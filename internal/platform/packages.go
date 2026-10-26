@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -386,6 +387,19 @@ func (h *Handler) readPackageRecord(ctx context.Context, ownerID, releaseID stri
 	return obj, record, nil
 }
 
+// writePackageJSON writes a response that carries stored records: without
+// HTML escaping, so a record travels as the canonical bytes its id hashes
+// (an operation id or a declaration may hold < > or &).
+func writePackageJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(v); err != nil {
+		log.Printf("corpusd: json encode: %v", err)
+	}
+}
+
 func packageView(obj objectgraph.Object, releaseID string, listing pkgrelease.Listing) PackageReleaseView {
 	var metadata struct {
 		PublishedAt string `json:"published_at"`
@@ -467,7 +481,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		if listing, ok := listings[releaseID]; ok {
 			// A republish names the first object and its listing, and never
 			// takes a new seq.
-			writeJSON(w, http.StatusOK, packageView(existing, releaseID, listing))
+			writePackageJSON(w, http.StatusOK, packageView(existing, releaseID, listing))
 			return
 		}
 		// The record was stored and its listing was not (a crash between the
@@ -561,7 +575,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	}
 	view := packageView(obj, releaseID, listing.Normalize())
 	view.Published = true
-	writeJSON(w, http.StatusCreated, view)
+	writePackageJSON(w, http.StatusCreated, view)
 }
 
 // packageReader is the owner a host read is for. A read that names none is
@@ -602,7 +616,7 @@ func (h *Handler) readPackageRelease(w http.ResponseWriter, r *http.Request, rel
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
 	}
-	writeJSON(w, http.StatusOK, packageView(obj, releaseID, listing))
+	writePackageJSON(w, http.StatusOK, packageView(obj, releaseID, listing))
 }
 
 // PackageCatalogEntry is one package on one track the reader may see.
@@ -687,7 +701,7 @@ func (h *Handler) packageHistory(w http.ResponseWriter, r *http.Request, name st
 		}
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].Listing.Seq > views[j].Listing.Seq })
-	writeJSON(w, http.StatusOK, map[string]any{"package": name, "releases": views, "count": len(views)})
+	writePackageJSON(w, http.StatusOK, map[string]any{"package": name, "releases": views, "count": len(views)})
 }
 
 // PackageTrackHead is a track's head: the parent the next release names.
