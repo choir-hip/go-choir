@@ -244,20 +244,24 @@
         // one it had before maximizing, shifted so the grab point stays put,
         // with its title bar under the pointer's height.
         //
-        // The ratio is taken against the title bar's normal width, not the
-        // maximized one: a button or double-click maximize leaves the stored
-        // normal geometry (and this component renders it) underneath, while a
-        // snap-to-top maximize grows the rendered frame to the free area. The
-        // grab point is therefore measured in the rendered frame's fraction
-        // of the normal frame's width, so both origins give the same, exact
-        // grab offset (a click at 25% of the title bar stays at 25%).
+        // The grab point is measured against the frame the pointer actually
+        // pressed, not against the geometry the store holds. While a window is
+        // maximized the frame is drawn at the free area (see windowStyle) and
+        // renderedX / renderedWidth still describe the stored normal geometry:
+        // a snap-to-top maximize keeps x where the drag released it, so
+        // (dragStartX - renderedX) / renderedWidth read 200/700 instead of
+        // 500/1280 and the window restored at the pointer (left edge 300)
+        // rather than under the same fraction along it (left edge 273).
+        // Measuring the pressed frame fixes both maximize paths with one rule.
         const normalWidth =
           restoredGeometry?.width ||
           (mode === 'maximized' && renderedWidth < freeArea.width
             ? renderedWidth
             : Math.round(freeArea.width * 0.7));
+        const frameLeft = mode === 'maximized' ? freeArea.x : renderedX;
+        const frameWidth = mode === 'maximized' ? freeArea.width : renderedWidth;
         const grabRatio = Math.min(
-          Math.max((dragStartX - renderedX) / Math.max(1, renderedWidth), 0),
+          Math.max((dragStartX - frameLeft) / Math.max(1, frameWidth), 0),
           1
         );
         dragOffsetX = Math.round(normalWidth * grabRatio);
