@@ -51,7 +51,9 @@ package agentcore
 //      round.
 //  R6. A newer stopped round silently outranks an older frozen candidate:
 //      the notice must name that candidate, its result, and whether the
-//      stopped round started from it.
+//      stopped round started from it. Since SD-04 (carry_select_test.go,
+//      S7-S10) a stopped round that did not start from the newest
+//      carriable candidate no longer outranks it at all.
 
 import (
 	"context"
@@ -650,15 +652,17 @@ func TestUnfinishedOfferNamesTheOlderFrozenCandidate(t *testing.T) {
 	kept := carriedCandidate{CandidateID: "unfinished:round-2", CandidateRef: carriedUnfinishedRefPrefix + patch.SHA256, AssignmentID: "round-2", Attempt: 1,
 		BaseRef: baseA, Kind: types.EngineeringAssignmentImplementation, CreatedAt: time.Date(2026, 10, 20, 18, 0, 0, 0, time.UTC), Unfinished: true,
 		UnfinishedReason: "activation budget exceeded"}
-	deps := carriedPatchDeps{History: &fakeCarriedHistory{entries: []carriedCandidate{frozen, kept}}, Deriver: &fakeCarriedDeriver{}, Root: root, CarryUnfinished: true}
+	deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c1": testCarriedPatch("packages/reader/page.go")}}
+	deps := carriedPatchDeps{History: &fakeCarriedHistory{entries: []carriedCandidate{frozen, kept}}, Deriver: deriver, Root: root, CarryUnfinished: true}
 
-	// The stopped round was not offered the candidate.
+	// The stopped round was not offered the candidate: the candidate is
+	// carried (SD-04), and the stopped round is named.
 	offer := offerCarriedPatch(context.Background(), deps, carriedInput(baseA))
-	if offer.Status != carriedOffered || !offer.SourceUnfinished || offer.OlderFrozenCandidateID != "candidate-round-1" || offer.OlderFrozenStartedFrom {
+	if offer.Status != carriedOffered || offer.SourceUnfinished || offer.CandidateID != "candidate-round-1" || strings.Join(offer.OutrankedStopped, ",") != "round-2" {
 		t.Fatalf("offer = %+v", offer)
 	}
 	notice := carriedPatchNotice(offer)
-	for _, want := range []string{"candidate-round-1", "assignment round-1", "rejected", "newest", "did not start from it"} {
+	for _, want := range []string{"candidate-round-1", "assignment round-1", "rejected", "round-2", "did not start from this candidate"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice does not say %q:\n%s", want, notice)
 		}
