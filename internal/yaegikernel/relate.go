@@ -26,7 +26,7 @@ import (
 // Bounds on one call.
 const (
 	RelateMaxEntities  = 12
-	RelateMaxNameRunes = 120
+	RelateMaxNameRunes = types.EntityNameMaxRunes
 )
 
 // RelateEntity is one attachment: an existing entity by EntityID (ent:<hex>
