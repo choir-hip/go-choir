@@ -4,6 +4,7 @@
   import DeskSheet from './DeskSheet.svelte';
   import {
     activeWindowId,
+    windows,
     openWindows,
     restoreWindow,
     focusWindow,
@@ -12,6 +13,7 @@
     showDesktopMode,
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+  import { promptContinueTarget } from './prompt-target.js';
 
   export let currentUser: any = null;
   export let authenticated = false;
@@ -33,6 +35,10 @@
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
   let promptWasDisabled = promptDisabled;
+  // The owner's one-tap override of the continue default. It belongs to the
+  // document in view: a different document, or a send, resets it.
+  let newDocumentOverride = false;
+  let overrideDocId = '';
 
   const launcherApps = LAUNCHER_APPS;
   const publicTicker = [
@@ -44,6 +50,12 @@
     ? ($desktopLiveStatus === 'connected' ? 'Online' : $desktopLiveStatus === 'connecting' ? 'Connecting' : $desktopLiveStatus === 'error' ? 'Connection error' : 'Offline')
     : 'Preview';
   $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
+  $: continueTarget = promptContinueTarget($windows, $activeWindowId, { authenticated });
+  $: if ((continueTarget?.docId || '') !== overrideDocId) {
+    overrideDocId = continueTarget?.docId || '';
+    newDocumentOverride = false;
+  }
+  $: continuing = !!continueTarget && !newDocumentOverride;
 
   function publishSurfaceMetrics() {
     if (!surfaceEl || typeof document === 'undefined') return;
@@ -59,12 +71,24 @@
     if (promptDisabled) return;
     if (event.key === 'Enter' && !event.shiftKey && promptValue.trim()) {
       event.preventDefault();
-      dispatch('promptsubmit', { text: promptValue.trim() });
+      dispatch('promptsubmit', {
+        text: promptValue.trim(),
+        continueDocId: continuing ? continueTarget.docId : '',
+        continueWindowId: continuing ? continueTarget.windowId : '',
+      });
+      newDocumentOverride = false;
       promptValue = '';
       tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
       (event.currentTarget as HTMLTextAreaElement)?.blur();
     }
+  }
+
+  // One tap flips the target and hands the focus back to the prompt, so the
+  // owner keeps typing.
+  function toggleContinueTarget() {
+    newDocumentOverride = !newDocumentOverride;
+    promptInputEl?.focus();
   }
 
   function resizePromptInput() {
@@ -266,7 +290,7 @@
     {/each}
   </div>
 
-  <div class="command-field" data-command-field>
+  <div class="command-field" class:has-target={continueTarget && !mobileSwitcherOpen} data-command-field>
     {#if mobileSwitcherOpen}
       <div class="mobile-app-switcher" data-mobile-app-switcher aria-label="Open apps">
         {#each $openWindows as win (win.windowId)}
@@ -289,6 +313,26 @@
     {/if}
     {#if !mobileSwitcherOpen}
       {#if promptStatus}<div class="prompt-status" data-prompt-status>{promptStatus}</div>{/if}
+      {#if continueTarget}
+        <button
+          class="prompt-target"
+          class:new-document={!continuing}
+          type="button"
+          data-prompt-target
+          data-prompt-target-mode={continuing ? 'continue' : 'new'}
+          aria-pressed={continuing ? 'true' : 'false'}
+          aria-label={continuing ? `Continue ${continueTarget.title}. Tap for a new document.` : `New document. Tap to continue ${continueTarget.title}.`}
+          title={continuing ? `Builds on ${continueTarget.title}` : 'Starts a new document'}
+          on:click={toggleContinueTarget}
+        >
+          {#if continuing}
+            <span class="prompt-target-verb">Continue</span>
+            <span class="prompt-target-title">{continueTarget.title}</span>
+          {:else}
+            <span class="prompt-target-verb">New document</span>
+          {/if}
+        </button>
+      {/if}
       <textarea
         bind:this={promptInputEl}
         bind:value={promptValue}
@@ -485,6 +529,60 @@
     font-size: 1rem;
     line-height: 1.35;
     padding: 0.66rem 0.95rem;
+  }
+
+  .command-field.has-target {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 100%;
+  }
+
+  .command-field.has-target textarea {
+    padding-left: 0.5rem;
+  }
+
+  /* The prompt's target, inside the field: no band of its own. */
+  .prompt-target {
+    position: relative;
+    z-index: 3;
+    align-self: center;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    max-width: min(14rem, 34vw);
+    margin-left: 0.42rem;
+    padding: 0.3rem 0.62rem;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm);
+    background: var(--choir-selected);
+    color: var(--choir-fg);
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .prompt-target.new-document {
+    background: var(--choir-panel-soft);
+    color: var(--choir-muted);
+  }
+
+  .prompt-target:hover,
+  .prompt-target:focus-visible {
+    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
+    outline: none;
+  }
+
+  .prompt-target-verb {
+    flex: 0 0 auto;
+    font-weight: 700;
+  }
+
+  .prompt-target-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobile-app-switcher {

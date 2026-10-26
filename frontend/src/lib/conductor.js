@@ -11,10 +11,15 @@ export async function submitConductorPrompt(text, options = {}) {
   }
 
   const commandId = options.commandId || crypto.randomUUID();
+  const body = { text: prompt, command_id: commandId };
+  // continue_doc_id builds on that document (the owner revise) instead of
+  // creating a new one; the response then carries continued: true.
+  const continueDocId = (options.continueDocId || '').trim();
+  if (continueDocId) body.continue_doc_id = continueDocId;
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: prompt, command_id: commandId }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
