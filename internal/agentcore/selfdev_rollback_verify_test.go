@@ -22,7 +22,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -119,5 +121,61 @@ func TestVerificationEvidenceStaysStrict(t *testing.T) {
 	}
 	if _, err := fx.rt.verificationEvidence(ctx, wrongTarget); err == nil {
 		t.Fatal("a rollback whose payload names an operation other than its target was accepted")
+	}
+}
+
+// The guest refuses a recorded pass payload whose schema_version is not 1, as
+// the checkpoint authority does (internal/platform/checkpoints.go), so a
+// wrong-schema payload is refused at the guest instead of minting a
+// certificate the authority then refuses.
+func TestVerificationEvidenceRefusesWrongSchemaVersion(t *testing.T) {
+	fx, first := rollbackFixture(t, "rb-schema")
+	ctx := context.Background()
+	recordPayload := func(key string, schema any) selfdev.Operation {
+		fields := map[string]any{
+			"operation_id": first.OperationID, "bundle_digest": first.BundleDigest,
+			"decision": "pass", "verifier_refs": []string{"capsule-go-eval:sha256:" + strings.Repeat("a", 64)},
+			"verifier_run_id": "run:verifier-" + key,
+		}
+		if schema != nil {
+			fields["schema_version"] = schema
+		}
+		payload, err := computerevent.CanonicalJSON(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := computerevent.NewEventID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		event := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: id, ComputerID: fx.computerID,
+			EventKind: computerevent.EventVerificationRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: "test-verification-" + key, TrajectoryID: first.TrajectoryID, CapsuleID: first.CapsuleID,
+			ActorProfile: agentprofile.Engineering, AuthorityRef: "guest-core:self-development-verifier",
+			PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, _, err := fx.appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.self-development-verification+json", "public"); err != nil {
+			t.Fatal(err)
+		}
+		recorded, found, err := fx.store.EventByIdempotency(ctx, fx.computerID, "test-verification-"+key)
+		if err != nil || !found {
+			t.Fatalf("verification event unavailable: %v", err)
+		}
+		digest, err := recorded.Digest()
+		if err != nil {
+			t.Fatal(err)
+		}
+		op := first
+		op.State, op.VerifierRefs = selfdev.StateMaterializing, []string{digest}
+		return op
+	}
+	if _, err := fx.rt.verificationEvidence(ctx, recordPayload("schema-1", 1)); err != nil {
+		t.Fatalf("a schema_version 1 payload was refused: %v", err)
+	}
+	for name, schema := range map[string]any{"absent": nil, "two": 2, "zero": 0} {
+		if _, err := fx.rt.verificationEvidence(ctx, recordPayload("schema-"+name, schema)); err == nil {
+			t.Fatalf("a payload with schema_version %s was accepted; the authority refuses it", name)
+		}
 	}
 }
