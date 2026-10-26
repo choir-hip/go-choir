@@ -80,6 +80,10 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 		ClientRequestID: "related-review-q:" + docID, ExpectedHeadRevisionID: head, Kind: StoryResearchKindEntities}); err != nil {
 		t.Fatal(err)
 	}
+	// Texture has read its inbox through the story's opening.
+	if cur, head := mustReaderCursor(t, s, texture), mustInboxHead(t, s, texture); head > cur {
+		mustCommitInbox(t, s, "turn-records-read:q0", &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: cur, Seq: head})
+	}
 	interim := mustCommitInbox(t, s, "cell-records:q-interim", nil, inboxReport("q-1", research, texture, false, types.CommitmentReport{}))
 	final := mustCommitInbox(t, s, "cell-records:q-final", nil, inboxReport("q-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
 	for _, r := range []types.InboxCommitReceipt{interim, final} {
@@ -118,4 +122,22 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 	if found.Records[0].WakeID == "" {
 		t.Fatal("a Report with a finding in an entities round did not wake Texture")
 	}
+}
+
+func mustReaderCursor(t *testing.T, s *Store, inbox string) int64 {
+	t.Helper()
+	cur, err := s.ReaderCursor(context.Background(), storyOwner, storyComputer, inbox, inbox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cur
+}
+
+func mustInboxHead(t *testing.T, s *Store, inbox string) int64 {
+	t.Helper()
+	head, err := s.InboxHead(context.Background(), storyOwner, storyComputer, inbox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return head
 }

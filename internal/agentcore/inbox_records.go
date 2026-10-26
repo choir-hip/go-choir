@@ -898,6 +898,10 @@ const captureSourceDesk = "source"
 
 // inboxUnread reports whether a desk's inbox head is past its cursor.
 func (rt *Runtime) inboxUnread(ctx context.Context, ownerID, computerID, deskAgentID string) (bool, error) {
+	if strings.HasPrefix(deskAgentID, agentprofile.Texture+":") {
+		// A backfill round's quiet Reports are not Texture's work (slice d, D5).
+		return rt.store.TextureWorkUnread(ctx, ownerID, computerID, deskAgentID)
+	}
 	cursor, err := rt.store.ReaderCursor(ctx, ownerID, computerID, deskAgentID, deskAgentID)
 	if err != nil {
 		return false, err
