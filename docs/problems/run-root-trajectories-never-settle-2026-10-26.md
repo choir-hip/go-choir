@@ -173,3 +173,10 @@ Fix, three parts:
 3. Rows already stored keep their empty rule (no migration, nothing is rewritten). `TrajectoryObligations` (behind `choir trajectory <id>`) reads any run-root row (non-publication, has `root_loop_id`, not a lifecycle row) as a run root: it evaluates the rule as `root_loop_id` required, adds `run_root: {run_id, run_state, verdict}`, and waits on the root run while it is not completed. A completed old row therefore reads `settlement_ready: true` with a verdict saying it predates settle-on-completion. It stays `status: live` in listings; a read never mutates.
 
 Residual, named: a root that completes while a child still holds an open work item stays live, and nothing re-attempts the settle when the child's work closes later (the same as today, no worse). Failed and cancelled root runs are not settled by this change. Old rows stay live until the owner cancels them.
+
+### Review 330 (Devin, no blocker) adopted
+
+- A passivated child is non-terminal and can be re-warmed, so the settle gates on non-terminal runs (`ListNonTerminalRunsByTrajectory`), not active ones.
+- The settle is `Store.SettleTrajectoryIfIdle`: under the trajectory lock it re-checks open work items, pending updates and non-terminal runs before it writes, so work that landed after the caller's reads keeps the row live. Run creation does not take that lock; a run that starts in the instant between the check and the write is the remaining, fail-closed window (the settled row then refuses new work items).
+- The run-root verdict text is built after the pending-update check, so it never says "ready to settle" while an update is pending.
+- `isRunRootRecord` requires `root_loop_id` to equal the trajectory id.

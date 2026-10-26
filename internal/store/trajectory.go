@@ -377,7 +377,39 @@ func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID s
 	return s.GetWorkItemOG(ctx, ownerID, workItemID)
 }
 
-// SettleTrajectoryIfIdle is stubbed until the fix lands.
+// SettleTrajectoryIfIdle settles a live legacy trajectory only if, under the
+// trajectory lock, it has no open work item, no pending worker update and no
+// non-terminal run. It reports whether it settled. The caller's earlier reads
+// are not trusted: work that landed after them keeps the row live.
 func (s *Store) SettleTrajectoryIfIdle(ctx context.Context, ownerID, trajectoryID string) (bool, error) {
-	return false, nil
+	if exists, err := s.lifecycleTrajectoryExists(ctx, ownerID, trajectoryID); err != nil {
+		return false, err
+	} else if exists {
+		return false, ErrLifecycleAuthorityRequired
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	rec, err := s.GetTrajectoryOG(ctx, ownerID, trajectoryID)
+	if err != nil {
+		return false, err
+	}
+	if rec.Status != types.TrajectoryLive {
+		return false, nil
+	}
+	open, err := s.ListWorkItemsByTrajectoryOG(ctx, ownerID, trajectoryID, true)
+	if err != nil || len(open) > 0 {
+		return false, err
+	}
+	pending, err := s.CountPendingWorkerUpdatesByTrajectory(ctx, ownerID, trajectoryID)
+	if err != nil || pending > 0 {
+		return false, err
+	}
+	runs, err := s.ListNonTerminalRunsByTrajectory(ctx, ownerID, trajectoryID, 1)
+	if err != nil || len(runs) > 0 {
+		return false, err
+	}
+	if _, err := s.UpdateTrajectoryStatusOG(ctx, ownerID, trajectoryID, types.TrajectorySettled); err != nil {
+		return false, err
+	}
+	return true, nil
 }
