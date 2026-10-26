@@ -185,6 +185,11 @@ func LoadConfigFromEnv() ManagerConfig {
 	}
 	cfg.GuestDNSOnly = parseComputerSelector(os.Getenv("VMCTL_GUEST_DNS_ONLY"))
 
+	// New-computer data image template (data_image_template.go). Rollback
+	// is unsetting VMCTL_DATA_IMAGE_TEMPLATE: creation builds in place again.
+	cfg.DataImageTemplate.Enabled = envFlagOn("VMCTL_DATA_IMAGE_TEMPLATE")
+	cfg.DataImageTemplate.Dir = strings.TrimSpace(os.Getenv("VMCTL_DATA_IMAGE_TEMPLATE_DIR"))
+
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
 	} else if _, err := os.Stat("/opt/go-choir/.git"); err == nil {

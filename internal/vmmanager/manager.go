@@ -196,6 +196,11 @@ type VMConfig struct {
 	// for a test account's computer). It is a boot input only: the visual
 	// capture grant reads it (visual_capture.go).
 	WarmnessClass string
+
+	// NewComputer marks the first creation of a computer (vmctl's mint
+	// path). Only such a boot may clone its data image from the template
+	// (data_image_template.go); every other boot keeps today's path.
+	NewComputer bool
 }
 
 // ErrOfflineMaintenanceUnbootable is returned (wrapped) by an
@@ -444,6 +449,11 @@ type ManagerConfig struct {
 	// (CHOIR_EVENT_TABLE_COMPUTERS; empty by default). See
 	// event_table_grant.go.
 	EventTable EventTableConfig
+
+	// DataImageTemplate is the new-computer data image template switch
+	// (VMCTL_DATA_IMAGE_TEMPLATE; off by default). See
+	// data_image_template.go.
+	DataImageTemplate DataImageTemplateConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -528,6 +538,19 @@ type Manager struct {
 	vaultHandleCheck func(h *os.File, dir string, acceptAnyCrypt bool) error
 	// vaultRootsMu serializes changes to the vault root record.
 	vaultRootsMu sync.Mutex
+
+	// Data image template (data_image_template.go). templateMu guards the
+	// builds in flight; templateBuildMu serializes the builds themselves.
+	// None of it is m.mu: a template is never built under the global lock.
+	templateMu      sync.Mutex
+	templateFlights map[string]*dataImageTemplateFlight
+	templateBuildMu sync.Mutex
+	// templateWait bounds a creation's wait for a build (0 = default);
+	// templateStagingHook and templateCloneFn are test seams (nil = none,
+	// FICLONE).
+	templateWait        time.Duration
+	templateStagingHook func(staging string) error
+	templateCloneFn     func(dst, src *os.File) error
 }
 
 func (m *Manager) StateDir() string {
@@ -731,6 +754,11 @@ func (m *Manager) Start() {
 				m.cfg.Jailer.BinPath, m.jailedExec(), m.jailChrootBase(), m.cfg.Jailer.UIDBase, m.cfg.Jailer.UIDCount, m.cfg.Jailer.CgroupParent, m.cfg.Jailer.Only)
 		}
 	}
+	if m.cfg.DataImageTemplate.Enabled && strings.TrimSpace(m.cfg.StoreDiskPath) != "" {
+		// A cache, not owner work: build the current template off every
+		// lock so the first creation after a deploy finds it ready.
+		go m.warmDataImageTemplate()
+	}
 	go m.healthCheckLoop()
 	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s jailer=%t", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode(), m.cfg.Jailer.Enabled)
 }
@@ -884,6 +912,10 @@ func (m *Manager) consumeBootEpoch(vmID string, supplied int64) (int64, error) {
 }
 
 func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
+	// A new computer's data image template is found, or built, before the
+	// global lock: only the clone below runs under it.
+	templatePick := m.dataImageTemplateForBoot(cfg, dataImageSizeMB)
+
 	m.mu.Lock()
 	locked := true
 	defer func() {
@@ -986,7 +1018,14 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		}
 		dataImg := filepath.Join(vmDataDir, "data.img")
 		if _, err := os.Stat(dataImg); os.IsNotExist(err) {
-			if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
+			if cfg.NewComputer && m.cfg.DataImageTemplate.Enabled {
+				source, err := m.prepareNewDataImage(dataImg, dataImageSizeMB, templatePick)
+				if err != nil {
+					return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
+				}
+				tl.markDetail("data_image_source", source)
+				log.Printf("vmmanager: data image for new VM %s: %s", cfg.VMID, source)
+			} else if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
 				return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
 			}
 		} else if err == nil {
@@ -3142,12 +3181,8 @@ func (m *Manager) createDataImage(path string, sizeMB int) error {
 // virgin computer. Returns ("", nil, nil) when seeding is disabled or the
 // configured repo path is absent — the image then ships an empty Source dir.
 func (m *Manager) sourceSeedStagingRoot() (staging string, cleanup func(), err error) {
-	repo := strings.TrimSpace(m.cfg.SourceSeedRepoPath)
+	repo := m.sourceSeedRepo()
 	if repo == "" {
-		return "", nil, nil
-	}
-	info, statErr := os.Stat(filepath.Join(repo, ".git"))
-	if statErr != nil || !info.IsDir() {
 		return "", nil, nil
 	}
 	dir, mkErr := os.MkdirTemp("", "choir-source-seed-*")
@@ -3164,7 +3199,7 @@ func (m *Manager) sourceSeedStagingRoot() (staging string, cleanup func(), err e
 	if out, cloneErr := exec.Command("git", args...).CombinedOutput(); cloneErr != nil {
 		return "", cleanup, fmt.Errorf("git clone %s: %w (%s)", repo, cloneErr, strings.TrimSpace(string(out)))
 	}
-	if commit != "" && commit != "local" && commit != "dirty" && len(commit) >= 7 {
+	if seedCheckoutCommit(commit) {
 		if out, coErr := exec.Command("git", "-C", target, "checkout", "--quiet", commit).CombinedOutput(); coErr != nil {
 			return "", cleanup, fmt.Errorf("git checkout %s in seeded source: %w (%s)", commit, coErr, strings.TrimSpace(string(out)))
 		}
