@@ -73,6 +73,12 @@ var metadataLookupKeys = []metadataLookupKey{
 	{Kind: "choir.publication_proposal", Field: "proposal_id"},
 	{Kind: "choir.publication", Field: "publication_id"},
 	{Kind: "choir.publication_version", Field: "publication_version_id"},
+	// The Library (S3, review 291 F1 and F2): a package release is found
+	// by its id on another owner's read, and the listing versions that
+	// admit readers beyond their owner (widened: "true"; no row otherwise)
+	// are what another owner's catalog pages through.
+	{Kind: "choir.package_release", Field: "release_id"},
+	{Kind: "choir.release_listing", Field: "widened"},
 }
 
 // lookupKeyField returns the keyed field of kind, if any.

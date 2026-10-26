@@ -363,7 +363,7 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	gatePath := "/api/computers/" + url.PathEscape(computerID) + "/packages/share-gate?" + url.Values{"release_id": {releaseID}}.Encode()
+	gatePath := "/api/computers/" + url.PathEscape(computerID) + "/packages/share-gate"
 	status, raw, err := h.guestJSON(r.Context(), guestURL, http.MethodGet, gatePath, authResult, computerID, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's share gate is unavailable"})

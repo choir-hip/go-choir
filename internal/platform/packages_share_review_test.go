@@ -49,6 +49,9 @@ func TestPackageLookupsAreIndexBacked(t *testing.T) {
 	if !lookupKeyFor(string(ReleaseListingKind), "$.widened") {
 		t.Fatal("F1 the listing's widened field is not a registered lookup key")
 	}
+	// A track read is the owner's: it reads through (object_kind, owner_id).
+	q, a := metadataPageSQL(string(ReleaseListingKind), "$.package", "reader", "owner-a", "", 50)
+	assertPlan(t, "an owner's track page", explainPlan(t, db, q, a...), "og_objects", "object_kind", "owner_id")
 	// F2: a release is found by its id through the key.
 	if !lookupKeyFor(string(PackageReleaseKind), "$.release_id") {
 		t.Fatal("F2 release_id is not a registered lookup key")
