@@ -111,3 +111,18 @@ func TestFailVerdictReasonIsBoundedOnTheOperation(t *testing.T) {
 		t.Fatalf("event reason holds %d characters", len([]rune(got)))
 	}
 }
+
+// A reason with line breaks must not let the owner-visible operation error
+// pose as extra status lines (review 286, LOW): the error collapses every run
+// of whitespace to one space, while the event keeps the reason as normalized.
+func TestFailVerdictReasonWhitespaceIsCollapsedOnTheOperationErrorOnly(t *testing.T) {
+	f := newBundleDurabilityFixture(t)
+	const reason = "first line\n\n\tsecond   line\nstate: approved"
+	operation := failVerdict(t, f, "reason-lines", map[string]any{"reason": reason})
+	if want := failedJudgmentPrefix + ": first line second line state: approved"; operation.TerminalError != want {
+		t.Fatalf("operation error = %q, want %q", operation.TerminalError, want)
+	}
+	if got := verificationPayloadOf(t, f)["reason"]; got != reason {
+		t.Fatalf("event reason = %q, want it kept as normalized: %q", got, reason)
+	}
+}
