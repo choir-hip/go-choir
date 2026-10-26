@@ -163,6 +163,14 @@ func failedJobRetryBackoff(failures int) time.Duration {
 	return 15 * time.Minute << shift
 }
 
+// blockedByContextCancel reports whether a recorded job error names a context
+// cancel or deadline: the exact Go error strings, since the schema has no
+// failure-kind column. Only legacy `blocked` rows are matched this way; the
+// worker now records such errors as `failed`.
+func blockedByContextCancel(errorText string) bool {
+	return strings.Contains(errorText, "context canceled") || strings.Contains(errorText, "context deadline exceeded")
+}
+
 func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool) (ProjectionJob, error) {
 	if !safeFileCASComponent(computerID) || len(computerID) > 128 || len(reason) > 255 {
 		return ProjectionJob{}, fmt.Errorf("invalid checkpoint request")
@@ -200,8 +208,15 @@ func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason str
 		// A failed job is transient trouble (lease loss, store error), not a
 		// deterministic refusal: it is re-admitted after a growing backoff so
 		// two failures cannot silently end cadence for this computer.
-		failedBackingOff := old.Status == "failed" && sameInputs && now.Sub(old.UpdatedAt) < failedJobRetryBackoff(old.Failures)
-		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs) || failedBackingOff {
+		//
+		// A `blocked` row whose recorded error is a context cancel or deadline
+		// is also transient: before the worker stopped classifying wrapped
+		// cancels as refusals, one cancelled read-back froze b@c's base for 30
+		// hours. That branch exists only for rows written before the fix and
+		// can be deleted once none remain.
+		retriable := old.Status == "failed" || (old.Status == "blocked" && blockedByContextCancel(old.Error))
+		failedBackingOff := retriable && sameInputs && now.Sub(old.UpdatedAt) < failedJobRetryBackoff(old.Failures)
+		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable) || failedBackingOff {
 			return old, tx.Commit()
 		}
 		if old.SeedBaseRef != seed || old.KeyDigest != keyDigest {

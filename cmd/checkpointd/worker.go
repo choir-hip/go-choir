@@ -147,6 +147,12 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 		<-stopped
 	}()
 	fail := func(status string, problem error) (*platform.ProjectionJob, error) {
+		status = projectionFailStatus(status, problem)
+		// Backstop for causes a %v wrap lost: a job whose own context is gone
+		// was stopped, not refused.
+		if status == "blocked" && ctx.Err() != nil {
+			status = "failed"
+		}
 		finishCtx, done := context.WithTimeout(context.Background(), 10*time.Second)
 		defer done()
 		if status == "failed" && j.Failures < 1 {
@@ -166,7 +172,13 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	}
 	wrapped, digest, err := store.GetKeyEscrow(ctx, j.ComputerID, keyescrow.ProtectorCustodian)
 	if err != nil {
-		return fail("blocked", fmt.Errorf("checkpoint escrow unavailable: %w", err))
+		// Only a missing escrow is a deterministic refusal; a store error or a
+		// cancelled context reading it is transient.
+		status := "failed"
+		if errors.Is(err, platform.ErrKeyEscrowNotFound) {
+			status = "blocked"
+		}
+		return fail(status, fmt.Errorf("checkpoint escrow unavailable: %w", err))
 	}
 	var record keyescrow.WrappedKey
 	if err := json.Unmarshal(wrapped, &record); err != nil {
@@ -226,11 +238,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	started := time.Now()
 	result, err := rebuilder.Run(ctx, source)
 	if err != nil {
-		status := "failed"
-		if errors.Is(err, projectionbase.ErrBaseRefused) {
-			status = "blocked"
-		}
-		return fail(status, err)
+		return fail(projectionRunStatus(err), err)
 	}
 	d := result.Descriptor
 	if d.ComputerID != j.ComputerID || d.Sequence != j.TargetSequence || d.CanonicalHead != j.TargetHead {
@@ -256,12 +264,30 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	return j, nil
 }
 
-// projectionRunStatus and projectionFailStatus are stubs at the test commit.
+// transientProjectionCause reports whether err carries a cancelled or expired
+// context. That is the unit stopping or the job's deadline, not a verdict on
+// the base, so it must never be recorded as a deterministic refusal even when
+// the read-back path wrapped it in ErrBaseRefused
+// (docs/problems/projection-job-blocked-by-a-cancel-2026-10-26.md).
+func transientProjectionCause(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// projectionRunStatus classifies a rebuilder.Run error: `blocked` only for a
+// deterministic refusal, `failed` (retried after backoff) for everything else,
+// including a cancel or deadline wrapped inside a refusal.
 func projectionRunStatus(err error) string {
-	if errors.Is(err, projectionbase.ErrBaseRefused) {
+	if errors.Is(err, projectionbase.ErrBaseRefused) && !transientProjectionCause(err) {
 		return "blocked"
 	}
 	return "failed"
 }
 
-func projectionFailStatus(status string, err error) string { return status }
+// projectionFailStatus demotes a call site's `blocked` to `failed` when its
+// error carries a transient cause; every other status passes through.
+func projectionFailStatus(status string, err error) string {
+	if status == "blocked" && transientProjectionCause(err) {
+		return "failed"
+	}
+	return status
+}

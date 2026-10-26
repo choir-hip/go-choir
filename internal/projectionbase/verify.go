@@ -94,7 +94,7 @@ func VerifyPublishedBase(ctx context.Context, artifactsRoot string, d Descriptor
 	workspace := choirstore.TextureWorkspacePath(filepath.Join(dir, "runtime.db"))
 	got, err := witnessForWorkspace(ctx, d.ComputerID, d.CanonicalHead, workspace)
 	if err != nil {
-		return fmt.Errorf("%w: read-back witness: %v", ErrBaseRefused, err)
+		return fmt.Errorf("%w: read-back witness: %w", ErrBaseRefused, err)
 	}
 	if err := selfdevprotocol.WitnessContentMatches(got, d.VMLocalContentWitness); err != nil {
 		return fmt.Errorf("%w: read-back witness mismatch: %v", ErrBaseRefused, err)

@@ -217,7 +217,7 @@ func installSeedCandidate(ctx context.Context, candidate SeedCandidate, scratchD
 	workspace := choirstore.TextureWorkspacePath(filepath.Join(stagingRoot, "runtime.db"))
 	got, err := witnessForWorkspace(ctx, descriptor.ComputerID, descriptor.CanonicalHead, workspace)
 	if err != nil {
-		return fmt.Errorf("%w: seed witness: %v", ErrBaseRefused, err)
+		return fmt.Errorf("%w: seed witness: %w", ErrBaseRefused, err)
 	}
 	if err := selfdevprotocol.WitnessContentMatches(got, descriptor.VMLocalContentWitness); err != nil {
 		return fmt.Errorf("%w: seed content witness mismatch: %v", ErrBaseRefused, err)

@@ -44,7 +44,7 @@ func ResolveTargetSequence(ctx context.Context, tail TailSource, computerID, tar
 		}
 		records, err := tail.TailPage(ctx, computerID, after, resolveTargetPageSize)
 		if err != nil {
-			return 0, fmt.Errorf("%w: read tail after %d: %v", ErrBaseRefused, after, err)
+			return 0, fmt.Errorf("%w: read tail after %d: %w", ErrBaseRefused, after, err)
 		}
 		if len(records) == 0 {
 			return 0, fmt.Errorf("%w: target is not a descendant of watermark %d", ErrBaseRefused, fromSequence)
