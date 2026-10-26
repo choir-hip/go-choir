@@ -22,7 +22,7 @@ type StoryAnalysis struct {
 	// Novelty is System 1's answer to "is this story centrally about a
 	// subject not in this list?" (yes or no). Name an entity the analysis
 	// missed only when p(yes) is at least types.EntityNoveltyYesP.
-	Novelty *StoryAnalysisAnswer   `json:"novelty,omitempty"`
+	Novelty *StoryAnalysisAnswer    `json:"novelty,omitempty"`
 	Lexicon types.EntityLexiconSize `json:"lexicon"`
 	// Dropped counts the candidates left out to keep the bound; Trimmed the
 	// candidates whose prior stories and co-entities were left out.

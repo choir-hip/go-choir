@@ -106,7 +106,9 @@ func TestFinishRuleIsFreedOnlyByAPlatformSideFailureOfThisRun(t *testing.T) { //
 		{"5xx", func(f *analysisFixture) {
 			f.epub.checkErr = &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusServiceUnavailable, Body: "corpusd is restarting"}
 		}, true},
-		{"transport", func(f *analysisFixture) { f.epub.checkErr = errors.New("dial tcp 10.0.0.1:443: connect: connection refused") }, true},
+		{"transport", func(f *analysisFixture) {
+			f.epub.checkErr = errors.New("dial tcp 10.0.0.1:443: connect: connection refused")
+		}, true},
 		{"no platform", func(f *analysisFixture) { f.rt.SetStoryPublisher(f.pub) }, true},
 		{"4xx refusal", func(f *analysisFixture) {
 			f.epub.checkErr = &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusUnprocessableEntity, Body: "entity 1 matches the existing entity wd:Q1"}

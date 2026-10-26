@@ -188,6 +188,9 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	result := relateResult{Story: req.Story}
 	model := ""
 	analysed := readAnalysisBasis(answered, req.Story)
+	if len(req.Entities) == 0 && !analysed.present {
+		return nil, fmt.Errorf("choir.Relate needs at least one entity: an empty list records that your story is about none of its candidates, and it needs this run's choir.StoryAnalysis() of the story")
+	}
 	var counts types.StoryEntityCounts
 	var gaps []string
 	for i, e := range req.Entities {
@@ -271,7 +274,9 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		}
 		fresh = append(fresh, a)
 	}
-	if len(fresh) > 0 {
+	// An empty call records its review alone: the story is about none of
+	// its candidates.
+	if len(fresh) > 0 || len(attachments) == 0 {
 		if err := rt.appendStoryEntitiesEvent(ctx, exec, owner, computer, runID, recordID, storyEntitiesRecord{Computer: computer, Story: req.Story, Attachments: fresh, Model: model, Review: export.Review}); err != nil {
 			log.Printf("story entities: record %s on run %s: %v", req.Story, runID, err)
 			return nil, fmt.Errorf("choir.Relate: the attachments could not be recorded on the tape, so they are not exported: %w", err)

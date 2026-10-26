@@ -19,9 +19,9 @@ package platform
 // edge; a role change tombstones the old role's edge.
 
 import (
-	"errors"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"

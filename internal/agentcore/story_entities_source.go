@@ -224,10 +224,11 @@ func (rt *Runtime) exportStoryEntities(ctx context.Context, publisher StoryEntit
 			review = rec.Review
 		}
 	}
-	if len(order) == 0 {
+	if len(order) == 0 && review == nil {
 		return
 	}
-	for start := 0; start < len(order); start += yaegikernel.RelateMaxEntities {
+	// A story about none of its candidates sends its review alone.
+	for start := 0; start == 0 || start < len(order); start += yaegikernel.RelateMaxEntities {
 		req := types.StoryEntitiesRequest{OwnerID: owner, ComputerID: computer, Story: story}
 		if start == 0 {
 			req.Review = review
