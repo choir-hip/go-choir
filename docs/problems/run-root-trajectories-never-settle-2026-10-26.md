@@ -157,3 +157,19 @@ After the move, a live stack that is not contained in the new base (its patch wa
 
 - discovered: the deploy-impact catch-all treats unlisted tooling scripts as a full guest-image deploy (3217a2f7 refreshed every active computer for a script nobody deploys).
 - introduced: none. repaired: none.
+
+## P-A decision, 2026-10-26 (Sonnet worker; mutation class orange)
+
+Deletion was checked first and is not available. Run-root trajectory rows are read by live code that is not display:
+- `CreateWorkItem` and `ensureSpawnedCoagentWorkItem` put a spawned coagent's work item on the run's trajectory; boot recovery (`ListOpenAssignedWorkItems`) skips work items whose trajectory row is missing or not live.
+- `CancelRunTrajectory` / `CancelTrajectoryAuthority` use the legacy row as the cancellation anchor for every run on the trajectory.
+- `validatePreCutoverCoagentUpdateAuthority` (tools_worker_update.go) loads the row with `GetTrajectory` and refuses a legacy update_coagent when it is missing.
+- The listing (`ListTrajectoriesByOwner`) and `GET /api/trajectories/<id>` return them.
+So the mint stays, and the change is the second option: a rule that can be satisfied, and a settle when the root run completes.
+
+Fix, three parts:
+1. `defaultSettlementRuleForKind`: non-publication rows require `root_loop_id`, which the root mint always sets. The row can now validate.
+2. `settleRunRootTrajectory`, called after a root run's completed state is stored (the tool-loop and provider paths, and the prompt-bar decision run, which is created completed): settle the row when the run is the root of its trajectory (`RequestedByRunID` empty and run id equals trajectory id), the obligations are ready (no open work item, no pending update_coagent), and no run on the trajectory is active. Otherwise the row stays live, as it does today: a root whose children still hold work is genuinely not done. Best effort: a failure is logged, never fails the run.
+3. Rows already stored keep their empty rule (no migration, nothing is rewritten). `TrajectoryObligations` (behind `choir trajectory <id>`) reads any run-root row (non-publication, has `root_loop_id`, not a lifecycle row) as a run root: it evaluates the rule as `root_loop_id` required, adds `run_root: {run_id, run_state, verdict}`, and waits on the root run while it is not completed. A completed old row therefore reads `settlement_ready: true` with a verdict saying it predates settle-on-completion. It stays `status: live` in listings; a read never mutates.
+
+Residual, named: a root that completes while a child still holds an open work item stays live, and nothing re-attempts the settle when the child's work closes later (the same as today, no worse). Failed and cancelled root runs are not settled by this change. Old rows stay live until the owner cancels them.
