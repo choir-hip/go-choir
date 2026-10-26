@@ -52,8 +52,9 @@ start:
       breaks at phone width.
     - >-
       The Claude delegate is available on b@c (observability 00:12:54,
-      claude-sonnet-5-5, until 2026-11-03); the first claude-mode round
-      (the Reader redesign, selfdev-aae30fb7) froze in 12 minutes, and its
+      claude-sonnet-5-5, until 2026-11-03); the Reader redesign round
+      (selfdev-aae30fb7) ran in a claude-capable capsule but its trace shows
+      no delegate call: Synthetic DeepSeek wrote it, frozen in 12 minutes, and its
       bundle reads as a binding mismatch after the refresh that followed
       (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
 
@@ -183,7 +184,8 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The delegate works on b@c and is fast; the Reader candidate looks
+      The delegate is available on b@c but was not called; DeepSeek, given
+      the design bar, built the Reader redesign in 12 minutes and it looks
       right in its one capture; its diff is unreadable until the binding
       mismatch is understood.
     main_uncertainty: >-
