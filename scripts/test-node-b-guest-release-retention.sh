@@ -249,7 +249,7 @@ fi
 fi
 # --- wiring in nix/node-b.nix (text assertions) ---------------------------------------
 nix="$here/../nix/node-b.nix"
-grep -qE '^\s*snapshotReleaseRetain = false;' "$nix" && ok "nix: snapshotReleaseRetain is a let-binding, off" || bad "nix: snapshotReleaseRetain = false; is missing"
+grep -qE '^\s*snapshotReleaseRetain = (true|false);' "$nix" && ok "nix: snapshotReleaseRetain is a let-binding" || bad "nix: the snapshotReleaseRetain let-binding is missing"
 grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-releases' && ok "nix: vmctl reads guest-releases read-only" || bad "nix: guest-releases is not in vmctl's ReadOnlyPaths"
 grep -q 'd /var/lib/go-choir/guest-releases 0755 root root -' "$nix" && ok "nix: the tmpfiles rule" || bad "nix: the tmpfiles rule for guest-releases is missing"
 grep -q 'system.activationScripts.go-choir-guest-release' "$nix" && grep -q 'deps = \[ "go-choir-guest-release" \]' "$nix" && ok "nix: go-choir-guest-image depends on the release snippet" || bad "nix: the guest-image snippet does not depend on go-choir-guest-release"

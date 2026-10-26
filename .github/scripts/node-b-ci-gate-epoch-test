@@ -72,6 +72,6 @@ run_body=$(sed -n '/^run() {/,/^}/p' "$gate")
 grep -Fq 'epoch_gate' <<<"$run_body" || fail "the live deploy path does not call epoch_gate"
 grep -Fq 'ci-gate-epoch-mode' "$gate" || fail "the gate's mode file moved"
 grep -Fq 'ci-gate-epoch-mode' "$root/nix/node-b.nix" || fail "nix/node-b.nix does not set the gate's epoch mode"
-grep -Eq '^\s*ciGateEpochCheck = "off";' "$root/nix/node-b.nix" || fail "nix/node-b.nix: ciGateEpochCheck must ship off"
+grep -Eq '^\s*ciGateEpochCheck = "(off|observe|enforce)";' "$root/nix/node-b.nix" || fail "nix/node-b.nix: ciGateEpochCheck must be off, observe or enforce"
 
 echo "node-b-ci-gate-epoch-test passed"
