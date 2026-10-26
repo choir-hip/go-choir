@@ -1223,6 +1223,13 @@ in
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "CORPUSD_PORT=8086"
+        # Related stories read switch (internal/platform/publication_related_story.go):
+        # the walk reads the research desk's judged related_story pairs. On by
+        # owner direction (2026-10-26: "Ofc I want it switched on"). Rollback
+        # without a deploy: write CORPUSD_RELATED_STORY=off to
+        # /var/lib/go-choir/unit-env/corpusd-retrieval.env and restart corpusd
+        # (an EnvironmentFile overrides Environment).
+        "CORPUSD_RELATED_STORY=on"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
       ] ++ doltClientEnv ++ [
