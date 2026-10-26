@@ -433,3 +433,74 @@ func TestRebaseAdmissionRefusesAnAutomaticNoticeAboveTheCap(t *testing.T) {
 	}
 	a.requireNothingCommitted(t, open)
 }
+
+// Review 328 (DeepSeek F3, Devin 4): the owner's notice is committed under the
+// open path's lock, after a re-check that no rebase round of the operation
+// runs; an open for the last automatic attempt and the owner's retry cannot
+// both succeed.
+func TestCommitRebaseOwnerNoticeRefusesWhileARoundRuns(t *testing.T) {
+	a := newRebaseAdmissionAt(t, 1, 1)
+	if _, err := a.s.OpenEngineeringAssignment(context.Background(), a.open); err != nil {
+		t.Fatal(err)
+	}
+	req := a.ownerNoticeRequest(t, 4)
+	if _, err := a.s.CommitRebaseOwnerNotice(context.Background(), req, rebaseAdmOp); !errors.Is(err, ErrRebaseRoundRunning) {
+		t.Fatalf("a live round must refuse the owner's notice: %v", err)
+	}
+	if rec, _ := a.s.GetCommitmentRecord(context.Background(), inboxTestOwner, inboxTestComputer, rebaseAdmNoticeID(4)); rec != nil {
+		t.Fatal("a refused commit left the notice")
+	}
+}
+
+func TestCommitRebaseOwnerNoticeCommitsWhenNoRoundRunsAndIsIdempotent(t *testing.T) {
+	a := newRebaseAdmissionAt(t, 1, 1)
+	req := a.ownerNoticeRequest(t, 4)
+	if _, err := a.s.CommitRebaseOwnerNotice(context.Background(), req, rebaseAdmOp); err != nil {
+		t.Fatalf("no round runs: %v", err)
+	}
+	if _, err := a.s.CommitRebaseOwnerNotice(context.Background(), req, rebaseAdmOp); err != nil {
+		t.Fatalf("the same command replays: %v", err)
+	}
+	// A claim naming an assignment the store cannot read fails closed.
+	b := newRebaseAdmissionAt(t, 1, 1)
+	if err := b.s.PutRebaseNoticeClaim(context.Background(), inboxTestOwner, inboxTestComputer, types.StackRebaseClaim{
+		PairKey: types.StackRebasePairKey(rebaseAdmOp, rebaseAdmBase), OperationID: rebaseAdmOp, BootedBase: rebaseAdmBase,
+		NoticeID: rebaseAdmNoticeID(1), Attempt: 1, AssignmentID: "assignment-missing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.s.CommitRebaseOwnerNotice(context.Background(), b.ownerNoticeRequest(t, 4), rebaseAdmOp); err == nil || errors.Is(err, ErrRebaseRoundRunning) {
+		t.Fatalf("an unreadable claim must fail closed with its own error: %v", err)
+	}
+}
+
+func TestAnOpenForTheLastAutomaticAttemptAndTheOwnersRetryNeverBothSucceed(t *testing.T) {
+	a := newRebaseAdmissionAt(t, 1, 3)
+	req := a.ownerNoticeRequest(t, 4)
+	var wg sync.WaitGroup
+	var openErr, retryErr error
+	wg.Add(2)
+	go func() { defer wg.Done(); _, openErr = a.s.OpenEngineeringAssignment(context.Background(), a.open) }()
+	go func() {
+		defer wg.Done()
+		_, retryErr = a.s.CommitRebaseOwnerNotice(context.Background(), req, rebaseAdmOp)
+	}()
+	wg.Wait()
+	if (openErr == nil) == (retryErr == nil) {
+		t.Fatalf("exactly one of the open (%v) and the owner's retry (%v) may succeed", openErr, retryErr)
+	}
+}
+
+func (a *rebaseAdmission) ownerNoticeRequest(t *testing.T, attempt int) types.CommitInboxRecordsRequest {
+	t.Helper()
+	rec, ok := types.NewStackRebaseNotice(types.StackRebaseNotice{
+		TextureInbox: a.seed.TextureInbox, ComputerID: inboxTestComputer, OperationID: rebaseAdmOp, BootedBase: rebaseAdmBase,
+		StackBase: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Attempt: attempt, DocID: strings.TrimPrefix(a.seed.TextureInbox, "texture:"), OwnerRetry: true,
+	})
+	if !ok {
+		t.Fatal("owner notice did not build")
+	}
+	req := types.CommitInboxRecordsRequest{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
+	req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
+	return req
+}

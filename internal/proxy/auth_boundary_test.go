@@ -205,6 +205,8 @@ func TestOwnerActsRefuseAgentAndAdminKeys(t *testing.T) {
 		{"approve", http.MethodPost, base + "/self-development/operations/op-1/decision", `{"decision":"approve"}`, "computer:self_development:approve", "guest"},
 		{"unparseable decision", http.MethodPost, base + "/self-development/operations/op-1/decision", `not json`, "computer:self_development:approve", "guest"},
 		{"rollback", http.MethodPost, base + "/self-development/rollbacks", `{}`, "computer:self_development:rollback", "guest"},
+		// U4 slice 8: the owner's rebase retry is an approval-class act.
+		{"rebase retry", http.MethodPost, base + "/self-development/rebase-retry", `{}`, "computer:self_development:approve", "guest"},
 		{"restore", http.MethodPost, base + "/lifecycle/restore", `{}`, "computer:lifecycle", "guest"},
 		{"rematerialize", http.MethodPost, base + "/lifecycle/rematerialize-from-tape", `{}`, "computer:lifecycle", "guest"},
 		{"bootstrap-chain", http.MethodPost, base + "/lifecycle/bootstrap-chain", `{}`, "computer:lifecycle", "guest"},

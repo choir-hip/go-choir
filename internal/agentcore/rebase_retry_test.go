@@ -226,3 +226,25 @@ func TestRebaseRetryAttemptFourIsAdmittedAndClaimedSeparately(t *testing.T) {
 		t.Fatalf("a second Cast for the owner's notice: %v", err)
 	}
 }
+
+// Review 328 (Devin 4, DeepSeek F3): the round-running check fails closed, and
+// the mint is atomic with it.
+func TestRebaseRetryFailsClosedWhenAClaimsAssignmentCannotBeRead(t *testing.T) {
+	f := newRebaseFixture(t)
+	f.exhaust(t)
+	// A claim naming an assignment that is not on the tape: unreadable, so not
+	// known to be finished.
+	pair := types.StackRebasePairKey(f.opID, f.moved)
+	if err := f.s.PutRebaseNoticeClaim(context.Background(), f.owner, f.computer, types.StackRebaseClaim{
+		PairKey: pair, OperationID: f.opID, BootedBase: f.moved, NoticeID: f.noticeID(3), Attempt: 3, AssignmentID: "assignment-missing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := f.retry(t)
+	if err == nil || !strings.Contains(err.Error(), "rebase_retry_unreadable") {
+		t.Fatalf("an unreadable claim must refuse the retry: %v", err)
+	}
+	if f.notice(t, 4) != nil {
+		t.Fatal("the retry minted over a claim it could not read")
+	}
+}

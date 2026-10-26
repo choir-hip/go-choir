@@ -175,8 +175,12 @@ func TestOwnerRetryNoticeIsStampedAndOnlyAboveTheCap(t *testing.T) {
 	if !IsStackRebaseNotice(rec) || rec.SubjectRefs["owner_retry"] != "true" || rec.Provenance.AgentID != RebaseOwnerRetryAgentID {
 		t.Fatalf("owner retry notice %+v", rec)
 	}
-	if !strings.Contains(rec.Directive.Body, rec.RecordID) || !strings.Contains(rec.Directive.Body, "owner") {
+	if !strings.HasPrefix(rec.Directive.Body, "The owner asked for another try.") || !strings.Contains(rec.Directive.Body, rec.RecordID) {
 		t.Fatalf("the body must name the id and say the owner asked: %s", rec.Directive.Body)
+	}
+	// The automatic notice does not claim the owner asked.
+	if strings.Contains(validRebaseNotice(t).Directive.Body, "The owner asked") {
+		t.Fatal("an automatic notice says the owner asked")
 	}
 	if !IsStackRebaseNotice(ownerRetryNotice(t, 9)) {
 		t.Fatal("later owner retries are notices")
