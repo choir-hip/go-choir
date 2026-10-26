@@ -251,3 +251,132 @@ related_story edge written by research's System 1 review over graph
 candidates, read by relatedCandidates as extra candidates behind a data
 switch, with the precision check (at most 10 percent wrong over 40 or more
 pairs); do not lower the threshold or the hub cutoff.
+
+## Build: the related_story edge (lane related-p3, 2026-10-26)
+
+Mutation class: red (a new tape event kind, a research desk surface, a new
+Store B write route). Rollback: the read switch off (links return to the
+phase 1 capture list at once, no deploy), the write setting off (the verb
+refuses), `git revert`; edges already written stay in Store B and are
+ignored while the read switch is off.
+
+What is built is the smallest vertical slice of phase 3 that can raise
+coverage: the pair relation only. The design's entity and topic-thread nodes,
+the review schedule and the batch record (design §11 slices 1 to 3) are not
+built here; each is a later change. Adaptations, with why:
+
+- Slice 1's `choir.Relate` staged semantic act and its five new object kinds
+  are not built. The desk records a pair relation with a new verb,
+  `choir.RelateStories`, host-mediated like `choir.System1` (research only),
+  and the record is a `story.relation` tape event on the computer's
+  `system1:<computer>` channel (acknowledged), not a ledger-reduced act. The
+  tape is still the authority (design R7): the Store B edge is a one-way,
+  re-runnable export of it. The full `Relate` can absorb the event later.
+- Slice 4's export route is the typed corpusd route
+  `types.StoryRelationsPath`, modelled on support verdicts.
+- Candidates are not graph walks yet (slice 3 is the batch record). Research
+  finds candidate pairs with the published search it already has
+  (`SearchWireCorpus` published pieces, which carry `publication_id`) and asks
+  System 1; FP0 casts the review by hand until the schedule exists.
+
+Files:
+
+- `internal/types/story.go`, `task.go`, `event_durability.go`,
+  `event_storage.go`: `StoryRelationsPath`, `StoryRelationsRequest`,
+  `EventStoryRelation` ("story.relation", acknowledged).
+- `internal/yaegikernel`: `relate_stories.go` (the one validation),
+  `ActionRelateStories`, the research module set only, surface text.
+- `internal/agentcore`: `story_relation_verb.go` (the host step),
+  `deskEgress`, `StoryRelationPublisher` (optional interface on the story
+  publisher), `system1_verb.go` (the shared tape read).
+- `internal/store/computer_setting.go`: `research.related_story`.
+- `internal/platform`: `publication_related_story.go` (edge kind, record
+  route, read), `publication_related.go` (`relatedCandidates`, `rankRelated`),
+  `handlers.go`; `internal/objectgraph/registry.go` (edge registered, owner
+  corpusd); `internal/proxy` (the bound-guest pass-through, as for verdicts).
+- `internal/runtimeprompts/overlays/rlm_research_runtime.yaml`: the verb.
+
+Switches (both off by default):
+
+- Write: the computer setting `research.related_story`, an owner act through
+  `/api/computer-settings` on one computer, no deploy. Off: the verb refuses
+  and nothing is recorded or exported. The route also refuses a computer that
+  is not platform tier (`computertiers`, fail closed), so a private computer
+  cannot write the public paper's graph even with the setting on.
+- Read: corpusd `CORPUSD_RELATED_STORY=on` in
+  `/var/lib/go-choir/unit-env/corpusd-retrieval.env` plus a corpusd restart
+  (the same file and procedure as `CORPUSD_CAPTURE_SEARCH`). Absent or any
+  other value: `relatedCandidates` ignores the edges. Writing without
+  showing is the audit-before-show state (design §7): FP0 audits the pairs
+  from the tape and Store B, then turns the read on.
+
+The edge: kind `related_story`, registered with owner corpusd, from and to
+two `choir.publication` canonical ids of the same owner, stored once with
+`from < to` (the relation is symmetric for display). Metadata is exactly
+`{"relation":"same_incident"|"later_development"|"same_subject"}`, so its
+edge id is deterministic and a repeat writes the same edge. The probability,
+the System 1 receipt, the question id and the reason live on the tape event,
+not on the edge.
+
+Who writes it: only the research desk decides a pair (the verb is in
+research's module set, the host refuses every other session role). The
+Store B edge is written by corpusd for the bound guest, as `cites_capture`
+and the support verdicts are; the desk writes no document text (Texture stays
+the only writer of canonical revisions, I26).
+
+What the read does (`relatedCandidates`): with the read switch on, the
+story's live `related_story` edges, in both directions, name extra
+candidates. A candidate must still be a published Autopaper story with a
+latest version and must pass `frontStory`; an edge to a retracted,
+unpublished, tombstoned or non-Autopaper story, to the story itself, or a
+duplicate of a pair already listed is ignored. A judged pair bypasses the
+score threshold (the judgment is its evidence) and ranks ahead of capture
+links, by relation (same incident, later development, same subject), then
+recency. The threshold, the capture hub cutoff (`HubStories`) and the live
+page rule are not changed. A story with more than `MaxRelatedEdges` (20)
+live `related_story` edges is a hub for this signal and its edges give no
+vote; the write route also refuses to take either endpoint past that bound.
+
+Ways it could fail (before code), pinned by the tests:
+
+- B1 The verb works on a computer that did not turn it on, or for a desk
+  other than research. Guard: setting check and role check in the host.
+- B2 A relation with no judgment behind it: a receipt the run never
+  recorded, a question the receipt did not answer, or a relation that is not
+  one of the receipt question's choices. Guard: the host reads the
+  `system1.judgment` answer from the tape, same run, and refuses.
+- B3 The desk overrides System 1 silently. Guard: the host computes whether
+  the relation is the top choice; if not, a reason of 20 or more characters is
+  required and the event records `overrode`.
+- B4 Self pair, duplicate pair, a pair given in both orders, bad ids, more
+  than 12 pairs. Guard: refused or collapsed before any write.
+- B5 A relation written for stories the owner does not own, or for stories
+  that are not published Autopaper stories. Guard: the corpusd route checks
+  owner and eligibility of both ends.
+- B6 A private computer writes the paper's graph. Guard: platform tier check,
+  bound guest check.
+- B7 A hub story, or one bad pass, links a story to everything. Guard:
+  `MaxRelatedEdges` on write and on read.
+- B8 The edge outlives the story it relates (retracted, unpublished).
+  Guard: eligibility is checked at read time.
+- B9 Export fails after the tape write. Guard: the tape keeps the record;
+  repeating the same pair re-exports it (idempotent edge id), and the result
+  tells the cell `exported: false` with the error. No boot resumer (restart
+  rule): a crash leaves the tape record and the edge absent until the desk
+  repeats the pair.
+- B10 The read switch is off but the edge changes the answer or its cache.
+  Guard: the cache key carries the basis mode; off ignores edges.
+
+Known gaps, written down instead of guarded: the host cannot check that a
+receipt's question was about the two stories named (the cell chooses the
+refs); the blind audit is the check. The edge belongs to the publication, not
+a version, so a story revised off its subject keeps the link until the edge is
+retracted (no retract route yet). Candidate generation is by research's own
+search until the batch record exists.
+
+What FP0 measures on staging: with the write setting on for the paper and
+the read off, cast research on the Vucic, California ballots and El-Sayed
+pairs and then a sample; audit at least 40 recorded pairs by reading both
+stories (wrong = not the relation recorded or not worth a reader's click),
+at most 10 percent wrong; then turn the read on and re-measure coverage of
+the front 60.
