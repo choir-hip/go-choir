@@ -498,6 +498,19 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		return fmt.Errorf("materializer: invalid frozen bundle: does not carry the operation's verifier receipt")
 	}
 
+	// U4: a candidate of a claimed rebase round must contain the applied
+	// change on the booted base. A refusal settles the operation failed, like
+	// a host build failure: the computer keeps its release. Nothing for a
+	// journalOnly settlement and nothing for any other operation.
+	if err := rt.rebaseContentGate(ctx, operation, journalOnly); err != nil {
+		var mismatch *rebaseContentMismatchError
+		if errors.As(err, &mismatch) && operation.State == selfdev.StateAccepted {
+			log.Printf("selfdev materializer: operation %s: %v; the computer keeps its current release", operation.OperationID, err)
+			return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: rebaseContentMismatch}, err, operation.State)
+		}
+		return err
+	}
+
 	// P5: a candidate that touched Go input runs only as a host-built layered
 	// release. The host builds while the operation stays accepted (desks keep
 	// working); a failed build fails the operation and changes nothing. A

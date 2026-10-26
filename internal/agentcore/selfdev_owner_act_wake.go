@@ -113,7 +113,7 @@ func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, o
 	rec, ok := types.NewSelfDevelopmentOwnerAct(types.SelfDevelopmentOwnerAct{
 		TextureInbox: inbox, ComputerID: computerID, OperationID: operation.OperationID,
 		TrajectoryID: operation.TrajectoryID, Act: act, DecisionEvent: operation.DecisionEvent,
-		Body: ownerActBody(ownerID, operation, act, reason),
+		Body: ownerActBody(ownerID, operation, act, reason) + rt.rebaseOwnerActSentence(operation, act),
 	})
 	if !ok {
 		return false, nil
@@ -138,4 +138,13 @@ func (rt *Runtime) notifyTextureOfOwnerAct(ctx context.Context, ownerID string, 
 	if _, err := rt.wakeTextureForOwnerAct(ctx, ownerID, operation, act, reason); err != nil {
 		log.Printf("selfdev owner act: %s %s: Texture not woken: %v", act, operation.OperationID, err)
 	}
+}
+
+// rebaseOwnerActSentence adds the lineage receipt's digest to the apply record
+// of a rebase operation (U4); nothing for any other act or operation.
+func (rt *Runtime) rebaseOwnerActSentence(operation selfdev.Operation, act string) string {
+	if act != types.OwnerActApply {
+		return ""
+	}
+	return rt.rebaseReceiptSentence(operation.OperationID)
 }
