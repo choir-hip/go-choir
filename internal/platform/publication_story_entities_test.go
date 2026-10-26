@@ -177,6 +177,43 @@ func TestStoryEntitiesRefuseADuplicateOfAnotherID(t *testing.T) { // N2, N3
 	}
 }
 
+// Two new entities of one normalised name in one request (review 298 F1):
+// the committed rows hold neither yet, so the check must also compare the
+// request's own new names.
+func TestStoryEntitiesRefuseTwoNewDuplicatesInOneRequest(t *testing.T) { // N2
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Anthropic raises", l.capture("https://wire.example/a", "", "Anthropic raised money"))
+	minted := newEntity("Anthropic", types.EntityTypeOrganization, types.EntityRoleCentral)
+	wd := types.StoryEntity{EntityID: types.WikidataEntityID("Q116758847"), Name: "Anthropic, Inc.", Type: types.EntityTypeOrganization, WikidataID: "Q116758847", New: true, Role: types.EntityRoleIncidental}
+	for _, order := range [][]types.StoryEntity{{minted, wd}, {wd, minted}} {
+		for _, validate := range []bool{true, false} {
+			req := l.entitiesReq(a, order...)
+			req.ValidateOnly = validate
+			_, err := l.svc.RecordStoryEntities(context.Background(), req)
+			if err == nil || !strings.Contains(err.Error(), order[0].EntityID) || !strings.Contains(err.Error(), "this request") {
+				t.Fatalf("validate=%v order %s, %s: err = %v, want the second refused with the first id named", validate, order[0].EntityID, order[1].EntityID, err)
+			}
+		}
+		for _, e := range order {
+			if _, ok := l.entityRow(labOwner, e.EntityID); ok {
+				t.Fatalf("a refused request wrote %s", e.EntityID)
+			}
+		}
+	}
+	// One of them alone is taken.
+	if _, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(a, minted)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// R1 is a seek on the lookup key, not a scan of every entity's metadata
+// (review 298 F2).
+func TestStoryEntitiesDuplicateCheckIsALookupKey(t *testing.T) {
+	if !lookupKeyFor(string(ogKindEntity), "$.normalized") {
+		t.Fatal("choir.entity $.normalized is not a registered lookup key")
+	}
+}
+
 func TestStoryEntitiesRefuseAMalformedOrForeignRequest(t *testing.T) { // N1
 	l := newEntityLab(t)
 	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
