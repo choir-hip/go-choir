@@ -1489,7 +1489,14 @@ in
         "CAP_DAC_OVERRIDE" "CAP_FOWNER" "CAP_KILL" "CAP_SETPCAP"
       ];
       # The jailer mounts and pivot_roots in its own mount namespace.
-      SystemCallFilter = [ "@system-service" "@privileged" "@mount" ];
+      # mincore: Firecracker's Diff snapshot (D5) reads resident guest pages
+      # with mincore(2) when dirty tracking is off. The filter is inherited by
+      # every VMM this unit launches, and with SystemCallErrorNumber=EPERM a
+      # missing mincore made every Diff fail ("Error calling mincore:
+      # Operation not permitted") and fall back to Full. Firecracker's own
+      # filter still allows it only on its vmm thread.
+      # docs/problems/diff-snapshot-mincore-eperm-under-jailer-2026-10-26.md
+      SystemCallFilter = [ "@system-service" "@privileged" "@mount" "mincore" ];
       # vmctl runs in <unit>/supervisor with the direct VMMs. Jailed VMMs
       # run in system-choirvms.slice/vms/<vm> (above), never in this unit:
       # VMCTL_JAILER_CGROUP_PARENT below, and vmctl refuses a parent inside
