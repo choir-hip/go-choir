@@ -57,7 +57,9 @@ func TestRelatedReviewRouteIsTheOwnersBoundedAct(t *testing.T) {
 		Schema string `json:"schema"`
 		agentcore.StoryEntitiesBackfillResult
 	}
-	if got.Code != http.StatusAccepted || json.Unmarshal(got.Body.Bytes(), &receipt) != nil || len(receipt.Requested) != 1 || receipt.Requested[0] != doc.DocID {
-		t.Fatalf("POST = %d %s, want the story asked", got.Code, got.Body.String())
+	if got.Code != http.StatusAccepted || json.Unmarshal(got.Body.Bytes(), &receipt) != nil || receipt.Scanned != 1 || receipt.Empty != 1 || len(receipt.Requested) != 0 {
+		// The story has only its opening seed, so it is read and skipped
+		// (review 325 F3), which shows the act ran for the owner's computer.
+		t.Fatalf("POST = %d %s, want the seed-only story read and skipped", got.Code, got.Body.String())
 	}
 }
