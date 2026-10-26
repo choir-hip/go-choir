@@ -71,7 +71,7 @@ func TestRelatedLinksStoriesThatShareACapture(t *testing.T) { // basics, W4, W12
 	c := l.publish("doc-c", 1, "Bridge closes", z)
 
 	got := l.related(a.RoutePath)
-	if got.Partial || got.Basis.Captures != 2 || got.Basis.Events != 0 || got.Basis.Mode != "captures" || got.Revision != 1 {
+	if got.Partial || got.Basis.Captures != 2 || got.Basis.Events != 0 || got.Basis.Mode != "captures+entities" || got.Revision != 1 {
 		t.Fatalf("A: partial/basis/revision = %v %+v %d, want a complete walk over 2 captures, no events", got.Partial, got.Basis, got.Revision)
 	}
 	if len(got.Links) != 1 || got.Links[0].Title != "Ferries resume" {
