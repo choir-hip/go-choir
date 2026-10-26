@@ -10,7 +10,9 @@ Python 3 standard library only.
 | `host_snapshot.py` | host meminfo (page cache, slab), PSI, KSM, per-VM RSS (vmctl list plus Firecracker anon/file split), optional host `fincore` | no |
 | `guest_memory.py` | guest `procmem` (Cached, AnonPages, Slab, per-process RSS) through the host-sourced route | no |
 | `density_bench.py` | benchmark step 1, the idle ladder | only with `--create-vms` |
+| `accept_five.py` | D7 acceptance: five test computers started in a row with no hand stop, admission decisions, make-room victims and snapshot bytes, MemAvailable series, then each victim woken through the product API | only with `--run` |
 | `test_guard.py` | canned-JSON test of the guard and safety stops | no |
+| `test_accept_five.py` | canned-JSON test of `accept_five.py` (guard, stops, decisions, wake rules, plan, summary) | no |
 
 ## Steps (about 40 minutes with the 3 and 10 minute marks)
 
@@ -30,6 +32,45 @@ Python 3 standard library only.
    writes `receipts/idle-ladder-<run>.json`.
 4. Put the receipts and a summary under `docs/evidence/` with the commit, host and
    tier (report §4 step 5), and replace the estimates in `vm-density-limits` §3.
+
+## D7 acceptance run (`accept_five.py`)
+
+Plan and preflight only (changes nothing; reads the host over ssh):
+`python3 scripts/density/accept_five.py --out receipts/`
+
+The run, from a checkout that has `frontend/node_modules` (the minting script
+needs it; pass `--repo-root` for another checkout), in a quiet window:
+`python3 scripts/density/accept_five.py --run --n 5 --idle-s 60 --out receipts/`
+
+It mints `d7-accept-<run>-<i>` computers one at a time and never stops
+anything; admission (D1) must hibernate idle test computers to make room. Per
+start it records `admission.recent` decisions newer than the run start, the
+hibernated VM ids with warmness class, MemAvailable before and after, the wall
+time to active, and the snapshot bytes of each victim (vmctl's hibernate
+timeline plus `du` on that VM's own `vm-state/<vm_id>/snapshot`, never the
+artifacts root). After the idle pause it wakes each make-room victim this run
+minted, through `choir computer start` with that computer's own key (read from
+its 0600 credential file, passed in the CLI environment, never printed or
+written to the receipt; build with `go build -o /tmp/choir ./cmd/choir`, done
+automatically), and records the wall time and the boot timeline (`resume` is
+a snapshot restore, `cold` and `fallback_cold` are not wakes). Output:
+`receipts/accept-five-<run>.json` and `.summary.txt`: none refused, the
+number of make-room hibernations, every wake under 1 s (expected to fail
+until D2 lands; the times are reported either way) and the MemAvailable
+series. The minted computers are left to idle hibernation; their ids are in
+the receipt.
+
+Stops (the only ones): memory PSI some avg10 above 5, a protected or non-test
+computer that was active leaving active, a minted computer or make-room
+victim that is not safe test class. There is no MemAvailable floor stop, since
+the floor is vmctl's and admission is what is under test. The preflight blocks
+the run when health shows admission disabled or `make_room` not `active`
+(`--allow-weak-preflight` overrides, and the result is then vacuous); it warns
+when the host looks able to hold all five. Protected: the paper (by class),
+`computer-ad1b46d4c20129e84b9e239cf4720fb9`, `computer-03335285269bdba4f94377e56879f9e6`
+and any `--protect-id`. Offline check: `python3 -I scripts/density/test_accept_five.py`;
+`--canned FILE` (`{"collect": ..., "health": ...}`) prints the plan and preflight
+without a host.
 
 ## What the guard does
 
