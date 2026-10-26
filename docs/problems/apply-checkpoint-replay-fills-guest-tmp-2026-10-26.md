@@ -100,3 +100,138 @@ Consequences:
   operation with that cause, as the restart rule closes a schedule whose tick
   crashes twice.
 - selfdev-83fbdfa9 stays `materializing` until a boot settles it.
+
+## Investigation (2026-10-26, lane apply-replay-bound; read-only, from code)
+
+### (a) Where the guest's /tmp lives, how big it is, and what a probe writes there
+
+- **/tmp is RAM.** The guest declares no root filesystem
+  (`nix/autoputer-vm.nix` has no `fileSystems."/"`), so microvm.nix's default
+  applies: `/` is `tmpfs` with `size=50%` of guest memory at mount
+  (microvm.nix `nixos-modules/microvm/mounts.nix:95-101`). The runtime unit has
+  no `PrivateTmp` (`nix/autoputer-vm.nix:1083-1101`), so the probe writes the
+  shared root tmpfs that the updater and every other guest service also use.
+- **Size.** Interactive guests run 4 CPU / 8192 MiB on Node B
+  (`nix/node-b.nix:1640-1641`, read by `interactiveMachineShape`,
+  `internal/vmctl/ownership.go:1333`): /tmp is about **4 GiB**, taken from the
+  same 8 GiB the runtime needs. Platform computers (the paper) run 4096 MiB
+  (`platformVMMemSizeMib`, `ownership.go:1965`, chosen by
+  `machineShapeForOwnership`, `:1323`): their /tmp is about **2 GiB**. The
+  persistent data volume is `/mnt/persistent`, a virtio-blk ext4 image of at
+  least 32 GiB (`dataImageSizeMB`, `internal/vmmanager/manager.go:77`; the nix
+  `size = 2048` at `autoputer-vm.nix:322` is only the build-time artifact). The
+  live store is there (`RUNTIME_STORE_PATH=/mnt/persistent/state`,
+  `autoputer-vm.nix:1018`), and rematerialize already stages its replay beside
+  it (`rematerialize.go:89`).
+- **What the scratch holds.** The probe does not replay from genesis on a
+  computer the size of b@c: with an advertised base it installs that base and
+  replays only the tail (`openProbeReplayStore`, `replay_completeness.go:448-471`);
+  without one it refuses any chain over 10,000 events
+  (`MaxRecoveryTailEvents`, `recoveryplan/recovery_plan.go:15`, checked at
+  `replay_completeness.go:454`), so a 45k chain cannot have taken the genesis
+  path. The scratch is therefore (1) the base blob, downloaded whole into the
+  scratch (`projectionbase/install.go:124`), (2) its unpacked copy, made while
+  the blob still exists (`install.go:146-157`; the blob is an uncompressed tar,
+  `publisher.go:246-263`), so the install peaks at **twice the blob**, and (3)
+  the tail replay's Dolt journal growth, one prepare and one finalize per event
+  (`store/computer_events.go:88`, the same per-event path as live writes).
+- **Bytes.** No test or evidence file measures a probe scratch directly. The
+  nearest measurements: compact projection bases are about 1.7 GB
+  (`nix/node-b.nix:1316`); the per-event journal cost of the same write path is
+  141 KiB per event on the local tape harness and 220 to 310 KiB per event on
+  the paper (`docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`,
+  sections "Correction" and the 10-15 cross-check). So a probe needs about
+  **2 x blob + 0.14 to 0.31 GiB per 1k tail events**. The b@c log lines
+  (`after=36377 … after=44569`) are the slow-page log, printed only when a page
+  takes over 2 s (`computerevent/appender.go:970-972`), so they bound the tail
+  from below (at least 8 pages, about 8k events, about 1.1 to 2.5 GiB) but do
+  not give the watermark. With a base of order 1 GB the install peak alone is
+  about 2 GB: 4 GiB of tmpfs does not hold it plus the tail. On the paper's
+  2 GiB /tmp the base install alone would not fit.
+
+### (b) Does platform_update.go:388 run on long-tape computers such as the paper today?
+
+No automatic path reaches it. The paper is not at risk from it today.
+
+- Its only entry points are `POST /internal/runtime/platform-update`
+  (`internal/apihandler/routes.go:57`, `platform_update.go:778`) and the boot
+  sweep (`runtime.go:949-955` → `settleOrResumePlatformUpdate`,
+  `platform_update.go:947`). The POST has had no caller since b9f195b1c deleted
+  the station probes (`docs/reports/surface-audit-cli-mcp-api-2026-10-14.md:307`;
+  a repo grep finds no script, nix unit or Go caller). Deploys reach computers
+  through vmctl's planned refresh, a different mechanism (marker plus base
+  refresh), including the busy-refresh of `critical_protected` and
+  `public_platform` computers; it never calls `ApplyPlatformUpdate`.
+- The boot sweep acts only on a pending update-accepted transition
+  (`pendingPlatformUpdate`, `:1036`) or a stranded `platform-update-applied-*`
+  event without its route sibling (`resumeStrandedPlatformUpdateTail`,
+  `:881-927`), and even then it first fetches an already-minted checkpoint by
+  key and binds only if none exists (`:364-375`). The paper reboots on every
+  deploy; a strand on its tape would have run this probe on every one of those
+  boots, so the absence of any paper /tmp exhaustion is weak evidence there is
+  none. Not verified against the paper's tape (this lane has no computer access).
+- The paper **is** exposed to the same probe through manual acts: an owner
+  checkpoint bind (`rematerialize.go:438,484`), the operator stamp heal
+  (`selfdev_stamp_heal.go:78,111`), the replay-completeness API
+  (`api_self_development.go:148`) or a self-development apply on it. Each would
+  install a ~1.7 GB base into a 2 GiB tmpfs. None runs on a schedule; the fix
+  below covers all of them because it changes `openReplayProbe`, their one
+  shared entry.
+
+### (c) What "settles from the updater journal, never re-applied" means for selfdev-83fbdfa9
+
+- The apply wrote its planned-restart marker before calling the updater and
+  cleared it when the updater returned (`markPlannedRestart`,
+  `planned_restart.go:310-336`). The Fatalf came later, inside
+  `recordMaterializationApplied`, so every boot since is markerless: a crash
+  boot.
+- At a crash boot, `markSelfDevelopmentOperationsInterruptedAfterCrash`
+  (`self_development_materializer.go:128-160`) marks the `materializing` op
+  interrupted, and the boot-phase reconcile (`runtime.go:961`) calls
+  `settleSelfDevelopmentOperationAfterCrash` (`:164-187`). The updater journal
+  for `selfdev-apply-<decision>` is terminal `applied` (the crashed pass had
+  already verified its receipts, `:478-481`), so the settlement takes the
+  default branch: `materializeSelfDevelopmentOperation(..., journalOnly=true)`
+  → `recordMaterializationApplied`. The `materialization-applied` event is
+  already on the tape (appended before the checkpoint, `:596-618`, deduplicated
+  by idempotency), and the settlement then calls `bindCheckpointAtHead` again:
+  **the same probe, the same scratch, the same /tmp.** "Never re-applied" holds
+  (the updater is not called), but the checkpoint is re-attempted.
+- So it will not settle by itself on b@c as built: each crash boot re-runs the
+  probe that killed the runtime. The journal-only path spends no apply attempt
+  (`applyOrReadJournal`, `:983-996`, skips `markPlannedRestart`), so nothing
+  bounds the repetition except the unit's start limit (5 starts in 10 minutes,
+  `autoputer-vm.nix:928-930`) and vmctl's wedge stop. **Hypothesis, not
+  confirmed by a trace after 11:50:** the 11:50 boot re-entered this loop; a
+  console read of b@c for a second `choir-replay-completeness` Fatalf would
+  confirm it.
+- The owner's rollback does not escape it: a rollback needs a prior checkpoint
+  and the current applied head (`startSelfDevelopmentRollback`,
+  `api_self_development.go:824-870`), and its own apply records through
+  `recordMaterializationApplied` (`:563`), which binds a checkpoint through the
+  same probe. The op needs the fix, not an owner act. Once the probe fits (or
+  refuses by name), the next crash boot or reconcile pass settles it.
+
+### (d) Does a pinned replay base let the probe replay incrementally?
+
+No, not beyond what it already does.
+
+- The probe already starts from the newest base it can verify: the advertised
+  watermark (`resolveRecoveryTarget` + `installStagedBase`,
+  `replay_completeness.go:463-471`; `restore_base.go:54-67`). It replays from
+  genesis only when no base was ever advertised, and then only for chains of at
+  most 10,000 events (`:448-461`). So "the apply path replays from genesis" is
+  not what happened on b@c: it installed a whole base and replayed the tail.
+- c374be0f9 pins the base a checkpoint's replay started from
+  (`pinCheckpointBase`, `restore_base.go:157-171`, called at
+  `checkpoint_restore_bindings.go:101`) so that a *restore* to an older
+  checkpoint can install it (`newestPinnedBaseAtOrBelow`, `restore_base.go:129-154`).
+  A pinned base is a base that was once advertised; checkpointd only advances
+  the watermark. The newest pin is therefore never newer than the advertised
+  base, and switching the probe to it can only lengthen the tail.
+- The probe's cost is O(store) + O(tail) per apply, not O(tape): it copies the
+  whole projection (twice, at the install peak) every time. A truly incremental
+  probe would keep a retained replay store between checkpoints and advance it
+  by the tail only. That is new persistent state (a second copy of the store on
+  the data volume) with its own trust and corruption story; it is a design, not
+  a patch, and is not chosen here (see the design section).
