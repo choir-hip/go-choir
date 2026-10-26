@@ -79,7 +79,9 @@ type ReleaseManifest struct {
 	// against (guest-image-manifest build_commit). The updater refuses a
 	// declared BaseCommit that differs from the booted base's — the
 	// commit-level provenance half of the base join (S2-d); the digest join
-	// stays the identity half.
+	// stays the identity half. A plain self-development release declares the
+	// base its source patch was authored against; the refusal is
+	// ReasonBaseMovedSinceFreeze.
 	BaseCommit string `json:"base_commit,omitempty"`
 	// CodeCommit is the repo commit the release binary was built from (S2-c
 	// provenance). When set on a layered release, the updater verifies the
@@ -431,6 +433,12 @@ func (u *Updater) RestartCurrent(ctx context.Context) error {
 	return u.service.Restart(ctx)
 }
 
+// ReasonBaseMovedSinceFreeze names the refusal of a release whose declared
+// base commit is not the booted base's: the candidate was built on a base the
+// computer no longer runs, and installing it would revert what the booted base
+// carries.
+const ReasonBaseMovedSinceFreeze = "base_moved_since_freeze"
+
 // checkStateCompatibility enforces a release's declared state-compat window
 // before Apply mutates anything: the guest persistent store's schema epoch
 // must satisfy [min_store_schema_version, store_schema_version], and a
@@ -468,11 +476,15 @@ func (u *Updater) checkStateCompatibility(manifest ReleaseManifest) error {
 		if commitErr != nil {
 			return fmt.Errorf("updater: resolve booted base commit: %w", commitErr)
 		}
+		booted = strings.TrimSpace(booted)
 		if booted == "" {
-			return fmt.Errorf("updater: release declares base_commit %s but the booted base carries no build_commit", manifest.BaseCommit)
+			return fmt.Errorf("updater: %s: release declares base_commit %s but the booted base carries no build_commit", ReasonBaseMovedSinceFreeze, manifest.BaseCommit)
 		}
-		if booted != manifest.BaseCommit {
-			return fmt.Errorf("updater: release base commit %s does not match booted base commit %s", manifest.BaseCommit, booted)
+		// A commit is compared whole and without regard to case; a short
+		// commit is not a prefix match (it cannot be proven to name the
+		// booted commit).
+		if !strings.EqualFold(booted, strings.TrimSpace(manifest.BaseCommit)) {
+			return fmt.Errorf("updater: %s: release base commit %s does not match booted base commit %s", ReasonBaseMovedSinceFreeze, manifest.BaseCommit, booted)
 		}
 	}
 	return nil

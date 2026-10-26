@@ -94,6 +94,10 @@ func (fx *derivableSelfDevFixture) requireRefusedForBase(t *testing.T, key strin
 	if fx.service.restarts != 0 {
 		t.Fatalf("restarts = %d; a refusal restarts nothing", fx.service.restarts)
 	}
+	// The refusal settles: desks are not held on a materializing operation.
+	if fx.rt.SelfDevelopmentApplyMaterializing(context.Background()) {
+		t.Fatal("a refused candidate leaves the operation materializing (desks held)")
+	}
 	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 0 {
 		t.Fatalf("events = %v; a refused candidate is not recorded as applied", kinds)
 	}
