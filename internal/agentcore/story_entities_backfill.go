@@ -105,14 +105,14 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 			recorded[rec.Story] = true
 		}
 	}
-	scanMax := storyEntitiesBackfillScanMax
+	scanMax := max(storyEntitiesBackfillScanMax, 1)
 	// One more than the act may read tells whether older stories remain.
 	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, from.Before, from.BeforeDoc, scanMax+1)
 	if err != nil {
 		return out, fmt.Errorf("related review: list the stories: %w", err)
 	}
 	for i, doc := range docs {
-		if len(out.Requested) >= limit || out.Scanned >= scanMax {
+		if i > 0 && (len(out.Requested) >= limit || out.Scanned >= scanMax) {
 			// Stopped before the oldest: go on after the last story read.
 			last := docs[i-1]
 			out.Next = &StoryEntitiesBackfillCursor{Before: last.UpdatedAt, BeforeDoc: last.DocID}

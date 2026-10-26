@@ -321,6 +321,10 @@ func (s *Service) checkPublicAutopaperStory(ctx context.Context, og *ObjectGraph
 		return storeFailed(err)
 	}
 	if !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) {
+		// Also a 409: a computer holds its own story's record as pending.
+		// A published story that is not public stays pending until a
+		// publish puts it on the public route (review 327 Nit 5), which
+		// is right, since its entities would never be shown.
 		return storyNotPublished{fmt.Errorf("%s is not on the public route, so its entities would never be shown", pub)}
 	}
 	return nil

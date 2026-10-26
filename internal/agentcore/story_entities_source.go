@@ -69,12 +69,13 @@ func readAnalysisBasis(answered map[string]types.EventRecord, story string) anal
 		if json.Unmarshal(rec.Result, &result) != nil {
 			continue
 		}
-		b.present = true
 		for _, ans := range result.Answers {
 			subject, ok := rec.Subjects[ans.ID]
 			if !ok || ans.Error != "" {
 				continue
 			}
+			// Only an answer without an error is a basis (review 327 Low 3).
+			b.present = true
 			ref := analysisAnswerRef{ref: "system1:" + id, questionID: ans.ID, probabilities: ans.Probabilities, top: topChoice(ans.Choices, ans.Probabilities), phrase: subject.Phrase}
 			switch subject.Kind {
 			case analysisSubjectRole:
