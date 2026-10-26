@@ -603,7 +603,7 @@ func (r *OwnershipRegistry) hibernateCacheReturnForLocked(own *VMOwnership) *Hib
 	if own == nil || cfg.Mode == GuestCacheReturnOff || len(cfg.Only) == 0 || !cfg.TriggerOn("hibernate") {
 		return nil
 	}
-	if isPlatformOwnership(own) {
+	if isPlatformOwnership(own) || own.IsHeld() {
 		return nil
 	}
 	class := warmnessClassForOwnership(own, r.warmnessPolicy)
@@ -739,14 +739,14 @@ func (r *OwnershipRegistry) guestCacheReturnAct(ctx context.Context, own *VMOwne
 	st := &r.cacheReturn
 	defer st.wg.Done()
 	defer st.end(own.VMID)
-	r.doGuestCacheReturn(ctx, own, trigger, cfg, cacheReturnSettleCap)
+	r.doGuestCacheReturn(ctx, own, trigger, cfg, time.Time{})
 }
 
 // doGuestCacheReturn runs one act and records it: the call (bounded by ctx
 // and the 10 s call bound), then the wait for the host to see the fall (at
 // most settleCap), then the host's readings. It returns the record and the
 // bytes the Firecracker RSS fell by, as the host measured them.
-func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwnership, trigger string, cfg GuestCacheReturnConfig, settleCap time.Duration) (CacheReturnRecord, uint64) {
+func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwnership, trigger string, cfg GuestCacheReturnConfig, deadline time.Time) (CacheReturnRecord, uint64) {
 	st := &r.cacheReturn
 
 	started := time.Now()
@@ -799,9 +799,22 @@ func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwner
 	rec.SettleExit = "none"
 	after, haveAfter := before, haveBefore
 	if haveBefore && status == http.StatusOK && !dry && (report.Outcome == "returned" || report.Outcome == "partial") {
-		settle := waitRSSFall(read, st.sleepFn(), before, report.ReclaimedBytes, settleCap)
-		after, haveAfter = settle.RSS, settle.Exit != "gone"
-		rec.SettleMS, rec.SettleExit = settle.MS, settle.Exit
+		// The cap is what remains now, after the call, not what remained
+		// before it (review 334).
+		limit := cacheReturnSettleCap
+		if !deadline.IsZero() {
+			limit = min(limit, time.Until(deadline))
+		}
+		if limit > 0 {
+			settle := waitRSSFall(read, st.sleepFn(), before, report.ReclaimedBytes, limit)
+			after, haveAfter = settle.RSS, settle.Exit != "gone"
+			rec.SettleMS, rec.SettleExit = settle.MS, settle.Exit
+		} else {
+			rec.SettleExit = "deadline"
+			if got, ok := read(); ok {
+				after, haveAfter = got, true
+			}
+		}
 	} else if got, ok := read(); ok {
 		after, haveAfter = got, true
 	}

@@ -183,7 +183,10 @@ func (m *Manager) snapshotCacheReturn(vmID, hostURL string, opt *CacheReturnOpti
 	}
 	cr.Outcome, cr.Method, cr.ReclaimedMiB = report.Outcome, report.Method, report.ReclaimedBytes>>20
 	cr.RSSEndMiB = cr.RSS0MiB
-	if !have {
+	// A dry run frees nothing, whatever the guest claims: it is not waited
+	// for (host guard; a buggy or hostile guest would add the cap to every
+	// observed hibernate).
+	if opt.DryRun || !have {
 		return
 	}
 	// The wait's cap is its own: the call's time is not charged to it, so
