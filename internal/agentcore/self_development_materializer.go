@@ -816,7 +816,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		return err
 	}
 	verifierCertificate, err := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
-		Version: 1, ComputerID: operation.ComputerID, OperationID: operation.OperationID,
+		Version: 1, ComputerID: operation.ComputerID, OperationID: evidence.OperationID,
 		BundleDigest: evidence.VerifiedBundleDigest, VerificationEventDigest: operation.VerifierRefs[0],
 		VerifierEvidenceRefs: evidence.Refs, DecisionEventHead: operation.DecisionEvent,
 		CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
@@ -1049,9 +1049,19 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 }
 
 type selfdevVerificationEvidence struct {
+	// OperationID is the operation the recorded payload names, which the
+	// verifier certificate must carry (the checkpoint authority joins it
+	// verbatim). It is the operation's own id, except for a rollback, whose
+	// payload names the operation that was verified, the rollback's target.
+	OperationID          string
 	VerifiedBundleDigest string
 	Refs                 []string
 }
+
+// rollbackTargetHops bounds how far a rollback follows rollback targets back
+// to the operation its verification payload names (a rollback to a rollback
+// to ...). A longer chain is refused.
+const rollbackTargetHops = 16
 
 // verificationEvidence reads the recorded verification event's output
 // payload and returns the exact fields the checkpoint authority joins on:
@@ -1083,12 +1093,13 @@ func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.O
 		VerifierRefs  []string `json:"verifier_refs"`
 		VerifierRunID string   `json:"verifier_run_id"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil || payload.OperationID != operation.OperationID ||
+	if err := json.Unmarshal(raw, &payload); err != nil ||
+		!rt.verificationPayloadNamesOperation(ctx, operation, payload.OperationID) ||
 		payload.Decision != "pass" || len(payload.VerifierRefs) == 0 || payload.VerifierRunID == "" ||
 		!computerevent.IsSHA256(payload.BundleDigest) {
 		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: verification payload refused")
 	}
-	return selfdevVerificationEvidence{VerifiedBundleDigest: payload.BundleDigest, Refs: payload.VerifierRefs}, nil
+	return selfdevVerificationEvidence{OperationID: payload.OperationID, VerifiedBundleDigest: payload.BundleDigest, Refs: payload.VerifierRefs}, nil
 }
 
 func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, applyErr error, expectedState string) error {
@@ -1206,4 +1217,45 @@ func (rt *Runtime) notifySelfDevelopmentDecisionBoundary(ctx context.Context, op
 	if _, err := rt.store.AppendCommitmentRecord(ctx, rt.selfdevRouteOwnerID, operation.ComputerID, rec); err != nil {
 		log.Printf("selfdev reconcile: decision-boundary observation for %s: %v", operation.OperationID, err)
 	}
+}
+
+// verificationPayloadNamesOperation reports whether a recorded verification
+// payload that names payloadOperationID is the evidence for this operation:
+// its own, or, for a rollback, the operation it rolls back to. A rollback
+// operation carries its target's verifier ref (selfdev.Store.StartRollback), so
+// its payload names the operation that was verified. The target is the
+// operation whose effective head is the rollback's BaseHead; it must be
+// settled (applied or rolled back) and cite the same verifier ref and bundle.
+// A target that is itself a rollback cites the ref it copied, so the chain is
+// followed back, bounded, to the operation the payload names. Anything else
+// stays refused: an apply never cites another operation's payload.
+// (docs/problems/selfdev-rollback-cannot-record-success-2026-10-26.md)
+func (rt *Runtime) verificationPayloadNamesOperation(ctx context.Context, operation selfdev.Operation, payloadOperationID string) bool {
+	if payloadOperationID == operation.OperationID {
+		return true
+	}
+	rollback := operation.State == selfdev.StateRollbackPending ||
+		(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "")
+	if !rollback || len(operation.VerifierRefs) == 0 || strings.TrimSpace(operation.BaseHead) == "" || rt.selfdevOperations == nil {
+		return false
+	}
+	head := operation.BaseHead
+	for hop := 0; hop < rollbackTargetHops; hop++ {
+		target, err := rt.selfdevOperations.GetByEffectiveHead(ctx, operation.ComputerID, head)
+		if err != nil || target.OperationID == operation.OperationID ||
+			len(target.VerifierRefs) == 0 || target.VerifierRefs[0] != operation.VerifierRefs[0] ||
+			target.BundleDigest != operation.BundleDigest {
+			return false
+		}
+		if target.OperationID == payloadOperationID {
+			return true
+		}
+		// Only a rollback is followed further back; its base head is the
+		// effective head of the operation it rolled back to.
+		if !strings.HasPrefix(target.OperationID, "rollback-") || strings.TrimSpace(target.BaseHead) == "" {
+			return false
+		}
+		head = target.BaseHead
+	}
+	return false
 }
