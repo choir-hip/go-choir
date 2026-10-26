@@ -26,6 +26,10 @@ import (
 // calls and one Texture turn each), inside a day's 3,000 System 1 calls.
 const StoryEntitiesBackfillMax = 200
 
+// storyEntitiesBackfillScanMax bounds the stories one act reads (review
+// 325 F2); the result's Next is the cursor to go on from.
+var storyEntitiesBackfillScanMax = 2000
+
 var (
 	// ErrStoryEntitiesBackfillOff refuses the act while the computer's
 	// research.related_story setting is off.
@@ -46,12 +50,33 @@ type StoryEntitiesBackfillResult struct {
 	Recorded int `json:"recorded"`
 	// Busy: stories skipped because their research desk is working.
 	Busy int `json:"busy"`
+	// Empty: stories skipped because their head has no text yet.
+	Empty int `json:"empty"`
+	// Gone: stories that went away during the act.
+	Gone int `json:"gone"`
 	// Scanned: stories read.
 	Scanned int `json:"scanned"`
+	// Next is where the next act goes on from, when this one stopped
+	// before the oldest story.
+	Next *StoryEntitiesBackfillCursor `json:"next,omitempty"`
 }
 
-// StoryEntitiesBackfill runs one batch of at most limit asks.
+// StoryEntitiesBackfillCursor names where an act goes on from: stories
+// updated before Before, or at Before with a doc id after BeforeDoc.
+type StoryEntitiesBackfillCursor struct {
+	Before    time.Time `json:"before"`
+	BeforeDoc string    `json:"before_doc"`
+}
+
+// StoryEntitiesBackfill runs one batch of at most limit asks from the
+// newest story.
 func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, batchID string, limit int) (StoryEntitiesBackfillResult, error) {
+	return rt.StoryEntitiesBackfillFrom(ctx, owner, computer, batchID, limit, StoryEntitiesBackfillCursor{})
+}
+
+// StoryEntitiesBackfillFrom runs one batch of at most limit asks, reading
+// at most storyEntitiesBackfillScanMax stories from the cursor.
+func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, computer, batchID string, limit int, from StoryEntitiesBackfillCursor) (StoryEntitiesBackfillResult, error) {
 	owner, computer, batchID = strings.TrimSpace(owner), strings.TrimSpace(computer), strings.TrimSpace(batchID)
 	out := StoryEntitiesBackfillResult{BatchID: batchID, Requested: []string{}}
 	if rt == nil || rt.store == nil {
@@ -80,12 +105,17 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 			recorded[rec.Story] = true
 		}
 	}
-	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, time.Time{}, "", 0)
+	scanMax := storyEntitiesBackfillScanMax
+	// One more than the act may read tells whether older stories remain.
+	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, from.Before, from.BeforeDoc, scanMax+1)
 	if err != nil {
 		return out, fmt.Errorf("related review: list the stories: %w", err)
 	}
-	for _, doc := range docs {
-		if len(out.Requested) >= limit {
+	for i, doc := range docs {
+		if len(out.Requested) >= limit || out.Scanned >= scanMax {
+			// Stopped before the oldest: go on after the last story read.
+			last := docs[i-1]
+			out.Next = &StoryEntitiesBackfillCursor{Before: last.UpdatedAt, BeforeDoc: last.DocID}
 			break
 		}
 		out.Scanned++
@@ -97,6 +127,14 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 		if asked == nil {
 			if recorded[types.StoryPublicationID(owner, doc.DocID)] {
 				out.Recorded++
+				continue
+			}
+			// A story with no text yet (its opening seed) cannot be
+			// analysed; asking it would ask it again every batch.
+			if empty, err := rt.storyHeadEmpty(ctx, owner, computer, doc); err != nil {
+				return out, fmt.Errorf("related review: read the head of %s: %w", doc.DocID, err)
+			} else if empty {
+				out.Empty++
 				continue
 			}
 			// As the reader's route does: a research run still working
@@ -115,6 +153,7 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 			out.Busy++
 			continue
 		case errors.Is(err, store.ErrNotFound):
+			out.Gone++
 			continue
 		case err != nil:
 			return out, fmt.Errorf("related review: ask %s: %w", doc.DocID, err)
@@ -125,4 +164,19 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 		}
 	}
 	return out, nil
+}
+
+// storyHeadEmpty reports whether a story's head revision has no text.
+func (rt *Runtime) storyHeadEmpty(ctx context.Context, owner, computer string, doc types.Document) (bool, error) {
+	if strings.TrimSpace(doc.CurrentRevisionID) == "" {
+		return true, nil
+	}
+	rev, err := rt.store.GetLifecycleRevision(ctx, owner, computer, doc.CurrentRevisionID)
+	if errors.Is(err, store.ErrNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(rev.Content) == "", nil
 }

@@ -11,7 +11,7 @@ import (
 
 // The owner's related-review act
 // (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice d):
-// POST {batch_id, limit} asks the research desks of this computer's stories
+// POST {batch_id, limit, from} asks the research desks of this computer's stories
 // with no entities record to record what each story is about, newest
 // first. A repeat of a batch replays it.
 
@@ -23,6 +23,9 @@ const (
 type relatedReviewHTTPRequest struct {
 	BatchID string `json:"batch_id"`
 	Limit   int    `json:"limit"`
+	// From is the previous act's next, to go on from it; empty starts at
+	// the newest story.
+	From agentcore.StoryEntitiesBackfillCursor `json:"from"`
 }
 
 type relatedReviewHTTPReceipt struct {
@@ -46,7 +49,7 @@ func (h *Handler) HandleTextureRelatedReview(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "batch_id and limit are required"})
 		return
 	}
-	result, err := h.Core.StoryEntitiesBackfill(r.Context(), ownerID, h.Core.TextureComputerID(), body.BatchID, body.Limit)
+	result, err := h.Core.StoryEntitiesBackfillFrom(r.Context(), ownerID, h.Core.TextureComputerID(), body.BatchID, body.Limit, body.From)
 	switch {
 	case errors.Is(err, agentcore.ErrStoryEntitiesBackfillOff):
 		writeAPIJSON(w, http.StatusConflict, storyResearchRefusal{Error: err.Error(), Reason: "off"})
