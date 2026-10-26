@@ -36,15 +36,16 @@ metamission:
       status: working
       depends_on: []
       note: >-
-        Land what is in flight, then stop starting. Train 13 (research
-        economy switches deleted) in CI; entity layer slice (a) in tier 2
-        review 298, slice (b) building; apply-checkpoint replay fix
-        (lane apply-replay-bound) building; the switched-off inventory
-        recorded. Nothing new starts except the density stations.
+        Land what is in flight, then stop starting. As of 22:5x: the
+        bearer-wake fix (review 339 accepted, one fix round), the rollback
+        CLI verb, the delete-dead lane (five dead switched-off features),
+        the progressive delivery design (design only), train 27 (built,
+        unpushed; D2's next-deploy proof). Trains 13 to 26b landed; see
+        the ledger.
     - id: D
-      path: docs/definitions/choir-density-2026-10-26.md (to author first)
-      readiness: intent
-      status: pending
+      path: docs/definitions/choir-density-2026-10-26.md
+      readiness: executable
+      status: working
       depends_on: []
       note: >-
         Density first (owner, 12:0x). Evidence:
@@ -223,7 +224,7 @@ boundaries:
 
 now:
   status: working
-  slice: L0, then D
+  slice: D (D2 next-deploy proof, then D7), with L0 landing the bearer wake, rollback CLI and delete-dead lanes
   bridge_conjecture: >-
     If admission can make room by hibernating idle computers and a wake
     costs under a second, then the host serves many more computers than it
@@ -231,15 +232,29 @@ now:
     loaded host exceed a second, or if a hibernated computer loses work.
   belief:
     believed_state: >-
-      Hibernate and fast wake work (0.1 to 0.4 s, 10-14 proof) but are not
-      used to make room; admission charges the last peak; diff snapshots
-      are built and off.
+      Updated 2026-10-26 22:5x. D1, D3a, D3, D4 landed; D5 Diff proved on
+      d@e and on for class:test; D6 observe on two computers; D2 on since
+      train 26b (22:46) but not yet proved across a deploy; X1 slices 1 to 3
+      landed, cadence on for d@e; U4 landed and proved on d@e, not yet on
+      for b@c (SD-01 manual promotion still applies there). Rollback has
+      never run on staging.
     main_uncertainty: >-
-      Whether d@e and b@c are exempt from idle hibernation as primary
-      computers (hypothesis), and how wake time behaves under load.
+      Whether a snapshot taken on one release resumes in under a second
+      after the next deploy (D2 P1), and whether wakes stay under a second
+      with five computers on one host (D7).
     next_observation: >-
-      vmctl's health read of each computer's warmness class and keepalive
-      reason; D1's failure modes written before its code.
+      d@e hibernates under D2, train 27 deploys, d@e wakes: snapshot outcome
+      snapshot, behind true, wake under 1000 ms, then a planned refresh
+      (journal: deploy refresh caller=retry-sweep planned_restart=true).
+  open_decision: >-
+    Continue this metamission with the next agent or open a new goal.
+    FP0's recommendation: continue it. D, X4, W, F and R are still open and
+    this file names their finish lines. Once the owner ratifies the
+    progressive delivery design (docs/design/progressive-delivery-2026-10-26.md),
+    W becomes that design's first station (default-on settings, cohorts,
+    automatic revert) instead of more one-off switch rulings.
   next_action: >-
-    Land L0; author docs/definitions/choir-density-2026-10-26.md from the
-    memory investigation and start D1 (tests first).
+    Land the bearer-wake fixes after review 339's round; prove rollback on
+    d@e with the new CLI verb; run the D2 next-deploy proof with train 27;
+    turn U4 on for b@c; land the delete-dead lane and the progressive
+    delivery design (design only); then D7.
