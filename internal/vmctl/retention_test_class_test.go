@@ -294,34 +294,6 @@ func TestTestIdleRechecksAtDestroyTime(t *testing.T) {
 	}
 }
 
-func TestShadowPlanReportsButNeverEnforces(t *testing.T) {
-	requireQuarantineCtime(t)
-	f := newRetentionFixture(t, RetentionPruneModeOff, RetentionPruneModeOff, RetentionPruneModeOff)
-	f.reg.SetRetentionShadowPruneConfig(RetentionPruneConfig{
-		Mode:             RetentionPruneModeActive,
-		StateDir:         f.stateDir,
-		TestIdleMode:     RetentionPruneModeActive,
-		QuarantineMode:   RetentionPruneModeActive,
-		TestIdleMinAge:   7 * 24 * time.Hour,
-		QuarantineMinAge: 7 * 24 * time.Hour,
-	})
-	name := f.quarantine(t, f.vm(rtTesterRecent), 1, "aa", "done", "active")
-	plan := f.reg.RetentionShadowPlan()
-	if e := testClassEntry(plan, f.vm(rtTesterA)); e == nil || e.Verdict != "would_remove" { // T5
-		t.Fatalf("shadow tester-a = %+v, want would_remove", e)
-	}
-	if e := quarantineEntry(plan, name); e == nil || e.Verdict != "would_remove" {
-		t.Fatalf("shadow quarantine = %+v, want would_remove", e)
-	}
-	f.reg.PruneRetention(context.Background(), allowLifecycleRoute)
-	if len(f.mgr.destroys) != 0 {
-		t.Fatalf("shadow config deleted: %v", f.mgr.destroys)
-	}
-	if _, err := os.Stat(filepath.Join(f.stateDir, f.vm(rtTesterRecent), name)); err != nil {
-		t.Fatalf("shadow config removed a quarantine: %v", err)
-	}
-}
-
 func TestQuarantineAgeOutKeepsEverythingThatMayBeTheOnlyCopy(t *testing.T) {
 	requireQuarantineCtime(t)
 	f := newRetentionFixture(t, RetentionPruneModeActive, RetentionPruneModeOff, RetentionPruneModeDryRun)

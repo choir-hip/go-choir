@@ -4,6 +4,13 @@
 # (docs/problems/vm-state-retention-skips-test-computers-and-quarantines-2026-10-22.md;
 # station docs/definitions/choir-launch-fp0-vm-retention-2026-10-22.md).
 #
+# NOTE 2026-10-26: GET /internal/vmctl/retention-shadow-plan and the
+# VMCTL_RETENTION_SHADOW_* env were deleted (the active plan, test-idle and
+# quarantine modes active since 10-24, replaces them). Steps 0, 1 and 2 are
+# the inert-deploy checks of that phase and read the retired endpoint; they
+# are kept for the record and fail against a current vmctl. Step 3 onward
+# reads the active plan's result.
+#
 # Every step here is read-only. Enforce is not a step: it is an env change
 # on vmctl in nix/node-b.nix (a reviewed commit and a deploy), and step 3
 # reads its result.

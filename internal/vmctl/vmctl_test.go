@@ -604,7 +604,7 @@ func TestOwnershipRegistry_PressureReclaimProtectsGuestBusy(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testing.T) {
+func TestOwnershipRegistry_RetentionActivePlanPrunesOnlyItsPolicy(t *testing.T) {
 	stateDir := t.TempDir()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetRetentionPruneConfig(RetentionPruneConfig{
@@ -615,18 +615,9 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 		MaxDeletes:            10,
 		MaxBytes:              1024 * 1024 * 1024,
 	})
-	reg.SetRetentionShadowPruneConfig(RetentionPruneConfig{
-		Mode:                    RetentionPruneModeActive,
-		StateDir:                stateDir,
-		EphemeralEmailDomains:   []string{"example.com", "example.test"},
-		EphemeralUserIDPrefixes: []string{"diagnostic-"},
-		EphemeralMinAge:         time.Hour,
-		MaxDeletes:              10,
-		MaxBytes:                1024 * 1024 * 1024,
-	})
 	reg.setRetentionUserEmailsForTest(map[string]string{
 		"active-policy-user": "playwright@example.com",
-		"shadow-email-user":  "load@example.test",
+		"other-email-user":   "load@example.test",
 		"real-user":          "yusefnathanson@me.com",
 	})
 
@@ -634,13 +625,9 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 	if err != nil {
 		t.Fatalf("resolve active policy user: %v", err)
 	}
-	shadowEmailOwn, err := reg.ResolveOrAssign("shadow-email-user")
+	otherEmailOwn, err := reg.ResolveOrAssign("other-email-user")
 	if err != nil {
-		t.Fatalf("resolve shadow email user: %v", err)
-	}
-	shadowSyntheticOwn, err := reg.ResolveOrAssign("diagnostic-1778792614")
-	if err != nil {
-		t.Fatalf("resolve shadow synthetic user: %v", err)
+		t.Fatalf("resolve other email user: %v", err)
 	}
 	realOwn, err := reg.ResolveOrAssign("real-user")
 	if err != nil {
@@ -649,14 +636,14 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 
 	old := time.Now().Add(-3 * time.Hour)
 	reg.mu.Lock()
-	for _, userID := range []string{"active-policy-user", "shadow-email-user", "diagnostic-1778792614", "real-user"} {
+	for _, userID := range []string{"active-policy-user", "other-email-user", "real-user"} {
 		own := reg.ownerships[ownershipKey(userID, PrimaryDesktopID)]
 		own.State = VMStateHibernated
 		own.LastActiveAt = old
 	}
 	reg.mu.Unlock()
 
-	for _, vmID := range []string{activeOwn.VMID, shadowEmailOwn.VMID, shadowSyntheticOwn.VMID, realOwn.VMID} {
+	for _, vmID := range []string{activeOwn.VMID, otherEmailOwn.VMID, realOwn.VMID} {
 		dir := filepath.Join(stateDir, vmID)
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("mkdir %s: %v", vmID, err)
@@ -673,30 +660,11 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 	if !retentionPlanHasVM(activePlan, activeOwn.VMID) {
 		t.Fatalf("active plan missing active-policy VM %s: %+v", activeOwn.VMID, activePlan.Candidates)
 	}
-	if retentionPlanHasVM(activePlan, shadowEmailOwn.VMID) {
-		t.Fatalf("active plan must not include shadow example.test VM %s: %+v", shadowEmailOwn.VMID, activePlan.Candidates)
-	}
-	if retentionPlanHasVM(activePlan, shadowSyntheticOwn.VMID) {
-		t.Fatalf("active plan must not include shadow synthetic VM %s: %+v", shadowSyntheticOwn.VMID, activePlan.Candidates)
+	if retentionPlanHasVM(activePlan, otherEmailOwn.VMID) {
+		t.Fatalf("active plan must not include example.test VM %s: %+v", otherEmailOwn.VMID, activePlan.Candidates)
 	}
 	if retentionPlanHasVM(activePlan, realOwn.VMID) {
 		t.Fatalf("active plan must not include protected real-user VM %s: %+v", realOwn.VMID, activePlan.Candidates)
-	}
-
-	shadowPlan := reg.RetentionShadowPlan()
-	if shadowPlan.Mode != RetentionPruneModeDryRun {
-		t.Fatalf("shadow plan mode = %s, want dry-run", shadowPlan.Mode)
-	}
-	if shadowPlan.Decision != "would_prune" {
-		t.Fatalf("shadow plan decision = %s, want would_prune: %+v", shadowPlan.Decision, shadowPlan)
-	}
-	for _, vmID := range []string{activeOwn.VMID, shadowEmailOwn.VMID, shadowSyntheticOwn.VMID} {
-		if !retentionPlanHasVM(shadowPlan, vmID) {
-			t.Fatalf("shadow plan missing VM %s: %+v", vmID, shadowPlan.Candidates)
-		}
-	}
-	if retentionPlanHasVM(shadowPlan, realOwn.VMID) {
-		t.Fatalf("shadow plan must not include protected real-user VM %s: %+v", realOwn.VMID, shadowPlan.Candidates)
 	}
 
 	mgr := &mockVMManager{}
@@ -712,9 +680,9 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 	if !containsString(mgr.destroys, activeOwn.VMID) {
 		t.Fatalf("destroyed VMs = %v, want active policy VM %s", mgr.destroys, activeOwn.VMID)
 	}
-	for _, vmID := range []string{shadowEmailOwn.VMID, shadowSyntheticOwn.VMID, realOwn.VMID} {
+	for _, vmID := range []string{otherEmailOwn.VMID, realOwn.VMID} {
 		if containsString(mgr.destroys, vmID) {
-			t.Fatalf("active prune must not destroy shadow/protected VM %s: %v", vmID, mgr.destroys)
+			t.Fatalf("active prune must not destroy other/protected VM %s: %v", vmID, mgr.destroys)
 		}
 	}
 }

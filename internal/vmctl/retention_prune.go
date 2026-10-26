@@ -276,20 +276,6 @@ func (r *OwnershipRegistry) RetentionPrunePlan() RetentionPrunePlan {
 	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached, r.retentionNow())
 }
 
-func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
-	cfg, ownerships, emails, detached, ok := r.retentionShadowSnapshot()
-	if !ok {
-		cfg := normalizeRetentionPruneConfig(RetentionPruneConfig{Mode: RetentionPruneModeOff})
-		return RetentionPrunePlan{
-			Mode:     cfg.Mode,
-			Decision: "disabled",
-			Reason:   "retention shadow plan is disabled",
-			Config:   retentionPruneConfigSummary(cfg),
-		}
-	}
-	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached, r.retentionNow())
-}
-
 func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState, now time.Time) RetentionPrunePlan {
 	plan := RetentionPrunePlan{
 		Mode:     cfg.Mode,
@@ -458,28 +444,6 @@ func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwne
 	}
 	detached := map[string]RetentionProtectedState{}
 	return cfg, ownerships, emails, detached
-}
-
-func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string, map[string]RetentionProtectedState, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if !r.retentionShadowPruneEnabled {
-		return RetentionPruneConfig{}, nil, nil, nil, false
-	}
-	cfg := normalizeRetentionPruneConfig(r.retentionShadowPrune)
-	if cfg.Mode != RetentionPruneModeOff {
-		cfg.Mode = RetentionPruneModeDryRun
-	}
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
-	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	emails := make(map[string]string, len(r.retentionUserEmails))
-	for userID, email := range r.retentionUserEmails {
-		emails[userID] = email
-	}
-	detached := map[string]RetentionProtectedState{}
-	return cfg, ownerships, emails, detached, true
 }
 
 func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, []RetentionKeptStateDir, int, int, []string) {
