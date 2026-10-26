@@ -170,10 +170,16 @@ const (
 )
 
 // StoryRelationsRequest carries a computer's judged pair relations to Store B.
+//
+// ValidateOnly asks for every check the write runs and no write: the computer
+// calls it before it puts a relation on its tape, so the tape holds only
+// pairs the platform would take. The answer carries "validated", never
+// "recorded".
 type StoryRelationsRequest struct {
-	OwnerID    string          `json:"owner_id"`
-	ComputerID string          `json:"computer_id"`
-	Relations  []StoryRelation `json:"relations"`
+	OwnerID      string          `json:"owner_id"`
+	ComputerID   string          `json:"computer_id"`
+	Relations    []StoryRelation `json:"relations"`
+	ValidateOnly bool            `json:"validate_only,omitempty"`
 }
 
 // StoryRelation is the part of a judged pair Store B keeps: two publication
