@@ -24,6 +24,11 @@ package agentcore
 //     tape's latest role and Store B's equal. A call whose role differs from
 //     the latest recorded one is a role change, recorded again; only a call
 //     equal to the latest record is a replay.
+//  E10 The desk's own story (review 304 item 3): "" or "story:head" binds to
+//     the publication id of the doc the research desk is bound to
+//     (research:<doc>, a lifecycle document of the owner on this computer),
+//     the id corpusd gives that story; a desk bound to no doc refuses and
+//     records, checks and exports nothing.
 //  E8 The id of a new entity is the cell's: a new entity's id is derived on
 //     the host from its normalised name (or its Wikidata id), so two calls
 //     naming it alike name one node.
@@ -470,5 +475,55 @@ func TestRelateRepeatCarriesTheFirstMintedDescription(t *testing.T) {
 	calls := f.epub.entityCalls()
 	if last := calls[len(calls)-1].Entities[0]; last.Name != "Anthropic" || !last.New {
 		t.Fatalf("repeat exported %+v, want the first minted description (Anthropic)", last)
+	}
+}
+
+func TestRelateOwnStoryBindsToTheDesksDocAndAnUnboundDeskRefuses(t *testing.T) { // E10
+	f := newEntityFixture(t)
+	f.turnOn(t)
+	receipt := f.judgedEntity(t, "run-own", "q1")
+	ent := newVucic(receipt, "q1", types.EntityRoleCentral)
+	relate := func(agentID, story string) (json.RawMessage, error) {
+		payload, err := json.Marshal(yaegikernel.RelatePayload{Story: story, Entities: []yaegikernel.RelateEntity{ent}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec := f.exec("run-own")
+		exec.AgentID = agentID
+		return f.rt.deskEgress(context.Background(), agentprofile.Research, exec, yaegikernel.ActionRelate, payload)
+	}
+
+	// Unbound: no doc behind the desk id, or no doc in it.
+	for _, agentID := range []string{"research:" + f.owner, "research", "research:", ""} {
+		if _, err := relate(agentID, yaegikernel.RelateOwnStory); err == nil || !strings.Contains(err.Error(), "bound") {
+			t.Errorf("desk %q: err = %v, want a refusal saying the desk is bound to no story", agentID, err)
+		}
+	}
+	if n := len(f.entityEvents(t)); n != 0 || len(f.epub.entityCalls()) != 0 || len(f.epub.entityChecks()) != 0 {
+		t.Fatalf("unbound calls left %d tape events, %d exports, %d checks", n, len(f.epub.entityCalls()), len(f.epub.entityChecks()))
+	}
+
+	// Bound: research:doc-system1 names a lifecycle document of the owner.
+	want := types.StoryPublicationID(f.owner, "doc-system1")
+	for _, story := range []string{"", yaegikernel.RelateOwnStory} {
+		raw, err := relate("research:doc-system1", story)
+		if err != nil {
+			t.Fatalf("story %q: %v", story, err)
+		}
+		if got := decodeAttach(t, raw).Story; got != want {
+			t.Fatalf("story %q: result story = %q, want the doc's publication id %q", story, got, want)
+		}
+	}
+	checks, exports := f.epub.entityChecks(), f.epub.entityCalls()
+	if len(checks) == 0 || len(exports) == 0 || checks[0].Story != want || exports[0].Story != want {
+		t.Fatalf("checks %+v exports %+v, want both for %q", checks, exports, want)
+	}
+	events := f.entityEvents(t)
+	if len(events) != 1 {
+		t.Fatalf("tape holds %d story.entities events, want 1 (the second call is a replay)", len(events))
+	}
+	var rec storyEntitiesRecord
+	if err := json.Unmarshal(events[0].Payload, &rec); err != nil || rec.Story != want {
+		t.Fatalf("tape record story = %q, %v; want %q", rec.Story, err, want)
 	}
 }
