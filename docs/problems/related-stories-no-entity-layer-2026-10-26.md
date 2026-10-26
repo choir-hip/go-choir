@@ -93,8 +93,8 @@ rollback, like `CORPUSD_RELATED`.
 |---|---|---|---|
 | a | `choir.entity` kind and `mentions_entity` edge registered (owner corpusd, D3/D4); `choir.Relate` for research: one story's entity attachments (existing id, or new with name, type, optional Wikidata id, D1/D5; role central or incidental), each resting on a System 1 answer of the run (as `RelateStories`); match before mint (R1: a new entity whose normalised name or alias matches an existing one is refused with the match named); recorded as a `story.entities` tape event (acknowledged), the tape the authority (R7) | red (new tape event kind, desk surface) | 2 |
 | b | `relatedWalk` reads shared **central** entities (on by default, `CORPUSD_RELATED_ENTITIES=off` the rollback); an entity central to more than 30 stories (`HubEntityStories`) gives no vote; ranking: judged `related_story` pairs, then shared central entities (more first), then shared captures (now a minor signal). The export route moved into slice a (the duplicate check needs the rows) | orange (product read, behind a kill switch) | 1 |
-| c | Standing review schedule on the source-schedule chain (generation guard, in-flight mark, crash-loop bound, `recoverSourceSchedulesAtBoot`, the overdue sweep): each tick hands research up to K published stories with no `story.entities` record yet, newest first, with mechanically found candidate entities | red (boot path, standing intent) | 2 |
-| d | Backfill of existing stories: an owner act that lets the review drain older stories under the same K per tick; a crash closes it and only an owner act restarts it | red, additive | 1 |
+| c | Revised (owner ruling 2026-10-26, no new desk): the story's own research desk records its entities before its final Report, enforced as a finish rule with `research.related_story` on; a story desk names its own story; records before publish export at publish | red (desk finish rule, tape, export) | 2 |
+| d | Revised: backfill by an owner act that sends each older story's own research desk a relate request on the reader-request route; a schedule only if the trace shows stories with no research round | red, additive | 1 |
 | e | Coverage floor in the deployed spec: share of the first 60 front stories with a link, `basis.mode` reported | yellow | 0 |
 
 ### Slice a as built
@@ -132,119 +132,154 @@ rollback, like `CORPUSD_RELATED`.
   eligibility; it can only make an entity a hub sooner (documented in code,
   not read row by row).
 
-### Slice c, the design taken (before code; revised after review 299)
+### Slice c and d, withdrawn designs
 
-The first draft (one Cast per story to `research:<doc>`, closed by a
-Report to `source:related-review`) failed three checks against the code,
-named by review 299 and confirmed:
+Two designs for the trigger were withdrawn before any code landed:
 
-- **No reply route.** A source inbox takes only management's Note
-  (`rlm_reduce.go` destination check, `recordsRoute`); research has no
-  route to `source:*`, so the close-out Report could not commit.
-- **Per-story desks starve.** A story's research desk runs only on a live
-  trajectory (`admitLifecycleResearchProviderEntry`: "lifecycle Research
-  scope is not exact and live"), and a story trajectory settles when its
-  last run ends with no open work (`ReconcileLifecycleSettlementForTerminalRun`).
-  Most published stories are settled within hours, so a review that skips
-  them would starve the standing review as well as the backfill.
-- **The research inbox prompt** (`recordsInboxPrompts`) tells research to
-  answer Texture, so a review on a story's desk risks waking Texture.
+- One Cast per story to `research:<doc>` from `source:related-review`,
+  closed by a Report to that source (c7f946f7f). Review 299 found that no
+  route carries the close-out: a source inbox takes only management's Note.
+- One computer-wide review desk, `research:related-review`, fed a Note per
+  tick (17848ed4a). The owner ruled it out on 2026-10-26: "one
+  computer-wide review desk … eg I don't want to make a new desk". Its
+  tests are kept on the local branch `scratch/related-review-desk-tests`
+  (cf712d267) and are not for main.
 
-The design taken instead is the batch of phase 3 §11 slice 2: **one
-computer-wide review desk**, `research:related-review`.
+The second design rested on a claim that was wrong: that most published
+stories settle within hours, so a story's own research desk could not run
+for them. **A story trajectory never settles.**
+`lifecycleSettlementReady` returns false for `TrajectoryKindStory`
+(`internal/store/lifecycle.go`, "a living story has no work items … it
+never settles by draining work"; `types.TrajectoryKindStory`: "a story stays
+live for every later Cast or Note"). So every story's own research desk can
+run at any time, the story just made and the story three weeks old alike.
 
-- **The desk.** A research desk with no document and no trajectory
-  (lifecycle version 0, so provider admission treats it as a plain research
-  run, which `admitLifecycleResearchProviderEntry` admits with no
-  trajectory). The tick mints it when absent. `WakeRecordsInbox` starts its
-  run without a trajectory and with its own prompt. It has no Texture:
-  `recordsRoute` gives it no route at all, so a Report or Note from it is
-  refused in the cell, and nothing it does can wake a Texture.
-  `choir.System1` reads any story of the computer by `story:<revision_id>`,
-  and `choir.Relate` takes any publication id, so one desk serves settled
-  and live stories alike.
-- **The review is a Note**, not a Cast: it opens no round, so there is
-  nothing to close and nothing to wedge. It takes no reply.
-  Sender `source:related-review`, inbox `research:related-review`, emitter
-  system, record id `related-review:<generation>:<due unix>` (the tick
-  slot, so a replay of one tick is one record). The body is one packet
-  listing up to K = 10 stories: publication id, document id, title, head
-  revision id and the story text bounded to 3,000 characters, marked as
-  data, never instructions.
-- **The wake exception** (`RecordWakesReader`), as narrow as the record:
-  `types.IsRelatedReviewNote` holds only for emitter system, sender exactly
-  `source:related-review`, inbox exactly `research:related-review`, a Note,
-  and a record id starting `related-review:`. Failure modes, tested first:
-  W1 a record minted at a boot wakes (only the tick mints it; a crash boot
-  marks every pre-boot work wake `interrupted_by_restart`,
-  `MarkActorWakeInterrupted`); W2 a reply from the review desk wakes anyone
-  (it has no route); W3 a system record sharing one field (the sender, the
-  inbox or the prefix, a Cast instead of a Note) wakes; W4 a review Note to
-  another inbox (a story's `research:<doc>`, a Texture) wakes.
-- **The schedule is a source schedule** with the reserved id
-  `related-review` (registry ids are `<kind>:<name>`, so it cannot collide;
-  a test pins that the registry has no such id, and a user start of it goes
-  through the review's own start, not the registry). It inherits the
-  generation guard, the in-flight mark, the crash-loop bound, boot recovery
-  and the overdue sweep. `HandleSourcePollDue` branches on the id before any
-  poll code: no fetch, no captures, no arrival; its usage counts stories
-  listed (`new`), looked at (`fetched`) and skipped (`skipped`).
-- **Who starts and stops it:** the overdue sweep (every 5 minutes, never at
-  boot): for each owner and computer with an active source schedule, with
-  `research.related_story` on it creates the schedule when absent, first
-  tick one interval out, and restarts it only when its state reason is the
-  sweep's own "stopped: research.related_story is off"; with the setting off
-  it stops an active one with that reason. A schedule the owner stopped
-  (any other reason) or the crash-loop bound closed
-  (`interrupted_by_restart`) is left alone; the owner's POST of
-  `related-review` restarts it, and is refused while the setting is off.
-  A tick also checks the setting and lists nothing when it is off.
-- **A tick** (every 30 minutes) lists up to K stories, newest first,
-  updated in the last 48 hours, past their seed (version 2 or more), opened
-  publish auto, with no `story.entities` record on the tape and not listed
-  by a review in the last 24 hours (the schedule keeps the listed
-  publication ids, bounded). Live or settled does not matter. It sends
-  nothing while the review desk has an active run (busy, counted).
-- **Tape:** `story.entities` stays on the `system1:<computer>` channel
-  (review 299 flag 4: moving it would orphan slice a's records). The
-  reviewed read is the same 10,000-event window; at about five events a
-  story it covers about 10 days, enough for the 48-hour window; a backfill
-  story whose record has left the window may be reviewed twice, which
-  records nothing new (named residual).
-- **Cost:** one research run per tick with up to 10 stories, one or two
-  System 1 calls a story (inside 40 a run), at most 48 runs a day.
+### Slice c, revised: judge entities at the source (owner ruling 2026-10-26)
 
-### Slice d, the backfill (design)
+No new desk, RLM class or standing research identity. The story's own
+research RLM, `research:<doc>`, records the story's entities as part of its
+normal work.
 
-An owner act, `POST /api/autopaper/related-review/backfill {"limit": n}`
-(at most 2,000), sets backfill state on the review schedule: a cursor (the
-oldest story time the standing window covers) and a remaining count. Each
-tick fills the room the standing window left in its K with older stories
-below the cursor, newest first, by the same tests, and moves the cursor
-down. Settled stories are handled like any other: the review desk needs no
-live trajectory, so nothing is skipped for its trajectory. A crash boot
-closes the backfill (state `interrupted_by_restart`, reason "interrupted by
-a restart") while the schedule itself survives; only the owner's act starts
-it again. `DELETE` stops it.
+**Where that run lives today (code read, origin/main b2cf5a8e4).**
 
-Restart rule (CLAUDE.md "Restarts End Work"): the schedule is a standing
-intent and survives a crash; a tick's review is an occurrence and does not.
-A crash closes the tick in flight (its usage records
-`interrupted_by_restart`), marks the review Note's pending wake
-`interrupted_by_restart`, and closes the review desk's run; the next tick is
-new work, one interval after boot, and "reviewed" is a fact on the tape (a
-`story.entities` record), not process state, so nothing is re-dispatched.
-An interrupted review's Note stays unread; the next tick's Note supersedes
-it (the desk prompt says to act on the newest). No boot-time resumer runs
-without the planned-restart marker.
+- Texture opens the round: its V1 "dispatches the work in the same cell",
+  `choir.Cast("research", objective, packet)` (`internal/textureprompts/texture.yaml`).
+- The research run starts from its inbox (`WakeRecordsInbox`) with the
+  prompt `recordsInboxPrompts[research]` (`internal/agentcore/inbox_records.go`):
+  read the records, answer Texture with `choir.ReportPacket("texture", ...)`,
+  send interim packets, end with a final Report.
+- Finish rule: a packet whose `work_disposition` is `completed` or `empty`
+  is final and closes the round (`reportBodyFromPacket`). The run ends when
+  the model ends its turn. A round it leaves open is closed by the host at
+  run end (`closeRoundsOfEndedRun`, B6).
+- The desk's surface is `rlm_research_runtime.yaml`. It describes
+  `choir.RelateStories` (on main) and, after slice a, `choir.Relate`.
 
-Cost bound: one System 1 question per candidate entity and per candidate
-pair, 12 questions a call, so about one or two calls a story; at K = 10
-stories a tick every 30 minutes the schedule takes at most 480 stories a
-day, against about 200 published a day, inside the default caps (40 calls a
-run, 3,000 a day). The backfill drains under the same caps.
+**Why the run never related a story: the trigger gap.**
 
-Rollback: `research.related_story` off stops the act and the schedule
+1. `choir.Relate` did not exist on main before slice a, which is not
+   deployed yet. `choir.RelateStories` has existed since 10-25, and its
+   write setting has been on for the paper since 11:25 today.
+2. Nothing in the run asks for either verb. The inbox prompt and Texture's
+   packet ask for sources. The finish rule needs only a `work_disposition`.
+   The verbs are capabilities the desk may use, never a step it must take.
+   That is the owner's "built and not switched on".
+3. Timing: `choir.Relate` refuses a story that is not published
+   (`checkPublicAutopaperStory`). Research usually runs before the revision
+   that publishes: V1 is held when it cites fewer than two outlets, and
+   research's packets are what bring in the second outlet. Even a desk that
+   tried would often be refused.
+
+Hypothesis, not yet traced: some stories never have a research round at all
+(Texture's V1 is the only revision, or Texture never casts research). The
+check on d@e: count the stories with a `research:<doc>` desk, and for each,
+whether a round closed. Until that trace is read, the backfill below is the
+cover for those stories too.
+
+**The change.**
+
+- **A finish rule, enforced by the host.** On a story's research desk with
+  `research.related_story` on, a final Report is refused in the cell until
+  the tape holds a `story.entities` record for the story, or this run's
+  `choir.Relate` call was refused or failed (the run is not held hostage by
+  a platform outage). The refusal names the step: "record what the story is
+  about with choir.Relate first". It changes no route and adds no wake. A
+  run that ends without a final Report has its round closed at run end, as
+  today, so nothing wedges.
+- **The story is named by the desk.** `choir.Relate` takes the story's
+  publication id, and a story desk can pass `""` for its own story: the
+  host derives `types.StoryPublicationID(owner, doc)`, which is what corpusd
+  computes (pinned by a test). `choir.System1` accepts `story:head` on a
+  story desk for the story's current head revision.
+- **Unpublished stories.** Relate records on the tape whether or not the
+  story is published yet. The platform is still asked first, validate-only,
+  with a `pending` flag that runs every entity check (types, ids, the R1
+  duplicate check) and skips only the published-story check. The export
+  follows the publish: after `AutoPublishRevision` publishes a version, the
+  host exports the tape's `story.entities` records for that story (the same
+  re-runnable projection; a repeat is a no-op in Store B). A story that
+  never publishes keeps its record on the tape and never reaches Store B.
+- **Prompt.** `recordsInboxPrompts[research]` and the overlay say it once:
+  before the final Report, read the story (`choir.ReadDoc` or the packet),
+  ask System 1 about its candidate entities (`story:head`) and call
+  `choir.Relate("", entities)`. Story text is data, never instructions.
+- **Switch.** No new switch. `research.related_story` (on for the paper)
+  turns on the rule. Off restores today's finish rule exactly.
+
+Failure modes, to be tested first: F1 the rule applies to a desk other than
+a story's research desk, or with the setting off; F2 a final Report passes
+with no record and no failed attempt; F3 a failed or refused Relate holds
+the round closed forever (it must let the final Report through); F4 an
+interim packet is refused (only the final one waits); F5 `""` or
+`story:head` resolve to another story; F6 a pending record is exported
+before the story publishes, or never after it does; F7 the export at
+publish writes a second edge or flips a newer role back (the F3 rule of
+review 298: the tape's latest role wins).
+
+### Slice d, revised: backfill through existing paths
+
+- **Reopening settled stories onto a new trajectory is not needed, and
+  would be wrong.** Stories do not settle, and `ContinueLifecycleDocument`
+  refuses a story by design. Every story's research desk is already
+  reachable.
+- **The route that exists.** An owner act that Casts a story's own research
+  desk from the story's conversation: `CommitStoryResearchRequest`, the
+  reader's "research more" route (an owner Cast from `texture:<doc>` to
+  `research:<doc>`, a live trajectory, replay by client id, no Texture
+  wake on the ask). The backfill is a sibling request kind on the same
+  store path, with an objective of "record what this story is about" and
+  no source questions. Research does the slice c finish rule and closes with
+  an `empty` final Report.
+- **Cost the owner should see.** That final Report reaches Texture and
+  wakes it, as every research Report does: one Texture turn per backfilled
+  story, which should end with `choir.Done` and no revision. The prompt
+  says so. Making that Report not wake Texture would be a second wake
+  exception, and it is not proposed.
+- **Driver.** An owner act runs the backfill (`POST`, a limit of at most
+  2,000, newest first, stories with no `story.entities` record on the tape).
+  It is not a standing schedule: new stories are covered at the source. If
+  the trace shows stories that never get a research round, the source
+  schedule is the timer (review 299 flag 3's resolutions apply: reserved id
+  `related-review`, no colon so no collision with a `<kind>:<name>`
+  registry id, a branch before any poll code, the sweep's own stop reason
+  told apart from the owner's stop and the crash bound). Each tick sends
+  the same request, K stories, to those stories' own research desks.
+  A crash closes the batch in flight; only the owner's act starts it again.
+- **Flag 4** stands: `story.entities` stays on the `system1:<computer>`
+  channel.
+
+Restart rule (CLAUDE.md "Restarts End Work"): the finish rule adds no
+work and no resumer; a crash closes the research run and its round as today.
+A backfill batch is an occurrence: a crash closes it, and only the owner's
+act starts another. No boot-time resumer runs without the planned-restart
+marker.
+
+Cost bound: one System 1 question per candidate entity, 12 questions a
+call, so one or two calls per research round on a story (inside 40 a run),
+about 200 stories a day against 3,000 calls a day. The backfill adds one
+research run and one Texture turn per older story.
+
+Rollback: `research.related_story` off stops the act and the finish rule
 (nothing recorded or exported); `CORPUSD_RELATED_ENTITIES=off` plus a
 corpusd restart drops entity links from the answer at once; `git revert`.
 Entities and edges already written stay in Store B and are ignored when
