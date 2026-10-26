@@ -118,6 +118,13 @@ func (f *hibernateFence) close(ttl time.Duration) (int, bool) {
 	return 0, true
 }
 
+// closed reports whether the fence is closed and its TTL has not run out.
+func (f *hibernateFence) closed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.fenced && f.clock().Before(f.until)
+}
+
 func (f *hibernateFence) lift() {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -97,6 +97,13 @@ var memoryReturnVmstat = []string{
 	"balloon_inflate", "balloon_deflate", "balloon_migrate",
 }
 
+// ReadMemoryReturn is the guest's own memory-return state, read from the
+// real /sys and /proc (the cache return act reports its free page reporting
+// facts from it).
+func ReadMemoryReturn() MemoryReturn {
+	return readMemoryReturn("/sys", "/proc", int64(os.Getpagesize())/1024)
+}
+
 // readMemoryReturn reads under sysRoot (/sys) and procRoot (/proc).
 // pageKiB is the guest's page size in KiB.
 func readMemoryReturn(sysRoot, procRoot string, pageKiB int64) MemoryReturn {

@@ -59,6 +59,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/internal/runtime/isolation-selftest", h.HandleInternalIsolationSelfTest)
 	s.HandleFunc("/internal/runtime/hibernate/prepare", h.HandleInternalHibernatePrepare)
 	s.HandleFunc("/internal/runtime/hibernate/resumed", h.HandleInternalHibernateResumed)
+	s.HandleFunc("/internal/runtime/memory/cache-return", h.HandleInternalMemoryCacheReturn)
 	s.HandleFunc("/internal/self-development/restart-handoff", h.HandleSelfDevelopmentRestartHandoff)
 	s.HandleFunc("/internal/texture/documents/", texture.HandleInternalTextureDocument)
 	s.HandleFunc("/internal/texture/revisions/", texture.HandleInternalTextureRevision)
