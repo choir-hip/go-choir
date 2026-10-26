@@ -122,3 +122,27 @@ func TestLegacyGuestIdleTimeoutEnv(t *testing.T) {
 		t.Fatalf("malformed legacy guest idle = %s, want the 30m default", d)
 	}
 }
+
+// Density D3 (D3-M8): both keepalive modes parse and the code default stays
+// under-capacity, so only the nix value moves primary computers to idle
+// hibernation; a silent change of the default would move every environment.
+func TestPrimaryKeepaliveModeEnv(t *testing.T) {
+	mode := func() string {
+		cfg, err := warmnessPolicyConfigFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg.PrimaryKeepaliveMode
+	}
+	if got := mode(); got != vmctl.PrimaryKeepaliveModeUnderCapacity {
+		t.Fatalf("keepalive default = %q, want under-capacity", got)
+	}
+	t.Setenv("VMCTL_PRIMARY_KEEPALIVE_MODE", "off")
+	if got := mode(); got != vmctl.PrimaryKeepaliveModeOff {
+		t.Fatalf("keepalive off = %q", got)
+	}
+	t.Setenv("VMCTL_PRIMARY_KEEPALIVE_MODE", "under-capacity")
+	if got := mode(); got != vmctl.PrimaryKeepaliveModeUnderCapacity {
+		t.Fatalf("keepalive under-capacity = %q", got)
+	}
+}
