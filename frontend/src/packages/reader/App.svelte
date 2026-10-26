@@ -610,8 +610,6 @@
   function updateProgress() {
     if (format === 'pdf') return;
     if (!stageEl) return;
-    const scrollable = Math.max(0, stageEl.scrollHeight - stageEl.clientHeight);
-    const within = scrollable > 0 ? stageEl.scrollTop / scrollable : 0;
     savePositionNow();
   }
 
@@ -634,10 +632,6 @@
     const target = format === 'pdf' ? pdfSearchModel?.model : model;
     searchHits = target ? searchDocuments(target, needle) : [];
     hitIndex = searchHits.length ? 0 : -1;
-  }
-
-  function searchModelForJump() {
-    return format === 'pdf' ? pdfSearchModel?.model : model;
   }
 
   function jumpToHit(index) {
@@ -921,7 +915,7 @@
     prefs = loadPrefs(window.localStorage);
     // A page is drawn from the page area's measured width, and draw again when
     // that width changes (a window resize, the contents panel opening, a
-    // phone turning): the observer is the one place that says \"now measure\".
+    // phone turning): the observer is the one place that says "now measure".
     const observer = typeof ResizeObserver === 'function' && stageEl
       ? new ResizeObserver((entries) => {
           const rect = entries[0]?.contentRect;
@@ -1348,13 +1342,16 @@
             {/if}
           {/each}
         </article>
-      {:else if isEmpty}
+      {:else if isEmpty || authNeeded}
         <div class="reader-empty" data-reader-empty>
           <h2>Open a document</h2>
           <p>PDF or EPUB, from your computer or from Files. You can also drop a file here.</p>
           <div class="reader-empty-actions">
             <button type="button" class="reader-open reader-open-primary" data-reader-open-file-empty on:click={openFilePicker}>Open file</button>
             <button type="button" class="reader-text-button" data-reader-open-sample on:click={openSample}>Read the sample</button>
+            {#if authNeeded}
+              <button type="button" class="reader-text-button" data-reader-empty-signin on:click={openAuth}>Sign in to open your own files</button>
+            {/if}
           </div>
           {#if recentFiles.length}
             <div class="reader-recents" data-reader-recents>
