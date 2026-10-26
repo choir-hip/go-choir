@@ -74,7 +74,7 @@ compat, base digest join, source trust, manifest verify), not only the new
 join. Until now these were rare for plain releases, which declared nothing to
 refuse on; the join makes a refusal an expected outcome, so it must settle.
 
-Fix (same commit series, second): a journaled terminal `refused` outcome keeps
+Fix (same commit series, second; settled `failed`, not `degraded`, by the Review 311 section below): a journaled terminal `refused` outcome keeps
 the typed error, so the existing branch settles the operation `degraded` with
 the refusal as its terminal error. The rollback path has the same override and
 is left as it is (residual, named): it is not refused by the join.
