@@ -40,21 +40,37 @@ current tree with the frozen candidate:
 
 1. Read the bundle the operation names (`readBoundSelfDevelopmentBundle`:
    final `bundle.json` from verified onward, else the draft; bound to the
-   operation).
+   operation). When both files exist in the frozen state (the finalizer wrote
+   `bundle.json` and has not yet renamed the operation), the final bytes do
+   not hash to the frozen digest, so a final that does not bind falls back to
+   the draft.
 2. The frozen tree's digest is the worktree digest of the latest receipt the
    bundle cites (build recipe, tests, toolchain). At the first Freeze the
    certified binder required exactly that receipt to have observed the frozen
    tree, so no new field is stored.
 3. Read the live tree without quiescing: a new executor read,
    `InspectGrantedWorktree`, returns the digest of `/workspace/platform` (the
-   same `digestCapsuleWorktree` the receipts and the R1 pre-check use) and the
-   capsule's diff. Freeze has already refused if a job is running. No
-   quiesce means no thaw, so a capsule that the terminal saga froze stays
-   frozen.
+   same `digestCapsuleWorktree` the receipts and the R1 pre-check use), the
+   capsule's diff, and the live release tree's files (`ReleaseFiles`: path,
+   sha256 of the content and mode, hashed as `StageGrantedRelease` hashes
+   them for the bundle's `RuntimeFiles`; the workspace digest does not cover
+   `var/lib/artifact/release/`). No quiesce means no thaw, so a capsule that
+   the terminal saga froze stays frozen. The read is bound to the
+   operation: the handle must resolve to `operation.CapsuleID` (else the
+   check refuses), the diff is classified under that resolved ID, and no
+   job of any run may be running in that capsule (`RunningJobInCapsule`; the
+   run-scoped `RunningJob` check at the top of Freeze covers only the
+   current run).
 4. Classify the live diff with the same classifier and compare its classified
    groups (not Ignored, not Unknown: `/tmp` and toolchain caches do not enter
    a bundle) with the bundle's groups, by path, kind and mode.
-5. If the digests and the classified sets match, replay as today, byte for
+   The live release files are compared with `bundle.RuntimeFiles` by path,
+   sha256 and mode; an added, removed or modified file is listed as
+   `added|removed|modified release <path>`. A `bin/autoputer` the freeze
+   reused from the running build (`ReleaseBinary.Origin` reused) was staged
+   beside the capsule's release, so its absence from the live tree is not a
+   removal.
+5. If the digests, the classified sets and the release files match, replay as today, byte for
    byte. If not, refuse with an error that names the bundle, lists up to 20
    changed paths (added, removed, modified since the freeze) or, when only
    content changed, both digests, and says the frozen candidate is what will
@@ -104,7 +120,23 @@ the moment the desk tries to fold a change in.
   the read does not change capsule state.
 - The refusal strands the assignment. Test: Complete records a terminal fate
   after the refusal, naming the frozen bundle.
+- A same-path rebuild of a release file (`bin/autoputer`) replays: the
+  workspace digest and the groups do not see it. Test: it refuses, naming
+  `modified release bin/autoputer`; a reused running binary still replays.
+- The read answers for another capsule, or for a tree a job of another run is
+  writing. Tests: both refuse before the tree is read.
+- Both bundle files present in the frozen state fail the digest check and
+  refuse an honest retry. Test: it replays.
 - The list floods the cell. Bounded at 20 paths plus a count.
+
+## Residuals
+
+- Classifier drift: the live diff is classified by the current classifier
+  and compared with the bundle's groups; a classifier change between the
+  freeze and the retry would refuse a retry over an unchanged tree. Accepted
+  (a refusal is the safe default); not compared by `classifier_digest`.
+- The 512-byte `RecordIntentError` cap truncates a long refusal that is
+  recorded for the reducer's staged Freeze; the cell's own result is whole.
 
 ## Rollback
 
