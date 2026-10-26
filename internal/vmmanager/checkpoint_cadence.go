@@ -58,6 +58,12 @@ func loadCheckpointCadenceFromEnv(cfg *ManagerConfig) {
 func checkpointCadenceIDs(tokens []string) []string {
 	var ids []string
 	for _, tok := range tokens {
+		// selectsComputer trims each token before it matches, so the drop must
+		// look at the trimmed token too (re-review 338).
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
 		if tok == "*" || strings.HasPrefix(tok, computerSelectorClassPrefix) {
 			log.Printf("vmmanager: VM_CHECKPOINT_CADENCE_ONLY takes computer ids only; ignoring %q", tok)
 			continue
@@ -68,9 +74,13 @@ func checkpointCadenceIDs(tokens []string) []string {
 }
 
 // checkpointCadenceProtected reports a warmness class the cadence never runs
-// on, whatever the list names. Not every launch path sets the class (the
-// platform computer's boot and resume config do not), so this is a second
-// line: the first is that the list names ids and nothing else.
+// on, whatever the list names. Not every launch path carries the class: a
+// fresh realization (vmctl's reserveFreshVMConfig: restart, refresh, recover)
+// sets it, so a named protected computer is refused there, while a first boot
+// or a resume of the same computer may not carry it and would select it. The
+// asymmetry is fail-closed for the paths that know the class and relies on the
+// first line for the rest: the list names ids and nothing else, and the nix
+// list ships empty.
 func checkpointCadenceProtected(class string) bool {
 	switch strings.TrimSpace(class) {
 	case "critical_protected", "public_platform":
