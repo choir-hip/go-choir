@@ -1278,6 +1278,19 @@ The cross-owner adoption refusal moves to S5, where the gate exists
 
 **Rollback:** `packages.share` off. Reads fall back to `owner`.
 
+**Never git-revert S3** (review 291 F3). Roll back with `packages.share`
+off on the computers and `CHOIR_PACKAGE_SHARE_READS=owner` on corpusd
+(then restart corpusd). A revert to S2 is worse than either:
+
+- S2 counts every listing object of a track, the versions it drops as
+  invalid included, against its 1000-listing cap, so a track with that many
+  answers `track_full` on every read and every publish;
+- S2's listing check refuses a widened version, so its chain stops at the
+  last owner-only version: a release withdrawn after being shared reads as
+  `listed` again and can head the track;
+- a publish under S2 ignores a shared head (it does not see that version)
+  and can take a seq already given, forking the track.
+
 **Proof:**
 
 - the release shared with d@e is visible to d@e's key, and not to a key
@@ -1296,9 +1309,20 @@ building it):
   (unset, empty or `scoped` honours each listing's scopes; any other value
   is `owner`). With `packages.share` off everywhere, the default, nothing
   is widened, so reads are owner scope by construction. A git revert is
-  not the rollback once a release was widened and then withdrawn: S2's
-  listing check refuses the wider version, so S2 reads that release as its
-  last owner-only version, `listed`.
+  never the rollback (the note under **Rollback** above names why).
+- **Index-backed reads** (review 291 F1, F2). The listing's `widened`
+  field and the release's `release_id` are registered lookup keys
+  (`og_lookup_keys`, backfilled online at corpusd start), so another
+  owner's catalog pages the widened listing versions by the key's primary
+  key, and a foreign single read seeks the release by id. With nothing
+  widened, a catalog reads one empty key page. Until the backfill switches
+  the keys on, a catalog shows no other owner's track and a foreign read is
+  404: the narrower answer, never a scan. A catalog still reads every
+  widened version on the cloud, through the index; a per-reader index is
+  the next step if sharing grows.
+- **A receipt acts once** (review 291 F4): a receipt already recorded as
+  a version's `state_actor` refuses `owner_act_replayed`. A scope change
+  keeps `state_reason`, which says why the release is in its state.
 - **`--confirm-paths` names a digest**, the `paths_digest` that the
   widening's `confirm_paths_required` refusal shows beside every path and
   the review diff's size. It binds the release id and the paths, so a
