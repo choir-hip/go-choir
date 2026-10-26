@@ -82,8 +82,9 @@ func (rt *Runtime) runContextForRun(rec *types.RunRecord) string {
 		}
 	}
 	if profile == agentprofile.Texture {
-		if operationID := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
-			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
+		if operationID, state := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
+			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ", now in state " + state + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
+			b.WriteString(" An owner revision with new direction (request intent apply_owner_revision) is a new round to Cast once this operation settles, not a re-run, so do not Wait it away.")
 		}
 	}
 	if profile == agentprofile.Engineering {
