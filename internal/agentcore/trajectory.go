@@ -2,11 +2,13 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -26,15 +28,23 @@ func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 	}
 }
 
+// runRootSubjectRef is the subject ref every run-root row carries: the run
+// that minted it. A run-root row's rule requires it, so the rule can validate.
+const runRootSubjectRef = "root_loop_id"
+
 // defaultSettlementRuleForKind is the per-kind settlement rule minted as
-// data. Nothing in M1 acts on the verdict; M5 wires reconciliation to it.
+// data. A run-root row (every kind but publication) settles when its root run
+// completes with nothing open (settleRunRootTrajectory); its rule used to
+// require no subject refs, which no evaluator accepts, so it never settled
+// (docs/problems/run-root-trajectories-never-settle-2026-10-26.md).
 func defaultSettlementRuleForKind(kind types.TrajectoryKind) types.SettlementRule {
 	switch kind {
 	case types.TrajectoryKindPublication:
 		return types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true,
 			RequiredSubjectRefs: []string{"publish_ref", "edition_ref"}}
 	default:
-		return types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true}
+		return types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true,
+			RequiredSubjectRefs: []string{runRootSubjectRef}}
 	}
 }
 
@@ -87,6 +97,24 @@ type TrajectoryObligations struct {
 	PendingUpdates  int                    `json:"pending_updates"`
 	SettlementReady bool                   `json:"settlement_ready"`
 	WaitingOn       []string               `json:"waiting_on"`
+	// RunRoot is set for a run-root row: what its root run is doing and what
+	// that means for the row.
+	RunRoot *RunRootVerdict `json:"run_root,omitempty"`
+}
+
+// RunRootVerdict reads a run-root trajectory row truthfully: it is the
+// registry row of one root run, not a unit of work.
+type RunRootVerdict struct {
+	RunID    string `json:"run_id"`
+	RunState string `json:"run_state"`
+	Verdict  string `json:"verdict"`
+}
+
+// isRunRootRecord is true for a registry row minted for a root run: not a
+// publication, not a lifecycle row, and carrying root_loop_id.
+func isRunRootRecord(rec types.TrajectoryRecord) bool {
+	return rec.Kind != types.TrajectoryKindPublication && rec.LifecycleVersion == 0 &&
+		strings.TrimSpace(rec.SubjectRefs[runRootSubjectRef]) != ""
 }
 
 // TrajectoryObligations loads the trajectory and evaluates its settlement
@@ -108,7 +136,21 @@ func (rt *Runtime) TrajectoryObligations(ctx context.Context, ownerID, trajector
 	if err != nil {
 		return TrajectoryObligations{}, err
 	}
-	ready, waitingOn := EvaluateTrajectorySettlement(trajectory, len(open))
+	evaluated := trajectory
+	var runRoot *RunRootVerdict
+	if isRunRootRecord(trajectory) {
+		// Rows minted before the rule required root_loop_id carry an empty
+		// list that can never validate; read them under the rule they should
+		// have had. Nothing rewrites the stored row.
+		if len(evaluated.SettlementRule.RequiredSubjectRefs) == 0 {
+			evaluated.SettlementRule.RequiredSubjectRefs = []string{runRootSubjectRef}
+		}
+		runRoot = &RunRootVerdict{RunID: strings.TrimSpace(trajectory.SubjectRefs[runRootSubjectRef])}
+	}
+	ready, waitingOn := EvaluateTrajectorySettlement(evaluated, len(open))
+	if runRoot != nil {
+		rt.describeRunRoot(ctx, ownerID, trajectory, runRoot, &ready, &waitingOn)
+	}
 	if pendingUpdates > 0 {
 		ready = false
 		waitingOn = append(waitingOn, fmt.Sprintf("%d pending update_coagent update(s)", pendingUpdates))
@@ -119,7 +161,72 @@ func (rt *Runtime) TrajectoryObligations(ctx context.Context, ownerID, trajector
 		PendingUpdates:  pendingUpdates,
 		SettlementReady: ready,
 		WaitingOn:       waitingOn,
+		RunRoot:         runRoot,
 	}, nil
+}
+
+// describeRunRoot fills a run-root verdict from the root run's stored state.
+// A row is not ready while its root run has not completed.
+func (rt *Runtime) describeRunRoot(ctx context.Context, ownerID string, trajectory types.TrajectoryRecord, verdict *RunRootVerdict, ready *bool, waitingOn *[]string) {
+	run, err := rt.getRunForComputer(ctx, ownerID, verdict.RunID)
+	switch {
+	case err != nil:
+		verdict.RunState = "unknown"
+		verdict.Verdict = "run-root registry row; its root run could not be read"
+		*ready = false
+		*waitingOn = append(*waitingOn, fmt.Sprintf("root run %s could not be read", verdict.RunID))
+	case run.State == types.RunCompleted:
+		verdict.RunState = string(run.State)
+		switch {
+		case trajectory.Status != types.TrajectoryLive:
+			verdict.Verdict = fmt.Sprintf("run-root registry row; its root run completed and the row is %s", trajectory.Status)
+		case *ready:
+			verdict.Verdict = "run-root registry row; its root run completed and nothing is open, so it is ready to settle (a row minted before settle-on-completion stays live until cancelled)"
+		default:
+			verdict.Verdict = "run-root registry row; its root run completed but work is still open on it"
+		}
+	default:
+		verdict.RunState = string(run.State)
+		verdict.Verdict = fmt.Sprintf("run-root registry row; its root run is %s", run.State)
+		*ready = false
+		*waitingOn = append(*waitingOn, fmt.Sprintf("root run %s is %s", verdict.RunID, run.State))
+	}
+}
+
+// settleRunRootTrajectory settles a run-root row once its root run has
+// completed, nothing is open on the trajectory and no run on it is active.
+// A child run or a work item that still holds the trajectory keeps it live.
+// Best effort: a failure is logged and never fails the run.
+func (rt *Runtime) settleRunRootTrajectory(ctx context.Context, rec *types.RunRecord) {
+	if rt == nil || rt.store == nil || rec == nil || rec.State != types.RunCompleted {
+		return
+	}
+	trajectoryID := trajectoryIDForRun(rec)
+	if trajectoryID == "" || rec.RunID != trajectoryID || strings.TrimSpace(rec.RequestedByRunID) != "" {
+		return
+	}
+	obligations, err := rt.TrajectoryObligations(ctx, rec.OwnerID, trajectoryID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("runtime: settle run-root trajectory %s: %v", trajectoryID, err)
+		}
+		return
+	}
+	if obligations.RunRoot == nil || obligations.Trajectory.Status != types.TrajectoryLive || !obligations.SettlementReady {
+		return
+	}
+	active, err := rt.store.ListActiveRunsByTrajectory(ctx, rec.OwnerID, trajectoryID, 1)
+	if err != nil {
+		log.Printf("runtime: settle run-root trajectory %s: list active runs: %v", trajectoryID, err)
+		return
+	}
+	if len(active) > 0 {
+		return
+	}
+	if _, err := rt.store.UpdateTrajectoryStatus(ctx, rec.OwnerID, trajectoryID, types.TrajectorySettled); err != nil &&
+		!errors.Is(err, store.ErrLifecycleAuthorityRequired) {
+		log.Printf("runtime: settle run-root trajectory %s: %v", trajectoryID, err)
+	}
 }
 
 // EvaluateTrajectorySettlement evaluates a settlement rule as pure data:
@@ -160,6 +267,3 @@ func EvaluateTrajectorySettlement(rec types.TrajectoryRecord, openWorkItems int)
 	}
 	return len(waitingOn) == 0, waitingOn
 }
-
-// settleRunRootTrajectory is stubbed until the fix lands.
-func (rt *Runtime) settleRunRootTrajectory(ctx context.Context, rec *types.RunRecord) {}
