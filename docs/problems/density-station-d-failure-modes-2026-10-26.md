@@ -202,6 +202,56 @@ do not report it would read as zero, so the rule must be "a guest that does
 not report the field is busy" or the timer drop must follow the guest deploy.
 Not built here.
 
+### D3 resumed after the capsule fix (FP0, 2026-10-26)
+
+FP0 took the stop above to `docs/problems/idle-hibernate-blind-to-live-capsules-2026-10-26.md`
+and asked for the fix first (D3a): `/health` reports `live_capsules` from the
+one planned-restart counter (`liveCapsuleCount`, shared, read through one
+flight and a 3 s cache because the count walks the assignments under the
+non-cancellable engine mutex), vmctl's busy probe reads it, and a guest whose
+`/health` lacks the field keeps the legacy 30 minute idle rule
+(`VMCTL_IDLE_TIMEOUT_LEGACY_GUEST`, default 30m) in the idle sweep, pressure
+reclaim and make-room; deploy refresh keeps the raw busy probe.
+
+D3 itself (the timer drop in `nix/node-b.nix`) then has these failure modes,
+each a test before the config change:
+
+- **D3-M1** a primary computer with a live run, a pending desk mutation or an
+  active self-development operation is hibernated (the busy fields).
+- **D3-M2** a computer with a live engineering capsule is hibernated (D3a:
+  `live_capsules`; the three blind states).
+- **D3-M3** a guest that cannot report `live_capsules` gets the short timer
+  (the legacy rule), or is held forever (it is not: past the legacy timeout
+  it goes).
+- **D3-M4** the paper (critical_protected), a public_platform computer or an
+  owner's paid (premium_always_on) computer is hibernated by the idle sweep,
+  pressure reclaim or make-room. The idle sweep and make-room exclude all
+  three; pressure reclaim excluded only premium_always_on and
+  critical_protected (`protectedReclaimReasons`). D3 lowers
+  `VMCTL_PRESSURE_RECLAIM_MIN_IDLE` to 10m, which would widen that gap, so
+  pressure reclaim now excludes public_platform too (reason
+  `public_platform`).
+- **D3-M5** a held computer is hibernated.
+- **D3-M6** a computer is hibernated just after its apply restart (PR-09).
+  The API-key touch (gap K) covers key traffic, but a host build of about 14
+  minutes with no traffic leaves `LastActiveAt` older than 10 minutes, and the
+  freshly booted guest reads idle: at 30 minutes this was rare, at 10 it is
+  every long apply. The idle clock must count work: vmctl records the time
+  it last saw a guest busy (every probe, so every sweep during the build) and
+  idle is measured from the later of that and `LastActiveAt`. Not persisted:
+  a vmctl restart forgets it and the guest's own busy fields still fence.
+- **D3-M7** a computer driven only by API keys is hibernated while busy (the
+  busy fields are the fence, not `LastActiveAt`).
+- **D3-M8** the keepalive env default changes silently: the code default of
+  `VMCTL_PRIMARY_KEEPALIVE_MODE` stays `under-capacity` (`envOr`); both values
+  parse; nix sets `off` explicitly.
+
+Rollback: `VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity`,
+`VMCTL_IDLE_TIMEOUT=30m`, `VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m` in
+`nix/node-b.nix`. The cost until D2 lands: a primary computer woken after a
+deploy cold boots (about 10 s, closing open obligations; an idle computer has
+none) instead of staying resident.
+
 ## D4. Admission charges the last peak, not what a wake settles at
 
 ### Problem
