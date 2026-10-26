@@ -38,7 +38,9 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 }
 func (e *Executor) InitializationError() error { return stubErr("initialize") }
 
-// SetBinaryReuseByInputDiff and SourceDir mirror the linux executor.
+// SetBinaryReuseGate, SetBinaryReuseByInputDiff and SourceDir mirror the linux
+// executor.
+func (e *Executor) SetBinaryReuseGate(func() bool) {}
 func (e *Executor) SetBinaryReuseByInputDiff(bool) {}
 func (e *Executor) SourceDir() string              { return "" }
 func (e *Executor) PreflightSourceSnapshot(context.Context, string) (SourcePreflight, error) {

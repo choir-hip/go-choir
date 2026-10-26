@@ -43,10 +43,11 @@ type Executor struct {
 	// trace records the freeze, digest and teardown steps for
 	// /api/runtime/observability; unset means untraced (executor_trace.go).
 	trace atomic.Pointer[steptrace.Tracker]
-	// reuseByInputDiff lets Freeze reuse the running binary when the source's
-	// commit differs from the binary's but no binary-input path does (U1,
+	// reuseGate lets Freeze reuse the running binary when the source's commit
+	// differs from the binary's but no binary-input path does (U1,
 	// docs/design/computer-update-architecture-rnd-2026-10-24.md section 4.6).
-	reuseByInputDiff  atomic.Bool
+	// It is asked each time Freeze builds its differ, not latched.
+	reuseGate         reuseGate
 	mu                sync.RWMutex
 	capsules          map[string]*Capsule
 	capabilities      map[capKey]*Capability
@@ -277,19 +278,23 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 	return e
 }
 
-// SetBinaryReuseByInputDiff switches Freeze's binary-reuse test from "the
-// running binary's commit is the source's" to "no binary-input path differs
-// between them". Off by default.
-func (e *Executor) SetBinaryReuseByInputDiff(on bool) { e.reuseByInputDiff.Store(on) }
+// SetBinaryReuseGate installs the switch that moves Freeze's binary-reuse test
+// from "the running binary's commit is the source's" to "no binary-input path
+// differs between them". The gate is called at each Freeze, so a setting that
+// loads after the executor is built (source.projection) still takes effect.
+// No gate, or a gate that returns false, is the old rule.
+func (e *Executor) SetBinaryReuseGate(gate func() bool) { e.reuseGate.set(gate) }
+
+// SetBinaryReuseByInputDiff is SetBinaryReuseGate with a fixed answer.
+func (e *Executor) SetBinaryReuseByInputDiff(on bool) {
+	e.reuseGate.set(func() bool { return on })
+}
 
 // SourceDir is the capsule source repository the executor seeds from.
 func (e *Executor) SourceDir() string { return e.sourceDir }
 
 func (e *Executor) reuseDiffer() BinaryInputDiffer {
-	if !e.reuseByInputDiff.Load() {
-		return nil
-	}
-	return GitPathDiffer(e.sourceDir)
+	return e.reuseGate.differ(e.sourceDir)
 }
 
 // InitializationError reports fail-closed construction validation before the

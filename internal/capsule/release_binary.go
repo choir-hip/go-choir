@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
@@ -201,6 +202,35 @@ func PlanReleaseBinaryReuseWith(ctx context.Context, changes []FileChange, sourc
 		return "", fmt.Errorf("the running binary was built from %s but the capsule source %s differs in binary inputs (%s%s); build bin/autoputer", runningCommit, sourceCommit, strings.Join(shown, ", "), moreSuffix(len(inputs)-len(shown)))
 	}
 	return ReuseProofBinaryInputsEqual, nil
+}
+
+// reuseGate is the live switch for U1's looser reuse test. The autoputer
+// builds its capsule executor before the per-computer source.projection
+// setting is loaded and the setting can change at runtime, so the answer is
+// read each time Freeze builds its differ, never latched at construction
+// (docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md).
+// The zero value has no gate and is off.
+type reuseGate struct{ fn atomic.Pointer[func() bool] }
+
+func (g *reuseGate) set(fn func() bool) {
+	if fn == nil {
+		g.fn.Store(nil)
+		return
+	}
+	g.fn.Store(&fn)
+}
+
+func (g *reuseGate) on() bool {
+	fn := g.fn.Load()
+	return fn != nil && (*fn)()
+}
+
+// differ is nil (the old rule) while the gate is off.
+func (g *reuseGate) differ(sourceDir string) BinaryInputDiffer {
+	if !g.on() {
+		return nil
+	}
+	return GitPathDiffer(sourceDir)
 }
 
 // gitDiffTimeout bounds the reuse comparison: Freeze must not hang on git.
