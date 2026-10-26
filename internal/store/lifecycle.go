@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -3728,8 +3729,24 @@ func (s *Store) QueueLifecycleUpdate(ctx context.Context, req types.QueueLifecyc
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	if document.DocID != documentID || document.OwnerID != ownerID || document.ComputerID != computerID || document.TrajectoryID != req.TrajectoryID {
+	if document.DocID != documentID || document.OwnerID != ownerID || document.ComputerID != computerID {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+	}
+	if document.TrajectoryID != req.TrajectoryID {
+		// A continued document points at its next trajectory (F1). Late
+		// evidence for an earlier episode of the same document is still
+		// recorded on that episode, so the late branch admits a trajectory
+		// in the pointer's lineage; a live update never does.
+		if !lateEvidenceOnly {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
+		lineage, lineageErr := s.LifecycleTrajectoryLineage(ctx, ownerID, computerID, document.TrajectoryID, 0)
+		if lineageErr != nil {
+			return types.LifecycleResult{}, lineageErr
+		}
+		if !slices.Contains(lineage, req.TrajectoryID) {
+			return types.LifecycleResult{}, ErrLifecycleInvalidTransition
+		}
 	}
 	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, ownerID, computerID, req.TargetAgentID)
 	if err != nil {

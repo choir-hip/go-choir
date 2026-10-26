@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,7 +124,17 @@ func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID,
 		return "", false, fmt.Errorf("texture evidence: document %s: %w", docID, err)
 	}
 	if doc.TrajectoryID != listing.TrajectoryID {
-		return "", false, fmt.Errorf("texture evidence: document %s names trajectory %q, not the operation's %q", docID, doc.TrajectoryID, listing.TrajectoryID)
+		// The embed job is async and settlement does not wait for it, so the
+		// owner's next revise can continue the document before the capture
+		// lands (F1). The operation's trajectory must be one the document's
+		// current trajectory continues; the commit is on the current one.
+		lineage, lineageErr := h.Store.LifecycleTrajectoryLineage(ctx, ownerID, computerID, doc.TrajectoryID, 0)
+		if lineageErr != nil {
+			return "", false, fmt.Errorf("texture evidence: lineage of %s: %w", doc.TrajectoryID, lineageErr)
+		}
+		if !slices.Contains(lineage, listing.TrajectoryID) {
+			return "", false, fmt.Errorf("texture evidence: document %s names trajectory %q, not the operation's %q", docID, doc.TrajectoryID, listing.TrajectoryID)
+		}
 	}
 	if doc.ArchivedAt != nil {
 		return "", false, fmt.Errorf("texture evidence: document %s is archived", docID)
