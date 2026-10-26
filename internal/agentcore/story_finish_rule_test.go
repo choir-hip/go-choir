@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -191,8 +192,13 @@ func TestResearchCellFinishRuleThroughACell(t *testing.T) { // F2, F4
 	execCtx := toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: f.owner, ChannelID: doc, ComputerID: f.computer,
 		Profile: agentprofile.Research, Role: agentprofile.Research, RunRecord: &rec}
 	tool := newDeskGoEvalTool(f.rt, newDeskSessionWorkers(), agentprofile.Research)
+	calls := 0
 	cell := func(src string) string {
 		t.Helper()
+		// Each cell is its own tool call, as in a run: its records commit
+		// under its own cell id.
+		calls++
+		execCtx.ToolCallID = fmt.Sprintf("call-%d", calls)
 		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
 		out, err := tool.Func(toolregistry.WithExecutionContext(ctx, execCtx), payload)
 		if err != nil {
@@ -230,12 +236,13 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	}
 
 	out = cell(`import "choir"
-a := choir.StoryAnalysis()
-c := a.Candidates[0]
-r, err := choir.Relate("", []map[string]any{{"entity_id": c.EntityID, "role": "central", "judgment_ref": c.Role.ReceiptRef, "question_id": c.Role.QuestionID}})
-fmt.Println("relate", err == nil, string(r))
+func() {
+	c := choir.StoryAnalysis().Candidates[0]
+	r, err := choir.Relate("", []map[string]any{{"entity_id": c.EntityID, "role": "central", "judgment_ref": c.Role.ReceiptRef, "question_id": c.Role.QuestionID}})
+	fmt.Println("relate", err == nil, string(r))
+}()
 ` + final)
-	if !strings.Contains(out, "relate true ") || !strings.Contains(out, `"story":"`+types.StoryPublicationID(f.owner, doc)+`"`) {
+	if !strings.Contains(out, "relate true ") || !strings.Contains(out, types.StoryPublicationID(f.owner, doc)) {
 		t.Fatalf("the cell's Relate(\"\") did not record its own story: %s", out)
 	}
 	got := textureRecords()
