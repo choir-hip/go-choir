@@ -661,3 +661,47 @@ func TestReclaimRejectsUnknownModeAndScope(t *testing.T) {
 		t.Fatal("a rejected request wrote")
 	}
 }
+
+// Review 333 LOW: a dry run samples free page reporting before it returns, so
+// observe mode's only artifact carries reporting_negotiated and the reportable
+// block.
+func TestReclaimDryRunSamplesReporting(t *testing.T) {
+	f := newReclaimFixture(t)
+	req := ReclaimRequest{Mode: ModeIdle, Scope: ScopeDaemon, DryRun: true}
+	yes := true
+	kib := int64(4096)
+	req.Reporting = func() Reporting { return Reporting{Negotiated: &yes, ReportableKiB: &kib} }
+	got, err := f.reclaimer().Reclaim(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Outcome != OutcomeDryRun || f.writeCount() != 0 {
+		t.Fatalf("outcome %q, %d writes", got.Outcome, f.writeCount())
+	}
+	if got.ReportingNegotiated == nil || !*got.ReportingNegotiated || got.Before.ReportableKiB == nil || *got.Before.ReportableKiB != 4096 {
+		t.Fatalf("dry run reporting = %v / %v, want negotiated and 4096 KiB reportable", got.ReportingNegotiated, got.Before.ReportableKiB)
+	}
+	// A refusal that reads nothing of the guest's memory (swap present) stays
+	// cheap, but nothing-to-return is still a report with the reporting state.
+	f.setScopeStat(f.daemon, memoryStat(400, 300, 100, 0, 0, 0))
+	got, err = f.reclaimer().Reclaim(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Outcome != OutcomeNothingToReturn || got.ReportingNegotiated == nil {
+		t.Fatalf("nothing_to_return report has no reporting state: %+v", got)
+	}
+}
+
+// An empty /proc/swaps is not "no swap": the kernel always writes a header.
+func TestReclaimEmptySwapsFileFailsClosed(t *testing.T) {
+	f := newReclaimFixture(t)
+	f.writeFile(filepath.Join(f.proc, "swaps"), "")
+	got, err := f.reclaimer().Reclaim(context.Background(), idleRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Outcome != OutcomeSwapPresent || f.writeCount() != 0 {
+		t.Fatalf("empty swaps: outcome %q with %d writes, want swap_present and none", got.Outcome, f.writeCount())
+	}
+}
