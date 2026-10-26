@@ -316,7 +316,11 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), result.BootedBase) {
 		return "", fmt.Errorf("rebase_base_missing: the booted base %s is not in the guest source repository yet; the platform fetches it and the next notice follows", result.BootedBase)
 	}
-	if claim, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, types.StackRebasePairKey(result.OperationID, result.BootedBase)); err == nil {
+	noticeAttempt := 1
+	if _, _, n, ok := types.ParseStackRebaseNoticeID(spec.Notice); ok {
+		noticeAttempt = n
+	}
+	if claim, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, types.StackRebaseClaimKey(types.StackRebasePairKey(result.OperationID, result.BootedBase), noticeAttempt)); err == nil {
 		return "", fmt.Errorf("rebase_pair_claimed: assignment %s already serves the rebase of %s onto %s", claim.AssignmentID, result.OperationID, result.BootedBase)
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return "", fmt.Errorf("source_projection_failed: read the rebase claim: %w", err)

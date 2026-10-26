@@ -25,6 +25,9 @@ import (
 const (
 	// RebaseNoticeAgentID is a rebase notice's provenance.
 	RebaseNoticeAgentID = "system:rebase-notice"
+	// RebaseOwnerRetryAgentID is the provenance of a notice the owner's retry
+	// act minted (slice 8): attempts above the cap, each one the owner's.
+	RebaseOwnerRetryAgentID = "system:rebase-owner-retry"
 	// RebaseNoticeMaxAttempts bounds the automatic attempts per pair. It
 	// mirrors the source schedule's crash-loop limit (two crashes close it).
 	RebaseNoticeMaxAttempts = 3
@@ -73,13 +76,49 @@ func ParseStackRebaseNoticeID(id string) (operationID, bootedBase string, attemp
 	return parts[0], parts[1], n, true
 }
 
+// StackRebaseClaimKey is the key of the claim of attempt n of a pair. The
+// automatic attempts (1..RebaseNoticeMaxAttempts) share the pair's one claim;
+// each owner retry (an attempt above the cap) is its own generation with its
+// own claim, so a spent pair can be re-opened by the owner's act.
+func StackRebaseClaimKey(pairKey string, attempt int) string {
+	if attempt <= RebaseNoticeMaxAttempts {
+		return pairKey
+	}
+	return pairKey + "#" + strconv.Itoa(attempt)
+}
+
+// StackRebaseNewerAttemptIDs are the record ids that would supersede attempt n:
+// every number above n up to the first owner retry, then n+1. An owner retry
+// is always numbered above the cap, so it can follow attempt 2 with a gap.
+func StackRebaseNewerAttemptIDs(operationID, bootedBase string, attempt int) []string {
+	last := attempt + 1
+	if attempt <= RebaseNoticeMaxAttempts {
+		last = RebaseNoticeMaxAttempts + 1
+	}
+	var out []string
+	for n := attempt + 1; n <= last; n++ {
+		out = append(out, StackRebaseNoticeID(operationID, bootedBase, n))
+	}
+	return out
+}
+
 // IsStackRebaseNotice reports whether rec is a rebase notice: a system Note
 // from selfdev-rebase:<operation> to a Texture inbox, whose id and subject
-// refs agree and whose attempt is in 1..RebaseNoticeMaxAttempts. An agent's
-// record is always EmitterAgent from its own inbox, so none passes.
+// refs agree. An automatic attempt is in 1..RebaseNoticeMaxAttempts and has no
+// owner stamp; an attempt above the cap is the owner's retry and carries the
+// stamp and its provenance. An agent's record is always EmitterAgent from its
+// own inbox, so none passes.
 func IsStackRebaseNotice(rec CommitmentRecord) bool {
 	operationID, base, attempt, ok := ParseStackRebaseNoticeID(rec.RecordID)
-	if !ok || attempt > RebaseNoticeMaxAttempts {
+	if !ok {
+		return false
+	}
+	ownerRetry := strings.TrimSpace(rec.SubjectRefs["owner_retry"]) == "true"
+	agent := strings.TrimSpace(rec.Provenance.AgentID)
+	switch {
+	case attempt <= RebaseNoticeMaxAttempts && (ownerRetry || agent == RebaseOwnerRetryAgentID):
+		return false
+	case attempt > RebaseNoticeMaxAttempts && (!ownerRetry || agent != RebaseOwnerRetryAgentID):
 		return false
 	}
 	refs := rec.SubjectRefs
@@ -104,6 +143,9 @@ type StackRebaseNotice struct {
 	StackBase  string
 	Attempt    int
 	DocID      string
+	// OwnerRetry marks a notice the owner's retry act minted: required above
+	// RebaseNoticeMaxAttempts, refused at or below it.
+	OwnerRetry bool
 }
 
 // NewStackRebaseNotice builds the notice. It returns false when the notice
@@ -113,7 +155,7 @@ func NewStackRebaseNotice(n StackRebaseNotice) (CommitmentRecord, bool) {
 	inbox := strings.TrimSpace(n.TextureInbox)
 	op, booted, stack := strings.TrimSpace(n.OperationID), strings.TrimSpace(n.BootedBase), strings.TrimSpace(n.StackBase)
 	if !strings.HasPrefix(inbox, "texture:") || inbox == "texture:" || op == "" || strings.Contains(op, ":") || booted == "" || strings.Contains(booted, ":") || stack == "" ||
-		n.Attempt < 1 || n.Attempt > RebaseNoticeMaxAttempts {
+		n.Attempt < 1 || (n.Attempt > RebaseNoticeMaxAttempts) != n.OwnerRetry {
 		return CommitmentRecord{}, false
 	}
 	id := StackRebaseNoticeID(op, booted, n.Attempt)
@@ -123,12 +165,17 @@ func NewStackRebaseNotice(n StackRebaseNotice) (CommitmentRecord, bool) {
 	if doc := strings.TrimSpace(n.DocID); doc != "" {
 		refs["doc_id"] = doc
 	}
+	agent, body := RebaseNoticeAgentID, stackRebaseNoticeBody(op, booted, stack, id)
+	if n.OwnerRetry {
+		refs["owner_retry"] = "true"
+		agent, body = RebaseOwnerRetryAgentID, "The owner asked for another try. "+body
+	}
 	return CommitmentRecord{
 		SchemaID:    CommitmentRecordSchemaV1,
 		RecordID:    id,
 		Kind:        CommitmentKindDirective,
 		Discrepancy: DiscrepancyUnresolved,
-		Provenance:  CommitmentProvenance{AgentID: RebaseNoticeAgentID},
+		Provenance:  CommitmentProvenance{AgentID: agent},
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  strings.TrimSpace(n.ComputerID),
 		Inbox:       inbox, SenderInbox: StackRebaseSenderInbox(op), Addressee: inbox,

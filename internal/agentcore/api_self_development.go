@@ -169,6 +169,12 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		h.packageShareGate(w, r, ownerID, computerID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "rebase-retry" {
+		// U4 slice 8: the owner re-opens a spent rebase pair. An owner act:
+		// the computer routes are read-only to a desk.
+		h.retryRebaseOwnerAct(w, r, ownerID)
+		return
+	}
 	if h.rt.selfdevOperations == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development operation authority unavailable"})
 		return
