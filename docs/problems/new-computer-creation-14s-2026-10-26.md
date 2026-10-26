@@ -266,3 +266,15 @@ a memory scan); the owner's "about 10 s" (not reproduced: this account measured 
   (8 GiB memory file, ~560 MB after btrfs zstd), and every guest-artifact deploy voids all snapshots.
   A base snapshot has the same lifecycle: it must be rebuilt after each deploy that changes the guest
   image or Firecracker, in the background, off the critical path.
+
+## Residuals of the data-image template (review 267, left open on purpose)
+
+- The seed identity covers the resolved mkfs path but not mkfs's version, argv or `mke2fs.conf`
+  (DeepSeek F2). On NixOS the store path carries the version; on another host an in-place e2fsprogs
+  upgrade or an argv change needs a manual `dataImageTemplateFormat` bump.
+- A `VMCTL_DATA_IMAGE_TEMPLATE_DIR` on a different filesystem than the state directory makes every
+  FICLONE fail with EXDEV, so each creation falls back to today's build and says so in its receipt
+  (Devin F3). No startup check refuses it yet.
+- Unsetting the switch leaves the template and any crashed `.building-*` file in place (DeepSeek F4);
+  clones share extents, so the cost is the seed's extents. Reclaiming them is an explicit prune, not an
+  automatic act of the off switch.
