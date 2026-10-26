@@ -543,7 +543,16 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 
 		row := types.InboxRecordReceipt{RecordID: rec.RecordID, Inbox: rec.Inbox, InboxSeq: rec.InboxSeq,
 			ConversationID: rec.ConversationID, Round: rec.Round, OpenedRound: opened, ClosedRound: closed, HypothesisIDs: ids}
-		if inboxRecordWakes(rec) {
+		wakes := inboxRecordWakes(rec)
+		if wakes {
+			// A backfill round's empty Report is settled without a wake.
+			quiet, err := s.storyEntitiesQuietReport(ctx, ownerID, computerID, rec)
+			if err != nil {
+				return nil, nil, receipt, err
+			}
+			wakes = !quiet
+		}
+		if wakes {
 			content, err := json.Marshal(inboxWakeContent{Inbox: rec.Inbox, InboxSeq: rec.InboxSeq, RecordID: rec.RecordID,
 				ConversationID: rec.ConversationID, Round: rec.Round})
 			if err != nil {

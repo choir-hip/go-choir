@@ -373,3 +373,78 @@ func revisionSourceURIs(raw json.RawMessage) []string {
 	}
 	return out
 }
+
+// A backfill round costs no Texture turn
+// (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice d,
+// D5). Research's Reports in a round the owner's entities request opened
+// that carry nothing (no claims, findings, settlements, drops, captures or
+// support failures) are settled by the reducer: they close the round as any
+// Report does, but they mint no wake and are not Texture's unread work. A
+// Report that carries anything wakes Texture as before, and a reader's
+// round is unchanged. No model is called to decide it.
+
+// storyEntitiesQuietReport reports whether rec is such a Report. rec has
+// its conversation and round stamped.
+func (s *Store) storyEntitiesQuietReport(ctx context.Context, ownerID, computerID string, rec types.CommitmentRecord) (bool, error) {
+	if rec.RecordKind() != types.CommitmentKindReport || rec.Round <= 0 || !reportCarriesNothing(rec) {
+		return false, nil
+	}
+	doc, ok := strings.CutPrefix(rec.Inbox, agentprofile.Texture+":")
+	if !ok || doc == "" || rec.SenderInbox != agentprofile.Research+":"+doc {
+		return false, nil
+	}
+	records, err := s.ConversationRecords(ctx, ownerID, computerID, rec.ConversationID)
+	if err != nil {
+		return false, err
+	}
+	for _, r := range records {
+		if r.Round == rec.Round && r.IsCast() && r.EmitterKind == types.CommitmentEmitterOwner && strings.HasPrefix(r.RecordID, storyEntitiesRecordPrefix) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func reportCarriesNothing(rec types.CommitmentRecord) bool {
+	if rec.Captures != nil && len(rec.Captures.Items) > 0 {
+		return false
+	}
+	if rec.Support != nil && len(rec.Support.Failures) > 0 {
+		return false
+	}
+	r := rec.Report
+	return r == nil || len(r.Claims)+len(r.Findings)+len(r.Settled)+len(r.Dropped) == 0
+}
+
+// TextureWorkUnread reports whether a Texture inbox holds unread records
+// that are work: records past its own cursor other than a backfill round's
+// quiet Reports.
+func (s *Store) TextureWorkUnread(ctx context.Context, ownerID, computerID, textureInbox string) (bool, error) {
+	ownerID, computerID, textureInbox = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(textureInbox)
+	cursor, err := s.ReaderCursor(ctx, ownerID, computerID, textureInbox, textureInbox)
+	if err != nil {
+		return false, err
+	}
+	head, err := s.InboxHead(ctx, ownerID, computerID, textureInbox)
+	if err != nil || head <= cursor {
+		return false, err
+	}
+	records, err := s.ListInboxRecords(ctx, ownerID, computerID, textureInbox, cursor, head)
+	if err != nil {
+		return false, err
+	}
+	if int64(len(records)) < head-cursor {
+		// A record the read did not return is work until it is read.
+		return true, nil
+	}
+	for _, rec := range records {
+		quiet, err := s.storyEntitiesQuietReport(ctx, ownerID, computerID, rec)
+		if err != nil {
+			return false, err
+		}
+		if !quiet {
+			return true, nil
+		}
+	}
+	return false, nil
+}
