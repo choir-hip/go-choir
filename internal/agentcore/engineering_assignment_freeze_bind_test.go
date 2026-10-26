@@ -2,7 +2,6 @@ package agentcore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,7 +29,7 @@ import (
 
 // r1FinalSubjectErr is what the capsule binder returns when the latest
 // cited receipt did not observe the frozen tree.
-var r1FinalSubjectErr = errors.New("capsule execution evidence does not bind the final frozen subject")
+var r1FinalSubjectErr = capsule.ErrFinalSubjectNotCertified
 
 // r1Capsule is the saga's executor over one capsule whose worktree digest
 // is a field. It applies the binder's rules (run, capsule, source per
@@ -46,6 +45,9 @@ type r1Capsule struct {
 	freezes    int
 	preflights int
 	receipts   map[string]capsule.ExecutionReceipt
+	// bindErr, when set, is what the post-freeze bind returns: a failure
+	// that is not the final-subject refusal.
+	bindErr error
 	// atFreeze runs inside ExtractGranted before the capsule freezes: the
 	// race, a writer that changed the tree after the pre-check.
 	atFreeze func(*r1Capsule)
@@ -101,7 +103,7 @@ func (c *r1Capsule) PersistGrantedFreezeReceipt(context.Context, string, string)
 func (c *r1Capsule) PersistGrantedCandidate(context.Context, string, string) (capsule.SourcePreflight, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return capsule.SourcePreflight{SubjectDigest: c.tree, ArtifactRef: "artifact:" + objectgraph.SHA256([]byte(c.tree))}, nil
+	return capsule.SourcePreflight{SubjectDigest: c.tree, ArtifactRef: "capsule-subject:" + c.tree}, nil
 }
 
 // bind applies the binder's rules against tree.
@@ -132,6 +134,9 @@ func (c *r1Capsule) ResolveGrantedExecutionReceiptsFor(_ context.Context, _, _ s
 	defer c.mu.Unlock()
 	if !c.frozen {
 		return nil, fmt.Errorf("capsule execution evidence requires frozen capsule")
+	}
+	if c.bindErr != nil {
+		return nil, c.bindErr
 	}
 	bound, err := c.bind(refs, binding, c.tree)
 	if err != nil {
@@ -296,5 +301,32 @@ func TestCompleteWhoseTreeChangesAfterThePreCheckEndsWithItsCause(t *testing.T) 
 	}
 	if assignedEngineeringFatePending(after) {
 		t.Fatal("the ended assignment still owes a fate re-drive")
+	}
+	if len(after.ReportRefs) == 0 {
+		t.Fatal("the ended assignment recorded no report")
+	}
+	report, err := f.s.GetEngineeringAssignmentReportByCanonicalID(context.Background(), after.ReportRefs[len(after.ReportRefs)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Result != types.EngineeringResultFailed || !strings.Contains(report.Summary, "does not bind the final frozen subject") {
+		t.Fatalf("the recorded fate is %s %q; want failed, naming the refusal", report.Result, report.Summary)
+	}
+}
+
+// Only the final-subject refusal ends the assignment: any other post-freeze
+// bind failure (an I/O error, a persist) may pass, so it keeps today's
+// strand and its re-drive.
+func TestOtherPostFreezeBindFailuresKeepTheRedrive(t *testing.T) {
+	f := newR1Fixture(t, "owner-r1-transient")
+	f.caps.bindErr = fmt.Errorf("persist executor receipt artifact: disk full")
+
+	if _, err := f.complete(t, types.EngineeringResultCompleted, "rlm-complete:r1:transient", f.edit, f.check); err == nil {
+		t.Fatal("a completed report whose post-freeze bind failed recorded")
+	}
+	after := f.get(t)
+	if after.Disposition.Terminal() || !assignedEngineeringFatePending(after) {
+		t.Fatalf("a transient post-freeze failure left %s/%s (fate pending %v); want the staged proposal kept for its re-drive",
+			after.Disposition, after.CapsuleDisposition, assignedEngineeringFatePending(after))
 	}
 }

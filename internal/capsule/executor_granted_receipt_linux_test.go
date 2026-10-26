@@ -4,6 +4,7 @@ package capsule
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,6 +164,81 @@ func TestResolveGrantedExecutionReceiptsForObservedBindsAfterReceiptlessMutation
 	if opened.SubjectBinding != "observed" || opened.FinalSubjectDigest != frozen || opened.LatestReceiptWorktreeDigest != observedByReceipt ||
 		opened.Execution.WorktreeDigest != observedByReceipt || opened.FinalSubjectDigest == opened.LatestReceiptWorktreeDigest {
 		t.Fatalf("granted receipt does not record both digests: %+v", opened)
+	}
+}
+
+// R1 (docs/problems/engineering-completion-path-cluster-2026-10-20.md): the
+// pre-check binds the cited receipts against the live tree before the
+// terminal saga's freeze intent, with the same rules, and changes nothing: it
+// neither freezes the capsule nor mints a granted receipt.
+func TestPreflightGrantedExecutionReceiptsChecksTheLiveTreeAndChangesNothing(t *testing.T) {
+	state := t.TempDir()
+	merged := filepath.Join(t.TempDir(), "root")
+	subject := filepath.Join(merged, "workspace", "platform")
+	if err := os.MkdirAll(subject, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subject, "App.svelte"), []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	sourceDigest, err := digestCanonicalSubjectTree(ctx, subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps := &Capsule{ID: "capsule-preflight", State: StateActive, MergedDir: merged, SourceSnapshotDigest: sourceDigest}
+	capability := &Capability{
+		CapabilityID: "cap-preflight", Handle: "handle-preflight", AgentRunID: "run-preflight",
+		AgentRole: RoleEngineering, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour),
+	}
+	executor := &Executor{
+		stateDir:          state,
+		capsules:          map[string]*Capsule{caps.ID: caps},
+		capabilities:      map[capKey]*Capability{{AgentRunID: "run-preflight", Handle: "handle-preflight"}: capability},
+		revokedCaps:       map[string]bool{},
+		executionReceipts: map[string]ExecutionReceipt{},
+		grantedReceipts:   map[string]GrantedExecutionReceipt{},
+	}
+	handleDigest := computerevent.DigestBytes([]byte("handle-preflight"))
+	if err := os.WriteFile(filepath.Join(subject, "App.svelte"), []byte("after\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	edited, err := digestCanonicalSubjectTree(ctx, subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().UTC().Add(-time.Minute)
+	build := persistTestExecutionReceipt(t, executor, ExecutionReceipt{
+		AgentRunID: "run-preflight", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
+		Command: "npm run build", WorktreeDigest: edited, SourceTreeDigest: sourceDigest, OccurredAt: base.Format(time.RFC3339Nano),
+	})
+	// Round 5c: the latest cited receipt observed the pre-edit tree.
+	stale := persistTestExecutionReceipt(t, executor, ExecutionReceipt{
+		AgentRunID: "run-preflight", CapabilityHandleDigest: handleDigest, CapsuleID: caps.ID,
+		Command: "go_eval:capture", WorktreeDigest: sourceDigest, SourceTreeDigest: sourceDigest, OccurredAt: base.Add(time.Second).Format(time.RFC3339Nano),
+	})
+
+	err = executor.PreflightGrantedExecutionReceipts(ctx, "run-preflight", "handle-preflight", []string{build, stale}, SubjectCertified)
+	if !errors.Is(err, ErrFinalSubjectNotCertified) {
+		t.Fatalf("certified pre-check with a stale latest receipt = %v, want ErrFinalSubjectNotCertified", err)
+	}
+	if err := executor.PreflightGrantedExecutionReceipts(ctx, "run-preflight", "handle-preflight", []string{build, stale}, SubjectObserved); err != nil {
+		t.Fatalf("observed pre-check of the same receipts: %v", err)
+	}
+	if err := executor.PreflightGrantedExecutionReceipts(ctx, "run-preflight", "handle-preflight", []string{build}, SubjectCertified); err != nil {
+		t.Fatalf("certified pre-check of a receipt that observed the live tree: %v", err)
+	}
+	if err := executor.PreflightGrantedExecutionReceipts(ctx, "run-other", "handle-preflight", []string{build}, SubjectObserved); err == nil {
+		t.Fatal("a pre-check under another run's capability passed")
+	}
+	if caps.State != StateActive {
+		t.Fatalf("the pre-check left the capsule %s, want active", caps.State)
+	}
+	if len(executor.grantedReceipts) != 0 {
+		t.Fatalf("the pre-check minted %d granted receipt(s)", len(executor.grantedReceipts))
+	}
+	if entries, _ := os.ReadDir(filepath.Join(executor.artifactRoot(), "receipts", "granted")); len(entries) != 0 {
+		t.Fatalf("the pre-check persisted %d granted receipt artifact(s)", len(entries))
 	}
 }
 

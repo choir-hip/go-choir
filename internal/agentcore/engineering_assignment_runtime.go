@@ -87,8 +87,8 @@ type assignmentCapsuleRuntime interface {
 }
 
 // assignmentFateExecutor is the executor surface the terminal report saga
-// drives (recordAssignedEngineeringReportOnce): freeze, digest, freeze
-// receipt, the receipt binding, the candidate export. The capsule executor
+// drives (recordAssignedEngineeringReportOnce): the receipt pre-check,
+// freeze, digest, freeze receipt, the receipt binding, the candidate export. The capsule executor
 // implements it; a test substitutes it (Runtime.assignmentFateRuntime) to
 // drive the saga without a guest kernel.
 type assignmentFateExecutor interface {
@@ -98,6 +98,7 @@ type assignmentFateExecutor interface {
 	ResolveGrantedWorktreeDigest(context.Context, string, string) (string, error)
 	PersistGrantedFreezeReceipt(context.Context, string, string) (capsule.CapsuleFateReceipt, error)
 	ResolveGrantedExecutionReceiptsFor(context.Context, string, string, []string, capsule.SubjectBinding) ([]capsule.ExecutionReceipt, error)
+	PreflightGrantedExecutionReceipts(context.Context, string, string, []string, capsule.SubjectBinding) error
 	PersistGrantedCandidate(context.Context, string, string) (capsule.SourcePreflight, error)
 }
 
