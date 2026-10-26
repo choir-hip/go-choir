@@ -14,7 +14,8 @@
 #       or leaves a half-made release directory
 #   M24 an unreadable vault root (complete:false) lets retention delete a
 #       release a vault snapshot needs, or a running one
-#   -   an unanswered vmctl lets retention delete anything
+#   -   an unanswered vmctl (no answer, 5xx, 404 from a rolled-back vmctl) lets
+#       retention delete anything
 #   -   a symlink or an odd name is deleted
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -144,10 +145,9 @@ stop_stub
 f0=$fail
 d="$root/t5"; fixture "$d"; start_stub 404 ""
 run_retention "$d" "$URL"
-expect_kept "$d" "404" $CUR $YOUNG
-expect_gone "$d" "404" $MID $OLD $OOS $USED $OOSRUN
+expect_kept "$d" "404" $CUR $YOUNG $MID $USED $OOSRUN $OLD $OOS
 untouched "$d" "404"
-[ $fail -eq $f0 ] && ok "404 (an older vmctl): in_use is empty; current and previous stay, the rest go"
+[ $fail -eq $f0 ] && ok "404 deletes nothing: only a parsed 200 is an answer (review 331: a vmctl rollback while release-bound VMs run)"
 stop_stub
 
 f0=$fail
@@ -183,6 +183,15 @@ expect_kept "$d" "no link" $CUR $YOUNG $MID $USED $OOSRUN $OLD $OOS
 [ $fail -eq $f0 ] && ok "an unreadable guest link deletes nothing"
 
 # --- materialize ------------------------------------------------------------------
+# These cases need GNU cp (--reflink) and stat (-c), as Node B has; elsewhere
+# they are skipped, not failed (review 331 Devin 2).
+if ! cp --help 2>&1 | grep -q -- '--reflink' || ! stat -c %a / >/dev/null 2>&1; then
+	echo "skip: materialize cases need GNU coreutils"
+	skip_materialize=1
+else
+	skip_materialize=0
+fi
+if [ "$skip_materialize" = 0 ]; then
 mksrc() { # DIR -> src path
 	local src="$1/src/${A}-go-choir-guest-image"
 	mkdir -p "$src"
@@ -237,6 +246,7 @@ if [ -d "$d/rel/$A" ]; then ok "materialize: the default mode reflinked (a refli
 	[ $fail -eq $f0 ] && ok "materialize: the default mode never falls back to a full copy (no reflink here: nothing made, exit 0)"
 fi
 
+fi
 # --- wiring in nix/node-b.nix (text assertions) ---------------------------------------
 nix="$here/../nix/node-b.nix"
 grep -qE '^\s*snapshotReleaseRetain = false;' "$nix" && ok "nix: snapshotReleaseRetain is a let-binding, off" || bad "nix: snapshotReleaseRetain = false; is missing"
