@@ -299,8 +299,21 @@ func (rt *Runtime) platformUpdateApplyRequest(ctx context.Context, offer selfdev
 // event closes the pending transition, then the tail (checkpoint, route)
 // runs.
 func (rt *Runtime) commitPlatformUpdateApplied(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, resolver updaterReceiptKeyResolver, operationID string, report PlatformUpdateReport) (PlatformUpdateReport, error) {
+	report, appliedEventHead, err := rt.recordPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, result, resolver, report)
+	if err != nil {
+		return report, err
+	}
+	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, result, appliedEventHead, operationID, report)
+}
+
+// recordPlatformUpdateApplied commits the applied event, which closes the
+// pending transition, and returns the head it committed. It is the cheap,
+// known half of commitPlatformUpdateApplied: the crash-boot settlement runs it
+// outside the tail's attempt bound, so a store that refuses the append for a
+// while never spends the bound and the transition does not stay pending.
+func (rt *Runtime) recordPlatformUpdateApplied(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, resolver updaterReceiptKeyResolver, report PlatformUpdateReport) (PlatformUpdateReport, string, error) {
 	if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
-		return report, fmt.Errorf("platform update: invalid applied receipts")
+		return report, "", fmt.Errorf("platform update: invalid applied receipts")
 	}
 	report.ReleaseDigest = result.ReleaseDigest
 	report.PriorReleaseDigest = result.PriorReleaseDigest
@@ -309,12 +322,12 @@ func (rt *Runtime) commitPlatformUpdateApplied(ctx context.Context, offer selfde
 
 	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
-		return report, fmt.Errorf("platform update: applied projection unavailable")
+		return report, "", fmt.Errorf("platform update: applied projection unavailable")
 	}
 	// Applied event closes the pending transition.
 	appliedEventID, err := computerevent.NewEventID()
 	if err != nil {
-		return report, err
+		return report, "", err
 	}
 	resultPayload, _ := json.Marshal(result)
 	appliedEvent := computerevent.Event{
@@ -327,17 +340,17 @@ func (rt *Runtime) commitPlatformUpdateApplied(ctx context.Context, offer selfde
 		ResultingEffectiveCommitment: head.DesiredStateCommitment,
 		ReducerVersion:               computerevent.ReducerVersionV1,
 	}
-	if _, _, err = rt.eventAppender.AppendNewPayload(ctx, appliedEvent, computerevent.TransitionInput{}, resultPayload, "application/vnd.choir.platform-update-result+json", "owner"); err != nil {
-		return report, fmt.Errorf("platform update: applied event refused: %w", err)
+	if _, _, err = appendEventPayload(rt, ctx, appliedEvent, computerevent.TransitionInput{}, resultPayload, "application/vnd.choir.platform-update-result+json", "owner"); err != nil {
+		return report, "", fmt.Errorf("platform update: applied event refused: %w", err)
 	}
 	head, err = rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
-		return report, fmt.Errorf("platform update: post-apply head unavailable")
+		return report, "", fmt.Errorf("platform update: post-apply head unavailable")
 	}
 	appliedEventHead := head.CanonicalEventHead
 	report.AppliedEventHead = appliedEventHead
 
-	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, result, appliedEventHead, operationID, report)
+	return report, appliedEventHead, nil
 }
 
 // drivePlatformUpdateTail commits the post-apply half of a platform update:
@@ -921,8 +934,26 @@ func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context, crashBo
 		log.Printf("runtime: platform update resume: stranded offer payload decode: %v", err)
 		return
 	}
-	if crashBoot && !rt.spendPlatformUpdateSettlementAttempt(updateID) {
-		return
+	if crashBoot {
+		// ApplyPlatformUpdate refuses an offer pinned to a retired realization
+		// or past its expiry before it reaches the tail: spend nothing on a
+		// re-drive that cannot start.
+		if offer.Realization != rt.selfdevRealizationID {
+			log.Printf("runtime: crash boot: platform update %s: stranded tail not re-driven: its offer binds a retired realization", updateID)
+			return
+		}
+		if offerErr := selfdevprotocol.PlatformUpdateOfferFromRequest(offer, time.Now().UTC()); offerErr != nil {
+			log.Printf("runtime: crash boot: platform update %s: stranded tail not re-driven: %v", updateID, offerErr)
+			return
+		}
+		offerDigest, digestErr := offer.Digest()
+		if digestErr != nil {
+			log.Printf("runtime: crash boot: platform update %s: offer digest: %v", updateID, digestErr)
+			return
+		}
+		if !rt.spendPlatformUpdateSettlementAttempt(ctx, updateID, appliedEvent.DecisionRef, offerDigest) {
+			return
+		}
 	}
 	log.Printf("runtime: platform update resume: re-driving stranded tail for update %s", updateID)
 	if _, applyErr := rt.ApplyPlatformUpdate(ctx, offer); applyErr != nil {
@@ -1016,14 +1047,22 @@ func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
 	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
 	switch {
 	case journaled.Result.Outcome == "applied":
-		// Recording the apply drives the tail, which can crash the computer:
-		// the attempt is spent durably first and a spent update is held.
-		if !rt.spendPlatformUpdateSettlementAttempt(offer.UpdateID) {
+		// The apply is known: a terminal journal and verified receipts. It is
+		// recorded first, outside the bound, so the pending transition closes
+		// and later updates are not refused. Only the tail, the work that can
+		// crash the computer, is bounded: its attempt is spent durably before it.
+		report := PlatformUpdateReport{UpdateID: offer.UpdateID, ComputerID: offer.ComputerID, AcceptedEventHead: acceptedDigest}
+		report, appliedEventHead, err := rt.recordPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, journaled.Result, resolver, report)
+		if err != nil {
+			log.Printf("runtime: crash boot: platform update %s: record journaled apply: %v", offer.UpdateID, err)
 			return
 		}
-		report := PlatformUpdateReport{UpdateID: offer.UpdateID, ComputerID: offer.ComputerID, AcceptedEventHead: acceptedDigest}
-		if _, err := rt.commitPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, journaled.Result, resolver, "platform-update-"+offer.UpdateID, report); err != nil {
-			log.Printf("runtime: crash boot: platform update %s: record journaled apply: %v", offer.UpdateID, err)
+		if !rt.spendPlatformUpdateSettlementAttempt(ctx, offer.UpdateID, acceptedDigest, offerDigest) {
+			rt.logPlatformUpdateCrashSettlement(ctx, offer, "applied (from the updater journal; the tail is held)")
+			return
+		}
+		if _, err := rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, journaled.Result, appliedEventHead, "platform-update-"+offer.UpdateID, report); err != nil {
+			log.Printf("runtime: crash boot: platform update %s: tail: %v", offer.UpdateID, err)
 			return
 		}
 		rt.logPlatformUpdateCrashSettlement(ctx, offer, "applied (from the updater journal)")
@@ -1046,23 +1085,62 @@ const (
 
 // spendPlatformUpdateSettlementAttempt durably counts this crash boot's
 // re-drive of the update's tail before the work, and reports whether the work
-// may run. Once the limit is spent, or when no durable count exists, the tail
-// is not re-driven: the cause is logged and the update stays where the tape
-// has it (a pending transition keeps refusing later updates, fail-closed; an
-// applied update keeps its applied event without its checkpoint and route). An
-// owner act decides.
-func (rt *Runtime) spendPlatformUpdateSettlementAttempt(updateID string) bool {
+// may run. It is called once per boot by the sweep. Once the limit is spent, or
+// when no durable count exists, the tail is not re-driven: the cause is logged
+// and one causal event on the tape names the update and the cause
+// (recordPlatformUpdateSettlementHeld). The update stays where the tape has it:
+// applied without its checkpoint and route, which the next signed update
+// supersedes; an owner act decides.
+func (rt *Runtime) spendPlatformUpdateSettlementAttempt(ctx context.Context, updateID, decisionRef, offerDigest string) bool {
 	err := spendSettlementAttempt(rt.cfg.StorePath, platformUpdateSettlementAttemptReason, updateID, platformUpdateSettlementAttemptLimit)
 	if err == nil {
 		return true
 	}
-	if errors.Is(err, ErrGuestApplyAttemptsSpent) {
-		log.Printf("runtime: crash boot: platform update %s: the settlement did not finish on %d boots; its checkpoint and route tail are not re-driven; an owner act decides: %v",
-			updateID, platformUpdateSettlementAttemptLimit, err)
-	} else {
-		log.Printf("runtime: crash boot: platform update %s: tail not re-driven: %v", updateID, err)
+	cause := fmt.Sprintf("the settlement did not finish on %d boots; the checkpoint and route tail are not re-driven: %v", platformUpdateSettlementAttemptLimit, err)
+	if !errors.Is(err, ErrGuestApplyAttemptsSpent) {
+		cause = fmt.Sprintf("the checkpoint and route tail are not re-driven: %v", err)
 	}
+	log.Printf("runtime: crash boot: platform update %s: %s", updateID, cause)
+	rt.recordPlatformUpdateSettlementHeld(ctx, updateID, decisionRef, offerDigest, cause)
 	return false
+}
+
+// recordPlatformUpdateSettlementHeld appends one idempotent causal event
+// (recovery_recorded) naming the update and why its tail is held, so the held
+// state is visible on the tape. It is not materialization_failed: the release
+// is live, and a failed event would falsify the tape. A failed append is
+// logged; the next crash boot appends it again.
+func (rt *Runtime) recordPlatformUpdateSettlementHeld(ctx context.Context, updateID, decisionRef, offerDigest, cause string) {
+	if rt == nil || rt.store == nil || rt.eventAppender == nil {
+		return
+	}
+	key := platformUpdateIdempotencyKey("settlement-held", updateID)
+	if _, found, err := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, key); err != nil || found {
+		return
+	}
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		return
+	}
+	payload, err := json.Marshal(struct {
+		UpdateID string `json:"update_id"`
+		Cause    string `json:"cause"`
+	}{updateID, cause})
+	if err != nil {
+		return
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: rt.selfdevComputerID,
+		EventKind: computerevent.EventRecoveryRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: key,
+		ActorProfile:   agentprofile.Management, AuthorityRef: "guest-core:crash-settlement",
+		PrivacyClass:      "owner",
+		ProposedEffectRef: offerDigest, DecisionRef: decisionRef,
+		ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, _, err := appendEventPayload(rt, ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.platform-update-settlement-held+json", "owner"); err != nil {
+		log.Printf("runtime: crash boot: platform update %s: record the held settlement: %v", updateID, err)
+	}
 }
 
 func (rt *Runtime) logPlatformUpdateCrashSettlement(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, outcome string) {

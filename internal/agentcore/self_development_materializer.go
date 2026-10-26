@@ -249,10 +249,22 @@ func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, o
 	switch operation.State {
 	case selfdev.StateDegraded:
 		return nil
-	case selfdev.StateAccepted:
-		// recordMaterializationFailed also discharges the accepted
-		// transition on the tape, as the unstarted-apply settlement does.
+	case selfdev.StateAwaitingApproval, selfdev.StateAccepted:
+		// Every state before materializing installed nothing. An operation
+		// with a decision on the tape also discharges that transition
+		// (recordMaterializationFailed, as the unstarted-apply settlement
+		// does); one without has nothing on the tape to discharge.
 		cause := selfdevSettlementUnfinishedNothingInstalled(operation.State)
+		if strings.TrimSpace(operation.DecisionEvent) == "" {
+			if _, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
+				next.TerminalError = cause
+				return nil
+			}); err != nil {
+				return fmt.Errorf("fail the undecided operation whose settlement did not finish: %w", err)
+			}
+			log.Printf("selfdev: crash boot: %s failed from %s: %s", operation.OperationID, operation.State, cause)
+			return nil
+		}
 		if err := rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(cause), operation.State); err != nil {
 			return fmt.Errorf("fail the accepted operation whose settlement did not finish: %w", err)
 		}
