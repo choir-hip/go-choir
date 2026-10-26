@@ -256,7 +256,7 @@ the write route.
 - **Common words.** A one-word name matches only where the story writes it
   with a capital letter and not as the first word of a sentence. It never
   matches if it is under four letters or on a short list of common words
-  (May, Apple Street, Court and the like). Multi-word names match as they
+  (May, March, Court, House, State and the like). Multi-word names match as they
   stand.
 - **Bound.** At most 12 candidates a story, one System 1 call's questions.
   The order is title matches first, then by occurrences. Hub entities
