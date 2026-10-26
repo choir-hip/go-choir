@@ -250,6 +250,15 @@ func (m *Manager) currentReleaseID() string {
 // off or the current release cannot be resolved (vmctl health).
 func (m *Manager) CurrentGuestRelease() string { return m.currentReleaseID() }
 
+// CurrentGuestReleaseInfo is the current release's id and the commit its image
+// was built from; both "" when the switch is off or the release is unresolved.
+func (m *Manager) CurrentGuestReleaseInfo() (id, commit string) {
+	if rel, ok := m.currentRelease(); ok {
+		return rel.ID, rel.Policy.BuildCommit
+	}
+	return "", ""
+}
+
 // releaseRefusal applies R0 to R6 to a snapshot meta. "" means the release
 // rules pass (or the meta is legacy). cur is the current release when it
 // resolved.
