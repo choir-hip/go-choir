@@ -554,6 +554,25 @@ start, carries a possessive, or appears in the title. Each fix gets its own
 failure test first. The re-measure is reported beside this baseline and
 does not replace it.
 
+**Re-measure after the fixes.** The four fixes each had a failure test
+first. After them, on the same labelled set with no label changed:
+- overall: 167 of 176 (0.949);
+- central: 66 of 71 (0.930);
+- within the top 24: 0.892 overall, 0.930 central;
+- proposals: 280 (from 269).
+
+The 9 left are:
+- the unreachable ones: swisstopo, Georgia, Jordan, "U.S. military",
+  "Mein Schiff 3";
+- Anthropic: one sentence-start mention, not in the title;
+- Ukraine's General Staff: "General" is a title word;
+- "Michigan Advance" absorbing Michigan;
+- EU inside a five-word span.
+
+A caution: the fixes were found on this set, so the re-measure is
+optimistic. The live check is the growth read's recall signals: the
+novelty "yes" rate and `existing_unmatched`.
+
 #### 8. Failure modes, tested first
 
 - **G1, false matches.** A sentence-start capital proposed as a name; a
