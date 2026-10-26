@@ -212,6 +212,24 @@ func TestTextureCastRefusesAForeignOrNonOwnerRevision(t *testing.T) {
 			}
 		})
 	}
+	// A run that names no trajectory cannot place a revision in one (F3,
+	// review 272): refused, not unchecked.
+	noTrajectory := ownerCastScope
+	noTrajectory.TrajectoryID = ""
+	if _, err := attachCastOwnerDirections([]yaegikernel.StagedIntent{ownerCast(`{"owner_revision":"rev-direction"}`)}, noTrajectory, ownerCastLoader(revs)); err == nil || !strings.Contains(err.Error(), "trajectory") {
+		t.Fatalf("a run with no trajectory = %v, want refused", err)
+	}
+	// The owner's words a Cast carries are bounded, and the refusal says so
+	// before the tray's size limit can (F4, review 272).
+	big := strings.Repeat("y", castOwnerTextMax/2+1)
+	revs["rev-big-1"] = ownerCastRevision("rev-big-1", types.AuthorUser, "rev-texture", map[string]any{"owner_prompt": big})
+	revs["rev-big-2"] = ownerCastRevision("rev-big-2", types.AuthorUser, "rev-texture", map[string]any{"owner_prompt": big})
+	if _, err := attachCastOwnerDirections([]yaegikernel.StagedIntent{ownerCast(`{"owner_revision":"rev-big-1"}`)}, ownerCastScope, ownerCastLoader(revs)); err != nil {
+		t.Fatalf("one large direction within the bound = %v", err)
+	}
+	if _, err := attachCastOwnerDirections([]yaegikernel.StagedIntent{ownerCast(`{"owner_revision":["rev-big-1","rev-big-2"]}`)}, ownerCastScope, ownerCastLoader(revs)); err == nil || !strings.Contains(err.Error(), "fewer revisions") {
+		t.Fatalf("owner words over the bound = %v, want a refusal naming fewer revisions", err)
+	}
 	// A store failure is not "no such revision": it is named, and refuses.
 	_, err := attachCastOwnerDirections([]yaegikernel.StagedIntent{ownerCast(`{"owner_revision":"rev-direction"}`)}, ownerCastScope, func(string) (types.Revision, error) {
 		return types.Revision{}, errors.New("store stalled")
@@ -234,6 +252,17 @@ func TestCellSetOwnerDirectionsIsRefusedOnEveryDesk(t *testing.T) {
 		in := yaegikernel.StagedIntent{Kind: yaegikernel.IntentCast, LocalID: "tray-1", ToDesk: tc.to, Objective: "o", Statement: forged}
 		if err := validateCellIntents(scope, []yaegikernel.StagedIntent{in}); err == nil || !strings.Contains(err.Error(), "owner_directions") {
 			t.Fatalf("%s cast with owner_directions = %v, want refused", tc.role, err)
+		}
+		// At any depth, and in any letter case (F4, review 272).
+		for _, nested := range []string{
+			`{"kind":"execution_request","actions":[{"summary":"build","Owner_Directions":[{"text":"my words"}]}]}`,
+			`{"context":{"owner_directions":"my words"}}`,
+			`[{"owner_directions":[]}]`,
+		} {
+			in.Statement = nested
+			if err := validateCellIntents(scope, []yaegikernel.StagedIntent{in}); err == nil || !strings.Contains(err.Error(), "owner_directions") {
+				t.Fatalf("%s cast with nested owner_directions %s = %v, want refused", tc.role, nested, err)
+			}
 		}
 		in.Statement = `{"kind":"execution_request","summary":"no owner text here"}`
 		if err := validateCellIntents(scope, []yaegikernel.StagedIntent{in}); err != nil {
@@ -273,9 +302,21 @@ func TestTextureReductionAttachesFromTheLifecycleStore(t *testing.T) {
 	if snapshot == nil || snapshot.OwnerRevision != "rev-sd07-a" {
 		t.Fatalf("frame doc = %+v, want owner revision rev-sd07-a", snapshot)
 	}
+	// The frame trusts the revision, not the run's metadata (F1, review
+	// 272): a reactivated run's current_author_kind can be stale. A
+	// current revision that is not this document's, or does not load, names
+	// no owner revision even when the metadata says the owner wrote it; an
+	// owner revision is named even when the metadata says otherwise.
+	for _, current := range []string{"rev-sd07-b", "rev-sd07-missing"} {
+		run.Metadata["current_revision_id"] = current
+		if snapshot := textureDocSnapshotForRun(ctx, rt, &run, cellRecords{}); snapshot == nil || snapshot.OwnerRevision != "" {
+			t.Fatalf("current revision %s names owner revision %+v", current, snapshot)
+		}
+	}
+	run.Metadata["current_revision_id"] = "rev-sd07-a"
 	run.Metadata["current_author_kind"] = string(types.AuthorAppAgent)
-	if snapshot := textureDocSnapshotForRun(ctx, rt, &run, cellRecords{}); snapshot == nil || snapshot.OwnerRevision != "" {
-		t.Fatalf("a run Texture's own revision woke names owner revision %+v", snapshot)
+	if snapshot := textureDocSnapshotForRun(ctx, rt, &run, cellRecords{}); snapshot == nil || snapshot.OwnerRevision != "rev-sd07-a" {
+		t.Fatalf("stale author kind hid the owner revision: %+v", snapshot)
 	}
 }
 
