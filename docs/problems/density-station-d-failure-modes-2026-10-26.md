@@ -470,3 +470,28 @@ claim that the shared busy probe answered not-busy for an empty
 Introduced: a
 host-to-guest memory act, bounded and stateless. Repaired: none until the
 staging proof.
+
+### D6 review 333 (S0 to S2) and the S3/S4 build: folded and named residuals
+
+Folded: the idle trigger runs on its own ticker (`StartGuestCacheReturnLoop`),
+and a non-off switch no longer starts the maintenance sweep (reconcile,
+warmers, prune) nor does the sweep carry the pass; the vmctl record and
+journal line carry `swappiness_key`, `reporting_negotiated`, the reportable
+blocks, `path` and `detail`; a dry run samples free page reporting; an empty
+`/proc/swaps` fails closed.
+
+Named, not fixed here:
+
+- **The nix wiring is FP0's, at landing** (`observe`, the selector, the
+  triggers, and the M20 comment beside the selector that the two
+  DAMON-selected computers are not named). Until then the feature is dark
+  everywhere (code default off).
+- **Every attempt counts** toward "acted on in this idle period", a guest-side
+  409 `busy` included, so a refused computer is asked again in its next idle
+  period (30 minutes for the ones the sweep never hibernates).
+- Under pressure a computer is not asked again within 60 s of its last act
+  (`cacheReturnPressureRepeat`), the guard that keeps two refused starts from
+  squeezing one computer twice; a quarter of the step-0 budget must remain
+  for an act to start.
+- The guest route answers 503 only when the handler has no runtime (not
+  reachable in a served guest).
