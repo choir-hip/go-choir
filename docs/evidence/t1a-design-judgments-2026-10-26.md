@@ -37,3 +37,36 @@ round 3 promotion: four files, +51 -23. Rendered 17 scenes at 02:5x.
 
 Verdict: approve. FP0 approved selfdev-02626b17 at 02:58:44. Residual (cosmetic):
 a snippet can begin mid-word ("...r nobody"), because the cut is by characters.
+
+## The window manager, round 1 (selfdev-12c347f9), 2026-10-26
+
+Sent 05:50:41 on b@c (doc 99e044ce, trajectory 0d7560d4; request
+`_runs/design/wm-request.txt`). Frozen 06:09:26; management's verify failed it
+06:09:56 ("independent judgment rejected the frozen bundle"). Its report to
+Texture (06:10:04) gives the reason: the build and syntax checks passed but no
+runtime evidence exists, because the request asked for a signed-in Playwright
+run and the capsule cannot sign in (the engineer marked its spec "UNRUN IN THIS
+CAPSULE" and said why). Patch from 39a1be5c5: FloatingWindow.svelte,
+stores/desktop.js, theme.ts, app.css, apps/registry.ts, three specs; 1618 lines.
+
+FP0 rendered the frozen patch in the real shell (mocked backend, signed in) at
+1280x860 and 390x844 with a geometry probe (`scratchpad/design/wm-probe.mjs`,
+`wm-probe2.mjs`; shots in `wm1-shots/`).
+
+| Request item | Result | Evidence |
+|---|---|---|
+| 1 Maximize is the whole area above the prompt bar, edge to edge, square, no shadow | pass (Salmon, Noir); Kintsugi keeps a 1px ring shadow | desktop rect 0,0 to 1280,787.8 = prompt top; Kintsugi box-shadow ring |
+| 2 Drag to the edges, title bar reachable | pass | dragged to x 1240 (40px of title bar left) |
+| 3 Resize from every edge and corner | pass from the left edge on desktop; on a phone the 28px top strip covers the title-bar buttons, so maximize and close cannot be pressed in normal mode | "div.resize-zone.resize-n intercepts pointer events" |
+| 4 Snap to top, drag a maximized window to restore | snap and its preview outline pass; dragging a maximized title bar does not restore it | mode stays maximized after a 280px drag |
+| 5 Phone windows open maximized | a new window: pass; a window restored from the saved desktop shows small (360x600) | phone shots |
+| 6 Desktop new window size | Files opens at the full free area (its default is larger than 70%), centered | new-files shot |
+| 7 Body top padding removed, insets on the desktop area | not measured (insets are 0 in the probe) | |
+| Markup | the getRestoredGeometry doc comment appears twice | desktop.js |
+
+Verdict: send back (the operation already failed). Round 2 asks for exactly the
+five defects above, from the carried tree, and tells management's verify that a
+signed-out capture cannot show windows; FP0 does the runtime check after the
+freeze (`_runs/design/wm-request-r2.txt`). Round 2 waits for train 4 (the
+stranded-freeze fix and live binary reuse) so it does not rebuild the binary
+for a frontend change.
