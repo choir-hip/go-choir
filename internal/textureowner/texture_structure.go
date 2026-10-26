@@ -11,16 +11,25 @@ import (
 )
 
 // carryForwardTextureMetadataForRecord carries the parent's durable metadata
-// forward, then labels the result with the trajectory its revision record is
-// on. The carry-forward copies the parent's trajectory_id, which is a stale
-// label whenever the document moved to a later trajectory; an empty
-// trajectoryID (an unbound document) leaves the label as carried.
+// forward, then labels the result with the trajectory the commit ran under (an
+// Unbound commit's record field is erased by the store, the label is not). The
+// carry-forward copies the parent's trajectory_id, a stale label whenever the
+// document moved to a later trajectory. An empty trajectoryID (a document with
+// no trajectory) drops any carried or supplied label.
 func carryForwardTextureMetadataForRecord(raw, parentRaw json.RawMessage, trajectoryID string) json.RawMessage {
 	raw = carryForwardDurableTextureMetadata(raw, parentRaw)
-	if trajectoryID == "" {
+	if trajectoryID != "" {
+		return mergeTextureRevisionMetadata(raw, map[string]any{"trajectory_id": trajectoryID})
+	}
+	meta := decodeRevisionMetadata(raw)
+	if _, labeled := meta["trajectory_id"]; !labeled {
 		return raw
 	}
-	return mergeTextureRevisionMetadata(raw, map[string]any{"trajectory_id": trajectoryID})
+	delete(meta, "trajectory_id")
+	if encoded, err := json.Marshal(meta); err == nil {
+		return encoded
+	}
+	return raw
 }
 
 func carryForwardDurableTextureMetadata(raw, parentRaw json.RawMessage) json.RawMessage {
