@@ -119,16 +119,14 @@ func main() {
 		registry.HostAdmissionSummary().Mode, admission.DefaultNeedBytes>>20, admission.MinNeedBytes>>20, admission.HeadroomBytes>>20, admission.Settle,
 		admission.MakeRoom, admission.MakeRoomMaxVictims, admission.MakeRoomSettleWait)
 	// Density D6: guests return cold page cache to the host. Off unless
-	// VMCTL_GUEST_CACHE_RETURN is exactly observe or active; the sweeper
-	// carries the idle trigger, so a non-off switch starts it.
+	// VMCTL_GUEST_CACHE_RETURN is exactly observe or active. The idle trigger
+	// has its own loop (started below); the switch does not start the
+	// maintenance sweep (review 333).
 	cacheReturn := guestCacheReturnConfigFromEnv()
 	registry.SetGuestCacheReturnConfig(cacheReturn)
 	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s",
 		cacheReturn.Mode, strings.Join(cacheReturn.Only, ","), strings.Join(cacheReturn.Triggers, ","), cacheReturn.Scope,
 		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget)
-	if cacheReturn.Mode != vmctl.GuestCacheReturnOff {
-		idleSweeperEnabled = true
-	}
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -261,6 +259,10 @@ func main() {
 	if idleSweeperEnabled {
 		registry.StartIdleSweeper(context.Background(), idleSweepInterval, handler.AuthorizeComputerVersionRoute)
 		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
+	}
+	if cacheReturn.NeedsIdleLoop() {
+		registry.StartGuestCacheReturnLoop(context.Background(), idleSweepInterval)
+		log.Printf("vmctl: guest cache return idle loop interval set to %s", idleSweepInterval)
 	}
 	// Deferred deploy refreshes are retried until each computer takes the
 	// update (docs/problems/always-busy-computer-never-updates-2026-10-15.md).

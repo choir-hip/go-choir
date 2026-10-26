@@ -126,6 +126,13 @@ func (c GuestCacheReturnConfig) TriggerOn(trigger string) bool {
 	return false
 }
 
+// NeedsIdleLoop reports whether the idle trigger's loop has anything to do:
+// the switch is on, the selector names someone and the idle trigger is
+// listed. A loop that does not is not started.
+func (c GuestCacheReturnConfig) NeedsIdleLoop() bool {
+	return (c.Mode == GuestCacheReturnObserve || c.Mode == GuestCacheReturnActive) && len(c.Only) > 0 && c.TriggerOn("idle")
+}
+
 // normalized fills zero durations and a missing scope with the defaults.
 func (c GuestCacheReturnConfig) normalized() GuestCacheReturnConfig {
 	def := DefaultGuestCacheReturnConfig()
@@ -379,6 +386,16 @@ type CacheReturnRecord struct {
 	// not_fenced, unsupported, host_timeout, error, bad_report or http_NNN.
 	Outcome string `json:"outcome"`
 	Method  string `json:"method,omitempty"`
+	// Path and Detail are the guest's: the file written (or the absent
+	// memory.reclaim) and why an act stopped or fell back. SwappinessKey,
+	// ReportingNegotiated and the reportable blocks are what the staging
+	// proof reads (design section 10 step 1); nil is "the guest did not say".
+	Path                string `json:"path,omitempty"`
+	Detail              string `json:"detail,omitempty"`
+	SwappinessKey       *bool  `json:"swappiness_key,omitempty"`
+	ReportingNegotiated *bool  `json:"reporting_negotiated,omitempty"`
+	ReportableKiBBefore int64  `json:"reportable_kib_before,omitempty"`
+	ReportableKiBAfter  int64  `json:"reportable_kib_after,omitempty"`
 
 	GuestTargetMiB    uint64 `json:"guest_target_mib"`
 	GuestReclaimedMiB uint64 `json:"guest_reclaimed_mib"`
@@ -400,6 +417,14 @@ type CacheReturnRecord struct {
 
 // JournalLine is the one journal line per act.
 func (r CacheReturnRecord) JournalLine() string {
+	say := func(b *bool) string {
+		if b == nil {
+			return "unknown"
+		}
+		return strconv.FormatBool(*b)
+	}
+	extra := fmt.Sprintf(" method=%s path=%s swappiness_key=%s reporting_negotiated=%s reportable_kib_before=%d reportable_kib_after=%d detail=%q",
+		r.Method, r.Path, say(r.SwappinessKey), say(r.ReportingNegotiated), r.ReportableKiBBefore, r.ReportableKiBAfter, r.Detail)
 	return fmt.Sprintf("guest cache return VM %s trigger=%s mode=%s scope=%s outcome=%s dry_run=%t "+
 		"guest_target_mib=%d guest_reclaimed_mib=%d rss_before_mib=%d rss_after_mib=%d "+
 		"rss_anon_before_mib=%d rss_anon_after_mib=%d rss_file_before_mib=%d rss_file_after_mib=%d "+
@@ -407,7 +432,7 @@ func (r CacheReturnRecord) JournalLine() string {
 		r.VMID, r.Trigger, r.Mode, r.Scope, r.Outcome, r.DryRun,
 		r.GuestTargetMiB, r.GuestReclaimedMiB, r.RSSBeforeMiB, r.RSSAfterMiB,
 		r.RSSAnonBeforeMiB, r.RSSAnonAfterMiB, r.RSSFileBeforeMiB, r.RSSFileAfterMiB,
-		r.HostAvailBeforeMiB, r.HostAvailAfterMiB, r.SettleMS, r.SettleExit, r.MS)
+		r.HostAvailBeforeMiB, r.HostAvailAfterMiB, r.SettleMS, r.SettleExit, r.MS) + extra
 }
 
 // GuestCacheReturnSummary is the health view: the switch and the recent
@@ -593,8 +618,32 @@ func (r *OwnershipRegistry) hibernateCacheReturnForLocked(own *VMOwnership) *Hib
 
 // --- the pass -------------------------------------------------------------
 
-// runGuestCacheReturnPass is the idle trigger: one pass of the idle sweep's
-// tick, after its hibernate decisions. It starts at most two acts host-wide
+// StartGuestCacheReturnLoop runs the idle trigger on its own ticker. It is
+// deliberately not a step of the idle sweep: the sweep also reconciles
+// Firecracker processes, resumes always-on computers and prunes state, and a
+// cache return switch (observe included) must start none of that (review 333).
+// The switch is read every tick, so a rollback to off needs no restart of the
+// loop. The loop makes no hibernate decision: a computer the sweep is
+// hibernating holds a lifecycle claim and is skipped.
+func (r *OwnershipRegistry) StartGuestCacheReturnLoop(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				r.runGuestCacheReturnPass(ctx)
+			}
+		}
+	}()
+}
+
+// runGuestCacheReturnPass is the idle trigger: one pass of its loop. It starts at most two acts host-wide
 // in the background and returns how many it started. Off, an empty selector
 // and a trigger list without idle return before reading anything. It never
 // holds r.mu across a probe or a call.
@@ -732,6 +781,14 @@ func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwner
 		rec.Outcome = "bad_report"
 	default:
 		rec.Outcome, rec.Method = report.Outcome, report.Method
+		rec.Path, rec.Detail = report.Path, report.Detail
+		rec.SwappinessKey, rec.ReportingNegotiated = report.SwappinessKey, report.ReportingNegotiated
+		if report.Before.ReportableKiB != nil {
+			rec.ReportableKiBBefore = *report.Before.ReportableKiB
+		}
+		if report.After.ReportableKiB != nil {
+			rec.ReportableKiBAfter = *report.After.ReportableKiB
+		}
 		rec.GuestTargetMiB, rec.GuestReclaimedMiB = report.TargetBytes>>20, report.ReclaimedBytes>>20
 		rec.GuestSteps, rec.GuestMS = report.Steps, report.MS
 	}
@@ -775,10 +832,21 @@ func (rec *CacheReturnRecord) setRSSAfter(v cacheReturnRSS) {
 type cacheReturnGuestReport struct {
 	Outcome        string `json:"outcome"`
 	Method         string `json:"method"`
+	Path           string `json:"path"`
+	Detail         string `json:"detail"`
 	TargetBytes    uint64 `json:"target_bytes"`
 	ReclaimedBytes uint64 `json:"reclaimed_bytes"`
 	Steps          int    `json:"steps"`
 	MS             int64  `json:"ms"`
+	// Pointers: a report that does not say is not a report of false.
+	SwappinessKey       *bool `json:"swappiness_key"`
+	ReportingNegotiated *bool `json:"reporting_negotiated"`
+	Before              struct {
+		ReportableKiB *int64 `json:"reportable_kib"`
+	} `json:"before"`
+	After struct {
+		ReportableKiB *int64 `json:"reportable_kib"`
+	} `json:"after"`
 }
 
 // call posts one act to the guest. The request carries no host credential:

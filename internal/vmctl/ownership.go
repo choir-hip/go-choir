@@ -1307,10 +1307,6 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		if stopped := r.StopIdleVMs(ctx, guard); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}
-		// Density D6: after the tick's hibernate decisions, idle computers
-		// return their cold page cache (off unless VMCTL_GUEST_CACHE_RETURN
-		// says otherwise).
-		r.runGuestCacheReturnPass(ctx)
 	}
 
 	go func() {
