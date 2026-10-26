@@ -516,6 +516,44 @@ tagger on the CPU is the usual next step. It is named as the escalation,
 not built: it is triggered by candidate recall below 0.8 on the labelled
 set, or by the novelty "yes" rate above 30 percent after 14 days.
 
+**Baseline, 2026-10-26.** The labels were committed (781be0ebc) before
+the extractor ran. Cold start: no gazetteer, no library IDF.
+`internal/entitytext/labelled_set_test.go` gives this candidate recall at
+d76fe2f1b:
+- overall: 151 of 176 (0.858);
+- central: 60 of 71 (0.845);
+- within the top 24: 0.812 overall, 0.845 central.
+
+That is above the 0.8 trigger, but not by much. The 25 misses, read before
+any change:
+1. **A possessive does not end a name** (8 misses). "Russia's Voronezh",
+   "Japan's Kyodo", "AFS's Mingshu Bates", "Hulu's English",
+   "OnTrac's West Coast", "Ukraine's General Staff", "France's Lycées
+   Indignés" run on into one span. This is a defect against G3.
+2. **A one-word name that only starts sentences** (6 misses): Meta,
+   Anthropic, Steinmeier (three times, every time at a sentence start),
+   Hungary, Mossos, and Michigan inside "Michigan Advance". The rule drops a
+   sentence's first word unless it recurs mid-sentence.
+3. **A capitalised connector is trimmed** (2 misses): "El-Sayed" becomes
+   "Sayed" and "El Arepazo" becomes "Arepazo". Separately, a sentence-start
+   opener stays in the span: "Democrat Abdul El-Sayed".
+4. **Alphanumeric acronyms** (1 miss): "G20".
+5. **Spans over four words are dropped** (1 miss): "EU Trade Commissioner
+   Maros Sefcovic" loses "EU".
+6. **The 48-proposal cap** in the longest story (1 miss): PolitiFact.
+7. **Not reachable by this method** (6 misses):
+   - lower case: swisstopo;
+   - title only: Georgia and Jordan;
+   - a descriptive form: "U.S. military";
+   - a name with a digit word: "Mein Schiff 3";
+   - one demonym-only mention.
+
+Fixes 1, 3 (the capitalised connector), 4 and part of 2 are generic. The
+part of 2 that is fixed: a sentence-start word that recurs at a sentence
+start, carries a possessive, or appears in the title. Each fix gets its own
+failure test first. The re-measure is reported beside this baseline and
+does not replace it.
+
 #### 8. Failure modes, tested first
 
 - **G1, false matches.** A sentence-start capital proposed as a name; a
