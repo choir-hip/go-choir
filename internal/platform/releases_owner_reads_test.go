@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,8 +9,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -41,6 +44,16 @@ import (
 //	    whichever was first (each owner must read the blob they published);
 //	F14 an unknown CHOIR_RELEASE_READS value opens reads (it must close them);
 //	F15 a tombstoned release is served;
+//	F17 a bound guest forges a choir.software_release object under its own
+//	    owner (metadata naming another owner's patch digest, with a garbage
+//	    body, or with a copy of the victim's real record) and the blob gate,
+//	    the single read or the list believes it;
+//	F18 forged objects naming a victim's release id shadow the real release
+//	    (a LIMIT 1 metadata lookup) so every reader gets a 500;
+//	F19 more than 200 forged same-digest objects push the real owner out of
+//	    the blob gate's window;
+//	F20 a bound guest writes a choir.software_release object through the
+//	    generic object routes at all;
 //	F16 a missing CHOIR_RELEASE_READS, or a Handler nobody configured, opens
 //	    reads (the default must be owner; only an explicit open opens).
 
@@ -95,7 +108,20 @@ type ownerReadsWorld struct {
 	idB2       string // owner-b publishes owner-a's patch bytes as its own release
 }
 
+var (
+	patchOwnerA = []byte("diff --git a/frontend/public/a.txt b/frontend/public/a.txt\nowner a\n")
+	patchOwnerB = []byte("diff --git a/frontend/public/b.txt b/frontend/public/b.txt\nowner b\n")
+)
+
 func newOwnerReadsWorld(t *testing.T, mode ReleaseReadsMode) *ownerReadsWorld {
+	t.Helper()
+	return newOwnerReadsWorldForged(t, mode, nil)
+}
+
+// newOwnerReadsWorldForged runs before, if set, after the handler exists and
+// before anything is published: forged objects that are already in the store
+// when the real releases arrive.
+func newOwnerReadsWorldForged(t *testing.T, mode ReleaseReadsMode, before func(h *Handler)) *ownerReadsWorld {
 	t.Helper()
 	h, _ := newReleaseHandler(t)
 	h.eventAuth = releaseMultiAuth{"computer-a1": true, "computer-a2": true, "computer-b1": true}
@@ -105,6 +131,9 @@ func newOwnerReadsWorld(t *testing.T, mode ReleaseReadsMode) *ownerReadsWorld {
 		tapB1: {UserID: "owner-b", ComputerID: "computer-b1"},
 	}
 	h.SetReleaseReads(mode)
+	if before != nil {
+		before(h)
+	}
 	w := &ownerReadsWorld{h: h}
 	publish := func(patch []byte, computer, owner string) (id, sha string) {
 		t.Helper()
@@ -118,8 +147,7 @@ func newOwnerReadsWorld(t *testing.T, mode ReleaseReadsMode) *ownerReadsWorld {
 		}
 		return id, sha
 	}
-	patchA := []byte("diff --git a/frontend/public/a.txt b/frontend/public/a.txt\nowner a\n")
-	patchB := []byte("diff --git a/frontend/public/b.txt b/frontend/public/b.txt\nowner b\n")
+	patchA, patchB := patchOwnerA, patchOwnerB
 	w.idA, w.shaA = publish(patchA, "computer-a1", "owner-a")
 	w.idB, w.shaB = publish(patchB, "computer-b1", "owner-b")
 	// F13: owner-b publishes owner-a's exact patch bytes as its own release.
@@ -374,5 +402,158 @@ func TestUnconfiguredHandlerReadsAreOwnerScoped(t *testing.T) {
 	}
 	if got := w.list("?owner_id=owner-a"); len(got) != 1 || got[0] != w.idA {
 		t.Fatalf("unconfigured handler list = %v, want only owner-a's", got)
+	}
+}
+
+// forgedRelease is an object a bound guest could insert under its own
+// owner and computer: the kind, owner and canonical id are well formed, and
+// the metadata and body say whatever the forger likes.
+func forgedRelease(t *testing.T, owner, computer, suffix string, metadata map[string]any, body []byte) objectgraph.Object {
+	t.Helper()
+	id, err := objectgraph.BuildCanonicalID(SoftwareReleaseKind, owner, suffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := objectgraph.NormalizeMetadata(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	return objectgraph.Object{
+		CanonicalID: id, ObjectKind: SoftwareReleaseKind, OwnerID: owner, ComputerID: computer,
+		VersionID: suffix, Body: body, Metadata: meta,
+		ContentHash: objectgraph.ContentHash(SoftwareReleaseKind, body, meta),
+		CreatedAt:   now, UpdatedAt: now,
+	}
+}
+
+func putForged(t *testing.T, h *Handler, objs ...objectgraph.Object) {
+	t.Helper()
+	for _, obj := range objs {
+		if err := h.service.ogStore().PutObject(t.Context(), obj); err != nil {
+			t.Fatalf("forge %s: %v", obj.CanonicalID, err)
+		}
+	}
+}
+
+func TestForgedReleaseObjectsDoNotOpenAnotherOwnersBlob(t *testing.T) {
+	w := newOwnerReadsWorld(t, ReleaseReadsOwner)
+	_, _, rawB := testRelease(t, patchOwnerB, "computer-b1", "owner-b")
+	// F17: owner-a forges releases under owner-a naming owner-b's patch.
+	putForged(t, w.h,
+		forgedRelease(t, "owner-a", "computer-a1", "forged-garbage",
+			map[string]any{"release_id": strings.Repeat("c", 64), "patch_sha256": w.shaB}, []byte("not a record")),
+		forgedRelease(t, "owner-a", "computer-a1", "forged-copy",
+			map[string]any{"release_id": w.idB, "patch_sha256": w.shaB}, rawB), // a real record, not owner-a's
+		forgedRelease(t, "owner-a", "computer-a1", "forged-nobody",
+			map[string]any{"patch_sha256": w.shaB}, nil),
+	)
+	if r := w.blob(w.shaB, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusNotFound {
+		t.Fatalf("owner-a's guest reads owner-b's blob through forged metadata = %d, want 404", r.Code)
+	}
+	r := (releaseCall{method: http.MethodGet, path: "/internal/platform/releases/blobs/" + w.shaB + "?computer_id=host&owner_id=owner-a", internal: true}).do(w.h)
+	if r.Code != http.StatusNotFound {
+		t.Fatalf("host read naming owner-a on owner-b's blob = %d, want 404", r.Code)
+	}
+	// The forgeries are not listed or readable as releases either.
+	if got := w.list("?owner_id=owner-a"); len(got) != 1 || got[0] != w.idA {
+		t.Fatalf("owner-a list with forgeries = %v, want only %s", got, w.idA)
+	}
+	// And the real owner still reads their blob.
+	if r := w.blob(w.shaB, "computer-b1", tapB1, "computer-b1"); r.Code != http.StatusOK {
+		t.Fatalf("owner-b reads own blob = %d", r.Code)
+	}
+}
+
+func TestForgedReleaseObjectsCannotShadowARealRelease(t *testing.T) {
+	_, idA, rawA := testRelease(t, patchOwnerA, "computer-a1", "owner-a")
+	w := newOwnerReadsWorldForged(t, ReleaseReadsOwner, func(h *Handler) {
+		// F18, in the store before the real release is published: owner-b
+		// forges objects that claim owner-a's release id.
+		putForged(t, h,
+			forgedRelease(t, "owner-b", "computer-b1", "shadow-garbage",
+				map[string]any{"release_id": idA, "publisher_computer_id": "computer-b1"}, []byte("not a record")),
+			// A copy of owner-a's real record, filed under owner-b at the
+			// canonical id owner-b's own id space allows for that release.
+			forgedRelease(t, "owner-b", "computer-b1", idA,
+				map[string]any{"release_id": idA, "publisher_computer_id": "computer-b1"}, rawA),
+		)
+	})
+	if w.idA != idA {
+		t.Fatalf("test setup: release id %s != %s", w.idA, idA)
+	}
+	host := func(owner string) *httptest.ResponseRecorder {
+		q := "?computer_id=host"
+		if owner != "" {
+			q += "&owner_id=" + owner
+		}
+		return (releaseCall{method: http.MethodGet, path: "/internal/platform/releases/" + idA + q, internal: true}).do(w.h)
+	}
+	// The owner reads their release, however the lookup would order rows.
+	if r := host("owner-a"); r.Code != http.StatusOK {
+		t.Fatalf("owner-a reads own release under shadowing = %d %s, want 200", r.Code, r.Body.String())
+	}
+	if r := w.one(idA, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusOK {
+		t.Fatalf("owner-a's guest reads own release under shadowing = %d", r.Code)
+	}
+	// The host, naming no owner, gets the verifying one, not a 500.
+	if r := host(""); r.Code != http.StatusOK {
+		t.Fatalf("unscoped host read under shadowing = %d %s, want 200", r.Code, r.Body.String())
+	}
+	// The forger does not read owner-a's release by filing a copy of it.
+	if r := host("owner-b"); r.Code != http.StatusNotFound {
+		t.Fatalf("owner-b reads owner-a's release through a filed copy = %d, want 404", r.Code)
+	}
+	if r := w.one(idA, "computer-b1", tapB1, "computer-b1"); r.Code != http.StatusNotFound {
+		t.Fatalf("owner-b's guest reads owner-a's release through a filed copy = %d, want 404", r.Code)
+	}
+	if got := w.list("?owner_id=owner-b"); has(got, idA) || len(got) != 2 {
+		t.Fatalf("owner-b list with a filed copy = %v, want only its own two", got)
+	}
+}
+
+func TestBlobGateIsNotPushedOutByManySameDigestObjects(t *testing.T) {
+	w := newOwnerReadsWorld(t, ReleaseReadsOwner)
+	// F19: 210 newer forged objects by another owner naming owner-a's digest.
+	for i := 0; i < 210; i++ {
+		putForged(t, w.h, forgedRelease(t, "owner-z", "computer-z", fmt.Sprintf("flood-%03d", i),
+			map[string]any{"patch_sha256": w.shaA}, []byte("x")))
+	}
+	if r := w.blob(w.shaA, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusOK {
+		t.Fatalf("owner-a reads its own blob under a flood of same-digest objects = %d, want 200", r.Code)
+	}
+}
+
+// F20: a bound guest cannot write the kind through the generic object routes.
+func TestGenericObjectRoutesRefuseReleases(t *testing.T) {
+	mem := objectgraph.NewMemoryStore()
+	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer svc.Close()
+	h := NewObjectGraphHandler(svc, mem)
+	a := &vmctl.GuestOwnership{Found: true, UserID: "owner-a", ComputerID: "computer-a1"}
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": a}); err != nil {
+		t.Fatal(err)
+	}
+	send := func(method, from string, internal bool, body any) int {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, "/internal/platform/objects", bytes.NewReader(raw))
+		req.RemoteAddr = from + ":40000"
+		if internal {
+			req.Header.Set("X-Internal-Caller", "true")
+		}
+		rec := httptest.NewRecorder()
+		h.HandleObjects(rec, req)
+		return rec.Code
+	}
+	create := map[string]any{"kind": "choir.software_release", "owner_id": "owner-a", "computer_id": "computer-a1", "identity_key": "k", "metadata": map[string]any{"patch_sha256": strings.Repeat("a", 64)}}
+	if code := send(http.MethodPost, "10.200.1.2", false, create); code != http.StatusForbidden {
+		t.Fatalf("guest create of a release object = %d, want 403", code)
+	}
+	obj := forgedRelease(t, "owner-a", "computer-a1", "forged", map[string]any{"patch_sha256": strings.Repeat("a", 64)}, []byte("x"))
+	if code := send(http.MethodPut, "10.200.1.2", false, obj); code != http.StatusForbidden {
+		t.Fatalf("guest put of a release object = %d, want 403", code)
+	}
+	if _, err := svc.GetObject(t.Context(), obj.CanonicalID); err == nil {
+		t.Fatal("a release object was written through the generic route")
 	}
 }
