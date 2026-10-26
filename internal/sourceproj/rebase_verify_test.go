@@ -2,6 +2,8 @@ package sourceproj
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -50,7 +52,7 @@ func (r *rebaseRepo) candidate(t *testing.T, edit func(root string)) []byte {
 
 func (r *rebaseRepo) verify(t *testing.T, candidateBase string, candidate []byte) RebaseVerdict {
 	t.Helper()
-	v, err := VerifyRebase(context.Background(), r.repo, RebaseCheck{BootedBase: r.booted, Patch: r.p, CandidateBase: candidateBase, Candidate: candidate})
+	v, err := VerifyRebase(context.Background(), r.repo, RebaseCheck{StackBase: r.base, BootedBase: r.booted, Patch: r.p, CandidateBase: candidateBase, Candidate: candidate})
 	if err != nil {
 		t.Fatalf("VerifyRebase: %v", err)
 	}
@@ -151,7 +153,7 @@ func TestVerifyRebaseAllCleanWhenThePlatformMovedElsewhere(t *testing.T) {
 	}
 	// And an empty P is not a rebase.
 	r.p = nil
-	if _, err := VerifyRebase(context.Background(), r.repo, RebaseCheck{BootedBase: r.booted, Patch: nil, CandidateBase: r.booted, Candidate: good}); err == nil {
+	if _, err := VerifyRebase(context.Background(), r.repo, RebaseCheck{StackBase: r.base, BootedBase: r.booted, Patch: nil, CandidateBase: r.booted, Candidate: good}); err == nil {
 		t.Fatal("an empty applied patch must be an error, not a pass")
 	}
 }
@@ -169,11 +171,154 @@ func TestVerifyRebaseAGlobLookingPathIsClassifiedByItself(t *testing.T) {
 	// Candidate drops the a.txt hunk. If [x].txt's glob matched a.txt-like paths
 	// the classification would be wrong; the verdict must name exactly a.txt.
 	cand := patchFrom(t, repo, base, func(root string) { editLine(t, root, "frontend/src/[x].txt", 2, "x line 02 CHANGED BY P") })
-	v, err := VerifyRebase(context.Background(), repo, RebaseCheck{BootedBase: base, Patch: p, CandidateBase: base, Candidate: cand})
+	v, err := VerifyRebase(context.Background(), repo, RebaseCheck{StackBase: base, BootedBase: base, Patch: p, CandidateBase: base, Candidate: cand})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v.Pass || strings.Join(v.Differing, ",") != "frontend/src/a.txt" {
 		t.Fatalf("verdict %+v", v)
+	}
+}
+
+// Review 321, F1 (DeepSeek, high): a path holding both a conflicting hunk and a
+// clean one. Path granularity let a candidate that resolved the conflict and
+// dropped the clean hunk pass. The check is per hunk: the 3-way merge of
+// (B', B, B+P) says what each non-overlapping hunk must look like.
+//
+// Ways it can fail, written first (the first is the reviewer's reproduction):
+//   - the clean hunk of a mixed path is absent and the candidate passes;
+//   - a merge that is clean by itself but not by `git apply` (a neighbouring
+//     line changed) accepts a candidate that differs from the merge;
+//   - a change P made that B' already has fails as "kept base";
+//   - a conflict path the candidate deletes counts as resolved;
+//   - keeping B' at the conflicting hunk while applying the rest passes.
+
+type mixedRepo struct {
+	repo, base, booted string
+	p                  []byte
+}
+
+// newMixedRepo: B has a.txt (40 lines). P edits line 5 and line 30 (two hunks).
+// B' edits line 5 differently, so hunk 1 conflicts and hunk 2 would apply.
+func newMixedRepo(t *testing.T, platform func(root string)) *mixedRepo {
+	t.Helper()
+	repo, base := baseRepo(t)
+	p := patchFrom(t, repo, base, func(root string) {
+		editLine(t, root, "frontend/src/a.txt", 5, "a line 05 P1")
+		editLine(t, root, "frontend/src/a.txt", 30, "a line 30 P2")
+	})
+	scratch := t.TempDir()
+	tgit(t, scratch, "clone", "-q", "--no-checkout", repo, ".")
+	tgit(t, scratch, "checkout", "-q", base)
+	platform(scratch)
+	tgit(t, scratch, "add", "-A")
+	tgit(t, scratch, "commit", "-q", "-m", "platform")
+	booted := tgit(t, scratch, "rev-parse", "HEAD")
+	tgit(t, repo, "fetch", "-q", scratch, "HEAD:refs/platform/mixed")
+	return &mixedRepo{repo: repo, base: base, booted: booted, p: p}
+}
+
+func (m *mixedRepo) verify(t *testing.T, cand []byte) RebaseVerdict {
+	t.Helper()
+	v, err := VerifyRebase(context.Background(), m.repo, RebaseCheck{StackBase: m.base, BootedBase: m.booted, Patch: m.p, CandidateBase: m.booted, Candidate: cand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func (m *mixedRepo) candidate(t *testing.T, edit func(root string)) []byte {
+	return patchFrom(t, m.repo, m.booted, edit)
+}
+
+func TestVerifyRebaseAMixedPathCannotDropTheCleanHunk(t *testing.T) {
+	m := newMixedRepo(t, func(root string) { editLine(t, root, "frontend/src/a.txt", 5, "a line 05 PLATFORM") })
+	const a = "frontend/src/a.txt"
+	// The reviewer's reproduction: the conflicting hunk resolved, P's second
+	// hunk (line 30) absent.
+	dropped := m.candidate(t, func(root string) { editLine(t, root, a, 5, "a line 05 PLATFORM+P1") })
+	if v := m.verify(t, dropped); v.Pass || v.Reason != RebaseHunkMissing || strings.Join(v.Dropped, ",") != a {
+		t.Fatalf("a mixed path that dropped P's second hunk passed: %+v", v)
+	}
+	// Both resolved: pass, the path is a resolved conflict.
+	both := m.candidate(t, func(root string) {
+		editLine(t, root, a, 5, "a line 05 PLATFORM+P1")
+		editLine(t, root, a, 30, "a line 30 P2")
+	})
+	if v := m.verify(t, both); !v.Pass || strings.Join(v.Resolved, ",") != a {
+		t.Fatalf("a correct mixed-path rebase: %+v", v)
+	}
+	// The second hunk altered is also a missing hunk.
+	altered := m.candidate(t, func(root string) {
+		editLine(t, root, a, 5, "a line 05 PLATFORM+P1")
+		editLine(t, root, a, 30, "a line 30 P2 ALTERED")
+	})
+	if v := m.verify(t, altered); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("an altered clean hunk passed: %+v", v)
+	}
+	// Edits elsewhere in the same file, outside P's hunks, are allowed.
+	elsewhere := m.candidate(t, func(root string) {
+		editLine(t, root, a, 5, "a line 05 PLATFORM+P1")
+		editLine(t, root, a, 30, "a line 30 P2")
+		editLine(t, root, a, 15, "a line 15 touched while rebasing")
+	})
+	if v := m.verify(t, elsewhere); !v.Pass {
+		t.Fatalf("an extra edit in a conflict path's stable text is allowed: %+v", v)
+	}
+	// Keeping B' at the conflicting hunk while applying the rest: kept base.
+	kept := m.candidate(t, func(root string) { editLine(t, root, a, 30, "a line 30 P2") })
+	if v := m.verify(t, kept); v.Pass || v.Reason != RebaseConflictUnresolved {
+		t.Fatalf("keeping the new base's version of the conflict: %+v", v)
+	}
+}
+
+func TestVerifyRebaseACleanMergeThatGitApplyRefusesMustEqualTheMerge(t *testing.T) {
+	// B' changes line 32, inside the context of P's second hunk: `git apply`
+	// refuses that hunk, yet the 3-way merge is clean, so the candidate must be
+	// exactly the merge.
+	m := newMixedRepo(t, func(root string) { editLine(t, root, "frontend/src/a.txt", 32, "a line 32 PLATFORM") })
+	const a = "frontend/src/a.txt"
+	good := m.candidate(t, func(root string) {
+		editLine(t, root, a, 5, "a line 05 P1")
+		editLine(t, root, a, 30, "a line 30 P2")
+	})
+	if v := m.verify(t, good); !v.Pass {
+		t.Fatalf("the exact merge: %+v", v)
+	}
+	missing := m.candidate(t, func(root string) { editLine(t, root, a, 5, "a line 05 P1") })
+	if v := m.verify(t, missing); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("a candidate lacking P's second hunk: %+v", v)
+	}
+}
+
+func TestVerifyRebaseAChangeTheNewBaseAlreadyHasIsNotKeptBase(t *testing.T) {
+	// B' made P's first change itself (upstreamed in part) and also edited
+	// line 6, so the first hunk no longer applies: the merge sees identical
+	// changes and is clean. The candidate that adds only P's second change
+	// contains P.
+	m := newMixedRepo(t, func(root string) {
+		editLine(t, root, "frontend/src/a.txt", 5, "a line 05 P1")
+		editLine(t, root, "frontend/src/a.txt", 6, "a line 06 PLATFORM")
+	})
+	const a = "frontend/src/a.txt"
+	good := m.candidate(t, func(root string) { editLine(t, root, a, 30, "a line 30 P2") })
+	if v := m.verify(t, good); !v.Pass {
+		t.Fatalf("P's first change is already in the base: %+v", v)
+	}
+	none := m.candidate(t, func(root string) { editLine(t, root, "frontend/src/b.txt", 3, "unrelated") })
+	if v := m.verify(t, none); v.Pass {
+		t.Fatalf("a candidate that never applies P's second hunk passed: %+v", v)
+	}
+}
+
+func TestVerifyRebaseDeletingAConflictPathIsNotResolving(t *testing.T) {
+	m := newMixedRepo(t, func(root string) { editLine(t, root, "frontend/src/a.txt", 5, "a line 05 PLATFORM") })
+	deleted := m.candidate(t, func(root string) {
+		if err := os.Remove(filepath.Join(root, "frontend/src/a.txt")); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if v := m.verify(t, deleted); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("deleting a file P modified passed: %+v", v)
 	}
 }
