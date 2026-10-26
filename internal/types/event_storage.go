@@ -66,6 +66,7 @@ var eventStorage = map[EventKind]EventStorage{
 	EventChannelMessage:  StorageObjectGraph,
 	EventSystem1Judgment: StorageObjectGraph,
 	EventStoryRelation:   StorageObjectGraph,
+	EventStoryEntities:   StorageObjectGraph,
 
 	// Object graph: owner acts and evidence.
 	EventEmailDraftApprovalRecorded:     StorageObjectGraph,

@@ -97,6 +97,30 @@ rollback, like `CORPUSD_RELATED`.
 | d | Backfill of existing stories: an owner act that lets the review drain older stories under the same K per tick; a crash closes it and only an owner act restarts it | red, additive | 1 |
 | e | Coverage floor in the deployed spec: share of the first 60 front stories with a link, `basis.mode` reported | yellow | 0 |
 
+### Slice a as built
+
+- The duplicate check (R1) needs the entity rows, and the rows live in Store
+  B (D3/D4), so the corpusd write route came with slice a: the verb asks it
+  validate-only before the tape record (as `choir.RelateStories` does), and
+  the export follows the record. Slice b is the walk alone.
+- Authority: one `story.entities` event per call on the `system1:<computer>`
+  channel (acknowledged), as `story.relation`. The Store B rows and edges
+  are its re-runnable export.
+- Identity: `wd:Q<n>` when research gives a Wikidata id, otherwise
+  `ent:<24 hex>` derived from the normalised name (lower case, possessive,
+  periods, a leading "the" and company suffixes folded), so a repeat or a
+  second spelling of the same normalised name is the same node. A new
+  entity whose normalised name matches a row of another id is refused with
+  that id named. Known gap, written down: aliases ("Biden" and "Joe
+  Biden", "Vucic" and "Vučić") are not matched; the duplicate audit and a
+  later `merged_into` act cover them.
+- A repeat after a failed export re-sends the description of an entity the
+  tape minted, so Store B can still write its row.
+- Edge: `mentions_entity` from the publication (not a version, as
+  `related_story`) to the entity, metadata exactly `{"role": ...}`; a role
+  change tombstones the other role's edge.
+- Threads (`choir.topic_thread`, `in_thread`) are not built in this lane.
+
 Restart rule (CLAUDE.md "Restarts End Work"): the schedule is a standing
 intent and survives a crash; a tick's batch is an occurrence and does not.
 A crash closes the batch in flight ("interrupted by a restart"); the next

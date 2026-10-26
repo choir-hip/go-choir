@@ -63,6 +63,15 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]int{"recorded": len(req.Relations)})
 	})
+	var entities []types.StoryEntitiesRequest
+	corpusMux.HandleFunc(types.StoryEntitiesPath, func(w http.ResponseWriter, r *http.Request) {
+		var req types.StoryEntitiesRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		mu.Lock()
+		entities = append(entities, req)
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]int{"recorded": len(req.Entities)})
+	})
 	corpusd := httptest.NewServer(corpusMux)
 	defer corpusd.Close()
 
@@ -164,6 +173,17 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	if rec := send(types.StoryRelationsPath, "10.200.1.2", types.StoryRelationsRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Relations: rel}); rec.Code != http.StatusOK {
 		t.Fatalf("guest relations = %d %s", rec.Code, rec.Body)
 	}
+	// Entity attachments take the same rule.
+	ents := []types.StoryEntity{{EntityID: types.MintedEntityID("Harbor Authority"), Name: "Harbor Authority", Type: types.EntityTypeOrganization, New: true, Role: types.EntityRoleCentral}}
+	if rec := send(types.StoryEntitiesPath, "10.200.1.2", types.StoryEntitiesRequest{OwnerID: "reader-owner", ComputerID: "computer-paper", Story: rel[0].StoryA, Entities: ents}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest wrote another owner's entities: %d %s", rec.Code, rec.Body)
+	}
+	if rec := send(types.StoryEntitiesPath, "10.200.1.2", types.StoryEntitiesRequest{OwnerID: "paper-owner", ComputerID: "computer-other", Story: rel[0].StoryA, Entities: ents}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest wrote another computer's entities: %d %s", rec.Code, rec.Body)
+	}
+	if rec := send(types.StoryEntitiesPath, "10.200.1.2", types.StoryEntitiesRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Story: rel[0].StoryA, Entities: ents}); rec.Code != http.StatusOK {
+		t.Fatalf("guest entities = %d %s", rec.Code, rec.Body)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(verdicts) != 1 || verdicts[0].OwnerID != "paper-owner" || len(verdicts[0].Verdicts) != 1 {
@@ -171,5 +191,8 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	}
 	if len(relations) != 1 || relations[0].OwnerID != "paper-owner" || len(relations[0].Relations) != 1 {
 		t.Fatalf("corpusd relations = %+v", relations)
+	}
+	if len(entities) != 1 || entities[0].OwnerID != "paper-owner" || len(entities[0].Entities) != 1 {
+		t.Fatalf("corpusd entities = %+v", entities)
 	}
 }

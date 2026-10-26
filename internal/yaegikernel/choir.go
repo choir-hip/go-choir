@@ -396,6 +396,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
 		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
 		"RelateStories":    func() reflect.Value { return reflect.ValueOf(s.RelateStories) },
+		"Relate":           func() reflect.Value { return reflect.ValueOf(s.Relate) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
 		"ListEvidence":     func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },

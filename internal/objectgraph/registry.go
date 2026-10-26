@@ -190,6 +190,13 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.publication_resolved_blocks", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.resolvedBlocksDoc"},
 		{Kind: "choir.publication_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.publicationCheck"},
 		{Kind: "choir.support_judgement", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.supportJudgement"},
+		// The entity layer (docs/problems/related-stories-no-entity-layer-2026-10-26.md;
+		// ontology claims-events-entities-ontology-2026-10-14.md D3/D4): a
+		// person, organization, place, product, work or law the paper's
+		// stories are about, keyed by its Wikidata QID or its normalised
+		// name. Written once by corpusd, as the export of the research desk's
+		// story.entities tape records.
+		{Kind: "choir.entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityRow"},
 		// A published software release record (P7,
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
 		// executable bytes; the patch lives in the host content store.
@@ -284,6 +291,10 @@ func DefaultRegistry() *Registry {
 		// export of the computer's story.relation tape records, read by the
 		// related-stories walk behind CORPUSD_RELATED_STORY.
 		{Kind: "related_story", Owner: OwnerCorpusd},
+		// corpusd: a publication's entity, with its role (central or
+		// incidental); the export of story.entities, read by the
+		// related-stories walk (central only).
+		{Kind: "mentions_entity", Owner: OwnerCorpusd},
 		// computer: engineering records (frozen V1 spelling) and the
 		// commitment record's delivery packet.
 		{Kind: "co_super_assignment_trajectory", Owner: OwnerVMStore},
