@@ -18,9 +18,12 @@ import (
 // person stopped an idle computer by hand (b@c, 2026-10-26 11:49, the
 // fourth recurrence). Now a refused start hibernates idle eligible
 // computers, lowest class first, longest idle first, and admits on a fresh
-// sample. It is refused only when the eligible computers together could not
-// cover the shortfall, or the freed memory never showed up, and the refusal
-// says why.
+// sample, one victim at a time: after each hibernate the shortfall is
+// recomputed from a fresh sample and the plan is re-read from the live
+// registry, and a victim is probed busy only just before its own hibernate
+// (review 302). It is refused only when the eligible computers together
+// could not cover the shortfall, the cap per start was reached, or the freed
+// memory never showed up, and the refusal says why.
 //
 // One decider: make-room runs under makeRoomMu, so a second refused start
 // waits and re-admits on a fresh sample (seeing the first start's
@@ -34,7 +37,12 @@ import (
 // public_platform), never of a higher class than the starter, never mid
 // lifecycle, and idle by the pressure-reclaim rule.
 //
-// Rollback: VMCTL_ADMISSION_MAKE_ROOM=off refuses as before.
+// A guest that answers busy at the hibernate fence is left running and counted
+// as a skip (errHibernateGuestBusy), never killed.
+//
+// Fails closed: off unless VMCTL_ADMISSION_MAKE_ROOM is exactly active, on,
+// enabled, true or 1 (nix/node-b.nix sets active). Rollback:
+// VMCTL_ADMISSION_MAKE_ROOM=off refuses as before.
 
 const (
 	HostAdmissionMakeRoomActive = "active"
@@ -43,6 +51,12 @@ const (
 	// stoppedByMakeRoom is the StoppedBy of a computer hibernated to make
 	// room for another's start. A request wakes it like any hibernate.
 	stoppedByMakeRoom = "make_room"
+
+	// The env overrides are capped where they are read (review 302 F5): a
+	// mistyped bound cannot hibernate a host's worth of computers or hold a
+	// start for an hour.
+	MaxMakeRoomVictims    = 10
+	MaxMakeRoomSettleWait = 60 * time.Second
 
 	defaultMakeRoomMaxVictims   = 3
 	defaultMakeRoomSettleWait   = 10 * time.Second
@@ -210,11 +224,17 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 }
 
 // makeRoomAndAdmit is a refused start's second chance: under the one
-// make-room slot, re-admit on a fresh sample; else hibernate victims one at
-// a time until a fresh sample admits. stillNeeded, when set, is asked before
-// any hibernate; false ends with errMakeRoomSuperseded. The caller must not
-// hold r.mu.
-func (r *OwnershipRegistry) makeRoomAndAdmit(own *VMOwnership, class WarmnessClass, stillNeeded func() bool) (*admissionTicket, error) {
+// make-room slot, re-admit on a fresh sample; else hibernate one victim at a
+// time, re-planning from the live registry and a fresh sample after each,
+// until a fresh sample admits, the per-start cap is reached, or nothing
+// eligible is left (review 302 F1, F2). stillNeeded, when set, is asked
+// before each hibernate; false ends with errMakeRoomSuperseded. A cancelled
+// ctx ends it too. Either way, a start that already hibernated victims
+// records a decision naming them (F4). The caller must not hold r.mu.
+func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnership, class WarmnessClass, stillNeeded func() bool) (*admissionTicket, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	r.makeRoomMu.Lock()
 	defer r.makeRoomMu.Unlock()
 
@@ -227,85 +247,221 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(own *VMOwnership, class WarmnessCla
 	if sampler == nil {
 		sampler = sampleHostPressure
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("make-room cancelled: %w", err)
+	}
 	if stillNeeded != nil && !stillNeeded() {
 		return nil, errMakeRoomSuperseded
 	}
 
 	// A start that waited for another's make-room may fit now.
-	d, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false)
+	first, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false)
 	if ticket != nil {
-		r.recordMakeRoom(d, "admit", nil, "")
+		r.recordMakeRoom(first, "admit", nil, "")
 		return ticket, nil
 	}
-	shortfall := admissionShortfall(d)
+	cur := first
+	shortfall := admissionShortfall(cur)
+	busy := r.guestBusy()
+	var made []string
+	// tried is why each computer this start looked at was passed over (or
+	// that it was hibernated); one entry per computer, so a computer probed
+	// twice is counted once.
+	tried := map[string]string{}
+	abandon := func(cause error, why string) (*admissionTicket, error) {
+		if len(made) > 0 {
+			r.recordMakeRoom(first, "abandon_make_room", made, why)
+		}
+		return nil, cause
+	}
+	// pick is the first ranked candidate not yet tried that passes the route
+	// guard and a fresh busy probe now.
+	pick := func(plan *makeRoomPlan) *makeRoomCandidate {
+		for i := range plan.candidates {
+			c := &plan.candidates[i]
+			if _, done := tried[c.own.VMID]; done {
+				continue
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+			if !authorizeLifecycleRoute(ctx, guard, c.own.UserID, c.own.DesktopID) {
+				tried[c.own.VMID] = "route"
+				continue
+			}
+			if busy(c.own) {
+				tried[c.own.VMID] = "busy"
+				continue
+			}
+			return c
+		}
+		return nil
+	}
+	skippedText := func(plan *makeRoomPlan) string {
+		merged := makeRoomPlan{skipped: map[string]int{}}
+		for reason, n := range plan.skipped {
+			merged.skipped[reason] += n
+		}
+		for _, reason := range tried {
+			if reason != "hibernated" {
+				merged.skipped[reason]++
+			}
+		}
+		return merged.skippedText()
+	}
 
 	plan := r.planMakeRoom(own, class, acfg)
-	busy := r.guestBusy()
-	var victims []makeRoomCandidate
-	cover := plan.pending
-	for _, c := range plan.candidates {
-		if len(victims) >= acfg.MakeRoomMaxVictims || cover >= shortfall {
+	// Another path's in-flight hibernate (the idle sweep, reclaim) is not
+	// this start's room: its memory may never show. When it alone would
+	// cover the shortfall, wait for it before evicting anyone else.
+	if plan.pending > 0 && plan.pending >= shortfall {
+		d, ticket, err := r.awaitAdmission(ctx, own, class, cfg, acfg, sampler)
+		if err != nil {
+			return abandon(fmt.Errorf("make-room cancelled: %w", err), "cancelled")
+		}
+		if ticket != nil {
+			r.recordMakeRoom(first, "admit_after_make_room", nil, "")
+			return ticket, nil
+		}
+		cur, shortfall = d, admissionShortfall(d)
+		plan = r.planMakeRoom(own, class, acfg)
+	}
+	// Refuse before hibernating anyone when the eligible computers
+	// themselves (pending excluded) could not cover the shortfall within
+	// the per-start cap.
+	var cover uint64
+	eligible := 0
+	for i := range plan.candidates {
+		if eligible >= acfg.MakeRoomMaxVictims || cover >= shortfall {
 			break
 		}
+		c := &plan.candidates[i]
+		if _, done := tried[c.own.VMID]; done {
+			continue
+		}
+		if ctx.Err() != nil {
+			return abandon(fmt.Errorf("make-room cancelled: %w", ctx.Err()), "cancelled")
+		}
+		if !authorizeLifecycleRoute(ctx, guard, c.own.UserID, c.own.DesktopID) {
+			tried[c.own.VMID] = "route"
+			continue
+		}
 		if busy(c.own) {
-			plan.skip("busy")
+			tried[c.own.VMID] = "busy"
 			continue
 		}
-		if !authorizeLifecycleRoute(context.Background(), guard, c.own.UserID, c.own.DesktopID) {
-			plan.skip("route")
-			continue
-		}
-		victims = append(victims, c)
 		cover += c.rss
+		eligible++
 	}
 	if cover < shortfall {
-		detail := fmt.Sprintf("short %d MiB; no computer can make room: %d MiB from %d eligible (at most %d per start), %d MiB already being hibernated; %s",
-			shortfall>>20, (cover-plan.pending)>>20, len(victims), acfg.MakeRoomMaxVictims, plan.pending>>20, plan.skippedText())
-		return nil, r.refuseMakeRoom(d, nil, detail)
-	}
-
-	var made []string
-	if plan.pending > 0 {
-		if ticket := r.awaitAdmission(own, class, cfg, acfg, sampler); ticket != nil {
-			r.recordMakeRoom(d, "admit_after_make_room", nil, "")
+		// A start is refused on a fresh sample only: another path's
+		// hibernate may have landed while this one planned.
+		if _, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false); ticket != nil {
+			r.recordMakeRoom(first, "admit_after_make_room", nil, "")
 			return ticket, nil
 		}
+		// These probes only sized the plan; the loop below re-probes each
+		// victim just before its hibernate.
+		detail := noRoomDetail(shortfall, cover, eligible, acfg, plan.pending, skippedText(&plan))
+		return nil, r.refuseMakeRoom(first, nil, detail)
 	}
-	for _, v := range victims {
+	for k := range tried {
+		delete(tried, k)
+	}
+
+	lastWaitTimedOut := false
+	for len(made) < acfg.MakeRoomMaxVictims {
+		if err := ctx.Err(); err != nil {
+			return abandon(fmt.Errorf("make-room cancelled: %w", err), "cancelled")
+		}
 		if stillNeeded != nil && !stillNeeded() {
-			return nil, errMakeRoomSuperseded
+			return abandon(errMakeRoomSuperseded, "superseded: the computer was registered meanwhile")
+		}
+		var ticket *admissionTicket
+		if cur, ticket = r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false); ticket != nil {
+			r.recordMakeRoom(first, "admit_after_make_room", made, "")
+			return ticket, nil
+		}
+		shortfall = admissionShortfall(cur)
+		// F1: the live registry, read now, decides who is still eligible;
+		// the busy probe runs just before the hibernate, not at plan time.
+		plan = r.planMakeRoom(own, class, acfg)
+		v := pick(&plan)
+		if v == nil {
+			break
 		}
 		log.Printf("vmctl: make-room decision=hibernate for_vm=%s for_computer=%s short_mib=%d victim_vm=%s victim_computer=%s class=%s idle_s=%d rss_mib=%d",
-			d.VMID, d.ComputerID, shortfall>>20, v.own.VMID, v.own.ComputerID, v.class, int64(v.idle.Seconds()), v.rss>>20)
+			first.VMID, first.ComputerID, shortfall>>20, v.own.VMID, v.own.ComputerID, v.class, int64(v.idle.Seconds()), v.rss>>20)
 		if err := r.hibernateVMForDesktopWithReason(v.own.UserID, v.own.DesktopID, stoppedByMakeRoom); err != nil {
-			// Another path took it (the sweep, reclaim, a visit); its memory
-			// is either on the way or in use again. The fresh sample decides.
-			log.Printf("vmctl: make-room hibernate of VM %s skipped: %v", v.own.VMID, err)
-		} else {
-			made = append(made, v.own.VMID)
+			// The guest answered busy (left running), or another path took
+			// it (the sweep, reclaim, a visit). Neither is room; the next
+			// victim is tried on a fresh plan.
+			reason := "hibernate_failed"
+			if errors.Is(err, errHibernateGuestBusy) {
+				reason = "hibernate_busy"
+			}
+			tried[v.own.VMID] = reason
+			log.Printf("vmctl: make-room hibernate of VM %s skipped (%s): %v", v.own.VMID, reason, err)
+			continue
 		}
-		if ticket := r.awaitAdmission(own, class, cfg, acfg, sampler); ticket != nil {
-			r.recordMakeRoom(d, "admit_after_make_room", made, "")
+		tried[v.own.VMID] = "hibernated"
+		made = append(made, v.own.VMID)
+		d, ticket, err := r.awaitAdmission(ctx, own, class, cfg, acfg, sampler)
+		if err != nil {
+			return abandon(fmt.Errorf("make-room cancelled: %w", err), "cancelled")
+		}
+		if ticket != nil {
+			r.recordMakeRoom(first, "admit_after_make_room", made, "")
 			return ticket, nil
 		}
+		cur, lastWaitTimedOut = d, true
 	}
-	detail := fmt.Sprintf("short %d MiB; made room by hibernating [%s] but memory did not show within %s",
-		shortfall>>20, strings.Join(made, " "), acfg.MakeRoomSettleWait)
-	return nil, r.refuseMakeRoom(d, made, detail)
+	cur, ticket = r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false)
+	if ticket != nil {
+		r.recordMakeRoom(first, "admit_after_make_room", made, "")
+		return ticket, nil
+	}
+	shortfall = admissionShortfall(cur)
+	if len(made) == 0 {
+		return nil, r.refuseMakeRoom(first, nil, noRoomDetail(shortfall, 0, 0, acfg, plan.pending, skippedText(&plan)))
+	}
+	var detail string
+	switch {
+	case len(made) >= acfg.MakeRoomMaxVictims:
+		detail = fmt.Sprintf("short %d MiB after hibernating [%s]: the cap of %d per start is reached", shortfall>>20, strings.Join(made, " "), acfg.MakeRoomMaxVictims)
+	case lastWaitTimedOut && len(tried) == len(made):
+		detail = fmt.Sprintf("short %d MiB; made room by hibernating [%s] but memory did not show within %s",
+			shortfall>>20, strings.Join(made, " "), acfg.MakeRoomSettleWait)
+	default:
+		detail = fmt.Sprintf("short %d MiB after hibernating [%s]; no further eligible computer: %s", shortfall>>20, strings.Join(made, " "), skippedText(&plan))
+	}
+	return nil, r.refuseMakeRoom(first, made, detail)
 }
 
-// awaitAdmission re-admits on fresh samples until one admits or the settle
-// wait ends.
-func (r *OwnershipRegistry) awaitAdmission(own *VMOwnership, class WarmnessClass, cfg PressureReclaimConfig, acfg HostAdmissionConfig, sampler hostPressureSampler) *admissionTicket {
+func noRoomDetail(shortfall, cover uint64, eligible int, acfg HostAdmissionConfig, pending uint64, skipped string) string {
+	return fmt.Sprintf("short %d MiB; no computer can make room: %d MiB from %d eligible (at most %d per start), %d MiB already being hibernated by other paths; %s",
+		shortfall>>20, cover>>20, eligible, acfg.MakeRoomMaxVictims, pending>>20, skipped)
+}
+
+// awaitAdmission re-admits on fresh samples until one admits, the settle
+// wait ends, or ctx is cancelled. It returns the last refused decision.
+func (r *OwnershipRegistry) awaitAdmission(ctx context.Context, own *VMOwnership, class WarmnessClass, cfg PressureReclaimConfig, acfg HostAdmissionConfig, sampler hostPressureSampler) (HostAdmissionDecision, *admissionTicket, error) {
 	deadline := time.Now().Add(acfg.MakeRoomSettleWait)
 	for {
-		if _, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false); ticket != nil {
-			return ticket
+		d, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false)
+		if ticket != nil {
+			return d, ticket, nil
 		}
 		if !time.Now().Before(deadline) {
-			return nil
+			return d, nil, nil
 		}
-		time.Sleep(acfg.MakeRoomPollInterval)
+		timer := time.NewTimer(acfg.MakeRoomPollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return d, nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 }
 

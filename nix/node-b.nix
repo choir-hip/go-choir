@@ -1871,7 +1871,9 @@ in
         # computers (never working, held, protected or of a higher class),
         # then admits; refused only when nothing eligible can make room
         # (docs/problems/density-station-d-failure-modes-2026-10-26.md).
-        # Rollback: VMCTL_ADMISSION_MAKE_ROOM=off.
+        # The code default is off (fails closed: only active, on, enabled,
+        # true or 1 enable it); this line turns it on. Bounds are capped at
+        # 10 victims and 60s. Rollback: VMCTL_ADMISSION_MAKE_ROOM=off.
         "VMCTL_ADMISSION_MAKE_ROOM=active"
         "VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS=3"
         "VMCTL_ADMISSION_MAKE_ROOM_SETTLE=10s"

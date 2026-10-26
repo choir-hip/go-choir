@@ -699,19 +699,20 @@ func hostAdmissionConfigFromEnv() vmctl.HostAdmissionConfig {
 			cfg.InFlightTTL = d
 		}
 	}
-	// Density D1: a refused start makes room (active, the default) or is
-	// refused as before (off, the rollback).
+	// Density D1: a refused start makes room (active) or is refused as
+	// before (off, the default and the rollback). Only an exact enabling
+	// word turns it on; the bounds are capped (review 302 F3, F5).
 	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM"); v != "" {
-		cfg.MakeRoom = v
+		cfg.MakeRoom = vmctl.NormalizeMakeRoomMode(v)
 	}
 	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.MakeRoomMaxVictims = n
+			cfg.MakeRoomMaxVictims = min(n, vmctl.MaxMakeRoomVictims)
 		}
 	}
 	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.MakeRoomSettleWait = d
+			cfg.MakeRoomSettleWait = min(d, vmctl.MaxMakeRoomSettleWait)
 		}
 	}
 	return cfg
