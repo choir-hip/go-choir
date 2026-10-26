@@ -19,7 +19,16 @@
  *      in view.
  *   C6 The chip adds a band or covers the prompt: the prompt surface grows,
  *      the chip leaves the command field, or the input is not usable, at
- *      desktop and phone width.
+ *      desktop and phone width; or its tap target is under 40px tall
+ *      (review 284 item 2).
+ * Review 284 (written before the fixes):
+ *   C7 A single URL with a document in view continues the document instead
+ *      of reaching the display app the conductor classifies: the chip must
+ *      default to "New document" for it, and a tap still continues.
+ *   C8 A quick second send while the first is routing goes out (and can
+ *      continue the old document after a "New document" send).
+ *   C9 A continue whose window was closed before the receipt came back
+ *      reopens the document but the reopened window ignores the receipt.
  *
  *   cd frontend && npm run build && npx vite preview --port 4173 --strictPort &
  *   npx playwright test tests/prompt-bar-continue.spec.js
@@ -73,7 +82,8 @@ function textureWindow(windowId, docId, zIndex = 2) {
 
 // mockComputer serves a signed-in owner whose desktop holds the given
 // windows. Every prompt-bar POST body is recorded in submits.
-async function mockComputer(page, { windows = [], activeWindowId = '' } = {}) {
+// gate, when given, holds every prompt-bar POST until it resolves.
+async function mockComputer(page, { windows = [], activeWindowId = '', gate = null } = {}) {
   const submits = [];
   await page.route('**/auth/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
@@ -99,6 +109,7 @@ async function mockComputer(page, { windows = [], activeWindowId = '' } = {}) {
     } else if (path === '/api/prompt-bar' && method === 'POST') {
       const request = route.request().postDataJSON();
       submits.push(request);
+      if (gate) await gate;
       status = 202;
       body = request.continue_doc_id
         ? {
@@ -218,6 +229,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(field.x + field.width + 0.5);
     expect(chipBox.y).toBeGreaterThanOrEqual(field.y - 0.5);
     expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(field.y + field.height + 0.5);
+    expect(chipBox.height).toBeGreaterThanOrEqual(40);
     // The input keeps most of the field and does not sit under the chip.
     expect(inputBox.width).toBeGreaterThan(field.width * 0.45);
     expect(inputBox.x).toBeGreaterThanOrEqual(chipBox.x + chipBox.width - 0.5);
@@ -225,3 +237,72 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(page.locator('[data-prompt-input]')).toHaveValue('still typeable');
   });
 }
+
+test('C7: a single URL defaults to a new document, and a tap still continues', async ({ page }) => {
+  const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides' });
+  const input = await openDesktop(page);
+  const chip = page.locator('[data-command-field] [data-prompt-target]');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+
+  await input.fill('  https://example.com/tides/article  ');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'new');
+  await chip.click();
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
+  await input.press('Enter');
+  await expect.poll(() => submits.length).toBe(1);
+  expect(submits[0].continue_doc_id).toBe('doc-tides');
+
+  await send(page, 'https://example.com/tides/article');
+  await expect.poll(() => submits.length).toBe(2);
+  expect(submits[1].continue_doc_id).toBeUndefined();
+
+  // Text that is not one URL keeps the continue default.
+  await input.fill('summarize https://example.com/tides/article');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue');
+});
+
+test('C8: no second send while the first is routing', async ({ page }) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides', gate });
+  const input = await openDesktop(page);
+  const chip = page.locator('[data-command-field] [data-prompt-target]');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'continue', { timeout: 10_000 });
+  await chip.click();
+  await send(page, 'Write about currents');
+  await expect.poll(() => submits.length).toBe(1);
+  expect(submits[0].continue_doc_id).toBeUndefined();
+
+  await input.fill('and add a map');
+  await input.press('Enter');
+  await page.waitForTimeout(400);
+  expect(submits.length).toBe(1);
+  await expect(input).toHaveValue('and add a map');
+  await expect(chip).toHaveAttribute('data-prompt-target-mode', 'new');
+
+  release();
+  await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(2, { timeout: 10_000 });
+  await expect(chip).toContainText(DOCS['doc-new'].title);
+  await input.press('Enter');
+  await expect.poll(() => submits.length).toBe(2);
+  expect(submits[1].continue_doc_id).toBe('doc-new');
+});
+
+test('C9: a window closed before the receipt reopens and follows the continue', async ({ page }) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const submits = await mockComputer(page, { windows: [textureWindow('win-tides', 'doc-tides')], activeWindowId: 'win-tides', gate });
+  await openDesktop(page);
+  await expect(page.locator('[data-command-field] [data-prompt-target]')).toBeVisible({ timeout: 10_000 });
+  await send(page, 'add a section on neap tides');
+  await expect.poll(() => submits.length).toBe(1);
+  expect(submits[0].continue_doc_id).toBe('doc-tides');
+
+  await page.locator('[data-window][data-window-app-id="texture"] [data-window-close]').click();
+  await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(0);
+  release();
+
+  const reopened = page.locator('[data-window][data-window-app-id="texture"]');
+  await expect(reopened).toHaveCount(1, { timeout: 10_000 });
+  await expect(reopened.locator('[data-texture-save-status]').first()).toContainText(/Writing first draft|Revising/, { timeout: 10_000 });
+});
