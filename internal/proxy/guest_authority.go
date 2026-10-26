@@ -116,7 +116,7 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		return fmt.Errorf("object graph request too large")
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	if r.URL.Path == "/internal/platform/captures" || r.URL.Path == types.StoryVerdictsPath {
+	if r.URL.Path == "/internal/platform/captures" || r.URL.Path == types.StoryVerdictsPath || r.URL.Path == types.StoryRelationsPath {
 		// corpusd sees the proxy as an internal caller, so the guest's
 		// ownership of the captures it writes is checked here, as for
 		// object writes.

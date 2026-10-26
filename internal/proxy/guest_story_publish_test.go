@@ -54,6 +54,15 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]int{"recorded": len(req.Verdicts)})
 	})
+	var relations []types.StoryRelationsRequest
+	corpusMux.HandleFunc(types.StoryRelationsPath, func(w http.ResponseWriter, r *http.Request) {
+		var req types.StoryRelationsRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		mu.Lock()
+		relations = append(relations, req)
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]int{"recorded": len(req.Relations)})
+	})
 	corpusd := httptest.NewServer(corpusMux)
 	defer corpusd.Close()
 
@@ -142,9 +151,25 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	if rec := send(types.StoryVerdictsPath, "10.200.1.2", types.StoryVerdictsRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Verdicts: verdict}); rec.Code != http.StatusOK {
 		t.Fatalf("guest verdicts = %d %s", rec.Code, rec.Body)
 	}
+	// The judged pair relations of the related_story edge pass under the same
+	// bound-guest rule: another owner's are refused, the guest's own reach
+	// corpusd.
+	rel := []types.StoryRelation{{StoryA: "obj:choir.publication:cGFwZXItb3duZXI:a", StoryB: "obj:choir.publication:cGFwZXItb3duZXI:b", Relation: types.StoryRelationSameIncident}}
+	if rec := send(types.StoryRelationsPath, "10.200.1.2", types.StoryRelationsRequest{OwnerID: "reader-owner", ComputerID: "computer-paper", Relations: rel}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest wrote another owner's relations: %d %s", rec.Code, rec.Body)
+	}
+	if rec := send(types.StoryRelationsPath, "10.200.1.2", types.StoryRelationsRequest{OwnerID: "paper-owner", ComputerID: "computer-other", Relations: rel}); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest wrote another computer's relations: %d %s", rec.Code, rec.Body)
+	}
+	if rec := send(types.StoryRelationsPath, "10.200.1.2", types.StoryRelationsRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Relations: rel}); rec.Code != http.StatusOK {
+		t.Fatalf("guest relations = %d %s", rec.Code, rec.Body)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(verdicts) != 1 || verdicts[0].OwnerID != "paper-owner" || len(verdicts[0].Verdicts) != 1 {
 		t.Fatalf("corpusd verdicts = %+v", verdicts)
+	}
+	if len(relations) != 1 || relations[0].OwnerID != "paper-owner" || len(relations[0].Relations) != 1 {
+		t.Fatalf("corpusd relations = %+v", relations)
 	}
 }

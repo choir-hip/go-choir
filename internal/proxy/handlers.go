@@ -1781,6 +1781,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// verdicts to Store B, both bound to the guest's owner and computer.
 	s.HandleFunc(types.StoryPublishPath, h.HandleGuestTexturePublication)
 	s.HandleFunc(types.StoryVerdictsPath, h.HandlePlatformObjectGraph)
+	s.HandleFunc(types.StoryRelationsPath, h.HandlePlatformObjectGraph)
 	s.HandleFunc("/assets/", h.HandleComputerSurface)
 	s.HandleFunc("/", h.HandleComputerSurface)
 }

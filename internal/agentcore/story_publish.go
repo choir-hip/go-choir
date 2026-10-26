@@ -56,6 +56,14 @@ type StoryPublisher interface {
 	PublishVerdicts(ctx context.Context, req types.StoryVerdictsRequest) error
 }
 
+// StoryRelationPublisher is the optional second face of a StoryPublisher: it
+// exports the research desk's judged pair relations to the platform
+// (choir.RelateStories). A publisher without it cannot export; the verb says
+// so and the record stays on the tape.
+type StoryRelationPublisher interface {
+	PublishRelations(ctx context.Context, req types.StoryRelationsRequest) error
+}
+
 // storyPublishTimeout bounds one publish; a publish that runs out is a
 // gap like any other failure.
 const storyPublishTimeout = 2 * time.Minute
@@ -447,6 +455,10 @@ func (p *httpStoryPublisher) PublishVersion(ctx context.Context, v StoryVersion)
 		return fmt.Errorf("published as v%d, want v%d", resp.Revision, v.Revision)
 	}
 	return nil
+}
+
+func (p *httpStoryPublisher) PublishRelations(ctx context.Context, req types.StoryRelationsRequest) error {
+	return p.post(ctx, p.platformURL, types.StoryRelationsPath, req, nil)
 }
 
 func (p *httpStoryPublisher) PublishVerdicts(ctx context.Context, req types.StoryVerdictsRequest) error {

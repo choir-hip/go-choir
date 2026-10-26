@@ -93,6 +93,10 @@ type Service struct {
 	// related is the derived state of the related-stories walk: answer
 	// cache, memo, story count (publication_related.go).
 	related relatedCache
+	// relationTier reports whether a computer is platform tier, for
+	// RecordStoryRelations; nil means the embedded tier file (platformComputer).
+	// A test sets it.
+	relationTier func(computerID string) (bool, error)
 }
 
 type citationInput struct {

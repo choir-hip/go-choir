@@ -109,6 +109,14 @@ func (rt *Runtime) system1Limits(ctx context.Context, ownerID, computerID string
 	return 0, 0
 }
 
+// system1ChannelTape reads the computer's system1:<computer> channel: the
+// System1 judgments and the story.relation records that rest on them. This is
+// the one caller of the acknowledged channel read (telemetry_readclass_test.go
+// pins it to this file).
+func (rt *Runtime) system1ChannelTape(ctx context.Context, owner, computer string) ([]types.EventRecord, error) {
+	return rt.store.ListAcknowledgedEventsByChannel(ctx, owner, system1Channel(computer), system1TapeLimit)
+}
+
 type system1Answer struct {
 	ID            string             `json:"id"`
 	Choices       []string           `json:"choices"`
@@ -172,8 +180,7 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 		return nil, err
 	}
 
-	channel := system1Channel(computer)
-	tape, err := rt.store.ListAcknowledgedEventsByChannel(ctx, owner, channel, system1TapeLimit)
+	tape, err := rt.system1ChannelTape(ctx, owner, computer)
 	if err != nil {
 		return nil, fmt.Errorf("choir.System1: read the tape: %w", err)
 	}

@@ -49,6 +49,14 @@ const SettingTelemetryBatch = "telemetry.batch"
 // default; off is the rollback.
 const SettingResearchSystem1 = "research.system1"
 
+// SettingResearchRelatedStory lets the research desk record judged pair
+// relations (choir.RelateStories) and export them to Store B as related_story
+// edges (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md,
+// "Build: the related_story edge"). The edges show only when corpusd's
+// CORPUSD_RELATED_STORY read switch is also on. Off by default; off is the
+// rollback: the verb refuses and nothing is recorded or exported.
+const SettingResearchRelatedStory = "research.related_story"
+
 // SettingDebouncedCheckpoint moves the guest's Dolt history commit off the
 // write path: a background committer commits on a time debounce and an ops
 // bound instead of finalize committing inline every hundred events
@@ -181,6 +189,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingCalibrationFeedback:          false,
 	SettingTelemetryBatch:               false,
 	SettingResearchSystem1:              false,
+	SettingResearchRelatedStory:         false,
 	SettingDebouncedCheckpoint:          false,
 	SettingEventTable:                   false,
 	SettingSourceProjection:             false,
