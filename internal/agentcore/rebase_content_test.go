@@ -269,3 +269,26 @@ func TestRebaseNoticeDefersWhileARebaseOfTheSameOperationIsLive(t *testing.T) {
 		t.Fatalf("after the round ended: %+v", out)
 	}
 }
+
+// The owner's apply record carries what the receipt says was resolved, so the
+// owner (and the staging proof) read the conflict resolution from the master
+// document without the guest filesystem.
+func TestRebaseReceiptTextNamesTheResolvedConflicts(t *testing.T) {
+	receipt := rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40), Clean: []string{"c.txt"}, Resolved: []string{"x/a.txt", "x/b.txt"}}
+	text := rebaseReceiptText(receipt, strings.Repeat("e", 64))
+	for _, want := range []string{strings.Repeat("e", 64), "op-a", "resolved conflicts: x/a.txt, x/b.txt", "1 path applied unchanged"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("the text lacks %q:\n%s", want, text)
+		}
+	}
+	if clean := rebaseReceiptText(rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40), Clean: []string{"c.txt"}}, "sha"); strings.Contains(clean, "resolved conflicts") {
+		t.Fatalf("no conflicts were resolved:\n%s", clean)
+	}
+	many := rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40)}
+	for i := 0; i < 14; i++ {
+		many.Resolved = append(many.Resolved, "f"+strings.Repeat("x", i)+".txt")
+	}
+	if text := rebaseReceiptText(many, "sha"); !strings.Contains(text, "and 4 more") {
+		t.Fatalf("a long list is bounded:\n%s", text)
+	}
+}
