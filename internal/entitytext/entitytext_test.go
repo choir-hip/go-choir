@@ -432,3 +432,65 @@ func TestGazetteerLookupAndNear(t *testing.T) {
 		t.Errorf("Near after a removal = %v", got)
 	}
 }
+
+// Fixes from the labelled set's baseline misses (doc, "Baseline,
+// 2026-10-26"), each a failure mode first. Texts are invented.
+
+// G3: a possessive ends a name; "Norway's Equinor" is two names.
+func TestProposeEndsANameAtAPossessive(t *testing.T) {
+	got := proposalKeys(Propose(Parse("", "Later, Norway’s Equinor shipped gas. Later, Equinor's chief spoke."), nil))
+	if _, ok := got["norway equinor"]; ok {
+		t.Fatal("a possessive ran two names into one")
+	}
+	if p, ok := got["equinor"]; !ok || p.Count != 2 {
+		t.Fatalf("equinor: %+v", got)
+	}
+	if _, ok := got["norway"]; !ok {
+		t.Fatalf("norway not proposed: %v", keysOf(got))
+	}
+}
+
+// A capitalised connector is part of a name ("El-Masri", "Van Dijk"); a
+// lower-case one still never starts or ends one.
+func TestProposeKeepsACapitalisedConnector(t *testing.T) {
+	got := proposalKeys(Propose(Parse("", "Later, Omar El-Masri spoke. Later, El-Masri left. Later, they met at El Faro. A minister of Spain spoke."), nil))
+	if p, ok := got["omar el masri"]; !ok || p.Count != 2 || !contains(p.Aliases, "El Masri") {
+		t.Fatalf("Omar El-Masri: %+v (keys %v)", p, keysOf(got))
+	}
+	if _, ok := got["el faro"]; !ok {
+		t.Fatalf("El Faro not proposed: %v", keysOf(got))
+	}
+	if _, ok := got["of spain"]; ok {
+		t.Fatal("a lower-case connector started a name")
+	}
+}
+
+// Alphanumeric acronyms are acronyms: G7, F1.
+func TestProposeAlphanumericAcronyms(t *testing.T) {
+	got := proposalKeys(Propose(Parse("", "Leaders of the G7 met. Later, the F1 season ended."), nil))
+	for _, k := range []string{"g7", "f1"} {
+		if p, ok := got[k]; !ok || !p.Acronym {
+			t.Errorf("%s: %+v", k, p)
+		}
+	}
+}
+
+// A one-word name that only starts sentences is proposed when it recurs at
+// a sentence start, carries a possessive there, or is in the title; a
+// sentence's first word with none of these still is not (G1).
+func TestProposeASentenceStartNameWithEvidence(t *testing.T) {
+	got := proposalKeys(Propose(Parse("", "Halvorsk set off early. Halvorsk plans a tour. Norwegia’s leader spoke. Investors bought stocks."), nil))
+	if p, ok := got["halvorsk"]; !ok || p.Count != 2 {
+		t.Errorf("recurring sentence-start name: %+v", p)
+	}
+	if _, ok := got["norwegia"]; !ok {
+		t.Errorf("possessive sentence-start name not proposed: %v", keysOf(got))
+	}
+	if _, ok := got["investors"]; ok {
+		t.Error("a sentence's first word with no evidence was proposed")
+	}
+	got = proposalKeys(Propose(Parse("Quorvex raises funds", "Quorvex raised money this week."), nil))
+	if p, ok := got["quorvex"]; !ok || !p.InTitle {
+		t.Errorf("a sentence-start name in the title: %+v", p)
+	}
+}
