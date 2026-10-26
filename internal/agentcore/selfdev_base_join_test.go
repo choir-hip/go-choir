@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -405,45 +404,6 @@ func rollbackFixture(t *testing.T, name string) (fx *derivableSelfDevFixture, fi
 	return fx, first
 }
 
-// rollbackEvidenceShim stands in for a join the rollback path does not make
-// today: verificationEvidence requires the recorded verification payload to
-// name the operation being materialized, but a rollback operation carries its
-// TARGET's verifier ref, whose payload names the target's operation. The shim
-// rewrites the payload's operation id to the rollback's, so these tests reach
-// the base-claim behavior; the unrelated join is a named residual (problem
-// doc, R7), not changed here.
-type rollbackEvidenceShim struct {
-	inner       computerevent.ArtifactReader
-	operationID atomic.Value // string
-}
-
-func (s *rollbackEvidenceShim) FetchPayload(ctx context.Context, computerID, digest string) ([]byte, error) {
-	raw, err := s.inner.FetchPayload(ctx, computerID, digest)
-	id, _ := s.operationID.Load().(string)
-	if err != nil || id == "" {
-		return raw, err
-	}
-	var payload map[string]any
-	if json.Unmarshal(raw, &payload) != nil || payload["verifier_run_id"] == nil {
-		return raw, nil
-	}
-	payload["operation_id"] = id
-	return computerevent.CanonicalJSON(payload)
-}
-
-// startRollbackToRewriting opens the rollback, naming it to the shim before
-// the reconciler can read evidence for it.
-func (fx *derivableSelfDevFixture) startRollbackToRewriting(t *testing.T, target selfdev.Operation, key string, shim *rollbackEvidenceShim) selfdev.Operation {
-	t.Helper()
-	// The operation id is minted by the start; the shim rewrites any
-	// verification payload to the one rollback operation open at the time.
-	fx.rt.selfdevMaterializeMu.Lock()
-	operation := fx.startRollbackTo(t, target, key)
-	shim.operationID.Store(operation.OperationID)
-	fx.rt.selfdevMaterializeMu.Unlock()
-	return operation
-}
-
 func (fx *derivableSelfDevFixture) startRollbackTo(t *testing.T, target selfdev.Operation, key string) selfdev.Operation {
 	t.Helper()
 	ctx := context.Background()
@@ -478,9 +438,7 @@ func (fx *derivableSelfDevFixture) startRollbackTo(t *testing.T, target selfdev.
 // visible on the operation's terminal result (review 311, DeepSeek F2).
 func TestRollbackToAPlainReleaseRecordsTheDroppedBaseClaim(t *testing.T) {
 	fx, first := rollbackFixture(t, "rb-note")
-	shim := &rollbackEvidenceShim{inner: fx.rt.eventPayloadReader}
-	fx.rt.eventPayloadReader = shim
-	rollback := fx.startRollbackToRewriting(t, first, "rollback-note", shim)
+	rollback := fx.startRollbackTo(t, first, "rollback-note")
 	got := fx.waitForState(t, rollback.OperationID, selfdev.StateRolledBack)
 	for _, want := range []string{"base claim dropped", joinTestBaseA} {
 		if !strings.Contains(got.TerminalError, want) {

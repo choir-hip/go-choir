@@ -571,6 +571,10 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if joinErr := fx.verifierDecisionJoin(r.Context(), request); joinErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		requestCommitment, _ := selfdevprotocol.Digest(request)
 		receipt, receiptErr := selfdevprotocol.NewAuthorityReceipt(selfdevprotocol.ReceiptKindCheckpoint,
 			request.ComputerID, requestCommitment, checkpoint.Digest, "corpusd", authorityKey, time.Now().UTC())
@@ -1200,4 +1204,35 @@ func TestSelfDevReconcileRecoversMaterializingOperation(t *testing.T) {
 			t.Fatalf("event kind %s count=%d, want exactly 1 after crash+recovery (%v)", want, kinds[want], kinds)
 		}
 	}
+}
+
+// verifierDecisionJoin is the production checkpoint authority's join of the
+// verifier certificate to the recorded verification payload
+// (internal/platform/checkpoints.go, verifyVerifierEvidence): the payload the
+// certificate's verification event points at must name the certificate's
+// operation and bundle. The fake authority enforces it so a materialization
+// that signs a certificate for the wrong operation is refused here as it is
+// there.
+func (fx *derivableSelfDevFixture) verifierDecisionJoin(ctx context.Context, request selfdevprotocol.CheckpointRequest) error {
+	certificate := request.VerifierCertificate.Request
+	event, found, err := fx.store.EventByDigest(ctx, request.ComputerID, certificate.VerificationEventDigest)
+	if err != nil || !found || event.EventKind != computerevent.EventVerificationRecorded || len(event.OutputArtifactRefs) != 1 {
+		return nil // a genesis baseline or other certificate: not this join
+	}
+	ref, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
+	if err != nil {
+		return err
+	}
+	raw, err := fx.rt.eventPayloadReader.FetchPayload(ctx, request.ComputerID, ref.Digest().String())
+	if err != nil {
+		return err
+	}
+	var payload struct {
+		OperationID  string `json:"operation_id"`
+		BundleDigest string `json:"bundle_digest"`
+	}
+	if json.Unmarshal(raw, &payload) != nil || payload.OperationID != certificate.OperationID || payload.BundleDigest != certificate.BundleDigest {
+		return fmt.Errorf("checkpoint authority: verifier decision mismatch")
+	}
+	return nil
 }
