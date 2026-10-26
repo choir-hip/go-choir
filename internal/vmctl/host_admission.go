@@ -204,6 +204,12 @@ type hostMemoryLedger struct {
 	// window ended (density D4), until sampleVMMemory persists it on the
 	// ownership. It is not persisted itself: a restart invents nothing.
 	settled map[string]uint64
+	// expired holds, per VM, the started reservation whose settle window
+	// ended and whose capture waits for the sampler's next pass (review 305
+	// F1): only that pass has just checked the VM is still running, so a
+	// reading left by a VM that died in the last sampler interval is not
+	// taken. Memory only, one entry per VM.
+	expired map[string]*admissionReservation
 	recent  []HostAdmissionDecision
 	// leases are memory hotplug leases (memory_hotplug.go): bytes plugged
 	// or requested above a computer's base, held at full size until the
@@ -221,6 +227,9 @@ func (l *hostMemoryLedger) initLocked() {
 	if l.settled == nil {
 		l.settled = map[string]uint64{}
 	}
+	if l.expired == nil {
+		l.expired = map[string]*admissionReservation{}
+	}
 	if l.leases == nil {
 		l.leases = map[string]uint64{}
 	}
@@ -235,7 +244,9 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 	for id, res := range l.reservations {
 		settled := !res.settledAt.IsZero()
 		if settled && now.Sub(res.settledAt) > cfg.Settle {
-			l.captureSettledLocked(res)
+			if prev, ok := l.expired[res.vmID]; !ok || res.startedAt.After(prev.startedAt) {
+				l.expired[res.vmID] = res
+			}
 			delete(l.reservations, id)
 			continue
 		}
@@ -288,6 +299,16 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 		return views[i].VMID < views[j].VMID
 	})
 	return total, views
+}
+
+// captureExpiredLocked captures what the ended windows left. The sampler
+// calls it right after dropping the readings of VMs that are gone, so every
+// reading it takes is from a VM that was running at this pass.
+func (l *hostMemoryLedger) captureExpiredLocked() {
+	for vmID, res := range l.expired {
+		l.captureSettledLocked(res)
+		delete(l.expired, vmID)
+	}
 }
 
 // captureSettledLocked keeps the VM's latest resident reading when a started
@@ -695,9 +716,11 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 			delete(led.peak, vmID)
 		}
 	}
-	// Settle windows that ended since the last reading capture here too
-	// (density D4); admission and health calls capture as they expire them.
+	// Settle windows that ended since the last reading end here, and every
+	// ended window, whoever noticed it, captures here, after the check that
+	// the VM is still running (density D4, review 305 F1).
 	led.outstandingLocked(now, acfg)
+	led.captureExpiredLocked()
 	settled := led.settled
 	led.settled = map[string]uint64{}
 	led.mu.Unlock()

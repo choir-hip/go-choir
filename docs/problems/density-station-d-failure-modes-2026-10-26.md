@@ -307,6 +307,13 @@ victims hibernated for memory the start never takes.
   value is the last one captured.
 - **M10** a settled value under the 1 GiB minimum charges the minimum; over
   the guest charges the guest.
+- **M11** (review 305 F1) a VM killed in the last sampler interval of its
+  window keeps its last reading in the ledger until the sampler prunes it, so
+  an admission or health read that ends the window first would capture a dead
+  VM's reading. An ended window now waits (one entry per VM, memory only) for
+  the sampler's pass, which captures only after dropping the readings of VMs
+  that are gone. The capture can lag the window end by one sampler interval
+  (15 s); a vmctl restart in that gap loses it, as M9 allows.
 
 ### Protected surfaces, evidence, rollback
 
