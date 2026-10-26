@@ -303,6 +303,11 @@ func TestCrashBootStrandedTailOfARetiredRealizationSpendsNoAttempt(t *testing.T)
 	if kinds := fx.countEventKinds(); kinds[computerevent.EventRouteProjectionUpdated] != 0 {
 		t.Fatalf("a retired realization's tail ran: %v", kinds)
 	}
+	// Review 323 (both seats): a tail that cannot be re-driven is visible on
+	// the tape too, once, not only in a log line every boot.
+	fx.requireOneSettlementHeldEvent(t, offer.UpdateID)
+	fx.crashBootPlatformUpdate()
+	fx.requireOneSettlementHeldEvent(t, offer.UpdateID)
 }
 
 // Review 323 (Devin, Medium): a journaled terminal `refused` is provably

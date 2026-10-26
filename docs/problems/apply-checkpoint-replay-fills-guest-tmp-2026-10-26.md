@@ -482,4 +482,29 @@ Both seats confirmed the 315 High is fixed on the platform settlement. New:
    `applied` journal has a tail and a bound; every other terminal outcome
    settles through the normal path with no spend.
 
-Adjudication of the rest: see the commit message of the fix.
+Adjudication of the rest:
+
+- Adopted: a stranded tail that cannot be re-driven (retired realization,
+  expired offer) now leaves the same idempotent `recovery_recorded` event as a
+  spent bound, once, instead of a log line on every boot (DeepSeek 3, Devin on
+  the expiry residual). The degraded cause names the rollback when it is one
+  (DeepSeek nit 5).
+- Deferred, successor named: platform shapes whose effective state is unknown
+  (a mid-flight journal, an unreadable journal or updater key, receipts that do
+  not verify) still leave the transition pending with a log line. Fail-closed is
+  right for unknown state, but there is no guest-side owner act that discharges a
+  platform update. Successor: a guest-side owner discharge of a pending platform
+  update, in the tail redesign (slice 2) with the host-side proof.
+- Rejected, reason: a per-boot dedup for the platform spend (DeepSeek 4, 315-3).
+  The sweep runs once per boot (`runtime.go`), and the invariant is stated in
+  `spendPlatformUpdateSettlementAttempt`. Rejected: boot-path test for the
+  `accepted -> failed` close (DeepSeek nit 6): a terminal journal implies the
+  operation left `accepted`, so the branch is defensive and cannot be forged
+  without bypassing the transition table; the helper-level test stands. Rejected:
+  the "settled as applied" log wording (cosmetic; the line says the tail is held).
+- Accepted residual: the applied-event record on a crash boot is unbounded. It is
+  O(1) and bounding it recreates the 315 High (an unrecorded apply leaves the
+  transition pending and refuses security updates). The cost is that a store which
+  crashes the guest on that very append boot-loops; that is a store defect no
+  settlement bound can fix, and the restart rule's remedy (the next planned
+  restart, the platform's deploy discharge) applies.
