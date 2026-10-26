@@ -272,4 +272,21 @@ assert_not_contains "$dolt_ops_output" "unknown deployed path"
 dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/test-dolt-history-audit.sh" "scripts/off-host-backup-dolt-snapshot-test.sh")"
 assert_contains "$dolt_ops_tooling_output" "deploy_needed=false"
 
+# D2 guest release metadata: the policy file and the floor list are inputs of
+# flake.nix (the guest image's release.json), so they rebuild the guest image;
+# the checks and their selftests are CI tooling and deploy nothing.
+guest_release_policy_output="$(run_classifier "nix/guest-release-policy.json")"
+assert_contains "$guest_release_policy_output" "deploy_host_os=true"
+assert_contains "$guest_release_policy_output" "deploy_active_vm_refresh=true"
+assert_contains "$guest_release_policy_output" "nix/guest-release-policy.json -> guest release policy"
+assert_not_contains "$guest_release_policy_output" "conservative Nix impact"
+
+guest_floor_paths_output="$(run_classifier "nix/guest-floor-paths.txt")"
+assert_contains "$guest_floor_paths_output" "deploy_host_os=true"
+assert_contains "$guest_floor_paths_output" "nix/guest-floor-paths.txt -> guest floor list"
+
+guest_release_tooling_output="$(run_classifier "nix/guest-release-policy.md" "scripts/check-guest-floor-paths" "scripts/selftest-guest-floor-paths" "scripts/test-guest-floor-commit-free")"
+assert_contains "$guest_release_tooling_output" "deploy_needed=false"
+assert_not_contains "$guest_release_tooling_output" "unknown deployed path"
+
 printf 'deploy-impact-classify-test: ok\n'

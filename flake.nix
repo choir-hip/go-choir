@@ -573,6 +573,77 @@
       #   install to a temp dir, then mv artifacts into /var/lib/go-choir/guest/
       guestVmConfig = self.nixosConfigurations.go-choir-autoputer-vm.config;
 
+      # The guest NixOS system for a given commit stamp. The deployed guest uses
+      # buildCommit; checks.guest-floor-commit-free builds it under two other
+      # stamps to prove the floor digest ignores the stamp.
+      mkGuestVm = commit: nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          goChoirPackages = goChoirPackages;
+          inherit choirGo;
+          buildCommit = commit;
+          inherit sourceRepoRemote;
+        };
+        modules = [
+          microvm.nixosModules.microvm
+          ./nix/autoputer-vm.nix
+          choirKernelModule
+        ];
+      };
+
+      # ── Guest release metadata (docs/design/density-d2-snapshots-survive-
+      # deploys-2026-10-26.md 3.1) ───────────────────────────────────────────
+      # release.json is built into every guest image. floor_digest covers what
+      # a snapshot's memory depends on that engineering cannot change: the
+      # guest kernel and initrd, the locked nixpkgs and microvm revisions, the
+      # Go toolchain and the floor source fileset (nix/guest-floor-paths.txt,
+      # no tests, no testdata). None of it contains the commit stamp, so a
+      # stamp-only change leaves the digest alone (checks.x86_64-linux.
+      # guest-floor-commit-free). security_epoch, guest_abi and guest_abi_min
+      # come from nix/guest-release-policy.json (rules in the sibling .md).
+      guestReleasePolicy = builtins.fromJSON (builtins.readFile ./nix/guest-release-policy.json);
+      guestFloorPaths =
+        let
+          lines = pkgs.lib.splitString "\n" (builtins.readFile ./nix/guest-floor-paths.txt);
+          stripped = map (l: pkgs.lib.trim (pkgs.lib.head (pkgs.lib.splitString "#" l))) lines;
+        in
+          map (pkgs.lib.removeSuffix "/") (builtins.filter (l: l != "") stripped);
+      guestFloorSrc = pkgs.lib.cleanSourceWith {
+        name = "guest-floor-source";
+        src = ./.;
+        filter = path: type:
+          let
+            full = toString path;
+            rel = relPath path;
+            isTestOnly = pkgs.lib.hasSuffix "_test.go" rel || pkgs.lib.hasInfix "/testdata/" ("/" + rel + "/");
+            under = e: rel == e || pkgs.lib.hasPrefix (e + "/") rel;
+            above = e: type == "directory" && pkgs.lib.hasPrefix (rel + "/") e;
+          in
+            full == rootPath || (!isTestOnly && pkgs.lib.any (e: under e || above e) guestFloorPaths);
+      };
+      # The commit-free parts of a guest, as strings (kept apart from the hash
+      # so the check can compare them and name the part that moved).
+      guestFloorInputs = vmConfig: {
+        kernel = "${vmConfig.boot.kernelPackages.kernel}";
+        kernelConfig = "${vmConfig.boot.kernelPackages.kernel.configfile}";
+        initrd = "${vmConfig.system.build.initialRamdisk}";
+        nixpkgs = nixpkgs.rev or nixpkgs.narHash;
+        microvm = microvm.rev or microvm.narHash;
+        go = choirGo.version;
+        floorSource = "${guestFloorSrc}";
+      };
+      guestFloorDigest = vmConfig:
+        "sha256:" + builtins.hashString "sha256" (builtins.toJSON (guestFloorInputs vmConfig));
+      guestReleaseJsonFor = commit: vmConfig: builtins.toJSON {
+        schema = 1;
+        floor_digest = guestFloorDigest vmConfig;
+        security_epoch = guestReleasePolicy.security_epoch;
+        guest_abi = guestReleasePolicy.guest_abi;
+        guest_abi_min = guestReleasePolicy.guest_abi_min;
+        build_commit = commit;
+      };
+      guestReleaseJson = guestReleaseJsonFor buildCommit guestVmConfig;
+
       mkGuestImage = name: vmConfig:
         let
           # Guest kernel (vmlinux ELF binary for Firecracker).
@@ -602,6 +673,7 @@ EOF
 ${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
 EOF
         cp ${vmConfig.environment.etc."choir-guest-image-manifest".source} $out/guest-image-manifest
+        cp ${pkgs.writeText "release.json" (guestReleaseJsonFor buildCommit vmConfig)} $out/release.json
       '';
 
       # Convenience package that bundles the canonical guest artifacts.
@@ -640,7 +712,26 @@ EOF
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
         inherit guest-image;
+        # The release.json of this commit's guest image, without building the
+        # image (the deploy-level floor measurement reads it per commit; the
+        # same text is lib.guestReleaseJson for pure evaluation).
+        guest-release-json = pkgs.writeText "release.json" guestReleaseJson;
       };
+
+      lib.guestReleaseJson = guestReleaseJson;
+
+      # D2 S1 test: the floor digest does not move on a commit-only change.
+      # Evaluates the guest under two different commit stamps; a difference in
+      # the kernel, initrd or floor source fails the evaluation.
+      checks.${system}.guest-floor-commit-free =
+        let
+          a = guestFloorInputs (mkGuestVm "0000000000000000000000000000000000000001").config;
+          b = guestFloorInputs (mkGuestVm "0000000000000000000000000000000000000002").config;
+          moved = builtins.filter (k: a.${k} != b.${k}) (builtins.attrNames a);
+        in
+          assert pkgs.lib.assertMsg (moved == [ ])
+            "the guest floor digest moves with the commit stamp: ${builtins.toJSON moved} differ between two buildCommit values. Take an input that carries the commit out of the digest and record why (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md 3.1, S1 test 2).";
+          pkgs.runCommand "guest-floor-commit-free" { } "echo ${builtins.toJSON a} > $out";
 
       # ── SBOM outputs ─────────────────────────────────────────────────
       # CycloneDX SBOMs for each Go service package. These are the
@@ -673,19 +764,7 @@ EOF
       #   - erofs for a shared read-only nix store (one file; no KSM, SEC-09)
       #   - virtio-blk for data volumes (mutable autoputer state)
       #   - No virtiofs/9p shares (simpler, no host daemon needed)
-      nixosConfigurations.go-choir-autoputer-vm = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          goChoirPackages = goChoirPackages;
-          inherit choirGo;
-          inherit buildCommit sourceRepoRemote;
-        };
-        modules = [
-          microvm.nixosModules.microvm
-          ./nix/autoputer-vm.nix
-          choirKernelModule
-        ];
-      };
+      nixosConfigurations.go-choir-autoputer-vm = mkGuestVm buildCommit;
 
 
       # ── Node B host configuration ─────────────────────────────────────

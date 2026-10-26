@@ -155,6 +155,10 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
+    nix/guest-release-policy.md|scripts/check-guest-floor-paths|scripts/selftest-guest-floor-paths|scripts/test-guest-floor-commit-free)
+      add_explanation "$path -> ignored (guest release policy notes and CI tooling; not deployed to host or guest closures)"
+      continue
+      ;;
     docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*|testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
@@ -352,6 +356,16 @@ for path in "${changed[@]}"; do
     nix/node-b.nix|nix/hardware.nix|nix/disks.nix)
       mark_host_os_only
       add_explanation "$path -> host OS only"
+      ;;
+    nix/guest-release-policy.json)
+      mark_host_os
+      mark_guest_boot_contract
+      add_explanation "$path -> guest release policy (security_epoch, guest_abi, guest_abi_min): host OS + canonical guest image. A raised security_epoch refuses every older release-bound snapshot at its next wake"
+      ;;
+    nix/guest-floor-paths.txt)
+      mark_host_os
+      mark_guest_boot_contract
+      add_explanation "$path -> guest floor list (the floor_digest source fileset of the guest image): host OS + canonical guest image"
       ;;
     nix/*)
       mark_host_os
