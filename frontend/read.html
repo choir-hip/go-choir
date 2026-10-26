@@ -5,16 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Reader – Choir</title>
     <meta name="description" content="Reader, the Choir window for PDFs and EPUBs, on a sample document that needs no account." />
-    <meta name="theme-color" content="#050912" />
-    <link rel="icon" href="/favicon.svg" />
+    <link rel="icon" data-tetramark-favicon />
   </head>
   <body>
     <div class="reader-chrome" data-reader-chrome>
-      <div class="reader-page-bar" data-reader-page-bar>
-        <span><strong>Reader</strong> · Choir</span>
-        <span>Sample document · no account needed</span>
+      <div class="reader-frame">
+        <div class="reader-titlebar" data-reader-titlebar>
+          <strong data-reader-window-title>Reader</strong>
+          <a href="/" data-reader-signin>Sign in to open your own files</a>
+        </div>
+        <div id="reader-root" data-reader-preview></div>
       </div>
-      <div id="reader-root" data-reader-preview></div>
     </div>
     <script>
       // /read is the Reader preview's address; /read.html stays served for

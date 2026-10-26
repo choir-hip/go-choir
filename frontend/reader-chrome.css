@@ -1,73 +1,95 @@
-:root {
-  --choir-bg: #050912;
-  --choir-bg-2: #081224;
-  --choir-panel: #0D1628;
-  --choir-panel-opaque: rgb(13, 22, 40);
-  --choir-panel-strong: #09101F;
-  --choir-panel-soft: rgba(18, 31, 55, 0.68);
-  --choir-fg: #F7FAFF;
-  --choir-muted: #9AA9C0;
-  --choir-subtle: #65748D;
-  --choir-accent: #6D8DFF;
-  --choir-accent-2: #45D7FF;
-  --choir-border: rgba(133, 159, 211, 0.22);
-  --choir-border-strong: rgba(130, 156, 255, 0.44);
-  --choir-input-bg: rgba(10, 17, 31, 0.78);
-  --choir-selected: rgba(91, 123, 255, 0.22);
-  --choir-on-accent: #FFFFFF;
-  --choir-surface-app: rgb(13, 22, 40);
-  --choir-surface-pane: rgb(9, 16, 31);
-  --choir-surface-card: rgba(18, 31, 55, 0.68);
-  --choir-surface-control: rgba(19, 32, 59, 0.84);
-  --choir-surface-input: rgba(10, 17, 31, 0.78);
-  --choir-surface-inset: rgb(9, 16, 31);
-  --choir-surface-document: rgb(13, 22, 40);
-  --choir-text-primary: #F7FAFF;
-  --choir-text-muted: #9AA9C0;
-  --choir-text-subtle: #65748D;
-  --choir-text-accent: #45D7FF;
-  --choir-text-on-accent: #FFFFFF;
-  --choir-state-selected: rgba(91, 123, 255, 0.22);
-  --choir-state-hover: color-mix(in srgb, #6D8DFF 12%, transparent);
-  --choir-state-focus: color-mix(in srgb, #6D8DFF 32%, transparent);
-  --choir-status-danger: #FF5B6B;
-  --choir-status-danger-soft: color-mix(in srgb, #FF5B6B 24%, transparent);
-  --choir-radius-control-sm: 14px;
-  --choir-radius-control: 20px;
-  --choir-radius-panel: 26px;
-  --choir-radius-pill: 30px;
-  --choir-shadow-soft: 0 18px 54px rgba(0,0,0,.38);
-  --choir-shadow-floating: 0 26px 90px rgba(0,0,0,.46);
-  --choir-control-shadow: 0 12px 32px rgba(0,0,0,.24), inset 0 10px 24px rgba(255,255,255,.035);
-  --choir-duration-fast: 120ms;
-  --choir-font-reading: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
-  --choir-font-display: Inter, ui-sans-serif, system-ui, sans-serif;
-  --choir-font-ui: Inter, ui-sans-serif, system-ui, sans-serif;
-}
+/* The preview page's outer chrome. Every colour is a theme variable, so
+   /read.html looks like the default desktop; nothing here is a literal.
+   The frame is laid out like a desktop window: a titlebar that names the
+   document (the Reader itself never repeats it), and the Reader below it. */
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; margin: 0; }
+html,
+body { height: 100%; margin: 0; }
+
 body {
   display: grid;
   overflow: hidden;
   background: var(--choir-bg);
-  color: var(--choir-fg);
+  color: var(--choir-text-primary);
   font-family: var(--choir-font-ui);
 }
-.reader-chrome { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; }
-#reader-root { min-height: 0; }
-.reader-page-bar {
+
+/* On a desktop the page is the wallpaper around one window. */
+.reader-chrome {
+  display: grid;
+  height: 100vh;
+  min-height: 0;
+  padding: 24px;
+  background: var(--choir-bg);
+}
+
+.reader-frame {
   display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--choir-border-strong);
+  border-radius: var(--choir-radius-panel);
+  background: var(--choir-surface-app);
+  box-shadow: var(--choir-shadow-floating);
+}
+
+.reader-titlebar {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  min-height: 36px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--choir-border);
-  padding: 10px 16px;
+  background: var(--choir-surface-pane);
   font-size: 0.78rem;
-  letter-spacing: 0.02em;
-  color: var(--choir-muted);
 }
-.reader-page-bar strong { color: var(--choir-fg); font-weight: 700; }
-.reader-page-bar span { display: inline-flex; gap: 6px; align-items: center; }
 
+.reader-titlebar strong {
+  overflow: hidden;
+  color: var(--choir-text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-titlebar a {
+  flex: 0 0 auto;
+  color: var(--choir-text-accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+#reader-root {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#reader-root > .reader-shell {
+  flex: 1 1 auto;
+}
+
+/* On a phone the window is the whole screen: no wallpaper, no frame. */
+@media (max-width: 640px) {
+  .reader-chrome {
+    padding: 0;
+  }
+
+  .reader-frame {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .reader-titlebar {
+    min-height: 32px;
+    padding: 0 8px;
+  }
+}

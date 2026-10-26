@@ -268,6 +268,7 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
   const r = normalized.radii;
   const e = normalized.effects;
   const panelOpaque = opaqueColor(c.panel, DEFAULT_THEME.colors.panel);
+  const paperOpaque = opaqueColor(c.bg2, DEFAULT_THEME.colors.bg2);
   const panelStrongOpaque = opaqueColor(c.panelStrong, DEFAULT_THEME.colors.panelStrong);
   return {
     '--choir-bg': c.bg,
@@ -302,6 +303,15 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-surface-inset': panelStrongOpaque,
     '--choir-surface-media': '#000000',
     '--choir-surface-document': panelOpaque,
+    // Reading paper and the sheet a document is drawn on. The document surface
+    // is the theme's own page; the paper is what a PDF page is drawn against,
+    // a shade lighter so a rendered page reads as a sheet laid on the desk.
+    '--choir-surface-paper': paperOpaque,
+    // Sepia is the Reader's warm tone: a paper, its ink and its muted ink are
+    // tokenised here so reader.css never carries a colour literal.
+    '--choir-surface-document-sepia': SEPIA_PAPER,
+    '--choir-text-sepia': SEPIA_INK,
+    '--choir-text-sepia-muted': SEPIA_MUTED,
     '--choir-text-primary': c.fg,
     '--choir-text-muted': c.muted,
     '--choir-text-subtle': c.subtle,
@@ -368,6 +378,12 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-font-mono': normalized.fonts.mono,
   };
 }
+
+// The Reader's sepia page. One warm paper with its ink and its muted ink,
+// defined once so the calm reading tone is the same on every theme.
+const SEPIA_PAPER = 'rgb(242, 231, 211)';
+const SEPIA_INK = 'rgb(47, 38, 28)';
+const SEPIA_MUTED = 'rgb(107, 91, 71)';
 
 function colorMix(color: string, percent: number): string {
   return `color-mix(in srgb, ${color} ${percent}%, transparent)`;

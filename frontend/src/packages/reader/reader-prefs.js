@@ -6,7 +6,10 @@ export const READER_PREF_KEY = 'choir.reader.prefs.v1';
 export const FONT_STEPS = { min: 14, max: 28, start: 18 };
 export const MEASURE_STEPS = [58, 72, 88];
 export const MEASURE_NAMES = { 58: 'Narrow', 72: 'Comfortable', 88: 'Wide' };
-export const READER_THEMES = ['paper', 'sepia', 'noir'];
+// Two tones: "Paper" is the theme's own page, "Sepia" a warm one. There is no
+// dark tone to choose — the theme already decides how dark a page is.
+export const READER_THEMES = ['paper', 'sepia'];
+export const READER_THEME_NAMES = { paper: 'Paper', sepia: 'Sepia' };
 
 export function normalizePrefs(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
