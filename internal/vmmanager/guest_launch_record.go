@@ -33,8 +33,9 @@ const launchRecordName = "guest-release.json"
 const launchTargetUnreadable = "!unreadable"
 
 // launchRecord is <state>/<vm>/guest-release.json. Release is empty until the
-// release directories land (S3); ImageTarget is empty when the link could not
-// be read at launch, which turns the guard off for that launch.
+// release directories are in use (S3). ImageTarget is empty when no guest link
+// is configured (the guard is off), launchTargetUnreadable when the configured
+// link could not be read at launch (the snapshot refuses at wake).
 type launchRecord struct {
 	Release     string    `json:"release"`
 	ImageTarget string    `json:"image_target"`

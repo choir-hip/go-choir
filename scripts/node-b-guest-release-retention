@@ -20,7 +20,7 @@
 #
 # vmctl's answer (GET /internal/vmctl/guest-releases):
 #   no answer (connection error, 5xx, unparsable)  delete nothing
-#   404 (an older vmctl, which never launches from a release)  in_use is empty
+#   404 (an older or rolled-back vmctl)  delete nothing; only a parsed 200 is an answer
 #   complete:false (an unreadable snapshot root)  delete only past-window
 #       releases the answer does not list as running
 # Symlinks, odd names and .tmp-* trees are never touched.
@@ -76,7 +76,11 @@ case "$code" in
 	[ "$(jq -r '.complete' "$body")" = "false" ] && complete=false
 	;;
 404)
-	log "vmctl answered 404 (an older vmctl); treating in_use as empty"
+	# An older vmctl, or a vmctl rolled back while release-bound VMs still run:
+	# either way the script cannot know what runs, and a running release is
+	# never deleted (review 331 DeepSeek 5).
+	log "vmctl answered 404 (an older or rolled-back vmctl); deleting nothing"
+	exit 0
 	;;
 *)
 	log "vmctl did not answer (http $code); deleting nothing"

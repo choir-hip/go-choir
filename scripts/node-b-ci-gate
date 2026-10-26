@@ -22,7 +22,11 @@
 # `--print-plan <request>` parses and prints the plan without running it
 # (.github/scripts/node-b-ci-gate-test).
 set -euo pipefail
-export PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin
+# The test modes (never root) keep the caller's PATH, so the tests run off Node B.
+case "${1:-}" in
+  --test-*) ;;
+  *) export PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin ;;
+esac
 umask 022
 
 repo_url=https://github.com/choir-hip/go-choir.git
@@ -44,6 +48,68 @@ max_request=2048
 refuse() {
   echo "node-b-ci-gate: refused: $*" >&2
   exit 2
+}
+
+# The guest security-epoch gate (D2 S1c; docs/design/density-d2-snapshots-
+# survive-deploys-2026-10-26.md 6.6; review 331). The in-repo CI step can be
+# switched off by the commit it is meant to judge. This gate runs on Node B
+# from the copy deployed before that commit, so it is the control point the
+# commit cannot edit. For a deploy it runs the BASE's copy of
+# scripts/check-guest-security-epoch (the deployed commit's; the commit's own
+# copy only when the base has none, the first adoption) over base..commit.
+# Mode, from a root-owned file nix writes: off (the default), observe (log the
+# verdict, never refuse), enforce (refuse the deploy before the floor moves).
+epoch_mode_file=/var/lib/go-choir/ci-gate-epoch-mode
+epoch_check_script=scripts/check-guest-security-epoch
+
+epoch_mode() {
+  local mode
+  mode=$(tr -d '[:space:]' <"$epoch_mode_file" 2>/dev/null) || mode=
+  printf '%s\n' "${mode:-off}"
+}
+
+# deployed_base REPO CHECKED_FLOOR: the last successfully deployed commit (the
+# receipt), else the floor the deploy was checked against.
+deployed_base() {
+  local repo="$1"
+  local floor="$2"
+  local base
+  base=$(sed -n 's/.*"deployed_commit"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' "$receipt" 2>/dev/null | head -n 1)
+  if [ -n "$base" ] && git -C "$repo" cat-file -e "${base}^{commit}" 2>/dev/null; then
+    printf '%s\n' "$base"
+  else
+    printf '%s\n' "$floor"
+  fi
+}
+
+# epoch_gate REPO BASE COMMIT MODE
+epoch_gate() {
+  local repo="$1" base="$2" commit="$3" mode="$4"
+  case "$mode" in
+    off) return 0 ;;
+    observe | enforce) ;;
+    *) refuse "unknown guest security epoch mode ${mode}" ;;
+  esac
+  local copy status=0 out
+  copy=$(mktemp)
+  if git -C "$repo" cat-file -e "${base}:${epoch_check_script}" 2>/dev/null; then
+    git -C "$repo" show "${base}:${epoch_check_script}" >"$copy"
+  elif git -C "$repo" show "${commit}:${epoch_check_script}" >"$copy" 2>/dev/null; then
+    echo "node-b-ci-gate: epoch: the base has no check; running the commit's own (first adoption)" >&2
+  else
+    rm -f "$copy"
+    echo "node-b-ci-gate: epoch: no check script in the base or the commit; skipped" >&2
+    return 0
+  fi
+  out=$(cd "$repo" && bash "$copy" --base "$base" --head "$commit" 2>&1) || status=$?
+  rm -f "$copy"
+  printf '%s\n' "$out" | sed 's/^/node-b-ci-gate: epoch: /' >&2
+  if [ "$status" -ne 0 ]; then
+    if [ "$mode" = enforce ]; then
+      refuse "guest security epoch check failed for ${base}..${commit}"
+    fi
+    echo "node-b-ci-gate: guest security epoch check FAILED for ${base}..${commit} (observe mode; deploying)" >&2
+  fi
 }
 
 prebuild_keys=(DEPLOY_COMMIT DEPLOY_FRONTEND DEPLOY_HOST DEPLOY_HOST_OS HOST_SERVICES)
@@ -233,6 +299,9 @@ run() {
   fi
   checked_floor=
   check_floor "$repo" "$commit"
+  if [ "$verb" = deploy ]; then
+    epoch_gate "$repo" "$(deployed_base "$repo" "$checked_floor")" "$commit" "$(epoch_mode)"
+  fi
 
   local program
   program=$(mktemp /run/go-choir-ci-gate.XXXXXX)
@@ -283,6 +352,14 @@ case "$mode" in
         advance_floor "$2" "$6" "$5"
         ;;
     esac
+    exit 0
+    ;;
+  --test-epoch)
+    # Tests only (.github/scripts/node-b-ci-gate-epoch-test): the epoch gate on
+    # a caller's repo. Never as root.
+    [ "$(id -u)" -ne 0 ] || refuse "test modes never run as root"
+    [ "$#" -eq 5 ] || refuse "usage: node-b-ci-gate --test-epoch <repo> <base> <commit> <mode>"
+    epoch_gate "$2" "$3" "$4" "$5"
     exit 0
     ;;
   --print-plan | --) ;;

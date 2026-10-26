@@ -54,7 +54,7 @@ POLICY=nix/guest-release-policy.json
 SURFACES=nix/guest-security-surfaces.txt
 FLOOR=nix/guest-floor-paths.txt
 CI_YML=.github/workflows/ci.yml
-GATE_FILES=(nix/guest-security-surfaces.txt scripts/check-guest-security-epoch scripts/selftest-guest-security-epoch .github/scripts/deploy-base-select)
+GATE_FILES=(nix/guest-security-surfaces.txt scripts/check-guest-security-epoch scripts/selftest-guest-security-epoch .github/scripts/deploy-base-select .github/scripts/ci-impact-classify)
 
 base=${GUEST_SECURITY_EPOCH_BASE:-}
 head=HEAD
@@ -180,6 +180,12 @@ else
 	# The failure must still reach the deploy: check needs v1-inventory and
 	# requires its success, and the staging deploy requires check's.
 	check_job=$(printf '%s\n' "$ci_text" | awk '/^  check:[[:space:]]*$/ {inj=1; next} inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {inj=0} inj' | sed -E 's/(^|[[:space:]])#.*$//')
+	if printf '%s\n' "$check_job" | grep -q 'continue-on-error'; then
+		fail "the check job at head sets continue-on-error: its failure would not block the deploy"
+	fi
+	if printf '%s\n' "$check_job" | grep -Eq '^ {6}- if:|^ {8}if:'; then
+		fail "a step of the check job at head has an if: condition"
+	fi
 	printf '%s\n' "$check_job" | grep -Eq 'needs:.*v1-inventory' || fail "the check job at head no longer needs v1-inventory"
 	printf '%s\n' "$check_job" | grep -Eq 'require_success .*v1-inventory' || fail "the check job at head no longer requires v1-inventory's success"
 	deploy_job=$(printf '%s\n' "$ci_text" | awk '/^  deploy-staging:[[:space:]]*$/ {inj=1; next} inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {inj=0} inj' | sed -E 's/(^|[[:space:]])#.*$//')

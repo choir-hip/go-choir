@@ -35,6 +35,13 @@ let
   # refuses (R0), and the retention job prunes all but current and previous.
   # S6 turns it on, after S5 and the R9 floor measurement. Rollback: false.
   snapshotReleaseRetain = false;
+  # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
+  # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
+  # commit's copy of scripts/check-guest-security-epoch over deployed..target,
+  # a control the target commit cannot edit (the in-repo CI step can be
+  # skipped by the commit it judges; review 331). Ships off: observe first,
+  # then enforce, each with a staging proof. Rollback: "off".
+  ciGateEpochCheck = "off";
   # Release materialization and retention (scripts/node-b-guest-release-*;
   # tests: scripts/test-node-b-guest-release-retention.sh).
   guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
@@ -3120,6 +3127,8 @@ in
   systemd.tmpfiles.rules = [
     # D2 S2: guest release directories (root-owned; vmctl reads them read-only).
     "d /var/lib/go-choir/guest-releases 0755 root root -"
+    # The CI deploy gate's guest security-epoch mode (ciGateEpochCheck).
+    "f+ /var/lib/go-choir/ci-gate-epoch-mode 0644 root root - ${ciGateEpochCheck}"
     # KSM off (SEC-09; review N4): merged pages across guests are a
     # cross-tenant side channel. 2 stops ksmd and unmerges what it merged.
     # Firecracker does not madvise guest memory MERGEABLE, so nothing was

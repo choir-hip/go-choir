@@ -592,14 +592,10 @@ func (a *vmManagerAdapter) CurrentGuestReleaseInfo() (string, string) {
 }
 
 func (a *vmManagerAdapter) GuestReleaseHealth() (string, map[string]vmctl.GuestReleaseVMStatus) {
-	current := a.mgr.CurrentGuestRelease()
-	out := map[string]vmctl.GuestReleaseVMStatus{}
-	for _, inst := range a.mgr.ListVMs() {
-		rel := inst.Config.GuestRelease
-		if rel == "" || inst.State != vmmanager.StateRunning {
-			continue
-		}
-		out[inst.Config.VMID] = vmctl.GuestReleaseVMStatus{GuestRelease: rel, Behind: current != "" && current != rel}
+	current, states := a.mgr.GuestReleaseHealth()
+	out := make(map[string]vmctl.GuestReleaseVMStatus, len(states))
+	for vmID, st := range states {
+		out[vmID] = vmctl.GuestReleaseVMStatus{GuestRelease: st.GuestRelease, Behind: st.Behind}
 	}
 	return current, out
 }
