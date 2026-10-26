@@ -1877,6 +1877,14 @@ in
         "VMCTL_ADMISSION_MAKE_ROOM=active"
         "VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS=3"
         "VMCTL_ADMISSION_MAKE_ROOM_SETTLE=10s"
+        # Density D4: what a start is charged. peak is the computer's last
+        # peak RSS (b@c's 7847 MiB); wake is the RSS its last start settled
+        # at (a snapshot wake about 0.3 to 0.4 GiB, a cold boot 1.15 to 1.37
+        # GiB; floored at 1 GiB, 2 GiB when unmeasured, never the peak). The
+        # settled RSS is recorded in both modes, so flip to wake after staging
+        # shows `need_source` settled in admission.recent for a woken
+        # computer and the host floor held. Rollback: peak.
+        "VMCTL_ADMISSION_NEED=peak"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"

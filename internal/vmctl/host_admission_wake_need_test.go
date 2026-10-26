@@ -62,8 +62,7 @@ func TestWakeNeedAdmitsTheCaseThePeakRefused(t *testing.T) {
 
 // M3, M10, M8: the estimate under each mode and the bounds.
 func TestWakeNeedEstimate(t *testing.T) {
-	_, guestMib := interactiveMachineShape()
-	guest := uint64(guestMib) << 20
+	const guest = 8 * gib // newAdmissionFixture sets Node B's 8 GiB guest
 	for name, tc := range map[string]struct {
 		mode    string
 		peak    uint64

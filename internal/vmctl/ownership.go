@@ -180,6 +180,13 @@ type VMOwnership struct {
 	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
 	// MemoryMeasuredAt is when MemoryPeakRSSBytes was last sampled.
 	MemoryMeasuredAt string `json:"memory_measured_at,omitempty"`
+	// MemorySettledRSSBytes is the Firecracker resident memory the computer's
+	// most recent started boot or wake had when its admission settle window
+	// ended (density D4). Zero is unmeasured, never zero need; admission with
+	// VMCTL_ADMISSION_NEED=wake charges it (host_admission.go).
+	MemorySettledRSSBytes uint64 `json:"memory_settled_rss_bytes,omitempty"`
+	// MemorySettledAt is when MemorySettledRSSBytes was captured.
+	MemorySettledAt string `json:"memory_settled_at,omitempty"`
 	// ReportedRelease is what the computer last reported it runs (P6):
 	// a report, never vmctl authority (reported_release.go).
 	ReportedRelease *ReportedRelease `json:"reported_release,omitempty"`

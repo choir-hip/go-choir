@@ -118,6 +118,9 @@ type ownershipResponse struct {
 	// admission estimates the next start from it.
 	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
 	MemoryMeasuredAt   string `json:"memory_measured_at,omitempty"`
+	// MemorySettledRSSBytes is the resident memory its last start settled
+	// at; admission with VMCTL_ADMISSION_NEED=wake charges it (density D4).
+	MemorySettledRSSBytes uint64 `json:"memory_settled_rss_bytes,omitempty"`
 	// Current memory, read without SSH: the latest host RSS sample, the
 	// base size, and with a hotplug device the plugged and requested
 	// totals and the lease (memory_hotplug.go). From the controller cache;
@@ -502,24 +505,25 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		dataImage = dataImageResponseFromStats(stats)
 	}
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
-		VMID:               own.VMID,
-		ComputerID:         stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:             own.UserID,
-		DesktopID:          own.DesktopID,
-		Kind:               own.Kind,
-		WarmnessClass:      string(h.registry.WarmnessClassForOwnership(own)),
-		ComputerURL:        own.ComputerURL,
-		State:              string(own.State),
-		CreatedAt:          own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		LastActiveAt:       own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-		Epoch:              own.Epoch,
-		StoppedBy:          own.StoppedBy,
-		DataImage:          dataImage,
-		MemoryPeakRSSBytes: own.MemoryPeakRSSBytes,
-		MemoryMeasuredAt:   own.MemoryMeasuredAt,
-		BootClaim:          bootClaimResponseFor(own.BootClaim),
-		StartInterruptions: own.StartInterruptions,
-		FailureWarmedAt:    own.FailureWarmedAt,
+		VMID:                  own.VMID,
+		ComputerID:            stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
+		UserID:                own.UserID,
+		DesktopID:             own.DesktopID,
+		Kind:                  own.Kind,
+		WarmnessClass:         string(h.registry.WarmnessClassForOwnership(own)),
+		ComputerURL:           own.ComputerURL,
+		State:                 string(own.State),
+		CreatedAt:             own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		LastActiveAt:          own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+		Epoch:                 own.Epoch,
+		StoppedBy:             own.StoppedBy,
+		DataImage:             dataImage,
+		MemoryPeakRSSBytes:    own.MemoryPeakRSSBytes,
+		MemoryMeasuredAt:      own.MemoryMeasuredAt,
+		MemorySettledRSSBytes: own.MemorySettledRSSBytes,
+		BootClaim:             bootClaimResponseFor(own.BootClaim),
+		StartInterruptions:    own.StartInterruptions,
+		FailureWarmedAt:       own.FailureWarmedAt,
 	})
 }
 
@@ -1080,6 +1084,7 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			PlatformBaseRef:           own.PlatformBaseRef,
 			MemoryPeakRSSBytes:        own.MemoryPeakRSSBytes,
 			MemoryMeasuredAt:          own.MemoryMeasuredAt,
+			MemorySettledRSSBytes:     own.MemorySettledRSSBytes,
 			ReportedRelease:           own.ReportedRelease,
 			BootClaim:                 bootClaimResponseFor(own.BootClaim),
 			StartInterruptions:        own.StartInterruptions,

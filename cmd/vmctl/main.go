@@ -699,6 +699,13 @@ func hostAdmissionConfigFromEnv() vmctl.HostAdmissionConfig {
 			cfg.InFlightTTL = d
 		}
 	}
+	// Density D4: peak (default) charges a start the last peak RSS; wake
+	// charges the RSS its last start settled at. Unknown values mean peak.
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("VMCTL_ADMISSION_NEED")), vmctl.HostAdmissionNeedWake) {
+		cfg.NeedMode = vmctl.HostAdmissionNeedWake
+	} else {
+		cfg.NeedMode = vmctl.HostAdmissionNeedPeak
+	}
 	// Density D1: a refused start makes room (active) or is refused as
 	// before (off, the default and the rollback). Only an exact enabling
 	// word turns it on; the bounds are capped (review 302 F3, F5).
