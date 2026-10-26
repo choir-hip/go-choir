@@ -956,3 +956,16 @@ Remaining named residuals: the whole-path rule for non-regular entries (symlinks
 gitlinks, mode-only changes of a path with no text hunk, renames) and the
 content of a conflict block itself; the doomed-round wedge (slice 9, awaiting
 FP0's ruling).
+
+## Re-review 337 (2026-10-26)
+
+Devin approved U4 with one real low and three nits, all adopted:
+
+- **Low 1.** P modifies a path the new base deleted: the whole-path rule passed any
+  candidate that brought the file back differently from the new base's absence, so a
+  candidate restoring B's original text dropped P's change and passed. The candidate
+  must now hold P's exact post-image; anything else is `hunk_missing`.
+- **Nit 3.** `CommitRebaseOwnerNotice` asserts, before the lock, that its request is one
+  owner-stamped stack rebase notice naming the operation, committed under its own id.
+- **Nits 2 and 4.** The escaped path bound includes the ellipsis, and C1 control
+  characters (0x80 to 0x9f) are escaped like C0.
