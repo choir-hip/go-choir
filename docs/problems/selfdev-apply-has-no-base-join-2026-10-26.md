@@ -1,6 +1,6 @@
 # A frontend-only self-development apply never checks its base (2026-10-26)
 
-Status: fix built on lane/base-join (tests first, then code), review 311 ruling applied; not deployed, no staging proof yet. Found by design review 303 (Devin and
+Status: fixed and proved on staging. Landed in train 17 (1ff7a6eb5), deployed with 670f9ea50/d385633b6; staging proof on d@e 2026-10-26 18:01 (below). Found by design review 303 (Devin and
 DeepSeek) of the U4 stack rebase design. Class of the fix: red (apply path,
 security provenance), review tier 2.
 
@@ -174,3 +174,16 @@ Residuals, named, no code in this lane:
   rollback materialization. Hypothesis until read on a live trace; not changed
   here (red, verification join). The rollback tests in this lane rewrite the
   payload's operation id in a test shim to reach the base-claim behavior.
+
+## Staging proof (2026-10-26 18:01 UTC, FP0)
+
+d@e (computer-59c902c5…, a test computer) booted d385633b6 and held an older
+candidate, selfdev-974729048206f364a38bf22908e186b8 (frontend only: App.svelte,
+app.css, desktop-motion.css, theme.ts), frozen on base 8efa23c7e. Approved with
+d@e's own key at 18:01:01. The operation settled `failed` at 18:01:12 (11 s) with
+`updater refused apply: updater: base_moved_since_freeze: release base commit
+8efa23c7e9f86dea8b0b2f397ebc42c612cf3dc3 does not match booted base commit
+d385633b65b0c34cd790ec11ff0f7a67e74a706b`. Nothing was installed: the
+operation is `failed`, not `degraded`, as the review 311 ruling requires; the
+refusal is typed and names both commits. Not read in this proof: whether a new
+round opened (no new operation was listed within a minute).
