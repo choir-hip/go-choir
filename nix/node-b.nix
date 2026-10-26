@@ -1722,9 +1722,10 @@ in
         # RES-10 balloon statistics (internal/vmmanager/balloon_stats.go):
         # staged per computer like the FP8 features. Step 1 (W2, FP0 under the
         # owner's switch delegation, 2026-10-24): one test computer, b@c.
-        # Next: class:test. Rollback: delete the line.
+        # Step 2 (2026-10-26, the switched-off audit): every test computer.
+        # Rollback: delete the line.
         #   "VM_BALLOON_STATS_POLLING_INTERVAL_S=5"          optional, default 5
-        "VM_BALLOON_STATS_ONLY=computer-6c50d6e566143ae32cdb660faa60e24d"
+        "VM_BALLOON_STATS_ONLY=computer-6c50d6e566143ae32cdb660faa60e24d,class:test"
         # A named computer cold boots once (the balloon is in the snapshot
         # launch-config hash); unnamed computers keep their exact config.
         # Read: GET localhost:8083/internal/vmctl/memory/balloon (host only),
@@ -1831,8 +1832,9 @@ in
         # 2026-10-24 (W3, FP0 under the switch delegation): b@c, the
         # self-development test computer, so the owner previews a candidate
         # through `choir self-dev visual` (gap B). The grant lands at b@c's
-        # next cold boot.
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d"
+        # next cold boot. 2026-10-26 (the switched-off audit): every test
+        # computer, so any self-development proof computer can preview.
+        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,class:test"
         # store.event_table, the host half (F-c deploy 2,
         # docs/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
         # computer's guest writer may stamp its telemetry for choir_events;
@@ -1966,7 +1968,10 @@ in
         # 9648031f and 71afbf14) are never named here, so an act never blurs
         # which mechanism a reading measures.
         # Rollback: VMCTL_GUEST_CACHE_RETURN=off.
-        "VMCTL_GUEST_CACHE_RETURN=observe"
+        # Step 2 (§10, 2026-10-26): active for the same two, after step 1's
+        # observe read on d@e (scope the daemon's cgroup, swappiness_key
+        # false, free page reporting negotiated).
+        "VMCTL_GUEST_CACHE_RETURN=active"
         "VMCTL_GUEST_CACHE_RETURN_ONLY=computer-59c902c5d46caecc0a180a8557164e72,computer-734d0344e9d5d7e51eef11df61f58a5b"
         "VMCTL_GUEST_CACHE_RETURN_TRIGGERS=idle"
         # A proof-account computer busy longer than this (e.g. stuck
