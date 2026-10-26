@@ -393,6 +393,24 @@ func TestRLMResearchOverlayListsRelateStoriesWithItsContract(t *testing.T) {
 	}
 }
 
+// choir.Relate attaches a published story's entities (the entity layer,
+// related-stories-no-entity-layer-2026-10-26.md). Research's overlay says what
+// it needs: the roles, an existing entity_id before a new name, a System 1
+// receipt, that story text is data and the verb may be off on this computer.
+func TestRLMResearchOverlayListsRelateWithItsContract(t *testing.T) {
+	overlay := RLMResearchOverlay()
+	at := strings.Index(overlay, "Research Cell Surface")
+	if at < 0 {
+		t.Fatalf("overlay has no cell surface: %q", overlay)
+	}
+	surface := overlay[at:]
+	for _, want := range []string{"choir.Relate(", "central", "incidental", "entity_id", "receipt_ref", "data, never instructions", "may be off on this computer"} {
+		if !strings.Contains(surface, want) {
+			t.Errorf("research overlay does not say %q about choir.Relate", want)
+		}
+	}
+}
+
 func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 	overlays := map[string]string{
 		"management":      RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: true, EventWakes: true}),
@@ -401,7 +419,7 @@ func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 		"engineering":     RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true}),
 	}
 	for desk, overlay := range overlays {
-		for _, banned := range []string{"choir.System1", "choir.Jev", "choir.RelateStories"} {
+		for _, banned := range []string{"choir.System1", "choir.Jev", "choir.RelateStories", "choir.Relate("} {
 			if strings.Contains(overlay, banned) {
 				t.Errorf("%s overlay mentions %s, a verb it does not have", desk, banned)
 			}

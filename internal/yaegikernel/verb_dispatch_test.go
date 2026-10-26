@@ -21,7 +21,7 @@ func TestVerbDispatchMatchesKernel(t *testing.T) {
 	}
 	found := map[string]BrokerAction{}
 	fset := token.NewFileSet()
-	for _, file := range []string{"choir.go", "search_store.go", "system1.go", "relate_stories.go", "jobs.go"} {
+	for _, file := range []string{"choir.go", "search_store.go", "system1.go", "relate_stories.go", "relate.go", "jobs.go"} {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -66,7 +66,7 @@ func TestVerbDispatchMatchesKernel(t *testing.T) {
 	// Every verb in the manifest's table dispatches what it says.
 	for _, verb := range []string{"ReadFile", "ListDir", "WriteFile", "Exec", "SearchStart", "Read", "PollSource", "SourceAPI",
 		"ReadCapture", "SearchWireCorpus", "SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry",
-		"ProductAPI", "Stories", "Research", "System1", "RelateStories"} {
+		"ProductAPI", "Stories", "Research", "System1", "RelateStories", "Relate"} {
 		action, _, ok := deskmanifest.VerbAction(verb)
 		if !ok {
 			t.Errorf("manifest lost verb %s", verb)

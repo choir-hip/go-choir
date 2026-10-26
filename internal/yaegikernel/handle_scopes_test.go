@@ -82,6 +82,7 @@ var verbDispatch = map[string]BrokerAction{
 	"ReadEvidence": ActionReadEvidence, "ListEvidence": ActionListEvidence, "RunMemoryEntry": ActionGetRunMemoryEntry,
 	"ProductAPI": ActionProductAPI, "Stories": ActionStories, "Research": ActionResearch, "System1": ActionSystem1,
 	"RelateStories": ActionRelateStories,
+	"Relate":        ActionRelate,
 }
 
 // The table forgot nothing a desk's verbs dispatch (failure mode F8: a real

@@ -24,7 +24,7 @@ var pinnedFrameActions = map[string][]BrokerAction{
 	"texture":    {ActionReadCapture},
 	"research": {ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence,
 		ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
-		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionSourceAPI},
+		ActionPollSource, ActionReadCapture, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI},
 	SessionRoleResearchChild: {ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
 		ActionReadEvidence, ActionListEvidence},
 	SessionRoleManagementTask: {ActionReadCapture, ActionStories},
@@ -35,7 +35,7 @@ var allBrokerActions = []BrokerAction{
 	ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
 	ActionSearchStart, ActionRead, ActionSearchWireCorpus, ActionSaveEvidence, ActionReadEvidence,
 	ActionListEvidence, ActionGetRunMemoryEntry, ActionProductAPI, ActionResearch, ActionPollSource,
-	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionSourceAPI,
+	ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionRelate, ActionSourceAPI,
 }
 
 const testSlotToken = "slot-token-0123456789abcdef0123456789abcdef"
@@ -224,7 +224,7 @@ func TestForgedFrameClaimsAnotherDesk(t *testing.T) {
 // parent is research. Failure mode 6.
 func TestFrameRoleResearchChildIsNarrower(t *testing.T) {
 	h := newFrameHarness(t, SessionRoleResearchChild)
-	for _, action := range []BrokerAction{ActionSaveEvidence, ActionPollSource, ActionSourceAPI, ActionSystem1, ActionRelateStories, ActionResearch, ActionGetRunMemoryEntry} {
+	for _, action := range []BrokerAction{ActionSaveEvidence, ActionPollSource, ActionSourceAPI, ActionSystem1, ActionRelateStories, ActionRelate, ActionResearch, ActionGetRunMemoryEntry} {
 		if resp := h.send(StreamBrokerEgress, h.request(action, nil)); resp.Success {
 			t.Fatalf("research child was served %s", action)
 		}
