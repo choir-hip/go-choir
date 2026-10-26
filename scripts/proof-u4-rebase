@@ -5,7 +5,7 @@
 # ONE test computer, through the product API and the choir CLI only.
 #
 #   scripts/proof-u4-rebase --computer ID --api-key-file FILE --out DIR [--host URL]
-#       [--phase all|apply|rebase|conflict|negatives] [--settle SECONDS] [--dry-run]
+#       [--phase all|apply|rebase|conflict|retry|negatives] [--settle SECONDS] [--dry-run]
 #
 # Never run it against the paper or an owner's computer, and never SSH or edit
 # Node B: the one platform act it needs (landing an unrelated commit on main so
@@ -28,13 +28,18 @@
 #   6  approve it; the lineage receipt exists with verdict pass; the owner-act
 #      "apply" record names its sha256; /health is "projected" on B'; a fresh
 #      ordinary cast is admitted
-#   7  conflict run: apply A2, then FP0 lands B'' editing one file of A2: the
-#      offer names that path in ConflictPaths and the receipt lists it as resolved
-#   8  negatives while at stack_base_moved: switch off; an ordinary request; a
+#   7  conflict run: A2 creates frontend/public/u4-proof-a2.txt and is applied;
+#      FP0 lands B'' creating the same file differently; the rebase candidate is
+#      on B'', contains the file, and the owner-act "apply" record lists it among
+#      the resolved conflicts (hard checks); the offer's conflict list is read
+#      from the trace when present (soft)
+#   8  the owner's retry act (slice 8): POST .../self-development/rebase-retry
+#      answers a minted owner notice or a 409 with a documented code
+#   9  negatives while at stack_base_moved: switch off; an ordinary request; a
 #      hand-made Cast naming a wrong or superseded notice id
-#   9  measure D4: root runs between attempt 1 and the final Report
+#  10  measure D4: root runs between attempt 1 and the final Report
 #
-# Step 8's wrong-id probe and step 6's "refused if the base moved again" rely on
+# Step 9's wrong-id probe and step 6's "refused if the base moved again" rely on
 # lane/base-join (a plain release claims its base and an apply whose base moved
 # is refused): marked [needs base-join] below. U4's own content check refuses a
 # candidate on a stale base without it, so those steps still pass here; with
@@ -178,21 +183,99 @@ if [ "$PHASE" = all ] || [ "$PHASE" = rebase ]; then
     sleep 15
   done
   [ -n "$zok" ] || { log "an ordinary cast was not admitted after the rebase"; exit 1; }
-  # Step 9: root runs between attempt 1 and the final Report.
+  # Step 10: root runs between attempt 1 and the final Report.
   runs=$(cli run list | jq -r --arg a "texture:$MASTER" '[(.runs // .)[] | select(.agent_id==$a)] | length')
   log "D4: root runs on texture:$MASTER so far: $runs"
-  record --argjson n "${runs:-0}" '{step:9, root_runs:$n}'
+  record --argjson n "${runs:-0}" '{step:10, root_runs:$n}'
 fi
 
 if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
-  # Step 7. The conflict run needs a second applied change A2 and a platform
-  # commit B'' that edits one file of A2: both are FP0's to arrange.
-  announce_platform_step "step 7: after A2 is applied on $C, land a main commit editing one file of A2 (file named in $OUT/a2-file.txt)"
-  log "conflict run: apply A2, land B'', then read the offer's conflict_paths and the receipt's resolved list from the staging evidence"
+  # Step 7: a rebase with a real conflict. A2 creates one named file; FP0 then
+  # lands a main commit that creates the same file with other content, so A2's
+  # patch cannot apply to B''. The hard checks: the rebase candidate is on B'',
+  # contains the file, and the owner's "apply" record names the file among the
+  # resolved conflicts. The offer's conflict list is read from the trace when it
+  # is there (a soft check: the run context may not be in the trace export).
+  A2FILE=frontend/public/u4-proof-a2.txt
+  echo "$A2FILE" > "$OUT/a2-file.txt"
+  MASTER=${MASTER:-$(api GET /api/texture/documents | jq -r '[.documents[]? | select(.title=="Master document")] | sort_by(.created_at) | last | .doc_id // empty')}
+  mtraj=$(api GET "/api/texture/documents/$MASTER" | jq -r .trajectory_id)
+  known() { cli self-dev list | jq -r '[(.operations // .)[] | .operation_id] | .[]' | sort; }
+  known > "$OUT/ops-before-a2.txt"
+  A2=$(cli texture create --title "U4 proof A2: conflict file" --content "Create the new file $A2 containing exactly the line 'U4 proof A2 from the owner'. Build, test and freeze it." --request-id "u4-proof-A2-$(date +%s)" | jq -r .doc_id)
+  log "document A2=$A2"
+  opA2=""; for i in $(seq 1 160); do
+    opA2=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty')
+    [ -n "$opA2" ] && ! grep -qx "$opA2" "$OUT/ops-before-a2.txt" && break; opA2=""; sleep 15
+  done
+  [ -n "$opA2" ] || { log "no candidate for A2"; exit 1; }
+  cli self-dev patch --operation "$opA2" --out "$OUT/a2.patch" > "$OUT/a2-patch.json"
+  grep -q "$A2FILE" "$OUT/a2.patch" || { log "A2's patch does not touch $A2FILE"; exit 1; }
+  cli self-dev approve --operation "$opA2" > "$OUT/approve-opA2.json"
+  wait_op "$opA2" applied > "$OUT/opA2-applied.json"
+  P=$(wait_for "projected after A2" 900 '.state == "projected"')
+  Bcur=$(printf '%s' "$P" | jq -r .booted_base)
+  rm -f "$OUT/platform-landed-2"
+  announce_platform_step "step 7: land a main commit that CREATES $A2FILE with different content (so A2 conflicts) so $C refreshes to a newer base than $Bcur; then touch $OUT/platform-landed-2"
+  until [ -e "$OUT/platform-landed-2" ]; do sleep 20; done
+  P=$(wait_for "stack_base_moved on B''" 1800 '.state == "stack_base_moved" and .booted_base != "'"$Bcur"'"')
+  Bpp=$(printf '%s' "$P" | jq -r .booted_base); opA2id=$(printf '%s' "$P" | jq -r .operation_id)
+  [ "$opA2id" = "$opA2" ] || log "note: the stack top is $opA2id (A2 was $opA2)"
+  NID="rebase-notice:$opA2id:$Bpp:1"
+  got=""; t0=$(date +%s)
+  while [ $(( $(date +%s) - t0 )) -lt $((SETTLE * 3)) ]; do
+    cli trace export "$mtraj" --out "$OUT/master-trace-7.json" >/dev/null 2>&1 || true
+    if grep -q "$NID" "$OUT/master-trace-7.json" 2>/dev/null; then got=1; break; fi
+    sleep 20
+  done
+  [ -n "$got" ] || { echo "{\"verdict\":\"fail\",\"reason\":\"$NID never reached the root\"}" > "$OUT/evidence.json"; exit 1; }
+  known > "$OUT/ops-before-rebase2.txt"; echo "$opA2" >> "$OUT/ops-before-rebase2.txt"
+  opR2=""; for i in $(seq 1 200); do
+    opR2=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty')
+    [ -n "$opR2" ] && ! grep -qx "$opR2" "$OUT/ops-before-rebase2.txt" && break; opR2=""; sleep 15
+  done
+  [ -n "$opR2" ] || { log "no rebase candidate for the conflict run"; exit 1; }
+  cli self-dev patch --operation "$opR2" --out "$OUT/rebase2-candidate.patch" > "$OUT/rebase2-candidate.json"
+  candBase=$(jq -r '.source_patch_base_commit // .bundle.source_patch_base_commit // .base_commit // empty' "$OUT/rebase2-candidate.json")
+  [ "$candBase" = "$Bpp" ] || { log "conflict candidate base $candBase is not $Bpp"; exit 1; }
+  grep -q "$A2FILE" "$OUT/rebase2-candidate.patch" || { log "the conflict candidate does not contain $A2FILE (it was dropped)"; exit 1; }
+  if grep -q "conflict with the new base: .*$A2FILE" "$OUT/master-trace-7.json" 2>/dev/null; then offer_named=true; else offer_named=false; log "soft: the offer's conflict list is not in the trace export"; fi
+  cli self-dev approve --operation "$opR2" > "$OUT/approve-opR2.json"
+  wait_op "$opR2" applied > "$OUT/opR2-applied.json"
+  wait_for "projected on B'' after the conflict rebase" 900 '.state == "projected"' >/dev/null
+  resolved=""
+  for i in $(seq 1 30); do
+    cli trace export "$mtraj" --out "$OUT/master-trace-7b.json" >/dev/null 2>&1 || true
+    if grep -q "resolved conflicts: .*$A2FILE" "$OUT/master-trace-7b.json" 2>/dev/null; then resolved=1; break; fi
+    sleep 10
+  done
+  [ -n "$resolved" ] || { echo "{\"verdict\":\"fail\",\"reason\":\"the apply record does not list $A2FILE as a resolved conflict\"}" > "$OUT/evidence.json"; exit 1; }
+  log "step 7 pass: $A2FILE resolved on $Bpp (offer named in trace: $offer_named)"
+  record --arg op "$opR2" --arg b "$Bpp" --arg f "$A2FILE" --argjson offer "$offer_named" '{step:7, operation:$op, base:$b, resolved:$f, offer_named_in_trace:$offer}'
+fi
+
+if [ "$PHASE" = all ] || [ "$PHASE" = retry ]; then
+  # Slice 8: the owner's retry act. Only meaningful at stack_base_moved; the
+  # answer is either a minted owner notice or a 409 with one of the documented
+  # codes. Anything else (404, 5xx, a 200 without a notice id) fails.
+  P=$(projection)
+  if [ "$(printf '%s' "$P" | jq -r .state)" = stack_base_moved ]; then
+    code=$(curl -sS -o "$OUT/retry.json" -w '%{http_code}' -X POST "$HOST/api/computers/$C/self-development/rebase-retry" \
+      -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$K")") -H "X-Choir-Computer: $C" -H 'Content-Type: application/json' --data '{}')
+    log "owner retry: HTTP $code $(cat "$OUT/retry.json")"
+    case "$code" in
+      200) jq -e '.notice_id | test("^rebase-notice:.*:[4-9]$|:[1-9][0-9]+$")' "$OUT/retry.json" >/dev/null || { log "retry minted a non-owner id"; exit 1; };;
+      409) jq -e '.reason | test("^rebase_retry_(off|not_moved|base_missing|no_root|round_running|no_attempt|attempt_live|attempts_remain|unavailable)$")' "$OUT/retry.json" >/dev/null || { log "retry refused with an unknown code"; exit 1; };;
+      *) log "retry answered HTTP $code"; exit 1;;
+    esac
+    record --arg c "$code" '{step:"retry", http:$c}'
+  else
+    log "retry skipped: the computer is not at stack_base_moved"
+  fi
 fi
 
 if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
-  # Step 8, run while the computer sits at stack_base_moved.
+  # Step 9, run while the computer sits at stack_base_moved.
   P=$(projection)
   if [ "$(printf '%s' "$P" | jq -r .state)" = stack_base_moved ]; then
     setting source.rebase_offer false
