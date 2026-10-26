@@ -102,6 +102,10 @@ func main() {
 	svc.SetTapeSegmentsMode(cfg.TapeSegments)
 	log.Printf("corpusd: tape segments: %s", svc.TapeSegmentsMode())
 	handler := platform.NewHandler(svc)
+	// Library S1: release reads are open (default) or owner-scoped.
+	// CHOIR_RELEASE_READS=owner enforces; read once, here.
+	handler.SetReleaseReads(platform.ParseReleaseReads(cfg.ReleaseReadsRaw))
+	log.Printf("corpusd: release reads: %s", platform.ParseReleaseReads(cfg.ReleaseReadsRaw))
 	if cfg.VmctlURL != "" {
 		svc.SetComputerRegistry(platform.NewVmctlComputerRegistry(vmctl.NewClient(cfg.VmctlURL)))
 		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {
