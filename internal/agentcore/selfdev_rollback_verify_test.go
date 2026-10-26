@@ -73,6 +73,8 @@ func TestRollbackMaterializesEndToEnd(t *testing.T) {
 func TestRollbackToARolledBackTargetMaterializes(t *testing.T) {
 	fx, first := rollbackFixture(t, "rb-chain")
 	firstRollback := fx.requireRolledBackTo(t, fx.startRollbackTo(t, first, "rollback-chain-1"), first)
+	// A new candidate is frozen on the base the computer is booted on.
+	fx.setBootedBuildCommit(t, joinTestBaseA)
 	fx.applyPlain(t, "op-rb-chain-3")
 	second := fx.startRollbackTo(t, firstRollback, "rollback-chain-2")
 	fx.requireRolledBackTo(t, second, firstRollback)

@@ -93,3 +93,27 @@ deploys as above); staging has none to date.
   becomes reachable only with this fix.
 - Whether the new gate that hung `rollback_pending` should have an owner exit
   (a close act) regardless of this fix: out of scope, named.
+
+## Fix as built (2026-10-26)
+
+- `verificationEvidence` accepts a payload that names another operation only
+  through `verificationPayloadNamesOperation`: the operation must be a
+  rollback (`rollback_pending`, or `degraded` carrying a route receipt, the
+  reconciler's own discriminator), its `BaseHead` must resolve
+  (`GetByEffectiveHead`, applied or rolled_back) to a target that cites the same
+  `VerifierRefs[0]` and `BundleDigest`, and that target (or, when the target is
+  itself a `rollback-` operation, the operation it rolled back to, followed at
+  most 16 hops) must be the operation the payload names. An apply never cites
+  another operation's payload.
+- The evidence carries the payload's operation id and the verifier certificate
+  is minted with it, so the checkpoint authority's verbatim join holds. The
+  derivable fixture's fake authority now enforces that join, as production does.
+- Tests: a real rollback end to end with no shim, a rollback to a rollback
+  (three applies and two rollbacks), and the strictness cases (an apply citing
+  another operation, a base head that resolves to nothing, a payload that names
+  an operation other than the target). The shim lane/base-join's rollback-note
+  test carried is removed.
+
+Residual: rolling back to the genesis baseline operation (verifier ref is the
+genesis event, certificate decision `genesis_baseline`) is a different
+evidence path and is not covered; named, not exercised here.
