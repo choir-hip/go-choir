@@ -426,23 +426,25 @@ func TestUpstreamedStackIsRetiredNotDivergence(t *testing.T) {
 	}
 }
 
-func TestMainEditedTheSameFileElsewhereIsNotRetired(t *testing.T) {
+func TestMainEditedTheSameFileElsewhereIsRetired(t *testing.T) {
 	repo, base := baseRepo(t)
 	patch := patchFrom(t, repo, base, func(r string) { editLine(t, r, "frontend/src/a.txt", 5, "accepted change") })
 	op := opFor("op-a", base, patch)
-	// Main took the change and also edited a distant line of the same file.
-	// Containment is exact (C1): the blobs differ, so the stack is not retired.
-	// The false negative lands safely as stack_base_moved; a looser reverse-apply
-	// test would retire stacks that were never upstreamed (a duplicated block
-	// satisfies it), so it is not used.
+	reconcile(t, Input{Repo: repo, BootedBase: base, Top: op})
+	// Main took the change and also edited a distant line of the same file
+	// (docs/problems/promoted-stack-stays-base-moved-2026-10-26.md). The blobs
+	// differ, but the three-way merge of the patch into the booted file is
+	// clean and leaves it unchanged: the stack is upstreamed, and the cast
+	// gate no longer refuses.
 	moved := platformMoved(t, repo, base, func(r string) {
 		editLine(t, r, "frontend/src/a.txt", 5, "accepted change")
 		editLine(t, r, "frontend/src/a.txt", 35, "later edit by someone else")
 	})
 	res := reconcile(t, Input{Repo: repo, BootedBase: moved, Top: op})
-	if res.State != StateBaseMoved || !res.Diverged {
-		t.Fatalf("C1: %+v", res)
+	if res.State != StateUpstreamed || res.Diverged || res.Refusal() != "" || res.Base != moved || headOf(t, repo) != moved {
+		t.Fatalf("C2 (three-way): %+v head %s", res, headOf(t, repo))
 	}
+	mustClean(t, repo)
 }
 
 func TestADuplicatedBlockDoesNotRetireTheStack(t *testing.T) {
