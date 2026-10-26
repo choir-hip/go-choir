@@ -146,7 +146,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/node-b-nix-retention|scripts/node-b-host-disk-alarm)
+    scripts/node-b-nix-retention|scripts/node-b-host-disk-alarm|scripts/node-b-guest-release-materialize|scripts/node-b-guest-release-retention)
       mark_host_os_only
       add_explanation "$path -> host OS activation (a host unit script read into the system closure)"
       continue

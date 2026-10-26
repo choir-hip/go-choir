@@ -309,4 +309,10 @@ assert_not_contains "$epoch_same_output" "security epoch raised"
 epoch_unnamed_output="$(cd "$epoch_repo" && printf 'nix/guest-release-policy.json\n' | "$CLASSIFIER")"
 assert_not_contains "$epoch_unnamed_output" "security epoch raised"
 
+# D2 S2: the guest release scripts are read into nix/node-b.nix: host OS only.
+guest_release_scripts_output="$(run_classifier "scripts/node-b-guest-release-materialize" "scripts/node-b-guest-release-retention" "scripts/test-node-b-guest-release-retention.sh")"
+assert_contains "$guest_release_scripts_output" "deploy_host_os=true"
+assert_contains "$guest_release_scripts_output" "deploy_active_vm_refresh=false"
+assert_not_contains "$guest_release_scripts_output" "unknown deployed path"
+
 printf 'deploy-impact-classify-test: ok\n'

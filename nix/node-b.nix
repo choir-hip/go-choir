@@ -26,6 +26,27 @@ let
   # through the gateway and never fall back to direct egress. Rollback:
   # empty the list, deploy, cold-boot the computer.
   hostFetchVMs = "";
+  # D2 (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md): the
+  # one switch for release-bound snapshots. On: every NixOS switch keeps the
+  # outgoing guest image as a release directory under
+  # /var/lib/go-choir/guest-releases (reflink copies), and (S3) vmctl launches
+  # from, and wakes snapshots onto, those directories. Off: no release is
+  # made, launches are byte-identical to today's, every release-bound snapshot
+  # refuses (R0), and the retention job prunes all but current and previous.
+  # S6 turns it on, after S5 and the R9 floor measurement. Rollback: false.
+  snapshotReleaseRetain = false;
+  # Release materialization and retention (scripts/node-b-guest-release-*;
+  # tests: scripts/test-node-b-guest-release-retention.sh).
+  guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
+    ''
+      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep ]}:$PATH"
+      ${builtins.readFile ../scripts/node-b-guest-release-materialize}
+    '';
+  guestReleaseRetention = pkgs.writeShellScript "go-choir-guest-release-retention"
+    ''
+      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gawk pkgs.gnugrep pkgs.jq pkgs.btrfs-progs ]}:$PATH"
+      ${builtins.readFile ../scripts/node-b-guest-release-retention}
+    '';
   # Auth signing material lives in this writable runtime directory.
   # Using a let-binding so downstream env vars compose the key paths
   # via interpolation instead of raw *_KEY_PATH=/absolute/path literals
@@ -271,6 +292,7 @@ let
     curl -fsS -X POST -H 'X-Internal-Caller: true' "''${internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim || true
     journalctl --vacuum-size=256M || true
     ${nixRetention} || true
+    ${guestReleaseRetention} || true
 
     avail_kib="$(df --output=avail -k / | tail -n 1 | tr -d ' ')"
     if [ -z "''${avail_kib}" ] || [ "''${avail_kib}" -lt "''${emergency_min_free_kib}" ]; then
@@ -1547,7 +1569,7 @@ in
       # vm-state). Read-only here means a VMM escape cannot replace corpusd's
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
-      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" ];
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" ];
       LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ doltClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
@@ -1979,6 +2001,32 @@ in
         "GO_CHOIR_DISK_GC_TARGET_FREE_KIB=188743680"
         "GO_CHOIR_NIX_RETENTION_MODE=enforce"
       ];
+    };
+  };
+
+  # Guest release retention (D2 S2): keeps current, previous, young and in-use
+  # release directories, prunes the rest (scripts/node-b-guest-release-
+  # retention). Only files under /var/lib/go-choir/guest-releases are touched;
+  # with snapshotReleaseRetain off it prunes to current and previous.
+  systemd.services.go-choir-guest-release-retention = {
+    description = "go-choir guest release retention";
+    after = [ "go-choir-vmctl.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
+      ExecStart = guestReleaseRetention;
+    };
+  };
+
+  systemd.timers.go-choir-guest-release-retention = {
+    description = "go-choir guest release retention every 30 minutes";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/30";
+      RandomizedDelaySec = "2m";
+      Persistent = true;
     };
   };
 
@@ -2885,7 +2933,15 @@ in
   # at that store output atomically; never let current host binaries boot an
   # unrelated mutable directory. Preserve the one pre-managed image directory
   # as an explicit rollback ref during the first cutover.
-  system.activationScripts.go-choir-guest-image = lib.optionalString (guestImage != null) ''
+  # D2 S2: the release snippet runs first (deps) and cannot fail the switch;
+  # it only does anything while snapshotReleaseRetain is on.
+  system.activationScripts.go-choir-guest-release = lib.optionalString (guestImage != null && snapshotReleaseRetain) ''
+    ${guestReleaseMaterialize} "${guestImage}" /var/lib/go-choir/guest-releases || true
+  '';
+
+  system.activationScripts.go-choir-guest-image = {
+    deps = [ "go-choir-guest-release" ];
+    text = lib.optionalString (guestImage != null) ''
     set -euo pipefail
     state=/var/lib/go-choir
     target="$state/guest"
@@ -3001,6 +3057,7 @@ in
     fi
     echo "go-choir guest image pointer updated to $src" || true
   '';
+  };
 
   # Host autoputer service deleted in PR 5 of store-consolidation mission.
   # All runtime work happens in VMs via vmctl. Served proxy routes require an
@@ -3040,6 +3097,8 @@ in
   # kernel and rootfs are deployed here. Provider credentials are never
   # placed in this directory or in the guest image itself (VAL-VM-011).
   systemd.tmpfiles.rules = [
+    # D2 S2: guest release directories (root-owned; vmctl reads them read-only).
+    "d /var/lib/go-choir/guest-releases 0755 root root -"
     # KSM off (SEC-09; review N4): merged pages across guests are a
     # cross-tenant side channel. 2 stops ksmd and unmerges what it merged.
     # Firecracker does not madvise guest memory MERGEABLE, so nothing was

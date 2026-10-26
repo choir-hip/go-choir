@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Guest release retention (docs/design/density-d2-snapshots-survive-deploys-
+# 2026-10-26.md 4.6, slice S2). Decides which release directories under
+# /var/lib/go-choir/guest-releases stay. Runs as root from the
+# go-choir-guest-release-retention timer (30 minutes) and from the disk
+# retention sweep. Retention affects efficiency only, never correctness: a
+# deleted release makes its snapshots refuse (release_missing) and cold boot,
+# and a running VM keeps its bytes through open file descriptors or its jail's
+# shared copy.
+#
+# Keep: the current release (the guest link's target); the newest other release
+# by first_current_at ("previous"); any release under 2 hours old (a launch that
+# resolved just before a switch); every release in vmctl's in_use answer.
+# Delete: every other real directory named like a release id, with rm -rf.
+# Also delete a non-current release older than the support window that no
+# running VM uses (its snapshots can never resume, R6). Cap: above
+# GO_CHOIR_GUEST_RELEASE_KEEP_MAX (8), delete releases that only snapshots use,
+# oldest first. NEVER delete current, previous, young, or a release a running
+# VM uses, by any rule, the cap and the support window included.
+#
+# vmctl's answer (GET /internal/vmctl/guest-releases):
+#   no answer (connection error, 5xx, unparsable)  delete nothing
+#   404 (an older vmctl, which never launches from a release)  in_use is empty
+#   complete:false (an unreadable snapshot root)  delete only past-window
+#       releases the answer does not list as running
+# Symlinks, odd names and .tmp-* trees are never touched.
+#
+# Env: GO_CHOIR_GUEST_RELEASES_DIR, GO_CHOIR_GUEST_LINK, GO_CHOIR_VMCTL_URL,
+# GO_CHOIR_GUEST_RELEASE_KEEP_MAX, GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS
+# (168), GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS (2), GO_CHOIR_NOW_EPOCH (tests).
+# Fails closed: a step that cannot read its input deletes nothing.
+set -u
+
+rel_dir="${GO_CHOIR_GUEST_RELEASES_DIR:-/var/lib/go-choir/guest-releases}"
+link="${GO_CHOIR_GUEST_LINK:-/var/lib/go-choir/guest}"
+vmctl="${GO_CHOIR_VMCTL_URL:-http://127.0.0.1:8083}"
+keep_max="${GO_CHOIR_GUEST_RELEASE_KEEP_MAX:-8}"
+window_h="${GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS:-168}"
+young_h="${GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS:-2}"
+now="${GO_CHOIR_NOW_EPOCH:-$(date +%s)}"
+id_re='^[0-9a-df-np-sv-z]{32}$'
+
+log() { echo "go-choir guest release retention: $*"; }
+
+case "$keep_max" in '' | *[!0-9]*) log "GO_CHOIR_GUEST_RELEASE_KEEP_MAX=$keep_max is not a number; using 8"; keep_max=8 ;; esac
+case "$window_h" in '' | *[!0-9]*) log "support window is not a number; using 168"; window_h=168 ;; esac
+case "$young_h" in '' | *[!0-9]*) log "young hours is not a number; using 2"; young_h=2 ;; esac
+
+[ -d "$rel_dir" ] || { log "no releases directory at $rel_dir; nothing to do"; exit 0; }
+target="$(readlink "$link" 2>/dev/null)" || target=""
+current="$(basename "$target" 2>/dev/null | cut -c1-32)"
+if ! printf '%s' "$current" | grep -Eq "$id_re"; then
+	log "the guest link $link does not name a store path; deleting nothing"
+	exit 0
+fi
+
+# --- vmctl's answer -----------------------------------------------------------------
+auth=()
+if [ -n "${CREDENTIALS_DIRECTORY:-}" ] && [ -r "${CREDENTIALS_DIRECTORY}/choir-internal-token.header" ]; then
+	auth=(-H "@${CREDENTIALS_DIRECTORY}/choir-internal-token.header")
+fi
+body="$(mktemp)"
+trap 'rm -f "$body"' EXIT
+code="$(curl -s -m 20 -o "$body" -w '%{http_code}' -H 'X-Internal-Caller: true' "${auth[@]}" "$vmctl/internal/vmctl/guest-releases" 2>/dev/null)" || code=000
+running=""
+snapshots=""
+complete=true
+case "$code" in
+200)
+	if ! jq -e '.in_use | type == "array"' "$body" >/dev/null 2>&1; then
+		log "vmctl answered 200 with an unparsable body; deleting nothing"
+		exit 0
+	fi
+	running="$(jq -r '.in_use[] | select((.running // []) | length > 0) | .id' "$body")"
+	snapshots="$(jq -r '.in_use[] | select((.snapshots // []) | length > 0) | .id' "$body")"
+	[ "$(jq -r '.complete' "$body")" = "false" ] && complete=false
+	;;
+404)
+	log "vmctl answered 404 (an older vmctl); treating in_use as empty"
+	;;
+*)
+	log "vmctl did not answer (http $code); deleting nothing"
+	exit 0
+	;;
+esac
+
+in_list() { printf '%s\n' "$2" | grep -qx "$1"; }
+
+# --- the releases --------------------------------------------------------------------
+declare -A first_at
+ids=()
+for d in "$rel_dir"/*; do
+	[ -d "$d" ] && [ ! -L "$d" ] || continue
+	id="$(basename "$d")"
+	printf '%s' "$id" | grep -Eq "$id_re" || continue
+	t="$(jq -r '.first_current_at | fromdateiso8601' "$d/installed.json" 2>/dev/null)"
+	case "$t" in '' | *[!0-9]*) t="$(stat -c %Y "$d" 2>/dev/null || echo "$now")" ;; esac
+	first_at[$id]="$t"
+	ids+=("$id")
+done
+
+# previous: the newest release other than current by first_current_at
+previous=""
+best=-1
+for id in "${ids[@]}"; do
+	[ "$id" = "$current" ] && continue
+	if [ "${first_at[$id]}" -gt "$best" ]; then best="${first_at[$id]}"; previous="$id"; fi
+done
+
+window_s=$((window_h * 3600))
+young_s=$((young_h * 3600))
+deleted=()
+remaining=()
+for id in "${ids[@]}"; do
+	age=$((now - first_at[$id]))
+	if [ "$id" = "$current" ] || [ "$id" = "$previous" ] || in_list "$id" "$running" || [ "$age" -lt "$young_s" ]; then
+		remaining+=("$id")
+		continue
+	fi
+	past_window=false
+	[ "$age" -gt "$window_s" ] && past_window=true
+	if [ "$past_window" = true ]; then
+		delete=true
+	elif [ "$complete" = true ] && ! in_list "$id" "$snapshots"; then
+		delete=true
+	else
+		delete=false
+	fi
+	if [ "$delete" = true ]; then deleted+=("$id"); else remaining+=("$id"); fi
+done
+
+# the cap: snapshot-only releases, oldest first
+if [ "$complete" = true ] && [ "${#remaining[@]}" -gt "$keep_max" ]; then
+	only_snapshots=()
+	for id in "${remaining[@]}"; do
+		[ "$id" = "$current" ] || [ "$id" = "$previous" ] || in_list "$id" "$running" && continue
+		age=$((now - first_at[$id]))
+		[ "$age" -lt "$young_s" ] && continue
+		only_snapshots+=("$id")
+	done
+	# oldest first
+	sorted="$(for id in "${only_snapshots[@]}"; do echo "${first_at[$id]} $id"; done | sort -n | awk '{print $2}')"
+	count="${#remaining[@]}"
+	for id in $sorted; do
+		[ "$count" -gt "$keep_max" ] || break
+		deleted+=("$id")
+		count=$((count - 1))
+	done
+fi
+
+for id in "${deleted[@]}"; do
+	# a real directory named like a release id, re-checked at the moment of deletion
+	d="$rel_dir/$id"
+	if [ -d "$d" ] && [ ! -L "$d" ]; then
+		chmod -R u+w "$d" 2>/dev/null
+		rm -rf "$d" && log "deleted release $id"
+	fi
+done
+log "current=$current previous=${previous:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete"
+if command -v btrfs >/dev/null 2>&1; then btrfs filesystem du -s "$rel_dir" 2>/dev/null || true; fi
+exit 0
