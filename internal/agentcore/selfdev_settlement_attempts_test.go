@@ -369,12 +369,21 @@ func TestCrashBootSettlementRecordsAppliedAfterTwoFailedAppendsWithoutSpendingTh
 // pre-mutation refusal (base join, state compat, source trust, staging).
 func (fx *derivableSelfDevFixture) writeTerminalRefusedJournal(t *testing.T, key string) {
 	t.Helper()
+	fx.writeTerminalRefusedJournalWithFailure(t, key, "base commit does not match the booted base")
+}
+
+func (fx *derivableSelfDevFixture) writeTerminalRefusedJournalWithFailure(t *testing.T, key, failure string) {
+	t.Helper()
 	sum := sha256.Sum256([]byte(key))
 	dir := filepath.Join(fx.updaterRoot, "operations")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"phase":"refused","request_commitment":"x","target_release_digest":"y","failure":"base commit does not match the booted base","result":{"outcome":"refused"}}`
+	failureField := ""
+	if failure != "" {
+		failureField = `"failure":"` + failure + `",`
+	}
+	body := `{"phase":"refused","request_commitment":"x","target_release_digest":"y",` + failureField + `"result":{"outcome":"refused"}}`
 	if err := os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -420,5 +429,73 @@ func TestCrashBootSettlementOfAJournaledRefusalFailsEvenWithTheBoundSpent(t *tes
 				t.Fatalf("the settlement called the updater (%d -> %d)", callsBefore, calls)
 			}
 		})
+	}
+}
+
+// Review 332 (nit 2): a journaled refusal with no reason still settles with a
+// named cause, not "...: " with nothing after it.
+func TestCrashBootSettlementOfAJournaledRefusalWithNoReasonNamesTheCause(t *testing.T) {
+	if got := journalFailureCause("", "refused"); got == "" || !strings.Contains(got, "refused") {
+		t.Fatalf("empty failure fell back to %q, want a named cause", got)
+	}
+	if got := journalFailureCause("  ", "refused"); got == "" {
+		t.Fatal("a blank failure fell back to nothing")
+	}
+	if got := journalFailureCause("base moved", "refused"); got != "base moved" {
+		t.Fatalf("a stated failure was replaced: %q", got)
+	}
+
+	fx := newDerivableSelfDevFixture(t, "computer-settle-refused-no-reason")
+	operation := fx.decideWithoutActing(t, "op-settle-refused-no-reason")
+	fx.writeTerminalRefusedJournalWithFailure(t, "selfdev-apply-"+fx.decisionDigest(t, "op-settle-refused-no-reason"), "")
+	fx.useDurableAttemptCount(t)
+
+	fx.bootAfterCrash(t)
+
+	got := fx.waitForState(t, operation.OperationID, selfdev.StateFailed)
+	if strings.TrimSpace(got.TerminalError) == "" || strings.HasSuffix(strings.TrimSpace(got.TerminalError), ":") || !strings.Contains(got.TerminalError, "no reason") {
+		t.Fatalf("terminal error %q does not name the cause of a refusal with no reason", got.TerminalError)
+	}
+}
+
+// Review 332 (nit 3): an `applied` journal on an operation that never reached
+// materializing is a contradiction (the updater only runs after the
+// materializing transition). The settlement records nothing and spends nothing:
+// the operation is held, visible, for an owner act, rather than getting an
+// applied event for an apply the operation never started.
+func TestCrashBootSettlementRefusesAnAppliedJournalOnAnOperationThatNeverMaterialized(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-settle-applied-on-accepted")
+	ctx := context.Background()
+	operation := fx.decideWithoutActing(t, "op-settle-applied-on-accepted")
+	accepted, found, err := fx.rt.recoverSelfDevelopmentDecision(ctx, operation)
+	if err != nil || !found || accepted.State != selfdev.StateAccepted {
+		t.Fatalf("recover the decision: %+v found=%v err=%v", accepted, found, err)
+	}
+	key := "selfdev-apply-" + fx.decisionDigest(t, "op-settle-applied-on-accepted")
+	sum := sha256.Sum256([]byte(key))
+	dir := filepath.Join(fx.updaterRoot, "operations")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"phase":"applied","request_commitment":"x","target_release_digest":"y","result":{"outcome":"applied"}}`
+	if err := os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fx.useDurableAttemptCount(t)
+
+	err = fx.rt.settleSelfDevelopmentOperationAfterCrash(ctx, accepted, false)
+
+	if !errors.Is(err, errSelfDevSettlementStateMismatch) {
+		t.Fatalf("settlement of an applied journal on an accepted operation = %v, want errSelfDevSettlementStateMismatch", err)
+	}
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 0 {
+		t.Fatalf("an applied event was recorded for an operation that never materialized: %v", kinds)
+	}
+	if n := fx.settlementAttempts(t, operation.OperationID); n != 0 {
+		t.Fatalf("the refused settlement spent %d attempts", n)
+	}
+	got, err := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if err != nil || got.State != selfdev.StateAccepted {
+		t.Fatalf("operation = %+v (%v), want it held accepted", got, err)
 	}
 }
