@@ -512,14 +512,15 @@ func (f *crFixture) records() []CacheReturnRecord {
 	return f.reg.GuestCacheReturnSummary().Recent
 }
 
-// M15: off never calls a guest across a full sweep tick, and observe does.
-func TestCacheReturnOffNeverCallsAGuestAcrossASweepTick(t *testing.T) {
+// M15: off never calls a guest across a full tick of its own loop, and
+// observe does.
+func TestCacheReturnOffNeverCallsAGuestAcrossATick(t *testing.T) {
 	g := newCRGuest(t)
 	f := newCRFixture(t, GuestCacheReturnOff)
 	f.running("vm-a", 10*time.Minute, g)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	f.reg.StartIdleSweeper(ctx, 5*time.Millisecond, func(context.Context, string, string) error { return nil })
+	f.reg.StartGuestCacheReturnLoop(ctx, 5*time.Millisecond)
 	time.Sleep(200 * time.Millisecond)
 	if n := g.calls.Load(); n != 0 {
 		t.Fatalf("a guest was called %d times with the switch off", n)
@@ -527,14 +528,120 @@ func TestCacheReturnOffNeverCallsAGuestAcrossASweepTick(t *testing.T) {
 	if recs := f.records(); len(recs) != 0 {
 		t.Fatalf("off recorded %d acts", len(recs))
 	}
-	// The same fixture with observe calls it within a few ticks.
+	// The same fixture with observe calls it within a few ticks: the loop
+	// reads the switch every tick.
 	f.reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnObserve, Only: []string{"*"}, Triggers: []string{"idle"}})
 	deadline := time.Now().Add(3 * time.Second)
 	for g.calls.Load() == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if g.calls.Load() == 0 {
-		t.Fatal("observe never called the guest from the sweep")
+		t.Fatal("observe never called the guest from the loop")
+	}
+}
+
+// Review 333 MED: the cache return runs on its own ticker. Turning it on
+// must not start the maintenance sweep (reconcile powers off unowned
+// Firecracker processes, the warmers resume computers, prune deletes), and
+// the sweep must not carry the pass.
+func TestCacheReturnLoopStartsNoMaintenanceSweep(t *testing.T) {
+	g := newCRGuest(t)
+	f := newCRFixture(t, GuestCacheReturnObserve)
+	f.running("vm-a", 10*time.Minute, g)
+	// A Firecracker process no ownership names: the sweep would reap it on
+	// its second sighting.
+	f.mgr.live["vm-orphan"] = []int{4242}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.reg.StartGuestCacheReturnLoop(ctx, 5*time.Millisecond)
+	deadline := time.Now().Add(3 * time.Second)
+	for g.calls.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if g.calls.Load() == 0 {
+		t.Fatal("the loop never acted")
+	}
+	time.Sleep(100 * time.Millisecond) // several more ticks
+	if len(f.mgr.reaped) != 0 {
+		t.Fatalf("the cache return loop reaped %v: it started the maintenance sweep", f.mgr.reaped)
+	}
+}
+
+func TestIdleSweepDoesNotCarryTheCacheReturnPass(t *testing.T) {
+	g := newCRGuest(t)
+	f := newCRFixture(t, GuestCacheReturnActive)
+	f.running("vm-a", 10*time.Minute, g)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.reg.StartIdleSweeper(ctx, 5*time.Millisecond, func(context.Context, string, string) error { return nil })
+	time.Sleep(200 * time.Millisecond)
+	if n := g.calls.Load(); n != 0 {
+		t.Fatalf("the idle sweep made %d cache return calls; the loop owns the pass", n)
+	}
+}
+
+// A loop that is not asked to run (off, nobody selected, no idle trigger) is
+// not a goroutine at all.
+func TestCacheReturnLoopIsNotStartedWhenTheSwitchDoesNotNeedIt(t *testing.T) {
+	for name, cfg := range map[string]GuestCacheReturnConfig{
+		"off":  {Mode: GuestCacheReturnOff, Only: []string{"*"}, Triggers: []string{"idle"}},
+		"typo": {Mode: "Active", Only: []string{"*"}, Triggers: []string{"idle"}},
+	} {
+		if (GuestCacheReturnConfig(cfg)).NeedsIdleLoop() {
+			t.Errorf("%s: NeedsIdleLoop is true", name)
+		}
+	}
+	on := GuestCacheReturnConfig{Mode: GuestCacheReturnObserve, Only: []string{"*"}, Triggers: []string{"idle"}}
+	if !on.NeedsIdleLoop() {
+		t.Error("observe with a selector and the idle trigger does not need the loop")
+	}
+	if (GuestCacheReturnConfig{Mode: GuestCacheReturnActive, Triggers: []string{"idle"}}).NeedsIdleLoop() {
+		t.Error("nobody selected needs the loop")
+	}
+	if (GuestCacheReturnConfig{Mode: GuestCacheReturnActive, Only: []string{"*"}, Triggers: []string{"hibernate", "pressure"}}).NeedsIdleLoop() {
+		t.Error("no idle trigger needs the idle loop")
+	}
+}
+
+// Review 333 LOW: the record carries what the proof reads (design section 10
+// step 1): swappiness_key, reporting_negotiated and reportable blocks, the
+// method's path, and the guest's detail.
+func TestCacheReturnRecordCarriesSwappinessReportingPathAndDetail(t *testing.T) {
+	g := newCRGuest(t)
+	g.report = `{"outcome":"partial","method":"memory_reclaim","path":"/sys/fs/cgroup/system.slice/d.service/memory.reclaim",` +
+		`"detail":"EAGAIN: the kernel reclaimed less than asked","target_bytes":1048576000,"reclaimed_bytes":943718400,"steps":15,"ms":900,` +
+		`"swappiness_key":false,"reporting_negotiated":true,"before":{"reportable_kib":2048},"after":{"reportable_kib":819200}}`
+	f := newCRFixture(t, GuestCacheReturnActive)
+	f.running("vm-a", 10*time.Minute, g)
+	f.pass()
+	recs := f.records()
+	if len(recs) != 1 {
+		t.Fatalf("records = %+v", recs)
+	}
+	r := recs[0]
+	if r.SwappinessKey == nil || *r.SwappinessKey || r.ReportingNegotiated == nil || !*r.ReportingNegotiated {
+		t.Fatalf("swappiness_key %v reporting_negotiated %v, want false and true", r.SwappinessKey, r.ReportingNegotiated)
+	}
+	if r.Path != "/sys/fs/cgroup/system.slice/d.service/memory.reclaim" || !strings.Contains(r.Detail, "EAGAIN") {
+		t.Fatalf("path %q detail %q", r.Path, r.Detail)
+	}
+	if r.ReportableKiBBefore != 2048 || r.ReportableKiBAfter != 819200 {
+		t.Fatalf("reportable before %d after %d", r.ReportableKiBBefore, r.ReportableKiBAfter)
+	}
+	line := r.JournalLine()
+	for _, want := range []string{"swappiness_key=false", "reporting_negotiated=true", "path=/sys/fs/cgroup/system.slice/d.service/memory.reclaim",
+		`detail="EAGAIN: the kernel reclaimed less than asked"`, "reportable_kib_before=2048", "reportable_kib_after=819200", "method=memory_reclaim"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("journal line %q lacks %q", line, want)
+		}
+	}
+	// A guest that does not say (an old report) leaves them out, not false.
+	g2 := newCRGuest(t)
+	f2 := newCRFixture(t, GuestCacheReturnActive)
+	f2.running("vm-a", 10*time.Minute, g2)
+	f2.pass()
+	if r2 := f2.records()[0]; r2.SwappinessKey != nil || r2.ReportingNegotiated != nil {
+		t.Fatalf("an absent field was recorded as %v / %v", r2.SwappinessKey, r2.ReportingNegotiated)
 	}
 }
 
