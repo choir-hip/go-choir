@@ -56,7 +56,8 @@ var wantCLIOnly = []string{
 	"precommit import-ledger",
 	// Owner acts (P7/P8): publishing and adopting a release.
 	"release adopt", "release publish", "self-dev approve",
-	"self-dev mode set", "self-dev wait", "texture watch", "trace export", "version",
+	// Owner act: rolling an applied operation back.
+	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "version",
 }
 
 func TestRegistryParityCLIAndMCP(t *testing.T) {
