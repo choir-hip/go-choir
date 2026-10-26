@@ -112,8 +112,11 @@ func readBoundSelfDevelopmentBundle(bundleRoot string, operation selfdev.Operati
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
+	// One status, three named checks: a bundle torn by a hard kill does not
+	// decode, which is not the same finding as a digest or identity mismatch.
+	// Clients match the "frozen bundle binding mismatch: " prefix.
 	if decoder.Decode(&bundle) != nil {
-		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch")
+		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle does not decode")
 	}
 	bound := false
 	if final {
@@ -121,8 +124,11 @@ func readBoundSelfDevelopmentBundle(bundleRoot string, operation selfdev.Operati
 	} else if digest, digestErr := bundle.ComputeContentDigest(); digestErr == nil {
 		bound = digest == operation.BundleDigest && bundle.ContentDigest == operation.BundleDigest
 	}
-	if !bound || !selfDevelopmentBundleMatchesOperation(bundle, operation) {
-		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch")
+	if !bound {
+		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle digest does not match the operation")
+	}
+	if !selfDevelopmentBundleMatchesOperation(bundle, operation) {
+		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle names another computer, trajectory, capsule or base")
 	}
 	return bundle, http.StatusOK, nil
 }

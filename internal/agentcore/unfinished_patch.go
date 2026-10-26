@@ -215,8 +215,8 @@ func keepUnfinishedRound(ctx context.Context, snapshotter unfinishedPatchSnapsho
 	return nil
 }
 
-// writeReadOnlyAtomic writes data to path, read only, through a rename. An
-// existing file with the same bytes is kept.
+// writeReadOnlyAtomic writes data to path, read only, through a durable
+// rename. An existing file with the same bytes is kept.
 func writeReadOnlyAtomic(path string, data []byte) error {
 	if existing, err := os.ReadFile(path); err == nil && string(existing) == string(data) {
 		return nil
@@ -224,25 +224,7 @@ func writeReadOnlyAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".keep-")
-	if err != nil {
-		return err
-	}
-	_, writeErr := tmp.Write(data)
-	closeErr := tmp.Close()
-	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(tmp.Name())
-		return errors.Join(writeErr, closeErr)
-	}
-	if err := os.Chmod(tmp.Name(), 0o444); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	return nil
+	return writeFileDurable(path, data, 0o444)
 }
 
 // readUnfinishedRounds lists a trajectory's kept records, oldest first. A

@@ -317,15 +317,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err != nil {
 		return nil, fmt.Errorf("canonical capsule effect bundle draft: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(staged.TemporaryRoot, "bundle.draft.json"), draft, 0o400); err != nil {
-		return nil, err
-	}
 	frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", record.ContentDigest)
-	if err := os.Rename(staged.TemporaryRoot, frozenRoot); err != nil {
-		existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.draft.json"))
-		if readErr != nil || !bytes.Equal(existing, draft) {
-			return nil, fmt.Errorf("freeze immutable bundle draft: %w", err)
-		}
+	if err := publishFrozenDraft(staged.TemporaryRoot, frozenRoot, draft); err != nil {
+		return nil, err
 	}
 	operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
 		next.CapsuleID = capsuleID
@@ -353,6 +347,30 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	// what resolved, and leave the runtime's observation for the rule pass.
 	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, out)
 	return out, nil
+}
+
+// publishFrozenDraft writes the draft into the staged tree and publishes the
+// tree at frozenRoot. Every file and directory is fsynced before the rename
+// and incoming/ after it: a refresh hard-kills the guest, and a rename that
+// reaches the disk before its files leaves a short or empty bundle under the
+// operation's digest (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
+func publishFrozenDraft(temporaryRoot, frozenRoot string, draft []byte) error {
+	if err := os.WriteFile(filepath.Join(temporaryRoot, "bundle.draft.json"), draft, 0o400); err != nil {
+		return err
+	}
+	if err := syncTree(temporaryRoot); err != nil {
+		return fmt.Errorf("sync frozen bundle draft: %w", err)
+	}
+	if err := os.Rename(temporaryRoot, frozenRoot); err != nil {
+		existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.draft.json"))
+		if readErr != nil || !bytes.Equal(existing, draft) {
+			return fmt.Errorf("freeze immutable bundle draft: %w", err)
+		}
+	}
+	if err := syncPath(filepath.Dir(frozenRoot)); err != nil {
+		return fmt.Errorf("sync frozen bundle draft: %w", err)
+	}
+	return nil
 }
 
 // recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
@@ -530,21 +548,33 @@ func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx,
 	finalDigest := computerevent.DigestBytes(finalBytes)
 	finalRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", finalDigest)
 	if draftErr == nil {
-		if err := os.WriteFile(filepath.Join(draftRoot, "bundle.json"), finalBytes, 0o400); err != nil {
-			return operation, err
+		// Durable before the rename, as Freeze: the final bundle, the whole
+		// tree (a draft frozen by an older binary was never synced), and the
+		// mapping recovery reads once the draft root is gone.
+		if err := writeFileDurable(filepath.Join(draftRoot, "bundle.json"), finalBytes, 0o400); err != nil {
+			return operation, fmt.Errorf("write verified bundle: %w", err)
+		}
+		if err := syncTree(draftRoot); err != nil {
+			return operation, fmt.Errorf("sync verified bundle: %w", err)
 		}
 		mappingRoot := filepath.Join(toolCtx.UpdaterRoot, "bundle-finalizations")
 		if err := os.MkdirAll(mappingRoot, 0o700); err != nil {
 			return operation, err
 		}
-		if err := os.WriteFile(filepath.Join(mappingRoot, contentDigest), []byte(finalDigest), 0o400); err != nil {
-			return operation, err
+		if err := syncPath(toolCtx.UpdaterRoot); err != nil {
+			return operation, fmt.Errorf("sync bundle finalizations: %w", err)
+		}
+		if err := writeFileDurable(filepath.Join(mappingRoot, contentDigest), []byte(finalDigest), 0o400); err != nil {
+			return operation, fmt.Errorf("write bundle finalization: %w", err)
 		}
 		if err := os.Rename(draftRoot, finalRoot); err != nil {
 			existing, readErr := os.ReadFile(filepath.Join(finalRoot, "bundle.json"))
 			if readErr != nil || !bytes.Equal(existing, finalBytes) {
 				return operation, fmt.Errorf("publish verified bundle: %w", err)
 			}
+		}
+		if err := syncPath(filepath.Dir(finalRoot)); err != nil {
+			return operation, fmt.Errorf("sync verified bundle: %w", err)
 		}
 	}
 	eventIdempotency := computerevent.DigestBytes([]byte("capsule-effect-final-v1\x00" + operation.OperationID + "\x00" + finalDigest))
