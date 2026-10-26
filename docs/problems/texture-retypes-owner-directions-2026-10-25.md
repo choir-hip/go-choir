@@ -98,6 +98,18 @@ favours closing the cast path over a new projection. Mutation class red
   every reducer refusal. A packet that sets `owner_directions` itself is
   refused on every desk (`validateCellIntents`), so no cell can label its
   own text as the owner's.
+- **Review 272 (DeepSeek F1-F4).** The frame's `OwnerRevision` comes
+  from the revision the run names, read and checked (this document,
+  author `user`), not from the run's `current_author_kind`, and a
+  passivated run reactivated on a later head now takes that head's author
+  kind with its id. A seeded request (prompt bar, handoff) walks to its
+  first revision for the id alone and keeps the seed's text; a document a
+  desk seeded (`coagent_texture_seed`, author `appagent`) has no owner
+  revision for its request, so none is printed and the prompt promises an
+  id only "where a revision is named". A run with no trajectory is
+  refused; the owner's words one Cast carries are bounded at 64 KiB
+  (refused by name, "name fewer revisions"); `owner_directions` is refused
+  at any depth of the packet.
 - **Replay.** Revisions are immutable, so a replayed cell attaches the
   same bytes and the fold stays a function of its inputs.
 - **Switch.** None: the change is additive and inert until a cast names
