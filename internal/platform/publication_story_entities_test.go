@@ -387,3 +387,29 @@ func TestStoryEntitiesPendingIsValidateOnlyAndKeepsEveryEntityCheck(t *testing.T
 		t.Fatal("pending validation wrote a row")
 	}
 }
+
+// Review 304 item 2: the computer frees a story's final Report only when the
+// platform fails, so the route tells its failures from its refusals: a check
+// the request fails is a 400, a store that cannot be read or written is a
+// 5xx.
+func TestStoryEntitiesStoreFailureIsAServerErrorAndARefusalIsNot(t *testing.T) {
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	l.attachEntities(a, newEntity("Anthropic", types.EntityTypeOrganization, types.EntityRoleCentral))
+	post := func(h *Handler, req types.StoryEntitiesRequest) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(req)
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, types.StoryEntitiesPath, bytes.NewReader(body))
+		r.Header.Set("X-Internal-Caller", "true")
+		h.HandleStoryEntities(rec, r)
+		return rec
+	}
+	dup := l.entitiesReq(a, types.StoryEntity{EntityID: "wd:Q116758847", Name: "Anthropic", Type: types.EntityTypeOrganization, WikidataID: "Q116758847", New: true, Role: types.EntityRoleCentral})
+	if rec := post(NewHandler(l.svc), dup); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a duplicate = %d %s, want 400", rec.Code, rec.Body.String())
+	}
+	broken := &Service{relationTier: l.svc.relationTier}
+	if rec := post(NewHandler(broken), l.entitiesReq(a, newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral))); rec.Code < 500 {
+		t.Fatalf("no store = %d %s, want a 5xx", rec.Code, rec.Body.String())
+	}
+}
