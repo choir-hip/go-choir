@@ -1,0 +1,55 @@
+# Guest code outside the floor that decides what a guest may do, read or reach
+# (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md 6.6). One
+# repo-relative directory prefix per line; `#` starts a comment.
+#
+# scripts/check-guest-security-epoch refuses a change to a path under one of
+# these prefixes unless the same change raises security_epoch in
+# nix/guest-release-policy.json or carries the reviewed trailers
+#
+#   Security-Effect: none; <why, at least 20 characters>
+#   Security-Effect-Reviewed-By: <devin|deepseek|owner>; <review N | owner YYYY-MM-DD>
+#
+# Excluded from matching everywhere: *_test.go, */testdata/*, *.md. A new guest
+# package with an authority, credential, egress or mutation role is added here
+# in the commit that creates it.
+#
+# Nothing under a path in nix/guest-floor-paths.txt belongs here: a floor
+# change moves the floor digest by itself and older release-bound snapshots
+# refuse (R3), so a surface inside the floor would only double-count. The check
+# fails when a prefix is equal to, contains, or lies under a floor path
+# (internal/capsule/transaction/ was dropped for this reason, review 313 F1).
+# internal/texturewrite/ is also under the floor (cmd/capsule-broker imports it)
+# and is left out for the same reason: see the Build findings section of the
+# design doc, 2026-10-26.
+
+# autoputer, the guest runtime and its HTTP surface
+cmd/autoputer/
+internal/autoputer/
+internal/server/
+internal/apihandler/
+
+# the desk runtime
+internal/agentcore/
+internal/actorruntime/
+internal/actor/
+internal/deskworker/
+cmd/desk-worker/
+internal/toolregistry/
+
+# guest credentials and host-guest authentication
+internal/hostauth/
+internal/dbcred/
+internal/keyescrow/
+
+# grants and authority
+internal/capfloor/
+internal/eventtablegrant/
+internal/owneract/
+
+# self-development
+internal/selfdev/
+internal/selfdevprotocol/
+
+# guest egress
+internal/hostfetch/
+internal/gatewayruntime/

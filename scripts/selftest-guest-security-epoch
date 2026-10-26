@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-guest-security-epoch (D2 design 6.6, S1c): builds
+# throwaway git repos and checks the verdicts, including the gate's own
+# protection (rule 6). Touches nothing in this tree except reading the real
+# surfaces and floor lists for the list-sanity case.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/.." && pwd)
+script=$here/check-guest-security-epoch
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+fails=0
+n=0
+
+GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+
+OK_EFFECT='Security-Effect: none; the change only renames a local variable'
+OK_REVIEW='Security-Effect-Reviewed-By: devin; review 313'
+GATE_EFFECT='Security-Effect: gate change; narrows the list on purpose, reviewed'
+
+policy() { printf '{"security_epoch":%s,"guest_abi":1,"guest_abi_min":1}\n' "$1"; }
+
+ci_yml() { # with the step
+	cat <<'YML'
+name: CI
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo plan
+  v1-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - run: scripts/check-guest-security-epoch --base "$BASE" --head HEAD
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo check
+YML
+}
+
+# new_repo DIR: a repo with the lists, the policy at epoch 1, the script, CI.
+new_repo() {
+	local d=$1
+	git init -q "$d"
+	mkdir -p "$d/nix" "$d/scripts" "$d/.github/workflows" "$d/.github/scripts" "$d/internal/agentcore" "$d/internal/capsule" "$d/internal/other"
+	printf 'internal/agentcore/\ninternal/server/\n' >"$d/nix/guest-security-surfaces.txt"
+	printf '# floor\nflake.nix\ninternal/capsule\n' >"$d/nix/guest-floor-paths.txt"
+	policy 1 >"$d/nix/guest-release-policy.json"
+	cp "$script" "$d/scripts/check-guest-security-epoch"
+	echo '#!/bin/sh' >"$d/scripts/selftest-guest-security-epoch"
+	echo '#!/bin/sh' >"$d/.github/scripts/deploy-base-select"
+	ci_yml >"$d/.github/workflows/ci.yml"
+	echo 'package agentcore' >"$d/internal/agentcore/a.go"
+	echo 'package other' >"$d/internal/other/o.go"
+	echo 'package capsule' >"$d/internal/capsule/c.go"
+	git -C "$d" add -A
+	git -C "$d" commit -q -m init
+}
+
+# commit DIR MESSAGE: commit all changes (or an empty commit).
+commit() { git -C "$1" add -A && git -C "$1" commit -q --allow-empty -m "$2"; }
+msg() { printf '%s\n\n%s\n%s\n' "$1" "$2" "$3"; } # subject, trailer, trailer
+rev() { git -C "$1" rev-parse "${2:-HEAD}"; }
+
+# ci_run DIR BASE HEAD: what the CI step does: the base's copy of the script
+# when the base has one, and the head's copy; both must pass.
+ci_run() {
+	local d=$1 base=$2 head=$3 rc=0
+	if git -C "$d" cat-file -e "$base:scripts/check-guest-security-epoch" 2>/dev/null; then
+		git -C "$d" show "$base:scripts/check-guest-security-epoch" >"$tmp/base-copy"
+		chmod +x "$tmp/base-copy"
+		(cd "$d" && "$tmp/base-copy" --base "$base" --head "$head") >"$tmp/out-base" 2>&1 || rc=1
+	fi
+	(cd "$d" && ./scripts/check-guest-security-epoch --base "$base" --head "$head") >"$tmp/out-head" 2>&1 || rc=1
+	cat "$tmp/out-base" "$tmp/out-head" 2>/dev/null || true
+	return $rc
+}
+
+expect() { # NAME WANT_EXIT DIR BASE HEAD
+	local name=$1 want=$2 d=$3 base=$4 head=$5 got=0 out
+	n=$((n + 1))
+	out=$(ci_run "$d" "$base" "$head" 2>&1) || got=$?
+	if [ "$got" != "$want" ]; then
+		echo "FAIL: $name: exit $got, want $want"
+		echo "$out" | sed 's/^/    /'
+		fails=$((fails + 1))
+	else
+		echo "ok:   $name"
+	fi
+}
+
+expect_head_only() { # NAME WANT_EXIT DIR BASE HEAD: the head's copy alone
+	local name=$1 want=$2 d=$3 base=$4 head=$5 got=0 out
+	n=$((n + 1))
+	out=$(cd "$d" && ./scripts/check-guest-security-epoch --base "$base" --head "$head" 2>&1) || got=$?
+	if [ "$got" != "$want" ]; then
+		echo "FAIL: $name: exit $got, want $want"
+		echo "$out" | sed 's/^/    /'
+		fails=$((fails + 1))
+	else
+		echo "ok:   $name"
+	fi
+}
+
+touch_surface() { echo "// $RANDOM$RANDOM" >>"$1/internal/agentcore/a.go"; }
+
+# --- surface coverage -------------------------------------------------------
+r=$tmp/r1
+new_repo "$r"
+base=$(rev "$r")
+expect "empty range passes" 0 "$r" "$base" "$base"
+
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+expect "a surface change with no raise and no trailer fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r2; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'surface change, both trailers' "$OK_EFFECT" "$OK_REVIEW")"
+expect "the same with both trailers passes" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r3; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'unknown seat' "$OK_EFFECT" 'Security-Effect-Reviewed-By: sol; review 313')"
+expect "a trailer with an unknown seat fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r4; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'malformed ref' "$OK_EFFECT" 'Security-Effect-Reviewed-By: devin; looked fine')"
+expect "a malformed review ref fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r5; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'owner ref' "$OK_EFFECT" 'Security-Effect-Reviewed-By: owner; owner 2026-10-26')"
+expect "an owner ref with a date passes" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r6; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'short why' 'Security-Effect: none; fine' "$OK_REVIEW")"
+expect "a why under 20 characters fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r7; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'only one trailer' "$OK_EFFECT" "Signed-off-by: t <t@t>")"
+expect "a missing Reviewed-By fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r8; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+commit "$r" "$(msg 'trailers in a later commit' "$OK_EFFECT" "$OK_REVIEW")"
+expect "a trailer in a later commit does not cover an earlier one" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r9; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "raise the epoch"
+expect "a raise later in the range passes the range" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r10; new_repo "$r"; base=$(rev "$r")
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "raise the epoch"
+touch_surface "$r"; commit "$r" "surface change after the raise"
+expect "a raise earlier in the range passes the range" 0 "$r" "$base" "$(rev "$r")"
+# a later range, based after the raise, is not covered by it
+base2=$(rev "$r" HEAD~1)
+touch_surface "$r"; commit "$r" "another surface change"
+expect "a later range starting after the raise is not covered by it" 1 "$r" "$base2" "$(rev "$r")"
+
+# --- exclusions -------------------------------------------------------------
+r=$tmp/r11; new_repo "$r"; base=$(rev "$r")
+echo 'package agentcore' >"$r/internal/agentcore/a_test.go"
+mkdir -p "$r/internal/agentcore/testdata"; echo x >"$r/internal/agentcore/testdata/f.json"
+echo '# notes' >"$r/internal/agentcore/README.md"
+echo 'package other' >>"$r/internal/other/o.go"
+commit "$r" "tests, testdata, markdown and a non-surface package"
+expect "tests, testdata, markdown and non-surface paths pass" 0 "$r" "$base" "$(rev "$r")"
+
+# --- monotone ---------------------------------------------------------------
+r=$tmp/r12; new_repo "$r"; base=$(rev "$r")
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "raise to 2"
+policy 1 >"$r/nix/guest-release-policy.json"; commit "$r" "$(msg 'lower to 1' "$OK_EFFECT" "$OK_REVIEW")"
+expect "a fall fails even with trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r13; new_repo "$r"
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "raise to 2"; base=$(rev "$r")
+policy 1 >"$r/nix/guest-release-policy.json"; commit "$r" "$(msg 'lower below the base' "$OK_EFFECT" "$OK_REVIEW")"
+expect "an epoch below the base's fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r14; new_repo "$r"; base=$(rev "$r")
+printf '{"security_epoch":1,"guest_abi":2,"guest_abi_min":1}\n' >"$r/nix/guest-release-policy.json"; commit "$r" "abi bump, same epoch"
+expect "a policy change that keeps the epoch passes" 0 "$r" "$base" "$(rev "$r")"
+
+# --- fail closed ------------------------------------------------------------
+r=$tmp/r15; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "$(msg 'covered' "$OK_EFFECT" "$OK_REVIEW")"
+expect_head_only "an unreadable base fails closed" 1 "$r" deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "$(rev "$r")"
+expect_head_only "an all-zero base fails closed" 1 "$r" 0000000000000000000000000000000000000000 "$(rev "$r")"
+
+r=$tmp/r16; new_repo "$r"; base=$(rev "$r")
+echo '{ not json' >"$r/nix/guest-release-policy.json"; commit "$r" "break the policy"
+expect "an unparsable policy file fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r17; new_repo "$r"; base=$(rev "$r")
+echo '{"guest_abi":1}' >"$r/nix/guest-release-policy.json"; commit "$r" "policy without an epoch"
+expect "a policy file without security_epoch fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/r18; new_repo "$r"; base=$(rev "$r")
+git -C "$r" rm -q nix/guest-release-policy.json; commit "$r" "delete the policy"
+expect "a deleted policy file fails" 1 "$r" "$base" "$(rev "$r")"
+
+# a shallow clone that lacks the base: fetched once, then decided
+r=$tmp/r19; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+git clone -q --depth=1 "file://$r" "$tmp/shallow"
+cp "$script" "$tmp/shallow/scripts/check-guest-security-epoch"
+expect_head_only "a shallow clone: the base is fetched and the uncovered change is still caught" 1 "$tmp/shallow" "$base" "$(rev "$tmp/shallow")"
+
+# --- merge commits ----------------------------------------------------------
+r=$tmp/r20; new_repo "$r"; base=$(rev "$r")
+git -C "$r" checkout -q -b side
+touch_surface "$r"; commit "$r" "$(msg 'side: covered' "$OK_EFFECT" "$OK_REVIEW")"
+git -C "$r" checkout -q -
+echo x >"$r/internal/other/o2.go"; commit "$r" "main: unrelated"
+git -C "$r" merge -q --no-ff side -m "merge side, no trailers"
+expect "a merge commit is skipped (its side commit is covered)" 0 "$r" "$base" "$(rev "$r")"
+
+# --- list sanity ------------------------------------------------------------
+for case_prefix in "internal/capsule/" "internal/" "internal/capsule/transaction/"; do
+	r=$tmp/r21; rm -rf "$r"; new_repo "$r"; base=$(rev "$r")
+	printf 'internal/agentcore/\n%s\n' "$case_prefix" >"$r/nix/guest-security-surfaces.txt"
+	commit "$r" "$(msg "surface $case_prefix" "$GATE_EFFECT" "$OK_REVIEW")"
+	expect "a surface prefix $case_prefix that is equal to, contains or lies under a floor path fails" 1 "$r" "$base" "$(rev "$r")"
+done
+r=$tmp/r22; new_repo "$r"; base=$(rev "$r")
+git -C "$r" rm -q nix/guest-security-surfaces.txt; commit "$r" "$(msg 'drop the list' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a missing surfaces file at the head fails" 1 "$r" "$base" "$(rev "$r")"
+
+n=$((n + 1))
+got=0
+out=$(cd "$root" && "$script" --lists-only 2>&1) || got=$?
+if [ "$got" != 0 ]; then
+	echo "FAIL: the real surfaces and floor lists: exit $got"
+	echo "$out" | sed 's/^/    /'
+	fails=$((fails + 1))
+else
+	echo "ok:   the real surfaces and floor lists pass the sanity rule"
+fi
+
+# --- rule 6: the gate protects itself ---------------------------------------
+r=$tmp/g1; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "$(msg 'drop agentcore from the list' "$GATE_EFFECT" "$OK_REVIEW")"
+mid=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change under the removed prefix"
+expect "a removed prefix still covers the same range (the base's list is read)" 1 "$r" "$base" "$(rev "$r")"
+expect "after the removal deployed, the range no longer matches the prefix" 0 "$r" "$mid" "$(rev "$r")"
+
+r=$tmp/g2; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "narrow the list, no trailers"
+expect "a gate-file change with no trailers fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g3; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"
+policy 2 >"$r/nix/guest-release-policy.json"; commit "$r" "narrow the list and raise the epoch"
+expect "a gate-file change with only an epoch raise fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g4; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "$(msg 'narrow the list, gate trailers' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a gate-file change with the gate trailers passes" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g5; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "$(msg 'narrow the list, none-form trailer' "$OK_EFFECT" "$OK_REVIEW")"
+expect "a gate-file change with the none-form trailer fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g6; new_repo "$r"; base=$(rev "$r")
+printf '#!/bin/sh\nexit 0\n' >"$r/scripts/check-guest-security-epoch"; commit "$r" "neuter the script"
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+expect_head_only "the neutered head script alone passes" 0 "$r" "$base" "$(rev "$r")"
+expect "a head script edited to always pass still fails against the base's copy" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g7; new_repo "$r"; base=$(rev "$r")
+grep -v check-guest-security-epoch "$r/.github/workflows/ci.yml" >"$r/ci.new"; echo '      - run: echo gone' >>"$r/ci.new"
+mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "drop the step from ci.yml"
+expect "a ci.yml that drops the step fails" 1 "$r" "$base" "$(rev "$r")"
+git -C "$r" commit -q --amend -m "$(msg 'drop the step, gate trailers' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a ci.yml that drops the step fails even with the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g8; new_repo "$r"; base=$(rev "$r")
+sed 's|run: scripts/check-guest-security-epoch|run: true # scripts/check-guest-security-epoch|' "$r/.github/workflows/ci.yml" >"$r/ci.new"
+mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "$(msg 'comment the step out' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a ci.yml that comments the step out fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g9; new_repo "$r"; base=$(rev "$r")
+awk '{print} /^  v1-inventory:/{print "    continue-on-error: true"}' "$r/.github/workflows/ci.yml" >"$r/ci.new"
+mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "$(msg 'v1-inventory may fail' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a v1-inventory job that may fail fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g10; new_repo "$r"; base=$(rev "$r")
+sed 's|echo plan|echo plan2|' "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "unrelated ci.yml change"
+expect "an unrelated ci.yml change needs no trailers" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g11; new_repo "$r"; base=$(rev "$r")
+echo '# changed' >>"$r/.github/scripts/deploy-base-select"; commit "$r" "change the base selection"
+expect "a change to deploy-base-select needs the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g12; new_repo "$r"; base=$(rev "$r")
+sed 's|--base "$BASE"|--base "${{ plan.outputs.base }}"|' "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "change the base the step uses"
+expect "a ci.yml change to the line that carries the check needs the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+# first adoption: the base has no script, no lists and no policy
+r=$tmp/a1; git init -q "$r"; echo x >"$r/readme"; commit "$r" init; base=$(rev "$r")
+mkdir -p "$r/nix" "$r/scripts" "$r/.github/workflows"
+printf 'internal/agentcore/\n' >"$r/nix/guest-security-surfaces.txt"; printf 'internal/capsule\n' >"$r/nix/guest-floor-paths.txt"
+policy 1 >"$r/nix/guest-release-policy.json"; cp "$script" "$r/scripts/check-guest-security-epoch"; ci_yml >"$r/.github/workflows/ci.yml"
+commit "$r" "$(msg 'adopt the gate' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "first adoption (nothing at the base) passes with the gate trailers" 0 "$r" "$base" "$(rev "$r")"
+
+if [ "$fails" -ne 0 ]; then
+	echo "selftest-guest-security-epoch: $fails of $n FAILED" >&2
+	exit 1
+fi
+echo "selftest-guest-security-epoch: PASS ($n cases)"
