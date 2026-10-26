@@ -915,3 +915,44 @@ Reviews: Devin approved with four low items and a nit; DeepSeek returned one HIG
   `CHOIR_SOURCE_PROJECTION` env) rather than the setting alone. Rejected.** The env
   switch is platform-set and documented in `sourceproj` as turning projection on
   regardless; a guest cannot reach it.
+
+## Review 328 adjudication (2026-10-26)
+
+Reviews: DeepSeek returned one HIGH (F1, blocking for slice 8), one medium and two
+lows; Devin approved with five lows. Every finding adopted unless noted:
+
+- **DeepSeek F1 (high) adopted.** The retry route was unreachable: the proxy answered
+  every `/self-development/` path it did not know with 409 "effects are disabled".
+  `selfDevelopmentGuestRoute` now routes `rebase-retry` (POST only), and
+  `HandleSelfDevelopmentGuest` requires the approve scope for an API key plus
+  `authorizeOwnerAct` (the owner's session, or a key minted with `owner:acts`; admin
+  does not grant it). Tests drive it through `HandleAPI`: the owner-act table
+  (agent and admin keys 403, owner key and session forwarded), GET 405, no
+  authentication 401, another user 403, and route shape.
+- **DeepSeek F2 (medium) adopted.** delete/delete and add/add-identical (the new
+  base already made P's whole-file change) refused the correct candidate. They are
+  now resolved when the candidate leaves the file as the new base has it, and dropped
+  when it restores or alters it. The 321 adjudication overstated this; it covered text
+  modifications only.
+- **DeepSeek F3 and Devin 4 (low) adopted.** `store.CommitRebaseOwnerNotice` commits the
+  owner's notice under the open path's lock after re-checking that no claimed
+  assignment of the operation is live; an unreadable assignment fails closed
+  (`rebase_retry_unreadable`), as does the runtime pre-check. The other order is
+  already atomic: attempt 4 supersedes attempts 1 to 3 in the open's conditions. A
+  concurrent open for attempt 3 and the retry cannot both succeed (test).
+- **DeepSeek F4 (low) adopted.** Resolved paths in the apply record are escaped (control
+  characters become visible escapes) and bounded in bytes (160 per path, 1200 in all).
+- **Devin 1 (low) adopted, a real defect.** `NewStackRebaseNotice` computed the
+  owner-retry body prefix and then discarded it. Fixed, and the test now asserts the
+  prefix instead of passing vacuously.
+- **Devin 2 (low) adopted.** On a regular-blob conflict path the candidate's mode must be
+  the mode P set when P changed it, else the new base's. Dropping a chmod bundled with
+  a conflicting edit is `hunk_missing`.
+- **Devin 3 (low) adopted.** A candidate equal to the raw conflicted merge, or holding
+  the verifier's 40-character markers that no input side had, is `hunk_missing`.
+- **Devin 5 (nit) adopted.** The proof records `{step:"retry", result:"skipped"}`.
+
+Remaining named residuals: the whole-path rule for non-regular entries (symlinks,
+gitlinks, mode-only changes of a path with no text hunk, renames) and the
+content of a conflict block itself; the doomed-round wedge (slice 9, awaiting
+FP0's ruling).
