@@ -471,3 +471,38 @@ func TestVerifyRebaseACorrectRebaseWhereTheNewBaseAlreadyMadeTheChange(t *testin
 		t.Fatalf("altering a file P adds, which the base already has identically, passed: %+v", v)
 	}
 }
+
+// Re-review 337 (Devin, low 1): P modifies a path the new base deleted. The
+// whole-path rule passed any candidate that brought the file back differently
+// from the new base's absence, including B's original text, which silently
+// drops P's change. The candidate must hold P's exact post-image.
+func TestVerifyRebaseAPathTheNewBaseDeletedNeedsPsPostImage(t *testing.T) {
+	m := newMixedRepo(t, func(root string) {
+		if err := os.Remove(filepath.Join(root, "frontend/src/a.txt")); err != nil {
+			t.Fatal(err)
+		}
+	})
+	const a = "frontend/src/a.txt"
+	// Restoring B's original text drops P's hunks entirely.
+	restoredOriginal := m.candidate(t, func(root string) { write(t, root, a, numbered("a", 40)) })
+	if v := m.verify(t, restoredOriginal); v.Pass || v.Reason != RebaseHunkMissing || strings.Join(v.Dropped, ",") != a {
+		t.Fatalf("a candidate that restores B's text passed: %+v", v)
+	}
+	// Some other text is not P either.
+	other := m.candidate(t, func(root string) { write(t, root, a, "something else\n") })
+	if v := m.verify(t, other); v.Pass {
+		t.Fatalf("a candidate with other text for the deleted path passed: %+v", v)
+	}
+	// Leaving it deleted drops P as well.
+	left := m.candidate(t, func(root string) { write(t, root, "frontend/src/elsewhere.txt", "x\n") })
+	if v := m.verify(t, left); v.Pass {
+		t.Fatalf("leaving the path deleted passed: %+v", v)
+	}
+	// P's exact post-image (B's text with P's two edits) is the rebase.
+	postImage := strings.Split(numbered("a", 40), "\n")
+	postImage[4], postImage[29] = "a line 05 P1", "a line 30 P2"
+	exact := m.candidate(t, func(root string) { write(t, root, a, strings.Join(postImage, "\n")) })
+	if v := m.verify(t, exact); !v.Pass || strings.Join(v.Resolved, ",") != a {
+		t.Fatalf("P's exact post-image for the path: %+v", v)
+	}
+}

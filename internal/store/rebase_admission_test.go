@@ -504,3 +504,55 @@ func (a *rebaseAdmission) ownerNoticeRequest(t *testing.T, attempt int) types.Co
 	req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
 	return req
 }
+
+// Re-review 337 (nit 3): the guarded commit takes only the owner's retry
+// notice of the operation, never an arbitrary command.
+func TestCommitRebaseOwnerNoticeTakesOnlyTheOwnersRetryNoticeOfTheOperation(t *testing.T) {
+	a := newRebaseAdmissionAt(t, 1, 1)
+	good := a.ownerNoticeRequest(t, 4)
+	cases := map[string]func() types.CommitInboxRecordsRequest{
+		"another operation": func() types.CommitInboxRecordsRequest { return good },
+		"an automatic notice": func() types.CommitInboxRecordsRequest {
+			rec, _ := types.NewStackRebaseNotice(types.StackRebaseNotice{
+				TextureInbox: a.seed.TextureInbox, ComputerID: inboxTestComputer, OperationID: rebaseAdmOp, BootedBase: rebaseAdmBase,
+				StackBase: "aaaa", Attempt: 2, DocID: "document-master",
+			})
+			req := types.CommitInboxRecordsRequest{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
+			req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
+			return req
+		},
+		"an ordinary record": func() types.CommitInboxRecordsRequest {
+			rec := inboxNote("rebase-notice:op-a:"+rebaseAdmBase+":4", "management:"+inboxTestOwner, a.seed.TextureInbox)
+			req := types.CommitInboxRecordsRequest{OwnerID: inboxTestOwner, ComputerID: inboxTestComputer, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
+			req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
+			return req
+		},
+		"two records": func() types.CommitInboxRecordsRequest {
+			req := good
+			req.Records = append(append([]types.CommitmentRecord(nil), good.Records...), inboxNote("extra", "management:"+inboxTestOwner, a.seed.TextureInbox))
+			req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
+			return req
+		},
+		"a command id that is not the record id": func() types.CommitInboxRecordsRequest {
+			req := good
+			req.CommandID = "some-other-command"
+			req.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req)
+			return req
+		},
+	}
+	for name, build := range cases {
+		operation := rebaseAdmOp
+		if name == "another operation" {
+			operation = "op-other"
+		}
+		if _, err := a.s.CommitRebaseOwnerNotice(context.Background(), build(), operation); err == nil || errors.Is(err, ErrRebaseRoundRunning) {
+			t.Fatalf("%s: want a refusal, got %v", name, err)
+		}
+	}
+	if rec, _ := a.s.GetCommitmentRecord(context.Background(), inboxTestOwner, inboxTestComputer, rebaseAdmNoticeID(4)); rec != nil {
+		t.Fatal("a refused commit left a record")
+	}
+	if _, err := a.s.CommitRebaseOwnerNotice(context.Background(), good, rebaseAdmOp); err != nil {
+		t.Fatalf("the owner's notice of the operation: %v", err)
+	}
+}

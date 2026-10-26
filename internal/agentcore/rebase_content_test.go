@@ -315,3 +315,15 @@ func TestRebaseReceiptTextEscapesAndBoundsThePaths(t *testing.T) {
 		t.Fatalf("ten 3000-byte paths made a %d-byte sentence; the sentence is bounded in bytes", len(text))
 	}
 }
+
+// Re-review 337 (nits 2 and 4): the cut text, ellipsis included, stays within
+// the bound, and C1 control characters are escaped like the C0 ones.
+func TestEscapeRecordTextBoundIncludesTheEllipsisAndEscapesC1(t *testing.T) {
+	if got := escapeRecordText(strings.Repeat("x", 500), 160); len(got) > 160 {
+		t.Fatalf("a cut path is %d bytes, over the 160-byte bound", len(got))
+	}
+	got := escapeRecordText("a\u0085b\u009bc", 160)
+	if strings.ContainsAny(got, "\u0085\u009b") || !strings.Contains(got, `\x85`) || !strings.Contains(got, `\x9b`) {
+		t.Fatalf("C1 controls must be escaped: %q", got)
+	}
+}
