@@ -155,8 +155,8 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
-    nix/guest-release-policy.md|scripts/check-guest-floor-paths|scripts/selftest-guest-floor-paths|scripts/test-guest-floor-commit-free)
-      add_explanation "$path -> ignored (guest release policy notes and CI tooling; not deployed to host or guest closures)"
+    nix/guest-release-policy.md|nix/guest-security-surfaces.txt|scripts/check-guest-floor-paths|scripts/selftest-guest-floor-paths|scripts/test-guest-floor-commit-free|scripts/check-guest-security-epoch|scripts/selftest-guest-security-epoch)
+      add_explanation "$path -> ignored (guest release policy notes, the security-surface list read only by the CI epoch check, and CI tooling; not deployed to host or guest closures)"
       continue
       ;;
     docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*|testdata/*)
@@ -361,6 +361,15 @@ for path in "${changed[@]}"; do
       mark_host_os
       mark_guest_boot_contract
       add_explanation "$path -> guest release policy (security_epoch, guest_abi, guest_abi_min): host OS + canonical guest image. A raised security_epoch refuses every older release-bound snapshot at its next wake"
+      # With the deploy base and head named (the CI deploy-impact job does),
+      # say whether the epoch rose, so a security raise is visible at deploy time.
+      if [[ -n "${DEPLOY_IMPACT_BASE:-}" && -n "${DEPLOY_IMPACT_HEAD:-}" ]]; then
+        old_epoch="$(git show "$DEPLOY_IMPACT_BASE:nix/guest-release-policy.json" 2>/dev/null | jq -r '.security_epoch // empty' 2>/dev/null || true)"
+        new_epoch="$(git show "$DEPLOY_IMPACT_HEAD:nix/guest-release-policy.json" 2>/dev/null | jq -r '.security_epoch // empty' 2>/dev/null || true)"
+        if [[ "$old_epoch" =~ ^[0-9]+$ && "$new_epoch" =~ ^[0-9]+$ ]] && ((new_epoch > old_epoch)); then
+          add_explanation "security epoch raised ${old_epoch}->${new_epoch}: every hibernated computer's older release-bound snapshot refuses at its next wake and cold boots onto this release"
+        fi
+      fi
       ;;
     nix/guest-floor-paths.txt)
       mark_host_os

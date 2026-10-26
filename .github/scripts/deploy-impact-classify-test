@@ -291,8 +291,28 @@ guest_floor_paths_output="$(run_classifier "nix/guest-floor-paths.txt")"
 assert_contains "$guest_floor_paths_output" "deploy_host_os=true"
 assert_contains "$guest_floor_paths_output" "nix/guest-floor-paths.txt -> guest floor list"
 
-guest_release_tooling_output="$(run_classifier "nix/guest-release-policy.md" "scripts/check-guest-floor-paths" "scripts/selftest-guest-floor-paths" "scripts/test-guest-floor-commit-free")"
+guest_release_tooling_output="$(run_classifier "nix/guest-release-policy.md" "scripts/check-guest-floor-paths" "scripts/selftest-guest-floor-paths" "scripts/test-guest-floor-commit-free" "nix/guest-security-surfaces.txt" "scripts/check-guest-security-epoch" "scripts/selftest-guest-security-epoch")"
 assert_contains "$guest_release_tooling_output" "deploy_needed=false"
 assert_not_contains "$guest_release_tooling_output" "unknown deployed path"
+
+# D2 S1c: with the deploy base and head named, a policy change that raises
+# security_epoch says so (the deploy explanation); without them it does not.
+epoch_repo="$(mktemp -d)"
+trap 'rm -rf "$epoch_repo"' EXIT
+(
+  cd "$epoch_repo"
+  git init -q
+  mkdir nix
+  printf '{"security_epoch":1,"guest_abi":1,"guest_abi_min":1}\n' >nix/guest-release-policy.json
+  git add -A && git -c user.name=t -c user.email=t@t commit -q -m one
+  printf '{"security_epoch":3,"guest_abi":1,"guest_abi_min":1}\n' >nix/guest-release-policy.json
+  git add -A && git -c user.name=t -c user.email=t@t commit -q -m two
+)
+epoch_raised_output="$(cd "$epoch_repo" && printf 'nix/guest-release-policy.json\n' | DEPLOY_IMPACT_BASE=HEAD~1 DEPLOY_IMPACT_HEAD=HEAD "$CLASSIFIER")"
+assert_contains "$epoch_raised_output" "security epoch raised 1->3"
+epoch_same_output="$(cd "$epoch_repo" && printf 'nix/guest-release-policy.json\n' | DEPLOY_IMPACT_BASE=HEAD DEPLOY_IMPACT_HEAD=HEAD "$CLASSIFIER")"
+assert_not_contains "$epoch_same_output" "security epoch raised"
+epoch_unnamed_output="$(cd "$epoch_repo" && printf 'nix/guest-release-policy.json\n' | "$CLASSIFIER")"
+assert_not_contains "$epoch_unnamed_output" "security epoch raised"
 
 printf 'deploy-impact-classify-test: ok\n'

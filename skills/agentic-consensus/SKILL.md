@@ -570,6 +570,19 @@ For each issue include file/path, exact failure mode, severity, and suggested fi
 If you find no blocking issue, say so explicitly and name the main residual risk.
 ```
 
+When the diff touches a guest security surface (a prefix in
+`nix/guest-security-surfaces.txt`), add this question to the code-review
+prompt (D2 design 6.6; `scripts/check-guest-security-epoch`):
+
+```text
+Security effect: this diff changes guest code that decides what a guest may do, read or reach.
+Answer explicitly: does it carry a security fix or tighten an authority, credential or egress boundary?
+If yes, it must raise security_epoch in nix/guest-release-policy.json in the same change.
+If no, say "security effect: none" and why in one sentence; the author then adds the trailers
+  Security-Effect: none; <why, at least 20 characters>
+  Security-Effect-Reviewed-By: <your seat>; review <N>
+```
+
 For planning, use:
 
 ```text

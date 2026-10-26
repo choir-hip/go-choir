@@ -1,0 +1,303 @@
+#!/usr/bin/env bash
+# The security-epoch check (docs/design/density-d2-snapshots-survive-deploys-
+# 2026-10-26.md 6.6, slice S1c; FP0 ruling of 2026-10-26, open to the owner's
+# reversal).
+#
+# A hibernated computer resumes onto its own guest release unless the floor
+# digest or the security epoch moved. The epoch (nix/guest-release-policy.json)
+# is how a security fix outside the floor reaches a hibernated computer, so it
+# must not depend on the author's memory. This check refuses a change to a
+# named security surface (nix/guest-security-surfaces.txt) unless, in the SAME
+# change, the epoch is raised or the commit carries both trailers
+#
+#   Security-Effect: none; <why, at least 20 characters>
+#   Security-Effect-Reviewed-By: <devin|deepseek|owner>; <review N | owner YYYY-MM-DD>
+#
+# It also refuses any fall of the epoch, and protects its own gate (rule 6).
+#
+#   scripts/check-guest-security-epoch [--base REF] [--head REF]
+#   scripts/check-guest-security-epoch --lists-only
+#
+# --base defaults to $GUEST_SECURITY_EPOCH_BASE, then HEAD~1. In CI the base is
+# the live staging commit (never the push's before-SHA); locally use
+# --base $(git merge-base origin/main HEAD). A base that cannot be read, even
+# after one fetch retry, and an all-zero base FAIL: a check that passes when it
+# cannot see the base is open exactly when a fetch fails. Exit 1 on failure.
+#
+# Rules:
+#   1. range = base..head; commits = rev-list --no-merges; touched paths of a
+#      commit = diff-tree against its first parent, minus *_test.go,
+#      */testdata/* and *.md.
+#   2. E(x) = .security_epoch of the policy file at x. Missing at the base
+#      counts as 0; an unparsable file at the head or at any commit that
+#      changed it fails.
+#   3. Monotone: every commit that changed the policy file has E(c) >= E(c^),
+#      and E(head) >= E(base). No override.
+#   4. Coverage: if E(head) > E(base) the range passes (every older release-bound
+#      snapshot refuses at wake). Otherwise each commit touching a surface needs
+#      both trailers in its own message (a later commit does not cover it).
+#   5. Sanity: the surfaces file exists at the head; no surface prefix equals,
+#      contains, or lies under a path in nix/guest-floor-paths.txt.
+#   6. The gate protects itself: a commit that touches a gate file (the surfaces
+#      list, this script, its selftest, .github/scripts/deploy-base-select, or a
+#      .github/workflows/ci.yml diff line naming this script or plan.outputs.base)
+#      needs the trailers ALWAYS, with `Security-Effect: gate change; <why>`; an
+#      epoch raise does not excuse it. Surfaces match against the UNION of the
+#      list at the base and at the head. The head's ci.yml must still invoke this
+#      script in the v1-inventory job, which must not set continue-on-error.
+#      (CI also runs the base's copy of this script; see ci.yml.)
+set -euo pipefail
+
+POLICY=nix/guest-release-policy.json
+SURFACES=nix/guest-security-surfaces.txt
+FLOOR=nix/guest-floor-paths.txt
+CI_YML=.github/workflows/ci.yml
+GATE_FILES=(nix/guest-security-surfaces.txt scripts/check-guest-security-epoch scripts/selftest-guest-security-epoch .github/scripts/deploy-base-select)
+
+base=${GUEST_SECURITY_EPOCH_BASE:-}
+head=HEAD
+lists_only=false
+while [ $# -gt 0 ]; do
+	case $1 in
+	--base) base=$2; shift 2 ;;
+	--head) head=$2; shift 2 ;;
+	--lists-only) lists_only=true; shift ;;
+	*) echo "usage: $0 [--base REF] [--head REF] | --lists-only" >&2; exit 2 ;;
+	esac
+done
+
+fails=0
+fail() { echo "guest-security-epoch: FAIL: $*" >&2; fails=$((fails + 1)); }
+
+# prefixes TEXT: normalized lines (comments and blanks dropped, trailing / removed).
+prefixes() { sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | sed 's|/*$||' || true; }
+
+# sanity_lists SURFACES_TEXT FLOOR_TEXT: rule 5.
+sanity_lists() {
+	local s f
+	while IFS= read -r s; do
+		[ -n "$s" ] || continue
+		while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			if [ "$s" = "$f" ] || [[ $s == "$f"/* ]] || [[ $f == "$s"/* ]]; then
+				fail "surface prefix $s/ is equal to, contains, or lies under the floor path $f (a surface is outside the floor by definition; the floor moves by itself)"
+			fi
+		done <<<"$2"
+	done <<<"$1"
+}
+
+if [ "$lists_only" = true ]; then
+	[ -r "$SURFACES" ] || { echo "guest-security-epoch: FAIL: cannot read $SURFACES" >&2; exit 1; }
+	[ -r "$FLOOR" ] || { echo "guest-security-epoch: FAIL: cannot read $FLOOR" >&2; exit 1; }
+	surfaces=$(prefixes <"$SURFACES")
+	[ -n "$surfaces" ] || fail "$SURFACES lists no prefixes"
+	sanity_lists "$surfaces" "$(prefixes <"$FLOOR")"
+	[ "$fails" -eq 0 ] || exit 1
+	echo "guest-security-epoch: lists ok ($(printf '%s\n' "$surfaces" | grep -c .) surface prefixes, none in the floor)"
+	exit 0
+fi
+
+[ -n "$base" ] || base="$head~1"
+
+have_commit() { git cat-file -e "$1^{commit}" 2>/dev/null; }
+ensure_base() {
+	have_commit "$1" && return 0
+	git remote get-url origin >/dev/null 2>&1 || return 1
+	git fetch --no-tags --depth=1 origin "$1" >/dev/null 2>&1 || true
+	have_commit "$1" && return 0
+	git fetch --no-tags --depth=200 origin "$1" >/dev/null 2>&1 || true
+	have_commit "$1"
+}
+
+if [ -z "$(printf '%s' "$base" | tr -d '0')" ]; then
+	echo "guest-security-epoch: FAIL: the base is empty or all zeros; there is no commit to compare against, and a check that passes without a base is open (CI passes the live staging commit)" >&2
+	exit 1
+fi
+if ! have_commit "$head"; then
+	echo "guest-security-epoch: FAIL: head $head cannot be read here" >&2
+	exit 1
+fi
+if ! ensure_base "$base"; then
+	echo "guest-security-epoch: FAIL: base $base cannot be read here after a fetch retry (shallow checkout, rewritten history or a fetch failure); the check cannot prove the range is covered" >&2
+	exit 1
+fi
+
+# show REV PATH: the file at REV, or fail.
+show() { git show "$1:$2" 2>/dev/null; }
+
+# epoch_at REV: prints a non-negative integer, MISSING (no file) or BAD.
+epoch_at() {
+	local text v
+	if ! text=$(show "$1" "$POLICY"); then
+		echo MISSING
+		return 0
+	fi
+	if v=$(printf '%s' "$text" | jq -er '.security_epoch | select(type == "number" and . >= 0 and . == floor)' 2>/dev/null); then
+		echo "$v"
+	else
+		echo BAD
+	fi
+}
+
+# --- the lists (rule 5, 6) ---------------------------------------------------
+head_surfaces_text=$(show "$head" "$SURFACES") || head_surfaces_text=""
+if [ -z "$head_surfaces_text" ]; then
+	fail "$SURFACES does not exist (or is empty) at head $head"
+fi
+base_surfaces_text=$(show "$base" "$SURFACES") || base_surfaces_text=""
+head_surfaces=$(printf '%s\n' "$head_surfaces_text" | prefixes)
+base_surfaces=$(printf '%s\n' "$base_surfaces_text" | prefixes)
+[ -n "$head_surfaces" ] || fail "$SURFACES lists no prefixes at head"
+union_surfaces=$(printf '%s\n%s\n' "$base_surfaces" "$head_surfaces" | grep -v '^$' | sort -u || true)
+floor_text=$( { show "$head" "$FLOOR" || true; printf '\n'; show "$base" "$FLOOR" || true; } )
+floor_paths=$(printf '%s\n' "$floor_text" | prefixes | sort -u)
+if [ -z "$floor_paths" ]; then
+	fail "$FLOOR does not exist (or lists nothing) at head $head; the surfaces cannot be checked against the floor"
+fi
+sanity_lists "$union_surfaces" "$floor_paths"
+
+# --- the CI step (rule 6) -----------------------------------------------------
+ci_text=$(show "$head" "$CI_YML") || ci_text=""
+if [ -z "$ci_text" ]; then
+	fail "$CI_YML does not exist at head"
+else
+	job=$(printf '%s\n' "$ci_text" | awk '/^  v1-inventory:[[:space:]]*$/ {inj=1; next} inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {inj=0} inj')
+	# An invocation: the script path as a command word, outside a comment
+	# (whole-line or trailing) and not an echo of it.
+	if ! printf '%s\n' "$job" | sed -E 's/(^|[[:space:]])#.*$//' | grep -v -E '(^|[^A-Za-z0-9_])echo[[:space:]]' | grep -q -E '(^|[^A-Za-z0-9_./:-])(\./)?scripts/check-guest-security-epoch([[:space:]]|$)'; then
+		fail "$CI_YML at head no longer invokes scripts/check-guest-security-epoch in the v1-inventory job (the staging deploy depends on that job through check)"
+	fi
+	if printf '%s\n' "$job" | sed -E 's/(^|[[:space:]])#.*$//' | grep -q 'continue-on-error'; then
+		fail "the v1-inventory job at head sets continue-on-error: a failure of this check would not block the deploy"
+	fi
+fi
+
+# --- the policy (rules 2, 3) ----------------------------------------------------
+head_epoch=$(epoch_at "$head")
+base_epoch=$(epoch_at "$base")
+[ "$base_epoch" != MISSING ] || base_epoch=0
+if [ "$head_epoch" = MISSING ] || [ "$head_epoch" = BAD ]; then
+	fail "$POLICY at head is $( [ "$head_epoch" = MISSING ] && echo missing || echo unparsable ); security_epoch must be a non-negative integer"
+	head_epoch=0
+fi
+if [ "$base_epoch" = BAD ]; then
+	fail "$POLICY at base $base is unparsable; the check cannot prove the epoch did not fall"
+	base_epoch=0
+fi
+if [ "$head_epoch" -lt "$base_epoch" ]; then
+	fail "security_epoch falls $base_epoch -> $head_epoch between base and head; the epoch never falls (a revert of a raise keeps the raised value)"
+fi
+
+if ! commits=$(git rev-list --no-merges --reverse "$base..$head" 2>/dev/null); then
+	echo "guest-security-epoch: FAIL: cannot list $base..$head (history is not available here)" >&2
+	exit 1
+fi
+
+# trailers of a commit message: only the real trailer block.
+trailers_of() { git log -1 --format=%B "$1" | git interpret-trailers --parse 2>/dev/null || true; }
+
+re_none='^Security-Effect: none; .{20,}$'
+re_gate='^Security-Effect: gate change; .{20,}$'
+re_rev='^Security-Effect-Reviewed-By: (devin|deepseek|owner); (review [0-9]+|owner [0-9]{4}-[0-9]{2}-[0-9]{2})$'
+
+covered_lines=()
+for c in $commits; do
+	sha12=${c:0:12}
+	subject=$(git log -1 --format=%s "$c")
+	parent_epoch=MISSING
+	if git rev-parse -q --verify "$c^" >/dev/null 2>&1; then
+		parent_epoch=$(epoch_at "$c^")
+	fi
+	[ "$parent_epoch" != MISSING ] || parent_epoch=0
+	[ "$parent_epoch" != BAD ] || parent_epoch=0
+	files=$(git diff-tree --no-commit-id --name-only -r --root "$c")
+
+	policy_changed=false
+	surface_hits=()
+	gate_hits=()
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		[ "$f" != "$POLICY" ] || policy_changed=true
+		for g in "${GATE_FILES[@]}"; do
+			[ "$f" != "$g" ] || gate_hits+=("$f")
+		done
+		if [ "$f" = "$CI_YML" ]; then
+			if git diff "$c^" "$c" -- "$CI_YML" 2>/dev/null | grep -E '^[+-][^+-]' | grep -qE 'check-guest-security-epoch|plan\.outputs\.base'; then
+				gate_hits+=("$f")
+			fi
+		fi
+		case $f in *_test.go | */testdata/* | *.md) continue ;; esac
+		while IFS= read -r p; do
+			[ -n "$p" ] || continue
+			case $f in "$p"/*) surface_hits+=("$f"); break ;; esac
+		done <<<"$union_surfaces"
+	done <<<"$files"
+
+	if [ "$policy_changed" = true ]; then
+		c_epoch=$(epoch_at "$c")
+		if [ "$c_epoch" = MISSING ] || [ "$c_epoch" = BAD ]; then
+			fail "commit $sha12 \"$subject\" leaves $POLICY $( [ "$c_epoch" = MISSING ] && echo deleted || echo unparsable )"
+		elif [ "$c_epoch" -lt "$parent_epoch" ]; then
+			fail "commit $sha12 \"$subject\" lowers security_epoch $parent_epoch -> $c_epoch; the epoch never falls, with no override"
+		fi
+	fi
+
+	need_gate=false
+	need_none=false
+	[ ${#gate_hits[@]} -eq 0 ] || need_gate=true
+	if [ ${#surface_hits[@]} -gt 0 ] && [ "$head_epoch" -le "$base_epoch" ]; then
+		need_none=true
+	fi
+	[ "$need_gate" = true ] || [ "$need_none" = true ] || continue
+
+	tr=$(trailers_of "$c")
+	has_none=false has_gate=false has_rev=false
+	while IFS= read -r line; do
+		[[ $line =~ $re_none ]] && has_none=true
+		[[ $line =~ $re_gate ]] && has_gate=true
+		[[ $line =~ $re_rev ]] && has_rev=true
+	done <<<"$tr"
+
+	missing=()
+	if [ "$need_gate" = true ] && [ "$has_gate" != true ]; then
+		missing+=("Security-Effect: gate change; <why, at least 20 characters> (a gate file changed: ${gate_hits[*]}; an epoch raise does not excuse it)")
+	fi
+	if [ "$need_none" = true ] && [ "$has_none" != true ]; then
+		missing+=("Security-Effect: none; <why, at least 20 characters>, or raise security_epoch in $POLICY")
+	fi
+	if [ "$has_rev" != true ]; then
+		missing+=("Security-Effect-Reviewed-By: <devin|deepseek|owner>; <review N | owner YYYY-MM-DD>")
+	fi
+	if [ ${#missing[@]} -gt 0 ]; then
+		touched=()
+		[ ${#surface_hits[@]} -eq 0 ] || touched+=("${surface_hits[@]}")
+		[ ${#gate_hits[@]} -eq 0 ] || touched+=("${gate_hits[@]}")
+		echo "guest-security-epoch: FAIL $sha12 \"$subject\" touches ${touched[*]}" >&2
+		for m in "${missing[@]}"; do echo "    missing trailer: $m" >&2; done
+		fails=$((fails + 1))
+	else
+		covered_lines+=("$sha12 $(printf '%s\n' "$tr" | grep -E '^Security-Effect' | tr '\n' ' ')")
+	fi
+done
+
+if [ "$fails" -ne 0 ]; then
+	cat >&2 <<MSG
+guest-security-epoch: $fails problem(s) in $base..$head.
+Remedies. Before the commit lands on main: amend it with the trailers after its
+review (Security-Effect: none; <why>, Security-Effect-Reviewed-By: <seat>; <ref>),
+or raise security_epoch in $POLICY in the same commit. After it is on main:
+a follow-up commit that raises security_epoch covers the whole range from the
+deployed base. Trailers cannot be added to a pushed commit. The epoch never
+falls, and a gate-file change needs the gate-change trailer even with a raise.
+MSG
+	exit 1
+fi
+
+for l in "${covered_lines[@]:-}"; do
+	[ -z "$l" ] || echo "guest-security-epoch: covered $l"
+done
+if [ "$head_epoch" -gt "$base_epoch" ]; then
+	echo "guest-security-epoch: PASS: security_epoch raised $base_epoch -> $head_epoch; every older release-bound snapshot refuses at wake"
+else
+	echo "guest-security-epoch: PASS: $base..$head (security_epoch $base_epoch)"
+fi
