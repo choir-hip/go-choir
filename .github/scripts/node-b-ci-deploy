@@ -902,10 +902,26 @@
   fi
   echo "    Public frontend asset /assets/$served_asset resolves through current/previous asset roots"
   if [ "${DEPLOY_FRONTEND}" = "true" ]; then
-    if ! grep -Fq "$DEPLOY_COMMIT" "$served_asset_path"; then
-      echo "Selected frontend asset ${served_asset_path} does not contain workflow commit ${DEPLOY_COMMIT}" >&2
+    # The build commit lives in build-info.js; Vite may split it into its own
+    # chunk when a second entry (read.html) shares it, so the commit is looked
+    # for in the entry and in the chunks the entry imports directly.
+    commit_asset=""
+    if grep -Fq "$DEPLOY_COMMIT" "$served_asset_path"; then
+      commit_asset="$served_asset"
+    else
+      served_asset_dir=$(dirname "$served_asset_path")
+      for dep in $(grep -oE '"\./[A-Za-z0-9_.-]+\.js"' "$served_asset_path" | tr -d '"' | sed 's#^\./##' | sort -u); do
+        if [ -f "$served_asset_dir/$dep" ] && grep -Fq "$DEPLOY_COMMIT" "$served_asset_dir/$dep"; then
+          commit_asset="$dep"
+          break
+        fi
+      done
+    fi
+    if [ -z "$commit_asset" ]; then
+      echo "Selected frontend asset ${served_asset_path} and the chunks it imports do not contain workflow commit ${DEPLOY_COMMIT}" >&2
       exit 1
     fi
+    echo "    Frontend commit ${DEPLOY_COMMIT} found in /assets/${commit_asset}"
     receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
       jq --arg commit "$DEPLOY_COMMIT" --arg asset "$served_asset" \
         '. + {frontend: {commit: $commit, status: "active", asset: $asset}}')
