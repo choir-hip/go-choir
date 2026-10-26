@@ -252,3 +252,25 @@ func TestCheckpointCadenceConfigDropsWildcardAndClassTokens(t *testing.T) {
 		t.Fatalf("selector = %v, want the two ids only", got)
 	}
 }
+
+// Re-review 338 (Devin, low): selectsComputer trims each token before it
+// matches, so a list built outside parseComputerSelector with " *" or
+// " class:test" must not survive the selector's own drop and then match.
+func TestCheckpointCadenceSelectorDropsPaddedWildcardAndClassTokens(t *testing.T) {
+	if got := checkpointCadenceIDs([]string{" *", "\tclass:test ", "computer-selected "}); !reflect.DeepEqual(got, []string{"computer-selected"}) {
+		t.Fatalf("ids = %q, want the trimmed id only", got)
+	}
+	cfg := balloonTestVMConfig()
+	cfg.ComputerID = "computer-selected"
+	cfg.WarmnessClass = "test"
+	for _, only := range [][]string{{" *"}, {"class:test "}, {" class:test"}} {
+		mgr := balloonTestManager(t, func(c *ManagerConfig) {
+			c.CheckpointCadenceOnly = only
+			c.CheckpointCadenceEveryEvents = 2500
+			c.CheckpointCadenceEvery = "60m"
+		})
+		if got := bootArgsOf(t, mgr.buildFirecrackerConfig(cfg, 9001)); strings.Contains(got, "choir.checkpoint_every") {
+			t.Fatalf("%q selected a computer: %s", only, got)
+		}
+	}
+}
