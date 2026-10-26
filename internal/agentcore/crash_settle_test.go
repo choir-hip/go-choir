@@ -136,6 +136,7 @@ func TestCrashBootRecordsJournaledApplyWithoutReapplying(t *testing.T) {
 	ctx := context.Background()
 	offer := fx.mintPlatformUpdateOffer(t, "update-journaled", "<html>journaled</html>", fx.currentHead(t))
 	acceptedDigest := fx.seedAcceptedPlatformUpdate(t, offer)
+	fx.useDurableAttemptCount(t)
 
 	// The updater finished the apply after the runtime that asked for it died.
 	request, err := fx.rt.platformUpdateApplyRequest(ctx, offer, acceptedDigest)
@@ -312,6 +313,7 @@ func TestCrashBootRecordsJournaledSelfDevelopmentApply(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	fx.controlFail.Store(false)
+	fx.useDurableAttemptCount(t)
 
 	fx.rt.closeSelfDevelopmentOperationsAfterCrash(ctx)
 	callsBefore := fx.applyCalls.Load()

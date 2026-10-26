@@ -183,7 +183,7 @@ func TestCrashBootSettlementThatCrashedTwiceClosesDegraded(t *testing.T) {
 	if got.State != selfdev.StateDegraded {
 		t.Fatalf("operation state = %s, want %s after the settlement crashed twice", got.State, selfdev.StateDegraded)
 	}
-	if !strings.Contains(got.TerminalError, "crashed the computer twice") {
+	if !strings.Contains(got.TerminalError, "did not finish on two boots") || strings.Contains(got.TerminalError, "crashed the computer") {
 		t.Fatalf("terminal error %q does not name the cause", got.TerminalError)
 	}
 	if n := fx.settlementAttempts(t, operation.OperationID); n != 2 {
@@ -229,5 +229,62 @@ func TestCrashBootSettlementSpendsOneAttemptPerBoot(t *testing.T) {
 	current, err := fx.operations.Get(context.Background(), fx.computerID, operation.OperationID)
 	if err != nil || current.State != selfdev.StateMaterializing {
 		t.Fatalf("operation after five passes = %+v (%v), want it still materializing", current, err)
+	}
+}
+
+// Review 309, finding 5: the bound fails closed. A runtime with no durable
+// attempt count cannot bound the settlement, so it refuses to run it: the
+// operation stays where it is, nothing is bound, and the updater is not called.
+func TestCrashBootSettlementWithoutADurableAttemptCountRefuses(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-settle-unbounded")
+	operation := fx.parkAppliedButUnrecorded(t, "op-settle-unbounded")
+	fx.rt.cfg.StorePath = "" // no durable count: nothing could bound the settlement
+	fx.controlFail.Store(false)
+	callsBefore := fx.applyCalls.Load()
+
+	fx.bootAfterCrash(t)
+	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+
+	got, err := fx.operations.Get(context.Background(), fx.computerID, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != selfdev.StateMaterializing || got.CheckpointRef != "" || got.RouteReceipt != "" {
+		t.Fatalf("an unbounded settlement ran: %+v", got)
+	}
+	if len(fx.checkpoints) != 0 {
+		t.Fatalf("an unbounded settlement bound %d checkpoints", len(fx.checkpoints))
+	}
+	if calls := fx.applyCalls.Load(); calls != callsBefore {
+		t.Fatalf("the settlement called the updater (%d -> %d)", callsBefore, calls)
+	}
+}
+
+// Review 309, finding 4: an operation still `accepted` has installed nothing,
+// so a settlement that crashed twice settles it `failed` (there is no
+// accepted -> degraded edge, and degraded means applied with an unsettled
+// tail). A materializing operation has installed something and stays degraded.
+func TestSettlementThatCrashedTwiceSettlesAnAcceptedOperationFailed(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-settle-accepted")
+	ctx := context.Background()
+	operation, _, _ := fx.seedOperationToAwaitingApproval(t, "op-settle-accepted")
+	accepted, err := fx.operations.Transition(ctx, fx.computerID, operation.OperationID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, func(*selfdev.Operation) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, accepted); err != nil {
+		t.Fatalf("close an accepted operation: %v", err)
+	}
+
+	got, err := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != selfdev.StateFailed {
+		t.Fatalf("accepted operation closed as %s, want %s", got.State, selfdev.StateFailed)
+	}
+	if !strings.Contains(got.TerminalError, "did not finish on two boots") {
+		t.Fatalf("terminal error %q does not name the cause", got.TerminalError)
 	}
 }

@@ -191,12 +191,12 @@ func TestReplayScratchEstimateCountsTheBaseInstallPeak(t *testing.T) {
 	if need != want {
 		t.Fatalf("estimate = %d, want 2 x blob (%d) + 3 tail events x %d = %d", need, descriptor.BlobSizeBytes, replayScratchPerEventBytes, want)
 	}
-	volume := &fakeScratchVolume{avail: replayScratchReserveBytes + need - 1}
+	volume := &fakeScratchVolume{avail: replayScratchReserve(100*replayScratchTestGiB) + need - 1}
 	rt.replayScratchUsage = volume.usage
 	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-estimate"); !errors.Is(err, ErrReplayScratchInsufficient) {
 		t.Fatalf("one byte short of estimate plus reserve: %v, want ErrReplayScratchInsufficient", err)
 	}
-	volume.set(replayScratchReserveBytes + need)
+	volume.set(replayScratchReserve(100*replayScratchTestGiB) + need)
 	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-estimate"); err != nil {
 		t.Fatalf("exactly estimate plus reserve refused: %v", err)
 	}
@@ -305,5 +305,51 @@ func TestReplayProbeBaseTailWitnessEqualsGenesisWitness(t *testing.T) {
 	}
 	if !reflect.DeepEqual(baseWitness, genesisWitness) {
 		t.Fatalf("base-plus-tail witness differs from the genesis witness:\nbase    %+v\ngenesis %+v", baseWitness, genesisWitness)
+	}
+}
+
+// Review 309, finding 2: the reserve is max(2 GiB, 10% of the volume), as the
+// problem doc specifies, not a flat 2 GiB.
+func TestReplayScratchReserveIsTheLargerOfTwoGiBAndTenPercent(t *testing.T) {
+	twoGiB := uint64(2) << 30
+	cases := []struct {
+		total, want uint64
+	}{
+		{0, twoGiB},
+		{8 * replayScratchTestGiB, twoGiB},
+		{20 * replayScratchTestGiB, twoGiB},
+		{32 * replayScratchTestGiB, 32 * replayScratchTestGiB / 10},
+		{100 * replayScratchTestGiB, 10 * replayScratchTestGiB},
+	}
+	for _, c := range cases {
+		if got := replayScratchReserve(c.total); got != c.want {
+			t.Fatalf("reserve on a %d-byte volume = %d, want %d", c.total, got, c.want)
+		}
+	}
+}
+
+// The admission and the watch read the same reserve: on a 100 GiB volume the
+// reserve is 10 GiB, so 5 GiB free (over a flat 2 GiB) refuses at admission
+// and stops a probe in flight.
+func TestReplayScratchAdmissionAndWatchUseTheVolumeReserve(t *testing.T) {
+	rt, cas, _ := replayScratchRuntime(t, "computer-scratch-pct", 4)
+	volume := &fakeScratchVolume{avail: 5 * replayScratchTestGiB}
+	rt.replayScratchUsage = volume.usage
+	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-pct"); !errors.Is(err, ErrReplayScratchInsufficient) {
+		t.Fatalf("admission with 5 GiB free on a 100 GiB volume: %v, want ErrReplayScratchInsufficient", err)
+	}
+
+	volume.set(50 * replayScratchTestGiB)
+	rt.replayScratchPoll = time.Millisecond
+	cas.onEvents = func() {
+		volume.set(5 * replayScratchTestGiB) // over 2 GiB, under 10% of the volume
+		seen := volume.callCount()
+		deadline := time.Now().Add(5 * time.Second)
+		for volume.callCount() < seen+2 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-pct"); !errors.Is(err, ErrReplayScratchInsufficient) {
+		t.Fatalf("probe in flight with 5 GiB free on a 100 GiB volume: %v, want ErrReplayScratchInsufficient", err)
 	}
 }
