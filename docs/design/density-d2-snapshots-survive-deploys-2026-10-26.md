@@ -1620,3 +1620,37 @@ with what the build did and what FP0 should rule.
 21. **S5: an unreadable `/proc/cpuinfo` at hibernate leaves `HostCPU` empty,**
     and a release-bound snapshot then refuses at wake (`host_cpu_unknown`); the
     hibernate still frees the memory. Test fixtures stub the reader.
+22. **Review 331 (tier 2) and its adjudication.**
+    - *DeepSeek, HIGH: the review-318 wiring checks are self-referential.*
+      **Accepted, and the honest limit stated:** no check in `ci.yml`'s
+      repository can be a boundary against a commit that edits the workflow that
+      runs it (a step `if:`, a `run:` replaced). The review-318 rules stay (any
+      `ci.yml` change is a gate change; `ci-impact-classify`, the `non_docs`
+      switch, is now a gate file; the `check` job's block is checked too), and the
+      control that commit cannot edit is the **Node B deploy gate**
+      (`scripts/node-b-ci-gate`, `epoch_gate`). On a deploy it runs the
+      previously deployed commit's copy of `scripts/check-guest-security-epoch`
+      over deployed..target, before the floor moves, from a mode file nix writes
+      (`ciGateEpochCheck`): `off` (shipped), `observe`, `enforce`. The test
+      `.github/scripts/node-b-ci-gate-epoch-test` has the single commit that
+      skips the CI step, neuters the script and changes a surface: refused in
+      `enforce`. Turning it on is FP0's act, observe first (a red deploy-path
+      change; rollback `off`). A pull_request_target workflow would also work for
+      pull requests but not for FP0's direct pushes to main.
+    - *Both, HIGH: a third marker writer (`writeRestoreRestartMarker`) bypassed
+      the fence.* **Accepted:** it takes the same non-waiting fence slot; a
+      fenced restore request defers and the idle poller waits for the fence.
+    - *DeepSeek 3 (race), accepted:* `Manager.GuestReleaseHealth` builds the
+      map under the manager lock; the adapter uses it. *DeepSeek 4
+      (non-hermetic test), accepted and reproduced:* the apply-attempts sidecar
+      is removed. *DeepSeek 5, accepted:* retention treats a 404 as no answer
+      and deletes nothing (a vmctl rollback with release-bound VMs running).
+      *Devin 2, 3 and DeepSeek 6, accepted:* the materialize cases skip without
+      GNU coreutils; the stale comment is fixed; the retention test runs in
+      `v1-inventory`; the host's busy log carries the guest's `reason`.
+    - *Devin 4, accepted in part:* the wiring check reads the `check` job's
+      block too (no `continue-on-error`, no step `if:`). *Devin 5 stands:* a
+      guest still on a pre-S5 build can have a guest-internal mark captured until
+      it updates; the host's in-flight guard covers the host-driven window.
+    - *Landing:* three lane commits touch gate files or a surface and need the
+      trailers at landing (FP0), as before.

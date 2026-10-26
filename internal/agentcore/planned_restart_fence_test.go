@@ -236,7 +236,15 @@ func TestRestoreRestartMarkerRefusedWhileFenced(t *testing.T) {
 	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); err != nil {
 		t.Fatalf("the deferred restore restart never wrote its marker after the fence lifted: %v", err)
 	}
-	if n, ok := rt.hibernate.close(time.Minute); !ok || n != 0 {
-		t.Fatalf("a finished restore-restart write left a work slot taken: inflight=%d ok=%v", n, ok)
+	// The marker is visible a moment before the writer releases its slot.
+	var n int
+	var ok bool
+	for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		if n, ok = rt.hibernate.close(time.Minute); ok {
+			break
+		}
+	}
+	if !ok {
+		t.Fatalf("a finished restore-restart write left a work slot taken: inflight=%d", n)
 	}
 }

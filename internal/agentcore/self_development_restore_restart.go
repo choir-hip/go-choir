@@ -72,7 +72,18 @@ func (rt *Runtime) restoreRestarter() (func(context.Context) error, error) {
 // writeRestoreRestartMarker writes the planned-restart marker for a restore
 // restart. A restore is not an apply: it spends no apply attempt (R4), so a
 // fifth restore to the same checkpoint restarts like the first.
+//
+// The write is one work occurrence through the hibernate fence, taken without
+// waiting (D2 S5; review 331, both seats): a closed fence refuses it with
+// errHibernateFenced before anything is written, and the fence cannot close
+// until the write returns. A marker written between the fence and the pause
+// would be captured in the snapshot.
 func (rt *Runtime) writeRestoreRestartMarker(target string) error {
+	release, ok := rt.hibernate.tryEnter()
+	if !ok {
+		return errHibernateFenced
+	}
+	defer release()
 	return WritePlannedRestartMarker(rt.cfg.StorePath, PlannedRestart{Reason: PlannedRestartSelfDevelopmentRestore, Target: target})
 }
 
@@ -129,6 +140,11 @@ func (rt *Runtime) requestRestoreRestart(ctx context.Context, target string) (sc
 		return false, why + "; the restart into the restored release waits for the next idle moment"
 	}
 	if err := rt.writeRestoreRestartMarker(target); err != nil {
+		if errors.Is(err, errHibernateFenced) {
+			// Being hibernated: wait for the fence to lift, as for a busy computer.
+			go rt.restartRestoredWhenIdle(target)
+			return false, "the guest is being hibernated; the restart into the restored release waits for the next idle moment"
+		}
 		log.Printf("restore: %v; no restart into the restored release", err)
 		return false, "the planned-restart marker could not be written (" + err.Error() + "); the previous binary keeps serving until the next restart"
 	}
@@ -169,6 +185,9 @@ func (rt *Runtime) restartRestoredWhenIdle(target string) {
 			continue
 		}
 		if err := rt.writeRestoreRestartMarker(target); err != nil {
+			if errors.Is(err, errHibernateFenced) {
+				continue // being hibernated: try again at the next poll
+			}
 			log.Printf("restore: %v; no restart into the restored release %s", err, target)
 			return
 		}

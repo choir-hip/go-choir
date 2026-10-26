@@ -354,3 +354,29 @@ func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
 	}
 	return use
 }
+
+// GuestReleaseVMState is the release a live VM was launched from and whether
+// it is behind the current release.
+type GuestReleaseVMState struct {
+	GuestRelease string
+	Behind       bool
+}
+
+// GuestReleaseHealth is the current release and, for each running VM launched
+// from a release, that release. The map is built under the manager lock: the
+// instances' state and config are mutated under it by every lifecycle (review
+// 331 DeepSeek 3).
+func (m *Manager) GuestReleaseHealth() (string, map[string]GuestReleaseVMState) {
+	current := m.currentReleaseID()
+	out := map[string]GuestReleaseVMState{}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for vmID, inst := range m.vms {
+		rel := inst.Config.GuestRelease
+		if rel == "" || inst.State != StateRunning {
+			continue
+		}
+		out[vmID] = GuestReleaseVMState{GuestRelease: rel, Behind: current != "" && current != rel}
+	}
+	return current, out
+}

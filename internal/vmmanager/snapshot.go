@@ -1000,6 +1000,7 @@ type guestHibernatePrepareResponse struct {
 	Status              string    `json:"status"`
 	Outcome             string    `json:"outcome,omitempty"`
 	Error               string    `json:"error,omitempty"`
+	Reason              string    `json:"reason,omitempty"`
 	CapabilityExpiresAt time.Time `json:"capability_expires_at,omitempty"`
 	GuestBuild          string    `json:"guest_build,omitempty"`
 	CredentialResume    bool      `json:"credential_resume,omitempty"`
@@ -1050,7 +1051,7 @@ func guestHibernatePrepare(ctx context.Context, hostURL string) (guestHibernateP
 	case status == http.StatusOK && resp.Status == "prepared":
 		return resp, "", nil
 	case status == http.StatusConflict:
-		return resp, snapshotReasonGuestBusy, fmt.Errorf("guest busy: running_runs=%d selfdev_active=%d", resp.RunningRuns, resp.SelfdevActiveOps)
+		return resp, snapshotReasonGuestBusy, fmt.Errorf("guest busy: running_runs=%d selfdev_active=%d reason=%q", resp.RunningRuns, resp.SelfdevActiveOps, resp.Reason)
 	case status == http.StatusNotFound || status == http.StatusMethodNotAllowed:
 		return resp, snapshotReasonGuestNoEndpoint, fmt.Errorf("guest answered %d", status)
 	default:

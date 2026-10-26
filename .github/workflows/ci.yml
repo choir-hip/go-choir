@@ -194,6 +194,7 @@ jobs:
           .github/scripts/node-b-vm-slice-preflight-test
           .github/scripts/node-b-sync-service-pointers-test
           .github/scripts/node-b-ci-gate-test
+          .github/scripts/node-b-ci-gate-epoch-test
           bash -n .github/scripts/*
 
   go-vet-build:
@@ -504,6 +505,7 @@ jobs:
         run: |
           scripts/check-guest-floor-paths
           scripts/selftest-guest-floor-paths
+          bash scripts/test-node-b-guest-release-retention.sh
 
       # The security-epoch check (docs/design/density-d2-snapshots-survive-
       # deploys-2026-10-26.md 6.6, S1c): a change to a named guest security
@@ -864,6 +866,7 @@ jobs:
           .github/scripts/deploy-receipt-merge-test
           .github/scripts/node-b-sync-service-pointers-test
           .github/scripts/node-b-ci-gate-test
+          .github/scripts/node-b-ci-gate-epoch-test
 
       - name: Read deployed base receipt from Node B
         # Best effort: the receipt is the deployed-base candidate when /health
