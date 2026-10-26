@@ -342,6 +342,15 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	if theirs.exists && !cand.exists {
 		return conflictDropped, nil
 	}
+	// P modifies a file the new base deleted: nothing to merge against, so the
+	// candidate must hold P's exact post-image. Any other text (B's original
+	// included) drops P's hunks (re-review 337).
+	if !ours.exists && theirs.exists {
+		if cand.entry == theirs.entry {
+			return conflictResolved, nil
+		}
+		return conflictDropped, nil
+	}
 	if !(ours.regular() && base.regular() && theirs.regular()) {
 		// Added, deleted, binary-mode or special entries cannot be merged by
 		// text: the whole-path rule (the candidate differs from B').
