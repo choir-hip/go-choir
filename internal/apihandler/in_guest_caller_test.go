@@ -37,6 +37,7 @@ func TestInGuestLoopbackCallerCannotActAsOwner(t *testing.T) {
 		{http.MethodPost, "/api/computers/routes-test/self-development/operations/op-1/decision", `{"decision":"approve"}`},
 		{http.MethodPost, "/internal/runtime/planned-restart", `{"reason":"forged","target":"x"}`},
 		{http.MethodPost, "/internal/runtime/hibernate/prepare", `{}`},
+		{http.MethodPost, "/internal/runtime/memory/cache-return", `{"mode":"idle","scope":"daemon"}`},
 		{http.MethodPost, "/internal/runtime/platform-update", `{}`},
 		{http.MethodPost, "/internal/runtime/runs/run-1/events?owner_id=owner-1", `{}`},
 		{http.MethodGet, "/internal/texture/documents/document-1", ""},
