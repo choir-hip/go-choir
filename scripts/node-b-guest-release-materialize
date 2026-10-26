@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Materialize a guest image as a release directory
+# (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md 4.1, slice S2).
+#
+#   node-b-guest-release-materialize SRC RELEASES_DIR
+#
+# SRC is the guest image's Nix store path; its release id is the first 32
+# characters of the basename (the Nix store hash). The files are reflink copies
+# in RELEASES_DIR/<id>/, root-owned and read-only, so the bytes outlive the
+# store path's garbage collection. Called from the go-choir-guest-release
+# activation snippet in nix/node-b.nix, before the guest link moves.
+#
+# It never fails the NixOS switch: every step is checked, any failure removes
+# the temporary tree, logs the reason, and the script exits 0 (a release that
+# is not materialized only means its snapshots cold boot). It never falls back
+# to a full copy: --reflink=always, because a silent copy is GBs per deploy.
+# GO_CHOIR_RELEASE_REFLINK=auto exists for the tests on filesystems without
+# reflinks.
+(
+	set +e +u +o pipefail
+	src="$1"
+	rel="$2"
+	mode="${GO_CHOIR_RELEASE_REFLINK:-always}"
+	id=$(basename "$src" | cut -c1-32)
+	note() { echo "go-choir guest release $id not materialized ($1); snapshots of it will cold boot" >&2; }
+	if ! printf '%s' "$id" | grep -Eq '^[0-9a-df-np-sv-z]{32}$'; then
+		note "not a store path"
+		exit 0
+	fi
+	[ -d "$rel/$id" ] && exit 0
+	tmp="$rel/.tmp-$id"
+	[ -e "$tmp" ] && { chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"; }
+	mkdir -p "$tmp" || { note "mkdir"; rm -rf "$tmp"; exit 0; }
+	for f in vmlinux initrd rootfs.ext4 storedisk.erofs kernel-params build.json guest-image-manifest release.json; do
+		cp --reflink="$mode" "$src/$f" "$tmp/$f" || { note "reflink $f"; rm -rf "$tmp"; exit 0; }
+	done
+	printf '{"store_path":"%s","first_current_at":"%s"}\n' "$src" "$(date -u +%FT%TZ)" >"$tmp/installed.json" \
+		&& chmod 0444 "$tmp"/* \
+		&& chmod 0555 "$tmp" \
+		&& { sync -f "$tmp/installed.json" 2>/dev/null || sync; } \
+		&& mv -T "$tmp" "$rel/$id" \
+		|| { note "finish"; chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"; exit 0; }
+	exit 0
+) || true
+exit 0
