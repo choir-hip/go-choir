@@ -275,3 +275,88 @@ func TestResearchWakePromptAsksForTheStoryEntitiesWhenTheRuleApplies(t *testing.
 		t.Fatalf("management: prompt = %q", p)
 	}
 }
+
+// F5 (review 324 F1): the rule holds a Report no legal call can free. When
+// this run's analysis has no System 1 answers, choir.Relate has no basis:
+// a story with no candidates is recorded with an empty list (the analysis
+// was built and found none), and an analysis that failed (System 1 off, no
+// decision model, the judge or the candidates read failing) frees this
+// run's final Report as a platform failure does, recording nothing.
+func TestFinishRuleIsSatisfiableWhenTheAnalysisHasNoAnswers(t *testing.T) {
+	relateEmpty := func(f *analysisFixture, runID string) (attachDecoded, error) {
+		payload, _ := json.Marshal(yaegikernel.RelatePayload{})
+		raw, err := f.rt.deskEgress(context.Background(), agentprofile.Research, f.deskExec(runID, "doc-story"), yaegikernel.ActionRelate, payload)
+		if err != nil {
+			return attachDecoded{}, err
+		}
+		return decodeAttach(t, raw), nil
+	}
+
+	t.Run("no candidates", func(t *testing.T) {
+		f := newAnalysisFixture(t)
+		f.turnOn(t)
+		f.cpub.resp = types.EntityCandidatesResponse{}
+		a := f.analyse(t, agentprofile.Research, "run-none", "doc-story")
+		if a == nil || len(a.Candidates) != 0 || a.Error != "" || f.judgeCalls() != 0 {
+			t.Fatalf("analysis = %+v, judge calls %d", a, f.judgeCalls())
+		}
+		if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err == nil {
+			t.Fatal("the Report passed before the story was recorded")
+		}
+		got, err := relateEmpty(f, "run-none")
+		if err != nil || !got.Exported {
+			t.Fatalf("Relate(\"\", nil) with no candidates = %+v, %v", got, err)
+		}
+		recs := f.records(t)
+		if len(recs) != 1 || len(recs[0].Attachments) != 0 || recs[0].Review == nil || recs[0].Review.Counts.Candidates != 0 {
+			t.Fatalf("records = %+v, want one review with nothing attached", recs)
+		}
+		if exports := f.epub.entityCalls(); len(exports) != 1 || exports[0].Review == nil || len(exports[0].Entities) != 0 {
+			t.Fatalf("exports = %+v", exports)
+		}
+		if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err != nil {
+			t.Fatalf("after the empty record: %v", err)
+		}
+	})
+
+	failures := []struct {
+		name  string
+		setup func(t *testing.T, f *analysisFixture)
+	}{
+		{"System 1 off", func(t *testing.T, f *analysisFixture) {
+			t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_RUN", "")
+			t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_DAY", "")
+		}},
+		{"no decision model", func(t *testing.T, f *analysisFixture) { f.rt.candidateJudge = nil }},
+		{"the judge fails", func(t *testing.T, f *analysisFixture) { f.judge.err = errors.New("the decision model is down") }},
+		{"the candidates read fails", func(t *testing.T, f *analysisFixture) {
+			f.cpub.err = &platformStatusError{Path: types.StoryEntityCandidatesPath, Status: http.StatusServiceUnavailable, Body: "corpusd is restarting"}
+		}},
+	}
+	for _, tc := range failures {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAnalysisFixture(t)
+			f.turnOn(t)
+			tc.setup(t, f)
+			runID := "run-" + strings.ReplaceAll(tc.name, " ", "-")
+			a := f.analyse(t, agentprofile.Research, runID, "doc-story")
+			if a == nil || a.Error == "" {
+				t.Fatalf("analysis = %+v, want its error", a)
+			}
+			// No basis for "about none": the analysis did not judge.
+			if _, err := relateEmpty(f, runID); err == nil {
+				t.Fatal("Relate(\"\", nil) recorded a story the analysis could not judge")
+			}
+			if err := f.finishGate(t, runID, "research:doc-story", agentprofile.Research); err != nil {
+				t.Fatalf("the final Report is held though no call can free it: %v", err)
+			}
+			if recs := f.records(t); len(recs) != 0 {
+				t.Fatalf("records = %+v, want none", recs)
+			}
+			// Another run's failed analysis frees nothing.
+			if err := f.finishGate(t, "run-other", "research:doc-story", agentprofile.Research); err == nil {
+				t.Fatal("another run's failed analysis freed this run's Report")
+			}
+		})
+	}
+}
