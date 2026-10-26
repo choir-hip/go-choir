@@ -98,6 +98,12 @@ type CheckpointRequest struct {
 	FrontendIdentity      FrontendIdentity      `json:"frontend_identity"`
 	TapeCompleteness      string                `json:"tape_completeness,omitempty"`
 	CompleteFromHead      string                `json:"complete_from_head,omitempty"`
+	// DepositMode is the live store's deposit mode when the witness was taken
+	// (DepositModeRetained or DepositModeUpcast; absent on checkpoints bound
+	// before the field existed). The host's verdict needs it: its rebuild
+	// always upcasts, so a mismatch against a retained store is not proof
+	// that the rows are underivable (residual R1).
+	DepositMode string `json:"deposit_mode,omitempty"`
 }
 
 type Checkpoint struct {
