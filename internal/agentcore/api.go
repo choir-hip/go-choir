@@ -142,20 +142,27 @@ type effectiveReleaseIdentity struct {
 // (VAL-RUNTIME-001). The active provider name is included so operators
 // can distinguish real-provider paths from stub/canned paths.
 type runtimeHealthResponse struct {
-	Status                string                   `json:"status"`
-	Service               string                   `json:"service"`
-	ComputerID            string                   `json:"computer_id"`
-	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
-	RunningRuns           int                      `json:"running_runs"`
-	DeskPendingMutations  int                      `json:"desk_pending_mutations,omitempty"`
-	SelfdevActiveOps      int                      `json:"selfdev_active_operations,omitempty"`
-	ActiveProvider        string                   `json:"active_provider"`
-	PersistentDisk        *persistentdisk.Status   `json:"persistent_disk,omitempty"`
-	Build                 buildinfo.Info           `json:"build"`
-	SelfDevelopmentMarker string                   `json:"self_development_marker,omitempty"`
-	EventSchemaVersion    uint64                   `json:"event_schema_version,omitempty"`
-	ReducerVersion        uint64                   `json:"reducer_version,omitempty"`
-	ReleaseDigest         string                   `json:"release_digest,omitempty"`
+	Status               string                   `json:"status"`
+	Service              string                   `json:"service"`
+	ComputerID           string                   `json:"computer_id"`
+	RuntimeHealth        types.RuntimeHealthState `json:"runtime_health"`
+	RunningRuns          int                      `json:"running_runs"`
+	DeskPendingMutations int                      `json:"desk_pending_mutations,omitempty"`
+	SelfdevActiveOps     int                      `json:"selfdev_active_operations,omitempty"`
+	// LiveCapsules is the count of engineering capsules a restart would
+	// destroy, the one planned_restart.go counts (density D3a). A pointer so
+	// 0 is reported: a guest that predates the field omits it, and vmctl
+	// keeps the legacy idle rule for such a guest. A parked run, a capsule
+	// before its first Freeze and a frozen candidate awaiting approval all
+	// read 0 in the three fields above.
+	LiveCapsules          *int                   `json:"live_capsules,omitempty"`
+	ActiveProvider        string                 `json:"active_provider"`
+	PersistentDisk        *persistentdisk.Status `json:"persistent_disk,omitempty"`
+	Build                 buildinfo.Info         `json:"build"`
+	SelfDevelopmentMarker string                 `json:"self_development_marker,omitempty"`
+	EventSchemaVersion    uint64                 `json:"event_schema_version,omitempty"`
+	ReducerVersion        uint64                 `json:"reducer_version,omitempty"`
+	ReleaseDigest         string                 `json:"release_digest,omitempty"`
 	// LayeringBootguard carries the release key whose layered exec the
 	// boot-loop guard refused (S2-e). Non-empty means the base runtime is
 	// serving instead of current/'s layered release; /health returns 503 so
@@ -704,6 +711,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		RunningRuns:          h.rt.RunningCount(),
 		DeskPendingMutations: reads.deskPending,
 		SelfdevActiveOps:     reads.selfdevActive,
+		LiveCapsules:         &reads.liveCapsules,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
@@ -756,6 +764,7 @@ type healthStoreStalled struct {
 type healthStoreReads struct {
 	deskPending   int
 	selfdevActive int
+	liveCapsules  int
 	identity      EffectiveRelease
 	unanswered    []string
 }
@@ -783,6 +792,12 @@ func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration)
 	}
 	desk := start(rt.pendingDeskMutations)
 	selfdevOps := start(rt.activeSelfdevOperations)
+	// The capsule count is a fail-closed read: an error is unanswered, not 0.
+	capsules := make(chan answer[int], 1)
+	go func() {
+		value, err := rt.liveCapsuleCountForHealth(ctx)
+		capsules <- answer[int]{value, err == nil && ctx.Err() == nil}
+	}()
 	release := make(chan answer[EffectiveRelease], 1)
 	go func() {
 		value := rt.EffectiveRelease(ctx)
@@ -803,6 +818,7 @@ func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration)
 	}
 	out.deskPending = awaitInt("desk_pending_mutations", desk)
 	out.selfdevActive = awaitInt("selfdev_active_operations", selfdevOps)
+	out.liveCapsules = awaitInt("live_capsules", capsules)
 	select {
 	case got := <-release:
 		if got.ok {

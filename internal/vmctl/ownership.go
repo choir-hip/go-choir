@@ -581,6 +581,18 @@ type OwnershipRegistry struct {
 	// work (autoputer /health reports running_runs>0). Nil falls back to the
 	// HTTP probe; tests inject a deterministic stub.
 	guestBusyProbe func(own *VMOwnership) bool
+	// guestHealthProbe is guestBusyProbe with what else the answer showed
+	// (density D3a): whether the guest reports live_capsules. Nil falls back
+	// to guestBusyProbe (reporting) and then the HTTP probe.
+	guestHealthProbe func(own *VMOwnership) guestHealthReading
+	// guestReportsCapsules is each guest's last answer to "does your /health
+	// carry live_capsules", from a live probe.
+	guestReportsCapsules map[string]bool
+	// legacyGuestIdleTimeout is the idle timeout of a guest whose /health
+	// does not report live_capsules: such a guest cannot be told from one
+	// holding a parked capsule, so the shorter idleTimeout does not apply
+	// to it. Zero means no such rule (every guest uses idleTimeout).
+	legacyGuestIdleTimeout time.Duration
 	// guestBusySeen is each guest's last busy answer from a live probe.
 	// vmctl health reads it instead of probing, so a guest that never
 	// answers cannot make vmctl itself look down
@@ -1077,6 +1089,17 @@ func (r *OwnershipRegistry) SetIdleTimeout(d time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.idleTimeout = d
+}
+
+// SetLegacyGuestIdleTimeout sets the idle timeout for a guest that does not
+// report live_capsules in /health (density D3a). The idle sweep, pressure
+// reclaim and make-room hibernate such a guest only after it has been idle
+// this long, however short idleTimeout and the reclaim idle are. Zero turns
+// the rule off.
+func (r *OwnershipRegistry) SetLegacyGuestIdleTimeout(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.legacyGuestIdleTimeout = d
 }
 
 // SetPressureReclaimConfig configures pressure-aware lifecycle behavior.
@@ -3581,13 +3604,13 @@ func (r *OwnershipRegistry) CheckIdleVMs() []string {
 // CheckIdleOwnerships returns idle ownership records whose VMs have exceeded
 // the idle timeout and should be stopped or hibernated.
 func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
-	return r.checkIdleOwnerships(r.guestBusy())
+	return r.checkIdleOwnerships(r.hibernationHold(r.guestBusy(), time.Now))
 }
 
 // IdleOwnershipsSeen is CheckIdleOwnerships from the guests' last recorded
 // busy answers, without probing any guest. For health only.
 func (r *OwnershipRegistry) IdleOwnershipsSeen() []*VMOwnership {
-	return r.checkIdleOwnerships(r.guestBusySeenAnswer())
+	return r.checkIdleOwnerships(r.hibernationHold(r.guestBusySeenAnswer(), time.Now))
 }
 
 func (r *OwnershipRegistry) checkIdleOwnerships(busy func(*VMOwnership) bool) []*VMOwnership {
@@ -3632,28 +3655,83 @@ func (r *OwnershipRegistry) checkIdleOwnerships(busy func(*VMOwnership) bool) []
 	return idle
 }
 
+// guestHealthReading is what one /health answer says about a guest.
+type guestHealthReading struct {
+	// Busy: live work, or an answer that cannot be taken as idle.
+	Busy bool
+	// ReportsCapsules: the answer carried live_capsules (density D3a). A
+	// live capsule is Busy; a guest that lacks the field is not known to be
+	// free of one.
+	ReportsCapsules bool
+}
+
 // guestBusy returns the busy-check closure used by the idle sweep and
 // pressure reclaim. It fails closed (Phase 0 step 3): only an explicit 200
 // /health reporting no work is idle. An unreachable, non-200 (a replaying
 // guest answers 503) or unreadable answer is busy — a stopped computer loses
 // whatever it was doing, and a truly dead guest is the wedge watchdog's.
 func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
-	probe := r.guestBusyProbe
+	probe := r.guestHealthProbe
 	if probe == nil {
-		probe = httpGuestBusy()
+		if busyProbe := r.guestBusyProbe; busyProbe != nil {
+			probe = func(own *VMOwnership) guestHealthReading {
+				return guestHealthReading{Busy: busyProbe(own), ReportsCapsules: true}
+			}
+		} else {
+			probe = httpGuestHealth()
+		}
 	}
 	return func(own *VMOwnership) bool {
-		busy := probe(own)
+		reading := probe(own)
 		if own != nil {
 			r.mu.Lock()
 			if r.guestBusySeen == nil {
 				r.guestBusySeen = make(map[string]bool)
 			}
-			r.guestBusySeen[own.VMID] = busy
+			r.guestBusySeen[own.VMID] = reading.Busy
+			if r.guestReportsCapsules == nil {
+				r.guestReportsCapsules = make(map[string]bool)
+			}
+			r.guestReportsCapsules[own.VMID] = reading.ReportsCapsules
 			r.mu.Unlock()
 		}
-		return busy
+		return reading.Busy
 	}
+}
+
+// holdReasonLegacyGuest is why a hibernation decider leaves a guest alone
+// that is idle past the short timer but not past the legacy one.
+const holdReasonLegacyGuest = "guest_does_not_report_live_capsules"
+
+// hibernationHoldReason answers, for a decider that hibernates (the idle
+// sweep, pressure reclaim, make-room), why a guest must be left alone: "busy",
+// holdReasonLegacyGuest, or "" when it may go. The legacy rule (density D3a)
+// holds a guest whose /health lacks live_capsules until it has been idle
+// legacyGuestIdleTimeout; it is not busy forever. Deploy refresh uses
+// guestBusy directly, so it still reaches old guests.
+func (r *OwnershipRegistry) hibernationHoldReason(busy func(*VMOwnership) bool, now func() time.Time) func(*VMOwnership) string {
+	return func(own *VMOwnership) string {
+		if busy(own) {
+			return "busy"
+		}
+		r.mu.RLock()
+		legacy := r.legacyGuestIdleTimeout
+		reports := r.guestReportsCapsules[own.VMID]
+		r.mu.RUnlock()
+		if legacy <= 0 || reports {
+			return ""
+		}
+		if !own.LastActiveAt.IsZero() && now().Sub(own.LastActiveAt) > legacy {
+			return ""
+		}
+		return holdReasonLegacyGuest
+	}
+}
+
+// hibernationHold is hibernationHoldReason as a busy check.
+func (r *OwnershipRegistry) hibernationHold(busy func(*VMOwnership) bool, now func() time.Time) func(*VMOwnership) bool {
+	reason := r.hibernationHoldReason(busy, now)
+	return func(own *VMOwnership) bool { return reason(own) != "" }
 }
 
 // guestBusySeenAnswer answers from the last recorded probe. A guest never
@@ -3671,32 +3749,43 @@ func (r *OwnershipRegistry) guestBusySeenAnswer() func(*VMOwnership) bool {
 }
 
 func httpGuestBusy() func(*VMOwnership) bool {
+	probe := httpGuestHealth()
+	return func(own *VMOwnership) bool { return probe(own).Busy }
+}
+
+func httpGuestHealth() func(*VMOwnership) guestHealthReading {
 	client := &http.Client{Timeout: 4 * time.Second}
-	return func(own *VMOwnership) bool {
+	busy := guestHealthReading{Busy: true}
+	return func(own *VMOwnership) guestHealthReading {
 		base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")
 		if base == "" {
-			return false
+			// No address: the guest cannot be asked, so it cannot be shown
+			// idle. Fail closed like every other unanswered probe.
+			return busy
 		}
 		req, err := http.NewRequest(http.MethodGet, base+"/health", nil)
 		if err != nil {
-			return true
+			return busy
 		}
 		hostauth.MarkInternal(req)
 		resp, err := client.Do(req)
 		if err != nil {
-			return true
+			return busy
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return true
+			return busy
 		}
 		var health struct {
 			RunningRuns          int `json:"running_runs"`
 			DeskPendingMutations int `json:"desk_pending_mutations"`
 			SelfdevActiveOps     int `json:"selfdev_active_operations"`
+			// LiveCapsules is a pointer: absent is a guest that predates
+			// the field, not zero live capsules.
+			LiveCapsules *int `json:"live_capsules"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
-			return true
+			return busy
 		}
 		// running_runs covers in-flight activations; desk_pending_mutations
 		// covers the gap between them — a controller that owes the document
@@ -3704,16 +3793,28 @@ func httpGuestBusy() func(*VMOwnership) bool {
 		// selfdev_active_operations covers the mid-transaction states
 		// (executing/accepted/materializing/rollback_pending) whose loss is
 		// not restart-repairable; parked states are excluded so a wedged op
-		// cannot pin the guest busy forever.
+		// cannot pin the guest busy forever. live_capsules (density D3a)
+		// covers the capsules those three miss: a parked run's, one before
+		// its first Freeze, a frozen candidate awaiting approval.
 		// Receipts: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md,
-		// docs/problems/capsule-subject-artifact-ephemeral-2026-09-28.md
-		return health.RunningRuns > 0 || health.DeskPendingMutations > 0 || health.SelfdevActiveOps > 0
+		// docs/problems/capsule-subject-artifact-ephemeral-2026-09-28.md,
+		// docs/problems/idle-hibernate-blind-to-live-capsules-2026-10-26.md
+		reading := guestHealthReading{ReportsCapsules: health.LiveCapsules != nil}
+		reading.Busy = health.RunningRuns > 0 || health.DeskPendingMutations > 0 || health.SelfdevActiveOps > 0 ||
+			(health.LiveCapsules != nil && *health.LiveCapsules > 0)
+		return reading
 	}
 }
 
 // setGuestBusyProbeForTest pins the busy signal deterministically.
 func (r *OwnershipRegistry) setGuestBusyProbeForTest(probe func(*VMOwnership) bool) {
 	r.guestBusyProbe = probe
+}
+
+// setGuestHealthProbeForTest pins the busy signal and whether the guest
+// reports live_capsules.
+func (r *OwnershipRegistry) setGuestHealthProbeForTest(probe func(*VMOwnership) guestHealthReading) {
+	r.guestHealthProbe = probe
 }
 
 // StopIdleVMs transitions all idle VMs to hibernated state.

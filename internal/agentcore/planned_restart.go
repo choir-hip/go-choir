@@ -384,18 +384,37 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 		}
 		work.SelfdevActive = len(ops)
 	}
-	if countCapsules && rt.store != nil {
-		assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
+	if countCapsules {
+		live, err := rt.liveCapsuleCount(ctx)
 		if err != nil {
-			return work, fmt.Errorf("cannot read engineering assignments: %w", err)
+			return work, err
 		}
-		for _, assignment := range assignments {
-			if plannedRestartLiveCapsule(assignment) {
-				work.LiveCapsules++
-			}
-		}
+		work.LiveCapsules = live
 	}
 	return work, nil
+}
+
+// liveCapsuleCount counts the computer's assignments whose capsule a restart
+// would destroy (plannedRestartLiveCapsule). It is the one counter: the
+// planned-restart refusal and /health's live_capsules (density D3a, which
+// vmctl's idle decision reads) both call it. It fails closed: an unreadable
+// assignment list is an error, never a 0 that reads as idle.
+func (rt *Runtime) liveCapsuleCount(ctx context.Context) (int, error) {
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" || rt.store == nil {
+		return 0, nil
+	}
+	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		return 0, fmt.Errorf("cannot read engineering assignments: %w", err)
+	}
+	live := 0
+	for _, assignment := range assignments {
+		if plannedRestartLiveCapsule(assignment) {
+			live++
+		}
+	}
+	return live, nil
 }
 
 // plannedRestartLiveCapsule reports an assignment whose capsule a restart

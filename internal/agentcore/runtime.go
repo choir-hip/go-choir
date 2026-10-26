@@ -280,7 +280,9 @@ type Runtime struct {
 	bootLog               *bootLogRing
 	// storeStall rate-limits /health's store_stalled holder log
 	// (api_health_stall_holder.go).
-	storeStall            storeStallCapture
+	storeStall storeStallCapture
+	// liveCapsules is /health's cached, single-flight capsule count (density D3a).
+	liveCapsules          liveCapsuleCache
 	capsuleBuilder        *transaction.TransactionBuilder
 	eventAppender         *computerevent.ComputerEventAppender
 	selfdevOperations     *selfdev.Store
