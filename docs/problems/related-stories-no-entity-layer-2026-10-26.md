@@ -120,6 +120,17 @@ rollback, like `CORPUSD_RELATED`.
   `related_story`) to the entity, metadata exactly `{"role": ...}`; a role
   change tombstones the other role's edge.
 - Threads (`choir.topic_thread`, `in_thread`) are not built in this lane.
+- Review 298 (tier 2) fixes: two new entities of one normalised name in
+  one request are refused (F1); the duplicate check is a seek on the
+  `choir.entity` `$.normalized` lookup key (F2); a call whose role differs
+  from the tape's latest record for that story and entity is recorded as a
+  role change, so the tape and the live edge never disagree (F3).
+  Accepted as is (F4): the export writes rows and edges one at a time, not
+  in one transaction; a failure part way leaves some edges written, the
+  tape holds the whole record, and a repeat re-exports it.
+- Review 299 (slice b): the hub cut counts raw central citers, before
+  eligibility; it can only make an entity a hub sooner (documented in code,
+  not read row by row).
 
 ### Slice c, the design taken (before code)
 

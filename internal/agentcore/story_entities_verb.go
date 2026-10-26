@@ -129,7 +129,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		return nil, fmt.Errorf("choir.Relate: read the tape: %w", err)
 	}
 	answered := map[string]types.EventRecord{}
-	recorded := map[string]bool{}                // story, entity, role on the tape
+	latest := map[string]string{}                // story, entity -> the latest recorded role
 	minted := map[string]storyEntityAttachment{} // entities this tape minted
 	for _, ev := range tape {
 		switch {
@@ -141,7 +141,8 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 				continue
 			}
 			for _, a := range rec.Attachments {
-				recorded[entityAttachmentKey(rec.Story, a.EntityID, a.Role)] = true
+				// The tape is read oldest first, so the last record wins.
+				latest[entityAttachmentKey(rec.Story, a.EntityID)] = a.Role
 				if a.New {
 					minted[a.EntityID] = a
 				}
@@ -171,7 +172,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		}
 		attachments = append(attachments, a)
 		result.Attached = append(result.Attached, relateAttached{EntityID: a.EntityID, Name: a.Name, Role: a.Role, New: a.New,
-			Probability: a.Probability, Top: a.Top, Overrode: a.Overrode, Replayed: recorded[entityAttachmentKey(req.Story, a.EntityID, a.Role)]})
+			Probability: a.Probability, Top: a.Top, Overrode: a.Overrode, Replayed: latest[entityAttachmentKey(req.Story, a.EntityID)] == a.Role})
 	}
 
 	export := types.StoryEntitiesRequest{OwnerID: owner, ComputerID: computer, Story: req.Story}
@@ -232,8 +233,13 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	return json.Marshal(result)
 }
 
-func entityAttachmentKey(story, entity, role string) string {
-	return story + "\x00" + entity + "\x00" + role
+// entityAttachmentKey keys the latest recorded role of an entity in a story.
+// A call equal to that role is a replay (recorded once, exported again); a
+// call with another role is a role change and is recorded, even when an
+// older record holds it (review 298 F3), so the tape's latest role and
+// Store B's live edge stay one.
+func entityAttachmentKey(story, entity string) string {
+	return story + "\x00" + entity
 }
 
 // system1ChoiceBasis finds the System 1 answer an act rests on and reads the
