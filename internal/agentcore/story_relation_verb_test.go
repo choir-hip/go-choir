@@ -19,6 +19,8 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -27,7 +29,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -73,11 +74,8 @@ func newRelateFixture(t *testing.T) *relateFixture {
 	pub := &fakeRelationPublisher{}
 	f.rt.SetStoryPublisher(pub)
 	id := func(suffix string) string {
-		out, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.publication"), f.owner, suffix)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
+		sum := sha256.Sum256([]byte(suffix))
+		return "pub-" + hex.EncodeToString(sum[:])[:32]
 	}
 	return &relateFixture{system1Fixture: f, pub: pub, a: id("story-a"), b: id("story-b")}
 }

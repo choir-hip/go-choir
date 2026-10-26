@@ -177,7 +177,7 @@ type StoryRelationsRequest struct {
 }
 
 // StoryRelation is the part of a judged pair Store B keeps: two publication
-// canonical ids and the relation. The probability, the System 1 receipt and
+// ids (pub-<32 hex>, the publication_id of the published search) and the relation. The probability, the System 1 receipt and
 // the reason stay on the computer's tape.
 type StoryRelation struct {
 	StoryA   string `json:"story_a"`
