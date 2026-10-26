@@ -83,6 +83,7 @@ type checkedEntity struct {
 	canonical string
 	role      string
 	row       *objectgraph.Object // a row to write, for an entity Store B lacks
+	lex       lexiconEntity       // the lexicon's entry for a row written
 }
 
 // RecordStoryEntities stores a computer's entity attachments of one published
@@ -106,6 +107,8 @@ func (s *Service) RecordStoryEntities(ctx context.Context, req types.StoryEntiti
 			if _, err := og.InsertObjectIfAbsent(ctx, *c.row); err != nil {
 				return 0, fmt.Errorf("story entities: write %s: %w", c.canonical, err)
 			}
+			// The lexicon learns the name now: the next request matches it.
+			s.noteEntityWritten(strings.TrimSpace(req.OwnerID), c.lex)
 		}
 		if err := og.PutEdge(ctx, makeEdge(pub, c.canonical, edgeMentionsEntity, now, mentionMetadata(c.role))); err != nil {
 			return 0, fmt.Errorf("story entities: write the mention of %s: %w", c.canonical, err)
@@ -247,6 +250,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 		}
 		obj.ComputerID = computer
 		c.row = &obj
+		c.lex = lexiconEntity{EntityID: id, Canonical: canonical, Name: name, Type: typ, FirstSeen: now}
 		out = append(out, c)
 	}
 	return pub, out, og, nil

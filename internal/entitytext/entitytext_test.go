@@ -404,3 +404,31 @@ func contains(xs []string, s string) bool {
 	}
 	return false
 }
+
+func TestGazetteerLookupAndNear(t *testing.T) {
+	g := NewGazetteer()
+	vz, js, ja := types.MintedEntityID("Volodymyr Zelenskyy"), types.MintedEntityID("John Smith"), types.MintedEntityID("Jane Smith")
+	g.Add(vz, "Volodymyr Zelenskyy")
+	g.Add(vz, "Zelensky")
+	g.Add(js, "John Smith")
+	g.Add(ja, "Jane Smith")
+	if got := g.Lookup(Key("Zelensky")); len(got) != 1 || got[0] != vz {
+		t.Errorf("Lookup(alias) = %v", got)
+	}
+	if got := g.Lookup("volodymyr"); len(got) != 0 {
+		t.Errorf("Lookup of a key prefix = %v", got)
+	}
+	if got := g.Near("zelenskyy"); len(got) != 1 || got[0] != vz {
+		t.Errorf("Near(surname) = %v", got)
+	}
+	if got := g.Near("smith"); len(got) != 2 {
+		t.Errorf("Near(shared surname) = %v, want both", got)
+	}
+	if got := g.Near("john smith"); len(got) != 0 {
+		t.Errorf("Near of a whole key = %v, want none", got)
+	}
+	g.Remove(js, "John Smith")
+	if got := g.Near("smith"); len(got) != 1 || got[0] != ja {
+		t.Errorf("Near after a removal = %v", got)
+	}
+}

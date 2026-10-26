@@ -345,6 +345,20 @@ corpusd and the guest alike.
     proposal that is an entity's name or alias turned into a hit;
   - all ranked and bounded.
 
+  As built (`internal/platform/publication_entity_candidates.go`):
+  - corpusd extracts again from the bounded text with the shared package
+    and takes only each proposal's rarity from the guest, so a proposal
+    the text does not hold is never offered;
+  - near forms fold into the one entity they belong to: a proposal that
+    is part of exactly one entity's name ("Zelenskyy" of "Volodymyr
+    Zelenskyy") becomes that entity's candidate, and a proposal around
+    one hit ("Marta Kowalczyk" around "Kowalczyk") becomes that hit's alias
+    candidate; a form two entities share goes to neither;
+  - hubs are known before ranking (one edge read per hit, at most 48
+    hits); prior stories and co-entities are read for the ranked hits
+    only;
+  - the lexicon assumes one corpusd process writes Store B, as today.
+
   No new store schema: two new object kinds, `choir.entity_review` (a
   review's counts) and `choir.entity_stopword` (a phrase's
   not-an-entity evidence), are registry entries. Aliases are a field on the
