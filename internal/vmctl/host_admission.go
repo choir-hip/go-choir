@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
@@ -84,11 +85,23 @@ func DefaultHostAdmissionConfig() HostAdmissionConfig {
 		Settle:           5 * time.Minute,
 		InFlightTTL:      15 * time.Minute,
 
-		MakeRoom:             HostAdmissionMakeRoomActive,
+		// Off in code (review 302 F3): a red feature fails closed.
+		// nix/node-b.nix sets it active explicitly.
+		MakeRoom:             HostAdmissionMakeRoomOff,
 		MakeRoomMaxVictims:   defaultMakeRoomMaxVictims,
 		MakeRoomSettleWait:   defaultMakeRoomSettleWait,
 		MakeRoomPollInterval: defaultMakeRoomPollInterval,
 	}
+}
+
+// NormalizeMakeRoomMode fails closed: only an exact enabling word turns
+// make-room on; anything else, an empty value and a typo included, is off.
+func NormalizeMakeRoomMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case HostAdmissionMakeRoomActive, "on", "enabled", "true", "1":
+		return HostAdmissionMakeRoomActive
+	}
+	return HostAdmissionMakeRoomOff
 }
 
 func normalizeHostAdmissionConfig(cfg HostAdmissionConfig) HostAdmissionConfig {
@@ -111,17 +124,18 @@ func normalizeHostAdmissionConfig(cfg HostAdmissionConfig) HostAdmissionConfig {
 	if cfg.InFlightTTL <= 0 {
 		cfg.InFlightTTL = def.InFlightTTL
 	}
-	switch strings.TrimSpace(strings.ToLower(cfg.MakeRoom)) {
-	case HostAdmissionMakeRoomOff, "false", "0", "disabled", "refuse":
-		cfg.MakeRoom = HostAdmissionMakeRoomOff
-	default:
-		cfg.MakeRoom = HostAdmissionMakeRoomActive
-	}
+	cfg.MakeRoom = NormalizeMakeRoomMode(cfg.MakeRoom)
 	if cfg.MakeRoomMaxVictims <= 0 {
 		cfg.MakeRoomMaxVictims = def.MakeRoomMaxVictims
 	}
+	if cfg.MakeRoomMaxVictims > MaxMakeRoomVictims {
+		cfg.MakeRoomMaxVictims = MaxMakeRoomVictims
+	}
 	if cfg.MakeRoomSettleWait <= 0 {
 		cfg.MakeRoomSettleWait = def.MakeRoomSettleWait
+	}
+	if cfg.MakeRoomSettleWait > MaxMakeRoomSettleWait {
+		cfg.MakeRoomSettleWait = MaxMakeRoomSettleWait
 	}
 	if cfg.MakeRoomPollInterval <= 0 {
 		cfg.MakeRoomPollInterval = def.MakeRoomPollInterval
@@ -399,6 +413,12 @@ func estimateNeedWith(own *VMOwnership, acfg HostAdmissionConfig) (uint64, strin
 // refused only when nothing eligible can make the room. The caller must not
 // hold r.mu.
 func (r *OwnershipRegistry) admitHostMemory(own *VMOwnership, class WarmnessClass) (*admissionTicket, error) {
+	return r.admitHostMemoryCtx(context.Background(), own, class)
+}
+
+// admitHostMemoryCtx is admitHostMemory for a start with a request context:
+// a cancelled context stops make-room.
+func (r *OwnershipRegistry) admitHostMemoryCtx(ctx context.Context, own *VMOwnership, class WarmnessClass) (*admissionTicket, error) {
 	r.mu.RLock()
 	cfg, acfg, sampler := r.pressureReclaim, r.hostAdmission, r.pressureSampler
 	mayMakeRoom := r.makeRoomEnabledLocked()
@@ -407,7 +427,7 @@ func (r *OwnershipRegistry) admitHostMemory(own *VMOwnership, class WarmnessClas
 	if err == nil || !mayMakeRoom || !makeRoomRefusal(err) {
 		return ticket, err
 	}
-	return r.makeRoomAndAdmit(own, class, nil)
+	return r.makeRoomAndAdmit(ctx, own, class, nil)
 }
 
 // admitHostMemoryLocked is admitHostMemory for a caller holding r.mu.

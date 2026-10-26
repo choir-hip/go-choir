@@ -1559,6 +1559,12 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 }
 
 func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
+	return r.startExistingVMCtx(context.Background(), own, mgr)
+}
+
+// startExistingVMCtx is startExistingVM for a start with a request context,
+// which a cancelled caller uses to stop make-room.
+func (r *OwnershipRegistry) startExistingVMCtx(ctx context.Context, own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil || mgr == nil {
 		return nil, nil
 	}
@@ -1584,7 +1590,7 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		r.mu.RLock()
 		class := warmnessClassForOwnership(own, r.warmnessPolicy)
 		r.mu.RUnlock()
-		admitted, err := r.admitHostMemory(own, class)
+		admitted, err := r.admitHostMemoryCtx(ctx, own, class)
 		if err != nil {
 			return nil, err
 		}
@@ -2256,7 +2262,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			var info *VMInstanceInfo
 			var err error
 			if mgr != nil {
-				info, err = r.startExistingVM(pending, mgr)
+				info, err = r.startExistingVMCtx(ctx, pending, mgr)
 				if err != nil {
 					log.Printf("vmctl: start existing VM %s failed: %v", pending.VMID, err)
 					r.mu.Lock()
@@ -2347,7 +2353,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				return stillNeededLocked(r, key)
 			}
 			r.mu.Unlock()
-			ticket, err = r.makeRoomAndAdmit(candidate, class, stillNeeded)
+			ticket, err = r.makeRoomAndAdmit(ctx, candidate, class, stillNeeded)
 			if errors.Is(err, errMakeRoomSuperseded) {
 				return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
 			}
