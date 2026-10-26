@@ -3,8 +3,6 @@ package vmctl
 import (
 	"context"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/rssfall"
 )
 
 // Density D6 S4: step 0 of make-room
@@ -79,7 +77,7 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		InFlight:    st.isInFlight,
 		LastAct:     st.lastActAt,
 		Unsupported: st.isUnsupported,
-		Busy:        r.guestBusy(),
+		Busy:        busyWithin(stepCtx, r.guestBusy(), deadline, budget/4),
 		Extra: func(own *VMOwnership) bool {
 			excess, measured := excessOf(own)
 			return !measured || excess >= cacheReturnPressureMinExcess
@@ -103,14 +101,17 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		if stepCtx.Err() != nil || remaining < budget/4 {
 			break
 		}
-		if !st.begin(own.VMID, now) {
+		if !st.begin(own.VMID, r.now()) {
 			continue
 		}
-		_, fall := r.doGuestCacheReturn(stepCtx, own, "pressure", gcfg, min(rssfall.DefaultCap, max(time.Until(deadline), 0)))
+		_, fall := r.doGuestCacheReturn(stepCtx, own, "pressure", gcfg, deadline)
 		st.end(own.VMID)
 		acted = append(acted, CacheReturnedVM{VMID: own.VMID, RSSFallMiB: fall >> 20})
 		if ctx.Err() != nil {
 			break // the start went away: admit nobody, hibernate nobody
+		}
+		if stepCtx.Err() != nil || time.Until(deadline) <= 0 {
+			break // out of time: D1's plan takes its own fresh sample
 		}
 		d, ticket := r.attemptMeasuredAdmission(starter, class, cfg, acfg, sampler, false)
 		attempted, last = true, d
@@ -119,4 +120,30 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		}
 	}
 	return nil, last, attempted, acted
+}
+
+// busyWithin clips a guest busy probe to the step's deadline (review 334): the
+// probe runs on its own goroutine and is abandoned, as busy, when the step's
+// time runs out, and no probe starts with under floor left. Selection is
+// inside the one deadline, so a hung guest cannot hold the make-room slot for
+// its own client timeout times the number of computers.
+func busyWithin(ctx context.Context, probe func(*VMOwnership) bool, deadline time.Time, floor time.Duration) func(*VMOwnership) bool {
+	return func(own *VMOwnership) bool {
+		remaining := time.Until(deadline)
+		if ctx.Err() != nil || remaining < floor || remaining <= 0 {
+			return true
+		}
+		answer := make(chan bool, 1)
+		go func() { answer <- probe(own) }()
+		timer := time.NewTimer(remaining)
+		defer timer.Stop()
+		select {
+		case busy := <-answer:
+			return busy
+		case <-timer.C:
+			return true
+		case <-ctx.Done():
+			return true
+		}
+	}
 }

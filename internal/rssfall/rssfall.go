@@ -52,11 +52,20 @@ func Wait(read func() (uint64, bool), sleep func(time.Duration), rss0, reclaimed
 		}
 		return Result{RSS: cur, Exit: ExitNoWait}
 	}
+	if limit <= 0 {
+		return Result{RSS: rss0, Exit: ExitCap}
+	}
 	prev := rss0
 	var elapsed time.Duration
 	for {
-		sleep(Poll)
-		elapsed += Poll
+		// The last poll is clipped to what the limit leaves, so a short cap
+		// (the pressure step's remaining time) is not overrun by a poll.
+		step := Poll
+		if left := limit - elapsed; left < step {
+			step = left
+		}
+		sleep(step)
+		elapsed += step
 		cur, ok := read()
 		if !ok {
 			return Result{RSS: prev, MS: elapsed.Milliseconds(), Exit: ExitGone}
