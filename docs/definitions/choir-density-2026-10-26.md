@@ -109,7 +109,9 @@ finish:
         Snapshots survive a deploy where it is safe. Why deploys void them,
         what makes a snapshot of build X unsafe under host build Y, the
         planned-restart marker rules. Design first; stop at the design if
-        it is bigger than one slice.
+        it is bigger than one slice (it is: see "D2 build spec"). b@c is
+        crash-looping at boot (X1) and may not be used for any D2 proof
+        until X1 lands; use d@e and test computers.
       class: red
     - id: D3
       what: >-
@@ -118,6 +120,8 @@ finish:
         timer drops to minutes, never a computer with a live run, capsule,
         apply or self-development operation, never the paper
         (critical_protected), public_platform or the owner's computers.
+        b@c is crash-looping at boot (X1) and may not be used for any D3
+        proof until X1 lands; use d@e and test computers.
       class: red
     - id: D4
       what: >-
@@ -206,7 +210,7 @@ now:
   deploy_identity: staging 99c4d9a9a
   candidate:
     id: lane/density
-    state: rehearsing
+    state: frozen
     ref: lane/density
     base: origin/main 618727c97
     digest: none
@@ -256,8 +260,9 @@ now:
     A start that makes room waits for a full snapshot (6 to 10 s) before
     its own boot; D5 (diff) shortens it.
   next_action: >-
-    D1 failure modes, then tests, then code; push lane/density for FP0's
-    review.
+    D1 on lane/density (docs ae8301b55, tests be447ccfd, code 6020c59c9)
+    awaits FP0's review and the landing loop. D2 (design only), D3 and D4
+    go to Sonnet workers from the build specs below.
 
 receipts: []
 ---
@@ -272,3 +277,206 @@ computers give memory back before anyone asks. D5 to D7 follow.
 Review tiers: D1, D3 and D4 are red behind a config switch with a one-act
 rollback (tier 1, Devin); D1 adds concurrency on the VM lifecycle, so FP0
 may take it to tier 2. D2's design is reviewed like the change it designs.
+
+## Rules for every item (read before building D2, D3 or D4)
+
+- Problem documentation first: add the item's section to
+  `docs/problems/density-station-d-failure-modes-2026-10-26.md` (copy the D1
+  section's shape: Problem, Design, Failure modes M1..Mn, Protected
+  surfaces/evidence/rollback) and commit it alone (green). Then the tests
+  alone (yellow, "red until the code"). Then the code (red). Push
+  `lane/<name>` after each commit; never push main.
+- Focused tests only on the laptop: `go test ./internal/vmctl -run <Names>`,
+  `go test ./cmd/vmctl -run Env`, `go test ./internal/vmmanager -run <Names>`.
+  Add `-race` for anything with goroutines. Broad runs go to
+  `ssh choir-agents ~/lane-test.sh` (read its usage first).
+- Gates before every push:
+  `direnv exec . sh -c 'scripts/check-v1-writer-purity.sh && scripts/check-decode-roots.sh && scripts/check-test-hang-guards.sh && scripts/selftest-guest-token && go build ./...'`,
+  and when `nix/` changed, both evals:
+  `nix eval --raw .#nixosConfigurations.go-choir-b.config.system.build.toplevel.drvPath`
+  and the same for `go-choir-autoputer-vm`.
+- **b@c is not a proof computer until X1 lands.** b@c is crash-looping at
+  boot from the X1 bug (the crash settlement reruns the apply checkpoint
+  replay; docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
+  No density proof may use b@c, as starter or victim. Use d@e and test
+  accounts (email domains example.com / example.test, which are class
+  `test`).
+- Test fixtures (internal/vmctl): `newAdmissionFixture` and
+  `newMakeRoomFixture` (host_admission_test.go,
+  host_admission_make_room_test.go) give a registry with a fixed clock
+  (`f.now`), a settable MemAvailable (`f.setAvail`), per-VM RSS
+  (`f.mgr.setRSS` then `f.reg.sampleVMMemory()`), and a hibernate that frees
+  the VM's RSS. `addOwnership` inserts an ownership.
+- Traps found while building D1:
+  - `checkIdleOwnerships` (the idle sweep) measures idle against
+    `time.Now()`, not the registry clock; pressure reclaim and make-room use
+    `r.now()`. A sweep test must set `LastActiveAt` relative to real time.
+  - `NewOwnershipRegistry` normalizes an empty keepalive mode to `off`; the
+    `under-capacity` default lives only in `cmd/vmctl/main.go`
+    (`warmnessPolicyConfigFromEnv`, `envOr`). Test both.
+  - `rankPressureCandidates` probes every active guest over HTTP (4 s
+    timeout each) before filtering; filter first, probe last (as
+    `planMakeRoom` does).
+  - `protectedReclaimReasons` (pressure reclaim) does not exclude
+    public_platform; `warmnessClassProtected` (idle sweep) and make-room
+    do. Do not reuse the former for an exclusion rule.
+  - Make-room is enabled only when a route guard is set
+    (`SetMakeRoomRouteGuard`, done in main.go). Existing tests that never set
+    it see today's refusal; new tests must set it.
+  - `admitHostMemoryLocked` runs under `r.mu`; anything that hibernates
+    must run with `r.mu` released (see the new-computer branch of
+    `resolveDesktopContext`).
+  - GNU sed is on PATH: `sed -i ''` does not mean "no backup", it treats
+    `''` as the script. Use `sed -i` or an editor.
+
+## D2 build spec: snapshots survive a deploy where safe (design, then stop)
+
+Deliverable of this item is a **design**, not code: the change spans the
+deploy (nix), vmmanager and vmctl and needs owner-ruled inputs, so it is
+bigger than one slice. Write it as a new section "L20 revised 2026-10-26" in
+`docs/design/fp10-snapshot-levers-and-host-slab-2026-10-22.md` (its L20
+section is the starting point) and stop there for review.
+
+- Why deploys void snapshots today (state it with citations):
+  `refreshConfigForCurrentDeploy` (`internal/vmmanager/manager.go`) maps a
+  snapshot's config onto the current guest artifacts, and the deploy
+  overwrites them in place at stable paths (`nix/node-b.nix`
+  `VM_KERNEL_IMAGE=/var/lib/go-choir/guest/vmlinux`, `VM_ROOTFS_IMAGE`,
+  `VM_STORE_DISK_IMAGE`, the install loop near
+  `for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params build.json`).
+  `validateSnapshot` (`internal/vmmanager/snapshot.go`) then refuses with
+  `launch_config_mismatch` or `disk_identity_mismatch`. That refusal is
+  correct: the resumed guest's memory maps the old disk contents.
+- What makes a snapshot of build X unsafe under host build Y (each is a
+  refusal rule the design must keep or add): the Firecracker version or
+  host kernel changed (kept: `firecracker_version_mismatch`,
+  `host_kernel_mismatch`); X's disk files are gone or changed (kept: disk
+  identity); X is below the **floor** (owner ruling 2026-10-25 Q2: "all
+  host-level and security-relevant code, everything engineering has no
+  access to"; a deploy that changes the floor voids older snapshots); X is
+  older than the **support window** (owner 2026-10-25 Q1: one week; today
+  also bounded by `VM_SNAPSHOT_MAX_AGE=36h`); the host-guest protocol X
+  speaks is not served by Y (the design must say how compatibility is
+  checked, e.g. a protocol version in build.json); confinement changed
+  (kept: `confinement_mismatch`); a forced security fix (owner 2026-10-25:
+  security first; a forced fix is never deferred, and a computer is never
+  contained or stopped for it).
+- Mechanism to specify: release directories named by guest manifest digest
+  (`/var/lib/go-choir/guest/releases/<digest>/`, `current` symlink) and
+  their retention (current, previous, and any named by an unconsumed
+  snapshot inside the window); vmctl/vmmanager record the release digest
+  in `VMConfig` and `SnapshotMeta`; `expectedLaunchConfig` uses the
+  snapshot's release when retained and at or above the floor.
+- Restart rules: a computer woken onto an older release is marked behind;
+  the deferred-refresh sweep (`deploy_refresh.go`) moves it to `current` at
+  its next idle moment. An idle computer has no open obligation, so that
+  refresh needs no planned-restart marker; a busy one takes the ordinary
+  marker path (CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned
+  Update)"); a woken-behind computer must never be resumed twice by one
+  marker.
+- Failure modes the design must answer: resume onto a deleted or
+  overwritten release; resume below the floor; a behind computer never
+  refreshed; disk growth from retained releases (size each release; the
+  snapshot budget is `VM_SNAPSHOT_BUDGET_GIB=48`); the snapshot vault and
+  jailer paths (`snapshot_vault_*`, `confinement_mismatch`); credential
+  delivery on resume unchanged; a vmctl restart resumes nothing.
+- Switch for the later build: `VM_SNAPSHOT_RELEASE_RETAIN=off|on` (off is
+  today). Rollback: off, then the next deploy voids old snapshots as today.
+- Evidence the design names: on staging, hibernate d@e or a test
+  computer, deploy a guest-artifact change, wake it, and read the wake
+  timeline (`snapshot` reason absent, wake_to_healthy under 1 s) and
+  vmctl's deferred refresh moving it to `current` once idle. Not on b@c
+  until X1 lands (see the rules above).
+
+## D3 build spec: idle hibernation reaches primary computers, in minutes
+
+- Files: `nix/node-b.nix` (vmctl environment: `VMCTL_IDLE_TIMEOUT`,
+  `VMCTL_PRIMARY_KEEPALIVE_MODE`, `VMCTL_PRESSURE_RECLAIM_MIN_IDLE`);
+  `internal/vmctl/warmness_policy.go` (`idleOwnershipCandidates`,
+  only if a code change is needed); `cmd/vmctl/main.go`
+  (`warmnessPolicyConfigFromEnv` default) only if the code default
+  changes; tests in `internal/vmctl` (new `idle_hibernation_density_test.go`)
+  and `cmd/vmctl/env_config_test.go`.
+- Change: `VMCTL_PRIMARY_KEEPALIVE_MODE=off` (primary computers idle-
+  hibernate like test ones) and `VMCTL_IDLE_TIMEOUT=10m`,
+  `VMCTL_PRESSURE_RECLAIM_MIN_IDLE=10m` (make-room's idle rule follows the
+  latter). The number: 10 minutes is the snapshot-levers design's Q1
+  default and the owner asked for "before 30 minutes"; it is bounded below
+  by the full-snapshot write (6 to 10 s of 8 GiB I/O and host PSI per
+  hibernate, R1) until D5 (diff) is on, so do not go under 10m before D5.
+  Record the hibernates-per-hour before and after from vmctl's journal
+  line `hibernated VM ... reason=idle`.
+- Exclusions that must hold (already in code; pin them): protected classes
+  (`warmnessClassProtected`: premium_always_on = the owner's paid
+  computers, critical_protected = the paper, public_platform); held
+  computers; a busy guest (`httpGuestBusy`: `running_runs`,
+  `desk_pending_mutations`, `selfdev_active_operations` > 0, and any
+  non-200 or unreadable answer counts as busy).
+- Failure modes (each a test before the config change): a primary
+  computer with a live run, pending desk mutation or active
+  self-development operation is hibernated; a computer with a live
+  engineering capsule is hibernated (**verify** that a live capsule shows in
+  one of the three health fields; if it does not, that is a new problem doc
+  and a code change to the busy probe before the timer drops); the paper,
+  public_platform or owner computer is hibernated; a held computer is
+  hibernated; a computer is hibernated just after its apply restart
+  (docs/problems/idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md:
+  a planned restart is not activity, PR-09); a computer driven only by API
+  keys hibernates while busy (LastActiveAt counts resolves only; the busy
+  probe is the fence); the keepalive env default changes silently.
+- Tests: in `internal/vmctl`, call `idleOwnershipCandidates` (pure
+  function; pass `now`) with keepalive `off` and a 10m timeout over
+  ownerships of each class, busy and not, held and not, idle 9m and 11m;
+  assert exactly the idle unheld non-busy primary and test computers are
+  candidates. In `cmd/vmctl/env_config_test.go`, assert
+  `VMCTL_PRIMARY_KEEPALIVE_MODE=off` and `under-capacity` both parse.
+- Switch: the three env values. Rollback: `VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity`,
+  `VMCTL_IDLE_TIMEOUT=30m`, `VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m`.
+- Cost to state in the commit: until D2 lands, a primary computer woken
+  after a deploy cold boots (about 10 s, crash-style boot that closes open
+  obligations; an idle computer has none) instead of staying resident.
+- Evidence: staging, d@e idle 11 minutes is hibernated (`reason=idle`),
+  woken by a session request, wake timeline read. Not b@c (X1).
+
+## D4 build spec: admission charges a wake's expected cost
+
+- Files: `internal/vmctl/host_admission.go` (`estimateNeedWith`,
+  `outstandingLocked`, `sampleVMMemory`, `HostAdmissionConfig`,
+  `normalizeHostAdmissionConfig`); `internal/vmctl/ownership.go`
+  (`VMOwnership`: a new persisted field `MemorySettledRSSBytes uint64
+  json:"memory_settled_rss_bytes,omitempty"` beside `MemoryPeakRSSBytes`);
+  `cmd/vmctl/main.go` (`hostAdmissionConfigFromEnv`); `nix/node-b.nix`;
+  tests in `internal/vmctl/host_admission_test.go` and
+  `cmd/vmctl/env_config_test.go`.
+- Change: record each start's **settled RSS**, the VM's resident memory
+  when its reservation's settle window (5 minutes) ends (in
+  `outstandingLocked`, where a settled reservation expires, capture the
+  latest `led.rss` for that VM; `sampleVMMemory` persists it on the
+  ownership). With `VMCTL_ADMISSION_NEED=wake`, `estimateNeedWith` charges a
+  start the settled RSS (floored at `MinNeedBytes`, 1 GiB; clamped to the
+  guest size), falling back to `DefaultNeedBytes` (2 GiB) when unmeasured,
+  never the peak. The peak stays recorded and shown. Evidence for the
+  numbers: a snapshot wake settles at about 0.3 to 0.4 GiB and a cold boot at
+  1.15 to 1.37 GiB (docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md;
+  hibernate-writes-whole-guest R5), against b@c's 7847 MiB peak. The 1 GiB
+  floor covers both.
+- Failure modes: overcommit, the admitted computer later grows to its peak
+  and the host falls under its floor (RES-15; the backstops are sustained
+  pressure reclaim and D1 make-room on the next start; say so, and keep the
+  OOM order: ordinary VMs at oom_score_adj 500); a settled RSS taken from a
+  start that failed or was killed inside the window; the field missing on
+  old ownership files (must read as unmeasured, not zero need); protected
+  starts unchanged; guest-size mode unchanged; `VMCTL_ADMISSION_NEED=peak`
+  restores today's estimate exactly; a vmctl restart does not invent a
+  settled value.
+- Tests: the 11:49 numbers: an ownership with peak 7847 MiB and settled
+  1.2 GiB is admitted at 13202 MiB available under `wake` and refused under
+  `peak`; unmeasured charges 2 GiB; settled 300 MiB charges 1 GiB; the
+  settle capture happens only at window end and only for a started
+  reservation (`ticket.finish(true)`); a JSON round trip of an ownership
+  without the field.
+- Switch: `VMCTL_ADMISSION_NEED=wake|peak` (code default `peak` until the
+  staging proof, then flip in nix; or default `wake` if FP0 rules built
+  features default on). Rollback: `VMCTL_ADMISSION_NEED=peak`.
+- Evidence: staging, vmctl health `admission.recent` shows `need_source`
+  `settled` for d@e's wake and the need near its settled RSS. Not b@c (X1).
