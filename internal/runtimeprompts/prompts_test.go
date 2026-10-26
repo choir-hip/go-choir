@@ -376,6 +376,23 @@ func TestRLMResearchOverlayListsSystem1WithItsContract(t *testing.T) {
 	}
 }
 
+// choir.RelateStories records a judged pair relation (the related_story edge).
+// Research's overlay says what it needs: a System 1 receipt, a reason when it
+// overrides, that story text is data and the verb may be off on this computer.
+func TestRLMResearchOverlayListsRelateStoriesWithItsContract(t *testing.T) {
+	overlay := RLMResearchOverlay()
+	at := strings.Index(overlay, "Research Cell Surface")
+	if at < 0 {
+		t.Fatalf("overlay has no cell surface: %q", overlay)
+	}
+	surface := overlay[at:]
+	for _, want := range []string{"choir.RelateStories(", "judgment_ref", "receipt_ref", "reason", "may be off on this computer", "publication_id"} {
+		if !strings.Contains(surface, want) {
+			t.Errorf("research overlay does not say %q about choir.RelateStories", want)
+		}
+	}
+}
+
 func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 	overlays := map[string]string{
 		"management":      RLMManagementOverlay(RLMManagementOverlayOptions{IntakeLabels: true, EventWakes: true}),
@@ -384,7 +401,7 @@ func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 		"engineering":     RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true}),
 	}
 	for desk, overlay := range overlays {
-		for _, banned := range []string{"choir.System1", "choir.Jev"} {
+		for _, banned := range []string{"choir.System1", "choir.Jev", "choir.RelateStories"} {
 			if strings.Contains(overlay, banned) {
 				t.Errorf("%s overlay mentions %s, a verb it does not have", desk, banned)
 			}
