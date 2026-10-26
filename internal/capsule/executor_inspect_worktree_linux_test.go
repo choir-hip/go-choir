@@ -54,7 +54,7 @@ func TestInspectGrantedWorktreeReadsTheLiveTreeAndChangesNothing(t *testing.T) {
 		}
 		found := false
 		for _, change := range live.Changes {
-			if change.Path == "/workspace/platform/App.svelte" && change.Kind == ChangeAdded {
+			if change.Path == "workspace/platform/App.svelte" && change.Kind == ChangeAdded {
 				found = true
 			}
 		}
