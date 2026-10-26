@@ -352,6 +352,13 @@ type derivableSelfDevFixture struct {
 	// workspace/platform Go effect, source.patch, and its sha and base
 	// commit (P5 host build tests).
 	goPatch []byte
+	// sourceBase, when set and goPatch is not, makes writeFrozenBundle freeze
+	// a frontend-only candidate that still records its source patch and the
+	// base commit it was authored against (the plain release's join input).
+	sourceBase string
+	// bootedManifest is the booted base image manifest path when the fixture
+	// was built with newDerivableSelfDevFixtureBooted.
+	bootedManifest string
 	// platformMux and platformURL are the fake platform-control server, so
 	// a test can mount real corpusd routes beside the fakes.
 	platformMux *http.ServeMux
@@ -375,6 +382,15 @@ func shortSockDir(t *testing.T) string {
 }
 
 func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfDevFixture {
+	return newDerivableSelfDevFixtureBooted(t, computerID, "")
+}
+
+// newDerivableSelfDevFixtureBooted is the fixture on a guest whose booted base
+// image manifest carries buildCommit as its build_commit line, wired into both
+// the updater and the runtime exactly as production wires them
+// (CHOIR_GUEST_IMAGE_MANIFEST). An empty buildCommit leaves the base unwired,
+// as every older fixture is.
+func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit string) *derivableSelfDevFixture {
 	fx := &derivableSelfDevFixture{computerID: computerID, controlFail: &atomic.Bool{}, checkpoints: map[string]selfdevprotocol.CheckpointResponse{}}
 	sockDir := shortSockDir(t)
 
@@ -432,7 +448,14 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 		SignerRef:  computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"},
 		PrivateKey: updaterKey,
 	}}
-	engine, err := updater.New(updaterRoot, computerID, "realization-derivable", fx.service, derivableHealthProber{}, guestSigner)
+	var engine *updater.Updater
+	if buildCommit == "" {
+		engine, err = updater.New(updaterRoot, computerID, "realization-derivable", fx.service, derivableHealthProber{}, guestSigner)
+	} else {
+		fx.bootedManifest = filepath.Join(t.TempDir(), "guest-image-manifest")
+		fx.setBootedBuildCommit(t, buildCommit)
+		engine, err = updater.NewWithBase(updaterRoot, computerID, "realization-derivable", fx.service, derivableHealthProber{}, guestSigner, fx.bootedManifest)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +489,10 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 				}{result, "materialization failed and prior release was restored"})
 				return
 			}
+			// As cmd/choir-updater answers a pre-mutation refusal: the
+			// stable discriminator and the computed gate message.
 			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "updater refused request", "reason": applyErr.Error()})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(result)
@@ -678,6 +704,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	fx.baseSource = &liveBaseSource{computerID: computerID, cas: fx.cas, pinner: fx.pinner, tempRoot: t.TempDir()}
 	rt.restoreBaseSource = fx.baseSource
 	WithSelfDevelopmentUpdater(updaterClient, updaterRoot, computerID, "realization-derivable")(rt)
+	rt.selfdevGuestImageManifest = fx.bootedManifest
 	WithSelfDevelopmentVerifier(verifierClient)(rt)
 	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability(platformServer.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), platformKey.Public().(ed25519.PublicKey)))(rt)
 	WithSelfDevelopmentRoute(vmctl.NewClient(vmctlServer.URL), "owner", "primary")(rt)
@@ -914,6 +941,9 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 		bundle.OrderedFileEffects = append(bundle.OrderedFileEffects, transaction.ChangeRecord{Path: "workspace/platform/internal/selfdevprobe/probe.go", Kind: "added", Mode: 0o644})
 		bundle.SourcePatchSHA256 = computerevent.DigestBytes(fx.goPatch)
 		bundle.SourcePatchBaseCommit = hostBuildTestBaseCommit
+	} else if fx.sourceBase != "" {
+		bundle.SourcePatchSHA256 = computerevent.DigestBytes([]byte(plainSourcePatch))
+		bundle.SourcePatchBaseCommit = fx.sourceBase
 	}
 	contentDigest, err := bundle.ComputeContentDigest()
 	if err != nil {
@@ -937,6 +967,10 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 	}
 	if fx.goPatch != nil {
 		if err := os.WriteFile(filepath.Join(incoming, "source.patch"), fx.goPatch, 0o444); err != nil {
+			t.Fatal(err)
+		}
+	} else if fx.sourceBase != "" {
+		if err := os.WriteFile(filepath.Join(incoming, "source.patch"), []byte(plainSourcePatch), 0o444); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -577,6 +577,14 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	return applyErr
 }
 
+// rollbackApplyManifest is the manifest a rollback applies: the pinned prior
+// release re-finalized under the rollback's decision event.
+func rollbackApplyManifest(pinned updater.ReleaseManifest, decisionEvent string) (updater.ReleaseManifest, error) {
+	pinned.AcceptedEventHead = decisionEvent
+	pinned.ContentDigest = ""
+	return updater.FinalizeManifest(pinned)
+}
+
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
 	if err != nil {
@@ -588,9 +596,7 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		return fmt.Errorf("materializer: rollback immutable inputs unavailable: %w", err)
 	}
 	closure, program := inputs.CodeClosure, inputs.ArtifactProgram
-	manifest.AcceptedEventHead = operation.DecisionEvent
-	manifest.ContentDigest = ""
-	manifest, err = updater.FinalizeManifest(manifest)
+	manifest, err = rollbackApplyManifest(manifest, operation.DecisionEvent)
 	if err != nil {
 		return err
 	}
