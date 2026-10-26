@@ -30,6 +30,9 @@ package textureowner
 //      must stay readable after the document moves on).
 //  C11. A continued trajectory that settles in turn cannot be continued (the
 //      chain must extend, one link per episode).
+//  C13. The actor's wake reconcile on the continued document cannot start
+//      the Texture run (staging 2026-10-26: "replace durable activation:
+//      lifecycle invalid transition", every second, no run ever).
 //  C12. An engineering round's carried work on the settled trajectory is not
 //      offered to the next trajectory's engineer (internal/agentcore).
 
@@ -39,6 +42,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -440,5 +444,106 @@ func TestOwnerReviseContinuesAContinuedDocumentAgain(t *testing.T) {
 	}
 	if got := documentTrajectories(t, s, start.OwnerID, start.ComputerID, docID); len(got) != 3 {
 		t.Fatalf("C11: document has %d trajectories, want 3", len(got))
+	}
+}
+
+// priorDeskRun gives the settled episode a desk run that ran and finished,
+// the shape of a document whose last episode really worked: the desk's
+// activation record has been through a run on the settled trajectory.
+func priorDeskRun(t *testing.T, s *store.Store, start types.StartLifecycleRequest) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID: "run-prior-episode", AgentID: start.Agent.AgentID, ChannelID: start.InitialDocument.DocID,
+		TrajectoryID: start.TrajectoryID, AgentProfile: start.Agent.Profile, AgentRole: start.Agent.Role,
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, State: types.RunRunning,
+		Prompt: "first episode", CreatedAt: now, UpdatedAt: now,
+		Metadata: map[string]any{"lifecycle_work_item_id": start.InitialWork.WorkItemID, "work_item_ids": []string{start.InitialWork.WorkItemID}, "doc_id": start.InitialDocument.DocID},
+	}
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "project-prior-episode",
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: run,
+	}
+	project.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project prior run: %v", err)
+	}
+	term := types.TerminalizeRunRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "terminalize-prior-episode",
+		TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, RunID: run.RunID,
+		TerminalState: types.RunCompleted, Reason: "done",
+	}
+	term.CommandDigest, _ = store.ComputeTerminalizeRunDigest(term)
+	if _, err := s.TerminalizeRun(ctx, term); err != nil {
+		t.Fatalf("terminalize prior run: %v", err)
+	}
+}
+
+// C13: the owner's revise on a settled document is acted on: the wake it
+// sends resolves and the actor's reconcile starts the Texture run on the
+// continued trajectory. A document made by the conductor stores its first
+// trajectory id in every revision's durable metadata (texture_handoff.go),
+// and a run copies durable metadata over its own, so the run must still bind
+// to the document's current trajectory, not the one the head names.
+func TestOwnerReviseOnSettledDocumentStartsTheTextureRun(t *testing.T) {
+	cases := []struct {
+		name          string
+		priorRun      bool
+		headNamesTraj bool
+	}{
+		{"fresh desk", false, false},
+		{"desk that ran in the settled episode", true, false},
+		{"head names the settled trajectory", false, true},
+		{"conductor document that ran", true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			core, handler := testAPISetup(t)
+			s := core.Store()
+			ctx := t.Context()
+			start := startObservationLifecycle(t, s, func(req *types.StartLifecycleRequest) {
+				if c.headNamesTraj {
+					req.InitialRevision.Metadata = json.RawMessage(`{"trajectory_id":"` + req.TrajectoryID + `","revision_role":"input","input_origin":"user_prompt"}`)
+				}
+			})
+			docID := start.InitialDocument.DocID
+			mu, dispatches := recordContinueDispatches(core)
+			if c.priorRun {
+				priorDeskRun(t, s, start)
+			}
+			settleDocumentTrajectory(t, s, start.OwnerID, start.ComputerID, docID, start.TrajectoryID)
+			head := start.InitialRevision.RevisionID
+			response := postOwnerInstruction(t, handler, "/api/texture/documents/"+docID+"/revise", start.OwnerID, "after-settled", "build on this", head)
+			if response.Code != http.StatusAccepted {
+				t.Fatalf("revise status=%d body=%s", response.Code, response.Body.String())
+			}
+			doc, err := s.GetLifecycleDocument(ctx, start.OwnerID, start.ComputerID, docID)
+			if err != nil || doc.TrajectoryID == start.TrajectoryID {
+				t.Fatalf("document trajectory=%q err=%v", doc.TrajectoryID, err)
+			}
+			mu.Lock()
+			var wake string
+			for _, d := range *dispatches {
+				if d.kind == "coagent_result" && d.toAgentID == start.Agent.AgentID {
+					wake = d.content
+				}
+			}
+			mu.Unlock()
+			if wake == "" {
+				t.Fatalf("no wake to %s: %+v", start.Agent.AgentID, *dispatches)
+			}
+			occurrence, state, err := handler.ResolveTextureActorOccurrence(ctx, start.OwnerID, start.ComputerID, start.Agent.AgentID, wake)
+			if err != nil || state != TextureActorOccurrencePending {
+				t.Fatalf("C13: resolve occurrence state=%q err=%v", state, err)
+			}
+			run, err := handler.ReconcileActorOccurrenceWake(ctx, start.OwnerID, start.ComputerID, start.Agent.AgentID, occurrence.ResolvedTargetWorkItemID, occurrence)
+			if err != nil || run == nil {
+				t.Fatalf("C13: reconcile run=%+v err=%v; want a Texture run on the continued trajectory", run, err)
+			}
+			if run.TrajectoryID != doc.TrajectoryID || metadataStringValue(run.Metadata, "lifecycle_work_item_id") != occurrence.ResolvedTargetWorkItemID {
+				t.Fatalf("C13: run trajectory=%s work=%v, want %s on %s", run.TrajectoryID, run.Metadata["lifecycle_work_item_id"], occurrence.ResolvedTargetWorkItemID, doc.TrajectoryID)
+			}
+		})
 	}
 }
