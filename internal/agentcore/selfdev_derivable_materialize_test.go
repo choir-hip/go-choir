@@ -357,6 +357,9 @@ type derivableSelfDevFixture struct {
 	platformMux *http.ServeMux
 	platformURL string
 	sockDir     string
+	// trajectoryID, when set, is the lifecycle trajectory new operations
+	// name (owner-act wake tests bind a Texture document to it).
+	trajectoryID string
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -779,7 +782,7 @@ func (fx *derivableSelfDevFixture) seedOperationToAwaitingApproval(t *testing.T,
 	t.Helper()
 	ctx := context.Background()
 	operation, err := fx.operations.Start(ctx, selfdev.StartRequest{
-		ComputerID: fx.computerID, IdempotencyKey: idempotencyKey,
+		ComputerID: fx.computerID, IdempotencyKey: idempotencyKey, TrajectoryID: fx.trajectoryID,
 		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
 	})
 	if err != nil {
