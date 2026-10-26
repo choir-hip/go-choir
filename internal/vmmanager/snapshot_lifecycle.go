@@ -621,6 +621,14 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		m.mu.Unlock()
 		return fallback(snapshotReasonSubnetTaken, fmt.Errorf("a live interface holds the subnet of %s", meta.HostURL))
 	}
+	// The running guest keeps the launch it had: the record is rewritten from
+	// the meta BEFORE the snapshot is consumed, so a write that fails falls
+	// back to a cold boot instead of resuming a guest whose next hibernate
+	// would carry no launch target (review 318 DeepSeek 4).
+	if err := m.storeLaunchRecord(vmID, launchRecord{Release: meta.GuestRelease, ImageTarget: meta.LaunchImageTarget, Epoch: meta.Epoch, LaunchedAt: time.Now().UTC()}); err != nil {
+		m.mu.Unlock()
+		return fallback(snapshotReasonLaunchRecord, err)
+	}
 	// One-shot: durable before any load. From here a crash leads to a cold
 	// boot, never a second load.
 	if err := consumeSnapshot(dir, meta, time.Now()); err != nil {
@@ -628,11 +636,6 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		return fallback(snapshotReasonConsumeFailed, err)
 	}
 	tl.mark("snapshot_consumed")
-	// The running guest keeps the launch it had: rewrite the record from the
-	// meta so the next hibernate carries the original target (D2 S1b).
-	if err := m.storeLaunchRecord(vmID, launchRecord{Release: meta.GuestRelease, ImageTarget: meta.LaunchImageTarget, Epoch: meta.Epoch, LaunchedAt: time.Now().UTC()}); err != nil {
-		log.Printf("vmmanager: warning: could not rewrite the launch record of VM %s at resume: %v", vmID, err)
-	}
 	m.recordLaunchedVMM(vmID, vmm)
 	m.reserveHostURLLocked(meta.HostURL)
 	inst := &VMInstance{

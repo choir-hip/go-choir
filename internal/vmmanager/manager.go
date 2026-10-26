@@ -1379,7 +1379,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 
 	// A resume is a cold boot from the stored config: with the D2 switch on it
 	// launches from the current release, not the one the config last named.
-	m.rebindLaunchRelease(&inst.Config)
+	m.refreshLaunchArtifacts(&inst.Config, VMConfig{})
 
 	// Clean up the old process.
 	m.forceCleanup(vmID, "resume")
@@ -1771,15 +1771,25 @@ func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	m.mu.Unlock()
 
 	m.mu.Lock()
-	cfg := mergeVMConfigOverrides(inst.Config, overrides)
-	if overrides.Epoch == 0 {
-		cfg.Epoch = 0
-	}
-	cfg.VMID = vmID
+	cfg := m.recoverConfig(inst.Config, overrides, vmID)
 	m.mu.Unlock()
 
 	// Boot with the same config but new epoch.
 	return m.bootVM(cfg)
+}
+
+// recoverConfig is the config a recovery boots: the stored one with the
+// caller's overrides and a new epoch. The stored artifacts and kernel
+// parameters date from the original launch; a recovery boots the current image
+// (H1, review 318 DeepSeek 2).
+func (m *Manager) recoverConfig(stored, overrides VMConfig, vmID string) VMConfig {
+	cfg := mergeVMConfigOverrides(stored, overrides)
+	if overrides.Epoch == 0 {
+		cfg.Epoch = 0
+	}
+	cfg.VMID = vmID
+	m.refreshLaunchArtifacts(&cfg, overrides)
+	return cfg
 }
 
 // RefreshVM force-kills and reboots a VM onto the current manager boot

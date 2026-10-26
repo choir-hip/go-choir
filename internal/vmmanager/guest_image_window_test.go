@@ -185,15 +185,16 @@ func TestLaunchWritesLaunchRecordBeforeSpawn(t *testing.T) {
 		t.Fatalf("launch record after relaunch = %+v; want image_target %s", rec, w.imageB)
 	}
 
-	// No link configured or an unreadable link: a record without a target, so
-	// the snapshot guard stays off for that launch (it validates as today).
+	// A configured link that cannot be read at launch records a sentinel that
+	// never equals a real target, so a snapshot of that guest refuses at wake
+	// (review 318 DeepSeek 6) instead of turning the guard off.
 	w.mgr.cfg.GuestReleaseLink = filepath.Join(w.mgr.cfg.StateDir, "no-such-link")
-	wantTarget = ""
+	wantTarget = launchTargetUnreadable
 	if err := w.mgr.launchFirecracker(w.cfg, fc, hostPort); err != nil {
 		t.Fatal(err)
 	}
-	if rec := w.launchRecord(t); rec.ImageTarget != "" {
-		t.Fatalf("launch record with an unreadable link = %+v; want an empty image_target", rec)
+	if rec := w.launchRecord(t); rec.ImageTarget != launchTargetUnreadable {
+		t.Fatalf("launch record with an unreadable link = %+v; want the unreadable sentinel", rec)
 	}
 }
 
@@ -359,9 +360,15 @@ func TestColdResumeAndRecoverReadKernelParamsAtLaunch(t *testing.T) {
 			_, err := f.mgr.ResumeVM(f.vmID)
 			return err
 		}},
+		// bootVM needs resize2fs; the recovery's config is what is under test.
 		{"RecoverVMWithConfig", func(f *snapshotFixture) error {
-			_, err := f.mgr.RecoverVMWithConfig(f.vmID, VMConfig{})
-			return err
+			cfg := f.mgr.recoverConfig(f.inst.Config, VMConfig{}, f.vmID)
+			hostPort, _ := f.mgr.hostPortFromHostURL(f.guestS.URL)
+			raw, err := json.Marshal(f.mgr.buildFirecrackerConfig(cfg, hostPort))
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(f.mgr.vmStateDir(f.vmID), "fc-config.json"), raw, 0o644)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -375,7 +382,9 @@ func TestColdResumeAndRecoverReadKernelParamsAtLaunch(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.mgr.firecrackerStarter = func(string, []string) error { return nil }
-			_ = tc.boot(f) // readiness may time out; the launch config is what is under test
+			if err := tc.boot(f); err != nil {
+				t.Logf("boot returned: %v", err)
+			}
 			raw, err := os.ReadFile(filepath.Join(f.mgr.vmStateDir(f.vmID), "fc-config.json"))
 			if err != nil {
 				t.Fatalf("no launch config written: %v", err)
@@ -389,5 +398,44 @@ func TestColdResumeAndRecoverReadKernelParamsAtLaunch(t *testing.T) {
 				t.Fatalf("%s booted with %q; want the kernel parameters read at launch (init-b)", tc.name, args)
 			}
 		})
+	}
+}
+
+// Review 318 DeepSeek 6: a launch whose record cannot be written spawns nothing.
+func TestLaunchRecordWriteFailureStopsTheLaunch(t *testing.T) {
+	w := newWindowFixture(t)
+	hostPort, _ := w.mgr.hostPortFromHostURL(w.guestS.URL)
+	fc := w.mgr.buildFirecrackerConfig(w.cfg, hostPort)
+	// A directory where the record's temp file goes: the write fails.
+	if err := os.MkdirAll(w.mgr.launchRecordPath(w.vmID)+".tmp", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spawned := false
+	w.mgr.firecrackerStarter = func(string, []string) error { spawned = true; return nil }
+	if err := w.mgr.launchFirecracker(w.cfg, fc, hostPort); err == nil || spawned {
+		t.Fatalf("launchFirecracker = %v, spawned %v; want an error and no spawn", err, spawned)
+	}
+}
+
+// Review 318 DeepSeek 4: a resume whose launch record cannot be rewritten
+// falls back to a cold boot and does not consume the snapshot.
+func TestResumeFallsBackWhenTheLaunchRecordCannotBeWritten(t *testing.T) {
+	w := newWindowFixture(t)
+	if err := w.mgr.writeLaunchRecord(w.cfg); err != nil {
+		t.Fatal(err)
+	}
+	w.serveLaunchAPI(t)
+	if err := w.mgr.HibernateVM(w.vmID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(w.mgr.launchRecordPath(w.vmID)+".tmp", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	started := false
+	w.mgr.firecrackerStarter = func(string, []string) error { started = true; return nil }
+	_, err := w.mgr.ResumeVMFromSnapshot(w.vmID, w.expect, nil)
+	var fb *SnapshotFallbackError
+	if !errors.As(err, &fb) || fb.Reason != snapshotReasonLaunchRecord || started {
+		t.Fatalf("resume = %v (started %v); want a %s fallback and no spawn", err, started, snapshotReasonLaunchRecord)
 	}
 }

@@ -722,7 +722,6 @@ the floor, and decides what a guest may do, read or reach:
 | guest credentials and host-guest authentication | `internal/hostauth/`, `internal/dbcred/`, `internal/keyescrow/` |
 | grants and authority | `internal/capfloor/`, `internal/eventtablegrant/`, `internal/owneract/` |
 | self-development | `internal/selfdev/`, `internal/selfdevprotocol/` |
-| Texture canonical writes (FP0 ruling, review 313 F3) | `internal/texturewrite/` |
 | guest egress | `internal/hostfetch/`, `internal/gatewayruntime/` |
 
 These are the packages that `cmd/autoputer` and `cmd/desk-worker` import
@@ -851,7 +850,7 @@ outside the repo's reach, as they are for every other check in
 In the 7 days to 2026-10-26, 223 of 887 non-doc commits on origin/main
 (25%) touched these prefixes outside tests, 156 of them in
 `internal/agentcore` and 4 in `internal/texturewrite`. The first list gave
-220. Each needs the trailers or a raise. Orange
+220 (that count included `internal/texturewrite/`, since removed: §13 item 1). Each needs the trailers or a raise. Orange
 and red changes already get a tier 1 seat, so the trailer rides that
 review. A tier 0 change that touches a surface now needs a seat or a
 raise. A raise costs one cold boot for every hibernated computer, which is
@@ -1457,7 +1456,7 @@ gate is concrete) required two amendments inside §6.6, both made:
 |---|---|
 | F1, `internal/capsule/transaction/` collides with the floor | **Accepted.** Dropped from the surfaces; the floor's whole `internal/capsule` directory already covers it. Rule 5 now states containment in both directions (§6.6). |
 | F2, the gate is not self-protected | **Accepted.** Rule 6: gate files always need the trailers, an epoch raise does not excuse them; surfaces are matched against the union of base and head lists; the check runs from both the base's and the head's script, and the base's copy verifies the CI step still exists (§6.6, S1c tests). |
-| F3, `internal/texturewrite/` is a missing surface | **Accepted by FP0 ruling** (2026-10-26, open to the owner's reversal): Texture canonical writes are an authority boundary, and under "security comes first" a resumed snapshot must not run code that is missing an authority fix. `internal/texturewrite/` is added to the surfaces (§6.6 table; `cmd/autoputer` imports it). The cost figure in §6.6 is rerun with the final list: 223 of 887 non-doc commits (25%), up from 220. |
+| F3, `internal/texturewrite/` is a missing surface | **Superseded** (FP0 ruling 2026-10-26 on the build finding, §13 item 1; review 318 nit): `internal/texturewrite/` is under the floor (`cmd/capsule-broker` imports it), so a change to it already moves `floor_digest` and older release-bound snapshots refuse at R3. It is not a surface, and rule 5 would fail if it were listed. |
 | F4, unreadable link at wake | **Accepted.** It refuses `image_moved_since_launch` (§4.4). |
 | F5, citation drift | `resumeFromSnapshot` corrected to ownership.go:1670. The other two cite this tree correctly (`mark_guest_boot_contract` at deploy-impact-classify:89, `markPlannedRestart` at planned_restart.go:317), so they stay. |
 
@@ -1556,3 +1555,37 @@ with what the build did and what FP0 should rule.
     host code and scripts, none under a surface. The overlay replaces `ci.yml`
     on every commit, so a commit that edited `ci.yml` is not tested for the
     gate rule in this run. A wider sample is the 25% figure of §6.6.
+
+14. **Review 318 (tier 2, Devin and DeepSeek v4.1 flash) and its adjudication.**
+    - *Both, HIGH: the gate can be switched off in the same commit as a
+      surface change* (a step `if:`, `exit 0` in the run block, a dropped
+      `needs:`). **Accepted, the cheap way:** any change to `ci.yml` is a gate
+      change and needs the gate-change trailers (§6.6 rule 6); and the head's
+      `ci.yml` must still have no step-level `if:` in `v1-inventory`, `check`
+      must still need `v1-inventory` and require its success, and
+      `deploy-staging` must still require `check`'s. Selftest cases for each.
+    - *DeepSeek, MEDIUM-HIGH: H1 not repaired on a cold `ResumeVM` or on
+      `RecoverVMWithConfig`.* **Accepted.** `refreshLaunchArtifacts` blanks
+      the stored artifacts and kernel parameters (keeping an explicit
+      override and the machine shape) and rebinds, in both. The earlier S3
+      `rebindLaunchRelease` in `ResumeVM` is this function now. Design §4.2
+      listed recover among the cold boots and was right.
+    - *DeepSeek, MEDIUM: the base's copy is skipped when the base is not in
+      the checkout.* **Accepted.** The CI step fetches the base first and fails
+      if it still cannot be read.
+    - *DeepSeek, LOW-MEDIUM: the resume's launch-record rewrite only warns.*
+      **Accepted.** It is written before the snapshot is consumed; a failure is
+      a cold-boot fallback (`launch_record_failed`).
+    - *Devin Low, DeepSeek 6: `guest-floor-commit-free` not in CI.* **Accepted:**
+      a `guest-floor-commit-free` job (pure Nix evaluation, when the sbom lane's
+      inputs changed) that `check` requires.
+    - *DeepSeek 6: a configured but unreadable link at launch turned the guard
+      off.* **Accepted:** the launch record carries the sentinel
+      `!unreadable`, which never equals a real target, so that guest's
+      snapshots refuse at wake. A failed record write stopping the launch is now
+      tested.
+    - *Nit, both: the §6.6 table still listed `internal/texturewrite/`.*
+      Removed; the F3 row records the ruling.
+    - *Not changed:* the jailed launch path has no test of its own (the record
+      is written before the confinement branch, which the direct-launch test
+      exercises); legacy metas still validate as before, as designed.
