@@ -2,13 +2,14 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
-	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -27,13 +28,6 @@ type checkpointBinding struct {
 	Head     *computerevent.Head
 	Witness  selfdevprotocol.VMLocalContentWitness
 	Frontend selfdevprotocol.FrontendIdentity
-	// CapturedHead is the probe's head. It differs from Head when desks
-	// appended while the probe replayed.
-	CapturedHead string
-	// CaughtUpEvents counts the events between CapturedHead and Head;
-	// HeldTailEvents those of them replayed while appends were held.
-	CaughtUpEvents uint64
-	HeldTailEvents uint64
 }
 
 // checkpointPublishFunc publishes a checkpoint for a binding. It runs while
@@ -42,41 +36,35 @@ type checkpointBinding struct {
 type checkpointPublishFunc func(ctx context.Context, binding checkpointBinding) (selfdevprotocol.CheckpointResponse, error)
 
 // bindCheckpointAtHead binds a checkpoint's head and witness to one state and
-// publishes it. The probe replays the tape to the head it captured with the
-// live state (H1) while desks keep working. Then, holding appends, it reads
-// the head H; if desks appended since H1 it advances the same replay store
-// by the tail, re-extracts live and replay at H, and re-checks equivalence
-// and eligibility there. The base pin and the publish happen under the same
-// hold, so the platform's current head is H and the witness is H's. An idle
-// computer (H = H1) binds exactly what it did before. publish nil returns the
-// binding without publishing.
+// publishes it. Holding appends, it reads the head H, extracts the live
+// witness at H, pins the advertised projection base under H and publishes, so
+// the platform's current head is H and the witness is H's. It installs no
+// base, replays no tape and writes no scratch or Dolt row: whether the
+// witnessed state is derivable from the tape is proven where a checkpoint is
+// used, by restore, which reconstructs to H and refuses a witness mismatch
+// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1). The
+// publish stays inside the hold: the authority accepts a checkpoint only at
+// its current head (checkpoints.go Publish), and a head read before the hold
+// is not the head after it on a computer that is working. publish nil
+// returns the binding without publishing.
 func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
-	probe, err := rt.openReplayProbe(ctx, computerID)
-	if err != nil {
-		return checkpointBinding{}, nil, fmt.Errorf("self-development checkpoint: replay completeness: %w", err)
+	if rt == nil || rt.store == nil || rt.eventAppender == nil {
+		return checkpointBinding{}, nil, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
 	}
-	defer probe.close()
-	report := probe.report
-	if err := checkpointEligibilityError(report.Eligibility, report.ObjectGraph); err != nil {
-		return checkpointBinding{}, nil, err
+	computerID = strings.TrimSpace(computerID)
+	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
+		return checkpointBinding{}, nil, fmt.Errorf("%w: computer binding does not match runtime", ErrReplayCompletenessUnavailable)
 	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return checkpointBinding{}, nil, err
 	}
 	frontend, err := checkpointFrontendIdentity(releaseDigest, files)
 	if err != nil {
 		return checkpointBinding{}, nil, err
 	}
-	captured := headDigest(report.LiveHead)
 
 	var lastErr error
 	for attempt := 1; attempt <= checkpointBindAttempts; attempt++ {
-		// Without the hold: bring the replay up to the live head, so the
-		// held tail is only what lands during this step.
-		if err := rt.advanceCheckpointReplay(probe.replayCtx(ctx), computerID, probe.replayStore); err != nil {
-			return checkpointBinding{}, nil, probe.scratchErr(err)
-		}
 		var (
 			binding  checkpointBinding
 			response *selfdevprotocol.CheckpointResponse
@@ -86,20 +74,13 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 			if err != nil {
 				return fmt.Errorf("self-development checkpoint: read live event head: %w", err)
 			}
-			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, CapturedHead: captured}
-			if headDigest(head) != captured {
-				rebound, held, err := rt.rebindCheckpointWitness(probe.replayCtx(ctx), computerID, probe.replayStore, head)
-				if err != nil {
-					return probe.scratchErr(err)
-				}
-				binding.Witness = rebound
-				binding.HeldTailEvents = held
-				if report.LiveHead != nil && head.Sequence > report.LiveHead.Sequence {
-					binding.CaughtUpEvents = head.Sequence - report.LiveHead.Sequence
-				}
+			witness, err := rt.liveCheckpointWitness(ctx, head)
+			if err != nil {
+				return err
 			}
-			if err := rt.pinCheckpointBase(ctx, computerID, report.BaseBlobSHA256, headDigest(head)); err != nil {
-				return fmt.Errorf("self-development checkpoint: pin replay base: %w", err)
+			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend}
+			if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
+				return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
 			}
 			if publish == nil {
 				return nil
@@ -122,91 +103,45 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 	return checkpointBinding{}, nil, fmt.Errorf("self-development checkpoint: the platform refused the bound head on all %d attempts (its head moved outside this computer's appends): %w", checkpointBindAttempts, lastErr)
 }
 
-// advanceCheckpointReplay replays the tail from the replay store's head to
-// the live head, without holding appends. It never compares: the held
-// section compares at the head it binds.
-func (rt *Runtime) advanceCheckpointReplay(ctx context.Context, computerID string, replayStore *choirstore.Store) error {
-	live, err := rt.store.Head(ctx, computerID)
-	if err != nil || live == nil {
-		// The held section reads the head again and refuses there.
-		return nil
-	}
-	replayed, err := replayStore.Head(ctx, computerID)
-	if err != nil {
-		return fmt.Errorf("self-development checkpoint: read replay event head: %w", err)
-	}
-	if headDigest(replayed) == live.CanonicalEventHead {
-		return nil
-	}
-	if err := rt.eventAppender.ReconstructThroughTarget(ctx, replayStore, live.CanonicalEventHead); err != nil {
-		return fmt.Errorf("self-development checkpoint: replay tail to sequence %d: %w", live.Sequence, err)
-	}
-	return nil
-}
-
-// rebindCheckpointWitness derives the witness at head. The caller holds
-// appends, so the live store is head's state. The replay store advances by
-// the tail only; replayInto uses its own dry-run appender, so the hold's
-// lock is never taken twice.
-func (rt *Runtime) rebindCheckpointWitness(ctx context.Context, computerID string, replayStore *choirstore.Store, head *computerevent.Head) (selfdevprotocol.VMLocalContentWitness, uint64, error) {
+// liveCheckpointWitness is the VM-local content witness of the live store at
+// head. The caller holds appends, so the live store is head's state.
+func (rt *Runtime) liveCheckpointWitness(ctx context.Context, head *computerevent.Head) (selfdevprotocol.VMLocalContentWitness, error) {
 	var empty selfdevprotocol.VMLocalContentWitness
 	if head == nil || !computerevent.IsSHA256(head.CanonicalEventHead) {
-		return empty, 0, fmt.Errorf("self-development checkpoint: live event head unavailable")
+		return empty, fmt.Errorf("self-development checkpoint: live event head unavailable")
 	}
-	version := replayCompletenessVersion(rt, head)
-	live, err := replayDoltStateExtractor(rt.store.TexturePath()).Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: version})
+	live, err := replayDoltStateExtractor(rt.store.TexturePath()).Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: replayCompletenessVersion(rt, head)})
 	if err != nil {
-		return empty, 0, fmt.Errorf("self-development checkpoint: extract live Dolt state at sequence %d: %w", head.Sequence, err)
+		return empty, fmt.Errorf("self-development checkpoint: extract live Dolt state at sequence %d: %w", head.Sequence, err)
 	}
-	before, err := replayStore.Head(ctx, computerID)
-	if err != nil {
-		return empty, 0, fmt.Errorf("self-development checkpoint: read replay event head: %w", err)
-	}
-	if err := rt.eventAppender.ReconstructThroughTarget(ctx, replayStore, head.CanonicalEventHead); err != nil {
-		return empty, 0, fmt.Errorf("self-development checkpoint: replay tail to sequence %d: %w", head.Sequence, err)
-	}
-	replayHead, err := replayStore.Head(ctx, computerID)
-	if err != nil || headDigest(replayHead) != head.CanonicalEventHead {
-		return empty, 0, fmt.Errorf("self-development checkpoint: replay did not reach the live head at sequence %d", head.Sequence)
-	}
-	replay, err := replayDoltStateExtractor(replayStore.TexturePath()).Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
-	if err != nil {
-		return empty, 0, fmt.Errorf("self-development checkpoint: extract replay Dolt state at sequence %d: %w", head.Sequence, err)
-	}
-	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(
-		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
-	)
-	var objectGraph *ReplayObjectGraphComparison
-	if !result.Equivalent() {
-		liveObjects, liveErr := rt.store.ListObjectGraphFingerprints(ctx)
-		replayObjects, replayErr := replayStore.ListObjectGraphFingerprints(ctx)
-		if liveErr == nil && replayErr == nil {
-			objectGraph = compareReplayObjectGraph(liveObjects, replayObjects)
-		}
-	}
-	if err := checkpointEligibilityError(replayEligibility(head, replayHead, live, replay, result), objectGraph); err != nil {
-		return empty, 0, fmt.Errorf("%w (at bound sequence %d)", err, head.Sequence)
-	}
-	witness, err := selfdevprotocol.WitnessFromObservationSets(live, replay, result)
-	if err != nil {
-		return empty, 0, err
-	}
-	var held uint64
-	if before != nil && replayHead.Sequence > before.Sequence {
-		held = replayHead.Sequence - before.Sequence
-	}
-	return witness, held, nil
+	return selfdevprotocol.WitnessFromObservationSet(live)
 }
 
-func checkpointEligibilityError(eligibility ReplayEligibility, og *ReplayObjectGraphComparison) error {
-	err := eligibility.Error()
-	if err == nil {
+// pinAdvertisedBase retains the platform's advertised projection base under
+// the checkpoint's head, so a restore to the checkpoint starts from a snapshot
+// at or below it even after the advertised base moves past it. A computer the
+// platform never published a base for has nothing to pin (restore replays its
+// bounded chain from genesis); a source that cannot answer is not that case
+// and refuses, so no checkpoint is published without the pin it needs.
+func (rt *Runtime) pinAdvertisedBase(ctx context.Context, computerID string, head *computerevent.Head) error {
+	if head == nil || head.Sequence == 0 {
 		return nil
 	}
-	if og != nil {
-		return fmt.Errorf("self-development checkpoint: %w (og_objects live_only=%d replay_only=%d changed=%d by_kind=%v)", err, og.LiveOnlyCount, og.ReplayOnlyCount, og.ChangedCount, og.ByObjectKind)
+	src, err := rt.resolveRestoreBaseSource()
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("self-development checkpoint: %w", err)
+	sequence, baseRef, err := src.Watermark(ctx, computerID)
+	if err != nil {
+		if errors.Is(err, projectionbase.ErrBaseRefused) {
+			return nil
+		}
+		return err
+	}
+	if sequence == 0 || strings.TrimSpace(baseRef) == "" {
+		return nil
+	}
+	return rt.pinCheckpointBase(ctx, computerID, baseRef, head.CanonicalEventHead)
 }
 
 func checkpointFrontendIdentity(releaseDigest string, files []updater.ManifestFile) (selfdevprotocol.FrontendIdentity, error) {

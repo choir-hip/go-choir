@@ -454,10 +454,8 @@ type CheckpointBindReport struct {
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
 	// BoundEventHead is the head the witness was taken at (and, when
-	// published, the checkpoint's accepted head). CaughtUpEvents counts the
-	// events desks appended while the checkpoint replayed.
+	// published, the checkpoint's accepted head).
 	BoundEventHead      string                              `json:"bound_event_head,omitempty"`
-	CaughtUpEvents      uint64                              `json:"caught_up_events,omitempty"`
 	PublishedCheckpoint *selfdevprotocol.CheckpointResponse `json:"published_checkpoint,omitempty"`
 }
 
@@ -491,7 +489,6 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 	report.VMLocalContentWitness = binding.Witness
 	report.FrontendIdentity = binding.Frontend
 	report.BoundEventHead = headDigest(binding.Head)
-	report.CaughtUpEvents = binding.CaughtUpEvents
 	report.PublishedCheckpoint = published
 	return report, nil
 }

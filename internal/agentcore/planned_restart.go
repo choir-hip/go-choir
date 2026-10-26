@@ -254,6 +254,13 @@ func GuestApplyAttemptsPath(storePath string) string {
 // store path (no durable volume, so no marker either) has nothing to count
 // across boots.
 func spendGuestApplyAttempt(storePath, reason, target string) error {
+	return spendGuestAttempt(storePath, reason, target, guestApplyAttemptLimit)
+}
+
+// spendGuestAttempt is spendGuestApplyAttempt with the limit the caller's
+// reason allows: a crash-boot settlement is allowed fewer starts than an
+// apply (selfdevSettlementAttemptLimit).
+func spendGuestAttempt(storePath, reason, target string, limit int) error {
 	path := GuestApplyAttemptsPath(storePath)
 	if path == "" {
 		return nil
@@ -270,7 +277,7 @@ func spendGuestApplyAttempt(storePath, reason, target string) error {
 		}
 	}
 	key := reason + " " + target
-	if counts[key] >= guestApplyAttemptLimit {
+	if counts[key] >= limit {
 		return fmt.Errorf("%w (%s %s, %d starts)", ErrGuestApplyAttemptsSpent, reason, target, counts[key])
 	}
 	counts[key]++

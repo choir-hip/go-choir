@@ -388,6 +388,12 @@ type Runtime struct {
 	// from the updater journal and never calls the updater for them. Guarded
 	// by selfdevMaterializeMu.
 	selfdevCrashInterrupted map[string]bool
+	// selfdevSettlementSpent names the operations whose settlement already
+	// spent this boot's durable attempt (self_development_materializer.go):
+	// one attempt per operation per crash boot, however many passes run.
+	// Reset when the boot marks its interrupted operations. Guarded by
+	// selfdevMaterializeMu.
+	selfdevSettlementSpent map[string]bool
 	// selfdevReconcilePending is the M7 derivable-continuation signal: the
 	// canonical post-commit observer sets it and a single drain loop
 	// collapses bursts into one reconcile per settlement boundary.

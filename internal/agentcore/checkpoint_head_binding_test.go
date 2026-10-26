@@ -29,8 +29,8 @@ import (
 // modes pinned here:
 //   - C1 an append between capture and publish leaves the published head
 //     ahead of the witness, so the restore refuses;
-//   - C2 a live-only row written after the capture is attested at the bound
-//     head without a comparison there;
+//   - C2 (withdrawn: the bind no longer compares live with a replay; a
+//     non-derivable row is refused at restore, checkpoint_bind_no_replay_test.go);
 //   - C5 a head that keeps moving outside this guest's appends loops forever
 //     instead of failing loudly and bounded;
 //   - C6 an idle checkpoint changes head, idempotency key or witness;
@@ -166,41 +166,55 @@ func (fx *checkpointHeadFixture) restore(t *testing.T, checkpoint selfdevprotoco
 	return fx.rt.RematerializeFromTape(context.Background(), fx.rt.cfg.ComputerID, checkpoint)
 }
 
-// C1, C7: the drill's race. A desk appends after the head and live state are
-// captured, while the checkpoint replays. The published checkpoint must be
-// restorable: its head is the one its witness was taken at.
+// C1, C7: the drill's race. A desk appends while the checkpoint binds. The
+// head and the witness are read under one append hold, so the published
+// checkpoint's head is the one its witness was taken at, and it restores.
 func TestCheckpointBindBusyComputerPublishesRestorableHead(t *testing.T) {
 	computerID := "computer-checkpoint-busy"
 	fx := newCheckpointHeadFixture(t, computerID)
-	appended := false
-	fx.rt.replayProbeAfterCapture = func() {
-		fx.appendDeskEvent(t, "desk-turn-during-checkpoint")
-		appended = true
-	}
+	stop := make(chan struct{})
+	done := make(chan int)
+	go func() {
+		appended := 0
+		for {
+			select {
+			case <-stop:
+				done <- appended
+				return
+			default:
+			}
+			eventID, _ := computerevent.NewEventID()
+			commitment := strings.Repeat("f", 64)
+			update := computerevent.Event{SchemaVersion: 1, EventID: eventID, ComputerID: computerID, EventKind: computerevent.EventResearchUpdate,
+				OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "desk-turn-" + eventID, ActorProfile: "research", AuthorityRef: "typed-update",
+				PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: commitment, ReducerVersion: 1}
+			if _, err := fx.rt.eventAppender.AppendNew(context.Background(), update, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
+				t.Errorf("desk append: %v", err)
+				done <- appended
+				return
+			}
+			appended++
+		}
+	}()
 
 	report, err := fx.rt.BindCheckpointRestoreSet(context.Background(), computerID)
+	close(stop)
+	appended := <-done
 	if err != nil {
 		t.Fatalf("busy checkpoint refused: %v", err)
 	}
-	if !appended {
-		t.Fatal("no desk event was appended during the checkpoint")
+	if appended == 0 {
+		t.Fatal("no desk event was appended around the checkpoint")
 	}
 	if report.PublishedCheckpoint == nil {
 		t.Fatal("no checkpoint was published")
 	}
 	published := report.PublishedCheckpoint.Checkpoint
-	headNow := fx.liveHead(t)
-	if headNow == fx.genesis {
-		t.Fatal("the live head did not move past the capture")
-	}
-	if published.Request.AcceptedEventHead != headNow {
-		t.Fatalf("published head = %s, want the head at publish %s", published.Request.AcceptedEventHead, headNow)
-	}
 	if published.Request.VMLocalContentWitness.ContentRoot != report.VMLocalContentWitness.ContentRoot {
 		t.Fatal("the bind report's witness is not the published witness")
 	}
-	if report.BoundEventHead != headNow || report.CaughtUpEvents != 1 {
-		t.Fatalf("bind report head/caught-up = %s/%d, want %s/1", report.BoundEventHead, report.CaughtUpEvents, headNow)
+	if report.BoundEventHead != published.Request.AcceptedEventHead {
+		t.Fatalf("bind report head %s is not the published head %s", report.BoundEventHead, published.Request.AcceptedEventHead)
 	}
 	pinRef := projectionbase.CheckpointPinReference(published.Request.AcceptedEventHead)
 	pinned := false
@@ -261,49 +275,18 @@ func TestCheckpointBindIdleComputerBindsCapturedHead(t *testing.T) {
 	}
 }
 
-// C2: state written after the capture is compared at the head the checkpoint
-// binds. A live-only table that replay cannot produce refuses the
-// checkpoint; nothing is published.
-func TestCheckpointBindRefusesLiveOnlyStateWrittenAfterCapture(t *testing.T) {
-	computerID := "computer-checkpoint-live-only"
-	fx := newCheckpointHeadFixture(t, computerID)
-	fx.rt.replayProbeAfterCapture = func() {
-		fx.appendDeskEvent(t, "desk-turn-during-checkpoint")
-		ctx := context.Background()
-		if _, err := fx.live.DB().ExecContext(ctx, "CREATE TABLE checkpoint_live_only (id VARCHAR(64) PRIMARY KEY)"); err != nil {
-			t.Error(err)
-		}
-		if _, err := fx.live.DB().ExecContext(ctx, "INSERT INTO checkpoint_live_only (id) VALUES ('drift')"); err != nil {
-			t.Error(err)
-		}
-	}
-	_, err := fx.rt.BindCheckpointRestoreSet(context.Background(), computerID)
-	if err == nil {
-		t.Fatal("a checkpoint attested live-only state written after the capture")
-	}
-	if !strings.Contains(err.Error(), "at bound sequence") {
-		t.Fatalf("refusal is not the bound head's comparison: %v", err)
-	}
-	if len(fx.platform.published) != 0 {
-		t.Fatalf("%d checkpoints were published over live-only state", len(fx.platform.published))
-	}
-}
-
-// C4, C8: the tail that lands while the probe replays is replayed before the
-// hold (the held section replays nothing it did not have to), and the
-// bind-only report (no platform credential) names the head its witness is.
-func TestCheckpointBindCatchesUpBeforeTheHold(t *testing.T) {
-	computerID := "computer-checkpoint-held-tail"
+// C4, C8: the bind-only report (no platform credential) names the head its
+// witness is, which is the live head at the bind.
+func TestCheckpointBindOnlyNamesTheHeadItWitnessed(t *testing.T) {
+	computerID := "computer-checkpoint-bind-only"
 	fx := newCheckpointHeadFixture(t, computerID)
 	fx.rt.ownerRecoveryControl = nil
 	manifest, err := updater.VerifyCurrentRelease(fx.rt.selfdevUpdaterRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx.rt.replayProbeAfterCapture = func() {
-		fx.appendDeskEvent(t, "desk-turn-1")
-		fx.appendDeskEvent(t, "desk-turn-2")
-	}
+	fx.appendDeskEvent(t, "desk-turn-1")
+	fx.appendDeskEvent(t, "desk-turn-2")
 	binding, published, err := fx.rt.bindCheckpointAtHead(context.Background(), computerID, manifest.ContentDigest, manifest.Files, nil)
 	if err != nil {
 		t.Fatalf("bind-only checkpoint refused: %v", err)
@@ -311,11 +294,8 @@ func TestCheckpointBindCatchesUpBeforeTheHold(t *testing.T) {
 	if published != nil {
 		t.Fatal("bind-only checkpoint published")
 	}
-	if headDigest(binding.Head) != fx.liveHead(t) || binding.CaughtUpEvents != 2 || binding.HeldTailEvents != 0 {
-		t.Fatalf("binding head=%s caught_up=%d held_tail=%d, want live head, 2, 0", headDigest(binding.Head), binding.CaughtUpEvents, binding.HeldTailEvents)
-	}
-	if binding.CapturedHead == headDigest(binding.Head) {
-		t.Fatal("the binding did not move past the captured head")
+	if headDigest(binding.Head) != fx.liveHead(t) {
+		t.Fatalf("binding head=%s, want the live head %s", headDigest(binding.Head), fx.liveHead(t))
 	}
 }
 

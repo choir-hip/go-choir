@@ -539,7 +539,10 @@ func TestCheckpointBindRefusesWhenAuthorityUnavailable(t *testing.T) {
 	}
 }
 
-func TestCheckpointBindRefusesLiveOnlyRowsAndMissingSPA(t *testing.T) {
+// The early derivability gate is withdrawn (design 4.1): live-only rows bind,
+// and restore refuses them (checkpoint_bind_no_replay_test.go). A served SPA
+// that is underivable still refuses the bind (I25).
+func TestCheckpointBindRefusesMissingSPAAndBindsLiveOnlyRows(t *testing.T) {
 	computerID := "computer-checkpoint-ineligible"
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
 	live, err := choirstore.Open(storePath)
@@ -573,7 +576,7 @@ func TestCheckpointBindRefusesLiveOnlyRowsAndMissingSPA(t *testing.T) {
 	request.Header.Set("X-Authenticated-Computer", computerID)
 	response = httptest.NewRecorder()
 	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "replay is ineligible") {
+	if response.Code != http.StatusOK {
 		t.Fatalf("live-only checkpoint status=%d body=%s", response.Code, response.Body.String())
 	}
 }

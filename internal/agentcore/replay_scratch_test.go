@@ -11,9 +11,9 @@ package agentcore
 //     remove its scratch.
 //  3. A probe killed in flight left its root behind, and nothing removed it:
 //     the next start must remove every stale root, old location and new.
-//  4. The apply cannot bind its checkpoint: the apply stays recorded on the
-//     tape, the operation is held with an owner-visible named reason and no
-//     retry wake, and it completes once the scratch fits.
+//  4. (Withdrawn: the apply's checkpoint bind no longer replays, so it has no
+//     scratch to hold on; checkpoint_bind_no_replay_test.go and
+//     selfdev_settlement_attempts_test.go prove that on a full volume.)
 //  5. The probe's base-plus-tail replay (the incremental path) must give the
 //     same witness as a full replay from genesis on the same chain.
 
@@ -26,14 +26,12 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
@@ -263,68 +261,6 @@ func TestStaleReplayScratchIsRemovedAtStart(t *testing.T) {
 		if _, err := os.Stat(dir); err != nil {
 			t.Fatalf("Start removed %s, which is not probe scratch: %v", dir, err)
 		}
-	}
-}
-
-// Failure mode 4: the apply's checkpoint cannot be bound. The applied event
-// stays on the tape, the operation is held materializing with a named,
-// owner-visible reason and no retry wake, and the next pass with room
-// completes it.
-func TestApplyHoldsByNameWhenTheCheckpointScratchCannotFit(t *testing.T) {
-	fx := newDerivableSelfDevFixture(t, "computer-scratch-apply")
-	volume := &fakeScratchVolume{avail: replayScratchTestGiB}
-	fx.rt.replayScratchUsage = volume.usage
-	var retries atomic.Int32
-	fx.rt.scheduleActor = func(_ context.Context, _, _, _, kind, _, _, _ string, _ time.Time) error {
-		if kind == selfdevMaterializationRetryKind {
-			retries.Add(1)
-		}
-		return nil
-	}
-	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-scratch")
-	fx.appendDecision(t, operation, bundleDigest, "decision-op-scratch")
-
-	var held selfdev.Operation
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		current, err := fx.operations.Get(context.Background(), fx.computerID, operation.OperationID)
-		if err == nil && strings.Contains(current.LastIntentError, "checkpoint deferred") {
-			held = current
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("operation never carried the checkpoint-deferred reason: %+v (err %v)", current, err)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if held.State != selfdev.StateMaterializing {
-		t.Fatalf("held operation state = %s, want %s", held.State, selfdev.StateMaterializing)
-	}
-	if !strings.Contains(held.LastIntentError, ErrReplayScratchInsufficient.Error()) {
-		t.Fatalf("held reason %q does not name %q", held.LastIntentError, ErrReplayScratchInsufficient)
-	}
-	kinds := fx.countEventKinds()
-	if kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventCheckpointPublished] != 0 {
-		t.Fatalf("events = %v; want the apply recorded once and no checkpoint", kinds)
-	}
-	// A further pass refuses the same way and appends nothing.
-	before := fx.countEventKinds()
-	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
-	if after := fx.countEventKinds(); !reflect.DeepEqual(before, after) {
-		t.Fatalf("a held pass appended events: %v -> %v", before, after)
-	}
-	if n := retries.Load(); n != 0 {
-		t.Fatalf("a scratch refusal armed %d retry wakes, want none", n)
-	}
-
-	volume.set(50 * replayScratchTestGiB)
-	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
-	applied := fx.waitForState(t, operation.OperationID, selfdev.StateApplied)
-	if !strings.HasPrefix(applied.CheckpointRef, "checkpoint:sha256:") || applied.RouteReceipt == "" {
-		t.Fatalf("operation applied without its checkpoint and route: %+v", applied)
-	}
-	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventCheckpointPublished] != 1 {
-		t.Fatalf("events after recovery = %v; want one apply and one checkpoint", kinds)
 	}
 }
 

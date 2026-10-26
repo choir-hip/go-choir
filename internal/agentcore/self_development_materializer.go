@@ -153,6 +153,7 @@ func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx contex
 	}
 	rt.selfdevMaterializeMu.Lock()
 	rt.selfdevCrashInterrupted = interrupted
+	rt.selfdevSettlementSpent = map[string]bool{}
 	rt.selfdevMaterializeMu.Unlock()
 }
 
@@ -176,11 +177,71 @@ func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context,
 		return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
 	case !journaled.Terminal:
 		return errSelfDevJournalMidFlight
-	case rollback:
-		return rt.rollbackSelfDevelopmentOperation(ctx, operation, true)
-	default:
-		return rt.materializeSelfDevelopmentOperation(ctx, operation, true)
 	}
+	// A terminal journal is recorded through the normal path, which binds a
+	// checkpoint and promotes the route. The step is bounded: a settlement
+	// that started on two crash boots and never finished closes the operation
+	// instead of running a third time.
+	if spentErr := rt.spendSelfDevelopmentSettlementAttempt(operation.OperationID); spentErr != nil {
+		if errors.Is(spentErr, ErrGuestApplyAttemptsSpent) {
+			return rt.closeSelfDevelopmentSettlementDegraded(ctx, operation)
+		}
+		return spentErr
+	}
+	if rollback {
+		return rt.rollbackSelfDevelopmentOperation(ctx, operation, true)
+	}
+	return rt.materializeSelfDevelopmentOperation(ctx, operation, true)
+}
+
+// selfdevSettlementAttemptReason and selfdevSettlementAttemptLimit bound the
+// crash-boot settlement of one operation across boots
+// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.5): the
+// attempt is spent durably before the work, so a settlement that crashes the
+// computer is counted, and the second crash is the last.
+const (
+	selfdevSettlementAttemptReason = "self_development_settlement"
+	selfdevSettlementAttemptLimit  = 2
+)
+
+// selfdevSettlementCrashedTwice is the cause on an operation whose
+// settlement crashed the computer twice.
+const selfdevSettlementCrashedTwice = "the settlement crashed the computer twice: the apply is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides"
+
+// spendSelfDevelopmentSettlementAttempt durably counts this boot's start of
+// the operation's settlement, once per boot: every commit triggers a
+// reconcile pass, and a pass that retries after an error is not a crash. It
+// returns ErrGuestApplyAttemptsSpent once the limit is spent.
+func (rt *Runtime) spendSelfDevelopmentSettlementAttempt(operationID string) error {
+	if rt.selfdevSettlementSpent[operationID] {
+		return nil
+	}
+	if err := spendGuestAttempt(rt.cfg.StorePath, selfdevSettlementAttemptReason, operationID, selfdevSettlementAttemptLimit); err != nil {
+		return err
+	}
+	if rt.selfdevSettlementSpent == nil {
+		rt.selfdevSettlementSpent = map[string]bool{}
+	}
+	rt.selfdevSettlementSpent[operationID] = true
+	return nil
+}
+
+// closeSelfDevelopmentSettlementDegraded closes an operation whose
+// settlement crashed the computer twice. The applied release and the
+// materialization-applied event stay; no checkpoint is bound and the route is
+// not promoted. An operation already degraded keeps the cause it has.
+func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, operation selfdev.Operation) error {
+	if operation.State == selfdev.StateDegraded {
+		return nil
+	}
+	if _, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
+		next.TerminalError = selfdevSettlementCrashedTwice
+		return nil
+	}); err != nil {
+		return fmt.Errorf("close the operation whose settlement crashed twice: %w", err)
+	}
+	log.Printf("selfdev: crash boot: %s closed degraded from %s: %s", operation.OperationID, operation.State, selfdevSettlementCrashedTwice)
+	return nil
 }
 
 // SelfDevelopmentApplyMaterializing reports whether a self-development
@@ -230,14 +291,9 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		if rt.selfdevCrashInterrupted[operation.OperationID] {
 			// Decided before a crash boot: settle from the journal, never
 			// apply, and arm no retry (a retry would only settle again).
-			settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback)
-			if errors.Is(settleErr, ErrReplayScratchInsufficient) {
-				rt.holdSelfDevelopmentCheckpointDeferred(ctx, operation, settleErr)
-			} else if settleErr != nil {
+			if settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback); settleErr != nil {
 				log.Printf("selfdev materializer: operation %s in %s interrupted by a restart, held: %v",
 					operation.OperationID, operation.State, settleErr)
-			} else {
-				rt.clearSelfDevelopmentCheckpointDeferred(ctx, operation)
 			}
 			continue
 		}
@@ -246,17 +302,6 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation, false)
 		} else {
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation, false)
-		}
-		if operationErr == nil {
-			rt.clearSelfDevelopmentCheckpointDeferred(ctx, operation)
-		}
-		if errors.Is(operationErr, ErrReplayScratchInsufficient) {
-			// The apply is on the tape; only its checkpoint could not be
-			// bound. A retry wake would only refuse again: the operation is
-			// held, visibly, and the next pass (any commit, or a boot)
-			// binds it once the probe fits.
-			rt.holdSelfDevelopmentCheckpointDeferred(ctx, operation, operationErr)
-			continue
 		}
 		if errors.Is(operationErr, ErrGuestApplyAttemptsSpent) {
 			// The apply crashed this guest every time it ran; retrying it
@@ -285,34 +330,6 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			}
 			continue
 		}
-	}
-}
-
-// selfdevCheckpointDeferredReason is the owner-visible stamp on an operation
-// whose apply is recorded but whose checkpoint the replay probe could not
-// bind for want of scratch space. The text is stable, so a pass that refuses
-// again appends nothing.
-var selfdevCheckpointDeferredReason = "checkpoint deferred: " + ErrReplayScratchInsufficient.Error() +
-	" on the persistent volume; the apply is recorded and its checkpoint binds when the replay probe fits"
-
-// holdSelfDevelopmentCheckpointDeferred stamps the operation with the named
-// reason and arms no retry wake
-// (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
-func (rt *Runtime) holdSelfDevelopmentCheckpointDeferred(ctx context.Context, operation selfdev.Operation, cause error) {
-	log.Printf("selfdev materializer: operation %s in %s held, checkpoint deferred: %v", operation.OperationID, operation.State, cause)
-	if err := rt.selfdevOperations.RecordIntentError(ctx, operation.ComputerID, operation.OperationID, selfdevCheckpointDeferredReason); err != nil {
-		log.Printf("selfdev materializer: stamp checkpoint deferral on %s: %v", operation.OperationID, err)
-	}
-}
-
-// clearSelfDevelopmentCheckpointDeferred removes the deferral stamp once a
-// pass binds the checkpoint.
-func (rt *Runtime) clearSelfDevelopmentCheckpointDeferred(ctx context.Context, operation selfdev.Operation) {
-	if operation.LastIntentError != selfdevCheckpointDeferredReason {
-		return
-	}
-	if err := rt.selfdevOperations.RecordIntentError(ctx, operation.ComputerID, operation.OperationID, ""); err != nil {
-		log.Printf("selfdev materializer: clear checkpoint deferral on %s: %v", operation.OperationID, err)
 	}
 }
 
