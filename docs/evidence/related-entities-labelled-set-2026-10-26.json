@@ -1,0 +1,1661 @@
+{
+ "labelled_at": "2026-10-26",
+ "labeller": "related-review lane worker (careful reader, before any extractor run)",
+ "convention": [
+  "An entity is a person, organization, place, product, work or law a careful reader attaches to the story (ontology §4.2).",
+  "central: the story is about it; incidental: named and relevant, not the subject.",
+  "News outlets, wires and social accounts cited only as attribution are not labelled (Reuters, AFP, CBS News); an outlet the story is about is.",
+  "Generic or unnamed groups are not labelled (\"the student movement\", \"a Greek Orthodox church\").",
+  "forms are the surface forms the story text uses for the entity, as a reader sees them; a label counts as found when an extractor candidate's match key equals one form's."
+ ],
+ "stories": [
+  {
+   "publication_id": "pub-835d6d93f10427784f9a6d354067a44c",
+   "publication_version_id": "pub-835d6d93f10427784f9a6d354067a44c-v96",
+   "title": "Lula wins fourth term as Brazil’s president",
+   "labels": [
+    {
+     "name": "Luiz Inácio Lula da Silva",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Luiz Inácio Lula da Silva",
+      "Lula"
+     ]
+    },
+    {
+     "name": "Brazil",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Brazil"
+     ]
+    },
+    {
+     "name": "Flávio Bolsonaro",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Flávio Bolsonaro",
+      "Flávio"
+     ]
+    },
+    {
+     "name": "Jair Bolsonaro",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Jair Bolsonaro"
+     ]
+    },
+    {
+     "name": "Pedro Sánchez",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Pedro Sánchez"
+     ]
+    },
+    {
+     "name": "Vladimir Putin",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Vladimir Putin",
+      "Putin"
+     ]
+    },
+    {
+     "name": "Emmanuel Macron",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Emmanuel Macron"
+     ]
+    },
+    {
+     "name": "Rio de Janeiro",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Rio de Janeiro"
+     ]
+    },
+    {
+     "name": "São Paulo",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "São Paulo"
+     ]
+    },
+    {
+     "name": "Latin America",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Latin America"
+     ]
+    },
+    {
+     "name": "France",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "France"
+     ]
+    },
+    {
+     "name": "Russia",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Russia"
+     ]
+    },
+    {
+     "name": "BRICS",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "BRICS"
+     ]
+    },
+    {
+     "name": "G20",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "G20"
+     ]
+    },
+    {
+     "name": "United Nations",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "UN"
+     ]
+    },
+    {
+     "name": "Donald Trump",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Trump"
+     ]
+    },
+    {
+     "name": "Jean-Jacques Kourliandsky",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Jean-Jacques Kourliandsky"
+     ]
+    },
+    {
+     "name": "Jean-Jaurès Foundation",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Jean-Jaurès Foundation"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-c265e12b49946bd04dc31d6030bae838",
+   "publication_version_id": "pub-c265e12b49946bd04dc31d6030bae838-v22",
+   "title": "Serbia’s student movement defeats Vučić’s party at the polls",
+   "labels": [
+    {
+     "name": "Aleksandar Vučić",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Aleksandar Vučić",
+      "Vučić"
+     ]
+    },
+    {
+     "name": "Serbia",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Serbia"
+     ]
+    },
+    {
+     "name": "Volodymyr Zelensky",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Volodymyr Zelensky"
+     ]
+    },
+    {
+     "name": "Péter Magyar",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Péter Magyar"
+     ]
+    },
+    {
+     "name": "Belgrade",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Belgrade"
+     ]
+    },
+    {
+     "name": "Hungary",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Hungary"
+     ]
+    },
+    {
+     "name": "Europe",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Europe"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-caae2d32957161640dd9e90d644642c5",
+   "publication_version_id": "pub-caae2d32957161640dd9e90d644642c5-v6",
+   "title": "VIZ schedules Bleach episode 50 for later today",
+   "labels": [
+    {
+     "name": "Bleach",
+     "type": "work",
+     "role": "central",
+     "forms": [
+      "Bleach"
+     ]
+    },
+    {
+     "name": "VIZ Media",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "VIZ"
+     ]
+    },
+    {
+     "name": "Bleach: Thousand-Year Blood War",
+     "type": "work",
+     "role": "central",
+     "forms": [
+      "Thousand-Year Blood War"
+     ]
+    },
+    {
+     "name": "Hulu",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Hulu"
+     ]
+    },
+    {
+     "name": "Disney+",
+     "type": "product",
+     "role": "incidental",
+     "forms": [
+      "Disney"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-bacabe18e515fe8724c6eadb5c134500",
+   "publication_version_id": "pub-bacabe18e515fe8724c6eadb5c134500-v4",
+   "title": "Steinmeier begins China state visit as Germany balances trade ties and risks",
+   "labels": [
+    {
+     "name": "Frank-Walter Steinmeier",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Steinmeier"
+     ]
+    },
+    {
+     "name": "China",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "China"
+     ]
+    },
+    {
+     "name": "Germany",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Germany"
+     ]
+    },
+    {
+     "name": "Beijing",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Beijing"
+     ]
+    },
+    {
+     "name": "Volkswagen",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Volkswagen"
+     ]
+    },
+    {
+     "name": "Hefei",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Hefei"
+     ]
+    },
+    {
+     "name": "Friedrich Merz",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Friedrich Merz"
+     ]
+    },
+    {
+     "name": "Maroš Šefčovič",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Maros Sefcovic"
+     ]
+    },
+    {
+     "name": "European Union",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "EU"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-d975583c14dd9750715416dbe96bbe76",
+   "publication_version_id": "pub-d975583c14dd9750715416dbe96bbe76-v20",
+   "title": "El-Sayed and Rogers question each other's loyalty in a final debate, with the Michigan Senate race a toss-up",
+   "labels": [
+    {
+     "name": "Abdul El-Sayed",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Abdul El-Sayed",
+      "El-Sayed"
+     ]
+    },
+    {
+     "name": "Mike Rogers",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Mike Rogers",
+      "Rogers"
+     ]
+    },
+    {
+     "name": "Michigan",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Michigan"
+     ]
+    },
+    {
+     "name": "United States Senate",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Senate"
+     ]
+    },
+    {
+     "name": "Donald Trump",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Donald Trump",
+      "Trump"
+     ]
+    },
+    {
+     "name": "Muslim Brotherhood",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Muslim Brotherhood"
+     ]
+    },
+    {
+     "name": "Immigration and Customs Enforcement",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Immigration and Customs Enforcement",
+      "ICE"
+     ]
+    },
+    {
+     "name": "AIPAC",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "AIPAC"
+     ]
+    },
+    {
+     "name": "Grand Rapids",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Grand Rapids"
+     ]
+    },
+    {
+     "name": "Detroit",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Detroit"
+     ]
+    },
+    {
+     "name": "Gary Peters",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Gary Peters"
+     ]
+    },
+    {
+     "name": "Barack Obama",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Barack Obama"
+     ]
+    },
+    {
+     "name": "Marist College",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Marist College"
+     ]
+    },
+    {
+     "name": "Cook Political Report",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Cook Political Report"
+     ]
+    },
+    {
+     "name": "Decision Desk HQ",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Decision Desk HQ"
+     ]
+    },
+    {
+     "name": "PolitiFact",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "PolitiFact"
+     ]
+    },
+    {
+     "name": "Canada",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Canada"
+     ]
+    },
+    {
+     "name": "Detroit Economic Club",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Detroit Economic Club"
+     ]
+    },
+    {
+     "name": "Escanaba",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Escanaba"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-c241e0d680d6c916762c425fc9970733",
+   "publication_version_id": "pub-c241e0d680d6c916762c425fc9970733-v7",
+   "title": "Trump calls El-Sayed a “jihadist” at Michigan rally",
+   "labels": [
+    {
+     "name": "Donald Trump",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Donald Trump",
+      "Trump"
+     ]
+    },
+    {
+     "name": "Abdul El-Sayed",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Abdul El-Sayed",
+      "El-Sayed"
+     ]
+    },
+    {
+     "name": "Port Huron",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Port Huron"
+     ]
+    },
+    {
+     "name": "Muslim Brotherhood",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Muslim Brotherhood"
+     ]
+    },
+    {
+     "name": "Michigan",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Michigan"
+     ]
+    },
+    {
+     "name": "United States Senate",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Senate"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-64762bd5b02b791596aaf44ef2d2e6e5",
+   "publication_version_id": "pub-64762bd5b02b791596aaf44ef2d2e6e5-v3",
+   "title": "CAE agrees to sell Flightscape to SITA for $500 million enterprise value",
+   "labels": [
+    {
+     "name": "CAE",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "CAE"
+     ]
+    },
+    {
+     "name": "Flightscape",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Flightscape"
+     ]
+    },
+    {
+     "name": "SITA",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "SITA"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-232a365a6a31cab62cfbeb3180312f16",
+   "publication_version_id": "pub-232a365a6a31cab62cfbeb3180312f16-v3",
+   "title": "Mossos chief says TikTok groups recruited youths for Barcelona unrest",
+   "labels": [
+    {
+     "name": "Sílvia Catà",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Sílvia Catà",
+      "Catà"
+     ]
+    },
+    {
+     "name": "Mossos d'Esquadra",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Mossos"
+     ]
+    },
+    {
+     "name": "TikTok",
+     "type": "product",
+     "role": "central",
+     "forms": [
+      "TikTok"
+     ]
+    },
+    {
+     "name": "Barcelona",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Barcelona"
+     ]
+    },
+    {
+     "name": "Blocus",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Blocus"
+     ]
+    },
+    {
+     "name": "Lycées Indignés",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Lycées Indignés"
+     ]
+    },
+    {
+     "name": "France",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "France"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-a414851c7aa861cfbacfc82fa52ba845",
+   "publication_version_id": "pub-a414851c7aa861cfbacfc82fa52ba845-v6",
+   "title": "Claude accessed Georgia’s public vote-count data through token loophole",
+   "labels": [
+    {
+     "name": "Anthropic",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Anthropic"
+     ]
+    },
+    {
+     "name": "Claude",
+     "type": "product",
+     "role": "central",
+     "forms": [
+      "Claude"
+     ]
+    },
+    {
+     "name": "Georgia",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Georgia"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-7f16c355566aabe4243ba01a4856e16d",
+   "publication_version_id": "pub-7f16c355566aabe4243ba01a4856e16d-v7",
+   "title": "Switzerland recreated in Minecraft at one block per meter",
+   "labels": [
+    {
+     "name": "Switzerland",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Switzerland"
+     ]
+    },
+    {
+     "name": "Minecraft",
+     "type": "product",
+     "role": "central",
+     "forms": [
+      "Minecraft"
+     ]
+    },
+    {
+     "name": "swisstopo",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "swisstopo"
+     ]
+    },
+    {
+     "name": "Manifold",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Manifold"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-14227ce0665a1cefeac39c66fbc0a58a",
+   "publication_version_id": "pub-14227ce0665a1cefeac39c66fbc0a58a-v5",
+   "title": "Ukraine says strikes damaged Russian military-linked plants",
+   "labels": [
+    {
+     "name": "Ukraine",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Ukraine"
+     ]
+    },
+    {
+     "name": "Russia",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Russia"
+     ]
+    },
+    {
+     "name": "Energia",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Energia"
+     ]
+    },
+    {
+     "name": "Proton-Elektroteks",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Proton-Elektroteks"
+     ]
+    },
+    {
+     "name": "Tolyattikauchuk",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Tolyattikauchuk"
+     ]
+    },
+    {
+     "name": "Yelets",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Yelets"
+     ]
+    },
+    {
+     "name": "Lipetsk Oblast",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Lipetsk"
+     ]
+    },
+    {
+     "name": "Oryol",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Oryol"
+     ]
+    },
+    {
+     "name": "Voronezh",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Voronezh"
+     ]
+    },
+    {
+     "name": "General Staff of the Armed Forces of Ukraine",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "General Staff"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-7e2995b21ec0387b764910920dc3b7cb",
+   "publication_version_id": "pub-7e2995b21ec0387b764910920dc3b7cb-v5",
+   "title": "Sagawa says breach may involve 53.23 million shipment records",
+   "labels": [
+    {
+     "name": "Sagawa Express",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Sagawa Express",
+      "Sagawa"
+     ]
+    },
+    {
+     "name": "Parcel Inquiry Service",
+     "type": "product",
+     "role": "incidental",
+     "forms": [
+      "Parcel Inquiry Service"
+     ]
+    },
+    {
+     "name": "Smart Club",
+     "type": "product",
+     "role": "incidental",
+     "forms": [
+      "Smart Club"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-67b750e9abdd18c00e8666c8dc90b858",
+   "publication_version_id": "pub-67b750e9abdd18c00e8666c8dc90b858-v2",
+   "title": "Meta seeks $95bn in stock-related deals to fund AI investment",
+   "labels": [
+    {
+     "name": "Meta",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Meta"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-aaaaa8a05acc02dfa953ae2fd30a3639",
+   "publication_version_id": "pub-aaaaa8a05acc02dfa953ae2fd30a3639-v5",
+   "title": "Governor says drone attack killed two in Voronezh Region",
+   "labels": [
+    {
+     "name": "Alexander Gusev",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Alexander Gusev",
+      "Gusev"
+     ]
+    },
+    {
+     "name": "Voronezh Oblast",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Voronezh Region",
+      "Voronezh"
+     ]
+    },
+    {
+     "name": "Ukraine",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Ukrainian"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-3f50ac1255c46a710305004dd70ee211",
+   "publication_version_id": "pub-3f50ac1255c46a710305004dd70ee211-v5",
+   "title": "Markets expect Fed to hold rates at Oct. 27-28 meeting, but see pause as potentially brief",
+   "labels": [
+    {
+     "name": "Federal Reserve",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Federal Reserve",
+      "Fed"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-071ff04873362006d437ea5345fc4cda",
+   "publication_version_id": "pub-071ff04873362006d437ea5345fc4cda-v8",
+   "title": "Palestinians in Gaza brace for Israel election as campaign sidelines territory",
+   "labels": [
+    {
+     "name": "Gaza",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Gaza"
+     ]
+    },
+    {
+     "name": "Israel",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Israel"
+     ]
+    },
+    {
+     "name": "Gadi Eisenkot",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Gadi Eisenkot"
+     ]
+    },
+    {
+     "name": "Benjamin Netanyahu",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Benjamin Netanyahu"
+     ]
+    },
+    {
+     "name": "Hamas",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Hamas"
+     ]
+    },
+    {
+     "name": "Knesset",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Knesset"
+     ]
+    },
+    {
+     "name": "JLabs",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "JLabs"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-ab4319e2584bf34635c855d45fc99a0f",
+   "publication_version_id": "pub-ab4319e2584bf34635c855d45fc99a0f-v3",
+   "title": "Ohio Democrats say Trump discontent is pushing some voters toward them",
+   "labels": [
+    {
+     "name": "Ohio",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Ohio"
+     ]
+    },
+    {
+     "name": "Kim McCarthy",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Kim McCarthy",
+      "McCarthy"
+     ]
+    },
+    {
+     "name": "Democratic Party",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Democratic",
+      "Democrats"
+     ]
+    },
+    {
+     "name": "Donald Trump",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Donald Trump",
+      "Trump"
+     ]
+    },
+    {
+     "name": "Republican Party",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Republican",
+      "Republicans"
+     ]
+    },
+    {
+     "name": "Fox News",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Fox News"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-ab3424141f101958babc70b553809a3a",
+   "publication_version_id": "pub-ab3424141f101958babc70b553809a3a-v4",
+   "title": "Poland signals space cooperation with Germany, without naming a project",
+   "labels": [
+    {
+     "name": "Poland",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Poland"
+     ]
+    },
+    {
+     "name": "Germany",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Germany"
+     ]
+    },
+    {
+     "name": "Andrzej Domański",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Andrzej Domanski"
+     ]
+    },
+    {
+     "name": "European Space Agency",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "European Space Agency",
+      "ESA"
+     ]
+    },
+    {
+     "name": "Warsaw",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Warsaw"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-025ed1adc4309b90c8ba1d28f0f0a349",
+   "publication_version_id": "pub-025ed1adc4309b90c8ba1d28f0f0a349-v6",
+   "title": "Three arrested in Jordan over church attack",
+   "labels": [
+    {
+     "name": "Jordan",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Jordan"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-b28ff5ad5ea7adae5ac7a04bfcf76cfd",
+   "publication_version_id": "pub-b28ff5ad5ea7adae5ac7a04bfcf76cfd-v3",
+   "title": "U.S. military restricts BYD vehicles at Kadena, citing security risks",
+   "labels": [
+    {
+     "name": "BYD",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "BYD"
+     ]
+    },
+    {
+     "name": "Kadena Air Base",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Kadena Air Base",
+      "Kadena"
+     ]
+    },
+    {
+     "name": "United States Armed Forces",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "U.S. military"
+     ]
+    },
+    {
+     "name": "Okinawa",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Okinawa"
+     ]
+    },
+    {
+     "name": "United States Forces Japan",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "U.S. Forces Japan"
+     ]
+    },
+    {
+     "name": "John Severns",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "John Severns"
+     ]
+    },
+    {
+     "name": "Japan",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Japan"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-26257a6199184129df3425b3dfb7892c",
+   "publication_version_id": "pub-26257a6199184129df3425b3dfb7892c-v3",
+   "title": "Duncan Robinson helps Detroit open season 3-0",
+   "labels": [
+    {
+     "name": "Duncan Robinson",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Duncan Robinson",
+      "Robinson"
+     ]
+    },
+    {
+     "name": "Detroit Pistons",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "Detroit"
+     ]
+    },
+    {
+     "name": "Cade Cunningham",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Cade Cunningham"
+     ]
+    },
+    {
+     "name": "Philadelphia 76ers",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Philadelphia",
+      "76ers"
+     ]
+    },
+    {
+     "name": "Boston Celtics",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Boston"
+     ]
+    },
+    {
+     "name": "J.B. Bickerstaff",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "J.B. Bickerstaff"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-c60f2420fd6629a5f16865b87ac7692b",
+   "publication_version_id": "pub-c60f2420fd6629a5f16865b87ac7692b-v3",
+   "title": "Driver dies after train hits vehicle at Peoria crossing",
+   "labels": [
+    {
+     "name": "Peoria",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Peoria"
+     ]
+    },
+    {
+     "name": "Peoria Police Department",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Peoria Police"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-88910e415a66e5fb3acd51b3f110965f",
+   "publication_version_id": "pub-88910e415a66e5fb3acd51b3f110965f-v3",
+   "title": "German writer Joachim Lottmann dies at 70",
+   "labels": [
+    {
+     "name": "Joachim Lottmann",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Joachim Lottmann",
+      "Lottmann"
+     ]
+    },
+    {
+     "name": "Deutsche Presse-Agentur",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "German Press Agency",
+      "dpa"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-861eb2f26a596a44870adefc46ec2e9a",
+   "publication_version_id": "pub-861eb2f26a596a44870adefc46ec2e9a-v5",
+   "title": "European gas prices hit four-year high as Birol warns of low winter reserves",
+   "labels": [
+    {
+     "name": "Europe",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Europe",
+      "European"
+     ]
+    },
+    {
+     "name": "Fatih Birol",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Fatih Birol",
+      "Birol"
+     ]
+    },
+    {
+     "name": "International Energy Agency",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "IEA"
+     ]
+    },
+    {
+     "name": "ENTSOG",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "ENTSOG"
+     ]
+    },
+    {
+     "name": "European Union",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "EU"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-9cd2bb447f477fc0c7def923b308ae0e",
+   "publication_version_id": "pub-9cd2bb447f477fc0c7def923b308ae0e-v26",
+   "title": "María Corina Machado returns to Caracas",
+   "labels": [
+    {
+     "name": "María Corina Machado",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "María Corina Machado",
+      "Machado"
+     ]
+    },
+    {
+     "name": "Venezuela",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Venezuela"
+     ]
+    },
+    {
+     "name": "Caracas",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Caracas"
+     ]
+    },
+    {
+     "name": "Donald Trump",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Donald Trump",
+      "Trump"
+     ]
+    },
+    {
+     "name": "Delcy Rodríguez",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Delcy Rodríguez"
+     ]
+    },
+    {
+     "name": "Nicolás Maduro",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Nicolás Maduro"
+     ]
+    },
+    {
+     "name": "United States",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "United States"
+     ]
+    },
+    {
+     "name": "El Arepazo",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "El Arepazo"
+     ]
+    },
+    {
+     "name": "South Florida",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "South Florida"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-d4a9caf162acda9fe8cf02a8dd28c9ef",
+   "publication_version_id": "pub-d4a9caf162acda9fe8cf02a8dd28c9ef-v5",
+   "title": "BMA announces two-day England consultants strike for 25–26 November",
+   "labels": [
+    {
+     "name": "British Medical Association",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "BMA"
+     ]
+    },
+    {
+     "name": "England",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "England"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-8a67f512d5ed158bffba1670534660b6",
+   "publication_version_id": "pub-8a67f512d5ed158bffba1670534660b6-v8",
+   "title": "Voronezh governor says drone and missile strikes killed two, injured 17",
+   "labels": [
+    {
+     "name": "Aleksandr Gusev",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Aleksandr Gusev"
+     ]
+    },
+    {
+     "name": "Voronezh Oblast",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Voronezh Oblast"
+     ]
+    },
+    {
+     "name": "Voronezh",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Voronezh"
+     ]
+    },
+    {
+     "name": "Ukraine",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Ukrainian"
+     ]
+    },
+    {
+     "name": "Energia",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Energia"
+     ]
+    },
+    {
+     "name": "Yelets",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Yelets"
+     ]
+    },
+    {
+     "name": "Voronezhsintezkauchuk",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "Voronezhsintezkauchuk"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-38661deaeb968ed3386c18b031169fbd",
+   "publication_version_id": "pub-38661deaeb968ed3386c18b031169fbd-v6",
+   "title": "Journalist says Musetti sought phone for 1 a.m. anti-doping alarm",
+   "labels": [
+    {
+     "name": "Lorenzo Musetti",
+     "type": "person",
+     "role": "central",
+     "forms": [
+      "Lorenzo Musetti",
+      "Musetti"
+     ]
+    },
+    {
+     "name": "José Morgado",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "José Morgado"
+     ]
+    },
+    {
+     "name": "Rogério Santos",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Rogério Santos"
+     ]
+    },
+    {
+     "name": "ATP",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "ATP"
+     ]
+    },
+    {
+     "name": "Luca Van Assche",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Luca Van Assche"
+     ]
+    },
+    {
+     "name": "Lyon",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Lyon"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-5c8406aa7d2e8230268b6747cdeddc71",
+   "publication_version_id": "pub-5c8406aa7d2e8230268b6747cdeddc71-v3",
+   "title": "Holiday parcel prices are forecast to hit records as surcharges climb",
+   "labels": [
+    {
+     "name": "AFS Logistics",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "AFS"
+     ]
+    },
+    {
+     "name": "TD Cowen",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "TD Cowen"
+     ]
+    },
+    {
+     "name": "UPS",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "UPS"
+     ]
+    },
+    {
+     "name": "FedEx",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "FedEx"
+     ]
+    },
+    {
+     "name": "OnTrac",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "OnTrac"
+     ]
+    },
+    {
+     "name": "Energy Information Administration",
+     "type": "organization",
+     "role": "incidental",
+     "forms": [
+      "EIA"
+     ]
+    },
+    {
+     "name": "Mingshu Bates",
+     "type": "person",
+     "role": "incidental",
+     "forms": [
+      "Mingshu Bates"
+     ]
+    }
+   ]
+  },
+  {
+   "publication_id": "pub-a7f27c9190c3010ac1946fcbafe0c078",
+   "publication_version_id": "pub-a7f27c9190c3010ac1946fcbafe0c078-v4",
+   "title": "Mein Schiff 3 collision cancels Canary Islands cruise",
+   "labels": [
+    {
+     "name": "Mein Schiff 3",
+     "type": "product",
+     "role": "central",
+     "forms": [
+      "Mein Schiff 3"
+     ]
+    },
+    {
+     "name": "TUI Cruises",
+     "type": "organization",
+     "role": "central",
+     "forms": [
+      "TUI Cruises"
+     ]
+    },
+    {
+     "name": "Bremerhaven",
+     "type": "place",
+     "role": "central",
+     "forms": [
+      "Bremerhaven"
+     ]
+    },
+    {
+     "name": "Canary Islands",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Canary Islands"
+     ]
+    },
+    {
+     "name": "Stromkaje",
+     "type": "place",
+     "role": "incidental",
+     "forms": [
+      "Stromkaje"
+     ]
+    }
+   ]
+  }
+ ]
+}
