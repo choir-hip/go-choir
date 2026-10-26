@@ -132,3 +132,12 @@ note on another document", and add: if the owner's request conflicts with
 an open request listed (the same date, place or resource), say so in your
 own document, name that document's title, and let the owner decide. The
 run still writes only its own document.
+
+## S2 paired test, run four after F6, 2026-10-26 00:39-00:40 (passes)
+
+The F6 label (a03d5266a, reviews 253 and 254) deployed 00:33:25; b@c booted
+it 00:36:35. On (doc f1a92969): label present, offsite in the excerpt, and
+the answer says "The open 'Team offsite plan' also calls for the lake house
+on Saturday, November 7; please decide which event should take priority
+before a reservation is made." Off (doc ed46f4af): no label, no mention.
+S2's acceptance action is met on this sample.

@@ -1025,7 +1025,7 @@ nodes:
     title: PD3 — one Texture root desk per computer with per-document sub-RLMs and a master document
     path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
     ledger: ''
-    status: working  # rewritten 2026-10-25; accepted by re-review 246; the live station of choir-selfdev-readiness-metamission-2026-10-24 (before T1a)
+    status: complete  # 2026-10-26 00:40; S1 and S2 live on b@c; S3 and S4 excluded (owner)
     kind: station
     entrypoint: false
     member_of: choir-persistent-desks-metamission-2026-10-11
@@ -1383,3 +1383,14 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-t1a-app-self-development-2026-10-26
+    title: T1a — the desktop apps self-developed to a design bar, one per request, on b@c
+    path: docs/definitions/choir-t1a-app-self-development-2026-10-26.md
+    ledger: ''
+    status: working  # the live station of choir-selfdev-readiness-metamission-2026-10-24
+    kind: station
+    entrypoint: false
+    member_of: choir-selfdev-readiness-metamission-2026-10-24
+    execution_mode: subordinate_only
+    depends_on: [choir-pd3-texture-root-desk-2026-10-11]
+    enables: []

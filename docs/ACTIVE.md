@@ -25,13 +25,13 @@ first pass's carried items. Then the tent poles: app agents, an agentic
 red-teaming loop, distribution. Cadence: switched-off slices share a deploy
 wave; each is turned on for one test computer at a time.
 
-**Now (2026-10-25 09:4x):** SR5 is complete, and so is reader-6, the
-Reader's next self-development round (deployed in 7fbe45512, b@c's stack
-upstreamed). The live station is
-[PD3 Texture root desk](definitions/choir-pd3-texture-root-desk-2026-10-11.md)
-S1 (`readiness: executable`, accepted by re-review 246), pulled forward by
-the owner; then T1a (Files, Slides, Calendar, Podcasts), then T1c (the
-desktop redesign).
+**Now (2026-10-26 00:5x):** PD3 is complete (the Texture root desk and
+master document, S1 and S2, live on b@c). The live station is
+[T1a, the apps to a design bar](definitions/choir-t1a-app-self-development-2026-10-26.md):
+the Reader redesign awaits approval on b@c, then Slides, Files (Open with),
+Calendar and Podcasts, with Synthetic DeepSeek and the Claude delegate
+(live on b@c). SR9, propagating accepted changes by an internal mechanism,
+is in investigation. Then T1c (the desktop redesign).
 
 ## Superseded (2026-10-24): the launch first pass
 

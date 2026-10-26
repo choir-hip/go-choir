@@ -190,7 +190,7 @@ metamission:
     - id: PD3
       path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11, rewritten 2026-10-25; PD2 landed as fcb424b92)
       readiness: executable
-      status: working
+      status: complete  # 2026-10-26 00:40, receipts S1 and S2 in its file
       depends_on: [SR5]
       note: >-
         Pulled forward (owner, 2026-10-25: "there should be one texture desk
@@ -210,9 +210,9 @@ metamission:
         pattern (I26). Red (Texture canonical writes, a new persistent
         agent, store refusals).
     - id: T1a
-      path: none yet (drafted in the ledger 01:5x)
-      readiness: intent
-      status: pending
+      path: docs/definitions/choir-t1a-app-self-development-2026-10-26.md
+      readiness: drafted
+      status: working
       depends_on: [SR5, PD3]
       note: >-
         Self-develop the other four apps on the list, the same loop as the
@@ -227,6 +227,21 @@ metamission:
         with texture revise, not resubmitted. Engineering on b@c runs
         Synthetic DeepSeek. Specs per app: the 2026-10-24 v7 brief
         (_runs/apprewrite/v7/request.txt) is the starting list.
+    - id: SR9
+      path: none yet (intent; investigation running 2026-10-26)
+      readiness: intent
+      status: pending
+      depends_on: [SR5]
+      note: >-
+        Owner 2026-10-26: "after selfdev succeeds on an individual computer,
+        the way that we get that running on every computer shouldn't be that
+        you, an external coding agent, pushes to main. We need to have our
+        internal mechanism of propagating changes. I think we may have even
+        have started to build this, so we should look into that and really
+        design it thoughtfully. Redesign it as needed." Starting points:
+        choir release publish (an applied operation as a source release),
+        the Autopaper object graph's publication and adoption, the
+        computer-update design (B4/B5), scripts/selfdev-promote.
     - id: T1c
       path: none yet (intent)
       readiness: intent
@@ -447,15 +462,15 @@ boundaries:
 now:
   status: working
   slice: >-
-    PD3 S1 (the live station): the master document and its root desk behind
-    texture.root_desk. Before it: SR5 complete (receipt below), and reader-6,
-    the Reader's next self-development round on the new base, done end to
-    end: built on b@c, rejected once on FP0's extractor check, repaired on
-    its carried tree, accepted, promoted (review 243 PASS), deployed in
-    7fbe45512, and b@c's stack upstreamed at 09:28:10. After PD3: T1a, then
-    T1c.
-  source_ref: 7fbe45512
-  deploy_identity: 7fbe45512 (reader-6 on main; deployed 09:27 UTC 2026-10-25)
+    T1a (the live station, docs/definitions/choir-t1a-app-self-development-2026-10-26.md):
+    the apps self-developed to a design bar, one per request, engineering on
+    b@c with Synthetic DeepSeek and the Claude delegate (live on b@c since
+    2026-10-26 00:12). PD3 complete (S1 and S2 live on b@c; receipt in its
+    file). New: SR9, propagating an accepted change to every computer by an
+    internal mechanism rather than FP0 pushing main (owner 2026-10-26;
+    investigation and design first). Then T1c.
+  source_ref: a03d5266a
+  deploy_identity: a03d5266a (PD3 S2 F6; deployed 00:33 UTC 2026-10-26)
   candidate:
     id: wave-1
     state: rehearsing

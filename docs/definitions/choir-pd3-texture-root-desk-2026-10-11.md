@@ -213,13 +213,14 @@ boundaries:
   protected_surfaces: [internal/textureowner, internal/store lifecycle and texture_turn, Texture commit path, agentcore desk sessions, agentcore RestartWorkKinds, actorruntime wake handling, computer settings]
 
 now:
-  status: working
+  status: complete
   slice: >-
-    S2: each sub-RLM's wake context carries the master document (at most
-    4 KiB, "waits on the owner" first), behind the same switch; tier 1.
-    S1 is live on b@c (receipt S1 below).
-  source_ref: 7f769cc34
-  deploy_identity: staging 7f769cc34 (S1; deployed 11:26 UTC 2026-10-25)
+    Complete: S1 (the root desk and master document) and S2 (every other
+    document's Texture reads the master's excerpt) are live on b@c behind
+    texture.root_desk (receipts S1 and S2 below). S3 and S4 (routing,
+    in-session sub-RLMs) are excluded and wait for the owner.
+  source_ref: a03d5266a
+  deploy_identity: staging a03d5266a (S2 with F4, F5 and F6; deployed 00:33 UTC 2026-10-26)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: PD3-1
@@ -238,8 +239,9 @@ now:
       checked by the proof script against the ledger, so "supervision
       surface" cannot be satisfied by any list
     scope_if_supported: one computer, sequential Texture turns
-    status: proposed
-    evidence_refs: []
+    status: supported
+    evidence_refs:
+      - docs/evidence/pd3-s1-acceptance-2026-10-25.md (S1 acceptance; S2 paired runs one to four)
   decision:
     what: >-
       the root is the master document's own Texture desk, named by a
@@ -254,23 +256,23 @@ now:
     owner_ratification_ref: direction ratified 2026-10-11 and 2026-10-25; this mechanism choice is FP0's conservative default under No Blocking Asks and is flagged for the owner
   belief:
     believed_state: >-
-      S1 is live on b@c: the master document exists (ef0e2ef8), its only
-      writer is its own Texture desk, it covers every open work item on the
-      computer, and a cancelled document run does not stop the root or the
-      other documents.
+      S1 and S2 are live on b@c: the master document (ef0e2ef8) is written
+      only by its own Texture desk and covers every open work item; every
+      other document's run reads an excerpt of it, newest documents first,
+      and names a conflicting open request in its own document (paired run
+      four: on names the "Team offsite plan", off does not).
     main_uncertainty: >-
-      Whether a sub-RLM given the master document as context weighs the
-      owner's other open requests (S2's paired test), and whether the
-      root's "what the owner last asked" line misreads rejections as
-      requests (acceptance finding F2).
-    next_observation: S2's paired off/on test on b@c
+      One paired sample; whether conflict notes stay useful and rare as
+      the computer's document count grows, and whether the root's "what
+      the owner last asked" line misreads rejections as requests (F2).
+    next_observation: conflict notes in ordinary use on b@c; the owner's ruling on S3 and S4
   blocker_or_risk: >-
     A document whose work drains settles and then refuses owner revisions
     (acceptance F1; the metamission's standing risk); proofs use fresh
     documents.
   next_action: >-
-    Build S2 in a lane (tests first), tier 1 review, land, run the paired
-    test on b@c.
+    None in this station. Turning texture.root_desk on beyond b@c follows
+    the metamission's switch order; S3 and S4 wait for the owner.
 
 receipts:
   - id: S1
@@ -286,6 +288,23 @@ receipts:
       open; isolation (run 9587225f cancelled, C revised, master followed);
       two root runs 3m20s apart; latency p50 off 16 s, on 10 s. Refusals and
       crash by test receipt.
+    evidence_ref: docs/evidence/pd3-s1-acceptance-2026-10-25.md
+  - id: S2
+    status: complete
+    at: 2026-10-26T00:40:19Z
+    source_ref: a03d5266a
+    commits: "ac9ae5fc7 9b3db6ebd (S2); 6a52dc1be a4ef55f5d (F4); 02f69b00f f82a750cf ce6507d32 b6a9b1f37 (F5); de395de21 0456f2111 fb5ceb08e b2cd15baf, rebased (F6)"
+    ci: "40192322501, 40195331859, 40197428136, 40249260923 success"
+    deploy: "staging a03d5266a, vmctl 00:33:25 UTC 2026-10-26, NRestarts 0; b@c booted it 00:36:35"
+    reviews: "249 (approve), 250 (approve, LOW), 251 (approve, LOW and NIT fixed), 253 (request changes: the ask ban), 254 (approve); all Devin, tier 1"
+    acceptance: >-
+      Paired test on b@c, run four (00:39-00:40): on, document f1a92969's
+      prompt carries the labelled excerpt with the offsite plan and its
+      answer names "Team offsite plan" and asks the owner which takes
+      priority; off, document ed46f4af carries no label and no mention.
+      Runs one to three failed on F4 (the excerpt kept the oldest
+      documents), F5 (refs written inline went unparsed) and F6 (the label
+      forbade naming another document).
     evidence_ref: docs/evidence/pd3-s1-acceptance-2026-10-25.md
 ---
 
