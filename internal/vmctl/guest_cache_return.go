@@ -61,6 +61,16 @@ const (
 
 	cacheReturnSettleCap = rssfall.DefaultCap
 
+	// cacheReturnPressureRepeat: under pressure a computer is not asked
+	// again within this long of its last act (two refused starts must not
+	// squeeze one computer twice).
+	cacheReturnPressureRepeat = time.Minute
+	// cacheReturnPressureMinExcess: a computer holding less than this over
+	// its D4 settled RSS has no cache worth asking for.
+	cacheReturnPressureMinExcess = 256 << 20
+	// cacheReturnPressureMaxCandidates bounds the computers one start asks.
+	cacheReturnPressureMaxCandidates = 3
+
 	cacheReturnPath = "/internal/runtime/memory/cache-return"
 )
 
@@ -213,6 +223,13 @@ type cacheReturnCandidateInput struct {
 	IdleFloor time.Duration
 	// Limit stops the (probing) pass once this many candidates are found.
 	Limit int
+	// Pressure is make-room's step 0 (S4): a computer acted on in this idle
+	// period is still a candidate, but not one acted on in the last
+	// cacheReturnPressureRepeat; Extra is a further cheap rule and Order
+	// replaces the longest-idle-first order.
+	Pressure bool
+	Extra    func(*VMOwnership) bool
+	Order    func(a, b *VMOwnership) bool
 
 	Claimed     func(*VMOwnership) bool
 	Uncaptured  func(vmID string) bool
@@ -285,7 +302,14 @@ func cacheReturnCandidates(in cacheReturnCandidateInput) []*VMOwnership {
 		if in.Unsupported != nil && in.Unsupported(own.VMID, own.Epoch) {
 			continue
 		}
-		if last, acted := lastActOf(in, own.VMID); acted && !last.Before(own.LastActiveAt) {
+		if in.Extra != nil && !in.Extra(own) {
+			continue
+		}
+		if last, acted := lastActOf(in, own.VMID); in.Pressure {
+			if acted && in.Now.Sub(last) < cacheReturnPressureRepeat {
+				continue
+			}
+		} else if acted && !last.Before(own.LastActiveAt) {
 			// Acted in this idle period. A computer the sweep never
 			// hibernates keeps its cache growing, so it is re-armed.
 			neverHibernated := warmnessClassProtected(class) || !in.SweepHibernates
@@ -299,6 +323,14 @@ func cacheReturnCandidates(in cacheReturnCandidateInput) []*VMOwnership {
 		pool = append(pool, ranked{own, idle})
 	}
 	sort.SliceStable(pool, func(i, j int) bool {
+		if in.Order != nil {
+			if in.Order(pool[i].own, pool[j].own) {
+				return true
+			}
+			if in.Order(pool[j].own, pool[i].own) {
+				return false
+			}
+		}
 		if pool[i].idle != pool[j].idle {
 			return pool[i].idle > pool[j].idle
 		}
@@ -577,43 +609,16 @@ func (r *OwnershipRegistry) runGuestCacheReturnPass(ctx context.Context) int {
 		return 0
 	}
 	now := r.now()
-
-	r.mu.RLock()
-	policy := r.warmnessPolicy
-	acfg := normalizeHostAdmissionConfig(r.hostAdmission)
-	sweepHibernates := r.idleTimeout > 0
-	owns := make([]*VMOwnership, 0, len(r.ownerships))
-	claimed := map[string]bool{}
-	for key, own := range r.ownerships {
-		owns = append(owns, r.cloneWithActivityLocked(own))
-		if _, held := r.lifecycle[key]; held {
-			claimed[own.VMID] = true
-		}
-	}
-	r.mu.RUnlock()
-
-	led := &r.admissionLedger
+	snap := r.cacheReturnSnapshot()
+	acfg := snap.acfg
 	picks := cacheReturnCandidates(cacheReturnCandidateInput{
-		Now: now, Config: cfg, Policy: policy, SweepHibernates: sweepHibernates,
-		Ownerships: owns, IdleFloor: cfg.Idle, Limit: free,
-		Claimed: func(own *VMOwnership) bool { return claimed[own.VMID] },
+		Now: now, Config: cfg, Policy: snap.policy, SweepHibernates: snap.sweepHibernates,
+		Ownerships: snap.owns, IdleFloor: cfg.Idle, Limit: free,
+		Claimed: func(own *VMOwnership) bool { return snap.claimed[own.VMID] },
 		// D4 first: an act before the settled RSS is captured would make
 		// D4 under-charge every later wake. An open reservation, or an
 		// ended window still awaiting the sampler's capture, holds it off.
-		Uncaptured: func(vmID string) bool {
-			led.mu.Lock()
-			defer led.mu.Unlock()
-			led.outstandingLocked(now, acfg)
-			if _, waiting := led.expired[vmID]; waiting {
-				return true
-			}
-			for _, res := range led.reservations {
-				if res.vmID == vmID {
-					return true
-				}
-			}
-			return false
-		},
+		Uncaptured:  r.cacheReturnUncaptured(now, acfg),
 		InFlight:    st.isInFlight,
 		LastAct:     st.lastActAt,
 		Unsupported: st.isUnsupported,
@@ -631,11 +636,69 @@ func (r *OwnershipRegistry) runGuestCacheReturnPass(ctx context.Context) int {
 	return started
 }
 
-// guestCacheReturnAct runs one act and records it.
+// cacheReturnSnap is the registry state both triggers read, taken under one
+// read lock.
+type cacheReturnSnap struct {
+	policy          WarmnessPolicyConfig
+	acfg            HostAdmissionConfig
+	sweepHibernates bool
+	owns            []*VMOwnership
+	claimed         map[string]bool
+}
+
+func (r *OwnershipRegistry) cacheReturnSnapshot() cacheReturnSnap {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	snap := cacheReturnSnap{
+		policy: r.warmnessPolicy, acfg: normalizeHostAdmissionConfig(r.hostAdmission),
+		sweepHibernates: r.idleTimeout > 0, claimed: map[string]bool{},
+		owns: make([]*VMOwnership, 0, len(r.ownerships)),
+	}
+	for key, own := range r.ownerships {
+		snap.owns = append(snap.owns, r.cloneWithActivityLocked(own))
+		if _, held := r.lifecycle[key]; held {
+			snap.claimed[own.VMID] = true
+		}
+	}
+	return snap
+}
+
+// cacheReturnUncaptured is D4's gate: a computer with an open reservation,
+// or an ended settle window still awaiting the sampler's capture, has not
+// had its settled RSS captured, and an act before that would make D4
+// under-charge every later wake.
+func (r *OwnershipRegistry) cacheReturnUncaptured(now time.Time, acfg HostAdmissionConfig) func(vmID string) bool {
+	led := &r.admissionLedger
+	return func(vmID string) bool {
+		led.mu.Lock()
+		defer led.mu.Unlock()
+		led.outstandingLocked(now, acfg)
+		if _, waiting := led.expired[vmID]; waiting {
+			return true
+		}
+		for _, res := range led.reservations {
+			if res.vmID == vmID {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// guestCacheReturnAct runs one idle-trigger act in the background.
 func (r *OwnershipRegistry) guestCacheReturnAct(ctx context.Context, own *VMOwnership, trigger string, cfg GuestCacheReturnConfig) {
 	st := &r.cacheReturn
 	defer st.wg.Done()
 	defer st.end(own.VMID)
+	r.doGuestCacheReturn(ctx, own, trigger, cfg, cacheReturnSettleCap)
+}
+
+// doGuestCacheReturn runs one act and records it: the call (bounded by ctx
+// and the 10 s call bound), then the wait for the host to see the fall (at
+// most settleCap), then the host's readings. It returns the record and the
+// bytes the Firecracker RSS fell by, as the host measured them.
+func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwnership, trigger string, cfg GuestCacheReturnConfig, settleCap time.Duration) (CacheReturnRecord, uint64) {
+	st := &r.cacheReturn
 
 	started := time.Now()
 	dry := cfg.Mode == GuestCacheReturnObserve
@@ -679,19 +742,24 @@ func (r *OwnershipRegistry) guestCacheReturnAct(ctx context.Context, own *VMOwne
 	rec.SettleExit = "none"
 	after, haveAfter := before, haveBefore
 	if haveBefore && status == http.StatusOK && !dry && (report.Outcome == "returned" || report.Outcome == "partial") {
-		settle := waitRSSFall(read, st.sleepFn(), before, report.ReclaimedBytes, cacheReturnSettleCap)
+		settle := waitRSSFall(read, st.sleepFn(), before, report.ReclaimedBytes, settleCap)
 		after, haveAfter = settle.RSS, settle.Exit != "gone"
 		rec.SettleMS, rec.SettleExit = settle.MS, settle.Exit
 	} else if got, ok := read(); ok {
 		after, haveAfter = got, true
 	}
+	var fall uint64
 	if haveAfter {
 		rec.setRSSAfter(after)
+		if haveBefore && before.Total > after.Total {
+			fall = before.Total - after.Total
+		}
 	}
 	rec.HostAvailAfterMiB = st.hostAvail() >> 20
 	rec.MS = time.Since(started).Milliseconds()
 	st.record(rec)
 	log.Print("vmctl: " + rec.JournalLine())
+	return rec, fall
 }
 
 func (rec *CacheReturnRecord) setRSSBefore(v cacheReturnRSS) {
@@ -736,6 +804,9 @@ func (s *guestCacheReturnState) call(ctx context.Context, own *VMOwnership, scop
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(cctx.Err(), context.DeadlineExceeded) {
 			return 0, report, errors.New("host_timeout")
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			return 0, report, errors.New("cancelled")
 		}
 		return 0, report, errors.New("error")
 	}
