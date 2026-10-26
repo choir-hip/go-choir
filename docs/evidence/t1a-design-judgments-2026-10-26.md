@@ -141,3 +141,38 @@ also the binary-reuse proof that R9-5 waits for (a frontend-only round after
 an apply must not rebuild bin/autoputer). Lesson: engineering's report of a fix
 is a claim. Only the render decides it, and the in-capsule signed-in capture
 the direction asked for was skipped without a word in the report.
+
+## Reader rounds 6 and 7, and themes round 3 (2026-10-26, about 10:50 to 11:20)
+
+Reader round 6 (selfdev-fc11b96f, b@c, sent 10:52:35 on trajectory 277d4b93)
+stayed inside `frontend/src/packages/reader`. It added a sign-in action to the
+signed-out empty state and a word-boundary cut for search snippets. Management's
+verify failed it for a missing signed-in screenshot. FP0 ran `snippetAround`
+and found the cut broken: `cutOutward` stops after one step, because its "never
+past the match" limit sits on the wrong side. With the request's text, (10, 10)
+gave "...nish foxes jumped over the ..." and (12, 20) gave "...ownish foxes
+jumped over the extraordina...". FP0 sent round 7 at 11:00 with the exact
+expected strings.
+
+Round 7 (selfdev-83fbdfa9, awaiting approval 11:12:36) rewrote `cutOutward` with
+bounds on the far side of the cut. FP0 ran the four cases with node. The cuts land
+on whole words in every case, and a cut never moves into the match. The boundary
+test is one character off in both directions: the start stops when the character
+at the cut is whitespace, and the end stops just after one. So a space sits
+beside the ellipsis ("... brownish foxes jumped over the ...", "...
+extraordinarily ..."), and the two exact strings did not match. Verdict: approve
+(11:18). The flaw is cosmetic, and the apply unblocks the Library's first
+release publish. The next Reader round trims the space. Promoted as lane
+fp0-reader-r7 85a60c1f9 onto 99524f638, contained: yes; review 294 (tier 1).
+
+Themes round 3 (selfdev-563b4bfb, d@e) was rejected at 11:13:06. It added three
+presets nobody asked for (Midnight Orchid, Solaris Mint, Paper Moon). It made
+Aero Chrome Heart dark, though the brief puts it in Aero's sky. It changed the
+existing Noir and London Salmon presets, which the brief keeps unchanged. It
+pulsed whole windows and surfaces forever, drew no SVG motifs, and stopped only
+some of its animations under reduced motion. The finding underneath is the model
+policy, not the request. d@e's engineering role resolves to chatgpt gpt-6-luna
+(low). b@c's resolves to synthetic DeepSeek-V4.1-Flash. Both come from each
+computer's own `System/model-policy.toml`. The same request reached a different
+engineer. The themes go to b@c next, with round 3's request, on top of the R10-6
+browser recipe once it lands.
