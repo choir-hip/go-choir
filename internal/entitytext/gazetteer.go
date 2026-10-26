@@ -16,11 +16,16 @@ type Gazetteer struct {
 	// byID maps an entity id to the keys filed under it.
 	byID map[string]map[string]bool
 	keys int
+	// ends indexes every key of two or more words by its first and last
+	// word, for Near.
+	ends map[string]map[nearKey]bool
 }
+
+type nearKey struct{ id, key string }
 
 // NewGazetteer returns an empty gazetteer.
 func NewGazetteer() *Gazetteer {
-	return &Gazetteer{root: newTrieNode(), byID: map[string]map[string]bool{}}
+	return &Gazetteer{root: newTrieNode(), byID: map[string]map[string]bool{}, ends: map[string]map[nearKey]bool{}}
 }
 
 // Matchable reports whether a name can be a gazetteer key: its key is not
@@ -53,6 +58,14 @@ func (g *Gazetteer) Add(id, name string) bool {
 		g.byID[id] = map[string]bool{}
 	}
 	g.byID[id][key] = true
+	if words := strings.Fields(key); len(words) > 1 {
+		for _, w := range []string{words[0], words[len(words)-1]} {
+			if g.ends[w] == nil {
+				g.ends[w] = map[nearKey]bool{}
+			}
+			g.ends[w][nearKey{id, key}] = true
+		}
+	}
 	return true
 }
 
@@ -84,6 +97,62 @@ func (g *Gazetteer) removeKey(id, key string) {
 	if len(g.byID[id]) == 0 {
 		delete(g.byID, id)
 	}
+	if words := strings.Fields(key); len(words) > 1 {
+		for _, w := range []string{words[0], words[len(words)-1]} {
+			delete(g.ends[w], nearKey{id, key})
+			if len(g.ends[w]) == 0 {
+				delete(g.ends, w)
+			}
+		}
+	}
+}
+
+// Lookup returns, sorted, the entities filed under exactly key.
+func (g *Gazetteer) Lookup(key string) []string {
+	words := strings.Fields(key)
+	if len(words) == 0 {
+		return nil
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	n := g.root
+	for _, w := range words {
+		if n = n.next[w]; n == nil {
+			return nil
+		}
+	}
+	out := make([]string, 0, len(n.ids))
+	for id := range n.ids {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Near returns, sorted, the entities with a key that key is a strict word
+// prefix or suffix of: "Zelenskyy" is near "Volodymyr Zelenskyy". A short
+// or closed one-word key is near nothing.
+func (g *Gazetteer) Near(key string) []string {
+	words := strings.Fields(key)
+	if len(words) == 0 || (len(words) == 1 && !singleWordMatches(Token{Key: words[0]})) {
+		return nil
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	ids := map[string]bool{}
+	for _, w := range []string{words[0], words[len(words)-1]} {
+		for nk := range g.ends[w] {
+			if affix(strings.Fields(nk.key), words) {
+				ids[nk.id] = true
+			}
+		}
+	}
+	out := make([]string, 0, len(ids))
+	for id := range ids {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Size is the number of entities and of distinct keys filed.

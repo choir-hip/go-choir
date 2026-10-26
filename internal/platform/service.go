@@ -97,6 +97,9 @@ type Service struct {
 	// RecordStoryRelations; nil means the embedded tier file (platformComputer).
 	// A test sets it.
 	relationTier func(computerID string) (bool, error)
+	// lexicons are the owners' learned entity lexicons
+	// (publication_entity_candidates.go).
+	lexicons entityLexicons
 }
 
 type citationInput struct {
