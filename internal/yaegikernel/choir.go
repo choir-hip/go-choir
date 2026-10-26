@@ -1008,8 +1008,10 @@ func (s *ChoirScope) Freeze(buildRecipeRef string, testReceipts, dependencyToolc
 // engineering Report's evidence_refs carry "assignment:<id>" and
 // "bundle:<digest>"); the reducer resolves the assignment's own operation
 // and asserts bundleDigest equals its durable digest. At most one verify per
-// cell; requires a bound cell.
-func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string) error {
+// cell; requires a bound cell. An optional fifth argument, reason, says why
+// as plain text (bounded to MaxVerifyReasonChars); it is recorded with the
+// verdict and, on a fail, shown on the operation.
+func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string, reason ...string) error {
 	if err := s.mutateDenied("Verify"); err != nil {
 		return err
 	}
@@ -1019,7 +1021,7 @@ func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string
 	if s.tray == nil {
 		return fmt.Errorf("choir: verify requires a bound cell")
 	}
-	return s.tray.Verify(assignmentID, decision, verifierRefs, bundleDigest)
+	return s.tray.Verify(assignmentID, decision, verifierRefs, bundleDigest, reason...)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development
