@@ -278,3 +278,19 @@ func TestHealthLiveCapsuleCacheExpires(t *testing.T) {
 		t.Fatalf("live_capsules = %v after the cache expired, want 1", got)
 	}
 }
+
+// Review 312 Low 3: a computer that cannot count its capsules (no computer id
+// to list assignments for) does not publish an explicit 0, which vmctl would
+// read as "a new build with no capsule" and apply the short timer. It omits
+// the field, so vmctl applies the legacy rule; the shared counter errors.
+func TestHealthOmitsLiveCapsulesWhenTheyCannotBeCounted(t *testing.T) {
+	handler, _ := newBoundedHealthFixture(t)
+	handler.rt.cfg.ComputerID = ""
+	got, _ := healthLiveCapsules(t, handler)
+	if got != nil {
+		t.Fatalf("live_capsules = %d, want the field omitted when it cannot be counted", *got)
+	}
+	if _, err := handler.rt.liveCapsuleCount(context.Background()); err == nil {
+		t.Fatalf("liveCapsuleCount answered without a computer id to count for")
+	}
+}

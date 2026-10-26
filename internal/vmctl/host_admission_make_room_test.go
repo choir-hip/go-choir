@@ -1088,3 +1088,31 @@ func TestMakeRoomSkippedListCountsAComputerOnce(t *testing.T) {
 		t.Fatalf("refusal %q does not say the guest answered busy", refusal.Reason)
 	}
 }
+
+// Review 312 Low 2: a cancel that lands during the last probe of the chosen
+// victim (the hold probe runs after pick's own ctx check) does not hibernate
+// a computer for a request nobody waits for.
+func TestMakeRoomCancelDuringTheLastProbeHibernatesNobody(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 2560*mib)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var probes int32
+	f.reg.setGuestBusyProbeForTest(func(own *VMOwnership) bool {
+		// The first probe sizes the plan; the second is the one just before
+		// the hibernate, and the request goes away during it.
+		if own.VMID == "vm-v1" && atomic.AddInt32(&probes, 1) == 2 {
+			cancel()
+		}
+		return false
+	})
+	_, err := f.reg.ResolveOrAssignDesktopContext(ctx, "new-user", PrimaryDesktopID)
+	if err == nil {
+		t.Fatalf("a cancelled start was admitted")
+	}
+	if got := f.mr.hibernates(); len(got) != 0 {
+		t.Fatalf("hibernates = %v, want none for a start cancelled during the last probe", got)
+	}
+}
