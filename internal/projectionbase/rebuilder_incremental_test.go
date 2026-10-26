@@ -910,3 +910,28 @@ func TestExplicitGenesisRepairAdmitsUnfrozenTarget(t *testing.T) {
 		t.Fatalf("repair target sequence = %d, want 1", repair.TargetSequence)
 	}
 }
+
+// A cancelled read-back is a refusal that still carries its cause, so the
+// checkpoint worker can tell a cancel from a deterministic mismatch
+// (docs/problems/projection-job-blocked-by-a-cancel-2026-10-26.md).
+func TestVerifyPublishedBaseCancelKeepsItsCause(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	computerID := "computer-readback-cancel"
+	digests := buildChainN(t, root, computerID, 3)
+	result := runRebuild(t, ctx, Config{
+		ComputerID: computerID, TargetHead: digests[2], ArtifactsRoot: root,
+		ScratchDir: t.TempDir(), KeyMaterial: fixtureKey(24), BatchSize: 100,
+		MemoryLimitRSS: 512 * 1024 * 1024, SeedPolicy: SeedNone, TargetSequence: 3,
+	}, fixtureReplay(NewDiskEventSource(root, computerID, digests[2])))
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	err := VerifyPublishedBase(cancelled, root, result.Descriptor)
+	if err == nil {
+		t.Fatal("cancelled read-back verification passed")
+	}
+	if !errors.Is(err, ErrBaseRefused) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled read-back lost its cause: refused=%v canceled=%v err=%v", errors.Is(err, ErrBaseRefused), errors.Is(err, context.Canceled), err)
+	}
+}

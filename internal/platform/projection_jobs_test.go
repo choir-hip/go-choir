@@ -222,3 +222,66 @@ func TestArtifactGCLockDoesNotBlockCredentialIssuance(t *testing.T) {
 		t.Fatal("credential issuance blocked behind the artifact GC sweep lock")
 	}
 }
+
+// docs/problems/projection-job-blocked-by-a-cancel-2026-10-26.md: a run
+// cancelled mid read-back was recorded `blocked` and never re-admitted, which
+// froze b@c's projection base. Rows already written that way must be treated
+// as `failed` (re-admitted after backoff); a deterministic refusal must still
+// wait for changed inputs, and head growth alone must not re-admit it.
+func TestProjectionJobBlockedByCancelIsReadmittedDeterministicBlockIsNot(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	for _, id := range []string{"computer-cancel", "computer-deadline", "computer-refused"} {
+		insertProjectionTestHead(t, s, id, 9000)
+		if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set := func(id, status, errText string, failures int, age time.Duration) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET status=?,error_text=?,failures=?,updated_at=? WHERE computer_id=?`, status, errText, failures, time.Now().UTC().Add(-age), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cancelText := "projection base refused: read-back witness: projection base: extract content witness: context canceled"
+	deadlineText := "projection base refused: read-back witness: context deadline exceeded"
+	refusedText := "projection base refused: read-back witness mismatch: content root differs"
+	set("computer-cancel", "blocked", cancelText, 1, time.Minute)
+	set("computer-deadline", "blocked", deadlineText, 1, time.Minute)
+	set("computer-refused", "blocked", refusedText, 1, 48*time.Hour)
+
+	// Inside the backoff a blocked-by-cancel row is held like a failed one.
+	held, err := s.EnqueueProjectionJob(ctx, "computer-cancel", "cadence", false)
+	if err != nil || held.Status != "blocked" || held.Generation != 1 {
+		t.Fatalf("blocked-by-cancel re-admitted inside backoff: %+v %v", held, err)
+	}
+	// After the backoff both cancel and deadline rows are re-admitted.
+	set("computer-cancel", "blocked", cancelText, 1, time.Hour)
+	set("computer-deadline", "blocked", deadlineText, 1, time.Hour)
+	for _, id := range []string{"computer-cancel", "computer-deadline"} {
+		again, err := s.EnqueueProjectionJob(ctx, id, "cadence", false)
+		if err != nil || again.Status != "queued" || again.Generation != 2 || again.Error != "" {
+			t.Fatalf("%s: blocked-by-cancel not re-admitted after backoff: %+v %v", id, again, err)
+		}
+	}
+	// A deterministic refusal is held, even old, and even after head growth.
+	if _, err := s.db.ExecContext(ctx, `UPDATE computer_event_heads SET sequence=? WHERE computer_id=?`, 20000, "computer-refused"); err != nil {
+		t.Fatal(err)
+	}
+	refused, err := s.EnqueueProjectionJob(ctx, "computer-refused", "cadence", false)
+	if err != nil || refused.Status != "blocked" || refused.Generation != 1 || refused.TargetSequence != 9000 {
+		t.Fatalf("deterministic block re-admitted by head growth: %+v %v", refused, err)
+	}
+	// A blocked-by-cancel row with changed inputs is re-admitted by the
+	// existing rule regardless of age (seed changed).
+	if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET status='blocked',error_text=?,updated_at=? WHERE computer_id=?`, refusedText, time.Now().UTC(), "computer-refused"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordReplayWatermark(ctx, "computer-refused", 5, strings.Repeat("c", 64)); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := s.EnqueueProjectionJob(ctx, "computer-refused", "cadence", false)
+	if err != nil || changed.Status != "queued" || changed.Generation != 2 {
+		t.Fatalf("changed seed did not re-admit a blocked job: %+v %v", changed, err)
+	}
+}

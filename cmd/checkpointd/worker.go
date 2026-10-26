@@ -255,3 +255,13 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	}
 	return j, nil
 }
+
+// projectionRunStatus and projectionFailStatus are stubs at the test commit.
+func projectionRunStatus(err error) string {
+	if errors.Is(err, projectionbase.ErrBaseRefused) {
+		return "blocked"
+	}
+	return "failed"
+}
+
+func projectionFailStatus(status string, err error) string { return status }
