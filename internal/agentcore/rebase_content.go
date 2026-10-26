@@ -319,12 +319,12 @@ func escapeRecordText(text string, max int) string {
 			piece = `\r`
 		case r == '\t':
 			piece = `\t`
-		case r < 0x20 || r == 0x7f:
+		case r < 0x20 || (r >= 0x7f && r <= 0x9f):
 			piece = fmt.Sprintf(`\x%02x`, r)
 		default:
 			piece = string(r)
 		}
-		if b.Len()+len(piece) > max {
+		if b.Len()+len(piece) > max-3 {
 			b.WriteString("...")
 			break
 		}

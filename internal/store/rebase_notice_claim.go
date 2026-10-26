@@ -269,6 +269,15 @@ func (s *Store) CommitRebaseOwnerNotice(ctx context.Context, req types.CommitInb
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
+	// Only the owner's retry notice of this operation: one record, an owner
+	// stamped stack rebase notice naming operationID, committed under its own id.
+	if len(req.Records) != 1 {
+		return types.InboxCommitReceipt{}, fmt.Errorf("commit rebase owner notice: want exactly one record, got %d: %w", len(req.Records), ErrInboxRefused)
+	}
+	if rec := req.Records[0]; !types.IsStackRebaseNotice(rec) || strings.TrimSpace(rec.SubjectRefs["owner_retry"]) != "true" ||
+		strings.TrimSpace(rec.SubjectRefs["operation_id"]) != strings.TrimSpace(operationID) || strings.TrimSpace(req.CommandID) != strings.TrimSpace(rec.RecordID) {
+		return types.InboxCommitReceipt{}, fmt.Errorf("commit rebase owner notice: the record is not the owner's retry notice of %s under its own command id: %w", operationID, ErrInboxRefused)
+	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	if replay, found, err := s.replayInboxCommand(ctx, req.OwnerID, req.ComputerID, req.CommandID, req.CommandDigest); found || err != nil {
