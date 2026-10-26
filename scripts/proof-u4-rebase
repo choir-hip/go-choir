@@ -75,8 +75,17 @@ api() { # method path [json]
     -H "X-Choir-Computer: $C" -H 'Content-Type: application/json' ${d:+--data "$d"}
 }
 setting() { api POST /api/computer-settings "{\"key\":\"$1\",\"value\":$2}" >/dev/null; }
-projection() { # prints the source_projection object from /health
-  api GET /health | jq -c '[.. | objects | select(has("source_projection")) | .source_projection][0] // {}'
+projection() { # prints the computer's source_projection (its effective release, on the product path)
+  local body
+  body=$(api GET /api/runtime/observability)
+  # A bearer request does not wake a hibernated computer (502; problem
+  # api-key-request-to-a-hibernated-computer-gets-502-2026-10-26.md), and an
+  # idle computer hibernates after 10 minutes, inside these waits. Start it.
+  if printf '%s' "$body" | grep -q -e 'failed to resolve user autoputer' -e 'computer authority unavailable'; then
+    [ "$DRY" = 1 ] || cli computer start --idempotency-key "proof-u4-wake-$(date +%s)" >/dev/null 2>&1 || true
+    body=$(api GET /api/runtime/observability)
+  fi
+  printf '%s' "$body" | jq -c '.effective_release.source_projection // {}' 2>/dev/null || echo '{}'
 }
 wait_for() { # description timeout jq-condition-on-projection
   local what=$1 limit=$2 cond=$3 t0 p; t0=$(date +%s)
