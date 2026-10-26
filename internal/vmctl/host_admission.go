@@ -41,6 +41,12 @@ const (
 	HostAdmissionModeMeasured  = "measured"
 	HostAdmissionModeGuestSize = "guest-size"
 
+	// Density D4: what a start is charged. peak is the computer's highest
+	// resident memory of its last start (today's estimate); wake is the
+	// resident memory its last start settled at.
+	HostAdmissionNeedPeak = "peak"
+	HostAdmissionNeedWake = "wake"
+
 	admissionRecentDecisions = 20
 	// memoryPeakSaveDelta bounds how often a measurement rewrites the
 	// ownership file.
@@ -63,6 +69,12 @@ type HostAdmissionConfig struct {
 	// InFlightTTL ends a reservation whose start never reported back.
 	InFlightTTL time.Duration
 
+	// NeedMode (density D4): peak (default) charges a start the computer's
+	// last peak RSS; wake charges the RSS its last start settled at, the
+	// default need when unmeasured, never the peak. The settled RSS is
+	// recorded in both modes; only the charge is switched.
+	NeedMode string
+
 	// MakeRoom (density D1, host_admission_make_room.go): active lets a
 	// refused start hibernate idle eligible computers and then admit; off
 	// is the rollback (refuse, as before).
@@ -84,6 +96,7 @@ func DefaultHostAdmissionConfig() HostAdmissionConfig {
 		HeadroomBytes:    1 << 30,
 		Settle:           5 * time.Minute,
 		InFlightTTL:      15 * time.Minute,
+		NeedMode:         HostAdmissionNeedPeak,
 
 		// Off in code (review 302 F3): a red feature fails closed.
 		// nix/node-b.nix sets it active explicitly.
@@ -123,6 +136,12 @@ func normalizeHostAdmissionConfig(cfg HostAdmissionConfig) HostAdmissionConfig {
 	}
 	if cfg.InFlightTTL <= 0 {
 		cfg.InFlightTTL = def.InFlightTTL
+	}
+	switch strings.TrimSpace(strings.ToLower(cfg.NeedMode)) {
+	case HostAdmissionNeedWake:
+		cfg.NeedMode = HostAdmissionNeedWake
+	default:
+		cfg.NeedMode = HostAdmissionNeedPeak
 	}
 	cfg.MakeRoom = NormalizeMakeRoomMode(cfg.MakeRoom)
 	if cfg.MakeRoomMaxVictims <= 0 {
@@ -181,7 +200,11 @@ type hostMemoryLedger struct {
 	rss          map[string]vmMemoryObservation
 	peak         map[string]uint64
 	peakReset    map[string]bool
-	recent       []HostAdmissionDecision
+	// settled holds the RSS captured when a started reservation's settle
+	// window ended (density D4), until sampleVMMemory persists it on the
+	// ownership. It is not persisted itself: a restart invents nothing.
+	settled map[string]uint64
+	recent  []HostAdmissionDecision
 	// leases are memory hotplug leases (memory_hotplug.go): bytes plugged
 	// or requested above a computer's base, held at full size until the
 	// unplug completes, so starts and grows see each other.
@@ -194,6 +217,9 @@ func (l *hostMemoryLedger) initLocked() {
 		l.rss = map[string]vmMemoryObservation{}
 		l.peak = map[string]uint64{}
 		l.peakReset = map[string]bool{}
+	}
+	if l.settled == nil {
+		l.settled = map[string]uint64{}
 	}
 	if l.leases == nil {
 		l.leases = map[string]uint64{}
@@ -209,6 +235,7 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 	for id, res := range l.reservations {
 		settled := !res.settledAt.IsZero()
 		if settled && now.Sub(res.settledAt) > cfg.Settle {
+			l.captureSettledLocked(res)
 			delete(l.reservations, id)
 			continue
 		}
@@ -263,6 +290,26 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 	return total, views
 }
 
+// captureSettledLocked keeps the VM's latest resident reading when a started
+// reservation's settle window ends: what a wake settles at (density D4). It
+// takes nothing when the VM has no reading since the start finished (it
+// stopped or was killed inside the window), and nothing when a newer
+// reservation for the same VM is open, whose early reading this would be.
+// A reservation that never finished (an in-flight expiry) or failed never
+// reaches here.
+func (l *hostMemoryLedger) captureSettledLocked(res *admissionReservation) {
+	obs, ok := l.rss[res.vmID]
+	if !ok || obs.bytes == 0 || obs.at.Before(res.settledAt) {
+		return
+	}
+	for _, other := range l.reservations {
+		if other != res && other.vmID == res.vmID && other.startedAt.After(res.startedAt) {
+			return
+		}
+	}
+	l.settled[res.vmID] = obs.bytes
+}
+
 func (l *hostMemoryLedger) recordLocked(d HostAdmissionDecision) {
 	l.recent = append(l.recent, d)
 	if len(l.recent) > admissionRecentDecisions {
@@ -314,6 +361,7 @@ type HostAdmissionSummary struct {
 	HeadroomBytes    uint64                     `json:"headroom_bytes,omitempty"`
 	SettleSeconds    int64                      `json:"settle_seconds,omitempty"`
 	MakeRoom         string                     `json:"make_room,omitempty"`
+	NeedMode         string                     `json:"need_mode,omitempty"`
 	ReservedBytes    uint64                     `json:"reserved_bytes"`
 	Reservations     []AdmissionReservationView `json:"reservations,omitempty"`
 	Recent           []HostAdmissionDecision    `json:"recent,omitempty"`
@@ -343,6 +391,7 @@ func (r *OwnershipRegistry) HostAdmissionSummary() HostAdmissionSummary {
 		out.HeadroomBytes = acfg.HeadroomBytes
 		out.SettleSeconds = int64(acfg.Settle.Seconds())
 		out.MakeRoom = acfg.MakeRoom
+		out.NeedMode = acfg.NeedMode
 	}
 	return out
 }
@@ -390,7 +439,17 @@ func estimateNeedWith(own *VMOwnership, acfg HostAdmissionConfig) (uint64, strin
 	_, memMib := machineShapeForOwnership(own)
 	guest := uint64(memMib) << 20
 	need, source := acfg.DefaultNeedBytes, "default"
-	if own != nil && own.MemoryPeakRSSBytes > 0 {
+	if acfg.NeedMode == HostAdmissionNeedWake {
+		// Density D4: what a wake settles at, never the peak. An
+		// unmeasured computer (the field missing on an older ownership
+		// file included) is the default, not zero.
+		if own != nil && own.MemorySettledRSSBytes > 0 {
+			need, source = own.MemorySettledRSSBytes, "settled"
+			if need < acfg.MinNeedBytes {
+				need = acfg.MinNeedBytes
+			}
+		}
+	} else if own != nil && own.MemoryPeakRSSBytes > 0 {
 		need, source = own.MemoryPeakRSSBytes, "measured"
 		if need < acfg.MinNeedBytes {
 			need = acfg.MinNeedBytes
@@ -606,6 +665,7 @@ func logAdmissionDecision(d HostAdmissionDecision) {
 func (r *OwnershipRegistry) sampleVMMemory() {
 	r.mu.RLock()
 	mgr := r.vmManager
+	acfg := normalizeHostAdmissionConfig(r.hostAdmission)
 	r.mu.RUnlock()
 	reader, ok := mgr.(vmMemoryReader)
 	if !ok || reader == nil {
@@ -635,15 +695,32 @@ func (r *OwnershipRegistry) sampleVMMemory() {
 			delete(led.peak, vmID)
 		}
 	}
+	// Settle windows that ended since the last reading capture here too
+	// (density D4); admission and health calls capture as they expire them.
+	led.outstandingLocked(now, acfg)
+	settled := led.settled
+	led.settled = map[string]uint64{}
 	led.mu.Unlock()
 
-	if len(peaks) == 0 {
+	if len(peaks) == 0 && len(settled) == 0 {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	changed := false
 	stamp := now.UTC().Format(time.RFC3339)
+	for vmID, bytes := range settled {
+		own := r.vmByID[vmID]
+		if own == nil {
+			continue
+		}
+		old := own.MemorySettledRSSBytes
+		own.MemorySettledRSSBytes = bytes
+		own.MemorySettledAt = stamp
+		if old == 0 || absDiff(old, bytes) >= memoryPeakSaveDelta {
+			changed = true
+		}
+	}
 	for vmID, peak := range peaks {
 		own := r.vmByID[vmID]
 		if own == nil {
