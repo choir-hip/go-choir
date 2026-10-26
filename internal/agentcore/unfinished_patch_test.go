@@ -413,18 +413,18 @@ func TestUnfinishedRoundFollowsTheCarryRule(t *testing.T) {
 	for _, state := range []string{selfdev.StateApplied, selfdev.StateAwaitingApproval} {
 		entry := kept
 		entry.OperationState = state
-		if chosen, _ := pickCarriedCandidate([]carriedCandidate{entry}, "retry"); chosen != nil {
+		if chosen := selectCarriedCandidate([]carriedCandidate{entry}, "retry", nil).Chosen; chosen != nil {
 			t.Fatalf("a kept round with operation %s is carried", state)
 		}
 	}
 	for _, state := range []string{"", selfdev.StateFailed} {
 		entry := kept
 		entry.OperationState = state
-		if chosen, _ := pickCarriedCandidate([]carriedCandidate{entry}, "retry"); chosen == nil {
+		if chosen := selectCarriedCandidate([]carriedCandidate{entry}, "retry", nil).Chosen; chosen == nil {
 			t.Fatalf("a kept round with operation %q is not carried", state)
 		}
 	}
-	if chosen, _ := pickCarriedCandidate([]carriedCandidate{kept}, "stopped"); chosen != nil {
+	if chosen := selectCarriedCandidate([]carriedCandidate{kept}, "stopped", nil).Chosen; chosen != nil {
 		t.Fatal("a round was offered its own kept patch")
 	}
 }
@@ -662,7 +662,7 @@ func TestUnfinishedOfferNamesTheOlderFrozenCandidate(t *testing.T) {
 		t.Fatalf("offer = %+v", offer)
 	}
 	notice := carriedPatchNotice(offer)
-	for _, want := range []string{"candidate-round-1", "assignment round-1", "rejected", "round-2", "did not start from this candidate"} {
+	for _, want := range []string{"candidate-round-1", "assignment round-1", "rejected", "round-2", "did not start from the newest candidate"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice does not say %q:\n%s", want, notice)
 		}
