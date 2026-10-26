@@ -464,3 +464,19 @@ func TestCacheReturnTimelineJSONNamesTheDesignFields(t *testing.T) {
 		}
 	}
 }
+
+// Review 334 LOW: a dry run is host-guarded. Observe mode frees nothing, so a
+// guest that claims a return anyway (buggy or hostile) is not waited for: the
+// step never adds the settle's 5 s to a hibernate it is only observing.
+func TestHibernateDryRunIgnoresAGuestsClaim(t *testing.T) {
+	f := newCRFixture(t)
+	f.guest.cacheReturn = f.reportReturned(2 * gibBytes) // claims 2 GiB in a dry run
+	snap := f.hibernate(t, HibernateOptions{CacheReturn: &CacheReturnOption{Scope: "daemon", DryRun: true}})
+	if f.slept != 0 || f.seq.count("settle_sleep") != 0 {
+		t.Fatalf("a dry run waited %s for a claim", f.slept)
+	}
+	cr := snap.CacheReturn
+	if cr == nil || !cr.DryRun || cr.SettleExit != "" || cr.Outcome != "returned" || snap.Outcome != "snapshot" {
+		t.Fatalf("cache_return = %+v outcome %q", cr, snap.Outcome)
+	}
+}
