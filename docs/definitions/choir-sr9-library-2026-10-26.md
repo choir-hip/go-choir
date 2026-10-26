@@ -18,14 +18,17 @@ definition_version: 5
 # user"; "we shouldn't have host with a GitHub push"; on clean rebases
 # applying without approval, "not yet"; the name, "to a mainstream audience,
 # we can say that this is the choir library". The owner wants all of it
-# built, in steps.
+# built, in steps. Owner 2026-10-26 02:0x: "we should have a way as admin
+# to, from the library ... Is it part of the library admin system to update
+# the base platform image?" (design 10.5: propose for the platform, a pull
+# exporter, the reviewed landing loop). Revision 2 answers review 257.
 readiness: drafted
 
 review:
-  reviewer: none yet (tier 2, Devin and DeepSeek; the design governs red steps)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: review 257 (tier 2, Devin and DeepSeek) on 152770461
+  frozen_ref: 152770461
+  verdict: send_back  # both seats requested changes; revision 2 answers each finding (design section 21); re-review pending
+  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch257/
 
 start:
   captured_at: 2026-10-26T02:00:00Z
@@ -67,6 +70,12 @@ start:
       T1a's Reader redesign candidate touched paths outside its package
       (app.css, read.html, reader.js, reader-chrome.css, theme.ts), so a real
       candidate today would be refused by a package-confined unit.
+    - >-
+      By the class derivation (internal/vmctl/warmness_policy.go
+      warmnessClassForOwnership), b@c's and d@e's computers read primary,
+      not test: their domains are not ephemeral (nix/node-b.nix:1873) and
+      computer-tiers.json lists no test_computers; standing consensus admits
+      only the test tier. Live class unconfirmed.
 
 finish:
   deliver: >-
@@ -75,15 +84,19 @@ finish:
     is private until the owner publishes it, carries only its own change, is
     adopted deterministically through each adopter's own gate, is checked on
     probation and reverted once on a regression, is visible in a read-only
-    Updates app, and later reaches main verbatim through a reviewed export,
-    after which every carrier reports upstreamed. Protected computers adopt
-    last and never automatically at first.
+    Updates app, and later reaches main verbatim when a platform admin
+    proposes it for the platform and a pull exporter opens a reviewed lane,
+    after which every carrier reports upstreamed. A change outside packages
+    is proposed for the platform the same way and is never adopted directly.
+    Protected computers adopt last and never automatically at first.
   artifact: >-
     The Library as built in steps S0 to S14 of
     docs/design/library-package-propagation-2026-10-26.md: the
-    choir.package_release and choir.package_listing kinds with owner-scoped
-    reads; choir package publish|share|withdraw|search|history|show|
-    subscribe|adopt|revert|export; the deterministic package_adopt job;
+    choir.package_release, choir.platform_proposal and choir.release_listing
+    kinds with owner-scoped reads and the platform scope; choir package
+    publish|share|withdraw|search|history|show|subscribe|adopt|revert|export
+    and choir platform publish|proposals|propose|decline|export; the pull
+    exporter; the deterministic package_adopt job;
     package-aware containment; probation with forward revert and
     suspension; the Updates app; auto mode with rings; the support window;
     signed listings and the security yank; runtime install (module/v1);
@@ -91,19 +104,31 @@ finish:
     code deleted.
   acceptance:
     - action: >-
-        A second account's key gets 404 on the list, the single read and
-        the blob of T-A's releases; b@c's key and T-B read them (S1).
+        d@e's key lists none of T-A's releases (200, empty) and gets 404 on
+        a known release id; b@c's key and T-B read them; the blob rule is a
+        unit test, since no client blob route exists (S1).
       proves: owner-scoped reads on the live path
-      evidence_class: deployed API proof
+      evidence_class: deployed API proof plus unit test
     - action: >-
         T-A (computer-6c50d6e566143ae32cdb660faa60e24d) publishes a
-        package-confined applied operation; a mixed one is refused with its
-        outside paths named; the record carries only the package tree (S2).
-      proves: the unit carries only its own change
-      evidence_class: deployed API proof plus record read
+        package-confined applied operation and the stored record carries
+        only the package subtree; corpusd refuses a forged release whose
+        tree_patch reaches outside the root (host-verified); T-A's draft
+        refuses a mixed operation with its outside paths named (a
+        publisher-side check, stated as such) (S2).
+      proves: the release content is only its own package change
+      evidence_class: deployed API proof, record read, unit test for the forged blob
+    - action: >-
+        T-A's release and a T-A change outside packages (choir platform
+        publish) are shared to the platform scope, proposed by the platform
+        admin act, exported by the pull exporter to lanes that pass the
+        checks, reviewed and landed; T-A reports upstreamed and corpusd
+        marks both landed; no host push credential exists (S4, S4b).
+      proves: the Library updates the base image only through the reviewed landing loop
+      evidence_class: deployed identity, CI, lane refs
     - action: >-
         T-B, subscribed in propose mode, shows an adoption awaiting approval
-        with its own screenshots and zero model calls in its trace, without
+        with its own screenshots and a provider-call counter of 0, without
         any adopt command; after approval it serves the release and its lock
         names it; pinned adopts nothing; a local edit yields conflict and an
         engineering item (S5).
@@ -117,10 +142,11 @@ finish:
       proves: main receives the change verbatim without a host push, and carriers retire
       evidence_class: deployed identity
     - action: >-
-        A release that throws on mount fails T-B's probation smoke and is
-        reverted once, forward, with an outcome recorded (S7); T-B in auto
-        mode adopts the next release with no human act, while a
-        primary-class computer gets it only as a proposal (S9).
+        A release that throws on mount fails probation on T-B and T-C, each
+        reverts once, forward, and the two outcomes suspend it (S7); T-B
+        (test class, standing mode armed) in auto mode adopts the next
+        release with no human act, while T-D (primary class) gets it only as
+        a proposal after the ring soak (S9).
       proves: probation, single revert, the class floor
       evidence_class: deployed product path
     - action: >-
@@ -160,16 +186,19 @@ value:
 homotopy:
   realism_axis: >-
     one package release at owner scope, two test computers of one owner,
-    propose with FP0 approving -> export retires both as upstreamed ->
-    probation and one forward revert -> auto on the test ring with soak ->
-    support window, signed listings, security yank -> runtime install, base
-    moves no longer touch packages -> cross-owner adoption in the frame ->
-    primary auto, the owner's computers propose, the paper last.
+    propose with FP0 approving -> proposed for the platform and exported by
+    the pull exporter, both retire as upstreamed -> platform proposals for
+    changes outside packages -> probation and one forward revert -> auto on
+    the test ring -> support window, signed listings, security yank ->
+    runtime install, base moves no longer touch packages -> cross-owner
+    adoption in the frame -> ring-soaked proposals to primary and the
+    owner's computers, the paper last by hand.
 
 boundaries:
   mutation_class: >-
     green for this file and the design; the build steps are red (S1, S2,
-    S3, S5, S6, S7, S9, S11, S12, S13) or orange (S4, S8, S10, S14 items)
+    S3, S4, S4b, S5, S6, S7, S9, S11, S12, S13) or orange (S8, S10, the
+    test_computers enabling change, S14 items)
   review_tier: >-
     the design, tier 2 (Devin and DeepSeek); per step as the design's
     section 17 names it
@@ -180,24 +209,26 @@ boundaries:
     - SR8 staged auto-approve (metamission station note)
     - the readiness metamission spine
   must_preserve:
-    - a package release carries only its package directory; a platform change never rides the Library
+    - a package release carries only its package directory (host-verified on its content); a change outside packages is never adopted between computers, only proposed for the platform
     - private by default; every scope change is an owner act with an owner-act receipt; no desk widens a scope
-    - the host holds no GitHub push credential; main changes only by the reviewed human or coding-agent path
+    - the host holds no GitHub push credential; main changes only by the reviewed path, fed by a pull exporter (a coding agent or a CI job with its own credential)
+    - a private release is invisible to platform admins; the admin scope grants no cross-owner reads
     - no clean rebase or re-materialization applies without approval until the owner rules (design Q1)
     - the adopter's own gate decides; auto-apply is never auto-promote
-    - protected computers adopt last, never automatically at first, enforced in code
+    - protected computers adopt last, never automatically at first; the class floor is enforced at the proxy subscription write and by standing consensus's test-tier gate; primary auto is out of scope
     - a forced security change sets a package aside and never contains or stops a computer
     - crash restarts close adoptions; subscriptions are standing intents
-    - source only; the host is the sole builder
+    - source only; no binary crosses between computers; from S12 the host builds package modules
+    - nothing old is retired before S14 (the P8 path keeps working until the new loop is proved)
     - the paper and the owner's computers are never used for proof steps
   excluded:
     - platform (non-package) change propagation other than the existing reviewed main path
     - third-party publishers outside this cloud before S13
     - package data migration across schema versions (P6) beyond SR7's additive rules
   protected_surfaces:
-    - auth on release and catalog read routes (S1, S3)
-    - Store B kinds and owner acts (S2, S3, S11)
-    - a new apply path and capsule seam that bypasses the desks (S5)
+    - auth on release and catalog read routes (S1, S3), and the admin-visible platform scope (S4)
+    - Store B kinds, owner acts and admin acts (S2, S3, S4, S4b, S11)
+    - a new apply path and capsule seam that bypasses the desks, and the boot reconcile of adoption rows (S5)
     - boot-path source projection (S6)
     - run acceptance: probation and the auto gate (S7, S9)
     - a new code-loading path and a security frame (S12, S13)
@@ -205,16 +236,19 @@ boundaries:
 now:
   status: working
   slice: >-
-    S0 then S1: write the four problem records (green), then build S1,
-    owner-scoped release reads, tests first, behind CHOIR_RELEASE_READS.
-  source_ref: 355c603ad
+    S1, owner-scoped release reads, built on lane/lib-s1 (FP0, in parallel
+    with this revision): default owner, open only as an explicit env
+    rollback, no admin bypass, host-internal unscoped, the P8 cross-owner
+    break named, a filtered list 200 with nothing, the blob rule a unit
+    test. Then the test_computers enabling change and T-B minted.
+  source_ref: 355c603ad (design); lane/lib-s1 b5de0b205 (S1)
   deploy_identity: unknown
   candidate:
-    id: none
-    state: none
-    ref: none
-    base: none
-    digest: none
+    id: lib-s1
+    state: rehearsing
+    ref: lane/lib-s1
+    base: origin/main at the lane's base
+    digest: none until frozen
     scope: [internal/proxy/releases.go, internal/platform/releases.go]
   conjecture:
     id: SR9-1
@@ -249,8 +283,8 @@ now:
     evidence_ref: docs/design/library-package-propagation-2026-10-26.md
     owner_ratification_ref: >-
       the owner's 2026-10-26 rulings cover packages, own change only,
-      privacy, and no host push; the design's open questions Q1 to Q6 await
-      the owner
+      privacy, no host push, and the admin path to the base image; the
+      design's open questions Q1 to Q7 await the owner
   belief:
     believed_state: >-
       The record, owner-act publish, verified adoption ladder, host builder,
@@ -262,14 +296,16 @@ now:
       assignment without an engineering run (design 6.4 [H]), and how often
       real candidates stay inside one package.
     next_observation: >-
-      S1's failure tests, then a read of the capsule executor's open and
+      The live warmness_class of T-A (expected primary by the code), then
+      S1's deployed legs, then a read of the capsule executor's open and
       Freeze entry points for S5.
   blocker_or_risk: >-
     Until S12 or an owner ruling on Q1, every deploy asks each adopter to
     approve a re-materialization; the export (S4) keeps that window short.
   next_action: >-
-    Land S0's four problem records (green, tier 0), then build S1 in a lane
-    on current main with its tests first and send it to tier 1 review.
+    Send revision 2 of the design to a one-seat re-review (Devin) while FP0
+    lands S0's problem records and S1 (tier 1); then the test_computers
+    enabling change (orange, tier 1) and mint T-B.
 
 receipts: []
 ---
@@ -280,7 +316,9 @@ The design is
 [docs/design/library-package-propagation-2026-10-26.md](../design/library-package-propagation-2026-10-26.md).
 Its section 17 is the step list this station runs, in order, each step
 landed alone behind its switch with its deployed proof on T-A
-(`computer-6c50d6e566143ae32cdb660faa60e24d`) and T-B (a second b@c test
-computer, described in its section 18). Its section 19 holds the owner's
+(`computer-6c50d6e566143ae32cdb660faa60e24d`), T-B and T-C (b@c computers
+listed as test class by the enabling change) and T-D (d@e's computer), all
+described in its section 18. Its section 21 records the disposition of
+review 257. Its section 19 holds the owner's
 open questions, and each has a conservative default the build uses until
 the owner rules.
