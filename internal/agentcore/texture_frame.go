@@ -259,6 +259,11 @@ func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRe
 		DocID: doc.DocID, RevisionID: rev.RevisionID, AuthorKind: string(rev.AuthorKind), Content: rev.Content,
 		Blocks: texturewrite.DocBlocks(base),
 	}
+	// The revision that woke the run, when the owner wrote it: a Cast names
+	// it and the reducer attaches the owner's words (texture_owner_directions_cast.go).
+	if metadataStringValue(rec.Metadata, "current_author_kind") == string(types.AuthorUser) {
+		snapshot.OwnerRevision = strings.TrimSpace(metadataStringValue(rec.Metadata, "current_revision_id"))
+	}
 	for _, r := range texturewrite.RecordsFrom(textureRecordInputs(records.view)) {
 		snapshot.Sources = append(snapshot.Sources, r.Sources...)
 	}
