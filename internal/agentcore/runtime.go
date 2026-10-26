@@ -381,6 +381,8 @@ type Runtime struct {
 	rebaseAnswerWindow time.Duration
 	rebaseNow          func() time.Time
 	rebaseAfterFunc    func(d time.Duration, fn func()) rebaseTimerHandle
+	// rebaseCommit replaces the store commit of a notice (tests; nil commits).
+	rebaseCommit func(ctx context.Context, req types.CommitInboxRecordsRequest) error
 	// sourcePreflight replaces the capsule executor's source preflight in the
 	// engineering cast plan (tests; nil uses capsuleExecutor).
 	sourcePreflight sourcePreflighter

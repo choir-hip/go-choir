@@ -194,6 +194,14 @@ func (rt *Runtime) fireRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	return out
 }
 
+// transientRebase is a failure that may pass (a failed read or commit): the
+// timer tries again after the stay-up interval instead of ending, so one
+// hiccup on a quiet computer does not stop the rebase until unrelated activity
+// reconciles again (review 321). A state that does not hold is not transient.
+func (rt *Runtime) transientRebase(format string, args ...any) rebaseNoticeOutcome {
+	return rebaseNoticeOutcome{Reason: fmt.Sprintf(format, args...), Rearm: rt.rebaseStayUpInterval()}
+}
+
 func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if rt == nil || rt.store == nil {
 		return rebaseNoticeOutcome{Reason: "no store"}
@@ -207,7 +215,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	}
 	result, err := rt.ReconcileSourceProjection(ctx, rebaseReconcileReason)
 	if err != nil {
-		return rebaseNoticeOutcome{Reason: "reconcile failed: " + err.Error()}
+		return rt.transientRebase("reconcile failed: %v", err)
 	}
 	if result.State != sourceproj.StateBaseMoved {
 		return rebaseNoticeOutcome{Reason: "the stack is " + string(result.State) + ", not stack_base_moved"}
@@ -221,7 +229,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	}
 	rootInbox, docID, live, err := rt.rebaseRoot(ctx, ownerID, computerID)
 	if err != nil {
-		return rebaseNoticeOutcome{Reason: "root Texture RLM: " + err.Error()}
+		return rt.transientRebase("root Texture RLM: %v", err)
 	}
 	if !live {
 		return rebaseNoticeOutcome{Reason: "no live root Texture RLM"}
@@ -230,13 +238,13 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if _, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, pair); err == nil {
 		return rebaseNoticeOutcome{Reason: "an assignment claimed the pair"}
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return rebaseNoticeOutcome{Reason: "read the claim: " + err.Error()}
+		return rt.transientRebase("read the claim: %v", err)
 	}
 	// Two rebase rounds of one operation never run at once: a claim for an
 	// older base whose assignment is not terminal defers this pair's notice.
 	claims, err := rt.store.ListRebaseNoticeClaims(ctx, ownerID, computerID, operationID)
 	if err != nil {
-		return rebaseNoticeOutcome{Reason: "read the operation's claims: " + err.Error()}
+		return rt.transientRebase("read the operation's claims: %v", err)
 	}
 	for _, other := range claims {
 		if other.PairKey == pair {
@@ -255,7 +263,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	for n := 1; n <= types.RebaseNoticeMaxAttempts; n++ {
 		rec, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, types.StackRebaseNoticeID(operationID, booted, n))
 		if err != nil {
-			return rebaseNoticeOutcome{Reason: fmt.Sprintf("read attempt %d: %v", n, err)}
+			return rt.transientRebase("read attempt %d: %v", n, err)
 		}
 		if rec != nil {
 			latest, attempt = rec, n
@@ -265,7 +273,7 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if latest != nil {
 		closed, wait, err := rt.rebaseAttemptClosed(ctx, ownerID, computerID, *latest, rootInbox)
 		if err != nil {
-			return rebaseNoticeOutcome{Reason: fmt.Sprintf("attempt %d: %v", attempt, err)}
+			return rt.transientRebase("attempt %d: %v", attempt, err)
 		}
 		if attempt >= types.RebaseNoticeMaxAttempts {
 			return rebaseNoticeOutcome{Reason: fmt.Sprintf("attempt %d was the last", attempt)}
@@ -284,11 +292,18 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: notice.RecordID, Records: []types.CommitmentRecord{notice}}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
-		return rebaseNoticeOutcome{Reason: "digest: " + err.Error()}
+		return rt.transientRebase("digest: %v", err)
 	}
 	req.CommandDigest = digest
-	if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
-		return rebaseNoticeOutcome{Reason: fmt.Sprintf("commit %s: %v", notice.RecordID, err)}
+	commit := rt.rebaseCommit
+	if commit == nil {
+		commit = func(ctx context.Context, req types.CommitInboxRecordsRequest) error {
+			_, err := rt.store.CommitInboxRecords(ctx, req)
+			return err
+		}
+	}
+	if err := commit(ctx, req); err != nil {
+		return rt.transientRebase("commit %s: %v", notice.RecordID, err)
 	}
 	out := rebaseNoticeOutcome{Minted: notice.RecordID, Attempt: next}
 	if next < types.RebaseNoticeMaxAttempts {
