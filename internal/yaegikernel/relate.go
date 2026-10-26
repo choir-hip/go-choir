@@ -58,6 +58,13 @@ func (e RelateEntity) ResolvedID() string {
 	}
 }
 
+// RelateOwnStory names the research desk's own story: Relate("") and
+// Relate("story:head") send it, and the host binds it to the publication id
+// of the doc the desk is bound to (research:<doc>), so a desk can record its
+// story's entities before the story is published (review 304 item 3). A
+// desk bound to no doc is refused on the host.
+const RelateOwnStory = "story:head"
+
 // RelatePayload defines ActionRelate: one story (its publication_id) and its
 // attachments.
 type RelatePayload struct {
@@ -71,8 +78,11 @@ type RelatePayload struct {
 // new names that normalise alike are one entity).
 func ValidateRelate(p RelatePayload) (RelatePayload, error) {
 	p.Story = strings.TrimSpace(p.Story)
-	if !publicationIDRE.MatchString(p.Story) {
-		return RelatePayload{}, fmt.Errorf("choir.Relate: story %q is not a publication id (use the publication_id, pub-<32 hex>, of a published story)", p.Story)
+	if p.Story == "" {
+		p.Story = RelateOwnStory
+	}
+	if p.Story != RelateOwnStory && !publicationIDRE.MatchString(p.Story) {
+		return RelatePayload{}, fmt.Errorf("choir.Relate: story %q is not a publication id (use the publication_id, pub-<32 hex>, of a published story, or \"\" for your own story)", p.Story)
 	}
 	if len(p.Entities) == 0 {
 		return RelatePayload{}, fmt.Errorf("choir.Relate needs at least one entity")
@@ -155,7 +165,7 @@ func relateEntities(arg any) ([]RelateEntity, error) {
 	return entities, nil
 }
 
-// Relate records what a published story is about: {story, attached:
+// Relate records what a story is about: {story, attached:
 // [{entity_id, name, role, new, probability, top, overrode, replayed}],
 // exported, export_error}. Each attachment names an existing entity by
 // entity_id, or a new one by name and type (and wikidata_id when you are
@@ -166,7 +176,8 @@ func relateEntities(arg any) ([]RelateEntity, error) {
 // name that matches an existing entity is refused with that entity's id: attach
 // it by entity_id. The record goes on the tape, then to the public graph; if
 // the export fails the record stays and repeating the call exports it again.
-// It may be off on this computer.
+// It may be off on this computer. Story "" (or "story:head") is your own
+// story, published or not; the result names its publication id.
 func (s *ChoirScope) Relate(story string, entities any) (JSON, error) {
 	es, err := relateEntities(entities)
 	if err != nil {
