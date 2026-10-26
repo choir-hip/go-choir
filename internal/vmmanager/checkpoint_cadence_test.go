@@ -202,3 +202,53 @@ func TestCheckpointCadenceSelectionRefusesAnUnselectedSnapshot(t *testing.T) {
 		})
 	}
 }
+
+// Review 336 (DeepSeek, blocking): the cadence selector names computer ids and
+// nothing else. A wildcard or a class token, or a protected-class computer,
+// must yield no boot arguments in code, so one edit of the host config (a copy
+// of the adjacent VM_DATA_DISCARD_ONLY=*) cannot put the unmeasured live
+// extract on the paper.
+func TestCheckpointCadenceSelectorRefusesWildcardsClassesAndProtectedComputers(t *testing.T) {
+	launch := func(only []string, class string) string {
+		cfg := balloonTestVMConfig()
+		cfg.ComputerID = "computer-selected"
+		cfg.WarmnessClass = class
+		mgr := balloonTestManager(t, func(c *ManagerConfig) {
+			c.CheckpointCadenceOnly = only
+			c.CheckpointCadenceEveryEvents = 2500
+			c.CheckpointCadenceEvery = "60m"
+		})
+		return bootArgsOf(t, mgr.buildFirecrackerConfig(cfg, 9001))
+	}
+	for _, tc := range []struct {
+		name  string
+		only  []string
+		class string
+		want  bool
+	}{
+		{"a named computer", []string{"computer-selected"}, "", true},
+		{"a named ordinary computer of a known class", []string{"computer-selected"}, "test", true},
+		{"wildcard", []string{"*"}, "", false},
+		{"wildcard beside a name", []string{"*", "computer-selected"}, "critical_protected", false},
+		{"class test", []string{"class:test"}, "test", false},
+		{"class critical_protected", []string{"class:critical_protected"}, "critical_protected", false},
+		{"named critical_protected computer", []string{"computer-selected"}, "critical_protected", false},
+		{"named public_platform computer", []string{"computer-selected"}, "public_platform", false},
+	} {
+		got := strings.Contains(launch(tc.only, tc.class), "choir.checkpoint_every")
+		if got != tc.want {
+			t.Fatalf("%s: cadence boot args present = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The host config load drops (and says so) what the selector refuses, so the
+// list the manager holds is ids only.
+func TestCheckpointCadenceConfigDropsWildcardAndClassTokens(t *testing.T) {
+	t.Setenv("VM_CHECKPOINT_CADENCE_ONLY", "computer-1, *, class:test, computer-2")
+	t.Setenv("VM_CHECKPOINT_CADENCE_EVERY_EVENTS", "")
+	t.Setenv("VM_CHECKPOINT_CADENCE_EVERY", "")
+	if got := LoadConfigFromEnv().CheckpointCadenceOnly; !reflect.DeepEqual(got, []string{"computer-1", "computer-2"}) {
+		t.Fatalf("selector = %v, want the two ids only", got)
+	}
+}
