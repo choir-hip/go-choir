@@ -97,6 +97,12 @@ func mergeContained(ctx context.Context, repo string, b, p, t treeEntry) (bool, 
 	if t.mode != p.mode {
 		return false, nil
 	}
+	if t.oid == b.oid {
+		// Booted still has the base's bytes and the patch changed them, so the
+		// merge would print the after-image, which differs from booted: no,
+		// without spawning git (this runs on every cast of a live stack).
+		return false, nil
+	}
 	for _, oid := range []string{b.oid, p.oid, t.oid} {
 		have, err := haveObject(ctx, repo, oid)
 		if err != nil {
@@ -106,34 +112,28 @@ func mergeContained(ctx context.Context, repo string, b, p, t treeEntry) (bool, 
 			return false, nil // no merge base or no side: exact only
 		}
 	}
-	for _, pair := range [][2]string{{b.oid, p.oid}, {b.oid, t.oid}} {
-		bin, err := binaryDiff(ctx, repo, pair[0], pair[1])
+	blobs := map[string][]byte{}
+	for name, oid := range map[string]string{"base": b.oid, "after": p.oid, "booted": t.oid} {
+		raw, err := gitRaw(ctx, repo, nil, nil, "cat-file", "blob", oid)
 		if err != nil {
 			return false, err
 		}
-		if bin {
+		if binary(raw) {
 			return false, nil
 		}
+		blobs[name] = raw
 	}
 	dir, err := os.MkdirTemp("", "choir-contained-")
 	if err != nil {
 		return false, err
 	}
 	defer os.RemoveAll(dir)
-	var booted []byte
-	files := map[string]string{"base": b.oid, "after": p.oid, "booted": t.oid}
-	for name, oid := range files {
-		raw, err := gitRaw(ctx, repo, nil, nil, "cat-file", "blob", oid)
-		if err != nil {
-			return false, err
-		}
-		if name == "booted" {
-			booted = raw
-		}
+	for name, raw := range blobs {
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
 			return false, err
 		}
 	}
+	booted := blobs["booted"]
 	// merge-file <current> <base> <other>: the change base->after merged into
 	// booted, printed (-p) rather than written over booted. Exit 0 is clean, 1
 	// to 127 counts conflicts, anything else is an error.
@@ -203,13 +203,14 @@ func haveObject(ctx context.Context, repo, oid string) (bool, error) {
 	return false, err
 }
 
-// binaryDiff reports whether git treats the diff of two blobs as binary.
-func binaryDiff(ctx context.Context, repo, a, b string) (bool, error) {
-	out, err := git(ctx, repo, nil, nil, "diff", "--no-ext-diff", "--no-textconv", "--numstat", a, b)
-	if err != nil {
-		return false, err
+// binary is git's own content heuristic, a NUL in the first 8000 bytes, read
+// from the bytes alone: repository attributes (a "-diff" or "binary" mark)
+// cannot route a binary file through the line merge, or keep a text file out.
+func binary(raw []byte) bool {
+	if len(raw) > 8000 {
+		raw = raw[:8000]
 	}
-	return strings.HasPrefix(out, "-\t-\t"), nil
+	return bytes.IndexByte(raw, 0) >= 0
 }
 
 // gitExitCode returns the exit status of a git command that ran and failed.
