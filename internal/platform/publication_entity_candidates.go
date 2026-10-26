@@ -52,6 +52,7 @@ type lexiconEntity struct {
 	Name      string
 	Type      string
 	FirstSeen time.Time
+	Aliases   []string
 }
 
 // entityLexicon is one owner's learned lexicon.
@@ -62,7 +63,8 @@ type entityLexicon struct {
 	gaz *entitytext.Gazetteer
 
 	mu       sync.RWMutex
-	entities map[string]lexiconEntity // entity id -> entity
+	entities map[string]lexiconEntity     // entity id -> entity
+	stop     map[string]entityStopwordRow // key -> an active stopword
 }
 
 func (x *entityLexicon) put(e lexiconEntity) {
@@ -72,6 +74,67 @@ func (x *entityLexicon) put(e lexiconEntity) {
 	}
 	x.mu.Unlock()
 	x.gaz.Add(e.EntityID, e.Name)
+	for _, a := range e.Aliases {
+		x.gaz.Add(e.EntityID, a)
+	}
+}
+
+// setStop records a stopword row's state: active rows stop their key.
+func (x *entityLexicon) setStop(row entityStopwordRow) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if row.Active {
+		x.stop[row.Key] = row
+	} else {
+		delete(x.stop, row.Key)
+	}
+}
+
+func (x *entityLexicon) stopped(key string) bool {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	_, ok := x.stop[key]
+	return ok
+}
+
+// stops are the active stopwords, by key.
+func (x *entityLexicon) stops() []entityStopwordRow {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	out := make([]entityStopwordRow, 0, len(x.stop))
+	for _, r := range x.stop {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// all is every entity of the lexicon.
+func (x *entityLexicon) all() []lexiconEntity {
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	out := make([]lexiconEntity, 0, len(x.entities))
+	for _, e := range x.entities {
+		out = append(out, e)
+	}
+	return out
+}
+
+// sprawls reports alias sprawl (slice c0 §7): the entity's name contains,
+// or is contained in, another entity's name.
+func (x *entityLexicon) sprawls(e lexiconEntity) bool {
+	key := entitytext.Key(e.Name)
+	for _, id := range x.gaz.Near(key) {
+		if id != e.EntityID {
+			return true
+		}
+	}
+	for _, h := range x.gaz.Match(entitytext.Parse("", e.Name), nil) {
+		if h.EntityID != e.EntityID {
+			return true
+		}
+	}
+	return false
 }
 
 func (x *entityLexicon) entity(id string) (lexiconEntity, bool) {
@@ -83,13 +146,19 @@ func (x *entityLexicon) entity(id string) (lexiconEntity, bool) {
 
 func (x *entityLexicon) size() types.EntityLexiconSize {
 	entities, keys := x.gaz.Size()
-	return types.EntityLexiconSize{Entities: entities, Keys: keys}
+	x.mu.RLock()
+	defer x.mu.RUnlock()
+	return types.EntityLexiconSize{Entities: entities, Keys: keys, Stopwords: len(x.stop)}
 }
 
 // entityLexicons holds the lexicons by owner.
 type entityLexicons struct {
 	mu      sync.Mutex
 	byOwner map[string]*entityLexicon
+	// writeMu serialises the read-modify-write of stopword rows.
+	writeMu sync.Mutex
+	// now is the learning clock; nil is time.Now. A test sets it.
+	now func() time.Time
 }
 
 // entityLexicon returns owner's lexicon, building it from Store B on first
@@ -102,7 +171,7 @@ func (s *Service) entityLexicon(ctx context.Context, og *ObjectGraphStore, owner
 	}
 	x, ok := s.lexicons.byOwner[owner]
 	if !ok {
-		x = &entityLexicon{ready: make(chan struct{}), gaz: entitytext.NewGazetteer(), entities: map[string]lexiconEntity{}}
+		x = &entityLexicon{ready: make(chan struct{}), gaz: entitytext.NewGazetteer(), entities: map[string]lexiconEntity{}, stop: map[string]entityStopwordRow{}}
 		s.lexicons.byOwner[owner] = x
 	}
 	s.lexicons.mu.Unlock()
@@ -141,14 +210,33 @@ func buildEntityLexicon(ctx context.Context, og *ObjectGraphStore, owner string,
 				continue
 			}
 			var meta struct {
-				EntityID string `json:"entity_id"`
-				Name     string `json:"name"`
-				Type     string `json:"type"`
+				EntityID string   `json:"entity_id"`
+				Name     string   `json:"name"`
+				Type     string   `json:"type"`
+				Aliases  []string `json:"aliases"`
 			}
 			if json.Unmarshal(obj.Metadata, &meta) != nil || meta.EntityID == "" || meta.Name == "" {
 				continue
 			}
-			x.put(lexiconEntity{EntityID: meta.EntityID, Canonical: obj.CanonicalID, Name: meta.Name, Type: meta.Type, FirstSeen: obj.CreatedAt.UTC()})
+			x.put(lexiconEntity{EntityID: meta.EntityID, Canonical: obj.CanonicalID, Name: meta.Name, Type: meta.Type, FirstSeen: obj.CreatedAt.UTC(), Aliases: meta.Aliases})
+		}
+		if len(page) < lexiconPageSize {
+			break
+		}
+		after = page[len(page)-1].CanonicalID
+	}
+	after = ""
+	for {
+		page, err := og.ListObjectsByMetadataPage(ctx, string(ogKindEntityStopword), "", "", owner, after, lexiconPageSize)
+		if err != nil {
+			return fmt.Errorf("read stopwords: %w", err)
+		}
+		for _, obj := range page {
+			var row entityStopwordRow
+			if obj.Tombstone || json.Unmarshal(obj.Body, &row) != nil {
+				continue
+			}
+			x.setStop(row)
 		}
 		if len(page) < lexiconPageSize {
 			return nil
@@ -278,6 +366,11 @@ func (s *Service) EntityCandidates(ctx context.Context, req types.EntityCandidat
 					continue
 				}
 			}
+		}
+		// The learned stoplist applies only here, after every entity form
+		// is matched, so it never blocks an entity's name or alias (G7).
+		if lex.stopped(p.Key) {
+			continue
 		}
 		c := &candidate{rankKey: "p:" + p.Key, EntityCandidate: types.EntityCandidate{
 			Source: types.EntityCandidateExtracted, Phrase: p.Phrase, Count: p.Count, Sentences: p.Sentences,

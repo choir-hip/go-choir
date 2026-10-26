@@ -100,6 +100,8 @@ type Service struct {
 	// lexicons are the owners' learned entity lexicons
 	// (publication_entity_candidates.go).
 	lexicons entityLexicons
+	// growth caches the entity growth read (publication_entity_learning.go).
+	growth growthCache
 }
 
 type citationInput struct {

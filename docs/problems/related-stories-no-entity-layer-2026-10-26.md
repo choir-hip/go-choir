@@ -457,6 +457,17 @@ Research calls `choir.Relate("", entities)`:
   `research_named` (named under the novelty rule), plus `overridden`,
   `category_gap` (with the names that drew it) and the novelty answer.
 
+As built (`internal/platform/publication_entity_learning.go`):
+- the export's optional `review` is recorded once per tape record (a
+  `choir.entity_review` row, insert-if-absent), and a review may attach
+  nothing;
+- stopword evidence keeps up to 8 distinct stories; a revoke clears it, and
+  evidence gathered during the 30-day hold counts once the hold ends;
+- the revoke is a corpusd method (`RevokeEntityStopword`). Its owner-facing
+  act surface is a named residual, not built in this lane;
+- aliases go on the entity row's body and metadata, and the lexicon reads
+  them back after a restart.
+
 #### 7. The growth read: the loop's health
 
 `GET /api/platform/entities/growth?days=N`, public and read-only, cached 5
