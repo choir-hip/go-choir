@@ -941,27 +941,67 @@ func TestComputerImportResidueSnapshotUsesProductPath(t *testing.T) {
 	}
 }
 
-func TestComputerCheckpointUsesProductPath(t *testing.T) {
-	var method, path string
+// The manual bind is deleted (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+// 4.4): checkpoints are bound automatically, and the read half survives as
+// `choir computer checkpoints`.
+func TestComputerCheckpointBindIsGone(t *testing.T) {
+	var requests int
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method = r.Method
-		path = r.URL.Path
-		if r.Body != nil {
-			defer r.Body.Close()
-			_, _ = io.ReadAll(r.Body)
-		}
-		_, _ = io.WriteString(w, `{"computer_id":"computer-1","checkpoint_eligible":false}`)
+		requests++
+		_, _ = io.WriteString(w, `{}`)
 	}))
 	defer stub.Close()
 	var out, errOut bytes.Buffer
-	if code := run([]string{"computer", "checkpoint", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
-		t.Fatalf("computer checkpoint code = %d, stderr=%s", code, errOut.String())
+	if code := run([]string{"computer", "checkpoint", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code == 0 {
+		t.Fatalf("computer checkpoint still runs: %s", out.String())
 	}
-	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/checkpoint" {
-		t.Fatalf("checkpoint request method=%s path=%s", method, path)
+	if requests != 0 {
+		t.Fatalf("the deleted bind made %d requests", requests)
 	}
-	if strings.Contains(path, "self-development/genesis") {
-		t.Fatal("checkpoint used genesis")
+}
+
+func TestComputerCheckpointsListsAndFetchesReadOnly(t *testing.T) {
+	var methods, paths, queries []string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		paths = append(paths, r.URL.Path)
+		queries = append(queries, r.URL.RawQuery)
+		_, _ = io.WriteString(w, `{"cadence":{"state":"on"},"checkpoints":[]}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "checkpoints", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer checkpoints code = %d, stderr=%s", code, errOut.String())
+	}
+	if code := run([]string{"computer", "checkpoints", "--host=" + stub.URL, "--computer=computer-1", "--digest=abc"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer checkpoints --digest code = %d, stderr=%s", code, errOut.String())
+	}
+	if len(methods) != 2 || methods[0] != http.MethodGet || methods[1] != http.MethodGet {
+		t.Fatalf("methods = %v, want two reads", methods)
+	}
+	for _, path := range paths {
+		if path != "/api/computers/computer-1/lifecycle/checkpoints" {
+			t.Fatalf("path = %s", path)
+		}
+	}
+	if queries[0] != "" || queries[1] != "checkpoint_digest=abc" {
+		t.Fatalf("queries = %v", queries)
+	}
+}
+
+func TestComputerResumeCheckpointsIsAnOwnerActPost(t *testing.T) {
+	var method, path string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_, _ = io.WriteString(w, `{"state":"on"}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "resume-checkpoints", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer resume-checkpoints code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/lifecycle/resume-checkpoints" {
+		t.Fatalf("resume request = %s %s", method, path)
 	}
 }
 

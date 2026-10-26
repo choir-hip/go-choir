@@ -48,6 +48,8 @@ import (
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
 	"computer restore", "help", "mcp",
+	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
+	"computer resume-checkpoints",
 	// Owner acts (Library S2, S3): publishing a package release, and
 	// sharing, withdrawing or reinstating it.
 	"package publish", "package reinstate", "package share", "package withdraw",
@@ -487,7 +489,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"computer_status":                  {cli: []string{"computer", "status", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replay_completeness":     {cli: []string{"computer", "replay-completeness", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replace_workspace":       {cli: []string{"computer", "replace-workspace", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"computer_checkpoint":              {cli: []string{"computer", "checkpoint", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
+		"computer_checkpoints":             {cli: []string{"computer", "checkpoints", "--computer", "c1", "--digest", "abc"}, mcp: `{"computer":"c1","digest":"abc"}`},
 		"computer_import_residue_snapshot": {cli: []string{"computer", "import-residue-snapshot", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_producer_reports":        {cli: []string{"computer", "producer-reports", "--computer", "c1", "--agent-id", "a", "--stale-delivered"}, mcp: `{"computer":"c1","agent_id":"a","stale_delivered":true}`},
 		"computer_settle_producer_reports": {cli: []string{"computer", "settle-producer-reports", "--computer", "c1", "--command-id", "cmd", "--report-ids", "r1,r2", "r3"}, mcp: `{"computer":"c1","command_id":"cmd","report_ids":["r1","r2","r3"]}`},

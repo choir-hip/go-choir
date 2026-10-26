@@ -108,6 +108,8 @@ type Runtime struct {
 	projectorStop chan struct{}
 	// sourceSweepStop ends the periodic lost-wake sweep of source schedules.
 	sourceSweepStop chan struct{}
+	// cadence is the automatic checkpoint bind (checkpoint_cadence.go).
+	cadence checkpointCadence
 
 	runningMu sync.Mutex
 	running   map[string]context.CancelFunc // loop_id → cancel function
