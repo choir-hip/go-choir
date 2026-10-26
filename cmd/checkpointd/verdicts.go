@@ -181,3 +181,16 @@ func resolveVerdictsAtBase(ctx context.Context, store verdictStore, d projection
 	}
 	return errors.Join(errs...)
 }
+
+// projectionWorkStore is what one minute's reconcile pass uses.
+type projectionWorkStore interface {
+	verdictStore
+	ReconcileProjectionJobs(ctx context.Context) error
+}
+
+// reconcileProjectionWork queues the minute's work: first the rebuilds that
+// judge published checkpoints, then checkpointd's own cadence jobs. It returns
+// the problem text for the worker's heartbeat. Stub for the tests.
+func reconcileProjectionWork(ctx context.Context, store projectionWorkStore, loadBase func(computerID, baseRef string) (projectionbase.Descriptor, error)) string {
+	return ""
+}

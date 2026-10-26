@@ -18,9 +18,12 @@ package agentcore
 //  5. the refusal surfaces as a server error instead of a visible conflict.
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -161,5 +164,30 @@ func TestBindReportCarriesTheHostVerdict(t *testing.T) {
 		if report.CheckpointVerdict != tc.wantVerdict || report.CheckpointEligible != tc.wantEligible {
 			t.Fatalf("%s: verdict %q eligible %v, want %q / %v", tc.name, report.CheckpointVerdict, report.CheckpointEligible, tc.wantVerdict, tc.wantEligible)
 		}
+	}
+}
+
+// Review 329 (DeepSeek 7): the refusal comes before the restore intent is
+// appended, so a refused restore leaves nothing on the tape.
+func TestRestoreRouteRefusesANotDerivableCheckpointBeforeAppendingTheIntent(t *testing.T) {
+	nf := newNoReplayFixture(t, "computer-restore-route-not-derivable")
+	checkpoint := nf.bind(t).PublishedCheckpoint.Checkpoint
+	nf.rt.restoreBaseSource = &verdictBaseSource{countingBaseSource: nf.source, found: true,
+		verdict: verdictOf(selfdevprotocol.CheckpointVerdictNotDerivable, selfdevprotocol.VerdictReasonWitnessMismatch)}
+	headBefore := nf.liveHead(t)
+
+	body, _ := json.Marshal(restoreAPIRequest{Checkpoint: checkpoint})
+	computerID := nf.rt.cfg.ComputerID
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/restore", bytes.NewReader(body))
+	request.Header.Set("X-Authenticated-User", "owner-restore")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	NewAPIHandler(nf.rt).HandleComputersRouter(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("restore route = %d %s, want 409", response.Code, response.Body.String())
+	}
+	if nf.liveHead(t) != headBefore {
+		t.Fatal("the refused restore appended a restore intent to the tape")
 	}
 }

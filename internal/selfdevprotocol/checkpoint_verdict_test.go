@@ -127,25 +127,36 @@ func TestCheckpointRequestRefusesAnUnknownDepositMode(t *testing.T) {
 	}
 }
 
-// A checkpoint bound before the field existed keeps its digest: the field is
-// omitted when empty.
-func TestDepositModeIsOmittedFromTheDigestWhenAbsent(t *testing.T) {
+// The deposit mode is advisory metadata for the host's verdict, not part of
+// what the checkpoint commits to: a guest rolled back below the field decodes
+// the checkpoint (dropping the unknown field), recomputes the digest and must
+// get the same one, or every checkpoint a newer guest bound is unrestorable
+// after the rollback (review 329, DeepSeek 5). It stays in the stored
+// checkpoint so the host can read it.
+func TestDepositModeIsNotPartOfTheCheckpointDigest(t *testing.T) {
 	request := ownerRecoveryTestRequest()
 	without, _, err := CheckpointFromRequest(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.DepositMode = DepositModeRetained
-	with, _, err := CheckpointFromRequest(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if without.Digest == with.Digest {
-		t.Fatal("the deposit mode is not part of the checkpoint digest")
-	}
-	request.DepositMode = ""
-	again, _, _ := CheckpointFromRequest(request)
-	if again.Digest != without.Digest {
-		t.Fatal("an absent deposit mode changed the digest of a pre-field checkpoint")
+	for _, mode := range []string{DepositModeRetained, DepositModeUpcast} {
+		request.DepositMode = mode
+		with, _, err := CheckpointFromRequest(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if with.Digest != without.Digest {
+			t.Fatalf("mode %q changed the digest %s -> %s", mode, without.Digest, with.Digest)
+		}
+		if with.Request.DepositMode != mode {
+			t.Fatalf("the stored checkpoint lost the mode: %q", with.Request.DepositMode)
+		}
+		// What an older guest does with the checkpoint: drop the field, rebuild.
+		stripped := with.Request
+		stripped.DepositMode = ""
+		again, _, err := CheckpointFromRequest(stripped)
+		if err != nil || again.Digest != with.Digest {
+			t.Fatalf("a guest that does not know the field computes another digest: %v %s vs %s", err, again.Digest, with.Digest)
+		}
 	}
 }

@@ -41,6 +41,10 @@ const (
 	VerdictReasonJobBlocked = "job_blocked"
 	// VerdictReasonInvalidWitness: a witness did not validate.
 	VerdictReasonInvalidWitness = "invalid_witness"
+	// VerdictReasonVersionSkew: the host rebuilt with a different reducer
+	// than the checkpoint was bound under, so a difference may be the version,
+	// not the tape. The host says "cannot prove".
+	VerdictReasonVersionSkew = "version_skew"
 	// VerdictReasonBaseHeadMismatch: the base the host holds at the
 	// checkpoint's sequence is at another head.
 	VerdictReasonBaseHeadMismatch = "base_head_mismatch"

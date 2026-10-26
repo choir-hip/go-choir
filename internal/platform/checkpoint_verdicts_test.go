@@ -311,3 +311,53 @@ func TestCheckpointVerdictRoute(t *testing.T) {
 }
 
 var _ = context.Background
+
+// Review 329 (DeepSeek 4): a deterministic refusal or a failure backoff of the
+// computer's cadence job at another target must not starve a checkpoint's
+// verification, which asks for a different head and would not hit the same
+// refusal. The refusal still stands for a request at its own target.
+func TestVerificationJobIsAdmittedPastARefusalAtAnotherTarget(t *testing.T) {
+	for _, status := range []string{"blocked", "failed"} {
+		authority, _, _, head := ownerRecoveryPlatformFixture(t)
+		store := authority.cas.store
+		setHead(t, store, 3000, strings.Repeat("f", 64))
+		if _, err := store.EnqueueProjectionJob(t.Context(), verdictComputer, "cadence", false); err != nil {
+			t.Fatal(err)
+		}
+		leased, err := store.ClaimProjectionJob(t.Context())
+		if err != nil || leased == nil {
+			t.Fatal(err)
+		}
+		if err := store.FinishProjectionJob(t.Context(), *leased, status, "refused at 3000", 0, ""); err != nil {
+			t.Fatal(err)
+		}
+		record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
+		job, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Status != "queued" || job.TargetSequence != 12 || job.TargetHead != head {
+			t.Fatalf("%s at another target starved the verification: %+v", status, job)
+		}
+	}
+}
+
+func TestVerificationJobStaysRefusedAtItsOwnTarget(t *testing.T) {
+	authority, _, _, head := ownerRecoveryPlatformFixture(t)
+	store := authority.cas.store
+	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
+	if _, err := store.EnqueueCheckpointVerificationJob(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	leased, err := store.ClaimProjectionJob(t.Context())
+	if err != nil || leased == nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishProjectionJob(t.Context(), *leased, "blocked", "projection base refused", 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	again, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
+	if err != nil || again.Status != "blocked" || again.Generation != leased.Generation {
+		t.Fatalf("a refusal at the checkpoint's own target was re-admitted: %+v %v", again, err)
+	}
+}

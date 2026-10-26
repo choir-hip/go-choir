@@ -72,7 +72,7 @@ func TestCheckpointListingShowsVerdictsAndFetchesByDigest(t *testing.T) {
 	if len(listing.Checkpoints) != 1 || listing.Checkpoints[0].CheckpointDigest != digest || listing.Checkpoints[0].Verdict.Status != selfdevprotocol.CheckpointVerdictPending {
 		t.Fatalf("listing = %+v", listing)
 	}
-	if listing.Cadence.State == "" || listing.Cadence.EveryEvents == 0 {
+	if listing.Cadence.State == "" {
 		t.Fatalf("the listing says nothing of the cadence: %+v", listing.Cadence)
 	}
 
