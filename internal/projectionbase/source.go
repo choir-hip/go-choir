@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
@@ -247,4 +248,12 @@ func (s *DiskEventSource) PinEventPayload(ctx context.Context, computerID, event
 // verifier, or a platform-composed CASReplaySource).
 func (s *DiskEventSource) VerifyEventHeadReceipt(ctx context.Context, receipt computerevent.Receipt, request computerevent.CASRequest) error {
 	return fmt.Errorf("%w: disk artifact store carries no signed event head receipts", ErrReceiptUnverifiable)
+}
+
+// CheckpointVerdictSource reads the host's verdict on a published checkpoint
+// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, slice 2). A
+// checkpoint with no verdict row (published before the host judged
+// checkpoints) reports found=false.
+type CheckpointVerdictSource interface {
+	CheckpointVerdict(ctx context.Context, computerID, checkpointDigest string) (verdict selfdevprotocol.CheckpointVerdict, found bool, err error)
 }

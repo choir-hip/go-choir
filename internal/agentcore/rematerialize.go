@@ -455,6 +455,11 @@ type CheckpointBindReport struct {
 	// docs/design/apply-checkpoint-without-replay-2026-10-26.md replaces it
 	// with the host's verified / not_derivable verdict.
 	CheckpointEligible    bool                                  `json:"checkpoint_eligible"`
+	// CheckpointVerdict is the host's verdict at the time of the answer:
+	// pending right after a publish (the host judges later), verified,
+	// not_derivable or unverified once it has. Empty when nothing was
+	// published or the platform did not answer.
+	CheckpointVerdict     string                                `json:"checkpoint_verdict,omitempty"`
 	ReleaseDigest         string                                `json:"release_digest"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
