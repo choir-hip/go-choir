@@ -159,6 +159,16 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusOK, report)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "packages" && parts[2] == "share-gate" {
+		// Library S3: whether this computer gates the owner's listing acts;
+		// read only.
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.packageShareGate(w, r, ownerID, computerID)
+		return
+	}
 	if h.rt.selfdevOperations == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development operation authority unavailable"})
 		return

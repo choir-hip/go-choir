@@ -129,6 +129,12 @@ func main() {
 	handler.ConfigurePackageOwnerActs(ownerActs)
 	handler.ConfigurePackageBase(context.Background(), os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
 	log.Printf("corpusd: package base store: %q", os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
+	// Library S3: package reads follow each listing's scope set unless
+	// CHOIR_PACKAGE_SHARE_READS=owner (any value but unset, empty or scoped
+	// is owner), the read side's rollback; read once, here.
+	shareReads := platform.ParsePackageShareReads(os.Getenv(platform.EnvPackageShareReads))
+	handler.SetPackageShareReads(shareReads)
+	log.Printf("corpusd: package share reads: %s", shareReads)
 	if err := handler.ConfigureComputerEvents(eventCAS, eventArtifacts, eventAuth); err != nil {
 		log.Fatalf("corpusd computer event routes: %v", err)
 	}
