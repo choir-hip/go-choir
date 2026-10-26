@@ -31,9 +31,29 @@ const (
 	snapshotStateOverheadBytes = int64(64) << 20
 )
 
+// HibernateGuestBusyError is HibernateVM's answer when the guest's fence
+// said it is working: the hibernate was abandoned and the VM keeps running.
+// Callers count it as a skip. vmctl recognizes it by the HibernateGuestBusy
+// method, so it need not import this package.
+type HibernateGuestBusyError struct {
+	VMID   string
+	Detail error
+}
+
+func (e *HibernateGuestBusyError) Error() string {
+	return fmt.Sprintf("hibernate of VM %s skipped: guest is busy: %v", e.VMID, e.Detail)
+}
+
+func (e *HibernateGuestBusyError) Unwrap() error { return e.Detail }
+
+// HibernateGuestBusy marks the error for vmctl's skip handling.
+func (e *HibernateGuestBusyError) HibernateGuestBusy() bool { return true }
+
 // hibernateVMSnapshot fences the guest, captures a full snapshot and stops
 // Firecracker. Any failure takes the kill path, so the VM always ends
-// stopped, which is what vmctl records.
+// stopped, which is what vmctl records. The one exception is a guest that
+// answers busy at the fence: it is left running and HibernateGuestBusyError
+// is returned.
 func (m *Manager) hibernateVMSnapshot(vmID string) error {
 	unlock := m.lockVMOperation(vmID)
 	defer unlock()
@@ -81,6 +101,19 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s)",
 			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused)
 		return nil
+	}
+
+	// A guest that answered busy at the fence is working. It reopened
+	// admission itself and nothing was paused or written, so the VM is
+	// left running and the caller is told, never killed (density D1,
+	// docs/problems/busy-guest-hibernate-takes-kill-path-2026-10-26.md).
+	if reason == snapshotReasonGuestBusy {
+		snap.Outcome = "skip"
+		snap.Reason = reason
+		log.Printf("vmmanager: snapshot hibernate of VM %s skipped (%s: %v); the guest is working and stays running", vmID, reason, err)
+		tl.finish("skipped", err)
+		m.persistHibernateTimeline(tl)
+		return &HibernateGuestBusyError{VMID: vmID, Detail: err}
 	}
 
 	// Kill path: today's hibernate. The next wake cold boots, which is a crash

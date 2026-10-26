@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 )
@@ -219,7 +220,11 @@ func (r *OwnershipRegistry) reclaimSustained(ctx context.Context, guard Computer
 		r.pressureWin.streak = 0
 		r.mu.Unlock()
 		if err := r.hibernateVMForDesktopWithReason(candidate.own.UserID, candidate.own.DesktopID, "pressure"); err != nil {
-			log.Printf("vmctl: pressure reclaim of VM %s failed: %v", candidate.own.VMID, err)
+			if errors.Is(err, errHibernateGuestBusy) {
+				log.Printf("vmctl: pressure reclaim of VM %s skipped: the guest is working", candidate.own.VMID)
+			} else {
+				log.Printf("vmctl: pressure reclaim of VM %s failed: %v", candidate.own.VMID, err)
+			}
 			return 0
 		}
 		hibernated = true

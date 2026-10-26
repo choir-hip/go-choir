@@ -3051,12 +3051,23 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 		r.lifecycle[key] = lifecycleHibernate
 		r.noteHibernateStartLocked()
 		r.mu.Unlock()
-		if err := mgr.HibernateVM(vmID); err != nil {
-			log.Printf("vmctl: manager hibernate of VM %s: %v", vmID, err)
+		mgrErr := mgr.HibernateVM(vmID)
+		busy := hibernateGuestBusy(mgrErr)
+		if mgrErr != nil && !busy {
+			log.Printf("vmctl: manager hibernate of VM %s: %v", vmID, mgrErr)
 		}
 		r.mu.Lock()
 		r.noteHibernateEndLocked()
 		r.releaseLifecycleLocked(key, lifecycleHibernate)
+		if busy {
+			// The guest's fence said it is working and the manager left it
+			// running. Nothing changes: it is not hibernated, not touched,
+			// and the caller counts a skip (never the kill path; density D1,
+			// docs/problems/busy-guest-hibernate-takes-kill-path-2026-10-26.md).
+			r.mu.Unlock()
+			log.Printf("vmctl: hibernate of VM %s skipped: the guest is working and stays running", vmID)
+			return fmt.Errorf("VM %s: %w", vmID, errHibernateGuestBusy)
+		}
 		own, ok = r.ownerships[key]
 		if !ok || own.VMID != vmID || own.Epoch != epoch {
 			r.mu.Unlock()
@@ -3071,6 +3082,19 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	r.saveLocked()
 	log.Printf("vmctl: hibernated VM %s for user %s desktop %s reason=%s (epoch=%d)", own.VMID, userID, own.DesktopID, own.StoppedBy, own.Epoch)
 	return nil
+}
+
+// errHibernateGuestBusy is hibernateVMForDesktopWithReason's answer when the
+// guest's own fence said it is working: the computer was left running and the
+// caller counts a skip.
+var errHibernateGuestBusy = errors.New("hibernate skipped: the guest is busy")
+
+// hibernateGuestBusy reports whether the manager's hibernate error is a busy
+// guest's refusal (vmmanager.HibernateGuestBusyError), found by method so
+// vmctl need not import the manager.
+func hibernateGuestBusy(err error) bool {
+	var busy interface{ HibernateGuestBusy() bool }
+	return err != nil && errors.As(err, &busy) && busy.HibernateGuestBusy()
 }
 
 func normalizeStopReason(reason string) string {
