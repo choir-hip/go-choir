@@ -177,6 +177,12 @@ type fakeGuest struct {
 	resumedStatus int
 	// onPrepare, when set, runs while the guest is being fenced.
 	onPrepare func()
+	// prepareBodies records the body of each prepare call (it stays "{}").
+	prepareBodies []string
+	// cacheReturn, when set, serves the cache return route (D6 S3); nil is a
+	// guest without the route (404). cacheReturnBodies records each body.
+	cacheReturn       func(w http.ResponseWriter, r *http.Request)
+	cacheReturnBodies []string
 }
 
 func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +192,17 @@ func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/health":
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	case guestCacheReturnPath:
+		raw, _ := io.ReadAll(r.Body)
+		g.cacheReturnBodies = append(g.cacheReturnBodies, string(raw))
+		if g.cacheReturn == nil {
+			http.NotFound(w, r)
+			return
+		}
+		g.cacheReturn(w, r)
 	case guestHibernatePreparePath:
+		raw, _ := io.ReadAll(r.Body)
+		g.prepareBodies = append(g.prepareBodies, string(raw))
 		g.prepares++
 		if g.onPrepare != nil {
 			g.onPrepare()
