@@ -74,8 +74,8 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 	for attempt := 1; attempt <= checkpointBindAttempts; attempt++ {
 		// Without the hold: bring the replay up to the live head, so the
 		// held tail is only what lands during this step.
-		if err := rt.advanceCheckpointReplay(ctx, computerID, probe.replayStore); err != nil {
-			return checkpointBinding{}, nil, err
+		if err := rt.advanceCheckpointReplay(probe.replayCtx(ctx), computerID, probe.replayStore); err != nil {
+			return checkpointBinding{}, nil, probe.scratchErr(err)
 		}
 		var (
 			binding  checkpointBinding
@@ -88,9 +88,9 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 			}
 			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, CapturedHead: captured}
 			if headDigest(head) != captured {
-				rebound, held, err := rt.rebindCheckpointWitness(ctx, computerID, probe.replayStore, head)
+				rebound, held, err := rt.rebindCheckpointWitness(probe.replayCtx(ctx), computerID, probe.replayStore, head)
 				if err != nil {
-					return err
+					return probe.scratchErr(err)
 				}
 				binding.Witness = rebound
 				binding.HeldTailEvents = held

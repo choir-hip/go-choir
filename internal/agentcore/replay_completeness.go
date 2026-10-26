@@ -231,6 +231,27 @@ type replayProbe struct {
 	report      ReplayCompletenessReport
 	replayStore *choirstore.Store
 	tempRoot    string
+	// ctx is the caller's context guarded by the scratch watch: replay work
+	// on the probe's store runs under it, so a volume running short stops
+	// the replay by name (replay_scratch.go). stopWatch ends the watch.
+	ctx       context.Context
+	stopWatch func()
+}
+
+// replayCtx is the guarded context for replay work on the probe's store.
+func (p *replayProbe) replayCtx(fallback context.Context) context.Context {
+	if p == nil || p.ctx == nil {
+		return fallback
+	}
+	return p.ctx
+}
+
+// scratchErr names a replay error the scratch watch caused.
+func (p *replayProbe) scratchErr(err error) error {
+	if p == nil {
+		return err
+	}
+	return replayScratchCause(p.ctx, err)
 }
 
 func (p *replayProbe) close() {
@@ -241,15 +262,20 @@ func (p *replayProbe) close() {
 		_ = p.replayStore.Close()
 		p.replayStore = nil
 	}
+	if p.stopWatch != nil {
+		p.stopWatch()
+		p.stopWatch = nil
+	}
 	if p.tempRoot != "" {
 		_ = os.RemoveAll(p.tempRoot)
+		activeReplayScratch.Delete(p.tempRoot)
 		p.tempRoot = ""
 	}
 }
 
 // openReplayProbe runs the probe and keeps its replay store open. The caller
 // closes the returned probe.
-func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (*replayProbe, error) {
+func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *replayProbe, err error) {
 	if rt == nil || rt.store == nil || rt.eventAppender == nil {
 		return nil, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
 	}
@@ -259,6 +285,19 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (*rep
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	// The scratch goes beside the live store, and only when the volume can
+	// hold it and keep the live store's reserve: checked before the capture
+	// holds appends (replay_scratch.go).
+	scratchParent := rt.replayScratchParent()
+	if scratchParent == "" {
+		return nil, fmt.Errorf("%w: live store path is not configured", ErrReplayCompletenessUnavailable)
+	}
+	if err := os.MkdirAll(scratchParent, 0o700); err != nil {
+		return nil, fmt.Errorf("replay completeness: create scratch parent: %w", err)
+	}
+	if err := rt.admitReplayScratch(ctx, computerID, scratchParent); err != nil {
+		return nil, fmt.Errorf("replay completeness: %w", err)
 	}
 
 	// Capture the head and the live state together: appends wait while the
@@ -292,17 +331,21 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (*rep
 		rt.replayProbeAfterCapture()
 	}
 
-	tempRoot, err := os.MkdirTemp("", "choir-replay-completeness-")
+	tempRoot, err := os.MkdirTemp(scratchParent, replayScratchPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: create disposable workspace: %w", err)
 	}
-	probe := &replayProbe{tempRoot: tempRoot}
+	activeReplayScratch.Store(tempRoot, struct{}{})
+	guarded, stopWatch := rt.watchReplayScratch(ctx, scratchParent)
+	probe := &replayProbe{tempRoot: tempRoot, ctx: guarded, stopWatch: stopWatch}
 	opened := false
 	defer func() {
 		if !opened {
+			err = probe.scratchErr(err)
 			probe.close()
 		}
 	}()
+	ctx = guarded
 	replayStore, baseSequence, baseBlob, targetSequence, observer, err := rt.openProbeReplayStore(ctx, computerID, tempRoot, liveHead)
 	if err != nil {
 		return nil, err

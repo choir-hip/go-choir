@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
+	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -233,6 +234,12 @@ type Runtime struct {
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
+	// replayScratchUsage reads free space on the probe's scratch volume
+	// (persistentdisk.Statfs when nil); replayScratchPoll is the in-flight
+	// check interval (replayScratchPollInterval when zero). Test seams
+	// (replay_scratch.go).
+	replayScratchUsage func(dir string) (persistentdisk.Usage, error)
+	replayScratchPoll  time.Duration
 	// selfdevStampHealMu admits one operator stamp heal at a time;
 	// selfdevStampHealAfterPlan is a test seam that runs between the heal's
 	// plan and its apply (selfdev_stamp_heal.go).
@@ -914,6 +921,11 @@ func WithComputerEventAppender(appender *computerevent.ComputerEventAppender) Ru
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.bootInProgress.Store(true)
 	defer rt.bootInProgress.Store(false)
+	// A replay probe killed in flight leaves its scratch behind, and a full
+	// volume stays full into the next start. No probe runs before Start, so
+	// every root is stale; even a maintenance hold must not keep them
+	// (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
+	rt.removeStaleReplayScratch()
 	// Telemetry batching is decided before the first event of this process, so
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)

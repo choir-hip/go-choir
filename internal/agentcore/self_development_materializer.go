@@ -230,9 +230,14 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		if rt.selfdevCrashInterrupted[operation.OperationID] {
 			// Decided before a crash boot: settle from the journal, never
 			// apply, and arm no retry (a retry would only settle again).
-			if settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback); settleErr != nil {
+			settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback)
+			if errors.Is(settleErr, ErrReplayScratchInsufficient) {
+				rt.holdSelfDevelopmentCheckpointDeferred(ctx, operation, settleErr)
+			} else if settleErr != nil {
 				log.Printf("selfdev materializer: operation %s in %s interrupted by a restart, held: %v",
 					operation.OperationID, operation.State, settleErr)
+			} else {
+				rt.clearSelfDevelopmentCheckpointDeferred(ctx, operation)
 			}
 			continue
 		}
@@ -241,6 +246,17 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation, false)
 		} else {
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation, false)
+		}
+		if operationErr == nil {
+			rt.clearSelfDevelopmentCheckpointDeferred(ctx, operation)
+		}
+		if errors.Is(operationErr, ErrReplayScratchInsufficient) {
+			// The apply is on the tape; only its checkpoint could not be
+			// bound. A retry wake would only refuse again: the operation is
+			// held, visibly, and the next pass (any commit, or a boot)
+			// binds it once the probe fits.
+			rt.holdSelfDevelopmentCheckpointDeferred(ctx, operation, operationErr)
+			continue
 		}
 		if errors.Is(operationErr, ErrGuestApplyAttemptsSpent) {
 			// The apply crashed this guest every time it ran; retrying it
@@ -271,6 +287,35 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		}
 	}
 }
+
+// selfdevCheckpointDeferredReason is the owner-visible stamp on an operation
+// whose apply is recorded but whose checkpoint the replay probe could not
+// bind for want of scratch space. The text is stable, so a pass that refuses
+// again appends nothing.
+var selfdevCheckpointDeferredReason = "checkpoint deferred: " + ErrReplayScratchInsufficient.Error() +
+	" on the persistent volume; the apply is recorded and its checkpoint binds when the replay probe fits"
+
+// holdSelfDevelopmentCheckpointDeferred stamps the operation with the named
+// reason and arms no retry wake
+// (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
+func (rt *Runtime) holdSelfDevelopmentCheckpointDeferred(ctx context.Context, operation selfdev.Operation, cause error) {
+	log.Printf("selfdev materializer: operation %s in %s held, checkpoint deferred: %v", operation.OperationID, operation.State, cause)
+	if err := rt.selfdevOperations.RecordIntentError(ctx, operation.ComputerID, operation.OperationID, selfdevCheckpointDeferredReason); err != nil {
+		log.Printf("selfdev materializer: stamp checkpoint deferral on %s: %v", operation.OperationID, err)
+	}
+}
+
+// clearSelfDevelopmentCheckpointDeferred removes the deferral stamp once a
+// pass binds the checkpoint.
+func (rt *Runtime) clearSelfDevelopmentCheckpointDeferred(ctx context.Context, operation selfdev.Operation) {
+	if operation.LastIntentError != selfdevCheckpointDeferredReason {
+		return
+	}
+	if err := rt.selfdevOperations.RecordIntentError(ctx, operation.ComputerID, operation.OperationID, ""); err != nil {
+		log.Printf("selfdev materializer: clear checkpoint deferral on %s: %v", operation.OperationID, err)
+	}
+}
+
 func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation selfdev.Operation) (selfdev.Operation, bool, error) {
 	transition, found, err := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID)
 	if err != nil || !found {
