@@ -20,6 +20,10 @@ package textureowner
 //     validate, or loses the document's blocks;
 //   - the Texture desk's next Write against the old head commits over it
 //     (E9), or a Write on the new head drops the embeds (E8);
+//   - a capture that finishes after the owner's revise continued the settled
+//     document onto a new trajectory is dropped, though it was admitted
+//     before the continue (F1; the embed job is async and settlement does
+//     not wait for it);
 //   - the owner route lets a key add a capsule_evidence embed the parent
 //     does not hold (E7), or refuses keeping or deleting one.
 
@@ -34,6 +38,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -186,6 +191,49 @@ func TestFrozenCandidateCapturesAreEmbeddedByTexture(t *testing.T) {
 	}
 	if got := texturedoc.Embeds(bodyOf(t, headOf(t, s, rec))); len(got) != 2 || got[0] != embeds[0] || got[1] != embeds[1] {
 		t.Fatalf("embeds after the desk's Write = %+v", got)
+	}
+}
+
+// An embed job outlives the trajectory it was started on: the episode
+// settles, the owner's next revise continues the document, and the capture
+// lands afterwards. It is committed on the document's current trajectory.
+func TestEvidenceEmbedLandsAfterTheDocumentContinued(t *testing.T) {
+	h, core, rec, _ := evidenceSetup(t, "continued")
+	ctx := context.Background()
+	s := core.Store()
+	term := types.TerminalizeRunRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "terminalize-evidence-run", TrajectoryID: rec.TrajectoryID,
+		AgentID: rec.AgentID, RunID: rec.RunID, TerminalState: types.RunCompleted, Reason: "done",
+	}
+	term.CommandDigest, _ = store.ComputeTerminalizeRunDigest(term)
+	if _, err := s.TerminalizeRun(ctx, term); err != nil {
+		t.Fatalf("terminalize run: %v", err)
+	}
+	settleDocumentTrajectory(t, s, rec.OwnerID, rec.ComputerID, rec.ChannelID, rec.TrajectoryID)
+	settledDoc, err := s.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, rec.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settledSnapshot, err := s.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, _, err := h.continueSettledDocumentForOwner(ctx, rec.OwnerID, settledDoc, settledSnapshot)
+	if err != nil || current.TrajectoryID == rec.TrajectoryID {
+		t.Fatalf("continue: trajectory %q err=%v", current.TrajectoryID, err)
+	}
+	base := headOf(t, s, rec)
+
+	// The listing still names the trajectory the candidate was frozen on.
+	if _, err := h.EmbedCandidateEvidence(ctx, rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
+		t.Fatalf("embed after the continue: %v", err)
+	}
+	head := headOf(t, s, rec)
+	if head.RevisionID == base.RevisionID || head.ParentRevisionID != base.RevisionID || head.TrajectoryID != current.TrajectoryID {
+		t.Fatalf("head %s parent %s trajectory %s; want an evidence revision on %s over %s", head.RevisionID, head.ParentRevisionID, head.TrajectoryID, current.TrajectoryID, base.RevisionID)
+	}
+	if got := texturedoc.Embeds(bodyOf(t, head)); len(got) != 2 {
+		t.Fatalf("embeds = %+v", got)
 	}
 }
 
