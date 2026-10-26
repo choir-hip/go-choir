@@ -123,6 +123,12 @@ func main() {
 	ownerActs := platform.LoadOwnerActAuthorityFromEnv()
 	log.Printf("corpusd: owner acts: %s", ownerActs.Status())
 	eventCAS.ConfigureEffectAdmission(ownerActs)
+	// Library S2: a package publish carries the owner-act receipt, verified
+	// under the same mode; a base parent is read from the deploy checkout's
+	// object store the host build already uses, read only.
+	handler.ConfigurePackageOwnerActs(ownerActs)
+	handler.ConfigurePackageBase(context.Background(), os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
+	log.Printf("corpusd: package base store: %q", os.Getenv("CORPUSD_HOST_BUILD_SOURCE_DIR"))
 	if err := handler.ConfigureComputerEvents(eventCAS, eventArtifacts, eventAuth); err != nil {
 		log.Fatalf("corpusd computer event routes: %v", err)
 	}

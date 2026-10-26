@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
+	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -29,6 +31,13 @@ type Handler struct {
 	guestLookup          guestOwnershipLookup
 	hostBuild            *hostbuild.Service
 	releaseReads         ReleaseReadsMode
+	// Library S2: the base-parent object store, its health detail, the
+	// publish's owner-act policy, and the lock that serializes a track's
+	// head and seq.
+	packageBase       pkgrelease.BaseTrees
+	packageBaseStatus *PackageBaseStatus
+	packageOwnerActs  *OwnerActAuthority
+	packageMu         sync.Mutex
 }
 type healthResponse struct {
 	Status  string         `json:"status"`
@@ -117,6 +126,10 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h != nil && h.service != nil {
 		tape := h.service.TapeDiagnostics()
 		resp.Tape = &tape
+	}
+	if h != nil && h.packageBaseStatus != nil {
+		status := *h.packageBaseStatus
+		resp.Packages = &status
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -589,6 +602,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc(hostbuild.Route+"/", h.HandleHostBuilds)
 	s.HandleFunc(releasesRoute, h.HandleReleases)
 	s.HandleFunc(releasesRoute+"/", h.HandleReleases)
+	s.HandleFunc(packagesRoute+"/", h.HandlePackages)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)

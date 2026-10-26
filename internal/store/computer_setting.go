@@ -222,6 +222,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureHoldTrajectory:        false,
 	SettingTextureRootDesk:              false,
 	SettingTextureOwnerActWakes:         false,
+	SettingPackagesPublish:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.
