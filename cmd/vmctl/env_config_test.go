@@ -38,3 +38,25 @@ func TestPressureAndAdmissionEnvDefaultsAndRollback(t *testing.T) {
 		t.Fatalf("admission rollback = %+v", a)
 	}
 }
+
+// Density D1: make-room is on by default and its rollback is one env value
+// (docs/problems/density-station-d-failure-modes-2026-10-26.md, M13).
+// Ways it could fail: the off value is not read; a malformed victim bound
+// or settle wait zeroes the bound.
+func TestAdmissionMakeRoomEnv(t *testing.T) {
+	if a := hostAdmissionConfigFromEnv(); a.MakeRoom != vmctl.HostAdmissionMakeRoomActive {
+		t.Fatalf("make-room default = %q, want active", a.MakeRoom)
+	}
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM", "off")
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS", "2")
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE", "20s")
+	a := hostAdmissionConfigFromEnv()
+	if a.MakeRoom != vmctl.HostAdmissionMakeRoomOff || a.MakeRoomMaxVictims != 2 || a.MakeRoomSettleWait != 20*time.Second {
+		t.Fatalf("make-room overrides = %+v", a)
+	}
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS", "zero")
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE", "-1s")
+	if a := hostAdmissionConfigFromEnv(); a.MakeRoomMaxVictims <= 0 || a.MakeRoomSettleWait <= 0 {
+		t.Fatalf("malformed make-room bounds = %+v, want the defaults", a)
+	}
+}
