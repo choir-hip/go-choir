@@ -16,7 +16,13 @@ package agentcore
 //      open and unbound in its queue position, and it is admitted on the
 //      first retry after the operation settles; its offer then carries the
 //      settled candidate by the usual rule (rejected and failed carry,
-//      applied does not). Chosen over carrying the pending tree as the base:
+//      applied does not). The hold is also computer-wide, because Freeze
+//      refuses per computer: while any self-development operation on the
+//      computer is open, other than the request's own (its assignment's
+//      idempotency key), every implementation request waits (why
+//      "operation_open", naming the operation and its trajectory). That also
+//      covers an open operation whose round left no candidate (review 259,
+//      F2 and F4). Chosen over carrying the pending tree as the base:
 //      a pending candidate may still apply, and a round built on it would
 //      then apply its change twice; and the store allows one open operation
 //      per computer (selfdev.ErrOperationOpen), so a round bound in that
@@ -32,9 +38,12 @@ package agentcore
 //  (b) Rank. The newest candidate on the tape (frozen or reported, by its
 //      creation order) outranks every newer stopped round that does not
 //      descend from it. A stopped round descends from it when the round's
-//      own recorded offer was decided with that candidate in view (offered;
-//      or refused, since the same refusal would meet the next round too),
-//      directly or through a chain of stopped rounds. The newest of the
+//      own recorded offer mounted that candidate's patch (offered), directly
+//      or through a chain of stopped rounds. A refused offer is not descent:
+//      the patch was never mounted, so the round started from the base, and
+//      the refusal need not recur (a transient artifact read, a base that
+//      moved again) (review 259, F1). The notice's "started from" is the same
+//      definition. The newest of the
 //      candidate and its descendants is carried, and outranked stopped
 //      rounds are named in the offer and the notice. When the newest
 //      candidate is neither carriable nor pending (applied, or finished and
@@ -52,8 +61,8 @@ package agentcore
 //      unbound.
 //  S3. A held request stays held after the operation settles (rejected,
 //      failed, applied), or is admitted and then carries nothing.
-//  S4. A verification request, or a request on another trajectory, is held
-//      by this trajectory's candidate.
+//  S4. A verification request is held, or a request is held by its own
+//      assignment's operation.
 //  S5. The hold fires on a settled candidate that will never change again
 //      (applied, rolled back, never proposed), stalling the trajectory.
 //  S6. An offer decided while the newest candidate is pending carries
@@ -63,14 +72,16 @@ package agentcore
 //  S8. A stopped round that started from the newest candidate (directly or
 //      through stopped rounds) loses to it, and the work it added on top is
 //      dropped.
-//  S9. A stopped round whose offer of the newest candidate was refused is
-//      outranked by that candidate (the same refusal would meet the next
-//      round, and the stopped round's work is lost).
+//  S9. A stopped round whose offer of the newest candidate was refused
+//      outranks it (its patch was never mounted: it started from the base).
 //  S10. An outranked stopped round is not named to the engineer.
 //  S11. With no candidate on the trajectory, or the newest one applied or
 //      never proposed, a stopped round stops carrying.
 //  S12. A history read that fails admits the request (and so carries
 //      nothing) instead of holding it.
+//  S13. A request on another trajectory binds while this computer has an
+//      open operation, and is then refused at Freeze (the lost-round class
+//      again).
 
 import (
 	"context"
@@ -176,8 +187,8 @@ func TestCarrySelectNewestCandidateOutranksAStoppedRoundFromTheBase(t *testing.T
 	}
 }
 
-// S8, S9: a stopped round that descends from the newest candidate carries,
-// through a chain of stopped rounds, and through a refused offer of it.
+// S8: a stopped round that descends from the newest candidate carries,
+// directly and through a chain of stopped rounds.
 func TestCarrySelectStoppedRoundThatStartedFromTheNewestCandidateCarries(t *testing.T) {
 	candidate := finishedRound("round-1", "capsule-subject:sha256:c1", baseA, selfdev.StateRejected, "", 3*time.Hour)
 	first := stoppedRound("round-2", strings.Repeat("ab", 32), 2*time.Hour)
@@ -234,7 +245,7 @@ func TestCarriedOfferNamesTheStoppedRoundTheNewestCandidateOutranked(t *testing.
 		t.Fatalf("outranked = %v", offer.OutrankedStopped)
 	}
 	notice := carriedPatchNotice(offer)
-	for _, want := range []string{"page 1 shows page 2 text", "starting point", "round-2", "stopped before it froze", "did not start from this candidate"} {
+	for _, want := range []string{"page 1 shows page 2 text", "starting point", "round-2", "stopped before it froze", "did not start from the newest candidate (candidate-round-1)"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice does not say %q:\n%s", want, notice)
 		}
@@ -242,8 +253,8 @@ func TestCarriedOfferNamesTheStoppedRoundTheNewestCandidateOutranked(t *testing.
 }
 
 // S8, S9 through the offer: the stopped round's recorded offer decides its
-// lineage, offered or refused.
-func TestCarriedOfferCarriesAStoppedRoundThatStartedFromTheNewestCandidate(t *testing.T) {
+// lineage; offered is descent, refused is not.
+func TestCarriedOfferCarriesAStoppedRoundOnlyIfItWasOfferedTheNewestCandidate(t *testing.T) {
 	for _, status := range []string{carriedOffered, carriedRefused} {
 		root := filepath.Join(t.TempDir(), "updater")
 		patch := testCarriedPatch("packages/reader/reader.go")
@@ -256,14 +267,18 @@ func TestCarriedOfferCarriesAStoppedRoundThatStartedFromTheNewestCandidate(t *te
 			CandidateID: "candidate-round-1", PatchSHA256: strings.Repeat("ef", 32)})
 		rejected := finishedRound("round-1", "capsule-subject:sha256:c1", baseA, selfdev.StateRejected, "", 2*time.Hour)
 		kept := stoppedRound("round-2", patch.SHA256, time.Hour)
-		deps := carriedPatchDeps{History: &fakeCarriedHistory{entries: []carriedCandidate{rejected, kept}}, Deriver: &fakeCarriedDeriver{}, Root: root, CarryUnfinished: true}
+		deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{"capsule-subject:sha256:c1": testCarriedPatch("packages/reader/page.go")}}
+		deps := carriedPatchDeps{History: &fakeCarriedHistory{entries: []carriedCandidate{rejected, kept}}, Deriver: deriver, Root: root, CarryUnfinished: true}
 		offer := offerCarriedPatch(context.Background(), deps, carriedInput(baseA))
-		if offer.Status != carriedOffered || !offer.SourceUnfinished || offer.SourceAssignmentID != "round-2" || len(offer.OutrankedStopped) != 0 {
-			t.Fatalf("lineage %s: offer = %+v; want the stopped round carried", status, offer)
-		}
-		// Offered is "started from it"; refused is not, and the notice says so.
-		if offer.OlderFrozenStartedFrom != (status == carriedOffered) {
-			t.Fatalf("lineage %s: started from = %v", status, offer.OlderFrozenStartedFrom)
+		switch status {
+		case carriedOffered:
+			if offer.Status != carriedOffered || !offer.SourceUnfinished || offer.SourceAssignmentID != "round-2" || len(offer.OutrankedStopped) != 0 || !offer.OlderFrozenStartedFrom {
+				t.Fatalf("offered lineage: offer = %+v; want the stopped round carried, started from the candidate", offer)
+			}
+		default:
+			if offer.Status != carriedOffered || offer.SourceUnfinished || offer.CandidateID != "candidate-round-1" || strings.Join(offer.OutrankedStopped, ",") != "round-2" {
+				t.Fatalf("refused lineage: offer = %+v; want the candidate carried and the stopped round named", offer)
+			}
 		}
 	}
 }
@@ -408,18 +423,81 @@ func TestAdmissionHoldFollowsTheOperationState(t *testing.T) {
 	}
 }
 
-// S4: a verification request is not held by the trajectory's candidate.
+// S4: a verification request is not held, and a request is not held by its
+// own assignment's operation.
 func TestAdmissionHoldIsForImplementationRequestsOnly(t *testing.T) {
+	ctx := context.Background()
 	f := newCarryHoldFixture(t, selfdev.StateFrozen)
 	verification := c1eGet(t, f.s, f.retry)
 	verification.Binding.Kind = types.EngineeringAssignmentVerification
-	if held, err := f.rt.carryHoldFor(context.Background(), verification); err != nil || held != nil {
-		t.Fatalf("verification request held by %+v, %v", held, err)
+	if err := f.rt.admitEngineeringAssignment(ctx, verification); err != nil {
+		t.Fatalf("verification request refused: %v", err)
 	}
-	other := c1eGet(t, f.s, f.retry)
-	other.Binding.TrajectoryID = "trajectory-elsewhere"
-	if held, err := f.rt.carryHoldFor(context.Background(), other); err != nil || held != nil {
-		t.Fatalf("another trajectory's request held by %+v, %v", held, err)
+
+	rt, s, _ := c1eRuntime(t)
+	operations, err := selfdev.NewStore(s, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.selfdevOperations = operations
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-own-operation", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := s.OpenEngineeringAssignment(ctx, store.SeedEngineeringOpenRequest(seed, 0, "cap-"+seed.AssignmentIDs[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedAssignmentOperation(t, rt, opened.Assignment, selfdev.StateFrozen, "")
+	if err := rt.admitEngineeringAssignment(ctx, c1eGet(t, s, opened.Assignment)); err != nil {
+		t.Fatalf("the request's own operation held it: %v", err)
+	}
+}
+
+// S13: while any operation on the computer is open, a request on another
+// trajectory waits too, and is admitted once it settles.
+func TestAdmissionHoldsEveryTrajectoryWhileAnOperationIsOpen(t *testing.T) {
+	ctx := context.Background()
+	f := newCarryHoldFixture(t, selfdev.StateFrozen)
+	seed, err := store.SeedEngineeringAssignmentAuthorityForDocument(f.s, "owner-carry-hold", f.first.Binding.ComputerID, "beta", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := f.s.OpenEngineeringAssignment(ctx, store.SeedEngineeringOpenRequest(seed, 0, "cap-"+seed.AssignmentIDs[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := opened.Assignment
+	if other.Binding.TrajectoryID == f.first.Binding.TrajectoryID {
+		t.Fatal("fixture: the other request is on the same trajectory")
+	}
+	// The older request on the first trajectory is cancelled so FIFO does
+	// not decide this.
+	cancel := types.CancelEngineeringAssignmentRequest{CommandID: "command-carry-hold-cancel", OwnerID: f.retry.Binding.OwnerID, ComputerID: f.retry.Binding.ComputerID,
+		AssignmentID: f.retry.AssignmentID, Attempt: f.retry.Binding.Attempt, ExpectedLifecycleVersion: c1eGet(t, f.s, f.retry).LifecycleVersion, Reason: "test: withdrawn"}
+	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+	if _, err := f.s.CancelEngineeringAssignment(ctx, cancel); err != nil {
+		t.Fatal(err)
+	}
+	err = f.rt.admitEngineeringAssignment(ctx, c1eGet(t, f.s, other))
+	var busy *engineeringAdmissionBusy
+	if !errors.As(err, &busy) || busy.Why != "operation_open" {
+		t.Fatalf("admission on another trajectory = %v; want a retryable operation_open refusal", err)
+	}
+	for _, want := range []string{f.operationID, selfdev.StateFrozen, f.first.Binding.TrajectoryID} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("refusal does not name %q: %v", want, err)
+		}
+	}
+	state := selfdev.StateFrozen
+	for _, next := range []string{selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRejected} {
+		if _, err := f.operations.Transition(ctx, f.first.Binding.ComputerID, f.operationID, state, next, nil); err != nil {
+			t.Fatal(err)
+		}
+		state = next
+	}
+	if err := f.rt.admitEngineeringAssignment(ctx, c1eGet(t, f.s, other)); err != nil {
+		t.Fatalf("after the operation settled the other request is still refused: %v", err)
 	}
 }
 
