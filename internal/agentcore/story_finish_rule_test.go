@@ -329,6 +329,8 @@ func TestFinishRuleIsSatisfiableWhenTheAnalysisHasNoAnswers(t *testing.T) {
 		}},
 		{"no decision model", func(t *testing.T, f *analysisFixture) { f.rt.candidateJudge = nil }},
 		{"the judge fails", func(t *testing.T, f *analysisFixture) { f.judge.err = errors.New("the decision model is down") }},
+		// Review 327 Low 3: answers that all carry an error are no answers.
+		{"every answer errs", func(t *testing.T, f *analysisFixture) { f.judge.omitAll = true }},
 		{"the candidates read fails", func(t *testing.T, f *analysisFixture) {
 			f.cpub.err = &platformStatusError{Path: types.StoryEntityCandidatesPath, Status: http.StatusServiceUnavailable, Body: "corpusd is restarting"}
 		}},
