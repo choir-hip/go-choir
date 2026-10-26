@@ -42,6 +42,9 @@ type healthResponse struct {
 	// path and the reader (docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md
 	// section 4.5): files created per 1,000 pins without SSH.
 	Tape *TapeDiagnostics `json:"tape,omitempty"`
+	// Packages is the Library's base-parent store and its shallow flag
+	// (S2, docs/design/library-package-propagation-2026-10-26.md 3.2).
+	Packages *PackageBaseStatus `json:"packages,omitempty"`
 }
 
 type apiError struct {

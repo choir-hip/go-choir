@@ -190,6 +190,13 @@ const SettingTextureRootDesk = "texture.root_desk"
 // by default; off mints nothing and is the rollback.
 const SettingTextureOwnerActWakes = "texture.owner_act_wakes"
 
+// SettingPackagesPublish lets the owner publish this computer's applied
+// package changes to the Choir Library at scope owner (Library S2,
+// docs/design/library-package-propagation-2026-10-26.md 3.2): the guest
+// drafts a package release only when it is on. Off by default; off is the
+// rollback, and releases already listed stay readable and inert.
+const SettingPackagesPublish = "packages.publish"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
