@@ -1165,7 +1165,11 @@ Failure modes of that test, and how each is answered:
   fool it. The price is the false negative in C2.
 - **C2 false negative, the reviewer edited the change on the way in, or main
   has since edited the same file elsewhere.** The test fails. The stack stays, `stack_base_moved` shows, and the owner or
-  U4 rebases. Safe direction.
+  U4 rebases. Safe direction. Amended 2026-10-26: "main has since edited the
+  same file elsewhere" is now contained by a three-way merge test per regular
+  text file (clean and byte-identical to booted), which C1's look-alike still
+  cannot pass (docs/problems/promoted-stack-stays-base-moved-2026-10-26.md).
+  A reviewer's edit on the way in still fails, as before.
 - **C3 partial containment.** Some files upstreamed, others not. git apply is
   atomic, test 1 needs every path. Not contained. Splitting a stack is a
   rebase (U4).
