@@ -794,6 +794,10 @@ rule now asks for what it requires.
   - a story whose analysis fails (System 1 off, the judge or the
     candidates read failing) frees its final Report and records nothing,
     so a later batch asks it again;
+  - each act reads every texture document (review 327 Low 2):
+    `ListStoryDocuments` loads the computer's whole document set and
+    filters in memory. The 2,000 bound and the cursor cap the work per
+    story, not that read; it is O(documents) per act;
   - an unpublished story's text goes to corpusd for the candidates read
     (review 324 F4). This is deliberate (§2): the route is behind the
     bound-guest rule, and corpusd keeps the lexicon, not the text. Named
@@ -844,6 +848,17 @@ Review 325 (Devin, slice d delta): approved, with these lows.
   - A story whose analysis fails is still asked again; that is named
     above.
 - F4, batch ids: no change.
+
+Review 327 (Devin, dc6a7a9c5): approved, no blocker. Follow-ups, tests
+first:
+- Low 1: a Report that cites sources (`EvidenceRefs`) is not quiet. Fixed.
+- Low 3: an analysis whose answers all carry an error is unanswered. It
+  frees the Report and is no basis for an empty Relate. Fixed.
+- Nit 4: the scan bound is clamped to at least one, and the cursor needs a
+  story read. Fixed.
+- Nit 5: a comment says why a published story that is not public stays
+  pending.
+- Low 2: residual, below.
 
 **Next.** Deploy the lane, turn on `research.related_story` for the paper,
 run the owner's backfill act, then the slice e proof on d@e.
