@@ -233,6 +233,16 @@ const (
 	// (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md).
 	EventSystem1Judgment EventKind = "system1.judgment"
 
+	// EventStoryRelation records a research cell's choir.RelateStories act on
+	// the tape, on the same system1:<computer> channel: a "recorded" event
+	// per judged pair with the relation, the probability read from the
+	// System 1 answer it rests on, whether the desk overrode it and why. It is
+	// the authority for the Store B related_story edge, which is a one-way,
+	// re-runnable export of it
+	// (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md,
+	// "Build: the related_story edge").
+	EventStoryRelation EventKind = "story.relation"
+
 	// EventChannelMessage is emitted when a message is posted to an agent
 	// channel, making inter-agent coordination observable through the
 	// event stream.

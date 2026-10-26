@@ -273,6 +273,11 @@ func DefaultRegistry() *Registry {
 		// the related-stories walk's reverse index
 		// (docs/reports/related-stories-graph-design-2026-10-19.md).
 		{Kind: "cites_capture", Owner: OwnerCorpusd},
+		// corpusd: a publication to a publication the research desk judged
+		// related (the relation is symmetric; stored once, from < to). The
+		// export of the computer's story.relation tape records, read by the
+		// related-stories walk behind CORPUSD_RELATED_STORY.
+		{Kind: "related_story", Owner: OwnerCorpusd},
 		// computer: engineering records (frozen V1 spelling) and the
 		// commitment record's delivery packet.
 		{Kind: "co_super_assignment_trajectory", Owner: OwnerVMStore},

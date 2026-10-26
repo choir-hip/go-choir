@@ -23,6 +23,11 @@ package platform
 //  5. score = sum of idf(source) over shared sources, times a recency
 //     factor; a candidate must clear Threshold and pass frontStory (the
 //     front list's own test of a public story).
+//  6. With CORPUSD_RELATED_STORY=on, the story's related_story edges (a pair
+//     the research desk judged related, publication_related_story.go) add
+//     candidates. A judged pair needs no score and ranks ahead of capture
+//     links, by relation; the threshold and the hub cutoff above are not
+//     changed.
 
 import (
 	"context"
@@ -54,11 +59,20 @@ func relatedDisabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv(relatedKillSwitchEnv)), "off")
 }
 
-// Basis modes: which signals the answer used.
+// Basis modes: which signals the answer used. relatedModeRelations (the
+// related_story edges too) is in publication_related_story.go.
 const (
 	relatedModeCaptures = "captures"
 	relatedModeOff      = "off"
 )
+
+// relatedMode is the mode a walk now runs in.
+func relatedMode() string {
+	if relatedStoryOn() {
+		return relatedModeRelations
+	}
+	return relatedModeCaptures
+}
 
 // Link reasons.
 const (
@@ -81,6 +95,9 @@ type relatedTuning struct {
 	HubStories int
 	// MaxCandidates bounds the candidate rows built (frontStory reads).
 	MaxCandidates int
+	// MaxRelatedEdges bounds a story's related_story neighbours: more is a
+	// hub for that signal and gives no vote, on write and on read.
+	MaxRelatedEdges int
 	// HalfLifeDays and RecencyFloor shape the recency factor.
 	HalfLifeDays float64
 	RecencyFloor float64
@@ -103,21 +120,22 @@ type relatedTuning struct {
 
 func defaultRelatedTuning() relatedTuning {
 	return relatedTuning{
-		MaxCaptures:   24,
-		MaxSiblings:   20,
-		MaxRawHits:    200,
-		HubStories:    6,
-		MaxCandidates: 40,
-		HalfLifeDays:  7,
-		RecencyFloor:  0.2,
-		SameSection:   1.1,
-		Threshold:     1.0,
-		DefaultLinks:  5,
-		MaxLinks:      10,
-		Budget:        400 * time.Millisecond,
-		TTL:           5 * time.Minute,
-		CacheCap:      500,
-		VersionPubCap: 50000,
+		MaxCaptures:     24,
+		MaxSiblings:     20,
+		MaxRawHits:      200,
+		HubStories:      6,
+		MaxCandidates:   40,
+		MaxRelatedEdges: 20,
+		HalfLifeDays:    7,
+		RecencyFloor:    0.2,
+		SameSection:     1.1,
+		Threshold:       1.0,
+		DefaultLinks:    5,
+		MaxLinks:        10,
+		Budget:          400 * time.Millisecond,
+		TTL:             5 * time.Minute,
+		CacheCap:        500,
+		VersionPubCap:   50000,
 	}
 }
 
@@ -291,6 +309,10 @@ type relatedCandidate struct {
 	Sources int     // shared sources that counted
 	Exact   bool    // some shared source is a capture both cite
 	Citers  int     // the largest citing-story count among them
+	// Relation is the research desk's judged relation to the story
+	// (related_story edge); "" for a capture-only candidate. A judged
+	// pair needs no score: the judgment is its evidence.
+	Relation string
 }
 
 // recencyFactor halves every HalfLifeDays, never below RecencyFloor; a
@@ -306,10 +328,12 @@ func recencyFactor(ageDays float64, t relatedTuning) float64 {
 	return f
 }
 
-// rankRelated scores, filters and orders candidates. A link needs a score
-// of at least Threshold; a shared section raises a link's rank, never its
-// score, so it cannot create a link. The list is cut at limit and is never
-// padded. Order: rank, then newer, then publication id.
+// rankRelated scores, filters and orders candidates. A capture link needs a
+// score of at least Threshold; a shared section raises a link's rank, never
+// its score, so it cannot create a link. A pair the research desk judged
+// related (Relation) needs no score. The list is cut at limit and is never
+// padded. Order: judged pairs by relation, then newer; then capture links by
+// rank, then newer, then publication id.
 func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t relatedTuning, limit int) []RelatedLink {
 	type scored struct {
 		c    relatedCandidate
@@ -322,7 +346,9 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 		}
 		age := now.Sub(c.Story.UpdatedAt).Hours() / 24
 		score := c.Raw * recencyFactor(age, t)
-		if score < t.Threshold {
+		// A judged pair (c.Relation) needs no score; any other candidate
+		// must clear the threshold.
+		if c.Relation == "" && score < t.Threshold {
 			continue
 		}
 		rank := score
@@ -333,7 +359,16 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 	}
 	sort.SliceStable(kept, func(i, j int) bool {
 		a, b := kept[i], kept[j]
-		if a.rank != b.rank {
+		// Judged pairs first, by relation, then newer; then capture links
+		// by rank.
+		if (a.c.Relation != "") != (b.c.Relation != "") {
+			return a.c.Relation != ""
+		}
+		if a.c.Relation != "" {
+			if ra, rb := storyRelationRank[a.c.Relation], storyRelationRank[b.c.Relation]; ra != rb {
+				return ra < rb
+			}
+		} else if a.rank != b.rank {
 			return a.rank > b.rank
 		}
 		if !a.c.Story.UpdatedAt.Equal(b.c.Story.UpdatedAt) {
@@ -349,6 +384,9 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 		reason := relatedReasonSource
 		if k.c.Exact {
 			reason = relatedReasonCapture
+		}
+		if k.c.Relation != "" {
+			reason = k.c.Relation
 		}
 		links = append(links, RelatedLink{
 			FrontStory: k.c.Story,
@@ -501,7 +539,7 @@ func (s *Service) RelatedStories(ctx context.Context, routePath string, limit in
 	c := &s.related
 	t := c.tune()
 	now := c.clock()
-	out := &RelatedStories{Route: strings.TrimSpace(routePath), Links: []RelatedLink{}, GeneratedAt: now.UTC(), Basis: RelatedBasis{Mode: relatedModeCaptures}}
+	out := &RelatedStories{Route: strings.TrimSpace(routePath), Links: []RelatedLink{}, GeneratedAt: now.UTC(), Basis: RelatedBasis{Mode: relatedMode()}}
 	if relatedDisabled() {
 		out.Basis.Mode = relatedModeOff
 		return out, nil
@@ -524,7 +562,7 @@ func (s *Service) RelatedStories(ctx context.Context, routePath string, limit in
 	if err != nil {
 		if ctx.Err() != nil {
 			// Over budget: empty, flagged partial, never cached.
-			partial := &RelatedStories{Route: bare, Links: []RelatedLink{}, GeneratedAt: now.UTC(), Basis: RelatedBasis{Mode: relatedModeCaptures}, Partial: true}
+			partial := &RelatedStories{Route: bare, Links: []RelatedLink{}, GeneratedAt: now.UTC(), Basis: RelatedBasis{Mode: out.Basis.Mode}, Partial: true}
 			return partial, nil
 		}
 		return nil, err
@@ -544,7 +582,7 @@ func (s *Service) relatedWalk(ctx context.Context, bare string, limit int, t rel
 	og := head.og
 	latest := head.versions[len(head.versions)-1]
 	out.Revision = latest.Revision
-	key := fmt.Sprintf("%s|%d|%s|%d", head.routeMeta.TargetID, latest.Revision, relatedModeCaptures, limit)
+	key := fmt.Sprintf("%s|%d|%s|%d", head.routeMeta.TargetID, latest.Revision, out.Basis.Mode, limit)
 	if cached, ok := c.get(key); ok {
 		return cached, nil
 	}
@@ -604,7 +642,26 @@ func (s *Service) relatedCitedCaptures(ctx context.Context, og *ObjectGraphStore
 	return ids, nil
 }
 
+// relatedCandidates are the stories that share a source with the story (the
+// capture walk) and, with CORPUSD_RELATED_STORY=on, the stories the research
+// desk judged related to it. The judged ones are read even for a story that
+// cites no capture.
 func (s *Service) relatedCandidates(ctx context.Context, og *ObjectGraphStore, self FrontStory, selfPub string, captures []string, t relatedTuning, now time.Time) ([]relatedCandidate, error) {
+	cands, err := s.relatedCaptureCandidates(ctx, og, self, selfPub, captures, t, now)
+	if err != nil {
+		return nil, err
+	}
+	if !relatedStoryOn() {
+		return cands, nil
+	}
+	judged, err := s.relatedStoryCandidates(ctx, og, selfPub, t)
+	if err != nil {
+		return nil, err
+	}
+	return mergeRelatedStoryCandidates(cands, judged), nil
+}
+
+func (s *Service) relatedCaptureCandidates(ctx context.Context, og *ObjectGraphStore, self FrontStory, selfPub string, captures []string, t relatedTuning, now time.Time) ([]relatedCandidate, error) {
 	if len(captures) == 0 {
 		return nil, nil
 	}

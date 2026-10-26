@@ -70,6 +70,10 @@ var eventDurability = map[EventKind]EventDurability{
 	// lost record would be a second spend on replay.
 	EventSystem1Judgment: DurabilityAcknowledged,
 
+	// Acknowledged: a judged pair relation is the authority for a public
+	// graph edge; a lost record would leave an edge with no record behind it.
+	EventStoryRelation: DurabilityAcknowledged,
+
 	// Acknowledged: the owner's approval and the send are acts and evidence.
 	EventEmailDraftApprovalRecorded: DurabilityAcknowledged,
 	EventEmailDraftBlocked:          DurabilityAcknowledged,

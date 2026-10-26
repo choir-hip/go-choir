@@ -100,7 +100,7 @@ func TestRelatedStoryEdgeIsInertUntilTheReadSwitchIsOn(t *testing.T) { // S1
 	b := l.publish("doc-b", 1, "Opposition claims win", l.capture("https://other.example/b", "", "The opposition claimed victory in Serbia"))
 	l.relate(types.StoryRelationSameIncident, a, b)
 
-	for _, off := range []string{"", "off", "1", "true", "ON "} {
+	for _, off := range []string{"", "off", "1", "true", "yes"} {
 		t.Setenv(relatedStoryEnv, off)
 		got := l.related(a.RoutePath)
 		if len(got.Links) != 0 || got.Basis.Mode != relatedModeCaptures {

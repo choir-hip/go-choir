@@ -43,6 +43,9 @@ const (
 	// ActionSystem1 asks the decision judge closed questions for the research
 	// desk's choir.System1 (system1.go).
 	ActionSystem1 BrokerAction = "system1"
+	// ActionRelateStories records the research desk's judged pair relations
+	// for choir.RelateStories (relate_stories.go).
+	ActionRelateStories BrokerAction = "relate_stories"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -320,7 +323,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionSourceAPI:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories, ActionSystem1, ActionRelateStories, ActionSourceAPI:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

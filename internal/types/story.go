@@ -155,7 +155,35 @@ const (
 	// StoryVerdictsPath records support verdicts in Store B, where the
 	// published check overlay reads them.
 	StoryVerdictsPath = "/internal/platform/support-verdicts"
+	// StoryRelationsPath records the research desk's judged pair relations in
+	// Store B as related_story edges, where the related-stories walk reads
+	// them (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md).
+	StoryRelationsPath = "/internal/platform/story-relations"
 )
+
+// The relations a judged pair can have, strongest first. A pair that is
+// unrelated, or shares an entity only incidentally, gets no edge.
+const (
+	StoryRelationSameIncident     = "same_incident"
+	StoryRelationLaterDevelopment = "later_development"
+	StoryRelationSameSubject      = "same_subject"
+)
+
+// StoryRelationsRequest carries a computer's judged pair relations to Store B.
+type StoryRelationsRequest struct {
+	OwnerID    string          `json:"owner_id"`
+	ComputerID string          `json:"computer_id"`
+	Relations  []StoryRelation `json:"relations"`
+}
+
+// StoryRelation is the part of a judged pair Store B keeps: two publication
+// canonical ids and the relation. The probability, the System 1 receipt and
+// the reason stay on the computer's tape.
+type StoryRelation struct {
+	StoryA   string `json:"story_a"`
+	StoryB   string `json:"story_b"`
+	Relation string `json:"relation"`
+}
 
 // StoryPublishRequest names the revision a computer publishes.
 type StoryPublishRequest struct {
