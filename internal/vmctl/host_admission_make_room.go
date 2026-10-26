@@ -106,14 +106,19 @@ type makeRoomCandidate struct {
 type makeRoomPlan struct {
 	candidates []makeRoomCandidate
 	skipped    map[string]int
-	pending    uint64
+	// skippedBy is the reason each skipped computer was skipped for, so a
+	// start that also tried one counts it once.
+	skippedBy map[string]string
+	pending   uint64
 }
 
-func (p *makeRoomPlan) skip(reason string) {
+func (p *makeRoomPlan) skip(reason, vmID string) {
 	if p.skipped == nil {
 		p.skipped = map[string]int{}
+		p.skippedBy = map[string]string{}
 	}
 	p.skipped[reason]++
+	p.skippedBy[vmID] = reason
 }
 
 func (p *makeRoomPlan) skippedText() string {
@@ -165,7 +170,7 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 			plan.pending += residentOf(own)
 			continue
 		} else if holder != "" && (own.State == VMStateActive || own.State == VMStateDegraded) {
-			plan.skip("lifecycle")
+			plan.skip("lifecycle", own.VMID)
 			continue
 		}
 		if own.State != VMStateActive {
@@ -182,16 +187,16 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 		}
 		switch {
 		case own.IsHeld():
-			plan.skip("held")
+			plan.skip("held", own.VMID)
 			continue
 		case protectedWarmnessClass(class):
-			plan.skip("protected")
+			plan.skip("protected", own.VMID)
 			continue
 		case warmnessPriority(class) > starterPriority:
-			plan.skip("higher_class")
+			plan.skip("higher_class", own.VMID)
 			continue
 		case own.LastActiveAt.IsZero():
-			plan.skip("unknown_last_active")
+			plan.skip("unknown_last_active", own.VMID)
 			continue
 		}
 		// The pressure-reclaim idle rule: a test computer yields to a real
@@ -205,7 +210,7 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 			}
 		}
 		if idle < minIdle {
-			plan.skip("recent_activity")
+			plan.skip("recent_activity", own.VMID)
 			continue
 		}
 		plan.candidates = append(plan.candidates, makeRoomCandidate{
@@ -306,10 +311,18 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 		for reason, n := range plan.skipped {
 			merged.skipped[reason] += n
 		}
-		for _, reason := range tried {
-			if reason != "hibernated" {
-				merged.skipped[reason]++
+		// A computer this start tried and the latest plan skips is one
+		// computer: the reason it was tried for replaces the plan's.
+		for vmID, reason := range tried {
+			if reason == "hibernated" {
+				continue
 			}
+			if prev, ok := plan.skippedBy[vmID]; ok {
+				if merged.skipped[prev]--; merged.skipped[prev] <= 0 {
+					delete(merged.skipped, prev)
+				}
+			}
+			merged.skipped[reason]++
 		}
 		return merged.skippedText()
 	}
@@ -360,14 +373,16 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 	if cover < shortfall {
 		// A start is refused on a fresh sample only: another path's
 		// hibernate may have landed while this one planned.
-		if _, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false); ticket != nil {
+		var ticket *admissionTicket
+		if cur, ticket = r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false); ticket != nil {
 			r.recordMakeRoom(first, "admit_after_make_room", nil, "")
 			return ticket, nil
 		}
+		shortfall = admissionShortfall(cur)
 		// These probes only sized the plan; the loop below re-probes each
 		// victim just before its hibernate.
 		detail := noRoomDetail(shortfall, cover, eligible, acfg, plan.pending, skippedText(&plan))
-		return nil, r.refuseMakeRoom(first, nil, detail)
+		return nil, r.refuseMakeRoom(first, cur, nil, detail)
 	}
 	for k := range tried {
 		delete(tried, k)
@@ -420,6 +435,12 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 		}
 		cur, lastWaitTimedOut = d, true
 	}
+	// A cancelled start is abandoned, not given a last attempt that could
+	// admit and boot a request nobody waits for: pick stops on a cancelled
+	// ctx, which is not the plan running out of victims (review 310 Low 1).
+	if err := ctx.Err(); err != nil {
+		return abandon(fmt.Errorf("make-room cancelled: %w", err), "cancelled")
+	}
 	cur, ticket = r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, false)
 	if ticket != nil {
 		r.recordMakeRoom(first, "admit_after_make_room", made, "")
@@ -427,7 +448,7 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 	}
 	shortfall = admissionShortfall(cur)
 	if len(made) == 0 {
-		return nil, r.refuseMakeRoom(first, nil, noRoomDetail(shortfall, 0, 0, acfg, plan.pending, skippedText(&plan)))
+		return nil, r.refuseMakeRoom(first, cur, nil, noRoomDetail(shortfall, 0, 0, acfg, plan.pending, skippedText(&plan)))
 	}
 	var detail string
 	switch {
@@ -439,7 +460,7 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 	default:
 		detail = fmt.Sprintf("short %d MiB after hibernating [%s]; no further eligible computer: %s", shortfall>>20, strings.Join(made, " "), skippedText(&plan))
 	}
-	return nil, r.refuseMakeRoom(first, made, detail)
+	return nil, r.refuseMakeRoom(first, cur, made, detail)
 }
 
 func noRoomDetail(shortfall, cover uint64, eligible int, acfg HostAdmissionConfig, pending uint64, skipped string) string {
@@ -485,9 +506,11 @@ func (r *OwnershipRegistry) recordMakeRoom(d HostAdmissionDecision, decision str
 	}
 }
 
-func (r *OwnershipRegistry) refuseMakeRoom(d HostAdmissionDecision, made []string, detail string) error {
-	r.recordMakeRoom(d, "refuse_no_room", made, detail)
-	return hostMemoryRefusal(d, detail)
+// refuseMakeRoom records the refusal with the start's first sample and
+// words it with the latest, the one the detail's shortfall comes from.
+func (r *OwnershipRegistry) refuseMakeRoom(first, latest HostAdmissionDecision, made []string, detail string) error {
+	r.recordMakeRoom(first, "refuse_no_room", made, detail)
+	return hostMemoryRefusal(latest, detail)
 }
 
 // stillNeededLocked reports that no request has registered the computer at
