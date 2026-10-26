@@ -210,6 +210,9 @@ func TestReclaimWritesSixtyFourMiBStepsWithSwappinessZero(t *testing.T) {
 	if got.Outcome != OutcomeReturned || !got.SwappinessKey || got.Cgroup != f.daemon {
 		t.Fatalf("report = %+v", got)
 	}
+	if got.Method != "memory_reclaim" || got.Path != reclaimFile {
+		t.Fatalf("method %q path %q, want memory_reclaim and %s", got.Method, got.Path, reclaimFile)
+	}
 	if got.TargetBytes != 1094*mib || got.Mode != ModeIdle || got.Scope != ScopeDaemon {
 		t.Fatalf("report target/mode/scope = %+v", got)
 	}
@@ -349,13 +352,14 @@ func TestReclaimStopHookEndsTheActBetweenSteps(t *testing.T) {
 	n := 0
 	r.Write = func(string, string) error { n++; return nil }
 	stopAt := 2
-	r.Stop = func() string {
+	req := idleRequest()
+	req.Stop = func() string {
 		if n >= stopAt {
 			return "run_started"
 		}
 		return ""
 	}
-	got, err := r.Reclaim(context.Background(), idleRequest())
+	got, err := r.Reclaim(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,6 +450,9 @@ func TestReclaimMissingFileIsUnsupportedInIdleMode(t *testing.T) {
 	if !strings.Contains(got.Detail, reclaimFile) {
 		t.Fatalf("detail %q does not name %s", got.Detail, reclaimFile)
 	}
+	if got.Method != "none" || got.Path != reclaimFile {
+		t.Fatalf("method %q path %q, want none and the absent %s", got.Method, got.Path, reclaimFile)
+	}
 }
 
 // M25: in hibernate mode the missing file falls back to exactly one
@@ -463,8 +470,8 @@ func TestReclaimMissingFileFallsBackToDropCachesInHibernateMode(t *testing.T) {
 	if f.writeCount() != 1 || len(f.writesTo(dropCaches)) != 1 || f.writesTo(dropCaches)[0] != "1" {
 		t.Fatalf("writes = %v, want one \"1\" to %s", f.writes, dropCaches)
 	}
-	if got.Method != MethodDropCaches {
-		t.Fatalf("method %q, want drop_caches", got.Method)
+	if got.Method != "drop_caches" || got.Path != dropCaches {
+		t.Fatalf("method %q path %q, want drop_caches and %s", got.Method, got.Path, dropCaches)
 	}
 	// The fallback is visible in the report: the method and the detail that
 	// names the file that was missing.
@@ -555,13 +562,14 @@ func TestReclaimReportsReportingNegotiatedAndReportableBlocks(t *testing.T) {
 	f := newReclaimFixture(t)
 	r := f.reclaimer()
 	calls := 0
-	r.Reporting = func() Reporting {
+	req := idleRequest()
+	req.Reporting = func() Reporting {
 		calls++
 		kib := int64(1000 * calls)
 		yes := true
 		return Reporting{Negotiated: &yes, ReportableKiB: &kib}
 	}
-	got, err := r.Reclaim(context.Background(), idleRequest())
+	got, err := r.Reclaim(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
