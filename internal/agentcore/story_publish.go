@@ -58,9 +58,12 @@ type StoryPublisher interface {
 
 // StoryRelationPublisher is the optional second face of a StoryPublisher: it
 // exports the research desk's judged pair relations to the platform
-// (choir.RelateStories). A publisher without it cannot export; the verb says
-// so and the record stays on the tape.
+// (choir.RelateStories). ValidateRelations runs every check the export runs
+// and writes nothing; the verb calls it before the tape record, so the tape
+// holds only pairs the platform would take. A publisher without these cannot
+// check or export, and the verb records nothing.
 type StoryRelationPublisher interface {
+	ValidateRelations(ctx context.Context, req types.StoryRelationsRequest) error
 	PublishRelations(ctx context.Context, req types.StoryRelationsRequest) error
 }
 
@@ -453,6 +456,23 @@ func (p *httpStoryPublisher) PublishVersion(ctx context.Context, v StoryVersion)
 	}
 	if resp.Revision != v.Revision {
 		return fmt.Errorf("published as v%d, want v%d", resp.Revision, v.Revision)
+	}
+	return nil
+}
+
+// ValidateRelations posts the relations validate-only and requires the
+// "validated" answer: a platform that does not know the flag answers
+// "recorded" (and has written), and that is no check.
+func (p *httpStoryPublisher) ValidateRelations(ctx context.Context, req types.StoryRelationsRequest) error {
+	req.ValidateOnly = true
+	var resp struct {
+		Validated *int `json:"validated"`
+	}
+	if err := p.post(ctx, p.platformURL, types.StoryRelationsPath, req, &resp); err != nil {
+		return err
+	}
+	if resp.Validated == nil {
+		return fmt.Errorf("%s: the platform did not answer the validate-only call", types.StoryRelationsPath)
 	}
 	return nil
 }

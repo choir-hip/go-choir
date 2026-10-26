@@ -32,7 +32,7 @@ var listEventsCallSiteClass = map[string]ReadConsistency{
 	// F10 (event-table design section 1.2): the channel read covers
 	// acknowledged kinds only; a second caller fails here until it adds a
 	// channel index or a union.
-	"internal/agentcore/system1_verb.go ListAcknowledgedEventsByChannel": ReadConsistent, // replay lookup and the System 1 call caps
+	"internal/agentcore/system1_verb.go ListAcknowledgedEventsByChannel": ReadConsistent, // replay lookup, the System 1 call caps and the story.relation dedup
 }
 
 func repoRoot(t *testing.T) string {

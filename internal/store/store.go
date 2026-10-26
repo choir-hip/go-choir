@@ -2847,9 +2847,11 @@ func (s *Store) ListEventsByOwnerAfter(ctx context.Context, ownerID string, afte
 // coordination channel. It reads og_objects only, so for events written
 // after the event-table cutover it covers acknowledged kinds only: batched
 // kinds carry the run's channel but are stamped into choir_events, which has
-// no channel index (event-table design 1.2, Q9). Its one caller, System1,
-// reads an acknowledged kind; a new caller must add a channel index or a
-// union (pinned by the call-site audit).
+// no channel index (event-table design 1.2, Q9). Its one call site,
+// System1's channel tape, serves two semantic readers (the System1 judgments
+// and the story.relation records), both acknowledged kinds; a caller of a
+// batched kind must add a channel index or a union (pinned by the call-site
+// audit).
 func (s *Store) ListAcknowledgedEventsByChannel(ctx context.Context, ownerID, channelID string, limit int) ([]types.EventRecord, error) {
 	s.beforeEventRead(ctx)
 	if limit <= 0 {
