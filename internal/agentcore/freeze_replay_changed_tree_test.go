@@ -122,11 +122,11 @@ func newFrozenReplay(t *testing.T, computerID, assignmentID, runID, capsuleID st
 	// The round-2 candidate: the window manager edit plus the stray
 	// Playwright output the engineer removed after the freeze.
 	f.frozenChanges = []capsule.FileChange{
-		{Path: "/workspace/platform/frontend/src/lib/WindowManager.svelte", Kind: capsule.ChangeModified, Mode: 0o644},
+		{Path: "workspace/platform/frontend/src/lib/WindowManager.svelte", Kind: capsule.ChangeModified, Mode: 0o644},
 	}
 	for i := 0; i < 17; i++ {
 		f.frozenChanges = append(f.frozenChanges, capsule.FileChange{
-			Path: fmt.Sprintf("/workspace/platform/frontend/test-results/run-%02d/trace.zip", i), Kind: capsule.ChangeAdded, Mode: 0o644,
+			Path: fmt.Sprintf("workspace/platform/frontend/test-results/run-%02d/trace.zip", i), Kind: capsule.ChangeAdded, Mode: 0o644,
 		})
 	}
 	builder := transaction.NewTransactionBuilder(transaction.NewClassifier())
@@ -218,7 +218,7 @@ func TestSecondFreezeOverTheFrozenTreeReplays(t *testing.T) {
 	}{
 		{"unchanged", f.frozenChanges},
 		{"tmp churn", append(append([]capsule.FileChange(nil), f.frozenChanges...),
-			capsule.FileChange{Path: "/tmp/playwright-run/results.json", Kind: capsule.ChangeAdded, Mode: 0o644})},
+			capsule.FileChange{Path: "tmp/playwright-run/results.json", Kind: capsule.ChangeAdded, Mode: 0o644})},
 	} {
 		f.tree.live = capsule.GrantedWorktree{Digest: f.frozenTree, Changes: step.changes}
 		out, err := f.freeze()
@@ -247,7 +247,7 @@ func TestSecondFreezeOverAChangedTreeNamesTheChange(t *testing.T) {
 	msg := err.Error()
 	for _, want := range []string{
 		"already frozen as bundle " + f.operation.BundleDigest,
-		"removed /workspace/platform/frontend/test-results/run-16/trace.zip",
+		"removed workspace/platform/frontend/test-results/run-16/trace.zip",
 		"frozen candidate is what will be reviewed",
 		"new round",
 	} {
@@ -255,17 +255,17 @@ func TestSecondFreezeOverAChangedTreeNamesTheChange(t *testing.T) {
 			t.Fatalf("refusal %q does not say %q", msg, want)
 		}
 	}
-	if got := strings.Count(msg, "/workspace/platform/frontend/test-results/"); got != 17 {
+	if got := strings.Count(msg, "workspace/platform/frontend/test-results/"); got != 17 {
 		t.Fatalf("refusal lists %d of the 17 removed test-results paths: %q", got, msg)
 	}
 
 	// More than 20 changed paths: the first 20 and a count.
 	flood := append([]capsule.FileChange(nil), f.frozenChanges...)
 	for i := 0; i < 30; i++ {
-		flood = append(flood, capsule.FileChange{Path: fmt.Sprintf("/workspace/platform/frontend/node_modules/.vite/dep-%02d.js", i), Kind: capsule.ChangeAdded, Mode: 0o644})
+		flood = append(flood, capsule.FileChange{Path: fmt.Sprintf("workspace/platform/frontend/node_modules/.vite/dep-%02d.js", i), Kind: capsule.ChangeAdded, Mode: 0o644})
 	}
 	f.tree.live = capsule.GrantedWorktree{Digest: objectgraph.SHA256([]byte("tree after npm install")), Changes: flood}
-	if _, err := f.freeze(); err == nil || strings.Count(err.Error(), "added /workspace/platform/") != 20 || !strings.Contains(err.Error(), "and 10 more") {
+	if _, err := f.freeze(); err == nil || strings.Count(err.Error(), "added workspace/platform/") != 20 || !strings.Contains(err.Error(), "and 10 more") {
 		t.Fatalf("a Freeze after 30 new paths = %v; want 20 listed and 10 counted", err)
 	}
 
