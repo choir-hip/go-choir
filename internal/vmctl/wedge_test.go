@@ -176,7 +176,7 @@ func TestGuestBusyFailsClosed(t *testing.T) {
 		"replaying 503":   {serve(http.StatusServiceUnavailable, `{"running_runs":0}`), true},
 		"unreadable 200":  {serve(http.StatusOK, `not json`), true},
 		"unreachable":     {closedURL, true},
-		"no computer url": {"", false},
+		"no computer url": {"", true}, // no address cannot be shown idle (density D3a)
 	} {
 		if got := busy(&VMOwnership{VMID: "vm", ComputerURL: tc.url}); got != tc.want {
 			t.Errorf("%s: busy = %v, want %v", name, got, tc.want)

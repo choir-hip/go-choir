@@ -192,7 +192,7 @@ func TestHandleHealthAnswers503NamingHolderWhenStoreStalled(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &keys); err != nil {
 		t.Fatal(err)
 	}
-	for _, unknown := range []string{"desk_pending_mutations", "selfdev_active_operations", "effective_release"} {
+	for _, unknown := range []string{"desk_pending_mutations", "selfdev_active_operations", "live_capsules", "effective_release"} {
 		if _, ok := keys[unknown]; ok {
 			t.Fatalf("503 body carries %q, which was not read: %s", unknown, rec.Body.String())
 		}
@@ -226,7 +226,7 @@ func TestHandleHealthUnheldStoreAnswers200WithUnchangedBody(t *testing.T) {
 		got = append(got, key)
 	}
 	sort.Strings(got)
-	want := []string{"active_provider", "build", "computer_id", "effective_release", "engine_mutex", "persistent_disk", "running_runs", "runtime_health", "service", "status"}
+	want := []string{"active_provider", "build", "computer_id", "effective_release", "engine_mutex", "live_capsules", "persistent_disk", "running_runs", "runtime_health", "service", "status"}
 	// persistent_disk and engine_mutex depend on the host and the store; keep
 	// the comparison to keys that today's handler always or never writes.
 	optional := map[string]bool{"persistent_disk": true, "engine_mutex": true, "dolt_gc": true}
