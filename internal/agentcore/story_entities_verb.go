@@ -122,8 +122,16 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		return nil, err
 	}
 
+	// relationMu covers the tape read, the platform's check and the record,
+	// so a concurrent call cannot record the same attachment meanwhile; it
+	// is released before the export, as choir.RelateStories does.
 	rt.relationMu.Lock()
-	defer rt.relationMu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			rt.relationMu.Unlock()
+		}
+	}()
 	tape, err := rt.system1ChannelTape(ctx, owner, computer)
 	if err != nil {
 		return nil, fmt.Errorf("choir.Relate: read the tape: %w", err)
@@ -143,7 +151,9 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 			for _, a := range rec.Attachments {
 				// The tape is read oldest first, so the last record wins.
 				latest[entityAttachmentKey(rec.Story, a.EntityID)] = a.Role
-				if a.New {
+				// The tape is read oldest first: the first record of a
+				// minted id is the description its row was minted with.
+				if _, seen := minted[a.EntityID]; a.New && !seen {
 					minted[a.EntityID] = a
 				}
 			}
@@ -195,8 +205,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	if !ok || publisher == nil {
 		return nil, fmt.Errorf("choir.Relate: nothing was recorded: no platform to check the entities with (choir.platform_url is not set on this computer)")
 	}
-	// Ask the platform before anything is recorded; the lock is held so a
-	// concurrent call cannot record the same attachment meanwhile.
+	// Ask the platform before anything is recorded.
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
 	err = publisher.ValidateEntities(vctx, export)
 	cancel()
@@ -219,6 +228,9 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 			return nil, fmt.Errorf("choir.Relate: the attachments could not be recorded on the tape, so they are not exported: %w", err)
 		}
 	}
+
+	rt.relationMu.Unlock()
+	locked = false
 
 	// Export: a projection of the tape; a failure leaves the record.
 	ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
