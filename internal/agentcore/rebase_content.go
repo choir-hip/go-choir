@@ -59,6 +59,8 @@ func (e *rebaseContentMismatchError) Error() string {
 	switch v.Reason {
 	case sourceproj.RebaseCleanPathDiffers:
 		b.WriteString(": paths of the applied change that apply cleanly to the new base are not in the candidate as they are: " + strings.Join(v.Differing, ", "))
+	case sourceproj.RebaseHunkMissing:
+		b.WriteString(": paths of the applied change that conflict with the new base lack a hunk of that change, or were deleted or edited elsewhere in the path: " + strings.Join(v.Dropped, ", "))
 	case sourceproj.RebaseConflictUnresolved:
 		b.WriteString(": paths of the applied change that conflict with the new base were left as the new base has them, which counts as dropped: " + strings.Join(v.Unresolved, ", "))
 	case sourceproj.RebaseBaseMismatch:
@@ -122,7 +124,7 @@ func (rt *Runtime) checkRebaseCandidate(ctx context.Context, lineage rebaseLinea
 		return sourceproj.RebaseVerdict{}, "", nil, fmt.Errorf("read the applied change's patch: %w", err)
 	}
 	verdict, err := sourceproj.VerifyRebase(ctx, rt.releaseRepo(), sourceproj.RebaseCheck{
-		BootedBase: lineage.BootedBase, Patch: patch, CandidateBase: candidateBase, Candidate: candidate,
+		StackBase: stackBase, BootedBase: lineage.BootedBase, Patch: patch, CandidateBase: candidateBase, Candidate: candidate,
 	})
 	return verdict, stackBase, patch, err
 }
