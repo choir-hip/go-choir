@@ -119,7 +119,7 @@ body {
   .pdf-controls,
   .epub-controls,
   .theme-preset
-) {
+):not([data-choir-content], [data-choir-content] *) {
   background: var(--choir-surface-card) !important;
   color: var(--choir-text-primary) !important;
   border-color: transparent !important;
@@ -153,10 +153,13 @@ body {
   .theme-preset.active,
   .current,
   .primary-action
-) {
+):not([data-choir-content], [data-choir-content] *) {
   background: var(--choir-state-selected) !important;
 }
 
+/* A document an app renders (the Reader's sheet, a slide deck) opts out of
+   these chrome overrides with [data-choir-content]: inside it, the document's
+   own type and ink win, and the shell never paints its body text grey. */
 .app-content :is(
   p,
   small,
@@ -172,7 +175,7 @@ body {
   .audio-position-note,
   .video-position-note,
   .empty-state
-) {
+):not([data-choir-content], [data-choir-content] *) {
   color: var(--choir-text-muted) !important;
 }
 
@@ -186,7 +189,7 @@ body {
   .theme-status,
   .accent,
   .link
-) {
+):not([data-choir-content], [data-choir-content] *) {
   color: var(--choir-text-accent) !important;
 }
 

@@ -30,6 +30,7 @@
     chapterKey,
     cleanText,
     detectFormat,
+    escapeRegExp,
     modelChapterCount,
     modelWordCount,
     readingMinutes,
@@ -43,6 +44,7 @@
     MEASURE_NAMES,
     MEASURE_STEPS,
     READER_THEMES,
+    READER_THEME_NAMES,
     loadPrefs,
     normalizePrefs,
     savePrefs,
@@ -63,6 +65,9 @@
   export let authenticated = false;
 
   const dispatch = createEventDispatcher();
+  // Phones and narrow containers put the secondary controls behind one
+  // overflow button; the shell sets the class on both surfaces.
+  const COMPACT_QUERY = '(max-width: 640px)';
   const ZOOM_MODES = [
     { value: 'page-width', label: 'Fit width' },
     { value: 'page-fit', label: 'Fit page' },
@@ -109,6 +114,14 @@
   let toast = '';
   let toastTimer = 0;
   let fileInputEl = null;
+  let compact = false;
+  let prefsOpen = false;
+  let overflowOpen = false;
+  let toolbarEl = null;
+  let stageWidth = 0;
+  let renderRaf = 0;
+  let drawAsked = false;
+  let closeQuery = null;
   let uploadDragDepth = 0;
   let dropping = false;
   let uploading = false;
@@ -132,6 +145,15 @@
   $: if (authenticated && sourceKey && sourceIdentity && sourceIdentity !== rememberedSourceIdentity) {
     void rememberCurrentSource();
   }
+  // Changing the page, the chapter, the zoom or the size of the page area
+  // re-renders the PDF: a page is drawn from a measured width, so the first
+  // draw and every later one go through the same path.
+  // A draw is asked for when the page is present and the area is measured, and
+  // again once it has drawn so a resize or a new scale redraws it.
+  $: if (format === 'pdf' && pdfDoc && canvasEl && stageWidth) {
+    scheduleRender();
+  }
+  $: if (!pdfDoc && rendered) rendered = false;
   $: if (sourceKey && sourceKey !== loadedSourceKey && !error && !loading) {
     void loadSource();
   }
@@ -144,6 +166,9 @@
   $: canPrev = format === 'pdf' ? pdfPage > 1 : sectionIndex > 0;
   $: canNext = format === 'pdf' ? pageCount > 0 && pdfPage < pageCount : sectionIndex < chapterCount - 1;
   $: pageLabel = pageCount ? pdfPage + ' / ' + pageCount : String(pdfPage);
+  $: isEmpty = status === 'empty' && !loading && !error && !model && !sourceKey;
+  $: showContents = Boolean(chapterCount);
+  $: toneName = READER_THEME_NAMES[prefs.theme] || 'Paper';
 
   function flash(message) {
     toast = message;
@@ -409,19 +434,41 @@
     return modelForSearch;
   }
 
-  function zoomScale(page) {
+  // Fit modes ask the page area for its measured width. A page is never sized
+  // from a fallback: with no measurement there is nothing honest to fit it to.
+  function scaleFor(page, stageRect) {
     const base = page.getViewport({ scale: 1 });
-    const rect = stageEl?.getBoundingClientRect();
-    const width = Math.max(220, (rect?.width || 760) - 36);
-    const height = Math.max(220, (rect?.height || 560) - 36);
-    if (zoomMode === 'page-width') return clampNumber(width / base.width, 0.2, 5);
-    if (zoomMode === 'page-fit') return clampNumber(Math.min(width / base.width, height / base.height), 0.2, 5);
-    return clampNumber((Number(zoomMode) || 100) / 100, 0.2, 5);
+    const width = Math.max(160, Math.floor(stageRect.width));
+    const height = Math.max(160, Math.floor(stageRect.height));
+    if (zoomMode === 'page-width') return clampNumber(width / base.width, 0.15, 5);
+    if (zoomMode === 'page-fit') return clampNumber(Math.min(width / base.width, height / base.height), 0.15, 5);
+    return clampNumber((Number(zoomMode) || 100) / 100, 0.15, 5);
+  }
+
+  // A page is drawn only once its page area has a measured width: pdfjs gets
+  // no fallback size, so the canvas is exactly the width the layout asked for
+  // times the screen's pixel ratio, and it is shown the moment it is drawn.
+  function scheduleRender() {
+    if (renderRaf) return;
+    renderRaf = requestAnimationFrame(() => {
+      renderRaf = 0;
+      void renderPage();
+    });
   }
 
   async function renderPage() {
     const seq = ++renderSeq;
-    if (!pdfDoc || !canvasEl) return;
+    // A page needs both the canvas being on the page and a measured page area.
+    // Both are reactive: the canvas is bound when the page markup renders (a
+    // draw asked for before that returns here and is asked for again when the
+    // area reports its width), and the ResizeObserver is the only thing that
+    // says how wide the page may be drawn.
+    if (!pdfDoc || !canvasEl || !stageWidth) return;
+    const stageRect = stageEl?.getBoundingClientRect();
+    if (!stageRect || stageRect.width < 40 || stageRect.height < 40) {
+      rendered = false;
+      return;
+    }
     if (activeRenderTask && activeRenderPromise) {
       activeRenderTask.cancel();
       try {
@@ -438,7 +485,7 @@
       await tick();
       const page = await pdfDoc.getPage(pdfPage);
       if (seq !== renderSeq) return;
-      const scale = zoomScale(page);
+      const scale = scaleFor(page, stageRect);
       lastScale = scale;
       const viewport = page.getViewport({ scale });
       const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -621,6 +668,62 @@
     }
   }
 
+
+  // ---- Toolbar: the reading settings popover and the phone overflow menu ----
+
+  function togglePrefs() {
+    prefsOpen = !prefsOpen;
+    if (prefsOpen) overflowOpen = false;
+  }
+
+  function toggleOverflow() {
+    overflowOpen = !overflowOpen;
+    if (overflowOpen) prefsOpen = false;
+  }
+
+  function toggleSearch() {
+    searchOpen = !searchOpen;
+    overflowOpen = false;
+    if (searchOpen) tick().then(() => document.querySelector('[data-reader-search]')?.focus());
+  }
+
+  // A popover closes on a press outside it and on Escape, so a tap on the page
+  // never leaves a panel hanging over the text.
+  function onDocumentPointerDown(event) {
+    if (!prefsOpen && !overflowOpen) return;
+    const target = event.target;
+    if (toolbarEl && target instanceof Node && toolbarEl.contains(target)) return;
+    prefsOpen = false;
+    overflowOpen = false;
+  }
+
+  function onDocumentKeydown(event) {
+    if (event.key !== 'Escape') return;
+    prefsOpen = false;
+    overflowOpen = false;
+  }
+
+  // The search snippet is matched case-insensitively against the flat text the
+  // model holds, so the same flat form is what gets split around the match.
+  function hitParts(hit) {
+    const flat = String(hit?.text || '').replace(/\\s+/g, ' ');
+    const needle = cleanText(searchTerm);
+    const match = needle ? new RegExp(escapeRegExp(needle), 'i').exec(flat) : null;
+    if (!match) {
+      return { before: flat, match: '', after: '' };
+    }
+    return {
+      before: flat.slice(0, match.index),
+      match: flat.slice(match.index, match.index + match[0].length),
+      after: flat.slice(match.index + match[0].length),
+    };
+  }
+
+  function hitPlace(hit) {
+    if (format === 'pdf' && hit.page) return 'Page ' + hit.page;
+    const chapter = (hit.sectionIndex || 0) + 1;
+    return 'Chapter ' + chapter + ' · ¶' + ((hit.blockIndex || 0) + 1);
+  }
 
   // ---- Opening a file from disk ----
 
@@ -824,6 +927,31 @@
 
   onMount(() => {
     prefs = loadPrefs(window.localStorage);
+    // A page is drawn from the page area's measured width, and draw again when
+    // that width changes (a window resize, the contents panel opening, a
+    // phone turning): the observer is the one place that says \"now measure\".
+    const observer = typeof ResizeObserver === 'function' && stageEl
+      ? new ResizeObserver((entries) => {
+          const rect = entries[0]?.contentRect;
+          const width = Math.round(rect?.width || 0);
+          if (width === stageWidth) return;
+          stageWidth = width;
+        })
+      : null;
+    observer?.observe(stageEl);
+    if (typeof window.matchMedia === 'function') {
+      const query = window.matchMedia(COMPACT_QUERY);
+      compact = query.matches;
+      const onChange = (event) => {
+        compact = event.matches;
+        prefsOpen = false;
+        overflowOpen = false;
+      };
+      query.addEventListener('change', onChange);
+      closeQuery = () => query.removeEventListener('change', onChange);
+    }
+    document.addEventListener('pointerdown', onDocumentPointerDown, true);
+    document.addEventListener('keydown', onDocumentKeydown);
     void refreshRecentFiles();
     if (sourceKey) void loadSource();
     else if (authenticated) {
@@ -849,10 +977,16 @@
       document.removeEventListener('visibilitychange', onHide);
       if (toastTimer) clearTimeout(toastTimer);
       if (activeRenderTask) activeRenderTask.cancel();
+      if (renderRaf) cancelAnimationFrame(renderRaf);
+      observer?.disconnect();
+      closeQuery?.();
+      document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+      document.removeEventListener('keydown', onDocumentKeydown);
     };
   });
-</script>
 
+
+</script>
 
 <svelte:window
   on:keydown={handleKeydown}
@@ -864,166 +998,263 @@
 
 <section
   class="reader-shell {tone}"
+  class:reader-compact={compact}
   data-reader-app
   data-reader-format={format}
   data-reader-status={status}
+  data-reader-window
   data-media-kind={format}
   aria-label={'Reader: ' + (model?.title || source.title || 'Reader')}
   tabindex="-1"
 >
-  <div
-    class="reader-drop-target"
-    class:reader-drop-target-active={dropping}
-    role="region"
-    aria-label="Drop a PDF or EPUB here to open it"
-    data-reader-drop
-  >
-    <input
-      class="reader-visually-hidden"
-      type="file"
-      accept={uploadAccept()}
-      data-reader-file-input
-      bind:this={fileInputEl}
-      on:change={onFilePickerChange}
-      tabindex="-1"
-      aria-hidden="true"
-    />
-    <p class="reader-drop-hint" aria-live="polite" data-reader-drop-hint>
-      {#if uploading}
-        Saving {uploadName || 'your file'} and opening it...
+  <input
+    class="reader-file-input"
+    type="file"
+    accept={uploadAccept()}
+    data-reader-file-input
+    bind:this={fileInputEl}
+    on:change={onFilePickerChange}
+    tabindex="-1"
+    aria-hidden="true"
+  />
+
+  {#if !isEmpty}
+    <div class="reader-toolbar" role="toolbar" aria-label="Reading controls" data-reader-toolbar bind:this={toolbarEl}>
+      {#if showContents}
+        <button
+          type="button"
+          class="reader-icon"
+          aria-expanded={tocOpen}
+          aria-controls="reader-toc"
+          aria-label="Contents"
+          title="Contents"
+          data-reader-toc-toggle
+          on:click={() => (tocOpen = !tocOpen)}
+        >
+          <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M3 4h10M3 8h10M3 12h10" />
+          </svg>
+        </button>
+      {/if}
+      <button
+        type="button"
+        class="reader-icon"
+        aria-label={format === 'pdf' ? 'Previous page' : 'Previous chapter'}
+        title={format === 'pdf' ? 'Previous page' : 'Previous chapter'}
+        data-reader-prev
+        disabled={!canPrev}
+        on:click={() => move(-1)}
+      >
+        <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M10 3.5 5.5 8 10 12.5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="reader-icon"
+        aria-label={format === 'pdf' ? 'Next page' : 'Next chapter'}
+        title={format === 'pdf' ? 'Next page' : 'Next chapter'}
+        data-reader-next
+        disabled={!canNext}
+        on:click={() => move(1)}
+      >
+        <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M6 3.5 10.5 8 6 12.5" />
+        </svg>
+      </button>
+
+      {#if format === 'pdf'}
+        <div class="reader-position" data-reader-position-field>
+          <input
+            class="reader-page-input"
+            type="number"
+            min="1"
+            max={pageCount || undefined}
+            value={pdfPage}
+            aria-label="Page"
+            title={'Page of ' + (pageCount || '?')}
+            data-reader-page
+            on:change={(event) => goToPage(event.currentTarget.value)}
+          />
+          <span class="reader-of" data-reader-page-count>/ {pageCount || '?'}</span>
+        </div>
       {:else}
-        Drop a file anywhere in this window, or use Open file, to read your own document. Reader opens {uploadFormats().map((type) => READER_UPLOAD_FORMATS.find((spec) => spec.mediaType === type)?.label).filter(Boolean).join(' and ')}.
-      {/if}
-    </p>
-    {#if dropping}
-      <div class="reader-drop-veil" data-reader-drop-veil aria-hidden="true">
-        <span class="reader-drop-badge">
-          {authenticated ? 'Drop to open in Reader' : 'Drop to open the sample (sign in to open your own files)'}
-        </span>
-      </div>
-    {/if}
-  </div>
-
-  <header class="reader-top" data-reader-top>
-    <div class="reader-identity">
-      <h1 data-reader-title>{model?.title || source.title || 'Reader'}</h1>
-      <p>
-        {#if model?.sample}
-          <span class="reader-chip" data-reader-chip="sample">Sample</span>
-        {:else}
-          <span class="reader-chip" data-reader-chip="format">{format === 'pdf' ? 'PDF' : 'EPUB'}</span>
-        {/if}
-        {#if model?.author}<span data-reader-author>{model.author}</span>{/if}
-        {#if words}<span data-reader-words>{words.toLocaleString()} words – {minutes} min</span>{/if}
-        {#if authNeeded}<span data-reader-auth-note>Preview</span>{/if}
-      </p>
-    </div>
-    <div class="reader-top-actions">
-      <button
-        type="button"
-        class="reader-button reader-open-file"
-        data-reader-open-file
-        title={authenticated ? 'Open a PDF or EPUB from your computer' : 'Sign in to open your own PDF or EPUB'}
-        on:click={openFilePicker}
-      >Open file</button>
-      <button
-        type="button"
-        class="reader-icon-button"
-        aria-expanded={tocOpen}
-        aria-controls="reader-toc"
-        title="Table of contents"
-        data-reader-toc-toggle
-        on:click={() => (tocOpen = !tocOpen)}
-      >☰<span class="reader-visually-hidden">Table of contents</span></button>
-      <button
-        type="button"
-        class="reader-icon-button"
-        aria-expanded={searchOpen}
-        title="Search this document"
-        data-reader-search-toggle
-        on:click={() => {
-          searchOpen = !searchOpen;
-          if (searchOpen) tick().then(() => document.querySelector('[data-reader-search]')?.focus());
-        }}
-      >⌕<span class="reader-visually-hidden">Search</span></button>
-      {#if authNeeded}
-        <button type="button" class="reader-button" data-reader-signin on:click={openAuth}>Sign in to read more</button>
-      {/if}
-    </div>
-  </header>
-
-  <div class="reader-tools" data-reader-tools role="toolbar" aria-label="Reading controls">
-    <div class="reader-group">
-      <button type="button" class="reader-button" data-reader-prev on:click={() => move(-1)} disabled={!canPrev}>
-        {format === 'pdf' ? 'Previous page' : 'Previous chapter'}
-      </button>
-      <button type="button" class="reader-button" data-reader-next on:click={() => move(1)} disabled={!canNext}>
-        {format === 'pdf' ? 'Next page' : 'Next chapter'}
-      </button>
-    </div>
-
-    {#if format === 'pdf'}
-      <label class="reader-group">
-        <span>page</span>
-        <input
-          class="reader-input reader-page-box"
-          type="number"
-          min="1"
-          max={pageCount || undefined}
-          value={pdfPage}
-          data-reader-page
-          on:change={(event) => goToPage(event.currentTarget.value)}
-        />
-        <span data-reader-page-count>{pageLabel}</span>
-      </label>
-      <label class="reader-group">
-        <span>zoom</span>
-        <select class="reader-select" data-reader-zoom bind:value={zoomMode} on:change={() => setZoom(zoomMode)}>
-          {#each ZOOM_MODES as mode}
-            <option value={mode.value}>{mode.label}</option>
-          {/each}
-        </select>
-      </label>
-    {:else}
-      <label class="reader-group" data-grow="true">
-        <span>chapter</span>
         <select
-          class="reader-select"
-          data-reader-toc
+          class="reader-chapter"
+          aria-label="Chapter"
+          title="Chapter"
+          data-reader-chapter
           value={sectionIndex}
           on:change={(event) => goToSection(Number(event.currentTarget.value))}
         >
           {#each model?.sections || [] as entry, index}
-            <option value={index}>{index + 1}. {entry.title}</option>
+            <option value={index}>{index + 1} / {chapterCount} · {entry.title}</option>
           {/each}
         </select>
-      </label>
-      <div class="reader-group">
-        <button type="button" class="reader-icon-button" data-reader-font-smaller title="Smaller text" aria-label="Smaller text" on:click={() => changeFont(-1)} disabled={prefs.fontSize <= FONT_STEPS.min}>A-</button>
-        <span data-reader-font-size>{prefs.fontSize}px</span>
-        <button type="button" class="reader-icon-button" data-reader-font-larger title="Larger text" aria-label="Larger text" on:click={() => changeFont(1)} disabled={prefs.fontSize >= FONT_STEPS.max}>A+</button>
-      </div>
-      <label class="reader-group">
-        <span>width</span>
-        <select class="reader-select" data-reader-measure value={prefs.measure} on:change={(event) => changePrefs({ measure: Number(event.currentTarget.value) })}>
-          {#each MEASURE_STEPS as step}
-            <option value={step}>{MEASURE_NAMES[step]}</option>
+      {/if}
+
+      <span class="reader-toolbar-spacer"></span>
+
+      {#if format === 'pdf' && !compact}
+        <select
+          class="reader-zoom"
+          aria-label="Zoom"
+          title="Zoom"
+          data-reader-zoom
+          bind:value={zoomMode}
+          on:change={() => setZoom(zoomMode)}
+        >
+          {#each ZOOM_MODES as mode}
+            <option value={mode.value}>{mode.label}</option>
           {/each}
         </select>
-      </label>
-      <div class="reader-group" role="group" aria-label="Page tone">
-        {#each READER_THEMES as theme}
+      {/if}
+
+      {#if !compact}
+        <div class="reader-popover-anchor">
           <button
             type="button"
-            class="reader-button"
-            data-reader-tone={theme}
-            aria-pressed={prefs.theme === theme}
-            on:click={() => changePrefs({ theme })}
-          >{theme}</button>
-        {/each}
-      </div>
-    {/if}
-  </div>
+            class="reader-aa {prefsOpen ? 'is-open' : ''}"
+            aria-expanded={prefsOpen}
+            aria-haspopup="dialog"
+            aria-label="Reading settings"
+            title="Reading settings"
+            data-reader-prefs-toggle
+            on:click={togglePrefs}
+          >Aa</button>
+          {#if prefsOpen}
+            <div class="reader-popover" role="dialog" aria-label="Reading settings" data-reader-prefs>
+              <div class="reader-setting">
+                <span>Text size</span>
+                <div class="reader-stepper">
+                  <button
+                    type="button"
+                    class="reader-icon reader-icon-sm"
+                    aria-label="Smaller text"
+                    title="Smaller text"
+                    data-reader-font-smaller
+                    disabled={prefs.fontSize <= FONT_STEPS.min}
+                    on:click={() => changeFont(-1)}
+                  >
+                    <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M3.5 8h9" />
+                    </svg>
+                  </button>
+                  <span class="reader-setting-value" data-reader-font-size>{prefs.fontSize}px</span>
+                  <button
+                    type="button"
+                    class="reader-icon reader-icon-sm"
+                    aria-label="Larger text"
+                    title="Larger text"
+                    data-reader-font-larger
+                    disabled={prefs.fontSize >= FONT_STEPS.max}
+                    on:click={() => changeFont(1)}
+                  >
+                    <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M3.5 8h9M8 3.5v9" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <label class="reader-setting">
+                <span>Width</span>
+                <select
+                  class="reader-select"
+                  data-reader-measure
+                  value={prefs.measure}
+                  on:change={(event) => changePrefs({ measure: Number(event.currentTarget.value) })}
+                >
+                  {#each MEASURE_STEPS as step}
+                    <option value={step}>{MEASURE_NAMES[step]}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="reader-setting">
+                <span>Tone</span>
+                <select
+                  class="reader-select"
+                  data-reader-tone-select
+                  value={prefs.theme}
+                  on:change={(event) => changePrefs({ theme: event.currentTarget.value })}
+                >
+                  {#each READER_THEMES as theme}
+                    <option value={theme} data-reader-tone={theme}>{READER_THEME_NAMES[theme]}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if !compact}
+        <button
+          type="button"
+          class="reader-icon"
+          aria-label="Search this document"
+          title="Search this document"
+          aria-expanded={searchOpen}
+          data-reader-search-toggle
+          on:click={toggleSearch}
+        >
+          <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="7" cy="7" r="4" />
+            <path d="M10.2 10.2 14 14" />
+          </svg>
+        </button>
+        <button type="button" class="reader-open" data-reader-open-file on:click={openFilePicker}>
+          Open file
+        </button>
+      {:else}
+        <div class="reader-popover-anchor">
+          <button
+            type="button"
+            class="reader-icon"
+            aria-label="More controls"
+            title="More controls"
+            aria-haspopup="menu"
+            aria-expanded={overflowOpen}
+            data-reader-overflow-toggle
+            on:click={toggleOverflow}
+          >
+            <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <circle cx="8" cy="3.5" r="0.9" />
+              <circle cx="8" cy="8" r="0.9" />
+              <circle cx="8" cy="12.5" r="0.9" />
+            </svg>
+          </button>
+          {#if overflowOpen}
+            <div class="reader-popover reader-popover-menu" role="menu" aria-label="More controls" data-reader-overflow>
+              <button type="button" role="menuitem" class="reader-menu-item" data-reader-prefs-toggle on:click={togglePrefs}>
+                Reading settings
+              </button>
+              <button type="button" role="menuitem" class="reader-menu-item" data-reader-search-toggle on:click={toggleSearch}>
+                Search
+              </button>
+              {#if format === 'pdf'}
+                <label class="reader-menu-item reader-menu-label">
+                  <span>Zoom</span>
+                  <select
+                    class="reader-select"
+                    data-reader-zoom
+                    bind:value={zoomMode}
+                    on:change={() => setZoom(zoomMode)}
+                  >
+                    {#each ZOOM_MODES as mode}
+                      <option value={mode.value}>{mode.label}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/if}
+              <button type="button" role="menuitem" class="reader-menu-item" data-reader-open-file on:click={openFilePicker}>
+                Open file
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   {#if uploading || uploadProgress > 0}
     <div class="reader-upload" data-reader-upload role="status" aria-live="polite">
@@ -1032,22 +1263,44 @@
       </div>
       <span>{uploadProgress > 0 && uploadProgress < 1 ? Math.round(uploadProgress * 100) + '% of ' + uploadName : uploadStatus || 'Saving ' + uploadName}</span>
       {#if uploading}
-        <button type="button" class="reader-button" data-reader-upload-cancel on:click={cancelUpload}>Cancel</button>
+        <button type="button" class="reader-open" data-reader-upload-cancel on:click={cancelUpload}>Cancel</button>
       {/if}
     </div>
   {/if}
   {#if uploadError}
-    <div class="reader-alert reader-upload-alert" role="alert" data-reader-upload-error>
-      <strong>Reader could not open that file</strong>
+    <div class="reader-alert" role="alert" data-reader-upload-error>
+      <strong>That file could not be opened</strong>
       <span>{uploadError}</span>
     </div>
   {/if}
 
-  <div class="reader-body" data-toc-open={tocOpen ? 'true' : 'false'}>
-    {#if tocOpen}
-      <nav class="reader-toc" id="reader-toc" aria-label="Chapters" data-reader-toc-panel>
-        <h2>Contents</h2>
-        {#if chapterCount}
+  {#if dropping}
+    <div class="reader-drop-veil" data-reader-drop-veil>
+      <span class="reader-drop-badge">
+        {authenticated ? 'Drop to open in Reader' : 'Drop to open the sample'}
+      </span>
+    </div>
+  {/if}
+
+  <div class="reader-body" data-toc-open={tocOpen && showContents ? 'true' : 'false'}>
+    {#if tocOpen && showContents}
+      <nav class="reader-toc" id="reader-toc" aria-label="Contents" data-reader-toc-panel>
+        <button
+          type="button"
+          class="reader-toc-close"
+          aria-label="Close contents"
+          title="Close contents"
+          on:click={() => (tocOpen = false)}
+        >
+          <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M4 4l8 8M12 4l-8 8" />
+          </svg>
+        </button>
+        <p class="reader-toc-meta" data-reader-words>
+          {#if model?.author}<span data-reader-author>{model.author}</span>{/if}
+          {#if words}<span>{words.toLocaleString()} words · {minutes} min read</span>{/if}
+        </p>
+        <div class="reader-toc-list">
           {#each model?.sections || [] as entry, index}
             <button
               type="button"
@@ -1056,33 +1309,27 @@
               data-reader-toc-item
               on:click={() => {
                 goToSection(index);
-                if (stageEl) stageEl.scrollTop = 0;
+                if (compact) tocOpen = false;
               }}
-            >
-              <span>{index + 1}. {entry.title}</span>
-              <small>{entry.blocks.length} blocks</small>
-            </button>
+            >{entry.title}</button>
           {/each}
-        {:else}
-          <p class="reader-status">Contents are read page by page in a PDF.</p>
-          <button type="button" class="reader-toc-item" aria-current="true" on:click={() => goToSection(0)}>
-            <span>All pages</span>
-            <small>{pageCount || 0} pages</small>
-          </button>
+        </div>
+        {#if authNeeded}
+          <button type="button" class="reader-open reader-toc-signin" data-reader-signin on:click={openAuth}>Sign in to open your own files</button>
         {/if}
       </nav>
     {/if}
 
     <div class="reader-stage" bind:this={stageEl} data-reader-stage on:scroll={updateProgress}>
       {#if loading}
-        <p class="reader-status" aria-live="polite">Opening {source.title || 'document'}...</p>
+        <p class="reader-status" aria-live="polite">Opening {source.title || 'document'}…</p>
       {:else if error}
         <div class="reader-alert" role="alert" data-reader-error>
           <strong>Reader could not open this document</strong>
           <span>{error}</span>
-          {#if model?.sample === false || !model}
-            <span>The PDF and EPUB windows are still in the launcher.</span>
-          {/if}
+          <button type="button" class="reader-open" data-reader-retry on:click={() => { error = ''; status = 'idle'; loadedSourceKey = ''; if (sourceKey) void loadSource(); else void loadSourceDirect(); }}>
+            Try again
+          </button>
         </div>
       {:else if format === 'pdf' && pdfDoc}
         <div class="reader-pdf-stage">
@@ -1090,20 +1337,15 @@
             <canvas bind:this={canvasEl} aria-label={'Page ' + pdfPage + ' of ' + (pageCount || '?')}></canvas>
           </div>
         </div>
-        {#if rendering}<span class="reader-status" aria-live="polite" data-reader-rendering>Rendering page {pdfPage}...</span>{/if}
+        {#if !rendered}<span class="reader-visually-hidden" aria-live="polite" data-reader-rendering>Drawing page {pdfPage}</span>{/if}
       {:else if section}
-        <article class="reader-sheet" data-reader-sheet style={sheetStyle} aria-labelledby="reader-section-title">
-          <h2 class="reader-visually-hidden" id="reader-section-title">{section.title}</h2>
-          {#if chapterCount > 1}
-            <p class="reader-status" data-reader-section-count>Chapter {sectionIndex + 1} of {chapterCount} – {section.title}</p>
+        <article class="reader-sheet" data-reader-sheet data-choir-content style={sheetStyle}>
+          {#if sectionIndex > 0 && section.title}
+            <h2 class="reader-chapter-title">{section.title}</h2>
           {/if}
           {#each section.blocks as block, index}
             {#if block.tag === 'h1' || block.tag === 'h2' || block.tag === 'h3' || block.tag === 'h4'}
-              {#if block.tag === 'h3' && block.page}
-                <h3 class="reader-page-mark" data-reader-block={index} data-reader-block-page={block.page}>Page {block.page}</h3>
-              {:else}
-                <h3 data-reader-block={index}>{block.text}</h3>
-              {/if}
+              <h3 data-reader-block={index}>{block.text}</h3>
             {:else if block.tag === 'blockquote'}
               <blockquote data-reader-block={index}>{block.text}</blockquote>
             {:else if block.tag === 'pre'}
@@ -1115,24 +1357,25 @@
             {/if}
           {/each}
         </article>
-      {:else}
+      {:else if isEmpty}
         <div class="reader-empty" data-reader-empty>
-          <h2>Nothing open yet</h2>
-          <p>Open a PDF or an EPUB from your computer or from Files, or read the sample below. Reader keeps your place once you are signed in.</p>
+          <h2>Open a document</h2>
+          <p>PDF or EPUB, from your computer or from Files. You can also drop a file here.</p>
           <div class="reader-empty-actions">
-            <button type="button" class="reader-button" data-reader-open-file-empty on:click={openFilePicker}>Open file</button>
-            <button type="button" class="reader-button" data-reader-open-sample on:click={openSample}>Open the sample document</button>
+            <button type="button" class="reader-open reader-open-primary" data-reader-open-file-empty on:click={openFilePicker}>Open file</button>
+            <button type="button" class="reader-text-button" data-reader-open-sample on:click={openSample}>Read the sample</button>
           </div>
           {#if recentFiles.length}
-            <!-- The list is a keyed each: a recents answer that arrives while the
-                 field is focused must not be read as a change to the open window
-                 list, and Svelte only re-keyed a list it could match by identity. -->
             <div class="reader-recents" data-reader-recents>
-              <span>Recently opened</span>
+              <p class="reader-recents-label">Recent</p>
               {#each recentFiles as recent (recent.identity)}
-                <button type="button" class="reader-recent-item" data-reader-recent on:click={() => openRecent(recent)}>
-                  <strong>{recent.title}</strong>
-                  <small>{recent.filePath || recent.sourceUrl}</small>
+                <button type="button" class="reader-recent" data-reader-recent on:click={() => openRecent(recent)}>
+                  <svg class="reader-glyph reader-recent-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M4 1.8h5l3 3v9.4H4z" />
+                    <path d="M9 1.8v3h3" />
+                  </svg>
+                  <span class="reader-recent-name">{recent.title}</span>
+                  <span class="reader-recent-folder">{recent.filePath || recent.sourceUrl || 'Files'}</span>
                 </button>
               {/each}
             </div>
@@ -1143,140 +1386,55 @@
       {#if searchOpen}
         <div class="reader-results" data-reader-results role="dialog" aria-label="Search results">
           <header>
-            <label class="reader-group">
-              <span>find</span>
-              <input
-                class="reader-input"
-                type="search"
-                data-reader-search
-                placeholder="Search this document"
-                bind:value={searchTerm}
-                on:input={runSearch}
-                on:keydown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    jumpToHit(hitIndex + (event.shiftKey ? -1 : 1));
-                  }
-                }}
-              />
-            </label>
-            <span data-reader-search-count>{searchHits.length} matches</span>
-            <button type="button" class="reader-icon-button" aria-label="Close search" on:click={() => (searchOpen = false)}>×</button>
+            <input
+              class="reader-search-input"
+              type="search"
+              data-reader-search
+              placeholder="Search this document"
+              aria-label="Search this document"
+              bind:value={searchTerm}
+              on:input={runSearch}
+              on:keydown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  jumpToHit(hitIndex + (event.shiftKey ? -1 : 1));
+                }
+              }}
+            />
+            <span class="reader-search-count" data-reader-search-count>{searchHits.length} {searchHits.length === 1 ? 'match' : 'matches'}</span>
+            <button type="button" class="reader-icon reader-icon-sm" aria-label="Close search" title="Close search" on:click={() => (searchOpen = false)}>
+              <svg class="reader-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
           </header>
-          {#if searchHits.length}
-            {#each searchHits.slice(0, 40) as hit, index}
-              <button
-                type="button"
-                class="reader-hit"
-                aria-current={index === hitIndex ? 'true' : 'false'}
-                data-reader-hit
-                on:click={() => jumpToHit(index)}
-              >
-                <strong>{format === 'pdf' && hit.page ? 'Page ' + hit.page : hit.title}</strong>
-                <span>{hit.snippet}</span>
-              </button>
-            {/each}
-          {:else if searchTerm.trim()}
-            <p class="reader-status">No matches for this document.</p>
-          {:else}
-            <p class="reader-status">Type to find text. Enter moves to the next match, Shift+Enter the previous.</p>
-          {/if}
+          <div class="reader-results-list">
+            {#if searchHits.length}
+              {#each searchHits.slice(0, 40) as hit, index}
+                {@const parts = hitParts(hit)}
+                <button
+                  type="button"
+                  class="reader-hit"
+                  aria-current={index === hitIndex ? 'true' : 'false'}
+                  data-reader-hit
+                  on:click={() => jumpToHit(index)}
+                >
+                  <span class="reader-hit-where">{hitPlace(hit)}</span>
+                  <span class="reader-hit-text">{parts.before}<mark>{parts.match}</mark>{parts.after}</span>
+                </button>
+              {/each}
+            {:else if searchTerm.trim()}
+              <p class="reader-status">No matches in this document.</p>
+            {:else}
+              <p class="reader-status">Type to find text.</p>
+            {/if}
+          </div>
         </div>
       {/if}
     </div>
   </div>
 
-  <footer class="reader-footer" data-reader-footer>
-    <div class="reader-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress} data-reader-progress>
-      <i style={'width: ' + progress + '%'}></i>
-    </div>
-    <span data-reader-progress-label>{progress}%</span>
-    <span data-reader-position>{format === 'pdf' ? 'Page ' + pageLabel : 'Chapter ' + (chapterCount ? sectionIndex + 1 : 0) + ' / ' + chapterCount}</span>
-    {#if model?.sample}<span data-reader-sample-note>Signed-out sample</span>{/if}
-  </footer>
-
   <p class="reader-visually-hidden" aria-live="polite" data-reader-live>{toast}</p>
 </section>
 
-<!-- One stylesheet for both surfaces: this window and /read.html import the
-     same reader.css, so the signed-out page and the desktop app look alike. -->
-<style>
-  @import './reader.css';
 
-  /* ---- Opening a file from disk ---- */
-  .reader-open-file {
-    font-weight: 600;
-  }
-  /* The drop target is one region over the window, in the reading surface's
-     own palette: it is laid out where the reader's paper is, so it reads as
-     part of the page rather than a floating system layer. */
-  .reader-drop-target {
-    position: relative;
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 18px 2px;
-    background: var(--choir-surface-document, var(--choir-surface-app));
-  }
-  .reader-drop-hint {
-    margin: 0;
-    color: var(--reader-muted, var(--choir-text-muted));
-    font-family: var(--choir-font-ui, inherit);
-    font-size: 11.5px;
-    letter-spacing: 0.01em;
-  }
-  .reader-drop-veil {
-    position: absolute;
-    inset: -46px 8px 8px;
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px dashed var(--choir-accent);
-    border-radius: var(--choir-radius-panel, 16px);
-    background: color-mix(in srgb, var(--reader-paper, var(--choir-surface-app)) 88%, transparent);
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--choir-accent) 14%, transparent);
-    pointer-events: none;
-  }
-  .reader-drop-badge {
-    padding: 10px 18px;
-    border: 1px solid var(--choir-border-strong);
-    border-radius: var(--choir-radius-pill, 999px);
-    color: var(--choir-text-on-accent);
-    background: var(--choir-accent);
-    font-family: var(--choir-font-ui, inherit);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .reader-upload {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 18px;
-    border-bottom: 1px solid var(--choir-border);
-    color: var(--choir-text-muted);
-    background: var(--choir-surface-pane);
-    font-family: var(--choir-font-ui, inherit);
-    font-size: 12px;
-  }
-  .reader-upload-bar {
-    flex: 1;
-    height: 6px;
-    overflow: hidden;
-    border-radius: var(--choir-radius-pill, 999px);
-    background: var(--choir-border);
-  }
-  .reader-upload-bar i {
-    display: block;
-    height: 100%;
-    background: var(--choir-accent);
-    transition: width var(--choir-duration-fast, 120ms) linear;
-  }
-  .reader-upload-alert {
-    margin: 10px 18px 0;
-  }
-  .reader-empty-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-</style>
