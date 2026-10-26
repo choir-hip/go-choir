@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -152,9 +153,12 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 			return fmt.Errorf("captures are written through /internal/platform/captures")
 		}
 		// A release is published by the owner's act, never filed by a guest
-		// (Library S1 review 262, F20).
-		if kinds.ObjectKind == release.ObjectKind || kinds.Kind == release.ObjectKind {
-			return fmt.Errorf("releases are published through the owner's act, not written as objects")
+		// (Library S1 review 262, F20); so are a package release and its
+		// listing (S2, L6).
+		for _, kind := range []string{release.ObjectKind, pkgrelease.ObjectKind, pkgrelease.ListingKind} {
+			if kinds.ObjectKind == kind || kinds.Kind == kind {
+				return fmt.Errorf("releases and their listings are published through the owner's act, not written as objects")
+			}
 		}
 		return nil
 	}

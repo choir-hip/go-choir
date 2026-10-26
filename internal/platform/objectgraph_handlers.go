@@ -160,16 +160,21 @@ func genericCaptureWriteRefusal(r *http.Request, kind objectgraph.ObjectKind, bo
 	return 0, ""
 }
 
-// genericReleaseWriteRefusal keeps choir.software_release off the generic
-// object routes for guests. A release object is written only by the host's
-// publish handler, after the owner's act and a check that the patch is in the
-// host content store; the release reads trust the objects of this kind, so a
-// guest filing one under its own owner would forge a publication.
+// genericReleaseWriteRefusal keeps choir.software_release, and the
+// Library's choir.package_release and choir.release_listing (S2), off the
+// generic object routes for guests. These objects are written only by the
+// host's publish handlers, after the owner's act and the host checks; the
+// reads trust the objects of these kinds, so a guest filing one under its
+// own owner would forge a publication or a track head.
 func genericReleaseWriteRefusal(r *http.Request, kind objectgraph.ObjectKind) (int, string) {
-	if string(kind) != release.ObjectKind || trustedInternalCaller(r) {
+	if trustedInternalCaller(r) {
 		return 0, ""
 	}
-	return http.StatusForbidden, "releases are published through the owner's act, not written as objects"
+	switch kind {
+	case objectgraph.ObjectKind(release.ObjectKind), PackageReleaseKind, ReleaseListingKind:
+		return http.StatusForbidden, "releases and their listings are published through the owner's act, not written as objects"
+	}
+	return 0, ""
 }
 
 func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request) {
