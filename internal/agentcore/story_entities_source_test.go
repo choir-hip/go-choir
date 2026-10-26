@@ -289,3 +289,47 @@ func TestOwnStoryIsCheckedPendingAndExportedWhenItPublishes(t *testing.T) { // F
 		t.Fatalf("a story with no record exported %d times", n)
 	}
 }
+
+// A story about none of its candidates: Relate("", nil) records a review
+// with no attachments, which frees the final Report and reaches the
+// platform; with no analysis of the story it is refused.
+func TestRelateRecordsAStoryAboutNoneOfItsCandidates(t *testing.T) {
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	empty := func(runID string) (attachDecoded, error) {
+		payload, _ := json.Marshal(yaegikernel.RelatePayload{})
+		raw, err := f.rt.deskEgress(context.Background(), agentprofile.Research, f.deskExec(runID, "doc-story"), yaegikernel.ActionRelate, payload)
+		if err != nil {
+			return attachDecoded{}, err
+		}
+		return decodeAttach(t, raw), nil
+	}
+	if _, err := empty("run-none-bare"); err == nil || !strings.Contains(err.Error(), "at least one") {
+		t.Fatalf("no analysis: %v, want a refusal", err)
+	}
+	if err := f.finishGate(t, "run-none-bare", "research:doc-story", agentprofile.Research); err == nil {
+		t.Fatal("a refused empty Relate freed the final Report")
+	}
+	f.analyse(t, agentprofile.Research, "run-none", "doc-story")
+	got, err := empty("run-none")
+	if err != nil || !got.Exported {
+		t.Fatalf("empty Relate with the analysis = %+v, %v", got, err)
+	}
+	recs := f.records(t)
+	if len(recs) != 1 || len(recs[0].Attachments) != 0 || recs[0].Review == nil || recs[0].Review.Counts.Candidates != 3 {
+		t.Fatalf("records = %+v, want one review with no attachments", recs)
+	}
+	exports := f.epub.entityCalls()
+	if len(exports) != 1 || len(exports[0].Entities) != 0 || exports[0].Review == nil {
+		t.Fatalf("exports = %+v, want the review alone", exports)
+	}
+	if err := f.finishGate(t, "run-none", "research:doc-story", agentprofile.Research); err != nil {
+		t.Fatalf("after the empty record: %v", err)
+	}
+	// At publish, a story whose record attaches nothing still sends its review.
+	before := len(f.epub.entityCalls())
+	f.rt.publishStoryVersion(context.Background(), f.epub, StoryVersion{OwnerID: f.owner, ComputerID: f.computer, DocID: "doc-story", RevisionID: "rev-doc-story", Revision: 1})
+	if after := f.epub.entityCalls()[before:]; len(after) != 1 || len(after[0].Entities) != 0 || after[0].Review == nil {
+		t.Fatalf("export at publish = %+v, want the review alone", after)
+	}
+}
