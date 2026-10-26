@@ -588,14 +588,22 @@ const defaultLegacyGuestIdleTimeout = 30 * time.Minute
 // long a guest that does not report live_capsules must be idle before the
 // idle sweep, pressure reclaim or make-room hibernates it (density D3a).
 // Unset or malformed is 30 minutes, so lowering VMCTL_IDLE_TIMEOUT never
-// lowers it for a guest that could be holding a parked capsule.
+// lowers it for a guest that could be holding a parked capsule. A value
+// below VMCTL_IDLE_TIMEOUT is raised to it: the legacy window protects a
+// guest from the short timer and is never shorter than that timer.
 func legacyGuestIdleTimeoutFromEnv() time.Duration {
+	d := defaultLegacyGuestIdleTimeout
 	if v := os.Getenv("VMCTL_IDLE_TIMEOUT_LEGACY_GUEST"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
+		if parsed, err := time.ParseDuration(v); err == nil && parsed > 0 {
+			d = parsed
 		}
 	}
-	return defaultLegacyGuestIdleTimeout
+	if v := os.Getenv("VMCTL_IDLE_TIMEOUT"); v != "" {
+		if idle, err := time.ParseDuration(v); err == nil && idle > d {
+			d = idle
+		}
+	}
+	return d
 }
 
 func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {

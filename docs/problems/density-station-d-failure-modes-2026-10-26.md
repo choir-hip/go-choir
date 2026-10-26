@@ -324,3 +324,47 @@ schema (additive, omitempty). Admissible evidence: the unit tests above (the
 MemAvailable before and after. Not b@c (X1). Rollback:
 `VMCTL_ADMISSION_NEED=peak` in `nix/node-b.nix`, or a revert of the code
 commit; the extra ownership fields are ignored by older code.
+
+### Review 312 (tier 2, both seats): fixed, and named residuals
+
+Fixed on the lane: the legacy 30 minute hold in `hibernationHoldReason` now
+folds `guestLastBusyAt` into the idle time it compares, as the plan, the
+sweep and reclaim do (Medium); make-room re-checks the start's context
+between `pick` and the hibernate (Low 2); a computer that cannot count its
+capsules (no computer id or store) omits `live_capsules` from `/health`
+instead of publishing 0, so vmctl applies the legacy rule (Low 3);
+`VMCTL_IDLE_TIMEOUT_LEGACY_GUEST` is floored at `VMCTL_IDLE_TIMEOUT` (nit).
+
+Residuals, named and not fixed here:
+
+- **R312-1** the 3 s `/health` capsule count cache can report a count that
+  predates a capsule opened and passivated inside the TTL (DeepSeek Low 2).
+  Narrow (at most 3 s, and a sweep must probe in that window). Fix when
+  seen: invalidate on capsule open/close, or do not reuse a cached zero.
+- **R312-2** the deferred D4 capture drains only at the sampler pass; with
+  reclaim `off` the sampler does not run, so a much later capture records
+  the capture-time RSS, and a same-VMID restart with no open reservation can
+  be captured as the old window's value (Devin Low 3). Accuracy only.
+- **R312-3** the M5 guard sees only open reservations: a newer start that
+  ended without capture (`finish(false)`, TTL) while the VM stayed up leaves
+  no reservation (DeepSeek Low 4, 305 F3). Overcharge direction, bounded by
+  the guest clamp.
+- **R312-4** a settled capture within `memoryPeakSaveDelta` of the old value
+  is charged in memory but not written, so "the persisted value is the last
+  one captured" is not exact (M9 tolerates).
+- **R312-5** the recorded make-room decision keeps the first sample's
+  numbers beside a refusal reason worded on the latest sample (by design:
+  the record is the start's first refused sample).
+- **R312-6** a legacy-hold computer is reported under `guest_busy` in
+  pressure reclaim, hiding `guest_does_not_report_live_capsules` (Devin
+  nit 4). Protective, cosmetic.
+- **R312-7** `attemptMeasuredAdmission` takes no context, so a cancel during
+  the final sample can still admit (microseconds), and hibernate's own
+  re-check is lifecycle and state only: the probe-to-claim window is one
+  probe, the same as the sweep (Devin Low 6).
+- **R312-8** the paper's `/health` capsule count walks all assignments under
+  the engine mutex every 3 s against a 1 s budget; measure on the paper
+  before D3 reaches it. A 503 reads as busy (safe) but looks `store_stalled`.
+- **R312-9** D4 `wake` charges the previous start's settled RSS; a wake that
+  settled low followed by a deploy-voided snapshot and a cold boot
+  undercharges. The staging proof must exercise that transition.

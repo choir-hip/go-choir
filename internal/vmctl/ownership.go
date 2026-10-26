@@ -3743,11 +3743,18 @@ func (r *OwnershipRegistry) hibernationHoldReason(busy func(*VMOwnership) bool, 
 		r.mu.RLock()
 		legacy := r.legacyGuestIdleTimeout
 		reports := r.guestReportsCapsules[own.VMID]
+		// Idle is measured from the later of LastActiveAt and the last time
+		// a probe found the guest busy, as the plan, the sweep and reclaim
+		// measure it, whatever clone the caller holds (review 312).
+		lastActive := own.LastActiveAt
+		if busyAt := r.guestLastBusyAt[own.VMID]; busyAt.After(lastActive) {
+			lastActive = busyAt
+		}
 		r.mu.RUnlock()
 		if legacy <= 0 || reports {
 			return ""
 		}
-		if !own.LastActiveAt.IsZero() && now().Sub(own.LastActiveAt) > legacy {
+		if !lastActive.IsZero() && now().Sub(lastActive) > legacy {
 			return ""
 		}
 		return holdReasonLegacyGuest

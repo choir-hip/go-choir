@@ -409,6 +409,11 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 		if v == nil {
 			break
 		}
+		// pick's last probe can outlast the request: never hibernate a
+		// computer for one that went away meanwhile (review 312 Low 2).
+		if err := ctx.Err(); err != nil {
+			return abandon(fmt.Errorf("make-room cancelled: %w", err), "cancelled")
+		}
 		log.Printf("vmctl: make-room decision=hibernate for_vm=%s for_computer=%s short_mib=%d victim_vm=%s victim_computer=%s class=%s idle_s=%d rss_mib=%d",
 			first.VMID, first.ComputerID, shortfall>>20, v.own.VMID, v.own.ComputerID, v.class, int64(v.idle.Seconds()), v.rss>>20)
 		if err := r.hibernateVMForDesktopWithReason(v.own.UserID, v.own.DesktopID, stoppedByMakeRoom); err != nil {
