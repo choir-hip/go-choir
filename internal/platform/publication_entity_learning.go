@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -45,6 +46,9 @@ const (
 	growthStoplistMax = 500
 	// growthDefaultDays is the growth read's window when none is asked.
 	growthDefaultDays = 30
+	// lexiconWarnKeys is the lexicon size the growth read warns above. No
+	// hard cap: one would silently stop learning (review 304 item 6).
+	lexiconWarnKeys = 500000
 	// entityGrowthInternalPath is the growth read the proxy forwards
 	// types.EntityGrowthPath to.
 	entityGrowthInternalPath = "/internal/platform/entities/growth"
@@ -168,6 +172,11 @@ func (s *Service) learnAlias(ctx context.Context, og *ObjectGraphStore, lex *ent
 	if len(lex.gaz.Lookup(key)) > 0 {
 		return false, nil // another entity's name or alias (G8), or already this one's
 	}
+	// A union merge under the lexicon's write lock (review 304 item 5): the
+	// row is read, the alias is added by key, and the union is written; the
+	// insert-once row is never overwritten from a stale copy.
+	s.lexicons.writeMu.Lock()
+	defer s.lexicons.writeMu.Unlock()
 	obj, err := og.GetObject(ctx, e.Canonical)
 	if err != nil {
 		return false, fmt.Errorf("entity alias: read %s: %w", id, err)
@@ -403,6 +412,9 @@ func (s *Service) computeEntityGrowth(ctx context.Context, days int, now time.Ti
 			return resp, err
 		}
 		size := lex.size()
+		if size.Keys > lexiconWarnKeys {
+			log.Printf("corpusd: entity lexicon of %s has %d keys, over %d (review 304 item 6: the named residual's signal)", owner, size.Keys, lexiconWarnKeys)
+		}
 		resp.Lexicon.Entities += size.Entities
 		resp.Lexicon.Keys += size.Keys
 		resp.Lexicon.Stopwords += size.Stopwords
