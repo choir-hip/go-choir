@@ -71,7 +71,7 @@ func (rt *Runtime) rebaseLineage(ctx context.Context, assignment types.Engineeri
 	if !ok || strings.TrimSpace(spec.RebaseOf) != operationID || strings.TrimSpace(spec.Base) != base {
 		return rebaseLineage{}, false
 	}
-	claim, err := rt.store.GetRebaseNoticeClaim(ctx, binding.OwnerID, binding.ComputerID, types.StackRebasePairKey(operationID, base))
+	claim, err := rt.store.GetRebaseNoticeClaim(ctx, binding.OwnerID, binding.ComputerID, types.StackRebaseClaimKey(types.StackRebasePairKey(operationID, base), attempt))
 	if err != nil || claim.AssignmentID != assignment.AssignmentID || claim.NoticeID != spec.RebaseNotice {
 		return rebaseLineage{}, false
 	}

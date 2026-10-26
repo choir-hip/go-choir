@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -33,6 +34,18 @@ import (
 func (f *rebaseFixture) retry(t *testing.T) (rebaseRetryResult, error) {
 	t.Helper()
 	return f.rt.retryRebaseNotice(context.Background(), f.owner)
+}
+
+// at puts the fixture clock delta after notice n's commit time (the store stamps
+// the real time; the fixture clock runs ahead of it to close attempts).
+func (f *rebaseFixture) at(t *testing.T, n int, delta time.Duration) {
+	t.Helper()
+	rec := f.notice(t, n)
+	committed, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = committed.Add(delta)
 }
 
 // exhaust mints the three automatic attempts, each closed by its window.
@@ -80,10 +93,11 @@ func TestRebaseRetryMintsAfterTheCapAndOnlyOncePerLiveAttempt(t *testing.T) {
 		t.Fatalf("the root reads it as %q", got)
 	}
 	// Live until its window passes; then the owner may ask again (attempt 5).
+	f.at(t, 4, time.Minute)
 	if _, err := f.retry(t); err == nil || !strings.Contains(err.Error(), "rebase_retry_attempt_live") {
 		t.Fatalf("attempt 4 is live: %v", err)
 	}
-	f.now = f.now.Add(time.Hour)
+	f.at(t, 4, time.Hour)
 	res, err = f.retry(t)
 	if err != nil || res.Attempt != 5 {
 		t.Fatalf("a second retry after attempt 4 closed: %+v %v", res, err)
@@ -166,6 +180,7 @@ func TestRebaseRetryIsNotOnTheDesksAllowlistAndRequiresTheOwner(t *testing.T) {
 		t.Fatalf("owner retry = %d %s", rec.Code, rec.Body)
 	}
 	// A refusal is a 409 naming its code.
+	f.at(t, 4, time.Minute)
 	rec = call(http.MethodPost, true, f.computer)
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "rebase_retry_attempt_live") {
 		t.Fatalf("a refused retry = %d %s", rec.Code, rec.Body)
@@ -176,6 +191,7 @@ func TestRebaseRetryAttemptFourIsAdmittedAndClaimedSeparately(t *testing.T) {
 	f := &rebaseCastFixture{rebaseFixture: newRebaseFixture(t), castID: "cast-root-4"}
 	f.preflight = &fakeSourcePreflight{head: gitHead(t, f.repo)}
 	f.rt.sourcePreflight = f.preflight
+	f.rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
 	f.exhaust(t)
 	if _, err := f.retry(t); err != nil {
 		t.Fatal(err)
