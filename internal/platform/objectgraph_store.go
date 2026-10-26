@@ -622,6 +622,16 @@ func (o *ObjectGraphStore) ListObjectsByMetadataPage(ctx context.Context, kind, 
 	return out, rows.Err()
 }
 
+// lookupKeyPageSQL is one keyset page of a registered lookup key, in its
+// primary key's order (object_kind, lookup_key, canonical_id). Not built.
+const lookupKeyPageSQL = `SELECT canonical_id FROM og_lookup_keys WHERE object_kind = ? AND lookup_key = ? AND canonical_id > ? ORDER BY object_kind ASC, lookup_key ASC, canonical_id ASC LIMIT ?`
+
+// ListKeyedObjectsPage pages the objects a registered lookup key names.
+// Not built.
+func (o *ObjectGraphStore) ListKeyedObjectsPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) ([]objectgraph.Object, string, error) {
+	return nil, "", fmt.Errorf("not built")
+}
+
 // GetEdge finds a single edge by from_id + kind.
 func (o *ObjectGraphStore) GetEdge(ctx context.Context, fromID string, kind objectgraph.EdgeKind) (_ objectgraph.Edge, err error) {
 	if o == nil || o.store == nil || o.store.db == nil {
