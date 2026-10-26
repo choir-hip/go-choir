@@ -722,6 +722,7 @@ the floor, and decides what a guest may do, read or reach:
 | guest credentials and host-guest authentication | `internal/hostauth/`, `internal/dbcred/`, `internal/keyescrow/` |
 | grants and authority | `internal/capfloor/`, `internal/eventtablegrant/`, `internal/owneract/` |
 | self-development | `internal/selfdev/`, `internal/selfdevprotocol/` |
+| Texture canonical writes (FP0 ruling, review 313 F3) | `internal/texturewrite/` |
 | guest egress | `internal/hostfetch/`, `internal/gatewayruntime/` |
 
 These are the packages that `cmd/autoputer` and `cmd/desk-worker` import
@@ -845,9 +846,12 @@ CI runner itself, to branch protection, or a push that skips CI; those are
 outside the repo's reach, as they are for every other check in
 `v1-inventory`.
 
-**Cost, measured.** In the 7 days to 2026-10-26, 220 of 887 non-doc
-commits on origin/main (25%) touched these prefixes outside tests, 156 of
-them in `internal/agentcore`. Each needs the trailers or a raise. Orange
+**Cost, measured** (rerun after review 313 with the final list:
+`internal/capsule/transaction/` dropped, `internal/texturewrite/` added).
+In the 7 days to 2026-10-26, 223 of 887 non-doc commits on origin/main
+(25%) touched these prefixes outside tests, 156 of them in
+`internal/agentcore` and 4 in `internal/texturewrite`. The first list gave
+220. Each needs the trailers or a raise. Orange
 and red changes already get a tier 1 seat, so the trailer rides that
 review. A tier 0 change that touches a surface now needs a seat or a
 raise. A raise costs one cold boot for every hibernated computer, which is
@@ -1453,6 +1457,6 @@ gate is concrete) required two amendments inside §6.6, both made:
 |---|---|
 | F1, `internal/capsule/transaction/` collides with the floor | **Accepted.** Dropped from the surfaces; the floor's whole `internal/capsule` directory already covers it. Rule 5 now states containment in both directions (§6.6). |
 | F2, the gate is not self-protected | **Accepted.** Rule 6: gate files always need the trailers, an epoch raise does not excuse them; surfaces are matched against the union of base and head lists; the check runs from both the base's and the head's script, and the base's copy verifies the CI step still exists (§6.6, S1c tests). |
-| F3, `internal/texturewrite/` is a missing surface | **Not taken in this round**, left to FP0: Texture canonical writes are a red surface for integrity, and whether that is a guest security surface for the epoch is a scope call. Adding it is one line in the surfaces file and costs trailers. |
+| F3, `internal/texturewrite/` is a missing surface | **Accepted by FP0 ruling** (2026-10-26, open to the owner's reversal): Texture canonical writes are an authority boundary, and under "security comes first" a resumed snapshot must not run code that is missing an authority fix. `internal/texturewrite/` is added to the surfaces (§6.6 table; `cmd/autoputer` imports it). The cost figure in §6.6 is rerun with the final list: 223 of 887 non-doc commits (25%), up from 220. |
 | F4, unreadable link at wake | **Accepted.** It refuses `image_moved_since_launch` (§4.4). |
 | F5, citation drift | `resumeFromSnapshot` corrected to ownership.go:1670. The other two cite this tree correctly (`mark_guest_boot_contract` at deploy-impact-classify:89, `markPlannedRestart` at planned_restart.go:317), so they stay. |
