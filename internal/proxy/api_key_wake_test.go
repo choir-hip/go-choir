@@ -405,15 +405,18 @@ func TestBearerKeyBoundToOneComputerCannotWakeAnother(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	// A selector for another desktop and a header for another computer.
-	for _, header := range []map[string]string{{"X-Choir-Desktop": "branch"}, {"X-Choir-Computer": "computer-b"}} {
-		rec = f.get("/api/shell/bootstrap", header)
-		if rec.Code == http.StatusOK {
-			t.Fatalf("header %v served", header)
-		}
+	// A selector for another desktop is denied before any wake.
+	if rec = f.get("/api/shell/bootstrap", map[string]string{"X-Choir-Desktop": "branch"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("desktop selector status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if f.resolves.Load() != 0 {
 		t.Fatalf("resolves=%d; a key bound to computer-a woke something while denied", f.resolves.Load())
+	}
+	// A header naming computer-b does not retarget a bound key: the only wake
+	// is computer-a's own desktop.
+	f.get("/api/shell/bootstrap", map[string]string{"X-Choir-Computer": "computer-b"})
+	if f.resolves.Load() != 1 || f.resolveBodies[0]["desktop_id"] != "primary" {
+		t.Fatalf("resolves=%d bodies=%v want one wake of computer-a's desktop", f.resolves.Load(), f.resolveBodies)
 	}
 	f.mu.Lock()
 	bState := f.computers["computer-b"].state

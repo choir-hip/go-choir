@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -172,7 +173,8 @@ const (
 
 // touchedAPIKeyTarget returns target after scheduling a best-effort refresh of
 // the computer's idle clock. An authenticated API-key request is activity, but
-// the key path never resolves a computer (it must not wake one), so
+// the touch never resolves a computer (a hibernated one is woken separately,
+// by resolveComputerURLForComputerTarget), so
 // LastActiveAt was never refreshed and the idle sweep hibernated a computer
 // that a CLI was driving
 // (docs/problems/idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md).
@@ -202,12 +204,32 @@ func (h *Handler) touchedAPIKeyTarget(target *resolvedComputerTarget) *resolvedC
 	return target
 }
 
-// resolveComputerURLForComputerTarget preserves the exact stable-computer join
-// for API keys. Unlike cookie requests, a bearer request never re-resolves or
-// wakes a logical desktop after authorization: it uses only the exact joined
-// ownership's current active realization. Recovery remains an explicit
-// computer route and rechecks the same stable ComputerID before effects.
+// resolveComputerURLForComputerTarget serves a bearer request from the exact
+// stable-computer join. A cookie request resolves by (user, desktop); a bearer
+// request never re-resolves to a different realization than the (UserID,
+// ComputerID) ownership join that authorized it (fbc7ff5a0). Waking the joined
+// computer does not violate that: when the joined computer is hibernated or
+// stopped, this wakes that exact computer through vmctl's resolve (the path
+// `computer start` uses, so admission and make-room apply), waits boundedly,
+// re-runs the exact join against the realized computer and serves only if it
+// still matches. A refused, timed-out or mismatching wake is a
+// *computerWakeError, answered as an honest 503 by the writers, never the
+// opaque 502 (docs/problems/api-key-request-to-a-hibernated-computer-gets-502-2026-10-26.md).
+// On a successful wake target is updated to the re-joined realization.
 func (h *Handler) resolveComputerURLForComputerTarget(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string) (string, error) {
+	return h.resolveAPIKeyComputerURL(ctx, authResult, target, desktopID, true)
+}
+
+// resolveActiveComputerURLForComputerTarget is the strict variant: it serves
+// only the joined computer's current active realization and never wakes. Owner
+// acts that rewrite guest state (restore, replace-workspace,
+// rematerialize-from-tape, import-residue-snapshot, bootstrap-chain) use it;
+// the cookie path does not wake for them either.
+func (h *Handler) resolveActiveComputerURLForComputerTarget(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string) (string, error) {
+	return h.resolveAPIKeyComputerURL(ctx, authResult, target, desktopID, false)
+}
+
+func (h *Handler) resolveAPIKeyComputerURL(ctx context.Context, authResult *AuthResult, target *resolvedComputerTarget, desktopID string, wake bool) (string, error) {
 	if authResult == nil {
 		return "", fmt.Errorf("authentication authority unavailable")
 	}
@@ -221,10 +243,183 @@ func (h *Handler) resolveComputerURLForComputerTarget(ctx context.Context, authR
 		return "", fmt.Errorf("api key computer authority unavailable")
 	}
 	if target.State != "active" || target.ComputerURL == "" {
-		return "", fmt.Errorf("api key computer realization unavailable")
+		if !wake {
+			return "", fmt.Errorf("api key computer realization unavailable")
+		}
+		woken, err := h.wakeAPIKeyComputer(ctx, target)
+		if err != nil {
+			return "", err
+		}
+		*target = woken
 	}
 	if err := h.ensureComputerVersionRoute(ctx, target.UserID, target.DesktopID); err != nil {
 		return "", err
 	}
 	return target.ComputerURL, nil
+}
+
+// computerWakeError is a bearer request's refused, timed-out or mismatching
+// wake of its joined computer. State is the realization's state before the
+// wake; Cause is a short classified text safe to show a client (no vmctl
+// address, no credential); Err is the underlying error.
+type computerWakeError struct {
+	ComputerID string
+	State      string
+	Cause      string
+	Err        error
+}
+
+func (e *computerWakeError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("computer %s %s was not woken: %s: %v", e.ComputerID, e.State, e.Cause, e.Err)
+	}
+	return fmt.Sprintf("computer %s %s was not woken: %s", e.ComputerID, e.State, e.Cause)
+}
+
+func (e *computerWakeError) Unwrap() error { return e.Err }
+
+// computerWakeFailureResponse is the honest 503 body of a failed wake.
+type computerWakeFailureResponse struct {
+	Error             string `json:"error"`
+	State             string `json:"state"`
+	Cause             string `json:"cause"`
+	Reason            string `json:"reason,omitempty"`
+	Kind              string `json:"kind,omitempty"`
+	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
+}
+
+const apiKeyWakeRetryAfterSeconds = 5
+
+// writeComputerWakeFailure renders a *computerWakeError as
+// 503 {"error":"computer_waking_failed","state":...,"cause":...} with
+// Retry-After. It reports whether err was one.
+func writeComputerWakeFailure(w http.ResponseWriter, err error) bool {
+	var wake *computerWakeError
+	if !errors.As(err, &wake) {
+		return false
+	}
+	retry := apiKeyWakeRetryAfterSeconds
+	body := computerWakeFailureResponse{Error: "computer_waking_failed", State: wake.State, Cause: wake.Cause}
+	if refusal := recoveryRefusalFromError(wake.Err); refusal != nil {
+		body.Reason, body.Kind = refusal.Reason, refusal.Kind
+		if refusal.RetryAfterSeconds > 0 {
+			retry = refusal.RetryAfterSeconds
+		}
+	}
+	body.RetryAfterSeconds = retry
+	w.Header().Set("Retry-After", strconv.Itoa(retry))
+	log.Printf("proxy: bearer wake failed: %v", wake)
+	writeJSON(w, http.StatusServiceUnavailable, body)
+	return true
+}
+
+// wakeableAPIKeyState reports whether a bearer request may start a computer
+// in this state. booting, stopping, degraded, failed and unknown states are
+// not woken by a request.
+func wakeableAPIKeyState(state string) bool {
+	return state == string(vmctl.VMStateHibernated) || state == string(vmctl.VMStateStopped)
+}
+
+// wakeAPIKeyComputer wakes the exact joined computer. Concurrent requests for
+// one (UserID, ComputerID) share one wake; a waiter whose request is canceled
+// leaves without canceling it.
+func (h *Handler) wakeAPIKeyComputer(ctx context.Context, target *resolvedComputerTarget) (resolvedComputerTarget, error) {
+	prior := *target
+	if !wakeableAPIKeyState(prior.State) {
+		return resolvedComputerTarget{}, &computerWakeError{
+			ComputerID: prior.ComputerID, State: prior.State,
+			Cause: fmt.Sprintf("a computer in state %q is not woken by a request", prior.State),
+		}
+	}
+	if h.vmctlClient == nil {
+		return resolvedComputerTarget{}, &computerWakeError{ComputerID: prior.ComputerID, State: prior.State, Cause: "computer lifecycle authority unavailable"}
+	}
+	flight := h.apiKeyWakes.DoChan(prior.UserID+"\x00"+prior.ComputerID, func() (any, error) {
+		return h.runAPIKeyWake(prior)
+	})
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return resolvedComputerTarget{}, &computerWakeError{ComputerID: prior.ComputerID, State: prior.State, Cause: "the request ended while waiting for the computer to wake", Err: ctx.Err()}
+	case result := <-flight:
+		if result.Err != nil {
+			return resolvedComputerTarget{}, result.Err
+		}
+		return result.Val.(resolvedComputerTarget), nil
+	}
+}
+
+// runAPIKeyWake is the one wake: it re-reads the join (another request may
+// have woken the computer already), starts the computer through the vmctl
+// resolve the explicit start route uses, and re-joins the realized computer.
+func (h *Handler) runAPIKeyWake(prior resolvedComputerTarget) (resolvedComputerTarget, error) {
+	fail := func(cause string, err error) (resolvedComputerTarget, error) {
+		return resolvedComputerTarget{}, &computerWakeError{ComputerID: prior.ComputerID, State: prior.State, Cause: cause, Err: err}
+	}
+	// Detached from any one request and bounded by the vmctl timeout.
+	ctx, cancel := h.vmctlOpContext(vmctl.WithLifecycleCaller(context.Background(), "proxy.bearer.wake"))
+	defer cancel()
+	if joined, ok := h.rejoinAPIKeyComputer(ctx, prior); ok {
+		return joined, nil
+	}
+	resp, err := h.vmctlClient.ResolveDesktopContext(ctx, prior.UserID, prior.DesktopID)
+	if err != nil {
+		return fail(wakeCause(err), err)
+	}
+	if resp != nil && resp.ComputerID != "" && resp.ComputerID != prior.ComputerID {
+		return fail("vmctl woke a different computer than the one the key joined", nil)
+	}
+	joined, ok := h.rejoinAPIKeyComputer(ctx, prior)
+	if !ok {
+		return fail("the computer is not the joined, active realization after the wake", nil)
+	}
+	return joined, nil
+}
+
+// rejoinAPIKeyComputer re-runs the exact (UserID, ComputerID) ownership join
+// and reports the realization only if it is the same interactive computer on
+// the same desktop, active, with a URL.
+func (h *Handler) rejoinAPIKeyComputer(ctx context.Context, prior resolvedComputerTarget) (resolvedComputerTarget, bool) {
+	ownership, err := h.vmctlClient.LookupComputerContext(ctx, prior.UserID, prior.ComputerID)
+	if err != nil || ownership == nil {
+		return resolvedComputerTarget{}, false
+	}
+	if ownership.UserID != prior.UserID || ownership.ComputerID != prior.ComputerID || ownership.DesktopID != prior.DesktopID ||
+		ownership.Kind != "" && ownership.Kind != vmctl.VMKindInteractive ||
+		strings.TrimSpace(ownership.State) != "active" || strings.TrimSpace(ownership.ComputerURL) == "" {
+		return resolvedComputerTarget{}, false
+	}
+	return resolvedComputerTarget{
+		ComputerID: ownership.ComputerID, UserID: ownership.UserID, DesktopID: ownership.DesktopID,
+		VMID: strings.TrimSpace(ownership.VMID), ComputerURL: strings.TrimSpace(ownership.ComputerURL),
+		State: strings.TrimSpace(ownership.State), Epoch: ownership.Epoch,
+	}, true
+}
+
+// wakeCause classifies a vmctl resolve failure into text safe to show a client.
+func wakeCause(err error) string {
+	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		if strings.TrimSpace(refusal.Reason) != "" {
+			return "vmctl refused the wake: " + refusal.Reason
+		}
+		return "vmctl refused the wake"
+	}
+	if isResolveTimeoutError(err) {
+		return "timed out waiting for the computer to become active"
+	}
+	const refusedPrefix = "vmctl client: resolve failed: "
+	text := err.Error()
+	if i := strings.Index(text, refusedPrefix); i >= 0 {
+		message := strings.Join(strings.Fields(text[i+len(refusedPrefix):]), " ")
+		if len(message) > 200 {
+			message = message[:200]
+		}
+		return "vmctl refused the wake: " + message
+	}
+	if strings.Contains(text, "resolve call failed") {
+		return "vmctl was unreachable"
+	}
+	return "vmctl could not wake the computer"
 }

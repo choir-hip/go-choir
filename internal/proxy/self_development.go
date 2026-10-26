@@ -385,7 +385,7 @@ func (h *Handler) HandleSelfDevelopmentReplayCompleteness(w http.ResponseWriter,
 	}
 	if err != nil {
 		logComputerAuthorityFailure(r, computerID, target, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 		return
 	}
 
@@ -523,7 +523,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	}
 	if err != nil {
 		logComputerAuthorityFailure(r, computerID, target, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 		return
 	}
 

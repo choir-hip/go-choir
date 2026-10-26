@@ -30,6 +30,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"golang.org/x/sync/singleflight"
 )
 
 // clientIdentityHeaders is the list of HTTP headers that must be stripped from
@@ -193,11 +194,12 @@ type Handler struct {
 	corpusd                    *http.Client
 	maild                      *http.Client
 	autoputerHTTP              *http.Client
-	replayAutoputerHTTP        *http.Client  // dedicated long-budget client for replay completeness
-	residueImportAutoputerHTTP *http.Client  // dedicated long-budget client for residue import
-	autoputerURL               *url.URL      // parsed autoputer URL for WS dial derivation
-	vmctlClient                *vmctl.Client // optional vmctl client for VM-backed routing
-	apiKeyTouchSent            sync.Map      // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
+	replayAutoputerHTTP        *http.Client       // dedicated long-budget client for replay completeness
+	residueImportAutoputerHTTP *http.Client       // dedicated long-budget client for residue import
+	autoputerURL               *url.URL           // parsed autoputer URL for WS dial derivation
+	vmctlClient                *vmctl.Client      // optional vmctl client for VM-backed routing
+	apiKeyWakes                singleflight.Group // userID\x00computerID -> the one in-flight bearer wake
+	apiKeyTouchSent            sync.Map           // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
 	lifecycle                  *lifecycleRecorder
 	recoveries                 *computeRecoveryTracker
 	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
@@ -1457,6 +1459,9 @@ func writeResolveError(w http.ResponseWriter, err error) {
 		writeRecoveryRefusalResponse(w, refusal)
 		return
 	}
+	if writeComputerWakeFailure(w, err) {
+		return
+	}
 	status := http.StatusBadGateway
 	if isResolveTimeoutError(err) {
 		status = http.StatusGatewayTimeout
@@ -1468,6 +1473,9 @@ func writeResolveError(w http.ResponseWriter, err error) {
 // their own message: a durable recovery refusal still becomes the structured
 // 503 with Retry-After; everything else keeps the caller's status and text.
 func writeAutoputerResolveFailure(w http.ResponseWriter, status int, message string, err error) {
+	if writeComputerWakeFailure(w, err) {
+		return
+	}
 	if refusal := recoveryRefusalFromError(err); refusal != nil {
 		writeRecoveryRefusalResponse(w, refusal)
 		return

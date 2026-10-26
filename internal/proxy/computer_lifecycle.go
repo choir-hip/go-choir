@@ -351,7 +351,7 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
-		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		autoputerURL, err = h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
 	} else if target.State == "active" && strings.TrimSpace(target.ComputerURL) != "" {
 		autoputerURL = target.ComputerURL
 	} else {
@@ -587,7 +587,7 @@ func (h *Handler) HandleComputerBootstrapChain(w http.ResponseWriter, r *http.Re
 
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
-		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		autoputerURL, err = h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
 	} else if target.State == "active" && strings.TrimSpace(target.ComputerURL) != "" {
 		autoputerURL = target.ComputerURL
 	} else {

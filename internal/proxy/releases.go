@@ -236,7 +236,7 @@ func (h *Handler) ownedComputerURL(w http.ResponseWriter, r *http.Request, authR
 		guestURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
 		if err != nil {
 			logComputerAuthorityFailure(r, computerID, target, err)
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+			writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 			return "", false
 		}
 		return guestURL, true
