@@ -108,6 +108,11 @@ type VMConfig struct {
 	// Empty means use the manager default.
 	KernelParams string
 
+	// GuestRelease is the id of the guest release this launch was made from
+	// (guest_release.go); empty for a legacy launch from the manager's
+	// stable paths. It is never carried into a refresh.
+	GuestRelease string `json:"guest_release,omitempty"`
+
 	// GuestPort is the port the guest autoputer runtime listens on inside
 	// the VM. The host-side vsock or tap networking maps this to a
 	// host-accessible URL.
@@ -236,6 +241,11 @@ type VMInstance struct {
 	// Healthy is the result of the last health check.
 	Healthy bool
 
+	// Behind records that this guest was resumed from a snapshot onto a guest
+	// release older than the current one (D2). A receipt of what validation
+	// saw; health recomputes it from the live current release.
+	Behind bool
+
 	// cmd is the running Firecracker process (nil when stopped).
 	cmd *exec.Cmd
 
@@ -294,6 +304,20 @@ type ManagerConfig struct {
 	// launch reads the kernel parameters from it at that moment instead of
 	// using the value cached at vmctl start (D2 S1b, H1).
 	KernelParamsFile string
+
+	// SnapshotReleaseRetain (VM_SNAPSHOT_RELEASE_RETAIN=on) is the D2 switch:
+	// cold boots launch from the current guest release directory and
+	// snapshots may resume onto their own release after a deploy
+	// (guest_release.go). Off, launches are byte-identical to before and every
+	// release-bound snapshot refuses (release_retain_off).
+	SnapshotReleaseRetain bool
+
+	// GuestReleasesDir is VM_GUEST_RELEASES_DIR, the release directories.
+	GuestReleasesDir string
+
+	// GuestReleaseSupportWindow is VM_GUEST_RELEASE_SUPPORT_WINDOW: how long a
+	// superseded release's snapshots may still resume (default 168h).
+	GuestReleaseSupportWindow time.Duration
 
 	// GuestReleaseLink is the stable symlink the guest image is launched
 	// from (VM_GUEST_RELEASE_LINK, /var/lib/go-choir/guest on Node B). Each
@@ -1018,6 +1042,8 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	cfg.Epoch = epoch
 	tl.markDetail("boot_epoch", fmt.Sprintf("epoch=%d", cfg.Epoch))
 
+	// With the D2 switch on, a cold boot launches from the current release.
+	m.bindCurrentRelease(&cfg)
 	// Apply defaults from manager config.
 	m.applyLaunchDefaults(&cfg)
 
@@ -1351,6 +1377,10 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 		return nil, fmt.Errorf("vm %s cannot be resumed (state=%s)", vmID, inst.State)
 	}
 
+	// A resume is a cold boot from the stored config: with the D2 switch on it
+	// launches from the current release, not the one the config last named.
+	m.rebindLaunchRelease(&inst.Config)
+
 	// Clean up the old process.
 	m.forceCleanup(vmID, "resume")
 	// This path cold boots: a memory snapshot can no longer be loaded (S3).
@@ -1525,18 +1555,7 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 			epoch = loaded
 		}
 	}
-	cfg := mergeVMConfigOverrides(VMConfig{
-		VMID:              vmID,
-		KernelImagePath:   m.cfg.KernelImagePath,
-		InitrdPath:        m.cfg.InitrdPath,
-		RootfsPath:        m.cfg.RootfsPath,
-		StoreDiskPath:     m.cfg.StoreDiskPath,
-		GuestPort:         m.cfg.GuestPort,
-		MachineCPUCount:   m.cfg.MachineCPUCount,
-		MachineMemSizeMib: m.cfg.MachineMemSizeMib,
-		PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
-		Epoch:             epoch,
-	}, overrides)
+	cfg := m.reattachConfig(vmID, epoch, overrides)
 	cfg.VMID = vmID
 	cfg.Epoch = epoch
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
@@ -1921,6 +1940,9 @@ func refreshBootConfig(stored, overrides VMConfig, defaults ManagerConfig) VMCon
 }
 
 func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfig {
+	// A refresh or a wake rebuild never carries a release forward: the
+	// current deploy (or the snapshot's own release) is chosen afresh.
+	cfg.GuestRelease = ""
 	if defaults.StoreDiskPath == "" {
 		return cfg
 	}

@@ -440,6 +440,7 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 		meta.Confinement = ConfinementJailer
 		meta.VMMUID = conf.UID
 	}
+	meta.GuestRelease = cfg.GuestRelease
 	// What the link named when this guest was launched (D2 S1b, H6).
 	if rec, ok := m.readLaunchRecord(vmID, cfg.Epoch); ok {
 		meta.LaunchImageTarget = rec.ImageTarget
@@ -629,7 +630,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	tl.mark("snapshot_consumed")
 	// The running guest keeps the launch it had: rewrite the record from the
 	// meta so the next hibernate carries the original target (D2 S1b).
-	if err := m.storeLaunchRecord(vmID, launchRecord{ImageTarget: meta.LaunchImageTarget, Epoch: meta.Epoch, LaunchedAt: time.Now().UTC()}); err != nil {
+	if err := m.storeLaunchRecord(vmID, launchRecord{Release: meta.GuestRelease, ImageTarget: meta.LaunchImageTarget, Epoch: meta.Epoch, LaunchedAt: time.Now().UTC()}); err != nil {
 		log.Printf("vmmanager: warning: could not rewrite the launch record of VM %s at resume: %v", vmID, err)
 	}
 	m.recordLaunchedVMM(vmID, vmm)
@@ -764,6 +765,14 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	tl.firstHealthy()
 	snap.Outcome = "snapshot"
 	snap.WakeToHealthyMS = tl.FirstHealthyOffsetMS
+	if meta.GuestRelease != "" {
+		snap.GuestRelease = meta.GuestRelease
+		snap.CurrentRelease = m.currentReleaseID()
+		snap.Behind = snap.CurrentRelease != "" && snap.CurrentRelease != meta.GuestRelease
+		m.mu.Lock()
+		inst.Behind = snap.Behind
+		m.mu.Unlock()
+	}
 
 	// The resumed VM maps the memory file MAP_PRIVATE for its whole life.
 	// Removing the names is safe (the mapping holds the inode); the blocks are

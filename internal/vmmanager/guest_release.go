@@ -1,0 +1,327 @@
+package vmmanager
+
+// Guest releases (D2 slice S3; docs/design/density-d2-snapshots-survive-
+// deploys-2026-10-26.md 3 and 4). A release is one guest image kept under
+// <VM_GUEST_RELEASES_DIR>/<id>/ (id = the Nix store hash of the image), made
+// by the NixOS activation snippet (scripts/node-b-guest-release-materialize)
+// and read-only to vmctl. With VM_SNAPSHOT_RELEASE_RETAIN=on a cold boot
+// launches from the current release's files, so the hibernated guest's
+// memory stays paired with the store disk it was taken against, and a wake
+// after a deploy resumes onto that same release when the floor, security
+// epoch and ABI are unchanged and the release is inside the support window.
+// Off, nothing here runs and launches are byte-identical to before.
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+)
+
+const (
+	// DefaultGuestReleaseSupportWindow is how long a superseded release's
+	// snapshots may still resume (owner, 2026-10-25: one week).
+	DefaultGuestReleaseSupportWindow = 168 * time.Hour
+	releasePolicySchema              = 1
+)
+
+// Fallback reasons of the release rules R0 to R6 (design 4.5).
+const (
+	snapshotReasonReleaseRetainOff      = "release_retain_off"
+	snapshotReasonReleaseMissing        = "release_missing"
+	snapshotReasonReleaseCurrentUnknown = "release_current_unknown"
+	snapshotReasonReleaseFloorMoved     = "release_floor_moved"
+	snapshotReasonReleaseSecurityEpoch  = "release_security_epoch"
+	snapshotReasonReleaseABI            = "release_abi_unsupported"
+	snapshotReasonReleaseOutOfSupport   = "release_out_of_support"
+)
+
+var releaseIDPattern = regexp.MustCompile(`^[0-9a-df-np-sv-z]{32}$`)
+
+// releasePolicy is a release's release.json, built into the guest image.
+type releasePolicy struct {
+	Schema        int    `json:"schema"`
+	FloorDigest   string `json:"floor_digest"`
+	SecurityEpoch int64  `json:"security_epoch"`
+	GuestABI      int    `json:"guest_abi"`
+	GuestABIMin   int    `json:"guest_abi_min"`
+	BuildCommit   string `json:"build_commit"`
+}
+
+type guestRelease struct {
+	ID        string
+	Dir       string
+	StorePath string
+	Kernel    string
+	Initrd    string
+	Rootfs    string
+	StoreDisk string
+	// KernelParams is the trimmed contents of <Dir>/kernel-params.
+	KernelParams   string
+	Policy         releasePolicy
+	FirstCurrentAt time.Time
+}
+
+func (m *Manager) releaseRetainOn() bool { return m.cfg.SnapshotReleaseRetain }
+
+func (m *Manager) releasesDir() string {
+	if d := strings.TrimSpace(m.cfg.GuestReleasesDir); d != "" {
+		return d
+	}
+	return "/var/lib/go-choir/guest-releases"
+}
+
+func (m *Manager) releaseSupportWindow() time.Duration {
+	if m.cfg.GuestReleaseSupportWindow > 0 {
+		return m.cfg.GuestReleaseSupportWindow
+	}
+	return DefaultGuestReleaseSupportWindow
+}
+
+// releaseByID loads a release directory. Any unreadable or malformed file is
+// an error: the caller refuses (release_missing) or runs legacy.
+func (m *Manager) releaseByID(id string) (guestRelease, error) {
+	if !releaseIDPattern.MatchString(id) {
+		return guestRelease{}, fmt.Errorf("malformed release id %q", id)
+	}
+	dir := filepath.Join(m.releasesDir(), id)
+	if info, err := os.Lstat(dir); err != nil || !info.IsDir() {
+		return guestRelease{}, fmt.Errorf("release %s: no directory", id)
+	}
+	rel := guestRelease{
+		ID:        id,
+		Dir:       dir,
+		Kernel:    filepath.Join(dir, "vmlinux"),
+		Initrd:    filepath.Join(dir, "initrd"),
+		Rootfs:    filepath.Join(dir, "rootfs.ext4"),
+		StoreDisk: filepath.Join(dir, "storedisk.erofs"),
+	}
+	var installed struct {
+		StorePath      string `json:"store_path"`
+		FirstCurrentAt string `json:"first_current_at"`
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "installed.json"))
+	if err != nil {
+		return guestRelease{}, fmt.Errorf("release %s: %w", id, err)
+	}
+	if err := json.Unmarshal(data, &installed); err != nil {
+		return guestRelease{}, fmt.Errorf("release %s: installed.json: %w", id, err)
+	}
+	first, err := time.Parse(time.RFC3339, installed.FirstCurrentAt)
+	if err != nil {
+		return guestRelease{}, fmt.Errorf("release %s: first_current_at: %w", id, err)
+	}
+	rel.StorePath, rel.FirstCurrentAt = installed.StorePath, first
+	data, err = os.ReadFile(filepath.Join(dir, "release.json"))
+	if err != nil {
+		return guestRelease{}, fmt.Errorf("release %s: %w", id, err)
+	}
+	if err := json.Unmarshal(data, &rel.Policy); err != nil || rel.Policy.Schema != releasePolicySchema || rel.Policy.FloorDigest == "" {
+		return guestRelease{}, fmt.Errorf("release %s: release.json is not a schema %d policy", id, releasePolicySchema)
+	}
+	data, err = os.ReadFile(filepath.Join(dir, "kernel-params"))
+	if err != nil || strings.TrimSpace(string(data)) == "" {
+		return guestRelease{}, fmt.Errorf("release %s: kernel-params unreadable or empty", id)
+	}
+	rel.KernelParams = strings.TrimSpace(string(data))
+	for _, p := range []string{rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk} {
+		if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
+			return guestRelease{}, fmt.Errorf("release %s: %s is not a regular file", id, filepath.Base(p))
+		}
+	}
+	return rel, nil
+}
+
+// currentRelease resolves VM_GUEST_RELEASE_LINK once: readlink, take the
+// 32-character store hash, load that release directory, and require its
+// installed.json to name the link's target. ok=false means legacy.
+func (m *Manager) currentRelease() (guestRelease, bool) {
+	if !m.releaseRetainOn() {
+		return guestRelease{}, false
+	}
+	target, ok := m.guestImageTarget()
+	if !ok {
+		return guestRelease{}, false
+	}
+	base := filepath.Base(target)
+	if len(base) < 32 {
+		return guestRelease{}, false
+	}
+	rel, err := m.releaseByID(base[:32])
+	if err != nil || rel.StorePath != target {
+		return guestRelease{}, false
+	}
+	return rel, true
+}
+
+// setLaunchRelease points cfg's boot artifacts at rel.
+func setLaunchRelease(cfg *VMConfig, rel guestRelease) {
+	cfg.KernelImagePath, cfg.InitrdPath, cfg.RootfsPath, cfg.StoreDiskPath = rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk
+	cfg.KernelParams = rel.KernelParams
+	cfg.GuestRelease = rel.ID
+}
+
+// bindCurrentRelease makes cfg a launch from the current release when the
+// switch is on and the artifacts are not already chosen. When the current
+// release cannot be resolved the launch stays legacy (m.cfg paths) and cfg
+// carries no release. With the switch off it does nothing.
+func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
+	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" {
+		return
+	}
+	if rel, ok := m.currentRelease(); ok {
+		setLaunchRelease(cfg, rel)
+	}
+}
+
+// rebindLaunchRelease re-chooses the artifacts of a computer that cold boots
+// again from its stored config (ResumeVM): the current release when the
+// switch is on, else the manager's own (legacy) paths.
+func (m *Manager) rebindLaunchRelease(cfg *VMConfig) {
+	if cfg.GuestRelease == "" && !m.releaseRetainOn() {
+		return
+	}
+	cfg.GuestRelease = ""
+	cfg.KernelImagePath, cfg.InitrdPath, cfg.RootfsPath, cfg.StoreDiskPath, cfg.KernelParams = "", "", "", "", ""
+	m.bindCurrentRelease(cfg)
+	m.applyLaunchDefaults(cfg)
+}
+
+// reattachConfig is the config of a reattached VM (ReattachVMWithConfig).
+// With the switch on, the launch record names the release the process was
+// launched from; if its epoch matches and the release directory loads, the
+// config names that release, not the current one (H2). Otherwise it is
+// today's config, and the VM's next snapshot is legacy.
+func (m *Manager) reattachConfig(vmID string, epoch int64, overrides VMConfig) VMConfig {
+	cfg := mergeVMConfigOverrides(VMConfig{
+		VMID:              vmID,
+		KernelImagePath:   m.cfg.KernelImagePath,
+		InitrdPath:        m.cfg.InitrdPath,
+		RootfsPath:        m.cfg.RootfsPath,
+		StoreDiskPath:     m.cfg.StoreDiskPath,
+		GuestPort:         m.cfg.GuestPort,
+		MachineCPUCount:   m.cfg.MachineCPUCount,
+		MachineMemSizeMib: m.cfg.MachineMemSizeMib,
+		PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
+		Epoch:             epoch,
+	}, overrides)
+	if m.releaseRetainOn() && overrides.StoreDiskPath == "" {
+		if rec, ok := m.readLaunchRecord(vmID, epoch); ok && rec.Release != "" {
+			if rel, err := m.releaseByID(rec.Release); err == nil {
+				setLaunchRelease(&cfg, rel)
+			}
+		}
+	}
+	return cfg
+}
+
+// currentReleaseID is the id of the current release, "" when legacy.
+func (m *Manager) currentReleaseID() string {
+	if rel, ok := m.currentRelease(); ok {
+		return rel.ID
+	}
+	return ""
+}
+
+// CurrentGuestRelease is the id of the current release, "" when the switch is
+// off or the current release cannot be resolved (vmctl health).
+func (m *Manager) CurrentGuestRelease() string { return m.currentReleaseID() }
+
+// releaseRefusal applies R0 to R6 to a snapshot meta. "" means the release
+// rules pass (or the meta is legacy). cur is the current release when it
+// resolved.
+func (m *Manager) releaseRefusal(meta *SnapshotMeta, now time.Time) string {
+	if meta.GuestRelease == "" {
+		return ""
+	}
+	if !m.releaseRetainOn() {
+		return snapshotReasonReleaseRetainOff // R0
+	}
+	rel, err := m.releaseByID(meta.GuestRelease)
+	if err != nil {
+		return snapshotReasonReleaseMissing // R1
+	}
+	cur, ok := m.currentRelease()
+	if !ok {
+		return snapshotReasonReleaseCurrentUnknown // R2
+	}
+	if rel.Policy.FloorDigest != cur.Policy.FloorDigest {
+		return snapshotReasonReleaseFloorMoved // R3
+	}
+	if rel.Policy.SecurityEpoch != cur.Policy.SecurityEpoch {
+		return snapshotReasonReleaseSecurityEpoch // R4: lower (a fix landed) and higher (a host rollback) both refuse
+	}
+	if rel.Policy.GuestABI < cur.Policy.GuestABIMin || rel.Policy.GuestABI > cur.Policy.GuestABI {
+		return snapshotReasonReleaseABI // R5
+	}
+	if rel.ID != cur.ID && now.Sub(rel.FirstCurrentAt) > m.releaseSupportWindow() {
+		return snapshotReasonReleaseOutOfSupport // R6; the current release never ages out
+	}
+	return ""
+}
+
+// GuestReleaseInUse is one release in the in-use answer.
+type GuestReleaseInUse struct {
+	ID        string   `json:"id"`
+	Running   []string `json:"running"`
+	Snapshots []string `json:"snapshots"`
+}
+
+// GuestReleaseUsage is GET /internal/vmctl/guest-releases: what retention may
+// not delete. Complete is false when a snapshot root that is configured could
+// not be read.
+type GuestReleaseUsage struct {
+	Retain   bool                `json:"retain"`
+	Current  string              `json:"current"`
+	Complete bool                `json:"complete"`
+	InUse    []GuestReleaseInUse `json:"in_use"`
+}
+
+// GuestReleaseUsage lists the releases live VMs run and unconsumed snapshots
+// (younger than the max age, every root including the vault) name.
+func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
+	use := GuestReleaseUsage{Retain: m.releaseRetainOn(), Current: m.currentReleaseID(), Complete: true, InUse: []GuestReleaseInUse{}}
+	byID := map[string]*GuestReleaseInUse{}
+	entry := func(id string) *GuestReleaseInUse {
+		if e, ok := byID[id]; ok {
+			return e
+		}
+		e := &GuestReleaseInUse{ID: id, Running: []string{}, Snapshots: []string{}}
+		byID[id] = e
+		return e
+	}
+	m.mu.RLock()
+	for vmID, inst := range m.vms {
+		if inst.Config.GuestRelease != "" && (inst.State == StateRunning || inst.State == StatePending) {
+			e := entry(inst.Config.GuestRelease)
+			e.Running = append(e.Running, vmID)
+		}
+	}
+	m.mu.RUnlock()
+	now := time.Now()
+	for _, root := range m.snapshotRoots() {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			use.Complete = false
+			continue
+		}
+		for _, de := range entries {
+			if !de.IsDir() {
+				continue
+			}
+			meta, err := readSnapshotMeta(snapshotDirIn(root, de.Name()))
+			if err != nil || meta.Consumed || meta.GuestRelease == "" || !now.Before(meta.CreatedAt.Add(m.snapshotMaxAge())) {
+				continue
+			}
+			e := entry(meta.GuestRelease)
+			e.Snapshots = append(e.Snapshots, de.Name())
+		}
+	}
+	for _, e := range byID {
+		use.InUse = append(use.InUse, *e)
+	}
+	return use
+}

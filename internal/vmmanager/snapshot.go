@@ -233,6 +233,10 @@ type SnapshotMeta struct {
 	// launched before the record existed, which validates as before.
 	// Additive, no version bump.
 	LaunchImageTarget string `json:"launch_image_target,omitempty"`
+	// GuestRelease is the guest release the captured guest was launched from
+	// (D2 S3); empty for a legacy launch. Additive, no version bump: an old
+	// meta reads as legacy.
+	GuestRelease string `json:"guest_release,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -268,6 +272,13 @@ type SnapshotTimeline struct {
 	SnapshotType string `json:"snapshot_type,omitempty"`
 	ColdOrigin   bool   `json:"cold_origin,omitempty"`
 	DiffRefused  string `json:"diff_refused,omitempty"`
+	// GuestRelease is the release a resumed guest runs; CurrentRelease the
+	// release current when the wake was validated; Behind is the receipt of
+	// that comparison (D2 S3). The update after a behind resume does not
+	// depend on it (the sweep resolves the current release itself).
+	GuestRelease   string `json:"guest_release,omitempty"`
+	CurrentRelease string `json:"current_release,omitempty"`
+	Behind         bool   `json:"behind,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
@@ -484,6 +495,14 @@ func (m *Manager) expectedLaunchConfig(meta *SnapshotMeta, expect VMConfig) (VMC
 	cfg.VMID = meta.VMID
 	cfg.credentialDiskPath = meta.CredentialDiskPath
 	cfg = refreshConfigForCurrentDeploy(cfg, m.cfg)
+	// A release-bound snapshot is rebuilt against its OWN release's files. A
+	// release that no longer loads leaves the artifacts blank (legacy
+	// defaults): validateSnapshot refuses it first (release_missing).
+	if meta.GuestRelease != "" && m.releaseRetainOn() {
+		if rel, err := m.releaseByID(meta.GuestRelease); err == nil {
+			setLaunchRelease(&cfg, rel)
+		}
+	}
 	if expect.MachineCPUCount != 0 {
 		cfg.MachineCPUCount = expect.MachineCPUCount
 	}
@@ -570,6 +589,9 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	}
 	if !v.CredentialDelivery && meta.resumeWindowPassed(v.Now) {
 		return snapshotReasonCredentialWindow
+	}
+	if reason := m.releaseRefusal(meta, v.Now); reason != "" {
+		return reason
 	}
 	if meta.FirecrackerVersion == "" || meta.FirecrackerVersion != v.FirecrackerVersion {
 		return snapshotReasonFirecracker

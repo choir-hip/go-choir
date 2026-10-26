@@ -75,7 +75,7 @@ func (m *Manager) launchRecordPath(vmID string) string {
 // is made of. The link is read once.
 func (m *Manager) writeLaunchRecord(cfg VMConfig) error {
 	target, _ := m.guestImageTarget()
-	return m.storeLaunchRecord(cfg.VMID, launchRecord{ImageTarget: target, Epoch: cfg.Epoch, LaunchedAt: time.Now().UTC()})
+	return m.storeLaunchRecord(cfg.VMID, launchRecord{Release: cfg.GuestRelease, ImageTarget: target, Epoch: cfg.Epoch, LaunchedAt: time.Now().UTC()})
 }
 
 func (m *Manager) storeLaunchRecord(vmID string, rec launchRecord) error {
@@ -129,7 +129,9 @@ func (m *Manager) readLaunchRecord(vmID string, epoch int64) (launchRecord, bool
 // or cannot be read at all (review 313 Devin F4). A meta with no recorded
 // target is not refused here (it validates as before this repair).
 func (m *Manager) imageMovedSinceLaunch(meta *SnapshotMeta) bool {
-	if meta.LaunchImageTarget == "" {
+	// A release-bound launch's paths are immutable release files, so the link
+	// moving cannot change the bytes under it.
+	if meta.LaunchImageTarget == "" || meta.GuestRelease != "" {
 		return false
 	}
 	now, ok := m.guestImageTarget()
