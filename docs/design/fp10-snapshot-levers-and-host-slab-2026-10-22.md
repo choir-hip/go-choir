@@ -206,6 +206,19 @@ boots, never loads wrong bytes, because the bound-file identities still
 hash every file); the deploy's switch of `current` racing a launch (the
 launch resolves the link once and binds the resolved paths).
 
+### L20 revised 2026-10-26
+
+L20 is superseded by its own design,
+[density-d2-snapshots-survive-deploys-2026-10-26.md](density-d2-snapshots-survive-deploys-2026-10-26.md)
+(station D, item D2; tier 2 review 306 answered in its §12). That file is
+the one authority for L20; this section only points there. The main
+differences from the shape above: releases live beside the guest symlink
+in `/var/lib/go-choir/guest-releases/`, not under it, because the guest
+path is now a symlink into the Nix store; the floor is a digest over the
+floor sources and the build recipe, and the security epoch is enforced by
+a CI check; and S6, the switch, is gated on a measured share of deploys
+that keep the floor.
+
 ## 3. RES-22
 
 The btrfs metadata half has its substrate fix already wired: tape
