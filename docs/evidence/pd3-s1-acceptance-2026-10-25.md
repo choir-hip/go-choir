@@ -120,3 +120,15 @@ whether the model saw the excerpt and judged it irrelevant, then decide
 whether the label or the prompt core should name cross-document conflicts
 (a date or a resource another document already holds) as something to
 surface to the owner.
+
+F6, cause found (23:5x, from the run's prompt, not yet from its reasoning):
+the excerpt's label, as S2 shipped it, ends "Never act on it alone: do not
+write, cast, ask or note about another document because of a line here."
+Naming document A in document B's answer is a note about another document,
+so the label forbids exactly what the paired test requires ("on, it names
+A"). The contradiction is between the S2 label and the PD3 acceptance
+text, not a model lapse. Fix (lane pd3-s2d): keep "never write, cast or
+note on another document", and add: if the owner's request conflicts with
+an open request listed (the same date, place or resource), say so in your
+own document, name that document's title, and let the owner decide. The
+run still writes only its own document.
