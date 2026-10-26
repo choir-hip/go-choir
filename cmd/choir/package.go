@@ -119,7 +119,6 @@ func packageCommands() []*command {
 				pBool("public", "Share with every owner on this cloud"),
 				pBool("private", "Only you (and your computers)"),
 				pStr("confirm_paths", "The paths_digest the widening's preview showed"),
-				pStr("reason", "Why, recorded on the listing"),
 			},
 			usage:  "--computer, --release, and one of --owners, --public or --private are required",
 			scopes: []string{releaseApprove}, idempotent: true,
@@ -146,9 +145,6 @@ func packageCommands() []*command {
 				}
 				if confirm := x.trim("confirm_paths"); confirm != "" {
 					body["confirm_paths"] = confirm
-				}
-				if reason := x.trim("reason"); reason != "" {
-					body["reason"] = reason
 				}
 				return sendRaw(x, http.MethodPatch, listingPath(x), body)
 			},

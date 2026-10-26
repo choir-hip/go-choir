@@ -177,7 +177,8 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	switch reason {
 	case pkgrelease.ReasonTrackMoved, pkgrelease.ReasonParentUnverifiable, pkgrelease.ReasonBlobMismatch,
 		pkgrelease.ReasonRecordUnlisted, pkgrelease.ReasonListingConflict, pkgrelease.ReasonConfirmPathsRequired,
-		pkgrelease.ReasonConfirmPathsMismatch, pkgrelease.ReasonListingState, pkgrelease.ReasonListingMoved:
+		pkgrelease.ReasonConfirmPathsMismatch, pkgrelease.ReasonListingState, pkgrelease.ReasonListingMoved,
+		pkgrelease.ReasonOwnerActReplayed:
 		status = http.StatusConflict
 	case pkgrelease.ReasonBlobTooLarge:
 		status = http.StatusRequestEntityTooLarge
@@ -326,6 +327,21 @@ func verifiedListing(obj objectgraph.Object, ownerID string) (pkgrelease.Listing
 // seq and the head are never counted from part of a track (review 274 F7)
 // and a long track never stops taking releases (bunch279-I2).
 func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[string]pkgrelease.Listing, int, error) {
+	chains, count, err := h.trackChains(ctx, ownerID, pkg)
+	if err != nil {
+		return nil, count, err
+	}
+	current := map[string]pkgrelease.Listing{}
+	for recordID, chain := range chains {
+		current[recordID] = chain[len(chain)-1]
+	}
+	return current, count, nil
+}
+
+// trackChains is each record's chain of listing versions on the track,
+// version 1 first, up to the newest one whose predecessor digests are
+// intact.
+func (h *Handler) trackChains(ctx context.Context, ownerID, pkg string) (map[string][]pkgrelease.Listing, int, error) {
 	objects, err := h.pagedListings(ctx, "$.package", pkg, ownerID)
 	if err != nil {
 		return nil, 0, err
@@ -341,12 +357,13 @@ func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[s
 		}
 		versions[listing.RecordID][listing.Version] = listing
 	}
-	current := map[string]pkgrelease.Listing{}
+	chains := map[string][]pkgrelease.Listing{}
 	for recordID, byVersion := range versions {
 		listing, ok := byVersion[1]
 		if !ok {
 			continue
 		}
+		chain := []pkgrelease.Listing{listing}
 		for next := 2; ; next++ {
 			candidate, ok := byVersion[next]
 			if !ok {
@@ -357,31 +374,70 @@ func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[s
 				break
 			}
 			listing = candidate
+			chain = append(chain, listing)
 		}
-		current[recordID] = listing
+		chains[recordID] = chain
 	}
-	return current, len(objects), nil
+	return chains, len(objects), nil
 }
 
-// pagedListings reads every listing object matching (jsonPath = value,
-// ownerID when named), page by page.
+// pagedListings reads every listing object of ownerID matching
+// (jsonPath = value; every one when jsonPath is empty), page by page. It
+// ends on an empty page or one shorter than the limit the store applies
+// (objectgraph.NormalizedLimit), never on the size it asked for, so a
+// zero page size or a store that caps a page cannot end it early or never
+// (review 291 F5). The query is the owner's: the (object_kind, owner_id)
+// index bounds it by the owner's listings.
 func (h *Handler) pagedListings(ctx context.Context, jsonPath, value, ownerID string) ([]objectgraph.Object, error) {
 	store := h.releaseStore()
 	if store == nil {
 		return nil, errors.New("package store unavailable")
 	}
+	if ownerID == "" {
+		return nil, errors.New("pagedListings: a listing read names its owner")
+	}
+	limit := objectgraph.NormalizedLimit(trackPageSize)
 	var out []objectgraph.Object
 	after := ""
 	for {
-		page, err := store.ListObjectsByMetadataPage(ctx, string(ReleaseListingKind), jsonPath, value, ownerID, after, trackPageSize)
+		page, err := store.ListObjectsByMetadataPage(ctx, string(ReleaseListingKind), jsonPath, value, ownerID, after, limit)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, page...)
-		if len(page) < trackPageSize {
+		if len(page) == 0 || len(page) < limit {
 			return out, nil
 		}
 		after = page[len(page)-1].CanonicalID
+	}
+}
+
+// widenedListings reads every listing version on the cloud that admits
+// readers beyond its owner, through the registered lookup key (review 291
+// F1): with nothing widened it is one key seek that finds nothing. Before
+// the keys are live it reads nothing (live is false): another owner's
+// tracks are then missing from a catalog until the backfill lands, which
+// is the narrower answer, never a scan.
+func (h *Handler) widenedListings(ctx context.Context) (objects []objectgraph.Object, live bool, err error) {
+	store := h.releaseStore()
+	if store == nil {
+		return nil, false, errors.New("package store unavailable")
+	}
+	if !store.LookupKeysLive() {
+		return nil, false, nil
+	}
+	after := ""
+	for {
+		page, next, err := store.ListKeyedObjectsPage(ctx, string(ReleaseListingKind), "$.widened", "true", after, objectgraph.NormalizedLimit(trackPageSize))
+		if err != nil {
+			return nil, true, err
+		}
+		h.widenedListingReads.Add(int64(len(page)))
+		objects = append(objects, page...)
+		if next == "" {
+			return objects, true, nil
+		}
+		after = next
 	}
 }
 
@@ -726,6 +782,12 @@ func (h *Handler) findPackageRecord(ctx context.Context, reader, releaseID strin
 	if store == nil {
 		return objectgraph.Object{}, pkgrelease.Record{}, errors.New("package store unavailable")
 	}
+	// release_id is a registered lookup key (review 291 F2): the read
+	// seeks it. Before the keys are live it would scan the kind, so the
+	// read answers as missing instead, the narrower answer.
+	if !store.LookupKeysLive() {
+		return objectgraph.Object{}, pkgrelease.Record{}, objectgraph.ErrNotFound
+	}
 	found, err := store.GetObjectByMetadata(ctx, string(PackageReleaseKind), "$.release_id", releaseID)
 	if err != nil {
 		return objectgraph.Object{}, pkgrelease.Record{}, err
@@ -768,7 +830,7 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 	// Other owners' tracks with a version that ever admitted this reader;
 	// whether the current version still does is decided below.
 	if h.packageShareReads != PackageShareReadsOwner {
-		widened, err := h.pagedListings(ctx, "$.widened", "true", "")
+		widened, _, err := h.widenedListings(ctx)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
 			return
@@ -870,9 +932,10 @@ func (h *Handler) packageHistory(w http.ResponseWriter, r *http.Request, name st
 			}
 		}
 		sort.Slice(visible, func(i, j int) bool { return visible[i].Seq > visible[j].Seq })
-		for i, listing := range visible {
+		for _, listing := range visible {
 			if len(views) == limit {
-				next = visible[i-1].Seq
+				// More remain: the next page starts below the last one served.
+				next = views[len(views)-1].Listing.Seq
 				break
 			}
 			obj, _, err := h.readPackageRecord(r.Context(), track, listing.RecordID)

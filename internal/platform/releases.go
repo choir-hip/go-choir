@@ -64,6 +64,8 @@ type releaseStore interface {
 	ListObjectsByMetadata(ctx context.Context, kind, jsonPath, value string, limit int) ([]objectgraph.Object, error)
 	ListObjectsByMetadataForOwner(ctx context.Context, kind, jsonPath, value, ownerID string, limit int) ([]objectgraph.Object, error)
 	ListObjectsByMetadataPage(ctx context.Context, kind, jsonPath, value, ownerID, afterCanonicalID string, limit int) ([]objectgraph.Object, error)
+	ListKeyedObjectsPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) ([]objectgraph.Object, string, error)
+	LookupKeysLive() bool
 	GetObject(ctx context.Context, id string) (objectgraph.Object, error)
 }
 
