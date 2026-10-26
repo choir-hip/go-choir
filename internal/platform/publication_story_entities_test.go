@@ -320,3 +320,18 @@ func TestStoryEntitiesRouteIsInternalAndPostOnly(t *testing.T) { // N6
 		t.Fatalf("internal POST = %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Review 298 (DeepSeek seat) item 4: the route enforces the name bound the
+// verb does.
+func TestStoryEntitiesRefuseAnOverlongName(t *testing.T) {
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Long", l.capture("https://wire.example/a", "", "long"))
+	name := strings.Repeat("Ä", types.EntityNameMaxRunes+1)
+	_, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(a, newEntity(name, types.EntityTypeOrganization, types.EntityRoleCentral)))
+	if err == nil || !strings.Contains(err.Error(), "characters") {
+		t.Fatalf("a %d-character name: err = %v", types.EntityNameMaxRunes+1, err)
+	}
+	if _, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(a, newEntity(strings.Repeat("Ä", types.EntityNameMaxRunes), types.EntityTypeOrganization, types.EntityRoleCentral))); err != nil {
+		t.Fatalf("a name at the bound: %v", err)
+	}
+}

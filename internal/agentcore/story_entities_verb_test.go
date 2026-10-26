@@ -49,6 +49,7 @@ type fakeEntityPublisher struct {
 	checks     []types.StoryEntitiesRequest
 	checkErr   error
 	onValidate func()
+	onPublish  func()
 }
 
 func (f *fakeEntityPublisher) ValidateEntities(_ context.Context, req types.StoryEntitiesRequest) error {
@@ -63,6 +64,9 @@ func (f *fakeEntityPublisher) ValidateEntities(_ context.Context, req types.Stor
 }
 
 func (f *fakeEntityPublisher) PublishEntities(_ context.Context, req types.StoryEntitiesRequest) error {
+	if f.onPublish != nil {
+		f.onPublish()
+	}
 	f.emu.Lock()
 	defer f.emu.Unlock()
 	f.entityReqs = append(f.entityReqs, req)
@@ -418,5 +422,53 @@ func TestRelateRepeatOfAnOlderRoleIsRecordedAgain(t *testing.T) { // E9
 		if last := calls[len(calls)-1]; last.Entities[0].Role != step.ent.Role {
 			t.Fatalf("step %d: exported role %s, want %s", i, last.Entities[0].Role, step.ent.Role)
 		}
+	}
+}
+
+// Review 298 (DeepSeek seat) item 3: the export is a slow network call and
+// must not hold relationMu, which serializes Relate and RelateStories.
+func TestRelateExportDoesNotHoldTheRelationLock(t *testing.T) {
+	f := newEntityFixture(t)
+	f.turnOn(t)
+	receipt := f.judgedEntity(t, "run-lock", "q1")
+	held := true
+	f.epub.onPublish = func() {
+		if f.rt.relationMu.TryLock() {
+			held = false
+			f.rt.relationMu.Unlock()
+		}
+	}
+	if _, err := f.attach(agentprofile.Research, "run-lock", newVucic(receipt, "q1", types.EntityRoleCentral)); err != nil {
+		t.Fatal(err)
+	}
+	if held {
+		t.Fatal("relationMu was held during the export")
+	}
+}
+
+// Review 298 (DeepSeek seat) item 5: a repeat re-sends the description the
+// entity was first minted with (the tape is read oldest first), not a later
+// spelling of the same id.
+func TestRelateRepeatCarriesTheFirstMintedDescription(t *testing.T) {
+	f := newEntityFixture(t)
+	f.turnOn(t)
+	f.epub.entityErrs = []error{fmt.Errorf("corpusd down"), fmt.Errorf("corpusd down")}
+	receipt := f.judgedEntity(t, "run-mint", "q1")
+	first := yaegikernel.RelateEntity{Name: "Anthropic", Type: types.EntityTypeOrganization, Role: types.EntityRoleCentral, JudgmentRef: receipt, QuestionID: "q1"}
+	second := yaegikernel.RelateEntity{Name: "Anthropic PBC", Type: types.EntityTypeOrganization, Role: types.EntityRoleIncidental, JudgmentRef: receipt, QuestionID: "q1",
+		Reason: "Named once, as the maker of a model the story mentions in passing."}
+	for _, e := range []yaegikernel.RelateEntity{first, second} {
+		if _, err := f.attach(agentprofile.Research, "run-mint", e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := types.MintedEntityID("Anthropic")
+	if _, err := f.attach(agentprofile.Research, "run-mint", yaegikernel.RelateEntity{EntityID: id, Role: types.EntityRoleIncidental, JudgmentRef: receipt, QuestionID: "q1",
+		Reason: "Named once, as the maker of a model the story mentions in passing."}); err != nil {
+		t.Fatal(err)
+	}
+	calls := f.epub.entityCalls()
+	if last := calls[len(calls)-1].Entities[0]; last.Name != "Anthropic" || !last.New {
+		t.Fatalf("repeat exported %+v, want the first minted description (Anthropic)", last)
 	}
 }
