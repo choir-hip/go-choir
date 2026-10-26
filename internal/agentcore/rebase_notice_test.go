@@ -32,6 +32,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+type noopRebaseTimer struct{}
+
+func (noopRebaseTimer) Stop() bool { return true }
+
 type rebaseFixture struct {
 	rt         *Runtime
 	s          *store.Store
@@ -73,6 +77,8 @@ func newRebaseFixture(t *testing.T) *rebaseFixture {
 	rt.bootedAt = f.now.Add(-time.Hour) // a long-running boot
 	rt.rebaseStayUp, rt.rebaseAnswerWindow = 5*time.Minute, 30*time.Minute
 	rt.rebaseNow = func() time.Time { return f.now }
+	// The tests fire the timer's work themselves; an armed timer never runs.
+	rt.rebaseAfterFunc = func(time.Duration, func()) rebaseTimerHandle { return noopRebaseTimer{} }
 	t.Cleanup(rt.stopRebaseNotice)
 	return f
 }
@@ -233,15 +239,17 @@ func TestRebaseNoticeOnlyForABaseMovedStackWithItsObjects(t *testing.T) {
 	if out := f.fire(t); out.Minted != "" || f.noticeCount(t) != 0 {
 		t.Fatalf("projected state minted %+v", out)
 	}
-	// The booted base's objects are missing (residual R3): no round, no notice.
+	// The booted base's objects are missing (residual R3): reconcile still
+	// answers stack_base_moved for a stack on another base, but the objects
+	// are not in the guest repository, so no round and no notice (the fetch
+	// supplies them first).
 	missing := "dddddddddddddddddddddddddddddddddddddddd"
 	setBootedBase(t, f.rt, missing)
-	if out := f.fire(t); out.Minted != "" {
-		t.Fatalf("base_objects_missing minted %+v", out)
+	if out := f.fire(t); out.Minted != "" || out.Reason != "the booted base's objects are missing" {
+		t.Fatalf("missing objects minted or misreported %+v", out)
 	}
-	status := f.rt.sourceProjectionStatus()
-	if status == nil || status.State != sourceproj.StateBaseObjectsMissing {
-		t.Fatalf("fixture: want base_objects_missing, got %+v", status)
+	if status := f.rt.sourceProjectionStatus(); status == nil || status.State != sourceproj.StateBaseMoved {
+		t.Fatalf("fixture: want stack_base_moved with absent objects, got %+v", status)
 	}
 	for n := 1; n <= 3; n++ {
 		if f.notice(t, n) != nil {
@@ -457,5 +465,29 @@ func TestRebaseNoticeRearmsWhileAttemptsRemain(t *testing.T) {
 	f.now = f.now.Add(time.Hour)
 	if out = f.fire(t); out.Attempt != 3 || out.Rearm != 0 {
 		t.Fatalf("attempt 3 is the last: no re-arm; got %+v", out)
+	}
+}
+
+func TestRebaseNoticeShowsToTheRootAsARebaseNoticeNotAClosure(t *testing.T) {
+	f := newRebaseFixture(t)
+	f.fire(t)
+	rec := f.notice(t, 1)
+	if got := inboxRecordKind(*rec); got != "rebase_notice" {
+		t.Fatalf("the root reads the notice as %q, want rebase_notice (not closure)", got)
+	}
+}
+
+// The setting handler arms or stops the timer: off is the live rollback.
+func TestRebaseOfferSettingOffStopsTheTimer(t *testing.T) {
+	f := newRebaseFixture(t)
+	if _, err := f.rt.ReconcileSourceProjection(context.Background(), "cast"); err != nil {
+		t.Fatal(err)
+	}
+	if _, armed := f.rt.rebaseNoticeDueAt(); !armed {
+		t.Fatal("fixture: the timer must be armed")
+	}
+	f.rt.applyRebaseOfferSetting(false)
+	if _, armed := f.rt.rebaseNoticeDueAt(); armed {
+		t.Fatal("turning the switch off must stop the timer")
 	}
 }

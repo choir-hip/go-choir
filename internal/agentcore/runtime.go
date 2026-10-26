@@ -371,6 +371,16 @@ type Runtime struct {
 	sourceProjectionMu    sync.Mutex
 	sourceProjectionRunMu sync.Mutex
 	sourceProjectionLast  *sourceproj.Result
+	// U4 (rebase_notice.go): the one live timer that mints a stack rebase
+	// notice, its due time, and the test seams (stay-up interval, answer
+	// window, clock and scheduler). Zero values mean the defaults.
+	rebaseMu           sync.Mutex
+	rebaseTimer        rebaseTimerHandle
+	rebaseDue          time.Time
+	rebaseStayUp       time.Duration
+	rebaseAnswerWindow time.Duration
+	rebaseNow          func() time.Time
+	rebaseAfterFunc    func(d time.Duration, fn func()) rebaseTimerHandle
 	// U1b: the booted base's objects are fetched into the guest repository.
 	sourceBaseFetchMu       sync.Mutex
 	sourceBaseFetchRunning  bool
