@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
@@ -369,6 +370,10 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 				return selfdev.Operation{}, http.StatusConflict, bindingErr
 			}
 		}
+		// A replay of the landed act is the same act: its owner-act record
+		// replays (one record, one wake), and a first call that landed the
+		// decision but not the record gets it now.
+		h.rt.notifyTextureOfOwnerAct(ctx, ownerID, operation, selfDevelopmentOwnerAct(request.Decision), request.Reason)
 		return operation, http.StatusOK, nil
 	}
 	if h.rt.selfdevControl == nil {
@@ -625,10 +630,21 @@ func (h *APIHandler) decideSelfDevelopment(ctx context.Context, ownerID, compute
 		}
 		decided = current
 	}
+	// The act wakes the Texture of the candidate's document (SD-08); the
+	// decision is already durable, so a failed wake is logged, not returned.
+	h.rt.notifyTextureOfOwnerAct(ctx, ownerID, decided, selfDevelopmentOwnerAct(request.Decision), request.Reason)
 	if decided.State == selfdev.StateAccepted {
 		h.rt.triggerSelfDevelopmentReconcile()
 	}
 	return decided, http.StatusOK, nil
+}
+
+// selfDevelopmentOwnerAct names a decision as its owner-act record's act.
+func selfDevelopmentOwnerAct(decision string) string {
+	if decision == "approve" {
+		return types.OwnerActApprove
+	}
+	return types.OwnerActReject
 }
 
 func selfDevelopmentDecisionAuthority(ownerID, consensusAuthority string) string {

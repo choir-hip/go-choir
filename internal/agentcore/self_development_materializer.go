@@ -478,7 +478,16 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid applied receipts")
 		}
-		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, operation.State, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve")
+		if err := rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, operation.State, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve"); err != nil {
+			return err
+		}
+		// A live apply wakes the candidate's Texture (SD-08). A crash
+		// boot's journal-only settlement does not: a restart never starts
+		// a Texture turn.
+		if !journalOnly {
+			rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, operation, types.OwnerActApply, "")
+		}
+		return nil
 	}
 	if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
 		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, operation.State)
