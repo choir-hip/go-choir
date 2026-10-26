@@ -121,6 +121,48 @@ rollback, like `CORPUSD_RELATED`.
   change tombstones the other role's edge.
 - Threads (`choir.topic_thread`, `in_thread`) are not built in this lane.
 
+### Slice c, the design taken (before code)
+
+Read against the code: research desks exist per story (`research:<doc>`,
+paired with `texture:<doc>`); there is no root research inbox to send a
+batch to, and a research Report to Texture wakes Texture. So the review is
+one Cast per story to that story's own research desk, from a system sender
+that never wakes:
+
+- **The schedule is a source schedule** with the reserved id
+  `related-review` (`store.SourceSchedule`, the same `source_poll_due`
+  chain). It inherits the generation guard, the in-flight mark, the
+  crash-loop bound (two crash boots with a tick in flight close it; an owner
+  act restarts it), `recoverSourceSchedulesAtBoot` (a crash closes the tick
+  in flight and arms the next one an interval after boot) and the overdue
+  sweep, and it shows in the source schedule list.
+- **Who starts it:** the overdue sweep (every 5 minutes, never at boot
+  alone): for an owner and computer with an active source schedule and
+  `research.related_story` on, it creates the review schedule if absent,
+  first tick one interval out; with the setting off it stops it. A schedule
+  closed by the crash-loop bound is not restarted by the sweep.
+- **A tick** (every 30 minutes) takes up to K = 10 stories, newest first,
+  updated in the last 48 hours, past their seed, published automatically,
+  with no `story.entities` record on the tape and not cast today, and
+  commits one Cast to each story's `research:<doc>` from
+  `source:related-review` (desk minted if absent, as the reader's research
+  request does). The packet carries the publication id, the head revision
+  id and the bounded story text, marked as data, never instructions.
+  A story whose trajectory is not live, or whose review round is still open,
+  is skipped and counted.
+- **Research's answer:** it records with `choir.Relate` and closes the round
+  with a Report to `review`, routed to `source:related-review`, which wakes
+  no one. Texture is never woken by the review.
+- **Tape:** `story.entities` moves to its own channel
+  (`story_entities:<computer>`), so the "already reviewed" read is not
+  crowded out by System 1 events (10,000-event window: about 25 days of
+  reviews at the current rate; the backfill's older stories past that
+  window are a named residual).
+- **Cost:** one research run per story (read, one or two System 1 calls,
+  one `Relate`), at most 480 a day; the per-story run is dearer than the
+  design's one-turn batch, which needs a root research inbox that does not
+  exist yet (named residual).
+
 Restart rule (CLAUDE.md "Restarts End Work"): the schedule is a standing
 intent and survives a crash; a tick's batch is an occurrence and does not.
 A crash closes the batch in flight ("interrupted by a restart"); the next
