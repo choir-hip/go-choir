@@ -127,8 +127,10 @@ func TestSemanticKindsNeverEnterTheQueue(t *testing.T) {
 			t.Fatalf("acknowledged kind %s: tape grew %d -> %d, last authority %q", kind, before, len(after), after[len(after)-1].Authority)
 		}
 	}
-	if batched != 10 || acknowledged != 33 {
-		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 33", batched, acknowledged)
+	// 34 acknowledged: story.relation (the research desk's judged pair
+	// relations) joined at d58d194cf.
+	if batched != 10 || acknowledged != 34 {
+		t.Fatalf("exercised %d batched and %d acknowledged kinds, want 10 and 34", batched, acknowledged)
 	}
 	// The unknown kind is acknowledged too.
 	if _, err := newTelemetryRecord(h.event("unknown", "run-kinds", "owner-1", types.EventKind("loop.made_up"), telemetryBase), false); err == nil {
