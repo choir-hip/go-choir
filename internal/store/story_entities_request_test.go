@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Slice d (docs/problems/related-stories-no-entity-layer-2026-10-26.md): the
@@ -59,5 +61,61 @@ func TestStoryEntitiesRequestCastsTheRecordObjective(t *testing.T) {
 	}
 	if _, err := ask("related-review-2:" + docID); !errors.Is(err, ErrStoryResearchBusy) {
 		t.Fatalf("a second request while the round is open: %v, want busy", err)
+	}
+}
+
+// A backfill round costs no Texture turn: research's empty Reports in a
+// round the owner's entities request opened neither wake Texture nor count
+// as its unread work. A Report that carries something still wakes it, and
+// so does an empty Report in a reader's round. Failure modes: the
+// backfill's empty final Report wakes Texture (one model turn per story);
+// the rule reaches a reader's round, or a Report with findings, and
+// Texture misses what research found.
+func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	docID, head := storyResearchFixture(t, s, "re-quiet")
+	texture, research := "texture:"+docID, "research:"+docID
+	if _, err := s.CommitStoryResearchRequest(ctx, StoryResearchRequest{OwnerID: storyOwner, ComputerID: storyComputer, DocumentID: docID,
+		ClientRequestID: "related-review-q:" + docID, ExpectedHeadRevisionID: head, Kind: StoryResearchKindEntities}); err != nil {
+		t.Fatal(err)
+	}
+	interim := mustCommitInbox(t, s, "cell-records:q-interim", nil, inboxReport("q-1", research, texture, false, types.CommitmentReport{}))
+	final := mustCommitInbox(t, s, "cell-records:q-final", nil, inboxReport("q-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
+	for _, r := range []types.InboxCommitReceipt{interim, final} {
+		if r.Records[0].WakeID != "" {
+			t.Fatalf("an empty Report of the entities round woke Texture: %+v", r.Records[0])
+		}
+	}
+	if !final.Records[0].ClosedRound {
+		t.Fatalf("the final Report did not close the round: %+v", final.Records[0])
+	}
+	if unread, err := s.TextureWorkUnread(ctx, storyOwner, storyComputer, texture); err != nil || unread {
+		t.Fatalf("Texture work unread after the quiet round = %v, %v; want none", unread, err)
+	}
+
+	// A reader's round: the same empty final Report wakes Texture.
+	if _, err := askStoryResearch(s, docID, "expand:q", head); err != nil {
+		t.Fatal(err)
+	}
+	reader := mustCommitInbox(t, s, "cell-records:r-final", nil, inboxReport("r-2", research, texture, true, types.CommitmentReport{StopReason: "empty"}))
+	if reader.Records[0].WakeID == "" {
+		t.Fatal("an empty final Report of a reader's round did not wake Texture")
+	}
+	if unread, err := s.TextureWorkUnread(ctx, storyOwner, storyComputer, texture); err != nil || !unread {
+		t.Fatalf("Texture work unread after a reader's round = %v, %v; want some", unread, err)
+	}
+	cur, _ := s.ReaderCursor(ctx, storyOwner, storyComputer, texture, texture)
+	mustCommitInbox(t, s, "turn-records-read:q", &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: cur, Seq: reader.Records[0].InboxSeq})
+
+	// An entities round whose Report carries a finding wakes Texture.
+	if _, err := s.CommitStoryResearchRequest(ctx, StoryResearchRequest{OwnerID: storyOwner, ComputerID: storyComputer, DocumentID: docID,
+		ClientRequestID: "related-review-f:" + docID, ExpectedHeadRevisionID: head, Kind: StoryResearchKindEntities}); err != nil {
+		t.Fatal(err)
+	}
+	found := mustCommitInbox(t, s, "cell-records:f-final", nil, inboxReport("f-2", research, texture, true,
+		types.CommitmentReport{Findings: []types.ReportFinding{{Text: "the story names the wrong minister", Outside: true}}, StopReason: "completed"}))
+	if found.Records[0].WakeID == "" {
+		t.Fatal("a Report with a finding in an entities round did not wake Texture")
 	}
 }

@@ -94,3 +94,42 @@ func TestStoryEntitiesBackfillAsksOnlyStoriesWithNoRecord(t *testing.T) {
 		t.Fatal("an unbounded backfill was accepted")
 	}
 }
+
+// The Texture controller reads the quiet round as no work (D5).
+func TestStoryEntitiesBackfillRoundLeavesTextureNoWork(t *testing.T) {
+	f := newAnalysisFixture(t)
+	ctx := context.Background()
+	doc := openStory(t, f.s, f.owner, f.computer, "open-quiet", "A quiet story")
+	f.turnOn(t)
+	got, err := f.rt.StoryEntitiesBackfill(ctx, f.owner, f.computer, "batch-q", 10)
+	if err != nil || len(got.Requested) != 1 {
+		t.Fatalf("backfill = %+v, %v", got, err)
+	}
+	texture, research := "texture:"+doc, "research:"+doc
+	// Texture has read its inbox through the request.
+	cur, _ := f.s.ReaderCursor(ctx, f.owner, f.computer, texture, texture)
+	head, _ := f.s.InboxHead(ctx, f.owner, f.computer, texture)
+	if head > cur {
+		read := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "turn-records-read:quiet",
+			Cursor: &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: cur, Seq: head}}
+		read.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(read)
+		if _, err := f.s.CommitInboxRecords(ctx, read); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if unread, err := f.rt.InboxUnread(ctx, f.owner, f.computer, texture); err != nil || unread {
+		t.Fatalf("Texture unread before the final Report = %v, %v", unread, err)
+	}
+	final := types.CommitmentRecord{SchemaID: types.CommitmentRecordSchemaV1, RecordID: "quiet-final", Kind: types.CommitmentKindReport,
+		Discrepancy: types.DiscrepancyUnresolved, EmitterKind: types.CommitmentEmitterAgent, Provenance: types.CommitmentProvenance{AgentID: research},
+		Inbox: texture, SenderInbox: research, Addressee: texture, Final: true, Report: &types.CommitmentReport{StopReason: "empty"}}
+	req := types.CommitInboxRecordsRequest{OwnerID: f.owner, ComputerID: f.computer, CommandID: "cell-records:quiet-final", Records: []types.CommitmentRecord{final}}
+	req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+	receipt, err := f.s.CommitInboxRecords(ctx, req)
+	if err != nil || receipt.Records[0].WakeID != "" {
+		t.Fatalf("final = %+v, %v; want no wake", receipt, err)
+	}
+	if unread, err := f.rt.InboxUnread(ctx, f.owner, f.computer, texture); err != nil || unread {
+		t.Fatalf("Texture unread after the quiet final Report = %v, %v; want none", unread, err)
+	}
+}
