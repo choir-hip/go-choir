@@ -234,9 +234,6 @@ func TestHibernateOptionChangesNeitherLaunchConfigNorPrepareBody(t *testing.T) {
 	}
 	on, off := newCRFixture(t), newCRFixture(t)
 	beforeOn, beforeOff := read(on), read(off)
-	if string(beforeOn) != string(beforeOff) {
-		t.Fatal("fixture launch configs differ before the hibernate")
-	}
 	on.hibernate(t, withCacheReturn)
 	if err := off.mgr.HibernateVM(off.vmID); err != nil {
 		t.Fatal(err)

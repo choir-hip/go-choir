@@ -425,6 +425,13 @@ func (a *vmManagerAdapter) HibernateVM(vmID string) error {
 	return a.mgr.HibernateVM(vmID)
 }
 
+// HibernateVMWithCacheReturn is HibernateVM with the D6 cache return step.
+func (a *vmManagerAdapter) HibernateVMWithCacheReturn(vmID string, opt vmctl.HibernateCacheReturn) error {
+	return a.mgr.HibernateVMWithOptions(vmID, vmmanager.HibernateOptions{
+		CacheReturn: &vmmanager.CacheReturnOption{Scope: opt.Scope, DryRun: opt.DryRun},
+	})
+}
+
 func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) {
 	inst, err := a.mgr.ResumeVM(vmID)
 	if err != nil {

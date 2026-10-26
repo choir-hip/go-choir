@@ -3150,10 +3150,19 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	// computer's read as booting meanwhile.
 	if mgr := r.vmManager; mgr != nil {
 		vmID, epoch := own.VMID, own.Epoch
+		// Density D6 S3: a hibernate of a selected computer returns its cold
+		// page cache between the fence and the snapshot. Decided here, on
+		// the ownership, never by a field of the VM's configuration.
+		cacheReturn := r.hibernateCacheReturnForLocked(own)
 		r.lifecycle[key] = lifecycleHibernate
 		r.noteHibernateStartLocked()
 		r.mu.Unlock()
-		mgrErr := mgr.HibernateVM(vmID)
+		var mgrErr error
+		if withOpt, ok := mgr.(hibernateCacheReturnManager); ok && cacheReturn != nil {
+			mgrErr = withOpt.HibernateVMWithCacheReturn(vmID, *cacheReturn)
+		} else {
+			mgrErr = mgr.HibernateVM(vmID)
+		}
 		busy := hibernateGuestBusy(mgrErr)
 		if mgrErr != nil && !busy {
 			log.Printf("vmctl: manager hibernate of VM %s: %v", vmID, mgrErr)

@@ -54,7 +54,7 @@ func (e *HibernateGuestBusyError) HibernateGuestBusy() bool { return true }
 // stopped, which is what vmctl records. The one exception is a guest that
 // answers busy at the fence: it is left running and HibernateGuestBusyError
 // is returned.
-func (m *Manager) hibernateVMSnapshot(vmID string) error {
+func (m *Manager) hibernateVMSnapshot(vmID string, opts HibernateOptions) error {
 	unlock := m.lockVMOperation(vmID)
 	defer unlock()
 
@@ -84,7 +84,7 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 	tl.Snapshot = snap
 	tl.mark("hibernate_begin")
 
-	meta, stopped, reason, err := m.captureSnapshot(vmID, cfg, hostURL, tl, snap)
+	meta, stopped, reason, err := m.captureSnapshot(vmID, cfg, hostURL, tl, snap, opts)
 	if reason == "" {
 		snap.Outcome = "snapshot"
 		snap.Vault = meta.Vault
@@ -98,8 +98,8 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 		}
 		tl.finish("hibernated", nil)
 		m.persistHibernateTimeline(tl)
-		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s)",
-			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused)
+		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s%s)",
+			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused, snap.CacheReturn.logSuffix())
 		return nil
 	}
 
@@ -142,7 +142,7 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 // captureSnapshot runs the fence, pause, snapshot, stop and commit steps.
 // reason is empty on success; otherwise it names why the kill path must be
 // used, and stopped reports whether Firecracker was already stopped.
-func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline) (*SnapshotMeta, bool, string, error) {
+func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline, opts HibernateOptions) (*SnapshotMeta, bool, string, error) {
 	m.mu.Lock()
 	var conf *ConfinementReceipt
 	if inst := m.vms[vmID]; inst != nil {
@@ -159,7 +159,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 		return nil, false, snapshotReasonVaultUnknownComputer, fmt.Errorf("VM_SNAPSHOT_VAULT_ONLY is set and VM %s has no computer id; refusing rather than risk a plaintext capture", vmID)
 	}
 	if !m.vaultSelected(vmID, cfg.ComputerID) {
-		return m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, nil)
+		return m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, nil, opts)
 	}
 	if jailed {
 		return nil, false, snapshotReasonVaultJailed, fmt.Errorf("a jailed VMM captures inside its jail on the main file system; vault computers are not supported under the jailer")
@@ -172,7 +172,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	if err := m.recordVaultRoot(m.cfg.SnapshotVaultDir); err != nil {
 		return nil, false, snapshotReasonVaultUnavailable, fmt.Errorf("record the vault root: %w", err)
 	}
-	meta, stopped, reason, err := m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, vh)
+	meta, stopped, reason, err := m.captureSnapshotInto(vmID, cfg, hostURL, tl, snap, conf, vh, opts)
 	if reason != "" {
 		// Whatever the capture wrote is removed where it was written: in the
 		// held vault directory, even if the path now names another one.
@@ -185,7 +185,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 
 // captureSnapshotInto is captureSnapshot after the vault decision: vh is the
 // held vault directory, or nil for the state directory.
-func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline, conf *ConfinementReceipt, vh *vaultHandle) (*SnapshotMeta, bool, string, error) {
+func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline, conf *ConfinementReceipt, vh *vaultHandle, opts HibernateOptions) (*SnapshotMeta, bool, string, error) {
 	jailed := conf.jailed()
 	root, vmmRoot := m.cfg.StateDir, m.cfg.StateDir
 	if vh != nil {
@@ -222,6 +222,7 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	// Fence: the guest closes run admission, confirms nothing is running and
 	// syncs. A busy guest answers 409 and reopens admission itself.
 	fenceStart := time.Now()
+	fenceBegan := m.cacheReturnNow() // for the cache return's fence budget
 	prepareCtx, cancel := context.WithTimeout(context.Background(), snapshotPrepareTimeout)
 	prepared, reason, err := guestHibernatePrepare(prepareCtx, hostURL)
 	cancel()
@@ -240,8 +241,22 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 		}
 	}
 
+	// Density D6 S3: ask the fenced guest to return its cold page cache and
+	// wait for the host to see the fall, so the snapshot does not write it.
+	// Its own bounded call after prepare and unplug; any failure skips it
+	// and the snapshot proceeds as without it (snapshot_cache_return.go).
+	if opts.CacheReturn != nil {
+		m.snapshotCacheReturn(vmID, hostURL, opts.CacheReturn, fenceBegan, snap)
+		if snap.CacheReturn != nil {
+			tl.markDetail("cache_return", snap.CacheReturn.detail())
+		}
+	}
+
 	// L3a (snapshot_diff.go): decide Full or Diff before the pause, so no
 	// read or exec of the decision adds frozen time.
+	if m.onDiffDecision != nil {
+		m.onDiffDecision()
+	}
 	m.mu.Lock()
 	coldOrigin, pid := false, 0
 	if inst := m.vms[vmID]; inst != nil {
