@@ -104,3 +104,60 @@ is left as it is (residual, named): it is not refused by the join.
 - Rollback of the fix: revert the commit; no data migration. A plain release
   that already carries `base_commit` stays valid (the field is read by the
   updater only at apply time).
+
+## Review 311 (2026-10-26)
+
+Devin and DeepSeek v4.1 flash reviewed the built fix (bbf755e93). Both approve
+the base join itself. FP0's ruling on the refusal settlement and the findings:
+
+- **Ruling: `degraded` means "applied, with an unsettled tail".** It stays an
+  open state (`selfdev.OpenStates`) and is repaired forward on a planned boot
+  (X1's use, `lane/apply-replay-bound`). A typed apply refusal installs
+  nothing, so it settles `materializing -> failed`, a settled state, with the
+  refusal reason and both commits (release base, booted base) on the
+  operation. A new self-development round can then open; U4 will later turn
+  that into a rebase round. The earlier "settles degraded" fix was wrong:
+  `degraded` is open, so `Store.Start` refused every new operation
+  (`ErrOperationOpen`) and engineering admission stayed held. The "Fix" and
+  "Fix as built" text above that says degraded is superseded by this section.
+- **DeepSeek F1 (High): fixed** as above (refused -> failed, a following
+  `Store.Start` succeeds; the crash-boot settlement of a journal-terminal
+  refused op settles failed without calling `Apply` again).
+- **DeepSeek F3 (medium-low): fixed.** `plainReleaseBaseCommit` distinguishes
+  "no manifest path wired, or a dev build (`local`, dirty)" (no claim, apply)
+  from "a path is wired but the manifest is unreadable or carries no valid
+  build commit" (fail closed: the apply is refused with a typed reason and
+  settles failed). Same item as Devin F6 and F7 (the host-built log line).
+- **DeepSeek F2 (medium): by design, now visible.** A rollback to a plain
+  release drops the base claim (rollback must stay possible). The operation's
+  terminal result now records that the claim was dropped. Rollback behavior is
+  unchanged.
+- **Devin F1 (medium): fixed.** The rollback path's journal re-read replaced a
+  journaled `refused` outcome with a plain error, so a refused rollback never
+  matched `ErrApplyRefused`, stayed `rollback_pending` and re-armed a 60 s
+  retry wake forever (and held every deploy through `plannedRestartBusy`). It
+  now keeps the typed refusal, like the apply path.
+
+Residuals, named, no code in this lane:
+
+- **R1 (DeepSeek F4, Devin F5): `RestagePinnedRelease` has no base join** (a
+  tape restore, `rematerialize.go`, can put an old-base frontend over a newer
+  booted base). Recovery path, not a candidate apply.
+- **R2 (DeepSeek F5): mid-apply journal conflict across the fix.** `base_commit`
+  enters the content digest, so a non-terminal pre-fix journal replayed by a
+  post-fix materializer yields `ErrIdempotencyConflict` and `refuse()`
+  overwrites the prepared journal, losing `PriorReleaseTarget`. Unreachable
+  while a deploy never restarts mid-apply (crash settlement is journal-only).
+- **R3 (Devin F2): platform-update crash settlement** leaves a journaled
+  `refused` update pending (`settlePendingPlatformUpdateAfterCrash` default
+  branch, `platform_update.go`); the live path discharges it. A second
+  instance of the same class, to be settled like the live path.
+- **R4 (Devin F3): a degraded-refused reconcile spends durable apply attempts**
+  (`spendGuestApplyAttempt`) before `Apply` returns the recorded refusal. With
+  refused now settling `failed`, this no longer applies to refusals; the
+  attempt-bound behavior for genuinely degraded ops belongs to
+  `lane/apply-replay-bound`.
+- **R5 (Devin F4): a bundle with no source patch claims no base** and installs
+  unjoined. Recording the freeze-time booted base in every bundle is open.
+- **R6 (Devin F8): a refused apply writes no canonical event**; the verdict
+  lives in the operation row and the daemon journal.
