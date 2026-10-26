@@ -177,7 +177,7 @@
     // The field is a soft glow field; it gains nothing from a 2x backing
     // store and costs 4x the fill rate. 1.5 is the point of diminishing
     // returns for a radial gradient you cannot see the pixels of.
-    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    dpr = Math.min(window.devicePixelRatio || 1, density === "ambient" ? 1 : 1.5);
     width = canvas.clientWidth || window.innerWidth;
     height = canvas.clientHeight || window.innerHeight;
     canvas.width = Math.max(1, Math.round(width * dpr));
@@ -188,9 +188,23 @@
     build();
   }
 
-  function draw(now: number) {
-    raf = requestAnimationFrame(draw);
+  // The loop: one chain, a frame-rate cap, and nothing else. render() is pure
+  // (no scheduling), so a resize or a reduced-motion snapshot can call it
+  // without starting a second chain.
+  const FRAME_MS = density === 'ambient' ? 1000 / 24 : 1000 / 60;
+  let lastFrame = 0;
+  let lastTick = 0;
+  function frame(now: number) {
+    raf = requestAnimationFrame(frame);
+    if (now - lastFrame < FRAME_MS - 1) return;
+    lastFrame = now;
+    render(now);
+  }
+
+  function render(now: number) {
     if (!ctx) return;
+    const dtMs = lastTick ? Math.min(100, now - lastTick) : 16.6;
+    lastTick = now;
     const t = now - t0;
     ctx.clearRect(0, 0, width, height);
 
@@ -223,7 +237,7 @@
     ctx.globalAlpha = 1;
 
     for (const p of pulses) {
-      p.t += p.sp * 16.6;
+      p.t += p.sp * dtMs;
       if (p.t > 1) {
         p.t = -0.4;
         p.e = (p.e + 37) % Math.max(1, edges.length);
@@ -270,7 +284,7 @@
 
   function start() {
     if (raf || reduced) return;
-    raf = requestAnimationFrame(draw);
+    raf = requestAnimationFrame(frame);
   }
 
   function stop() {
@@ -279,17 +293,28 @@
     raf = 0;
   }
 
+  // Ambient only: after IDLE_MS without input the field freezes on its last
+  // frame (0 CPU, 0 compositor work) and wakes on the next input.
+  const IDLE_MS = 120_000;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  function onInput() {
+    if (density !== 'ambient') return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(stop, IDLE_MS);
+    if (visible) start();
+  }
+
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   function onResize() {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       resize();
-      draw(performance.now());
+      render(performance.now());
     }, 160);
   }
   function onVisibility() {
     visible = document.visibilityState === 'visible';
-    if (visible) start();
+    if (visible) onInput();
     else stop();
   }
 
@@ -303,14 +328,18 @@
       reduced = ev.matches;
       if (reduced) {
         stop();
-        draw(performance.now());
+        render(performance.now());
       } else start();
     });
     resize();
-    if (reduced) draw(performance.now());
+    if (reduced) render(performance.now());
     else start();
     window.addEventListener('resize', onResize, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
+    for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
+      window.addEventListener(ev, onInput, { passive: true });
+    }
+    onInput();
   });
 
   onDestroy(() => {
@@ -319,7 +348,11 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
+      for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
+        window.removeEventListener(ev, onInput);
+      }
     }
+    if (idleTimer) clearTimeout(idleTimer);
   });
 </script>
 
