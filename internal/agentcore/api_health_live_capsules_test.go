@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -95,7 +96,7 @@ func TestHealthReportsLiveCapsuleInTheThreeBlindStates(t *testing.T) {
 	t.Run("parked (passivated) bound run keeps its capsule", func(t *testing.T) {
 		handler, s := newBoundedHealthFixture(t)
 		open := seedLiveCapsule(t, handler, s)
-		run, err := s.GetRun(ctx, "run:"+open.AssignmentID)
+		run, err := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, "run:"+open.AssignmentID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,5 +207,74 @@ func TestHealthLiveCapsulesIsAFailClosedStoreRead(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"live_capsules"`) {
 		t.Fatalf("503 does not name live_capsules among the unanswered reads: %s", rec.Body.String())
+	}
+}
+
+// The count walks every engineering assignment object under the engine
+// mutex, which is not cancellable, and /health is probed often. Each poll
+// during a stall must not leave its own waiter behind (the pile that
+// TestHandleHealthStalledStoreLeaksNoGoroutines pins for the other reads):
+// one flight at a time, joined by every poll.
+func TestHealthLiveCapsuleReadIsSingleFlightDuringAStall(t *testing.T) {
+	handler, productStore := newBoundedHealthFixture(t)
+	if rec, _ := serveHealth(t, handler); rec.Code != http.StatusOK {
+		t.Fatalf("warm-up /health status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	liveCapsuleHealthTTL = 0
+	t.Cleanup(func() { liveCapsuleHealthTTL = defaultLiveCapsuleHealthTTL })
+	release := holdStore(t, productStore)
+	for i := 0; i < 5; i++ {
+		if rec, _ := serveHealth(t, handler); rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("poll %d during the stall: status=%d want 503", i, rec.Code)
+		}
+	}
+	if n := goroutinesNaming("liveCapsuleFlight"); n > 1 {
+		t.Fatalf("%d live-capsule reads wait on the stalled store, want at most one in flight", n)
+	}
+	release()
+	deadline := time.Now().Add(5 * time.Second)
+	for goroutinesNaming("liveCapsuleFlight") != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := goroutinesNaming("liveCapsuleFlight"); n != 0 {
+		t.Fatalf("%d live-capsule reads outlived the stall", n)
+	}
+	if got, _ := healthLiveCapsules(t, handler); got == nil {
+		t.Fatalf("/health after release does not report live_capsules")
+	}
+}
+
+func goroutinesNaming(name string) int {
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	count := 0
+	for _, stack := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(stack, name) {
+			count++
+		}
+	}
+	return count
+}
+
+// The answer is cached for a few seconds so probes do not each walk the
+// assignments; the cache must expire, or a new capsule would read 0.
+func TestHealthLiveCapsuleCacheExpires(t *testing.T) {
+	handler, s := newBoundedHealthFixture(t)
+	liveCapsuleHealthTTL = 100 * time.Millisecond
+	t.Cleanup(func() { liveCapsuleHealthTTL = defaultLiveCapsuleHealthTTL })
+	if got, _ := healthLiveCapsules(t, handler); got == nil || *got != 0 {
+		t.Fatalf("live_capsules = %v, want 0", got)
+	}
+	seedLiveCapsule(t, handler, s)
+	time.Sleep(250 * time.Millisecond)
+	if got, _ := healthLiveCapsules(t, handler); got == nil || *got != 1 {
+		t.Fatalf("live_capsules = %v after the cache expired, want 1", got)
 	}
 }
