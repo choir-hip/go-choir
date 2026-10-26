@@ -116,8 +116,6 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyEventTableSetting(value)
 			case store.SettingSourceProjection:
 				rt.applySourceProjectionSetting(value)
-			case store.SettingRunMemoryElision, store.SettingSearchCaps:
-				rt.applyResearchSwitchSetting(key, value)
 			}
 			resp := map[string]any{"setting": current}
 			if value {
@@ -143,7 +141,6 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		if key == store.SettingSourceProjection {
 			rt.applySourceProjectionSetting(value)
 		}
-		rt.applyResearchSwitchSetting(key, value)
 		resp := map[string]any{"setting": setting}
 		if value {
 			rt.importGraphHome(r.Context(), key, resp)

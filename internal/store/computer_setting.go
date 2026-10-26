@@ -102,23 +102,6 @@ const SettingTraceLog = "store.trace_log"
 // addressee. Off by default; off mints nothing and is the rollback.
 const SettingEngineeringProgressToTexture = "engineering.progress_to_texture"
 
-// SettingRunMemoryElision turns on rolling elision of old tool results in a
-// research run's context (E2, docs/reports/autopaper-compute-halving-
-// 2026-10-15.md lever 2): the last few results stay verbatim and older long
-// ones become a stub the desk can read back with choir.RunMemoryEntry. An
-// owner act at runtime, per computer, no deploy. Off by default; off is the
-// rollback. The env switch CHOIR_RUN_MEMORY_ELISION=1 turns it on for every
-// computer regardless.
-const SettingRunMemoryElision = "research.run_memory_elision"
-
-// SettingSearchCaps caps what a desk search puts in its context (E3, the same
-// report, lever 3): 12 results per provider and snippets cut to 300
-// characters, instead of 40 whole results. An owner act at runtime, per
-// computer, no deploy. Off by default; off is the rollback. The env knobs
-// CHOIR_DESK_SEARCH_MAX_RESULTS and CHOIR_DESK_SEARCH_SNIPPET_CHARS turn
-// caps on for every computer, and win over the setting's 12 and 300 when set.
-const SettingSearchCaps = "research.search_caps"
-
 // SettingEvidenceGraph moves research evidence (SaveEvidence) from the
 // agent_evidence table to the choir.agent_evidence graph kind, on the tape
 // (docs/problems/data-has-more-than-one-home-2026-10-24.md, step 3). Read live
@@ -220,8 +203,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingSourceProjection:             false,
 	SettingTraceLog:                     false,
 	SettingEngineeringProgressToTexture: false,
-	SettingRunMemoryElision:             false,
-	SettingSearchCaps:                   false,
 	SettingEvidenceGraph:                false,
 	SettingEngineeringSlotsGraph:        false,
 	SettingEngineeringCarryUnfinished:   false,

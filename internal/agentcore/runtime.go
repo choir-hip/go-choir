@@ -65,9 +65,6 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
-	// The owner's per-computer research switches (research_switches.go).
-	runMemoryElisionSetting atomic.Bool
-	searchCapsSetting       atomic.Bool
 	// recordsRunStart holds each running desk run's cursor at its first
 	// cell (run id -> int64): choir.Records() shows the run every record
 	// past it (B13).
@@ -963,7 +960,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository.
 	rt.configureSourceProjectionSetting(ctx)
-	rt.configureResearchSwitchSettings(ctx)
 	go rt.startSourceProjection(ctx, "boot")
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
@@ -3740,7 +3736,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		renderedSystemPrompt = toolregistry.BuildSystemPrompt(systemPrompt, registry)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
-		withElision(rt.runMemoryElisionPolicy(rec)).
 		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt)).
 		withRunContext(
 			func() json.RawMessage { return runContextMessage(time.Now(), "") },
