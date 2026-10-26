@@ -1213,6 +1213,13 @@
       });
       agentPending = true;
       agentRunId = response?.run_id || agentRunId;
+      // A revise on a settled document continues it on a new trajectory
+      // (F1): follow the document there, or the stream stays on the old one.
+      const nextTrajectoryId = String(response?.trajectory_id || '');
+      if (nextTrajectoryId && currentDoc && nextTrajectoryId !== (currentDoc.trajectory_id || '')) {
+        currentDoc = { ...currentDoc, trajectory_id: nextTrajectoryId };
+        void connectDocumentStream(currentDoc.doc_id, nextTrajectoryId);
+      }
       saveStatus = synthStatusLabel();
     } catch (err) {
       if (err instanceof AuthRequiredError) {

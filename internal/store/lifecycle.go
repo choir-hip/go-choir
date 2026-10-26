@@ -5616,7 +5616,9 @@ func (s *Store) ArchiveLifecycleArtifact(ctx context.Context, req types.ArchiveL
 	if document.ArchivedAt != nil {
 		return types.LifecycleResult{}, ErrLifecycleInvalidTransition
 	}
-	if document.CurrentRevisionID != req.ExpectedHeadRevisionID {
+	// A settled trajectory whose document moved on to a continuing trajectory
+	// (F1, ContinueLifecycleDocument) no longer owns the document.
+	if document.CurrentRevisionID != req.ExpectedHeadRevisionID || document.TrajectoryID != req.TrajectoryID {
 		return types.LifecycleResult{}, ErrConcurrentStateChange
 	}
 	headObj, err := s.lifecycleGetObject(ctx, ogKindTexRev, ownerID, computerID, document.CurrentRevisionID)

@@ -755,7 +755,7 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 		if offer.SourceOperationState != "" {
 			b.WriteString("Carried work: " + carriedOutcome(offer) + " Its source patch is not carried into this capsule: " + offer.Reason + ".")
 		} else {
-			b.WriteString("Carried work: an earlier round on this trajectory (assignment " + offer.SourceAssignmentID +
+			b.WriteString("Carried work: an earlier round on this document (assignment " + offer.SourceAssignmentID +
 				") left unfinished source changes, but they are not carried into this capsule: " + offer.Reason + ".")
 			if offer.SourceUnfinished && offer.SourceReason != "" {
 				b.WriteString(" That round was stopped before it froze (the reason: \"" + offer.SourceReason + "\").")
@@ -789,7 +789,7 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 				if result == "" {
 					result = "no result"
 				}
-				fmt.Fprintf(&b, " An older round on this trajectory froze a candidate: %s (assignment %s, reported %s", offer.OlderFrozenCandidateID, offer.OlderFrozenAssignmentID, result)
+				fmt.Fprintf(&b, " An older round on this document froze a candidate: %s (assignment %s, reported %s", offer.OlderFrozenCandidateID, offer.OlderFrozenAssignmentID, result)
 				if offer.OlderFrozenOperationState != "" {
 					fmt.Fprintf(&b, ", its self-development operation %s", offer.OlderFrozenOperationState)
 				}
@@ -850,7 +850,7 @@ func carriedOutcome(offer carriedPatchOffer) string {
 	if offer.SourceReason != "" {
 		reason = "the reason: \"" + offer.SourceReason + "\""
 	}
-	return fmt.Sprintf("assignment %s (attempt %d) finished a candidate on this trajectory, and its self-development operation %s %s; %s.",
+	return fmt.Sprintf("assignment %s (attempt %d) finished a candidate on this document, and its self-development operation %s %s; %s.",
 		offer.SourceAssignmentID, offer.SourceAttempt, offer.SourceOperationID, what, reason)
 }
 
@@ -886,32 +886,56 @@ type storeCarriedHistory struct {
 	lineage func(ctx context.Context, ownerID, computerID, trajectoryID string) ([]string, error)
 }
 
+// CarriedCandidates lists the trajectory's rounds. A trajectory that continues a settled one of the same document (F1,
+// store.ContinueLifecycleDocument) reads that trajectory's rounds too, newest
+// trajectory first: a document outlives its episodes, and the owner's next
+// revise must not start the engineer cold. A failed lineage read is an error,
+// like a failed candidate read.
 func (h storeCarriedHistory) CarriedCandidates(ctx context.Context, ownerID, computerID, trajectoryID string) ([]carriedCandidate, error) {
-	candidates, err := h.rt.store.ListEngineeringSubjectCandidates(ctx, ownerID, computerID, trajectoryID)
+	lineage := h.lineage
+	if lineage == nil {
+		lineage = func(ctx context.Context, ownerID, computerID, trajectoryID string) ([]string, error) {
+			return h.rt.store.LifecycleTrajectoryLineage(ctx, ownerID, computerID, trajectoryID, 0)
+		}
+	}
+	chain, err := lineage(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read the lineage of trajectory %s: %w", trajectoryID, err)
 	}
-	out := make([]carriedCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		assignment, err := h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
-		if err != nil {
-			continue
-		}
-		report, err := h.rt.store.GetEngineeringAssignmentReport(ctx, ownerID, computerID, candidate.SourceReportID)
-		if err != nil {
-			continue
-		}
-		out = append(out, carriedCandidate{
-			CandidateID: candidate.CandidateID, CandidateRef: candidate.ArtifactRef, AssignmentID: candidate.AssignmentID,
-			Attempt: candidate.Attempt, BaseRef: assignment.Binding.SourceArtifactRef, Kind: assignment.Binding.Kind,
-			Result: report.Result, CreatedAt: candidate.CreatedAt,
-		})
+	if len(chain) == 0 {
+		chain = []string{trajectoryID}
 	}
-	if h.rt.carryUnfinishedOn(ctx, ownerID, computerID) {
-		out = mergeUnfinishedRounds(out, readUnfinishedRounds(h.rt.selfdevUpdaterRoot, trajectoryID), trajectoryID,
-			func(assignmentID string, attempt uint64) (types.EngineeringAssignment, error) {
-				return h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	carryUnfinished := h.rt.carryUnfinishedOn(ctx, ownerID, computerID)
+	var out []carriedCandidate
+	for _, member := range chain {
+		candidates, err := h.rt.store.ListEngineeringSubjectCandidates(ctx, ownerID, computerID, member)
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range candidates {
+			assignment, err := h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, candidate.AssignmentID, candidate.Attempt)
+			if err != nil {
+				continue
+			}
+			report, err := h.rt.store.GetEngineeringAssignmentReport(ctx, ownerID, computerID, candidate.SourceReportID)
+			if err != nil {
+				continue
+			}
+			out = append(out, carriedCandidate{
+				CandidateID: candidate.CandidateID, CandidateRef: candidate.ArtifactRef, AssignmentID: candidate.AssignmentID,
+				Attempt: candidate.Attempt, BaseRef: assignment.Binding.SourceArtifactRef, Kind: assignment.Binding.Kind,
+				Result: report.Result, CreatedAt: candidate.CreatedAt,
 			})
+		}
+		if carryUnfinished {
+			out = mergeUnfinishedRounds(out, readUnfinishedRounds(h.rt.selfdevUpdaterRoot, member), member,
+				func(assignmentID string, attempt uint64) (types.EngineeringAssignment, error) {
+					return h.rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+				})
+		}
+	}
+	if out == nil {
+		out = []carriedCandidate{}
 	}
 	var operations carriedOperationReader
 	if h.rt.selfdevOperations != nil {
