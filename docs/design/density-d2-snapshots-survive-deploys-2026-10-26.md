@@ -452,7 +452,8 @@ moves only with the deploy.
   into `meta.LaunchImageTarget`. `validateSnapshot` refuses a legacy meta
   whose `LaunchImageTarget` is set and differs from the `readlink` of
   `VM_GUEST_RELEASE_LINK` now, with the new reason
-  `image_moved_since_launch`. It runs in the same place as R0 to R6. An
+  `image_moved_since_launch`. A link that cannot be read at wake refuses
+  with the same reason (review 313 Devin F4). It runs in the same place as R0 to R6. An
   old meta without the field validates as today. A release-bound meta skips
   it, because its paths cannot move.
 
@@ -588,7 +589,7 @@ Firecracker, kernel and hash checks:
    - `LastReason: "resumed on release <id>"`.
 
    The hook goes into `OwnershipRegistry.resumeFromSnapshot`
-   (ownership.go:1664-1689) as a callback set from `cmd/vmctl/main.go`
+   (ownership.go:1670) as a callback set from `cmd/vmctl/main.go`
    next to `SetDeployRefreshPendingPath` (:264), so the registry does not
    import the handler. Enrolling a computer that is not behind costs one
    sweep pass: step 3 forgets it.
@@ -720,7 +721,7 @@ the floor, and decides what a guest may do, read or reach:
 | the desk runtime | `internal/agentcore/`, `internal/actorruntime/`, `internal/actor/`, `internal/deskworker/`, `cmd/desk-worker/`, `internal/toolregistry/` |
 | guest credentials and host-guest authentication | `internal/hostauth/`, `internal/dbcred/`, `internal/keyescrow/` |
 | grants and authority | `internal/capfloor/`, `internal/eventtablegrant/`, `internal/owneract/` |
-| self-development and capsule transactions | `internal/selfdev/`, `internal/selfdevprotocol/`, `internal/capsule/transaction/` |
+| self-development | `internal/selfdev/`, `internal/selfdevprotocol/` |
 | guest egress | `internal/hostfetch/`, `internal/gatewayruntime/` |
 
 These are the packages that `cmd/autoputer` and `cmd/desk-worker` import
@@ -729,6 +730,14 @@ the ones with an authority, credential, egress or mutation role. Paths
 excluded from matching everywhere: `*_test.go`, `*/testdata/*`, `*.md`.
 A new guest package with such a role is added to the file in the commit
 that creates it; review asks the question.
+
+`internal/capsule/transaction/` is **not** a surface (review 313 Devin
+F1). The floor commands import `internal/capsule`, so the floor list names
+that directory, and the floor fileset takes a directory with everything
+under it. A change to `transaction/` therefore already moves the floor
+digest, and every older release-bound snapshot refuses (R3) without any
+epoch raise. Listing it as a surface as well would break rule 5 on the
+designed lists themselves.
 
 **The script.** `scripts/check-guest-security-epoch [--base REF] [--head REF]`,
 in the style of `scripts/check-store-schema-floor.sh` (same `ensure_base`
@@ -759,9 +768,33 @@ fetch-and-retry, same fail-closed rules). It reads the diff like this:
    `<seat>` is one of `devin`, `deepseek`, `owner`. `<ref>` matches
    `review [0-9]+` or `owner [0-9]{4}-[0-9]{2}-[0-9]{2}`. A trailer in a
    later commit does not cover an earlier one: "the same change".
-5. **Sanity.** The surfaces file must exist and must not share a prefix
-   with `nix/guest-floor-paths.txt` (a surface is outside the floor by
-   definition; the floor moves by itself).
+5. **Sanity.** The surfaces file must exist, and no surface prefix may
+   be equal to, contain, or lie under a path in `nix/guest-floor-paths.txt`
+   (a surface is outside the floor by definition; the floor moves by
+   itself). Containment counts in both directions, because the floor
+   fileset includes subdirectories.
+6. **The gate protects itself** (review 313 Devin F2). The surfaces list
+   is declared, not derived, so a change that narrows the gate in the same
+   range as surface code would otherwise pass. Three rules close that:
+   - **Gate files need the trailers, always.** A commit that touches any
+     of `nix/guest-security-surfaces.txt`,
+     `scripts/check-guest-security-epoch`,
+     `scripts/selftest-guest-security-epoch`,
+     `.github/scripts/deploy-base-select` (it chooses the base), or whose
+     `.github/workflows/ci.yml` diff adds or removes a line containing
+     `check-guest-security-epoch` or `plan.outputs.base`, must carry both
+     trailers, with `Security-Effect: gate change; <why>`. An epoch raise
+     does not excuse it: a raise answers a fix, not a weaker gate.
+   - **The list is read at both ends.** Matching uses the **union** of the
+     surfaces file at the base and at the head. Removing a prefix
+     therefore takes effect only for ranges whose base already lacks it,
+     that is, after the removal has deployed under the trailers above.
+   - **The script is run from both ends.** CI runs
+     `git show <base>:scripts/check-guest-security-epoch` (when the base
+     has it) as well as the head's copy, and both must pass. An edit that
+     neuters the head's script still meets the base's. The base's copy
+     also checks that the head's `ci.yml` still invokes the check in the
+     `v1-inventory` job, and fails if it does not.
 
 **How it fails.** Exit 1, and one line per uncovered commit:
 `guest-security-epoch: FAIL <sha12> "<subject>" touches <paths>`, then the
@@ -770,8 +803,9 @@ after its review, or raise `security_epoch` in it. After it is on main: a
 follow-up commit that raises `security_epoch` (it covers the whole range
 from the deployed base, rule 4). Trailers cannot be added to a pushed
 commit. It also fails, with the cause named, when the base cannot be read
-after the fetch retry, when the policy file does not parse, and when the
-surfaces file is missing.
+after the fetch retry, when the policy file does not parse, when the
+surfaces file is missing, and when a gate file changed without its
+trailers (rule 6).
 
 **Where it runs, and which base.**
 - **CI:** a step in the `v1-inventory` job (Vocabulary Gates,
@@ -806,6 +840,10 @@ the remaining way for an unflagged fix to reach a resumed computer, and it
 is bounded by §6.7. The review prompt for a change that touches a
 surface asks the seat to answer "security effect: none, or raise the
 epoch" explicitly (S1c adds the line to the code-review prompt template).
+Rule 6 protects the gate's own files, but it cannot stop a change to the
+CI runner itself, to branch protection, or a push that skips CI; those are
+outside the repo's reach, as they are for every other check in
+`v1-inventory`.
 
 **Cost, measured.** In the 7 days to 2026-10-26, 220 of 887 non-doc
 commits on origin/main (25%) touched these prefixes outside tests, 156 of
@@ -955,8 +993,13 @@ both trailers passes; a trailer with an unknown seat or a malformed ref
 fails; a trailer in a later commit does not cover an earlier one; a raise
 anywhere in the range passes the range; a fall fails even with trailers; a
 `_test.go`-only change passes; an unreadable base fails; an unparsable
-policy file fails; a prefix shared with the floor list fails; a merge
-commit is skipped.
+policy file fails; a prefix equal to, containing or under a floor path
+fails, and the real lists pass; a merge commit is skipped. Gate cases
+(rule 6): a commit that removes a prefix and changes code under it in the
+same range fails without the gate trailer, because the base's list still
+names the prefix; a gate-file change with only an epoch raise fails; a
+head script edited to always pass still fails against the base's copy; a
+`ci.yml` that drops the step fails.
 
 **Rollback:** remove the CI step. Nothing at runtime depends on it.
 
@@ -1402,3 +1445,14 @@ was not.
 | 9, deliverable shape | goal file docs/definitions/choir-density-2026-10-26.md:331-345 | **Accepted.** The fp10 doc gains a short "L20 revised 2026-10-26" section that points here, so there is one authority and the deliverable the goal file named exists. |
 | "Worth it?", gate S6 on the deploy-level number | — | **Accepted.** S6 gate 2 (§7) and the R9 method and threshold (§10). A proxy read today puts the share at 61% with the revised floor, 37% if every surface change took a raise. |
 | Risk, embeds and generated files | `//go:embed` cannot leave the package directory | **Answered**: whole package directories are listed (§3.1). |
+
+**Re-review 313** (Devin, one seat: approves; S1 to S5 may be built; S6's
+gate is concrete) required two amendments inside §6.6, both made:
+
+| Finding | Answer |
+|---|---|
+| F1, `internal/capsule/transaction/` collides with the floor | **Accepted.** Dropped from the surfaces; the floor's whole `internal/capsule` directory already covers it. Rule 5 now states containment in both directions (§6.6). |
+| F2, the gate is not self-protected | **Accepted.** Rule 6: gate files always need the trailers, an epoch raise does not excuse them; surfaces are matched against the union of base and head lists; the check runs from both the base's and the head's script, and the base's copy verifies the CI step still exists (§6.6, S1c tests). |
+| F3, `internal/texturewrite/` is a missing surface | **Not taken in this round**, left to FP0: Texture canonical writes are a red surface for integrity, and whether that is a guest security surface for the epoch is a scope call. Adding it is one line in the surfaces file and costs trailers. |
+| F4, unreadable link at wake | **Accepted.** It refuses `image_moved_since_launch` (§4.4). |
+| F5, citation drift | `resumeFromSnapshot` corrected to ownership.go:1670. The other two cite this tree correctly (`mark_guest_boot_contract` at deploy-impact-classify:89, `markPlannedRestart` at planned_restart.go:317), so they stay. |
