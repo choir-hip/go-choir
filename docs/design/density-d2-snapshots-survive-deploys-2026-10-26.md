@@ -1589,3 +1589,34 @@ with what the build did and what FP0 should rule.
     - *Not changed:* the jailed launch path has no test of its own (the record
       is written before the confinement branch, which the direct-launch test
       exercises); legacy metas still validate as before, as designed.
+15. **S2: "vmctl does not answer".** §4.6 says delete nothing; the S2 test list
+    says "connection refused: only out-of-support is deleted". They disagree.
+    Built as the prose (delete nothing, also on 5xx and an unparsable 200): the
+    script cannot know what runs, and M1 says a running release is never
+    deleted by any rule. `complete:false` deletes only past-window releases
+    that the answer does not list as running, as written.
+16. **S2: the activation snippet runs only while `snapshotReleaseRetain` is
+    on** (the `[ -n "$retain" ]` line of §4.1's sketch became the Nix
+    condition), and is a script (`scripts/node-b-guest-release-materialize`)
+    the snippet calls, so it is testable. `GO_CHOIR_RELEASE_REFLINK=auto` is a
+    test-only escape; the default is `always`.
+17. **S3: `ResumeVM` (a stop, then start from the stored config) and
+    `RecoverVMWithConfig` also launch from stored config.** The design named
+    `BootVM`, `RefreshVM` and recover; a cold `ResumeVM` was not named. Both now
+    re-choose artifacts and kernel parameters (`refreshLaunchArtifacts`, review
+    318 DeepSeek 2).
+18. **S3: `VMInstanceInfo.Behind` is the resume receipt; health recomputes it
+    live** from the current release. A `ReattachVMWithConfig` full-process test
+    needs `/proc` and was not run on the worker host; its config half is
+    `reattachConfig`, tested directly.
+19. **S4: the sweep compares the running VM's release (from the manager),
+    not the entry's `Release`, with the current release.** An entry for a
+    computer that already has a deploy entry is not overwritten. `guestReleaseReader`
+    gained `CurrentGuestReleaseInfo`.
+20. **S5: the host guard sits in `hibernateVMForDesktopWithReason`,** the one
+    function the idle sweep, make-room, pressure reclaim and the operator all
+    call, and answers `errHibernateGuestBusy` (a skip, never the kill path). An
+    unparsable planned-restart marker counts as pending by its file time.
+21. **S5: an unreadable `/proc/cpuinfo` at hibernate leaves `HostCPU` empty,**
+    and a release-bound snapshot then refuses at wake (`host_cpu_unknown`); the
+    hibernate still frees the memory. Test fixtures stub the reader.
