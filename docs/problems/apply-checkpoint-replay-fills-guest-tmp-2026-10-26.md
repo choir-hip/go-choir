@@ -426,3 +426,34 @@ non-derivable row yields a checkpoint that publishes and is refused at restore;
 restore still fails closed (`WitnessContentMatches`), and slice 2 moves the
 proof to the host, where `not_derivable` becomes visible before a route
 promotion.
+
+## Review 315 (2026-10-26): findings on slice 1b and what the next commit does
+
+Two seats reviewed slice 1b (`ac6dcce04`). DeepSeek: changes required (one High);
+Devin: a Medium on the same mechanism.
+
+1. High: the platform settlement spent its attempt before
+   `commitPlatformUpdateApplied`, which appends the applied event and then drives
+   the tail. Two failed appends after a journaled `applied` (a store refusing
+   appends while it replays, the b@c environment) spent the bound with the applied
+   event never committed; the transition stayed pending and
+   `ApplyPlatformUpdate` then refused every later offer, security updates
+   included. Fix: the commit is split. The applied event is recorded first,
+   outside the bound (it is O(1) and the journal says what happened); the spend
+   gates only the tail.
+2. Medium: a spent bound left the held state only in a log line. Fix: at
+   spend-out (or with no durable count) one idempotent `recovery_recorded`
+   event names the update and the cause. It is not `materialization_failed`: the
+   release is live and a failed event would falsify the tape. Not
+   `lifecycle_observed`: it carries a receipt join the event cannot satisfy.
+3. Low: the stranded path spent before checking the pinned offer's realization
+   and expiry, which `ApplyPlatformUpdate` refuses before the tail; it now
+   checks first. The degraded close routes every pre-materializing state
+   (`awaiting_approval`, `accepted`) to `failed`.
+
+Found while fixing, not fixed: `ApplyPlatformUpdate` validates the offer's
+5-minute expiry before it reaches the applied-event branch, so a stranded tail
+older than the offer's expiry is refused by the crash-boot re-drive whatever the
+bound says; nothing finishes it except the next signed update superseding it. The
+held event now makes that visible only once the bound is spent; an expired strand
+logs and writes nothing. Recorded for the redesign of the tail (slice 2).
