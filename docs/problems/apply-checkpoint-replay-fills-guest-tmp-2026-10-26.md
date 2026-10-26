@@ -60,3 +60,43 @@ the same limit. Not yet traced whether platform_update runs on the paper today.
 2. Incremental witness: replay only from the newest pinned replay base
    (c374be0f9 pins replay bases) instead of from genesis.
 3. Clean the scratch at boot (stale choir-replay-completeness-* roots).
+
+## Addendum 12:3x: the crash boot repeats it (a crash loop)
+
+b@c was restarted at 11:50 (epoch 40). At 11:58:21 its runtime died the same
+way: `fatal error: write /tmp/choir-replay-completeness-1700721818/...: no
+space left on device`. vmctl stopped it as wedged at 12:07:24
+(console.log lines 3437 to 3571; vmctl journal 12:05 to 12:07).
+
+The boot path that ran the replay is the crash settlement, not a new apply:
+
+```text
+triggerSelfDevelopmentReconcile -> selfdevReconcileDrain
+ -> reconcileSelfDevelopmentMaterialization (self_development_materializer.go:233)
+ -> settleSelfDevelopmentOperationAfterCrash (:182)
+ -> materializeSelfDevelopmentOperation (:481)
+ -> recordMaterializationApplied (:683)
+ -> bindCheckpointAtHead (checkpoint_restore_bindings.go:54)
+ -> openReplayProbe (replay_completeness.go:318) -> ReconstructThroughTarget
+```
+
+The boot log at 11:50 correctly said the apply is "interrupted; settles from the
+updater journal, never re-applied". But settling from the journal records the
+materialization as applied, and that recording binds a checkpoint at head,
+which replays the whole tape (about 57k events by 11:58) into /tmp. So every
+boot of b@c re-runs the step that killed it, about eight minutes in. It is a
+crash loop under the restart rule's letter: no work is resumed, but a boot-time
+settlement repeats an unbounded step. The updater's own overlay probe then
+fails too (`/tmp/choir-overlay-probe-*: no space left on device`), so /tmp is
+shared between the runtime's scratch and the updater's probes.
+
+Consequences:
+
+- b@c must stay stopped until the fix covers the crash-settlement path; a
+  restart reproduces the crash.
+- The fix must bound the replay's disk (or move the checkpoint bind off the
+  apply-recording path) AND make the crash settlement idempotent with a
+  bounded cost. A settlement that crashes the computer twice should close the
+  operation with that cause, as the restart rule closes a schedule whose tick
+  crashes twice.
+- selfdev-83fbdfa9 stays `materializing` until a boot settles it.
