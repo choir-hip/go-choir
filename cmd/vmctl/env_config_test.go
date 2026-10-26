@@ -103,3 +103,22 @@ func TestAdmissionNeedEnv(t *testing.T) {
 		t.Fatalf("unknown need = %q, want peak", a.NeedMode)
 	}
 }
+
+// Density D3a: the shorter idle timer applies only to guests that report
+// live_capsules; the rest keep the legacy rule, 30 minutes unless
+// VMCTL_IDLE_TIMEOUT_LEGACY_GUEST says otherwise. Ways it could fail: the
+// default is not 30m (so lowering VMCTL_IDLE_TIMEOUT silently lowers it for
+// every guest); a malformed value zeroes it.
+func TestLegacyGuestIdleTimeoutEnv(t *testing.T) {
+	if d := legacyGuestIdleTimeoutFromEnv(); d != 30*time.Minute {
+		t.Fatalf("legacy guest idle default = %s, want 30m", d)
+	}
+	t.Setenv("VMCTL_IDLE_TIMEOUT_LEGACY_GUEST", "45m")
+	if d := legacyGuestIdleTimeoutFromEnv(); d != 45*time.Minute {
+		t.Fatalf("legacy guest idle = %s, want 45m", d)
+	}
+	t.Setenv("VMCTL_IDLE_TIMEOUT_LEGACY_GUEST", "soon")
+	if d := legacyGuestIdleTimeoutFromEnv(); d != 30*time.Minute {
+		t.Fatalf("malformed legacy guest idle = %s, want the 30m default", d)
+	}
+}
