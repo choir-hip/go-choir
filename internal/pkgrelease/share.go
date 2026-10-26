@@ -29,6 +29,9 @@ const (
 	ReasonListingState = "listing_state_refused"
 	// ReasonListingMoved: another act wrote the listing's next version first.
 	ReasonListingMoved = "listing_moved"
+	// ReasonOwnerActReplayed: the act's receipt already wrote a version of
+	// this listing; a receipt acts once (review 291 F4).
+	ReasonOwnerActReplayed = "owner_act_replayed"
 )
 
 func (l Listing) hasScope(scope string) bool {

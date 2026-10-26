@@ -325,9 +325,9 @@ func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
 // Library S3 (design 17 S3): the share gate is the guest's rollout switch,
 // as packages.publish is for the draft. Failure modes pinned:
 //
-//	G6   with packages.share off (the default) the gate answers yes, so a
-//	     share, withdraw or reinstate act reaches corpusd from a stock
-//	     computer; the gate writes;
+//	G6   the gate answers yes with packages.share off (the default), so a
+//	     share, withdraw or reinstate act would reach corpusd from a stock
+//	     computer; or the gate writes. Off must refuse packages_share_off;
 //	N1   (S2 residual bunch279-N1) a store or ref read failure while
 //	     drafting answers 409, as if it were a conflict; it is 503.
 func TestPackageShareGateNeedsTheSetting(t *testing.T) {
