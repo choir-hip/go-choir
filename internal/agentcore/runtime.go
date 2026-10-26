@@ -1287,6 +1287,7 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 	rt.emitEvent(ctx, rec, types.EventRunStarted, events.CauseTaskLifecycle, json.RawMessage(`{"route":"server_content_reference"}`))
 	completedPayload, _ := json.Marshal(map[string]any{"route": "server_content_reference", "decision": decision})
 	rt.emitEvent(ctx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, completedPayload)
+	rt.settleRunRootTrajectory(ctx, rec)
 	return rec, nil
 }
 
@@ -3948,6 +3949,7 @@ func (rt *Runtime) afterRunCompleted(persistCtx context.Context, rec *types.RunR
 		}
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
+	rt.settleRunRootTrajectory(persistCtx, rec)
 	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 	rt.recheckRecordsInbox(persistCtx, rec)
 }
@@ -4184,6 +4186,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
+	rt.settleRunRootTrajectory(persistCtx, rec)
 	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 	rt.recheckRecordsInbox(persistCtx, rec)
 
