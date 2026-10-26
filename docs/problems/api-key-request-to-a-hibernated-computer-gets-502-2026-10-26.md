@@ -44,7 +44,77 @@ Option 1 keeps the authority rule the code states and is the conservative
 default; option 2 is what density wants. Either is orange (proxy behavior),
 tier 1.
 
+## Decision (owner, 2026-10-26, in session)
+
+The owner asked: "Why can't we wake a hibernated computer?" and wants a bearer
+request to wake its computer. This chooses option 3 below, narrowed: a bearer
+request wakes the exact computer its ownership join named, not any other.
+
+### FP0's reading of fbc7ff5a0
+
+The no-wake rule came from fbc7ff5a0 (2026-08-09, "security: bind API keys to
+exact owned computers"). Its real invariant is that a bearer request never
+re-resolves to a different realization than the exact (UserID, ComputerID)
+ownership join it authorized. The cookie path resolves by (user, desktop), so
+a replaced or remapped desktop could send a bearer request to a computer the
+key was never bound to. That is what the commit forbade. The no-wake was a
+side effect of the implementation ("serve only the joined active URL"), not
+the invariant.
+
+### Chosen behaviour
+
+On a bearer request whose joined computer is `hibernated` or `stopped`:
+
+1. wake that exact computer through the path the explicit `computer start`
+   route uses (`vmctl.ResolveDesktopContext` for the joined (UserID,
+   DesktopID)), so vmctl admission and D1's make-room apply; no new wake
+   mechanism;
+2. wait for it boundedly (the existing `vmctlOpContext` bound, 60 s by
+   default), concurrent requests for one (UserID, ComputerID) sharing one wake;
+3. re-run the exact ownership join (`LookupComputerContext(UserID,
+   ComputerID)`) against the realized computer and require the same
+   ComputerID, UserID, DesktopID, kind and an `active` state with a URL; any
+   mismatch refuses;
+4. serve the request from the re-joined realization.
+
+A wake that is refused (admission, recovery refusal), times out, or lands on a
+mismatching realization answers `503` with
+`{"error":"computer_waking_failed","state":"<state before the wake>","cause":"..."}`
+(plus `Retry-After`), never the opaque 502. A state that cannot be woken by a
+request (`booting`, `stopping`, `degraded`, `failed`) gets the same 503 body
+naming that state. No feature switch; rollback is a git revert.
+
+Routes that mutate the guest as an owner act (`restore`, `replace-workspace`,
+`rematerialize-from-tape`, `import-residue-snapshot`, `bootstrap-chain`) keep
+the strict "active only" rule: the cookie path does not wake for them either
+(rematerialize falls to cold recovery), and a wake is not part of what the
+owner authorized there.
+
+## Failure modes
+
+- The wake resolves a different computer (desktop remapped or replaced between
+  the join and the wake): the post-wake join compares ComputerID, UserID,
+  DesktopID and kind; mismatch refuses with 503, and the request is never sent.
+- A key bound to computer X can never wake Y: the wake target is the joined
+  `target`, whose ComputerID is checked against the key's binding before and
+  after; an owner-wide key must still name its target before any lookup.
+- Admission refuses the wake (no room): 503 with the cause, no storm of
+  retries inside the proxy.
+- Wake exceeds the bound: 503 naming the timeout; the vmctl wake continues, so
+  a retry shortly after is served.
+- Wake storm: concurrent bearer requests for one computer share one in-flight
+  wake (singleflight keyed by user and computer); a waiter whose request is
+  cancelled leaves without cancelling the wake.
+- An owner-stopped computer is restarted by the next bearer request: the same
+  as a cookie request; recorded as a consequence, not a defect.
+- A cause string must not leak vmctl addresses or credentials: causes are
+  classified (timeout, vmctl-authored refusal text, unreachable, mismatch).
+- `run start` (POST /api/prompt-bar) goes through `resolveComputerURLForComputerTarget`
+  (handlers.go), so it wakes by the same path; its old text "failed to resolve
+  user autoputer" came from `writeResolveError`.
+
 ## Status
 
-Recorded; not yet fixed. Successor: the density station D (this is D3's
-client-side consequence).
+Decided 2026-10-26; implemented on lane/bearer-wake (red: proxy to vmctl
+lifecycle). Successor: the density station D (this is D3's client-side
+consequence).
