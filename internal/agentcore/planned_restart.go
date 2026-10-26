@@ -294,23 +294,69 @@ func spendGuestAttempt(storePath, reason, target string, limit int) error {
 	if path == "" {
 		return nil
 	}
-	counts := map[string]int{}
-	raw, err := os.ReadFile(path)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-	case err != nil:
-		return fmt.Errorf("guest apply attempts: read: %w", err)
-	default:
-		if err := json.Unmarshal(raw, &counts); err != nil {
-			return fmt.Errorf("guest apply attempts: decode: %w", err)
-		}
+	counts, err := readGuestAttempts(path)
+	if err != nil {
+		return err
 	}
 	key := reason + " " + target
 	if counts[key] >= limit {
 		return fmt.Errorf("%w (%s %s, %d starts)", ErrGuestApplyAttemptsSpent, reason, target, counts[key])
 	}
 	counts[key]++
-	raw, err = json.Marshal(counts)
+	return writeGuestAttempts(path, counts)
+}
+
+// peekGuestAttempts reads how many starts of reason and target are counted
+// without spending one.
+func peekGuestAttempts(storePath, reason, target string) (int, error) {
+	path := GuestApplyAttemptsPath(storePath)
+	if path == "" {
+		return 0, nil
+	}
+	counts, err := readGuestAttempts(path)
+	if err != nil {
+		return 0, err
+	}
+	return counts[reason+" "+target], nil
+}
+
+// clearGuestAttempt forgets the counted starts of reason and target: the
+// start finished (it returned, so it did not crash the guest), or the owner
+// reopened a closed cadence.
+func clearGuestAttempt(storePath, reason, target string) error {
+	path := GuestApplyAttemptsPath(storePath)
+	if path == "" {
+		return nil
+	}
+	counts, err := readGuestAttempts(path)
+	if err != nil {
+		return err
+	}
+	key := reason + " " + target
+	if _, counted := counts[key]; !counted {
+		return nil
+	}
+	delete(counts, key)
+	return writeGuestAttempts(path, counts)
+}
+
+func readGuestAttempts(path string) (map[string]int, error) {
+	counts := map[string]int{}
+	raw, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return nil, fmt.Errorf("guest apply attempts: read: %w", err)
+	default:
+		if err := json.Unmarshal(raw, &counts); err != nil {
+			return nil, fmt.Errorf("guest apply attempts: decode: %w", err)
+		}
+	}
+	return counts, nil
+}
+
+func writeGuestAttempts(path string, counts map[string]int) error {
+	raw, err := json.Marshal(counts)
 	if err != nil {
 		return fmt.Errorf("guest apply attempts: encode: %w", err)
 	}

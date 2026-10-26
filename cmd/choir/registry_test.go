@@ -47,9 +47,9 @@ import (
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
-	"computer restore", "help", "mcp",
+	"computer restore",
 	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
-	"computer resume-checkpoints",
+	"computer resume-checkpoints", "help", "mcp",
 	// Owner acts (Library S2, S3): publishing a package release, and
 	// sharing, withdrawing or reinstating it.
 	"package publish", "package reinstate", "package share", "package withdraw",

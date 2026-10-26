@@ -1004,6 +1004,10 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// poisons wakes); its first pass is one interval after boot.
 	rt.startSourceScheduleSweep(ctx)
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
+	// Automatic checkpoints: a standing intent whose ticks are new work. It
+	// binds nothing before its initial delay, and counts from the platform's
+	// newest checkpoint (checkpoint_cadence.go).
+	rt.startCheckpointCadence(ctx)
 	// U1: the guest source repository follows the effective release. Spawned,
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository.
@@ -1084,6 +1088,7 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
+	rt.stopCheckpointCadence()
 	rt.stopProjector()
 	rt.stopSourceScheduleSweep()
 	rt.stopEventLayer()

@@ -634,9 +634,10 @@ func runTextureWatch(args []string, stdout, stderr io.Writer) int {
 // ---- computer ----
 
 // extractCheckpointArtifact accepts the restore operand in any of the product
-// envelopes: a Checkpoint, a CheckpointResponse, or a checkpoint bind report
-// with published_checkpoint.checkpoint. choir computer checkpoint writes the
-// bind report; restore/rematerialize consume the nested Checkpoint without jq.
+// envelopes: a Checkpoint, a CheckpointResponse (what choir computer
+// checkpoints --digest prints), or an old checkpoint bind report with
+// published_checkpoint.checkpoint. restore/rematerialize consume the nested
+// Checkpoint without jq.
 func extractCheckpointArtifact(raw []byte) (json.RawMessage, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &top); err != nil {

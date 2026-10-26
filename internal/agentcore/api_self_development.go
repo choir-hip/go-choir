@@ -117,9 +117,15 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		h.restoreComputer(w, r, computerID)
 		return
 	}
-	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "checkpoint" {
-		extendReplayCompletenessGuestWriteDeadline(w)
-		h.bindComputerCheckpoint(w, r, computerID)
+	// Checkpoints are bound automatically (checkpoint_cadence.go); the manual
+	// bind route is gone. What remains is the read of what was bound and the
+	// owner act that reopens a closed cadence.
+	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "checkpoints" {
+		h.listComputerCheckpoints(w, r, computerID)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "resume-checkpoints" {
+		h.resumeCheckpointCadence(w, r, computerID)
 		return
 	}
 	if len(parts) == 3 && parts[1] == "lifecycle" && parts[2] == "import-residue-snapshot" {
