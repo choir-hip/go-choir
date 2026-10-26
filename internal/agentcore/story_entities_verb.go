@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -120,6 +121,13 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	req, err := yaegikernel.ValidateRelate(req)
 	if err != nil {
 		return nil, err
+	}
+	if req.Story == yaegikernel.RelateOwnStory {
+		doc, err := rt.researchDeskDoc(ctx, exec, owner, computer)
+		if err != nil {
+			return nil, err
+		}
+		req.Story = types.StoryPublicationID(owner, doc)
 	}
 
 	// relationMu covers the tape read, the platform's check and the record,
@@ -243,6 +251,25 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		result.Exported = true
 	}
 	return json.Marshal(result)
+}
+
+// researchDeskDoc is the doc a research desk is bound to: its agent id is
+// research:<doc> (the inbox id the desks use) and the doc is a lifecycle
+// document of the owner on this computer. A desk bound to no doc has no own
+// story to name.
+func (rt *Runtime) researchDeskDoc(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer string) (string, error) {
+	doc, ok := strings.CutPrefix(strings.TrimSpace(exec.AgentID), yaegikernel.SessionRoleResearch+":")
+	doc = strings.TrimSpace(doc)
+	if !ok || doc == "" {
+		return "", fmt.Errorf("choir.Relate: this research desk is bound to no story, so it has no own story to name; name the story's publication_id")
+	}
+	if _, err := rt.store.GetLifecycleDocument(ctx, owner, computer, doc); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return "", fmt.Errorf("choir.Relate: this research desk is bound to no story on this computer (no document %q), so it has no own story to name; name the story's publication_id", doc)
+		}
+		return "", fmt.Errorf("choir.Relate: read the desk's story: %w", err)
+	}
+	return doc, nil
 }
 
 // entityAttachmentKey keys the latest recorded role of an entity in a story.
