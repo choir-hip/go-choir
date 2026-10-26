@@ -589,22 +589,8 @@ func (o *ObjectGraphStore) ListObjectsByMetadataPage(ctx context.Context, kind, 
 	}
 	done := o.store.retrievalTimer(retrievalListByMetadata)
 	defer func() { done("json_page", len(out), err) }()
-	where := `object_kind = ?`
-	args := []any{kind}
-	if jsonPath != "" {
-		where += ` AND ` + metadataJSONEq
-		args = append(args, jsonPath, value)
-	}
-	if ownerID != "" {
-		where += ` AND owner_id = ?`
-		args = append(args, ownerID)
-	}
-	rows, err := o.store.corpus().QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE `+where+` AND canonical_id > ?
-		 ORDER BY canonical_id ASC LIMIT ?`,
-		append(args, afterCanonicalID, objectgraph.NormalizedLimit(limit))...)
+	query, args := metadataPageSQL(kind, jsonPath, value, ownerID, afterCanonicalID, limit)
+	rows, err := o.store.corpus().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("platform objectgraph: list by metadata page: %w", err)
 	}
@@ -622,14 +608,105 @@ func (o *ObjectGraphStore) ListObjectsByMetadataPage(ctx context.Context, kind, 
 	return out, rows.Err()
 }
 
+// metadataPageSQL is ListObjectsByMetadataPage's query. With an owner it
+// reads through idx_og_objects_kind_owner, so its work is bounded by that
+// owner's objects of the kind (the plan test pins it); without one it is a
+// scan of the kind, which no request path runs (the cross-owner reads go
+// through ListKeyedObjectsPage).
+func metadataPageSQL(kind, jsonPath, value, ownerID, afterCanonicalID string, limit int) (string, []any) {
+	where := `object_kind = ?`
+	args := []any{kind}
+	if jsonPath != "" {
+		where += ` AND ` + metadataJSONEq
+		args = append(args, jsonPath, value)
+	}
+	if ownerID != "" {
+		where += ` AND owner_id = ?`
+		args = append(args, ownerID)
+	}
+	return `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE ` + where + ` AND canonical_id > ?
+		 ORDER BY canonical_id ASC LIMIT ?`, append(args, afterCanonicalID, objectgraph.NormalizedLimit(limit))
+}
+
 // lookupKeyPageSQL is one keyset page of a registered lookup key, in its
-// primary key's order (object_kind, lookup_key, canonical_id). Not built.
+// primary key's order (object_kind, lookup_key, canonical_id): the engine
+// seeks the key and reads limit index entries in order, with no sort. The
+// plan test explains this text.
 const lookupKeyPageSQL = `SELECT canonical_id FROM og_lookup_keys WHERE object_kind = ? AND lookup_key = ? AND canonical_id > ? ORDER BY object_kind ASC, lookup_key ASC, canonical_id ASC LIMIT ?`
 
-// ListKeyedObjectsPage pages the objects a registered lookup key names.
-// Not built.
-func (o *ObjectGraphStore) ListKeyedObjectsPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) ([]objectgraph.Object, string, error) {
-	return nil, "", fmt.Errorf("not built")
+// errLookupKeysNotLive: the lookup keys are not backfilled yet, so a keyed
+// read cannot answer; the caller fails narrow rather than scan.
+var errLookupKeysNotLive = errors.New("platform objectgraph: lookup keys are not live yet")
+
+// LookupKeysLive reports whether every registered object has its key row.
+func (o *ObjectGraphStore) LookupKeysLive() bool {
+	return o != nil && o.store != nil && o.store.retrievalState.lookupKeyLive.Load()
+}
+
+// ListKeyedObjectsPage is one page of the objects whose registered lookup
+// key (kind, jsonPath) is value, in canonical id order strictly after
+// afterCanonicalID: a primary-key page of og_lookup_keys, then the named
+// rows by primary key, with the JSON comparison as the deciding filter (a
+// truncated key never changes an answer). next is the page's last key id,
+// to pass as the next cursor; it is "" when the page is empty, which is
+// the end. It refuses an unregistered pair, and errLookupKeysNotLive
+// before the backfill switched the keys on: it never falls back to a
+// scan (review 291 F1).
+func (o *ObjectGraphStore) ListKeyedObjectsPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) (out []objectgraph.Object, next string, err error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, "", fmt.Errorf("platform objectgraph: nil store")
+	}
+	if !lookupKeyFor(kind, jsonPath) {
+		return nil, "", fmt.Errorf("platform objectgraph: (%s, %s) is not a registered lookup key", kind, jsonPath)
+	}
+	if !o.LookupKeysLive() {
+		return nil, "", errLookupKeysNotLive
+	}
+	done := o.store.retrievalTimer(retrievalListByMetadata)
+	defer func() { done("lookup_key_page", len(out), err) }()
+	rows, err := o.store.corpus().QueryContext(ctx, lookupKeyPageSQL, kind, lookupKeyValue(value), afterCanonicalID, objectgraph.NormalizedLimit(limit))
+	if err != nil {
+		return nil, "", fmt.Errorf("platform objectgraph: lookup key page: %w", err)
+	}
+	var ids []any
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, "", fmt.Errorf("platform objectgraph: lookup key page: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil || len(ids) == 0 {
+		return nil, "", err
+	}
+	next = ids[len(ids)-1].(string)
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
+	objects, err := o.store.corpus().QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE canonical_id IN (`+placeholders+`) AND object_kind = ? AND `+metadataJSONEq+`
+		 ORDER BY canonical_id ASC`,
+		append(ids, kind, jsonPath, value)...)
+	if err != nil {
+		return nil, "", fmt.Errorf("platform objectgraph: keyed objects: %w", err)
+	}
+	defer objects.Close()
+	for objects.Next() {
+		obj, bodyRef, err := scanObjectGraphObject(objects)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
+			return nil, "", err
+		}
+		out = append(out, obj)
+	}
+	return out, next, objects.Err()
 }
 
 // GetEdge finds a single edge by from_id + kind.

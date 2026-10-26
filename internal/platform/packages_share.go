@@ -180,15 +180,31 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
 	}
-	listings, _, err := h.trackListings(ctx, ownerID, record.Package.Name)
+	chains, _, err := h.trackChains(ctx, ownerID, record.Package.Name)
 	if err != nil {
 		writeListingsError(w, err)
 		return
+	}
+	listings := map[string]pkgrelease.Listing{}
+	for id, chain := range chains {
+		listings[id] = chain[len(chain)-1]
 	}
 	current, ok := listings[releaseID]
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
+	}
+	// A receipt acts once (review 291 F4): one that already wrote a version
+	// of this listing is a replay, for instance of a widen after the owner
+	// narrowed. A refused act writes nothing, so it spends nothing.
+	if actor != "owner_act:unverified" {
+		for _, version := range chains[releaseID] {
+			if version.StateActor == actor {
+				writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonOwnerActReplayed, Detail: fmt.Sprintf(
+					"this owner-act receipt already wrote version %d of the listing; each act is a new receipt", version.Version)})
+				return
+			}
+		}
 	}
 	if current.State == pkgrelease.StateYanked {
 		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonListingState, Detail: "the release is yanked by the security authority; no owner act changes its listing"})
@@ -230,10 +246,10 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 				writePackageJSON(w, http.StatusConflict, PackageListingRefusal{Error: reason + ": " + detail, Reason: reason, Preview: preview})
 				return
 			}
-			next.StateReason = reasonOr(change.Reason, "shared")
-		default:
-			next.StateReason = reasonOr(change.Reason, "narrowed")
 		}
+		// A scope change keeps the state and its reason: state_reason says
+		// why the release is in its state (review 291 F5); the act's own
+		// record is its state_actor receipt.
 	} else {
 		switch {
 		case current.State == change.State:
