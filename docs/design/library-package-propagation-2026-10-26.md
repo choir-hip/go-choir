@@ -466,8 +466,10 @@ S1 is built on `lane/lib-s1` (`38910e5de`, revised in `5200659a2` and
   (`proxy/releases.go` serves only the list and single reads), and
   `objectgraph.ListFilter.OwnerID` already exists.
 - **A named transitional break.** Under `owner`, the P8 cross-owner
-  adoption reads answer 404 for another owner's release until S3's
-  sharing scopes land. Same-owner P8 adoption is unaffected.
+  adoption reads answer 404 for another owner's release. Same-owner P8
+  adoption is unaffected. (Correction, S3: S3's scopes are on package
+  release listings only. `choir.software_release` has no listing, so its
+  cross-owner reads stay 404 until S14 retires the kind.)
 - **The rule for the new kinds** is the listing's scope set.
 
 ### 4.4 Evidence and private data
@@ -710,7 +712,12 @@ drive two things.
   release to `suspended` (actor `host:probation`), which stops new offers.
   Carriers are offered a revert, and the publisher's owner reinstates the
   release with an owner act.
-- **Withdraw.** The publisher's act. It is terminal for that release.
+- **Withdraw.** The publisher's act, from `listed` or `suspended`. The
+  release leaves the catalog heads and the track head and stays in the
+  history. (Correction, S3: it is not terminal. A reinstate lists it again
+  while its parent is still the head of the track without it; once a
+  release was published past it, a reinstate would fork the track and
+  refuses `track_moved`.)
 - **Protected computers.** On the owner's computers and the paper, a
   failed probation *proposes* the revert instead of applying it, until the
   owner rules (Q4).
@@ -1081,6 +1088,8 @@ listed(S)      -> listed(S')          owner act
 listed         -> withdrawn           owner act (publisher)
 listed         -> suspended           host: 2 reverted outcomes on distinct computers
 suspended      -> listed              owner act (reinstate)
+listed|suspended -> withdrawn         owner act (withdraw)
+withdrawn      -> listed              owner act (reinstate), only while its parent heads the track without it (S3)
 listed|suspended|withdrawn -> yanked  host security authority; forces set-aside
 platform_state: offered -> proposed -> exported -> landed | declined   (10.5)
 ```
@@ -1275,6 +1284,42 @@ The cross-owner adoption refusal moves to S5, where the gate exists
   of a third account;
 - after a withdraw it leaves the catalog heads, and its history shows
   `withdrawn`.
+
+**As built** (lane `lane/lib-s3`; corrections to this design, found
+building it):
+
+- **The rollback is two switches.** `packages.share` is a guest setting,
+  which neither the proxy nor corpusd can read. It gates the acts: the
+  proxy asks the named computer's `GET .../packages/share-gate` before
+  every share, withdraw or reinstate, as publish asks for the draft. The
+  read side's fallback is corpusd's `CHOIR_PACKAGE_SHARE_READS=owner`
+  (unset, empty or `scoped` honours each listing's scopes; any other value
+  is `owner`). With `packages.share` off everywhere, the default, nothing
+  is widened, so reads are owner scope by construction. A git revert is
+  not the rollback once a release was widened and then withdrawn: S2's
+  listing check refuses the wider version, so S2 reads that release as its
+  last owner-only version, `listed`.
+- **`--confirm-paths` names a digest**, the `paths_digest` that the
+  widening's `confirm_paths_required` refusal shows beside every path and
+  the review diff's size. It binds the release id and the paths, so a
+  confirmation never carries over to another release.
+- **Not built in S3, refused by name** (`scope_not_built`): the `platform`
+  scope (S4), and `shared_with.computers`, since no computer reads
+  packages before S5. Sharing names owners.
+- **The act's gate computer** is any of the owner's computers named by
+  `--computer`, so a withdraw still works when the publishing computer is
+  gone.
+- **L24 in S3** is the read half: two owners' tracks of one package never
+  mix in a catalog row, a history (one track; the reader's own unless
+  `track` names another) or the track head a publish drafts on, and a
+  shared release is never a parent. The per-computer half (one track per
+  package per computer) is S5's subscription rule.
+- **Tracks page, never cap** (review residual bunch279-I2): every track
+  read pages to its end by canonical id, a publish past the old
+  1000-listing cap lists, and history pages newest first by `before_seq`.
+  No store schema change was needed.
+- **The catalog names the reader** (`"reader"`: the caller's own owner
+  id), so an owner can tell another which id to share with.
 
 ### S4. Export, the platform scope, "propose for the platform", and the pull exporter, for package releases (red, tier 2: a new visibility scope and admin act)
 
