@@ -120,8 +120,11 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	}
 	// 42 designed kinds plus system1.judgment (acknowledged, 2026-10-20): a
 	// paid call the tape must hold so a replay never spends twice.
-	if n := len(eventDurability); n != 43 {
-		t.Fatalf("eventDurability has %d entries, want 43 (the 42 designed kinds and system1.judgment)", n)
+	// And story.relation (acknowledged, 2026-10-26): the research desk's
+	// judged pair relation, whose tape record is the authority for the
+	// Store B related_story edge.
+	if n := len(eventDurability); n != 44 {
+		t.Fatalf("eventDurability has %d entries, want 44 (the 42 designed kinds, system1.judgment and story.relation)", n)
 	}
 }
 
