@@ -25,10 +25,10 @@ definition_version: 5
 readiness: drafted
 
 review:
-  reviewer: review 257 (tier 2, Devin and DeepSeek) on 152770461
-  frozen_ref: 152770461
-  verdict: send_back  # both seats requested changes; revision 2 answers each finding (design section 21); re-review pending
-  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch257/
+  reviewer: review 265 (one-seat re-review, Devin) on e2d6bc50a; before it, review 257 (tier 2, Devin and DeepSeek) on 152770461, send_back
+  frozen_ref: e2d6bc50a
+  verdict: accept  # approved with six required edits, applied in the commit after e2d6bc50a (design section 21, last row)
+  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch265/
 
 start:
   captured_at: 2026-10-26T02:00:00Z
@@ -153,14 +153,15 @@ finish:
         T-B's Updates app lists every update with evidence and has no write
         route (S8); a yank sets T-B's package aside and survives a restore
         (S11); T-B installs a release without a frontend build or restart
-        and a deploy leaves it untouched (S12); T-C of a second owner adopts
-        a shared release only inside the sandboxed frame (S13).
+        and a deploy leaves it untouched (S12); T-D, the second owner's
+        computer, adopts a shared release only inside the sandboxed frame
+        (S13).
       proves: the rest of the system as designed
       evidence_class: deployed product path
   rollback: >-
     Per step, its default-off switch (named in the design's section 17) or
     a git revert; rows written stay inert (replay projects any kind). The
-    release system on main keeps working until S5 retires its adoption path.
+    release system on main keeps working until S14 retires its adoption path.
   landing:
     required: true
     environment: staging
@@ -198,7 +199,9 @@ boundaries:
   mutation_class: >-
     green for this file and the design; the build steps are red (S1, S2,
     S3, S4, S4b, S5, S6, S7, S9, S11, S12, S13) or orange (S8, S10, the
-    test_computers enabling change, S14 items)
+    test_computers enabling change, S14 items); the enabling change's
+    precondition, naming T-A, T-B and T-C in vmctl's
+    CHOIR_VISUAL_CAPTURE_COMPUTERS, is red, tier 1
   review_tier: >-
     the design, tier 2 (Devin and DeepSeek); per step as the design's
     section 17 names it
@@ -249,7 +252,7 @@ now:
     ref: lane/lib-s1
     base: origin/main at the lane's base
     digest: none until frozen
-    scope: [internal/proxy/releases.go, internal/platform/releases.go]
+    scope: [internal/proxy/releases.go, internal/proxy/guest_authority.go, internal/platform/releases.go, internal/platform/objectgraph_handlers.go, internal/platform/objectgraph_store.go, internal/platform/config.go, internal/platform/handlers.go, cmd/corpusd/main.go]
   conjecture:
     id: SR9-1
     claim: >-
@@ -303,9 +306,12 @@ now:
     Until S12 or an owner ruling on Q1, every deploy asks each adopter to
     approve a re-materialization; the export (S4) keeps that window short.
   next_action: >-
-    Send revision 2 of the design to a one-seat re-review (Devin) while FP0
-    lands S0's problem records and S1 (tier 1); then the test_computers
-    enabling change (orange, tier 1) and mint T-B.
+    FP0 lands S0's problem records and S1 (tier 1); then the
+    test_computers enabling change (orange, tier 1) and mint T-B. The
+    enabling change has a precondition (design section 18): T-A, T-B and
+    T-C are named by computer id in CHOIR_VISUAL_CAPTURE_COMPUTERS, and the
+    retention plan shows each kept as selector_named, because
+    test_class_idle destroys test-class computers idle 7 days.
 
 receipts: []
 ---
