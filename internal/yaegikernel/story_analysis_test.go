@@ -1,6 +1,8 @@
 package yaegikernel
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -77,5 +79,28 @@ func TestRelateSurfaceNamesTheOwnStoryAndTheAnalysis(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("Relate's surface doc misses %q: %s", want, doc)
 		}
+	}
+}
+
+// A story about none of its candidates is recorded with an empty list, for
+// the desk's own story only: a published story's record names at least one
+// entity.
+func TestRelateTakesAnEmptyListForTheOwnStoryOnly(t *testing.T) {
+	for _, story := range []string{"", RelateOwnStory} {
+		got, err := ValidateRelate(RelatePayload{Story: story})
+		if err != nil || got.Story != RelateOwnStory || len(got.Entities) != 0 {
+			t.Fatalf("own story, no entities: %+v, %v", got, err)
+		}
+	}
+	scope, broker := system1Scope(t, SessionRoleResearch, "")
+	var sent RelatePayload
+	broker.SetEgress(func(_ context.Context, _ BrokerAction, raw json.RawMessage) (json.RawMessage, error) {
+		if err := json.Unmarshal(raw, &sent); err != nil {
+			t.Fatal(err)
+		}
+		return json.RawMessage(`{}`), nil
+	})
+	if _, err := scope.Relate("", nil); err != nil || sent.Story != RelateOwnStory || len(sent.Entities) != 0 {
+		t.Fatalf("Relate(\"\", nil) = %v, sent %+v", err, sent)
 	}
 }
