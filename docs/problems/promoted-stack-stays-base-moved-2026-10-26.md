@@ -1,6 +1,6 @@
 # A promoted stack stays stack_base_moved when main edited the same file (2026-10-26)
 
-Status: documented; fix designed below, not built. Class of the fix: red (source
+Status: fix built on lane contained3 (bc2998cec tests, d14b7d58f code, review 292 tier 2: Devin approve, DeepSeek ship, no false positive found; the two cheap lows folded in). Residuals named by the review: added or renamed paths that main later edited, and a file the patch fills from empty that main then edited, stay exact (safe false negatives; U4 remains the general answer). Class of the fix: red (source
 projection decides whether a computer may cast), review tier 2.
 
 ## Evidence (staging, b@c, computer-6c50d6e5)
