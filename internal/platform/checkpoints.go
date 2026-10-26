@@ -202,6 +202,13 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
+	// The host judges every checkpoint it holds: pending until a rebuild at the
+	// checkpoint's own head has been compared with its witness.
+	_, err = tx.ExecContext(ctx, `INSERT IGNORE INTO computer_checkpoint_verdicts (`+checkpointVerdictColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		request.ComputerID, checkpoint.Digest, head.Sequence, request.AcceptedEventHead, selfdevprotocol.CheckpointVerdictPending, "", "", "[]", "", receipt.IssuedAt, receipt.IssuedAt)
+	if err != nil {
+		return selfdevprotocol.CheckpointResponse{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}

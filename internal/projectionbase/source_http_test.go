@@ -72,3 +72,41 @@ func TestHTTPSourceTransportContract(t *testing.T) {
 		t.Fatalf("missing descriptor did not refuse: %v", err)
 	}
 }
+
+// The guest reads the host's checkpoint verdict over the platform's verdict
+// route: path, parameter names, a 404 as "no verdict row", other statuses as
+// errors (so a platform outage is never read as "no verdict").
+func TestHTTPSourceCheckpointVerdictContract(t *testing.T) {
+	ctx := context.Background()
+	var query string
+	status := http.StatusOK
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/computers/checkpoints/verdict", func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"not_derivable","reason":"witness_mismatch","differing_tables":["og_objects"]}`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	src := NewHTTPSource(server.URL, func(ctx context.Context) (string, error) { return "cap", nil })
+
+	digest := strings.Repeat("d", 64)
+	verdict, found, err := src.CheckpointVerdict(ctx, "computer-verdict", digest)
+	if err != nil || !found || verdict.Status != "not_derivable" || verdict.Reason != "witness_mismatch" || len(verdict.DifferingTables) != 1 {
+		t.Fatalf("verdict = %+v %v %v", verdict, found, err)
+	}
+	if !strings.Contains(query, "computer_id=computer-verdict") || !strings.Contains(query, "checkpoint_digest="+digest) {
+		t.Fatalf("verdict params = %q", query)
+	}
+	status = http.StatusNotFound
+	if _, found, err := src.CheckpointVerdict(ctx, "computer-verdict", digest); err != nil || found {
+		t.Fatalf("404 = found %v err %v, want no verdict and no error", found, err)
+	}
+	status = http.StatusBadGateway
+	if _, found, err := src.CheckpointVerdict(ctx, "computer-verdict", digest); err == nil || found {
+		t.Fatalf("502 = found %v err %v, want an error", found, err)
+	}
+}
