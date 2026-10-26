@@ -631,6 +631,22 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 			CodeClosure: fx.closures[string(slot.Current.CodeRef)], ArtifactProgram: fx.programs[string(slot.Current.ArtifactProgramRef)],
 		})
 	})
+	// The immutable inputs of a version the route ledger has promoted: a
+	// rollback resolves its target's closure and program from here.
+	vmctlMux.HandleFunc("/internal/vmctl/computer-version-inputs/resolve", func(w http.ResponseWriter, r *http.Request) {
+		var version computerversion.ComputerVersion
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&version) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		closure, closureOK := fx.closures[string(version.CodeRef)]
+		program, programOK := fx.programs[string(version.ArtifactProgramRef)]
+		if !closureOK || !programOK {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(vmctl.ComputerVersionInputs{CodeClosure: closure, ArtifactProgram: program})
+	})
 	vmctlMux.HandleFunc("/internal/vmctl/computer-version-routes/apply-self-development", func(w http.ResponseWriter, r *http.Request) {
 		raw, ok := readBody(r.Body)
 		var request selfdevprotocol.ApplyRouteProjectionRequest
@@ -1066,6 +1082,8 @@ func (fx *derivableSelfDevFixture) waitForState(t *testing.T, operationID string
 		var stepErr error
 		if operation.State == selfdev.StateAccepted || operation.State == selfdev.StateMaterializing {
 			stepErr = fx.rt.materializeSelfDevelopmentOperation(context.Background(), operation, false)
+		} else if operation.State == selfdev.StateRollbackPending {
+			stepErr = fx.rt.rollbackSelfDevelopmentOperation(context.Background(), operation, false)
 		} else if operation.State == selfdev.StateAwaitingApproval {
 			_, _, stepErr = fx.rt.recoverSelfDevelopmentDecision(context.Background(), operation)
 		}
