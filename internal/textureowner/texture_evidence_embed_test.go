@@ -78,11 +78,11 @@ func evidenceListing(rec types.RunRecord) agentcore.VisualEvidenceListing {
 	}
 }
 
-func evidenceSetup(t *testing.T, suffix string) (*Handler, *agentcore.Runtime, types.RunRecord, *fakeEvidenceSource) {
+func evidenceSetup(t *testing.T, suffix string, shape ...func(*types.Revision)) (*Handler, *agentcore.Runtime, types.RunRecord, *fakeEvidenceSource) {
 	t.Helper()
 	core, h := testAPISetup(t)
 	core.SetTextureCaptures(courtCapture)
-	rec := seedCellAuthorLifecycleOn(t, core.Store(), core.TextureComputerID(), "owner-evidence", suffix, "# Reader change\n\nThe candidate froze.")
+	rec := seedCellAuthorLifecycleOn(t, core.Store(), core.TextureComputerID(), "owner-evidence", suffix, "# Reader change\n\nThe candidate froze.", shape...)
 	h.createAgentMutationForRun(context.Background(), &rec)
 	source := &fakeEvidenceSource{listing: evidenceListing(rec)}
 	h.evidenceSource = source

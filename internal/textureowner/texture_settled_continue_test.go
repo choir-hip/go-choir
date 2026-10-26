@@ -40,6 +40,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -134,7 +135,7 @@ func TestOwnerReviseOnSettledDocumentStartsNextTrajectory(t *testing.T) {
 	ctx := t.Context()
 	start := startObservationLifecycle(t, s, func(req *types.StartLifecycleRequest) {
 		// A produced head names its trajectory in metadata, as the desk's revisions do.
-		req.InitialRevision.Metadata = json.RawMessage(`{"trajectory_id":"trajectory-observation"}`)
+		req.InitialRevision.Metadata = json.RawMessage(`{"trajectory_id":"` + req.TrajectoryID + `"}`)
 	})
 	docID := start.InitialDocument.DocID
 	mu, dispatches := recordContinueDispatches(core)
@@ -557,5 +558,60 @@ func TestOwnerReviseOnSettledDocumentStartsTheTextureRun(t *testing.T) {
 				t.Fatalf("C13: run trajectory=%s work=%v, want %s on %s", run.TrajectoryID, run.Metadata["lifecycle_work_item_id"], occurrence.ResolvedTargetWorkItemID, doc.TrajectoryID)
 			}
 		})
+	}
+}
+
+// The label follows the record on every owner-visible commit path: a head that
+// already names another trajectory (a settled one, from before the label was
+// restamped) must not pass that name on through the public revisions route or
+// the evidence embed.
+const staleTrajectoryLabel = `{"trajectory_id":"trajectory-stale"}`
+
+func TestRevisionsRouteLabelsTheRecordsTrajectory(t *testing.T) {
+	core, handler := testAPISetup(t)
+	s := core.Store()
+	start := startObservationLifecycle(t, s, func(req *types.StartLifecycleRequest) {
+		req.InitialRevision.Metadata = json.RawMessage(staleTrajectoryLabel)
+	})
+	before, err := s.GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "direct owner correction", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "label-owner-edit", ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+	})
+	response := httptest.NewRecorder()
+	handler.HandleTextureRevisions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("direct edit status=%d body=%s", response.Code, response.Body.String())
+	}
+	after, err := s.GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(after.HeadRevision.Metadata, &meta); err != nil {
+		t.Fatalf("decode metadata %s: %v", after.HeadRevision.Metadata, err)
+	}
+	if got, _ := meta["trajectory_id"].(string); got != start.TrajectoryID || after.HeadRevision.TrajectoryID != start.TrajectoryID {
+		t.Fatalf("revisions route: metadata trajectory_id=%q record=%q, want both %q", got, after.HeadRevision.TrajectoryID, start.TrajectoryID)
+	}
+}
+
+func TestEvidenceEmbedLabelsTheRecordsTrajectory(t *testing.T) {
+	h, core, rec, _ := evidenceSetup(t, "label", func(r *types.Revision) {
+		r.Metadata = json.RawMessage(staleTrajectoryLabel)
+	})
+	if _, err := h.EmbedCandidateEvidence(t.Context(), rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	head := headOf(t, core.Store(), rec)
+	var meta map[string]any
+	if err := json.Unmarshal(head.Metadata, &meta); err != nil {
+		t.Fatalf("decode metadata %s: %v", head.Metadata, err)
+	}
+	if got, _ := meta["trajectory_id"].(string); got != rec.TrajectoryID || head.TrajectoryID != rec.TrajectoryID {
+		t.Fatalf("evidence embed: metadata trajectory_id=%q record=%q, want both %q", got, head.TrajectoryID, rec.TrajectoryID)
 	}
 }
