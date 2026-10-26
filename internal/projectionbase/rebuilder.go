@@ -495,7 +495,7 @@ func (r *Rebuilder) seedScratch(ctx context.Context, source CASReplaySource, scr
 	}
 	if cfg.SeedRequired {
 		if lastErr != nil {
-			return nil, 0, fmt.Errorf("%w: no compatible verified base for %s: %v", ErrBaseRefused, cfg.ComputerID, lastErr)
+			return nil, 0, fmt.Errorf("%w: no compatible verified base for %s: %w", ErrBaseRefused, cfg.ComputerID, lastErr)
 		}
 		return nil, 0, fmt.Errorf("%w: no compatible verified base for %s", ErrBaseRefused, cfg.ComputerID)
 	}
@@ -533,7 +533,7 @@ func (r *Rebuilder) adoptSeed(ctx context.Context, source CASReplaySource, scrat
 		// exactly from the seed head before any bytes are adopted.
 		page, err := source.EventsPage(ctx, cfg.ComputerID, descriptor.Sequence, 1)
 		if err != nil {
-			return 0, fmt.Errorf("%w: read tail start after seed watermark %d: %v", ErrBaseRefused, descriptor.Sequence, err)
+			return 0, fmt.Errorf("%w: read tail start after seed watermark %d: %w", ErrBaseRefused, descriptor.Sequence, err)
 		}
 		if len(page) == 0 {
 			return 0, fmt.Errorf("%w: tail is empty after seed watermark %d", ErrBaseRefused, descriptor.Sequence)

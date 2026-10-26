@@ -93,3 +93,36 @@ string exactly.
   schema version, bounds): deterministic.
 - `source_http.go`, `install.go`, `advertise.go`, `rebase.go`: not on the
   checkpoint worker's path (restore and advertise callers); not changed.
+
+## Fix (2026-10-26, lane/projection-cancel; mutation class red, tier 1)
+
+Tests first (commit ec5de2de5), fix second.
+
+1. Classification. `cmd/checkpointd/worker.go`: `projectionRunStatus` maps a
+   `rebuilder.Run` error to `blocked` only when it is `ErrBaseRefused` and does
+   not carry `context.Canceled` or `context.DeadlineExceeded` (`errors.Is`);
+   otherwise `failed`, retried after `failedJobRetryBackoff`. The shared `fail`
+   closure also demotes any `blocked` site whose error carries a transient
+   cause, and, as a backstop for causes a `%v` wrap lost, any `blocked` when the
+   job's own context is already done. The `GetKeyEscrow` site records `blocked`
+   only for `ErrKeyEscrowNotFound`; a store error is `failed`.
+2. Wrap fix. The five ctx- or I/O-bearing `%v` wraps listed in the audit
+   (read-back witness, seed witness, tail-start read, tail read, last rejected
+   seed candidate) now use `%w` for the cause, so `errors.Is(err,
+   context.Canceled)` holds through `ErrBaseRefused`.
+3. Re-admission of legacy rows. `internal/platform/projection_jobs.go`:
+   `EnqueueProjectionJob` treats a `blocked` row whose `error_text` contains
+   "context canceled" or "context deadline exceeded" like a `failed` one
+   (re-admitted after the growing backoff, same inputs). The schema has no
+   failure-kind column, so the exact Go strings are matched; the comment marks
+   the branch as existing only for rows written before the fix. Deterministic
+   blocked rows still wait for a changed seed or key, and head growth alone
+   does not re-admit them.
+
+b@c's frozen job (generation 14, failures 1, updated 2026-10-25 08:15Z) matches
+the legacy branch, so the first cadence tick after this deploys re-admits it
+with no operator act.
+
+Residual: the local-filesystem `ErrBaseRefused` sites (scratch open/head, seed
+staging, adopt) stay `blocked` when the job context is alive; a disk-full
+refusal there is not distinguishable from corruption by type.
