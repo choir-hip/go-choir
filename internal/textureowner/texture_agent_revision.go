@@ -679,6 +679,13 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		runMetadata["request_source"] = "update_coagent"
 	}
 	for _, key := range durableMetadataKeys {
+		// The run binds to the document's current trajectory, set above. A
+		// head written in an earlier episode of a continued document (F1)
+		// still names that episode in its metadata, and copying it over
+		// would bind the run to the settled trajectory.
+		if _, bound := runMetadata["trajectory_id"]; bound && key == "trajectory_id" {
+			continue
+		}
 		if val, ok := metadata[key]; ok && val != nil && val != "" {
 			runMetadata[key] = val
 		}
