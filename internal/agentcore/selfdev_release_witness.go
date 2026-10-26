@@ -189,7 +189,10 @@ var selfdevGatePairs = []selfdevGatePair{
 		Anchors: []witnessAnchor{
 			{File: "api_self_development.go", Needle: "operation.BaseHead", Max: 2},
 			{File: "self_development_decision_binding.go", Needle: "operation.BaseHead", Max: 0},
-			{File: "self_development_materializer.go", Needle: "operation.BaseHead", Max: 1},
+			// 1 bundle-to-operation join plus 2 reads in verificationPayloadNamesOperation,
+			// which walks from the rollback's head to its target operation; neither
+			// compares the frozen surface with the decision.
+			{File: "self_development_materializer.go", Needle: "operation.BaseHead", Max: 3},
 		},
 	},
 	{
