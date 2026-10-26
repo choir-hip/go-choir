@@ -497,3 +497,5 @@ B, C, F, H and K.
 - discovered: none new. The S7-0 `package_kv` silo was already named (`H038`).
 - introduced: none (no code).
 - repaired: none; the replan routes `H038`'s package half to P2.
+
+Update 2026-10-26: `internal/appverbs` was deleted (`5459c6275` on lane/delete-dead).

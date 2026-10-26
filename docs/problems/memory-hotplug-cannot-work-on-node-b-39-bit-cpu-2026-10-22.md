@@ -117,3 +117,5 @@ for this reason instead.
 - Remaining error: the guest-side failure is reasoned from the kernel
   path and #6255's log, not read from a Choir console. What a capsule job
   does after a refused grow is unread.
+
+Deleted 2026-10-26 (`6013d77d3` on lane/delete-dead): the controller, routes, device config and guest lease hook were removed; see docs/evidence/switched-off-inventory-2026-10-26.md.
