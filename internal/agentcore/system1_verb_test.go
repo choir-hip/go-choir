@@ -37,6 +37,8 @@ type fakeSystem1Judge struct {
 	err error
 	// omit is a question id the judge leaves unanswered.
 	omit string
+	// omitAll leaves every question unanswered.
+	omitAll bool
 	// probs overrides the first choice's probability (default 0.7).
 	first float64
 	// prefer ranks a question's named choice first instead of its first
@@ -58,7 +60,7 @@ func (f *fakeSystem1Judge) Judge(_ context.Context, state json.RawMessage, quest
 	}
 	answers := map[string]any{}
 	for id, raw := range questions {
-		if id == f.omit {
+		if id == f.omit || f.omitAll {
 			continue
 		}
 		var q struct {

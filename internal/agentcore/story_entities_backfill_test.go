@@ -224,3 +224,19 @@ func TestStoryEntitiesBackfillRecordsAStoryAboutNone(t *testing.T) { // D8
 		t.Fatalf("next batch = %+v, %v; want the story recorded, not asked", again, err)
 	}
 }
+
+// Review 327 Nit 4: a scan bound under one still reads a story, and never
+// panics.
+func TestStoryEntitiesBackfillScanBoundIsAtLeastOne(t *testing.T) {
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	defer func(n int) { storyEntitiesBackfillScanMax = n }(storyEntitiesBackfillScanMax)
+	storyEntitiesBackfillScanMax = 0
+	for i := 0; i < 2; i++ {
+		seedStory(t, f.s, f.owner, f.computer, fmt.Sprintf("doc-bound-%d", i), "A story", "A harbor reopens.")
+	}
+	got, err := f.rt.StoryEntitiesBackfill(context.Background(), f.owner, f.computer, "batch-bound", 5)
+	if err != nil || got.Scanned != 1 || len(got.Requested) != 1 || got.Next == nil {
+		t.Fatalf("act = %+v, %v; want one story read and the cursor", got, err)
+	}
+}

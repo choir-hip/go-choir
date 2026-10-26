@@ -122,6 +122,17 @@ func TestStoryEntitiesRoundEmptyReportsDoNotWakeTexture(t *testing.T) {
 	if found.Records[0].WakeID == "" {
 		t.Fatal("a Report with a finding in an entities round did not wake Texture")
 	}
+
+	// Review 327 Low 1: a Report that cites sources is not quiet either.
+	if _, err := s.CommitStoryResearchRequest(ctx, StoryResearchRequest{OwnerID: storyOwner, ComputerID: storyComputer, DocumentID: docID,
+		ClientRequestID: "related-review-e:" + docID, ExpectedHeadRevisionID: head, Kind: StoryResearchKindEntities}); err != nil {
+		t.Fatal(err)
+	}
+	cited := inboxReport("e-2", research, texture, true, types.CommitmentReport{StopReason: "completed"})
+	cited.EvidenceRefs = []string{"https://wire.example/harbor"}
+	if got := mustCommitInbox(t, s, "cell-records:e-final", nil, cited); got.Records[0].WakeID == "" {
+		t.Fatal("a Report citing sources in an entities round did not wake Texture")
+	}
 }
 
 func mustReaderCursor(t *testing.T, s *Store, inbox string) int64 {
