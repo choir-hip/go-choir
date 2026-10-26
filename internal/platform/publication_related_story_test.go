@@ -69,8 +69,19 @@ func (l *relatedLab) relate(relation string, a, b *PublishTextureResponse) {
 	}
 }
 
-func (l *relatedLab) relatedStoryEdges(pub string) []objectgraph.Edge {
+// canon is the canonical id of a published story's publication.
+func (l *relatedLab) canon(owner, publicationID string) string {
 	l.t.Helper()
+	id, err := publicationCanonicalFor(owner, publicationID)
+	if err != nil {
+		l.t.Fatalf("canonical id of %s: %v", publicationID, err)
+	}
+	return id
+}
+
+func (l *relatedLab) relatedStoryEdges(publicationID string) []objectgraph.Edge {
+	l.t.Helper()
+	pub := l.canon(labOwner, publicationID)
 	live := false
 	var out []objectgraph.Edge
 	for _, f := range []objectgraph.EdgeFilter{
@@ -178,7 +189,7 @@ func TestRelatedStoryEdgeIgnoresSelfDuplicateRetractedAndNonAutopaper(t *testing
 	l.putRelatedStoryEdge(a.PublicationID, tomb.PublicationID, types.StoryRelationSameSubject, true)
 
 	// Retract the retracted story: its publication is no longer published.
-	pub, err := l.svc.ogStore().GetObject(ctx, retracted.PublicationID)
+	pub, err := l.svc.ogStore().GetObject(ctx, l.canon(labOwner, retracted.PublicationID))
 	if err != nil {
 		t.Fatalf("get publication: %v", err)
 	}
@@ -217,8 +228,9 @@ func contains(list []string, want string) bool {
 }
 
 // putRelatedStoryEdge writes an edge as the export would, bypassing the route.
-func (l *relatedLab) putRelatedStoryEdge(from, to, relation string, tombstone bool) {
+func (l *relatedLab) putRelatedStoryEdge(fromPub, toPub, relation string, tombstone bool) {
 	l.t.Helper()
+	from, to := l.canon(labOwner, fromPub), l.canon(labOwner, toPub)
 	meta, err := json.Marshal(map[string]string{"relation": relation})
 	if err != nil {
 		l.t.Fatal(err)

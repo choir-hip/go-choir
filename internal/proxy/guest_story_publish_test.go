@@ -154,7 +154,7 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	// The judged pair relations of the related_story edge pass under the same
 	// bound-guest rule: another owner's are refused, the guest's own reach
 	// corpusd.
-	rel := []types.StoryRelation{{StoryA: "obj:choir.publication:cGFwZXItb3duZXI:a", StoryB: "obj:choir.publication:cGFwZXItb3duZXI:b", Relation: types.StoryRelationSameIncident}}
+	rel := []types.StoryRelation{{StoryA: "pub-0123456789abcdef0123456789abcdef", StoryB: "pub-fedcba9876543210fedcba9876543210", Relation: types.StoryRelationSameIncident}}
 	if rec := send(types.StoryRelationsPath, "10.200.1.2", types.StoryRelationsRequest{OwnerID: "reader-owner", ComputerID: "computer-paper", Relations: rel}); rec.Code != http.StatusForbidden {
 		t.Fatalf("a guest wrote another owner's relations: %d %s", rec.Code, rec.Body)
 	}

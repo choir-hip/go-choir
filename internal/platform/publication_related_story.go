@@ -28,6 +28,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -194,6 +195,17 @@ func mergeRelatedStoryCandidates(cands, judged []relatedCandidate) []relatedCand
 	return cands
 }
 
+// publicationCanonicalFor is the canonical id of an owner's publication from
+// its public id (pub-<32 hex>); the same derivation publication identity uses.
+func publicationCanonicalFor(ownerID, publicationID string) (string, error) {
+	if !publicationPublicIDRE.MatchString(publicationID) {
+		return "", fmt.Errorf("not a publication id")
+	}
+	return objectgraph.BuildCanonicalID("choir.publication", ownerID, objectgraph.StableSuffixFromKey(publicationID))
+}
+
+var publicationPublicIDRE = regexp.MustCompile(`^pub-[0-9a-f]{32}$`)
+
 // RecordStoryRelations stores a computer's judged pair relations in Store B
 // as related_story edges. It accepts a platform-tier computer only (a private
 // computer cannot write the public paper's graph), only pairs of that
@@ -232,18 +244,19 @@ func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelat
 		if _, known := storyRelationRank[relation]; !known {
 			return 0, fmt.Errorf("relation %d: unknown relation %q", i+1, relation)
 		}
-		for _, id := range []string{a, b} {
-			kind, idOwner, _, err := objectgraph.ParseCanonicalID(id)
-			if err != nil || kind != objectgraph.ObjectKind("choir.publication") {
-				return 0, fmt.Errorf("relation %d: %q is not a publication id", i+1, id)
-			}
-			if idOwner != owner {
-				return 0, fmt.Errorf("relation %d: %s belongs to another owner", i+1, id)
-			}
-		}
 		if a == b {
 			return 0, fmt.Errorf("relation %d: a story cannot be related to itself", i+1)
 		}
+		var canon [2]string
+		for j, id := range []string{a, b} {
+			c, err := publicationCanonicalFor(owner, id)
+			if err != nil {
+				return 0, fmt.Errorf("relation %d: %q is not a publication id", i+1, id)
+			}
+			canon[j] = c
+		}
+		// Edges join canonical ids, stored once with from < to.
+		a, b = canon[0], canon[1]
 		if a > b {
 			a, b = b, a
 		}
@@ -263,10 +276,10 @@ func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelat
 	for id := range ids {
 		info, ok := pubs[id]
 		if !ok || !info.eligible {
-			return 0, fmt.Errorf("%s is not a published Autopaper story", id)
+			return 0, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
 		}
 		if info.obj.OwnerID != owner {
-			return 0, fmt.Errorf("%s belongs to another owner", id)
+			return 0, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
 		}
 	}
 

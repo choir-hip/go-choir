@@ -2,11 +2,12 @@ package yaegikernel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -18,11 +19,8 @@ import (
 
 func pubID(t *testing.T, suffix string) string {
 	t.Helper()
-	id, err := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.publication"), "owner-1", suffix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return id
+	sum := sha256.Sum256([]byte(suffix))
+	return "pub-" + hex.EncodeToString(sum[:])[:32]
 }
 
 func TestRelateStoriesIsExportedToTheResearchDeskOnly(t *testing.T) {
@@ -105,7 +103,7 @@ func TestRelateStoriesRefusesAMalformedPairListBeforeTheHost(t *testing.T) {
 		{"too many", many, "12"},
 		{"self pair", with(func(p *RelateStoriesPair) { p.StoryB = p.StoryA }), "itself"},
 		{"empty story", with(func(p *RelateStoriesPair) { p.StoryA = " " }), "publication"},
-		{"malformed id", with(func(p *RelateStoriesPair) { p.StoryA = "obj:choir.publication" }), "publication"},
+		{"malformed id", with(func(p *RelateStoriesPair) { p.StoryA = "pub-123" }), "publication"},
 		{"another kind", with(func(p *RelateStoriesPair) { p.StoryA = "obj:choir.web_capture:b3duZXI:abc" }), "publication"},
 		{"unknown relation", with(func(p *RelateStoriesPair) { p.Relation = "unrelated" }), "relation"},
 		{"no receipt", with(func(p *RelateStoriesPair) { p.JudgmentRef = "" }), "judgment_ref"},

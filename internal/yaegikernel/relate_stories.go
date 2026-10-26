@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -30,8 +30,12 @@ const (
 	relateStoriesMaxRefLen              = 128
 )
 
-// RelateStoriesPair is one judged pair: two publications (their canonical ids,
-// as the published search returns them in publication_id), the relation the
+// publicationIDRE is a publication's public id: the publication_id the
+// published search returns.
+var publicationIDRE = regexp.MustCompile(`^pub-[0-9a-f]{32}$`)
+
+// RelateStoriesPair is one judged pair: two publications (their
+// publication_id, as the published search returns it), the relation the
 // desk decided, and the System 1 answer it rests on (the receipt_ref of the
 // choir.System1 call and the id of the question in it). Reason is the desk's
 // one line; it is required when the relation is not System 1's top choice.
@@ -69,9 +73,8 @@ func ValidateRelateStoriesPairs(in []RelateStoriesPair) ([]RelateStoriesPair, er
 		p.JudgmentRef, p.QuestionID = strings.TrimSpace(p.JudgmentRef), strings.TrimSpace(p.QuestionID)
 		p.Reason = strings.TrimSpace(p.Reason)
 		for _, id := range []string{p.StoryA, p.StoryB} {
-			kind, _, _, err := objectgraph.ParseCanonicalID(id)
-			if err != nil || kind != objectgraph.ObjectKind("choir.publication") {
-				return nil, fmt.Errorf("pair %d: %q is not a publication id (use the publication_id of a published story from the published search)", i+1, id)
+			if !publicationIDRE.MatchString(id) {
+				return nil, fmt.Errorf("pair %d: %q is not a publication id (use the publication_id, pub-<32 hex>, of a published story from the published search)", i+1, id)
 			}
 		}
 		if p.StoryA == p.StoryB {
