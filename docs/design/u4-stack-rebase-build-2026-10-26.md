@@ -255,7 +255,7 @@ record, which names the operation and `B'`.
    check that matters is the gate exception below.
 2. **What delivers to it.** A records wake, not a digest. The notice is committed
    with `CommitInboxRecords`. That commit writes its own `inbox_record` wake row,
-   and the actor-wake outbox delivers it (`runtime.go:982-987`: "the actor-wake
+   and the actor-wake outbox delivers it (`runtime.go:975-980`: "the actor-wake
    outbox projector is the sole post-restart delivery path"). The notice is
    `types.CommitmentEmitterSystem`, so it must join the closed allowlist in
    `store.RecordWakesReader` (`management_tasks.go:66-100`). The precedent is the
@@ -334,7 +334,7 @@ record, which names the operation and `B'`.
      with `B'`, and names `ConflictPaths` and `CleanPaths`. The engineer redoes
      only the conflicting paths (design step 4).
    - The offer file gains `RebaseOf` and `RebaseNotice` with omitempty. The decode
-     is a plain `json.Unmarshal` (`carried_patch.go:690`), so older code reads the
+     is a plain `json.Unmarshal` (`carried_patch.go:687`), so older code reads the
      file.
 6. **The materializer's base check.**
    - Where: in `materializeSelfDevelopmentOperation`, after the bundle validates
