@@ -117,16 +117,9 @@ func TestDeciderIsTheGatewayByDefault(t *testing.T) {
 	if d.(*gatewayDecider).url != "http://127.0.0.1:9/x" {
 		t.Fatalf("url override ignored")
 	}
-	// Direct mode is an explicit opt-in and needs a key.
-	if _, _, err := newDecider(get(map[string]string{"FRONT_IMPORTANCE_DIRECT": "1"}), http.DefaultClient); err == nil {
-		t.Fatal("direct mode without a key was accepted")
-	}
-	d, mode, err = newDecider(get(map[string]string{"FRONT_IMPORTANCE_DIRECT": "1", "OPENROUTER_API_KEY": "fake"}), http.DefaultClient)
-	if err != nil || mode != "direct" {
-		t.Fatalf("direct = %q, %v", mode, err)
-	}
-	if _, ok := d.(*gateway.JevTransport); !ok {
-		t.Fatalf("direct decider %#v", d)
+	// The removed direct switch no longer changes the mode.
+	if _, mode, err := newDecider(get(map[string]string{"FRONT_IMPORTANCE_DIRECT": "1", "OPENROUTER_API_KEY": "fake"}), http.DefaultClient); err != nil || mode != "gateway" {
+		t.Fatalf("FRONT_IMPORTANCE_DIRECT=1 = %q, %v; want gateway", mode, err)
 	}
 	// A gateway URL that is not loopback is refused: the internal credential
 	// must never be sent off the host.

@@ -1399,10 +1399,8 @@ in
   # ranked by recency. It reaches Jev through the gateway's host route
   # (/provider/v1/host/judgments, SEC-16) with the host-internal credential
   # and loads no provider environment, so the gateway is the one holder and
-  # meter of the OpenRouter key; no other unit depends on it. Rollback while
-  # the old path exists in code: add `EnvironmentFile =
-  # "-/var/lib/go-choir/gateway-provider.env"` and
-  # `FRONT_IMPORTANCE_DIRECT=1` back and redeploy.
+  # meter of the OpenRouter key; no other unit depends on it. (The direct
+  # FRONT_IMPORTANCE_DIRECT=1 rollback was deleted 2026-10-26.)
   systemd.services.go-choir-front-importance = {
     description = "Autopaper front-page importance scores (Jev)";
     after = [ "network-online.target" "go-choir-corpusd.service" ];

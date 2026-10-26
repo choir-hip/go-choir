@@ -8,9 +8,7 @@
 //
 // corpusd has no model access; this host job calls Jev through the gateway's
 // host route (internal/gateway/host_judgment.go) with the host-internal
-// credential and holds no provider key (SEC-16). FRONT_IMPORTANCE_DIRECT=1
-// restores the old direct OpenRouter transport (internal/gateway/jev.go) for
-// one release as the rollback.
+// credential and holds no provider key (SEC-16).
 package frontimportance
 
 import (
@@ -117,11 +115,8 @@ func Main(args []string) int {
 		return 2
 	}
 
-	// SEC-16: Jev is reached through the gateway by default, so this job
-	// holds no provider key. Direct mode is an explicit opt-in (the rollback).
-	if strings.ToLower(strings.TrimSpace(os.Getenv("FRONT_IMPORTANCE_DIRECT"))) == "1" && strings.TrimSpace(os.Getenv("GATEWAY_JEV_RECEIPT_PATH")) == "" {
-		_ = os.Setenv("GATEWAY_JEV_RECEIPT_PATH", filepath.Join(filepath.Dir(cfg.ScoresPath), "jev-receipts.jsonl"))
-	}
+	// SEC-16: Jev is reached through the gateway, so this job holds no
+	// provider key.
 	jev, mode, err := newDecider(os.Getenv, &http.Client{Timeout: cfg.CallTime + 15*time.Second})
 	if err != nil {
 		log.Printf("front-importance: %v; scores left as they are", err)
