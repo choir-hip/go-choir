@@ -80,9 +80,10 @@
 
       # Go toolchain lane (docs/reports/patch-lanes-plan-2026-10-15.md,
       # slice 3). Go point releases carry only security and critical fixes,
-      # and they are the cheapest patch in the inventory: 1.26.9 closes 22
+      # and they are the cheapest patch in the inventory: 1.26.9 closed 22
       # reachable standard-library govulncheck findings that the base's
-      # 1.26.4 ships. The base's go_1_26 recipe with a newer version and
+      # 1.26.4 ships; 1.26.10 closes GO-2026-6809 (crypto/x509), reachable
+      # (docs/problems/patch-watch-silent-and-open-security-findings-2026-10-26.md). The base's go_1_26 recipe with a newer version and
       # source hash (the same recipe nixos-unstable uses for 1.26.8, which
       # differs only in those two fields). It applies only while the given
       # nixpkgs is older, so the weekly base bump retires it. One compiler
@@ -91,8 +92,8 @@
       # Next point release: bump version + hash here, `toolchain` in go.mod,
       # and the go-version pins in .github/workflows/ci.yml.
       choirGoRelease = {
-        version = "1.26.9";
-        hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
+        version = "1.26.10";
+        hash = "sha256-/WPog7ovK/ypPBZGsx6+9j4rHk0rMXyXidl2po2B828=";
       };
       mkChoirGo = p:
         if p.lib.versionAtLeast p.go_1_26.version choirGoRelease.version then p.go_1_26

@@ -145,8 +145,10 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
-          status=$?
+          # govulncheck exits 3 when it finds anything; under the step's -e
+          # that killed the step before it reported (problem doc 2026-10-26).
+          status=0
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govuln.txt" 2>&1 || status=$?
           count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govuln.txt" || true)
           { echo "## Go (toolchain ${{ steps.declared.outputs.go }})"; echo; echo "- govulncheck exit ${status}, reachable findings: ${count}"; echo; } >> "$REPORT"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
