@@ -16,6 +16,11 @@ package agentcore
 //     id, an unknown relation, more than 12 pairs.
 //  B9 The export fails after the tape write: the cell is told, the tape keeps
 //     the record, and repeating the pair re-exports without a second record.
+//  B10 The platform would refuse the pair (not the owner's published story,
+//     over the degree bound) and the tape records it anyway, an authoritative
+//     looking judgment that never became an edge; or the platform cannot be
+//     asked and the record is written unchecked; or two pairs of one call
+//     (the same stories and relation on two receipts) write two records.
 
 import (
 	"context"
@@ -38,6 +43,27 @@ type fakeRelationPublisher struct {
 	mu   sync.Mutex
 	reqs []types.StoryRelationsRequest
 	errs []error // one per call, in order; nil or missing is success
+
+	checks     []types.StoryRelationsRequest // validate-only calls
+	checkErr   error
+	onValidate func() // runs inside a validate-only call, before it answers
+}
+
+func (f *fakeRelationPublisher) ValidateRelations(_ context.Context, req types.StoryRelationsRequest) error {
+	f.mu.Lock()
+	f.checks = append(f.checks, req)
+	hook, err := f.onValidate, f.checkErr
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return err
+}
+
+func (f *fakeRelationPublisher) validations() []types.StoryRelationsRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]types.StoryRelationsRequest(nil), f.checks...)
 }
 
 func (f *fakeRelationPublisher) PublishVersion(context.Context, StoryVersion) error { return nil }
@@ -198,6 +224,8 @@ func TestRelateStoriesRecordsTheJudgmentOnTheTapeAndExportsTheEdge(t *testing.T)
 	f := newRelateFixture(t)
 	f.turnOn(t)
 	receipt := f.judged(t, "run-ok", "q1")
+	onTapeAtCheck := -1
+	f.pub.onValidate = func() { onTapeAtCheck = len(f.relationEvents(t)) }
 
 	raw, err := f.relate(agentprofile.Research, "run-ok", f.pair(receipt, "q1", types.StoryRelationSameIncident))
 	if err != nil {
@@ -234,6 +262,12 @@ func TestRelateStoriesRecordsTheJudgmentOnTheTapeAndExportsTheEdge(t *testing.T)
 	}
 	if payload.Relation != "same_incident" || payload.Probability != 0.7 || !payload.Top || payload.JudgmentRef != receipt || payload.QuestionID != "q1" || payload.Computer != f.computer {
 		t.Fatalf("payload = %s", evs[0].Payload)
+	}
+
+	// B10: the platform was asked first, with the same pair, and the tape was
+	// still empty when it answered.
+	if checks := f.pub.validations(); len(checks) != 1 || len(checks[0].Relations) != 1 || checks[0].Relations[0].StoryA != r.StoryA || onTapeAtCheck != 0 {
+		t.Fatalf("validations = %+v with %d on the tape at the check, want one check of the pair before the record", checks, onTapeAtCheck)
 	}
 
 	calls := f.pub.calls()
@@ -376,16 +410,57 @@ func TestRelateStoriesExportFailureKeepsTheRecordAndARepeatReExports(t *testing.
 		t.Fatalf("%d export attempts, want 2 (the failure, then the repeat)", n)
 	}
 
-	// No platform to publish to: recorded, not exported, and it says so.
+	// No platform to ask: nothing is recorded, and it says so.
 	g := newRelateFixture(t)
 	g.turnOn(t)
 	g.rt.SetStoryPublisher(nil)
 	r2 := g.judged(t, "run-b9-b", "q1")
-	raw, err = g.relate(agentprofile.Research, "run-b9-b", g.pair(r2, "q1", types.StoryRelationSameIncident))
+	if _, err = g.relate(agentprofile.Research, "run-b9-b", g.pair(r2, "q1", types.StoryRelationSameIncident)); err == nil || !strings.Contains(err.Error(), "platform") {
+		t.Fatalf("no publisher: err = %v, want a refusal naming the platform", err)
+	}
+	if n := len(g.relationEvents(t)); n != 0 {
+		t.Fatalf("%d relation events with no platform to check them, want 0", n)
+	}
+}
+
+// B10
+func TestRelateStoriesRecordsNothingThePlatformRefusesToExport(t *testing.T) {
+	f := newRelateFixture(t)
+	f.turnOn(t)
+	receipt := f.judged(t, "run-b10", "q1")
+	p := f.pair(receipt, "q1", types.StoryRelationSameIncident)
+
+	f.pub.checkErr = fmt.Errorf("story-relations: status 400: %s is not a published Autopaper story of owner %s", f.a, f.owner)
+	_, err := f.relate(agentprofile.Research, "run-b10", p)
+	if err == nil || !strings.Contains(err.Error(), "not a published Autopaper story") {
+		t.Fatalf("refused pair: err = %v, want the platform's refusal passed to the desk", err)
+	}
+	if n := len(f.relationEvents(t)); n != 0 || len(f.pub.calls()) != 0 {
+		t.Fatalf("a refused pair left %d tape events and %d exports", n, len(f.pub.calls()))
+	}
+
+	// Once the platform accepts it, the record and the export follow.
+	f.pub.checkErr = nil
+	raw, err := f.relate(agentprofile.Research, "run-b10", p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := decodeRelate(t, raw); got.Exported || got.ExportError == "" {
-		t.Fatalf("no publisher: %s, want not exported with a reason", raw)
+	if got := decodeRelate(t, raw); !got.Exported || len(got.Recorded) != 1 || len(f.relationEvents(t)) != 1 {
+		t.Fatalf("accepted pair: %s, %d events", raw, len(f.relationEvents(t)))
+	}
+}
+
+// B10
+func TestRelateStoriesTwoReceiptsForOnePairInOneCallWriteOneRecord(t *testing.T) {
+	f := newRelateFixture(t)
+	f.turnOn(t)
+	first := f.judged(t, "run-b10-dup", "q1")
+	second := f.judged(t, "run-b10-dup", "q2")
+	if _, err := f.relate(agentprofile.Research, "run-b10-dup",
+		f.pair(first, "q1", types.StoryRelationSameIncident), f.pair(second, "q2", types.StoryRelationSameIncident)); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(f.relationEvents(t)); n != 1 {
+		t.Fatalf("%d relation events for one pair and relation in one call, want 1", n)
 	}
 }
