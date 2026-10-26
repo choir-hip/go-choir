@@ -1766,3 +1766,22 @@ Fix direction (not chosen): the refusal that follows opening closes the
 operation with that cause, and a round's terminal report closes any
 operation it opened that is not frozen. The delegate computer needs that
 stale operation closed before the next drill; no hand edits of state.
+
+
+## R1 reached on the completed path (2026-10-26, Reader round 5c)
+
+Trace review round 8 (docs/evidence/selfdev-trace-reviews-2026-10-25.md,
+R8-1). On b@c, operation selfdev-60f57884, engineering's `choir.Freeze`
+succeeded at 05:21:04.9; its `Complete("completed", ...)` at 05:21:14.4 was
+refused "capsule execution evidence does not bind the final frozen subject:
+latest receipt observed 77fc3b13..., frozen subject is 3282e7c2..." after the
+capsule had frozen durably (`freeze_requested` 05:21:14.626, `frozen`
+05:21:15.155). Every later cell, `Complete("blocked")` included, was refused
+"assigned capsule obligation is no longer executable: assignment fate is not
+active and bound" (engineering_assignment_tools_overlay.go:141), and the run
+ended by the completion guard at 05:21:55. Residual R1 above (cited refs are
+checked after the durable freeze intent) is the cause: the observed binding
+cannot help, because the doorway refuses first. Status: open, red; fix next,
+tests first: check the cited receipts against the tree that will freeze
+before the durable freeze intent, so a refused binding leaves the assignment
+active and the desk can cite the right receipts or report blocked.

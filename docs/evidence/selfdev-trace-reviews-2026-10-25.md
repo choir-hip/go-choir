@@ -405,3 +405,32 @@ Where the trace differs from the brief:
 - R7-9 A follow-up review shows the cumulative patch from the deploy commit, so the reviewer must diff two patches to see round 4. Proposed: `self-dev patch` takes a `--since <operation>` or the candidate stores the delta against the capsule's source pin. Process gap.
 - R7-10 The acting pack and the Texture body say dc62cd52 is awaiting a decision for 9 minutes after it applied (02:09:03). Proposed: resolve `selfdev-observation:...:awaiting-decision` at apply, and have `texture revise` take the current status line. Real defect (stale state); impact small this round.
 - Observed, fine: Texture and management took 44 seconds from the owner's revise to the bound engineering run; management's cast loop `for _, r := range choir.Records()` cast once only because the new session held one record (it would cast per record; a latent double-cast, a hypothesis); capsule evidence reports `evidence_complete` false with the three deficits above for both assignments.
+
+## Round 8: T1a Reader round 5b and 5c (operations selfdev-3a4bed53, selfdev-60f57884), 2026-10-26 04:54-05:22
+
+Trajectory 83dfe82b. Read by a Sonnet reviewer from the trace export, the operations and the capsule evidence, 05:2x UTC; read only.
+
+### 1. Round 5b: why management's verify failed it
+- `choir.Verify(assignmentID, decision, verifierRefs, bundleDigest)` (yaegikernel/choir.go:1012) takes no reason, and the verification event (`commitVerifyIntent`, rlm_reduce.go:1637) records only the decision, refs, assignment, desk and claim gate; the operation's error is the fixed string at tools_capsule.go:481. Management's verify cell is absent from the export (run_events start at 05:18:57; `runs` is capped at 20).
+- The reason survives only in management's prose report to Texture (record cell:7221e1e1...:report:tray-1, inbox seq 5; Texture revision 15, 04:56:24): the only screenshot "is the Autopaper home route with a story-loading error, not the Reader sign-in state, so it does not visually establish the requested behavior."
+- Management passed round 5a on the same limitation at 04:52:24 (revision 11: "nonblank but shows a story-load error, not the auth-needed empty state"). The verify is not consistent across rounds.
+- The capture routes are `/` and `/read.html`; round 5c captured the same two. Whether either can show the auth-needed state signed out is a hypothesis to test.
+
+### 2. Round 5c: engineering's Complete was refused after the capsule froze
+- 05:21:04.9 `choir.Freeze` returned no error; bundle d2833752 (Source group: App.svelte only). The operation froze at 05:21:05.
+- 05:21:14.4 `choir.Complete("completed", ...)` returned an error: "assignment command evidence unavailable after durable freeze: capsule execution evidence does not bind the final frozen subject: latest receipt observed 77fc3b13..., frozen subject is 3282e7c2...". 77fc3b13 is the assignment's source subject digest, so the latest cited receipt observed the tree before the edits. The capsule fate history shows `freeze_requested` 05:21:14.626 and `frozen` 05:21:15.155 inside that Complete cell.
+- 05:21:25 the retry Complete, with the Freeze cell's receipt dropped, was refused "assigned capsule obligation is no longer executable: assignment fate is not active and bound" (engineering_assignment_tools_overlay.go:141). 05:21:33, :40 and :49: every cell refused the same way, `Complete("blocked", ...)` included. The guard retried at 05:21:31 and :39 and the loop cancelled at 05:21:55.5.
+- The completion guard is right: no tool result carries `fate_terminal=true`. The defect is the order in `recordAssignedEngineeringReportOnce` (engineering_assignment_fate.go about 1023-1107): the durable freeze commits before `bindFrozenAssignmentExecutionReceipts` (about line 1107) can refuse, and a refusal leaves the assignment frozen and unbound, so the doorway refuses every later fate. This is residual R1 of docs/problems/engineering-completion-path-cluster-2026-10-20.md ("cited refs checked after the durable freeze intent", discovered and not repaired), now reached on the completed path; the observed binding that repaired failure 2 cannot help, because the doorway refuses before it.
+- Which cited receipt observed 77fc3b13 is not in the export (cited: build capsule-exec:69f26852, check capsule-go-eval:cd1bfa94, capture capsule-exec:393e5983, Freeze cell capsule-go-eval:dd4b4c). Engineering's own theory that citing the Freeze cell's receipt caused it is a hypothesis.
+
+### 3. SD-07 on staging: owner directions byte-identical (confirmed)
+The owner prompt (revision 16 `owner_prompt`), the Texture to management cast (cell:15d98590...:cast:tray-1, `owner_request`) and the management to engineering cast (engineering's `choir.Records()` at 05:19:21, `request.body`) are byte-identical, 16 backticks each. The same holds for 5a (revision 8, cast cell:5719b015...) and 5b (revision 12, cast cell:31feb5c2...). In 5a one Texture cell failed to parse at 04:48:31 ("expected ';', found `") and the next succeeded at 04:48:37; 5c's Texture and management cells show no errors. Engineering used a `@@BT@@` placeholder to keep backticks out of a Go raw string in its own check script (05:20:20).
+
+### 4. Other
+Engineering ran 80 s in 5b and about 1m45s in 5c to the Freeze (DeepSeek V4.1 Flash, low effort); edits stayed in App.svelte. 5b's verify took about 19 s. 5c's frozen bundle d2833752 is orphaned on a failed operation with no verifier refs (`evidence_complete` false).
+
+### Problems from this round
+- R8-1 A Complete whose receipt binding is refused after the durable freeze strands the assignment: every later fate, `blocked` included, is refused and the run ends by the completion guard (R1 of the completion-path cluster, now on the completed path). Real defect, red; documented here first, fix next (bind and check the cited receipts before the durable freeze, so a refusal leaves the assignment active).
+- R8-2 The verify's reason is not recorded (repeat of R6-3 and SD-09): `Verify` takes no reason and the verify cell is not exported. Real defect.
+- R8-3 Management's verify judged the same capture limitation pass in 5a and fail in 5b. Process gap; the direction should name a capture that can show the state, or the verify should rest on the static check, stated in the direction.
+- R8-4 SD-07 holds on staging: three rounds of owner directions with backticks reached engineering byte-identical. Closes the SD-07 staging proof.
