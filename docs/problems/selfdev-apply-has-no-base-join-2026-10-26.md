@@ -1,6 +1,6 @@
 # A frontend-only self-development apply never checks its base (2026-10-26)
 
-Status: fix built on lane/base-join (tests first, then code); not deployed, no staging proof yet. Found by design review 303 (Devin and
+Status: fix built on lane/base-join (tests first, then code), review 311 ruling applied; not deployed, no staging proof yet. Found by design review 303 (Devin and
 DeepSeek) of the U4 stack rebase design. Class of the fix: red (apply path,
 security provenance), review tier 2.
 
@@ -159,5 +159,18 @@ Residuals, named, no code in this lane:
   `lane/apply-replay-bound`.
 - **R5 (Devin F4): a bundle with no source patch claims no base** and installs
   unjoined. Recording the freeze-time booted base in every bundle is open.
-- **R6 (Devin F8): a refused apply writes no canonical event**; the verdict
-  lives in the operation row and the daemon journal.
+- **R6 (Devin F8): fixed with the ruling.** A refusal now settles through
+  `recordMaterializationFailed`, so a `materialization_failed` event
+  discharges the head's pending transition (without it a `failed` operation
+  would leave the transition pending and block the next decision).
+- **R7 (discovered building the rollback tests, 2026-10-26): a rollback
+  operation cannot record its own success.** `verificationEvidence` requires
+  the recorded verification payload to name the operation being materialized
+  (`payload.OperationID != operation.OperationID`), but a rollback operation
+  carries its TARGET's verifier ref (`Store.StartRollback`), whose payload names
+  the target's operation. Driven end to end in the derivable fixture, the
+  rollback applies in the updater and then sticks in `rollback_pending` with
+  `materializer: verification payload refused`. No existing test completes a
+  rollback materialization. Hypothesis until read on a live trace; not changed
+  here (red, verification join). The rollback tests in this lane rewrite the
+  payload's operation id in a test shim to reach the base-claim behavior.
