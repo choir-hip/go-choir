@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# D2 design S1, test 2: the guest floor digest does not move on a commit-only
+# change, and the release.json the image carries is evaluable without building
+# the image. Pure evaluation (no builds), so it runs on any host with nix.
+#
+#   scripts/test-guest-floor-commit-free
+#
+# 1. checks.x86_64-linux.guest-floor-commit-free evaluates the guest NixOS
+#    config under two different buildCommit specialArgs and asserts that the
+#    kernel, initrd and floor-source store paths are equal (the assertion
+#    lives in the flake; a violation fails this evaluation).
+# 2. packages.x86_64-linux.guest-release-json evaluates, and lib.guestReleaseJson
+#    (the same text) is a release.json whose security_epoch, guest_abi and guest_abi_min equal the policy file's
+#    and whose floor_digest is "sha256:<64 hex>".
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+fails=0
+fail() { echo "FAIL: $*"; fails=$((fails + 1)); }
+
+if nix eval --raw ".#checks.x86_64-linux.guest-floor-commit-free.drvPath" >/dev/null 2>"${TMPDIR:-/tmp}/gfcf.err"; then
+	echo "ok:   guest-floor-commit-free evaluates (kernel, initrd, floor source equal under two buildCommit values)"
+else
+	fail "guest-floor-commit-free does not evaluate"
+	sed 's/^/    /' "${TMPDIR:-/tmp}/gfcf.err" | tail -20
+fi
+
+# lib.guestReleaseJson is the pure-eval string that packages.x86_64-linux.
+# guest-release-json writes to a file and the guest image copies in; reading
+# the package's contents would need a build, the string does not.
+if nix eval --raw ".#packages.x86_64-linux.guest-release-json.drvPath" >/dev/null 2>&1 &&
+	rel=$(nix eval --raw ".#lib.guestReleaseJson" 2>"${TMPDIR:-/tmp}/gfcf.err"); then
+	digest=$(printf '%s' "$rel" | jq -r .floor_digest)
+	if printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+		echo "ok:   release.json floor_digest $digest"
+	else
+		fail "floor_digest is not sha256:<64 hex>: $digest"
+	fi
+	for k in security_epoch guest_abi guest_abi_min; do
+		want=$(jq -r ".$k" nix/guest-release-policy.json)
+		got=$(printf '%s' "$rel" | jq -r ".$k")
+		if [ "$want" = "$got" ]; then
+			echo "ok:   release.json $k=$got matches the policy file"
+		else
+			fail "release.json $k=$got, policy file says $want"
+		fi
+	done
+	[ "$(printf '%s' "$rel" | jq -r .schema)" = 1 ] || fail "release.json schema is not 1"
+	[ -n "$(printf '%s' "$rel" | jq -r .build_commit)" ] || fail "release.json has no build_commit"
+else
+	fail "guest-release-json or lib.guestReleaseJson does not evaluate"
+	sed 's/^/    /' "${TMPDIR:-/tmp}/gfcf.err" | tail -20
+fi
+
+if [ "$fails" -ne 0 ]; then
+	echo "test-guest-floor-commit-free: $fails FAILED" >&2
+	exit 1
+fi
+echo "test-guest-floor-commit-free: PASS"
