@@ -523,6 +523,25 @@ EOF
           choir.capsule_egress_tunnel_identity=enforce)
             echo "CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY=enforce" >> "$ENV_FILE"
             ;;
+          # The automatic checkpoint cadence (X1 slice 3): the guest compiles it
+          # off; the computers vmctl's VM_CHECKPOINT_CADENCE_ONLY names get the
+          # two values as boot arguments. Validated before they are copied:
+          # digits only for the count, digits and one unit for the duration;
+          # anything else is dropped and the cadence stays off.
+          choir.checkpoint_every_events=*)
+            value="''${param#choir.checkpoint_every_events=}"
+            case "$value" in
+              ""|*[!0-9]*) ;;
+              *) echo "CHOIR_CHECKPOINT_EVERY_EVENTS=$value" >> "$ENV_FILE" ;;
+            esac
+            ;;
+          choir.checkpoint_every=*)
+            value="''${param#choir.checkpoint_every=}"
+            case "$value" in
+              ""|*[!0-9smh]*) ;;
+              *) echo "CHOIR_CHECKPOINT_EVERY=$value" >> "$ENV_FILE" ;;
+            esac
+            ;;
           # The gateway token never rides kernel argv; it arrives on the
           # root-only credential disk (S1 security-floor remainder).
         esac

@@ -256,6 +256,14 @@ func (s *Store) enqueueProjectionJob(ctx context.Context, computerID, reason str
 		// can be deleted once none remain.
 		retriable := old.Status == "failed" || (old.Status == "blocked" && blockedByContextCancel(old.Error))
 		failedBackingOff := retriable && sameInputs && now.Sub(old.UpdatedAt) < failedJobRetryBackoff(old.Failures)
+		// A checkpoint's rebuild asks for a head of its own. A refusal or a
+		// backoff of the computer's job at another target says nothing about
+		// it, and must not starve it (review 329); only a refusal at the same
+		// target stands.
+		if at != nil && (old.TargetSequence != at.sequence || old.TargetHead != at.head) {
+			failedBackingOff = false
+			sameInputs = false
+		}
 		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (at == nil && old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable) || failedBackingOff {
 			return old, tx.Commit()
 		}

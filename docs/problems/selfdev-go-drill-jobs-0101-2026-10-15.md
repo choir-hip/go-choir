@@ -75,8 +75,9 @@ enter it. So none of those can cause this mismatch.
 
 ### Root cause (code, confirmed against the tape head movement)
 
-The pre-apply checkpoint is `POST /api/computers/{id}/lifecycle/checkpoint`
-→ `BindCheckpointRestoreSet`:
+The pre-apply checkpoint was `POST /api/computers/{id}/lifecycle/checkpoint`
+(deleted 2026-10-26: checkpoints are bound automatically; read them with
+`GET .../lifecycle/checkpoints`) → `BindCheckpointRestoreSet`:
 
 1. `checkpointRestoreBindings` → `ReplayCompleteness` captures head H1 and
    the live Dolt state together under `HoldAppends`, replays the tape to H1

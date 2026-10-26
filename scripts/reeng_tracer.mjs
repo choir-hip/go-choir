@@ -69,6 +69,7 @@ import {
   verifiedNamedBundle, visualEvidenceChecks, witnessGapTable, witnessJoined,
 } from './reeng_tracer_checks.mjs';
 import { inProgressReceipt, interruptedReceipt, signalExitCode, strandedTracerComputers } from './reeng_tracer_receipt.mjs';
+import { pinNewestCheckpoint, restoredToPinnedCheckpoint } from './checkpoint_pick.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = (process.env.CHOIR_DEPLOYED_BASE_URL || process.env.CHOIR_HOST || 'https://choir.news').replace(/\/$/, '');
@@ -1570,16 +1571,18 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   at('mode');
   await served('pre_apply');
   if (CHANGE === 'go-served') await probe('pre_apply');
+  // The computer binds checkpoints itself (POST /lifecycle/checkpoint is
+  // deleted: docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4);
+  // the restore target is the newest it has bound, at or before this head.
   const pinPreApplyCheckpoint = async () => {
-    const ck = await c.api(lc('checkpoint'), 'POST', {}, RESTORE_MIN * 60_000);
-    const checkpoint = ck.body?.published_checkpoint?.checkpoint || ck.body?.checkpoint || null;
+    const { checkpoint, row, error } = await pinNewestCheckpoint((p) => c.api(p, 'GET', undefined, RESTORE_MIN * 60_000), lc);
     claim.pre_apply_checkpoint = {
-      at: iso(), status: ck.status, checkpoint_digest: checkpoint?.checkpoint_digest || null,
+      at: iso(), status: checkpoint ? 200 : null, checkpoint_digest: checkpoint?.checkpoint_digest || row?.checkpoint_digest || null,
       accepted_event_head: checkpoint?.request?.accepted_event_head || null, effective_event_head: checkpoint?.request?.effective_event_head || null,
-      error: ck.body?.error || ck.error || null,
+      verdict: row?.verdict?.status || null, error: error || null,
     };
     phase('pre_apply_checkpoint', claim.pre_apply_checkpoint);
-    if (!checkpoint) gap('pre_apply_checkpoint', 'POST /api/computers/{id}/lifecycle/checkpoint', `no published checkpoint (status ${ck.status}: ${claim.pre_apply_checkpoint.error || 'no body'})`);
+    if (!checkpoint) gap('pre_apply_checkpoint', 'GET /api/computers/{id}/lifecycle/checkpoints', error);
     return checkpoint;
   };
   // --autonomous: corpusd decides as soon as Verify passes, so the restore
@@ -2227,10 +2230,9 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
     one_planned_restart: Boolean(boot && boot.restart_kind === 'planned' && boot.restart_reason === 'self_development_apply' && boot.crash_lines.length === 0
       && (!boot.restart_target || boot.restart_target === op?.operation_id)),
     route_receipt: Boolean(rr.materialization_receipt && rr.checkpoint_ref && rr.route_certificate),
-    restore_to_pre_apply_head: Boolean(claim.restore?.status === 200 && claim.restore.witness_matched && claim.restore.frontend_restaged
-      && claim.pre_apply_checkpoint?.checkpoint_digest && claim.restore.checkpoint_digest === claim.pre_apply_checkpoint.checkpoint_digest
-      && preHead?.effective_event_head && claim.pre_apply_checkpoint.effective_event_head === preHead.effective_event_head
-      && claim.applied?.effective_head !== preHead.effective_event_head),
+    // The pinned checkpoint is the newest the computer had bound, so its head
+    // is at or before the pre-apply head, not necessarily equal to it.
+    restore_to_pre_apply_head: restoredToPinnedCheckpoint(claim) && Boolean(preHead?.effective_event_head),
   };
   if (AUTONOMOUS) {
     // P4: one owner act (the standing arm, test tier), no owner_approval

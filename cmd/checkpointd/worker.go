@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -64,23 +63,14 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	}
 	// A reconcile error (one computer that cannot be enqueued) is recorded on
 	// the worker heartbeat and does not stop already-queued work.
-	reconcileProblem := ""
-	if err := store.ReconcileProjectionJobs(ctx); err != nil {
-		reconcileProblem = "reconcile: " + err.Error()
-		log.Printf("checkpoint %s", reconcileProblem)
-	}
-	// Judge published checkpoints, and queue the rebuild of the oldest
-	// unjudged one per computer (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
-	// slice 2). Best effort: a verdict problem is recorded on the heartbeat
-	// and never stops the cadence jobs queued above.
+	// Judge published checkpoints and queue their rebuilds before checkpointd's
+	// own cadence jobs (reconcileProjectionWork). Best effort: a problem is
+	// recorded on the heartbeat and never stops already-queued work.
 	loadBase := func(computerID, baseRef string) (projectionbase.Descriptor, error) {
 		d, _, err := projectionbase.LoadPublishedBase(svc.ArtifactsRoot(), computerID, baseRef)
 		return d, err
 	}
-	if err := reconcileCheckpointVerdicts(ctx, store, loadBase); err != nil {
-		reconcileProblem = strings.TrimSpace(reconcileProblem + " verdicts: " + err.Error())
-		log.Printf("checkpoint verdicts: %v", err)
-	}
+	reconcileProblem := reconcileProjectionWork(ctx, store, loadBase)
 	if err := store.CheckpointHeartbeat(ctx, reconcileProblem); err != nil {
 		return nil, err
 	}
@@ -139,11 +129,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 					cancel()
 					return
 				}
-				problem := ""
-				if err := store.ReconcileProjectionJobs(ctx); err != nil {
-					problem = "reconcile: " + err.Error()
-					log.Printf("checkpoint %s", problem)
-				}
+				problem := reconcileProjectionWork(ctx, store, loadBase)
 				if err := store.CheckpointHeartbeat(ctx, problem); err != nil {
 					cancel()
 					return

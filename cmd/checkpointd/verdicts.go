@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
@@ -122,16 +123,26 @@ func judgeAgainstBase(ctx context.Context, store verdictStore, rec platform.Chec
 	if err != nil {
 		return fmt.Errorf("read checkpoint: %w", err)
 	}
+	verdict := selfdevprotocol.JudgeCheckpointWitness(checkpoint.Request.DepositMode, checkpoint.Request.VMLocalContentWitness, d.VMLocalContentWitness)
+	verdict.BaseRef = d.BlobSHA256
+	// A host on another reducer than the checkpoint was bound under can rebuild
+	// different bytes from the same tape: a difference across versions is not
+	// proof (review 329). Equal content stays verified.
+	if verdict.Status == selfdevprotocol.CheckpointVerdictNotDerivable && d.ReducerVersion != checkpoint.Request.ReducerVersion {
+		verdict.Status, verdict.Reason = selfdevprotocol.CheckpointVerdictUnverified, selfdevprotocol.VerdictReasonVersionSkew
+		verdict.Detail = fmt.Sprintf("host rebuilt with reducer %d, the checkpoint was bound under %d: %s", d.ReducerVersion, checkpoint.Request.ReducerVersion, verdict.Detail)
+	}
 	// Pins are for apply and platform-update checkpoints. A cadence checkpoint
 	// comes every few minutes and a pin has no release path until the retention
-	// slice; its base is kept by the newest-two rule while it is new.
-	if !checkpoint.Request.OwnerRecovery {
+	// slice; its base is kept by the newest-two rule while it is new. Nor is a
+	// base retained for a checkpoint restore will refuse. The pin comes before
+	// the verdict is recorded: a verdict is only recorded once the base it rests
+	// on is retained.
+	if !checkpoint.Request.OwnerRecovery && verdict.Status != selfdevprotocol.CheckpointVerdictNotDerivable {
 		if err := store.PinProjectionBase(ctx, rec.ComputerID, d.BlobSHA256, projectionbase.CheckpointPinReference(rec.AcceptedHead)); err != nil {
 			return fmt.Errorf("pin base %s: %w", d.BlobSHA256, err)
 		}
 	}
-	verdict := selfdevprotocol.JudgeCheckpointWitness(checkpoint.Request.DepositMode, checkpoint.Request.VMLocalContentWitness, d.VMLocalContentWitness)
-	verdict.BaseRef = d.BlobSHA256
 	_, err = store.ResolveCheckpointVerdict(ctx, rec.ComputerID, rec.CheckpointDigest, verdict)
 	return err
 }
@@ -189,8 +200,20 @@ type projectionWorkStore interface {
 }
 
 // reconcileProjectionWork queues the minute's work: first the rebuilds that
-// judge published checkpoints, then checkpointd's own cadence jobs. It returns
-// the problem text for the worker's heartbeat. Stub for the tests.
+// judge published checkpoints, then checkpointd's own cadence jobs. The order
+// matters on a busy computer: its cadence job comes due again as soon as the
+// last one finishes, so queued first it would take the computer's one job row
+// every minute and a checkpoint's rebuild would never get it (review 329). A
+// problem in either is reported for the worker's heartbeat and stops neither.
 func reconcileProjectionWork(ctx context.Context, store projectionWorkStore, loadBase func(computerID, baseRef string) (projectionbase.Descriptor, error)) string {
-	return ""
+	var problems []string
+	if err := reconcileCheckpointVerdicts(ctx, store, loadBase); err != nil {
+		problems = append(problems, "verdicts: "+err.Error())
+		log.Printf("checkpoint verdicts: %v", err)
+	}
+	if err := store.ReconcileProjectionJobs(ctx); err != nil {
+		problems = append(problems, "reconcile: "+err.Error())
+		log.Printf("checkpoint reconcile: %v", err)
+	}
+	return strings.Join(problems, " ")
 }

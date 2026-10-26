@@ -109,7 +109,7 @@ is also sent as `X-Choir-Computer`.
 | `computer replay-completeness` | `computer_replay_completeness` | GET `.../self-development/replay-completeness` | — | R | computer:self_development:read |
 | `computer replace-workspace` | `computer_replace_workspace` | POST `.../lifecycle/replace-workspace` | — | W D | computer:lifecycle |
 | `computer rematerialize-from-tape` | `computer_rematerialize_from_tape` | POST `.../lifecycle/rematerialize-from-tape` | CLI `--checkpoint-file` (F); MCP `checkpoint` object | W D | computer:lifecycle |
-| `computer checkpoint` | `computer_checkpoint` | POST `.../lifecycle/checkpoint` | — | W | computer:lifecycle |
+| `computer checkpoints` (was `computer checkpoint`, a manual bind, deleted 2026-10-26) | `computer_checkpoints` | GET `.../lifecycle/checkpoints` | `--digest` | R | computer:lifecycle |
 | `computer import-residue-snapshot` | `computer_import_residue_snapshot` | POST `.../lifecycle/import-residue-snapshot` | — | W (appends one tape snapshot) | computer:lifecycle |
 | `computer restore` | `computer_restore` | POST `.../lifecycle/restore` (operand scopes vm_local, computer_surface_frontend) | CLI `--checkpoint-file` (F); MCP `checkpoint` object | W D | computer:lifecycle |
 | `computer bootstrap-chain` | `computer_bootstrap_chain` | POST `.../lifecycle/bootstrap-chain` | — | W D (one-way genesis) | computer:lifecycle |
