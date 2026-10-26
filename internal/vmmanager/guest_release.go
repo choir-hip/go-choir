@@ -177,15 +177,35 @@ func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
 	}
 }
 
-// rebindLaunchRelease re-chooses the artifacts of a computer that cold boots
-// again from its stored config (ResumeVM): the current release when the
-// switch is on, else the manager's own (legacy) paths.
-func (m *Manager) rebindLaunchRelease(cfg *VMConfig) {
-	if cfg.GuestRelease == "" && !m.releaseRetainOn() {
+// refreshLaunchArtifacts re-chooses the boot artifacts and kernel parameters of
+// a computer that boots again from its stored config (a cold ResumeVM, a
+// RecoverVM). The stored values were filled at its original launch: after a
+// NixOS switch they name the previous image's init= path (H1, review 318
+// DeepSeek 2). Artifacts and parameters an explicit override carries are kept;
+// the rest are blanked, bound to the current release when the D2 switch is on,
+// and filled from the manager (legacy), which is what a fresh boot does. The
+// machine shape is untouched. Without a store disk (the legacy rootfs mode)
+// nothing is re-chosen, as refreshConfigForCurrentDeploy.
+func (m *Manager) refreshLaunchArtifacts(cfg *VMConfig, overrides VMConfig) {
+	if m.cfg.StoreDiskPath == "" {
 		return
 	}
 	cfg.GuestRelease = ""
-	cfg.KernelImagePath, cfg.InitrdPath, cfg.RootfsPath, cfg.StoreDiskPath, cfg.KernelParams = "", "", "", "", ""
+	if overrides.KernelImagePath == "" {
+		cfg.KernelImagePath = ""
+	}
+	if overrides.InitrdPath == "" {
+		cfg.InitrdPath = ""
+	}
+	if overrides.RootfsPath == "" {
+		cfg.RootfsPath = ""
+	}
+	if overrides.StoreDiskPath == "" {
+		cfg.StoreDiskPath = ""
+	}
+	if overrides.KernelParams == "" {
+		cfg.KernelParams = ""
+	}
 	m.bindCurrentRelease(cfg)
 	m.applyLaunchDefaults(cfg)
 }

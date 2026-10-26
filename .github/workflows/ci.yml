@@ -535,6 +535,15 @@ jobs:
             echo "guest-security-epoch: FAIL: no base commit could be chosen" >&2
             exit 1
           fi
+          # A base that is not in the checkout is fetched before "first
+          # adoption" is decided; an unreadable base fails (review 318).
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$base" || true
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "guest-security-epoch: FAIL: base $base cannot be read here after a fetch" >&2
+              exit 1
+            fi
+          fi
           rc=0
           {
             echo "### Guest security epoch ($base..HEAD)"
@@ -551,10 +560,30 @@ jobs:
             exit "$rc"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # The guest floor digest must not move on a commit-only change (D2 S1; review
+  # 318 Low): pure Nix evaluation of the guest under two commit stamps. Runs when
+  # the flake, go.mod or Go code changed (the sbom lane's inputs).
+  guest-floor-commit-free:
+    name: Guest Floor Digest Is Commit-Free
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.sbom == 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@786fff0690178f1234e4e1fe9b536e94f5433196 # v20
+        with:
+          determinate: false
+
+      - name: Evaluate the guest floor under two commit stamps
+        shell: bash
+        run: scripts/test-guest-floor-commit-free
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, build-frontend]
+    needs: [plan, go-vet-build, go-test, go-test-runtime, go-test-scale, doccheck, heresy-detector, v1-inventory, guest-floor-commit-free, build-frontend]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -616,6 +645,7 @@ jobs:
           require_go_lane go-test-scale "${{ needs.go-test-scale.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
+          require_if_run guest-floor-commit-free "${{ needs.guest-floor-commit-free.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           echo "All selected CI gates passed"
 

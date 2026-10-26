@@ -105,7 +105,10 @@ const (
 	// snapshotReasonImageMoved: the guest link named another image when the
 	// snapshot's guest was launched than it does now, or cannot be read (D2
 	// S1b, H6). The guest's memory describes the launch-time store disk.
-	snapshotReasonImageMoved       = "image_moved_since_launch"
+	snapshotReasonImageMoved = "image_moved_since_launch"
+	// snapshotReasonLaunchRecord: the launch record could not be rewritten at
+	// resume, so the guest would lose its H6 guard.
+	snapshotReasonLaunchRecord     = "launch_record_failed"
 	snapshotReasonDisk             = "disk_identity_mismatch"
 	snapshotReasonFilesMissing     = "snapshot_files_missing"
 	snapshotReasonCredentialWindow = "credential_window_passed"

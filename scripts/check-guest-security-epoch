@@ -39,12 +39,14 @@
 #   5. Sanity: the surfaces file exists at the head; no surface prefix equals,
 #      contains, or lies under a path in nix/guest-floor-paths.txt.
 #   6. The gate protects itself: a commit that touches a gate file (the surfaces
-#      list, this script, its selftest, .github/scripts/deploy-base-select, or a
-#      .github/workflows/ci.yml diff line naming this script or plan.outputs.base)
+#      list, this script, its selftest, .github/scripts/deploy-base-select, or
+#      ANY change to .github/workflows/ci.yml; review 318)
 #      needs the trailers ALWAYS, with `Security-Effect: gate change; <why>`; an
 #      epoch raise does not excuse it. Surfaces match against the UNION of the
 #      list at the base and at the head. The head's ci.yml must still invoke this
-#      script in the v1-inventory job, which must not set continue-on-error.
+#      script in the v1-inventory job, which must not set continue-on-error or a
+#      step-level if:; check must still need and require v1-inventory, and
+#      deploy-staging must still require check's success.
 #      (CI also runs the base's copy of this script; see ci.yml.)
 set -euo pipefail
 
@@ -170,6 +172,18 @@ else
 	if printf '%s\n' "$job" | sed -E 's/(^|[[:space:]])#.*$//' | grep -q 'continue-on-error'; then
 		fail "the v1-inventory job at head sets continue-on-error: a failure of this check would not block the deploy"
 	fi
+	# A step-level `if:` (eight spaces) can switch the check off while the job
+	# stays green; the job-level `if:` (four spaces) is the classifier's.
+	if printf '%s\n' "$job" | sed -E 's/(^|[[:space:]])#.*$//' | grep -Eq '^ {6}- if:|^ {8}if:'; then
+		fail "a step of the v1-inventory job at head has an if: condition; the epoch check must run on every non-docs change"
+	fi
+	# The failure must still reach the deploy: check needs v1-inventory and
+	# requires its success, and the staging deploy requires check's.
+	check_job=$(printf '%s\n' "$ci_text" | awk '/^  check:[[:space:]]*$/ {inj=1; next} inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {inj=0} inj' | sed -E 's/(^|[[:space:]])#.*$//')
+	printf '%s\n' "$check_job" | grep -Eq 'needs:.*v1-inventory' || fail "the check job at head no longer needs v1-inventory"
+	printf '%s\n' "$check_job" | grep -Eq 'require_success .*v1-inventory' || fail "the check job at head no longer requires v1-inventory's success"
+	deploy_job=$(printf '%s\n' "$ci_text" | awk '/^  deploy-staging:[[:space:]]*$/ {inj=1; next} inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {inj=0} inj' | sed -E 's/(^|[[:space:]])#.*$//')
+	printf '%s\n' "$deploy_job" | grep -Eq "needs.check.result == 'success'" || fail "the deploy-staging job at head no longer requires check's success"
 fi
 
 # --- the policy (rules 2, 3) ----------------------------------------------------
@@ -221,11 +235,10 @@ for c in $commits; do
 		for g in "${GATE_FILES[@]}"; do
 			[ "$f" != "$g" ] || gate_hits+=("$f")
 		done
-		if [ "$f" = "$CI_YML" ]; then
-			if git diff "$c^" "$c" -- "$CI_YML" 2>/dev/null | grep -E '^[+-][^+-]' | grep -qE 'check-guest-security-epoch|plan\.outputs\.base'; then
-				gate_hits+=("$f")
-			fi
-		fi
+		# Any change to ci.yml is a gate change (review 318, both seats): a step
+		# `if:`, an `exit 0` in the run block, or a dropped needs: line disables
+		# the gate without touching a line that names this script.
+		[ "$f" != "$CI_YML" ] || gate_hits+=("$f")
 		case $f in *_test.go | */testdata/* | *.md) continue ;; esac
 		while IFS= read -r p; do
 			[ -n "$p" ] || continue

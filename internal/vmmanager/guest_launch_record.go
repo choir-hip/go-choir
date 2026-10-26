@@ -27,6 +27,11 @@ import (
 
 const launchRecordName = "guest-release.json"
 
+// launchTargetUnreadable is recorded when the configured guest link could not
+// be read at launch. It never equals a real target, so a snapshot of that
+// guest is refused at wake (image_moved_since_launch).
+const launchTargetUnreadable = "!unreadable"
+
 // launchRecord is <state>/<vm>/guest-release.json. Release is empty until the
 // release directories land (S3); ImageTarget is empty when the link could not
 // be read at launch, which turns the guard off for that launch.
@@ -74,7 +79,13 @@ func (m *Manager) launchRecordPath(vmID string) string {
 // writeLaunchRecord records, durably and before the spawn, what this launch
 // is made of. The link is read once.
 func (m *Manager) writeLaunchRecord(cfg VMConfig) error {
-	target, _ := m.guestImageTarget()
+	target, ok := m.guestImageTarget()
+	if !ok && strings.TrimSpace(m.cfg.GuestReleaseLink) != "" {
+		// A configured link that cannot be read at launch: record that, so a
+		// snapshot of this guest refuses at wake instead of turning the guard
+		// off (review 318 DeepSeek 6).
+		target = launchTargetUnreadable
+	}
 	return m.storeLaunchRecord(cfg.VMID, launchRecord{Release: cfg.GuestRelease, ImageTarget: target, Epoch: cfg.Epoch, LaunchedAt: time.Now().UTC()})
 }
 
