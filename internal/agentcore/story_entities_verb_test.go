@@ -161,8 +161,9 @@ type attachDecoded struct {
 		Overrode    bool    `json:"overrode"`
 		Replayed    bool    `json:"replayed"`
 	} `json:"attached"`
-	Exported    bool   `json:"exported"`
-	ExportError string `json:"export_error"`
+	Exported      bool   `json:"exported"`
+	ExportPending bool   `json:"export_pending"`
+	ExportError   string `json:"export_error"`
 }
 
 func decodeAttach(t *testing.T, raw json.RawMessage) attachDecoded {
