@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -284,10 +285,14 @@ func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
 }
 
 // P8: a retried submit with the same command_id commits no second
-// revision. The revise it reuses does not replay a commit whose head has
-// already moved (its head check answers first, as /revise does today), so
-// the retry is a replay or a 409; either way the head stays the first
-// revision.
+// revision. The mechanism, read from the code and this test (review 284
+// item 7): the prompt-bar continue sends no expected head, so the retry
+// takes the document's current head, which is now the first owner revision.
+// The retry passes the handler's head check, but its command (same
+// owner-revise:<command_id>, new expected head and parent) has a different
+// digest, so the store's replayLifecycleCommand finds the stored command
+// and refuses it: 409 "lifecycle command digest conflict" (lifecycle.go,
+// replayLifecycleCommand). It is not a 202 replay.
 func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	core, handler := testAPISetup(t)
 	s := core.Store()
@@ -302,14 +307,8 @@ func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	}
 	firstReceipt := decodeContinueReceipt(t, first)
 	retry := postPromptBar(t, handler, start.OwnerID, body, false)
-	switch retry.Code {
-	case http.StatusAccepted:
-		if receipt := decodeContinueReceipt(t, retry); receipt.RevisionID != firstReceipt.RevisionID || !receipt.Replay {
-			t.Fatalf("P8: accepted retry receipt=%+v, want a replay of %s", receipt, firstReceipt.RevisionID)
-		}
-	case http.StatusConflict:
-	default:
-		t.Fatalf("P8: retry status=%d body=%s", retry.Code, retry.Body.String())
+	if retry.Code != http.StatusConflict || !strings.Contains(retry.Body.String(), "lifecycle command digest conflict") {
+		t.Fatalf("P8: retry status=%d body=%s, want 409 lifecycle command digest conflict", retry.Code, retry.Body.String())
 	}
 	doc, err := s.GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, docID)
 	if err != nil || doc.CurrentRevisionID != firstReceipt.RevisionID {
@@ -338,5 +337,26 @@ func TestPromptBarContinueRefusesInProcessDesk(t *testing.T) {
 	defer mu.Unlock()
 	if len(*dispatches) != 0 {
 		t.Fatalf("P9: refused continue dispatched %+v", *dispatches)
+	}
+}
+
+// P4 (review 284 item 9): a document with no lifecycle trajectory has no
+// canonical revision path; a continue of it is a 409 and creates nothing.
+func TestPromptBarContinueRefusesUnboundDocument(t *testing.T) {
+	core, handler := testAPISetup(t)
+	now := time.Now().UTC()
+	doc := types.Document{DocID: "doc-unbound", OwnerID: "user-1", ComputerID: "autoputer-test", Title: "Unbound", CreatedAt: now, UpdatedAt: now}
+	if err := handler.Store.CreateDocument(t.Context(), doc); err != nil {
+		t.Fatal(err)
+	}
+	w := postPromptBar(t, handler, "user-1", map[string]string{"text": "build on this", "command_id": "unbound", "continue_doc_id": doc.DocID}, false)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "not lifecycle-bound") {
+		t.Fatalf("unbound continue status=%d body=%s, want 409 not lifecycle-bound", w.Code, w.Body.String())
+	}
+	if got := conductorRunCount(t, core, "user-1"); got != 0 {
+		t.Fatalf("a refused continue recorded %d conductor runs", got)
+	}
+	if got := ownerTrajectoryCount(t, core.Store(), "user-1", "autoputer-test"); got != 0 {
+		t.Fatalf("a refused continue started %d trajectories", got)
 	}
 }
