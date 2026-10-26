@@ -72,6 +72,15 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 		mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]int{"recorded": len(req.Entities)})
 	})
+	var candidates []types.EntityCandidatesRequest
+	corpusMux.HandleFunc(types.StoryEntityCandidatesPath, func(w http.ResponseWriter, r *http.Request) {
+		var req types.EntityCandidatesRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		mu.Lock()
+		candidates = append(candidates, req)
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(types.EntityCandidatesResponse{Candidates: []types.EntityCandidate{}})
+	})
 	corpusd := httptest.NewServer(corpusMux)
 	defer corpusd.Close()
 
@@ -184,8 +193,27 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	if rec := send(types.StoryEntitiesPath, "10.200.1.2", types.StoryEntitiesRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Story: rel[0].StoryA, Entities: ents}); rec.Code != http.StatusOK {
 		t.Fatalf("guest entities = %d %s", rec.Code, rec.Body)
 	}
+	// The entity candidates read (slice c0) takes the same rule: it reads the
+	// owner's lexicon, so only the bound guest's own owner and computer pass.
+	cand := types.EntityCandidatesRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Title: "Harbor", Text: "Later, Harbor Authority reopened."}
+	other := cand
+	other.OwnerID = "reader-owner"
+	if rec := send(types.StoryEntityCandidatesPath, "10.200.1.2", other); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest read another owner's lexicon: %d %s", rec.Code, rec.Body)
+	}
+	other = cand
+	other.ComputerID = "computer-other"
+	if rec := send(types.StoryEntityCandidatesPath, "10.200.1.2", other); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest read as another computer: %d %s", rec.Code, rec.Body)
+	}
+	if rec := send(types.StoryEntityCandidatesPath, "10.200.1.2", cand); rec.Code != http.StatusOK {
+		t.Fatalf("guest candidates = %d %s", rec.Code, rec.Body)
+	}
 	mu.Lock()
 	defer mu.Unlock()
+	if len(candidates) != 1 || candidates[0].OwnerID != "paper-owner" || candidates[0].Text != cand.Text {
+		t.Fatalf("corpusd candidates = %+v", candidates)
+	}
 	if len(verdicts) != 1 || verdicts[0].OwnerID != "paper-owner" || len(verdicts[0].Verdicts) != 1 {
 		t.Fatalf("corpusd verdicts = %+v", verdicts)
 	}
