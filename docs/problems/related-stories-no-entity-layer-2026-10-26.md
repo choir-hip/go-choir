@@ -612,6 +612,48 @@ before the story publishes, or never after it does; F7 the export at
 publish writes a second edge or flips a newer role back (the F3 rule of
 review 298: the tape's latest role wins).
 
+**Review 304 (Devin, design c0 and c): passed, with findings folded in
+here before any code.**
+1. (MED) **A replay mints a fresh event.** The host's cross-run replay
+   records the answer again as a new `system1.judgment` event of this run,
+   with a fresh EventID. Its result's `receipt_ref` is rewritten to that
+   id, so Relate's same-run basis (`answered[EventID]`) finds it, and the
+   preload carries the fresh ref. Without this, every preloaded citation is
+   refused, and F3 would free Reports with no coverage.
+2. (MED) **Only a platform-side failure frees the Report.** That means no
+   publisher, a transport error, or a 5xx from corpusd. A host-side
+   refusal returns to the cell as a fixable error and does not count. That
+   covers validation, a missing basis, an override without a reason, and a
+   4xx from the platform's own checks. So the finish rule is not a
+   checkbox.
+3. (LOW) **`ValidateRelate` accepts the own-story forms.** It accepts `""`
+   and `story:head` as the desk's own story. The host binds them to the
+   desk's doc (`research:<doc>`). A research desk with no doc refuses them,
+   and a test pins it.
+4. (LOW) **`pending` is validate-only.** The route refuses `pending`
+   without `validate_only`.
+5. (LOW) **An alias write is a union merge.** It reads the row, adds the
+   alias by key, and writes the union under the lexicon's write lock. It is
+   never an overwrite of the insert-once row (`learnAlias`, named so).
+6. (LOW) **Lexicon bound.** The gazetteer is bounded by the owner's entity
+   rows, which only the research desk mints: at most 12 per Relate call,
+   two or three calls per story, about 5 per story by §7's curve. At the
+   paper's rate of about 100 stories a day, that is about 180k entities a
+   year, at about 200 bytes a key, under 40 MB per owner. The size is
+   reported in the growth read. A hard cap is not added now. It would
+   silently stop learning, which is the failure the owner names. Above
+   500k keys, the read logs a warning: a named residual with its signal.
+7. (LOW) **The 10,000-event channel window.** `system1:<computer>` is
+   read as the newest 10,000 events, and c0 adds about 3 a run (two
+   judgments and a record). The caps and same-run replay read only recent
+   events, so they hold. Cross-run analysis replay past that window re-pays
+   System 1 once. That is a named residual: the cost is one call per
+   story whose last analysis fell out of the window. The read's
+   `Timestamp` sort gains the `StreamSeq` tiebreak, so equal timestamps
+   order as written.
+8. (NIT) **A mint's type basis is resolved host-side.** The host reads it
+   from the analysis's type answer for that phrase, never from the cell.
+
 ### Slice d, revised: backfill through existing paths
 
 - **Reopening settled stories onto a new trajectory is not needed, and
