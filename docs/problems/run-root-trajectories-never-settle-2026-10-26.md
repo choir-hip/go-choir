@@ -116,3 +116,44 @@ For P-B: no fix proposed; investigate first. Smallest next step is read-only: ex
 
 - P-B is the SD-01 race FP0 owns until U4 lands: FP0 lands every applied change on main by hand before the next deploy. FP0 did not land themes round 6 (applied 15:23) before b@c's base moved; it was promoted verbatim at 16:38 as 670f9ea50 (patch sha256 056f181abb9470a5c50e…, matching the operation's source_patch_sha256). The booted base management named, 3217a2f7, is a docs-only main commit (15:06) while staging still ran 9771c7680, so the guest's "booted base" reads a main commit rather than the deployed build; that mechanism is not yet traced and stays a hypothesis here. U4 (lane u4-rebase, in review 321) and base-join (landed in train 17) are the structural answer.
 - P-A is a separate, real defect: 33 of 50 listed b@c trajectories are run-root rows that stay live forever. Fix after this record, smallest option first (settle the run-root row when its run completes, or delete the mint if nothing reads it).
+
+## P-B investigation, 2026-10-26 (read-only; Sonnet worker, lane run-root-trajectories)
+
+Mutation class of this section: green (docs). Nothing was changed on any computer.
+
+### Conclusion
+
+The premise in the FP0 addendum is not what happened. **3217a2f7 was not a docs-only commit and it did deploy.** It added `scripts/qa_renew_key.mjs`. That path matches none of the ignore patterns in `.github/scripts/deploy-impact-classify` (the tooling patterns cover `scripts/check-*.sh`, `scripts/*_probe.mjs`, `scripts/*.py`, `scripts/mail-*` and a few named files, not `*.mjs` in general), so it fell to the `*)` arm: "unknown deployed path: conservative host + canonical guest image". The classifier therefore set `deploy_host_os`, `deploy_active_vm_refresh` and the autoputer runtime, and the run built the guest image from the push's own head. A docs-only push does not do this.
+
+So the guest's booted base was genuinely 3217a2f7, and management's text was true. There is no docs-only stamping bug.
+
+### Evidence
+
+- Where the guest's booted base comes from: `bootedBaseCommit()` (internal/agentcore/source_projection.go:60) reads `build_commit=` from the guest image manifest (`rt.guestImageManifestPath()`). The manifest is written by `nix/autoputer-vm.nix:48-52` (`build_commit=${buildCommit}`); `buildCommit = self.rev or self.dirtyRev or "local"` (flake.nix:236), the commit the deploy builds. `hostbuild.baseRefusal` (internal/hostbuild/service.go:388) and `updater` (internal/updater/updater.go:445-490) read the same field. The refusal string quoted by management is `sourceproj.reconcileStack`'s `StateBaseMoved` reason (internal/sourceproj/sourceproj.go:~335): "the stack is based on <base> but this computer booted <booted> and the stack's patch is not in it", surfaced as `stack_base_moved:` by `Result.Refusal()`.
+- CI run 40346087412 (push 3217a2f7, 15:06:45Z to 15:17:02Z, success): the plan job's base was the live staging commit 9771c768 (`deploy-base-select ... from health.platform.deployed_commit`); `Detect Staging Deploy Impact` logged `scripts/qa_renew_key.mjs -> unknown deployed path: conservative host + canonical guest image`, then `deploy_host_os=true`, `deploy_active_vm_refresh=true`. The deploy built the NixOS closure and guest images (15:08:07), logged `go-choir guest image pointer updated to /nix/store/bz4929hm...-go-choir-guest-image` at 15:14:57, refreshed 4 active computers (15:15-15:16, each "expecting served commit 9771c768 or 3217a2f7 after refresh", `refreshed=4`), and published `Published activation receipt for 3217a2f7e4ba...` at 15:16:58 with `deployed_commit` 3217a2f7. Every service reported commit 3217a2f7.
+- Run 40346712729 (push a5bf97c2, 15:10:30Z to 15:31:44Z) is the *next* deploy; `/health` now reads `commit`/`deployed_commit` a5bf97c2 (`built_at` 20261026150757 is that commit's committer time). The "staging ran 9771c768 until 15:31" in the brief is the proxy's health read before that run finished; the host and guest image were on 3217a2f7 from 15:17. (I did not re-read /health at 15:2x, so the exact health value in that window is not verified; the run log is the evidence for the guest image.)
+- Timeline for b@c: candidate patch authored in a capsule created 14:56 (base 9771c768, then the booted base); the guest image refresh at ~15:15 moved the booted base to 3217a2f7; round 6 applied at 15:23:15 (`selfdev-a681cea5`, state applied); the round 7 cast at 15:24 reconciled the stack (base 9771c768, patch not in 3217a2f7, because FP0 promoted it only at 16:38 as 670f9ea50) to `stack_base_moved` and refused.
+- b@c was read through `bc computer status` and `bc self-dev list` only. `bc identity` returned `503 execution identity authority unavailable`, so I could not read the booted manifest from the guest; the build commit of the booted image is inferred from the deploy log and from management's quoted refusal, which matches the code path above.
+
+### Is every apply exposed to base-moved after any docs-only push?
+
+No. A docs-only push (`docs/*`, top-level `*.md`, `.github/*`, tests) sets `non_docs=false`, skips `deploy-impact`, and nothing builds a guest image, so no computer's booted base moves.
+
+But every apply is exposed to base-moved after **any deploy that rebuilds the guest image**, whether or not the guest's code changed, because `build_commit` is the deploy commit and the manifest digest changes with it. Three ways a deploy that changed no guest behavior still moves every computer's base:
+
+1. The classifier's catch-all `*)` arm. Any new path outside its allowlist (this one was `scripts/qa_renew_key.mjs`) triggers a full host + guest-image + active-VM refresh.
+2. Any real change to a service the guest image embeds (frontend, agentcore, and so on), which is intended.
+3. A forced deploy.
+
+After the move, a live stack that is not contained in the new base (its patch was not promoted to main yet) is `stack_base_moved` and every engineering cast is refused until it is upstreamed. `Contained` (internal/sourceproj/contained.go) already compares trees (three-way containment, landed 06:38 today), so it is not comparing commit ids; what it cannot do is accept a stack whose patch is *not* in main and whose base merely differs from booted in unrelated paths. That is the U4 rebase (lane u4-rebase), not a containment bug.
+
+### Smallest fixes (reported, not done; P-B is not fixed in code here)
+
+- S1, one line, removes this instance: add `scripts/*.mjs` tooling (`scripts/qa_*.mjs`, `scripts/*_test.mjs`, and the other operator scripts that no closure reads) to the "ignored" arm of `.github/scripts/deploy-impact-classify` and its test, so an operator script does not rebuild the guest image and refresh every computer. This stops the class "tooling push moves every base"; it does not stop real deploys moving the base.
+- S2, the structural answer: when the stack base differs from the booted base, try to carry the patch onto the booted base (a clean three-way apply of the patch, base to booted) instead of marking `stack_base_moved`; refuse only on a conflict. That is U4. Until it lands, FP0's promote-before-next-deploy rule is the mitigation.
+- Not proposed: stamping a "code commit" instead of the deploy commit into `build_commit`. It would make the manifest digest differ from the commit id and break `hostbuild.baseRefusal`, which compares both.
+
+### Heresy delta (P-B)
+
+- discovered: the deploy-impact catch-all treats unlisted tooling scripts as a full guest-image deploy (3217a2f7 refreshed every active computer for a script nobody deploys).
+- introduced: none. repaired: none.
