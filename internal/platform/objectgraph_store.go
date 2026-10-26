@@ -540,6 +540,42 @@ func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, json
 	return out, rows.Err()
 }
 
+// ListObjectsByMetadataForOwner is ListObjectsByMetadata limited to one
+// owner's objects in the query itself, so another owner's matching objects
+// can never fill the limit.
+func (o *ObjectGraphStore) ListObjectsByMetadataForOwner(ctx context.Context, kind, jsonPath, value, ownerID string, limit int) (out []objectgraph.Object, err error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	done := o.store.retrievalTimer(retrievalListByMetadata)
+	where, args, shape, none, err := o.metadataPredicate(ctx, kind, jsonPath, value)
+	defer func() { done(shape, len(out), err) }()
+	if err != nil || none {
+		return nil, err
+	}
+	rows, err := o.store.corpus().QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE `+where+` AND owner_id = ?
+		 ORDER BY updated_at DESC LIMIT ?`,
+		append(args, ownerID, objectgraph.NormalizedLimit(limit))...)
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list by metadata for owner: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		obj, bodyRef, err := scanObjectGraphObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
 // GetEdge finds a single edge by from_id + kind.
 func (o *ObjectGraphStore) GetEdge(ctx context.Context, fromID string, kind objectgraph.EdgeKind) (_ objectgraph.Edge, err error) {
 	if o == nil || o.store == nil || o.store.db == nil {

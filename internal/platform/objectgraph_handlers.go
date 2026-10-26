@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -159,6 +160,18 @@ func genericCaptureWriteRefusal(r *http.Request, kind objectgraph.ObjectKind, bo
 	return 0, ""
 }
 
+// genericReleaseWriteRefusal keeps choir.software_release off the generic
+// object routes for guests. A release object is written only by the host's
+// publish handler, after the owner's act and a check that the patch is in the
+// host content store; the release reads trust the objects of this kind, so a
+// guest filing one under its own owner would forge a publication.
+func genericReleaseWriteRefusal(r *http.Request, kind objectgraph.ObjectKind) (int, string) {
+	if string(kind) != release.ObjectKind || trustedInternalCaller(r) {
+		return 0, ""
+	}
+	return http.StatusForbidden, "releases are published through the owner's act, not written as objects"
+}
+
 func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph unavailable"})
@@ -170,6 +183,10 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if status, msg := genericCaptureWriteRefusal(r, objectgraph.ObjectKind(req.Kind), req.Body); status != 0 {
+		writeJSON(w, status, apiError{Error: msg})
+		return
+	}
+	if status, msg := genericReleaseWriteRefusal(r, objectgraph.ObjectKind(req.Kind)); status != 0 {
 		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
@@ -222,6 +239,10 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status, msg := genericCaptureWriteRefusal(r, obj.ObjectKind, obj.Body); status != 0 {
+		writeJSON(w, status, apiError{Error: msg})
+		return
+	}
+	if status, msg := genericReleaseWriteRefusal(r, obj.ObjectKind); status != 0 {
 		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
