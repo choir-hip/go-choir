@@ -124,9 +124,9 @@ The design's six, with the test that would pin each:
    `CheckPatchAppliesToTree`, are named as conflicts, never applied twice. Test: a
    fixture base with one of two hunks already present; the check names that hunk's
    path.
-2. *Base moves again*: the candidate is pinned to `B'`; add a guest check that the
+2. *Base moves again*: the candidate is pinned to `B'`; the guest check that the
    materializer refuses a candidate whose `SourcePatchBaseCommit` is not the booted
-   base (none exists today). Test: apply of a bundle based on a non-booted commit is
+   base is not built in U4 (it is `lane/base-join`, below; do not re-add it here). Test: apply of a bundle based on a non-booted commit is
    refused with a named reason; the next reconcile starts a new round.
 3. *Loop*: one automatic round per (stack operation, booted base) pair, decided once
    and remembered under `<root>/rebase/`, like the carried offers; a failed or
@@ -211,7 +211,9 @@ the later half of U4 and does not answer the automatic guest round.
 **Not in U4: the base join.** A self-development apply that does not check its
 candidate's base against the booted base is its own security slice. It is built
 unconditionally (not behind any U4 switch) on `lane/base-join`, from
-`docs/problems/selfdev-apply-has-no-base-join-2026-10-26.md`. U4 depends on it
+`docs/problems/selfdev-apply-has-no-base-join-2026-10-26.md` (that problem doc
+lives on `lane/base-join` and reaches `main` when the lane lands; landing order:
+`lane/base-join` first, then the U4 staging proof, slice 7). U4 depends on it
 for failure mode 2 (the base moves again before apply), and the U4 staging proof
 runs only after it has landed.
 
@@ -428,16 +430,27 @@ most three attempts per pair.
      `internal/store/engineering_assignments.go:905`) holds a pair claim, the
      materializer runs `verifyRebaseContent` before apply. It never runs for
      `journalOnly`.
-   - In a scratch work tree from the guest repository (which holds `B` and
+   - In a scratch index from the guest repository (which holds `B` and
      `B'`), it computes three trees:
-     - `T_P` = `B'` with `P` applied using `git apply --3way`, recording which
-       paths applied cleanly;
+     - `T_P` = `B'` with `P` applied using `git apply --cached --3way` in a
+       scratch index, recording which paths applied cleanly. `sourceproj`'s
+       `patchedTree`/`scratchIndex` are index-only (`git apply --cached`,
+       `git.go:122-140`) and do not do a 3-way apply today, so the per-path
+       clean/conflict classification is a new helper in `sourceproj`, not a reuse;
      - `T_C` = `B'` with the bundle's patch applied;
      - and it requires `SourcePatchBaseCommit == B'`.
    - It requires all of these:
      - every clean path of `P` is byte-equal in `T_C` and `T_P`;
      - every conflict path of `P` (the offer's `ConflictPaths`) differs in `T_C`
-       from `B'`, so it was resolved and not dropped;
+       from `B'`, so it was resolved and not dropped. **Named residual
+       (re-review 307, finding 2):** content cannot tell "resolved by keeping
+       `B'`'s version" from "dropped". A candidate that legitimately keeps `B'`
+       content at a conflict path is refused `rebase_content_mismatch` with the
+       verdict `kept_base_unverifiable` and that path named. It is fail-closed, not
+       silent. There is no escape in U4 (no marker channel is designed); the pair
+       waits for the next base or slice 8's owner retry. A marker (a per-path
+       `kept-base` line in the Freeze receipt) is the candidate remedy for a later
+       slice, and is not built here;
      - paths the bundle changes outside `P` are allowed and listed.
    - A failure refuses the apply with `rebase_content_mismatch`, naming the
      paths. The computer keeps its release.
@@ -624,11 +637,19 @@ preflight.**
 
 **Slice 4 (red, tier 1): the rebase offer and its notice.**
 - *Files:* `internal/agentcore/carried_patch.go`:
-  - `offerRebasePatch` writes to `carried/rebase-offers/`;
+  - `offerRebasePatch` writes to `carried/rebase-offers/`. Before writing it
+    checks the patch digest, its size (`CarriedPatchMaxBytes`) and its paths, as
+    the ordinary offer does. `ConflictPaths` and `CleanPaths` come from
+    `CheckCarriedPatchApplies(P, B' ref)` (`CarriedPatchConflictError{Paths,
+    Clean}`), and the patch is mounted even on conflict. An over-bound patch, a
+    digest mismatch or a root mismatch writes no offer and the assignment starts
+    from `B'` with no mount, with the reason on the tape as the ordinary offer
+    does;
   - the spawn mount reads that path for a claimed assignment;
   - `carriedPatchNotice` gets the rebase wording.
 - *Failure modes:* failure modes 1, 11 and 12; an ordinary assignment carrying an
-  applied operation; old code reading a rebase offer.
+  applied operation; old code reading a rebase offer; an over-bound or
+  digest-mismatched `P`.
 - *Tests:*
   - a `B'` already holding one of `P`'s two hunks names that path as a conflict;
   - an ordinary assignment on an applied trajectory gets no offer;
@@ -670,7 +691,10 @@ preflight.**
 
 **Slice 8 (orange, tier 1, later): the owner retry act.**
 - An owner product API, not on management's ProductAPI allowlist, re-opens a
-  spent pair under a fourth and later attempt with an owner-act stamp.
+  spent pair under a fourth and later attempt with an owner-act stamp. Those
+  notices amend `IsStackRebaseNotice`: its `n` bound of 1..3 is the automatic
+  bound; an owner-act-stamped notice carries `n` above 3 and the predicate then
+  also requires the stamp (slice 8 changes the predicate, with its own tests).
 - The claim then records attempt-scoped history: the claim key becomes
   (pair, owner generation).
 - Until this lands, a spent pair waits for the next base.
