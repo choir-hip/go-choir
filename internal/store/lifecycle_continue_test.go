@@ -22,6 +22,10 @@ package store
 //      new trajectory now owns.
 //  S8. The lineage read follows a continues link to another document's
 //      trajectory, loops on a cycle, or ignores its bound.
+//  S9. A desk run that still owns the activation is continued past, so it
+//      rebinds the desk to the settled trajectory when it ends.
+//  S10. A late update for the settled trajectory is refused once the document
+//      moved on, though it was recorded before (the document pointer check).
 
 import (
 	"context"
@@ -368,5 +372,61 @@ func TestLifecycleTrajectoryLineage(t *testing.T) {
 	cycleA := startContinueTestDocument(t, s, "cycle", map[string]string{types.TrajectoryRefContinues: "trajectory-cycle"})
 	if got, err := s.LifecycleTrajectoryLineage(ctx, start.OwnerID, start.ComputerID, cycleA.TrajectoryID, 8); err != nil || len(got) != 1 {
 		t.Fatalf("S8: self-cycle lineage=%v err=%v, want only itself", got, err)
+	}
+}
+
+// S9: a desk run that owns the activation holds the settled trajectory; the
+// continue refuses rather than let the run rebind the desk when it ends.
+func TestContinueLifecycleDocumentRefusesWhileTheDeskRunOwnsTheActivation(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := startContinueTestDocument(t, s, "owned", nil)
+	queueLifecycleUpdateFixture(t, s, start, "command-queue-owned") // projects a pending desk run
+	settleContinueTestTrajectory(t, s, start.OwnerID, start.ComputerID, start.InitialDocument.DocID, start.TrajectoryID)
+	req := continueTestRequest(start, start.TrajectoryID, "trajectory-owned-2", start.InitialRevision.RevisionID)
+	if _, err := s.ContinueLifecycleDocument(ctx, req); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("S9: continue under a desk run that owns the activation err=%v, want concurrent state change", err)
+	}
+	doc, err := s.GetLifecycleDocument(ctx, start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil || doc.TrajectoryID != start.TrajectoryID {
+		t.Fatalf("S9: refused continue moved the document to %q err=%v", doc.TrajectoryID, err)
+	}
+	if _, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, req.TrajectoryID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("S9: refused continue left trajectory %s err=%v", req.TrajectoryID, err)
+	}
+}
+
+// S10: a producer report for the settled trajectory that reaches the store
+// after the document continued is recorded as late evidence, as it was before
+// the continue; the document pointer names the next trajectory of the lineage.
+func TestLateUpdateForAContinuedTrajectoryIsStillRecorded(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := startContinueTestDocument(t, s, "late", nil)
+	late := queueLifecycleUpdateFixture(t, s, start, "command-queue-late-continued")
+	term := types.TerminalizeRunRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "terminalize-late-run", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, RunID: late.SourceRunID, TerminalState: types.RunCompleted, Reason: "done",
+	}
+	term.CommandDigest, _ = ComputeTerminalizeRunDigest(term)
+	if _, err := s.TerminalizeRun(ctx, term); err != nil {
+		t.Fatalf("terminalize run: %v", err)
+	}
+	settleContinueTestTrajectory(t, s, start.OwnerID, start.ComputerID, start.InitialDocument.DocID, start.TrajectoryID)
+	next := continueTestRequest(start, start.TrajectoryID, "trajectory-late-2", start.InitialRevision.RevisionID)
+	if _, err := s.ContinueLifecycleDocument(ctx, next); err != nil {
+		t.Fatalf("continue: %v", err)
+	}
+	result, err := s.QueueLifecycleUpdate(ctx, late)
+	if err != nil {
+		t.Fatalf("S10: late update after the continue: %v", err)
+	}
+	if result.Update == nil || result.Update.Disposition != types.UpdateLate || result.Update.TrajectoryID != start.TrajectoryID ||
+		len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleUpdateLate {
+		t.Fatalf("S10: late update result=%+v", result)
+	}
+	doc, err := s.GetLifecycleDocument(ctx, start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	if err != nil || doc.TrajectoryID != next.TrajectoryID {
+		t.Fatalf("S10: the late update moved the document to %q err=%v", doc.TrajectoryID, err)
 	}
 }
