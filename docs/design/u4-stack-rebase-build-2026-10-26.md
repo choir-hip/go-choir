@@ -865,3 +865,53 @@ may not be in the trace export).
 **Not built:** the staging run itself (FP0). Known residual: a replayed rebase open after a
 restart has a different `RebaseAdmission.BootedAt`, so its command digest differs
 and the replay fails closed.
+
+## Review 321 adjudication (2026-10-26)
+
+Reviews: Devin approved with four low items and a nit; DeepSeek returned one HIGH
+(F1) and three small ones. Every finding, decided:
+
+- **F1 (high, DeepSeek) adopted.** `VerifyRebase` was path-granular: a path with a
+  conflicting hunk and a clean hunk could drop the clean one and pass (reproduced).
+  It is now hunk-granular for every path `git apply` cannot take as a whole. The
+  check is the 3-way merge of (B', B, B+P) per path (`git merge-file`, marker size
+  40): a clean merge requires the candidate to equal it; a conflicting merge requires
+  the candidate to hold, in order, every stable stretch of the merge (prefix, between
+  conflict blocks, suffix) and to differ from the merge with conflicts resolved to B'
+  (that is `kept_base_unverifiable`, the named residual). New reason `hunk_missing`
+  (`Dropped`). Consequences, all tests: a change B' already made is no longer "kept
+  base" when the merge is clean; a path P touches is checked whole, so edits elsewhere
+  in it are refused like on a clean path (extras belong in paths P does not touch); a
+  conflict path the candidate deletes is `hunk_missing` (DeepSeek's "deleting counts as
+  resolved" risk). Within a conflict block the resolution stays unverifiable by content.
+- **F2 (low, DeepSeek) adopted.** The proof script exits 1 on a failed negative and
+  records skipped negatives explicitly in `evidence.json` (`verdict`, `skipped`).
+  Step 7 (the conflict run) is a real check since 8db86c7ce.
+- **F3 (low, DeepSeek) adopted.** The root prompt keeps "never cast to research or
+  management" and states the rebase notice as the one exception.
+- **F4 (nit, DeepSeek) and Devin 2 (low) adopted.** Admission selects the Cast by the
+  binding's `ParentControlID`, not by "the record to the assigned inbox".
+- **Devin 1 (low) adopted.** A transient failure (reconcile, a read, the commit) re-arms
+  the timer after the stay-up interval; a state that does not hold still ends it.
+- **Devin 3 (low) deferred, successor named: U4 slice 9, "a rebase round doomed by a
+  newer base is cancelled".** A claimed rebase round whose base the computer no longer
+  booted can never finish (every Freeze is refused `booted_base_moved`), yet it is
+  non-terminal, so the timer defers the next pair's notice and the owner retry answers
+  `rebase_retry_round_running`; management's new engineering Cast would also be refused
+  while the old assignment holds the parent round. Skipping the defer alone would mint
+  notices that cannot be used, so the fix is a system cancellation of the doomed
+  assignment (the existing `persistSystemEngineeringCancellation` path). That cancels
+  engineering work on a platform decision, so it needs FP0's ruling before it is built.
+  Until then the stuck round is cleared by the desk's CancelAct or the owner, and the
+  wedge is fail-closed and visible.
+- **Devin 4 (nit) rejected.** A notice minted in the instant before an open claims the
+  pair is inert (admission refuses it `rebase_notice_claimed`) and bounded (the cap);
+  closing the window needs the mint inside the open's transaction, which would put the
+  timer's clock on the store's critical path for no gain.
+- **Devin 5 (nit) rejected.** `patchedTreeOnly` over the clean paths applies the same
+  per-path patches that each passed alone, so it cannot disagree except by a transient
+  git failure, which returns an error and retries rather than settling the operation.
+- **DeepSeek risk: `rebaseOfferOn` reads `sourceproj.Enabled()` (setting OR the
+  `CHOIR_SOURCE_PROJECTION` env) rather than the setting alone. Rejected.** The env
+  switch is platform-set and documented in `sourceproj` as turning projection on
+  regardless; a guest cannot reach it.
