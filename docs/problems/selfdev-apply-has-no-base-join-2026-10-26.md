@@ -1,6 +1,6 @@
 # A frontend-only self-development apply never checks its base (2026-10-26)
 
-Status: documented; fix not built. Found by design review 303 (Devin and
+Status: fix built on lane/base-join (tests first, then code); not deployed, no staging proof yet. Found by design review 303 (Devin and
 DeepSeek) of the U4 stack rebase design. Class of the fix: red (apply path,
 security provenance), review tier 2.
 
@@ -78,3 +78,29 @@ Fix (same commit series, second): a journaled terminal `refused` outcome keeps
 the typed error, so the existing branch settles the operation `degraded` with
 the refusal as its terminal error. The rollback path has the same override and
 is left as it is (residual, named): it is not refused by the join.
+
+## Fix as built (2026-10-26)
+
+- `plainReleaseBaseCommit` (materializer) sets the plain manifest's `BaseCommit`
+  to the bundle's `SourcePatchBaseCommit` (lower-cased). It claims none, and
+  logs, when the bundle records no source patch base, or when the booted base
+  names no verifiable 40/64-hex commit (dev `build_commit=local`, a dirty tree,
+  or no image manifest wired); refusing there would refuse every candidate on
+  that build. A short or malformed base is claimed as is, so it is refused.
+- The updater's `checkStateCompatibility` compares with `EqualFold`, never a
+  prefix, and refuses with `base_moved_since_freeze` naming both commits.
+  Not gated on any switch. Only the plain manifest is written in one place
+  (`materializeSelfDevelopmentOperation`); the layered manifest keeps the
+  host's recorded base and the platform-update manifest its offer's.
+- A journal-terminal `applied` operation never reaches the check: `Apply`
+  returns the recorded outcome first and a crash-boot settlement reads the
+  journal only (b@c's selfdev-83fbdfa9 shape; tested).
+- Rollback: `rollbackApplyManifest` drops a plain pinned release's base claim,
+  so a rollback is never refused by the join; a layered release keeps its base.
+- Release-time consequence: a plain release minted by this build carries a
+  `base_commit` in its content digest; releases minted before it are unchanged,
+  and an operation mid-apply across the upgrade is not restarted by a deploy
+  (CLAUDE.md: never restarted mid self-development apply).
+- Rollback of the fix: revert the commit; no data migration. A plain release
+  that already carries `base_commit` stays valid (the field is read by the
+  updater only at apply time).

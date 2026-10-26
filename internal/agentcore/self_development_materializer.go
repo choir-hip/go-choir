@@ -498,6 +498,13 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		EventSchemaVersion: computerevent.SchemaVersionV1, ReducerVersion: computerevent.ReducerVersionV1,
 		Marker: "selfdev-" + operation.BundleDigest[:16], Files: manifestFiles,
 	}
+	// The plain release joins its base: the base commit the candidate was
+	// authored against is the manifest's BaseCommit, and the updater refuses
+	// the apply when it is not the booted base. Not gated on any switch (a
+	// security provenance check; docs/problems/
+	// selfdev-apply-has-no-base-join-2026-10-26.md). A host-built release
+	// takes the host's recorded base below.
+	release.BaseCommit = rt.plainReleaseBaseCommit(operation, bundle)
 	sourceDir := filepath.Dir(bundlePath)
 	if hostBuilt != nil {
 		// The layered release: the host's closure, receipts and the layer's
@@ -527,7 +534,16 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		// whatever the live Apply returned (including a transport error that
 		// lost the response or an epoch-fenced replay refusal).
 		result, applyErr = journaled.Result, nil
-		if journaled.Result.Outcome != "applied" {
+		switch journaled.Result.Outcome {
+		case "applied":
+		case "refused":
+			// A pre-mutation refusal keeps its type: the branch below settles
+			// the operation degraded with the refusal as its reason. Losing
+			// the type left it materializing, desks held, replaying the same
+			// journaled refusal (docs/problems/
+			// selfdev-apply-has-no-base-join-2026-10-26.md).
+			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journaled.Failure)
+		default:
 			applyErr = errors.New(journaled.Failure)
 		}
 	}
@@ -577,10 +593,43 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	return applyErr
 }
 
+// plainReleaseBaseCommit is the base commit a plain (not host-built) release
+// declares: the one its frozen bundle's source patch was authored against, or
+// "" when the join cannot be claimed, each case named:
+//   - the bundle records no source patch: it has no base to join (the
+//     candidate is not derived from source), so the release claims none;
+//   - the booted base names no verifiable commit (a dev build's
+//     build_commit=local, a dirty tree, or no booted image manifest wired):
+//     nothing can be proven against it, and refusing would refuse every
+//     candidate on that build, so the release claims none;
+//   - otherwise the base is claimed exactly as recorded (lower-cased). A
+//     short or malformed commit is claimed too, so the updater refuses it
+//     with the reason rather than a prefix match passing it.
+func (rt *Runtime) plainReleaseBaseCommit(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) string {
+	base := strings.ToLower(strings.TrimSpace(bundle.SourcePatchBaseCommit))
+	if base == "" {
+		log.Printf("selfdev materializer: operation %s: the bundle records no source patch base; the release claims no base commit", operation.OperationID)
+		return ""
+	}
+	if rt.bootedBaseCommit() == "" {
+		log.Printf("selfdev materializer: operation %s: the booted base names no verifiable commit; the release claims no base commit", operation.OperationID)
+		return ""
+	}
+	return base
+}
+
 // rollbackApplyManifest is the manifest a rollback applies: the pinned prior
 // release re-finalized under the rollback's decision event.
 func rollbackApplyManifest(pinned updater.ReleaseManifest, decisionEvent string) (updater.ReleaseManifest, error) {
 	pinned.AcceptedEventHead = decisionEvent
+	if pinned.ClosureDigest == "" && pinned.BaseImageManifestDigest == "" && pinned.LayeringEntrypoint == "" {
+		// A plain release's base claim is a freeze-time provenance check on
+		// installing a new candidate. A rollback returns to a release the
+		// computer already ran and is never refused by it. A layered
+		// release keeps the base it was built on: its closure resolves
+		// against that base.
+		pinned.BaseCommit = ""
+	}
 	pinned.ContentDigest = ""
 	return updater.FinalizeManifest(pinned)
 }
