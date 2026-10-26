@@ -177,7 +177,7 @@
     // The field is a soft glow field; it gains nothing from a 2x backing
     // store and costs 4x the fill rate. 1.5 is the point of diminishing
     // returns for a radial gradient you cannot see the pixels of.
-    dpr = Math.min(window.devicePixelRatio || 1, density === "ambient" ? 1 : 1.5);
+    dpr = Math.min(window.devicePixelRatio || 1, density === 'ambient' ? 1 : 1.5);
     width = canvas.clientWidth || window.innerWidth;
     height = canvas.clientHeight || window.innerHeight;
     canvas.width = Math.max(1, Math.round(width * dpr));
@@ -314,8 +314,10 @@
   }
   function onVisibility() {
     visible = document.visibilityState === 'visible';
-    if (visible) onInput();
-    else stop();
+    if (visible) {
+      onInput();
+      start();
+    } else stop();
   }
 
   onMount(() => {
@@ -329,7 +331,10 @@
       if (reduced) {
         stop();
         render(performance.now());
-      } else start();
+      } else {
+        onInput();
+        start();
+      }
     });
     resize();
     if (reduced) render(performance.now());
