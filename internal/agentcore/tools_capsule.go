@@ -40,6 +40,9 @@ type CapsuleToolCtx struct {
 	// OpenFreezeCandidate opens the promotion candidate when an assignment
 	// freezes with none (Gate 2 track D); nil keeps the pre-created-only rule.
 	OpenFreezeCandidate func(ctx context.Context, trajectoryID string) (selfdev.Operation, error)
+	// VerifyRebase checks a staged cumulative patch for a rebase round (U4);
+	// nil, or an assignment no pair claim names, checks nothing.
+	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) error
 	EventProjection     interface {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
@@ -296,6 +299,17 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	// U1: the bundle's patch is the cumulative one, from the stack base.
 	if err := composeFreezePatch(ctx, toolCtx.Executor.SourceDir(), staged); err != nil {
 		return nil, err
+	}
+	// U4: a rebase round's candidate must contain the applied change. The
+	// check is repeated at apply; here it fails before the owner sees it.
+	if toolCtx.VerifyRebase != nil && staged.SourcePatchSHA != "" {
+		stagedPatch, readErr := os.ReadFile(filepath.Join(staged.TemporaryRoot, "source.patch"))
+		if readErr != nil {
+			return nil, fmt.Errorf("read the staged source patch: %w", readErr)
+		}
+		if err := toolCtx.VerifyRebase(ctx, staged, stagedPatch); err != nil {
+			return nil, err
+		}
 	}
 	sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, handle)
 	if err != nil {

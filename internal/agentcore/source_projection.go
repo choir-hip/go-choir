@@ -337,6 +337,11 @@ type sourceProjectionFact struct {
 	BootedBase  string `json:"booted_base,omitempty"`
 	// LocksCleared names the stale git locks reconcile removed.
 	LocksCleared []string `json:"locks_cleared,omitempty"`
+	// RebaseOf and ReceiptSHA256 are set on a source_projection_rebased fact
+	// (U4): the applied change a candidate was verified to contain, and the
+	// lineage receipt's digest.
+	RebaseOf      string `json:"rebase_of,omitempty"`
+	ReceiptSHA256 string `json:"receipt_sha256,omitempty"`
 }
 
 func (rt *Runtime) appendSourceProjectionFact(trigger string, result sourceproj.Result) {
