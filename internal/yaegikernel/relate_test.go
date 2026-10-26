@@ -21,6 +21,10 @@ import (
 //     role, no System 1 receipt or question, an oversized reason, more than
 //     12 attachments, the same entity twice (by id, or two new names that
 //     normalise alike), or a probability the cell supplies.
+//  E10 The desk's own story cannot be named before it is published (review
+//     304 item 3): "" and "story:head" are the desk's own story, kept as
+//     RelateOwnStory for the host to bind; any other non-publication form is
+//     refused.
 
 func TestRelateIsExportedToTheResearchDeskOnly(t *testing.T) {
 	cases := []struct {
@@ -108,7 +112,7 @@ func TestRelateRefusesAMalformedAttachmentBeforeTheHost(t *testing.T) { // E4
 		p    RelatePayload
 		want string
 	}{
-		{"no story", RelatePayload{Entities: []RelateEntity{relateEntityOK()}}, "publication"},
+		{"another story form", RelatePayload{Story: "story:tail", Entities: []RelateEntity{relateEntityOK()}}, "publication"},
 		{"malformed story", RelatePayload{Story: "pub-12", Entities: []RelateEntity{relateEntityOK()}}, "publication"},
 		{"no attachment", RelatePayload{Story: story}, "at least one"},
 		{"too many", many, "12"},
@@ -153,5 +157,28 @@ func TestRelateRefusesAMalformedAttachmentBeforeTheHost(t *testing.T) { // E4
 	}
 	if _, err := scope.Relate(story, "not a list"); err == nil {
 		t.Error("a string argument was accepted")
+	}
+}
+
+func TestRelateNamesTheDesksOwnStoryByEmptyOrHead(t *testing.T) { // E10
+	for _, story := range []string{"", "story:head", "  story:head ", " "} {
+		got, err := ValidateRelate(RelatePayload{Story: story, Entities: []RelateEntity{relateEntityOK()}})
+		if err != nil || got.Story != RelateOwnStory {
+			t.Errorf("story %q: got %q, %v; want %q", story, got.Story, err, RelateOwnStory)
+		}
+	}
+	scope, broker := system1Scope(t, SessionRoleResearch, "")
+	var sent RelatePayload
+	broker.SetEgress(func(_ context.Context, _ BrokerAction, raw json.RawMessage) (json.RawMessage, error) {
+		if err := json.Unmarshal(raw, &sent); err != nil {
+			t.Fatal(err)
+		}
+		return json.RawMessage(`{}`), nil
+	})
+	if _, err := scope.Relate("", []RelateEntity{relateEntityOK()}); err != nil {
+		t.Fatalf("Relate(\"\"): %v", err)
+	}
+	if sent.Story != RelateOwnStory {
+		t.Fatalf("the host was sent story %q, want %q for the host to bind", sent.Story, RelateOwnStory)
 	}
 }
