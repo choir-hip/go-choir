@@ -128,35 +128,39 @@ const (
 // from writing.
 func TestCacheReturnIdleIsBusyOnAnyHealthSignal(t *testing.T) {
 	one, zero := 1, 0
-	cases := map[string]func(f *cacheReturnFixture){
-		"a run is running": func(f *cacheReturnFixture) { f.rt.running["loop-1"] = func() {} },
-		"desk mutation pending": func(f *cacheReturnFixture) {
+	type busyCase struct {
+		reason  string
+		arrange func(f *cacheReturnFixture)
+	}
+	cases := map[string]busyCase{
+		"a run is running": {"running", func(f *cacheReturnFixture) { f.rt.running["loop-1"] = func() {} }},
+		"desk mutation pending": {"desk_pending", func(f *cacheReturnFixture) {
 			f.rt.cacheReturnReads = func(context.Context, time.Duration) healthStoreReads {
 				return healthStoreReads{deskPending: 1, liveCapsules: &zero}
 			}
-		},
-		"self-development active": func(f *cacheReturnFixture) {
+		}},
+		"self-development active": {"selfdev_active", func(f *cacheReturnFixture) {
 			f.rt.cacheReturnReads = func(context.Context, time.Duration) healthStoreReads {
 				return healthStoreReads{selfdevActive: 1, liveCapsules: &zero}
 			}
-		},
-		"a live capsule": func(f *cacheReturnFixture) {
+		}},
+		"a live capsule": {"live_capsules", func(f *cacheReturnFixture) {
 			f.rt.cacheReturnReads = func(context.Context, time.Duration) healthStoreReads {
 				return healthStoreReads{liveCapsules: &one}
 			}
-		},
-		"live capsules not reported (nil)": func(f *cacheReturnFixture) {
+		}},
+		"live capsules not reported (nil)": {"live_capsules", func(f *cacheReturnFixture) {
 			f.rt.cacheReturnReads = func(context.Context, time.Duration) healthStoreReads { return healthStoreReads{} }
-		},
-		"the hibernate fence is closed": func(f *cacheReturnFixture) { f.rt.hibernate.close(time.Minute) },
+		}},
+		"the hibernate fence is closed": {"hibernating", func(f *cacheReturnFixture) { f.rt.hibernate.close(time.Minute) }},
 	}
-	for name, arrange := range cases {
+	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := newCacheReturnFixture(t)
-			arrange(f)
+			c.arrange(f)
 			code, body := postCacheReturn(t, f.rt, hostPeer, idleBody)
-			if code != http.StatusConflict || body["outcome"] != "busy" {
-				t.Fatalf("%s: %d %v, want 409 busy", name, code, body)
+			if code != http.StatusConflict || body["outcome"] != "busy" || body["reason"] != c.reason {
+				t.Fatalf("%s: %d %v, want 409 busy reason %s", name, code, body, c.reason)
 			}
 			if f.writeCount() != 0 {
 				t.Fatalf("%s: %d writes", name, f.writeCount())
@@ -175,8 +179,8 @@ func TestCacheReturnIdleUnansweredStoreReadIsBusy(t *testing.T) {
 			return healthStoreReads{liveCapsules: &zero, unanswered: unanswered}
 		}
 		code, body := postCacheReturn(t, f.rt, hostPeer, idleBody)
-		if code != http.StatusConflict || body["outcome"] != "busy" {
-			t.Fatalf("unanswered %v: %d %v, want 409 busy", unanswered, code, body)
+		if code != http.StatusConflict || body["outcome"] != "busy" || body["reason"] != "store_unanswered" {
+			t.Fatalf("unanswered %v: %d %v, want 409 busy reason store_unanswered", unanswered, code, body)
 		}
 		if f.writeCount() != 0 {
 			t.Fatalf("unanswered %v: %d writes", unanswered, f.writeCount())
