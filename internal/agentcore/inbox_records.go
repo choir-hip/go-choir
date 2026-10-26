@@ -363,6 +363,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "job"
 	case types.IsEngineeringProgressRelay(rec):
 		return "progress"
+	case types.IsSelfDevelopmentOwnerAct(rec):
+		return "owner_act"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:

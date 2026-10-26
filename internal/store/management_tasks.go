@@ -76,6 +76,13 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if types.IsEngineeringProgressRelay(rec) {
 		return true
 	}
+	// An owner-act record tells a Texture that the candidate its document
+	// supervises was approved, applied or rejected. It is minted only by
+	// the live act (the decision request, or a live apply), never by a
+	// crash boot's settlement, so waking its reader resumes nothing.
+	if types.IsSelfDevelopmentOwnerAct(rec) {
+		return true
+	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {
 		return true
 	}
