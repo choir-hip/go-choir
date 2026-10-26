@@ -100,6 +100,21 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 // metadata (input_origin=user_prompt, owner_prompt).
 func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Request, doc types.Document, ownerID string, req textureAgentRevisionRequest) {
 	snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID)
+	if snapshotErr == nil && snapshot.Trajectory.Status == types.TrajectorySettled && strings.TrimSpace(firstNonEmpty(req.Prompt, req.Intent)) != "" {
+		// The document's episode of work settled; the owner's next ask is the
+		// next episode on the same document (F1,
+		// docs/problems/settled-document-refuses-owner-revision-2026-10-26.md).
+		// Only a revise against the current head continues it; a stale one
+		// falls through to the refusal below and starts nothing. A cancelled
+		// trajectory is a stop and keeps refusing.
+		if expected := strings.TrimSpace(req.ExpectedHeadRevisionID); expected == "" || expected == snapshot.Document.CurrentRevisionID {
+			if continued, continuedSnapshot, continueErr := h.continueSettledDocumentForOwner(r.Context(), ownerID, doc, snapshot); continueErr == nil {
+				doc, snapshot = continued, continuedSnapshot
+			} else {
+				log.Printf("texture api: continue settled document %s for owner revise: %v", doc.DocID, continueErr)
+			}
+		}
+	}
 	if snapshotErr != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable lifecycle state is unavailable or terminal"})
 		return
@@ -212,12 +227,69 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		h.NoteTextureRootChange(context.WithoutCancel(r.Context()), ownerID, doc.ComputerID, doc.DocID)
 	}
 	writeAPIJSON(w, http.StatusAccepted, textureOwnerRevisionResponse{
-		Schema:     textureOwnerRevisionSchemaV1,
-		DocID:      doc.DocID,
-		RevisionID: result.Revision.RevisionID,
-		RequestID:  requestID,
-		Replay:     result.Replay,
+		Schema:       textureOwnerRevisionSchemaV1,
+		DocID:        doc.DocID,
+		TrajectoryID: doc.TrajectoryID,
+		RevisionID:   result.Revision.RevisionID,
+		RequestID:    requestID,
+		Replay:       result.Replay,
 	})
+}
+
+// textureContinueIdentity derives the next trajectory's ids from the settled
+// trajectory alone, so every revise racing on one settled document sends the
+// same continue command and all but one replay it: one next trajectory.
+func textureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID string) (trajectoryID, commandID, workItemID string) {
+	key := strings.Join([]string{"choir:texture:continue", ownerID, computerID, docID, settledTrajectoryID}, "\x00")
+	trajectoryID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00trajectory")).String()
+	workItemID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00work")).String()
+	return trajectoryID, "continue:" + trajectoryID, workItemID
+}
+
+// continueSettledDocumentForOwner starts the next trajectory on a document
+// whose trajectory settled, carrying its head, its Texture desk and one open
+// Texture work item (store.ContinueLifecycleDocument), and returns the
+// document and the live snapshot the owner's revise then commits on. A lost
+// race joins whichever continue moved the document.
+func (h *Handler) continueSettledDocumentForOwner(ctx context.Context, ownerID string, doc types.Document, settled types.LifecycleSnapshot) (types.Document, types.LifecycleSnapshot, error) {
+	settledID := settled.Trajectory.TrajectoryID
+	trajectoryID, commandID, workItemID := textureContinueIdentity(ownerID, doc.ComputerID, doc.DocID, settledID)
+	req := types.ContinueLifecycleDocumentRequest{
+		OwnerID: ownerID, ComputerID: doc.ComputerID, CommandID: commandID,
+		TrajectoryID: trajectoryID, PredecessorTrajectoryID: settledID, DocID: doc.DocID,
+		ExpectedHeadRevisionID: settled.Document.CurrentRevisionID,
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: workItemID, Objective: textureOwnerReopenObjective,
+			AssignedAgentID: agentprofile.Texture + ":" + doc.DocID, AuthorityProfile: agentprofile.Texture,
+		},
+	}
+	digest, err := store.ComputeContinueLifecycleDocumentDigest(req)
+	if err != nil {
+		return types.Document{}, types.LifecycleSnapshot{}, err
+	}
+	req.CommandDigest = digest
+	result, continueErr := h.Store.ContinueLifecycleDocument(ctx, req)
+	if continueErr == nil && !result.Replay {
+		h.recordTextureAudit(ctx, "trajectory_started", ownerID, doc.ComputerID, trajectoryID, doc.DocID, req.ExpectedHeadRevisionID, commandID, digest, result.Trajectory.LifecycleVersion)
+	}
+	current, err := h.Store.GetLifecycleDocument(ctx, ownerID, doc.ComputerID, doc.DocID)
+	if err != nil {
+		return types.Document{}, types.LifecycleSnapshot{}, err
+	}
+	if current.TrajectoryID == settledID {
+		if continueErr == nil {
+			continueErr = errors.New("continue left the document on its settled trajectory")
+		}
+		return types.Document{}, types.LifecycleSnapshot{}, continueErr
+	}
+	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, ownerID, current.ComputerID, current.TrajectoryID)
+	if err != nil {
+		return types.Document{}, types.LifecycleSnapshot{}, err
+	}
+	if snapshot.Trajectory.Status != types.TrajectoryLive {
+		return types.Document{}, types.LifecycleSnapshot{}, fmt.Errorf("document %s moved to trajectory %s, which is %s", doc.DocID, current.TrajectoryID, snapshot.Trajectory.Status)
+	}
+	return current, snapshot, nil
 }
 
 // ownerRevisionTarget finds the one open desk work item an owner revise
@@ -327,11 +399,14 @@ const textureOwnerRevisionSchemaV1 = "choir.texture_owner_revision.v1"
 // document: the committed owner revision is the durable receipt and the desk
 // follows the document revision event stream.
 type textureOwnerRevisionResponse struct {
-	Schema     string `json:"schema"`
-	DocID      string `json:"doc_id"`
-	RevisionID string `json:"revision_id"`
-	RequestID  string `json:"request_id"`
-	Replay     bool   `json:"replay"`
+	Schema string `json:"schema"`
+	DocID  string `json:"doc_id"`
+	// TrajectoryID is the trajectory the revision committed on: a new one
+	// when the revise continued a settled document (F1).
+	TrajectoryID string `json:"trajectory_id,omitempty"`
+	RevisionID   string `json:"revision_id"`
+	RequestID    string `json:"request_id"`
+	Replay       bool   `json:"replay"`
 }
 
 func (h *Handler) pendingAgentMutationByDoc(ctx context.Context, ownerID, computerID, docID string) (*store.AgentMutation, error) {
