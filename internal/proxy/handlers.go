@@ -1455,11 +1455,13 @@ func isResolveTimeoutError(err error) bool {
 // resolve failure. A durable recovery refusal is a structured 503 with
 // Retry-After; timeouts are 504 Gateway Timeout; other failures are 502.
 func writeResolveError(w http.ResponseWriter, err error) {
-	if refusal := recoveryRefusalFromError(err); refusal != nil {
-		writeRecoveryRefusalResponse(w, refusal)
+	// A wake refused by a vmctl recovery refusal wraps it: the wake body
+	// (which carries the refusal's reason and kind) wins.
+	if writeComputerWakeFailure(w, err) {
 		return
 	}
-	if writeComputerWakeFailure(w, err) {
+	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		writeRecoveryRefusalResponse(w, refusal)
 		return
 	}
 	status := http.StatusBadGateway

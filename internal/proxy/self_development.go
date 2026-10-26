@@ -515,7 +515,13 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
-		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		// Reads wake the joined computer; approve, rollback, adopt and
+		// rebase-retry are owner acts and never do.
+		if action == "read" {
+			autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		} else {
+			autoputerURL, err = h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		}
 	} else if target.State == "active" && strings.TrimSpace(target.ComputerURL) != "" {
 		autoputerURL = target.ComputerURL
 	} else {

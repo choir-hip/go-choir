@@ -97,7 +97,13 @@ func (h *Handler) HandleComputerProducerReports(w http.ResponseWriter, r *http.R
 	}
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
-		autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		// Listing wakes the joined computer; settle and resume are owner
+		// acts and never do.
+		if r.Method == http.MethodGet {
+			autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		} else {
+			autoputerURL, err = h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		}
 	} else if target.State == "active" && strings.TrimSpace(target.ComputerURL) != "" {
 		autoputerURL = target.ComputerURL
 	}
