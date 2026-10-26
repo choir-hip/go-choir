@@ -699,6 +699,23 @@ type OpenEngineeringAssignmentRequest struct {
 	// store plans it inside the open's lock and commits it in the open's
 	// batch, so no round exists without its assignment.
 	Records CommitInboxRecordsRequest `json:"records"`
+	// Rebase is set by the runtime exactly when it admitted a rebase Cast
+	// (U4, docs/design/u4-stack-rebase-build-2026-10-26.md): the Cast's spec
+	// names a rebase notice. It carries the clock the store does not read,
+	// and is an input to the command digest. The store binds the notice to
+	// this assignment, and the pair's claim, in the open's own transaction;
+	// a spec that names a notice without it, or it without a notice, is
+	// refused.
+	Rebase *RebaseAdmission `json:"rebase,omitempty"`
+}
+
+// RebaseAdmission is what the runtime knows about this boot that the store
+// cannot: when the runtime started and whether the boot followed a planned
+// restart (a marker). A notice committed before a markerless boot was closed
+// by the crash and is never acted on.
+type RebaseAdmission struct {
+	BootedAt    time.Time `json:"booted_at"`
+	PlannedBoot bool      `json:"planned_boot,omitempty"`
 }
 
 type BindEngineeringAssignmentRequest struct {
