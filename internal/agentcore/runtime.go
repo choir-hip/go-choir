@@ -394,6 +394,9 @@ type Runtime struct {
 	rebaseAnswerWindow time.Duration
 	rebaseNow          func() time.Time
 	rebaseAfterFunc    func(d time.Duration, fn func()) rebaseTimerHandle
+	// sourcePreflight replaces the capsule executor's source preflight in the
+	// engineering cast plan (tests; nil uses capsuleExecutor).
+	sourcePreflight sourcePreflighter
 	// U1b: the booted base's objects are fetched into the guest repository.
 	sourceBaseFetchMu       sync.Mutex
 	sourceBaseFetchRunning  bool

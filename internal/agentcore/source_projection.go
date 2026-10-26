@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section 4.6
@@ -270,18 +271,90 @@ func (rt *Runtime) reconcileSourceProjectionLogged(ctx context.Context, reason s
 // the computer no longer booted, or a projection that cannot be rebuilt. The
 // reason is stable (its first word is the code) and names the bases.
 func (rt *Runtime) sourceProjectionCastGate(ctx context.Context) error {
-	if !sourceproj.Enabled() {
+	_, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{})
+	return err
+}
+
+// rebaseSpec is what management's engineering Cast spec says about a rebase
+// (U4): the notice it answers, the operation to rebase and the base to rebase
+// onto. The zero value is an ordinary Cast.
+type rebaseSpec struct {
+	Notice   string
+	RebaseOf string
+	Base     string
+}
+
+func (s rebaseSpec) set() bool { return strings.TrimSpace(s.Notice) != "" }
+
+// sourceProjectionCastGateFor is the gate with U4's exception
+// (docs/design/u4-stack-rebase-build-2026-10-26.md, failure mode 6). An
+// ordinary Cast gets the gate unchanged. A Cast whose spec names a rebase
+// notice is admitted only when every live fact agrees:
+//   - the three switches are on (source.rebase_offer, source.projection,
+//     texture.root_desk); with one off the ordinary gate answers, so today's
+//     refusal text is unchanged;
+//   - the stack sits on a moved base (stack_base_moved), its operation is the
+//     spec's rebase_of, the booted base is the spec's base, and the booted
+//     base's objects are in the guest repository;
+//   - no assignment has claimed the pair.
+//
+// It returns the booted base commit the capsule must start from (empty for an
+// ordinary Cast). The store's records admission checks the tape facts (the
+// notice, the root's Cast, the latest attempt) inside the open's transaction.
+func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseSpec) (rebaseBase string, err error) {
+	ordinary := func() error {
+		if !sourceproj.Enabled() {
+			return nil
+		}
+		rt.waitSourceBaseFetch(ctx)
+		result, err := rt.ReconcileSourceProjection(ctx, "cast")
+		if err != nil {
+			return fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
+		}
+		if refusal := result.Refusal(); refusal != "" {
+			return errors.New(refusal)
+		}
 		return nil
+	}
+	if !spec.set() {
+		return "", ordinary()
+	}
+	ownerID, computerID := rt.rebaseScope()
+	if !sourceproj.Enabled() || !rt.rebaseOfferOn(ctx, ownerID, computerID) {
+		if err := ordinary(); err != nil {
+			return "", err
+		}
+		return "", errors.New("rebase_offer_off: the Cast names a rebase notice but source.rebase_offer is not on with source.projection and texture.root_desk")
+	}
+	if strings.TrimSpace(spec.RebaseOf) == "" || strings.TrimSpace(spec.Base) == "" {
+		return "", errors.New("rebase_spec_incomplete: a rebase Cast's spec names rebase_notice, rebase_of (the operation) and base (the booted base), all three")
 	}
 	rt.waitSourceBaseFetch(ctx)
 	result, err := rt.ReconcileSourceProjection(ctx, "cast")
 	if err != nil {
-		return fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
+		return "", fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 	}
-	if refusal := result.Refusal(); refusal != "" {
-		return errors.New(refusal)
+	if result.State != sourceproj.StateBaseMoved {
+		if refusal := result.Refusal(); refusal != "" {
+			return "", errors.New(refusal)
+		}
+		return "", fmt.Errorf("rebase_not_needed: the applied stack is %s, not on a moved base; there is nothing to rebase", result.State)
 	}
-	return nil
+	if strings.TrimSpace(spec.RebaseOf) != result.OperationID {
+		return "", fmt.Errorf("rebase_of_mismatch: the spec rebases %q, the applied stack's operation is %q", spec.RebaseOf, result.OperationID)
+	}
+	if strings.TrimSpace(spec.Base) != result.BootedBase {
+		return "", fmt.Errorf("rebase_base_mismatch: the spec rebases onto %q, this computer booted %q", spec.Base, result.BootedBase)
+	}
+	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), result.BootedBase) {
+		return "", fmt.Errorf("rebase_base_missing: the booted base %s is not in the guest source repository yet; the platform fetches it and the next notice follows", result.BootedBase)
+	}
+	if claim, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, types.StackRebasePairKey(result.OperationID, result.BootedBase)); err == nil {
+		return "", fmt.Errorf("rebase_pair_claimed: assignment %s already serves the rebase of %s onto %s", claim.AssignmentID, result.OperationID, result.BootedBase)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return "", fmt.Errorf("source_projection_failed: read the rebase claim: %w", err)
+	}
+	return result.BootedBase, nil
 }
 
 type sourceProjectionFact struct {

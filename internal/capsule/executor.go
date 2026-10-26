@@ -380,6 +380,24 @@ func (e *Executor) PreflightSourceSnapshot(ctx context.Context, candidateRef str
 	return SourcePreflight{SubjectDigest: digest, ArtifactRef: "capsule-source-git:" + commit + ":sha256:" + digest}, nil
 }
 
+// PreflightSourceCommit persists the immutable content-addressed source of one
+// named commit, the way PreflightSourceSnapshot does for the repository's
+// clean HEAD (U4: a rebase round starts from the booted base B', not from HEAD,
+// which at stack_base_moved is the projection commit on the old base). The
+// commit must be a full object id that is in the source repository.
+func (e *Executor) PreflightSourceCommit(ctx context.Context, commit string) (SourcePreflight, error) {
+	commit = strings.TrimSpace(commit)
+	decoded, err := hex.DecodeString(commit)
+	if err != nil || (len(decoded) != 20 && len(decoded) != 32) {
+		return SourcePreflight{}, fmt.Errorf("capsule source commit is invalid")
+	}
+	digest, err := e.commitDigest(ctx, commit)
+	if err != nil {
+		return SourcePreflight{}, err
+	}
+	return SourcePreflight{SubjectDigest: digest, ArtifactRef: "capsule-source-git:" + commit + ":sha256:" + digest}, nil
+}
+
 // canonicalTreeDigestVersion names the algorithm of
 // canonicalImmutableCommitDigest and digestCanonicalSubjectTree. Change it
 // with any change to what they hash, so no cached digest outlives its

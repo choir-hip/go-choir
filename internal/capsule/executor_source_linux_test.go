@@ -225,6 +225,48 @@ func TestPreflightSourceSnapshotResumesPinnedGitRef(t *testing.T) {
 	}
 }
 
+// U4: a rebase round starts from the booted base, not HEAD. PreflightSourceCommit
+// pins a named older commit exactly as PreflightSourceSnapshot pinned it when it
+// was HEAD, and refuses what is not a full object id in the repository.
+func TestPreflightSourceCommitPinsANamedCommitNotHead(t *testing.T) {
+	source := t.TempDir()
+	mustRunGit(t, source, "init")
+	mustRunGit(t, source, "config", "user.name", "Capsule Test")
+	mustRunGit(t, source, "config", "user.email", "capsule@test.invalid")
+	if err := os.WriteFile(filepath.Join(source, "tracked"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunGit(t, source, "add", ".")
+	mustRunGit(t, source, "commit", "-m", "first")
+	e := &Executor{stateDir: filepath.Join(t.TempDir(), "state"), sourceDir: source}
+	atFirst, err := e.PreflightSourceSnapshot(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstCommit := SourceArtifactCommit(atFirst.ArtifactRef)
+	if err := os.WriteFile(filepath.Join(source, "tracked"), []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunGit(t, source, "add", ".")
+	mustRunGit(t, source, "commit", "-m", "second")
+	atHead, err := e.PreflightSourceSnapshot(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	named, err := e.PreflightSourceCommit(context.Background(), firstCommit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named != atFirst || named == atHead {
+		t.Fatalf("named commit preflight %+v; want the first commit's %+v, not HEAD's %+v", named, atFirst, atHead)
+	}
+	for _, bad := range []string{"", "not-hex", "abc123", strings.Repeat("0", 40)} {
+		if _, err := e.PreflightSourceCommit(context.Background(), bad); err == nil {
+			t.Fatalf("PreflightSourceCommit(%q) did not fail", bad)
+		}
+	}
+}
+
 func TestPersistGrantedCandidateIsReconstructableAndReusable(t *testing.T) {
 	state := t.TempDir()
 	merged := filepath.Join(t.TempDir(), "root")

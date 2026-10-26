@@ -791,3 +791,43 @@ a named residual.
    - tiers set: slices 1-3 and 6 at tier 2, including the gate exception and the
      new slice 6;
    - option A is reduced to the owner's ruling.
+
+## Build status (2026-10-26, Sonnet worker; paused by FP0 for density work)
+
+Resume cold from here. Lane `lane/u4-rebase`; class red; the whole feature is
+behind `source.rebase_offer` (default off).
+
+**How the trigger and `lane/base-join` meet.** The U4 trigger is state-based: it
+reads `stack_base_moved` from reconcile (the effective release's stack against the
+booted base), never an operation's outcome, so it behaves the same with or without
+base-join. With base-join landed, an apply whose base moved settles `failed`; the
+stack and `current` do not change, so the state still holds and a new pair
+(operation, newer base) gets a new notice. A rebase round whose own candidate is
+refused that way leaves its claim in place: that pair is spent, and the newer base
+is a new pair. Without base-join, slice 3's content verification still refuses a
+rebase candidate whose `SourcePatchBaseCommit` is not the claim's booted base
+(and, at apply, not the booted base now), so a rebase operation never applies on a
+stale base even before base-join lands. Landing order stays base-join first, then
+the U4 staging proof.
+
+**Built and pushed (slice 1, `947e0a288`):** notice type and predicate, claim kind
+(registered in `objectgraph`), `source.rebase_offer`, the wake predicate, the timer
+and bounded re-mint (`internal/agentcore/rebase_notice.go`), settings hook.
+
+**Slice 2 (this push):** store admission and the claim in the open's transaction
+(`requireRebaseNoticeAdmission`, `OpenEngineeringAssignmentRequest.Rebase`); the
+runtime gate `sourceProjectionCastGateFor` (the old `sourceProjectionCastGate(ctx)`
+is a wrapper, a deliberate deviation from the doc's "change every caller");
+`PreflightSourceCommit` on the capsule executor (linux test written, not run on
+darwin: CI runs it); `rebaseLineage` derived from the tape; the rebase offer under
+`carried/rebase-offers/`; the root and management prompt text (slice 5 of the doc).
+
+**Not built, next (slice 3):** `verifyRebaseContent` (`internal/agentcore/
+rebase_content.go`) at materialization and Freeze, the `rebase_content_mismatch`
+refusal, the lineage receipt and the `source_projection_rebased` fact, the `--cached
+--3way` per-path helper in `sourceproj`, and the base-equals-claim check; then the
+doc's "defer while a non-terminal rebase of the same operation exists" check in the
+timer (needs `ListRebaseNoticeClaims`, already in the store), then slice 7 proof
+(`scripts/proof-u4-rebase`). Known residual: a replayed rebase open after a restart
+has a different `RebaseAdmission.BootedAt`, so its command digest differs and the
+replay fails closed.
