@@ -711,7 +711,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		RunningRuns:          h.rt.RunningCount(),
 		DeskPendingMutations: reads.deskPending,
 		SelfdevActiveOps:     reads.selfdevActive,
-		LiveCapsules:         &reads.liveCapsules,
+		LiveCapsules:         reads.liveCapsules,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
@@ -764,9 +764,11 @@ type healthStoreStalled struct {
 type healthStoreReads struct {
 	deskPending   int
 	selfdevActive int
-	liveCapsules  int
-	identity      EffectiveRelease
-	unanswered    []string
+	// liveCapsules is nil when the computer cannot count its capsules, so
+	// /health omits the field and vmctl applies the legacy idle rule.
+	liveCapsules *int
+	identity     EffectiveRelease
+	unanswered   []string
 }
 
 // readHealthStore runs /health's three store reads concurrently and gives up
@@ -793,11 +795,14 @@ func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration)
 	desk := start(rt.pendingDeskMutations)
 	selfdevOps := start(rt.activeSelfdevOperations)
 	// The capsule count is a fail-closed read: an error is unanswered, not 0.
+	capsulesCountable := rt.liveCapsulesCountable()
 	capsules := make(chan answer[int], 1)
-	go func() {
-		value, err := rt.liveCapsuleCountForHealth(ctx)
-		capsules <- answer[int]{value, err == nil && ctx.Err() == nil}
-	}()
+	if capsulesCountable {
+		go func() {
+			value, err := rt.liveCapsuleCountForHealth(ctx)
+			capsules <- answer[int]{value, err == nil && ctx.Err() == nil}
+		}()
+	}
 	release := make(chan answer[EffectiveRelease], 1)
 	go func() {
 		value := rt.EffectiveRelease(ctx)
@@ -818,7 +823,10 @@ func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration)
 	}
 	out.deskPending = awaitInt("desk_pending_mutations", desk)
 	out.selfdevActive = awaitInt("selfdev_active_operations", selfdevOps)
-	out.liveCapsules = awaitInt("live_capsules", capsules)
+	if capsulesCountable {
+		live := awaitInt("live_capsules", capsules)
+		out.liveCapsules = &live
+	}
 	select {
 	case got := <-release:
 		if got.ok {

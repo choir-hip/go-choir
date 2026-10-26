@@ -394,16 +394,24 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 	return work, nil
 }
 
+// errLiveCapsulesUncountable is the answer when there is no computer id or
+// store to count for: unknown, never 0 (review 312 Low 3).
+var errLiveCapsulesUncountable = errors.New("live capsules cannot be counted: no computer id or store")
+
+func (rt *Runtime) liveCapsulesCountable() bool {
+	return strings.TrimSpace(rt.TextureComputerID()) != "" && rt.store != nil
+}
+
 // liveCapsuleCount counts the computer's assignments whose capsule a restart
 // would destroy (plannedRestartLiveCapsule). It is the one counter: the
 // planned-restart refusal and /health's live_capsules (density D3a, which
 // vmctl's idle decision reads) both call it. It fails closed: an unreadable
 // assignment list is an error, never a 0 that reads as idle.
 func (rt *Runtime) liveCapsuleCount(ctx context.Context) (int, error) {
-	computerID := strings.TrimSpace(rt.TextureComputerID())
-	if computerID == "" || rt.store == nil {
-		return 0, nil
+	if !rt.liveCapsulesCountable() {
+		return 0, errLiveCapsulesUncountable
 	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
 	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
 	if err != nil {
 		return 0, fmt.Errorf("cannot read engineering assignments: %w", err)
