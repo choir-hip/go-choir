@@ -1664,6 +1664,10 @@ in
         "VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"
         "VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases"
         "VM_GUEST_RELEASE_SUPPORT_WINDOW=168h"
+        # D2 S4: how long a user must be away before a computer that woke from
+        # a snapshot onto an older release is updated (the planned,
+        # marker-backed deploy refresh).
+        "VMCTL_BEHIND_REFRESH_IDLE=2m"
         "VM_STATE_DIR=/var/lib/go-choir/vm-state"
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"

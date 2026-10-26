@@ -267,6 +267,18 @@ func main() {
 		if err := handler.SetDeployRefreshPendingPath(pendingPath); err != nil {
 			log.Printf("vmctl: deploy refresh pending set not loaded (starting empty): %v", err)
 		}
+		// D2 S4: a computer resumed from a snapshot onto an older guest release
+		// is updated at its next idle moment, once its user has been away this
+		// long (default 2m).
+		behindIdle := vmctl.DefaultBehindRefreshIdle
+		if v := strings.TrimSpace(os.Getenv("VMCTL_BEHIND_REFRESH_IDLE")); v != "" {
+			if d, err := time.ParseDuration(v); err == nil && d > 0 {
+				behindIdle = d
+			} else {
+				log.Printf("vmctl: VMCTL_BEHIND_REFRESH_IDLE=%q is not a positive duration; using %s", v, behindIdle)
+			}
+		}
+		handler.SetBehindRefresh(behindIdle, nil)
 		handler.StartDeployRefreshRetry(context.Background(), vmctl.DeployRefreshRetryInterval)
 		log.Printf("vmctl: deploy refresh retry every %s (pending=%q)", vmctl.DeployRefreshRetryInterval, pendingPath)
 	}
@@ -574,6 +586,11 @@ func (a *vmManagerAdapter) GuestReleases() (json.RawMessage, error) {
 }
 
 // GuestReleaseHealth implements the vmctl guestReleaseReader capability.
+// CurrentGuestReleaseInfo implements the vmctl guestReleaseReader capability.
+func (a *vmManagerAdapter) CurrentGuestReleaseInfo() (string, string) {
+	return a.mgr.CurrentGuestReleaseInfo()
+}
+
 func (a *vmManagerAdapter) GuestReleaseHealth() (string, map[string]vmctl.GuestReleaseVMStatus) {
 	current := a.mgr.CurrentGuestRelease()
 	out := map[string]vmctl.GuestReleaseVMStatus{}

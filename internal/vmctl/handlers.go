@@ -200,6 +200,11 @@ type Handler struct {
 	dataImageStatsFor    func(vmID string) (DataImageStats, bool)
 	deployRefreshMu      sync.Mutex
 	deployRefreshTracker *deployRefreshTracker
+	// behindRefreshIdle and behindNow drive the user-idle gate of the "resume,
+	// then update" entry (SetBehindRefresh).
+	behindMu          sync.Mutex
+	behindRefreshIdle time.Duration
+	behindNow         func() time.Time
 	// guestServedCommit reads the build a guest serves (nil: its /health).
 	guestServedCommit func(context.Context, VMOwnership) string
 }
@@ -1124,6 +1129,10 @@ type hibernateTimelineReader interface {
 type guestReleaseReader interface {
 	GuestReleases() (json.RawMessage, error)
 	GuestReleaseHealth() (current string, byVM map[string]GuestReleaseVMStatus)
+	// CurrentGuestReleaseInfo is the current release's id and the commit its
+	// image was built from ("" when legacy); the "resume, then update" sweep
+	// aims its refresh at that commit.
+	CurrentGuestReleaseInfo() (id, commit string)
 }
 
 // GuestReleaseVMStatus is the release a live VM runs, and whether it is

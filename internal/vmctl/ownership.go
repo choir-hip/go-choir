@@ -539,6 +539,10 @@ type VMInstanceInfo struct {
 type OwnershipRegistry struct {
 	mu sync.RWMutex
 
+	// resumeEnroller is called after a snapshot resume onto a guest release
+	// (SetResumeEnroller).
+	resumeEnroller func(own VMOwnership, release string)
+
 	// clock overrides time.Now for host-capacity tests.
 	clock func() time.Time
 	// unmanagedSince records when reconcile first saw a live VM process the
@@ -870,6 +874,14 @@ func (r *OwnershipRegistry) writePersistenceLocked() error {
 func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
 	r.vmManager = mgr
+	r.mu.Unlock()
+}
+
+// SetResumeEnroller registers the callback a release-bound snapshot resume
+// calls (D2 S4: the handler's enrollResumed).
+func (r *OwnershipRegistry) SetResumeEnroller(fn func(own VMOwnership, release string)) {
+	r.mu.Lock()
+	r.resumeEnroller = fn
 	r.mu.Unlock()
 }
 
@@ -1732,6 +1744,16 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 		return nil, false
 	}
 	log.Printf("vmctl: computer %s (VM %s) resumed from snapshot (epoch=%d)", own.ComputerID, own.VMID, info.Epoch)
+	// A resume onto a guest release is followed by an update at the computer's
+	// next idle moment (D2 S4); the registry does not know the handler.
+	if info.GuestRelease != "" {
+		r.mu.RLock()
+		enroll := r.resumeEnroller
+		r.mu.RUnlock()
+		if enroll != nil {
+			enroll(*own, info.GuestRelease)
+		}
+	}
 	return info, true
 }
 

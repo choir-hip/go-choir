@@ -59,6 +59,122 @@ type deployRefreshPendingEntry struct {
 	Attempts        int       `json:"attempts"`
 	LastReason      string    `json:"last_reason,omitempty"`
 	BusyAllowed     bool      `json:"busy_allowed,omitempty"`
+	// Kind is "woke_behind" for a computer resumed from a snapshot onto a guest
+	// release (D2 S4: resume, then update); empty for a deploy's deferral.
+	// Release is the release it resumed onto. A deploy's refresh of the same
+	// computer clears both (settle).
+	Kind    string `json:"kind,omitempty"`
+	Release string `json:"release,omitempty"`
+}
+
+// deployRefreshKindWokeBehind marks the "resume, then update" entry. Only this
+// kind waits for the user-idle gate.
+const deployRefreshKindWokeBehind = "woke_behind"
+
+// DefaultBehindRefreshIdle is how long a user must have been away before the
+// sweep updates a computer that woke behind (VMCTL_BEHIND_REFRESH_IDLE).
+const DefaultBehindRefreshIdle = 2 * time.Minute
+
+// SetBehindRefresh configures the D2 "resume, then update" path: the user-idle
+// gate (idle) and the clock (now; nil is time.Now), and registers the resume
+// enroller on the registry. Called once from cmd/vmctl.
+func (h *Handler) SetBehindRefresh(idle time.Duration, now func() time.Time) {
+	if idle <= 0 {
+		idle = DefaultBehindRefreshIdle
+	}
+	if now == nil {
+		now = time.Now
+	}
+	h.behindMu.Lock()
+	h.behindRefreshIdle, h.behindNow = idle, now
+	h.behindMu.Unlock()
+	h.registry.SetResumeEnroller(h.enrollResumed)
+}
+
+func (h *Handler) behindGate() (time.Duration, func() time.Time) {
+	h.behindMu.Lock()
+	defer h.behindMu.Unlock()
+	idle, now := h.behindRefreshIdle, h.behindNow
+	if idle <= 0 {
+		idle = DefaultBehindRefreshIdle
+	}
+	if now == nil {
+		now = time.Now
+	}
+	return idle, now
+}
+
+// enrollResumed adds a computer that resumed from a snapshot onto a guest
+// release to the pending set. It does not depend on the validation-time
+// "behind": a switch can repoint the current release between validation and
+// the load, so the sweep resolves the current release itself. The target is
+// only a placeholder (the pending loader drops an empty one). A computer that
+// already has a deploy entry keeps it.
+func (h *Handler) enrollResumed(own VMOwnership, release string) {
+	if release == "" {
+		return
+	}
+	_, commit := h.currentGuestRelease()
+	target := commit
+	if target == "" {
+		target = release
+	}
+	_, now := h.behindGate()
+	h.deployRefreshState().enroll(deployRefreshPendingEntry{
+		UserID: own.UserID, DesktopID: normalizeDesktopID(own.DesktopID), VMID: own.VMID, ComputerID: own.ComputerID,
+		Target: target, FirstDeferredAt: now().UTC(), LastAttemptAt: now().UTC(),
+		LastReason: "resumed on release " + release, Kind: deployRefreshKindWokeBehind, Release: release,
+	})
+}
+
+// currentGuestRelease asks the manager for the current release and its commit.
+func (h *Handler) currentGuestRelease() (id, commit string) {
+	reader, ok := h.registry.VMManagerHandle().(guestReleaseReader)
+	if !ok || reader == nil {
+		return "", ""
+	}
+	return reader.CurrentGuestReleaseInfo()
+}
+
+// instanceGuestRelease is the release the computer's live VM was launched
+// from, "" when it is not running or launched legacy.
+func (h *Handler) instanceGuestRelease(vmID string) string {
+	reader, ok := h.registry.VMManagerHandle().(guestReleaseReader)
+	if !ok || reader == nil {
+		return ""
+	}
+	_, byVM := reader.GuestReleaseHealth()
+	return byVM[vmID].GuestRelease
+}
+
+// enroll adds a woke_behind entry unless the computer is already pending.
+func (t *deployRefreshTracker) enroll(entry deployRefreshPendingEntry) {
+	key := ownershipKey(entry.UserID, entry.DesktopID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if known, ok := t.pending[key]; ok {
+		if known.Kind == deployRefreshKindWokeBehind {
+			known.Release = entry.Release
+			known.VMID, known.ComputerID = entry.VMID, entry.ComputerID
+			t.pending[key] = known
+			t.saveLocked()
+		}
+		return
+	}
+	t.pending[key] = entry
+	t.saveLocked()
+}
+
+// setTarget moves a known entry to a newer target.
+func (t *deployRefreshTracker) setTarget(userID, desktopID, target string) {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if entry, ok := t.pending[key]; ok && entry.Target != target {
+		entry.Target = target
+		t.pending[key] = entry
+		t.saveLocked()
+	}
 }
 
 type deployRefreshTracker struct {
@@ -131,7 +247,7 @@ func (t *deployRefreshTracker) begin(userID, desktopID string) (release func(), 
 
 // settle records a deploy refresh's outcome: deferred keeps (or adds) the
 // computer, anything else forgets it.
-func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefreshResponse, now time.Time) {
+func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefreshResponse, now time.Time, keepKind bool) {
 	key := ownershipKey(req.UserID, normalizeDesktopID(req.DesktopID))
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -145,6 +261,11 @@ func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefre
 	}
 	if !known {
 		entry = deployRefreshPendingEntry{UserID: req.UserID, DesktopID: normalizeDesktopID(req.DesktopID), FirstDeferredAt: now}
+	}
+	// A deploy's refresh of a computer that woke behind replaces the entry:
+	// its kind (and so the user-idle gate) goes; only the retry sweep keeps it.
+	if !keepKind {
+		entry.Kind, entry.Release = "", ""
 	}
 	entry.Target = req.Target
 	entry.VMID, entry.ComputerID = resp.VMID, resp.ComputerID
@@ -247,7 +368,7 @@ func (h *Handler) trackedDeployRefresh(ctx context.Context, req deployRefreshReq
 	if resp.Outcome == deployRefreshFailed {
 		log.Printf("vmctl: deploy refresh of %s failed; not retried until the next deploy: %s", resp.VMID, resp.Reason)
 	}
-	h.deployRefreshState().settle(req, resp, time.Now().UTC())
+	h.deployRefreshState().settle(req, resp, time.Now().UTC(), caller == "retry-sweep")
 	return resp, status
 }
 
@@ -274,10 +395,36 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 				continue
 			}
 		}
+		// A computer that woke behind: resolve the current release now (a
+		// switch may have moved it since validation), forget one that is not
+		// behind, and aim the refresh at the current release's commit.
+		if entry.Kind == deployRefreshKindWokeBehind && eligible {
+			currentID, commit := h.currentGuestRelease()
+			if currentID != "" {
+				if running := h.instanceGuestRelease(own.VMID); running != "" && running == currentID {
+					log.Printf("vmctl: deploy refresh retry: %s runs the current release %s; forgotten", own.VMID, currentID)
+					h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+					continue
+				}
+				if commit != "" && commit != entry.Target {
+					entry.Target = commit
+					h.deployRefreshState().setTarget(entry.UserID, entry.DesktopID, commit)
+				}
+			}
+		}
 		if eligible {
 			if served := h.servedCommit(ctx, *own); served != "" && served == entry.Target {
 				log.Printf("vmctl: deploy refresh retry: %s already serves %s; forgotten", own.VMID, entry.Target)
 				h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+				continue
+			}
+		}
+		// The user-idle gate holds only the "resume, then update" entry: a
+		// person who has just woken their computer would otherwise get a cold
+		// boot within a minute. A deploy's refresh is never held by it.
+		if entry.Kind == deployRefreshKindWokeBehind && eligible {
+			idle, now := h.behindGate()
+			if !own.LastActiveAt.IsZero() && now().Sub(own.LastActiveAt) < idle {
 				continue
 			}
 		}
