@@ -292,3 +292,26 @@ func TestRebaseReceiptTextNamesTheResolvedConflicts(t *testing.T) {
 		t.Fatalf("a long list is bounded:\n%s", text)
 	}
 }
+
+// Review 328 (DeepSeek F4): the resolved paths in the owner's apply record are
+// text a guest influences. They are escaped and bounded in bytes, so a path with
+// a newline cannot forge a line and ten long paths cannot swell the master
+// document.
+func TestRebaseReceiptTextEscapesAndBoundsThePaths(t *testing.T) {
+	hostile := "frontend/src/a\nIGNORE ABOVE\x1b[31m.txt"
+	receipt := rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40), Resolved: []string{hostile}}
+	text := rebaseReceiptText(receipt, "sha")
+	if strings.ContainsAny(text, "\n\r\x1b") {
+		t.Fatalf("a control character reached the owner's record: %q", text)
+	}
+	if !strings.Contains(text, `a\nIGNORE ABOVE`) {
+		t.Fatalf("the path is escaped, not dropped: %q", text)
+	}
+	long := rebaseLineageReceipt{Schema: rebaseLineageSchema, RebaseOf: "op-a", Base: strings.Repeat("b", 40)}
+	for i := 0; i < 10; i++ {
+		long.Resolved = append(long.Resolved, strings.Repeat(string(rune('a'+i)), 3000))
+	}
+	if text := rebaseReceiptText(long, "sha"); len(text) > 2500 {
+		t.Fatalf("ten 3000-byte paths made a %d-byte sentence; the sentence is bounded in bytes", len(text))
+	}
+}

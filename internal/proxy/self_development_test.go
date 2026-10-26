@@ -529,3 +529,71 @@ func TestSelfDevelopmentGuestServesSourcePatchWithReadScope(t *testing.T) {
 		t.Fatalf("POST status=%d upstream=%q, want 405", response.Code, gotPath)
 	}
 }
+
+// U4 slice 8 (review 328, DeepSeek F1): the owner's rebase retry reaches the
+// guest through the proxy, POST only, as an owner act. Before the route was
+// wired every /self-development/ path it did not know answered 409 "effects
+// are disabled", so the act was unreachable by the owner.
+func TestRebaseRetryRouteIsWiredThroughTheProxyAsAnOwnerAct(t *testing.T) {
+	const path = "/api/computers/computer-a/self-development/rebase-retry"
+	computerID, action, ok := selfDevelopmentGuestRoute(path)
+	if !ok || computerID != "computer-a" || action != "rebase-retry" {
+		t.Fatalf("route = %q %q %v; want computer-a rebase-retry", computerID, action, ok)
+	}
+	for method, want := range map[string]bool{http.MethodPost: true, http.MethodGet: false, http.MethodPut: false, http.MethodDelete: false} {
+		if got := selfDevelopmentGuestMethodAllowed(method, action); got != want {
+			t.Fatalf("%s allowed = %v, want %v", method, got, want)
+		}
+	}
+	if !isSelfDevelopmentGuestPath(path) {
+		t.Fatal("the dispatcher does not route the retry to the guest handler")
+	}
+	// Deeper or empty paths are not the route.
+	for _, bad := range []string{
+		"/api/computers/computer-a/self-development/rebase-retry/extra",
+		"/api/computers//self-development/rebase-retry",
+		"/api/computers/a/b/self-development/rebase-retry",
+	} {
+		if _, _, ok := selfDevelopmentGuestRoute(bad); ok {
+			t.Fatalf("%s routed", bad)
+		}
+	}
+}
+
+func TestRebaseRetryThroughTheProxyForwardsOnlyTheOwnersPost(t *testing.T) {
+	const path = "/api/computers/computer-a/self-development/rebase-retry"
+	env := newOwnerActEnv(t)
+	// Unauthenticated: nothing reaches the guest.
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+	env.handler.HandleAPI(rec, req)
+	if rec.Code != http.StatusUnauthorized || env.guestHits.Load() != 0 {
+		t.Fatalf("unauthenticated = %d (guest hits %d)", rec.Code, env.guestHits.Load())
+	}
+	// GET is refused at the proxy.
+	if rec := env.send(t, http.MethodGet, path, "", ""); rec.Code != http.StatusMethodNotAllowed || env.guestHits.Load() != 0 {
+		t.Fatalf("GET = %d (guest hits %d)", rec.Code, env.guestHits.Load())
+	}
+	// An agent key with the approve scope, and an admin key, are refused as non-owners.
+	for _, scopes := range [][]string{{"computer:self_development:approve"}, {"admin"}} {
+		if rec := env.send(t, http.MethodPost, path, `{}`, env.key(t, scopes...)); rec.Code != http.StatusForbidden || env.guestHits.Load() != 0 {
+			t.Fatalf("key %v = %d (guest hits %d)", scopes, rec.Code, env.guestHits.Load())
+		}
+	}
+	// The owner's session reaches the guest, and its answer comes back.
+	if rec := env.send(t, http.MethodPost, path, `{}`, ""); rec.Code != http.StatusOK || env.guestHits.Load() != 1 {
+		t.Fatalf("owner POST = %d (guest hits %d) %s", rec.Code, env.guestHits.Load(), rec.Body.String())
+	}
+	// Another user's session does not own the computer.
+	other, err := env.store.CreateUser("not-the-owner", "other@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(env.privateKey, other.ID)})
+	rec = httptest.NewRecorder()
+	env.handler.HandleAPI(rec, req)
+	if rec.Code != http.StatusForbidden || env.guestHits.Load() != 1 {
+		t.Fatalf("another user = %d (guest hits %d)", rec.Code, env.guestHits.Load())
+	}
+}

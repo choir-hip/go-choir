@@ -3,6 +3,7 @@ package sourceproj
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -321,5 +322,152 @@ func TestVerifyRebaseDeletingAConflictPathIsNotResolving(t *testing.T) {
 	})
 	if v := m.verify(t, deleted); v.Pass || v.Reason != RebaseHunkMissing {
 		t.Fatalf("deleting a file P modified passed: %+v", v)
+	}
+}
+
+// Review 328 (Devin 2, 3 and DeepSeek F2): shapes around the hunk check.
+//   - a candidate that is the raw conflicted merge, markers and all, passes;
+//   - a candidate that drops P's mode change on a conflict path passes;
+//   - delete/delete and add/add-identical (B' already made P's change) refuse
+//     the correct candidate, forcing content P does not contain.
+
+func TestVerifyRebaseRefusesTheRawConflictedMerge(t *testing.T) {
+	m := newMixedRepo(t, func(root string) { editLine(t, root, "frontend/src/a.txt", 5, "a line 05 PLATFORM") })
+	const a = "frontend/src/a.txt"
+	// The text `git merge-file` writes with its conflict markers left in.
+	oursT := numbered("a", 40)
+	lines := strings.Split(oursT, "\n")
+	lines[4] = "a line 05 PLATFORM"
+	ours := strings.Join(lines, "\n")
+	baseLines := strings.Split(oursT, "\n")
+	baseText := strings.Join(baseLines, "\n")
+	theirsLines := strings.Split(oursT, "\n")
+	theirsLines[4], theirsLines[29] = "a line 05 P1", "a line 30 P2"
+	theirs := strings.Join(theirsLines, "\n")
+	merged, conflicts, err := mergeFile(context.Background(), []byte(ours), []byte(baseText), []byte(theirs), "")
+	if err != nil || conflicts != 1 || !strings.Contains(string(merged), strings.Repeat("<", conflictMarker)) {
+		t.Fatalf("fixture: merge conflicts=%d err=%v", conflicts, err)
+	}
+	raw := m.candidate(t, func(root string) { write(t, root, a, string(merged)) })
+	if v := m.verify(t, raw); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("a candidate with the conflict markers left in passed: %+v", v)
+	}
+}
+
+func TestVerifyRebaseAConflictPathKeepsPsModeChange(t *testing.T) {
+	repo, base := baseRepo(t)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	tgit(t, repo, "config", "core.filemode", "true")
+	// P edits line 5 and makes the file executable.
+	scratch := t.TempDir()
+	tgit(t, scratch, "clone", "-q", "--no-checkout", repo, ".")
+	tgit(t, scratch, "checkout", "-q", base)
+	tgit(t, scratch, "config", "core.filemode", "true")
+	editLine(t, scratch, "frontend/src/a.txt", 5, "a line 05 P1")
+	if err := os.Chmod(filepath.Join(scratch, "frontend/src/a.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgit(t, scratch, "add", "-A")
+	p := []byte(tgit(t, scratch, "diff", "--cached", "--no-color") + "\n")
+	if !strings.Contains(string(p), "new mode 100755") {
+		t.Fatalf("fixture: P must change the mode:\n%s", p)
+	}
+	// B' edits the same line.
+	pl := t.TempDir()
+	tgit(t, pl, "clone", "-q", "--no-checkout", repo, ".")
+	tgit(t, pl, "checkout", "-q", base)
+	editLine(t, pl, "frontend/src/a.txt", 5, "a line 05 PLATFORM")
+	tgit(t, pl, "add", "-A")
+	tgit(t, pl, "commit", "-q", "-m", "platform")
+	booted := tgit(t, pl, "rev-parse", "HEAD")
+	tgit(t, repo, "fetch", "-q", pl, "HEAD:refs/platform/mode")
+	check := func(candidate []byte) RebaseVerdict {
+		v, err := VerifyRebase(context.Background(), repo, RebaseCheck{StackBase: base, BootedBase: booted, Patch: p, CandidateBase: booted, Candidate: candidate})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	withMode := patchFromMode(t, repo, booted, true)
+	without := patchFromMode(t, repo, booted, false)
+	if v := check(withMode); !v.Pass {
+		t.Fatalf("the content resolution with P's mode change: %+v", v)
+	}
+	if v := check(without); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("a candidate that drops P's mode change passed: %+v", v)
+	}
+}
+
+func patchFromMode(t *testing.T, repo, rev string, exec bool) []byte {
+	t.Helper()
+	scratch := t.TempDir()
+	tgit(t, scratch, "clone", "-q", "--no-checkout", repo, ".")
+	tgit(t, scratch, "checkout", "-q", rev)
+	tgit(t, scratch, "config", "core.filemode", "true")
+	editLine(t, scratch, "frontend/src/a.txt", 5, "a line 05 PLATFORM+P1")
+	if exec {
+		if err := os.Chmod(filepath.Join(scratch, "frontend/src/a.txt"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tgit(t, scratch, "add", "-A")
+	return []byte(tgit(t, scratch, "diff", "--cached", "--no-color") + "\n")
+}
+
+func TestVerifyRebaseACorrectRebaseWhereTheNewBaseAlreadyMadeTheChange(t *testing.T) {
+	// delete/delete: P deletes b.txt, and so did B'. The correct candidate
+	// leaves it deleted.
+	repo, base := baseRepo(t)
+	p := patchFrom(t, repo, base, func(root string) { _ = os.Remove(filepath.Join(root, "frontend/src/b.txt")) })
+	pl := t.TempDir()
+	tgit(t, pl, "clone", "-q", "--no-checkout", repo, ".")
+	tgit(t, pl, "checkout", "-q", base)
+	_ = os.Remove(filepath.Join(pl, "frontend/src/b.txt"))
+	write(t, pl, "frontend/src/c.txt", "platform\n")
+	tgit(t, pl, "add", "-A")
+	tgit(t, pl, "commit", "-q", "-m", "platform deleted b")
+	booted := tgit(t, pl, "rev-parse", "HEAD")
+	tgit(t, repo, "fetch", "-q", pl, "HEAD:refs/platform/dd")
+	verify := func(patch []byte, cand []byte) RebaseVerdict {
+		v, err := VerifyRebase(context.Background(), repo, RebaseCheck{StackBase: base, BootedBase: booted, Patch: patch, CandidateBase: booted, Candidate: cand})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	stays := patchFrom(t, repo, booted, func(root string) { write(t, root, "frontend/src/unrelated.txt", "x\n") })
+	if v := verify(p, stays); !v.Pass {
+		t.Fatalf("delete/delete with the file still deleted: %+v", v)
+	}
+	restored := patchFrom(t, repo, booted, func(root string) { write(t, root, "frontend/src/b.txt", numbered("b", 40)) })
+	if v := verify(p, restored); v.Pass {
+		t.Fatalf("restoring a file P deletes passed: %+v", v)
+	}
+
+	// add/add identical: P adds n.txt, and B' already added exactly it.
+	repo2, base2 := baseRepo(t)
+	p2 := patchFrom(t, repo2, base2, func(root string) { write(t, root, "frontend/src/n.txt", "same\n") })
+	pl2 := t.TempDir()
+	tgit(t, pl2, "clone", "-q", "--no-checkout", repo2, ".")
+	tgit(t, pl2, "checkout", "-q", base2)
+	write(t, pl2, "frontend/src/n.txt", "same\n")
+	tgit(t, pl2, "add", "-A")
+	tgit(t, pl2, "commit", "-q", "-m", "platform added n")
+	booted2 := tgit(t, pl2, "rev-parse", "HEAD")
+	tgit(t, repo2, "fetch", "-q", pl2, "HEAD:refs/platform/aa")
+	v2 := func(cand []byte) RebaseVerdict {
+		v, err := VerifyRebase(context.Background(), repo2, RebaseCheck{StackBase: base2, BootedBase: booted2, Patch: p2, CandidateBase: booted2, Candidate: cand})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if v := v2(patchFrom(t, repo2, booted2, func(root string) { write(t, root, "frontend/src/other.txt", "x\n") })); !v.Pass {
+		t.Fatalf("add/add identical, the file left as it is: %+v", v)
+	}
+	if v := v2(patchFrom(t, repo2, booted2, func(root string) { write(t, root, "frontend/src/n.txt", "changed\n") })); v.Pass {
+		t.Fatalf("altering a file P adds, which the base already has identically, passed: %+v", v)
 	}
 }
