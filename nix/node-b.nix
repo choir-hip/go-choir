@@ -1948,6 +1948,18 @@ in
         # shows `need_source` settled in admission.recent for a woken
         # computer and the host floor held. Rollback: peak.
         "VMCTL_ADMISSION_NEED=peak"
+        # Density D6: idle guests return cold page cache to the host
+        # (docs/design/density-d6-page-cache-return-2026-10-26.md). Step 1 of
+        # its staging proof (§10): observe (every act a dry run) on the idle
+        # trigger, for d@e and one test computer (fp0-jobpark-1024b); never the
+        # paper, the owner's computers or b@c. The code default is off.
+        # D6-M20: the two DAMON-selected computers (VM_GUEST_RECLAIM_ONLY,
+        # 9648031f and 71afbf14) are never named here, so an act never blurs
+        # which mechanism a reading measures.
+        # Rollback: VMCTL_GUEST_CACHE_RETURN=off.
+        "VMCTL_GUEST_CACHE_RETURN=observe"
+        "VMCTL_GUEST_CACHE_RETURN_ONLY=computer-59c902c5d46caecc0a180a8557164e72,computer-734d0344e9d5d7e51eef11df61f58a5b"
+        "VMCTL_GUEST_CACHE_RETURN_TRIGGERS=idle"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
