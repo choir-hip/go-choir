@@ -1142,9 +1142,7 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	if lifecycleBound {
 		recordTrajectoryID = doc.TrajectoryID
 	}
-	if hasParentRev || lifecycleBound {
-		metadata = carryForwardTextureMetadataForRecord(metadata, parentRev.Metadata, recordTrajectoryID)
-	}
+	metadata = carryForwardTextureMetadataForRecord(metadata, parentRev.Metadata, recordTrajectoryID)
 	// Only Texture's evidence path writes an embed (station TE, design E7):
 	// the owner may keep, delete or move one, never add or alter one.
 	var parentBody json.RawMessage
