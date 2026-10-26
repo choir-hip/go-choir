@@ -374,3 +374,55 @@ after a revert (bytes only, no state).
 - R4: the reconcile pass signs a verifier certificate before the bind on every
   held pass; hoisting the admission check before the signature would make a
   held pass cheaper.
+
+## Review 309 (2026-10-26): findings on slice 1 and what slice 1b does
+
+Slice 1 (`1d7d92a22`, landed as `9771c7680`) was reviewed by two seats (Devin,
+DeepSeek v4.1 flash; bunch 309). Both accepted the code: the bind no longer
+replays, the witness is identical to the replay path's, the publish inside the
+hold is correct, and restore still refuses a non-derivable store. Findings,
+recorded before the fix (slice 1b):
+
+1. Medium (both seats): `settlePendingPlatformUpdateAfterCrash` and
+   `resumeStrandedPlatformUpdateTail` re-drive the checkpoint and route tail on
+   every crash boot with no attempt bound. Only the self-development settlement
+   was bounded. A tail that crashes the computer deterministically (a full data
+   volume, an out-of-memory kill) repeats on every boot: the loop the restart
+   rule forbids. Fix: a durable `spendGuestAttempt` before the work, reason
+   `platform_update_settlement`, limit 2, one count per update shared by the two
+   paths; a planned, marker-backed restart is not counted (the marker bounds it:
+   a resume that crashes is a markerless boot, which is bounded here).
+2. Low: the scratch reserve is a flat 2 GiB; this document specifies
+   `max(2 GiB, 10% of the volume)`. Fix: derive it from the same `Usage` in
+   admission and in the watch.
+3. Low: the close cause said "crashed the computer twice" but counts starts, so
+   two boots on which the base source was down close an operation with a false
+   cause. Fix: "the settlement did not finish on two boots".
+4. Low: `allowedTransition` has no `accepted -> degraded` edge, so an operation
+   whose settlement was spent before it materialized wedged. Ruling (FP0):
+   `degraded` means applied with an unsettled tail and stays open; an operation
+   that installed nothing settles `failed`. Fix: an `accepted` operation closes
+   `failed`; one that reached `materializing` or later closes `degraded`.
+5. Low: `spendGuestAttempt` returns nil when there is no
+   `GuestApplyAttemptsPath`, so a runtime without a store path had no bound. For
+   a settlement bound that fails open. Fix: both settlements refuse, held and
+   visible, when the count cannot be kept.
+6. Nits: the dead `replayCtx`; the witness digest struct duplicated in
+   `WitnessFromObservationSets` (now one `witnessDerivabilityDigest`);
+   `CheckpointEligible` is a hard-coded placeholder until slice 2's
+   `verified` / `not_derivable` (documented in the code).
+7. Observation, not fixed here: the settlement's live extract still reads every
+   table under the append hold (design R2, unmeasured on the paper).
+
+**The withdrawn bind-time derivability gate.** The second seat flagged that the
+delta withdraws a recorded Definition action ("refuse checkpoint creation while
+any behavior-bearing VM-local row is not event- or receipt-derivable",
+`docs/archive/choir-tape-recovery-2026-08-13.md`) with no ruling in the delta.
+The withdrawal rests on the owner's in-session statements of 2026-10-26: "why
+do we need to be replaying stuff to apply anyway? ... I think we're probably
+doing it the wrong way", and "the redesign should cover this". FP0 read these as
+the ruling. It is a reading, open to the owner's reversal. Until slice 2 a
+non-derivable row yields a checkpoint that publishes and is refused at restore;
+restore still fails closed (`WitnessContentMatches`), and slice 2 moves the
+proof to the host, where `not_derivable` becomes visible before a route
+promotion.
