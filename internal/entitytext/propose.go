@@ -48,10 +48,17 @@ func Propose(d *Doc, idf func(string) float64) []Proposal {
 	pieces := spansOf(body)
 
 	confirmed := map[string]bool{}
+	startSingles := map[string]int{}
 	for _, p := range pieces {
 		if !body[p[0]].SentenceStart || body[p[0]].Acronym {
 			confirmed[keyOf(body, p)] = true
+		} else if p[1]-p[0] == 1 {
+			startSingles[body[p[0]].Key]++
 		}
+	}
+	inTitle := map[string]bool{}
+	for _, t := range d.Title {
+		inTitle[t.Key] = true
 	}
 	keys := map[string][]string{}
 	add := func(p [2]int) {
@@ -70,7 +77,12 @@ func Propose(d *Doc, idf func(string) float64) []Proposal {
 			continue
 		}
 		if p[1]-p[0] == 1 {
-			continue // a sentence's first word alone says nothing
+			// A sentence's first word alone says nothing, unless it starts
+			// sentences again, carries a possessive, or is in the title.
+			if k := first.Key; startSingles[k] >= 2 || first.possessive || inTitle[k] {
+				add(p)
+			}
+			continue
 		}
 		if connectors[body[p[0]+1].Key] {
 			// "Leaders of NATO": the opener is not part of the name.
@@ -252,7 +264,10 @@ func splitter(toks []Token, k, start, end int) bool {
 // refuses one that is empty or too long.
 func trim(toks []Token, p [2]int) ([2]int, bool) {
 	s, e := p[0], p[1]
-	for s < e && (connectors[toks[s].Key] || toks[s].Key == "the" || closed(toks[s])) {
+	// A capitalised connector belongs to the name ("El-Masri", "Van Dijk");
+	// a lower-case one never starts or ends one.
+	inner := func(t Token) bool { return connectors[t.Key] && t.Capital }
+	for s < e && !inner(toks[s]) && (connectors[toks[s].Key] || toks[s].Key == "the" || closed(toks[s])) {
 		s++
 	}
 	for e > s && (connectors[toks[e-1].Key] || toks[e-1].Key == "the" || closed(toks[e-1]) || (e-1 > s && companySuffixes[toks[e-1].Key])) {

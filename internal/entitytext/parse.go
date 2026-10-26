@@ -35,6 +35,9 @@ type Token struct {
 	// joined: only spaces or a hyphen separate the token from the previous
 	// one in the same sentence, so a name may run across them.
 	joined bool
+	// possessive: the word carried a possessive ('s or s'), which ends a
+	// name ("Norway's Equinor" is two).
+	possessive bool
 }
 
 // Doc is a parsed story: its title and body tokens.
@@ -123,6 +126,7 @@ func tokenize(text string) ([]Token, int) {
 				continue
 			}
 			surface, next, acronym := readWord(rs, i)
+			possessive := next > i+len([]rune(surface))
 			i = next
 			key := tokenKey(surface)
 			if key == "" {
@@ -142,11 +146,12 @@ func tokenize(text string) ([]Token, int) {
 				Capital:       unicode.IsUpper(first) || unicode.IsTitle(first),
 				Acronym:       acronym,
 				joined:        sentHasTok && !gap,
+				possessive:    possessive,
 			}
 			toks = append(toks, t)
 			sentHasTok = true
 			clauseStart = false
-			gap = false
+			gap = possessive
 		}
 		gap = true
 	}
@@ -200,9 +205,10 @@ func readWord(rs []rune, i int) (string, int, bool) {
 	return surface, next, isAcronym(surface)
 }
 
-// isAcronym: all letters capitals, 2 to 6 of them, no lower case.
+// isAcronym: no lower case, and 2 to 6 capitals, or 1 to 5 capitals with
+// digits up to 6 characters in all (NATO, U.S., G7, F1).
 func isAcronym(s string) bool {
-	letters := 0
+	letters, digits := 0, 0
 	for _, r := range s {
 		switch {
 		case unicode.IsLetter(r):
@@ -210,12 +216,17 @@ func isAcronym(s string) bool {
 				return false
 			}
 			letters++
+		case unicode.IsDigit(r):
+			digits++
 		case r == '.':
 		default:
 			return false
 		}
 	}
-	return letters >= 2 && letters <= 6
+	if digits == 0 {
+		return letters >= 2 && letters <= 6
+	}
+	return letters >= 1 && letters+digits <= 6
 }
 
 // endsSentence decides whether the mark at rs[i] ends a sentence.
