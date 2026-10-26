@@ -251,12 +251,25 @@ func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
 		fmt.Fprintf(&b, ": %d %s applied unchanged", n, noun)
 	}
 	if len(receipt.Resolved) > 0 {
-		const limit = 10
-		shown := receipt.Resolved
+		// The paths are text a guest influences: escaped (a path can hold a
+		// newline) and bounded in bytes, not only in count (review 328).
+		const limit, perPath, total = 10, 160, 1200
+		var shown []string
+		size := 0
+		for _, path := range receipt.Resolved {
+			if len(shown) == limit {
+				break
+			}
+			path = escapeRecordText(path, perPath)
+			if size+len(path) > total {
+				break
+			}
+			shown = append(shown, path)
+			size += len(path) + 2
+		}
 		more := ""
-		if len(shown) > limit {
-			more = fmt.Sprintf(", and %d more", len(shown)-limit)
-			shown = shown[:limit]
+		if n := len(receipt.Resolved) - len(shown); n > 0 {
+			more = fmt.Sprintf(", and %d more", n)
 		}
 		fmt.Fprintf(&b, "; resolved conflicts: %s%s", strings.Join(shown, ", "), more)
 	}
@@ -290,4 +303,32 @@ func (rt *Runtime) verifyRebaseAtFreeze(ctx context.Context, rec *types.RunRecor
 		return &rebaseContentMismatchError{Verdict: verdict}
 	}
 	return nil
+}
+
+// escapeRecordText makes guest-influenced text safe for a one-line record:
+// control characters become visible escapes and the text is cut to max bytes
+// on a rune boundary.
+func escapeRecordText(text string, max int) string {
+	var b strings.Builder
+	for _, r := range text {
+		var piece string
+		switch {
+		case r == '\n':
+			piece = `\n`
+		case r == '\r':
+			piece = `\r`
+		case r == '\t':
+			piece = `\t`
+		case r < 0x20 || r == 0x7f:
+			piece = fmt.Sprintf(`\x%02x`, r)
+		default:
+			piece = string(r)
+		}
+		if b.Len()+len(piece) > max {
+			b.WriteString("...")
+			break
+		}
+		b.WriteString(piece)
+	}
+	return b.String()
 }

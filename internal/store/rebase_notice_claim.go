@@ -249,3 +249,43 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 	}
 	return &claim, append(newer, condition), nil
 }
+
+// ErrRebaseRoundRunning refuses an owner's rebase notice while a rebase round
+// of the operation has not ended.
+var ErrRebaseRoundRunning = errors.New("a rebase round of this operation is still running")
+
+// CommitRebaseOwnerNotice commits the owner's retry notice under the open
+// path's lock, after re-checking that no rebase round of operationID runs
+// (review 328: the check and the mint are one step, so an open for the last
+// automatic attempt cannot slip between them; the open's own conditions refuse
+// the other order, because attempt 4 supersedes attempts 1 to 3). A claim whose
+// assignment cannot be read fails closed with its own error. A replay of the
+// same command returns the committed receipt.
+func (s *Store) CommitRebaseOwnerNotice(ctx context.Context, req types.CommitInboxRecordsRequest, operationID string) (types.InboxCommitReceipt, error) {
+	if s.ogStore == nil {
+		return types.InboxCommitReceipt{}, fmt.Errorf("commit rebase owner notice: object graph not initialized")
+	}
+	req, err := normalizeInboxCommand(req)
+	if err != nil {
+		return types.InboxCommitReceipt{}, err
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	if replay, found, err := s.replayInboxCommand(ctx, req.OwnerID, req.ComputerID, req.CommandID, req.CommandDigest); found || err != nil {
+		return replay, err
+	}
+	claims, err := s.ListRebaseNoticeClaims(ctx, req.OwnerID, req.ComputerID, operationID)
+	if err != nil {
+		return types.InboxCommitReceipt{}, err
+	}
+	for _, claim := range claims {
+		assignment, err := s.GetEngineeringAssignment(ctx, req.OwnerID, req.ComputerID, claim.AssignmentID, 1)
+		if err != nil {
+			return types.InboxCommitReceipt{}, fmt.Errorf("rebase claim %s: assignment %s cannot be read: %w", claim.PairKey, claim.AssignmentID, err)
+		}
+		if !assignment.Disposition.Terminal() {
+			return types.InboxCommitReceipt{}, fmt.Errorf("%w: assignment %s", ErrRebaseRoundRunning, claim.AssignmentID)
+		}
+	}
+	return s.commitInboxRecordsLocked(ctx, req)
+}
