@@ -172,7 +172,7 @@ func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context,
 	case err != nil:
 		return fmt.Errorf("updater journal unreadable: %w", err)
 	case !found && operation.State == selfdev.StateDegraded:
-		return nil // a refused apply already left its terminal row
+		return nil // closed degraded already (the settlement crashed twice): an owner act decides
 	case !found:
 		return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
 	case !journaled.Terminal:
@@ -504,13 +504,26 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	// security provenance check; docs/problems/
 	// selfdev-apply-has-no-base-join-2026-10-26.md). A host-built release
 	// takes the host's recorded base below.
-	release.BaseCommit = rt.plainReleaseBaseCommit(operation, bundle)
 	sourceDir := filepath.Dir(bundlePath)
 	if hostBuilt != nil {
 		// The layered release: the host's closure, receipts and the layer's
 		// own frontend. The capsule-built binary is not a release input.
 		release = layeredSelfDevelopmentManifest(release, *hostBuilt)
 		sourceDir = hostBuilt.Dir
+	} else {
+		baseCommit, baseErr := rt.plainReleaseBaseCommit(operation, bundle)
+		switch {
+		case baseErr == nil:
+			release.BaseCommit = baseCommit
+		case journalOnly:
+			// A crash-boot settlement reads the journal, which is the
+			// authority; the claim only shapes a request it never sends.
+			log.Printf("selfdev materializer: operation %s: %v (journal-only settlement continues)", operation.OperationID, baseErr)
+		default:
+			// The join cannot be proven: fail closed before the updater is
+			// asked. Nothing was installed, so the operation settles failed.
+			return rt.settleSelfDevelopmentRefusal(ctx, operation, baseErr)
+		}
 	}
 	manifest, err := updater.FinalizeManifest(release)
 	if err != nil {
@@ -556,7 +569,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid applied receipts")
 		}
-		if err := rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, operation.State, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve"); err != nil {
+		if err := rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventMaterializationApplied, operation.State, selfdev.StateApplied, routeledger.TransitionPromote, "computer:self_development:approve", ""); err != nil {
 			return err
 		}
 		// A live apply wakes the candidate's Texture (SD-08). A crash
@@ -577,52 +590,67 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if !errors.Is(applyErr, updater.ErrApplyRefused) {
 		return applyErr
 	}
-	if operation.State == selfdev.StateDegraded {
-		// Re-refused while degraded and the journal still has no terminal
-		// outcome: nothing will repair this pass's verdict; staying silent
-		// keeps the terminal row instead of arming a retry every 60s.
-		return nil
-	}
-	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
-		next.TerminalError = applyErr.Error()
-		return nil
-	})
-	if transitionErr != nil {
-		return transitionErr
-	}
-	return applyErr
+	return rt.settleSelfDevelopmentRefusal(ctx, operation, applyErr)
+}
+
+// selfdevReasonBaseUnverifiable is the typed reason on an apply refused
+// because the booted base is named by a manifest that cannot be read or
+// carries no valid build commit: the join cannot be proven, so it fails closed.
+const selfdevReasonBaseUnverifiable = "base_unverifiable"
+
+// settleSelfDevelopmentRefusal settles an operation whose apply was refused
+// before any mutation. A typed refusal installs nothing, so the operation is
+// failed, a settled state: `degraded` means "applied, with an unsettled tail"
+// and stays open (selfdev.OpenStates), so settling there would hold every new
+// round and engineering admission forever. The failure is recorded like any
+// other failed materialization (a materialization_failed event discharges the
+// pending transition; the prior effective state trivially holds), with the
+// refusal's own text, which names both commits for a moved base, as the
+// operation's reason (docs/problems/
+// selfdev-apply-has-no-base-join-2026-10-26.md, review 311).
+func (rt *Runtime) settleSelfDevelopmentRefusal(ctx context.Context, operation selfdev.Operation, refusal error) error {
+	log.Printf("selfdev materializer: operation %s refused before any change, settled failed: %v", operation.OperationID, refusal)
+	return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: "refused"}, refusal, operation.State)
 }
 
 // plainReleaseBaseCommit is the base commit a plain (not host-built) release
 // declares: the one its frozen bundle's source patch was authored against, or
-// "" when the join cannot be claimed, each case named:
+// "" when no claim applies, each case named:
 //   - the bundle records no source patch: it has no base to join (the
 //     candidate is not derived from source), so the release claims none;
-//   - the booted base names no verifiable commit (a dev build's
-//     build_commit=local, a dirty tree, or no booted image manifest wired):
-//     nothing can be proven against it, and refusing would refuse every
-//     candidate on that build, so the release claims none;
+//   - no booted base image manifest is wired, or it names a dev build
+//     (build_commit=local, or a dirty tree): nothing can be proven against
+//     it, and refusing would refuse every candidate on that build, so the
+//     release claims none;
+//   - a manifest is wired but cannot be read, or carries no valid build
+//     commit: that is not a dev build, it is a join that cannot be proven, so
+//     it fails closed with the typed reason base_unverifiable (an error
+//     wrapping updater.ErrApplyRefused, which settles the operation failed);
 //   - otherwise the base is claimed exactly as recorded (lower-cased). A
 //     short or malformed commit is claimed too, so the updater refuses it
 //     with the reason rather than a prefix match passing it.
-func (rt *Runtime) plainReleaseBaseCommit(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) string {
+func (rt *Runtime) plainReleaseBaseCommit(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) (string, error) {
 	base := strings.ToLower(strings.TrimSpace(bundle.SourcePatchBaseCommit))
 	if base == "" {
 		log.Printf("selfdev materializer: operation %s: the bundle records no source patch base; the release claims no base commit", operation.OperationID)
-		return ""
+		return "", nil
 	}
-	if rt.bootedBaseCommit() == "" {
-		log.Printf("selfdev materializer: operation %s: the booted base names no verifiable commit; the release claims no base commit", operation.OperationID)
-		return ""
+	booted, err := rt.bootedBaseForJoin()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s: %v", updater.ErrApplyRefused, selfdevReasonBaseUnverifiable, err)
 	}
-	return base
+	if booted == "" {
+		log.Printf("selfdev materializer: operation %s: no booted base manifest wired, or a dev build; the release claims no base commit", operation.OperationID)
+		return "", nil
+	}
+	return base, nil
 }
 
 // rollbackApplyManifest is the manifest a rollback applies: the pinned prior
 // release re-finalized under the rollback's decision event.
 func rollbackApplyManifest(pinned updater.ReleaseManifest, decisionEvent string) (updater.ReleaseManifest, error) {
 	pinned.AcceptedEventHead = decisionEvent
-	if pinned.ClosureDigest == "" && pinned.BaseImageManifestDigest == "" && pinned.LayeringEntrypoint == "" {
+	if rollbackDropsBaseClaim(pinned) {
 		// A plain release's base claim is a freeze-time provenance check on
 		// installing a new candidate. A rollback returns to a release the
 		// computer already ran and is never refused by it. A layered
@@ -632,6 +660,20 @@ func rollbackApplyManifest(pinned updater.ReleaseManifest, decisionEvent string)
 	}
 	pinned.ContentDigest = ""
 	return updater.FinalizeManifest(pinned)
+}
+
+// rollbackDropsBaseClaim reports whether rolling back to the pinned release
+// drops a base claim: a plain release that carries one.
+func rollbackDropsBaseClaim(pinned updater.ReleaseManifest) bool {
+	return pinned.BaseCommit != "" && pinned.ClosureDigest == "" && pinned.BaseImageManifestDigest == "" && pinned.LayeringEntrypoint == ""
+}
+
+// rollbackDroppedClaimNote is the operation's terminal result when a rollback
+// to a plain release dropped that release's base claim by design. The rolled
+// back computer runs a release authored on a base that may no longer be the
+// booted one; the note makes that visible (review 311).
+func rollbackDroppedClaimNote(pinned updater.ReleaseManifest) string {
+	return "rolled back to a plain release; its base claim dropped by design (base commit " + pinned.BaseCommit + " is not joined to the booted base)"
 }
 
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
@@ -645,6 +687,10 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		return fmt.Errorf("materializer: rollback immutable inputs unavailable: %w", err)
 	}
 	closure, program := inputs.CodeClosure, inputs.ArtifactProgram
+	terminalNote := ""
+	if rollbackDropsBaseClaim(manifest) {
+		terminalNote = rollbackDroppedClaimNote(manifest)
+	}
 	manifest, err = rollbackApplyManifest(manifest, operation.DecisionEvent)
 	if err != nil {
 		return err
@@ -664,7 +710,14 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	}
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
 		result, applyErr = journaled.Result, nil
-		if journaled.Result.Outcome != "applied" {
+		switch journaled.Result.Outcome {
+		case "applied":
+		case "refused":
+			// Keep the refusal's type, as the apply path does: replacing it
+			// with a plain error left the rollback pending, re-arming a retry
+			// wake every 60 s and holding every deploy (review 311).
+			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journaled.Failure)
+		default:
 			applyErr = errors.New(journaled.Failure)
 		}
 	}
@@ -677,7 +730,7 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid rollback receipts")
 		}
-		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventRollbackApplied, operation.State, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback")
+		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventRollbackApplied, operation.State, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback", terminalNote)
 	}
 	if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
 		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, operation.State)
@@ -685,22 +738,12 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	if !errors.Is(applyErr, updater.ErrApplyRefused) {
 		return applyErr
 	}
-	if operation.State == selfdev.StateDegraded {
-		// Re-refused while degraded with a non-terminal journal: stay
-		// terminal rather than arming a retry loop.
-		return nil
-	}
-	_, transitionErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
-		next.TerminalError = applyErr.Error()
-		return nil
-	})
-	if transitionErr != nil {
-		return errors.Join(applyErr, transitionErr)
-	}
-	return applyErr
+	// A refused rollback installed nothing: it settles failed, like a refused
+	// apply, and the applied release it was to leave stays as it was.
+	return rt.settleSelfDevelopmentRefusal(ctx, operation, applyErr)
 }
 
-func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, closure computerversion.CodeClosure, program computerversion.ArtifactProgram, eventKind computerevent.EventKind, expectedState, nextState string, routeKind routeledger.TransitionKind, decisionScope string) error {
+func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, closure computerversion.CodeClosure, program computerversion.ArtifactProgram, eventKind computerevent.EventKind, expectedState, nextState string, routeKind routeledger.TransitionKind, decisionScope, terminalNote string) error {
 	payload, err := computerevent.CanonicalJSON(result)
 	if err != nil {
 		return err
@@ -992,6 +1035,9 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		next.DesiredHead, next.EffectiveHead = finalHead.DesiredEventHead, finalHead.EffectiveEventHead
 		next.MaterializationReceipt, next.CheckpointRef, next.RouteCertificate, next.RouteGeneration, next.RouteReceipt = receiptDigest, checkpointRef, routeCertificateDigest, &routeGeneration, string(route.TransitionReceipt.ID)
 		next.ReleaseDigest, next.CodeRef, next.ArtifactProgramRef = result.ReleaseDigest, string(version.CodeRef), string(version.ArtifactProgramRef)
+		if terminalNote != "" {
+			next.TerminalError = terminalNote
+		}
 		return nil
 	})
 	if err == nil {

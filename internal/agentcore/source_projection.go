@@ -78,6 +78,39 @@ func (rt *Runtime) bootedBaseCommit() string {
 	return ""
 }
 
+// bootedBaseForJoin is the booted base for the apply-time base join, which
+// must tell "nothing to join against" from "cannot be proven":
+//   - ("", nil): no image manifest is wired, or it names a dev build
+//     (build_commit=local, or "<commit>-dirty"); the join is not claimed;
+//   - (commit, nil): the booted build commit;
+//   - ("", err): a manifest is wired but cannot be read, or carries no valid
+//     build commit; the join cannot be proven and the caller fails closed.
+func (rt *Runtime) bootedBaseForJoin() (string, error) {
+	path := rt.guestImageManifestPath()
+	if path == "" {
+		return "", nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("the booted base image manifest is unreadable: %w", err)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok || key != "build_commit" {
+			continue
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		switch {
+		case looksLikeGitCommit(value):
+			return value, nil
+		case value == "local" || strings.HasSuffix(value, "-dirty"):
+			return "", nil
+		}
+		return "", fmt.Errorf("the booted base image manifest carries no valid build_commit (%q)", value)
+	}
+	return "", errors.New("the booted base image manifest carries no build_commit")
+}
+
 // sourceProjectionInput reads the effective release's operation: the one
 // whose release is `current` (the authority the effective identity already
 // uses), its bundle's patch and base, and whether an apply is in flight.
