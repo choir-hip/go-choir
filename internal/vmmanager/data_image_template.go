@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -76,6 +77,16 @@ var perComputerNames = map[string]bool{
 	"choir-signers":           true,
 	"credential.img":          true,
 }
+
+// The only names prune and the temporaries sweep may remove from the
+// template directory (VMCTL_DATA_IMAGE_TEMPLATE_DIR is operator-set, so a
+// loose prefix could reach files that are not ours), and the only
+// leftover clone temporary the VM directory sweep removes.
+var (
+	dataImageTemplateNameRE = regexp.MustCompile(`^data-[0-9a-f]{64}\.img$`)
+	dataImageTemplateTmpRE  = regexp.MustCompile(`^\.building-[0-9a-f]{64}-[0-9a-f]+\.img$`)
+	dataImageCloneTmpRE     = regexp.MustCompile(`^data\.img\.building-[0-9a-f]+$`)
+)
 
 var errDataImageTemplateWait = errors.New("wait_timeout")
 
@@ -155,6 +166,12 @@ func (m *Manager) dataImageSeedIdentity(sizeMB int) (string, error) {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\nsize_mb=%d\nmkfs=%s\n", dataImageTemplateFormat, sizeMB, resolvedPath(m.dataImageMkfsBin()))
 	repo := m.sourceSeedRepo()
+	if repo == "" && strings.TrimSpace(m.cfg.SourceSeedRepoPath) != "" {
+		// A configured seed that cannot be read is not "no seed": caching
+		// an unseeded template would prune the seeded one, and the next
+		// creation would serve an empty image until the repo came back.
+		return "", fmt.Errorf("seed repo %s is configured but unreadable", strings.TrimSpace(m.cfg.SourceSeedRepoPath))
+	}
 	if repo == "" {
 		fmt.Fprintf(h, "seed=none\n")
 		return hex.EncodeToString(h.Sum(nil)), nil
@@ -473,17 +490,27 @@ func (m *Manager) cloneDataImageTemplate(pick dataImageTemplatePick, dataImg str
 	if err != nil || !srcInfo.Mode().IsRegular() || srcInfo.Size() != int64(sizeMB)*1024*1024 {
 		return fmt.Errorf("template_gone: opened template is not the checked file")
 	}
-	dst, err := os.OpenFile(dataImg, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	// The clone is written beside data.img under a temporary name and
+	// renamed into place once synced: a crash mid-clone leaves only a
+	// temporary, never a partial data.img that every later boot would read
+	// as an existing image.
+	sweepDataImageCloneTemporaries(filepath.Dir(dataImg))
+	tmp := dataImg + ".building-" + randomSuffix()
+	dst, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create data image: %v", err)
 	}
+	renamed := false
 	defer func() {
 		closeErr := dst.Close()
 		if err == nil && closeErr != nil {
 			err = fmt.Errorf("close data image: %v", closeErr)
 		}
 		if err != nil {
-			_ = os.Remove(dataImg)
+			_ = os.Remove(tmp)
+			if renamed {
+				_ = os.Remove(dataImg)
+			}
 		}
 	}()
 	clone := m.templateCloneFn
@@ -500,7 +527,27 @@ func (m *Manager) cloneDataImageTemplate(pick dataImageTemplatePick, dataImg str
 	if err := dst.Sync(); err != nil {
 		return fmt.Errorf("sync data image: %v", err)
 	}
+	if err := os.Rename(tmp, dataImg); err != nil {
+		return fmt.Errorf("rename data image: %v", err)
+	}
+	renamed = true
 	return syncDirectory(filepath.Dir(dataImg))
+}
+
+// sweepDataImageCloneTemporaries removes the temporary clones a crashed
+// creation left in a VM directory; they are never data.img.
+func sweepDataImageCloneTemporaries(vmDir string) {
+	entries, err := os.ReadDir(vmDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if dataImageCloneTmpRE.MatchString(e.Name()) {
+			if err := os.Remove(filepath.Join(vmDir, e.Name())); err == nil {
+				log.Printf("vmmanager: removed interrupted data image clone %s", filepath.Join(vmDir, e.Name()))
+			}
+		}
+	}
 }
 
 // warmDataImageTemplate builds the current template at start, so the first
@@ -518,7 +565,7 @@ func sweepDataImageTemplateTemporaries(dir string) {
 		return
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), dataImageTemplateTmp) {
+		if dataImageTemplateTmpRE.MatchString(e.Name()) {
 			if err := os.Remove(filepath.Join(dir, e.Name())); err == nil {
 				log.Printf("vmmanager: removed interrupted data image template build %s", e.Name())
 			}
@@ -537,7 +584,7 @@ func pruneDataImageTemplates(dir, keep string) int {
 	for _, e := range entries {
 		name := e.Name()
 		path := filepath.Join(dir, name)
-		if path == keep || !strings.HasPrefix(name, dataImageTemplatePrefix) || !strings.HasSuffix(name, dataImageTemplateSuffix) {
+		if path == keep || !dataImageTemplateNameRE.MatchString(name) {
 			continue
 		}
 		if err := os.Remove(path); err == nil {

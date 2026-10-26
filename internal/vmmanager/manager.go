@@ -1135,8 +1135,13 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	guestIP, _ := m.guestAndHostIP(hostPort)
 	hostURL := fmt.Sprintf("http://%s:%d", guestIP, cfg.GuestPort)
 
+	// NewComputer is a boot input for this call only: the tracked config is
+	// what a later recover or refresh boots from, and those never take the
+	// template (a lost data.img keeps today's path).
+	trackedCfg := cfg
+	trackedCfg.NewComputer = false
 	inst := &VMInstance{
-		Config:    cfg,
+		Config:    trackedCfg,
 		State:     StatePending,
 		HostURL:   hostURL,
 		StartedAt: time.Now(),
@@ -1881,6 +1886,9 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	// RUNTIME_MAINTENANCE_HOLD=1). Every caller sets these explicitly.
 	cfg.MaintenanceHold = overrides.MaintenanceHold
 	cfg.RecoveryReplayOnly = overrides.RecoveryReplayOnly
+	// NewComputer is the same: only the mint's own call names it, and a
+	// stored config must never carry it into a recover or refresh.
+	cfg.NewComputer = overrides.NewComputer
 	// BootKind merges only when the caller names it: an empty override must
 	// not erase a label the adapter already set (recover/refresh).
 	if overrides.BootKind != "" {
