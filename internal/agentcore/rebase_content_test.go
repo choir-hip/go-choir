@@ -247,3 +247,25 @@ func TestRebaseContentFreezeRefusesBeforeTheOwnerSees(t *testing.T) {
 		t.Fatalf("an ordinary Freeze was checked: %v", err)
 	}
 }
+
+// The timer defers a new pair's notice while a rebase of the same operation,
+// claimed for an older base, still runs: two rebase rounds never run at once.
+func TestRebaseNoticeDefersWhileARebaseOfTheSameOperationIsLive(t *testing.T) {
+	f := newRebaseContentFixture(t)
+	newer := commitOnTop(t, f.repo, f.moved, map[string]string{"frontend/public/newer.txt": "n\n"})
+	setBootedBase(t, f.rt, newer)
+	out := f.fire(t)
+	if out.Minted != "" || out.Rearm <= 0 || !strings.Contains(out.Reason, "still runs") {
+		t.Fatalf("a live rebase of the same operation must defer the new pair: %+v", out)
+	}
+	if rec, _ := f.s.GetCommitmentRecord(context.Background(), f.owner, f.computer, types.StackRebaseNoticeID(f.opID, newer, 1)); rec != nil {
+		t.Fatal("a notice was minted while a rebase ran")
+	}
+	// The round ends: the next pair gets its notice.
+	f.rt.assignmentRuntime = absentAssignmentCapsule{}
+	c1eCancel(t, f.rt, f.assignment, "test: the rebase round ends", true)
+	out = f.fire(t)
+	if out.Minted != types.StackRebaseNoticeID(f.opID, newer, 1) {
+		t.Fatalf("after the round ended: %+v", out)
+	}
+}

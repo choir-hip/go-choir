@@ -232,6 +232,24 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return rebaseNoticeOutcome{Reason: "read the claim: " + err.Error()}
 	}
+	// Two rebase rounds of one operation never run at once: a claim for an
+	// older base whose assignment is not terminal defers this pair's notice.
+	claims, err := rt.store.ListRebaseNoticeClaims(ctx, ownerID, computerID, operationID)
+	if err != nil {
+		return rebaseNoticeOutcome{Reason: "read the operation's claims: " + err.Error()}
+	}
+	for _, other := range claims {
+		if other.PairKey == pair {
+			continue
+		}
+		assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, other.AssignmentID, 1)
+		if err == nil && !assignment.Disposition.Terminal() {
+			return rebaseNoticeOutcome{
+				Reason: fmt.Sprintf("a rebase of %s onto %s (assignment %s) still runs", operationID, carriedBaseLabel(other.BootedBase), other.AssignmentID),
+				Rearm:  rt.rebaseStayUpInterval(),
+			}
+		}
+	}
 	var latest *types.CommitmentRecord
 	attempt := 0
 	for n := 1; n <= types.RebaseNoticeMaxAttempts; n++ {
