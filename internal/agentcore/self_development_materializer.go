@@ -121,6 +121,20 @@ const selfdevApplyInterruptedByRestart = "interrupted_by_restart"
 
 var errSelfDevJournalMidFlight = errors.New("updater journal is mid-flight; effective state unknown")
 
+// errSelfDevSettlementStateMismatch holds a settlement whose journal and
+// operation state contradict each other.
+var errSelfDevSettlementStateMismatch = errors.New("updater journal contradicts the operation state")
+
+// journalFailureCause is the reason an updater journal states for a
+// non-applied outcome, or a named cause when it states none, so a settled
+// operation never carries an empty reason.
+func journalFailureCause(failure, outcome string) string {
+	if strings.TrimSpace(failure) != "" {
+		return failure
+	}
+	return "the updater journaled a " + outcome + " outcome with no reason"
+}
+
 // markSelfDevelopmentOperationsInterruptedAfterCrash records the operations a
 // crash boot found decided but unsettled: every post-decision state, and ops
 // awaiting approval whose owner decision already committed. An op the owner
@@ -184,6 +198,13 @@ func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context,
 	// that stays; it settles through the normal path with no bound, because it
 	// has no tail to bound and the bound must never keep it from settling.
 	if journaled.Result.Outcome == "applied" {
+		// The updater only runs after the materializing transition, so an
+		// applied journal on an operation that never reached it is a
+		// contradiction. Record nothing and spend nothing: the operation is
+		// held, visible, for an owner act.
+		if operation.State == selfdev.StateAwaitingApproval || operation.State == selfdev.StateAccepted {
+			return fmt.Errorf("%w: the journal is applied but the operation is %s", errSelfDevSettlementStateMismatch, operation.State)
+		}
 		// The applied event is recorded first, outside the bound: it is O(1),
 		// the journal says what happened, and it closes the pending
 		// transition, so a store that refuses appends for a while cannot spend
@@ -630,9 +651,9 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 			// the type left it materializing, desks held, replaying the same
 			// journaled refusal (docs/problems/
 			// selfdev-apply-has-no-base-join-2026-10-26.md).
-			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journaled.Failure)
+			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journalFailureCause(journaled.Failure, journaled.Result.Outcome))
 		default:
-			applyErr = errors.New(journaled.Failure)
+			applyErr = errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome))
 		}
 	}
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
@@ -791,9 +812,9 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 			// Keep the refusal's type, as the apply path does: replacing it
 			// with a plain error left the rollback pending, re-arming a retry
 			// wake every 60 s and holding every deploy (review 311).
-			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journaled.Failure)
+			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journalFailureCause(journaled.Failure, journaled.Result.Outcome))
 		default:
-			applyErr = errors.New(journaled.Failure)
+			applyErr = errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome))
 		}
 	}
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
