@@ -1656,6 +1656,14 @@ in
         "VM_INITRD_IMAGE=/var/lib/go-choir/guest/initrd"
         "VM_STORE_DISK_IMAGE=/var/lib/go-choir/guest/storedisk.erofs"
         "VM_KERNEL_PARAMS_FILE=/var/lib/go-choir/guest/kernel-params"
+        # D2 (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md):
+        # snapshotReleaseRetain (let-binding above) is the one switch. Off, the
+        # launch is byte-identical to a vmctl without it and release-bound
+        # snapshots refuse (release_retain_off).
+        "VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "off"}"
+        "VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"
+        "VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases"
+        "VM_GUEST_RELEASE_SUPPORT_WINDOW=168h"
         "VM_STATE_DIR=/var/lib/go-choir/vm-state"
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"

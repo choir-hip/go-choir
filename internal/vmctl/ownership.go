@@ -517,6 +517,11 @@ type VMInstanceInfo struct {
 	StartedAt       time.Time
 	LastHealthCheck time.Time
 	LastHealthyAt   time.Time
+	// GuestRelease is the guest release the VM was launched from, "" for a
+	// legacy launch; Behind is the receipt of a snapshot resume onto a release
+	// older than the current one (D2). Health recomputes it live.
+	GuestRelease string
+	Behind       bool
 }
 
 // OwnershipRegistry manages the mapping of users to VMs. It provides

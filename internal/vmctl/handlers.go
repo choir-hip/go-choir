@@ -71,6 +71,11 @@ type vmctlHealthResponse struct {
 	// Admission is the start admission ledger: reservations for starts in
 	// flight and the recent decisions with their inputs.
 	Admission HostAdmissionSummary `json:"admission"`
+	// GuestReleaseCurrent and GuestReleases are the D2 release facts: the
+	// current release and each computer launched from one, with whether it is
+	// behind (guest_release.go). Absent while the switch is off.
+	GuestReleaseCurrent string                 `json:"guest_release_current,omitempty"`
+	GuestReleases       []GuestReleaseComputer `json:"guest_releases,omitempty"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -230,6 +235,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	// Health never probes a guest: one that does not answer would make
 	// vmctl itself look down (docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
 	idleEligible := h.registry.IdleOwnershipsSeen()
+	releaseCurrent, releaseComputers := h.guestReleaseHealth(ownerships)
 	writeVMCTLJSON(w, http.StatusOK, vmctlHealthResponse{
 		Status:          "ok",
 		Service:         "vmctl",
@@ -242,6 +248,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Warmness:        h.registry.WarmnessSummary(idleEligible),
 		Processes:       h.registry.LastProcessReconcile(),
 		Admission:       h.registry.HostAdmissionSummary(),
+
+		GuestReleaseCurrent: releaseCurrent,
+		GuestReleases:       releaseComputers,
 	})
 }
 
@@ -1108,6 +1117,75 @@ type hibernateTimelineReader interface {
 	HibernateTimeline(vmID string) (json.RawMessage, error)
 }
 
+// guestReleaseReader is the optional D2 capability of the real vmmanager
+// adapter: the releases in use (what retention may not delete) and the
+// release each live VM runs. A manager without it answers 404 and adds
+// nothing to health.
+type guestReleaseReader interface {
+	GuestReleases() (json.RawMessage, error)
+	GuestReleaseHealth() (current string, byVM map[string]GuestReleaseVMStatus)
+}
+
+// GuestReleaseVMStatus is the release a live VM runs, and whether it is
+// behind the current release.
+type GuestReleaseVMStatus struct {
+	GuestRelease string
+	Behind       bool
+}
+
+// GuestReleaseComputer is one computer's release in vmctl health.
+type GuestReleaseComputer struct {
+	ComputerID   string `json:"computer_id"`
+	VMID         string `json:"vm_id"`
+	GuestRelease string `json:"guest_release"`
+	Behind       bool   `json:"behind"`
+}
+
+// HandleGuestReleases serves GET /internal/vmctl/guest-releases: the guest
+// releases live VMs run and unconsumed snapshots need, for the release
+// retention job (scripts/node-b-guest-release-retention). Internal callers
+// only. 404 when the manager cannot tell (an older vmctl answers 404 too).
+func (h *Handler) HandleGuestReleases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	reader, ok := h.registry.VMManagerHandle().(guestReleaseReader)
+	if !ok || reader == nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "guest releases unavailable on this vm manager"})
+		return
+	}
+	raw, err := reader.GuestReleases()
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
+}
+
+// guestReleaseHealth lists, for health, the current release and each active
+// computer launched from a release.
+func (h *Handler) guestReleaseHealth(ownerships []*VMOwnership) (string, []GuestReleaseComputer) {
+	reader, ok := h.registry.VMManagerHandle().(guestReleaseReader)
+	if !ok || reader == nil {
+		return "", nil
+	}
+	current, byVM := reader.GuestReleaseHealth()
+	var out []GuestReleaseComputer
+	for _, own := range ownerships {
+		if st, ok := byVM[own.VMID]; ok && st.GuestRelease != "" {
+			out = append(out, GuestReleaseComputer{ComputerID: own.ComputerID, VMID: own.VMID, GuestRelease: st.GuestRelease, Behind: st.Behind})
+		}
+	}
+	return current, out
+}
+
 // hibernateRequest is the JSON payload for POST /internal/vmctl/hibernate.
 type hibernateRequest struct {
 	ComputerID string `json:"computer_id,omitempty"`
@@ -1358,6 +1436,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
+	s.HandleFunc("/internal/vmctl/guest-releases", h.HandleGuestReleases)
 	s.HandleFunc(HostBootStatePath, h.HandleHostBootState)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 	s.HandleFunc("/internal/vmctl/memory", h.HandleMemory)

@@ -36,6 +36,7 @@ func defaultRelPolicy(age time.Duration) testRelPolicy {
 func writeTestRelease(t *testing.T, dir, id string, p testRelPolicy) {
 	t.Helper()
 	rd := filepath.Join(dir, id)
+	_ = os.RemoveAll(rd)
 	if err := os.MkdirAll(rd, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +54,18 @@ func writeTestRelease(t *testing.T, dir, id string, p testRelPolicy) {
 	}
 	inst := fmt.Sprintf(`{"store_path":"/nix/store/%s-go-choir-guest-image","first_current_at":%q}`, id, time.Now().Add(-p.FirstAge).UTC().Format(time.RFC3339))
 	if err := os.WriteFile(filepath.Join(rd, "installed.json"), []byte(inst), 0o444); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// setFirstCurrent rewrites only installed.json, leaving the release files (and
+// their bound identities) alone.
+func setFirstCurrent(t *testing.T, dir, id string, age time.Duration) {
+	t.Helper()
+	path := filepath.Join(dir, id, "installed.json")
+	_ = os.Remove(path)
+	inst := fmt.Sprintf(`{"store_path":"/nix/store/%s-go-choir-guest-image","first_current_at":%q}`, id, time.Now().Add(-age).UTC().Format(time.RFC3339))
+	if err := os.WriteFile(path, []byte(inst), 0o444); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -213,7 +226,7 @@ func TestSnapshotResumesOntoItsOwnRelease(t *testing.T) {
 		t.Fatalf("meta.GuestRelease = %q, want R1", meta.GuestRelease)
 	}
 	for _, d := range meta.Disks {
-		if strings.HasPrefix(d.Path, filepath.Join(r.mgr.cfg.StateDir, "guest")) {
+		if strings.HasPrefix(d.Path, filepath.Join(r.mgr.cfg.StateDir, "guest")+string(filepath.Separator)) {
 			t.Fatalf("bound path %s is not under the release", d.Path)
 		}
 	}
@@ -330,18 +343,15 @@ func TestValidateSnapshotReleaseRules(t *testing.T) {
 			r.point(t, relR2)
 		}, snapshotReasonReleaseABI},
 		{"R6 superseded and past the support window", func(t *testing.T, r *releaseFixture, _ *SnapshotMeta) {
-			_ = os.RemoveAll(filepath.Join(r.releases, relR1))
-			writeTestRelease(t, r.releases, relR1, defaultRelPolicy(week+time.Hour))
+			setFirstCurrent(t, r.releases, relR1, week+time.Hour)
 			r.point(t, relR2)
 		}, snapshotReasonReleaseOutOfSupport},
 		{"the current release past the window resumes (R6 exemption)", func(t *testing.T, r *releaseFixture, _ *SnapshotMeta) {
-			_ = os.RemoveAll(filepath.Join(r.releases, relR1))
-			writeTestRelease(t, r.releases, relR1, defaultRelPolicy(week+time.Hour))
+			setFirstCurrent(t, r.releases, relR1, week+time.Hour)
 			// still current
 		}, ""},
 		{"a release that became current again after a rollback resumes", func(t *testing.T, r *releaseFixture, _ *SnapshotMeta) {
-			_ = os.RemoveAll(filepath.Join(r.releases, relR1))
-			writeTestRelease(t, r.releases, relR1, defaultRelPolicy(3*week))
+			setFirstCurrent(t, r.releases, relR1, 3*week)
 			r.point(t, relR2)
 			r.point(t, relR1)
 		}, ""},
@@ -451,11 +461,21 @@ func TestReattachConfigKeepsTheLaunchRelease(t *testing.T) {
 	// Another epoch, no record, no release directory, and the switch off all
 	// give the legacy config (today's paths).
 	for name, mutate := range map[string]func(){
-		"epoch moved":       func() { _ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 99, LaunchedAt: time.Now()}) },
-		"no record":         func() { _ = os.Remove(r.mgr.launchRecordPath(r.vmID)) },
-		"release dir gone":  func() { _ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 7, LaunchedAt: time.Now()}); _ = os.RemoveAll(filepath.Join(r.releases, relR1)) },
-		"switch off":        func() { _ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 7, LaunchedAt: time.Now()}); r.mgr.cfg.SnapshotReleaseRetain = false },
-		"legacy record":     func() { _ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: "", Epoch: 7, LaunchedAt: time.Now()}) },
+		"epoch moved": func() {
+			_ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 99, LaunchedAt: time.Now()})
+		},
+		"no record": func() { _ = os.Remove(r.mgr.launchRecordPath(r.vmID)) },
+		"release dir gone": func() {
+			_ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 7, LaunchedAt: time.Now()})
+			_ = os.RemoveAll(filepath.Join(r.releases, relR1))
+		},
+		"switch off": func() {
+			_ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: relR1, Epoch: 7, LaunchedAt: time.Now()})
+			r.mgr.cfg.SnapshotReleaseRetain = false
+		},
+		"legacy record": func() {
+			_ = r.mgr.storeLaunchRecord(r.vmID, launchRecord{Release: "", Epoch: 7, LaunchedAt: time.Now()})
+		},
 	} {
 		mutate()
 		got := r.mgr.reattachConfig(r.vmID, 7, VMConfig{})
@@ -481,19 +501,19 @@ func TestJailSourcesComeFromTheReleaseAndAreStable(t *testing.T) {
 	}
 	var store jailFile
 	for _, f := range files {
-		if strings.HasSuffix(f.Source, "storedisk.erofs") {
+		if strings.HasSuffix(f.HostPath, "storedisk.erofs") {
 			store = f
 		}
 	}
-	if store.Source != filepath.Join(r.releases, relR1, "storedisk.erofs") {
-		t.Fatalf("jail store disk source = %q; want the R1 release path", store.Source)
+	if store.HostPath != filepath.Join(r.releases, relR1, "storedisk.erofs") {
+		t.Fatalf("jail store disk source = %q; want the R1 release path", store.HostPath)
 	}
 	name := func() string {
-		info, err := os.Stat(store.Source)
+		info, err := os.Stat(store.HostPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return sharedArtifactName(store.Source, info)
+		return sharedArtifactName(store.HostPath, info)
 	}
 	before := name()
 	r.point(t, relR2)

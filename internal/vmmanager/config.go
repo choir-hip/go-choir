@@ -56,6 +56,17 @@ func LoadConfigFromEnv() ManagerConfig {
 	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASE_LINK")); v != "" {
 		cfg.GuestReleaseLink = v
 	}
+	cfg.GuestReleasesDir = "/var/lib/go-choir/guest-releases"
+	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASES_DIR")); v != "" {
+		cfg.GuestReleasesDir = v
+	}
+	cfg.SnapshotReleaseRetain = strings.EqualFold(strings.TrimSpace(os.Getenv("VM_SNAPSHOT_RELEASE_RETAIN")), "on")
+	cfg.GuestReleaseSupportWindow = DefaultGuestReleaseSupportWindow
+	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASE_SUPPORT_WINDOW")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.GuestReleaseSupportWindow = d
+		}
+	}
 
 	if v := os.Getenv("VM_GUEST_PORT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

@@ -246,5 +246,7 @@ grep -q 'system.activationScripts.go-choir-guest-release' "$nix" && grep -q 'dep
 grep -q 'systemd.services.go-choir-guest-release-retention' "$nix" && grep -q 'systemd.timers.go-choir-guest-release-retention' "$nix" && ok "nix: the retention oneshot and timer" || bad "nix: the retention unit or timer is missing"
 grep -q 'guestReleaseRetention' "$nix" && grep -c 'guestReleaseRetention' "$nix" | grep -qE '^[3-9]' && ok "nix: the disk retention sweep calls it" || bad "nix: diskRetentionSweep does not call the release retention"
 
+grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "off"}' "$nix" && grep -q 'VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases' "$nix" && grep -q 'VM_GUEST_RELEASE_SUPPORT_WINDOW=168h' "$nix" && grep -q 'VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"' "$nix" && ok "nix: vmctl's four release variables follow the one switch" || bad "nix: the vmctl release env lines are missing"
+
 echo "node-b-guest-release-retention tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

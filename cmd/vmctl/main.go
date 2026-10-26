@@ -389,6 +389,8 @@ func toVMInstanceInfo(inst *vmmanager.VMInstance) *vmctl.VMInstanceInfo {
 		StartedAt:       inst.StartedAt,
 		LastHealthCheck: inst.LastHealthCheck,
 		LastHealthyAt:   inst.LastHealthyAt,
+		GuestRelease:    inst.Config.GuestRelease,
+		Behind:          inst.Behind,
 	}
 }
 
@@ -563,6 +565,26 @@ func (a *vmManagerAdapter) DiscardSnapshot(vmID, reason string) bool {
 // SweepOrphanSnapshots implements the vmctl snapshotDiscarder capability.
 func (a *vmManagerAdapter) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
 	return a.mgr.SweepOrphanSnapshots(keep)
+}
+
+// GuestReleases implements the vmctl guestReleaseReader capability: the
+// releases live VMs run and unconsumed snapshots need (D2 retention).
+func (a *vmManagerAdapter) GuestReleases() (json.RawMessage, error) {
+	return json.Marshal(a.mgr.GuestReleaseUsage())
+}
+
+// GuestReleaseHealth implements the vmctl guestReleaseReader capability.
+func (a *vmManagerAdapter) GuestReleaseHealth() (string, map[string]vmctl.GuestReleaseVMStatus) {
+	current := a.mgr.CurrentGuestRelease()
+	out := map[string]vmctl.GuestReleaseVMStatus{}
+	for _, inst := range a.mgr.ListVMs() {
+		rel := inst.Config.GuestRelease
+		if rel == "" || inst.State != vmmanager.StateRunning {
+			continue
+		}
+		out[inst.Config.VMID] = vmctl.GuestReleaseVMStatus{GuestRelease: rel, Behind: current != "" && current != rel}
+	}
+	return current, out
 }
 
 // HibernateTimeline implements the vmctl hibernateTimelineReader capability.
