@@ -1634,8 +1634,11 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		EventAppender: rt.eventAppender, OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
 		EventProjection: rt.store, Ledger: rt.store,
 	}
-	out, verifyErr := recordSelfDevelopmentVerdict(ctx, toolCtx, assignment.Binding.TrajectoryID, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs,
-		map[string]any{"assignment_id": assignmentID, "verifier_desk": r.scope.DeskAgentID})
+	verdictExtra := map[string]any{"assignment_id": assignmentID, "verifier_desk": r.scope.DeskAgentID}
+	if reason := yaegikernel.NormalizeVerifyReason(in.Reason); reason != "" {
+		verdictExtra[verdictReasonKey] = reason
+	}
+	out, verifyErr := recordSelfDevelopmentVerdict(ctx, toolCtx, assignment.Binding.TrajectoryID, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs, verdictExtra)
 	if verifyErr != nil {
 		stamp("verify: " + verifyErr.Error())
 		return nil, verifyErr

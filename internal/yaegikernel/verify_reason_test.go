@@ -32,13 +32,13 @@ func managementVerifyCell(t *testing.T, source string) (SessionResult, []StagedI
 	if err != nil {
 		t.Fatalf("cell: %v", err)
 	}
-	return out, hooks.End()
+	return out, out.Intents
 }
 
 func TestCellVerifyCarriesReasonAndStaysOptional(t *testing.T) {
 	out, staged := managementVerifyCell(t, `fmt.Println(choir.Verify("a-1", "fail", []string{"r1"}, "sha256:abc", "the signed-in page was never opened"))`)
 	if out.Error != "" || len(staged) != 1 || staged[0].Kind != IntentVerify {
-		t.Fatalf("with a reason: error %q, staged %+v", out.Error, staged)
+		t.Fatalf("with a reason: error %q, stdout %q, staged %+v", out.Error, out.Stdout, staged)
 	}
 	if staged[0].Reason != "the signed-in page was never opened" {
 		t.Fatalf("staged reason = %q", staged[0].Reason)
