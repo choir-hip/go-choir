@@ -1071,13 +1071,13 @@ func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
 		}
 		rt.logPlatformUpdateCrashSettlement(ctx, offer, "applied (from the updater journal)")
 	case journaled.Result.RecoveryReceipt != nil && journaled.Result.RecoveryReceipt.Verify(resolver) == nil:
-		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, journaled.Result, errors.New(journaled.Failure), true)
+		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, journaled.Result, errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome)), true)
 		rt.logPlatformUpdateCrashSettlement(ctx, offer, "failed (prior release restored, from the updater journal)")
 	case journaled.Result.Outcome == "refused":
 		// A refusal is journaled before any mutation: nothing changed, so it
 		// discharges like a missing journal. Left pending, it refuses every
 		// later offer.
-		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, journaled.Result, errors.New(journaled.Failure), false)
+		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, journaled.Result, errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome)), false)
 		rt.logPlatformUpdateCrashSettlement(ctx, offer, "failed (refused before any mutation, from the updater journal)")
 	default:
 		log.Printf("runtime: crash boot: platform update %s left pending: journal outcome %q has no verified recovery", offer.UpdateID, journaled.Result.Outcome)

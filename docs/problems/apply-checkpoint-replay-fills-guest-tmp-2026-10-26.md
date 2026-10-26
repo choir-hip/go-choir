@@ -495,6 +495,20 @@ Adjudication of the rest:
   right for unknown state, but there is no guest-side owner act that discharges a
   platform update. Successor: a guest-side owner discharge of a pending platform
   update, in the tail redesign (slice 2) with the host-side proof.
+- Deferred with the same successor (re-review 332, Medium): the selfdev twin of
+  those unknown-state shapes. A journaled terminal `failed` without a verified
+  recovery receipt, and an `applied` journal whose receipts fail
+  `recordSettlementApplied`, hold the operation `materializing` with the pending
+  transition bound. Pending blocks every later decision, so no guest-side act
+  discharges it either; an owner rollback is the only way out today. Fail-closed
+  is right for unknown effective state. Successor: the guest-side owner discharge
+  in slice 2, covering the platform and the selfdev shapes together.
+- Adopted (re-review 332, nits): a journaled refusal or failure with no stated
+  reason settles with a named cause ("the updater journaled a refused outcome
+  with no reason"), never an empty one; and an `applied` journal on an
+  operation that is still `awaiting_approval` or `accepted` (a contradiction: the
+  updater runs only after `materializing`) is held with a named error, with no
+  applied event recorded and no attempt spent.
 - Rejected, reason: a per-boot dedup for the platform spend (DeepSeek 4, 315-3).
   The sweep runs once per boot (`runtime.go`), and the invariant is stated in
   `spendPlatformUpdateSettlementAttempt`. Rejected: boot-path test for the
