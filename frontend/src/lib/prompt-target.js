@@ -17,3 +17,19 @@ export function promptContinueTarget(windows, activeWindowId, { authenticated = 
   const title = String(win.title || context.windowTitle || '').trim() || 'Texture';
   return { windowId: win.windowId, docId, title };
 }
+
+// isSingleHttpUrl mirrors the conductor's content rule
+// (content.ClassifyPromptBarContentIntent): text that is one absolute http or
+// https URL opens its display app. With a document in view the chip
+// defaults to a new document for it, so a pasted link still reaches its app
+// unless the owner taps to continue (review 284 item 1).
+export function isSingleHttpUrl(text) {
+  const fields = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (fields.length !== 1) return false;
+  try {
+    const parsed = new URL(fields[0]);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.host !== '';
+  } catch {
+    return false;
+  }
+}

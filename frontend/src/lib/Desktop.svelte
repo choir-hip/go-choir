@@ -175,7 +175,10 @@
     promptReplay.id !== lastPromptReplayId
   ) {
     lastPromptReplayId = promptReplay.id;
-    submitPromptText(promptReplay.text);
+    submitPromptText(promptReplay.text, {
+      continueDocId: promptReplay.continueDocId || '',
+      continueWindowId: promptReplay.continueWindowId || '',
+    });
   }
   $: if (mounted && desktopReady && publicRoutePath && publicRoutePath !== lastOpenedPublicRoutePath) {
     lastOpenedPublicRoutePath = publicRoutePath;
@@ -1223,7 +1226,12 @@
     const text = (event.detail?.text || '').trim();
     if (!text) return;
     if (!authenticated) {
-      requestAuth({ kind: 'prompt', text });
+      requestAuth({
+        kind: 'prompt',
+        text,
+        continueDocId: event.detail?.continueDocId || '',
+        continueWindowId: event.detail?.continueWindowId || '',
+      });
       return;
     }
     submitPromptText(text, {
@@ -1235,10 +1243,13 @@
   // showContinuedDocument keeps a prompt-bar continue in the document's own
   // window: it focuses that window (or opens one on the document if it was
   // closed) and hands it the receipt, so it follows the trajectory the
-  // revision committed on (FE-02 step 1).
+  // revision committed on (FE-02 step 1). live marks a receipt the window has
+  // not followed yet, so a window that mounts with it (the reopen) follows
+  // it too; the window clears it once followed.
   function showContinuedDocument(receipt, preferredWindowId = '') {
     const docId = receipt.doc_id || '';
     const promptBarContinue = {
+      live: true,
       docId,
       trajectoryId: receipt.trajectory_id || '',
       revisionId: receipt.revision_id || '',
@@ -1247,8 +1258,10 @@
     const isDocWindow = (win) => normalizeAppId(win.appId) === 'texture' && win.mode !== 'closed' && win.appContext?.docId === docId;
     const target = $windows.find((win) => win.windowId === preferredWindowId && isDocWindow(win)) || $windows.find(isDocWindow);
     if (target) {
-      if (target.mode === 'minimized') restoreWindow(target.windowId);
-      else focusWindow(target.windowId);
+      // restoreWindow brings back a minimized or hidden window; focusWindow
+      // alone does not unhide one.
+      if (target.mode === 'normal' || target.mode === 'maximized') focusWindow(target.windowId);
+      else restoreWindow(target.windowId);
       updateWindowAppContext(target.windowId, { promptBarContinue });
     } else {
       openApp('texture', 'Texture', getAppIcon('texture'), { docId, allowMultiple: true, promptBarContinue });

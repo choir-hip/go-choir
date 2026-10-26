@@ -107,9 +107,10 @@
   let editorBodyDoc = null;
   let initializedKey = '';
   // A prompt-bar continue of this document (FE-02 step 1) arrives as a
-  // receipt on the window context. The one present at mount is history (a
-  // restored desktop), so only a later receipt is followed.
-  let promptBarContinueSeen = String(appContext?.promptBarContinue?.requestId || '');
+  // receipt on the window context. A receipt present at mount is followed
+  // only while the shell marks it live (a window reopened for the continue);
+  // otherwise it is history from a restored desktop.
+  let promptBarContinueSeen = appContext?.promptBarContinue?.live ? '' : String(appContext?.promptBarContinue?.requestId || '');
   let latestHeadRevisionId = '';
   let pendingHeadRevisionId = '';
   let newVersionAvailable = false;
@@ -503,6 +504,7 @@
     if (!requestId || requestId === promptBarContinueSeen) return;
     if (!currentDoc?.doc_id || receipt.docId !== currentDoc.doc_id) return;
     promptBarContinueSeen = requestId;
+    if (receipt.live) publishWindowContext({ promptBarContinue: { ...receipt, live: false } });
     agentPending = true;
     const nextTrajectoryId = String(receipt.trajectoryId || '');
     if (nextTrajectoryId && nextTrajectoryId !== (currentDoc.trajectory_id || '')) {
