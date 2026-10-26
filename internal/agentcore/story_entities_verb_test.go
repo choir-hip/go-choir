@@ -19,6 +19,11 @@ package agentcore
 //     platform cannot be asked and the record is written unchecked.
 //  E7 The export fails after the tape write: the cell is told, the tape keeps
 //     the record, and repeating the call re-exports without a second record.
+//  E9 A repeat of an older call flips a role back silently (review 298 F3):
+//     central, then incidental, then the first call again must leave the
+//     tape's latest role and Store B's equal. A call whose role differs from
+//     the latest recorded one is a role change, recorded again; only a call
+//     equal to the latest record is a replay.
 //  E8 The id of a new entity is the cell's: a new entity's id is derived on
 //     the host from its normalised name (or its Wikidata id), so two calls
 //     naming it alike name one node.
@@ -374,5 +379,44 @@ func TestRelateExportFailureKeepsTheRecordAndARepeatReExports(t *testing.T) { //
 	calls := f.epub.entityCalls()
 	if len(calls) != 2 || calls[1].Entities[0].EntityID != again.EntityID || !calls[1].Entities[0].New || calls[1].Entities[0].Name != "Aleksandar Vucic" || calls[1].Entities[0].Type != "person" {
 		t.Fatalf("exports = %+v; the repeat exports the attachment again, with the entity the tape minted", calls)
+	}
+}
+
+func TestRelateRepeatOfAnOlderRoleIsRecordedAgain(t *testing.T) { // E9
+	f := newEntityFixture(t)
+	f.turnOn(t)
+	receipt := f.judgedEntity(t, "run-e9", "q1") // central 0.7, incidental 0.15
+	id := types.MintedEntityID("Aleksandar Vucic")
+	central := newVucic(receipt, "q1", types.EntityRoleCentral)
+	incidental := yaegikernel.RelateEntity{EntityID: id, Role: types.EntityRoleIncidental, JudgmentRef: receipt, QuestionID: "q1",
+		Reason: "He is named once, in the last paragraph, as a past speaker."}
+
+	steps := []struct {
+		ent      yaegikernel.RelateEntity
+		replayed bool
+		events   int
+	}{
+		{central, false, 1},
+		{incidental, false, 2},
+		{central, false, 3},    // the older call again: a role change, recorded
+		{central, true, 3},     // equal to the latest record: a replay
+		{incidental, false, 4}, // and back
+	}
+	for i, step := range steps {
+		raw, err := f.attach(agentprofile.Research, "run-e9", step.ent)
+		if err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+		got := decodeAttach(t, raw)
+		if got.Attached[0].Replayed != step.replayed {
+			t.Fatalf("step %d (%s): replayed = %v, want %v", i, step.ent.Role, got.Attached[0].Replayed, step.replayed)
+		}
+		if n := len(f.entityEvents(t)); n != step.events {
+			t.Fatalf("step %d: %d events, want %d", i, n, step.events)
+		}
+		calls := f.epub.entityCalls()
+		if last := calls[len(calls)-1]; last.Entities[0].Role != step.ent.Role {
+			t.Fatalf("step %d: exported role %s, want %s", i, last.Entities[0].Role, step.ent.Role)
+		}
 	}
 }
