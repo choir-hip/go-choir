@@ -2874,7 +2874,14 @@ func (s *Store) ListAcknowledgedEventsByChannel(ctx context.Context, ownerID, ch
 		}
 		events = append(events, rec)
 	}
-	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
+	// Equal timestamps read in write order (StreamSeq), so records written in
+	// one instant, such as a replay and the record it follows, never swap.
+	sort.SliceStable(events, func(i, j int) bool {
+		if !events[i].Timestamp.Equal(events[j].Timestamp) {
+			return events[i].Timestamp.Before(events[j].Timestamp)
+		}
+		return events[i].StreamSeq < events[j].StreamSeq
+	})
 	if len(events) > limit {
 		events = events[:limit]
 	}
