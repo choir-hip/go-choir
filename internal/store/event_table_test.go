@@ -1221,3 +1221,22 @@ func TestEventTableSealerRecheckAdmitsOnlyTheEventTable(t *testing.T) {
 		}
 	}
 }
+
+// Review 304 item 7: events of one channel written in the same instant read
+// in the order they were written (StreamSeq), so a replay record and the
+// record it follows never swap.
+func TestEventTableChannelReadBreaksTimestampTiesByStreamSeq(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	var ops []computerevent.ProjectionOp
+	for i, id := range []string{"tie-c", "tie-a", "tie-b"} {
+		rec := eventTableRecord(id, "run-t", "owner-1", "traj-t", types.EventSystem1Judgment, int64(i+1), int64(30-10*i), eventTableBase)
+		rec.ChannelID = "system1:tie"
+		ops = append(ops, eventTableOp(t, rec, false))
+	}
+	projectAt(t, s, 2, ops...)
+	got := mustEvents(t)(s.ListAcknowledgedEventsByChannel(ctx, "owner-1", "system1:tie", 10))
+	if ids := eventIDs(got); ids != "tie-b#3/10,tie-a#2/20,tie-c#1/30" {
+		t.Fatalf("channel read order = %s, want by stream seq: tie-b,tie-a,tie-c", ids)
+	}
+}
