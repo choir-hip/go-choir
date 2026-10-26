@@ -304,3 +304,33 @@ func TestCrashBootStrandedTailOfARetiredRealizationSpendsNoAttempt(t *testing.T)
 		t.Fatalf("a retired realization's tail ran: %v", kinds)
 	}
 }
+
+// Review 323 (Devin, Medium): a journaled terminal `refused` is provably
+// pre-mutation. A crash boot discharges it as failed, like a missing journal;
+// before, it fell to the "no verified recovery" branch and left the transition
+// pending, so every later offer was refused.
+func TestCrashBootSettlesAJournaledRefusalAsFailed(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-pu-refused-journal")
+	ctx := context.Background()
+	offer := fx.mintPlatformUpdateOffer(t, "update-refused-journal", "<html>refused-journal</html>", fx.currentHead(t))
+	fx.seedAcceptedPlatformUpdate(t, offer)
+	fx.useDurableAttemptCount(t)
+	fx.writeTerminalRefusedJournal(t, platformUpdateIdempotencyKey("apply", offer.UpdateID))
+
+	fx.crashBootPlatformUpdate()
+
+	kinds := fx.countEventKinds()
+	if kinds[computerevent.EventMaterializationFailed] != 1 || kinds[computerevent.EventMaterializationApplied] != 0 {
+		t.Fatalf("events = %v, want one materialization_failed", kinds)
+	}
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound after a refused journal", pending)
+	}
+	if calls := fx.applyCalls.Load(); calls != 0 {
+		t.Fatalf("the crash boot called the updater %d times", calls)
+	}
+	next := fx.mintPlatformUpdateOffer(t, "update-after-refused", "<html>after-refused</html>", fx.currentHead(t))
+	if _, err := fx.rt.ApplyPlatformUpdate(ctx, next); err != nil {
+		t.Fatalf("a later offer was refused after the refused journal settled: %v", err)
+	}
+}

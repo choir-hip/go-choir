@@ -22,7 +22,10 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,6 +192,12 @@ func TestCrashBootSettlementThatCrashedTwiceClosesDegraded(t *testing.T) {
 	if n := fx.settlementAttempts(t, operation.OperationID); n != 2 {
 		t.Fatalf("attempts = %d after the close, want the two crashes only", n)
 	}
+	// The cause says the apply is recorded on the tape, so it must be, and the
+	// applied event must have closed the pending transition: a degraded close
+	// that leaves it bound refuses every later update.
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound after the degraded close", pending)
+	}
 	if len(fx.checkpoints) != 0 || got.CheckpointRef != "" || got.RouteReceipt != "" {
 		t.Fatalf("the closed settlement bound or promoted: checkpoints=%d ref=%q route=%q", len(fx.checkpoints), got.CheckpointRef, got.RouteReceipt)
 	}
@@ -273,7 +282,7 @@ func TestSettlementThatCrashedTwiceSettlesAnAcceptedOperationFailed(t *testing.T
 		t.Fatalf("recover the decision: %+v found=%v err=%v; want an accepted operation", accepted, found, err)
 	}
 
-	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, accepted); err != nil {
+	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, accepted, false); err != nil {
 		t.Fatalf("close an accepted operation: %v", err)
 	}
 
@@ -299,7 +308,7 @@ func TestSettlementThatCrashedTwiceSettlesAnOperationStillAwaitingApprovalFailed
 	ctx := context.Background()
 	operation, _, _ := fx.seedOperationToAwaitingApproval(t, "op-settle-awaiting")
 
-	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, operation); err != nil {
+	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, operation, false); err != nil {
 		t.Fatalf("close an operation awaiting approval: %v", err)
 	}
 
@@ -309,5 +318,107 @@ func TestSettlementThatCrashedTwiceSettlesAnOperationStillAwaitingApprovalFailed
 	}
 	if got.State != selfdev.StateFailed || !strings.Contains(got.TerminalError, "did not finish on two boots") {
 		t.Fatalf("operation = %s %q, want failed with the cause", got.State, got.TerminalError)
+	}
+}
+
+// Review 323 (DeepSeek, High): the selfdev settlement spent its attempt before
+// the applied event, so two boots on which the store refused the append spent
+// the bound; the third boot closed the operation degraded with no applied event,
+// the pending transition still bound (every later offer refused) and a cause
+// ("the apply is recorded on the tape") that was not true. The applied event is
+// recorded first, outside the bound; only the tail is bounded.
+func TestCrashBootSettlementRecordsAppliedAfterTwoFailedAppendsWithoutSpendingTheBound(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-settle-append-fails")
+	real := appendEventPayload
+	defer func() { appendEventPayload = real }()
+	failing := true
+	appendEventPayload = func(rt *Runtime, ctx context.Context, event computerevent.Event, input computerevent.TransitionInput, payload []byte, mediaType, privacyClass string) (computerevent.Receipt, string, error) {
+		if failing && event.EventKind == computerevent.EventMaterializationApplied {
+			return computerevent.Receipt{}, "", errors.New("store mid-replay: append unavailable")
+		}
+		return real(rt, ctx, event, input, payload, mediaType, privacyClass)
+	}
+	operation := fx.parkAppliedButUnrecorded(t, "op-settle-append-fails")
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 0 {
+		t.Fatalf("the applied event committed while appends were refused: %v", kinds)
+	}
+	fx.controlFail.Store(false)
+
+	fx.bootAfterCrash(t)
+	fx.bootAfterCrash(t)
+	if n := fx.settlementAttempts(t, operation.OperationID); n != 0 {
+		t.Fatalf("two failed applied appends spent %d settlement attempts", n)
+	}
+
+	failing = false
+	fx.bootAfterCrash(t)
+
+	applied := fx.waitForState(t, operation.OperationID, selfdev.StateApplied)
+	if !strings.HasPrefix(applied.CheckpointRef, "checkpoint:sha256:") {
+		t.Fatalf("third boot did not finish the settlement: %+v", applied)
+	}
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound", pending)
+	}
+	if n := fx.settlementAttempts(t, operation.OperationID); n != 1 {
+		t.Fatalf("settlement attempts = %d, want the one tail", n)
+	}
+}
+
+// writeTerminalRefusedJournal is the journal the updater leaves for a
+// pre-mutation refusal (base join, state compat, source trust, staging).
+func (fx *derivableSelfDevFixture) writeTerminalRefusedJournal(t *testing.T, key string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte(key))
+	dir := filepath.Join(fx.updaterRoot, "operations")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"phase":"refused","request_commitment":"x","target_release_digest":"y","failure":"base commit does not match the booted base","result":{"outcome":"refused"}}`
+	if err := os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Review 323 (Devin, Medium; the selfdev half): a journaled refusal installed
+// nothing and has no tail. It settles `failed` and discharges the pending
+// transition on a crash boot, spending no attempt, even when the bound for the
+// operation is already spent or cannot be kept.
+func TestCrashBootSettlementOfAJournaledRefusalFailsEvenWithTheBoundSpent(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(fx *derivableSelfDevFixture, t *testing.T, operationID string)
+	}{
+		{"bound spent", func(fx *derivableSelfDevFixture, t *testing.T, operationID string) {
+			fx.rt.cfg.StorePath = filepath.Join(t.TempDir(), "runtime.db")
+			raw, _ := json.Marshal(map[string]int{settlementAttemptKey(operationID): selfdevSettlementAttemptLimit})
+			if err := os.WriteFile(GuestApplyAttemptsPath(fx.rt.cfg.StorePath), raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"no durable count", func(fx *derivableSelfDevFixture, t *testing.T, operationID string) {
+			fx.rt.cfg.StorePath = ""
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newDerivableSelfDevFixture(t, "computer-settle-refused-"+strings.ReplaceAll(tc.name, " ", "-"))
+			operation := fx.decideWithoutActing(t, "op-settle-refused")
+			fx.writeTerminalRefusedJournal(t, "selfdev-apply-"+fx.decisionDigest(t, "op-settle-refused"))
+			tc.setup(fx, t, operation.OperationID)
+			callsBefore := fx.applyCalls.Load()
+
+			fx.bootAfterCrash(t)
+
+			got := fx.waitForState(t, operation.OperationID, selfdev.StateFailed)
+			if !strings.Contains(got.TerminalError, "base commit does not match") {
+				t.Fatalf("terminal error %q does not carry the refusal", got.TerminalError)
+			}
+			if pending := fx.pendingTransition(t); pending != "" {
+				t.Fatalf("pending transition %s still bound after a refused settlement", pending)
+			}
+			if calls := fx.applyCalls.Load(); calls != callsBefore {
+				t.Fatalf("the settlement called the updater (%d -> %d)", callsBefore, calls)
+			}
+		})
 	}
 }
