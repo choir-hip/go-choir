@@ -291,3 +291,23 @@ func TestSettlementThatCrashedTwiceSettlesAnAcceptedOperationFailed(t *testing.T
 		t.Fatalf("pending transition %s still bound after the operation failed", pending)
 	}
 }
+
+// Review 315 (Devin, nit 2): every state before materializing installed
+// nothing, so it settles failed, not only `accepted`.
+func TestSettlementThatCrashedTwiceSettlesAnOperationStillAwaitingApprovalFailed(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-settle-awaiting")
+	ctx := context.Background()
+	operation, _, _ := fx.seedOperationToAwaitingApproval(t, "op-settle-awaiting")
+
+	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, operation); err != nil {
+		t.Fatalf("close an operation awaiting approval: %v", err)
+	}
+
+	got, err := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != selfdev.StateFailed || !strings.Contains(got.TerminalError, "did not finish on two boots") {
+		t.Fatalf("operation = %s %q, want failed with the cause", got.State, got.TerminalError)
+	}
+}
