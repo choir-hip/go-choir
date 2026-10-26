@@ -322,6 +322,22 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	if err != nil {
 		return 0, err
 	}
+	// The new base already made P's change in a whole-file shape. P deleted the
+	// file and so did B': the candidate must leave it deleted (restoring it
+	// would undo P). P added a file and B' has exactly that file: the candidate
+	// must leave it as it is.
+	if !ours.exists && !theirs.exists {
+		if cand.exists {
+			return conflictDropped, nil
+		}
+		return conflictResolved, nil
+	}
+	if ours.exists && theirs.exists && ours.entry == theirs.entry {
+		if cand.entry == ours.entry {
+			return conflictResolved, nil
+		}
+		return conflictDropped, nil
+	}
 	// P leaves the file in place, so a candidate without it dropped the change.
 	if theirs.exists && !cand.exists {
 		return conflictDropped, nil
@@ -333,6 +349,11 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 			return conflictKeptBase, nil
 		}
 		return conflictResolved, nil
+	}
+	// The mode the candidate must have: P's when P changed it, else B''s.
+	wantMode := ours.mode
+	if theirs.mode != base.mode {
+		wantMode = theirs.mode
 	}
 	oursText, baseText, theirsText, err := catBlobs(ctx, repo, ours.sha, base.sha, theirs.sha)
 	if err != nil {
@@ -347,7 +368,7 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 		return 0, err
 	}
 	if conflicts == 0 {
-		if bytes.Equal(candText, merged) {
+		if bytes.Equal(candText, merged) && cand.mode == wantMode {
 			return conflictResolved, nil
 		}
 		return conflictDropped, nil
@@ -359,7 +380,12 @@ func checkConflictPath(ctx context.Context, repo, path, bootedTree, stackTree, p
 	if bytes.Equal(candText, keptBase) {
 		return conflictKeptBase, nil
 	}
-	if containsInOrder(candText, stableSegments(merged)) {
+	// The raw merge, conflict markers left in, is not a resolution; neither is
+	// any text with the verifier's long markers that no input side had.
+	if bytes.Equal(candText, merged) || (hasConflictMarker(candText) && !hasConflictMarker(oursText) && !hasConflictMarker(baseText) && !hasConflictMarker(theirsText)) {
+		return conflictDropped, nil
+	}
+	if containsInOrder(candText, stableSegments(merged)) && cand.mode == wantMode {
 		return conflictResolved, nil
 	}
 	return conflictDropped, nil
@@ -435,6 +461,17 @@ func mergeFile(ctx context.Context, ours, base, theirs []byte, extra string) ([]
 		return stdout.Bytes(), exit.ExitCode(), nil
 	}
 	return nil, 0, fmt.Errorf("sourceproj: git merge-file: %w", runErr)
+}
+
+func hasConflictMarker(text []byte) bool {
+	open := bytes.Repeat([]byte("<"), conflictMarker)
+	close := bytes.Repeat([]byte(">"), conflictMarker)
+	for _, line := range bytes.Split(text, []byte("\n")) {
+		if bytes.HasPrefix(line, open) || bytes.HasPrefix(line, close) {
+			return true
+		}
+	}
+	return false
 }
 
 // stableSegments splits merged text at its conflict blocks and returns the

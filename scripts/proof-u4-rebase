@@ -267,12 +267,13 @@ if [ "$PHASE" = all ] || [ "$PHASE" = retry ]; then
     log "owner retry: HTTP $code $(cat "$OUT/retry.json")"
     case "$code" in
       200) jq -e '.notice_id | test("^rebase-notice:.*:[4-9]$|:[1-9][0-9]+$")' "$OUT/retry.json" >/dev/null || { log "retry minted a non-owner id"; exit 1; };;
-      409) jq -e '.reason | test("^rebase_retry_(off|not_moved|base_missing|no_root|round_running|no_attempt|attempt_live|attempts_remain|unavailable)$")' "$OUT/retry.json" >/dev/null || { log "retry refused with an unknown code"; exit 1; };;
+      409) jq -e '.reason | test("^rebase_retry_(off|not_moved|base_missing|no_root|round_running|no_attempt|attempt_live|attempts_remain|unreadable|unavailable)$")' "$OUT/retry.json" >/dev/null || { log "retry refused with an unknown code"; exit 1; };;
       *) log "retry answered HTTP $code"; exit 1;;
     esac
     record --arg c "$code" '{step:"retry", http:$c}'
   else
-    log "retry skipped: the computer is not at stack_base_moved"
+    log "retry SKIPPED: the computer is not at stack_base_moved"
+    record '{step:"retry", result:"skipped"}'
   fi
 fi
 

@@ -72,14 +72,19 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 	if !live {
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_no_root", "there is no live root Texture RLM to ask")
 	}
-	// No rebase round of this operation runs, for any base.
+	// No rebase round of this operation runs, for any base. An assignment that
+	// cannot be read is not known to be finished: fail closed. The commit below
+	// repeats the check under the open path's lock.
 	claims, err := rt.store.ListRebaseNoticeClaims(ctx, ownerID, computerID, operationID)
 	if err != nil {
-		return rebaseRetryResult{}, err
+		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_unreadable", "the operation's rebase claims cannot be read: %v", err)
 	}
 	for _, claim := range claims {
 		assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, claim.AssignmentID, 1)
-		if err == nil && !assignment.Disposition.Terminal() {
+		if err != nil {
+			return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_unreadable", "assignment %s of a rebase claim cannot be read (%v), so it is not known to be finished", claim.AssignmentID, err)
+		}
+		if !assignment.Disposition.Terminal() {
 			return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_round_running", "assignment %s still runs the rebase of %s", claim.AssignmentID, operationID)
 		}
 	}
@@ -138,8 +143,11 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 		return rebaseRetryResult{}, err
 	}
 	req.CommandDigest = digest
-	if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
-		return rebaseRetryResult{}, fmt.Errorf("commit %s: %w", notice.RecordID, err)
+	if _, err := rt.store.CommitRebaseOwnerNotice(ctx, req, operationID); err != nil {
+		if errors.Is(err, store.ErrRebaseRoundRunning) {
+			return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_round_running", "%v", err)
+		}
+		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_unreadable", "commit %s: %v", notice.RecordID, err)
 	}
 	return rebaseRetryResult{Minted: notice.RecordID, Attempt: next}, nil
 }
