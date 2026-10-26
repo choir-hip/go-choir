@@ -321,3 +321,41 @@ func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
 	// And with no head: the base cannot stand in either.
 	wantDraftReason(t, w.draft("op-0003", nil), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
 }
+
+// Library S3 (design 17 S3): the share gate is the guest's rollout switch,
+// as packages.publish is for the draft. Failure modes pinned:
+//
+//	G6   with packages.share off (the default) the gate answers yes, so a
+//	     share, withdraw or reinstate act reaches corpusd from a stock
+//	     computer; the gate writes;
+//	N1   (S2 residual bunch279-N1) a store or ref read failure while
+//	     drafting answers 409, as if it were a conflict; it is 503.
+func TestPackageShareGateNeedsTheSetting(t *testing.T) {
+	w := newDraftWorld(t)
+	gate := func(method string) *httptest.ResponseRecorder {
+		return releaseRouterCall(t, w.h, method, "/api/computers/"+draftComputer+"/packages/share-gate", "owner-a", draftComputer, nil)
+	}
+	wantDraftReason(t, gate(http.MethodGet), http.StatusConflict, "packages_share_off")
+	if err := w.rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-a", ComputerID: draftComputer, Key: store.SettingPackagesShare, Value: true}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := gate(http.MethodGet); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), store.SettingPackagesShare) {
+		t.Fatalf("G6 the gate on = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := gate(http.MethodPost); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("G6 a gate write = %d, want 405", rec.Code)
+	}
+	// packages.publish does not open the share gate, nor the reverse.
+	if store.SettingPackagesShare == store.SettingPackagesPublish {
+		t.Fatal("the share switch is the publish switch")
+	}
+}
+
+func TestPackageDraftReadFailureIsUnavailable(t *testing.T) {
+	w := newDraftWorld(t)
+	w.operation("op-0001", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n"})
+	w.operation("op-0002", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n"})
+	// The source repository is gone: the applied refs cannot be read.
+	w.rt.releaseSourceDir = t.TempDir()
+	wantDraftReason(t, w.draft("op-0002", nil), http.StatusServiceUnavailable, "tree_unavailable")
+}

@@ -48,8 +48,9 @@ import (
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
 	"computer restore", "help", "mcp",
-	// Owner act (Library S2): publishing a package release.
-	"package publish",
+	// Owner acts (Library S2, S3): publishing a package release, and
+	// sharing, withdrawing or reinstating it.
+	"package publish", "package reinstate", "package share", "package withdraw",
 	"precommit import-ledger",
 	// Owner acts (P7/P8): publishing and adopting a release.
 	"release adopt", "release publish", "self-dev approve",

@@ -197,6 +197,14 @@ const SettingTextureOwnerActWakes = "texture.owner_act_wakes"
 // rollback, and releases already listed stay readable and inert.
 const SettingPackagesPublish = "packages.publish"
 
+// SettingPackagesShare lets the owner share, withdraw and reinstate package
+// releases with this computer as the act's gate (Library S3,
+// docs/design/library-package-propagation-2026-10-26.md 17 S3): the guest
+// answers the proxy's share gate only when it is on. Off by default; off is
+// the rollout switch's rollback, and corpusd's CHOIR_PACKAGE_SHARE_READS=owner
+// is the read side's.
+const SettingPackagesShare = "packages.share"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
