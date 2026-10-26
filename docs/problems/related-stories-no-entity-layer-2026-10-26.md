@@ -710,3 +710,71 @@ blind audit of at least 40 entity attachments and 40 shown pairs, at most
 Heresy delta. Discovered: built judgment verbs with no standing trigger;
 a deployed spec with no coverage floor. Introduced: none intended.
 Repaired: none until the slices land.
+
+## Parked 2026-10-26
+
+The owner is working on density alone today, so this lane is parked. The
+head of `lane/related-review` is the commit that adds this section. Its
+parent is cc81b5064. Nothing here is deployed, and nothing should be
+deployed until the "not built" items below land.
+
+**Built and pushed** (tests first, each pair named in the commit log):
+- Slices a and b (train 14, e9024b2e9).
+- c0, corpusd side:
+  - `internal/entitytext`;
+  - the per-owner lexicon and the candidates read;
+  - the learning writes (reviews, stopwords, the alias union merge);
+  - the growth read, scoped to the paper owners;
+  - the labelled set and its baseline measurement (recall 0.949 overall,
+    0.930 central).
+- c0, host side (4157113c2). The story analysis is built once a run at a
+  story research desk's first cell and preloaded as
+  `choir.StoryAnalysis()`:
+  - capped at 32 KB, with names and titles only;
+  - at most two System 1 calls;
+  - a cross-run replay is a fresh event of the new run (review 304 item 1);
+  - each analysis answer records its question subjects on the tape, the
+    basis for item 8.
+- Item 3 (2d4373992). `Relate("")` and `story:head` are bound to
+  `research:<doc>`, and an unbound desk refuses.
+- Item 7 (6dcae65d6). The channel read breaks timestamp ties by StreamSeq.
+- The finish rule, slice c (8d71c7670), with item 2. A final Report waits
+  for the story's record, or for a platform-side failure of this run's
+  Relate. The platform route answers a store failure 503 and a refusal 400
+  (cc81b5064).
+- The deployed spec: the growth shape, convergence and the coverage floor.
+
+**Not built:**
+- **The prompt and overlay** (`recordsInboxPrompts[research]`,
+  `rlm_research_runtime.yaml`, the Relate surface text). Until this lands,
+  the finish rule would refuse research final Reports that the prompt never
+  asked for. This is the reason not to deploy the lane as it stands.
+- **Relate's source rules and the story export** (c0 §5 and §6, slice c
+  F6 and F7):
+  - the mint type basis read host-side from the analysis;
+  - "not an entity" and "none of these fit" need a reason;
+  - novelty, or a reason, for a name the analysis missed;
+  - counts by source and the Review on the record and the export;
+  - the pending validate for the desk's own story;
+  - the export after `PublishVersion` (`publishStoryVersion`).
+
+  The tests are written and parked, unpushed, on the local branch
+  `related-review-source-rules-wip` (31fb9df24, worktree
+  `/Users/wiz/Dev/lanes/related-review`). That branch also gives the fake
+  judge a per-question `prefer` option.
+- **Slice d**: the backfill owner act on the reader-request route.
+- **Slice e**: the run on d@e. The spec and the labelled set are done; the
+  proof is not run.
+- **Named residuals:**
+  - the owner-act surface for `RevokeEntityStopword`;
+  - the single corpusd writer;
+  - the 10k-event channel window (a cross-run replay past it pays again,
+    once);
+  - the growth read's hit rate counts existing-unmatched attachments as
+    hits.
+
+**First next step.** Bring `related-review-source-rules-wip` onto the lane
+head and implement the source rules and the export against its tests. Then
+write the prompt and overlay. Then run the full agentcore suite on the
+agents VM with `-timeout 50m`: at the default 10 minutes, the whole package
+times out.
