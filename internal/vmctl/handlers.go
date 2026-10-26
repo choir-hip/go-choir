@@ -211,7 +211,12 @@ type Handler struct {
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
 func NewHandler(registry *OwnershipRegistry) *Handler {
-	return &Handler{registry: registry}
+	h := &Handler{registry: registry}
+	// Hibernate skips a computer whose deploy refresh is in flight (D2 S5).
+	if registry != nil {
+		registry.SetDeployRefreshInFlight(h.deployRefreshInFlightFor)
+	}
+	return h
 }
 
 // writeJSON writes a JSON response.

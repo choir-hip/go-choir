@@ -47,6 +47,35 @@ type PlannedRestart struct {
 	TelemetryDrainFailed bool `json:"telemetry_drain_failed,omitempty"`
 }
 
+// plannedRestartMarkerPending reports whether a marker that could still plan a
+// boot is on disk: present and no older than plannedRestartMaxAge. A marker
+// that cannot be read or parsed counts by its file time (fail closed while it
+// is fresh). No store path, or no marker, is not pending.
+func plannedRestartMarkerPending(storePath string, now time.Time) bool {
+	path := PlannedRestartMarkerPath(storePath)
+	if path == "" {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	if err == nil {
+		var marker PlannedRestart
+		if json.Unmarshal(raw, &marker) == nil && !marker.RequestedAt.IsZero() {
+			return now.Sub(marker.RequestedAt) <= plannedRestartMaxAge
+		}
+	}
+	if info, statErr := os.Stat(path); statErr == nil {
+		return now.Sub(info.ModTime()) <= plannedRestartMaxAge
+	}
+	return true
+}
+
+// errHibernateFenced refuses a planned-restart mark while the hibernate fence
+// is closed: the marker would be written into the snapshot being taken.
+var errHibernateFenced = errors.New("hibernate_fenced: the guest is being hibernated; a planned restart cannot be marked now")
+
 // PlannedRestartMarkerPath is the marker beside the runtime store, on the
 // same durable volume.
 func PlannedRestartMarkerPath(storePath string) string {
@@ -331,9 +360,21 @@ func spendSettlementAttempt(storePath, reason, target string, limit int) error {
 // later crash as planned (L1a-3a).
 func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr error), error) {
 	storePath := ""
+	releaseSlot := func() {}
 	if rt != nil {
 		storePath = rt.cfg.StorePath
+		// The mark is one work occurrence through the hibernate fence, taken
+		// without waiting: a closed fence refuses it before an attempt is spent
+		// or anything is written, and the fence cannot close until the marker
+		// write returns (D2 S5).
+		release, ok := rt.hibernate.tryEnter()
+		if !ok {
+			log.Printf("runtime: refuse %s %s: %v", reason, target, errHibernateFenced)
+			return func(error) {}, errHibernateFenced
+		}
+		releaseSlot = release
 	}
+	defer releaseSlot()
 	if err := spendGuestApplyAttempt(storePath, reason, target); err != nil {
 		log.Printf("runtime: refuse %s %s: %v", reason, target, err)
 		return func(error) {}, err
@@ -463,8 +504,10 @@ type plannedRestartRequest struct {
 }
 
 type plannedRestartBusyResponse struct {
-	Error            string `json:"error"`
-	Outcome          string `json:"outcome"`
+	Error   string `json:"error"`
+	Outcome string `json:"outcome"`
+	// Reason is "hibernate_fenced" when the refusal is the hibernate fence.
+	Reason           string `json:"reason,omitempty"`
 	AllowBusy        bool   `json:"allow_busy"`
 	RunningRuns      int    `json:"running_runs"`
 	SelfdevActiveOps int    `json:"selfdev_active_operations"`
@@ -544,6 +587,18 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "target is required"})
 		return
 	}
+	// The mark is one work occurrence through the hibernate fence, taken
+	// without waiting (D2 S5): a closed fence refuses it before anything is
+	// written, and an open fence cannot close until the marker write returns.
+	releaseSlot, entered := h.rt.hibernate.tryEnter()
+	if !entered {
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:   "the guest is being hibernated; restart deferred to its next idle moment",
+			Outcome: "busy", Reason: "hibernate_fenced",
+		})
+		return
+	}
+	defer releaseSlot()
 	allowBusy := plannedRestartAllowBusy(r)
 	work, err := h.rt.plannedRestartBusy(r.Context(), true)
 	if err != nil {
@@ -576,6 +631,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
+	releaseSlot() // the marker is durable: the fence may close and will see it
 	marker.WorkStateEpoch = CurrentWorkStateEpoch
 	// The kill skips every fsync the guest's writers left to the kernel (a
 	// frozen bundle, the visual captures): flush them all before the answer

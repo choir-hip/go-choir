@@ -441,6 +441,14 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 		meta.VMMUID = conf.UID
 	}
 	meta.GuestRelease = cfg.GuestRelease
+	// The CPU the memory image was captured on. An unreadable cpuinfo leaves
+	// it empty: a release-bound snapshot then refuses at wake
+	// (host_cpu_unknown); the hibernate still frees the memory.
+	if fp, err := readHostCPU(); err == nil {
+		meta.HostCPU = fp
+	} else {
+		log.Printf("vmmanager: warning: host CPU fingerprint for the snapshot of VM %s: %v", vmID, err)
+	}
 	// What the link named when this guest was launched (D2 S1b, H6).
 	if rec, ok := m.readLaunchRecord(vmID, cfg.Epoch); ok {
 		meta.LaunchImageTarget = rec.ImageTarget

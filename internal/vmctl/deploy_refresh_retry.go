@@ -228,6 +228,17 @@ func (h *Handler) SetDeployRefreshPendingPath(path string) error {
 	return nil
 }
 
+// deployRefreshInFlightFor reports whether a deploy refresh of the computer is
+// running now.
+func (h *Handler) deployRefreshInFlightFor(userID, desktopID string) bool {
+	t := h.deployRefreshState()
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	_, busy := t.inFlight[key]
+	return busy
+}
+
 // begin takes the computer's in-flight slot; ok is false while another deploy
 // refresh of it runs.
 func (t *deployRefreshTracker) begin(userID, desktopID string) (release func(), ok bool) {

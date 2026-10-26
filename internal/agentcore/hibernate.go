@@ -124,6 +124,34 @@ func (f *hibernateFence) lift() {
 	f.liftLocked()
 }
 
+// tryEnter admits one work occurrence only if the fence is open right now; it
+// never waits. The planned-restart mark enters this way (D2 S5): a fenced
+// guest refuses the mark at once, and a mark that is inside keeps the fence
+// from closing until its marker write returns (close refuses while inflight >
+// 0). An expired fence is lifted first, as enter does. No lock is held while
+// the caller works.
+func (f *hibernateFence) tryEnter() (func(), bool) {
+	f.mu.Lock()
+	if f.fenced {
+		if f.clock().Before(f.until) {
+			f.mu.Unlock()
+			return func() {}, false
+		}
+		log.Printf("agentcore: hibernate fence expired without a resume; reopening work admission")
+		f.liftLocked()
+	}
+	f.inflight++
+	f.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			f.mu.Lock()
+			f.inflight--
+			f.mu.Unlock()
+		})
+	}, true
+}
+
 // enter admits one work occurrence, waiting while the fence holds. The fence
 // lifts on resume, on expiry, or never for a guest that is killed instead.
 func (f *hibernateFence) enter(ctx context.Context) (func(), error) {
@@ -234,9 +262,12 @@ type hibernatePrepareResponse struct {
 	// delivered with resumed, so its snapshot is not bounded by the frozen
 	// capability's renewal window.
 	CredentialResume bool `json:"credential_resume,omitempty"`
-	RunningRuns      int  `json:"running_runs,omitempty"`
-	InflightWork     int  `json:"inflight_work,omitempty"`
-	SelfdevActiveOps int  `json:"selfdev_active_operations,omitempty"`
+	// Reason names a busy refusal that is not a run count: "planned_restart_pending"
+	// (a fresh planned-restart marker is on disk; D2 S5).
+	Reason           string `json:"reason,omitempty"`
+	RunningRuns      int    `json:"running_runs,omitempty"`
+	InflightWork     int    `json:"inflight_work,omitempty"`
+	SelfdevActiveOps int    `json:"selfdev_active_operations,omitempty"`
 }
 
 type hibernateResumedRequest struct {
@@ -284,6 +315,16 @@ func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareR
 		return http.StatusConflict, hibernatePrepareResponse{
 			Outcome: "busy", Error: "guest is busy; hibernate deferred",
 			InflightWork: inflight,
+		}
+	}
+	// A planned-restart marker on disk would be captured in the snapshot, and
+	// a resumed guest that crashed within the marker's window would boot as
+	// planned and resume work (D2 S5, design 5.3). Refuse until it is gone.
+	if plannedRestartMarkerPending(rt.cfg.StorePath, rt.hibernate.clock()) {
+		rt.hibernate.lift()
+		return http.StatusConflict, hibernatePrepareResponse{
+			Outcome: "busy", Reason: "planned_restart_pending",
+			Error: "a planned restart is pending; hibernate deferred",
 		}
 	}
 	// Admission is closed; anything still running started outside the actor

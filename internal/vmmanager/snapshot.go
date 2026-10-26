@@ -240,6 +240,9 @@ type SnapshotMeta struct {
 	// (D2 S3); empty for a legacy launch. Additive, no version bump: an old
 	// meta reads as legacy.
 	GuestRelease string `json:"guest_release,omitempty"`
+	// HostCPU is the capturing host's CPU fingerprint (host_cpu.go, D2 S5);
+	// empty when it could not be read, and in metas from before S5.
+	HostCPU string `json:"host_cpu,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -604,6 +607,9 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	}
 	if m.imageMovedSinceLaunch(meta) {
 		return snapshotReasonImageMoved
+	}
+	if reason := cpuRefusal(meta); reason != "" {
+		return reason
 	}
 	expectCfg, fcConfig := m.expectedLaunchConfig(meta, v.Expect)
 	if m.snapshotConfinementMismatch(dir, meta, expectCfg) {

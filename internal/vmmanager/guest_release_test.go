@@ -94,6 +94,9 @@ func (r *releaseFixture) point(t *testing.T, id string) {
 func newReleaseFixture(t *testing.T) *releaseFixture {
 	t.Helper()
 	f := newSnapshotFixture(t)
+	// Hermetic host CPU: a release-bound snapshot needs a fingerprint (S5).
+	cpu := "cpu-test"
+	stubHostCPU(t, &cpu, nil)
 	root := f.mgr.cfg.StateDir
 	r := &releaseFixture{snapshotFixture: f, releases: filepath.Join(root, "guest-releases"), link: filepath.Join(root, "guest-link")}
 	writeTestRelease(t, r.releases, relR1, defaultRelPolicy(2*time.Hour))
