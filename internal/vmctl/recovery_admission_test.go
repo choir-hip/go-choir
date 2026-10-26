@@ -27,6 +27,15 @@ type recoveryEvidenceFake struct {
 	headCalls         int
 	watermarkCalls    int
 	escrowed          bool
+	delay             time.Duration
+}
+
+// setDelay slows every evidence response, so a test can hold an Admit
+// re-evaluation open while a background job request finishes.
+func (f *recoveryEvidenceFake) setDelay(delay time.Duration) {
+	f.mu.Lock()
+	f.delay = delay
+	f.mu.Unlock()
 }
 
 func (f *recoveryEvidenceFake) setEscrowed(escrowed bool) {
@@ -49,6 +58,12 @@ func (f *recoveryEvidenceFake) setWatermark(sequence uint64, baseRef string) {
 }
 
 func (f *recoveryEvidenceFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	delay := f.delay
+	f.mu.Unlock()
+	if delay > 0 {
+		time.Sleep(delay)
+	}
 	switch r.URL.Path {
 	case "/internal/computers/events/head":
 		f.mu.Lock()
@@ -103,6 +118,7 @@ type recoveryJobsFake struct {
 	watermarkSequence uint64
 	baseRef           string
 	posts             []map[string]any
+	postDelay         time.Duration
 }
 
 func (f *recoveryJobsFake) postCount() int {
@@ -126,8 +142,13 @@ func (f *recoveryJobsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		f.posts = append(f.posts, body)
-		status, sequence, baseRef := f.status, f.watermarkSequence, f.baseRef
+		status, sequence, baseRef, postDelay := f.status, f.watermarkSequence, f.baseRef, f.postDelay
 		f.mu.Unlock()
+		// The POST is recorded before the response, so a delay here leaves
+		// the enqueue unfinished after the test sees one POST.
+		if postDelay > 0 {
+			time.Sleep(postDelay)
+		}
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id":        body["computer_id"],
@@ -302,6 +323,58 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	requireRecoveryRefusal(t, err)
 	if len(restartedMgr.boots) != 0 {
 		t.Fatalf("restarted vmctl booted a durably refused computer, boots=%d", len(restartedMgr.boots))
+	}
+}
+
+// An Admit re-evaluation reads evidence over HTTP between its snapshot and its
+// store. A job request that finishes inside that window must keep its Job and
+// JobRequestedAt on the stored condition, and the re-evaluation must not post a
+// second job because it saw the older snapshot.
+func TestRecoveryAdmissionReevaluationKeepsJobRecordedDuringEvidenceRead(t *testing.T) {
+	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusdServer := httptest.NewServer(corpusd)
+	t.Cleanup(corpusdServer.Close)
+	jobs := &recoveryJobsFake{status: "running", postDelay: 60 * time.Millisecond}
+	jobsServer := httptest.NewServer(jobs)
+	t.Cleanup(jobsServer.Close)
+	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
+
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg.SetVMManager(&mockVMManager{bootError: &testGuestBootRefusalError{
+		kind:      "tail_excess",
+		reason:    "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
+		local:     0,
+		watermark: 148431,
+		target:    572151,
+		empty:     true,
+		chain:     true,
+	}})
+	seedRecoveryOwnership(reg, "user-blocked", "computer-blocked", VMStateStopped)
+
+	_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-blocked", PrimaryDesktopID)
+	requireRecoveryRefusal(t, err)
+	waitForRecoveryTest(t, func() bool { return jobs.postCount() == 1 })
+
+	// The second resolve snapshots the condition while the first enqueue is
+	// still waiting for its response, then holds the evidence read open past
+	// the moment that response lands.
+	corpusd.setDelay(200 * time.Millisecond)
+	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-blocked", PrimaryDesktopID)
+	requireRecoveryRefusal(t, err)
+	reg.recoveryAdmissionHandle().Wait()
+
+	if jobs.postCount() != 1 {
+		t.Fatalf("re-evaluation posted a duplicate job from a stale snapshot: %d POSTs", jobs.postCount())
+	}
+	condition, ok := reg.RecoveryConditionFor("computer-blocked")
+	if !ok {
+		t.Fatal("recovery condition missing after re-evaluation")
+	}
+	if condition.Job == nil {
+		t.Fatal("re-evaluation erased the job recorded while its evidence read was in flight")
+	}
+	if condition.JobRequestedAt.IsZero() {
+		t.Fatal("re-evaluation erased JobRequestedAt, so the re-enqueue backoff no longer applies")
 	}
 }
 
