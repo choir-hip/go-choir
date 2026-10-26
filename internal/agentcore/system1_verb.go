@@ -170,6 +170,38 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 		return nil, fmt.Errorf("choir.System1: no decision model is bound on this computer")
 	}
 
+	return rt.system1Call(ctx, exec, owner, computer, runID, perRun, perDay, system1Ask{questions: questions})
+}
+
+// system1Ask is one call's questions, validated, and how it may be answered.
+type system1Ask struct {
+	questions []yaegikernel.System1Question
+	// crossRun lets an answer another run of this computer recorded for the
+	// same digest answer this run (the host's story analysis, slice c0 §3):
+	// it is recorded again as a fresh answered event of this run, its
+	// receipt rewritten to that event, with no request record, so it costs
+	// nothing and counts toward no cap (review 304 item 1).
+	crossRun bool
+	// subjects name what each question asks about; they are recorded with
+	// the answer, so a later act can read its basis from the tape.
+	subjects map[string]system1Subject
+}
+
+// system1Subject is what a host-built question asks about.
+type system1Subject struct {
+	// Kind is role, type or novelty.
+	Kind     string `json:"kind"`
+	EntityID string `json:"entity_id,omitempty"`
+	Phrase   string `json:"phrase,omitempty"`
+	// Key is the phrase's match key (entitytext.Key).
+	Key string `json:"key,omitempty"`
+}
+
+// system1Call answers one validated call: a same-run replay by digest, a
+// cross-run replay when the ask allows it, or a judge call under the caps,
+// each on the tape.
+func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, perRun, perDay int, ask system1Ask) (json.RawMessage, error) {
+	questions := ask.questions
 	rt.system1Mu.Lock()
 	defer rt.system1Mu.Unlock()
 
@@ -188,6 +220,8 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 	}
 	dayStart := time.Now().UTC().Truncate(24 * time.Hour)
 	runCalls, dayCalls := 0, 0
+	var crossRun, crossRunModel string
+	var crossRunResult json.RawMessage
 	for _, ev := range tape {
 		if ev.Kind != types.EventSystem1Judgment {
 			continue
@@ -195,6 +229,7 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 		var rec struct {
 			Digest   string          `json:"request_digest"`
 			Computer string          `json:"computer_id"`
+			Model    string          `json:"model"`
 			Result   json.RawMessage `json:"result"`
 		}
 		_ = json.Unmarshal(ev.Payload, &rec)
@@ -203,9 +238,14 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 		}
 		switch ev.Phase {
 		case system1PhaseAnswered:
-			if ev.RunID == runID && rec.Digest == digest && len(rec.Result) > 0 {
+			if rec.Digest != digest || len(rec.Result) == 0 {
+				break
+			}
+			if ev.RunID == runID {
 				return system1Replay(rec.Result)
 			}
+			// The tape is read oldest first: the newest answer wins.
+			crossRun, crossRunModel, crossRunResult = ev.EventID, rec.Model, rec.Result
 		case system1PhaseRequested:
 			if ev.RunID == runID {
 				runCalls++
@@ -214,6 +254,9 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 				dayCalls++
 			}
 		}
+	}
+	if ask.crossRun && crossRun != "" {
+		return rt.system1CrossRunReplay(ctx, exec, owner, computer, runID, digest, questions, crossRun, crossRunModel, crossRunResult, ask.subjects)
 	}
 	if runCalls >= perRun {
 		return nil, fmt.Errorf("choir.System1: this run has made its %d calls per run (%s); decide with what you have, or read closely", perRun, system1MaxCallsPerRunEnv)
@@ -277,18 +320,55 @@ func (rt *Runtime) system1Egress(ctx context.Context, deskRole string, exec tool
 		return nil, err
 	}
 	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
-	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, answeredID, system1PhaseAnswered, map[string]any{
+	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, answeredID, system1PhaseAnswered, withSubjects(map[string]any{
 		"request_digest": digest, "request_event_id": requestID, "computer_id": computer, "question_ids": ids,
 		"model": model, "response_id": distribution.ID, "result": json.RawMessage(resultRaw),
 		"usage": distribution.Usage, "input_tokens": distribution.Usage.InputTokens, "output_tokens": distribution.Usage.OutputTokens,
 		"cost_usd": distribution.Usage.Cost,
-	}); err != nil {
+	}, ask.subjects)); err != nil {
 		// The call was paid for; an answer that is not on the tape would be
 		// unaudited and unreplayable, so it is not handed to the cell.
 		log.Printf("system1: record the answer of %s on run %s: %v", requestID, runID, err)
 		return nil, fmt.Errorf("choir.System1: the answer could not be recorded on the tape, so it is not returned: %w", err)
 	}
 	rt.recordJevCostFor(ctx, owner, runID, firstNonEmpty(exec.AgentID, agentProfileResearchID), "system1", model, distribution.Usage, len(questions))
+	return resultRaw, nil
+}
+
+// withSubjects adds a host-built call's subjects to its answer record.
+func withSubjects(payload map[string]any, subjects map[string]system1Subject) map[string]any {
+	if len(subjects) > 0 {
+		payload["subjects"] = subjects
+	}
+	return payload
+}
+
+// system1CrossRunReplay records another run's answer as a fresh answered
+// event of this run: its receipt names the new event, so Relate's same-run
+// basis finds it; replay_of names the answer it repeats. No request record
+// is written and no cost is booked.
+func (rt *Runtime) system1CrossRunReplay(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, digest string, questions []yaegikernel.System1Question, replayOf, model string, recorded json.RawMessage, subjects map[string]system1Subject) (json.RawMessage, error) {
+	var result system1Result
+	if err := json.Unmarshal(recorded, &result); err != nil {
+		return nil, fmt.Errorf("choir.System1: the recorded answer did not decode: %w", err)
+	}
+	answeredID := uuid.New().String()
+	result.ReceiptRef = "system1:" + answeredID
+	result.Replayed = true
+	resultRaw, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(questions))
+	for _, q := range questions {
+		ids = append(ids, q.ID)
+	}
+	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, answeredID, system1PhaseAnswered, withSubjects(map[string]any{
+		"request_digest": digest, "computer_id": computer, "question_ids": ids, "model": model,
+		"result": json.RawMessage(resultRaw), "replay_of": replayOf,
+	}, subjects)); err != nil {
+		return nil, fmt.Errorf("choir.System1: the replayed answer could not be recorded on the tape, so it is not returned: %w", err)
+	}
 	return resultRaw, nil
 }
 

@@ -242,7 +242,7 @@ var system = []Desk{
 			"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 			"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 			"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
-			"System1", "RelateStories", "Relate"},
+			"System1", "RelateStories", "Relate", "StoryAnalysis"},
 		CapsuleVerbs:   []string{"read_file", "list_dir", "stat", "go_eval"},
 		MessageTargets: []string{Texture},
 		Addresses:      []string{Texture},

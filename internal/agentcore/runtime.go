@@ -252,6 +252,9 @@ type Runtime struct {
 	// (story_relation_verb.go, story_entities_verb.go); both release it
 	// before their export.
 	relationMu sync.Mutex
+	// analyses holds each story research run's entity analysis, built once
+	// at its first cell (story_analysis.go).
+	analyses analysisMemo
 	// support is the support-judgement job state (support_judge.go).
 	support supportJudging
 	// events is the event layer's queue and index (event_layer.go).
