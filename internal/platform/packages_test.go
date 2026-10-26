@@ -44,7 +44,14 @@ import (
 //	     new one;
 //	B1   a base commit the host object store does not hold is believed
 //	     (package_parent_unverifiable), and an unconfigured store is too;
-//	H1   the store's shallow flag is missing from the health detail.
+//	H1   the store's shallow flag is missing from the health detail;
+//	A1   a corpusd with no owner-act authority publishes (review 274 F3);
+//	C1   a record stored without its listing is lost silently: it must be
+//	     listed on republish while it can still be the head, and refused
+//	     by name once the track moved; a listing that is not stored is
+//	     reported as published (review 274 F6, Devin F7);
+//	C2   past the listing cap a track's seq is counted from a truncated
+//	     read (review 274 F7).
 
 const pkgRoot = "frontend/src/packages/reader"
 
@@ -121,6 +128,10 @@ func newPkgWorld(t *testing.T) *pkgWorld {
 	pkgGit(t, repo, nil, "", "commit", "-q", "-m", "base")
 	w := &pkgWorld{t: t, h: h, repo: repo, base: pkgGit(t, repo, nil, "", "rev-parse", "HEAD")}
 	h.ConfigurePackageBase(context.Background(), repo)
+	// corpusd always configures an owner-act authority (cmd/corpusd); the
+	// world runs it in observe with no key, so a publish without a receipt
+	// lists as owner_act:unverified.
+	h.ConfigurePackageOwnerActs(NewOwnerActAuthority(OwnerActObserve, nil))
 	return w
 }
 
@@ -666,4 +677,113 @@ func TestHealthReportsThePackageBaseShallowFlag(t *testing.T) {
 	if got := health(); got.Packages == nil || got.Packages.Shallow != nil || got.Packages.Error == "" {
 		t.Fatalf("H1 unconfigured store = %+v", got.Packages)
 	}
+}
+
+func TestPackagePublishRefusesWithoutAnOwnerActAuthority(t *testing.T) {
+	w := newPkgWorld(t)
+	w.h.ConfigurePackageOwnerActs(nil)
+	b := w.build("<p>v2</p>\n", "owner-a", nil)
+	wantPkgRefusal(t, w.publish(b), http.StatusServiceUnavailable, "owner_act_unconfigured")
+	if rec := w.read(packagesRoute + "/releases/" + b.id + "?owner_id=owner-a"); rec.Code != http.StatusNotFound {
+		t.Fatalf("A1 a refused publish stored the release: %d", rec.Code)
+	}
+}
+
+// storeRecordOnly files b's record the way publish does and stops before
+// the listing: a crash between the two writes.
+func (w *pkgWorld) storeRecordOnly(b built) {
+	w.t.Helper()
+	w.putBlobs(b)
+	id, err := packageReleaseCanonicalID(b.record.Publisher.OwnerID, b.id)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	metadata, err := objectgraph.NormalizeMetadata(map[string]any{"release_id": b.id, "package": b.record.Package.Name, "track": b.record.Track})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	obj := objectgraph.Object{
+		CanonicalID: id, ObjectKind: PackageReleaseKind, OwnerID: b.record.Publisher.OwnerID, ComputerID: b.record.Publisher.ComputerID,
+		VersionID: b.id, Body: b.raw, Metadata: metadata, ContentHash: objectgraph.ContentHash(PackageReleaseKind, b.raw, metadata), CreatedAt: now, UpdatedAt: now,
+	}
+	if inserted, err := w.h.releaseStore().InsertObjectIfAbsent(context.Background(), obj); err != nil || !inserted {
+		w.t.Fatalf("store record only: %v %v", inserted, err)
+	}
+}
+
+func TestPackageRecordWithoutItsListingIsListedOrRefusedByName(t *testing.T) {
+	w := newPkgWorld(t)
+	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
+	w.storeRecordOnly(r1)
+	// C1: still head-eligible, the republish lists it.
+	if v := w.published(r1); !v.Published || v.Listing.Seq != 1 {
+		t.Fatalf("C1 republish of an unlisted record = %+v", v)
+	}
+	// r2's record is stored unlisted; meanwhile r2b takes the head.
+	r2 := w.build("<p>v3</p>\n", "owner-a", &r1)
+	w.storeRecordOnly(r2)
+	r2b := w.build("<p>v3b</p>\n", "owner-a", &r1)
+	w.published(r2b)
+	got := wantPkgRefusal(t, w.publish(r2), http.StatusConflict, "package_record_unlisted")
+	if !strings.Contains(got.Error, r2b.id) {
+		t.Fatalf("C1 refusal does not name the head that moved: %s", got.Error)
+	}
+}
+
+func TestPackageListingThatIsNotStoredIsNoPublish(t *testing.T) {
+	w := newPkgWorld(t)
+	b := w.build("<p>v2</p>\n", "owner-a", nil)
+	// Something already holds the listing's canonical id and is no listing.
+	id, err := listingCanonicalID("owner-a", b.id, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, _ := objectgraph.NormalizeMetadata(map[string]any{"package": "reader"})
+	body := []byte(`{"not":"a listing"}`)
+	now := time.Now().UTC()
+	junk := objectgraph.Object{CanonicalID: id, ObjectKind: ReleaseListingKind, OwnerID: "owner-a", ComputerID: "computer-a1", Body: body, Metadata: metadata,
+		ContentHash: objectgraph.ContentHash(ReleaseListingKind, body, metadata), CreatedAt: now, UpdatedAt: now}
+	if _, err := w.h.releaseStore().InsertObjectIfAbsent(context.Background(), junk); err != nil {
+		t.Fatal(err)
+	}
+	wantPkgRefusal(t, w.publish(b), http.StatusConflict, "package_listing_conflict")
+	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); rec.Code != http.StatusNotFound {
+		t.Fatalf("a listing that was not stored heads the track: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPackageTrackRefusesPastTheListingCap(t *testing.T) {
+	saved := maxTrackListings
+	maxTrackListings = 2
+	t.Cleanup(func() { maxTrackListings = saved })
+	w := newPkgWorld(t)
+	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
+	w.published(r1)
+	r2 := w.build("<p>v3</p>\n", "owner-a", &r1)
+	w.published(r2)
+	// C2: a third listing would be counted from a read the cap truncates.
+	r3 := w.build("<p>v4</p>\n", "owner-a", &r2)
+	wantPkgRefusal(t, w.publish(r3), http.StatusConflict, "track_full")
+	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); !strings.Contains(rec.Body.String(), r2.id) {
+		t.Fatalf("head at the cap = %d %s, want r2", rec.Code, rec.Body.String())
+	}
+	// A read past the cap refuses rather than answer from a truncated read.
+	withdrawn := w.read(packagesRoute + "/releases/" + r2.id + "?owner_id=owner-a")
+	var view PackageReleaseView
+	if json.Unmarshal(withdrawn.Body.Bytes(), &view) != nil {
+		t.Fatalf("read r2: %s", withdrawn.Body.String())
+	}
+	next := view.Listing
+	prev, _ := view.Listing.Digest()
+	next.Version, next.PrevVersionDigest, next.State, next.StateReason, next.StateActor = 2, prev, pkgrelease.StateWithdrawn, "withdrawn", "owner_act:test"
+	obj, err := listingObject("owner-a", "computer-a1", next, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.h.releaseStore().InsertObjectIfAbsent(context.Background(), obj); err != nil {
+		t.Fatal(err)
+	}
+	wantPkgRefusal(t, w.read(packagesRoute+"/catalog/reader/releases?owner_id=owner-a"), http.StatusConflict, "track_full")
+	wantPkgRefusal(t, w.read(packagesRoute+"/catalog?owner_id=owner-a"), http.StatusConflict, "track_full")
 }

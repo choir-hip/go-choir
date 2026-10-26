@@ -236,6 +236,10 @@ func TestPackagePublishIsTheOwnersActAndOnlyAVerifiedDraftReachesCorpusd(t *test
 	refused("foreign computer", func(string) []byte {
 		return packageDraftFor(t, env.user, func(r *pkgrelease.Record) { r.Publisher.ComputerID = "computer-z" }, false)
 	})
+	// Review 274 F1: a draft for another operation than the owner named.
+	refused("another operation", func(string) []byte {
+		return packageDraftFor(t, env.user, func(r *pkgrelease.Record) { r.Operation.OperationID = "op-2" }, false)
+	})
 	refused("another package", func(string) []byte {
 		return packageDraftFor(t, env.user, func(r *pkgrelease.Record) {
 			r.Package.Name, r.Source.Root, r.Source.ChangedPaths = "image", "frontend/src/packages/image", []string{"frontend/src/packages/image/App.svelte"}
