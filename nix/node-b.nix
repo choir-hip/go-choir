@@ -1753,8 +1753,10 @@ in
         # resident pages. Full and no computer selected: inert. FP0 names
         # one test computer for the proof, never the paper or the owner's
         # computer. Rollback: set the list empty again and deploy.
-        "VM_SNAPSHOT_TYPE=full"
-        "VM_SNAPSHOT_DIFF_ONLY="
+        # D5 (docs/definitions/choir-density-2026-10-26.md), step 1: diff on
+        # for d@e only, the proof computer; widened after its staging proof.
+        "VM_SNAPSHOT_TYPE=diff"
+        "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
         # the right to launch the guest image's Chromium in a capsule capture
