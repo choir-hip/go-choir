@@ -112,6 +112,8 @@ func releaseFrozenBundleOn(t *testing.T, updaterRoot, computerID, operationID, t
 
 type releaseOpRow struct {
 	operationID, computerID, state, bundleDigest, releaseDigest, trajectoryID string
+	// idempotencyKey defaults to "key-<operationID>".
+	idempotencyKey string
 }
 
 func insertReleaseOperation(t *testing.T, productStore *store.Store, row releaseOpRow) {
@@ -120,10 +122,13 @@ func insertReleaseOperation(t *testing.T, productStore *store.Store, row release
 	if row.trajectoryID == "" {
 		row.trajectoryID = "trajectory-" + row.operationID
 	}
+	if row.idempotencyKey == "" {
+		row.idempotencyKey = "key-" + row.operationID
+	}
 	if _, err := productStore.DB().ExecContext(context.Background(), `INSERT INTO self_development_operations
 		(operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,capsule_id,base_head,prompt_artifact_ref,bundle_digest,release_digest,code_ref,verifier_refs_json,decision_event,desired_head,effective_head,checkpoint_ref,route_certificate,state,created_at,updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		row.operationID, row.computerID, "key-"+row.operationID, strings.Repeat("d", 64), row.trajectoryID, "capsule-"+row.operationID, strings.Repeat("a", 64),
+		row.operationID, row.computerID, row.idempotencyKey, strings.Repeat("d", 64), row.trajectoryID, "capsule-"+row.operationID, strings.Repeat("a", 64),
 		"artifact:sha256:"+strings.Repeat("b", 64), row.bundleDigest, row.releaseDigest, "code:sha256:"+strings.Repeat("9", 64), `["verifier:`+row.operationID+`"]`,
 		strings.Repeat("e", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), "checkpoint:"+row.operationID, "route-cert:"+row.operationID, row.state, now, now); err != nil {
 		t.Fatal(err)
