@@ -74,6 +74,8 @@ type CapsuleToolCtx struct {
 type frozenTreeReader interface {
 	ResolveExecutionReceipts([]string) ([]capsule.ExecutionReceipt, error)
 	InspectGrantedWorktree(context.Context, string, string) (capsule.GrantedWorktree, error)
+	ResolveGrantedCapsuleID(agentRunID, handle string) (string, error)
+	RunningJobInCapsule(capsuleID string) (yaegikernel.JobView, bool)
 }
 
 // releaseBinaryStillRunning refuses a verification pass on a bundle whose
@@ -400,11 +402,26 @@ func frozenCandidateTreeChanged(ctx context.Context, toolCtx *CapsuleToolCtx, ha
 	if err != nil {
 		return unchecked(err.Error())
 	}
+	// The read is of the operation's capsule, whatever the handle names,
+	// and no job of any run may be writing it.
+	capsuleID, err := reader.ResolveGrantedCapsuleID(toolCtx.AgentRunID, handle)
+	if err != nil {
+		return unchecked(err.Error())
+	}
+	if capsuleID == "" || capsuleID != operation.CapsuleID {
+		return unchecked("the handle names another capsule than the one this candidate froze")
+	}
+	if job, running := reader.RunningJobInCapsule(capsuleID); running {
+		return unchecked(fmt.Sprintf("job %s is still running in this capsule and writes its tree", job.ID))
+	}
 	refs := append([]string{bundle.BuildRecipeRef}, bundle.TestReceipts...)
 	refs = append(refs, bundle.DependencyToolchainRefs...)
 	receipts, err := reader.ResolveExecutionReceipts(trimNonEmptyStrings(refs))
-	if err != nil || len(receipts) == 0 {
+	if err != nil {
 		return unchecked(fmt.Sprintf("the frozen bundle's receipts are unavailable: %v", err))
+	}
+	if len(receipts) == 0 {
+		return unchecked("the frozen bundle's receipts are unavailable: none resolved")
 	}
 	// The latest receipt by occurrence, as the binder picks it.
 	latestAt, frozenDigest := "", ""
@@ -417,11 +434,11 @@ func frozenCandidateTreeChanged(ctx context.Context, toolCtx *CapsuleToolCtx, ha
 	if err != nil {
 		return unchecked(err.Error())
 	}
-	current, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(bundle.CapsuleIdentity, live.Changes)
+	current, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, live.Changes)
 	if err != nil {
 		return unchecked(err.Error())
 	}
-	changed := frozenTreeChanges(bundle.Groups, current.Groups)
+	changed := append(frozenTreeChanges(bundle.Groups, current.Groups), frozenReleaseChanges(bundle, live.ReleaseFiles)...)
 	if frozenDigest == "" || live.Digest == "" {
 		return unchecked("a tree digest is unavailable")
 	}
@@ -439,9 +456,56 @@ func frozenCandidateTreeChanged(ctx context.Context, toolCtx *CapsuleToolCtx, ha
 			what += fmt.Sprintf(" and %d more", more)
 		}
 	}
-	return fmt.Errorf("Freeze refused: %s, and this capsule's tree changed since: %s (/workspace/platform was %s at the freeze, is %s now). "+
+	digests := ""
+	if strings.TrimPrefix(frozenDigest, "sha256:") != strings.TrimPrefix(live.Digest, "sha256:") {
+		digests = fmt.Sprintf(" (/workspace/platform was %s at the freeze, is %s now)", frozenDigest, live.Digest)
+	}
+	return fmt.Errorf("Freeze refused: %s, and this capsule's tree changed since: %s%s. "+
 		"The change is not in the candidate: the frozen candidate is what will be reviewed. Complete to end this round (a completed Complete cites a receipt that observed the current tree); "+
-		"to put this change in a candidate, the round must end and a new round start", frozen, what, frozenDigest, live.Digest)
+		"to put this change in a candidate, the round must end and a new round start", frozen, what, digests)
+}
+
+// frozenReleaseChanges lists, sorted by path, how the capsule's live release
+// tree moved from the bundle's RuntimeFiles: "added release", "removed
+// release" or "modified release" (content or mode), per path. The workspace
+// digest and the classified groups do not cover the release tree, so a
+// same-path rebuild of bin/autoputer shows only here. A bin/autoputer the
+// freeze reused from the running build was staged beside the capsule's
+// release, not read from it, so its absence from the live tree is not a
+// removal.
+func frozenReleaseChanges(bundle transaction.CapsuleEffectBundle, live []capsule.FrozenReleaseFile) []string {
+	reused := bundle.ReleaseBinary != nil && bundle.ReleaseBinary.Origin == capsule.ReleaseBinaryReusedRunning
+	frozen := map[string]capsule.FrozenReleaseFile{}
+	for _, file := range bundle.RuntimeFiles {
+		if reused && file.Path == capsule.ReleaseBinaryPath {
+			continue
+		}
+		frozen[file.Path] = file
+	}
+	paths := map[string]string{}
+	for _, file := range live {
+		before, in := frozen[file.Path]
+		switch {
+		case !in:
+			paths[file.Path] = "added"
+		case before.SHA256 != file.SHA256 || before.Mode != file.Mode:
+			paths[file.Path] = "modified"
+		}
+		delete(frozen, file.Path)
+	}
+	for path := range frozen {
+		paths[path] = "removed"
+	}
+	sorted := make([]string, 0, len(paths))
+	for path := range paths {
+		sorted = append(sorted, path)
+	}
+	sort.Strings(sorted)
+	out := make([]string, len(sorted))
+	for i, path := range sorted {
+		out[i] = paths[path] + " release " + path
+	}
+	return out
 }
 
 // frozenTreeChanges lists, sorted by path, how the classified effect set

@@ -1718,7 +1718,78 @@ func (e *Executor) InspectGrantedWorktree(ctx context.Context, agentRunID, handl
 	if err != nil {
 		return GrantedWorktree{}, err
 	}
+	// The release tree is outside the digest above; the bundle's
+	// RuntimeFiles carry its content, so a same-path rebuild shows here.
+	err = e.traceStep(caps.ID, "capsule.release_inspect", func() (releaseErr error) {
+		out.ReleaseFiles, releaseErr = liveReleaseFiles(ctx, caps, out.Changes)
+		return releaseErr
+	})
+	if err != nil {
+		return GrantedWorktree{}, err
+	}
 	return out, nil
+}
+
+// releaseFileMode is the mode a frozen release file carries: read and execute
+// bits only, never none.
+func releaseFileMode(info os.FileInfo) uint32 {
+	mode := uint32(info.Mode().Perm() & 0o555)
+	if mode == 0 {
+		mode = 0o444
+	}
+	return mode
+}
+
+// liveReleaseFiles hashes the regular files the capsule has changed under the
+// release tree as StageGrantedRelease records them (path relative to the
+// release root, sha256 of the content, releaseFileMode), sorted by path, so a
+// second Freeze can compare them with the bundle's RuntimeFiles. It stages
+// nothing and applies no release policy: a file StageGrantedRelease would
+// refuse is still reported, and a deleted file is simply absent.
+func liveReleaseFiles(ctx context.Context, caps *Capsule, changes []FileChange) ([]FrozenReleaseFile, error) {
+	rootFD, err := unix.Open(caps.MergedDir, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, fmt.Errorf("capsule release root is unavailable: %w", err)
+	}
+	defer unix.Close(rootFD)
+	var files []FrozenReleaseFile
+	for _, change := range changes {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(change.Path, ReleaseTreePrefix) || change.Kind == ChangeDeleted {
+			continue
+		}
+		clean := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(change.Path, ReleaseTreePrefix)))
+		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
+		}
+		input, err := openBeneath(rootFD, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
+		if err != nil {
+			return nil, fmt.Errorf("capsule release file %q is unavailable: %w", change.Path, err)
+		}
+		info, err := input.Stat()
+		if err != nil {
+			_ = input.Close()
+			return nil, fmt.Errorf("capsule release file %q is unavailable", change.Path)
+		}
+		if info.IsDir() {
+			_ = input.Close()
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			_ = input.Close()
+			return nil, fmt.Errorf("capsule release file %q is not regular", change.Path)
+		}
+		hash := sha256.New()
+		_, copyErr := io.Copy(hash, &contextReader{ctx: ctx, reader: input})
+		if err := errors.Join(copyErr, input.Close()); err != nil {
+			return nil, fmt.Errorf("capsule release file %q is unreadable: %w", change.Path, err)
+		}
+		files = append(files, FrozenReleaseFile{Path: filepath.ToSlash(clean), SHA256: hex.EncodeToString(hash.Sum(nil)), Mode: releaseFileMode(info)})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
 }
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {
@@ -2040,10 +2111,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		if copyErr != nil || closeErr != nil {
 			return nil, errors.Join(copyErr, closeErr)
 		}
-		mode := uint32(info.Mode().Perm() & 0o555)
-		if mode == 0 {
-			mode = 0o444
-		}
+		mode := releaseFileMode(info)
 		if err := os.Chmod(target, os.FileMode(mode)); err != nil {
 			return nil, err
 		}

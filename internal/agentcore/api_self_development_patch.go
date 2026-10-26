@@ -96,36 +96,45 @@ func (h *APIHandler) exportSelfDevelopmentSourcePatch(w http.ResponseWriter, r *
 // readBoundSelfDevelopmentBundle reads the bundle the operation names: the
 // final bundle.json (verified onward; its bytes hash to the digest) or the
 // Freeze draft (frozen; its recomputed content digest is the digest), and
-// requires it to bind this operation.
+// requires it to bind this operation. Both files exist while the finalizer
+// has written bundle.json and not yet renamed the operation to verified; the
+// final bytes then do not hash to the frozen digest, so a final that does not
+// bind falls back to the draft rather than failing the read.
 func readBoundSelfDevelopmentBundle(bundleRoot string, operation selfdev.Operation) (transaction.CapsuleEffectBundle, int, error) {
 	var bundle transaction.CapsuleEffectBundle
 	if _, err := os.Lstat(bundleRoot); errors.Is(err, fs.ErrNotExist) {
 		return bundle, http.StatusGone, errors.New("the frozen bundle is no longer retained on this computer")
 	}
-	raw, err := os.ReadFile(filepath.Join(bundleRoot, "bundle.json"))
-	final := err == nil
-	if errors.Is(err, fs.ErrNotExist) {
-		raw, err = os.ReadFile(filepath.Join(bundleRoot, "bundle.draft.json"))
-	}
-	if err != nil {
-		return bundle, http.StatusGone, errors.New("the frozen bundle is no longer retained on this computer")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
 	// One status, three named checks: a bundle torn by a hard kill does not
 	// decode, which is not the same finding as a digest or identity mismatch.
 	// Clients match the "frozen bundle binding mismatch: " prefix.
-	if decoder.Decode(&bundle) != nil {
-		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle does not decode")
+	var failure error
+	retained := false
+	for _, file := range []struct {
+		name  string
+		final bool
+	}{{"bundle.json", true}, {"bundle.draft.json", false}} {
+		raw, err := os.ReadFile(filepath.Join(bundleRoot, file.name))
+		if err != nil {
+			continue
+		}
+		retained = true
+		decoded, err := decodeBoundBundle(raw, file.final, operation)
+		if err == nil {
+			bundle = decoded
+			failure = nil
+			break
+		}
+		if failure == nil {
+			failure = err
+		}
+		bundle = decoded
 	}
-	bound := false
-	if final {
-		bound = computerevent.DigestBytes(raw) == operation.BundleDigest
-	} else if digest, digestErr := bundle.ComputeContentDigest(); digestErr == nil {
-		bound = digest == operation.BundleDigest && bundle.ContentDigest == operation.BundleDigest
+	if !retained {
+		return bundle, http.StatusGone, errors.New("the frozen bundle is no longer retained on this computer")
 	}
-	if !bound {
-		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle digest does not match the operation")
+	if failure != nil {
+		return bundle, http.StatusConflict, failure
 	}
 	if !selfDevelopmentBundleMatchesOperation(bundle, operation) {
 		return bundle, http.StatusConflict, errors.New("frozen bundle binding mismatch: frozen bundle names another computer, trajectory, capsule or base")
@@ -186,4 +195,26 @@ func sourcePatchAddedSecrets(patch []byte) []string {
 		kinds = append(kinds, "unscannable_line")
 	}
 	return kinds
+}
+
+// decodeBoundBundle decodes one bundle file and checks its digest binds the
+// operation: the raw bytes' digest for a final bundle, the recomputed content
+// digest for a draft.
+func decodeBoundBundle(raw []byte, final bool, operation selfdev.Operation) (transaction.CapsuleEffectBundle, error) {
+	var bundle transaction.CapsuleEffectBundle
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&bundle) != nil {
+		return bundle, errors.New("frozen bundle binding mismatch: frozen bundle does not decode")
+	}
+	bound := false
+	if final {
+		bound = computerevent.DigestBytes(raw) == operation.BundleDigest
+	} else if digest, digestErr := bundle.ComputeContentDigest(); digestErr == nil {
+		bound = digest == operation.BundleDigest && bundle.ContentDigest == operation.BundleDigest
+	}
+	if !bound {
+		return bundle, errors.New("frozen bundle binding mismatch: frozen bundle digest does not match the operation")
+	}
+	return bundle, nil
 }
