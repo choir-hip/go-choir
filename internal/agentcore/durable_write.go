@@ -41,7 +41,7 @@ func syncTree(root string) error {
 }
 
 // writeFileDurable replaces path with data through a temporary file in the
-// same directory: write, fsync, chmod, rename, fsync the directory. A kill
+// same directory: write, chmod, fsync, rename, fsync the directory. A kill
 // leaves the old file or the new one, never a torn one.
 func writeFileDurable(path string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
@@ -50,13 +50,10 @@ func writeFileDurable(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	_, writeErr := tmp.Write(data)
+	chmodErr := tmp.Chmod(mode)
 	syncErr := durableSync(tmp)
 	closeErr := tmp.Close()
-	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), mode); err != nil {
+	if err := errors.Join(writeErr, chmodErr, syncErr, closeErr); err != nil {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
