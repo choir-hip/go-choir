@@ -46,6 +46,14 @@ key nor sees these calls.
   delegate stays on the one test computer until desk-cell confinement
   (SEC-01) lands, and before any wider use the key is held by the gateway
   (Option K). SEC-01 alone does not unlock wider use.
+- Owner request, 2026-10-25 (in session: "We should set it up on b@c.com
+  as well"): a second test computer, b@c's
+  (computer-6c50d6e566143ae32cdb660faa60e24d), joins the allowlist with the
+  same token and expiry (2026-11-03). This widens the exposure this record
+  names to two guest disks; the 10-21 ruling's gateway condition (Option K)
+  is not met, and the owner was told so in session. Review 252 (Devin)
+  approved the one-line change with this note. Rollback: drop the id,
+  deploy, cold-boot b@c.
 
 ## What Option K can and cannot be
 
