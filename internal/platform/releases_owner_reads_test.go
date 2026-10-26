@@ -516,8 +516,10 @@ func TestBlobGateIsNotPushedOutByManySameDigestObjects(t *testing.T) {
 	w := newOwnerReadsWorld(t, ReleaseReadsOwner)
 	// F19: 210 newer forged objects by another owner naming owner-a's digest.
 	for i := 0; i < 210; i++ {
-		putForged(t, w.h, forgedRelease(t, "owner-z", "computer-z", fmt.Sprintf("flood-%03d", i),
-			map[string]any{"patch_sha256": w.shaA}, []byte("x")))
+		flood := forgedRelease(t, "owner-z", "computer-z", fmt.Sprintf("flood-%03d", i),
+			map[string]any{"patch_sha256": w.shaA}, []byte("x"))
+		flood.UpdatedAt = flood.UpdatedAt.Add(time.Hour) // newer than the real releases, whatever the clock's grain
+		putForged(t, w.h, flood)
 	}
 	if r := w.blob(w.shaA, "computer-a1", tapA1, "computer-a1"); r.Code != http.StatusOK {
 		t.Fatalf("owner-a reads its own blob under a flood of same-digest objects = %d, want 200", r.Code)
