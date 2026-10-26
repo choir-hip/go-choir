@@ -222,8 +222,8 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	relayJSON(w, status, raw)
 }
 
-// ownedComputerURL resolves the caller's own active computer, the way the
-// self-development guest routes do.
+// ownedComputerURL resolves the caller's own active computer for the publish
+// and package acts; they are owner acts and never wake it.
 func (h *Handler) ownedComputerURL(w http.ResponseWriter, r *http.Request, authResult *AuthResult, computerID string) (string, bool) {
 	var target *resolvedComputerTarget
 	var err error
@@ -233,7 +233,7 @@ func (h *Handler) ownedComputerURL(w http.ResponseWriter, r *http.Request, authR
 		if !ok {
 			return "", false
 		}
-		guestURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
+		guestURL, err := h.resolveActiveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
 		if err != nil {
 			logComputerAuthorityFailure(r, computerID, target, err)
 			writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)

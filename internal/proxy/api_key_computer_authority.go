@@ -246,6 +246,9 @@ func (h *Handler) resolveAPIKeyComputerURL(ctx context.Context, authResult *Auth
 		if !wake {
 			return "", fmt.Errorf("api key computer realization unavailable")
 		}
+		if err := h.ensureComputerVersionRoute(ctx, target.UserID, target.DesktopID); err != nil {
+			return "", err
+		}
 		woken, err := h.wakeAPIKeyComputer(ctx, target)
 		if err != nil {
 			return "", err
@@ -436,14 +439,15 @@ func wakeCause(err error) string {
 	if isResolveTimeoutError(err) {
 		return "timed out waiting for the computer to become active"
 	}
-	const refusedPrefix = "vmctl client: resolve failed: "
-	text := err.Error()
-	if i := strings.Index(text, refusedPrefix); i >= 0 {
-		message := strings.Join(strings.Fields(text[i+len(refusedPrefix):]), " ")
-		if len(message) > 200 {
-			message = message[:200]
-		}
-		return "vmctl refused the wake: " + message
+	text := strings.ToLower(err.Error())
+	// vmctl's own refusal text is not echoed; known kinds map to fixed text.
+	switch {
+	case strings.Contains(text, "admission"), strings.Contains(text, "no room"), strings.Contains(text, "capacity"), strings.Contains(text, "memory"):
+		return "vmctl admission refused the wake: no room on the host"
+	case strings.Contains(text, "held"), strings.Contains(text, "hold"):
+		return "vmctl refused the wake: the computer is held"
+	case strings.Contains(text, "resolve failed"):
+		return "vmctl refused the wake"
 	}
 	if strings.Contains(text, "resolve call failed") {
 		return "vmctl was unreachable"

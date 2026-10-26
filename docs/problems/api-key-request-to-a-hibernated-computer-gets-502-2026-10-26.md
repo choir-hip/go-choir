@@ -113,6 +113,35 @@ owner authorized there.
   (handlers.go), so it wakes by the same path; its old text "failed to resolve
   user autoputer" came from `writeResolveError`.
 
+## Review 339 round: owner acts and residuals
+
+Owner acts never wake (conservative): restore, replace-workspace,
+rematerialize-from-tape, import-residue-snapshot, bootstrap-chain, settle and
+resume producer reports and checkpoints, self-development approve, rollback,
+adopt and rebase-retry, and release and package publish all use the strict
+active-only resolver. Reads (self-development operations, producer-report and
+checkpoint listing, and the general API routes) wake. The route is checked
+before the wake. A wake refused by a vmctl recovery refusal renders the wake
+body (with reason, kind and Retry-After), and `cause` is fixed text per known
+refusal kind, never vmctl's own text.
+
+Residuals, recorded and not fixed here:
+
+- Remap-window wake of Y (DeepSeek F1, Devin F5): the wake names the joined
+  (UserID, DesktopID); if the desktop is remapped to another computer Y between
+  the join and the resolve, vmctl may wake Y. The post-wake re-join refuses to
+  serve it, but Y has been started.
+- Shared-flight waiters are not revalidated against their own join (DeepSeek
+  F3): a waiter takes the flight's re-joined result, keyed by user and computer,
+  without its own desktop selectors being re-checked after the wake.
+- Non-primary desktops cannot wake (DeepSeek F4): `ResolveDesktopContext`
+  routes only the primary desktop, and the test fixture masks it by waking by
+  desktop name.
+- Wakes bypass the lifecycle durable-intent ledger (Devin F4): `computer start`
+  records prepare and complete; a bearer wake records nothing.
+- A `read:runtime` key can now cause a start (DeepSeek): a read scope is enough
+  to wake a hibernated computer.
+
 ## Status
 
 Decided 2026-10-26; implemented on lane/bearer-wake (red: proxy to vmctl

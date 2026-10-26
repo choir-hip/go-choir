@@ -426,15 +426,80 @@ func TestBearerKeyBoundToOneComputerCannotWakeAnother(t *testing.T) {
 	}
 }
 
-func TestGuestStateOwnerActRoutesStillRequireAnActiveComputer(t *testing.T) {
+func TestOwnerActRoutesNeverWakeAComputer(t *testing.T) {
+	const base = "/api/computers/computer-a"
+	acts := []struct{ method, path, body string }{
+		{http.MethodPost, base + "/lifecycle/replace-workspace", `{}`},
+		{http.MethodPost, base + "/lifecycle/rematerialize-from-tape", `{}`},
+		{http.MethodPost, base + "/lifecycle/restore", `{}`},
+		{http.MethodPost, base + "/lifecycle/import-residue-snapshot", `{}`},
+		{http.MethodPost, base + "/lifecycle/bootstrap-chain", `{}`},
+		{http.MethodPost, base + "/lifecycle/settle-producer-reports", `{}`},
+		{http.MethodPost, base + "/lifecycle/resume-checkpoints", `{}`},
+		{http.MethodPost, base + "/self-development/rollbacks", `{}`},
+		{http.MethodPost, base + "/self-development/rebase-retry", `{}`},
+		{http.MethodPost, base + "/self-development/adoptions", `{}`},
+		{http.MethodPost, base + "/self-development/operations/op1/decision", `{}`},
+		{http.MethodPost, base + "/releases", `{"operation_id":"op1"}`},
+	}
+	for _, act := range acts {
+		t.Run(act.method+" "+act.path, func(t *testing.T) {
+			f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+				"computer-a": {state: "hibernated", desktopID: "primary"},
+			})
+			req := httptest.NewRequest(act.method, act.path, strings.NewReader(act.body))
+			req.Header.Set("Authorization", "Bearer "+f.secret)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			f.handler.HandleAPI(rec, req)
+			if f.resolves.Load() != 0 || f.exact.Load() != 0 {
+				t.Fatalf("owner act woke or reached a hibernated computer (status=%d resolves=%d guest=%d)", rec.Code, f.resolves.Load(), f.exact.Load())
+			}
+		})
+	}
+}
+
+func TestReadRoutesWakeTheJoinedComputer(t *testing.T) {
+	for _, path := range []string{
+		"/api/computers/computer-a/lifecycle/producer-reports",
+		"/api/computers/computer-a/self-development/operations",
+	} {
+		t.Run(path, func(t *testing.T) {
+			f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+				"computer-a": {state: "hibernated", desktopID: "primary"},
+			})
+			rec := f.get(path, nil)
+			if f.resolves.Load() != 1 {
+				t.Fatalf("status=%d resolves=%d want one wake; body=%s", rec.Code, f.resolves.Load(), rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestWakeRefusedByRecoveryRefusalRendersTheWakeBody(t *testing.T) {
 	f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
 		"computer-a": {state: "hibernated", desktopID: "primary"},
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/replace-workspace", strings.NewReader(`{}`))
-	req.Header.Set("Authorization", "Bearer "+f.secret)
-	rec := httptest.NewRecorder()
-	f.handler.HandleAPI(rec, req)
-	if f.resolves.Load() != 0 {
-		t.Fatalf("replace-workspace woke a hibernated computer (status=%d)", rec.Code)
+	f.resolveStatus = http.StatusServiceUnavailable
+	f.resolveBody = `{"error":"computer recovery blocked","reason":"snapshot voided","kind":"projection_base_missing","retry_after_seconds":30}`
+	rec := f.get("/api/shell/bootstrap", nil)
+	body := decodeWakeBody(t, rec)
+	if rec.Code != http.StatusServiceUnavailable || body["error"] != "computer_waking_failed" || body["state"] != "hibernated" {
+		t.Fatalf("status=%d body=%v", rec.Code, body)
+	}
+	if body["kind"] != "projection_base_missing" || rec.Header().Get("Retry-After") != "30" {
+		t.Fatalf("refusal detail lost: body=%v retry-after=%q", body, rec.Header().Get("Retry-After"))
+	}
+}
+
+func TestWakeCauseDoesNotEchoVmctlText(t *testing.T) {
+	f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+		"computer-a": {state: "hibernated", desktopID: "primary"},
+	})
+	f.resolveStatus = http.StatusInternalServerError
+	f.resolveBody = `{"error":"secret-internal-detail /var/lib/vmctl/x"}`
+	rec := f.get("/api/shell/bootstrap", nil)
+	if strings.Contains(rec.Body.String(), "secret-internal-detail") || strings.Contains(rec.Body.String(), "/var/lib") {
+		t.Fatalf("vmctl text echoed: %s", rec.Body.String())
 	}
 }
