@@ -160,3 +160,45 @@ func TestLegacyGuestIdleTimeoutIsFlooredAtTheIdleTimeout(t *testing.T) {
 		t.Fatalf("legacy guest idle = %s, want 20m", d)
 	}
 }
+
+// D6 S2: the guest cache return switch is off unless VMCTL_GUEST_CACHE_RETURN
+// names an enabling word exactly; nix/node-b.nix sets it, and "off" is the
+// rollback (docs/problems/density-station-d-failure-modes-2026-10-26.md D6,
+// M15, M16).
+// Ways it could fail: a typo, a capital or a near word turns it on; the code
+// default is anything but off or selects nobody; the selector, triggers,
+// scope or the three durations are not read or are not clamped.
+func TestGuestCacheReturnEnv(t *testing.T) {
+	if cfg := guestCacheReturnConfigFromEnv(); cfg.Mode != vmctl.GuestCacheReturnOff || len(cfg.Only) != 0 || !cfg.TriggerOn("idle") {
+		t.Fatalf("defaults = %+v, want off, nobody selected, idle trigger", cfg)
+	}
+	for value, want := range map[string]string{
+		"active": vmctl.GuestCacheReturnActive, "observe": vmctl.GuestCacheReturnObserve, "off": vmctl.GuestCacheReturnOff,
+		"Active": vmctl.GuestCacheReturnOff, "on": vmctl.GuestCacheReturnOff, "true": vmctl.GuestCacheReturnOff,
+		"actve": vmctl.GuestCacheReturnOff, "1": vmctl.GuestCacheReturnOff,
+	} {
+		t.Setenv("VMCTL_GUEST_CACHE_RETURN", value)
+		if got := guestCacheReturnConfigFromEnv().Mode; got != want {
+			t.Fatalf("VMCTL_GUEST_CACHE_RETURN=%q gives %q, want %q", value, got, want)
+		}
+	}
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN", "observe")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_ONLY", "computer-de, class:test")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_TRIGGERS", "idle,hibernate")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_SCOPE", "root")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_IDLE", "5m")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_IDLE", "30s")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET", "20s")
+	cfg := guestCacheReturnConfigFromEnv()
+	if cfg.Mode != vmctl.GuestCacheReturnObserve || len(cfg.Only) != 2 || cfg.Only[0] != "computer-de" || cfg.Only[1] != "class:test" ||
+		!cfg.TriggerOn("idle") || !cfg.TriggerOn("hibernate") || cfg.TriggerOn("pressure") || cfg.Scope != "root" ||
+		cfg.Idle != 5*time.Minute || cfg.PressureIdle != 30*time.Second || cfg.PressureBudget != 20*time.Second {
+		t.Fatalf("overrides = %+v", cfg)
+	}
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_IDLE", "1h")
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET", "1ms")
+	cfg = guestCacheReturnConfigFromEnv()
+	if cfg.Idle != 9*time.Minute || cfg.PressureBudget != 2*time.Second {
+		t.Fatalf("clamps = idle %s budget %s, want 9m and 2s", cfg.Idle, cfg.PressureBudget)
+	}
+}
