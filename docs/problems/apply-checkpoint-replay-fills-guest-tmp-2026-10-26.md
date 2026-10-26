@@ -235,3 +235,142 @@ No, not beyond what it already does.
   by the tail only. That is new persistent state (a second copy of the store on
   the data volume) with its own trust and corruption story; it is a design, not
   a patch, and is not chosen here (see the design section).
+
+## Fix design (chosen 2026-10-26, lane apply-replay-bound)
+
+Mutation class: **red** (checkpoint/witness computation site, self-development
+apply error handling, boot path). Review tier 2 by the operating contract (boot
+path, a new goroutine); the lane lands the commits on its branch and leaves the
+review to the orchestrator.
+
+### The options, judged against the investigation
+
+1. **Bound and relocate the scratch.** Chosen. The replacement already exists:
+   rematerialize stages its replay beside the live store on `/mnt/persistent`
+   (`rematerialize.go:89`). The probe is the one replay that still uses
+   `os.MkdirTemp("", …)`.
+2. **Incremental replay from the newest pinned base.** Rejected: (d) shows a
+   pinned base is never newer than the advertised base the probe already starts
+   from, so it would only lengthen the tail.
+3. **Boot-time removal of stale `choir-replay-completeness-*` roots.** Chosen,
+   as the complement of 1: a probe killed in flight leaves no scratch behind
+   into the next start.
+
+The substrate cause is that every probe copies the whole projection (O(store),
+twice at the install peak) and writes it to RAM. Option 1 removes the RAM
+coupling and makes the cost admitted and bounded; it does not remove the
+O(store) copy. The O(store) copy goes away only with a retained replay store
+advanced by the tail between checkpoints; that is new persistent state and a
+design of its own (residual R1 below), not a patch to land today.
+
+### The mechanism
+
+- **Where.** The probe's root moves to `<dir of the live store>/replay-probe/`
+  (`/mnt/persistent/replay-probe/choir-replay-completeness-*` in a guest), on
+  the 32 GiB data volume instead of the RAM tmpfs.
+- **Admission, before any work.** Before the live capture (which holds appends
+  and hashes the live store), the probe estimates its scratch: for a base,
+  `2 x blob_size_bytes` (download plus unpack) plus `tail x 320 KiB`; with no
+  advertised base, `sequence x 320 KiB`. 320 KiB per event is the top of the
+  measured 220 to 310 KiB. It refuses with the named error
+  `ErrReplayScratchInsufficient` unless free space covers the estimate plus a
+  reserve of `max(2 GiB, 10% of the volume)`. An estimate it cannot make (base
+  source unreachable) still requires the reserve; the probe's own base refusal
+  then reports the source error as before.
+- **Bound, in flight.** The live store shares the volume and keeps writing
+  while the probe replays, so the estimate is not enough. A watchdog reads free
+  space once a second while the probe holds its scratch and cancels the
+  probe's replay context with `ErrReplayScratchInsufficient` when free space
+  falls under the reserve. Replay checks its context after every event
+  (`computerevent/appender.go:989-997`), so it stops within one event and one
+  small commit. The scratch is removed by the probe's close as today. Dolt's
+  Fatalf is reached only if more than the reserve is written in one second.
+- **Stale roots at boot.** The first thing `Start` does (before the
+  maintenance-hold check, which must not keep a full volume full) is remove
+  every `choir-replay-completeness-*` root under the new parent and under
+  `os.TempDir()` (the old location: a runtime restart inside one VM boot keeps
+  tmpfs). No probe can be running then: the probe is in-process and the
+  runtime is single-instance per guest.
+- **The apply when the checkpoint cannot be bound.** The
+  `materialization-applied` event is already on the tape before the checkpoint
+  is bound (`self_development_materializer.go:596-618`); that is the apply's
+  record. On `ErrReplayScratchInsufficient` the materializer stamps the
+  operation (`RecordIntentError`, the owner-visible stamp; a stable text, so
+  an unchanged refusal appends nothing) with "checkpoint deferred: …" and holds
+  the operation in `materializing` without arming the 60 s retry wake. The
+  route is not promoted without a checkpoint (unchanged contract). The next
+  reconcile pass (any commit, or a boot) tries again, cheaply refused by the
+  admission check until space exists. The same hold applies to the crash-boot
+  settlement path.
+
+### Owner ruling on resources
+
+Owner, 2026-10-22: durable resource-use improvements beat short-term uptime.
+Moving 2 to 5 GiB of scratch per apply from RAM-backed tmpfs to the data volume
+is a durable RAM saving on every computer that applies; the cost is disk
+writes on the data image, freed on the host by the discard path (RES-16) after
+the probe removes its root. Refusing an apply's checkpoint (the op held,
+visible) instead of risking the runtime is the uptime trade the ruling allows.
+
+### Conjecture delta
+
+Before: the replay probe's scratch is small and disposable, so `/tmp` is fine.
+After: the scratch is O(base) + O(tail), must be admitted against the
+persistent volume's free space and bounded while it runs, and a refusal is a
+named, visible deferral of the checkpoint, never a runtime death.
+
+### Protected surfaces
+
+Checkpoint/route projection (the witness and the bind are unchanged; where the
+replay store lives and when it may run change), self-development apply (the
+materializer's handling of one named error), boot path (one new phase that
+only removes the probe's own scratch).
+
+### Admissible evidence
+
+- Local (yellow tests, written first): scratch exhaustion refuses by name and
+  leaves no scratch and no live capture; exhaustion in flight cancels the
+  replay by name and removes the scratch; stale roots are removed at boot; the
+  materializer holds the operation with the stamp and arms no retry when the
+  checkpoint refuses; a base-plus-tail probe's witness equals a genesis probe's
+  on the same fixture (the incremental path's correctness bar for R1).
+- Staging (required, not claimable locally): after deploy, b@c's next boot
+  settles selfdev-83fbdfa9 (operation `applied`, a
+  `selfdev-checkpoint-published-*` event, route generation advanced), the
+  console shows no Fatalf, the boot log shows the scratch phase, and the probe
+  root is under `/mnt/persistent/replay-probe` while it runs.
+
+### Rollback
+
+`git revert` of the fix commit: the probe returns to `/tmp`. A probe killed
+under the fix leaves its root on the data volume, and the reverted code has no
+boot phase to remove it; remove `/mnt/persistent/replay-probe` by a guest act
+after a revert (bytes only, no state).
+
+### Heresy delta
+
+- Discovered: (H1) the crash-boot journal-only settlement re-runs the
+  checkpoint probe with no attempt bound, a crash-restart loop path the restart
+  rule forbids (hypothesis for b@c after 11:50; code path confirmed); (H2) the
+  replay scratch shares RAM with the runtime (tmpfs root); (H3) this document's
+  first framing "replays the whole tape" was wrong: it installs a whole base and
+  replays the tail.
+- Introduced: none intended. The held `materializing` operation counts as
+  self-development work and blocks a planned refresh while refused; that was
+  already true of the crashed state, and is now visible on the operation.
+- Repaired: the probe can no longer exhaust `/tmp`, and a predictable
+  exhaustion of the data volume refuses by name instead of a Fatalf (H2, and
+  H1 for this cause). H1 for any other Fatalf in the settlement stays open (R3).
+
+### Residuals
+
+- R1: a retained replay store advanced by the tail between checkpoints, to
+  remove the O(store) copy per probe (design, tier 2).
+- R2: stream the base download into the unpack (verify the digest before the
+  rename, not before the unpack) to remove the 2 x blob install peak; it
+  touches the restore installer's verification order.
+- R3: bound the crash-boot settlement's checkpoint attempts the way live applies
+  are bounded (`spendGuestApplyAttempt`).
+- R4: the reconcile pass signs a verifier certificate before the bind on every
+  held pass; hoisting the admission check before the signature would make a
+  held pass cheaper.
