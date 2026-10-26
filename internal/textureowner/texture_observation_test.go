@@ -26,7 +26,7 @@ func observationBodyDoc(text string) json.RawMessage {
 	return payload
 }
 
-func startObservationLifecycle(t *testing.T, s *store.Store) types.StartLifecycleRequest {
+func startObservationLifecycle(t *testing.T, s *store.Store, shape ...func(*types.StartLifecycleRequest)) types.StartLifecycleRequest {
 	t.Helper()
 	req := types.StartLifecycleRequest{
 		OwnerID: "user-1", ComputerID: "autoputer-test", CommandID: "start-observation",
@@ -37,6 +37,9 @@ func startObservationLifecycle(t *testing.T, s *store.Store) types.StartLifecycl
 		InitialDocument: types.Document{DocID: "doc-observation", Title: "Observed Texture"},
 		InitialRevision: types.Revision{RevisionID: "revision-observation-0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Texture", BodyDoc: observationBodyDoc("initial")},
 		Agent:           types.AgentRecord{AgentID: "texture:doc-observation", Profile: "texture", Role: "texture", ChannelID: "doc-observation"},
+	}
+	for _, edit := range shape {
+		edit(&req)
 	}
 	req.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(req)
 	if _, err := s.StartLifecycle(context.Background(), req); err != nil {
