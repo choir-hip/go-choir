@@ -10,6 +10,19 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 )
 
+// carryForwardTextureMetadataForRecord carries the parent's durable metadata
+// forward, then labels the result with the trajectory its revision record is
+// on. The carry-forward copies the parent's trajectory_id, which is a stale
+// label whenever the document moved to a later trajectory; an empty
+// trajectoryID (an unbound document) leaves the label as carried.
+func carryForwardTextureMetadataForRecord(raw, parentRaw json.RawMessage, trajectoryID string) json.RawMessage {
+	raw = carryForwardDurableTextureMetadata(raw, parentRaw)
+	if trajectoryID == "" {
+		return raw
+	}
+	return mergeTextureRevisionMetadata(raw, map[string]any{"trajectory_id": trajectoryID})
+}
+
 func carryForwardDurableTextureMetadata(raw, parentRaw json.RawMessage) json.RawMessage {
 	parentMeta := decodeRevisionMetadata(parentRaw)
 	meta := decodeRevisionMetadata(raw)
