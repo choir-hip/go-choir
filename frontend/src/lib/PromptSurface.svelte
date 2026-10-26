@@ -13,7 +13,7 @@
     showDesktopMode,
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
-  import { promptContinueTarget } from './prompt-target.js';
+  import { isSingleHttpUrl, promptContinueTarget } from './prompt-target.js';
 
   export let currentUser: any = null;
   export let authenticated = false;
@@ -35,10 +35,12 @@
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
   let promptWasDisabled = promptDisabled;
-  // The owner's one-tap override of the continue default. It belongs to the
-  // document in view: a different document, or a send, resets it.
-  let newDocumentOverride = false;
-  let overrideDocId = '';
+  // The owner's one-tap choice of target ('continue' or 'new'; '' is the
+  // default). It belongs to the document in view and to one send: a
+  // different document, or the send settling, clears it.
+  let targetChoice = '';
+  let choiceDocId = '';
+  let choiceRouting = false;
 
   const launcherApps = LAUNCHER_APPS;
   const publicTicker = [
@@ -51,11 +53,19 @@
     : 'Preview';
   $: chyronTickerItems = chyronItems.length > 0 ? [...chyronItems, ...chyronItems] : [];
   $: continueTarget = promptContinueTarget($windows, $activeWindowId, { authenticated });
-  $: if ((continueTarget?.docId || '') !== overrideDocId) {
-    overrideDocId = continueTarget?.docId || '';
-    newDocumentOverride = false;
+  $: if ((continueTarget?.docId || '') !== choiceDocId) {
+    choiceDocId = continueTarget?.docId || '';
+    targetChoice = '';
   }
-  $: continuing = !!continueTarget && !newDocumentOverride;
+  $: if (promptRouting) {
+    choiceRouting = true;
+  } else if (choiceRouting) {
+    choiceRouting = false;
+    targetChoice = '';
+  }
+  // The default is to continue, except for a single URL, which goes to the
+  // display app the conductor picks for it.
+  $: continuing = !!continueTarget && (targetChoice ? targetChoice === 'continue' : !isSingleHttpUrl(promptValue));
 
   function publishSurfaceMetrics() {
     if (!surfaceEl || typeof document === 'undefined') return;
@@ -71,12 +81,15 @@
     if (promptDisabled) return;
     if (event.key === 'Enter' && !event.shiftKey && promptValue.trim()) {
       event.preventDefault();
+      // With a target in view, one send at a time: a second send while the
+      // first routes would read a target the first is still changing. The
+      // text stays in the field.
+      if (promptRouting && continueTarget) return;
       dispatch('promptsubmit', {
         text: promptValue.trim(),
         continueDocId: continuing ? continueTarget.docId : '',
         continueWindowId: continuing ? continueTarget.windowId : '',
       });
-      newDocumentOverride = false;
       promptValue = '';
       tick().then(resizePromptInput);
     } else if (event.key === 'Escape') {
@@ -87,7 +100,7 @@
   // One tap flips the target and hands the focus back to the prompt, so the
   // owner keeps typing.
   function toggleContinueTarget() {
-    newDocumentOverride = !newDocumentOverride;
+    targetChoice = continuing ? 'new' : 'continue';
     promptInputEl?.focus();
   }
 
@@ -325,12 +338,14 @@
           title={continuing ? `Builds on ${continueTarget.title}` : 'Starts a new document'}
           on:click={toggleContinueTarget}
         >
-          {#if continuing}
-            <span class="prompt-target-verb">Continue</span>
-            <span class="prompt-target-title">{continueTarget.title}</span>
-          {:else}
-            <span class="prompt-target-verb">New document</span>
-          {/if}
+          <span class="prompt-target-pill">
+            {#if continuing}
+              <span class="prompt-target-verb">Continue</span>
+              <span class="prompt-target-title">{continueTarget.title}</span>
+            {:else}
+              <span class="prompt-target-verb">New document</span>
+            {/if}
+          </span>
         </button>
       {/if}
       <textarea
@@ -540,21 +555,21 @@
     padding-left: 0.5rem;
   }
 
-  /* The prompt's target, inside the field: no band of its own. */
+  /* The prompt's target, inside the field: no band of its own. The button
+     fills the field's height (a phone tap target of at least 40px); the
+     pill inside it is what shows. */
   .prompt-target {
     position: relative;
     z-index: 3;
-    align-self: center;
+    align-self: stretch;
     display: inline-flex;
-    align-items: baseline;
-    gap: 0.3rem;
+    align-items: center;
     min-width: 0;
     max-width: min(14rem, 34vw);
-    margin-left: 0.42rem;
-    padding: 0.3rem 0.62rem;
+    margin: 0 0 0 0.42rem;
+    padding: 0;
     border: 0;
-    border-radius: var(--choir-radius-control-sm);
-    background: var(--choir-selected);
+    background: transparent;
     color: var(--choir-fg);
     font: inherit;
     font-size: 0.78rem;
@@ -563,15 +578,31 @@
     cursor: pointer;
   }
 
+  .prompt-target-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0.3rem 0.62rem;
+    border-radius: var(--choir-radius-control-sm);
+    background: var(--choir-selected);
+  }
+
   .prompt-target.new-document {
-    background: var(--choir-panel-soft);
     color: var(--choir-muted);
   }
 
-  .prompt-target:hover,
+  .prompt-target.new-document .prompt-target-pill {
+    background: var(--choir-panel-soft);
+  }
+
   .prompt-target:focus-visible {
-    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
     outline: none;
+  }
+
+  .prompt-target:hover .prompt-target-pill,
+  .prompt-target:focus-visible .prompt-target-pill {
+    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
   }
 
   .prompt-target-verb {
