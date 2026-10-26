@@ -515,25 +515,41 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// revision is shown as the owner's request.
 	holdTrajectory := rt.textureSettingOn(ctx, ownerID, doc.ComputerID, store.SettingTextureHoldTrajectory)
 	directionsOn := rt.textureOwnerDirectionsOn(ctx, ownerID, doc.ComputerID)
-	wantRoot := holdTrajectory && metadataString(metadata, "seed_prompt") == "" && strings.TrimSpace(currentRevision.ParentRevisionID) != ""
+	seeded := metadataString(metadata, "seed_prompt") != ""
+	hasParent := strings.TrimSpace(currentRevision.ParentRevisionID) != ""
+	wantRoot := holdTrajectory && !seeded && hasParent
+	// The request's revision, so a cast names it and the runtime attaches
+	// the request verbatim (texture-retypes-owner-directions-2026-10-25): a
+	// seeded request walks to its root for the id alone, keeping the seed's
+	// text (review 272 F2). A root the owner did not write (a desk's seed)
+	// has no id to name.
+	wantRootID := hasParent && (seeded || wantRoot)
 	var ownerDirections []textureOwnerDirection
 	promptMetadata := metadata
-	if directionsOn || wantRoot {
+	if directionsOn || wantRootID {
 		directions, root := collectTextureOwnerStory(currentRevision, previousRevision, func(revisionID string) (types.Revision, error) {
 			return rt.getTextureRevision(ctx, ownerID, revisionID)
-		}, wantRoot)
+		}, wantRootID)
 		if directionsOn {
 			ownerDirections = directions
 		}
 		if root != nil {
-			if request := strings.TrimSpace(root.Content); request != "" {
+			request := strings.TrimSpace(root.Content)
+			switch {
+			case wantRoot && request != "":
 				promptMetadata = cloneMetadata(metadata)
 				promptMetadata["seed_prompt"] = truncatePromptSnippet(request, textureOriginalRequestMaxChars)
-				// Its revision, so a cast names it and the runtime attaches
-				// the request verbatim (texture-retypes-owner-directions-2026-10-25).
+				promptMetadata[texturePromptSeedRevisionKey] = strings.TrimSpace(root.RevisionID)
+			case seeded:
+				promptMetadata = cloneMetadata(metadata)
 				promptMetadata[texturePromptSeedRevisionKey] = strings.TrimSpace(root.RevisionID)
 			}
 		}
+	}
+	if seeded && !hasParent && currentRevision.AuthorKind == types.AuthorUser {
+		// The owner's seeded first revision is this turn's head.
+		promptMetadata = cloneMetadata(metadata)
+		promptMetadata[texturePromptSeedRevisionKey] = strings.TrimSpace(currentRevision.RevisionID)
 	}
 
 	diffSummary := ""

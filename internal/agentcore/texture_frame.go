@@ -259,13 +259,34 @@ func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRe
 		DocID: doc.DocID, RevisionID: rev.RevisionID, AuthorKind: string(rev.AuthorKind), Content: rev.Content,
 		Blocks: texturewrite.DocBlocks(base),
 	}
-	// The revision that woke the run, when the owner wrote it: a Cast names
-	// it and the reducer attaches the owner's words (texture_owner_directions_cast.go).
-	if metadataStringValue(rec.Metadata, "current_author_kind") == string(types.AuthorUser) {
-		snapshot.OwnerRevision = strings.TrimSpace(metadataStringValue(rec.Metadata, "current_revision_id"))
-	}
+	snapshot.OwnerRevision = rt.textureRunOwnerRevision(ctx, rec, doc, rev)
+
 	for _, r := range texturewrite.RecordsFrom(textureRecordInputs(records.view)) {
 		snapshot.Sources = append(snapshot.Sources, r.Sources...)
 	}
 	return snapshot
+}
+
+// textureRunOwnerRevision is the revision that woke the run when the owner
+// wrote it: a Cast names it and the reducer attaches the owner's words
+// (texture_owner_directions_cast.go). It trusts the revision, not the run's
+// current_author_kind (review 272 F1): the revision the run names is read
+// (the frame's own when it is that one) and must be this document's and
+// owner-written.
+func (rt *Runtime) textureRunOwnerRevision(ctx context.Context, rec *types.RunRecord, doc types.Document, framed types.Revision) string {
+	id := strings.TrimSpace(metadataStringValue(rec.Metadata, "current_revision_id"))
+	if id == "" {
+		return ""
+	}
+	current := framed
+	if strings.TrimSpace(framed.RevisionID) != id {
+		var err error
+		if current, err = rt.store.GetLifecycleRevision(ctx, strings.TrimSpace(rec.OwnerID), strings.TrimSpace(rec.ComputerID), id); err != nil {
+			return ""
+		}
+	}
+	if strings.TrimSpace(current.RevisionID) != id || strings.TrimSpace(current.DocID) != strings.TrimSpace(doc.DocID) || current.AuthorKind != types.AuthorUser {
+		return ""
+	}
+	return id
 }
