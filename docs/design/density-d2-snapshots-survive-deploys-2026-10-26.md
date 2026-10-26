@@ -1460,3 +1460,88 @@ gate is concrete) required two amendments inside §6.6, both made:
 | F3, `internal/texturewrite/` is a missing surface | **Accepted by FP0 ruling** (2026-10-26, open to the owner's reversal): Texture canonical writes are an authority boundary, and under "security comes first" a resumed snapshot must not run code that is missing an authority fix. `internal/texturewrite/` is added to the surfaces (§6.6 table; `cmd/autoputer` imports it). The cost figure in §6.6 is rerun with the final list: 223 of 887 non-doc commits (25%), up from 220. |
 | F4, unreadable link at wake | **Accepted.** It refuses `image_moved_since_launch` (§4.4). |
 | F5, citation drift | `resumeFromSnapshot` corrected to ownership.go:1670. The other two cite this tree correctly (`mark_guest_boot_contract` at deploy-impact-classify:89, `markPlannedRestart` at planned_restart.go:317), so they stay. |
+
+## 13. Build findings (2026-10-26, S1, S1b, S1c worker)
+
+Written while building S1, S1b and S1c in lane `lane/density-d2-build`. Each
+item is a place the design is silent, ambiguous, or wrong against the code,
+with what the build did and what FP0 should rule.
+
+1. **`internal/texturewrite/` is under the floor, so it cannot be a security
+   surface (blocks the §6.6 list as written).** `cmd/capsule-broker`, one of
+   the five floor commands, imports `internal/texturewrite` (`GOOS=linux
+   CGO_ENABLED=0 go list -deps ./cmd/capsule-broker | grep texturewrite`,
+   2026-10-26). The package is therefore one of the 35 floor packages and is
+   listed in `nix/guest-floor-paths.txt` (the S1 selftest requires it).
+   Review 313 F3 added it to the surfaces on the premise that "the floor
+   commands do not" import it ("`cmd/autoputer` imports it" is true, but so
+   does the floor). §6.6 rule 5 forbids a surface prefix that equals, contains
+   or lies under a floor path, and the task brief says to exclude anything
+   under a floor path. The two cannot both hold. This is the same collision
+   review 313 F1 found for `internal/capsule/transaction/`, and the same
+   answer applies: a change under a floor path already moves `floor_digest`,
+   so every older release-bound snapshot refuses at R3 without an epoch
+   raise, and the F3 rationale ("a resumed snapshot must not run code that is
+   missing an authority fix") is already met. **Built as:** the surfaces file
+   omits `internal/texturewrite/`, with a comment saying why; rule 5 passes on
+   the real lists. **FP0 to rule:** accept the omission (recommended), or
+   reverse F3's premise in another way (for example carve texturewrite out of
+   rule 5, which would double-count a floor package and re-open the F1 logic).
+   The cost figure in §6.6 (223 of 887, 4 in texturewrite) falls by at most 4.
+2. **S0 had not been done.** The D2 section of the failure-modes doc and the
+   H1/H6 problem record did not exist, and Problem Documentation First puts
+   them before S1 and S1b. They were written first in this lane
+   (`415237e99`).
+3. **`packages.x86_64-linux.guest-release-json` cannot be read by `nix eval`
+   alone.** A `writeText` derivation's contents need a build, and the worker
+   host is not an x86_64-linux builder. The flake therefore also exposes
+   `lib.guestReleaseJson` (the same text as a string), and
+   `scripts/test-guest-floor-commit-free` reads that. R9 should read the
+   string, not the package.
+4. **Where the floor-paths check runs.** The design says "the check job". That
+   job (`Go Vet + Test + Build`, name `check`) has no Go and only confirms
+   other jobs' results. The script needs `go list`, and `go-vet-build` runs
+   only when a Go path changed, so a `flake.nix` or list-only change would skip
+   it. It runs in `v1-inventory` (every non-docs change) with a `setup-go`
+   step, which `check` also depends on.
+5. **The eight-day fallback base is computed in the `v1-inventory` job,** not
+   in `plan`: `plan` checks out at depth 2 and cannot run `rev-list --before`.
+   `plan.outputs.base` is the deployed commit or empty.
+6. **First range after S1c lands.** Staging's commit predates S1c, so the
+   first run diffs from it to the S1c head and flags every surface commit in
+   between that has no trailers (two of the last 20 main commits, §13.4 below).
+   FP0 clears it with one follow-up commit that raises `security_epoch`
+   (rule 4), or by amending before landing. A base that lacks the policy file
+   counts as epoch 0, so a first-ever policy file with epoch 1 reads as a
+   raise; S1 lands and deploys before S1c, so the staging base has the file.
+7. **S1c's own commits trip rule 6** (they add the surfaces list, the script,
+   its selftest and the `ci.yml` step): a gate-file change needs `Security-Effect:
+   gate change; <why>` and a `Security-Effect-Reviewed-By` trailer, and the
+   reviewer's `review N` does not exist yet. The worker did not write a
+   reviewer trailer it cannot back. **FP0 adds the trailers when landing S1c,**
+   after the seat's review. Until then a local run of the check over the lane
+   range fails on exactly those commits, which is the check working.
+8. **A launch whose launch record cannot be written fails the launch** (S1b),
+   as the `fc-config.json` write already does. The design says the record is
+   "written and fsynced before Firecracker is spawned" and does not say what
+   happens on failure. A failed write after the config write means the state
+   directory is unwritable, in which case the launch would fail anyway.
+9. **`VM_GUEST_RELEASE_LINK` defaults to `/var/lib/go-choir/guest` in
+   `LoadConfigFromEnv`, not in `DefaultManagerConfig`.** Tests and other
+   callers that build a `ManagerConfig` by hand get no link, so the S1b guard
+   is off for them (a meta without a launch target validates as today). S3's
+   env test should assert the same split.
+10. **The launch-config golden file was written on macOS.** It pins the
+    Firecracker config and launch hash with fake paths and nothing
+    host-dependent that was found, but Linux CI is the first place it runs on
+    the deploy OS. If it differs there, regenerate with
+    `UPDATE_GOLDEN=1 go test ./internal/vmmanager -run TestLaunchConfigGolden`
+    on the pre-S1b commit `415237e99`'s code, never on the new code.
+11. **No code-review prompt template exists in the repo.** The "security effect"
+    question is added to the code-review prompt in
+    `skills/agentic-consensus/SKILL.md` (Prompt Construction).
+12. **S1b jailed path.** The launch record is written before the confinement
+    branch of `launchFirecracker`, so jailed and direct launches both write
+    it, and the guard compares link targets. The jailed launch itself was not
+    exercised in a test (the fixture runs direct); the write is not
+    mode-dependent.
