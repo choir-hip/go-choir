@@ -1820,15 +1820,28 @@ in
         "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d"
         "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-03T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
-        # Keep personal computers resident while the host is under capacity.
-        "VMCTL_IDLE_TIMEOUT=30m"
+        # Density D3: idle computers give memory back in minutes (owner
+        # 2026-10-26: "we should consider hibernating before 30 minutes. If
+        # we can restore fast we can hibernate idle computers at will").
+        # Primary computers idle-hibernate like test ones; never a computer
+        # with a live run, capsule, apply or self-development operation, a
+        # held one, the paper, a public platform computer or a paid account's
+        # computer. A guest whose /health does not report live_capsules (one
+        # built before D3a) keeps the 30 minute rule, so the timer drop
+        # cannot run ahead of the guest deploy. 10 minutes is the floor until
+        # D5 (diff snapshots): each hibernate is a full-guest snapshot write.
+        # Until D2, a primary computer woken after a deploy cold boots (about
+        # 10 s) instead of resuming. Rollback: IDLE_TIMEOUT=30m,
+        # PRIMARY_KEEPALIVE_MODE=under-capacity, RECLAIM_MIN_IDLE=30m.
+        "VMCTL_IDLE_TIMEOUT=10m"
+        "VMCTL_IDLE_TIMEOUT_LEGACY_GUEST=30m"
         "VMCTL_IDLE_SWEEP_INTERVAL=2m"
-        "VMCTL_PRIMARY_KEEPALIVE_MODE=under-capacity"
+        "VMCTL_PRIMARY_KEEPALIVE_MODE=off"
         # Active reclaim uses the same ranking exposed by dry-run mode, but
         # hibernates a bounded number of lower-priority idle computers when
         # host pressure crosses threshold.
         "VMCTL_PRESSURE_RECLAIM_MODE=active"
-        "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=30m"
+        "VMCTL_PRESSURE_RECLAIM_MIN_IDLE=10m"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB=4096"
         "VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_PERCENT=15"
         "VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_MIB=32768"

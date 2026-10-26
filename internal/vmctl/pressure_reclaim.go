@@ -576,7 +576,7 @@ func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) Pr
 	sampler := r.pressureSampler
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
+		ownerships = append(ownerships, r.cloneWithActivityLocked(own))
 	}
 	r.mu.RUnlock()
 
@@ -662,7 +662,7 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 	sampler := r.pressureSampler
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
+		ownerships = append(ownerships, r.cloneWithActivityLocked(own))
 	}
 	r.mu.RUnlock()
 
@@ -802,6 +802,11 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 		reasons = append(reasons, "premium_always_on")
 	case WarmnessClassCriticalProtected:
 		reasons = append(reasons, "critical_protected")
+	case WarmnessClassPublicPlatform:
+		// Density D3: the idle sweep and make-room always excluded a
+		// public platform computer; reclaim did not, and a 10 minute
+		// minimum idle would have widened that.
+		reasons = append(reasons, "public_platform")
 	}
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "unknown_last_active")

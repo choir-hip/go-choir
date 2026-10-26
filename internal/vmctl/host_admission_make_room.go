@@ -174,7 +174,11 @@ func (r *OwnershipRegistry) planMakeRoom(starter *VMOwnership, starterClass Warm
 		class := warmnessClassForOwnership(own, policy)
 		idle := time.Duration(0)
 		if !own.LastActiveAt.IsZero() {
-			idle = now.Sub(own.LastActiveAt)
+			lastActive := own.LastActiveAt
+			if busyAt := r.guestLastBusyAt[own.VMID]; busyAt.After(lastActive) {
+				lastActive = busyAt // work is activity (density D3, PR-09)
+			}
+			idle = now.Sub(lastActive)
 		}
 		switch {
 		case own.IsHeld():
