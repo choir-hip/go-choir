@@ -61,6 +61,14 @@ func (v *fakeScratchVolume) usage(dir string) (persistentdisk.Usage, error) {
 	return persistentdisk.Usage{TotalBytes: total, UsedBytes: total - v.avail, AvailBytes: v.avail}, nil
 }
 
+// readDirs copies the directories usage was asked about, under the lock: the
+// probe's watchdog goroutine can still be calling usage when the test reads.
+func (v *fakeScratchVolume) readDirs() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append([]string(nil), v.dirs...)
+}
+
 func (v *fakeScratchVolume) callCount() int {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -136,7 +144,7 @@ func TestReplayScratchLivesBesideTheStoreNotInTmp(t *testing.T) {
 	if roots := replayScratchRoots(t, parent); len(roots) != 0 {
 		t.Fatalf("closed probe left its root: %v", roots)
 	}
-	for _, dir := range volume.dirs {
+	for _, dir := range volume.readDirs() {
 		if dir != parent {
 			t.Fatalf("free space read on %s, want the scratch parent %s", dir, parent)
 		}
