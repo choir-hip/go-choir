@@ -19,6 +19,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,6 +83,9 @@ func TestCrashBootStrandedPlatformUpdateTailIsBoundedToTwoBoots(t *testing.T) {
 
 	fx.crashBootPlatformUpdate() // control plane still down: the tail fails
 	fx.crashBootPlatformUpdate()
+	if got := fx.countEventKinds()[computerevent.EventRecoveryRecorded]; got != 0 {
+		t.Fatalf("a held event before the bound was spent: %d", got)
+	}
 	if n := fx.guestAttemptCount(t, platformUpdateSettlementAttemptReason, offer.UpdateID); n != 2 {
 		t.Fatalf("attempts after two crash boots = %d, want 2", n)
 	}
@@ -96,6 +100,9 @@ func TestCrashBootStrandedPlatformUpdateTailIsBoundedToTwoBoots(t *testing.T) {
 	if kinds[computerevent.EventCheckpointPublished] != 0 || kinds[computerevent.EventRouteProjectionUpdated] != 0 || len(fx.checkpoints) != 0 {
 		t.Fatalf("the spent tail ran: events=%v checkpoints=%d", kinds, len(fx.checkpoints))
 	}
+	fx.requireOneSettlementHeldEvent(t, offer.UpdateID)
+	fx.crashBootPlatformUpdate() // a fourth boot adds nothing
+	fx.requireOneSettlementHeldEvent(t, offer.UpdateID)
 }
 
 // Failure mode 3: the pending path and the stranded path share one count for
@@ -134,6 +141,7 @@ func TestCrashBootPendingAndStrandedPlatformUpdateShareOneBound(t *testing.T) {
 	if kinds := fx.countEventKinds(); kinds[computerevent.EventCheckpointPublished] != 0 || kinds[computerevent.EventRouteProjectionUpdated] != 0 {
 		t.Fatalf("the spent tail ran on the third boot: %v", kinds)
 	}
+	fx.requireOneSettlementHeldEvent(t, offer.UpdateID)
 }
 
 // Failure mode 4: a planned restart resumes the tail once and spends no
@@ -186,10 +194,113 @@ func TestCrashBootPlatformUpdateTailRefusesWithoutADurableAttemptCount(t *testin
 
 	fx2.crashBootPlatformUpdate()
 
-	if kinds := fx2.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 0 {
-		t.Fatalf("an unbounded settlement recorded the apply: %v", kinds)
+	// The apply is known (a terminal journal, verified receipts): it is
+	// recorded, which closes the pending transition and unblocks later
+	// updates. Only the tail, the work that can crash, is refused.
+	kinds := fx2.countEventKinds()
+	if kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventCheckpointPublished] != 0 || kinds[computerevent.EventRouteProjectionUpdated] != 0 {
+		t.Fatalf("an unbounded settlement: events = %v, want the apply recorded and no tail", kinds)
 	}
-	if pending := fx2.pendingTransition(t); pending != acceptedDigest {
-		t.Fatalf("pending transition = %q, want it held on %q", pending, acceptedDigest)
+	if pending := fx2.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound: every later offer, security updates included, would be refused", pending)
+	}
+}
+
+// requireOneSettlementHeldEvent: a spent tail leaves exactly one causal event
+// on the tape that names the update and the cause. It is not a failed event:
+// the release is live.
+func (fx *derivableSelfDevFixture) requireOneSettlementHeldEvent(t *testing.T, updateID string) {
+	t.Helper()
+	ctx := context.Background()
+	kinds := fx.countEventKinds()
+	if kinds[computerevent.EventRecoveryRecorded] != 1 {
+		t.Fatalf("recovery_recorded events = %d, want exactly one held event: %v", kinds[computerevent.EventRecoveryRecorded], kinds)
+	}
+	if kinds[computerevent.EventMaterializationFailed] != 0 {
+		t.Fatalf("a held tail wrote materialization_failed, which falsifies a live release: %v", kinds)
+	}
+	held, found, err := fx.store.EventByIdempotency(ctx, fx.computerID, platformUpdateIdempotencyKey("settlement-held", updateID))
+	if err != nil || !found {
+		t.Fatalf("held event: found=%v err=%v", found, err)
+	}
+	raw, err := fx.rt.eventPayloadReader.FetchPayload(ctx, fx.computerID, held.PayloadCommitment)
+	if err != nil {
+		t.Fatalf("held payload: %v", err)
+	}
+	var payload struct {
+		UpdateID string `json:"update_id"`
+		Cause    string `json:"cause"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.UpdateID != updateID || payload.Cause == "" {
+		t.Fatalf("held payload = %s (%v), want the update id and a cause", raw, err)
+	}
+}
+
+// Review 315, finding 1: the spend gates the tail, not the applied event. Two
+// pre-append failures after a journaled `applied` must not spend the bound: the
+// third boot still records the apply and closes the pending transition.
+func TestCrashBootRecordsAppliedAfterTwoFailedAppendsWithoutSpendingTheTailBound(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-pu-append-fails")
+	ctx := context.Background()
+	offer := fx.mintPlatformUpdateOffer(t, "update-append-fails", "<html>append-fails</html>", fx.currentHead(t))
+	acceptedDigest := fx.seedAcceptedPlatformUpdate(t, offer)
+	fx.useDurableAttemptCount(t)
+	request, err := fx.rt.platformUpdateApplyRequest(ctx, offer, acceptedDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.engine.Apply(ctx, request); err != nil {
+		t.Fatalf("seed journal: %v", err)
+	}
+	real := appendEventPayload
+	defer func() { appendEventPayload = real }()
+	failing := true
+	appendEventPayload = func(rt *Runtime, ctx context.Context, event computerevent.Event, input computerevent.TransitionInput, payload []byte, mediaType, privacyClass string) (computerevent.Receipt, string, error) {
+		if failing {
+			return computerevent.Receipt{}, "", fmt.Errorf("store mid-replay: append unavailable")
+		}
+		return real(rt, ctx, event, input, payload, mediaType, privacyClass)
+	}
+
+	fx.crashBootPlatformUpdate()
+	fx.crashBootPlatformUpdate()
+	if n := fx.guestAttemptCount(t, platformUpdateSettlementAttemptReason, offer.UpdateID); n != 0 {
+		t.Fatalf("two failed applied appends spent %d tail attempts", n)
+	}
+	if fx.pendingTransition(t) != acceptedDigest {
+		t.Fatal("the transition closed while the append was failing")
+	}
+
+	failing = false
+	fx.crashBootPlatformUpdate()
+
+	kinds := fx.countEventKinds()
+	if kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventRouteProjectionUpdated] != 1 {
+		t.Fatalf("third boot events = %v, want the apply recorded and the tail finished", kinds)
+	}
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound", pending)
+	}
+	if n := fx.guestAttemptCount(t, platformUpdateSettlementAttemptReason, offer.UpdateID); n != 1 {
+		t.Fatalf("tail attempts = %d, want the one tail", n)
+	}
+}
+
+// Review 315, finding 3: a stranded offer the apply would refuse (a retired
+// realization, an expired offer) does not spend the bound.
+func TestCrashBootStrandedTailOfARetiredRealizationSpendsNoAttempt(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-pu-strand-retired")
+	offer := fx.strandPlatformUpdateTail(t, "update-strand-retired")
+	fx.useDurableAttemptCount(t)
+	fx.controlFail.Store(false)
+	fx.rt.selfdevRealizationID = "realization-retired-since"
+
+	fx.crashBootPlatformUpdate()
+
+	if n := fx.guestAttemptCount(t, platformUpdateSettlementAttemptReason, offer.UpdateID); n != 0 {
+		t.Fatalf("a tail the apply would refuse spent %d attempts", n)
+	}
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventRouteProjectionUpdated] != 0 {
+		t.Fatalf("a retired realization's tail ran: %v", kinds)
 	}
 }
