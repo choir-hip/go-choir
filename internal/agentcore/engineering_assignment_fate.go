@@ -1131,7 +1131,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("already-frozen assignment digest unavailable: %w", digestErr)
 		}
 		report, resolveErr = traceCall(rt, rec.RunID, "complete.bind_receipts", func() (types.EngineeringAssignmentReport, error) {
-			return rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report, frozenDigest)
+			return rt.bindFrozenAssignmentExecutionReceipts(ctx, fate, assignment, handle, report, frozenDigest)
 		})
 		if resolveErr != nil {
 			if errors.Is(resolveErr, capsule.ErrFinalSubjectNotCertified) {
@@ -1601,7 +1601,7 @@ func engineeringExecutionAttestationFromReceipt(assignment types.EngineeringAssi
 	return attestation, nil
 }
 
-func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, assignment types.EngineeringAssignment, handle string, report types.EngineeringAssignmentReport, frozenDigest string) (types.EngineeringAssignmentReport, error) {
+func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, fate assignmentFateExecutor, assignment types.EngineeringAssignment, handle string, report types.EngineeringAssignmentReport, frozenDigest string) (types.EngineeringAssignmentReport, error) {
 	refs := make([]string, 0, len(report.Commands))
 	for _, command := range report.Commands {
 		refs = append(refs, command.ExecutionRef)
@@ -1610,7 +1610,7 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 		return report, nil
 	}
 	binding := assignmentSubjectBinding(report.Result)
-	receipts, err := rt.assignmentFate().ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
+	receipts, err := fate.ResolveGrantedExecutionReceiptsFor(ctx, assignment.BoundRunID, handle, refs, binding)
 	if err != nil || len(receipts) != len(refs) {
 		return report, executionEvidenceCountError("assignment command evidence unavailable after durable freeze", len(refs), len(receipts), err)
 	}
@@ -1665,23 +1665,25 @@ func (rt *Runtime) preflightAssignmentExecutionReceipts(ctx context.Context, fat
 // retries.
 const uncertifiedFrozenRevokeReason = "cited receipts do not certify the frozen subject"
 
-// endUncertifiedFrozenAssignment ends an assignment whose terminal report
-// passed the receipt pre-check but whose receipts do not certify the tree
-// that froze: something still alive in the capsule changed the tree between
-// the pre-check and the quiesce (R1's race). The refusal is deterministic
-// (the tree is frozen, the receipts are content-addressed), the staged
-// proposition holds the terminal slot, and frozen -> active is not a fate
-// transition, so no re-drive and no later Complete can record. The saga
-// revokes the capsule as a stopped round's (carry_unfinished may keep the
-// patch) and records a system cancellation that names the refusal: a failed
-// report, and management is told. It returns the refusal, so the desk's
-// claim reads as refused. The caller holds the assignment's saga.
+// endUncertifiedFrozenAssignment ends an assignment whose terminal report's
+// receipts do not certify the tree that froze: something still alive in the
+// capsule changed the tree between the pre-check and the quiesce (R1's race),
+// or a proposal staged before the pre-check existed is re-driven (so the
+// reason claims no pre-check). The refusal is deterministic (the tree is
+// frozen, the receipts are content-addressed), the staged proposition holds
+// the terminal slot, and frozen -> active is not a fate transition, so no
+// re-drive and no later Complete can record. The saga revokes the capsule as
+// a stopped round's (the frozen tree survives as an unfinished patch only
+// when engineering.carry_unfinished is on and the binding is an
+// implementation) and records a system cancellation that names the refusal:
+// a failed report, and management is told. It returns the refusal, so the
+// desk's claim reads as refused. The caller holds the assignment's saga.
 func (rt *Runtime) endUncertifiedFrozenAssignment(ctx context.Context, assignment types.EngineeringAssignment, cause error) (types.EngineeringAssignmentCommandResult, error) {
 	causeText := cause.Error()
 	if len(causeText) > 400 {
 		causeText = causeText[:400] + "..."
 	}
-	reason := "the cited receipts do not certify the tree that froze (it changed after the pre-check); the capsule is revoked and the assignment cancelled: " + causeText
+	reason := "the cited receipts do not certify the tree that froze; the capsule is revoked and the assignment cancelled: " + causeText
 	revoked, err := rt.revokeStoppedAssignedCapsule(ctx, assignment, uncertifiedFrozenRevokeReason)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, errors.Join(cause, fmt.Errorf("revoke the uncertified frozen assignment: %w", err))
