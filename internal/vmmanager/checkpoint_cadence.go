@@ -2,6 +2,7 @@ package vmmanager
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ const (
 
 // loadCheckpointCadenceFromEnv reads the selector and its values.
 func loadCheckpointCadenceFromEnv(cfg *ManagerConfig) {
-	cfg.CheckpointCadenceOnly = parseComputerSelector(os.Getenv("VM_CHECKPOINT_CADENCE_ONLY"))
+	cfg.CheckpointCadenceOnly = checkpointCadenceIDs(parseComputerSelector(os.Getenv("VM_CHECKPOINT_CADENCE_ONLY")))
 	cfg.CheckpointCadenceEveryEvents = defaultCheckpointCadenceEveryEvents
 	if raw := strings.TrimSpace(os.Getenv("VM_CHECKPOINT_CADENCE_EVERY_EVENTS")); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil {
@@ -50,12 +51,43 @@ func loadCheckpointCadenceFromEnv(cfg *ManagerConfig) {
 	}
 }
 
+// checkpointCadenceIDs keeps the computer ids of a selector list and drops, with
+// a log line, the tokens this selector refuses: "*" and class:<class> are the
+// generic selector's, and would put the unmeasured live extract on every
+// computer of a class, the paper included (review 336).
+func checkpointCadenceIDs(tokens []string) []string {
+	var ids []string
+	for _, tok := range tokens {
+		if tok == "*" || strings.HasPrefix(tok, computerSelectorClassPrefix) {
+			log.Printf("vmmanager: VM_CHECKPOINT_CADENCE_ONLY takes computer ids only; ignoring %q", tok)
+			continue
+		}
+		ids = append(ids, tok)
+	}
+	return ids
+}
+
+// checkpointCadenceProtected reports a warmness class the cadence never runs
+// on, whatever the list names. Not every launch path sets the class (the
+// platform computer's boot and resume config do not), so this is a second
+// line: the first is that the list names ids and nothing else.
+func checkpointCadenceProtected(class string) bool {
+	switch strings.TrimSpace(class) {
+	case "critical_protected", "public_platform":
+		return true
+	}
+	return false
+}
+
 // checkpointCadenceKernelParams is the boot arguments for cfg's launch: nil for
 // a computer the list does not name, and nil when the values give no usable
 // trigger (a selection must never reach the guest with a bad value; the guest
 // would then run its own off default and read as selected).
 func (m *Manager) checkpointCadenceKernelParams(cfg VMConfig) []string {
-	if !selectsComputer(m.cfg.CheckpointCadenceOnly, cfg) {
+	// Ids only, enforced here as well as at the config load: a list built
+	// another way still cannot select by wildcard or class, or a protected
+	// computer.
+	if checkpointCadenceProtected(cfg.WarmnessClass) || !selectsComputer(checkpointCadenceIDs(m.cfg.CheckpointCadenceOnly), cfg) {
 		return nil
 	}
 	// A value that is set but bad refuses the whole selection: half a
