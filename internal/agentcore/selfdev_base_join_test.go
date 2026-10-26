@@ -215,6 +215,7 @@ func TestCrashBootSettlesAppliedPlainOperationAfterTheBaseMoved(t *testing.T) {
 
 	// The platform moved the booted base while the guest was down.
 	fx.setBootedBuildCommit(t, joinTestBaseB)
+	fx.useDurableAttemptCount(t)
 	fx.rt.closeSelfDevelopmentOperationsAfterCrash(ctx)
 	callsBefore := fx.applyCalls.Load()
 	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)

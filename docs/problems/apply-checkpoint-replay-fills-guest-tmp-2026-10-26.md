@@ -457,3 +457,29 @@ older than the offer's expiry is refused by the crash-boot re-drive whatever the
 bound says; nothing finishes it except the next signed update superseding it. The
 held event now makes that visible only once the bound is spent; an expired strand
 logs and writes nothing. Recorded for the redesign of the tail (slice 2).
+
+## Review 323 (2026-10-26): findings on the 315 fix and what the next commit does
+
+Both seats confirmed the 315 High is fixed on the platform settlement. New:
+
+1. High (DeepSeek): the self-development settlement had the same shape the
+   platform one had. `settleSelfDevelopmentOperationAfterCrash` spent the bound
+   before `recordMaterializationApplied`, whose first durable step is the applied
+   append. Two boots on which the store refused that append spent the bound; the
+   third closed the operation `degraded` with no applied event, the pending
+   transition still bound (every later offer refused, security updates
+   included), and a cause ("the apply is recorded on the tape") that was not
+   true. Fix: the applied-event append is split out
+   (`appendMaterializationAppliedEvent`) and runs first, outside the bound; the
+   spend gates only the checkpoint and route tail. The cause is now true, and the
+   rollback wording says the rollback is what is recorded.
+2. Medium (Devin): a journaled terminal `refused` outcome is pre-mutation, but a
+   crash boot's platform settlement fell to the "no verified recovery" branch and
+   left the transition pending forever. Fix: it discharges as failed, like a
+   missing journal. The self-development settlement had the sibling hole: it
+   spent before reading the outcome, so a refusal arriving after the bound was
+   spent closed `degraded` for an operation that installed nothing. Now only an
+   `applied` journal has a tail and a bound; every other terminal outcome
+   settles through the normal path with no spend.
+
+Adjudication of the rest: see the commit message of the fix.
