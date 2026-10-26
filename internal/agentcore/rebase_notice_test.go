@@ -24,6 +24,7 @@ package agentcore
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -489,5 +490,34 @@ func TestRebaseOfferSettingOffStopsTheTimer(t *testing.T) {
 	f.rt.applyRebaseOfferSetting(false)
 	if _, armed := f.rt.rebaseNoticeDueAt(); armed {
 		t.Fatal("turning the switch off must stop the timer")
+	}
+}
+
+// Review 321 (Devin 1): a transient failure (a failed commit, a failed read)
+// must not end the timer, or one hiccup on a quiet computer stops the rebase
+// until unrelated activity reconciles again.
+func TestRebaseNoticeATransientFailureReArms(t *testing.T) {
+	f := newRebaseFixture(t)
+	failures := 0
+	f.rt.rebaseCommit = func(context.Context, types.CommitInboxRecordsRequest) error {
+		failures++
+		return errors.New("store busy")
+	}
+	out := f.fire(t)
+	if out.Minted != "" || out.Rearm != f.rt.rebaseStayUpInterval() || failures != 1 {
+		t.Fatalf("a failed commit must re-arm after the stay-up interval and mint nothing: %+v (commits tried %d)", out, failures)
+	}
+	if _, armed := f.rt.rebaseNoticeDueAt(); !armed {
+		t.Fatal("the timer was not re-armed")
+	}
+	// The failure left nothing on the tape, and the next fire mints attempt 1.
+	f.rt.rebaseCommit = nil
+	if got := f.fire(t); got.Minted != f.noticeID(1) {
+		t.Fatalf("after the hiccup: %+v", got)
+	}
+	// A state that does not hold is not transient: no re-arm.
+	setBootedBase(t, f.rt, f.base)
+	if got := f.fire(t); got.Rearm != 0 {
+		t.Fatalf("a projected stack must not re-arm: %+v", got)
 	}
 }

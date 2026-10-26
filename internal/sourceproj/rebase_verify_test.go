@@ -256,14 +256,15 @@ func TestVerifyRebaseAMixedPathCannotDropTheCleanHunk(t *testing.T) {
 	if v := m.verify(t, altered); v.Pass || v.Reason != RebaseHunkMissing {
 		t.Fatalf("an altered clean hunk passed: %+v", v)
 	}
-	// Edits elsewhere in the same file, outside P's hunks, are allowed.
+	// A path P touches is checked whole, like a clean path: an edit elsewhere in
+	// it is not P. Extra edits belong in paths P does not touch.
 	elsewhere := m.candidate(t, func(root string) {
 		editLine(t, root, a, 5, "a line 05 PLATFORM+P1")
 		editLine(t, root, a, 30, "a line 30 P2")
 		editLine(t, root, a, 15, "a line 15 touched while rebasing")
 	})
-	if v := m.verify(t, elsewhere); !v.Pass {
-		t.Fatalf("an extra edit in a conflict path's stable text is allowed: %+v", v)
+	if v := m.verify(t, elsewhere); v.Pass || v.Reason != RebaseHunkMissing {
+		t.Fatalf("an extra edit inside a path P touches must be refused, as for a clean path: %+v", v)
 	}
 	// Keeping B' at the conflicting hunk while applying the rest: kept base.
 	kept := m.candidate(t, func(root string) { editLine(t, root, a, 30, "a line 30 P2") })
@@ -293,12 +294,12 @@ func TestVerifyRebaseACleanMergeThatGitApplyRefusesMustEqualTheMerge(t *testing.
 
 func TestVerifyRebaseAChangeTheNewBaseAlreadyHasIsNotKeptBase(t *testing.T) {
 	// B' made P's first change itself (upstreamed in part) and also edited
-	// line 6, so the first hunk no longer applies: the merge sees identical
-	// changes and is clean. The candidate that adds only P's second change
-	// contains P.
+	// line 7, inside the first hunk's context, so `git apply` refuses the hunk:
+	// the merge sees identical changes at line 5 and is clean. The candidate
+	// that adds only P's second change contains P.
 	m := newMixedRepo(t, func(root string) {
 		editLine(t, root, "frontend/src/a.txt", 5, "a line 05 P1")
-		editLine(t, root, "frontend/src/a.txt", 6, "a line 06 PLATFORM")
+		editLine(t, root, "frontend/src/a.txt", 7, "a line 07 PLATFORM")
 	})
 	const a = "frontend/src/a.txt"
 	good := m.candidate(t, func(root string) { editLine(t, root, a, 30, "a line 30 P2") })

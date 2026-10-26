@@ -347,7 +347,7 @@ func TestRootSectionCastsOnlyForARebaseNotice(t *testing.T) {
 	root := RootSection()
 	for _, want := range []string{
 		"rebase_notice", "selfdev-rebase:", `choir.Cast("management"`, "once per notice", "copying the notice id exactly",
-		"An owner's request is never one", "never cast to research", "Waits on the owner",
+		"An owner's request is never one", "never cast to research or management", "One exception", "Waits on the owner",
 	} {
 		if !strings.Contains(root, want) {
 			t.Errorf("root section lacks %q", want)
