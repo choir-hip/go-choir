@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# The guest floor list must cover what the floor binaries import
+# (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md 3.1, S1).
+#
+# nix/guest-floor-paths.txt names the paths that flake.nix hashes into a guest
+# image's floor_digest. If a floor command starts importing a Choir package
+# the list does not cover, a change to that package would not move the floor
+# digest, and a hibernated computer could resume below a floor fix. This check
+# runs `GOOS=linux CGO_ENABLED=0 go list -deps` over the floor commands, keeps
+# the go-choir packages, and fails unless each package directory is listed in
+# the file or lies under a listed directory. It also fails when:
+#   - a required build-recipe path is not listed (flake.nix, flake.lock,
+#     go.mod, go.sum, nix/autoputer-vm.nix, the two guest-signer-state scripts),
+#   - a listed path does not exist (the nix fileset would fail to evaluate),
+#   - the file cannot be read or lists nothing.
+#
+#   scripts/check-guest-floor-paths [--paths FILE]
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+paths=nix/guest-floor-paths.txt
+while [ $# -gt 0 ]; do
+	case $1 in
+	--paths) paths=$2; shift 2 ;;
+	*) echo "usage: $0 [--paths FILE]" >&2; exit 2 ;;
+	esac
+done
+
+floor_commands="./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate ./cmd/choir-capture"
+required="flake.nix flake.lock go.mod go.sum nix/autoputer-vm.nix scripts/guest-signer-state-migrate scripts/guest-signer-state-project"
+module=github.com/yusefmosiah/go-choir
+
+if [ ! -r "$paths" ]; then
+	echo "guest-floor-paths: FAIL: cannot read $paths" >&2
+	exit 1
+fi
+listed=$(sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$paths" | grep -v '^$' | sed 's|/*$||' || true)
+if [ -z "$listed" ]; then
+	echo "guest-floor-paths: FAIL: $paths lists no paths" >&2
+	exit 1
+fi
+
+fails=0
+fail() { echo "guest-floor-paths: FAIL: $*" >&2; fails=$((fails + 1)); }
+
+# covered REL: REL equals a listed path or lies under a listed directory.
+covered() {
+	local rel=$1 p
+	while IFS= read -r p; do
+		[ "$rel" = "$p" ] && return 0
+		case $rel in "$p"/*) return 0 ;; esac
+	done <<<"$listed"
+	return 1
+}
+
+for r in $required; do
+	covered "$r" || fail "required path $r is not listed in $paths"
+done
+
+while IFS= read -r p; do
+	[ -e "$p" ] || fail "listed path $p does not exist"
+done <<<"$listed"
+
+if ! pkgs=$(GOOS=linux CGO_ENABLED=0 go list -deps $floor_commands 2>&1); then
+	echo "$pkgs" | sed 's/^/    /' >&2
+	fail "go list -deps failed over the floor commands"
+else
+	pkgs=$(printf '%s\n' "$pkgs" | grep "^$module/" | sed "s|^$module/||" | sort -u)
+	[ -n "$pkgs" ] || fail "go list -deps returned no $module packages"
+	while IFS= read -r pkg; do
+		[ -n "$pkg" ] || continue
+		covered "$pkg" || fail "floor package $pkg is imported by a floor command but is not covered by $paths"
+	done <<<"$pkgs"
+fi
+
+if [ "$fails" -ne 0 ]; then
+	echo "guest-floor-paths: $fails problem(s). Add the path to nix/guest-floor-paths.txt in the same commit." >&2
+	exit 1
+fi
+echo "guest-floor-paths: ok ($(printf '%s\n' "$pkgs" | grep -c .) floor packages covered by $(printf '%s\n' "$listed" | grep -c .) listed paths)"

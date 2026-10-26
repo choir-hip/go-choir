@@ -1,0 +1,63 @@
+# The guest floor: everything in the guest that engineering has no access to
+# (owner, 2026-10-25 Q2). One repo-relative path per line; a directory covers
+# everything under it, so a package is listed as its whole directory (files it
+# embeds and generated files are covered). Tests (*_test.go) and testdata/ are
+# left out of the hash by flake.nix: they are not in the binaries.
+#
+# The floor_digest in a guest image's release.json hashes the contents of
+# these paths (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md
+# 3.1). It over-approximates on purpose: a wrongly counted floor change only
+# costs a cold boot. scripts/check-guest-floor-paths fails CI when a package
+# the floor commands import is not covered by this list. Add a path here in
+# the commit that makes the floor depend on it.
+
+# build recipe and pins: the floor binaries and the image are built by
+# mkGoService, commonGoArgs and mkGuestImage in flake.nix
+flake.nix
+flake.lock
+go.mod
+go.sum
+
+# the guest NixOS module and the scripts it reads
+nix/autoputer-vm.nix
+scripts/guest-signer-state-migrate
+scripts/guest-signer-state-project
+
+# the floor commands (the guest's Choir binaries other than autoputer)
+cmd/capsule-broker
+cmd/choir-capture
+cmd/choir-delegate
+cmd/choir-receipt-signer
+cmd/choir-updater
+
+# every Choir package those commands import (GOOS=linux go list -deps)
+internal/agentprofile
+internal/base/blob
+internal/base/journal
+internal/base/model
+internal/base/tree
+internal/buildinfo
+internal/capsule
+internal/capsulejob
+internal/claudedelegate
+internal/coagentpacket
+internal/computerevent
+internal/computerversion
+internal/deskmanifest
+internal/hostlink
+internal/mirrorgrant
+internal/normtext
+internal/quotematch
+internal/receiptsigner
+internal/sourcecontract
+internal/sourcefetch
+internal/steptrace
+internal/storeschema
+internal/texturedoc
+internal/texturewrite
+internal/types
+internal/updater
+internal/verifierprotocol
+internal/visualcapture
+internal/vocabmigrate
+internal/yaegikernel

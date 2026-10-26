@@ -480,6 +480,22 @@ jobs:
         shell: bash
         run: python3 -I scripts/selftest-guest-token
 
+      # The guest floor list (nix/guest-floor-paths.txt) must cover every Choir
+      # package a floor command imports, or a floor change would not move the
+      # floor digest (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md
+      # 3.1, S1). Needs Go for `go list -deps`; runs on every non-docs change.
+      - name: Set up Go for the guest floor list
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Check the guest floor list covers the floor binaries
+        shell: bash
+        run: |
+          scripts/check-guest-floor-paths
+          scripts/selftest-guest-floor-paths
+
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
