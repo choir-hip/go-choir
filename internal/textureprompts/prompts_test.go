@@ -85,9 +85,11 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// and one sentence said so; 4.56k until the grounding rules
 	// (articles-relay-outlets-instead-of-grounding-them-2026-10-19)
 	// replaced two news rules with three; 5.15k until the owner's-intention
-	// rules (texture-holds-the-trajectory-2026-10-25) added four lines.
-	if n := len(prompt); n > 6000 {
-		t.Errorf("prompt core is %d characters; the budget is about 6k", n)
+	// rules (texture-holds-the-trajectory-2026-10-25) added four lines; 6k
+	// until casts named the owner's revisions instead of retyping them
+	// (texture-retypes-owner-directions-2026-10-25).
+	if n := len(prompt); n > 6150 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.15k", n)
 	}
 }
 
@@ -242,7 +244,7 @@ func TestPromptCorePutsTheOwnersIntentionFirst(t *testing.T) {
 func TestPromptCoreCastsTheOwnersWordsByRevision(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, want := range []string{
-		"never retype them",
+		"never retyped",
 		`"owner_revision"`,
 		"choir.ReadDoc().OwnerRevision",
 		"owner_directions",
