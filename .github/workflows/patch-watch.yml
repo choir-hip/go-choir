@@ -152,6 +152,12 @@ jobs:
           count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govuln.txt" || true)
           { echo "## Go (toolchain ${{ steps.declared.outputs.go }})"; echo; echo "- govulncheck exit ${status}, reachable findings: ${count}"; echo; } >> "$REPORT"
           echo "count=${count}" >> "$GITHUB_OUTPUT"
+          # Exit 3 means findings; any other non-zero exit means the scan did
+          # not run, which must not read as "0 findings" (review 308).
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            { echo "- govulncheck tool error (exit ${status}): the scan did not run. Last lines:"; echo; echo '```'; tail -n 20 "$RUNNER_TEMP/govuln.txt"; echo '```'; echo; } >> "$REPORT"
+            echo "tool_error=1" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: npm audit (lock used by the Nix build, runtime deps)
         id: npm
@@ -177,6 +183,7 @@ jobs:
           KEV_AFFECTED: ${{ steps.kernel.outputs.kev_affected }}
           FC_LAG: ${{ steps.firecracker.outputs.lag }}
           GO_COUNT: ${{ steps.govuln.outputs.count }}
+          GO_TOOL_ERROR: ${{ steps.govuln.outputs.tool_error }}
           NPM_HIGH: ${{ steps.npm.outputs.high }}
         run: |
           set -euo pipefail
@@ -191,5 +198,11 @@ jobs:
           [ -n "$KEV_AFFECTED" ] && upsert "Patch SLA: known-exploited kernel CVEs affect the declared kernel" sev-S0 "$body"
           [ -n "$FC_LAG" ] && upsert "Patch SLA: Firecracker behind upstream ($FC_LAG)" sev-S2 "$body"
           [ "${GO_COUNT:-0}" != "0" ] && upsert "Patch SLA: govulncheck reachable findings" sev-S2 "$body"
+          [ -n "${GO_TOOL_ERROR:-}" ] && upsert "Patch SLA: govulncheck tool error" sev-S2 "$body"
           [ "${NPM_HIGH:-0}" != "0" ] && upsert "Patch SLA: high-severity frontend runtime advisories" sev-S1 "$body"
           exit 0
+
+      - name: Fail when a scanner did not run
+        if: always() && steps.govuln.outputs.tool_error == '1'
+        shell: bash
+        run: 'echo "govulncheck did not run; see the summary" >&2; exit 1'
