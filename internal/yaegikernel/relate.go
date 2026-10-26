@@ -85,7 +85,12 @@ func ValidateRelate(p RelatePayload) (RelatePayload, error) {
 		return RelatePayload{}, fmt.Errorf("choir.Relate: story %q is not a publication id (use the publication_id, pub-<32 hex>, of a published story, or \"\" for your own story)", p.Story)
 	}
 	if len(p.Entities) == 0 {
-		return RelatePayload{}, fmt.Errorf("choir.Relate needs at least one entity")
+		// An empty list says your own story is about none of its
+		// candidates; the host takes it only with this run's analysis.
+		if p.Story == RelateOwnStory {
+			return RelatePayload{Story: p.Story}, nil
+		}
+		return RelatePayload{}, fmt.Errorf("choir.Relate needs at least one entity (an empty list is for your own story, \"\", about none of its candidates)")
 	}
 	if len(p.Entities) > RelateMaxEntities {
 		return RelatePayload{}, fmt.Errorf("choir.Relate takes at most %d entities per call, got %d", RelateMaxEntities, len(p.Entities))
@@ -148,11 +153,18 @@ func relateEntities(arg any) ([]RelateEntity, error) {
 	if typed, ok := arg.([]RelateEntity); ok {
 		return typed, nil
 	}
+	if arg == nil {
+		// nil: your story is about none of its candidates.
+		return nil, nil
+	}
 	raw, err := jsonCellArg(arg)
 	if err != nil {
 		return nil, err
 	}
 	raw = strings.TrimSpace(raw)
+	if raw == "null" {
+		return nil, nil
+	}
 	if !strings.HasPrefix(raw, "[") {
 		return nil, fmt.Errorf("choir.Relate takes a story's publication_id and a list of {entity_id | name, type, wikidata_id, role, judgment_ref, question_id, reason} maps")
 	}
