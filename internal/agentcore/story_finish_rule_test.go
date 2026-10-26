@@ -250,3 +250,26 @@ func() {
 		t.Fatalf("after Relate, Texture inbox = %+v, want the final Report", got)
 	}
 }
+
+// The research wake prompt asks for the record when the rule applies, and
+// only then (slice c "Prompt").
+func TestResearchWakePromptAsksForTheStoryEntitiesWhenTheRuleApplies(t *testing.T) {
+	f := newAnalysisFixture(t)
+	ctx := context.Background()
+	asks := func(p string) bool {
+		return strings.Contains(p, "choir.StoryAnalysis()") && strings.Contains(p, `choir.Relate("", entities)`)
+	}
+	if p := f.rt.recordsInboxPrompt(ctx, f.owner, f.computer, "research:doc-story"); asks(p) || !strings.Contains(p, "choir.Records()") {
+		t.Fatalf("setting off: prompt = %q, want the plain research prompt", p)
+	}
+	f.turnOn(t)
+	if p := f.rt.recordsInboxPrompt(ctx, f.owner, f.computer, "research:doc-story"); !asks(p) {
+		t.Fatalf("setting on, story desk: prompt = %q, want it to ask for the story's entities", p)
+	}
+	if p := f.rt.recordsInboxPrompt(ctx, f.owner, f.computer, "research:"+f.owner); asks(p) {
+		t.Fatalf("unbound desk: prompt = %q, want the plain research prompt", p)
+	}
+	if p := f.rt.recordsInboxPrompt(ctx, f.owner, f.computer, persistentManagementAgentID(f.owner)); asks(p) || p == "" {
+		t.Fatalf("management: prompt = %q", p)
+	}
+}
