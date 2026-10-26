@@ -43,6 +43,13 @@ func SeedEngineeringAssignmentAuthority(s *Store, ownerID, computerID string, co
 // each hold an assignment (C1e failure item 3). key names the document;
 // "assignment" is the default seed.
 func SeedEngineeringAssignmentAuthorityForDocument(s *Store, ownerID, computerID, key string, count int) (EngineeringAssignmentSeed, error) {
+	return SeedEngineeringAssignmentAuthorityWithCastBody(s, ownerID, computerID, key, count, "")
+}
+
+// SeedEngineeringAssignmentAuthorityWithCastBody is the seed whose Texture
+// Cast carries castBody as its packet (the directive body), such as the
+// root's Cast naming a rebase notice (U4).
+func SeedEngineeringAssignmentAuthorityWithCastBody(s *Store, ownerID, computerID, key string, count int, castBody string) (EngineeringAssignmentSeed, error) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	ownerID, computerID, key = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(key)
@@ -107,8 +114,10 @@ func SeedEngineeringAssignmentAuthorityForDocument(s *Store, ownerID, computerID
 			return EngineeringAssignmentSeed{}, err
 		}
 	}
+	textureCast := TextureCastRecord(f.TextureCastID, f.TextureInbox, f.ParentAgentID, "change the platform")
+	textureCast.Directive.Body = castBody
 	cast := types.CommitInboxRecordsRequest{OwnerID: f.OwnerID, ComputerID: f.ComputerID, CommandID: "seed-texture-cast-" + key,
-		Records: []types.CommitmentRecord{TextureCastRecord(f.TextureCastID, f.TextureInbox, f.ParentAgentID, "change the platform")}}
+		Records: []types.CommitmentRecord{textureCast}}
 	if cast.CommandDigest, err = ComputeCommitInboxRecordsDigest(cast); err != nil {
 		return EngineeringAssignmentSeed{}, err
 	}
