@@ -190,6 +190,8 @@ EXCLUDES=(
   "$ART/checkpoint-scratch"       # regenerable scratch
   "$ROOT/secrets/offhost-backup"  # holds this backup's own key
   "key-escrow-kek*"                # opens the sealed escrow key; the owner keeps it offline (FP9)
+  "gateway-provider.env"           # every provider API key, plaintext; re-provisioned by hand after a restore (PR-13)
+  "codex-auth.json"                # the ChatGPT OAuth token set, same (PR-13)
   "$ROOT/mail/mail.db"            # captured consistently via sqlite3 .backup
   "$ROOT/mail/mail.db-wal"
   "$ROOT/mail/mail.db-shm"
@@ -232,8 +234,7 @@ resolve_paths() {
   is_subvolume "$CORPUS_DOLT_DATA" || add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
   add_path "$ROOT/secrets" required
   add_path "$ROOT/auth-signing" optional
-  add_path "$ROOT/gateway-provider.env" optional
-  add_path "$ROOT/codex-auth.json" optional
+  # gateway-provider.env and codex-auth.json are excluded by name (PR-13).
   add_path "$ROOT/maild.env" optional
   add_path "$ROOT/searxng.env" optional
   add_path "$ROOT/gateway-identities.json" optional
