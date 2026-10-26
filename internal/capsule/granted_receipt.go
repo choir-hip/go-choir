@@ -1,6 +1,9 @@
 package capsule
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // grantedExecutionBindReason names the first field that prevents freeze/grant
 // from certifying an execution receipt against the exact frozen assignment.
@@ -42,6 +45,14 @@ const (
 	// receipt's worktree digest are recorded side by side, not compared.
 	SubjectObserved SubjectBinding = "observed"
 )
+
+// ErrFinalSubjectNotCertified is the certified binding's refusal: the
+// chronologically latest cited receipt did not observe the tree it is bound
+// against. Against a frozen tree it is deterministic (the tree cannot change
+// and receipts are content-addressed), so a caller can tell it from a
+// transient failure: the terminal saga ends the assignment on it rather
+// than re-driving a proposition that can never bind.
+var ErrFinalSubjectNotCertified = errors.New("capsule execution evidence does not bind the final frozen subject")
 
 // boundGrantedReceipts is what bindGrantedReceipts established: the receipts
 // in citation order and the worktree digest the chronologically latest of
@@ -90,7 +101,7 @@ func bindGrantedReceipts(open func(ref string) (ExecutionReceipt, error), refs [
 	// latest cited receipt: earlier receipts legitimately recorded earlier
 	// post-evaluation tree states.
 	if out.LatestWorktreeDigest != frozenDigest {
-		return boundGrantedReceipts{}, fmt.Errorf("capsule execution evidence does not bind the final frozen subject: latest receipt observed %s, frozen subject is %s", out.LatestWorktreeDigest, frozenDigest)
+		return boundGrantedReceipts{}, fmt.Errorf("%w: latest receipt observed %s, frozen subject is %s", ErrFinalSubjectNotCertified, out.LatestWorktreeDigest, frozenDigest)
 	}
 	return out, nil
 }
