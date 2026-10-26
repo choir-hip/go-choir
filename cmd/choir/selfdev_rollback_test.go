@@ -21,8 +21,9 @@ type rollbackStub struct {
 	// ops are the operations GET /operations/{id} answers, by id.
 	ops  map[string]map[string]any
 	head map[string]any
-	// status is the GET /api/compute/status body.
-	status map[string]any
+	// routeGeneration is the listing's route_generation (0 omits it, as a
+	// guest whose route does not resolve does).
+	routeGeneration uint64
 	// inflight is what GET /operations?state=rollback_pending lists.
 	inflight []map[string]any
 	// postStatus and postBody are the rollbacks POST answer.
@@ -43,20 +44,19 @@ func (s *rollbackStub) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	const base = "/api/computers/computer-x/self-development"
 	key := r.Method + " " + strings.TrimPrefix(r.URL.Path, base)
-	if r.URL.Path == "/api/compute/status" {
-		key = r.Method + " /api/compute/status"
-	}
 	if r.URL.RawQuery != "" {
 		key += "?" + r.URL.RawQuery
 	}
 	s.requests = append(s.requests, key)
 	switch {
-	case key == "GET /api/compute/status?computer_id=computer-x":
-		_ = json.NewEncoder(w).Encode(s.status)
 	case key == "GET /head":
 		_ = json.NewEncoder(w).Encode(s.head)
 	case key == "GET /operations?state=rollback_pending":
-		_ = json.NewEncoder(w).Encode(map[string]any{"operations": s.inflight})
+		listing := map[string]any{"operations": s.inflight}
+		if s.routeGeneration != 0 {
+			listing["route_generation"] = s.routeGeneration
+		}
+		_ = json.NewEncoder(w).Encode(listing)
 	case key == "POST /rollbacks":
 		var body map[string]any
 		raw, _ := io.ReadAll(r.Body)
@@ -110,11 +110,9 @@ func newRollbackStub(t *testing.T) (*rollbackStub, *httptest.Server) {
 			"canonical_event_head": rhex("c"), "sequence": 9, "desired_event_head": rhex("d"), "effective_event_head": rhex("e"),
 			"pending_transition_ref": "", "desired_state_commitment": rhex("1"), "effective_state_commitment": rhex("2"),
 		},
-		status: map[string]any{"status": "ok", "current_computer": map[string]any{
-			"computer_id": "computer-x", "immutable_identity": map[string]any{"route_generation": 7, "joined": true},
-		}},
-		postStatus: http.StatusCreated,
-		postBody:   `{"operation_id":"rollback-1","state":"rollback_pending"}`,
+		routeGeneration: 7,
+		postStatus:      http.StatusCreated,
+		postBody:        `{"operation_id":"rollback-1","state":"rollback_pending"}`,
 	}
 	server := httptest.NewServer(http.HandlerFunc(stub.serve))
 	t.Cleanup(server.Close)
@@ -137,7 +135,7 @@ func (s *rollbackStub) posted() int {
 // Each of the handler's seven bindings comes from one public read route:
 // the target operation (to_applied_head, prior_materialization,
 // prior_checkpoint), the event head (expected_desired_head,
-// current_applied_head) and the compute status (expected_route_generation).
+// current_applied_head) and the operations listing (expected_route_generation).
 // A binding taken from the wrong route is refused by the guest as a changed
 // precondition, so the body is pinned field by field.
 func TestSelfDevRollbackResolvesEveryBindingFromTheReadRoutes(t *testing.T) {
@@ -166,7 +164,7 @@ func TestSelfDevRollbackResolvesEveryBindingFromTheReadRoutes(t *testing.T) {
 			t.Fatalf("%s = %#v, want %#v", field, stub.posts[0][field], value)
 		}
 	}
-	for _, route := range []string{"GET /operations/op-old", "GET /head", "GET /api/compute/status?computer_id=computer-x"} {
+	for _, route := range []string{"GET /operations/op-old", "GET /head", "GET /operations?state=rollback_pending"} {
 		found := false
 		for _, got := range stub.requests {
 			found = found || got == route
@@ -199,11 +197,8 @@ func TestSelfDevRollbackRefusesBeforeAnyPost(t *testing.T) {
 		{name: "pending transition", target: "op-old", wantMessage: "pending", mutate: func(s *rollbackStub) {
 			s.head["pending_transition_ref"] = rhex("9")
 		}},
-		{name: "route not joined", target: "op-old", wantMessage: "route", mutate: func(s *rollbackStub) {
-			s.status["current_computer"] = map[string]any{"computer_id": "computer-x", "immutable_identity": map[string]any{"route_absent": true}}
-		}},
-		{name: "status for another computer", target: "op-old", wantMessage: "computer-y", mutate: func(s *rollbackStub) {
-			s.status["current_computer"] = map[string]any{"computer_id": "computer-y", "immutable_identity": map[string]any{"route_generation": 7, "joined": true}}
+		{name: "route generation not reported", target: "op-old", wantMessage: "route generation", mutate: func(s *rollbackStub) {
+			s.routeGeneration = 0
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,7 +330,7 @@ func TestSelfDevRollbackHelpNamesTheOwnerActScope(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	run([]string{"self-dev", "rollback", "--help"}, &stdout, &stderr)
 	help := stdout.String() + stderr.String()
-	for _, want := range []string{"owner:acts", "computer:self_development:rollback", "read:runtime", "-to-operation", "-wait", "CLI only"} {
+	for _, want := range []string{"owner:acts", "computer:self_development:rollback", "-to-operation", "-wait", "CLI only"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("help does not mention %q:\n%s", want, help)
 		}
