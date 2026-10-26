@@ -59,10 +59,13 @@ type relateAttached struct {
 }
 
 type relateResult struct {
-	Story       string           `json:"story"`
-	Attached    []relateAttached `json:"attached"`
-	Exported    bool             `json:"exported"`
-	ExportError string           `json:"export_error,omitempty"`
+	Story    string           `json:"story"`
+	Attached []relateAttached `json:"attached"`
+	Exported bool             `json:"exported"`
+	// ExportPending: the desk's own story is not published yet; the record
+	// is exported when it publishes.
+	ExportPending bool   `json:"export_pending,omitempty"`
+	ExportError   string `json:"export_error,omitempty"`
 }
 
 // storyEntityAttachment is one attachment as the tape records it.
@@ -79,6 +82,15 @@ type storyEntityAttachment struct {
 	Reason      string  `json:"reason,omitempty"`
 	JudgmentRef string  `json:"judgment_ref"`
 	QuestionID  string  `json:"question_id"`
+	// Source is existing, extracted or research_named when the run held
+	// its story's analysis (story_entities_source.go).
+	Source string `json:"source,omitempty"`
+	// The type basis of an extracted mint: the analysis's type answer, its
+	// top choice, and whether the desk chose another.
+	TypeJudgmentRef string `json:"type_judgment_ref,omitempty"`
+	TypeQuestionID  string `json:"type_question_id,omitempty"`
+	TypeTop         string `json:"type_top,omitempty"`
+	TypeOverrode    bool   `json:"type_overrode,omitempty"`
 }
 
 type storyEntitiesRecord struct {
@@ -86,6 +98,8 @@ type storyEntitiesRecord struct {
 	Story       string                  `json:"story"`
 	Attachments []storyEntityAttachment `json:"attachments"`
 	Model       string                  `json:"model,omitempty"`
+	// Review is the record's review when the run held its story's analysis.
+	Review *types.StoryEntityReview `json:"review,omitempty"`
 }
 
 // StoryEntityPublisher is the optional third face of a StoryPublisher: it
@@ -122,13 +136,14 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	if err != nil {
 		return nil, err
 	}
+	ownStory := rt.ownStoryOf(ctx, exec.AgentID, owner, computer)
 	if req.Story == yaegikernel.RelateOwnStory {
-		doc, err := rt.researchDeskDoc(ctx, exec.AgentID, owner, computer)
-		if err != nil {
+		if _, err := rt.researchDeskDoc(ctx, exec.AgentID, owner, computer); err != nil {
 			return nil, err
 		}
-		req.Story = types.StoryPublicationID(owner, doc)
+		req.Story = ownStory
 	}
+	own := ownStory != "" && req.Story == ownStory
 
 	// relationMu covers the tape read, the platform's check and the record,
 	// so a concurrent call cannot record the same attachment meanwhile; it
@@ -172,6 +187,9 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	var attachments []storyEntityAttachment
 	result := relateResult{Story: req.Story}
 	model := ""
+	analysed := readAnalysisBasis(answered, req.Story)
+	var counts types.StoryEntityCounts
+	var gaps []string
 	for i, e := range req.Entities {
 		basis, err := system1ChoiceBasis(e.JudgmentRef, e.QuestionID, e.Role, answered, computer)
 		if err != nil {
@@ -187,6 +205,14 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 			Reason: e.Reason, JudgmentRef: e.JudgmentRef, QuestionID: e.QuestionID}
 		if e.EntityID == "" {
 			a.Name, a.Type, a.WikidataID, a.New = e.Name, e.Type, e.WikidataID, true
+		}
+		if analysed.present {
+			if err := analysed.applySource(i+1, e, &a, &counts, &gaps); err != nil {
+				return nil, err
+			}
+			if a.Overrode || a.TypeOverrode {
+				counts.Overridden++
+			}
 		}
 		attachments = append(attachments, a)
 		result.Attached = append(result.Attached, relateAttached{EntityID: a.EntityID, Name: a.Name, Role: a.Role, New: a.New,
@@ -209,14 +235,24 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		export.Entities = append(export.Entities, e)
 	}
 
+	// The record's review, under the id the record will take.
+	recordID := uuid.New().String()
+	if analysed.present {
+		export.Review = analysed.buildReview(recordID, counts, gaps, attachments, rt.analyses.built(runID+"\x00"+strings.TrimPrefix(exec.AgentID, yaegikernel.SessionRoleResearch+":")))
+	}
+
 	publisher, ok := rt.storyPublisher().(StoryEntityPublisher)
 	if !ok || publisher == nil {
 		return nil, rt.relatePlatformFailed(ctx, exec, owner, computer, runID, req.Story,
 			fmt.Errorf("no platform to check the entities with (choir.platform_url is not set on this computer)"))
 	}
 	// Ask the platform before anything is recorded.
+	// The desk's own story may not be published yet: the check is pending,
+	// every entity check without the published-story check (slice c).
+	check := export
+	check.ValidateOnly, check.Pending = true, own
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
-	err = publisher.ValidateEntities(vctx, export)
+	err = publisher.ValidateEntities(vctx, check)
 	cancel()
 	if err != nil {
 		log.Printf("story entities: the platform did not take %d attachments of %s on run %s: %v", len(export.Entities), req.Story, runID, err)
@@ -236,7 +272,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		fresh = append(fresh, a)
 	}
 	if len(fresh) > 0 {
-		if err := rt.appendStoryEntitiesEvent(ctx, exec, owner, computer, runID, storyEntitiesRecord{Computer: computer, Story: req.Story, Attachments: fresh, Model: model}); err != nil {
+		if err := rt.appendStoryEntitiesEvent(ctx, exec, owner, computer, runID, recordID, storyEntitiesRecord{Computer: computer, Story: req.Story, Attachments: fresh, Model: model, Review: export.Review}); err != nil {
 			log.Printf("story entities: record %s on run %s: %v", req.Story, runID, err)
 			return nil, fmt.Errorf("choir.Relate: the attachments could not be recorded on the tape, so they are not exported: %w", err)
 		}
@@ -249,10 +285,15 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
 	err = publisher.PublishEntities(ectx, export)
 	cancel()
-	if err != nil {
+	switch {
+	case err != nil && own && platformRefused(err):
+		// Checked pending, refused on write: the story is not published
+		// yet. The record goes out when it publishes (publishStoryVersion).
+		result.ExportPending = true
+	case err != nil:
 		result.ExportError = err.Error()
 		log.Printf("story entities: export of %d attachments of %s on run %s failed: %v", len(export.Entities), req.Story, runID, err)
-	} else {
+	default:
 		result.Exported = true
 	}
 	return json.Marshal(result)
@@ -361,12 +402,12 @@ func system1ChoiceBasis(judgmentRef, questionID, want string, answered map[strin
 	return relationBasis{}, fmt.Errorf("receipt %q has no answer to question %q", judgmentRef, questionID)
 }
 
-func (rt *Runtime) appendStoryEntitiesEvent(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, rec storyEntitiesRecord) error {
+func (rt *Runtime) appendStoryEntitiesEvent(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, eventID string, rec storyEntitiesRecord) error {
 	raw, err := json.Marshal(rec)
 	if err != nil {
 		return err
 	}
-	ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: owner, AgentID: exec.AgentID,
+	ev := types.EventRecord{EventID: eventID, Timestamp: time.Now().UTC(), RunID: runID, OwnerID: owner, AgentID: exec.AgentID,
 		ChannelID: system1Channel(computer), Kind: types.EventStoryEntities, Phase: storyEntitiesPhaseRecorded, Payload: raw}
 	return rt.store.AppendEvent(ctx, &ev)
 }

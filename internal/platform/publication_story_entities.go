@@ -44,7 +44,7 @@ const (
 	mentionEdgeLimit = 200
 	// maxReviewItems bounds a review's not-entity phrases and its aliases:
 	// at most the 24 candidates' worth, with room.
-	maxReviewItems = 48
+	maxReviewItems = types.EntityReviewMaxItems
 )
 
 // entityRow is a choir.entity row's body: identity and display only (ontology

@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -81,7 +82,19 @@ type analysisMemo struct {
 
 type analysisEntry struct {
 	once     sync.Once
+	done     atomic.Bool
 	analysis *yaegikernel.StoryAnalysis
+}
+
+// built returns a run's analysis if it was built, without building it.
+func (m *analysisMemo) built(key string) *yaegikernel.StoryAnalysis {
+	m.mu.Lock()
+	e := m.byKey[key]
+	m.mu.Unlock()
+	if e == nil || !e.done.Load() {
+		return nil
+	}
+	return e.analysis
 }
 
 func (m *analysisMemo) entry(key string) *analysisEntry {
@@ -124,6 +137,7 @@ func (rt *Runtime) storyAnalysisFor(ctx context.Context, deskRole string, exec t
 	e := rt.analyses.entry(runID + "\x00" + doc)
 	e.once.Do(func() {
 		e.analysis = rt.buildStoryAnalysis(ctx, exec, owner, computer, runID, doc)
+		e.done.Store(true)
 	})
 	return e.analysis
 }
@@ -242,7 +256,7 @@ func (rt *Runtime) askAnalysisQuestions(ctx context.Context, exec toolregistry.E
 			a.Error = "the analysis questions could not be asked: " + err.Error()
 			return
 		}
-		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, perRun, perDay, system1Ask{questions: valid, crossRun: true, subjects: subjects})
+		raw, err := rt.system1Call(ctx, exec, owner, computer, runID, perRun, perDay, system1Ask{questions: valid, crossRun: true, subjects: subjects, story: a.Story.PublicationID})
 		if err != nil {
 			log.Printf("story analysis: %s on run %s: System 1: %v", a.Story.DocID, runID, err)
 			a.Error = "System 1 did not answer every analysis question: " + err.Error()

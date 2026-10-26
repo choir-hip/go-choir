@@ -17,6 +17,8 @@ const (
 	EntityStopwordRevokeDays = 30
 	// EntityAliasesMax bounds one entity's learned aliases.
 	EntityAliasesMax = 16
+	// EntityReviewMaxItems bounds a review's not-entities and its aliases.
+	EntityReviewMaxItems = 48
 	// EntityNoveltyYesP is the novelty answer's p(yes) at which research may
 	// name an entity the analysis missed, and at which a review counts as a
 	// novelty "yes" in the growth read.

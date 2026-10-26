@@ -243,11 +243,7 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		return ""
 	}
 	rt.enqueueStoryPublish("doc:"+ownerID+":"+doc.DocID, func(ctx context.Context) {
-		if err := publisher.PublishVersion(ctx, v); err != nil {
-			log.Printf("story publish: %s v%d (revision %s) failed and stays a gap: %v", v.DocID, v.Revision, v.RevisionID, err)
-			return
-		}
-		log.Printf("story publish: %s published v%d (revision %s)", v.DocID, v.Revision, v.RevisionID)
+		rt.publishStoryVersion(ctx, publisher, v)
 	})
 	return ""
 }

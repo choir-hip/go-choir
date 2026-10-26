@@ -182,9 +182,11 @@ type system1Ask struct {
 	// receipt rewritten to that event, with no request record, so it costs
 	// nothing and counts toward no cap (review 304 item 1).
 	crossRun bool
-	// subjects name what each question asks about; they are recorded with
-	// the answer, so a later act can read its basis from the tape.
+	// subjects name what each question asks about, and story the story the
+	// questions analyse; both are recorded with the answer, so a later act
+	// can read its basis from the tape.
 	subjects map[string]system1Subject
+	story    string
 }
 
 // system1Subject is what a host-built question asks about.
@@ -256,7 +258,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		}
 	}
 	if ask.crossRun && crossRun != "" {
-		return rt.system1CrossRunReplay(ctx, exec, owner, computer, runID, digest, questions, crossRun, crossRunModel, crossRunResult, ask.subjects)
+		return rt.system1CrossRunReplay(ctx, exec, owner, computer, runID, digest, questions, crossRun, crossRunModel, crossRunResult, ask.subjects, ask.story)
 	}
 	if runCalls >= perRun {
 		return nil, fmt.Errorf("choir.System1: this run has made its %d calls per run (%s); decide with what you have, or read closely", perRun, system1MaxCallsPerRunEnv)
@@ -325,7 +327,7 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 		"model": model, "response_id": distribution.ID, "result": json.RawMessage(resultRaw),
 		"usage": distribution.Usage, "input_tokens": distribution.Usage.InputTokens, "output_tokens": distribution.Usage.OutputTokens,
 		"cost_usd": distribution.Usage.Cost,
-	}, ask.subjects)); err != nil {
+	}, ask.subjects, ask.story)); err != nil {
 		// The call was paid for; an answer that is not on the tape would be
 		// unaudited and unreplayable, so it is not handed to the cell.
 		log.Printf("system1: record the answer of %s on run %s: %v", requestID, runID, err)
@@ -335,10 +337,14 @@ func (rt *Runtime) system1Call(ctx context.Context, exec toolregistry.ExecutionC
 	return resultRaw, nil
 }
 
-// withSubjects adds a host-built call's subjects to its answer record.
-func withSubjects(payload map[string]any, subjects map[string]system1Subject) map[string]any {
+// withSubjects adds a host-built call's subjects, and the story it
+// analyses, to its answer record.
+func withSubjects(payload map[string]any, subjects map[string]system1Subject, story string) map[string]any {
 	if len(subjects) > 0 {
 		payload["subjects"] = subjects
+	}
+	if story != "" {
+		payload["analysis_story"] = story
 	}
 	return payload
 }
@@ -347,7 +353,7 @@ func withSubjects(payload map[string]any, subjects map[string]system1Subject) ma
 // event of this run: its receipt names the new event, so Relate's same-run
 // basis finds it; replay_of names the answer it repeats. No request record
 // is written and no cost is booked.
-func (rt *Runtime) system1CrossRunReplay(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, digest string, questions []yaegikernel.System1Question, replayOf, model string, recorded json.RawMessage, subjects map[string]system1Subject) (json.RawMessage, error) {
+func (rt *Runtime) system1CrossRunReplay(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, digest string, questions []yaegikernel.System1Question, replayOf, model string, recorded json.RawMessage, subjects map[string]system1Subject, story string) (json.RawMessage, error) {
 	var result system1Result
 	if err := json.Unmarshal(recorded, &result); err != nil {
 		return nil, fmt.Errorf("choir.System1: the recorded answer did not decode: %w", err)
@@ -366,7 +372,7 @@ func (rt *Runtime) system1CrossRunReplay(ctx context.Context, exec toolregistry.
 	if err := rt.appendSystem1Event(ctx, exec, owner, computer, runID, answeredID, system1PhaseAnswered, withSubjects(map[string]any{
 		"request_digest": digest, "computer_id": computer, "question_ids": ids, "model": model,
 		"result": json.RawMessage(resultRaw), "replay_of": replayOf,
-	}, subjects)); err != nil {
+	}, subjects, story)); err != nil {
 		return nil, fmt.Errorf("choir.System1: the replayed answer could not be recorded on the tape, so it is not returned: %w", err)
 	}
 	return resultRaw, nil
