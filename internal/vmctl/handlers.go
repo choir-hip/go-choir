@@ -985,25 +985,6 @@ func (h *Handler) HandleRetentionPlan(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionPrunePlan())
 }
 
-// HandleRetentionShadowPlan handles GET /internal/vmctl/retention-shadow-plan.
-// It returns an observation-only retention inventory. The shadow plan is never
-// consumed by prune or reclaim deletion paths.
-func (h *Handler) HandleRetentionShadowPlan(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, h.registry.RetentionShadowPlan())
-}
-
 // HandlePulse handles GET /internal/vmctl/pulse. It returns public-safe
 // aggregate usage and health facts without raw users, emails, prompts,
 // documents, traces, IPs, or per-user timelines.
@@ -1452,7 +1433,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/unhold", h.HandleUnhold)
 	s.HandleFunc("/internal/vmctl/divergence", h.HandleSetDivergence)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
-	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 	s.HandleFunc("/internal/vmctl/guest-releases", h.HandleGuestReleases)
@@ -1552,12 +1532,6 @@ func ReclaimEndpoint(baseURL string) string {
 // vmctl service at the given base URL.
 func RetentionPlanEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/retention-plan", baseURL)
-}
-
-// RetentionShadowPlanEndpoint returns the full retention-shadow-plan endpoint
-// URL for the vmctl service at the given base URL.
-func RetentionShadowPlanEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/retention-shadow-plan", baseURL)
 }
 
 // PulseEndpoint returns the full Pulse aggregate endpoint URL for the vmctl
