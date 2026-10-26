@@ -462,7 +462,8 @@ func renderSelfDevRollback(w io.Writer, result any, _ *call) int {
 //	expected_desired_head, current_applied_head
 //	    GET self-development/head: desired_event_head, effective_event_head
 //	expected_route_generation
-//	    GET /api/compute/status?computer_id=: current_computer.immutable_identity.route_generation
+//	    GET self-development/operations?state=rollback_pending: route_generation
+//	    (the guest's own route slot generation, the value its check compares)
 //	idempotency_key
 //	    --idempotency-key, or cli-rollback:<target>:<current head prefix>
 func selfDevRollback(x *call) (any, error) {
@@ -500,21 +501,23 @@ func selfDevRollback(x *call) (any, error) {
 	if head.EffectiveEventHead == target.EffectiveHead {
 		return nil, fmt.Errorf("operation %s is the computer's current state (effective head %s); there is nothing to roll back to", targetID, head.EffectiveEventHead[:12])
 	}
+	// The listing of open rollbacks also carries the route slot's current
+	// generation, the one binding no other public read exposes.
+	existing, generation, err := selfDevOpenRollbacks(x.c, computerID, target.EffectiveHead)
+	if err != nil {
+		return nil, err
+	}
 	if head.PendingTransitionRef != "" {
 		// A first call that landed but lost its answer leaves the head
 		// pending on its own rollback event: answer with that operation.
-		if existing, err := selfDevInFlightRollback(x.c, computerID, target.EffectiveHead); err != nil {
-			return nil, err
-		} else if existing != nil {
+		if existing != nil {
 			fmt.Fprintf(x.c.stderr, "choir self-dev rollback: a rollback to %s is already in flight; not posting another\n", targetID)
 			return selfDevRollbackFinish(x, computerID, existing)
 		}
 		return nil, fmt.Errorf("a transition is pending on the event head (%s); wait for it to settle (choir self-dev list --computer %s) before rolling back", head.PendingTransitionRef, computerID)
 	}
-
-	generation, err := selfDevRouteGeneration(x.c, computerID)
-	if err != nil {
-		return nil, err
+	if generation == 0 {
+		return nil, fmt.Errorf("the operations listing reports no route generation for %s (its route does not resolve)", computerID)
 	}
 	key := x.trim("idempotency_key")
 	if key == "" {
@@ -552,48 +555,23 @@ func selfDevRollbackFinish(x *call, computerID string, raw json.RawMessage) (any
 	return &selfDevRollbackResult{raw: settled, code: code}, nil
 }
 
-// selfDevInFlightRollback is the open rollback operation whose target is the
-// given effective head, if there is one.
-func selfDevInFlightRollback(c *client, computerID, targetHead string) (json.RawMessage, error) {
+// selfDevOpenRollbacks lists the computer's rollback_pending operations and
+// returns the one whose target is the given effective head, if any, with the
+// route slot generation the listing reports (0 when it reports none).
+func selfDevOpenRollbacks(c *client, computerID, targetHead string) (json.RawMessage, uint64, error) {
 	var listing struct {
-		Operations []json.RawMessage `json:"operations"`
+		Operations      []json.RawMessage `json:"operations"`
+		RouteGeneration uint64            `json:"route_generation"`
 	}
 	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"rollback_pending"}}.Encode()
 	if err := c.do(http.MethodGet, path, nil, &listing); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for _, raw := range listing.Operations {
 		var operation selfDevRollbackTarget
 		if json.Unmarshal(raw, &operation) == nil && operation.BaseHead == targetHead {
-			return raw, nil
+			return raw, listing.RouteGeneration, nil
 		}
 	}
-	return nil, nil
-}
-
-// selfDevRouteGeneration reads the computer's current route generation from
-// the compute status route, the public read of the ComputerVersion route
-// slot the guest compares expected_route_generation against.
-func selfDevRouteGeneration(c *client, computerID string) (uint64, error) {
-	var status struct {
-		CurrentComputer struct {
-			ComputerID        string `json:"computer_id"`
-			ImmutableIdentity *struct {
-				RouteGeneration uint64 `json:"route_generation"`
-				RouteAbsent     bool   `json:"route_absent"`
-				Joined          bool   `json:"joined"`
-			} `json:"immutable_identity"`
-		} `json:"current_computer"`
-	}
-	if err := c.do(http.MethodGet, "/api/compute/status?"+url.Values{"computer_id": []string{computerID}}.Encode(), nil, &status); err != nil {
-		return 0, fmt.Errorf("read route generation: %w", err)
-	}
-	current := status.CurrentComputer
-	if current.ComputerID != computerID {
-		return 0, fmt.Errorf("compute status answered computer %q, not %q; refusing its route generation", current.ComputerID, computerID)
-	}
-	if current.ImmutableIdentity == nil || current.ImmutableIdentity.RouteAbsent || !current.ImmutableIdentity.Joined || current.ImmutableIdentity.RouteGeneration == 0 {
-		return 0, fmt.Errorf("the compute status reports no joined route generation for %s", computerID)
-	}
-	return current.ImmutableIdentity.RouteGeneration, nil
+	return nil, listing.RouteGeneration, nil
 }

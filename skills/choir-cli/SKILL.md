@@ -51,9 +51,9 @@ and posts the approve decision, which consumes it. It refuses before any write
 unless the operation is `awaiting_approval`. Rollback of an applied operation
 is `choir self-dev rollback --computer=ID --to-operation=APPLIED_OP [--idempotency-key=K] [--wait]`
 (an owner act: the key needs `owner:acts`, plus `computer:self_development:rollback`,
-`computer:self_development:read` and `read:runtime`). It resolves the guest's seven
-bindings from the target operation, `self-dev head` and the compute status route
-generation, refuses a target that is not applied, is the current state or is the
+and `computer:self_development:read`). It resolves the guest's seven
+bindings from the target operation, `self-dev head` and the operations listing's
+route generation, refuses a target that is not applied, is the current state or is the
 genesis baseline before posting, and prints the guest's answer unchanged (a 409
 included); `--wait` polls the rollback operation to `rolled_back`.
 
