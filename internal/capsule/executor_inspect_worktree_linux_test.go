@@ -109,7 +109,11 @@ func TestInspectGrantedWorktreeHashesTheLiveReleaseTree(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The digest step refuses an empty subject tree: seed a platform file.
 	if err := os.MkdirAll(filepath.Join(merged, "workspace", "platform"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(merged, "workspace", "platform", "App.svelte"), []byte("after\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	caps := &Capsule{ID: "capsule-release", State: StateActive, MergedDir: merged, UpperDir: upper}
