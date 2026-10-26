@@ -42,3 +42,40 @@ deploy that lands while a candidate awaits approval may do the same.
 
 Next: a read-only code investigation of where bundleRoot points, what a
 guest refresh does to it, and what a claude-mode Freeze writes.
+
+## Investigation (00:5x, read-only, Sonnet; confirmed from code unless marked)
+
+- bundleRoot is `/mnt/persistent/choir-updater/incoming/<BundleDigest>`
+  (api_self_development_patch.go:65, api_self_development_visual.go:89;
+  nix/autoputer-vm.nix:121,889), on the VM's persistent data.img. A
+  refresh kills Firecracker (vmmanager/receipts.go:56, proc.Kill) and
+  boots the same data.img (manager.go:1731-1747). The 409 branches sit
+  after the existence and read checks, so the directory and a file
+  existed; one message covers three different failures (strict decode,
+  digest, identity), so the 409 cannot say which.
+- No boot step touches `incoming/<digest>` for an awaiting_approval
+  operation; no boot step rewrites BaseHead, CapsuleID or BundleDigest;
+  claude-capable capsules write the same bundle struct (hypothesis 2 and
+  3 have no code path).
+- Leading hypothesis: bundle.json is written with a plain WriteFile and
+  the directory renamed with no fsync (tools_capsule.go:533,542), and the
+  VM was SIGKILLed 35 to 40 seconds later, about the ext4 dirty-expire
+  window, so the file on disk is short, empty or stale. Not confirmable
+  without reading the guest disk, which FP0 does not do.
+- Approving would fail the same way: the materializer
+  (self_development_materializer.go:320-333) reads bundle.json only and is
+  stricter than the reader, and its reconcile re-arms a 60 s retry.
+
+## Fix shapes
+
+1. fsync bundle.json, the draft and source.patch, and their directory, in
+   Freeze and finalize.
+2. The guest syncs the filesystem after it writes the planned-restart
+   marker, before vmctl kills it (a refresh is a hard kill; anything else
+   written without fsync is exposed the same way).
+3. The reader names which check failed (decode, digest, identity).
+4. Optional: restore bundle.json from the tape artifact whose digest is
+   the operation's BundleDigest.
+
+Disposition of selfdev-aae30fb7: rejected with the reason, and the round
+is repaired by a fresh freeze.
