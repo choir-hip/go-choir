@@ -34,7 +34,7 @@ const packagesRoute = "/internal/platform/packages"
 
 // maxTrackListings bounds one (owner, package) listing read. S2 lists one
 // version per release; S3's state changes add versions.
-const maxTrackListings = 1000
+var maxTrackListings = 1000
 
 // PackageBaseStatus is the package base store in corpusd's health detail:
 // FP0 reads the shallow flag without SSH before S2's proof (design 3.2,
