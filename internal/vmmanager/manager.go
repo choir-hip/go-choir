@@ -367,6 +367,13 @@ type ManagerConfig struct {
 	// capsule_tunnel_identity.go); everyone else keeps the image's observe.
 	CapsuleTunnelEnforceOnly []string
 
+	// CheckpointCadenceOnly runs the automatic checkpoint cadence on the
+	// computers it names (VM_CHECKPOINT_CADENCE_ONLY; checkpoint_cadence.go),
+	// with these values; empty: off. The guest compiles the cadence off.
+	CheckpointCadenceOnly        []string
+	CheckpointCadenceEveryEvents int
+	CheckpointCadenceEvery       string
+
 	// FirecrackerNext is a second VMM build launched only for the computers
 	// it selects (VM_FIRECRACKER_NEXT_*; vmm_next.go). Empty BinPath: off.
 	FirecrackerNext FirecrackerNextConfig
