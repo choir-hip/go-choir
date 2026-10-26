@@ -79,6 +79,9 @@ var metadataLookupKeys = []metadataLookupKey{
 	// are what another owner's catalog pages through.
 	{Kind: "choir.package_release", Field: "release_id"},
 	{Kind: "choir.release_listing", Field: "widened"},
+	// The entity layer's duplicate check (R1, review 298 F2): a new
+	// entity's normalised name against the owner's entity rows.
+	{Kind: "choir.entity", Field: "normalized"},
 }
 
 // lookupKeyField returns the keyed field of kind, if any.

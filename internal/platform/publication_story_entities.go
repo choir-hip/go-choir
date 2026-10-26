@@ -162,6 +162,10 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 
 	now := time.Now().UTC()
 	seen := map[string]bool{}
+	// R1 within the request (review 298 F1): Store B holds no row of a new
+	// entity yet, so two new entities of one normalised name under two ids
+	// (a minted id and a Wikidata id) are compared here.
+	newNames := map[string]string{} // normalised name -> the first new id
 	var out []checkedEntity
 	for i, e := range req.Entities {
 		n := i + 1
@@ -208,6 +212,10 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 		if id != want {
 			return "", nil, nil, fmt.Errorf("entity %d: id %s does not derive from its name or Wikidata id (want %s)", n, id, want)
 		}
+		if first, ok := newNames[norm]; ok && first != id {
+			return "", nil, nil, fmt.Errorf("entity %d: %q has the normalised name of %s, new in this request; attach one node, not two", n, name, first)
+		}
+		newNames[norm] = id
 		// R1: another node of the same normalised name is a duplicate.
 		same, err := og.ListObjectsByMetadataForOwner(ctx, string(ogKindEntity), "$.normalized", norm, owner, 4)
 		if err != nil {

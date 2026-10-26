@@ -37,6 +37,9 @@ func relatedEntitiesOn() bool {
 // candidate must be a published Autopaper story and pass frontStory now.
 func (s *Service) relatedEntityCandidates(ctx context.Context, og *ObjectGraphStore, selfPub string, t relatedTuning) ([]relatedCandidate, error) {
 	live := false
+	// The read keeps the oldest mentionEdgeLimit live edges (ORDER BY
+	// created_at); a story's live mentions are one per attached entity, at
+	// most 12 a call and a few calls a story, far under the bound.
 	own, err := og.ListEdges(ctx, objectgraph.EdgeFilter{FromID: selfPub, Kind: edgeMentionsEntity, Tombstone: &live, Limit: mentionEdgeLimit})
 	if err != nil {
 		return nil, fmt.Errorf("related: entities of %s: %w", selfPub, err)
@@ -78,7 +81,14 @@ func (s *Service) relatedEntityCandidates(ctx context.Context, og *ObjectGraphSt
 				citing[e.FromID] = e.CreatedAt.Unix()
 			}
 		}
-		citing[selfPub] = citing[selfPub] // the story counts toward its entity's stories
+		if _, ok := citing[selfPub]; !ok {
+			citing[selfPub] = 0 // the story counts toward its entity's stories
+		}
+		// The hub count is of raw central citers, before eligibility: a
+		// retracted, private or non-Autopaper citer counts toward the cut
+		// though the walk would not show it. The approximation only makes a
+		// hub sooner (never links more), and costs no row reads per entity
+		// (review 299, documented rather than read).
 		if len(citing) > t.HubEntityStories {
 			continue
 		}

@@ -110,9 +110,11 @@ func (rt *Runtime) system1Limits(ctx context.Context, ownerID, computerID string
 }
 
 // system1ChannelTape reads the computer's system1:<computer> channel: the
-// System1 judgments and the story.relation records that rest on them. This is
+// System1 judgments and the story.relation and story.entities records that
+// rest on them. This is
 // the one call site of the acknowledged channel read (telemetry_readclass_test.go
-// pins it to this file); both kinds are acknowledged, so it needs no union.
+// pins it to this file); all three kinds are acknowledged, so it needs no
+// union.
 func (rt *Runtime) system1ChannelTape(ctx context.Context, owner, computer string) ([]types.EventRecord, error) {
 	return rt.store.ListAcknowledgedEventsByChannel(ctx, owner, system1Channel(computer), system1TapeLimit)
 }
