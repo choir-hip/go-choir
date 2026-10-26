@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // MaxProposals bounds the phrases a story proposes.
@@ -321,4 +323,16 @@ func isAcronymish(s string) bool {
 		}
 	}
 	return true
+}
+
+// WireProposals puts proposals on the wire.
+func WireProposals(ps []Proposal) []types.EntityProposal {
+	out := make([]types.EntityProposal, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, types.EntityProposal{
+			Phrase: p.Phrase, Count: p.Count, Sentences: p.Sentences, InTitle: p.InTitle, InLead: p.InLead,
+			Acronym: p.Acronym, Rarity: p.Rarity, Score: p.Score, Aliases: p.Aliases,
+		})
+	}
+	return out
 }
