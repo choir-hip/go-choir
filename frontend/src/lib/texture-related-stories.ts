@@ -24,9 +24,9 @@ export type RelatedLink = {
   updated_at?: string;
   route: { bare: string; permalink?: string };
   section?: string;
-  /** Why the story is related: "capture" (a shared source) or "source" (a recaptured page). */
+  /** Why the story is related: a judged relation (same_incident, later_development, same_subject), "entity" (a central entity both are about), "capture" (a shared source) or "source" (a recaptured page). */
   reason?: string;
-  shared?: { events?: number; sources?: number; citers?: number };
+  shared?: { events?: number; sources?: number; citers?: number; entities?: number };
 };
 
 export type RelatedStories = {

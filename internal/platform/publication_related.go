@@ -28,6 +28,12 @@ package platform
 //     candidates. A judged pair needs no score and ranks ahead of capture
 //     links, by relation; the threshold and the hub cutoff above are not
 //     changed.
+//  7. Unless CORPUSD_RELATED_ENTITIES=off, the stories centrally about an
+//     entity the story is centrally about (mentions_entity edges, written by
+//     the research desk's choir.Relate, publication_related_entities.go) add
+//     candidates. An entity central to more than HubEntityStories stories
+//     has no vote. An entity link needs no score and ranks after judged
+//     pairs and ahead of capture links, by shared entities.
 
 import (
 	"context"
@@ -68,16 +74,21 @@ const (
 
 // relatedMode is the mode a walk now runs in.
 func relatedMode() string {
+	mode := relatedModeCaptures
 	if relatedStoryOn() {
-		return relatedModeRelations
+		mode = relatedModeRelations
 	}
-	return relatedModeCaptures
+	if relatedEntitiesOn() {
+		mode += relatedModeEntitiesSuffix
+	}
+	return mode
 }
 
 // Link reasons.
 const (
 	relatedReasonCapture = "capture" // a capture both stories cite
 	relatedReasonSource  = "source"  // a recapture of one page
+	relatedReasonEntity  = "entity"  // a central entity both stories are about
 )
 
 // relatedTuning is the one table of starting values (design 5.5, D5): they
@@ -98,6 +109,9 @@ type relatedTuning struct {
 	// MaxRelatedEdges bounds a story's related_story neighbours: more is a
 	// hub for that signal and gives no vote, on write and on read.
 	MaxRelatedEdges int
+	// HubEntityStories: an entity central to more than this many stories
+	// has no vote (phase 3 §4.1: hubs are down-weighted as in phase 1).
+	HubEntityStories int
 	// HalfLifeDays and RecencyFloor shape the recency factor.
 	HalfLifeDays float64
 	RecencyFloor float64
@@ -120,22 +134,23 @@ type relatedTuning struct {
 
 func defaultRelatedTuning() relatedTuning {
 	return relatedTuning{
-		MaxCaptures:     24,
-		MaxSiblings:     20,
-		MaxRawHits:      200,
-		HubStories:      6,
-		MaxCandidates:   40,
-		MaxRelatedEdges: 20,
-		HalfLifeDays:    7,
-		RecencyFloor:    0.2,
-		SameSection:     1.1,
-		Threshold:       1.0,
-		DefaultLinks:    5,
-		MaxLinks:        10,
-		Budget:          400 * time.Millisecond,
-		TTL:             5 * time.Minute,
-		CacheCap:        500,
-		VersionPubCap:   50000,
+		MaxCaptures:      24,
+		MaxSiblings:      20,
+		MaxRawHits:       200,
+		HubStories:       6,
+		MaxCandidates:    40,
+		MaxRelatedEdges:  20,
+		HubEntityStories: 30,
+		HalfLifeDays:     7,
+		RecencyFloor:     0.2,
+		SameSection:      1.1,
+		Threshold:        1.0,
+		DefaultLinks:     5,
+		MaxLinks:         10,
+		Budget:           400 * time.Millisecond,
+		TTL:              5 * time.Minute,
+		CacheCap:         500,
+		VersionPubCap:    50000,
 	}
 }
 
@@ -173,6 +188,9 @@ type RelatedShared struct {
 	Events  int `json:"events"`
 	Sources int `json:"sources"`
 	Citers  int `json:"citers"`
+	// Entities counts the central entities both stories are about (each
+	// central to at most HubEntityStories stories).
+	Entities int `json:"entities"`
 }
 
 // relatedCache is the in-process state of the related walk: the answer
@@ -313,6 +331,9 @@ type relatedCandidate struct {
 	// (related_story edge); "" for a capture-only candidate. A judged
 	// pair needs no score: the judgment is its evidence.
 	Relation string
+	// Entities counts the shared central entities that voted; a candidate
+	// with any needs no score.
+	Entities int
 }
 
 // recencyFactor halves every HalfLifeDays, never below RecencyFloor; a
@@ -348,7 +369,7 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 		score := c.Raw * recencyFactor(age, t)
 		// A judged pair (c.Relation) needs no score; any other candidate
 		// must clear the threshold.
-		if c.Relation == "" && score < t.Threshold {
+		if c.Relation == "" && c.Entities == 0 && score < t.Threshold {
 			continue
 		}
 		rank := score
@@ -359,8 +380,8 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 	}
 	sort.SliceStable(kept, func(i, j int) bool {
 		a, b := kept[i], kept[j]
-		// Judged pairs first, by relation, then newer; then capture links
-		// by rank.
+		// Judged pairs first, by relation, then newer; then entity links
+		// by shared entities, then rank; then capture links by rank.
 		if (a.c.Relation != "") != (b.c.Relation != "") {
 			return a.c.Relation != ""
 		}
@@ -368,8 +389,13 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 			if ra, rb := storyRelationRank[a.c.Relation], storyRelationRank[b.c.Relation]; ra != rb {
 				return ra < rb
 			}
-		} else if a.rank != b.rank {
-			return a.rank > b.rank
+		} else {
+			if a.c.Entities != b.c.Entities {
+				return a.c.Entities > b.c.Entities
+			}
+			if a.rank != b.rank {
+				return a.rank > b.rank
+			}
 		}
 		if !a.c.Story.UpdatedAt.Equal(b.c.Story.UpdatedAt) {
 			return a.c.Story.UpdatedAt.After(b.c.Story.UpdatedAt)
@@ -385,13 +411,16 @@ func rankRelated(self FrontStory, cands []relatedCandidate, now time.Time, t rel
 		if k.c.Exact {
 			reason = relatedReasonCapture
 		}
+		if k.c.Entities > 0 {
+			reason = relatedReasonEntity
+		}
 		if k.c.Relation != "" {
 			reason = k.c.Relation
 		}
 		links = append(links, RelatedLink{
 			FrontStory: k.c.Story,
 			Reason:     reason,
-			Shared:     RelatedShared{Sources: k.c.Sources, Citers: k.c.Citers},
+			Shared:     RelatedShared{Sources: k.c.Sources, Citers: k.c.Citers, Entities: k.c.Entities},
 		})
 	}
 	return links
@@ -651,14 +680,21 @@ func (s *Service) relatedCandidates(ctx context.Context, og *ObjectGraphStore, s
 	if err != nil {
 		return nil, err
 	}
-	if !relatedStoryOn() {
-		return cands, nil
+	if relatedStoryOn() {
+		judged, err := s.relatedStoryCandidates(ctx, og, selfPub, t)
+		if err != nil {
+			return nil, err
+		}
+		cands = mergeRelatedStoryCandidates(cands, judged)
 	}
-	judged, err := s.relatedStoryCandidates(ctx, og, selfPub, t)
-	if err != nil {
-		return nil, err
+	if relatedEntitiesOn() {
+		shared, err := s.relatedEntityCandidates(ctx, og, selfPub, t)
+		if err != nil {
+			return nil, err
+		}
+		cands = mergeRelatedEntityCandidates(cands, shared)
 	}
-	return mergeRelatedStoryCandidates(cands, judged), nil
+	return cands, nil
 }
 
 func (s *Service) relatedCaptureCandidates(ctx context.Context, og *ObjectGraphStore, self FrontStory, selfPub string, captures []string, t relatedTuning, now time.Time) ([]relatedCandidate, error) {
