@@ -70,3 +70,33 @@ signed-out capture cannot show windows; FP0 does the runtime check after the
 freeze (`_runs/design/wm-request-r2.txt`). Round 2 waits for train 4 (the
 stranded-freeze fix and live binary reuse) so it does not rebuild the binary
 for a frontend change.
+
+## The window manager, round 1 follow-up and round 2 (selfdev-7d9f19ce, selfdev-7fc55caa), 2026-10-26
+
+After round 1 failed, management asked for "a bounded follow-up" on its own;
+engineering froze again on the same trajectory (selfdev-7d9f19ce, created
+06:56:20) and the verify failed it at 06:57:29 for the same reason (no signed-in
+evidence). That kept b@c busy, so it took train 4 only at 06:58:48.
+
+Round 2 (`_runs/design/wm-request-r2.txt`) was sent 06:59:18 on b@c at
+df5480a77, continued onto trajectory 2b229b5d (the document had settled),
+froze at 07:50:19 and passed management's verify (awaiting approval 07:51:50).
+Patch from df5480a77, 2155 lines.
+
+| Check | Result | Evidence |
+|---|---|---|
+| Maximize square, no shadow, no border, all presets | pass (Kintsugi ring gone) | computed style "none, 0px x4, 0px" |
+| Phone: windows show maximized, restored ones too; buttons pressable in normal mode | pass | elementFromPoint on each button |
+| Resize from left and top edges; snap with preview | pass | wm2-shots |
+| Restore (button, double-click, drag down, un-minimize) | **fail: every restore throws** `ReferenceError: withoutShowDesktopMarkers is not defined`; the rewrite deleted the helper and left 8 callers | page error; `tsc --checkJs` reports TS2304 at 8 lines; main restores, rounds 1 and 2 do not |
+| Resize past the right edge | fail: the window grows off screen (150 to 1430 on 1280) | probe |
+| Patch hygiene | fail: 17 Playwright failure files under frontend/test-results | patch file list |
+
+Round 1's judgment missed the restore failure: its probe never pressed Restore
+on a window it had maximized. Verdict: reject (08:01:25, reason recorded).
+Round 3 (`_runs/design/wm-request-r3.txt`, sent 08:02:01, trajectory ce030d08)
+asks for the helper back with a `tsc --checkJs` gate for undefined names, the
+test-results files deleted, and resize capped at the free area's edges.
+Lesson: management's verify passed a candidate whose central function throws
+on first use; a reading of the diff cannot catch an undefined name, a type
+check can, so the direction now names one.
