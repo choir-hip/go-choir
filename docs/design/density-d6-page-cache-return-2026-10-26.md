@@ -118,7 +118,7 @@ that S5 does not ship without it (§12).
 | Balloon statistics | `balloon_stats.go` (`VM_BALLOON_STATS_ONLY`); reader `GuestMemoryStats`; route `GET /internal/vmctl/memory/balloon` | b@c only | inert case and b@c probe PASS (10-24) |
 | Free page hinting | never sent (developer preview, documented corruption race) | nowhere | n/a |
 | Balloon inflation (`PATCH /balloon`) | **none**: `fcapi.go` has `Balloon` and `BalloonStatistics` (GET) only | nowhere | n/a |
-| virtio-mem hotplug and unplug | `memory_hotplug.go`, `unplugBeforeSnapshot` | `VM_MEMORY_HOTPLUG=off` | built; moves only the hotplug region |
+| virtio-mem hotplug and unplug | `memory_hotplug.go`, `unplugBeforeSnapshot` | `VM_MEMORY_HOTPLUG=off` | deleted 2026-10-26 (`6013d77d3`); moved only the hotplug region |
 | DAMON_RECLAIM boot arguments | `guest_reclaim.go` (`VM_GUEST_RECLAIM_ONLY`) | two test computers | negative or unread (§2) |
 | `memory.reclaim` on a capsule cgroup at teardown | `internal/capsule/teardown_reclaim.go`; raw write `job_memory.go` `writeCgroupFile` (unexported) | every guest (`CHOIR_CAPSULE_TEARDOWN_RECLAIM`, default on) | D3 drill; part of outcome C's burst end |
 | Guest memory reader | `internal/guestmem` (meminfo incl. `Active(file)`, `Inactive(file)`, `Shmem`, `Dirty`; memory by cgroup; page cache by file tree) | every guest, read only | SDC RES-07 |

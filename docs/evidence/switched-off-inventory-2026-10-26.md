@@ -130,3 +130,13 @@ Not to flip: `intake.*`, `research.system1`, `research.related_story` (paper-spe
 - Done since: body caps `enforce`; retention modes `active`; hotplug `off`; jailer wave 2a (premium_always_on); GUEST_DNS to `class:primary`; b@c's whole set on (SW-01).
 - Still stale in the older doc: "PUT /api/computer-settings" (it is POST), "nine settings", and B8 (already off).
 - New since: `packages.publish`, `packages.share`, `CHOIR_RELEASE_READS`, `CHOIR_PACKAGE_SHARE_READS`, `CI_REUSE_GREEN_PR_RUN`, `CORPUSD_RELATED_STORY`.
+
+## Deleted 2026-10-26 (lane/delete-dead; owner: "we've got into this habit of writing code but having it switched off")
+
+One commit per item, in the lane's order (SHAs are the lane's; main's differ after landing):
+
+- virtio-mem hotplug controller (item 47): `6013d77d3`. Whole feature: vmctl controller and routes, vmmanager device and snapshot shaping, the guest lease hook and health fields, `VM_MEMORY_HOTPLUG=off`.
+- `VMCTL_RETENTION_SHADOW_*` and the shadow plan (item 48): `b021427c6`, with `GET /internal/vmctl/retention-shadow-plan`.
+- `internal/appverbs` and `CHOIR_APP_VERBS` (item 50): `5459c6275`.
+- `FRONT_IMPORTANCE_DIRECT` (item 52): `c4184f8db`.
+- `PROXY_EXPAND_REQUESTERS` (item 49): NOT deleted. The empty list gates nothing today, but the private door is a code path with behavior the public door does not have (an allowlisted owner session is exempt from the per-address throttle and reads the full request history; `internal/proxy/platform_expand.go` `expandOwnerSession`, `caller.owner`), and the whole of `platform_expand_test.go` is written against it. Removing it is a feature removal and a test rewrite, not a switch.
