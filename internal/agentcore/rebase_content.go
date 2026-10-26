@@ -232,8 +232,34 @@ func (rt *Runtime) rebaseReceiptSentence(operationID string) string {
 	if json.Unmarshal(raw, &receipt) != nil || receipt.Schema != rebaseLineageSchema {
 		return ""
 	}
-	return fmt.Sprintf(" This candidate is a rebase of applied change %s onto base %s; its lineage receipt (sha256 %s) records that it still contains that change.",
-		receipt.RebaseOf, carriedBaseLabel(receipt.Base), rebaseReceiptSHA256(raw))
+	return rebaseReceiptText(receipt, rebaseReceiptSHA256(raw))
+}
+
+// rebaseReceiptText is the sentence the apply record carries: the change
+// rebased, the receipt's digest, how many paths applied unchanged and which
+// conflicts were resolved (bounded).
+func rebaseReceiptText(receipt rebaseLineageReceipt, sha string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, " This candidate is a rebase of applied change %s onto base %s; its lineage receipt (sha256 %s) records that it still contains that change", receipt.RebaseOf, carriedBaseLabel(receipt.Base), sha)
+	if n := len(receipt.Clean); n > 0 {
+		noun := "paths"
+		if n == 1 {
+			noun = "path"
+		}
+		fmt.Fprintf(&b, ": %d %s applied unchanged", n, noun)
+	}
+	if len(receipt.Resolved) > 0 {
+		const limit = 10
+		shown := receipt.Resolved
+		more := ""
+		if len(shown) > limit {
+			more = fmt.Sprintf(", and %d more", len(shown)-limit)
+			shown = shown[:limit]
+		}
+		fmt.Fprintf(&b, "; resolved conflicts: %s%s", strings.Join(shown, ", "), more)
+	}
+	b.WriteString(".")
+	return b.String()
 }
 
 // verifyRebaseAtFreeze is Freeze's call: for a run whose assignment a claim
