@@ -353,3 +353,142 @@ events, minutes under the hold. Slice 1 is the safer boot.
   10-minute `go test` timeout (the package is sharded in CI); the focused
   replay, restore, checkpoint, self-development and crash-settlement tests
   pass. Run `scripts/go-test-runtime-shards` before any landing.
+
+## Build findings (2026-10-26, lane x1-slices23: slices 2 and 3)
+
+Slices 2 and 3 are built on `lane/apply-replay-bound` (slice 1b). Slice 4 is
+not built (F10). Where the design and the code disagreed, the code's reading
+and the choice made are recorded here; each is a one-line reversal.
+
+**F1. There is no restore picker to make prefer verified.** Restore takes the
+checkpoint as its operand (`RematerializeFromTape`); the only choice it makes
+is which base to install, and a base is derived from the tape alone, so it is
+neither verified nor unverified. What 4.4 asks for is built another way:
+restore asks the host's verdict first and refuses `not_derivable` before it
+installs anything (409, `ErrCheckpointNotDerivable`); and the host pins the
+judged base under an apply checkpoint's reference, so a restore to it starts
+at the exact head with no tail (`newestPinnedBaseAtOrBelow` already picks the
+newest pin at or below the target).
+
+**F2. Four verdict states, not two.** `pending` (published, not judged),
+`verified`, `not_derivable`, and `unverified` (the host did not or could not
+judge: no base at or below the head and genesis beyond the replay bound, a job
+the host refused or failed three times at that head, a base at another head,
+an invalid witness, or R1). Two outcomes cannot say "not yet" or "cannot tell",
+and calling "cannot tell" `not_derivable` would make restore refuse good
+restore points. Restore refuses only `not_derivable`.
+
+**F3. R1 is named and is `unverified / base_upcast`, never `not_derivable`.**
+The host rebuild always upcasts deposits; a live store without an upcast ledger
+kept its recorded bytes (`matchLiveDepositMode`, `replay_completeness.go`).
+The bind now records the live store's deposit mode in the checkpoint request
+(`deposit_mode`, additive, omitted when empty, so every pre-field digest is
+unchanged). A mismatch is `not_derivable` only when the checkpoint says
+`upcast` (both sides built in one mode); against `retained`, or a checkpoint
+that does not say, it is `unverified / base_upcast` with the differing tables
+named, and restore's own reconstruction (in the live store's mode) decides.
+Equal witnesses are `verified` in every mode. Consequence: a computer whose
+store is retained gets no `not_derivable` verdict until it is upcast; it keeps
+today's restore-time enforcement.
+
+**F4. The verification job is frozen at the checkpoint's head, not the
+computer's.** `EnqueueProjectionJob` freezes the head at enqueue time; by then
+a working computer has moved on, and the rebuilt witness would be another
+state's. `EnqueueCheckpointVerificationJob` targets the checkpoint's own
+sequence and head and seeds from the advertised base when it is at or below
+the checkpoint, else from the newest recorded base that is (a base published
+below the advertised one is recorded in `computer_projection_bases` so it can
+be found by sequence). With no base in reach and the checkpoint beyond the
+10,000-event bound it refuses by name (`unverified / no_base`) instead of
+queuing a job that can only block the computer's cadence. The job row is one
+per computer, so verification and checkpointd's own cadence job take turns;
+the oldest unjudged checkpoint per computer goes first, and each rebuild seeds
+the next. A cadence base that lands on a checkpoint's head judges it too. The
+verdict pass runs on checkpointd's minute timer and is best effort (a verdict
+problem is recorded on the heartbeat and never stops cadence jobs).
+Deploy order: corpusd before checkpointd (corpusd creates
+`computer_checkpoint_verdicts`; checkpointd applies no DDL), and corpusd before
+the guests (a guest on this build sends `deposit_mode`, which an older corpusd's
+strict decoder refuses as an invalid checkpoint request, apply binds included).
+
+**F5. Pins are for apply checkpoints, not the cadence (a deviation from the
+wording of 4.1).** 4.1 says every bind pins the advertised base; 4.3 releases
+only apply pins ("until two later applies have succeeded"). With a cadence
+bind every 3.5 to 6 minutes on the paper, pinning each would hold one base
+(1.7 to 8 GiB) per bind with no release path until slice 4. So the
+owner-recovery bind (the cadence's) and the host's judged-base pin skip the
+pin; the apply and the platform update keep theirs. The cost, stated: a
+cadence checkpoint restores with no tail only while its base is among the
+newest two (the existing retention); older ones fall back to the nearest pin or
+the advertised base within the 10,000-event bound, or refuse. "Put my computer
+back to this morning" is not delivered until slice 4's one-per-day keep.
+Reversal: the `pinBase` argument of `bindCheckpoint` and the
+`OwnerRecovery` test in `judgeAgainstBase`.
+
+**F6. The cadence is built; its host plumbing and its measurement are not.**
+Defaults are compiled in (2,500 events, 60 minutes); `CHOIR_CHECKPOINT_EVERY_EVENTS`
+and `CHOIR_CHECKPOINT_EVERY` are read from the process environment (`0` turns a
+trigger off; a typo keeps the default). The path that writes them into the
+guest (vmctl, kernel cmdline, `go-choir-extract-cmdline` into
+`/run/go-choir-autoputer.env`) is not built, so the fleet cannot be tuned
+without a guest release yet. R2 is still unmeasured: the live extract's time
+under the append hold on the paper. Until it is, the cadence limits itself:
+binds are at least a minute apart and at least twenty times the last hold apart
+(at most about 5% of the time held, whatever the store's size), a failing bind
+backs off 5, 10, 20 up to 60 minutes, and the hold's length is published as
+`last_bind_millis` in the listing, which is the measurement R2 asks for. Whoever
+deploys this should read that number on the paper first and have the plumbing
+ready; as built, the compiled defaults go live on every computer at deploy.
+
+**F7. The owner act that reopens a closed cadence is `choir computer
+resume-checkpoints`.** 4.2 says a tick that crashes the computer twice turns the
+cadence off "until an owner act" without naming one. It is a CLI-only owner act
+(`POST /api/computers/{id}/lifecycle/resume-checkpoints`, needs the owner's
+session or an `owner:acts` key), and it only forgets the counted starts and the
+backoff. The two-crash count is the existing durable attempt file
+(`spendSettlementAttempt`, reason `checkpoint_cadence`, limit 2); a tick that
+returns, in success or error, is forgotten, so only a bind that never returned
+stays counted. A runtime with no durable attempt count closes the cadence.
+
+**F8. What was removed and added.** Removed: `POST /lifecycle/checkpoint` (the
+guest handler) and `choir computer checkpoint`; the proxy's special case and
+long budget for that path. Added: `GET /api/computers/{id}/lifecycle/checkpoints`
+(the computer's checkpoints with the host's verdict on each and the cadence's
+state; `?checkpoint_digest=` returns one checkpoint with its receipt, which is
+a `--checkpoint-file` operand for restore), `choir computer checkpoints
+[--digest D]`, corpusd's `GET /internal/computers/checkpoints/list` and
+`/checkpoints/verdict`, and the guest credential's `ListCheckpoints` and
+`FetchCheckpointByDigest` (the receipt is verified against the platform key).
+The cadence counts from the platform's newest checkpoint, the one authority
+for "since the last checkpoint", and asks the platform only when a checkpoint
+could be due. An apply's, a rollback's and a platform update's checkpoint reset
+the count by being the newest.
+
+**F9. Tests changed.** Four tests bound a checkpoint through the deleted route;
+they call `BindCheckpointRestoreSet` directly. The proxy's long-budget test
+moves from the deleted route to restore. Three assertions that the owner-
+recovery bind pins a base now assert it does not, and a new test keeps the
+apply bind's pin covered.
+
+**F10. Slice 4 is not built: 4.3 does not fully specify it.** (a) "Pin release
+after two later applies have succeeded" needs a count of successful applies and
+an owner for the release; the release route needs `computer:lifecycle`, which
+the guest's capability does not carry, and the host has no apply-success
+signal. (b) "One per day for 7 days" is a new selection rule inside artifact GC
+(`projectionBasePins`), which today keeps the newest two bases per computer,
+every pin and in-flight seeds; it needs day buckets and a join to the verdict
+table, in a protected surface with its own history
+([platform-artifact-retention-2026-10-22](../problems/platform-artifact-retention-2026-10-22.md)).
+(c) "An unverified or `not_derivable` base is removed once a newer verified one
+exists" confuses the base (always tape-derived, a valid replay start) with the
+checkpoint's live witness (what the verdict judges); it needs a ruling on what
+is deleted. (d) F5 shows retention is not optional for the cadence's value: it
+is what turns "newest two" into "this morning". It wants its own design pass.
+
+**F11. Host load, to watch after deploy.** Each checkpoint costs one host
+rebuild (43 to 56 s, checkpointd's caps unchanged). When the guest cadence is
+every 2,500 events it replaces checkpointd's own cadence rebuild (the base lands
+at the checkpoint's head and the watermark is current), so the rate is the same
+as today's. The extra rebuilds are the time-triggered ones (a quiet computer,
+every 60 minutes with at least one event) and each apply's. The queue is one
+job per computer, so a burst on one computer cannot starve another.

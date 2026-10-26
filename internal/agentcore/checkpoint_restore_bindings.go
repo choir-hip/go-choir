@@ -51,6 +51,18 @@ type checkpointPublishFunc func(ctx context.Context, binding checkpointBinding) 
 // is not the head after it on a computer that is working. publish nil
 // returns the binding without publishing.
 func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
+	return rt.bindCheckpoint(ctx, computerID, releaseDigest, files, publish, true)
+}
+
+// bindCheckpoint is bindCheckpointAtHead with the pin chosen by the caller.
+// An apply or a platform update pins the advertised base under its checkpoint,
+// so a restore to it, or a rollback of it, keeps a start point after the
+// advertised base moves on. The cadence's owner-recovery checkpoints pin none:
+// there is one every few minutes, a pin has no release path until the
+// retention slice, and the bases of recent checkpoints are kept by the newest-
+// two rule while they are new (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+// Build findings).
+func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc, pinBase bool) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
 	if rt == nil || rt.store == nil || rt.eventAppender == nil {
 		return checkpointBinding{}, nil, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
 	}
@@ -86,8 +98,10 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 				return fmt.Errorf("self-development checkpoint: %w", err)
 			}
 			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, DepositMode: depositMode}
-			if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
-				return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
+			if pinBase {
+				if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
+					return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
+				}
 			}
 			if publish == nil {
 				return nil

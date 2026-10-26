@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -750,13 +751,75 @@ func (r PlatformKeyResolver) ResolveReceiptKey(domain, computerID, keyID string,
 	return append(ed25519.PublicKey(nil), r.PublicKey...), nil
 }
 
-// ListCheckpoints reads this computer's checkpoint listing, newest first.
+// ListCheckpoints reads this computer's checkpoint listing, newest first, with
+// the host's verdict on each. Any answer but a listing is an error: an outage
+// is not "no checkpoint".
 func (g *GuestCredentials) ListCheckpoints(ctx context.Context, computerID string, limit int) (selfdevprotocol.CheckpointList, error) {
-	return selfdevprotocol.CheckpointList{}, fmt.Errorf("not implemented")
+	if g == nil || computerID != g.computerID {
+		return selfdevprotocol.CheckpointList{}, fmt.Errorf("guest credential: checkpoint listing computer binding mismatch")
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return selfdevprotocol.CheckpointList{}, err
+	}
+	query := url.Values{"computer_id": {computerID}}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, g.baseURL+"/internal/computers/checkpoints/list?"+query.Encode(), nil)
+	if err != nil {
+		return selfdevprotocol.CheckpointList{}, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := g.http.Do(request)
+	if err != nil {
+		return selfdevprotocol.CheckpointList{}, fmt.Errorf("guest credential: list checkpoints: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return selfdevprotocol.CheckpointList{}, fmt.Errorf("guest credential: checkpoint listing refused with status %d", response.StatusCode)
+	}
+	var list selfdevprotocol.CheckpointList
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&list); err != nil {
+		return selfdevprotocol.CheckpointList{}, fmt.Errorf("guest credential: decode checkpoint listing: %w", err)
+	}
+	return list, nil
 }
 
 // FetchCheckpointByDigest returns one published checkpoint with its receipt,
-// verified against the platform-control key, or nil when there is none.
+// verified against the platform-control key, or nil when there is none: the
+// artifact an owner restores from.
 func (g *GuestCredentials) FetchCheckpointByDigest(ctx context.Context, computerID, checkpointDigest string) (*selfdevprotocol.CheckpointResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+	if g == nil || computerID != g.computerID || strings.TrimSpace(checkpointDigest) == "" {
+		return nil, fmt.Errorf("guest credential: checkpoint fetch computer binding mismatch")
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{"computer_id": {computerID}, "checkpoint_digest": {checkpointDigest}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, g.baseURL+"/internal/computers/checkpoints/list?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := g.http.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("guest credential: fetch checkpoint: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("guest credential: checkpoint fetch refused with status %d", response.StatusCode)
+	}
+	var result selfdevprotocol.CheckpointResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 256<<10)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("guest credential: decode checkpoint: %w", err)
+	}
+	if result.Checkpoint.Request.ComputerID != computerID || result.Checkpoint.Digest != checkpointDigest || result.Receipt.Kind != selfdevprotocol.ReceiptKindCheckpoint || result.Receipt.ComputerID != computerID || result.Receipt.ArtifactDigest != result.Checkpoint.Digest || result.Receipt.Verify(g.PublicKey()) != nil {
+		return nil, fmt.Errorf("guest credential: fetched checkpoint binding failed")
+	}
+	return &result, nil
 }

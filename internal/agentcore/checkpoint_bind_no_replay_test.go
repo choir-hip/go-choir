@@ -264,18 +264,34 @@ func TestCheckpointBindWithoutAdvertisedBaseBindsUnpinned(t *testing.T) {
 	}
 }
 
-// Failure mode 6: a base source that fails to answer is not "no base". The
-// checkpoint is not published unpinned; the bind fails and the caller retries.
-func TestCheckpointBindRefusesWhenTheBaseSourceCannotAnswer(t *testing.T) {
+// Failure mode 6: a base source that fails to answer is not "no base". An
+// apply's checkpoint (which pins) is not published unpinned; the bind fails and
+// the caller retries. The cadence's bind pins nothing, so it does not need the
+// source and still publishes.
+func TestApplyCheckpointBindRefusesWhenTheBaseSourceCannotAnswer(t *testing.T) {
 	nf := newNoReplayFixture(t, "computer-bind-source-down")
 	nf.base.watermarkErr = errors.New("corpusd unreachable")
-
-	_, err := nf.rt.BindCheckpointRestoreSet(context.Background(), nf.rt.cfg.ComputerID)
-	if err == nil {
-		t.Fatal("a bind that could not read the advertised base published a checkpoint")
+	ctx := context.Background()
+	manifest, err := nf.rt.ensureCheckpointReleaseManifest(ctx, nf.rt.cfg.ComputerID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(nf.platform.published) != 0 {
-		t.Fatalf("%d checkpoints published without a base answer", len(nf.platform.published))
+	published := 0
+	publish := func(context.Context, checkpointBinding) (selfdevprotocol.CheckpointResponse, error) {
+		published++
+		return selfdevprotocol.CheckpointResponse{}, nil
+	}
+
+	if _, _, err := nf.rt.bindCheckpointAtHead(ctx, nf.rt.cfg.ComputerID, manifest.ContentDigest, manifest.Files, publish); err == nil {
+		t.Fatal("an apply bind that could not read the advertised base went on")
+	}
+	if published != 0 {
+		t.Fatalf("%d checkpoints published without a base answer", published)
+	}
+
+	report, err := nf.rt.BindCheckpointRestoreSet(ctx, nf.rt.cfg.ComputerID)
+	if err != nil || report.PublishedCheckpoint == nil {
+		t.Fatalf("the cadence's bind pins nothing and needs no base source: %v", err)
 	}
 }
 
