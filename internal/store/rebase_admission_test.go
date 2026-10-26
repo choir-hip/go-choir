@@ -62,6 +62,7 @@ func (a *rebaseAdmission) commitNotice(t *testing.T, attempt int, inbox string) 
 	rec, ok := types.NewStackRebaseNotice(types.StackRebaseNotice{
 		TextureInbox: inbox, ComputerID: inboxTestComputer, OperationID: rebaseAdmOp, BootedBase: rebaseAdmBase,
 		StackBase: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Attempt: attempt, DocID: strings.TrimPrefix(inbox, "texture:"),
+		OwnerRetry: attempt > types.RebaseNoticeMaxAttempts,
 	})
 	if !ok {
 		t.Fatal("notice did not build")
@@ -349,4 +350,86 @@ func TestRebaseAdmissionTwoConcurrentOpensProduceOneClaim(t *testing.T) {
 	if claim.AssignmentID != winner {
 		t.Fatalf("claim names %s, the committed open is %s", claim.AssignmentID, winner)
 	}
+}
+
+// U4 slice 8: the owner's retry re-opens a spent pair under attempt 4 or later.
+// Ways it can fail: the later attempt collides with the pair's first claim, so
+// a spent pair stays spent; two opens bind one owner generation; a gap in the
+// attempt numbers lets an older attempt open after the owner retried.
+
+// newRebaseAdmissionAt seeds the root's Cast naming attempt, commits that
+// notice (owner-stamped above the cap) and builds the open for it.
+func newRebaseAdmissionAt(t *testing.T, count, attempt int) *rebaseAdmission {
+	t.Helper()
+	s := openTestStore(t)
+	body := `{"kind":"execution_request","rebase_notice":"` + rebaseAdmNoticeID(attempt) + `"}`
+	seed, err := SeedEngineeringAssignmentAuthorityWithCastBody(s, inboxTestOwner, inboxTestComputer, "master", count, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &rebaseAdmission{s: s, seed: seed}
+	a.commitNotice(t, attempt, seed.TextureInbox)
+	a.open = a.openFor(t, 0, rebaseAdmNoticeID(attempt))
+	return a
+}
+
+func TestRebaseAdmissionOwnerRetryOpensAfterASpentPair(t *testing.T) {
+	a := newRebaseAdmissionAt(t, 2, 4)
+	// The pair was spent by an earlier automatic attempt: its claim stands.
+	first := types.StackRebaseClaim{
+		PairKey: types.StackRebasePairKey(rebaseAdmOp, rebaseAdmBase), OperationID: rebaseAdmOp, BootedBase: rebaseAdmBase,
+		NoticeID: rebaseAdmNoticeID(1), Attempt: 1, AssignmentID: "assignment-earlier",
+	}
+	if err := a.s.PutRebaseNoticeClaim(context.Background(), inboxTestOwner, inboxTestComputer, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.s.OpenEngineeringAssignment(context.Background(), a.open); err != nil {
+		t.Fatalf("an owner retry must open after a spent pair: %v", err)
+	}
+	// Two claims now: the first generation's is untouched, the owner's is its own.
+	gen0, err := a.s.GetRebaseNoticeClaim(context.Background(), inboxTestOwner, inboxTestComputer, types.StackRebasePairKey(rebaseAdmOp, rebaseAdmBase))
+	if err != nil || gen0.AssignmentID != "assignment-earlier" {
+		t.Fatalf("the first claim must stand: %+v %v", gen0, err)
+	}
+	gen1, err := a.s.GetRebaseNoticeClaim(context.Background(), inboxTestOwner, inboxTestComputer, types.StackRebaseClaimKey(types.StackRebasePairKey(rebaseAdmOp, rebaseAdmBase), 4))
+	if err != nil || gen1.AssignmentID != a.open.AssignmentID || gen1.Attempt != 4 || gen1.NoticeID != rebaseAdmNoticeID(4) {
+		t.Fatalf("the owner generation's claim: %+v %v", gen1, err)
+	}
+	// The same owner notice opens one assignment only.
+	second := a.openFor(t, 1, rebaseAdmNoticeID(4))
+	if _, err := a.s.OpenEngineeringAssignment(context.Background(), second); !errors.Is(err, ErrEngineeringAssignmentInvalid) || !strings.Contains(err.Error(), "rebase_notice_claimed") {
+		t.Fatalf("a second open for the owner's notice: %v", err)
+	}
+}
+
+func TestRebaseAdmissionAnOlderAttemptIsSupersededAcrossAGap(t *testing.T) {
+	// Attempt 2 was the last automatic one; the owner retried as 4 (no 3).
+	a := newRebaseAdmissionAt(t, 1, 2)
+	a.commitNotice(t, 4, a.seed.TextureInbox)
+	_, err := a.s.OpenEngineeringAssignment(context.Background(), a.open)
+	if !errors.Is(err, ErrEngineeringAssignmentInvalid) || !strings.Contains(err.Error(), "rebase_notice_superseded") {
+		t.Fatalf("attempt 2 after the owner's attempt 4: %v", err)
+	}
+	a.requireNothingCommitted(t, a.open)
+}
+
+func TestRebaseAdmissionRefusesAnAutomaticNoticeAboveTheCap(t *testing.T) {
+	// An EmitterSystem record at attempt 4 that lacks the owner stamp is not a notice.
+	s := openTestStore(t)
+	body := `{"kind":"execution_request","rebase_notice":"` + rebaseAdmNoticeID(4) + `"}`
+	seed, err := SeedEngineeringAssignmentAuthorityWithCastBody(s, inboxTestOwner, inboxTestComputer, "master", 1, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &rebaseAdmission{s: s, seed: seed}
+	rec := inboxNote(rebaseAdmNoticeID(4), "selfdev-rebase:"+rebaseAdmOp, seed.TextureInbox)
+	rec.EmitterKind = types.CommitmentEmitterSystem
+	rec.Provenance.AgentID = types.RebaseNoticeAgentID
+	rec.SubjectRefs = map[string]string{"operation_id": rebaseAdmOp, "booted_base": rebaseAdmBase, "stack_base": "aaaa", "attempt": "4"}
+	mustCommitInbox(t, s, "unstamped", nil, rec)
+	open := a.openFor(t, 0, rebaseAdmNoticeID(4))
+	if _, err := s.OpenEngineeringAssignment(context.Background(), open); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+		t.Fatalf("an unstamped attempt 4 must be refused: %v", err)
+	}
+	a.requireNothingCommitted(t, open)
 }
