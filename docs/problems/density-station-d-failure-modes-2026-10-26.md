@@ -143,3 +143,61 @@ code commit.
   only); the idle sweep does. Make-room excludes all three.
 - Protected starts (`admit_protected`) are admitted under the floor without
   making room; the backstop is pressure reclaim.
+
+## D3. Idle hibernation reaching primary computers: stopped at the busy-probe check (2026-10-26)
+
+### Problem
+
+D3 drops `VMCTL_IDLE_TIMEOUT` to 10 minutes and turns off the primary
+keepalive, so a primary computer idle for 10 minutes is hibernated. The
+owner rule is that a computer with a live engineering capsule is never
+hibernated. The build spec asks first whether a live capsule shows in the
+three fields vmctl's busy probe reads (`httpGuestBusy`, `internal/vmctl/ownership.go`:
+`running_runs`, `desk_pending_mutations`, `selfdev_active_operations` on the
+guest's `/health`).
+
+### Finding: it does not always show
+
+- `running_runs` is `Runtime.RunningCount()`, the length of `rt.running`
+  (`internal/agentcore/runtime.go`), which holds only runs executing an
+  activation. A passivated engineering run keeps its capsule: "a passivated
+  run is parked, not dead. It keeps its capsule and round on a live runtime"
+  (`assignedEngineeringCapsuleUsable`,
+  `internal/agentcore/engineering_assignment_fate.go`, accepting
+  `RunPassivated` beside `RunPending` and `RunRunning`). Parked, it is not in
+  `rt.running`.
+- `selfdev_active_operations` counts executing, accepted, materializing and
+  rollback_pending operations only; frozen, verified and awaiting_approval
+  are "deliberately excluded" (`activeSelfdevOperations`,
+  `internal/agentcore/runtime.go`). An engineering assignment opens its
+  operation at its first Freeze (`freezeCapsuleEffectBundle`,
+  `internal/agentcore/tools_capsule.go`), so before the first Freeze there
+  is no operation, and a frozen candidate awaiting the owner's decision has
+  one that does not count.
+- The guest already knows the difference: `plannedRestartLiveCapsule`
+  (`internal/agentcore/planned_restart.go`) calls a capsule live when the
+  assignment is not terminal and its disposition is active, freeze_requested,
+  frozen or revoke_requested, and a planned restart refuses on it. It is a
+  count (`live_capsules`) in the planned-restart refusal only. `/health`
+  does not carry it, and the hibernate fence deliberately does not count
+  capsules ("a memory snapshot keeps capsules",
+  `prepareHibernate`, `internal/agentcore/hibernate.go`).
+- So a computer whose engineer is parked, or whose frozen candidate waits for
+  the owner, reads idle to vmctl's probe with a live capsule. The idle sweep
+  already exposes this at 30 minutes; D3 would triple its frequency. The
+  snapshot does keep the capsule, but every guest-artifact deploy voids the
+  snapshot (R1) and the wake is then a crash-style cold boot, which revokes
+  the capsule and loses its work
+  (`docs/problems/always-busy-computer-never-updates-2026-10-15.md`).
+
+### Decision for the orchestrator
+
+The spec says a new problem doc and a code change to the busy probe before
+the timer drops. The worker brief says to stop rather than invent a signal.
+D3 is therefore not built. The signal that would be needed: `/health`
+reports `live_capsules` (the count `plannedRestartBusy(ctx, true)` already
+computes) and `httpGuestBusy` adds it. That is a guest change (agentcore,
+`/health`, a guest-artifact deploy) plus a vmctl change, and old guests that
+do not report it would read as zero, so the rule must be "a guest that does
+not report the field is busy" or the timer drop must follow the guest deploy.
+Not built here.
