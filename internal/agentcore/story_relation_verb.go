@@ -35,9 +35,13 @@ import (
 //   - the desk decides: a relation System 1 did not rank first needs a reason
 //     of at least 20 characters, and the event records that it overrode;
 //   - the tape is the authority (design R7): the record is appended
-//     (acknowledged) before anything leaves the computer, and the export is a
+//     (acknowledged) before anything is exported, and the export is a
 //     re-runnable projection. A repeated pair writes no second record and
 //     exports again, which is the retry of a failed export;
+//   - the platform is asked first, validate-only: a pair it would refuse
+//     (not the owner's published story, over the degree bound) or cannot be
+//     asked about is not recorded, so the tape holds no judgment that could
+//     never become an edge;
 //   - nothing resumes (restart rule): a crash between the record and the
 //     export leaves the record on the tape and the edge absent until the desk
 //     repeats the pair.
@@ -138,20 +142,35 @@ func (rt *Runtime) relateStoriesEgress(ctx context.Context, deskRole string, exe
 		}})
 	}
 
-	// Record: the tape first.
-	result := relateStoriesResult{Recorded: make([]relateStoriesRecorded, 0, len(all))}
 	export := types.StoryRelationsRequest{OwnerID: owner, ComputerID: computer}
 	for _, c := range all {
-		if !c.out.Replayed {
+		export.Relations = append(export.Relations, types.StoryRelation{StoryA: c.pair.StoryA, StoryB: c.pair.StoryB, Relation: c.pair.Relation})
+	}
+
+	// Ask the platform before anything is recorded. The lock is held across
+	// the call so a concurrent call cannot record the same pair meanwhile.
+	if err := rt.validateStoryRelations(ctx, export); err != nil {
+		rt.relationMu.Unlock()
+		log.Printf("story relation: the platform did not take %d relations on run %s: %v", len(export.Relations), runID, err)
+		return nil, fmt.Errorf("choir.RelateStories: nothing was recorded, the platform did not take the pairs: %w", err)
+	}
+
+	// Record: the tape first.
+	result := relateStoriesResult{Recorded: make([]relateStoriesRecorded, 0, len(all))}
+	for _, c := range all {
+		key := relationKey(c.pair.StoryA, c.pair.StoryB, c.pair.Relation)
+		if !c.out.Replayed && !recorded[key] {
 			if err := rt.appendStoryRelationEvent(ctx, exec, owner, computer, runID, c.pair, c.out, c.model); err != nil {
 				rt.relationMu.Unlock()
 				log.Printf("story relation: record %s %s on run %s: %v", c.pair.StoryA, c.pair.StoryB, runID, err)
 				return nil, fmt.Errorf("choir.RelateStories: the relation could not be recorded on the tape, so it is not exported: %w", err)
 			}
-			recorded[relationKey(c.pair.StoryA, c.pair.StoryB, c.pair.Relation)] = true
+			recorded[key] = true
+		} else {
+			// On the tape already, or recorded a pair ago in this call.
+			c.out.Replayed = true
 		}
 		result.Recorded = append(result.Recorded, c.out)
-		export.Relations = append(export.Relations, types.StoryRelation{StoryA: c.pair.StoryA, StoryB: c.pair.StoryB, Relation: c.pair.Relation})
 	}
 	rt.relationMu.Unlock()
 
@@ -245,6 +264,19 @@ func (rt *Runtime) appendStoryRelationEvent(ctx context.Context, exec toolregist
 	ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: owner, AgentID: exec.AgentID,
 		ChannelID: system1Channel(computer), Kind: types.EventStoryRelation, Phase: storyRelationPhaseRecorded, Payload: raw}
 	return rt.store.AppendEvent(ctx, &ev)
+}
+
+// validateStoryRelations asks the platform to check the relations and write
+// nothing. It fails when there is no platform to ask, or the platform
+// refuses; the caller records nothing then.
+func (rt *Runtime) validateStoryRelations(ctx context.Context, req types.StoryRelationsRequest) error {
+	publisher, ok := rt.storyPublisher().(StoryRelationPublisher)
+	if !ok || publisher == nil {
+		return fmt.Errorf("no platform to check the pairs with (choir.platform_url is not set on this computer)")
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
+	defer cancel()
+	return publisher.ValidateRelations(ctx, req)
 }
 
 // exportStoryRelations sends the relations to the platform. It fails when
