@@ -61,6 +61,18 @@ type HostAdmissionConfig struct {
 	Settle time.Duration
 	// InFlightTTL ends a reservation whose start never reported back.
 	InFlightTTL time.Duration
+
+	// MakeRoom (density D1, host_admission_make_room.go): active lets a
+	// refused start hibernate idle eligible computers and then admit; off
+	// is the rollback (refuse, as before).
+	MakeRoom string
+	// MakeRoomMaxVictims bounds the computers one start may hibernate.
+	MakeRoomMaxVictims int
+	// MakeRoomSettleWait bounds how long a start waits, after each
+	// hibernate, for the freed memory to show in MemAvailable.
+	MakeRoomSettleWait time.Duration
+	// MakeRoomPollInterval is how often that wait re-samples.
+	MakeRoomPollInterval time.Duration
 }
 
 func DefaultHostAdmissionConfig() HostAdmissionConfig {
@@ -71,6 +83,11 @@ func DefaultHostAdmissionConfig() HostAdmissionConfig {
 		HeadroomBytes:    1 << 30,
 		Settle:           5 * time.Minute,
 		InFlightTTL:      15 * time.Minute,
+
+		MakeRoom:             HostAdmissionMakeRoomActive,
+		MakeRoomMaxVictims:   defaultMakeRoomMaxVictims,
+		MakeRoomSettleWait:   defaultMakeRoomSettleWait,
+		MakeRoomPollInterval: defaultMakeRoomPollInterval,
 	}
 }
 
@@ -93,6 +110,21 @@ func normalizeHostAdmissionConfig(cfg HostAdmissionConfig) HostAdmissionConfig {
 	}
 	if cfg.InFlightTTL <= 0 {
 		cfg.InFlightTTL = def.InFlightTTL
+	}
+	switch strings.TrimSpace(strings.ToLower(cfg.MakeRoom)) {
+	case HostAdmissionMakeRoomOff, "false", "0", "disabled", "refuse":
+		cfg.MakeRoom = HostAdmissionMakeRoomOff
+	default:
+		cfg.MakeRoom = HostAdmissionMakeRoomActive
+	}
+	if cfg.MakeRoomMaxVictims <= 0 {
+		cfg.MakeRoomMaxVictims = def.MakeRoomMaxVictims
+	}
+	if cfg.MakeRoomSettleWait <= 0 {
+		cfg.MakeRoomSettleWait = def.MakeRoomSettleWait
+	}
+	if cfg.MakeRoomPollInterval <= 0 {
+		cfg.MakeRoomPollInterval = def.MakeRoomPollInterval
 	}
 	return cfg
 }
@@ -239,6 +271,10 @@ type HostAdmissionDecision struct {
 	StartsInFlight int    `json:"starts_in_flight"`
 	FloorBytes     uint64 `json:"floor_bytes"`
 	HeadroomBytes  uint64 `json:"headroom_bytes"`
+	// MadeRoomVMIDs are the computers a make-room decision hibernated;
+	// Reason explains a make-room refusal (host_admission_make_room.go).
+	MadeRoomVMIDs []string `json:"made_room_vm_ids,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
 }
 
 // AdmissionReservationView is one reservation as health shows it.
@@ -263,6 +299,7 @@ type HostAdmissionSummary struct {
 	MinNeedBytes     uint64                     `json:"min_need_bytes,omitempty"`
 	HeadroomBytes    uint64                     `json:"headroom_bytes,omitempty"`
 	SettleSeconds    int64                      `json:"settle_seconds,omitempty"`
+	MakeRoom         string                     `json:"make_room,omitempty"`
 	ReservedBytes    uint64                     `json:"reserved_bytes"`
 	Reservations     []AdmissionReservationView `json:"reservations,omitempty"`
 	Recent           []HostAdmissionDecision    `json:"recent,omitempty"`
@@ -291,6 +328,7 @@ func (r *OwnershipRegistry) HostAdmissionSummary() HostAdmissionSummary {
 		out.MinNeedBytes = acfg.MinNeedBytes
 		out.HeadroomBytes = acfg.HeadroomBytes
 		out.SettleSeconds = int64(acfg.Settle.Seconds())
+		out.MakeRoom = acfg.MakeRoom
 	}
 	return out
 }
@@ -355,11 +393,21 @@ func estimateNeedWith(own *VMOwnership, acfg HostAdmissionConfig) (uint64, strin
 // below the floor. Protected computers are always admitted. Only active
 // pressure reclaim enables it. A nil ticket with a nil error means no
 // reservation was taken.
+//
+// A refused start makes room when make-room is on (density D1): it
+// hibernates idle eligible computers and admits on a fresh sample, and is
+// refused only when nothing eligible can make the room. The caller must not
+// hold r.mu.
 func (r *OwnershipRegistry) admitHostMemory(own *VMOwnership, class WarmnessClass) (*admissionTicket, error) {
 	r.mu.RLock()
 	cfg, acfg, sampler := r.pressureReclaim, r.hostAdmission, r.pressureSampler
+	mayMakeRoom := r.makeRoomEnabledLocked()
 	r.mu.RUnlock()
-	return r.admitHostMemoryWith(own, class, cfg, acfg, sampler)
+	ticket, err := r.admitHostMemoryWith(own, class, cfg, acfg, sampler)
+	if err == nil || !mayMakeRoom || !makeRoomRefusal(err) {
+		return ticket, err
+	}
+	return r.makeRoomAndAdmit(own, class, nil)
 }
 
 // admitHostMemoryLocked is admitHostMemory for a caller holding r.mu.
@@ -380,6 +428,19 @@ func (r *OwnershipRegistry) admitHostMemoryWith(own *VMOwnership, class Warmness
 		return nil, r.admitGuestSize(own, class, cfg, sampler)
 	}
 
+	d, ticket := r.attemptMeasuredAdmission(own, class, cfg, acfg, sampler, true)
+	logAdmissionDecision(d)
+	if ticket != nil {
+		return ticket, nil
+	}
+	return nil, hostMemoryRefusal(d, "")
+}
+
+// attemptMeasuredAdmission is one measured admission decision: a sample
+// and the ledger read under the ledger lock, and a reservation when it
+// admits. record adds the decision to the recent list; make-room's
+// re-samples do not, it records its own outcome once.
+func (r *OwnershipRegistry) attemptMeasuredAdmission(own *VMOwnership, class WarmnessClass, cfg PressureReclaimConfig, acfg HostAdmissionConfig, sampler hostPressureSampler, record bool) (HostAdmissionDecision, *admissionTicket) {
 	var vmID, computerID string
 	if own != nil {
 		vmID, computerID = own.VMID, own.ComputerID
@@ -426,7 +487,9 @@ func (r *OwnershipRegistry) admitHostMemoryWith(own *VMOwnership, class Warmness
 	default:
 		d.Decision = "refuse"
 	}
-	led.recordLocked(d)
+	if record {
+		led.recordLocked(d)
+	}
 	var ticket *admissionTicket
 	if d.Decision != "refuse" {
 		led.nextID++
@@ -437,16 +500,31 @@ func (r *OwnershipRegistry) admitHostMemoryWith(own *VMOwnership, class Warmness
 		ticket = &admissionTicket{reg: r, id: led.nextID, vmID: vmID, need: need, source: source}
 	}
 	led.mu.Unlock()
+	return d, ticket
+}
 
-	logAdmissionDecision(d)
-	if ticket != nil {
-		return ticket, nil
+// admissionShortfall is how far a refused decision's sample was under its
+// requirement.
+func admissionShortfall(d HostAdmissionDecision) uint64 {
+	required := d.FloorBytes + d.HeadroomBytes + d.ReservedBytes + d.NeedBytes
+	if d.AvailableBytes >= required {
+		return 0
 	}
-	return nil, &RecoveryRefusal{
-		ComputerID: computerID,
-		Kind:       RecoveryRefusalHostMemoryPressure,
-		Reason: fmt.Sprintf("host memory available %d MiB; %d MiB reserved for starts in flight; this computer needs %d MiB (%s) above the %d MiB floor and %d MiB headroom",
-			sample.MemoryAvailableBytes>>20, reserved>>20, need>>20, source, floor>>20, acfg.HeadroomBytes>>20),
+	return required - d.AvailableBytes
+}
+
+// hostMemoryRefusal is the refusal for a refused measured decision; detail,
+// when set, is make-room's account of why it could not make the room.
+func hostMemoryRefusal(d HostAdmissionDecision, detail string) *RecoveryRefusal {
+	reason := fmt.Sprintf("host memory available %d MiB; %d MiB reserved for starts in flight; this computer needs %d MiB (%s) above the %d MiB floor and %d MiB headroom",
+		d.AvailableBytes>>20, d.ReservedBytes>>20, d.NeedBytes>>20, d.NeedSource, d.FloorBytes>>20, d.HeadroomBytes>>20)
+	if detail != "" {
+		reason += "; " + detail
+	}
+	return &RecoveryRefusal{
+		ComputerID:        d.ComputerID,
+		Kind:              RecoveryRefusalHostMemoryPressure,
+		Reason:            reason,
 		RetryAfterSeconds: hostMemoryRetryAfterSeconds,
 	}
 }

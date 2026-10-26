@@ -112,8 +112,9 @@ func main() {
 	}
 	admission := hostAdmissionConfigFromEnv()
 	registry.SetHostAdmissionConfig(admission)
-	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s",
-		registry.HostAdmissionSummary().Mode, admission.DefaultNeedBytes>>20, admission.MinNeedBytes>>20, admission.HeadroomBytes>>20, admission.Settle)
+	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
+		registry.HostAdmissionSummary().Mode, admission.DefaultNeedBytes>>20, admission.MinNeedBytes>>20, admission.HeadroomBytes>>20, admission.Settle,
+		admission.MakeRoom, admission.MakeRoomMaxVictims, admission.MakeRoomSettleWait)
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -238,6 +239,8 @@ func main() {
 	// stopped computer cold boots) and interrupted captures, before any
 	// computer is started or woken.
 	registry.SweepOrphanSnapshots()
+	// Density D1: make-room's hibernates take the idle sweep's route guard.
+	registry.SetMakeRoomRouteGuard(handler.AuthorizeComputerVersionRoute)
 	if reattached := registry.ReattachManagedVMs(context.Background(), handler.AuthorizeComputerVersionRoute); reattached > 0 {
 		log.Printf("vmctl: route-authorized reattach adopted %d managed VM(s)", reattached)
 	}
@@ -694,6 +697,21 @@ func hostAdmissionConfigFromEnv() vmctl.HostAdmissionConfig {
 	if v := os.Getenv("VMCTL_ADMISSION_INFLIGHT_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.InFlightTTL = d
+		}
+	}
+	// Density D1: a refused start makes room (active, the default) or is
+	// refused as before (off, the rollback).
+	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM"); v != "" {
+		cfg.MakeRoom = v
+	}
+	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MakeRoomMaxVictims = n
+		}
+	}
+	if v := os.Getenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.MakeRoomSettleWait = d
 		}
 	}
 	return cfg

@@ -593,6 +593,13 @@ type OwnershipRegistry struct {
 	// reservations for starts in flight (host_admission.go).
 	hostAdmission   HostAdmissionConfig
 	admissionLedger hostMemoryLedger
+	// makeRoomMu is the one make-room decider (host_admission_make_room.go):
+	// a refused start that waits on it re-admits before choosing a victim.
+	// Never taken while holding mu.
+	makeRoomMu sync.Mutex
+	// makeRoomGuard authorizes make-room's hibernates as the idle sweep's
+	// guard authorizes its own; nil means make-room hibernates nothing.
+	makeRoomGuard ComputerVersionRouteGuard
 
 	// memoryHotplug selects computers for a virtio-mem device and bounds
 	// their leases; memoryCtl is the lease controller (memory_hotplug.go).
@@ -2329,6 +2336,28 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			ComputerID: stableComputerID(userID, desktopID, "")}
 		class := warmnessClassForOwnership(candidate, r.warmnessPolicy)
 		ticket, err := r.admitHostMemoryLocked(candidate, class)
+		if err != nil && makeRoomRefusal(err) && r.makeRoomEnabledLocked() {
+			// Make room without holding r.mu across a hibernate (density
+			// D1, M10). Nothing for this computer is registered yet, so the
+			// lock may go; another request that registers it meanwhile wins
+			// and this one starts over.
+			stillNeeded := func() bool {
+				r.mu.RLock()
+				defer r.mu.RUnlock()
+				return stillNeededLocked(r, key)
+			}
+			r.mu.Unlock()
+			ticket, err = r.makeRoomAndAdmit(candidate, class, stillNeeded)
+			if errors.Is(err, errMakeRoomSuperseded) {
+				return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
+			}
+			r.mu.Lock()
+			if err == nil && !stillNeededLocked(r, key) {
+				r.mu.Unlock()
+				ticket.finish(false)
+				return r.resolveDesktopContext(ctx, userID, desktopID, allowAssignment, expectedVMID)
+			}
+		}
 		if err != nil {
 			r.mu.Unlock()
 			return nil, err
