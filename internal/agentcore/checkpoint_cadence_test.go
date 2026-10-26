@@ -25,12 +25,16 @@ package agentcore
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
+// Review 329 (FP0): the cadence compiles OFF. The host selects the computers
+// that run it, with the values (vmctl's VM_CHECKPOINT_CADENCE_ONLY), so the
+// first computer is chosen and its hold measured before the cadence widens.
 func TestCheckpointCadenceConfig(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	for _, tc := range []struct {
@@ -38,16 +42,53 @@ func TestCheckpointCadenceConfig(t *testing.T) {
 		env  map[string]string
 		want checkpointCadenceConfig
 	}{
-		{"defaults", nil, checkpointCadenceConfig{EveryEvents: 2500, Every: 60 * time.Minute}},
-		{"override both", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "100", "CHOIR_CHECKPOINT_EVERY": "10m"}, checkpointCadenceConfig{EveryEvents: 100, Every: 10 * time.Minute}},
-		{"zero events turns the event trigger off", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "0"}, checkpointCadenceConfig{EveryEvents: 0, Every: 60 * time.Minute}},
-		{"zero duration turns the time trigger off", map[string]string{"CHOIR_CHECKPOINT_EVERY": "0"}, checkpointCadenceConfig{EveryEvents: 2500, Every: 0}},
-		{"garbage keeps the default", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "many", "CHOIR_CHECKPOINT_EVERY": "soon"}, checkpointCadenceConfig{EveryEvents: 2500, Every: 60 * time.Minute}},
-		{"negative keeps the default", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "-5", "CHOIR_CHECKPOINT_EVERY": "-1m"}, checkpointCadenceConfig{EveryEvents: 2500, Every: 60 * time.Minute}},
+		{"compiled default is off", nil, checkpointCadenceConfig{}},
+		{"the host's selection", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "2500", "CHOIR_CHECKPOINT_EVERY": "60m"}, checkpointCadenceConfig{EveryEvents: 2500, Every: 60 * time.Minute}},
+		{"events only", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "100"}, checkpointCadenceConfig{EveryEvents: 100}},
+		{"time only", map[string]string{"CHOIR_CHECKPOINT_EVERY": "10m"}, checkpointCadenceConfig{Every: 10 * time.Minute}},
+		{"zero turns a trigger off", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "0", "CHOIR_CHECKPOINT_EVERY": "0"}, checkpointCadenceConfig{}},
+		{"garbage stays off", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "many", "CHOIR_CHECKPOINT_EVERY": "soon"}, checkpointCadenceConfig{}},
+		{"negative stays off", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "-5", "CHOIR_CHECKPOINT_EVERY": "-1m"}, checkpointCadenceConfig{}},
+		{"one good value is kept beside a bad one", map[string]string{"CHOIR_CHECKPOINT_EVERY_EVENTS": "2500", "CHOIR_CHECKPOINT_EVERY": "soon"}, checkpointCadenceConfig{EveryEvents: 2500}},
 	} {
 		if got := checkpointCadenceConfigFromEnv(env(tc.env)); got != tc.want {
 			t.Fatalf("%s: %+v, want %+v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// An unselected computer's runtime, reading no selection, never binds and says
+// so.
+func TestCheckpointCadenceIsDisabledWhenTheHostSelectedNothing(t *testing.T) {
+	t.Setenv("CHOIR_CHECKPOINT_EVERY_EVENTS", "")
+	t.Setenv("CHOIR_CHECKPOINT_EVERY", "")
+	cf := newCadenceFixture(t, "computer-cadence-unselected")
+	cf.rt.cadence.cfg = nil // read the environment, as a booted runtime does
+	cf.events(t, 5, "busy")
+	if out, _ := cf.tick(t, time.Now().UTC().Add(100*time.Hour)); out != cadenceSkipped || cf.binds.Load() != 0 {
+		t.Fatalf("an unselected computer: %s binds=%d", out, cf.binds.Load())
+	}
+	if status := cf.rt.CheckpointCadenceStatus(); status.State != "disabled" {
+		t.Fatalf("status = %+v, want disabled", status)
+	}
+}
+
+// Review 329 (DeepSeek 8): an attempt file that cannot be read means a crashing
+// bind could not be bounded. The cadence closes with that cause instead of
+// reading "on" while skipping every tick.
+func TestCheckpointCadenceClosesWhenTheAttemptFileCannotBeRead(t *testing.T) {
+	cf := newCadenceFixture(t, "computer-cadence-corrupt-attempts")
+	cf.events(t, 5, "busy")
+	if err := os.WriteFile(GuestApplyAttemptsPath(cf.rt.cfg.StorePath), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := cf.tick(t, time.Now().UTC())
+	if out != cadenceOff || cf.binds.Load() != 0 {
+		t.Fatalf("a corrupt attempt file: %s binds=%d", out, cf.binds.Load())
+	}
+	status := cf.rt.CheckpointCadenceStatus()
+	if status.State != "off" || !strings.Contains(status.Cause, "attempt") {
+		t.Fatalf("status = %+v, want off naming the attempt file", status)
 	}
 }
 

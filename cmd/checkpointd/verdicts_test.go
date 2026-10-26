@@ -348,3 +348,105 @@ func TestReconcileDoesNotPinTheBaseOfACadenceCheckpoint(t *testing.T) {
 		t.Fatalf("a cadence checkpoint pinned %v", store.pinned)
 	}
 }
+
+// Review 329 (DeepSeek 6, Devin 7): a host on a newer reducer than the guest
+// can rebuild different bytes from the same tape. A mismatch across reducer
+// versions is unverified / version_skew, never not_derivable; equal content is
+// verified whatever the versions.
+func TestReconcileDoesNotCallAMismatchAcrossReducerVersionsNotDerivable(t *testing.T) {
+	store := newFakeVerdictStore()
+	head, blob := hex64('1'), hex64('9')
+	store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	cp := store.checkpoints[hex64('d')]
+	cp.Request.ReducerVersion = 1
+	store.checkpoints[hex64('d')] = cp
+	store.bases["c1/100"] = blob
+	d := descriptorOf("c1", 100, head, blob, witnessOf(tablesB))
+	d.ReducerVersion = 2
+	if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+		t.Fatal(err)
+	}
+	v := store.resolved[hex64('d')]
+	if v.Status != selfdevprotocol.CheckpointVerdictUnverified || v.Reason != selfdevprotocol.VerdictReasonVersionSkew || strings.Join(v.DifferingTables, ",") != "og_objects" {
+		t.Fatalf("verdict = %+v, want unverified / version_skew naming og_objects", v)
+	}
+
+	equal := newFakeVerdictStore()
+	equal.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	cp = equal.checkpoints[hex64('d')]
+	cp.Request.ReducerVersion = 1
+	equal.checkpoints[hex64('d')] = cp
+	equal.bases["c1/100"] = blob
+	d = descriptorOf("c1", 100, head, blob, witnessOf(tablesA))
+	d.ReducerVersion = 2
+	if err := reconcileCheckpointVerdicts(t.Context(), equal, loader(d)); err != nil {
+		t.Fatal(err)
+	}
+	if v := equal.resolved[hex64('d')]; v.Status != selfdevprotocol.CheckpointVerdictVerified {
+		t.Fatalf("equal content across versions = %+v, want verified", v)
+	}
+}
+
+// Review 329 (Devin 7): a base is not retained for a checkpoint restore will
+// refuse.
+func TestReconcileDoesNotPinTheBaseOfANotDerivableApplyCheckpoint(t *testing.T) {
+	store := newFakeVerdictStore()
+	head, blob := hex64('1'), hex64('9')
+	store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	store.bases["c1/100"] = blob
+	d := descriptorOf("c1", 100, head, blob, witnessOf(tablesB))
+	if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+		t.Fatal(err)
+	}
+	if v := store.resolved[hex64('d')]; v.Status != selfdevprotocol.CheckpointVerdictNotDerivable {
+		t.Fatalf("verdict = %+v", v)
+	}
+	if len(store.pinned) != 0 {
+		t.Fatalf("a not_derivable checkpoint's base was pinned: %v", store.pinned)
+	}
+}
+
+type fakeWorkStore struct {
+	*fakeVerdictStore
+	calls        *[]string
+	reconcileErr error
+}
+
+func (f fakeWorkStore) PendingCheckpointVerdicts(ctx context.Context) ([]platform.CheckpointVerdictRecord, error) {
+	*f.calls = append(*f.calls, "verdicts")
+	return f.fakeVerdictStore.PendingCheckpointVerdicts(ctx)
+}
+
+func (f fakeWorkStore) ReconcileProjectionJobs(context.Context) error {
+	*f.calls = append(*f.calls, "cadence")
+	return f.reconcileErr
+}
+
+// Review 329 (Devin 6): on a busy computer the cadence job comes due again as
+// soon as the last one finishes. If the cadence is queued first it takes the
+// computer's one job row every minute and the checkpoint's rebuild never gets
+// it. The verification is queued first; a problem in either is reported and
+// stops neither.
+func TestReconcileProjectionWorkQueuesVerificationBeforeTheCadenceJob(t *testing.T) {
+	var calls []string
+	store := fakeWorkStore{fakeVerdictStore: newFakeVerdictStore(), calls: &calls}
+	store.addPending("c1", hex64('d'), 100, hex64('1'), witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	problem := reconcileProjectionWork(t.Context(), store, loader())
+	if len(calls) != 2 || calls[0] != "verdicts" || calls[1] != "cadence" {
+		t.Fatalf("order %v, want verdicts then cadence", calls)
+	}
+	if problem != "" {
+		t.Fatalf("problem %q", problem)
+	}
+	if len(store.enqueued) != 1 {
+		t.Fatalf("enqueued %v", store.enqueued)
+	}
+
+	calls = nil
+	store.reconcileErr = errors.New("one computer cannot be enqueued")
+	store.enqueueErr["c1"] = errors.New("store unavailable")
+	problem = reconcileProjectionWork(t.Context(), store, loader())
+	if len(calls) != 2 || !strings.Contains(problem, "reconcile: one computer cannot be enqueued") || !strings.Contains(problem, "verdicts:") {
+		t.Fatalf("calls %v problem %q: both problems must be reported and neither may stop the other", calls, problem)
+	}
+}
