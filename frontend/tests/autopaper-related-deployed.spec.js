@@ -6,8 +6,10 @@
  * https://choir.news) with no session, at phone width. It reads the public
  * front list and the public related route
  * (GET /api/platform/publications/related), then opens a story in the
- * browser. Phase 1 has no event signal: every link's reason is "capture" or
- * "source", and basis.events is 0.
+ * browser. There is no event signal: every link's reason is "capture",
+ * "source" or "entity" (a central entity both stories are about, slice b of
+ * docs/problems/related-stories-no-entity-layer-2026-10-26.md), and
+ * basis.events is 0.
  *
  * API assertions:
  *   1. Every front story's related answer is 200 with the documented shape.
@@ -18,8 +20,21 @@
  *      and appears once per list.
  *   4. A story that cites sources reports basis.captures > 0: the publish
  *      path wrote its cites_capture edges (or the backfill did).
- *   5. Hub rule: no link is justified by a source cited by more than six
- *      stories (shared.citers).
+ *   5. Hub rule: no source link is justified by a source cited by more than
+ *      six stories (shared.citers); an entity link shares at least one
+ *      central entity (shared.entities).
+ *
+ * Coverage and the entity loop (slice e):
+ *   6. The share of the first 60 front stories with a link is reported with
+ *      every story's basis.mode. Once the entity loop has reviewed stories on
+ *      7 days, the share must reach AUTOPAPER_RELATED_COVERAGE_FLOOR (default
+ *      0.25), so decay is no longer silent.
+ *   7. The entity growth series (GET /api/platform/entities/growth) has its
+ *      documented shape and is attached; after 14 reviewed days the
+ *      convergence signals hold: existing_unmatched at most 20 percent and
+ *      alias sprawl at most 15 percent over the last 7 days, the novelty
+ *      "yes" rate at most 30 percent, and mints per story falling (the last
+ *      7 days under 0.8 times the first 7).
  *
  * Browser assertions (a story with a non-empty list):
  *   - the related request starts after the resolve answered, so the list is
@@ -50,6 +65,7 @@ const ARTIFACT_DIR = process.env.AUTOPAPER_RELATED_ARTIFACT_DIR || '';
 // property the spec checks from outside.
 const HUB_STORIES = 6;
 const MAX_LINKS = 5;
+const COVERAGE_FLOOR = Number(process.env.AUTOPAPER_RELATED_COVERAGE_FLOOR || '0.25');
 
 test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
 test.setTimeout(240_000);
@@ -127,7 +143,7 @@ test('every front story has a well-formed related answer, and some are linked', 
     expect(Array.isArray(related.links), `${label}: links is an array, never null`).toBe(true);
     expect(typeof related.partial, `${label}: partial`).toBe('boolean');
     expect(related.basis && typeof related.basis.captures === 'number' && typeof related.basis.events === 'number' && typeof related.basis.mode === 'string', `${label}: basis`).toBe(true);
-    expect(related.basis.events, `${label}: phase 1 has no event signal`).toBe(0);
+    expect(related.basis.events, `${label}: there is no event signal`).toBe(0);
     expect(Date.parse(related.generated_at), `${label}: generated_at`).not.toBeNaN();
     expect(related.links.length, `${label}: at most ${MAX_LINKS} links`).toBeLessThanOrEqual(MAX_LINKS);
 
@@ -147,11 +163,15 @@ test('every front story has a well-formed related answer, and some are linked', 
       expect(frontRoutes.has(link.route.bare), `${where}: is on the front list`).toBe(true);
       expect(seen.has(link.publication_id), `${where}: listed once`).toBe(false);
       seen.add(link.publication_id);
-      expect(['capture', 'source'], `${where}: reason`).toContain(link.reason);
+      expect(['capture', 'source', 'entity'], `${where}: reason`).toContain(link.reason);
       expect(link.title, `${where}: title`).toBeTruthy();
       // 5. hub rule, read from outside
-      expect(link.shared?.sources, `${where}: shares at least one source`).toBeGreaterThanOrEqual(1);
-      expect(link.shared?.citers, `${where}: justified only by sources cited by at most ${HUB_STORIES} stories`).toBeLessThanOrEqual(HUB_STORIES);
+      if (link.reason === 'entity') {
+        expect(link.shared?.entities, `${where}: shares at least one central entity`).toBeGreaterThanOrEqual(1);
+      } else {
+        expect(link.shared?.sources, `${where}: shares at least one source`).toBeGreaterThanOrEqual(1);
+        expect(link.shared?.citers, `${where}: justified only by sources cited by at most ${HUB_STORIES} stories`).toBeLessThanOrEqual(HUB_STORIES);
+      }
       pairs.push({
         from: story.route.bare, from_title: story.title, to: link.route.bare, to_title: link.title,
         reason: link.reason, shared: link.shared, from_basis: related.basis,
@@ -263,4 +283,74 @@ test('a story with no related links shows no block and no heading', async ({ pag
   await page.waitForTimeout(500);
   await expect(page.locator('[data-texture-related]')).toHaveCount(0);
   await expect(page.getByText('More on this')).toHaveCount(0);
+});
+
+// The entity loop's growth series, once per run.
+let growth = null;
+async function entityGrowth(request) {
+  if (!growth) growth = await getJSON(request, '/api/platform/entities/growth?days=30');
+  return growth;
+}
+
+function reviewedDays(g) {
+  return (g.days || []).filter((d) => d.stories_reviewed > 0);
+}
+
+function sumOver(days, pick) {
+  return days.reduce((n, d) => n + pick(d), 0);
+}
+
+test('the entity growth series has its shape, and converges after 14 reviewed days', async ({ request }, testInfo) => {
+  const g = await entityGrowth(request);
+  expect(Array.isArray(g.days) && g.days.length === 30, 'growth: 30 days').toBe(true);
+  expect(Array.isArray(g.stoplist), 'growth: stoplist is an array').toBe(true);
+  expect(g.lexicon && typeof g.lexicon.entities === 'number' && typeof g.lexicon.keys === 'number' && typeof g.lexicon.stopwords === 'number', 'growth: lexicon').toBe(true);
+  for (const d of g.days) {
+    expect(/^\d{4}-\d{2}-\d{2}$/.test(d.day), `growth day ${d.day}`).toBe(true);
+    for (const k of ['stories_reviewed', 'minted', 'alias_sprawl', 'keywords_added', 'aliases_learned', 'stopwords_added', 'existing_unmatched']) {
+      expect(typeof d[k], `growth ${d.day}: ${k}`).toBe('number');
+    }
+    for (const k of ['hit_rate', 'existing_unmatched_share', 'alias_sprawl_share', 'novelty_yes_rate']) {
+      expect(d[k] >= 0 && d[k] <= 1, `growth ${d.day}: ${k} in [0, 1]`).toBe(true);
+    }
+  }
+  const body = JSON.stringify(g, null, 2);
+  await testInfo.attach('entity-growth.json', { body, contentType: 'application/json' });
+  if (ARTIFACT_DIR) {
+    fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+    fs.writeFileSync(nodePath.join(ARTIFACT_DIR, 'entity-growth.json'), body);
+  }
+
+  const reviewed = reviewedDays(g);
+  test.skip(reviewed.length < 14, `the entity loop has reviewed stories on ${reviewed.length} of the 14 days convergence needs`);
+  const last7 = reviewed.slice(-7);
+  const first7 = reviewed.slice(0, 7);
+  const attachments = sumOver(last7, (d) => d.attachments.existing + d.attachments.extracted + d.attachments.research_named);
+  const unmatched = sumOver(last7, (d) => d.existing_unmatched);
+  const minted = sumOver(last7, (d) => d.minted);
+  const sprawl = sumOver(last7, (d) => d.alias_sprawl);
+  const stories = sumOver(last7, (d) => d.stories_reviewed);
+  const noveltyYes = sumOver(last7, (d) => d.novelty_yes_rate * d.stories_reviewed);
+  const perStory = (days) => sumOver(days, (d) => d.minted) / Math.max(1, sumOver(days, (d) => d.stories_reviewed));
+  expect(attachments === 0 || unmatched / attachments <= 0.2, `existing_unmatched ${unmatched}/${attachments} over the last 7 days: the alias act is due`).toBe(true);
+  expect(minted === 0 || sprawl / minted <= 0.15, `alias sprawl ${sprawl}/${minted} of the last 7 days' mints`).toBe(true);
+  expect(noveltyYes / Math.max(1, stories) <= 0.3, `novelty "yes" rate ${(noveltyYes / Math.max(1, stories)).toFixed(2)} over the last 7 days: candidate recall is short (the NER escalation)`).toBe(true);
+  expect(perStory(last7) < 0.8 * perStory(first7), `mints per story ${perStory(first7).toFixed(2)} then ${perStory(last7).toFixed(2)}: not falling`).toBe(true);
+});
+
+test('the share of front stories with a related link meets the floor once the entity loop runs', async ({ request }, testInfo) => {
+  const { stories, answers } = await allRelated(request);
+  test.skip(stories.length === 0, 'no Autopaper story is published yet');
+  const linked = answers.filter((a) => a.related.links.length > 0).length;
+  const share = linked / answers.length;
+  const modes = {};
+  for (const a of answers) modes[a.related.basis.mode] = (modes[a.related.basis.mode] || 0) + 1;
+  const byReason = {};
+  for (const a of answers) for (const l of a.related.links) byReason[l.reason] = (byReason[l.reason] || 0) + 1;
+  const g = await entityGrowth(request);
+  const report = { stories: answers.length, linked, share, floor: COVERAGE_FLOOR, modes, links_by_reason: byReason, reviewed_days: reviewedDays(g).length };
+  await testInfo.attach('related-coverage.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
+  console.log(`related coverage: ${linked}/${answers.length} = ${(share * 100).toFixed(1)}%; modes ${JSON.stringify(modes)}; links by reason ${JSON.stringify(byReason)}; entity loop reviewed on ${report.reviewed_days} days`);
+  test.skip(report.reviewed_days < 7, `the entity loop has reviewed stories on ${report.reviewed_days} of the 7 days the floor waits for`);
+  expect(share, `only ${linked} of ${answers.length} front stories have a related link (floor ${COVERAGE_FLOOR}); modes ${JSON.stringify(modes)}`).toBeGreaterThanOrEqual(COVERAGE_FLOOR);
 });
