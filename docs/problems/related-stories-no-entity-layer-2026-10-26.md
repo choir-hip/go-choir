@@ -467,6 +467,13 @@ As built (`internal/platform/publication_entity_learning.go`):
   act surface is a named residual, not built in this lane;
 - aliases go on the entity row's body and metadata, and the lexicon reads
   them back after a restart.
+- the growth read is unauthenticated, so it aggregates only the paper
+  owners (`CORPUSD_AUTOPAPER_OWNERS`), and nothing when none is set. It
+  shows counts, sizes and the active stoplist. It never shows aliases or
+  another owner's entities. Every row it reads was learned from a published
+  public paper story, because the entity write accepts no other. The cache
+  is keyed by window alone, which is right because the answer does not
+  depend on the caller.
 
 #### 7. The growth read: the loop's health
 

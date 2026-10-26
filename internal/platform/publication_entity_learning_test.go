@@ -19,6 +19,7 @@ package platform
 //     recomputes on every request.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -235,5 +236,56 @@ func TestEntityReviewsCountOncePerRecordAndFeedTheGrowthRead(t *testing.T) { // 
 	var pub types.EntityGrowthResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &pub); err != nil || len(pub.Days) != 3 {
 		t.Fatalf("public growth body = %s", rec.Body.String())
+	}
+}
+
+// R: the growth read is unauthenticated, so it aggregates the paper owners
+// alone: another owner's reviews, mints and stopwords never reach it, and
+// with no paper owner configured it shows nothing.
+func TestEntityGrowthShowsThePaperOwnersAlone(t *testing.T) {
+	l := newEntityLab(t)
+	const other = "owner-two"
+	l.svc.SetAutopaperOwners([]string{labOwner, other})
+	theirs := l.publishAs(other, PublishModeAuto, nil, "doc-other", 1, "Other story", l.captureAs(other, labComputer, "https://wire.example/other", "", "other"))
+	req := types.StoryEntitiesRequest{OwnerID: other, ComputerID: labComputer, Story: theirs.PublicationID,
+		Entities: []types.StoryEntity{newEntity("Private Holdings", types.EntityTypeOrganization, types.EntityRoleCentral)}}
+	for i, s := range []string{"rec-o0", "rec-o1", "rec-o2"} {
+		r := req
+		r.Review = &types.StoryEntityReview{RecordID: s, Counts: types.StoryEntityCounts{Existing: 7}, NotEntities: []types.StoryEntityNotEntity{{Phrase: "Secretphrase", P: 0.9}}}
+		if i > 0 {
+			r.Entities = nil
+		}
+		l.record(r)
+	}
+
+	// The control: while owner-two is a paper owner, its learning shows.
+	both, err := l.svc.EntityGrowth(context.Background(), 3)
+	if err != nil || both.Days[2].Attachments.Existing != 21 || both.Lexicon.Entities != 1 {
+		t.Fatalf("control read = %+v, %v", both, err)
+	}
+
+	l.svc.growth = growthCache{}
+	l.svc.SetAutopaperOwners(nil)
+	empty, err := l.svc.EntityGrowth(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("growth: %v", err)
+	}
+	if empty.Lexicon.Entities != 0 || len(empty.Stoplist) != 0 || empty.Days[2].StoriesReviewed != 0 {
+		t.Fatalf("with no paper owner configured the read shows %+v", empty)
+	}
+
+	l.svc.growth = growthCache{}
+	l.svc.SetAutopaperOwners([]string{labOwner})
+	rec := httptest.NewRecorder()
+	NewHandler(l.svc).HandlePublicEntityGrowth(rec, httptest.NewRequest(http.MethodGet, "/api/platform/entities/growth?days=3", nil))
+	var g types.EntityGrowthResponse
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &g) != nil {
+		t.Fatalf("anonymous growth = %d %s", rec.Code, rec.Body.String())
+	}
+	if g.Lexicon.Entities != 0 || len(g.Stoplist) != 0 || g.Days[2].StoriesReviewed != 0 || g.Days[2].Attachments.Existing != 0 || g.Days[2].Minted != 0 {
+		t.Fatalf("another owner's learning reached the public read: %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("Secretphrase")) || bytes.Contains(rec.Body.Bytes(), []byte("Private Holdings")) {
+		t.Fatalf("another owner's phrase or entity name is in the public read")
 	}
 }
