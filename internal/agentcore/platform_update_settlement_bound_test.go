@@ -29,10 +29,15 @@ import (
 )
 
 // useDurableAttemptCount gives the runtime a store path, so the durable
-// attempt count exists beside it.
+// attempt count exists beside it. A reconcile pass started by an earlier
+// commit may still be running and reads the path while it settles, under
+// selfdevMaterializeMu, so the path is set under that lock.
 func (fx *derivableSelfDevFixture) useDurableAttemptCount(t *testing.T) {
 	t.Helper()
-	fx.rt.cfg.StorePath = filepath.Join(t.TempDir(), "runtime.db")
+	path := filepath.Join(t.TempDir(), "runtime.db")
+	fx.rt.selfdevMaterializeMu.Lock()
+	fx.rt.cfg.StorePath = path
+	fx.rt.selfdevMaterializeMu.Unlock()
 }
 
 // guestAttemptCount reads the durable count for one reason and target.
