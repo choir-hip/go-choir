@@ -118,3 +118,5 @@ Residual: rolling back to the genesis baseline operation (verifier ref is the
 genesis event, certificate decision `genesis_baseline`) is a different
 evidence path and is not covered; the owner API now refuses a genesis target at
 open (review 322) until a genesis evidence path exists.
+
+Gap (2026-10-26): the fix is unexercised on staging because no owner-reachable surface assembles the rollback request: its seven bindings (expected_desired_head, current_applied_head, to_applied_head, prior_materialization, prior_checkpoint, expected_route_generation, idempotency_key) have no CLI verb, only the raw POST; lane/rollback-cli adds `choir self-dev rollback --to-operation`.
