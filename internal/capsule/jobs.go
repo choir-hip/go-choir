@@ -196,6 +196,26 @@ func (e *Executor) RunningJob(agentRunID string) (yaegikernel.JobView, time.Time
 	return yaegikernel.JobView{}, time.Time{}, false
 }
 
+// RunningJobInCapsule reports a running job of any run on the capsule: what
+// writes the capsule's tree, whoever started it. RunningJob answers for one
+// run only.
+func (e *Executor) RunningJobInCapsule(capsuleID string) (yaegikernel.JobView, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for _, job := range e.jobs {
+		if job.capsuleID != capsuleID {
+			continue
+		}
+		select {
+		case <-job.done:
+			continue
+		default:
+		}
+		return jobView(job.status, "", ""), true
+	}
+	return yaegikernel.JobView{}, false
+}
+
 // JobViews lists the run's jobs, oldest first, as a cell sees them.
 func (e *Executor) JobViews(agentRunID string) []yaegikernel.JobView {
 	e.mu.RLock()

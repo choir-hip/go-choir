@@ -187,6 +187,9 @@ func (e *Executor) StartJob(context.Context, string, string, JobRequest) (yaegik
 func (e *Executor) StopJob(context.Context, string, string, string) (yaegikernel.JobView, error) {
 	return yaegikernel.JobView{}, stubErr("stop job")
 }
+func (e *Executor) RunningJobInCapsule(string) (yaegikernel.JobView, bool) {
+	return yaegikernel.JobView{}, false
+}
 func (e *Executor) RunningJob(string) (yaegikernel.JobView, time.Time, bool) {
 	return yaegikernel.JobView{}, time.Time{}, false
 }
