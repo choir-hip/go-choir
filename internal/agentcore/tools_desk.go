@@ -563,6 +563,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// wake turn carries only ids.
 			updates := pendingCellUpdates(ctx, rt, execCtx)
 			emits := pendingCellEmits(ctx, rt, execCtx)
+			// A story's research desk reads its story's entity analysis,
+			// built at the run's first cell (slice c0 §4).
+			analysis := rt.storyAnalysisFor(ctx, deskRole, execCtx)
 			if reduction.active {
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
@@ -591,7 +594,8 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			egressLog := &cellEgressLog{}
 			evalCtx = withCellEgressLog(evalCtx, egressLog)
 			evalStart := time.Now()
-			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits, reduction.records.view)
+			res, evalErr := w.EvalFrame(evalCtx, yaegikernel.SessionFrame{Source: input.Source, Inbox: reduction.inbox, Doc: docSnapshot, Pack: pack,
+				Updates: updates, Emits: emits, Records: reduction.records.view, Analysis: analysis})
 			elapsed := time.Since(evalStart)
 			// The cell's own bound fired, not the run's cancellation or the
 			// activation's deadline.

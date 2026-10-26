@@ -501,6 +501,14 @@ func (p *httpStoryPublisher) PublishEntities(ctx context.Context, req types.Stor
 	return p.post(ctx, p.platformURL, types.StoryEntitiesPath, req, nil)
 }
 
+// EntityCandidates reads a story's entity candidates from the platform
+// (slice c0 §2); nothing is written.
+func (p *httpStoryPublisher) EntityCandidates(ctx context.Context, req types.EntityCandidatesRequest) (types.EntityCandidatesResponse, error) {
+	var resp types.EntityCandidatesResponse
+	err := p.post(ctx, p.platformURL, types.StoryEntityCandidatesPath, req, &resp)
+	return resp, err
+}
+
 func (p *httpStoryPublisher) PublishVerdicts(ctx context.Context, req types.StoryVerdictsRequest) error {
 	return p.post(ctx, p.platformURL, types.StoryVerdictsPath, req, nil)
 }

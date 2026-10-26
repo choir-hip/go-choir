@@ -411,12 +411,18 @@ func (w *DeskSessionWorker) EvalInbox(ctx context.Context, source string, inbox 
 // pending update_coagent records (choir.Updates()), and for a texture desk
 // the bound document's head (R3d, choir.ReadDoc()).
 func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox []IncomingMessage, doc *DocSnapshot, pack *types.ActingPack, updates []PendingUpdate, emits []PendingEmit, records []InboxRecord) (SessionResult, error) {
+	return w.EvalFrame(ctx, SessionFrame{Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates, Emits: emits, Records: records})
+}
+
+// EvalFrame runs one cell with a frame the caller filled; the worker gives
+// it its id.
+func (w *DeskSessionWorker) EvalFrame(ctx context.Context, frame SessionFrame) (SessionResult, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.dead {
 		return SessionResult{}, fmt.Errorf("desk session worker dead")
 	}
-	frame := SessionFrame{ID: nextDeskSessionFrameID(), Source: source, Inbox: inbox, Doc: doc, Pack: pack, Updates: updates, Emits: emits, Records: records}
+	frame.ID = nextDeskSessionFrameID()
 	raw, err := json.Marshal(frame)
 	if err != nil {
 		return SessionResult{}, fmt.Errorf("desk eval marshal: %w", err)

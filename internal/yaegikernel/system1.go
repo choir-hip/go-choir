@@ -52,6 +52,21 @@ type System1Payload struct {
 // ValidateSystem1Questions checks a question list against the bounds and
 // returns it normalized (fields trimmed). It names the first offending field.
 func ValidateSystem1Questions(in []System1Question) ([]System1Question, error) {
+	return validateSystem1Questions(in, System1MaxChoices)
+}
+
+// System1HostMaxChoices bounds the choices of a question the host asks
+// itself: the story analysis's type question has the six entity types, "not
+// an entity" and "none of these fit" (slice c0 §3).
+const System1HostMaxChoices = 8
+
+// ValidateSystem1HostQuestions checks questions the host builds, with the
+// host's choice bound; every other bound is the cell's.
+func ValidateSystem1HostQuestions(in []System1Question) ([]System1Question, error) {
+	return validateSystem1Questions(in, System1HostMaxChoices)
+}
+
+func validateSystem1Questions(in []System1Question, maxChoices int) ([]System1Question, error) {
 	if len(in) == 0 {
 		return nil, fmt.Errorf("choir.System1 needs at least one question")
 	}
@@ -74,8 +89,8 @@ func ValidateSystem1Questions(in []System1Question) ([]System1Question, error) {
 		if n := utf8.RuneCountInString(text); n == 0 || n > System1MaxTextRunes {
 			return nil, fmt.Errorf("question %q: text must be 1-%d characters (it is your wording of the question; evidence goes in context_refs), got %d", id, System1MaxTextRunes, n)
 		}
-		if n := len(q.Choices); n < System1MinChoices || n > System1MaxChoices {
-			return nil, fmt.Errorf("question %q: choices must number %d-%d, got %d", id, System1MinChoices, System1MaxChoices, n)
+		if n := len(q.Choices); n < System1MinChoices || n > maxChoices {
+			return nil, fmt.Errorf("question %q: choices must number %d-%d, got %d", id, System1MinChoices, maxChoices, n)
 		}
 		choices := make([]string, 0, len(q.Choices))
 		seenChoice := map[string]bool{}

@@ -286,3 +286,47 @@ func (s *Store) WarmSearchIndex(ctx context.Context) (docs int, reads uint64, er
 	s.warmStoryKinds(ctx, listed)
 	return len(listed), s.searchIdx.headReads.Load() - before, ctx.Err()
 }
+
+// StoryLibraryIDF returns the inverse document frequency of a word over the
+// owner's story library, from the search index's head term counts, for the
+// entity extraction's rarity (docs/problems/related-stories-no-entity-layer-
+// 2026-10-26.md, slice c0 §1): ln((N+1)/(df+1)) + 1, so a word in every
+// story weighs about 1 and a word in none weighs most. A word is looked up
+// as the index tokenizes it. An empty library gives nil (rarity unknown).
+// The function memoizes and is for one goroutine.
+func (s *Store) StoryLibraryIDF(ctx context.Context, ownerID string) (func(string) float64, error) {
+	docs, err := s.searchableTextureDocuments(ctx, strings.TrimSpace(ownerID))
+	if err != nil {
+		return nil, err
+	}
+	var live []*searchEntry
+	for _, e := range s.headEntries(ctx, docs) {
+		if e != nil {
+			live = append(live, e)
+		}
+	}
+	if len(live) == 0 {
+		return nil, nil
+	}
+	n := float64(len(live))
+	memo := map[string]float64{}
+	return func(word string) float64 {
+		toks := searchTokens(word)
+		if len(toks) == 0 {
+			return 1
+		}
+		term := toks[0]
+		if v, ok := memo[term]; ok {
+			return v
+		}
+		df := 0
+		for _, e := range live {
+			if e.terms[term] > 0 {
+				df++
+			}
+		}
+		v := math.Log((n+1)/(float64(df)+1)) + 1
+		memo[term] = v
+		return v
+	}, nil
+}

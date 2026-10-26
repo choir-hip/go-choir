@@ -53,6 +53,9 @@ type SessionFrame struct {
 	// Jobs carries this run's capsule jobs at cell start, read through
 	// choir.Poll (jobs.go).
 	Jobs []JobView `json:"jobs,omitempty"`
+	// Analysis carries a story research desk's entity analysis, read
+	// through choir.StoryAnalysis() (story_analysis.go).
+	Analysis *StoryAnalysis `json:"analysis,omitempty"`
 }
 
 // DocSnapshot is the bound Texture document as the cell's frame showed it:
