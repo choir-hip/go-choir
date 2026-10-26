@@ -822,12 +822,28 @@ is a wrapper, a deliberate deviation from the doc's "change every caller");
 darwin: CI runs it); `rebaseLineage` derived from the tape; the rebase offer under
 `carried/rebase-offers/`; the root and management prompt text (slice 5 of the doc).
 
-**Not built, next (slice 3):** `verifyRebaseContent` (`internal/agentcore/
-rebase_content.go`) at materialization and Freeze, the `rebase_content_mismatch`
-refusal, the lineage receipt and the `source_projection_rebased` fact, the `--cached
---3way` per-path helper in `sourceproj`, and the base-equals-claim check; then the
-doc's "defer while a non-terminal rebase of the same operation exists" check in the
-timer (needs `ListRebaseNoticeClaims`, already in the store), then slice 7 proof
-(`scripts/proof-u4-rebase`). Known residual: a replayed rebase open after a restart
-has a different `RebaseAdmission.BootedAt`, so its command digest differs and the
-replay fails closed.
+**Slice 3 (built):**
+- `sourceproj.VerifyRebase` (`internal/sourceproj/rebase_verify.go`). Deviation from
+  the design: per-path clean/conflict classification applies P one path at a time
+  with `git apply --cached --include=<path>` in a scratch index; no `--3way`
+  is needed. A path with a glob character is a conflict path whenever the whole
+  patch does not apply (the stricter check).
+- `internal/agentcore/rebase_content.go`: the check at materialization
+  (`rebaseContentGate`, called before the host build, never for `journalOnly`,
+  never for an operation no pair claim names; a refusal settles the operation
+  `failed` like a host-build failure) and at Freeze (`CapsuleToolCtx.VerifyRebase`,
+  writes nothing). Candidate base must equal the claim's booted base, which must
+  still be the booted base (`booted_base_moved`), so a rebase never applies on a
+  stale base with or without base-join. Pass writes the deterministic receipt
+  `<root>/rebase/lineage/<op>.json`, a `source_projection_rebased` fact, and the
+  owner's apply record names the receipt's sha256.
+- The timer defers a new pair's notice while a rebase of the same operation,
+  claimed for an older base, still runs.
+- `scripts/proof-u4-rebase` (dry run works). Steps that need FP0's platform acts
+  (landing B', landing B'' for the conflict run) are announced and awaited.
+  `[needs base-join]` marks the steps whose refusal text comes from base-join.
+
+**Not built:** the staging run itself (FP0), the conflict run's automation, and
+slice 8 (the owner retry act). Known residual: a replayed rebase open after a
+restart has a different `RebaseAdmission.BootedAt`, so its command digest differs
+and the replay fails closed.
