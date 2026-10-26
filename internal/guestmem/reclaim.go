@@ -315,6 +315,10 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 	if err != nil {
 		return finish(OutcomeSwapPresent, "cannot read /proc/swaps: "+err.Error())
 	}
+	if strings.TrimSpace(string(swaps)) == "" {
+		// The kernel always writes a header line: empty is not "no swap".
+		return finish(OutcomeSwapPresent, "/proc/swaps is empty")
+	}
 	if hasSwapDevice(string(swaps)) {
 		return finish(OutcomeSwapPresent, "/proc/swaps lists a device")
 	}
@@ -339,6 +343,13 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 	rep.Method = method
 
 	rep.Before = r.snapshot(cgroup)
+	// Free page reporting's state is a read: every report that got this far,
+	// a dry run included, carries it.
+	if req.Reporting != nil {
+		reporting := req.Reporting()
+		rep.ReportingNegotiated = reporting.Negotiated
+		rep.Before.ReportableKiB = reporting.ReportableKiB
+	}
 	if method == MethodMemoryReclaim {
 		raw, err := os.ReadFile(filepath.Join(cgroup, "memory.stat"))
 		if err != nil {
@@ -352,12 +363,6 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 	}
 	if req.DryRun {
 		return finish(OutcomeDryRun, "")
-	}
-
-	if req.Reporting != nil {
-		reporting := req.Reporting()
-		rep.ReportingNegotiated = reporting.Negotiated
-		rep.Before.ReportableKiB = reporting.ReportableKiB
 	}
 
 	quiet := r.Quiet
