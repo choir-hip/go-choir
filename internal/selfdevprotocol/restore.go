@@ -162,16 +162,11 @@ func WitnessFromObservationSets(live, replay computerversion.ObservationSet, res
 			return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
 		}
 	}
-	proof, err := computerevent.CanonicalJSON(struct {
-		Database    string            `json:"database"`
-		ContentRoot string            `json:"content_root"`
-		Schema      map[string]string `json:"schema"`
-		Tables      map[string]string `json:"tables"`
-	}{liveWitness.Database, liveWitness.ContentRoot, liveWitness.Schema, liveWitness.Tables})
+	digest, err := witnessDerivabilityDigest(liveWitness)
 	if err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	liveWitness.DerivabilityDigest = computerevent.DigestBytes(proof)
+	liveWitness.DerivabilityDigest = digest
 	if err := liveWitness.Validate(); err != nil {
 		return VMLocalContentWitness{}, err
 	}

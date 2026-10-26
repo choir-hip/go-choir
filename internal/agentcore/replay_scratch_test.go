@@ -38,6 +38,15 @@ import (
 
 const replayScratchTestGiB = uint64(1) << 30
 
+// Every test in the package sees a roomy volume unless it sets its own: the
+// reserve is a percentage of the volume, so a test must not depend on how full
+// the machine running it is.
+func init() {
+	defaultReplayScratchUsage = func(string) (persistentdisk.Usage, error) {
+		return persistentdisk.Usage{TotalBytes: 100 * replayScratchTestGiB, UsedBytes: 10 * replayScratchTestGiB, AvailBytes: 90 * replayScratchTestGiB}, nil
+	}
+}
+
 // fakeScratchVolume reports a volume of 100 GiB whose free space a test sets.
 type fakeScratchVolume struct {
 	mu    sync.Mutex

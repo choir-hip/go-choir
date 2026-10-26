@@ -365,6 +365,7 @@ func TestOwnerActWakeCrashSettledApplyMintsNothing(t *testing.T) {
 		t.Fatalf("crash boot did not mark %s interrupted", operation.OperationID)
 	}
 	fx.controlFail.Store(false)
+	fx.useDurableAttemptCount(t)
 	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)
 	fx.waitForState(t, operation.OperationID, selfdev.StateApplied)
 	if got := ownerActRecords(t, fx.store, "owner", fx.computerID, inbox); len(got) != 0 {

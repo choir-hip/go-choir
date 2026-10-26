@@ -448,7 +448,12 @@ func (h *APIHandler) bindComputerCheckpoint(w http.ResponseWriter, r *http.Reque
 }
 
 type CheckpointBindReport struct {
-	ComputerID            string                                `json:"computer_id"`
+	ComputerID string `json:"computer_id"`
+	// CheckpointEligible is a placeholder: true whenever a checkpoint was
+	// bound. The bind no longer proves derivability (no replay); restore does,
+	// and refuses a witness mismatch. Slice 2 of
+	// docs/design/apply-checkpoint-without-replay-2026-10-26.md replaces it
+	// with the host's verified / not_derivable verdict.
 	CheckpointEligible    bool                                  `json:"checkpoint_eligible"`
 	ReleaseDigest         string                                `json:"release_digest"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`

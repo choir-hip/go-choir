@@ -267,10 +267,10 @@ func TestCrashBootSettlementWithoutADurableAttemptCountRefuses(t *testing.T) {
 func TestSettlementThatCrashedTwiceSettlesAnAcceptedOperationFailed(t *testing.T) {
 	fx := newDerivableSelfDevFixture(t, "computer-settle-accepted")
 	ctx := context.Background()
-	operation, _, _ := fx.seedOperationToAwaitingApproval(t, "op-settle-accepted")
-	accepted, err := fx.operations.Transition(ctx, fx.computerID, operation.OperationID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, func(*selfdev.Operation) error { return nil })
-	if err != nil {
-		t.Fatal(err)
+	operation := fx.decideWithoutActing(t, "op-settle-accepted")
+	accepted, found, err := fx.rt.recoverSelfDevelopmentDecision(ctx, operation)
+	if err != nil || !found || accepted.State != selfdev.StateAccepted {
+		t.Fatalf("recover the decision: %+v found=%v err=%v; want an accepted operation", accepted, found, err)
 	}
 
 	if err := fx.rt.closeSelfDevelopmentSettlementDegraded(ctx, accepted); err != nil {
@@ -286,5 +286,8 @@ func TestSettlementThatCrashedTwiceSettlesAnAcceptedOperationFailed(t *testing.T
 	}
 	if !strings.Contains(got.TerminalError, "did not finish on two boots") {
 		t.Fatalf("terminal error %q does not name the cause", got.TerminalError)
+	}
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending transition %s still bound after the operation failed", pending)
 	}
 }
