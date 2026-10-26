@@ -372,10 +372,12 @@ func TestMakeRoomWaitIsBounded(t *testing.T) {
 // hibernated once, each start admitted with its own victim.
 func TestMakeRoomOneDeciderNoDoubleHibernate(t *testing.T) {
 	f := newMakeRoomFixture(t, makeRoomAdmission())
-	f.activeComputer("v1", "vm-v1", 3*time.Hour, 3*gib)
-	f.activeComputer("v2", "vm-v2", 2*time.Hour, 3*gib)
-	f.activeComputer("v3", "vm-v3", 1*time.Hour, 3*gib)
-	// Room for neither start: each needs 2 GiB above floor + headroom.
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.activeComputer("v3", "vm-v3", 1*time.Hour, 1536*mib)
+	// Room for neither start: each needs 2 GiB above floor + headroom, 1 GiB
+	// short. One 1.5 GiB victim admits the first; the second then sees the
+	// first's reservation and needs exactly one more (not two, not three).
 	f.setAvail(5*gib + 1*gib)
 
 	var wg sync.WaitGroup
@@ -469,11 +471,16 @@ func TestMakeRoomForANewComputer(t *testing.T) {
 	f.setAvail(4*gib + 1*gib + 1*gib) // a new computer needs the 2 GiB default
 	var lockHeld int32
 	f.mr.onHibernate = func(string) {
-		if !f.reg.mu.TryLock() {
-			atomic.StoreInt32(&lockHeld, 1)
-			return
+		// The other request may hold the lock for a moment; a lock held
+		// across the whole hibernate never frees.
+		for i := 0; i < 200; i++ {
+			if f.reg.mu.TryLock() {
+				f.reg.mu.Unlock()
+				return
+			}
+			time.Sleep(time.Millisecond)
 		}
-		f.reg.mu.Unlock()
+		atomic.StoreInt32(&lockHeld, 1)
 	}
 
 	var wg sync.WaitGroup

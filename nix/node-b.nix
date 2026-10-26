@@ -1867,6 +1867,14 @@ in
         "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=24"
         "VMCTL_STORE_COMPACT_TIMEOUT=45m"
         "VMCTL_ADMISSION_MODE=measured"
+        # Density D1: a start that does not fit hibernates idle eligible
+        # computers (never working, held, protected or of a higher class),
+        # then admits; refused only when nothing eligible can make room
+        # (docs/problems/density-station-d-failure-modes-2026-10-26.md).
+        # Rollback: VMCTL_ADMISSION_MAKE_ROOM=off.
+        "VMCTL_ADMISSION_MAKE_ROOM=active"
+        "VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS=3"
+        "VMCTL_ADMISSION_MAKE_ROOM_SETTLE=10s"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
