@@ -872,7 +872,14 @@ func (h *APIHandler) startSelfDevelopmentRollback(w http.ResponseWriter, r *http
 		return
 	}
 	targetEvent, found, err := h.rt.store.EventByDigest(r.Context(), computerID, request.ToAppliedHead)
-	if err != nil || !found || (targetEvent.EventKind != computerevent.EventGenesisImported && targetEvent.EventKind != computerevent.EventMaterializationApplied && targetEvent.EventKind != computerevent.EventRollbackApplied) || !computerevent.IsSHA256(targetEvent.ResultingEffectiveCommitment) {
+	// A genesis baseline has no recorded verification event, so a rollback to
+	// it could apply and then never record its success (R7). Refuse at open
+	// until a genesis evidence path exists.
+	if err == nil && found && targetEvent.EventKind == computerevent.EventGenesisImported {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "rollback to the genesis baseline is not supported: it has no verification evidence to record the rollback against"})
+		return
+	}
+	if err != nil || !found || (targetEvent.EventKind != computerevent.EventMaterializationApplied && targetEvent.EventKind != computerevent.EventRollbackApplied) || !computerevent.IsSHA256(targetEvent.ResultingEffectiveCommitment) {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "rollback target is not a prior applied event"})
 		return
 	}

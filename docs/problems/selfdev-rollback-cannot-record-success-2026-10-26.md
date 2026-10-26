@@ -1,6 +1,6 @@
 # A self-development rollback applies, then cannot record its success (2026-10-26)
 
-Status: documented; fix on lane/rollback-verify (tests first). Latent: staging
+Status: fixed on lane/rollback-verify (review 322 approved; its Medium is closed: a genesis-baseline rollback is refused at open, 409, instead of wedging at record). Latent: staging
 has never run a rollback (b@c, 2026-10-26: 9 applied, 17 failed, 17 rejected,
 none rolled back). Class of the fix: red (checkpoint and route promotion for a
 rollback, verifier certificate), review tier 1 or 2 by FP0.
@@ -116,4 +116,5 @@ deploys as above); staging has none to date.
 
 Residual: rolling back to the genesis baseline operation (verifier ref is the
 genesis event, certificate decision `genesis_baseline`) is a different
-evidence path and is not covered; named, not exercised here.
+evidence path and is not covered; the owner API now refuses a genesis target at
+open (review 322) until a genesis evidence path exists.
