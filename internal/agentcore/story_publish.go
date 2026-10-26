@@ -430,6 +430,14 @@ func platformRefused(err error) bool {
 	return errors.As(err, &status) && status.Status >= 400 && status.Status < 500
 }
 
+// platformNotPublished reports the platform's refusal of a story that is
+// not published yet (409, review 324 F2): the own story's record is
+// exported when it publishes. Any other refusal is an export error.
+func platformNotPublished(err error) bool {
+	var status *platformStatusError
+	return errors.As(err, &status) && status.Status == http.StatusConflict
+}
+
 func (p *httpStoryPublisher) post(ctx context.Context, baseURL, path string, body, out any) error {
 	if baseURL == "" {
 		return fmt.Errorf("%s: no host URL to send it to", path)

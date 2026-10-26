@@ -314,17 +314,23 @@ func (s *Service) checkPublicAutopaperStory(ctx context.Context, og *ObjectGraph
 	}
 	info, ok := pubs[pub]
 	if !ok || !info.eligible || info.obj.OwnerID != owner {
-		return fmt.Errorf("%s is not a published Autopaper story of owner %s", pub, owner)
+		return storyNotPublished{fmt.Errorf("%s is not a published Autopaper story of owner %s", pub, owner)}
 	}
 	manifest, err := s.frontManifest(ctx, og, info.latest)
 	if err != nil {
 		return storeFailed(err)
 	}
 	if !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) {
-		return fmt.Errorf("%s is not on the public route, so its entities would never be shown", pub)
+		return storyNotPublished{fmt.Errorf("%s is not on the public route, so its entities would never be shown", pub)}
 	}
 	return nil
 }
+
+// storyNotPublished marks a refusal of a story that is not owner's
+// published Autopaper story on the public route; the route answers 409.
+type storyNotPublished struct{ error }
+
+func (e storyNotPublished) Unwrap() error { return e.error }
 
 // HandleStoryEntities serves POST types.StoryEntitiesPath for a computer
 // exporting its entity attachments, under the one bound-guest write rule.
@@ -347,8 +353,14 @@ func (h *Handler) HandleStoryEntities(w http.ResponseWriter, r *http.Request) {
 		log.Printf("corpusd: story entities from %s: %v", strings.TrimSpace(req.ComputerID), err)
 		status := http.StatusBadRequest
 		var failed storeFailure
-		if errors.As(err, &failed) {
+		var unpublished storyNotPublished
+		switch {
+		case errors.As(err, &failed):
 			status = http.StatusServiceUnavailable
+		case errors.As(err, &unpublished):
+			// Not published (or not public) yet: a computer exports its own
+			// story's record when the story publishes (review 324 F2).
+			status = http.StatusConflict
 		}
 		writeJSON(w, status, apiError{Error: err.Error()})
 		return
