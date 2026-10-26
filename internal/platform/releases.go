@@ -23,9 +23,10 @@ const SoftwareReleaseKind objectgraph.ObjectKind = "choir.software_release"
 const releasesRoute = "/internal/platform/releases"
 
 // ReleaseReadsMode is CHOIR_RELEASE_READS (Library S1,
-// docs/design/library-package-propagation-2026-10-26.md 4.3): open serves a
-// published release to any reader, as before; owner serves a release only to
-// the owner who published it. It is read once at startup (SetReleaseReads).
+// docs/design/library-package-propagation-2026-10-26.md 4.3): owner serves a
+// release only to the owner who published it; open serves a published
+// release to any reader, as before S1. Owner is the default: only an explicit
+// "open" opens reads. It is read once at startup (SetReleaseReads).
 type ReleaseReadsMode string
 
 const (
@@ -36,18 +37,18 @@ const (
 	EnvReleaseReads = "CHOIR_RELEASE_READS"
 )
 
-// ParseReleaseReads reads the switch value. Unset or "open" is open. Any
-// other value is owner: a typo narrows reads, it never opens them.
+// ParseReleaseReads reads the switch value. Only "open" is open. Unset, empty
+// or any other value is owner: a missing value or a typo narrows reads, it
+// never opens them.
 func ParseReleaseReads(raw string) ReleaseReadsMode {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(ReleaseReadsOpen):
+	if strings.ToLower(strings.TrimSpace(raw)) == string(ReleaseReadsOpen) {
 		return ReleaseReadsOpen
-	default:
-		return ReleaseReadsOwner
 	}
+	return ReleaseReadsOwner
 }
 
 // SetReleaseReads sets the mode once at startup, before the handler serves.
+// A Handler nobody configures reads as owner.
 func (h *Handler) SetReleaseReads(mode ReleaseReadsMode) {
 	if h != nil {
 		h.releaseReads = mode
@@ -103,13 +104,14 @@ type ReleaseView struct {
 // A guest never writes here: publication is the owner's act through the
 // proxy (failure mode R3).
 //
-// Reads follow CHOIR_RELEASE_READS (Library S1, failure mode L4). At open,
-// any bound guest may read any published release, as before. At owner, a
+// Reads follow CHOIR_RELEASE_READS (Library S1, failure mode L4). At owner
+// (the default), a
 // release is served only to the owner who published it: a guest's owner is
 // the one vmctl binds its network address to (never a parameter), and the
 // proxy's host call names the authenticated owner in owner_id. A release
 // the reader may not see answers 404 exactly as a missing one does. A host
-// call that names no owner is unscoped, as before.
+// call that names no owner is unscoped, as before. Only an explicit open
+// lets any bound guest read any published release, as before S1.
 func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, releasesRoute), "/")
 	switch {
@@ -303,7 +305,7 @@ func (h *Handler) publishRelease(w http.ResponseWriter, r *http.Request) {
 // caller writes. The caller has already passed authorizeFileCAS for
 // computerID.
 func (h *Handler) releaseReadScope(r *http.Request, computerID string) (scope string, status int, refusal string) {
-	if h.releaseReads != ReleaseReadsOwner {
+	if h.releaseReads == ReleaseReadsOpen {
 		return "", 0, ""
 	}
 	if trustedInternalCaller(r) {
@@ -395,7 +397,7 @@ func (h *Handler) listReleases(w http.ResponseWriter, r *http.Request) {
 	filter := objectgraph.ListFilter{
 		Kind: SoftwareReleaseKind, ComputerID: strings.TrimSpace(r.URL.Query().Get("publisher_computer_id")), Limit: limit,
 	}
-	if h.releaseReads == ReleaseReadsOwner {
+	if h.releaseReads != ReleaseReadsOpen {
 		// The proxy names the owner it authenticated. The list is host only,
 		// so no guest reaches this branch; a host call naming no owner is
 		// unscoped, as before.

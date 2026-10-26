@@ -171,7 +171,7 @@ func (h *Handler) HandleComputerReleasePublish(w http.ResponseWriter, r *http.Re
 
 // HandleReleases serves the release list and one release to an authenticated
 // caller with the read scope. The caller's owner rides every read to corpusd,
-// which scopes it to that owner when CHOIR_RELEASE_READS=owner (Library S1).
+// which scopes it to that owner unless CHOIR_RELEASE_READS=open (Library S1; owner is the default).
 func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -182,6 +182,9 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	// The admin scope passes this scope check and nothing more: the owner
+	// below is always the key's own user, so private means private even to
+	// admin (Library S1; TestAdminKeyReadsOnlyItsOwnersReleases).
 	if authResult.AuthMethod == "api_key" && !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, releaseReadScope) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + releaseReadScope})
 		return
@@ -191,7 +194,7 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case rest == "":
 		// The proxy names the owner it authenticated; corpusd scopes the list
-		// to that owner when CHOIR_RELEASE_READS=owner. A caller-supplied
+		// to that owner (the default; CHOIR_RELEASE_READS=open lifts it). A caller-supplied
 		// owner is never forwarded.
 		query := url.Values{"owner_id": {authResult.UserID}}
 		if limit := strings.TrimSpace(r.URL.Query().Get("limit")); limit != "" {

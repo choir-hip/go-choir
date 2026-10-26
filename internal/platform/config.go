@@ -59,9 +59,10 @@ type Config struct {
 	// front list attaches its scores read-only; a missing or bad file
 	// leaves the list unchanged.
 	FrontImportancePath string
-	// ReleaseReadsRaw is CHOIR_RELEASE_READS (Library S1): open (the
-	// default) serves any published release to any reader; owner serves a
-	// release only to the owner who published it (ParseReleaseReads).
+	// ReleaseReadsRaw is CHOIR_RELEASE_READS (Library S1): owner (the
+	// default, also when unset) serves a release only to the owner who
+	// published it; an explicit open serves any release to any reader
+	// (ParseReleaseReads).
 	ReleaseReadsRaw string
 }
 
