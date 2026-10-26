@@ -693,6 +693,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
 			}
 		}
+		if rec.Final && deskProfile == agentprofile.Research && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+			if err := r.requireStoryEntitiesRecorded(ctx); err != nil {
+				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
+			}
+		}
 		if rec.Final {
 			openRound[conversation] = false
 		}
@@ -834,6 +839,52 @@ func (r *rlmCallReduction) requireChildOutcomesRead(ctx context.Context, convers
 		}
 	}
 	return nil
+}
+
+// requireStoryEntitiesRecorded is the finish rule of a story's research
+// desk (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice
+// c): with research.related_story on, its final Report waits until the tape
+// holds a story.entities record for the story, or this run's choir.Relate
+// failed on the platform's side (review 304 item 2). Off, or on a desk bound
+// to no story, it is today's rule. It adds no wake and no resumer: a run that
+// ends without its final Report has its round closed at run end.
+func (r *rlmCallReduction) requireStoryEntitiesRecorded(ctx context.Context) error {
+	rt := r.rt()
+	if rt == nil || rt.store == nil || r.rec == nil || strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Research {
+		return nil
+	}
+	owner, computer, runID := r.scope.OwnerID, r.scope.ComputerID, r.scope.RunID
+	if !rt.computerSettingOn(ctx, owner, computer, store.SettingResearchRelatedStory) {
+		return nil
+	}
+	doc, err := rt.researchDeskDoc(ctx, r.scope.DeskAgentID, owner, computer)
+	if err != nil {
+		return nil
+	}
+	story := types.StoryPublicationID(owner, doc)
+	tape, err := rt.system1ChannelTape(ctx, owner, computer)
+	if err != nil {
+		return fmt.Errorf("the finish rule could not read the tape: %w", err)
+	}
+	for _, ev := range tape {
+		if ev.Kind != types.EventStoryEntities {
+			continue
+		}
+		var rec struct {
+			Computer string `json:"computer_id"`
+			Story    string `json:"story"`
+		}
+		if json.Unmarshal(ev.Payload, &rec) != nil || rec.Story != story || (rec.Computer != "" && rec.Computer != computer) {
+			continue
+		}
+		switch {
+		case ev.Phase == storyEntitiesPhaseRecorded:
+			return nil
+		case ev.Phase == storyEntitiesPhasePlatformFailed && ev.RunID == runID:
+			return nil
+		}
+	}
+	return fmt.Errorf("before the final Report, record what this story is about with choir.Relate(\"\", entities), citing choir.StoryAnalysis()'s System 1 answers; send interim packets meanwhile")
 }
 
 // inboxRecordRequestSource marks a run a records desk started because its

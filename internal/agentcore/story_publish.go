@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"errors"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -413,6 +414,26 @@ func NewHTTPStoryPublisher(proxyURL, platformURL string) StoryPublisher {
 	return &httpStoryPublisher{proxyURL: trim(proxyURL), platformURL: trim(platformURL), client: &http.Client{Timeout: storyPublishTimeout}}
 }
 
+// platformStatusError is a platform answer that is not a success. A 4xx is
+// the platform's own refusal of the request; a 5xx is the platform failing.
+type platformStatusError struct {
+	Path   string
+	Status int
+	Body   string
+}
+
+func (e *platformStatusError) Error() string {
+	return fmt.Sprintf("%s: status %d: %s", e.Path, e.Status, e.Body)
+}
+
+// platformRefused reports whether err is the platform's own refusal (a 4xx):
+// the request was read and judged, so the caller can fix it. Anything else
+// (no answer, a transport error, a 5xx) is the platform failing.
+func platformRefused(err error) bool {
+	var status *platformStatusError
+	return errors.As(err, &status) && status.Status >= 400 && status.Status < 500
+}
+
 func (p *httpStoryPublisher) post(ctx context.Context, baseURL, path string, body, out any) error {
 	if baseURL == "" {
 		return fmt.Errorf("%s: no host URL to send it to", path)
@@ -433,7 +454,7 @@ func (p *httpStoryPublisher) post(ctx context.Context, baseURL, path string, bod
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(data)))
+		return &platformStatusError{Path: path, Status: resp.StatusCode, Body: strings.TrimSpace(string(data))}
 	}
 	if out != nil {
 		if err := json.Unmarshal(data, out); err != nil {

@@ -123,7 +123,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		return nil, err
 	}
 	if req.Story == yaegikernel.RelateOwnStory {
-		doc, err := rt.researchDeskDoc(ctx, exec, owner, computer)
+		doc, err := rt.researchDeskDoc(ctx, exec.AgentID, owner, computer)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +211,8 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 
 	publisher, ok := rt.storyPublisher().(StoryEntityPublisher)
 	if !ok || publisher == nil {
-		return nil, fmt.Errorf("choir.Relate: nothing was recorded: no platform to check the entities with (choir.platform_url is not set on this computer)")
+		return nil, rt.relatePlatformFailed(ctx, exec, owner, computer, runID, req.Story,
+			fmt.Errorf("no platform to check the entities with (choir.platform_url is not set on this computer)"))
 	}
 	// Ask the platform before anything is recorded.
 	vctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), storyRelationExportTimeout)
@@ -219,7 +220,11 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	cancel()
 	if err != nil {
 		log.Printf("story entities: the platform did not take %d attachments of %s on run %s: %v", len(export.Entities), req.Story, runID, err)
-		return nil, fmt.Errorf("choir.Relate: nothing was recorded, the platform did not take the entities: %w", err)
+		if platformRefused(err) {
+			// The platform judged the call: the desk can fix it.
+			return nil, fmt.Errorf("choir.Relate: nothing was recorded, the platform did not take the entities: %w", err)
+		}
+		return nil, rt.relatePlatformFailed(ctx, exec, owner, computer, runID, req.Story, err)
 	}
 
 	// Record: the tape first, only what it does not hold yet.
@@ -257,8 +262,8 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 // research:<doc> (the inbox id the desks use) and the doc is a lifecycle
 // document of the owner on this computer. A desk bound to no doc has no own
 // story to name.
-func (rt *Runtime) researchDeskDoc(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer string) (string, error) {
-	doc, ok := strings.CutPrefix(strings.TrimSpace(exec.AgentID), yaegikernel.SessionRoleResearch+":")
+func (rt *Runtime) researchDeskDoc(ctx context.Context, agentID, owner, computer string) (string, error) {
+	doc, ok := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
 	doc = strings.TrimSpace(doc)
 	if !ok || doc == "" {
 		return "", fmt.Errorf("choir.Relate: this research desk is bound to no story, so it has no own story to name; name the story's publication_id")
@@ -270,6 +275,29 @@ func (rt *Runtime) researchDeskDoc(ctx context.Context, exec toolregistry.Execut
 		return "", fmt.Errorf("choir.Relate: read the desk's story: %w", err)
 	}
 	return doc, nil
+}
+
+// storyEntitiesPhasePlatformFailed marks a Relate call of a run that the
+// platform could not answer (no platform, a transport error, a 5xx). It
+// frees that run's final Report from the finish rule (review 304 item 2);
+// it attaches nothing.
+const storyEntitiesPhasePlatformFailed = "platform_failed"
+
+// relatePlatformFailed records that this run's Relate failed on the
+// platform's side and returns the cell's error. A host-side refusal is not
+// one: it returns before this, and the rule still holds.
+func (rt *Runtime) relatePlatformFailed(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, story string, cause error) error {
+	raw, err := json.Marshal(map[string]any{"computer_id": computer, "story": story, "error": cause.Error()})
+	if err == nil {
+		ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: owner, AgentID: exec.AgentID,
+			ChannelID: system1Channel(computer), Kind: types.EventStoryEntities, Phase: storyEntitiesPhasePlatformFailed, Payload: raw}
+		err = rt.store.AppendEvent(context.WithoutCancel(ctx), &ev)
+	}
+	if err != nil {
+		log.Printf("story entities: record the platform failure of %s on run %s: %v", story, runID, err)
+		return fmt.Errorf("choir.Relate: nothing was recorded, the platform could not be asked: %w", cause)
+	}
+	return fmt.Errorf("choir.Relate: nothing was recorded, the platform could not be asked (%w); this run may end with its final Report, and a later research run on the story records its entities", cause)
 }
 
 // entityAttachmentKey keys the latest recorded role of an entity in a story.
