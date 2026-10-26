@@ -266,7 +266,12 @@ type Runtime struct {
 	}
 	assignmentRuntime assignmentCapsuleRuntime
 	// assignmentFateRuntime replaces the capsule executor in the terminal
-	// report saga; nil uses capsuleExecutor (assignmentFate).
+	// report saga; nil uses capsuleExecutor (assignmentFate). The two test
+	// substitutes are separate and pair with their accessors:
+	// assignmentRuntime with assignedCapsule() (spawn, revoke, destroy),
+	// assignmentFateRuntime with assignmentFate() (freeze, digest, receipt
+	// binding, candidate). A test that sets only one still reaches
+	// capsuleExecutor through the other.
 	assignmentFateRuntime assignmentFateExecutor
 	bootLog               *bootLogRing
 	// storeStall rate-limits /health's store_stalled holder log
