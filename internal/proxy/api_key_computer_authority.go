@@ -321,7 +321,7 @@ func wakeableAPIKeyState(state string) bool {
 }
 
 // wakeAPIKeyComputer wakes the exact joined computer. Concurrent requests for
-// one (UserID, ComputerID) share one wake; a waiter whose request is canceled
+// one (UserID, ComputerID) share one wake (joinAPIKeyWake); a waiter whose request is canceled
 // leaves without canceling it.
 func (h *Handler) wakeAPIKeyComputer(ctx context.Context, target *resolvedComputerTarget) (resolvedComputerTarget, error) {
 	prior := *target
@@ -334,21 +334,48 @@ func (h *Handler) wakeAPIKeyComputer(ctx context.Context, target *resolvedComput
 	if h.vmctlClient == nil {
 		return resolvedComputerTarget{}, &computerWakeError{ComputerID: prior.ComputerID, State: prior.State, Cause: "computer lifecycle authority unavailable"}
 	}
-	flight := h.apiKeyWakes.DoChan(prior.UserID+"\x00"+prior.ComputerID, func() (any, error) {
-		return h.runAPIKeyWake(prior)
-	})
+	flight := h.joinAPIKeyWake(prior)
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	select {
 	case <-ctx.Done():
 		return resolvedComputerTarget{}, &computerWakeError{ComputerID: prior.ComputerID, State: prior.State, Cause: "the request ended while waiting for the computer to wake", Err: ctx.Err()}
-	case result := <-flight:
-		if result.Err != nil {
-			return resolvedComputerTarget{}, result.Err
-		}
-		return result.Val.(resolvedComputerTarget), nil
+	case <-flight.done:
+		return flight.result, flight.err
 	}
+}
+
+// apiKeyWakeFlight is one in-flight wake; done closes after result and err
+// are set.
+type apiKeyWakeFlight struct {
+	done   chan struct{}
+	result resolvedComputerTarget
+	err    error
+}
+
+// joinAPIKeyWake returns the in-flight wake for the target's (UserID,
+// ComputerID), starting it if there is none.
+func (h *Handler) joinAPIKeyWake(prior resolvedComputerTarget) *apiKeyWakeFlight {
+	key := prior.UserID + "\x00" + prior.ComputerID
+	h.apiKeyWakeMu.Lock()
+	defer h.apiKeyWakeMu.Unlock()
+	if flight, ok := h.apiKeyWakes[key]; ok {
+		return flight
+	}
+	flight := &apiKeyWakeFlight{done: make(chan struct{})}
+	if h.apiKeyWakes == nil {
+		h.apiKeyWakes = make(map[string]*apiKeyWakeFlight)
+	}
+	h.apiKeyWakes[key] = flight
+	go func() {
+		flight.result, flight.err = h.runAPIKeyWake(prior)
+		h.apiKeyWakeMu.Lock()
+		delete(h.apiKeyWakes, key)
+		h.apiKeyWakeMu.Unlock()
+		close(flight.done)
+	}()
+	return flight
 }
 
 // runAPIKeyWake is the one wake: it re-reads the join (another request may

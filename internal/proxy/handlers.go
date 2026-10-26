@@ -30,7 +30,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
-	"golang.org/x/sync/singleflight"
 )
 
 // clientIdentityHeaders is the list of HTTP headers that must be stripped from
@@ -194,12 +193,13 @@ type Handler struct {
 	corpusd                    *http.Client
 	maild                      *http.Client
 	autoputerHTTP              *http.Client
-	replayAutoputerHTTP        *http.Client       // dedicated long-budget client for replay completeness
-	residueImportAutoputerHTTP *http.Client       // dedicated long-budget client for residue import
-	autoputerURL               *url.URL           // parsed autoputer URL for WS dial derivation
-	vmctlClient                *vmctl.Client      // optional vmctl client for VM-backed routing
-	apiKeyWakes                singleflight.Group // userID\x00computerID -> the one in-flight bearer wake
-	apiKeyTouchSent            sync.Map           // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
+	replayAutoputerHTTP        *http.Client  // dedicated long-budget client for replay completeness
+	residueImportAutoputerHTTP *http.Client  // dedicated long-budget client for residue import
+	autoputerURL               *url.URL      // parsed autoputer URL for WS dial derivation
+	vmctlClient                *vmctl.Client // optional vmctl client for VM-backed routing
+	apiKeyWakeMu               sync.Mutex
+	apiKeyWakes                map[string]*apiKeyWakeFlight // userID\x00computerID -> the one in-flight bearer wake
+	apiKeyTouchSent            sync.Map                     // userID\x00computerID -> time of the last idle-clock touch sent to vmctl
 	lifecycle                  *lifecycleRecorder
 	recoveries                 *computeRecoveryTracker
 	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
