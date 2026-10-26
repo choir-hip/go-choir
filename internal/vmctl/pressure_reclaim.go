@@ -560,13 +560,13 @@ type pressureCandidateInternal struct {
 }
 
 func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
-	return r.pressureReclaimPlan(r.guestBusy())
+	return r.pressureReclaimPlan(r.hibernationHold(r.guestBusy(), r.now))
 }
 
 // PressureReclaimPlanSeen is the reclaim plan from the guests' last recorded
 // busy answers, without probing any guest. For health only.
 func (r *OwnershipRegistry) PressureReclaimPlanSeen() PressureReclaimPlan {
-	return r.pressureReclaimPlan(r.guestBusySeenAnswer())
+	return r.pressureReclaimPlan(r.hibernationHold(r.guestBusySeenAnswer(), r.now))
 }
 
 func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) PressureReclaimPlan {
@@ -688,7 +688,7 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 		}
 	}
 
-	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, r.now(), r.guestBusy())
+	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, r.now(), r.hibernationHold(r.guestBusy(), r.now))
 	if limit > len(ranked) {
 		limit = len(ranked)
 	}

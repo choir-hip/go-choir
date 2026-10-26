@@ -262,7 +262,7 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 	}
 	cur := first
 	shortfall := admissionShortfall(cur)
-	busy := r.guestBusy()
+	hold := r.hibernationHoldReason(r.guestBusy(), r.now)
 	var made []string
 	// tried is why each computer this start looked at was passed over (or
 	// that it was hibernated); one entry per computer, so a computer probed
@@ -289,8 +289,8 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 				tried[c.own.VMID] = "route"
 				continue
 			}
-			if busy(c.own) {
-				tried[c.own.VMID] = "busy"
+			if reason := hold(c.own); reason != "" {
+				tried[c.own.VMID] = reason
 				continue
 			}
 			return c
@@ -346,8 +346,8 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 			tried[c.own.VMID] = "route"
 			continue
 		}
-		if busy(c.own) {
-			tried[c.own.VMID] = "busy"
+		if reason := hold(c.own); reason != "" {
+			tried[c.own.VMID] = reason
 			continue
 		}
 		cover += c.rss
