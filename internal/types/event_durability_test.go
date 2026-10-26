@@ -123,8 +123,11 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	// And story.relation (acknowledged, 2026-10-26): the research desk's
 	// judged pair relation, whose tape record is the authority for the
 	// Store B related_story edge.
-	if n := len(eventDurability); n != 44 {
-		t.Fatalf("eventDurability has %d entries, want 44 (the 42 designed kinds, system1.judgment and story.relation)", n)
+	// And story.entities (acknowledged, 2026-10-26): the research desk's
+	// entity attachments of a published story, whose tape record is the
+	// authority for the Store B choir.entity rows and mentions_entity edges.
+	if n := len(eventDurability); n != 45 {
+		t.Fatalf("eventDurability has %d entries, want 45 (the 42 designed kinds, system1.judgment, story.relation and story.entities)", n)
 	}
 }
 

@@ -1,0 +1,285 @@
+package platform
+
+// The entity layer's write route (docs/problems/related-stories-no-entity-layer-2026-10-26.md,
+// slice a; ontology docs/reports/claims-events-entities-ontology-2026-10-14.md
+// D3/D4: the paper's entities are public rows in Store B). The research desk
+// attaches a published story's entities (choir.Relate); the computer exports
+// them here as choir.entity rows and mentions_entity edges from the
+// publication. Ways it can fail, written before the code:
+//
+//  N1 The route accepts a computer that is not platform tier, a story of
+//     another owner, a story that is not a published Autopaper story or not
+//     on the public route, more than 12 entities, an unknown role or type, a
+//     malformed entity id, or a new entity whose id is not the one its name
+//     (or Wikidata id) derives.
+//  N2 Sprawl (R1): a new entity whose normalised name matches an existing
+//     entity of another id is minted beside it. Refused with the match named.
+//     The same id again is the same node, not a duplicate.
+//  N3 An attachment names an entity id Store B does not hold.
+//  N4 A repeat writes a second entity row or a second edge; a role change
+//     leaves the old role's edge live.
+//  N5 The validate-only call writes, skips a check the write runs, or
+//     answers like a record.
+//  N6 The route answers a non-internal caller or any method but POST.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+func newEntityLab(t *testing.T) *relatedLab {
+	t.Helper()
+	l := newRealisticLab(t)
+	l.svc.relationTier = func(computerID string) (bool, error) { return computerID == labComputer, nil }
+	return l
+}
+
+func newEntity(name, typ, role string) types.StoryEntity {
+	return types.StoryEntity{EntityID: types.MintedEntityID(name), Name: name, Type: typ, New: true, Role: role}
+}
+
+func (l *relatedLab) entitiesReq(story *PublishTextureResponse, entities ...types.StoryEntity) types.StoryEntitiesRequest {
+	return types.StoryEntitiesRequest{OwnerID: labOwner, ComputerID: labComputer, Story: story.PublicationID, Entities: entities}
+}
+
+func (l *relatedLab) attachEntities(story *PublishTextureResponse, entities ...types.StoryEntity) {
+	l.t.Helper()
+	if _, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(story, entities...)); err != nil {
+		l.t.Fatalf("attach entities to %s: %v", story.PublicationID, err)
+	}
+}
+
+func (l *relatedLab) entityRow(owner, entityID string) (objectgraph.Object, bool) {
+	l.t.Helper()
+	id, err := entityCanonicalFor(owner, entityID)
+	if err != nil {
+		l.t.Fatalf("entity canonical id of %s: %v", entityID, err)
+	}
+	obj, err := l.svc.ogStore().GetObject(context.Background(), id)
+	if err != nil {
+		return objectgraph.Object{}, false
+	}
+	return obj, true
+}
+
+func (l *relatedLab) mentionEdges(publicationID string, live bool) []objectgraph.Edge {
+	l.t.Helper()
+	tomb := !live
+	edges, err := l.svc.ogStore().ListEdges(context.Background(), objectgraph.EdgeFilter{FromID: l.canon(labOwner, publicationID), Kind: edgeMentionsEntity, Tombstone: &tomb, Limit: 200})
+	if err != nil {
+		l.t.Fatalf("list mentions_entity edges: %v", err)
+	}
+	return edges
+}
+
+func edgeRole(e objectgraph.Edge) string {
+	var meta struct {
+		Role string `json:"role"`
+	}
+	_ = json.Unmarshal(e.Metadata, &meta)
+	return meta.Role
+}
+
+func TestStoryEntitiesWriteTheEntityRowAndTheMentionEdge(t *testing.T) { // N4
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded the election"))
+	vucic := newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral)
+	serbia := newEntity("Serbia", types.EntityTypePlace, types.EntityRoleIncidental)
+
+	n, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(a, vucic, serbia))
+	if err != nil || n != 2 {
+		t.Fatalf("record = %d, %v; want 2", n, err)
+	}
+	row, ok := l.entityRow(labOwner, vucic.EntityID)
+	if !ok || row.ObjectKind != "choir.entity" || row.OwnerID != labOwner {
+		t.Fatalf("entity row = %+v (found %v), want a choir.entity of the owner", row, ok)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(row.Metadata, &meta); err != nil || meta["name"] != "Aleksandar Vucic" || meta["type"] != "person" || meta["entity_id"] != vucic.EntityID || meta["normalized"] != types.NormalizeEntityName("Aleksandar Vucic") {
+		t.Fatalf("entity metadata = %s", row.Metadata)
+	}
+	edges := l.mentionEdges(a.PublicationID, true)
+	if len(edges) != 2 {
+		t.Fatalf("%d live mentions_entity edges, want 2", len(edges))
+	}
+	roles := map[string]string{}
+	for _, e := range edges {
+		roles[e.ToID] = edgeRole(e)
+	}
+	vid, _ := entityCanonicalFor(labOwner, vucic.EntityID)
+	sid, _ := entityCanonicalFor(labOwner, serbia.EntityID)
+	if roles[vid] != "central" || roles[sid] != "incidental" {
+		t.Fatalf("roles = %v", roles)
+	}
+
+	// A repeat, new or by id, writes nothing new.
+	l.attachEntities(a, vucic, serbia)
+	l.attachEntities(a, types.StoryEntity{EntityID: vucic.EntityID, Role: types.EntityRoleCentral})
+	if got := l.mentionEdges(a.PublicationID, true); len(got) != 2 {
+		t.Fatalf("after repeats %d live edges, want 2", len(got))
+	}
+	rows, err := l.svc.ogStore().ListObjects(context.Background(), objectgraph.ListFilter{Kind: "choir.entity", OwnerID: labOwner, Limit: 50})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("%d entity rows after repeats (%v), want 2", len(rows), err)
+	}
+
+	// A role change leaves one live edge, with the new role.
+	l.attachEntities(a, types.StoryEntity{EntityID: serbia.EntityID, Role: types.EntityRoleCentral})
+	live := 0
+	for _, e := range l.mentionEdges(a.PublicationID, true) {
+		if e.ToID == sid {
+			live++
+			if edgeRole(e) != "central" {
+				t.Fatalf("Serbia's live edge has role %q, want central", edgeRole(e))
+			}
+		}
+	}
+	if live != 1 {
+		t.Fatalf("Serbia has %d live edges after the role change, want 1", live)
+	}
+}
+
+func TestStoryEntitiesRefuseADuplicateOfAnotherID(t *testing.T) { // N2, N3
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	b := l.publish("doc-b", 1, "Opposition wins", l.capture("https://other.example/b", "", "The opposition won"))
+	l.attachEntities(a, newEntity("Anthropic", types.EntityTypeOrganization, types.EntityRoleCentral))
+
+	// The same normalised name is the same id: attached, not refused.
+	same := newEntity("Anthropic PBC", types.EntityTypeOrganization, types.EntityRoleCentral)
+	if same.EntityID != types.MintedEntityID("Anthropic") {
+		t.Fatalf("fixture: %s and Anthropic mint different ids", same.Name)
+	}
+	l.attachEntities(b, same)
+
+	// A Wikidata node whose name matches the minted one is a second node: refused, the match named.
+	wd := types.StoryEntity{EntityID: types.WikidataEntityID("Q116758847"), Name: "Anthropic", Type: types.EntityTypeOrganization, WikidataID: "Q116758847", New: true, Role: types.EntityRoleCentral}
+	_, err := l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(b, wd))
+	if err == nil || !strings.Contains(err.Error(), types.MintedEntityID("Anthropic")) || !strings.Contains(err.Error(), "entity_id") {
+		t.Fatalf("wikidata duplicate: err = %v, want the existing id named and attach-by-entity_id", err)
+	}
+	if _, ok := l.entityRow(labOwner, wd.EntityID); ok {
+		t.Fatal("a refused duplicate was written")
+	}
+
+	// An id Store B does not hold.
+	_, err = l.svc.RecordStoryEntities(context.Background(), l.entitiesReq(b, types.StoryEntity{EntityID: types.MintedEntityID("Nobody"), Role: types.EntityRoleCentral}))
+	if err == nil || !strings.Contains(err.Error(), "unknown entity") {
+		t.Fatalf("unknown id: err = %v", err)
+	}
+}
+
+func TestStoryEntitiesRefuseAMalformedOrForeignRequest(t *testing.T) { // N1
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	private := l.publishAs(labOwner, PublishModeAuto, json.RawMessage(`{"visibility":"private","route":"public"}`), "doc-private", 1, "Private", l.capture("https://wire.example/p", "", "private source"))
+	ownerPub := l.publishAs(labOwner, PublishModeOwner, nil, "doc-owner", 1, "Owner published", l.capture("https://wire.example/o", "", "owner source"))
+	other := l.publishAs("other-owner", PublishModeAuto, nil, "doc-other", 1, "Other owner", l.captureAs("other-owner", labComputer, "https://wire.example/x", "", "other source"))
+	ok := newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral)
+	many := make([]types.StoryEntity, 0, 13)
+	for i := 0; i < 13; i++ {
+		many = append(many, newEntity("Entity "+strings.Repeat("x", i+1), types.EntityTypePerson, types.EntityRoleCentral))
+	}
+	with := func(f func(*types.StoryEntity)) types.StoryEntity {
+		e := ok
+		f(&e)
+		return e
+	}
+	cases := []struct {
+		name string
+		req  types.StoryEntitiesRequest
+		want string
+	}{
+		{"not platform tier", func() types.StoryEntitiesRequest {
+			r := l.entitiesReq(a, ok)
+			r.ComputerID = "private-computer"
+			return r
+		}(), "platform"},
+		{"no owner", func() types.StoryEntitiesRequest { r := l.entitiesReq(a, ok); r.OwnerID = ""; return r }(), "owner_id"},
+		{"no entities", l.entitiesReq(a), "1 to 12"},
+		{"13 entities", l.entitiesReq(a, many...), "1 to 12"},
+		{"malformed story", func() types.StoryEntitiesRequest { r := l.entitiesReq(a, ok); r.Story = "pub-1"; return r }(), "publication"},
+		{"another owner's story", l.entitiesReq(other, ok), "not a published Autopaper story"},
+		{"owner published, not Autopaper", l.entitiesReq(ownerPub, ok), "not a published Autopaper story"},
+		{"not on the public route", l.entitiesReq(private, ok), "public route"},
+		{"unknown role", l.entitiesReq(a, with(func(e *types.StoryEntity) { e.Role = "mentioned" })), "role"},
+		{"unknown type", l.entitiesReq(a, with(func(e *types.StoryEntity) { e.Type = "topic" })), "type"},
+		{"malformed id", l.entitiesReq(a, with(func(e *types.StoryEntity) { e.EntityID = "ent:xyz" })), "entity id"},
+		{"id not derived from the name", l.entitiesReq(a, with(func(e *types.StoryEntity) { e.EntityID = types.MintedEntityID("Someone Else") })), "derive"},
+		{"wikidata id not derived", l.entitiesReq(a, with(func(e *types.StoryEntity) { e.EntityID, e.WikidataID = "wd:Q1", "Q2" })), "derive"},
+		{"one entity twice", l.entitiesReq(a, ok, with(func(e *types.StoryEntity) { e.Role = types.EntityRoleIncidental })), "twice"},
+	}
+	for _, tc := range cases {
+		if _, err := l.svc.RecordStoryEntities(context.Background(), tc.req); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to contain %q", tc.name, err, tc.want)
+		}
+	}
+	if rows, _ := l.svc.ogStore().ListObjects(context.Background(), objectgraph.ListFilter{Kind: "choir.entity", Limit: 50}); len(rows) != 0 {
+		t.Fatalf("refused requests wrote %d entity rows", len(rows))
+	}
+}
+
+func TestStoryEntitiesValidateOnlyRunsEveryCheckAndWritesNothing(t *testing.T) { // N5
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	l.attachEntities(a, newEntity("Anthropic", types.EntityTypeOrganization, types.EntityRoleCentral))
+
+	req := l.entitiesReq(a, newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral))
+	req.ValidateOnly = true
+	if n, err := l.svc.RecordStoryEntities(context.Background(), req); err != nil || n != 1 {
+		t.Fatalf("validate = %d, %v; want 1", n, err)
+	}
+	if _, ok := l.entityRow(labOwner, types.MintedEntityID("Aleksandar Vucic")); ok {
+		t.Fatal("validate-only wrote an entity row")
+	}
+	if got := l.mentionEdges(a.PublicationID, true); len(got) != 1 {
+		t.Fatalf("validate-only wrote edges: %d live, want the 1 from before", len(got))
+	}
+	dup := l.entitiesReq(a, types.StoryEntity{EntityID: "wd:Q116758847", Name: "Anthropic", Type: types.EntityTypeOrganization, WikidataID: "Q116758847", New: true, Role: types.EntityRoleCentral})
+	dup.ValidateOnly = true
+	if _, err := l.svc.RecordStoryEntities(context.Background(), dup); err == nil {
+		t.Fatal("validate-only took a duplicate the write refuses")
+	}
+
+	// Over HTTP the validate-only answer says validated, never recorded.
+	body, _ := json.Marshal(req)
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, types.StoryEntitiesPath, bytes.NewReader(body))
+	r.Header.Set("X-Internal-Caller", "true")
+	NewHandler(l.svc).HandleStoryEntities(rec, r)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"validated"`) || strings.Contains(rec.Body.String(), `"recorded"`) {
+		t.Fatalf("validate-only over HTTP = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestStoryEntitiesRouteIsInternalAndPostOnly(t *testing.T) { // N6
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	body, _ := json.Marshal(l.entitiesReq(a, newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral)))
+
+	rec := httptest.NewRecorder()
+	NewHandler(l.svc).HandleStoryEntities(rec, httptest.NewRequest(http.MethodGet, types.StoryEntitiesPath, nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET = %d, want 405", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	NewHandler(l.svc).HandleStoryEntities(rec, httptest.NewRequest(http.MethodPost, types.StoryEntitiesPath, bytes.NewReader(body)))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST without the internal header = %d, want 403", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, types.StoryEntitiesPath, bytes.NewReader(body))
+	r.Header.Set("X-Internal-Caller", "true")
+	NewHandler(l.svc).HandleStoryEntities(rec, r)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"recorded":1`) {
+		t.Fatalf("internal POST = %d %s", rec.Code, rec.Body.String())
+	}
+}

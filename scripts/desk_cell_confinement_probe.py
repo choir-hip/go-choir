@@ -226,13 +226,13 @@ FRAME_ALLOWED = {
     "management": {"product_api", "read_capture", "stories"},
     "texture": {"read_capture"},
     "research": {"search_start", "read", "search_wire_corpus", "save_evidence", "read_evidence", "list_evidence",
-                 "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "source_api"},
+                 "get_run_memory_entry", "research", "poll_source", "read_capture", "system1", "relate_stories", "relate", "source_api"},
     "research_child": {"search_start", "read", "read_capture", "search_wire_corpus", "read_evidence", "list_evidence"},
     "management_task": {"read_capture", "stories"},
 }
 FRAME_ACTIONS = {"exec", "read_file", "write_file", "list_dir", "message", "search_start", "read", "search_wire_corpus",
                  "save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry", "product_api", "research",
-                 "poll_source", "read_capture", "stories", "system1", "relate_stories", "source_api"}
+                 "poll_source", "read_capture", "stories", "system1", "relate_stories", "relate", "source_api"}
 
 
 def judge_frames(fb):
