@@ -634,6 +634,11 @@ type OwnershipRegistry struct {
 	// reservations for starts in flight (host_admission.go).
 	hostAdmission   HostAdmissionConfig
 	admissionLedger hostMemoryLedger
+	// cacheReturnCfg and cacheReturn are the guest page cache return
+	// trigger (guest_cache_return.go): the switch, and its memory-only
+	// state. Off by default.
+	cacheReturnCfg GuestCacheReturnConfig
+	cacheReturn    guestCacheReturnState
 	// makeRoomMu is the one make-room decider (host_admission_make_room.go):
 	// a refused start that waits on it re-admits before choosing a victim.
 	// Never taken while holding mu.
@@ -1302,6 +1307,10 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		if stopped := r.StopIdleVMs(ctx, guard); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}
+		// Density D6: after the tick's hibernate decisions, idle computers
+		// return their cold page cache (off unless VMCTL_GUEST_CACHE_RETURN
+		// says otherwise).
+		r.runGuestCacheReturnPass(ctx)
 	}
 
 	go func() {
