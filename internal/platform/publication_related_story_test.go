@@ -57,6 +57,9 @@ func newRelatedStoryLab(t *testing.T) *relatedLab {
 	l := newRealisticLab(t)
 	l.svc.relationTier = func(computerID string) (bool, error) { return computerID == labComputer, nil }
 	t.Setenv(relatedStoryEnv, "on")
+	// These tests are about the related_story signal alone; the entity
+	// signal (on by default) has its own (publication_related_entities_test.go).
+	t.Setenv(relatedEntitiesEnv, "off")
 	return l
 }
 
