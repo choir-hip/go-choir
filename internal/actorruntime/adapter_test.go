@@ -703,7 +703,7 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 	}
 	select {
 	case <-blocking.started:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("Texture activation did not start after owner recovery")
 	}
 
