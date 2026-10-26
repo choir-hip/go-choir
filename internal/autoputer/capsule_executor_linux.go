@@ -67,11 +67,13 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	configureJobMemory(executor, staticBudget)
 	// U1 (docs/design/computer-update-architecture-rnd-2026-10-24.md, section
 	// 4.6): with the source projection on, Freeze reuses the running binary
-	// when no binary-input path differs from the capsule source.
-	if sourceproj.Enabled() {
-		executor.SetBinaryReuseByInputDiff(true)
-		log.Printf("capsule executor: source projection on; binary reuse by binary-input diff")
-	}
+	// when no binary-input path differs from the capsule source. The gate is
+	// asked at each Freeze: the per-computer source.projection setting loads
+	// after this executor is built (agentcore Runtime.Start) and can change at
+	// runtime, so reading sourceproj.Enabled() here would miss it
+	// (docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md).
+	executor.SetBinaryReuseGate(sourceproj.Enabled)
+	log.Printf("capsule executor: binary reuse by binary-input diff gated on source projection (asked at each freeze)")
 	// Capsule memory per doctrine (RES-04) is a policy: observe keeps the
 	// MemoryMax shape and records what doctrine would have done.
 	memoryPolicy := capsule.CapsuleMemoryPolicyFromEnv(nil)
