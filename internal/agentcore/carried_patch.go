@@ -62,8 +62,10 @@ import (
 // has seen. A round whose trajectory's newest work still has an open
 // operation is held by admission until it settles (carryHoldFor), so it
 // never starts from the base while the decision it should build on is a
-// minute away; and the newest carriable candidate outranks every newer
-// stopped round that did not descend from it (selectCarriedCandidate).
+// minute away; while any operation on the computer is open every
+// implementation request waits, since its Freeze would be refused
+// (openOperationHold); and the newest carriable candidate outranks every
+// newer stopped round that did not descend from it (selectCarriedCandidate).
 
 const (
 	carriedOffered = "offered"
@@ -190,6 +192,7 @@ type carriedPatchOffer struct {
 	// OutrankedStopped are the assignments of newer stopped rounds passed
 	// over because they did not start from the carried candidate.
 	OutrankedStopped []string `json:"outranked_stopped,omitempty"`
+	OutrankedBy      string   `json:"outranked_by,omitempty"`
 	// SourcePending: the trajectory's newest work still has an open
 	// self-development operation (SourceOperationState); nothing is carried
 	// and the refusal is never recorded, so a replay decides again.
@@ -249,6 +252,8 @@ type carrySelection struct {
 	// Outranked are the assignments of newer stopped rounds passed over
 	// because they did not descend from the newest candidate.
 	Outranked []string
+	// OutrankedBy is the candidate the Outranked rounds did not start from.
+	OutrankedBy string
 }
 
 // selectCarriedCandidate chooses the one round to carry among the changed
@@ -259,8 +264,8 @@ type carrySelection struct {
 //   - Rank: when the newest candidate is carriable (rejected, failed), it
 //     outranks every newer stopped round that does not descend from it; the
 //     newest of the candidate and its descendants is chosen. viewed returns
-//     the candidate a round's own recorded offer named (offered or refused),
-//     "" when none.
+//     the candidate a round's own recorded offer mounted, "" when none
+//     (carriedOfferParent).
 //   - Otherwise the newest round is chosen if it is carriable; when it is not
 //     (it finished and was never proposed, or its operation applied) the
 //     chain ends and nothing is carried.
@@ -300,6 +305,7 @@ func selectCarriedCandidate(entries []carriedCandidate, selfAssignmentID string,
 	}
 	chosen := 0
 	var outranked []string
+	var outrankedBy string
 	if newest > 0 && roundCarriable(eligible[newest]) {
 		chosen = newest
 		for i := 0; i < newest; i++ {
@@ -311,6 +317,9 @@ func selectCarriedCandidate(entries []carriedCandidate, selfAssignmentID string,
 		for i := 0; i < chosen; i++ {
 			outranked = append(outranked, eligible[i].AssignmentID)
 		}
+		if len(outranked) > 0 {
+			outrankedBy = eligible[newest].CandidateID
+		}
 	}
 	if !roundCarriable(eligible[chosen]) {
 		return carrySelection{}
@@ -319,7 +328,7 @@ func selectCarriedCandidate(entries []carriedCandidate, selfAssignmentID string,
 	for _, entry := range eligible[chosen+1:] {
 		older = append(older, entry.CandidateID)
 	}
-	return carrySelection{Chosen: &eligible[chosen], Older: older, Outranked: outranked}
+	return carrySelection{Chosen: &eligible[chosen], Older: older, Outranked: outranked, OutrankedBy: outrankedBy}
 }
 
 // carriedDescends is whether a stopped round descends from the candidate
@@ -353,25 +362,18 @@ func carriedDescends(entry carriedCandidate, targetID string, entries []carriedC
 	}
 }
 
-// carriedOfferParent reads the candidate a round's recorded offer named.
-// With offeredOnly, only an offer that mounted the patch counts; otherwise a
-// recorded refusal counts too (the round was decided with it in view, and
-// the same refusal would meet the next round).
-func carriedOfferParent(root string, offeredOnly bool) func(carriedCandidate) string {
+// carriedOfferParent reads the candidate a round's recorded offer mounted.
+// Only an offered patch is descent: a refused one was never mounted, so the
+// round started from the base, and the refusal need not recur for the next
+// round (review 259, F1). Selection and the notice share this definition.
+func carriedOfferParent(root string) func(carriedCandidate) string {
 	return func(entry carriedCandidate) string {
 		offer, ok := decodeCarriedOffer(root, entry.AssignmentID, entry.Attempt)
-		if !ok || offer.Status != carriedOffered && (offeredOnly || offer.Status != carriedRefused) {
+		if !ok || offer.Status != carriedOffered {
 			return ""
 		}
 		return offer.CandidateID
 	}
-}
-
-// pickCarriedCandidate is selectCarriedCandidate's choice with no recorded
-// offers in view.
-func pickCarriedCandidate(entries []carriedCandidate, selfAssignmentID string) (*carriedCandidate, []string) {
-	sel := selectCarriedCandidate(entries, selfAssignmentID, nil)
-	return sel.Chosen, sel.Older
 }
 
 // carryHoldFrom is the round the assignment must wait for: the trajectory's
@@ -386,7 +388,7 @@ func carryHoldFrom(ctx context.Context, history carriedPatchHistory, root string
 	if err != nil {
 		return nil, err
 	}
-	return selectCarriedCandidate(entries, assignment.AssignmentID, carriedOfferParent(root, false)).Pending, nil
+	return selectCarriedCandidate(entries, assignment.AssignmentID, carriedOfferParent(root)).Pending, nil
 }
 
 // carryHoldFor is admission's read of carryHoldFrom on this runtime's tape.
@@ -395,6 +397,31 @@ func (rt *Runtime) carryHoldFor(ctx context.Context, assignment types.Engineerin
 		return nil, nil
 	}
 	return carryHoldFrom(ctx, storeCarriedHistory{rt: rt}, rt.selfdevUpdaterRoot, assignment)
+}
+
+// openOperationHold is the computer's oldest open self-development
+// operation other than the request's own (keyed by its assignment, as
+// openFreezeCandidate opens it), or nil. Freeze refuses per computer while
+// one is open (selfdev.ErrOperationOpen), so an implementation request bound
+// now could not freeze; it waits instead (review 259, F2). It reads the
+// operations themselves, so an open operation whose round left no
+// candidate holds too (F4). Only Freeze and the owner's rollback open an
+// operation, and neither goes through engineering admission.
+func (rt *Runtime) openOperationHold(ctx context.Context, assignment types.EngineeringAssignment) (*selfdev.Operation, error) {
+	if rt == nil || rt.selfdevOperations == nil || assignment.Binding.Kind != types.EngineeringAssignmentImplementation {
+		return nil, nil
+	}
+	open, err := rt.selfdevOperations.ListByStates(ctx, assignment.Binding.ComputerID, selfdev.OpenStates...)
+	if err != nil {
+		return nil, err
+	}
+	own := store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID)
+	for i := range open {
+		if open[i].IdempotencyKey != own {
+			return &open[i], nil
+		}
+	}
+	return nil, nil
 }
 
 func carriedOfferPath(root, assignmentID string, attempt uint64) string {
@@ -420,7 +447,7 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 		log.Printf("agentcore: carried patch: read trajectory %s candidates: %v", in.TrajectoryID, err)
 		return carriedPatchOffer{}
 	}
-	sel := selectCarriedCandidate(entries, in.AssignmentID, carriedOfferParent(deps.Root, false))
+	sel := selectCarriedCandidate(entries, in.AssignmentID, carriedOfferParent(deps.Root))
 	if pending := sel.Pending; pending != nil {
 		// Admission holds a round while this is so; an offer that meets it
 		// anyway says so, and is not recorded, so a replay decides again.
@@ -441,7 +468,7 @@ func offerCarriedPatch(ctx context.Context, deps carriedPatchDeps, in carriedPat
 		Schema: carriedOfferSchema, AssignmentID: in.AssignmentID, Attempt: in.Attempt,
 		BaseRef: chosen.BaseRef, RetryBaseRef: in.RetryBaseRef, BaseMoved: chosen.BaseRef != in.RetryBaseRef,
 		CandidateID: chosen.CandidateID, SourceAssignmentID: chosen.AssignmentID, SourceAttempt: chosen.Attempt,
-		SourceResult: string(chosen.Result), OlderCandidates: older, OutrankedStopped: sel.Outranked,
+		SourceResult: string(chosen.Result), OlderCandidates: older, OutrankedStopped: sel.Outranked, OutrankedBy: sel.OutrankedBy,
 	}
 	// Only a finished candidate (or a rejected one) is described by its
 	// operation; a round that reported failed is unfinished work whatever
@@ -687,7 +714,7 @@ func nameOlderFrozenCandidate(offer *carriedPatchOffer, root string, entries []c
 	}
 	offer.OlderFrozenCandidateID, offer.OlderFrozenAssignmentID = older.CandidateID, older.AssignmentID
 	offer.OlderFrozenResult, offer.OlderFrozenOperationState = string(older.Result), older.OperationState
-	offer.OlderFrozenStartedFrom = carriedDescends(chosen, older.CandidateID, entries, carriedOfferParent(root, true))
+	offer.OlderFrozenStartedFrom = carriedDescends(chosen, older.CandidateID, entries, carriedOfferParent(root))
 }
 
 // carriedPatchDirForSpawn is the directory the retry's capsule mounts: only
@@ -800,11 +827,11 @@ func carriedPatchNotice(offer carriedPatchOffer) string {
 		}
 		if len(offer.OutrankedStopped) > 0 {
 			if len(offer.OutrankedStopped) == 1 {
-				fmt.Fprintf(&b, " A newer round on this trajectory (assignment %s) was stopped before it froze, but it did not start from this candidate (%s), so its kept unfinished work is not carried: this candidate is the newest work the owner has seen.",
-					offer.OutrankedStopped[0], offer.CandidateID)
+				fmt.Fprintf(&b, " A newer round on this trajectory (assignment %s) was stopped before it froze, but it did not start from the newest candidate (%s), so its kept unfinished work is not carried: the work carried here builds on that candidate.",
+					offer.OutrankedStopped[0], offer.OutrankedBy)
 			} else {
-				fmt.Fprintf(&b, " Newer rounds on this trajectory (assignments %s) were stopped before they froze, but they did not start from this candidate (%s), so their kept unfinished work is not carried: this candidate is the newest work the owner has seen.",
-					strings.Join(offer.OutrankedStopped, ", "), offer.CandidateID)
+				fmt.Fprintf(&b, " Newer rounds on this trajectory (assignments %s) were stopped before they froze, but they did not start from the newest candidate (%s), so their kept unfinished work is not carried: the work carried here builds on that candidate.",
+					strings.Join(offer.OutrankedStopped, ", "), offer.OutrankedBy)
 			}
 		}
 		return b.String()

@@ -54,8 +54,12 @@ var errEngineeringRequestExpired = errors.New("engineering request expired befor
 type engineeringAdmissionBusy struct {
 	AssignmentID string
 	BlockedBy    string
-	// Why is "live" (another assignment holds a capsule) or "queued_ahead"
-	// (an older open request goes first).
+	// Why is "live" (another assignment holds a capsule), "queued_ahead"
+	// (an older open request goes first), "candidate_pending" (the
+	// trajectory's newest work has an open self-development operation),
+	// "operation_open" (another self-development operation on the computer
+	// is open, so a Freeze would be refused) or "carry_unreadable" (the
+	// carry's history or the operations could not be read).
 	Why string
 }
 
@@ -187,6 +191,17 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
 			BlockedBy: fmt.Sprintf("%s (assignment %s), whose self-development operation %s is still %s", held.CandidateID, held.AssignmentID, held.OperationID, held.OperationState),
 			Why:       "candidate_pending"}
+	}
+	// Freeze refuses per computer, so the hold is computer-wide too.
+	open, err := rt.openOperationHold(ctx, assignment)
+	if err != nil {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
+			BlockedBy: fmt.Sprintf("the computer's open self-development operations, which could not be read (%v)", err), Why: "carry_unreadable"}
+	}
+	if open != nil {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
+			BlockedBy: fmt.Sprintf("self-development operation %s (trajectory %s), still %s, which a Freeze on this computer waits for", open.OperationID, open.TrajectoryID, open.State),
+			Why:       "operation_open"}
 	}
 	return nil
 }
