@@ -26,6 +26,9 @@ const ogKindRebaseNoticeClaim = objectgraph.ObjectKind("choir.rebase_notice_clai
 
 func rebaseNoticeClaimKey(pairKey string) string { return strings.TrimSpace(pairKey) }
 
+// A claim's object key is types.StackRebaseClaimKey(pair, attempt): the
+// automatic attempts share the pair's key, each owner retry has its own.
+
 // validateRebaseNoticeClaim refuses a claim that names no pair, notice or
 // assignment, or whose fields disagree with each other.
 func validateRebaseNoticeClaim(claim types.StackRebaseClaim) error {
@@ -54,7 +57,7 @@ func rebaseNoticeClaimObject(ownerID, computerID string, claim types.StackRebase
 	if claim.ClaimedAt.IsZero() {
 		claim.ClaimedAt = now
 	}
-	obj, err := lifecycleObject(ogKindRebaseNoticeClaim, ownerID, computerID, rebaseNoticeClaimKey(claim.PairKey), claim, map[string]any{
+	obj, err := lifecycleObject(ogKindRebaseNoticeClaim, ownerID, computerID, rebaseNoticeClaimKey(types.StackRebaseClaimKey(claim.PairKey, claim.Attempt)), claim, map[string]any{
 		"computer_id": computerID, "pair_key": claim.PairKey, "operation_id": claim.OperationID, "notice_id": claim.NoticeID, "assignment_id": claim.AssignmentID,
 	}, claim.ClaimedAt, claim.ClaimedAt)
 	if err != nil {
@@ -85,7 +88,8 @@ func (s *Store) PutRebaseNoticeClaim(ctx context.Context, ownerID, computerID st
 	return nil
 }
 
-// GetRebaseNoticeClaim returns the claim of a pair, or ErrNotFound.
+// GetRebaseNoticeClaim returns the claim at key (types.StackRebaseClaimKey of
+// the pair and an attempt), or ErrNotFound.
 func (s *Store) GetRebaseNoticeClaim(ctx context.Context, ownerID, computerID, pairKey string) (types.StackRebaseClaim, error) {
 	obj, err := s.lifecycleGetObject(ctx, ogKindRebaseNoticeClaim, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), rebaseNoticeClaimKey(pairKey))
 	if err != nil {
@@ -174,7 +178,7 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 		return nil, nil, refuse("rebase_notice_mismatch", "management's spec is not JSON")
 	}
 	operationID, base, attempt, ok := types.ParseStackRebaseNoticeID(noticeID)
-	if !ok || attempt > types.RebaseNoticeMaxAttempts {
+	if !ok {
 		return nil, nil, refuse("rebase_notice_mismatch", "%q is not a rebase notice id", noticeID)
 	}
 	notice, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, noticeID)
@@ -207,15 +211,15 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 		return nil, nil, refuse("rebase_notice_mismatch", "the objective does not name notice %s; a rebase Cast asks for the rebase", noticeID)
 	}
 	var newer []objectgraph.ObjectCondition
-	for n := attempt + 1; n <= types.RebaseNoticeMaxAttempts; n++ {
-		later, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseNoticeID(operationID, base, n))
+	for _, laterID := range types.StackRebaseNewerAttemptIDs(operationID, base, attempt) {
+		later, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, laterID)
 		if err != nil {
 			return nil, nil, err
 		}
 		if later != nil {
-			return nil, nil, refuse("rebase_notice_superseded", "notice %s is superseded by attempt %d", noticeID, n)
+			return nil, nil, refuse("rebase_notice_superseded", "notice %s is superseded by %s", noticeID, laterID)
 		}
-		id, err := lifecycleCanonicalID(ogKindCommitmentRecord, req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseNoticeID(operationID, base, n))
+		id, err := lifecycleCanonicalID(ogKindCommitmentRecord, req.Binding.OwnerID, req.Binding.ComputerID, laterID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -228,7 +232,7 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 		}
 	}
 	pair := types.StackRebasePairKey(operationID, base)
-	if _, err := s.GetRebaseNoticeClaim(ctx, req.Binding.OwnerID, req.Binding.ComputerID, pair); err == nil {
+	if _, err := s.GetRebaseNoticeClaim(ctx, req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseClaimKey(pair, attempt)); err == nil {
 		return nil, nil, refuse("rebase_notice_claimed", "pair %s is already claimed by an assignment", pair)
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, nil, err
