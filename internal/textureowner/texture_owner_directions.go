@@ -30,6 +30,9 @@ const (
 	// textureOriginalRequestMaxChars caps the original request read from the
 	// document's first owner revision (reader-4's was 8484 characters).
 	textureOriginalRequestMaxChars = 16000
+	// texturePromptSeedRevisionKey names, in the request turn's metadata
+	// only (never stored), the revision the original request was read from.
+	texturePromptSeedRevisionKey = "seed_revision_id"
 )
 
 // textureOwnerDirection is one owner revise on the document: the revision
