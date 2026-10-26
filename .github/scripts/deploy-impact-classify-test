@@ -216,6 +216,8 @@ tooling_scripts_output="$(
     "scripts/m11_selfdev_episode_probe.mjs" \
     "scripts/s0m_ask_acceptance_probe.mjs" \
     "scripts/qa_renew_key.mjs" \
+    "scripts/density/README.md" \
+    "scripts/density/accept_five.py" \
     "scripts/qa_test_computer.mjs" \
     "docs/reports/some-report.md"
 )"
@@ -223,6 +225,7 @@ assert_contains "$tooling_scripts_output" "deploy_needed=false"
 assert_contains "$tooling_scripts_output" "scripts/check-heresies.sh -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/mail-resend-setup -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/m11_selfdev_episode_probe.mjs -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_contains "$tooling_scripts_output" "scripts/density/README.md -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/qa_renew_key.mjs -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_not_contains "$tooling_scripts_output" "unknown deployed path"
 
