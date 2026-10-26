@@ -285,6 +285,9 @@ type SnapshotTimeline struct {
 	GuestRelease   string `json:"guest_release,omitempty"`
 	CurrentRelease string `json:"current_release,omitempty"`
 	Behind         bool   `json:"behind,omitempty"`
+	// CacheReturn is the cache return before this hibernate's snapshot
+	// (density D6 S3); nil when the hibernate did not ask for one.
+	CacheReturn *CacheReturnTimeline `json:"cache_return,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------

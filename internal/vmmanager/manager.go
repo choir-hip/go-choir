@@ -539,6 +539,15 @@ type Manager struct {
 	// real binary. A jailed launch passes the jailer's arguments.
 	firecrackerStarter func(vmID string, args []string) error
 
+	// Test seams for the cache return before a snapshot (snapshot_cache_return.go):
+	// the clock the fence budget reads, the settle's sleep, the call's
+	// bound, a VM's RSS reader, and a hook at the Full or Diff decision.
+	cacheReturnClock     func() time.Time
+	cacheReturnSleep     func(time.Duration)
+	cacheReturnTimeout   time.Duration
+	cacheReturnRSSReader func(vmID string) func() (uint64, bool)
+	onDiffDecision       func()
+
 	// hostNet runs ip/iptables for guest taps (hostfirewall.go); tests
 	// replace it. Reached through m.net().
 	hostNetOnce sync.Once
@@ -1325,8 +1334,15 @@ func (m *Manager) StopVM(vmID string) error {
 // below: Firecracker is killed and the next wake cold boots from the
 // persistent directory, which is a crash boot under the restart rule.
 func (m *Manager) HibernateVM(vmID string) error {
+	return m.HibernateVMWithOptions(vmID, HibernateOptions{})
+}
+
+// HibernateVMWithOptions is HibernateVM with per-call options (density D6
+// S3). The options never reach the VM's configuration or its launch: they
+// only add a step to a snapshot hibernate, and kill mode ignores them.
+func (m *Manager) HibernateVMWithOptions(vmID string, opts HibernateOptions) error {
 	if m.hibernateMode() == HibernateModeSnapshot {
-		return m.hibernateVMSnapshot(vmID)
+		return m.hibernateVMSnapshot(vmID, opts)
 	}
 	return m.hibernateVMKill(vmID)
 }
