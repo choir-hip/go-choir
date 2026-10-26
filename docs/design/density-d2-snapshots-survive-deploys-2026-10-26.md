@@ -1491,7 +1491,7 @@ with what the build did and what FP0 should rule.
 2. **S0 had not been done.** The D2 section of the failure-modes doc and the
    H1/H6 problem record did not exist, and Problem Documentation First puts
    them before S1 and S1b. They were written first in this lane
-   (`415237e99`).
+   (`1151978c6`).
 3. **`packages.x86_64-linux.guest-release-json` cannot be read by `nix eval`
    alone.** A `writeText` derivation's contents need a build, and the worker
    host is not an x86_64-linux builder. The flake therefore also exposes
@@ -1536,7 +1536,7 @@ with what the build did and what FP0 should rule.
     host-dependent that was found, but Linux CI is the first place it runs on
     the deploy OS. If it differs there, regenerate with
     `UPDATE_GOLDEN=1 go test ./internal/vmmanager -run TestLaunchConfigGolden`
-    on the pre-S1b commit `415237e99`'s code, never on the new code.
+    from the vmmanager code of the pre-S1b commit `7b831a361`, never from the S1b code.
 11. **No code-review prompt template exists in the repo.** The "security effect"
     question is added to the code-review prompt in
     `skills/agentic-consensus/SKILL.md` (Prompt Construction).
