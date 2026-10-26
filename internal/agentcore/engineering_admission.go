@@ -141,7 +141,8 @@ func sameEngineeringAssignment(a, b types.EngineeringAssignment) bool {
 // nil admits the request; a *engineeringAdmissionBusy refuses it, retryably.
 // The caller holds engineeringAssignmentOpenMu, so no other saga binds a
 // capsule while the rows are read. It writes only the cancel of this
-// request when it has expired.
+// request when it has expired. Last it asks the carry whether the request
+// must wait for its trajectory's pending candidate (carryHoldFor).
 func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment types.EngineeringAssignment) error {
 	assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, assignment.Binding.ComputerID)
 	if err != nil {
@@ -171,6 +172,21 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 			continue
 		}
 		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID, BlockedBy: other.AssignmentID, Why: "queued_ahead"}
+	}
+	// The carry hold (SD-03, carried_patch.go): an implementation request
+	// whose trajectory's newest work still has an open self-development
+	// operation waits for that decision, so it builds on the settled
+	// candidate instead of starting from the base. A refusal, never a wait
+	// under the mutex: nothing that settles an operation goes through here.
+	held, err := rt.carryHoldFor(ctx, assignment)
+	if err != nil {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
+			BlockedBy: fmt.Sprintf("its trajectory's newest candidate, which could not be read (%v)", err), Why: "carry_unreadable"}
+	}
+	if held != nil {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
+			BlockedBy: fmt.Sprintf("%s (assignment %s), whose self-development operation %s is still %s", held.CandidateID, held.AssignmentID, held.OperationID, held.OperationState),
+			Why:       "candidate_pending"}
 	}
 	return nil
 }
