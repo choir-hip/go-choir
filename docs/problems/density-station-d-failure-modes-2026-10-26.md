@@ -368,3 +368,101 @@ Residuals, named and not fixed here:
 - **R312-9** D4 `wake` charges the previous start's settled RSS; a wake that
   settled low followed by a deploy-voided snapshot and a cold boot
   undercharges. The staging proof must exercise that transition.
+
+## D6. A guest's page cache never goes back to the host
+
+### Problem
+
+A guest frees clean page cache only under its own memory pressure, and an
+8 GiB guest holding 2 GiB of anonymous memory never feels any. Free page
+reporting (on for every computer, `VM_BALLOON_FREE_PAGE_REPORTING=1`) and
+Firecracker's discard carry freed pages to the host and work (host RSS fell
+1,614.7 MiB for 1,288.2 MiB freed, ledger 10-22 21:26, a mixed anonymous and
+cache free). What is missing is step 1, the guest freeing its cold cache.
+The paper's guest held 4,747 MiB of page cache (4,210 MiB the Dolt store,
+4.75 GB inactive against 0.17 GB active) with its VMM at 8,093 MiB; the
+owner's computers (premium_always_on) never idle-hibernate, so their cache
+never returns either. A hibernate then writes that cache into the snapshot.
+No code asks a running guest to free cache outside a capsule's teardown
+(`internal/capsule/teardown_reclaim.go`); the balloon is configured
+(`amount_mib: 0`, `deflate_on_oom`, free page reporting) and never inflated.
+
+### Design
+
+[density-d6-page-cache-return-2026-10-26.md](../design/density-d6-page-cache-return-2026-10-26.md)
+(revision 2, after review 320). A guest-side, bounded, cold-first
+`memory.reclaim` act on the daemon's own cgroup (route
+`POST /internal/runtime/memory/cache-return`, host-peer only), triggered by
+vmctl: idle (S2), before hibernate (S3), before make-room (S4). One switch,
+`VMCTL_GUEST_CACHE_RETURN=off|observe|active`, code default `off`. This
+build covers S0 to S2; S3 and S4 wait for the tier 2 re-review.
+
+### Failure modes (each pinned by a test before the code)
+
+- **D6-M1** an act runs while a run, a pending desk mutation, a
+  self-development operation or a live capsule is in flight.
+- **D6-M2** an act evicts the hot set and runs are slower afterwards.
+- **D6-M3** an act reclaims anonymous memory or anything swaps.
+- **D6-M4** the write blocks the guest daemon (EAGAIN parking; a write that
+  outlasts the budget).
+- **D6-M5** memory freed but not returned (reporting not negotiated;
+  fragmentation).
+- **D6-M6** D4's settled RSS is captured after an act.
+- **D6-M7** a Diff becomes incorrect (a new non-resident class, frozen-time
+  work, a changed Diff input, `init_on_free` or page poisoning on).
+- **D6-M8** the hibernate act fails or delays the hibernate, or a stuck act
+  holds the fence (the act is a separate bounded call; failure skips).
+- **D6-M9** an old guest without the route is retried every sweep.
+- **D6-M10** the idle trigger acts on the same computer every pass.
+- **D6-M11** an act races a hibernate, stop or start of the same VM.
+- **D6-M12** the paper, a public_platform computer or a held computer is
+  acted on before S5.
+- **D6-M13** the pressure step counts pending return as room, overruns its
+  deadline, or two refused starts squeeze the same computer.
+- **D6-M14** a vmctl restart or a guest crash resumes or replays an act.
+- **D6-M15** rollback is not exact (with `off`, no guest call; prepare
+  unchanged).
+- **D6-M16** a typo turns it on.
+- **D6-M17** a guest's self-report drives an admission decision.
+- **D6-M18** the launch config changes and voids snapshots.
+- **D6-M19** the act takes the host credential to a guest.
+- **D6-M20** a DAMON-selected computer is acted on and its reading loses
+  attribution.
+- **D6-M21** the target counts shmem, dirty or writeback pages, so the act
+  spins into EAGAIN or does writeback I/O (review 320 F3, DeepSeek F7).
+- **D6-M22** the settle exits before the return happens (review 320 F1).
+- **D6-M23** the hibernate mode runs on an unfenced guest (bypassing the
+  busy check).
+- **D6-M24** a candidate with no `ComputerURL` reads as idle (review 320
+  DeepSeek F4). The shared probe already fails closed on this (density D3a,
+  `dfdef0855`, pinned by `idle_hibernation_capsules_test.go`), so no problem
+  record is written; D6's candidate rule keeps its own non-empty-URL check
+  as defense in depth.
+- **D6-M25** the act writes to a cgroup other than the configured scope, or
+  falls back silently when the scope's file is absent.
+
+Slice map: S1 pins M1, M3, M4, M21, M23, M25; S2 pins M1, M6, M9, M10, M11,
+M12, M14, M15, M16, M17, M19, M24 (M20 in the nix comment); S3 pins M7, M8,
+M15, M18, M22, M23; S4 pins M12, M13.
+
+### Protected surfaces, evidence, rollback
+
+Mutation class: S0 green, S1 orange, S2 red (vmctl lifecycle neighbourhood;
+additive, behind one switch). Protected surfaces touched from S2: vmctl's
+idle sweep tick and health; never admission, the launch config, the snapshot
+meta or the prepare body. Admissible evidence: the unit tests above; on
+staging (FP0) the design's section 10 steps 1 and 2, with host RSS and
+MemAvailable read from the host, never from the guest's report. Not b@c
+until X1, never the owner's computers. Rollback, one act:
+`VMCTL_GUEST_CACHE_RETURN=off` in `nix/node-b.nix`; no launch-config byte and
+no prepare-body byte changes, so no snapshot is voided and no computer cold
+boots. Second rollback: revert the code commits; the guest route left behind
+is inert when uncalled.
+
+Heresy delta: discovered, "guest page cache never returns to the host" is
+step 1 of the return chain, not steps 2 and 3, which work; the design's
+claim that the shared busy probe answered not-busy for an empty
+`ComputerURL` did not hold on the build base (D3a already fails closed).
+Introduced: a
+host-to-guest memory act, bounded and stateless. Repaired: none until the
+staging proof.
