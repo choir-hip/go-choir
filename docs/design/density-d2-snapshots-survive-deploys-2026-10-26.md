@@ -1509,7 +1509,7 @@ with what the build did and what FP0 should rule.
    `plan.outputs.base` is the deployed commit or empty.
 6. **First range after S1c lands.** Staging's commit predates S1c, so the
    first run diffs from it to the S1c head and flags every surface commit in
-   between that has no trailers (two of the last 20 main commits, §13.4 below).
+   between that has no trailers (two of the last 20 main commits, item 13).
    FP0 clears it with one follow-up commit that raises `security_epoch`
    (rule 4), or by amending before landing. A base that lacks the policy file
    counts as epoch 0, so a first-ever policy file with epoch 1 reads as a
@@ -1545,3 +1545,14 @@ with what the build did and what FP0 should rule.
     it, and the guard compares link targets. The jailed launch itself was not
     exercised in a test (the fixture runs direct); the write is not
     mode-dependent.
+13. **Dry run over the last 20 main commits (2026-10-26, origin/main
+    `a5bf97c2d`).** History rebuilt in a throwaway clone with the S1 and S1c
+    files overlaid on every commit (so the lists, policy, script and `ci.yml`
+    exist at both ends of each range), then the check run once per commit
+    (`c^..c`): **2 of 20 would fail**, both `internal/agentcore` red commits
+    without trailers (`d5b4f495e`, `9771c7680`: the replay-probe scratch and
+    the checkpoint-bind fixes). The whole 20-commit range also fails (the same
+    two). The other 18 are docs, tests, `checkpointd`, `vmmanager`/`vmctl`
+    host code and scripts, none under a surface. The overlay replaces `ci.yml`
+    on every commit, so a commit that edited `ci.yml` is not tested for the
+    gate rule in this run. A wider sample is the 25% figure of §6.6.

@@ -62,6 +62,9 @@ jobs:
       ci: ${{ steps.classify.outputs.ci }}
       sampled_race: ${{ steps.classify.outputs.sampled_race }}
       sample_bucket: ${{ steps.classify.outputs.sample_bucket }}
+      # The live staging commit this push is planned against (empty when there
+      # is no trustworthy one); the security-epoch check diffs from it.
+      base: ${{ steps.classify.outputs.base }}
       race_selected: ${{ steps.select-race.outputs.race_selected }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -79,6 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           force_all=false
+          deployed=""
           case "$EVENT_NAME" in
             workflow_dispatch)
               force_all=true
@@ -132,6 +136,7 @@ jobs:
             git diff --name-only "$before" "$AFTER" |
               .github/scripts/ci-impact-classify --sha "$AFTER" "$GITHUB_OUTPUT"
           fi
+          echo "base=${deployed}" >> "$GITHUB_OUTPUT"
 
       - name: Select standard or Race Go matrices
         id: select-race
@@ -452,6 +457,10 @@ jobs:
     if: needs.plan.outputs.non_docs == 'true'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # The security-epoch check reads every commit between the live
+          # staging commit and this one.
+          fetch-depth: 0
 
       - name: Run V1 writer-purity gate
         shell: bash
@@ -495,6 +504,52 @@ jobs:
         run: |
           scripts/check-guest-floor-paths
           scripts/selftest-guest-floor-paths
+
+      # The security-epoch check (docs/design/density-d2-snapshots-survive-
+      # deploys-2026-10-26.md 6.6, S1c): a change to a named guest security
+      # surface raises security_epoch or carries the reviewed Security-Effect
+      # trailers. The base is the live staging commit (plan.outputs.base), never
+      # the push's before-SHA, so a commit that failed one push cannot drop out
+      # of the next push's range. The base's copy of the script runs as well as
+      # this commit's, so an edit that weakens the script still meets the old
+      # one. `check` needs this job and the staging deploy needs `check`.
+      - name: Check the guest security epoch
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PLAN_BASE: ${{ needs.plan.outputs.base }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          scripts/selftest-guest-security-epoch
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$PLAN_BASE" ;;
+            *) base="" ;;
+          esac
+          if [[ -z "$base" ]]; then
+            base="$(git rev-list -1 --first-parent --before=8.days HEAD)"
+            echo "No trustworthy live staging commit; base is the newest first-parent commit older than eight days: $base"
+          fi
+          if [[ -z "$base" ]]; then
+            echo "guest-security-epoch: FAIL: no base commit could be chosen" >&2
+            exit 1
+          fi
+          rc=0
+          {
+            echo "### Guest security epoch ($base..HEAD)"
+            if git cat-file -e "$base:scripts/check-guest-security-epoch" 2>/dev/null; then
+              git show "$base:scripts/check-guest-security-epoch" >"$RUNNER_TEMP/base-check-guest-security-epoch"
+              chmod +x "$RUNNER_TEMP/base-check-guest-security-epoch"
+              echo "base copy:"
+              "$RUNNER_TEMP/base-check-guest-security-epoch" --base "$base" --head HEAD 2>&1 || rc=1
+            else
+              echo "the base has no copy of the check (first adoption); the head's copy runs alone"
+            fi
+            echo "head copy:"
+            scripts/check-guest-security-epoch --base "$base" --head HEAD 2>&1 || rc=1
+            exit "$rc"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   check:
     name: Go Vet + Test + Build
@@ -856,7 +911,7 @@ jobs:
           echo "Diff base: deployed staging identity $before ($base_source)"
           mapfile -t changed < <(git diff --name-only "$before" "$after")
 
-          printf '%s\n' "${changed[@]}" | .github/scripts/deploy-impact-classify "$GITHUB_OUTPUT"
+          printf '%s\n' "${changed[@]}" | DEPLOY_IMPACT_BASE="$before" DEPLOY_IMPACT_HEAD="$after" .github/scripts/deploy-impact-classify "$GITHUB_OUTPUT"
 
           deploy_needed="$(grep '^deploy_needed=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)"
 
