@@ -20,7 +20,10 @@ import (
 //	   proxy forwards it, widening the read to another owner's releases;
 //	P4 a second owner's key is forwarded as the first owner;
 //	P5 an API key without the read scope reads anyway (unchanged: 403);
-//	P6 a release id that is not a sha256 reaches corpusd (unchanged: 404).
+//	P6 a release id that is not a sha256 reaches corpusd (unchanged: 404);
+//	P7 an admin key of owner B reads as someone other than B: the admin scope
+//	   passes the scope check only; it names no other owner, so private means
+//	   private even to admin.
 
 func (e *releaseProxyEnv) corpusdReads() []string {
 	e.mu.Lock()
@@ -134,5 +137,37 @@ func TestReleaseReadsKeepTheirScopeAndIdChecks(t *testing.T) {
 	// P6: a release id that is not a sha256 is a 404 before corpusd.
 	if rec := env.send(t, http.MethodGet, "/api/releases/not-a-sha", "", env.secret(t, "computer:self_development:read")); rec.Code != http.StatusNotFound || len(env.corpusdReads()) != 0 {
 		t.Fatalf("bad id = %d, reads %v", rec.Code, env.corpusdReads())
+	}
+}
+
+func TestAdminKeyReadsOnlyItsOwnersReleases(t *testing.T) {
+	env := newReleaseProxyEnv(t)
+	env.draft = func() []byte { return []byte(`{}`) }
+	ownerB, err := env.store.CreateUser("owner-b", "b@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := env.secretFor(t, ownerB.ID, "admin")
+	id := strings.Repeat("a", 64)
+	for _, path := range []string{
+		"/api/releases?limit=5",
+		"/api/releases?owner_id=" + env.user + "&limit=5", // naming the first owner changes nothing
+		"/api/releases/" + id,
+		"/api/releases/" + id + "?owner_id=" + env.user,
+	} {
+		env.calls = nil
+		if rec := env.send(t, http.MethodGet, path, "", admin); rec.Code != http.StatusOK {
+			t.Fatalf("admin %s = %d %s", path, rec.Code, rec.Body.String())
+		}
+		reads := env.corpusdReads()
+		if len(reads) != 1 {
+			t.Fatalf("%s: corpusd reads = %v", path, reads)
+		}
+		if owner, ok := upstreamOwner(t, reads[0]); !ok || owner != ownerB.ID {
+			t.Fatalf("admin of owner B, %s: upstream %q names owner %q, want only %q", path, reads[0], owner, ownerB.ID)
+		}
+		if strings.Contains(reads[0], env.user) {
+			t.Fatalf("admin of owner B reached corpusd naming owner A: %q", reads[0])
+		}
 	}
 }
