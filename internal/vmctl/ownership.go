@@ -539,6 +539,12 @@ type VMInstanceInfo struct {
 type OwnershipRegistry struct {
 	mu sync.RWMutex
 
+	// deployRefreshInFlight reports whether a deploy refresh of the computer is
+	// running (the handler's tracker; SetDeployRefreshInFlight). Hibernate
+	// skips such a computer: the refresh holds the guest's planned-restart
+	// marker window, and a snapshot inside it would capture the marker (D2 S5).
+	deployRefreshInFlight func(userID, desktopID string) bool
+
 	// resumeEnroller is called after a snapshot resume onto a guest release
 	// (SetResumeEnroller).
 	resumeEnroller func(own VMOwnership, release string)
@@ -874,6 +880,13 @@ func (r *OwnershipRegistry) writePersistenceLocked() error {
 func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
 	r.vmManager = mgr
+	r.mu.Unlock()
+}
+
+// SetDeployRefreshInFlight registers the in-flight check hibernate consults.
+func (r *OwnershipRegistry) SetDeployRefreshInFlight(fn func(userID, desktopID string) bool) {
+	r.mu.Lock()
+	r.deployRefreshInFlight = fn
 	r.mu.Unlock()
 }
 
@@ -3109,6 +3122,16 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	if own.State != VMStateActive && own.State != VMStateDegraded {
 		r.mu.Unlock()
 		return fmt.Errorf("VM %s cannot be hibernated (state=%s)", own.VMID, own.State)
+	}
+	// A deploy refresh of this computer is in flight: it holds the guest's
+	// planned-restart marker window, which a snapshot must never capture.
+	// Skipped like a busy guest (never the kill path); the idle sweep, make-room
+	// and the operator all arrive here.
+	if r.deployRefreshInFlight != nil && r.deployRefreshInFlight(userID, desktopID) {
+		vmID := own.VMID
+		r.mu.Unlock()
+		log.Printf("vmctl: hibernate of VM %s skipped: a deploy refresh of this computer is in flight", vmID)
+		return fmt.Errorf("VM %s: %w (a deploy refresh is in flight)", vmID, errHibernateGuestBusy)
 	}
 
 	// Delegate to the real VM manager if available. A snapshot hibernate

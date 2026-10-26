@@ -109,19 +109,22 @@ func TestSnapshotRefusesAChangedOrUnknownHostCPU(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			fp, ferr := tc.atHiber, tc.hiberErr
-			stubHostCPU(t, &fp, &ferr)
+			var fp string
+			var ferr error
 			var dir string
 			var meta *SnapshotMeta
 			var validate func() string
 			if tc.releaseMeta {
 				r := newReleaseFixture(t)
-				fp, ferr = tc.atHiber, tc.hiberErr // the fixture stub may have set its own
+				stubHostCPU(t, &fp, &ferr) // after the fixture's own stub
+				fp, ferr = tc.atHiber, tc.hiberErr
 				d, m := r.hibernate(t)
 				dir, meta = d, m
 				validate = func() string { return r.validate(dir, meta) }
 			} else {
 				f := newSnapshotFixture(t)
+				stubHostCPU(t, &fp, &ferr)
+				fp, ferr = tc.atHiber, tc.hiberErr
 				f.serveLaunchAPI(t)
 				if err := f.mgr.HibernateVM(f.vmID); err != nil {
 					t.Fatal(err)
