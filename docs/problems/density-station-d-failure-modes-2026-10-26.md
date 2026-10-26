@@ -201,3 +201,69 @@ computes) and `httpGuestBusy` adds it. That is a guest change (agentcore,
 do not report it would read as zero, so the rule must be "a guest that does
 not report the field is busy" or the timer drop must follow the guest deploy.
 Not built here.
+
+## D4. Admission charges the last peak, not what a wake settles at
+
+### Problem
+
+`estimateNeedWith` (`internal/vmctl/host_admission.go`) charges a start the
+computer's `MemoryPeakRSSBytes`, the highest resident memory of its last
+start, clamped to the guest size. For b@c that is 7847 MiB, from one long
+run; a snapshot wake lands at about 0.3 to 1.4 GiB and settles near 0.3 to
+0.4 GiB (`docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`), a cold
+boot at 1.15 to 1.37 GiB. At 11:49 the peak made a 448 MiB shortfall
+(13650 MiB required against 13202 MiB) that a charge near the settled size
+would not have had. An over-charge means refused starts and, with D1, extra
+victims hibernated for memory the start never takes.
+
+### Design (the D4 build spec in the goal file)
+
+- Record each start's settled RSS: when a started reservation's settle
+  window (5 minutes) ends, the ledger keeps the VM's latest resident reading
+  (`outstandingLocked`); `sampleVMMemory` persists it on the ownership as
+  `MemorySettledRSSBytes` (`memory_settled_rss_bytes`, with
+  `MemorySettledAt`) beside the peak. The capture runs in every mode; only
+  the charge is switched.
+- `VMCTL_ADMISSION_NEED=wake` charges the settled RSS (at least
+  `MinNeedBytes`, at most the guest), `DefaultNeedBytes` when unmeasured,
+  never the peak. `peak` (the code default until the staging proof) is
+  today's estimate exactly. The peak stays recorded and shown. Health
+  `admission.recent` shows `need_source` `settled`.
+
+### Failure modes (each pinned by a test before the code)
+
+- **M1** overcommit: the admitted computer later grows to its peak and the
+  host falls under its floor (RES-15). Not closed by this item. The
+  backstops are sustained pressure reclaim and D1 make-room on the next
+  start; the OOM order is unchanged (ordinary VMs at oom_score_adj 500). The
+  proof must show the floor held with `wake` on.
+- **M2** a settled RSS taken from a start that failed or was killed inside
+  the window: `finish(false)` deletes the reservation, and a VM that stopped
+  has no reading, so neither captures.
+- **M3** the field missing on an old ownership file reads as unmeasured
+  (default need), never as zero need; a JSON round trip of an ownership
+  without it.
+- **M4** the capture happens only when a started reservation's window ends,
+  not before, not for an in-flight reservation, and not twice.
+- **M5** a second start of the same VM inside the first's window must not
+  have the first's window capture the second's early reading.
+- **M6** protected starts are unchanged (admitted, reserving the same need
+  as the mode charges).
+- **M7** guest-size mode is unchanged (no estimate, no ledger).
+- **M8** `VMCTL_ADMISSION_NEED=peak`, an unset or an unknown value restores
+  today's estimate exactly.
+- **M9** a vmctl restart does not invent a settled value: the ledger is not
+  persisted, so a window open at a restart captures nothing; the persisted
+  value is the last one captured.
+- **M10** a settled value under the 1 GiB minimum charges the minimum; over
+  the guest charges the guest.
+
+### Protected surfaces, evidence, rollback
+
+Protected: vmctl admission (`host_admission.go`), the ownership file's
+schema (additive, omitempty). Admissible evidence: the unit tests above (the
+11:49 numbers); staging, d@e or a test computer woken, `admission.recent`
+`need_source` `settled` with the need near its settled RSS, and host
+MemAvailable before and after. Not b@c (X1). Rollback:
+`VMCTL_ADMISSION_NEED=peak` in `nix/node-b.nix`, or a revert of the code
+commit; the extra ownership fields are ignored by older code.
