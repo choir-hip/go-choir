@@ -1197,6 +1197,13 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
 	now := time.Now().UTC()
+	// U4: a Cast whose spec names a rebase notice is bound to it inside this
+	// lock, and the pair's claim joins the batch under an absent-object
+	// condition, so two racing opens cannot both commit.
+	rebaseClaim, rebaseConditions, err := s.requireRebaseNoticeAdmission(ctx, req, records, now)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
 	transition, err := s.prepareEngineeringLifecycleTransition(ctx, authority.trajectory, authority.trajectoryRec, now)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
@@ -1258,6 +1265,10 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: assignmentObj.CanonicalID},
 		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID})
+	if rebaseClaim != nil {
+		inboxObjects = append(inboxObjects, *rebaseClaim)
+		conditions = append(conditions, rebaseConditions...)
+	}
 	result, err := s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleOpenEngineeringAssignment, types.LifecycleEngineeringAssignmentOpened,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj}, conditions, edges, nil, inboxObjects...)
 	if err != nil {

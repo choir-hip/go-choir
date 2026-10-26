@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -114,4 +115,129 @@ func (s *Store) ListRebaseNoticeClaims(ctx context.Context, ownerID, computerID,
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ClaimedAt.Before(out[j].ClaimedAt) })
 	return out, nil
+}
+
+// rebaseCastSpec is the part of management's engineering Cast spec the
+// rebase admission reads. Other fields (parent, network, ...) are the
+// ordinary path's.
+type rebaseCastSpec struct {
+	RebaseNotice string `json:"rebase_notice"`
+	RebaseOf     string `json:"rebase_of"`
+	Base         string `json:"base"`
+}
+
+// requireRebaseNoticeAdmission is U4's admission check, run inside the open's
+// lock beside requireEngineeringRecordsAdmission (docs/design/
+// u4-stack-rebase-build-2026-10-26.md, question 5). When management's Cast
+// spec names a rebase notice it requires all of:
+//   - the runtime admitted a rebase (req.Rebase) and this open's spec agrees;
+//   - the notice record exists and passes IsStackRebaseNotice (an agent's
+//     record never does);
+//   - its inbox is the parent Cast's sender, and the parent's packet names
+//     the same notice id (the root made this Cast);
+//   - the spec's rebase_of and base equal the notice's subject refs, and the
+//     objective contains the notice id;
+//   - it is the latest attempt of its pair;
+//   - it was not committed before this boot on a markerless boot (the runtime
+//     passes the clock; the store does not read it);
+//   - no claim exists for the pair.
+//
+// It returns the claim object, to join the open's batch, and the conditions
+// that make it atomic: the claim must be absent, and so must any newer
+// attempt of the notice. A spec without a notice returns nothing, and a
+// runtime admission without a notice in the spec is refused.
+func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.OpenEngineeringAssignmentRequest, records types.CommitInboxRecordsRequest, now time.Time) (*objectgraph.Object, []objectgraph.ObjectCondition, error) {
+	refuse := func(code, format string, args ...any) error {
+		return fmt.Errorf("co-super assignment: records admission: %s: "+format+": %w", append(append([]any{code}, args...), ErrEngineeringAssignmentInvalid)...)
+	}
+	var cast *types.CommitmentRecord
+	for i := range records.Records {
+		if strings.TrimSpace(records.Records[i].Inbox) == req.Binding.AssignedAgentID {
+			cast = &records.Records[i]
+		}
+	}
+	if cast == nil || cast.Directive == nil {
+		return nil, nil, nil // requireEngineeringRecordsAdmission refuses this
+	}
+	noticeID := types.CastRebaseNotice(cast.Directive.Body)
+	if noticeID == "" {
+		if req.Rebase != nil {
+			return nil, nil, refuse("rebase_notice_mismatch", "the runtime admitted a rebase but management's spec names no rebase_notice")
+		}
+		return nil, nil, nil
+	}
+	if req.Rebase == nil {
+		return nil, nil, refuse("rebase_notice_mismatch", "management's spec names notice %s but the runtime did not admit a rebase", noticeID)
+	}
+	var spec rebaseCastSpec
+	if err := json.Unmarshal([]byte(cast.Directive.Body), &spec); err != nil {
+		return nil, nil, refuse("rebase_notice_mismatch", "management's spec is not JSON")
+	}
+	operationID, base, attempt, ok := types.ParseStackRebaseNoticeID(noticeID)
+	if !ok || attempt > types.RebaseNoticeMaxAttempts {
+		return nil, nil, refuse("rebase_notice_mismatch", "%q is not a rebase notice id", noticeID)
+	}
+	notice, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, noticeID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if notice == nil || !types.IsStackRebaseNotice(*notice) {
+		return nil, nil, refuse("rebase_notice_mismatch", "notice %s is not a rebase notice on the tape", noticeID)
+	}
+	parent, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, strings.TrimSpace(cast.ParentID))
+	if err != nil {
+		return nil, nil, err
+	}
+	if parent == nil || parent.Directive == nil {
+		return nil, nil, refuse("rebase_notice_mismatch", "the parent Cast %q is not on the tape", cast.ParentID)
+	}
+	if strings.TrimSpace(notice.Inbox) != strings.TrimSpace(parent.SenderInbox) {
+		return nil, nil, refuse("rebase_notice_mismatch", "notice %s was sent to %s, the parent Cast is from %s", noticeID, notice.Inbox, parent.SenderInbox)
+	}
+	if types.CastRebaseNotice(parent.Directive.Body) != noticeID {
+		return nil, nil, refuse("rebase_notice_mismatch", "the parent Cast does not carry notice %s; the root did not make this request", noticeID)
+	}
+	if strings.TrimSpace(spec.RebaseOf) != operationID || strings.TrimSpace(notice.SubjectRefs["operation_id"]) != operationID {
+		return nil, nil, refuse("rebase_notice_mismatch", "spec rebase_of %q is not the notice's operation %q", spec.RebaseOf, operationID)
+	}
+	if strings.TrimSpace(spec.Base) != base || strings.TrimSpace(notice.SubjectRefs["booted_base"]) != base {
+		return nil, nil, refuse("rebase_notice_mismatch", "spec base %q is not the notice's base %q", spec.Base, base)
+	}
+	if !strings.Contains(cast.Directive.Objective, noticeID) {
+		return nil, nil, refuse("rebase_notice_mismatch", "the objective does not name notice %s; a rebase Cast asks for the rebase", noticeID)
+	}
+	var newer []objectgraph.ObjectCondition
+	for n := attempt + 1; n <= types.RebaseNoticeMaxAttempts; n++ {
+		later, err := s.GetCommitmentRecord(ctx, req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseNoticeID(operationID, base, n))
+		if err != nil {
+			return nil, nil, err
+		}
+		if later != nil {
+			return nil, nil, refuse("rebase_notice_superseded", "notice %s is superseded by attempt %d", noticeID, n)
+		}
+		id, err := lifecycleCanonicalID(ogKindCommitmentRecord, req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseNoticeID(operationID, base, n))
+		if err != nil {
+			return nil, nil, err
+		}
+		newer = append(newer, objectgraph.ObjectCondition{CanonicalID: id})
+	}
+	if !req.Rebase.PlannedBoot && !req.Rebase.BootedAt.IsZero() {
+		committed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(notice.Provenance.CommittedAt))
+		if err != nil || committed.Before(req.Rebase.BootedAt) {
+			return nil, nil, refuse("rebase_notice_interrupted", "notice %s was committed before this boot and a crash closed it: interrupted by a restart", noticeID)
+		}
+	}
+	pair := types.StackRebasePairKey(operationID, base)
+	if _, err := s.GetRebaseNoticeClaim(ctx, req.Binding.OwnerID, req.Binding.ComputerID, pair); err == nil {
+		return nil, nil, refuse("rebase_notice_claimed", "pair %s is already claimed by an assignment", pair)
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, nil, err
+	}
+	claim, condition, err := rebaseNoticeClaimObject(req.Binding.OwnerID, req.Binding.ComputerID, types.StackRebaseClaim{
+		PairKey: pair, OperationID: operationID, BootedBase: base, NoticeID: noticeID, Attempt: attempt, AssignmentID: req.AssignmentID,
+	}, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &claim, append(newer, condition), nil
 }

@@ -168,12 +168,29 @@ func TestRebaseAdmissionRefusesWhatIsNotBoundToTheNotice(t *testing.T) {
 			open.Records.Records = recs
 			mutate(t, a, &open)
 			open = a.seal(open)
-			if _, err := a.s.OpenEngineeringAssignment(context.Background(), open); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+			_, err := a.s.OpenEngineeringAssignment(context.Background(), open)
+			if !errors.Is(err, ErrEngineeringAssignmentInvalid) {
 				t.Fatalf("want ErrEngineeringAssignmentInvalid, got %v", err)
+			}
+			if want := rebaseAdmRefusalCode[name]; !strings.Contains(err.Error(), want) {
+				t.Fatalf("refused for the wrong reason: want %q in %v", want, err)
 			}
 			a.requireNothingCommitted(t, open)
 		})
 	}
+}
+
+// rebaseAdmRefusalCode is the stable code each refusal above must carry, so a
+// case never passes by failing for another reason.
+var rebaseAdmRefusalCode = map[string]string{
+	"no notice record":                               "rebase_notice_mismatch: notice " + "rebase-notice:op-a:" + rebaseAdmBase + ":2 is not a rebase notice on the tape",
+	"objective without the notice id (D2a)":          "the objective does not name notice",
+	"spec rebase_of differs (D2a)":                   "spec rebase_of",
+	"spec base differs (D2a)":                        "spec base",
+	"spec omits the operation":                       "spec rebase_of",
+	"the runtime did not admit a rebase":             "the runtime did not admit a rebase",
+	"a pre-boot notice after a markerless boot (D6)": "rebase_notice_interrupted",
+	"a superseded attempt":                           "rebase_notice_superseded",
 }
 
 func TestRebaseAdmissionRefusesANoticeInAnotherTexturesInbox(t *testing.T) {
