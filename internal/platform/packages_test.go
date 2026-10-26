@@ -50,8 +50,9 @@ import (
 //	     listed on republish while it can still be the head, and refused
 //	     by name once the track moved; a listing that is not stored is
 //	     reported as published (review 274 F6, Devin F7);
-//	C2   past the listing cap a track's seq is counted from a truncated
-//	     read (review 274 F7).
+//	C2   a track's seq is counted from a truncated read (review 274 F7): S3
+//	     pages every track read to its end instead of capping it
+//	     (TestPackageTrackPagesPastOnePage, bunch279-I2).
 
 const pkgRoot = "frontend/src/packages/reader"
 
@@ -751,39 +752,4 @@ func TestPackageListingThatIsNotStoredIsNoPublish(t *testing.T) {
 	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); rec.Code != http.StatusNotFound {
 		t.Fatalf("a listing that was not stored heads the track: %d %s", rec.Code, rec.Body.String())
 	}
-}
-
-func TestPackageTrackRefusesPastTheListingCap(t *testing.T) {
-	saved := maxTrackListings
-	maxTrackListings = 2
-	t.Cleanup(func() { maxTrackListings = saved })
-	w := newPkgWorld(t)
-	r1 := w.build("<p>v2</p>\n", "owner-a", nil)
-	w.published(r1)
-	r2 := w.build("<p>v3</p>\n", "owner-a", &r1)
-	w.published(r2)
-	// C2: a third listing would be counted from a read the cap truncates.
-	r3 := w.build("<p>v4</p>\n", "owner-a", &r2)
-	wantPkgRefusal(t, w.publish(r3), http.StatusConflict, "track_full")
-	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-a"); !strings.Contains(rec.Body.String(), r2.id) {
-		t.Fatalf("head at the cap = %d %s, want r2", rec.Code, rec.Body.String())
-	}
-	// A read past the cap refuses rather than answer from a truncated read.
-	withdrawn := w.read(packagesRoute + "/releases/" + r2.id + "?owner_id=owner-a")
-	var view PackageReleaseView
-	if json.Unmarshal(withdrawn.Body.Bytes(), &view) != nil {
-		t.Fatalf("read r2: %s", withdrawn.Body.String())
-	}
-	next := view.Listing
-	prev, _ := view.Listing.Digest()
-	next.Version, next.PrevVersionDigest, next.State, next.StateReason, next.StateActor = 2, prev, pkgrelease.StateWithdrawn, "withdrawn", "owner_act:test"
-	obj, err := listingObject("owner-a", "computer-a1", next, time.Now().UTC())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.h.releaseStore().InsertObjectIfAbsent(context.Background(), obj); err != nil {
-		t.Fatal(err)
-	}
-	wantPkgRefusal(t, w.read(packagesRoute+"/catalog/reader/releases?owner_id=owner-a"), http.StatusConflict, "track_full")
-	wantPkgRefusal(t, w.read(packagesRoute+"/catalog?owner_id=owner-a"), http.StatusConflict, "track_full")
 }

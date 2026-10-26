@@ -46,6 +46,8 @@ type packageProxyEnv struct {
 	draft   func(query string) []byte
 	head    string // corpusd's track head answer; "" is 404
 	receipt string // the owner-act header corpusd saw on the publish
+	// guestStatus is the guest's status (0 is 200); S3's share gate.
+	guestStatus int
 }
 
 func (e *packageProxyEnv) record(call string) {
@@ -78,13 +80,16 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		env.record("guest " + r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " owner=" + r.Header.Get("X-Authenticated-User") + " computer=" + r.Header.Get("X-Authenticated-Computer"))
 		w.Header().Set("Content-Type", "application/json")
+		if env.guestStatus != 0 {
+			w.WriteHeader(env.guestStatus)
+		}
 		_, _ = w.Write(env.draft(r.URL.RawQuery))
 	}))
 	t.Cleanup(guest.Close)
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		line := "corpusd " + r.Method + " " + r.URL.Path + " internal=" + r.Header.Get("X-Internal-Caller") + " query=" + r.URL.RawQuery
-		if r.Method == http.MethodPost {
+		if r.Method == http.MethodPost || strings.HasPrefix(r.URL.Path, "/internal/platform/listings/") {
 			line += " " + string(body)
 			env.mu.Lock()
 			env.receipt = r.Header.Get(owneract.Header)
@@ -93,6 +98,8 @@ func newPackageProxyEnv(t *testing.T) *packageProxyEnv {
 		env.record(line)
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/internal/platform/listings/"):
+			_, _ = w.Write([]byte(`{"release_id":"r","changed":true}`))
 		case r.Method == http.MethodPut:
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"digest":"x"}`))
@@ -360,6 +367,133 @@ func TestGuestCannotFilePackageObjectsThroughTheProxy(t *testing.T) {
 		srv.ServeHTTP(rec, req)
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("guest created a %s object through the proxy: %d %s", kind, rec.Code, rec.Body)
+		}
+	}
+}
+
+// Library S3 at the proxy (design 4.1, 4.4, 14): share, withdraw and
+// reinstate are owner acts. Failure modes pinned:
+//
+//	A2   a listing act without owner:acts (admin included) reaches the guest
+//	     or corpusd; the receipt does not bind the release and the change;
+//	G1   with packages.share off on the named computer the act reaches
+//	     corpusd (the guest's gate is the rollout switch, as for publish);
+//	R4   the owner corpusd is told is a body field, not the authenticated
+//	     owner; a computer the key does not own gates the act;
+//	L4   a history read forwards a caller-chosen owner, or drops the track
+//	     and the page cursor.
+func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
+	env := newPackageProxyEnv(t)
+	env.draft = func(string) []byte { return []byte(`{"setting":"packages.share","on":true}`) }
+	id := strings.Repeat("a", 64)
+	path := "/api/catalog/records/" + id + "/listing"
+	share := `{"computer_id":"computer-a","scopes":["owner","shared"],"shared_with":{"owners":["owner-b"]},"confirm_paths":"` + strings.Repeat("f", 64) + `"}`
+	reset := func() {
+		env.mu.Lock()
+		env.calls = nil
+		env.receipt = ""
+		env.mu.Unlock()
+	}
+
+	// A2: no owner:acts, admin included: nothing upstream.
+	for _, scopes := range [][]string{{"computer:self_development:approve"}, {"admin"}} {
+		if rec := env.send(t, http.MethodPatch, path, share, env.secret(t, scopes...)); rec.Code != http.StatusForbidden || env.joined() != "" {
+			t.Fatalf("A2 %v share = %d, calls %v", scopes, rec.Code, env.joined())
+		}
+	}
+	owner := env.secret(t, "computer:self_development:approve", OwnerActsScope)
+	for name, body := range map[string]string{
+		"scopes and a state":   `{"computer_id":"computer-a","scopes":["owner"],"state":"withdrawn"}`,
+		"neither":              `{"computer_id":"computer-a"}`,
+		"no computer":          `{"scopes":["owner"]}`,
+		"an owner in the body": `{"computer_id":"computer-a","scopes":["owner"],"owner_id":"evil"}`,
+	} {
+		reset()
+		if rec := env.send(t, http.MethodPatch, path, body, owner); rec.Code != http.StatusBadRequest || env.joined() != "" {
+			t.Fatalf("%s = %d %s, calls %v; want 400 and no upstream call", name, rec.Code, rec.Body.String(), env.joined())
+		}
+	}
+	reset()
+	if rec := env.send(t, http.MethodPatch, "/api/catalog/records/not-a-sha/listing", share, owner); rec.Code != http.StatusNotFound || env.joined() != "" {
+		t.Fatalf("a malformed id = %d, calls %v", rec.Code, env.joined())
+	}
+	// R4: a computer the key does not own.
+	reset()
+	if rec := env.send(t, http.MethodPatch, path, strings.Replace(share, "computer-a", "computer-z", 1), owner); rec.Code == http.StatusOK || strings.Contains(env.joined(), "corpusd PUT") {
+		t.Fatalf("R4 another computer's gate = %d, calls %v", rec.Code, env.joined())
+	}
+
+	// G1: the gate is off; the guest's refusal is relayed, corpusd untouched.
+	reset()
+	env.guestStatus = http.StatusConflict
+	env.draft = func(string) []byte { return []byte(`{"error":"off","reason":"packages_share_off"}`) }
+	if rec := env.send(t, http.MethodPatch, path, share, owner); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "packages_share_off") || strings.Contains(env.joined(), "corpusd") {
+		t.Fatalf("G1 the gate off = %d %s, calls %v", rec.Code, rec.Body.String(), env.joined())
+	}
+	env.guestStatus = 0
+	env.draft = func(string) []byte { return []byte(`{"setting":"packages.share","on":true}`) }
+
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := owneract.NewSigner(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.handler.ownerActSigner = signer
+	verifier, _ := owneract.NewVerifier(signer.PublicKey())
+	for _, c := range []struct {
+		body   string
+		change platform.ListingChange
+	}{
+		{share, platform.ListingChange{Scopes: []string{"owner", "shared"}, SharedWith: &pkgrelease.SharedWith{Owners: []string{"owner-b"}}}},
+		{`{"computer_id":"computer-a","state":"withdrawn","reason":"bad build"}`, platform.ListingChange{State: "withdrawn", Reason: "bad build"}},
+		{`{"computer_id":"computer-a","state":"listed"}`, platform.ListingChange{State: "listed"}},
+	} {
+		reset()
+		rec := env.send(t, http.MethodPatch, path, c.body, owner)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("act %s = %d %s", c.body, rec.Code, rec.Body.String())
+		}
+		calls := env.joined()
+		for _, want := range []string{
+			"guest GET /api/computers/computer-a/packages/share-gate?",
+			"owner=" + env.user + " computer=computer-a",
+			"corpusd PUT /internal/platform/listings/" + id + " internal=true",
+			`"owner_id":"` + env.user + `"`, `"computer_id":"computer-a"`,
+		} {
+			if !strings.Contains(calls, want) {
+				t.Fatalf("act %s calls missing %q:\n%s", c.body, want, calls)
+			}
+		}
+		receipt, err := owneract.Decode(env.receipt)
+		if err != nil {
+			t.Fatalf("A2 no receipt on the act: %v", err)
+		}
+		verified, err := verifier.Verify(receipt, "computer-a", owneract.ActPackageListing, time.Now())
+		if err != nil || verified.OwnerUserID != env.user {
+			t.Fatalf("A2 receipt = %+v %v", verified, err)
+		}
+		for key, want := range platform.PackageListingSubject(id, c.change) {
+			if verified.SubjectString(key) != want {
+				t.Fatalf("A2 receipt subject %s = %q, want %q", key, verified.SubjectString(key), want)
+			}
+		}
+	}
+}
+
+func TestPackageHistoryForwardsTheTrackAndThePage(t *testing.T) {
+	env := newPackageProxyEnv(t)
+	reader := env.secret(t, "computer:self_development:read")
+	rec := env.send(t, http.MethodGet, "/api/catalog/packages/reader/releases?track=owner-x&limit=2&before_seq=3&owner_id=evil", "", reader)
+	calls := env.joined()
+	if rec.Code != http.StatusOK || strings.Contains(calls, "evil") {
+		t.Fatalf("L4 history = %d, calls %v", rec.Code, calls)
+	}
+	for _, want := range []string{"owner_id=" + env.user, "track=owner-x", "limit=2", "before_seq=3"} {
+		if !strings.Contains(calls, want) {
+			t.Fatalf("history calls %v lack %q", calls, want)
 		}
 	}
 }

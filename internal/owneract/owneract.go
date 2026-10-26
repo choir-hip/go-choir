@@ -79,6 +79,10 @@ const (
 	// (Library S2, docs/design/library-package-propagation-2026-10-26.md
 	// 4.1). Its subject binds the release id and the scopes.
 	ActPackagePublish = "package.publish"
+	// ActPackageListing is one change to a package release's listing: its
+	// scopes (share), or its state (withdraw, reinstate) (Library S3,
+	// design 4.1). Its subject binds the release id and the change.
+	ActPackageListing = "package.listing"
 )
 
 // Auth methods.
