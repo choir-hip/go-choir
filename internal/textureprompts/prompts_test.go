@@ -303,7 +303,7 @@ func TestRootSectionAsksForTheNewestDocumentsFirst(t *testing.T) {
 // still never act on another document.
 func TestRootContextLabelLetsARunSurfaceAConflictInItsOwnDocument(t *testing.T) {
 	label := RootContextLabel()
-	for _, want := range []string{"conflicts with an open request", "say so in your own document", "let the owner decide", "do not write, cast or note on another document"} {
+	for _, want := range []string{"conflicts with an open request", "say so in your own document", "let the owner decide", "do not write, cast or note on another document, or ask about one", "in quotes as listed"} {
 		if !strings.Contains(label, want) {
 			t.Errorf("root context label lacks %q", want)
 		}
