@@ -367,7 +367,13 @@ func publishFrozenDraft(temporaryRoot, frozenRoot string, draft []byte) error {
 			return fmt.Errorf("freeze immutable bundle draft: %w", err)
 		}
 	}
-	if err := syncPath(filepath.Dir(frozenRoot)); err != nil {
+	// incoming/ itself may be new since boot: sync its entry in the
+	// updater root too, or the whole subtree can vanish under a kill.
+	incoming := filepath.Dir(frozenRoot)
+	if err := syncPath(incoming); err != nil {
+		return fmt.Errorf("sync frozen bundle draft: %w", err)
+	}
+	if err := syncPath(filepath.Dir(incoming)); err != nil {
 		return fmt.Errorf("sync frozen bundle draft: %w", err)
 	}
 	return nil
