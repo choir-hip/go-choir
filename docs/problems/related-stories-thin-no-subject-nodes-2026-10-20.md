@@ -227,3 +227,27 @@ named before the code, with the guard that the tests pin.
    default, and a tape record that replay reads instead of calling Jev again
    (red). Management does not get the verb in this change (owner ruling).
 4. Entity and thread kinds, edges, `choir.Relate`, export (later, red).
+
+## Re-measured 2026-10-26 (owner: "a lot of the top stories are missing their related stories section, even though they definitely have related stories")
+
+Read-only, public GETs of https://choir.news/api/platform/publications/front?limit=60
+and the related route for each story, about 00:50 UTC (Sonnet
+investigation; report kept outside the repo). 14 of the 60 front stories
+have any related link (23 percent), 6 of the top 20. Every answer was
+partial false with no errors, so the budget, kill switch and cache are not
+involved; it is not a rendering bug or a recent regression (the 10-20
+measurement after the live-blog fix was about 15 percent). Coverage tracks
+cited captures: 1 of 34 stories citing 2 captures, 6 of 13 citing 3 or 4,
+7 of 13 citing 5 or more. The paper now writes most stories from two
+sources, so shared-capture overlap is rare. Three same-subject pairs share
+no capture and have no link either way: the two Vucic-concedes stories,
+the two "20,000 California ballots" DOJ stories, and the El-Sayed
+metal-detector and El-Sayed/Rogers debate stories. The walk
+(internal/platform/publication_related.go relatedWalk, relatedCandidates)
+has no event, entity, topic or related_story path; phase 3 (the research
+desk's System 1 linking, design above) was never built, and choir.System1
+now exists (research.system1, on for the paper). Fix shape unchanged: a
+related_story edge written by research's System 1 review over graph
+candidates, read by relatedCandidates as extra candidates behind a data
+switch, with the precision check (at most 10 percent wrong over 40 or more
+pairs); do not lower the threshold or the hub cutoff.
