@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -166,4 +167,43 @@ func guestMemoryStatsVia(ctx context.Context, api *fcAPIClient, vmID string) (Gu
 		return fail(GuestMemoryStatsReasonNotReported, "the guest driver has not sent available_memory and total_memory")
 	}
 	return GuestMemoryStats{VMID: vmID, StatsPollingIntervalS: dev.StatsPollingIntervalS, Stats: st, ObservedAt: time.Now().UTC()}, nil
+}
+
+var (
+	errVMNotRunning = errors.New("VM is not running")
+	errNoAPISocket  = errors.New("VM has no API socket")
+)
+
+// noAPISocketError is errNoAPISocket with the path looked at and why.
+type noAPISocketError struct {
+	Path string
+	Err  error
+}
+
+func (e *noAPISocketError) Error() string {
+	return fmt.Sprintf("%v: %s: %v", errNoAPISocket, e.Path, e.Err)
+}
+
+func (e *noAPISocketError) Unwrap() error { return errNoAPISocket }
+
+// runningAPISocket returns the API socket of a running VM and its base
+// memory, or an error wrapping errVMNotRunning or errNoAPISocket.
+func (m *Manager) runningAPISocket(vmID string) (string, int, error) {
+	m.mu.Lock()
+	inst := m.vms[vmID]
+	if inst == nil || inst.State != StateRunning {
+		m.mu.Unlock()
+		return "", 0, fmt.Errorf("%w: VM %s", errVMNotRunning, vmID)
+	}
+	jailed := inst.confinement.jailed()
+	base := inst.Config.MachineMemSizeMib
+	m.mu.Unlock()
+	sock := m.apiSocketPath(vmID)
+	if jailed {
+		sock = m.jailAPISocketHostPath(vmID)
+	}
+	if _, err := os.Stat(sock); err != nil {
+		return "", 0, fmt.Errorf("VM %s: %w", vmID, &noAPISocketError{Path: sock, Err: err})
+	}
+	return sock, base, nil
 }

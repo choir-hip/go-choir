@@ -487,7 +487,7 @@ func TestBothSwitchesOffLeaveThePlanAsToday(t *testing.T) {
 func TestSelectorNamedComputersFromEnviron(t *testing.T) {
 	got := RetentionSelectorNamedFromEnviron([]string{
 		"VM_GUEST_RECLAIM_ONLY=computer-aaa, computer-bbb",
-		"VM_MEMORY_HOTPLUG_ONLY=class:test",
+		"VM_BALLOON_STATS_ONLY=class:test",
 		"VM_SNAPSHOT_DIFF_ONLY=",
 		"VM_FIRECRACKER_NEXT_ONLY=*",
 		"VM_CAPSULE_TUNNEL_ENFORCE_ONLY=vm-123\ncomputer-aaa",

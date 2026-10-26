@@ -458,10 +458,7 @@ type VMManagerConfig struct {
 	GuestPort         int
 	MachineCPUCount   int
 	MachineMemSizeMib int
-	// MemoryHotplugMiB is the virtio-mem region this computer boots with
-	// (0: none); vmctl's selection (memory_hotplug.go).
-	MemoryHotplugMiB int
-	PersistentDir    string
+	PersistentDir     string
 	// GatewayToken is the credential token for the autoputer to authenticate
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
@@ -646,11 +643,6 @@ type OwnershipRegistry struct {
 	// makeRoomGuard authorizes make-room's hibernates as the idle sweep's
 	// guard authorizes its own; nil means make-room hibernates nothing.
 	makeRoomGuard ComputerVersionRouteGuard
-
-	// memoryHotplug selects computers for a virtio-mem device and bounds
-	// their leases; memoryCtl is the lease controller (memory_hotplug.go).
-	memoryHotplug MemoryHotplugConfig
-	memoryCtl     memoryController
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
@@ -1575,9 +1567,8 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	if own == nil || mgr == nil {
 		return VMManagerConfig{}, fmt.Errorf("VM realization authority is unavailable")
 	}
-	// The class first: bootWarmnessClass refreshes the test tier for an
-	// account minted since the sweep, and the hotplug selection below reads
-	// that tier (RES-09).
+	// bootWarmnessClass refreshes the test tier for an account minted since
+	// the sweep.
 	warmness := r.bootWarmnessClass(own)
 	epoch, err := mgr.ReserveBootEpoch(own.VMID, own.Epoch+1)
 	if err != nil {
@@ -1594,7 +1585,6 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	cfg := vmManagerConfigForOwnership(own, gatewayToken)
 	cfg.Epoch = epoch
 	cfg.RealizationID = realizationIDFor(own.VMID, epoch)
-	cfg.MemoryHotplugMiB = memoryHotplugMiBWith(own, r.memoryHotplug, r.warmnessPolicy)
 	corpusdURL := r.corpusdURL
 	r.mu.Unlock()
 
@@ -1748,9 +1738,6 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 		return nil, false
 	}
 	resumeCfg := vmManagerConfigForOwnership(own, "")
-	// The selection the snapshot's launch hash must match (a changed
-	// selection cold boots).
-	resumeCfg.MemoryHotplugMiB = r.memoryHotplugMiBFor(own)
 	info, err := r.spawnClaimed(own.VMID, bootClaimResume, own.Epoch, func() (*VMInstanceInfo, error) {
 		return resumer.ResumeVMFromSnapshot(own.VMID, resumeCfg, r.resumeCredentialIssuer(own))
 	})
@@ -2541,8 +2528,6 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			err = fmt.Errorf("realization credential unavailable")
 		} else {
 			shapeCPU, shapeMem := interactiveMachineShape()
-			// The class before the hotplug selection, which reads the test
-			// tier the class lookup refreshes (RES-09).
 			warmness := r.bootWarmnessClass(own)
 			info, err = mgr.BootVM(VMManagerConfig{
 				VMID:                       vmID,
@@ -2552,7 +2537,6 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				GuestPort:                  8085,
 				MachineCPUCount:            shapeCPU,
 				MachineMemSizeMib:          shapeMem,
-				MemoryHotplugMiB:           r.memoryHotplugMiBFor(own),
 				GatewayToken:               gwToken,
 				ComputerCredentialEnvelope: credentialEnvelope,
 				ComputerKind:               "active",

@@ -371,9 +371,6 @@ func TestValidateSnapshotDiffRules(t *testing.T) {
 		{"unknown type", func(t *testing.T, dir string, meta *SnapshotMeta) {
 			meta.SnapshotType = "Sparse"
 		}, snapshotReasonSnapshotType},
-		{"hotplug region not counted", func(t *testing.T, dir string, meta *SnapshotMeta) {
-			meta.Config.MemoryHotplugMiB = 4
-		}, snapshotReasonDiffLength},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -396,23 +393,6 @@ func TestValidateSnapshotDiffRules(t *testing.T) {
 			}
 		})
 	}
-	t.Run("hotplug region counted", func(t *testing.T) {
-		d := newDiffFixture(t)
-		d.mgr.mu.Lock()
-		d.inst.Config.MemoryHotplugMiB = 4
-		d.mgr.mu.Unlock()
-		d.launchWithHotplugDevice(t)
-		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib+4) << 20
-		meta, tl := d.hibernateAndRead(t)
-		// The hibernate itself must have taken Diff: a Full fallback would
-		// also pass the load rule below (N1, review round 2).
-		if got := strings.Join(d.fc.createTypes(), ","); got != "Diff" || meta.SnapshotType != "Diff" {
-			t.Fatalf("create types = %s meta=%q refused=%q, want Diff", got, meta.SnapshotType, tl.Snapshot.DiffRefused)
-		}
-		if got := d.mgr.diffSnapshotRefusalReason(d.mgr.snapshotDir(d.vmID), meta); got != "" {
-			t.Fatalf("diff rule = %q for base+hotplug length", got)
-		}
-	})
 }
 
 // Failure mode 5: no version bump, and a meta from before L3a (no
@@ -488,26 +468,6 @@ func TestDiffSnapshotConfigFromEnv(t *testing.T) {
 	}
 }
 
-// launchWithHotplugDevice rewrites the fixture's fc-config.json with a
-// virtio-mem device, as a launch with MemoryHotplugMiB > 0 writes it.
-func (d *diffFixture) launchWithHotplugDevice(t *testing.T) {
-	t.Helper()
-	path := filepath.Join(d.mgr.vmStateDir(d.vmID), "fc-config.json")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cfg map[string]any
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	cfg["memory-hotplug"] = map[string]any{"total_size_mib": 4, "block_size_mib": 2, "slot_size_mib": 2}
-	out, _ := json.Marshal(cfg)
-	if err := os.WriteFile(path, out, 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // countVersionExecs makes the fake Firecracker binary count its --version
 // runs, and returns a reader of the count.
 func countVersionExecs(t *testing.T, mgr *Manager) func() int {
@@ -568,11 +528,9 @@ func TestHibernateNeverExecsVersionInsideThePause(t *testing.T) {
 	})
 }
 
-// Round 2, F1: Firecracker set_len()s a Diff file, so the reachable length
-// mismatch is the shape (a hotplug region vmctl selected but the launch
-// omitted, or the reverse). The shape is checked before the pause; the
-// length after the create; either falls back to Full in the same pause.
-func TestDiffSnapshotShapeAndLengthCheckedAtCreate(t *testing.T) {
+// Round 2, F1: Firecracker set_len()s a Diff file, so a length mismatch is
+// checked after the create and falls back to Full in the same pause.
+func TestDiffSnapshotLengthCheckedAtCreate(t *testing.T) {
 	t.Run("length mismatch after create", func(t *testing.T) {
 		d := newDiffFixture(t)
 		d.fc.diffLen = int64(d.cfg.MachineMemSizeMib) << 19
@@ -584,27 +542,6 @@ func TestDiffSnapshotShapeAndLengthCheckedAtCreate(t *testing.T) {
 			t.Fatalf("pauses = %d, want 1", got)
 		}
 		if meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedLengthAtCreate {
-			t.Fatalf("meta type=%q refused=%q", meta.SnapshotType, tl.Snapshot.DiffRefused)
-		}
-	})
-	t.Run("hotplug selected, device omitted", func(t *testing.T) {
-		d := newDiffFixture(t)
-		d.mgr.mu.Lock()
-		d.inst.Config.MemoryHotplugMiB = 4
-		d.mgr.mu.Unlock()
-		meta, tl := d.hibernateAndRead(t)
-		if got := strings.Join(d.fc.createTypes(), ","); got != "Full" || meta.SnapshotType != "Full" {
-			t.Fatalf("create types = %s meta=%q, want Full", got, meta.SnapshotType)
-		}
-		if tl.Snapshot.DiffRefused != diffRefusedHotplugShape {
-			t.Fatalf("refusal = %q", tl.Snapshot.DiffRefused)
-		}
-	})
-	t.Run("device present, no hotplug selected", func(t *testing.T) {
-		d := newDiffFixture(t)
-		d.launchWithHotplugDevice(t)
-		meta, tl := d.hibernateAndRead(t)
-		if meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedHotplugShape {
 			t.Fatalf("meta type=%q refused=%q", meta.SnapshotType, tl.Snapshot.DiffRefused)
 		}
 	})

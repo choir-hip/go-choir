@@ -18,7 +18,7 @@ import (
 // (docs/design/density-d6-page-cache-return-2026-10-26.md sections 4.3, 5.1).
 //
 // A snapshot writes the guest's memory, cold page cache included. After the
-// fence (prepare) and the hotplug unplug, and before the Full or Diff
+// fence (prepare) and before the Full or Diff
 // decision and the pause, the host asks the fenced guest to return its cold
 // cache, then waits for the Firecracker process's RSS to fall. It is its own
 // call, never part of the prepare body: a stuck guest write costs at most

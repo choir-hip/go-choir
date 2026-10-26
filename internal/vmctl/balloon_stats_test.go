@@ -1,8 +1,11 @@
 package vmctl
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -16,7 +19,7 @@ import (
 // "Failure modes before code" (items 8, 10, 11, 13).
 
 type fakeBalloonStatsManager struct {
-	*fakeMemoryManager
+	*rssVMManager
 	smu   sync.Mutex
 	stats map[string]GuestMemoryStats
 	errs  map[string]error
@@ -48,10 +51,10 @@ func u64(v uint64) *uint64 { return &v }
 func balloonStatsFixture(t *testing.T) (*Handler, *fakeBalloonStatsManager) {
 	t.Helper()
 	mgr := &fakeBalloonStatsManager{
-		fakeMemoryManager: newFakeMemoryManager(),
-		stats:             map[string]GuestMemoryStats{},
-		errs:              map[string]error{},
-		delay:             map[string]time.Duration{},
+		rssVMManager: newRSSVMManager(),
+		stats:        map[string]GuestMemoryStats{},
+		errs:         map[string]error{},
+		delay:        map[string]time.Duration{},
 	}
 	reg, _ := hostCapacityRegistry(t, mgr)
 	for _, own := range []*VMOwnership{
@@ -173,11 +176,55 @@ func TestBalloonStatsRouteFansOut(t *testing.T) {
 
 // A manager without the reader answers a reason per computer.
 func TestBalloonStatsRouteWithoutReader(t *testing.T) {
-	reg, _ := hostCapacityRegistry(t, newFakeMemoryManager())
+	reg, _ := hostCapacityRegistry(t, newRSSVMManager())
 	addOwnership(reg, &VMOwnership{VMID: "vm-x", ComputerID: "computer-test-x", UserID: "qa-x", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive})
 	rec := serveThroughHostauth(NewHandler(reg).HandleBalloonStats, http.MethodGet, "/internal/vmctl/memory/balloon", "127.0.0.1:5000", "", nil)
 	body := decodeBalloonStats(t, rec.Body.String())
 	if rec.Code != http.StatusOK || len(body.VMs) != 1 || body.VMs[0].Reason != "unsupported" || body.VMs[0].Reading != nil {
 		t.Fatalf("without reader = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func newRSSVMManager() *rssVMManager {
+	return &rssVMManager{processControlVMManager: newProcessControlVMManager(), rss: map[string]uint64{}}
+}
+
+func serveThroughHostauth(h http.HandlerFunc, method, path, remote, token string, body any) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	if body != nil {
+		_ = json.NewEncoder(&buf).Encode(body)
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	req.RemoteAddr = remote
+	if token != "" {
+		req.Header.Set(hostauth.Header, token)
+	}
+	rec := httptest.NewRecorder()
+	hostauth.Middleware(h).ServeHTTP(rec, req)
+	return rec
+}
+
+// The VM list shows the latest RSS sample and the base size of an active
+// computer, from the admission ledger, with no Firecracker call.
+func TestListShowsCurrentMemory(t *testing.T) {
+	reg, now := hostCapacityRegistry(t, newRSSVMManager())
+	addOwnership(reg, &VMOwnership{VMID: "vm-m", ComputerID: "computer-memory-m", UserID: "user-m", DesktopID: PrimaryDesktopID,
+		Kind: VMKindInteractive, State: VMStateActive, ComputerURL: "http://10.200.3.2:8085"})
+	reg.admissionLedger.mu.Lock()
+	reg.admissionLedger.initLocked()
+	reg.admissionLedger.rss["vm-m"] = vmMemoryObservation{bytes: 1500 << 20, at: *now}
+	reg.admissionLedger.mu.Unlock()
+	list, err := NewHandler(reg).listOwnershipResponses(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *ownershipResponse
+	for i := range list {
+		if list[i].VMID == "vm-m" {
+			got = &list[i]
+		}
+	}
+	if got == nil || got.MemoryBaseMiB <= 0 || got.MemoryRSSBytes != 1500<<20 {
+		t.Fatalf("list memory fields = %+v", got)
 	}
 }

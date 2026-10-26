@@ -181,20 +181,6 @@ func LoadConfigFromEnv() ManagerConfig {
 	cfg.HostFetch = loadHostFetchConfig(os.Getenv)
 	cfg.EventTable = loadEventTableConfig(os.Getenv)
 
-	// virtio-mem hotplug (memory_hotplug.go). Off by default; vmctl also
-	// selects each computer, so this flag alone adds no device.
-	cfg.MemoryHotplug = envFlagOn("VM_MEMORY_HOTPLUG")
-	for name, dst := range map[string]*int{
-		"VM_MEMORY_HOTPLUG_BLOCK_MIB": &cfg.MemoryHotplugBlockMiB,
-		"VM_MEMORY_HOTPLUG_SLOT_MIB":  &cfg.MemoryHotplugSlotMiB,
-	} {
-		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				*dst = n
-			}
-		}
-	}
-
 	if v := strings.TrimSpace(os.Getenv("VMCTL_GUEST_DNS_PORT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 65536 {
 			cfg.GuestDNSPort = n
