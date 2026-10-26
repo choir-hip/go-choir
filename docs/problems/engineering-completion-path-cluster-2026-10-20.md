@@ -1785,3 +1785,74 @@ cannot help, because the doorway refuses first. Status: open, red; fix next,
 tests first: check the cited receipts against the tree that will freeze
 before the durable freeze intent, so a refused binding leaves the assignment
 active and the desk can cite the right receipts or report blocked.
+
+### Fix design (R1), written before the code
+
+Mutation class: red (run acceptance, completion evidence, the engineering
+terminal saga).
+
+The cited receipts are checked against the tree that is about to freeze
+before the durable freeze intent. A new executor read,
+`PreflightGrantedExecutionReceipts`, digests the live worktree of the
+assignment's capsule and runs the same portable binder the post-freeze
+resolver runs (`bindGrantedReceipts`: run, handle, capsule and source
+snapshot per receipt; the certified rule for `completed`, observed for
+`failed` and `blocked`). It mints and persists nothing. The saga calls it
+only on the branch that would write the freeze intent (capsule `active`, no
+staged proposal), so a refusal returns with the assignment `bound`, the
+capsule `active` and unfrozen, and no pending proposal: the doorway stays
+open, and the desk can cite the right receipts or report `blocked`. The
+post-freeze bind stays the authoritative check.
+
+Failure modes considered:
+
+1. The worktree changes between the pre-check and the quiesce. The Complete
+   reduces after its cell's code ran; a running capsule job refuses the
+   Complete before any effect (`refuseCompleteWhileJobRuns`); the run's
+   cells are sequential. What remains is a process still alive in the
+   capsule's cgroup (a backgrounded server, a delegate's child), which can
+   write until `Quiesce` freezes the cgroup. Narrow but real, so the
+   post-freeze bind is kept.
+2. The post-freeze bind still refuses (that race). The refusal is
+   deterministic: the tree is frozen and receipts are content-addressed
+   files, so the re-drives (six, five minutes apart) can never succeed. The
+   staged proposition holds the terminal slot (`SlotTerminalReport`), and
+   `frozen -> active` is not a transition the append-only fate history
+   admits, so neither a corrected report nor a thaw is available without a
+   state-machine change. The saga ends the assignment there: on the typed
+   refusal (`capsule.ErrFinalSubjectNotCertified`) and only on it, it
+   revokes the capsule (the stopped-round revoke, so `carry_unfinished`
+   can keep the patch) and records a non-silent system cancellation whose
+   reason names the refusal. The store records that as a `failed` report,
+   management is told, the self-development operation closes. Other
+   post-freeze errors (I/O, a persist) keep today's re-drive. If the
+   cancellation itself fails after the revoke, the re-drive meets the
+   revoke intent, conflicts, and the existing limit cancels it.
+3. The pre-check refuses what the post-freeze bind would accept. Same rule,
+   same inputs except the tree; a refusal changes no state and the desk can
+   retry. Fails closed and recoverable.
+4. Authenticity differs between the two checks. It cannot: run, handle,
+   capsule and source snapshot do not depend on the tree, and the receipts
+   are immutable. Only the final-subject rule can change its answer.
+5. `failed` and `blocked` cite a foreign or unknown ref. The observed
+   pre-check refuses it before the freeze too; before this change it was
+   refused after the freeze and stranded the assignment (the same class).
+6. Cost: one more worktree digest per terminal Complete. Accepted; the
+   live digest cannot be reused for the frozen one.
+7. Resume, replay, crash. No new state, no boot-path scan, no mode flag, no
+   schema change. A staged proposal (freeze requested, frozen, revoke
+   requested, revoked) skips the pre-check, as the planned-restart and
+   watchdog resumes do today. Zero cited refs skip it, as the post-freeze
+   bind does. A partial report never freezes and is not touched.
+8. The run after a race cancellation. The Complete returns the refusal and
+   says the assignment ended; the run's next cell is refused at the
+   doorway and the completion guard ends the run. Named residual: the run
+   is not stopped from inside its own reduce.
+
+Tests first: the staging shape through the real saga with a fake executor
+(a Freeze already happened; `Complete("completed")` whose latest receipt
+observed the pre-edit tree is refused with the assignment still active; a
+corrected `Complete("completed")` and, separately, a `Complete("blocked")`
+then record terminal fates), and the race (the tree changes after the
+pre-check; the assignment ends cancelled with the refusal as its cause,
+not stranded).
