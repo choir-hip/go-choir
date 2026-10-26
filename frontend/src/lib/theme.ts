@@ -173,8 +173,164 @@ export const LONDON_SALMON: ChoirTheme = {
   },
 };
 
-export const DEFAULT_THEME = LONDON_SALMON;
-export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON];
+export const FRUTIGER_AERO: ChoirTheme = {
+  ...base,
+  id: 'frutiger-aero',
+  name: 'Frutiger Aero',
+  colors: {
+    bg: '#BCEBFA', bg2: '#EAF8FD', panel: '#F4FBFE', panelStrong: '#E1F3FA', panelSoft: 'rgba(245, 252, 254, 0.94)',
+    fg: '#123744', muted: '#3C6270', subtle: '#5B7C88', accent: '#087A9B', accent2: '#0F6E8A',
+    success: '#0F6B45', warning: '#7A4A00', danger: '#9E2436', onDanger: '#FFFFFF',
+    border: 'rgba(8, 122, 155, 0.2)', borderStrong: 'rgba(8, 96, 126, 0.44)',
+    inputBg: 'rgba(255, 255, 255, 0.96)', selected: 'rgba(8, 122, 155, 0.16)', onAccent: '#FFFFFF',
+    promptSurfaceBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(224, 246, 252, 0.92))',
+    sheetBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(228, 247, 252, 0.96))',
+    controlBg: 'rgba(255, 255, 255, 0.97)', tetramarkColor: '#075F7A',
+    fieldEdge: 'rgba(8, 122, 155, 0.2)',
+    fieldNodeFar: 'rgba(60, 98, 112, 0.46)',
+    fieldNodeMid: 'rgba(8, 122, 155, 0.6)',
+    fieldNodeNear: 'rgba(5, 84, 108, 0.86)',
+    fieldHalo: 'rgba(8, 122, 155, 0.06)',
+    deskTexture: '#087A9B',
+    deskManagement: '#0F6E8A',
+    deskEngineering: '#0F6B45',
+    deskResearch: '#7A4A00',
+    chart1: '#087A9B', chart2: '#0F6E8A', chart3: '#0F6B45', chart4: '#7A4A00', chart5: '#9E2436',
+  },
+  fonts: {
+    ui: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    display: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  },
+  effects: {
+    blur: '14px',
+    texture: 'aero-glass',
+    shadowSoft: '0 12px 30px rgba(7, 63, 84, .16)',
+    shadowFloating: '0 20px 54px rgba(7, 63, 84, .2)',
+    shadowGlow: '0 0 30px rgba(8, 122, 155, .16)',
+    controlShadow: '0 8px 18px rgba(7, 63, 84, .12), inset 0 1px 0 rgba(255, 255, 255, .9)',
+  },
+};
+
+export const VECTOR_HEART: ChoirTheme = {
+  ...base,
+  id: 'vector-heart',
+  name: 'Vector Heart',
+  colors: {
+    bg: '#F5F0FF', bg2: '#FFF5FB', panel: '#FFFBFF', panelStrong: '#F3E8FC', panelSoft: 'rgba(255, 251, 255, 0.94)',
+    fg: '#26113E', muted: '#5D3F7C', subtle: '#7C6298', accent: '#B30079', accent2: '#8A0F62',
+    success: '#0B6B45', warning: '#7A4600', danger: '#A3123A', onDanger: '#FFFFFF',
+    border: 'rgba(179, 0, 121, 0.2)', borderStrong: 'rgba(120, 26, 120, 0.44)',
+    inputBg: 'rgba(255, 255, 255, 0.97)', selected: 'rgba(179, 0, 121, 0.14)', onAccent: '#FFFFFF',
+    promptSurfaceBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 236, 255, 0.94))',
+    sheetBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 235, 255, 0.96))',
+    controlBg: 'rgba(255, 255, 255, 0.97)', tetramarkColor: '#7C0A55',
+    fieldEdge: 'rgba(179, 0, 121, 0.2)',
+    fieldNodeFar: 'rgba(93, 63, 124, 0.46)',
+    fieldNodeMid: 'rgba(179, 0, 121, 0.58)',
+    fieldNodeNear: 'rgba(60, 16, 92, 0.86)',
+    fieldHalo: 'rgba(179, 0, 121, 0.06)',
+    deskTexture: '#B30079',
+    deskManagement: '#8A0F62',
+    deskEngineering: '#0B6B45',
+    deskResearch: '#7A4600',
+    chart1: '#B30079', chart2: '#8A0F62', chart3: '#0B6B45', chart4: '#7A4600', chart5: '#A3123A',
+  },
+  fonts: {
+    ui: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    display: "'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif",
+    mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  },
+  effects: {
+    blur: '12px',
+    texture: 'vector-hearts',
+    shadowSoft: '0 12px 28px rgba(57, 16, 84, .16)',
+    shadowFloating: '0 20px 52px rgba(57, 16, 84, .2)',
+    shadowGlow: '0 0 28px rgba(179, 0, 121, .18)',
+    controlShadow: '0 8px 18px rgba(57, 16, 84, .12), inset 0 1px 0 rgba(255, 255, 255, .9)',
+  },
+};
+
+export const LIQUID_METAL: ChoirTheme = {
+  ...base,
+  id: 'liquid-metal',
+  name: 'Liquid Metal',
+  colors: {
+    bg: '#11161D', bg2: '#1A222B', panel: '#1C242E', panelStrong: '#161D25', panelSoft: 'rgba(32, 42, 53, 0.94)',
+    fg: '#F5F8FA', muted: '#B3BFCB', subtle: '#8B98A6', accent: '#65C5D8', accent2: '#9FE3EE',
+    success: '#4FD3A0', warning: '#F0C464', danger: '#F47A88', onDanger: '#14181D',
+    border: 'rgba(101, 197, 216, 0.22)', borderStrong: 'rgba(159, 227, 238, 0.46)',
+    inputBg: 'rgba(20, 26, 33, 0.97)', selected: 'rgba(101, 197, 216, 0.2)', onAccent: '#0B1116',
+    promptSurfaceBg: 'linear-gradient(180deg, rgba(34, 44, 56, 0.9), rgba(16, 21, 28, 0.94))',
+    sheetBg: 'linear-gradient(180deg, rgba(30, 39, 50, 0.95), rgba(14, 19, 25, 0.97))',
+    controlBg: 'rgba(30, 40, 51, 0.97)', tetramarkColor: '#A8ECF6',
+    fieldEdge: 'rgba(101, 197, 216, 0.22)',
+    fieldNodeFar: 'rgba(139, 152, 166, 0.46)',
+    fieldNodeMid: 'rgba(101, 197, 216, 0.62)',
+    fieldNodeNear: 'rgba(216, 242, 248, 0.9)',
+    fieldHalo: 'rgba(101, 197, 216, 0.06)',
+    deskTexture: '#65C5D8',
+    deskManagement: '#9FE3EE',
+    deskEngineering: '#4FD3A0',
+    deskResearch: '#F0C464',
+    chart1: '#65C5D8', chart2: '#9FE3EE', chart3: '#4FD3A0', chart4: '#F0C464', chart5: '#F47A88',
+  },
+  fonts: {
+    ui: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    display: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  },
+  effects: {
+    blur: '16px',
+    texture: 'liquid-chrome',
+    shadowSoft: '0 16px 38px rgba(0, 0, 0, .46)',
+    shadowFloating: '0 24px 70px rgba(0, 0, 0, .54)',
+    shadowGlow: '0 0 32px rgba(101, 197, 216, .2)',
+    controlShadow: '0 10px 24px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .08)',
+  },
+};
+
+export const AERO_CHROME_HEART: ChoirTheme = {
+  ...base,
+  id: 'aero-chrome-heart',
+  name: 'Aero Chrome Heart',
+  colors: {
+    bg: '#C4ECF9', bg2: '#FBEFFA', panel: '#FFF7FE', panelStrong: '#EDE1F5', panelSoft: 'rgba(255, 250, 254, 0.94)',
+    fg: '#20143A', muted: '#55396F', subtle: '#76608A', accent: '#A60072', accent2: '#7A0A57',
+    success: '#0C6644', warning: '#744400', danger: '#A3142F', onDanger: '#FFFFFF',
+    border: 'rgba(166, 0, 114, 0.2)', borderStrong: 'rgba(100, 30, 110, 0.44)',
+    inputBg: 'rgba(255, 255, 255, 0.97)', selected: 'rgba(166, 0, 114, 0.14)', onAccent: '#FFFFFF',
+    promptSurfaceBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 238, 250, 0.94))',
+    sheetBg: 'linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 236, 250, 0.96))',
+    controlBg: 'rgba(255, 255, 255, 0.97)', tetramarkColor: '#7A0A57',
+    fieldEdge: 'rgba(166, 0, 114, 0.2)',
+    fieldNodeFar: 'rgba(85, 57, 111, 0.46)',
+    fieldNodeMid: 'rgba(166, 0, 114, 0.58)',
+    fieldNodeNear: 'rgba(32, 20, 58, 0.88)',
+    fieldHalo: 'rgba(166, 0, 114, 0.06)',
+    deskTexture: '#A60072',
+    deskManagement: '#55396F',
+    deskEngineering: '#0C6644',
+    deskResearch: '#744400',
+    chart1: '#A60072', chart2: '#55396F', chart3: '#0C6644', chart4: '#744400', chart5: '#A3142F',
+  },
+  fonts: {
+    ui: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    display: "'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif",
+    mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  },
+  effects: {
+    blur: '16px',
+    texture: 'aero-chrome',
+    shadowSoft: '0 14px 34px rgba(32, 20, 58, .18)',
+    shadowFloating: '0 22px 60px rgba(32, 20, 58, .22)',
+    shadowGlow: '0 0 32px rgba(166, 0, 114, .18)',
+    controlShadow: '0 8px 20px rgba(32, 20, 58, .14), inset 0 1px 0 rgba(255, 255, 255, .9)',
+  },
+};
+
+export const DEFAULT_THEME = AERO_CHROME_HEART;
+export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON, FRUTIGER_AERO, VECTOR_HEART, LIQUID_METAL, AERO_CHROME_HEART];
 const PRESET_IDS = new Set(THEME_PRESETS.map((theme) => theme.id));
 const THEME_GROUPS = ['colors', 'radii', 'motion', 'fonts', 'effects'] as const;
 

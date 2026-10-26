@@ -265,3 +265,39 @@
     translate: 0 0;
   }
 }
+
+
+/* ── themes round 6: settle into the wallpaper ──────────────────────────
+   The surface settle above scales the whole plane; for the four new
+   presets the opening beat is opacity only, so a wallpapered desktop
+   fades in over its own field instead of briefly scaling its wallpaper. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-desktop][data-desktop-ready='true']:is(
+    [data-theme-id='frutiger-aero'],
+    [data-theme-id='vector-heart'],
+    [data-theme-id='liquid-metal'],
+    [data-theme-id='aero-chrome-heart']
+  ) .desktop-area {
+    animation: choir-surface-veil var(--choir-duration-window-open) var(--choir-ease) both;
+  }
+}
+
+@keyframes choir-surface-veil {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-desktop][data-desktop-ready='true']:is(
+    [data-theme-id='frutiger-aero'],
+    [data-theme-id='vector-heart'],
+    [data-theme-id='liquid-metal'],
+    [data-theme-id='aero-chrome-heart']
+  ) .desktop-area {
+    animation: none;
+  }
+}

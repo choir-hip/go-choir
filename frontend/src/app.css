@@ -461,3 +461,334 @@ body {
   background: var(--choir-body-overlay);
   background-size: 64px 100%;
 }
+
+/*
+  ─────────────────────────────────────────────────────────────────────────
+  Themes round 6: Frutiger Aero, Vector Heart, Liquid Metal, Aero Chrome
+  Heart. Every rule here is scoped to one of the four new presets, directly
+  or through a token they alone declare, so the three older presets
+  (Futuristic Noir, Carbon Fiber Kintsugi, London Salmon) render exactly as
+  before.
+
+  Why the wallpaper lives on .app-root and .desktop: both layers paint an
+  opaque var(--choir-bg) over the body, so a wallpaper on body or
+  body::before is never seen. Each of these selectors is the theme's root
+  attribute plus the class, so it outranks the components' own scoped
+  single-class rules.
+  ─────────────────────────────────────────────────────────────────────────
+*/
+
+/* Extra chrome colours, one token per themed element, so the four components'
+   <style> blocks carry no colour literal at all. */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='aero-chrome-heart']) {
+  color-scheme: light;
+  --choir-chrome-titlebar: linear-gradient(180deg, color-mix(in srgb, var(--choir-panel) 82%, transparent), color-mix(in srgb, var(--choir-accent) 24%, transparent));
+  --choir-chrome-sheen: linear-gradient(100deg, transparent 0%, color-mix(in srgb, white 78%, transparent) 22%, color-mix(in srgb, white 26%, transparent) 42%, transparent 62%);
+  --choir-chrome-border: color-mix(in srgb, var(--choir-border-strong) 70%, transparent);
+  --choir-chrome-shadow: var(--choir-shadow-floating);
+  --choir-chrome-btn: color-mix(in srgb, var(--choir-panel) 72%, transparent);
+  --choir-chrome-btn-hover: color-mix(in srgb, var(--choir-accent) 22%, transparent);
+  --choir-chrome-btn-active: color-mix(in srgb, var(--choir-accent) 34%, transparent);
+  --choir-chrome-close-hover: color-mix(in srgb, var(--choir-danger) 82%, transparent);
+  --choir-chrome-close-fg: var(--choir-on-danger);
+  --choir-chrome-tray-bg: color-mix(in srgb, var(--choir-panel-soft) 70%, transparent);
+  --choir-chrome-tray-item-active: color-mix(in srgb, var(--choir-accent) 26%, white);
+  --choir-chrome-sheet-backdrop: color-mix(in srgb, var(--choir-bg) 42%, transparent);
+  --choir-chrome-sheet-header: linear-gradient(180deg, color-mix(in srgb, white 66%, transparent), transparent);
+  --choir-chrome-sheet-tile: linear-gradient(180deg, color-mix(in srgb, white 92%, transparent), color-mix(in srgb, var(--choir-panel-strong) 88%, transparent));
+  --choir-chrome-icon-tile: linear-gradient(165deg, color-mix(in srgb, white 76%, transparent), color-mix(in srgb, var(--choir-accent) 16%, transparent));
+  --choir-chrome-icon-tile-hover: linear-gradient(165deg, color-mix(in srgb, white 90%, transparent), color-mix(in srgb, var(--choir-accent) 30%, transparent));
+  --choir-chrome-icon-shadow: 0 6px 14px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent), inset 0 1px 0 color-mix(in srgb, white 84%, transparent);
+  --choir-chrome-sheen-duration: 7s;
+}
+
+/* Liquid Metal is the one dark new preset: graphite glass with a cool
+   highlight. */
+:root[data-theme-id='liquid-metal'] {
+  color-scheme: dark;
+  --choir-chrome-titlebar: linear-gradient(180deg, color-mix(in srgb, var(--choir-panel-strong) 94%, transparent), color-mix(in srgb, var(--choir-accent) 16%, transparent) 60%, color-mix(in srgb, var(--choir-panel) 90%, transparent));
+  --choir-chrome-sheen: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--choir-accent-2) 34%, transparent) 20%, color-mix(in srgb, white 16%, transparent) 38%, transparent 58%);
+  --choir-chrome-border: color-mix(in srgb, var(--choir-border-strong) 80%, transparent);
+  --choir-chrome-shadow: var(--choir-shadow-floating);
+  --choir-chrome-btn: color-mix(in srgb, var(--choir-panel) 90%, transparent);
+  --choir-chrome-btn-hover: color-mix(in srgb, var(--choir-accent) 26%, transparent);
+  --choir-chrome-btn-active: color-mix(in srgb, var(--choir-accent) 38%, transparent);
+  --choir-chrome-close-hover: color-mix(in srgb, var(--choir-danger) 78%, transparent);
+  --choir-chrome-close-fg: var(--choir-on-danger);
+  --choir-chrome-tray-bg: color-mix(in srgb, var(--choir-panel-strong) 88%, transparent);
+  --choir-chrome-tray-item-active: color-mix(in srgb, var(--choir-accent) 24%, var(--choir-panel));
+  --choir-chrome-sheet-backdrop: color-mix(in srgb, var(--choir-bg) 56%, transparent);
+  --choir-chrome-sheet-header: linear-gradient(180deg, color-mix(in srgb, var(--choir-panel) 70%, transparent), transparent);
+  --choir-chrome-sheet-tile: linear-gradient(180deg, color-mix(in srgb, var(--choir-panel) 96%, transparent), color-mix(in srgb, var(--choir-panel-strong) 94%, transparent));
+  --choir-chrome-icon-tile: linear-gradient(165deg, color-mix(in srgb, var(--choir-panel) 96%, transparent), color-mix(in srgb, var(--choir-accent) 18%, transparent));
+  --choir-chrome-icon-tile-hover: linear-gradient(165deg, color-mix(in srgb, var(--choir-panel) 98%, transparent), color-mix(in srgb, var(--choir-accent) 32%, transparent));
+  --choir-chrome-icon-shadow: 0 8px 18px color-mix(in srgb, var(--choir-shadow-color) 52%, transparent), inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+  --choir-chrome-sheen-duration: 9s;
+}
+
+/* ── Wallpapers: the layers that actually paint the desktop ──────────── */
+:root[data-theme-id='frutiger-aero'] :is(.app-root, .desktop) {
+  background-color: var(--choir-bg);
+  background-image:
+    radial-gradient(circle at 12% 84%, rgba(255, 255, 255, 0.72) 0 16px, transparent 17px),
+    radial-gradient(circle at 20% 90%, rgba(255, 255, 255, 0.6) 0 10px, transparent 11px),
+    radial-gradient(circle at 72% 22%, rgba(255, 255, 255, 0.68) 0 26px, transparent 27px),
+    radial-gradient(circle at 79% 28%, rgba(255, 255, 255, 0.5) 0 14px, transparent 15px),
+    radial-gradient(circle at 88% 16%, rgba(255, 255, 255, 0.58) 0 18px, transparent 19px),
+    radial-gradient(ellipse 30% 12% at 26% 18%, rgba(255, 255, 255, 0.7), transparent 70%),
+    radial-gradient(ellipse 26% 9% at 62% 10%, rgba(255, 255, 255, 0.58), transparent 70%),
+    linear-gradient(180deg, rgba(188, 235, 250, 0.55) 0%, rgba(234, 248, 253, 0.32) 48%, transparent 62%),
+    linear-gradient(0deg, rgba(120, 208, 126, 0.62) 0 94px, rgba(24, 146, 172, 0.42) 94px 106px, transparent 106px);
+  background-repeat: no-repeat;
+  background-size: auto;
+}
+
+:root[data-theme-id='vector-heart'] :is(.app-root, .desktop) {
+  background-color: var(--choir-bg);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='420' viewBox='0 0 560 420'%3E%3Cg fill='%23B30079' fill-opacity='0.16'%3E%3Cpath d='M120 330s-50-31-68-64A39 39 0 0 1 120 223a39 39 0 0 1 68 43c-18 33-68 64-68 64z'/%3E%3Cpath d='M420 170s-30-19-41-39a24 24 0 0 1 41-26 24 24 0 0 1 41 26c-11 20-41 39-41 39z'/%3E%3C/g%3E%3Cg fill='%238A0F62' fill-opacity='0.13'%3E%3Cpath d='M480 360s-26-16-35-33a20 20 0 0 1 35-22 20 20 0 0 1 35 22c-9 17-35 33-35 33z'/%3E%3Cpath d='M230 90s-22-14-30-28a17 17 0 0 1 30-19 17 17 0 0 1 30 19c-8 14-30 28-30 28z'/%3E%3C/g%3E%3Cg fill='%235D3F7C' fill-opacity='0.14'%3E%3Cpath d='M300 300 312 268 342 266 318 246 326 216 300 232 274 216 282 246 258 266 288 268z'/%3E%3Cpath d='M90 140 99 116 122 114 104 99 110 77 90 89 70 77 76 99 58 114 81 116z'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.86) 0 22px, transparent 23px),
+    radial-gradient(circle at 84% 78%, rgba(255, 255, 255, 0.7) 0 16px, transparent 17px),
+    linear-gradient(140deg, rgba(244, 214, 255, 0.9) 0%, rgba(255, 238, 249, 0.55) 46%, rgba(255, 214, 236, 0.8) 100%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 560px 420px, auto, auto, auto;
+}
+
+:root[data-theme-id='liquid-metal'] :is(.app-root, .desktop) {
+  background-color: var(--choir-bg);
+  background-image:
+    linear-gradient(106deg, rgba(101, 197, 216, 0) 40%, rgba(159, 227, 238, 0.42) 48%, rgba(255, 255, 255, 0.9) 51%, rgba(159, 227, 238, 0.36) 54%, rgba(101, 197, 216, 0) 62%),
+    linear-gradient(174deg, rgba(0, 0, 0, 0) 36%, rgba(101, 197, 216, 0.26) 43%, rgba(216, 242, 248, 0.66) 48%, rgba(101, 197, 216, 0.28) 53%, rgba(0, 0, 0, 0) 60%),
+    radial-gradient(ellipse 70% 26% at 24% 76%, rgba(159, 227, 238, 0.26), rgba(0, 0, 0, 0) 72%),
+    radial-gradient(ellipse 60% 22% at 84% 24%, rgba(216, 242, 248, 0.2), rgba(0, 0, 0, 0) 70%),
+    radial-gradient(circle at 78% 88%, rgba(79, 211, 160, 0.24) 0 34px, rgba(0, 0, 0, 0) 36px),
+    linear-gradient(162deg, #1a222b 0%, #11161d 46%, #1f2a34 78%, #0d1218 100%);
+  background-repeat: no-repeat;
+  background-size: auto;
+}
+
+:root[data-theme-id='aero-chrome-heart'] :is(.app-root, .desktop) {
+  background-color: var(--choir-bg);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='360' viewBox='0 0 480 360'%3E%3Cg fill='%23A60072' fill-opacity='0.19'%3E%3Cpath d='M140 250s-62-38-84-79A48 48 0 0 1 140 118a48 48 0 0 1 84 53c-22 41-84 79-84 79z'/%3E%3C/g%3E%3Cg fill='%237A0A57' fill-opacity='0.15'%3E%3Cpath d='M380 150s-30-18-40-38a23 23 0 0 1 40-25 23 23 0 0 1 40 25c-10 20-40 38-40 38z'/%3E%3C/g%3E%3Cg fill='%23FFFFFF' fill-opacity='0.62'%3E%3Cpath d='M330 300 339 276 362 274 344 259 350 237 330 249 310 237 316 259 298 274 321 276z'/%3E%3Cpath d='M60 70 67 52 85 50 71 39 76 21 60 31 44 21 49 39 35 50 53 52z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(180deg, rgba(159, 227, 238, 0.5) 0%, rgba(196, 236, 249, 0.44) 40%, rgba(251, 239, 250, 0.5) 100%),
+    linear-gradient(108deg, transparent 2%, rgba(255, 255, 255, 0.72) 8%, rgba(159, 227, 238, 0.62) 13%, rgba(255, 255, 255, 0.26) 18%, transparent 24%),
+    linear-gradient(108deg, transparent 32%, rgba(255, 255, 255, 0.6) 37%, rgba(166, 0, 114, 0.26) 41%, rgba(255, 255, 255, 0.3) 45%, transparent 51%),
+    linear-gradient(108deg, transparent 62%, rgba(255, 255, 255, 0.5) 67%, rgba(159, 227, 238, 0.46) 72%, transparent 78%),
+    linear-gradient(108deg, transparent 84%, rgba(255, 255, 255, 0.56) 88%, rgba(166, 0, 114, 0.2) 92%, transparent 97%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 480px 360px, auto, auto, auto, auto, auto;
+}
+
+/* ── Window chrome ──────────────────────────────────────────────────────
+   The title bar: app.css's own .window .titlebar rule above carries
+   !important, so the themed title bar overrides that same rule (two
+   attribute selectors on the root outrank its one) and still takes its
+   colour from a theme token. */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.titlebar, [data-window-titlebar]) {
+  position: relative;
+  background-image: var(--choir-chrome-titlebar) !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--choir-chrome-border);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
+  backdrop-filter: blur(var(--choir-blur));
+}
+
+/* The sheen: a pseudo-element moved with translate only, never
+   background-position, so the title bar never repaints its own background. */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.titlebar, [data-window-titlebar])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--choir-chrome-sheen);
+  background-repeat: no-repeat;
+  background-size: 42% 100%;
+  translate: -46% 0;
+  opacity: 0.9;
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.titlebar, [data-window-titlebar]) > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.titlebar, [data-window-titlebar])::after {
+    animation: choir-titlebar-sheen var(--choir-chrome-sheen-duration) linear infinite;
+  }
+}
+
+@keyframes choir-titlebar-sheen {
+  from {
+    translate: -46% 0;
+  }
+  to {
+    translate: 240% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.titlebar, [data-window-titlebar])::after {
+    animation: none;
+  }
+}
+
+/* Window frame: border, radius, shadow; app surfaces stay opaque. */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window, [data-window], [data-floating-window]) {
+  border: 1px solid var(--choir-chrome-border) !important;
+  border-color: var(--choir-chrome-border) !important;
+  border-radius: var(--choir-radius-panel) !important;
+  box-shadow: var(--choir-chrome-shadow) !important;
+  backdrop-filter: blur(var(--choir-blur));
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window, [data-window], [data-floating-window])[data-window-mode='maximized'] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) .app-content {
+  background: var(--choir-surface-app) !important;
+  backdrop-filter: none;
+}
+
+/* The three title-bar buttons. */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.ctrl-btn, [data-window-minimize], [data-window-maximize], [data-window-close]) {
+  background: var(--choir-chrome-btn);
+  color: var(--choir-text-primary) !important;
+  border: 1px solid var(--choir-chrome-border);
+  border-radius: var(--choir-radius-control-sm);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 36%, transparent);
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.ctrl-btn, [data-window-minimize], [data-window-maximize]):hover {
+  background: var(--choir-chrome-btn-hover);
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.ctrl-btn, [data-window-minimize], [data-window-maximize]):active {
+  background: var(--choir-chrome-btn-active);
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.close-btn, [data-window-close]):hover,
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) :is(.window, .floating-window) :is(.close-btn, [data-window-close]):focus-visible {
+  background: var(--choir-chrome-close-hover);
+  color: var(--choir-chrome-close-fg) !important;
+}
+
+/* ── Prompt bar and window tray ──────────────────────────────────────── */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-prompt-surface] {
+  border: 1px solid var(--choir-chrome-border);
+  box-shadow: var(--choir-shadow-floating), inset 0 1px 0 color-mix(in srgb, white 58%, transparent);
+  backdrop-filter: blur(var(--choir-blur));
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-prompt-surface] [data-window-tray-item] {
+  background: var(--choir-chrome-tray-bg);
+  border: 1px solid var(--choir-chrome-border);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 40%, transparent);
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-prompt-surface] [data-window-tray-item].active {
+  background: var(--choir-chrome-tray-item-active);
+  border-color: var(--choir-accent);
+}
+
+/* ── Launcher sheet ──────────────────────────────────────────────────── */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desk-sheet-backdrop] {
+  background: var(--choir-chrome-sheet-backdrop);
+  backdrop-filter: blur(calc(var(--choir-blur) / 2));
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desk-sheet] {
+  border: 1px solid var(--choir-chrome-border);
+  background-image: var(--choir-chrome-sheet-header), var(--choir-sheet-bg);
+  box-shadow: var(--choir-shadow-floating), inset 0 1px 0 color-mix(in srgb, white 40%, transparent);
+  backdrop-filter: blur(var(--choir-blur));
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desk-sheet] [data-desk-sheet-app],
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desk-sheet] [data-desk-overview] {
+  background-image: var(--choir-chrome-sheet-tile);
+  border: 1px solid var(--choir-border);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 40%, transparent);
+}
+
+/* ── Desktop icon tiles ──────────────────────────────────────────────── */
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desktop-icon] .icon-emoji {
+  background-image: var(--choir-chrome-icon-tile);
+  border: 1px solid var(--choir-chrome-border);
+  border-radius: var(--choir-radius-control-sm);
+  box-shadow: var(--choir-chrome-icon-shadow);
+}
+
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desktop-icon]:hover .icon-emoji,
+:root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desktop-icon].icon-selected .icon-emoji {
+  background-image: var(--choir-chrome-icon-tile-hover);
+}
+
+/* ── One small ambient animation per new preset ────────────────────────
+   Wallpaper motifs only (the desktop layer's own background), transform and
+   opacity only, and a matching reduce clause. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-id='frutiger-aero'] .desktop {
+    animation: choir-aero-drift 26s ease-in-out infinite alternate;
+  }
+
+  :root[data-theme-id='vector-heart'] .desktop {
+    animation: choir-vector-sway 30s ease-in-out infinite alternate;
+  }
+
+  :root[data-theme-id='liquid-metal'] .desktop {
+    animation: choir-metal-flow 22s ease-in-out infinite alternate;
+  }
+
+  :root[data-theme-id='aero-chrome-heart'] .desktop {
+    animation: choir-chrome-glide 28s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes choir-aero-drift {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: 0 -18px, 14px 0, -10px 6px, -18px 10px, -24px 14px, 0 0, 0 0, 0 0, 0 0;
+  }
+}
+
+@keyframes choir-vector-sway {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: -14px -10px, 0 0, 0 0, 0 0;
+  }
+}
+
+@keyframes choir-metal-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 40px 0;
+  }
+}
+
+@keyframes choir-chrome-glide {
+  from {
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: -20px 12px, 0 0, 30px 0, 26px 0, 22px 0, 18px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) .desktop {
+    animation: none;
+  }
+}
