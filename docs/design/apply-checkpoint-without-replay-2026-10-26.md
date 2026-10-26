@@ -555,12 +555,42 @@ Deferred, with reasons:
 - **Repairing a corrupt attempt file on `resume-checkpoints`.** The file also
   bounds apply and settlement crash loops; deleting it is an operator act, not
   a side effect of an owner CLI verb.
-- **Crash bound counts only binds that never returned (Devin 5, DeepSeek 2).**
-  A bind that publishes and then crashes the guest before returning is not
-  counted, so a repeating crash there would not close the cadence. It is named
-  here as a residual; the platform-side and unit restart limits still bound it.
+- **A crash after the bind's work but before the start is forgotten.** A start
+  is counted before the bind and forgotten when `bindFn` returns, so a bind
+  that publishes and then crashes the guest before returning has never
+  returned: it stays counted, and two of those close the cadence (owner-
+  reopenable). The bound is fail-closed. What it does not count is a crash
+  after the start is forgotten (the next tick's own work), which is the next
+  tick's start. (Review 336 corrected this paragraph; it said the opposite.)
 - **A vocabulary or schema version in the skew check.** The checkpoint carries
   a reducer version only; `deposit_mode: upcast` already implies the V2
-  vocabulary. Adding versions to the checkpoint repeats F3's cost.
+  vocabulary. Adding versions to the checkpoint repeats F3's cost. The coupling
+  is therefore explicit (review 336): **any vocabulary or schema bump that can
+  change a rebuilt witness must bump `ReducerVersion`**, or a newer host will
+  record a permanent `not_derivable` for a good point. Until a rejudge exists,
+  that bump is the safety.
 - **`last_bound_*` in the status is memory-only** (zero after each boot); the
   listing's checkpoints are the platform's and survive.
+
+## Review 336 (2026-10-26): adjudication
+
+Devin approved; DeepSeek asked for one blocking fix and recorded three lesser
+points.
+
+- **Blocking, adopted: the selector refuses wildcards, classes and protected
+  computers in code.** `VM_CHECKPOINT_CADENCE_ONLY` takes computer ids only:
+  the config load drops `*` and every `class:` token (logging each), and the
+  launch refuses them again at the point of use, and refuses any computer whose
+  launch carries `critical_protected` or `public_platform`. The class is a
+  second line, not the first: the platform computer's boot and resume config do
+  not set `WarmnessClass`, so the paper is kept off by the list naming ids only
+  and by the nix list shipping empty. Tested in both places.
+- **Low 2, adopted:** the crash-bound sentence in "Review 329" said the opposite
+  of the code; corrected above.
+- **Low 3, accepted as designed:** the proof scripts need a checkpoint they
+  cannot mint. That is the cost of deleting the manual bind (4.4, F9), recorded
+  in "Review 329"; a drill that needs a restore target runs on a computer the
+  host selected, or after an apply that bound one.
+- **Residual 4, adopted as a stated coupling:** a vocabulary or schema bump must
+  bump `ReducerVersion` (above); recording the vocabulary in the checkpoint is
+  deferred with the rejudge.
