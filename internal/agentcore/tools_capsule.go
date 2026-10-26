@@ -390,9 +390,9 @@ const selfDevelopmentJudgmentRejected = "independent judgment rejected the froze
 
 // recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
 // verification event, then frozen -> verified -> awaiting_approval on pass or
-// frozen -> failed on fail. The legacy verifier slot and the decision-model
-// judgment (judgeFrozenCandidate) both write through it; extra fields join
-// the event payload but not its idempotency key.
+// frozen -> failed on fail. Management's Verify (commitVerifyIntent) is its
+// only non-test caller; extra fields join the event payload but not its
+// idempotency key.
 func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, trajectoryID, operationID, bundleDigest, decision string, verifierRefs []string, extra map[string]any) (map[string]any, error) {
 	if toolCtx.OperationStore == nil || toolCtx.EventAppender == nil || toolCtx.EventProjection == nil {
 		return nil, fmt.Errorf("self-development verification authority unavailable")
@@ -499,7 +499,10 @@ func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, 
 			next.VerifierRefs = []string{verifierRef}
 			next.TerminalError = selfDevelopmentJudgmentRejected
 			if reason != "" {
-				next.TerminalError += ": " + reason
+				// One line: the owner-visible error collapses the reason's
+				// whitespace so it cannot pose as further status lines. The
+				// event keeps the reason as normalized.
+				next.TerminalError += ": " + strings.Join(strings.Fields(reason), " ")
 			}
 			return nil
 		})
