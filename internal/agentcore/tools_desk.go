@@ -1192,6 +1192,9 @@ func (rt *Runtime) deskEgress(egrCtx context.Context, deskRole string, cellExec 
 	if action == yaegikernel.ActionRelateStories {
 		return rt.relateStoriesEgress(egrCtx, deskRole, cellExec, payload)
 	}
+	if action == yaegikernel.ActionRelate {
+		return rt.relateEgress(egrCtx, deskRole, cellExec, payload)
+	}
 	if action == yaegikernel.ActionProductAPI {
 		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
 	}

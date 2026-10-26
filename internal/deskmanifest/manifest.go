@@ -185,6 +185,7 @@ var verbDispatch = map[string]dispatch{
 	"Research":         {"research", false},
 	"System1":          {"system1", false},
 	"RelateStories":    {"relate_stories", false},
+	"Relate":           {"relate", false},
 }
 
 // VerbAction reports the action a verb dispatches, whether the worker serves
@@ -241,7 +242,7 @@ var system = []Desk{
 			"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 			"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 			"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "SourceAPI",
-			"System1", "RelateStories"},
+			"System1", "RelateStories", "Relate"},
 		CapsuleVerbs:   []string{"read_file", "list_dir", "stat", "go_eval"},
 		MessageTargets: []string{Texture},
 		Addresses:      []string{Texture},

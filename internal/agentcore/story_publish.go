@@ -481,6 +481,26 @@ func (p *httpStoryPublisher) PublishRelations(ctx context.Context, req types.Sto
 	return p.post(ctx, p.platformURL, types.StoryRelationsPath, req, nil)
 }
 
+// ValidateEntities posts the attachments validate-only and requires the
+// "validated" answer, as ValidateRelations does.
+func (p *httpStoryPublisher) ValidateEntities(ctx context.Context, req types.StoryEntitiesRequest) error {
+	req.ValidateOnly = true
+	var resp struct {
+		Validated *int `json:"validated"`
+	}
+	if err := p.post(ctx, p.platformURL, types.StoryEntitiesPath, req, &resp); err != nil {
+		return err
+	}
+	if resp.Validated == nil {
+		return fmt.Errorf("%s: the platform did not answer the validate-only call", types.StoryEntitiesPath)
+	}
+	return nil
+}
+
+func (p *httpStoryPublisher) PublishEntities(ctx context.Context, req types.StoryEntitiesRequest) error {
+	return p.post(ctx, p.platformURL, types.StoryEntitiesPath, req, nil)
+}
+
 func (p *httpStoryPublisher) PublishVerdicts(ctx context.Context, req types.StoryVerdictsRequest) error {
 	return p.post(ctx, p.platformURL, types.StoryVerdictsPath, req, nil)
 }

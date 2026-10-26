@@ -243,6 +243,16 @@ const (
 	// "Build: the related_story edge").
 	EventStoryRelation EventKind = "story.relation"
 
+	// EventStoryEntities records a research cell's choir.Relate act on the
+	// tape, on the same system1:<computer> channel: one "recorded" event per
+	// call naming a published story and its entity attachments, each with its
+	// role, the probability read from the System 1 answer it rests on,
+	// whether the desk overrode it and why, and, for an entity the call
+	// mints, its name and type. It is the authority for the Store B
+	// choir.entity rows and mentions_entity edges, a one-way, re-runnable
+	// export of it (docs/problems/related-stories-no-entity-layer-2026-10-26.md).
+	EventStoryEntities EventKind = "story.entities"
+
 	// EventChannelMessage is emitted when a message is posted to an agent
 	// channel, making inter-agent coordination observable through the
 	// event stream.
