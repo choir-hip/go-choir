@@ -35,7 +35,10 @@ package agentcore
 //     applied operation), is awaiting approval, or is in any other open state
 //     is offered: its change would be applied twice, or would race the
 //     decision still pending on it. This holds for a round that reported
-//     failed as well as one that finished.
+//     failed as well as one that finished. An open state is not silent
+//     either: admission holds the request until it settles, and an offer
+//     that meets one anyway is a refusal that names it and is not recorded
+//     (carry_select_test.go, S1 and S6).
 // 15. A finished round with no operation (never proposed) is offered.
 // 16. The rejection reason is lost, unbounded, or the notice still calls the
 //     work unfinished instead of saying the patch is the starting point and
@@ -508,6 +511,10 @@ func TestCarriedOfferNeverCarriesAnAppliedPendingOrUnproposedRound(t *testing.T)
 		selfdev.StateDegraded, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateExecuting, selfdev.StateRequested,
 		selfdev.StateRollbackPending, selfdev.StateRolledBack,
 	}
+	open := map[string]bool{}
+	for _, state := range selfdev.OpenStates {
+		open[state] = true
+	}
 	for _, state := range notCarried {
 		for _, result := range []types.EngineeringAssignmentResultKind{types.EngineeringResultCompleted, types.EngineeringResultFailed} {
 			newest := finishedRound("round-2", "capsule-subject:sha256:c2", baseA, state, "", time.Hour)
@@ -516,9 +523,18 @@ func TestCarriedOfferNeverCarriesAnAppliedPendingOrUnproposedRound(t *testing.T)
 			deriver := &fakeCarriedDeriver{patches: map[string]capsule.CarriedPatch{
 				"capsule-subject:sha256:c1": testCarriedPatch("a.go"), "capsule-subject:sha256:c2": testCarriedPatch("b.go"),
 			}}
-			offer := offerCarriedPatch(context.Background(), carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{newest, older}}, deriver), carriedInput(baseA))
-			if offer.Status != "" || len(deriver.derived) != 0 {
-				t.Fatalf("operation %s, result %s: offer %+v derived %v; want nothing (and no older round reached past it)", state, result, offer, deriver.derived)
+			deps := carriedDeps(t, &fakeCarriedHistory{entries: []carriedCandidate{newest, older}}, deriver)
+			offer := offerCarriedPatch(context.Background(), deps, carriedInput(baseA))
+			if len(deriver.derived) != 0 || carriedPatchDirForSpawn(offer) != "" {
+				t.Fatalf("operation %s, result %s: offer %+v derived %v; want nothing carried (and no older round reached past it)", state, result, offer, deriver.derived)
+			}
+			switch {
+			case open[state]:
+				if offer.Status != carriedRefused || !offer.SourcePending || readCarriedOffer(deps.Root, "assignment-retry", 1).Status != "" {
+					t.Fatalf("open operation %s, result %s: offer %+v; want an unrecorded pending refusal", state, result, offer)
+				}
+			case offer.Status != "":
+				t.Fatalf("settled operation %s, result %s: offer %+v; want nothing", state, result, offer)
 			}
 		}
 	}
