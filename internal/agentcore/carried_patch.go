@@ -669,7 +669,12 @@ func carriedFileList(files []string) string {
 // storeCarriedHistory reads a trajectory's candidates from the tape with the
 // bits of their rounds the offer needs. A candidate whose round or report
 // cannot be read is left out.
-type storeCarriedHistory struct{ rt *Runtime }
+type storeCarriedHistory struct {
+	rt *Runtime
+	// lineage is the trajectory and the trajectories it continues, newest
+	// first; nil reads store.LifecycleTrajectoryLineage. A seam for tests.
+	lineage func(ctx context.Context, ownerID, computerID, trajectoryID string) ([]string, error)
+}
 
 func (h storeCarriedHistory) CarriedCandidates(ctx context.Context, ownerID, computerID, trajectoryID string) ([]carriedCandidate, error) {
 	candidates, err := h.rt.store.ListEngineeringSubjectCandidates(ctx, ownerID, computerID, trajectoryID)
