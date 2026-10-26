@@ -202,8 +202,9 @@ cover for those stories too.
 - **A finish rule, enforced by the host.** On a story's research desk with
   `research.related_story` on, a final Report is refused in the cell until
   the tape holds a `story.entities` record for the story, or this run's
-  `choir.Relate` call was refused or failed (the run is not held hostage by
-  a platform outage). The refusal names the step: "record what the story is
+  `choir.Relate` failed on the platform's side, or this run's analysis
+  failed (review 304 item 2, review 324 F1; the run is not held hostage by
+  a platform outage). A host-side refusal does not free it. The refusal names the step: "record what the story is
   about with choir.Relate first". It changes no route and adds no wake. A
   run that ends without a final Report has its round closed at run end, as
   today, so nothing wedges.
@@ -604,8 +605,9 @@ novelty "yes" rate and `existing_unmatched`.
 
 Failure modes, to be tested first: F1 the rule applies to a desk other than
 a story's research desk, or with the setting off; F2 a final Report passes
-with no record and no failed attempt; F3 a failed or refused Relate holds
-the round closed forever (it must let the final Report through); F4 an
+with no record and no failed attempt; F3 a platform-side failure of
+Relate or of the analysis holds the round closed forever (it must let the
+final Report through), while a host-side refusal still holds it; F4 an
 interim packet is refused (only the final one waits); F5 `""` or
 `story:head` resolve to another story; F6 a pending record is exported
 before the story publishes, or never after it does; F7 the export at
@@ -747,6 +749,23 @@ rebased onto origin/main 4eec2c61d. Nothing is deployed yet.
   Report. The owner's `POST /api/texture/related-review {batch_id, limit}`
   asks the research desks of stories with no entities record, newest
   first. It replays by batch id and skips busy stories.
+  **D5, no Texture turn** (22b0048b0 / 0294bced8). Research's Reports
+  that carry nothing, in a round an entities request opened, close the
+  round with no wake and are not Texture's unread work. The reducer
+  decides this; no model is called. A Texture prompt line was rejected,
+  because it would still cost a model turn per story.
+  **Running the act.** Send `POST https://choir.news/api/texture/related-review`
+  with `Content-Type: application/json` and the body
+  `{"batch_id": "...", "limit": 200}`; send it again with
+  `"from": <the previous result's next>` to go on. It authenticates with
+  either:
+  - the owner's session; or
+  - an API key that has `write:texture` (or `admin`). An owner-wide key
+    also names the paper computer, with `X-Choir-Computer: <computer id>`
+    or `?computer_id=`.
+  The proxy's generic `/api/*` forward carries the request, so no proxy
+  route is needed. `owner:acts` is not checked on this route, and on its
+  own it does not grant `write:texture`.
   **Deviation:** an act asks at most 200 stories, not the design's 2,000,
   which keeps one act inside a day's System 1 calls. Run more acts for
   more stories.
@@ -763,16 +782,68 @@ rule now asks for what it requires.
 - **Named residuals:**
   - the owner-act surface for `RevokeEntityStopword`;
   - the single corpusd writer;
-  - the 10k-event channel window (a cross-run replay past it pays again,
-    once);
+  - the 10k-event channel window. A cross-run replay past it pays again,
+    once. The backfill's never-re-ask check reads the same window (review
+    325 F1): past roughly 2,000 to 3,000 backfilled stories, the earliest
+    records fall out, and a new batch asks those stories again. Each such
+    story costs one research run, a duplicate tape record and a re-export,
+    which Store B deduplicates. Fix when it matters: a per-story recorded
+    lookup instead of the windowed tape;
   - the growth read's hit rate counts existing-unmatched attachments as
     hits;
-  - each backfilled story costs one Texture turn: research's final Report
-    wakes Texture, as every research Report does. The request asks for a
-    Report that says nothing needs to change; Texture's prompt has no line
-    for it;
-  - the backfill route is on the computer. Reaching the paper computer's
-    route needs the paper owner's session, and no proxy route is added.
+  - a story whose analysis fails (System 1 off, the judge or the
+    candidates read failing) frees its final Report and records nothing,
+    so a later batch asks it again;
+  - an unpublished story's text goes to corpusd for the candidates read
+    (review 324 F4). This is deliberate (§2): the route is behind the
+    bound-guest rule, and corpusd keeps the lexicon, not the text. Named
+    for the owner.
+
+**Reviews 324 and 325, ruled 2026-10-26.**
+
+Review 324 (tier 2 at 99c4f8874; Devin and DeepSeek):
+- F1, HIGH, both seats. The finish rule could not be met when the
+  analysis had no System 1 answers. Fixed (d42e6f6d0, tests 5ad2b1be9):
+  - an `analysis_unanswered` marker goes on the tape;
+  - with no candidates, `choir.Relate("", nil)` records the story;
+  - an analysis that failed frees the Report.
+- F2 (Devin) / F3 (DeepSeek): `export_pending` swallowed every 4xx. Fixed
+  (d42e6f6d0, tests b3005f1e6): corpusd answers 409 for a story not
+  published yet, and only a 409 is pending.
+- Devin F3, the re-Relate past the 10k window: **not a defect.** The
+  replay test (`latest`) and the finish rule read the same window. A
+  record that has fallen out is not a replay, so it is recorded again.
+- Devin F4 / DeepSeek F2: the unpublished text to corpusd is named above,
+  and the analysis's platform failure is covered by F1's marker.
+- Devin F5: platform tests over 10 minutes. CI splits the package; the
+  VM runs use `-timeout 50m`. No change.
+- Devin F6, the candidates route answers 400 for internal failures:
+  **deferred.** Since F1, every analysis failure frees the Report, so the
+  status does not change behaviour. Fold it into the storeFailure split
+  when that route is next touched.
+- DeepSeek F4 and F5: the 10k window and the lexicon cold build stay named
+  residuals.
+- DeepSeek F6, `relationMu` blocking all computers: **Devin's dispute
+  upheld.** A Runtime serves one computer, so a slow corpusd blocks only
+  that computer's Relate, as RelateStories does today. Within one
+  computer, Relate calls and System 1 calls are serialised (`relationMu`
+  across the 30 s check, `system1Mu` across a call); that is a latency
+  residual.
+- DeepSeek F7 / Devin nit, stale doc text: fixed above. Devin's memo-key
+  nit: fixed (`deskDocOf`).
+
+Review 325 (Devin, slice d delta): approved, with these lows.
+- F1: the windowed never-re-ask check. Named in the residuals above.
+- F2: the scan was unbounded. An act now reads at most 2,000 stories and
+  returns `next`, which the route takes as `from`; stories gone during
+  the act are counted (71beae541, tests 0d5c69986).
+- F3: stories that can never be recorded were asked again by every batch.
+  - With F1's fix, a story with no candidates is recorded (test D8).
+  - A story with only its opening seed is skipped and counted as `empty`
+    (D6).
+  - A story whose analysis fails is still asked again; that is named
+    above.
+- F4, batch ids: no change.
 
 **Next.** Deploy the lane, turn on `research.related_story` for the paper,
 run the owner's backfill act, then the slice e proof on d@e.
