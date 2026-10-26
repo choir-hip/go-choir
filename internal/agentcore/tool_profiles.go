@@ -494,24 +494,27 @@ func deskSurfacePrompt(profile string, rec *types.RunRecord, hidden ...string) s
 }
 
 // textureRunSelfDevelopmentOperation names the self-development operation a
-// Texture run's trajectory supervises, or "" when there is none.
-func textureRunSelfDevelopmentOperation(rt *Runtime, rec *types.RunRecord) string {
+// Texture run's trajectory supervises and its state, or "" when there is none.
+// Only an operation still in flight is supervised: when every operation on the
+// trajectory is terminal (failed, rejected, rolled back, applied) there is
+// nothing to supervise (R10-1).
+func textureRunSelfDevelopmentOperation(rt *Runtime, rec *types.RunRecord) (operationID, state string) {
 	if rt == nil || rt.selfdevOperations == nil || rec == nil || strings.TrimSpace(rec.ComputerID) == "" {
-		return ""
+		return "", ""
 	}
 	trajectoryID := strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
 	if trajectoryID == "" {
-		return ""
+		return "", ""
 	}
 	// Texture has no assignment: it is a trajectory-wide caller (C1e D2) and
 	// picks explicitly among the trajectory's operations.
 	operations, err := rt.selfdevOperations.ListByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	operation, ok := pickTrajectoryOperation(operations)
+	operation, ok := pickLiveTrajectoryOperation(operations)
 	if !ok {
-		return ""
+		return "", ""
 	}
-	return operation.OperationID
+	return operation.OperationID, operation.State
 }

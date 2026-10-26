@@ -66,22 +66,45 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 	return advanceFreezeCandidate(ctx, operations, operation)
 }
 
+// operationStateTerminal reports whether an operation has left flight: it
+// failed, was rejected, was rolled back, or was applied.
+func operationStateTerminal(state string) bool {
+	switch state {
+	case selfdev.StateFailed, selfdev.StateRejected, selfdev.StateRolledBack, selfdev.StateApplied:
+		return true
+	}
+	return false
+}
+
 // pickTrajectoryOperation is the explicit pick a trajectory-wide caller makes
 // among a trajectory's operations (C1e D2: each assignment opens its own, so
 // a trajectory can carry several). It names the newest operation still in
 // flight, or else the newest. ops is in creation order (ListByTrajectory).
+// A caller that must not treat a finished operation as current uses
+// pickLiveTrajectoryOperation instead.
 func pickTrajectoryOperation(ops []selfdev.Operation) (selfdev.Operation, bool) {
-	for i := len(ops) - 1; i >= 0; i-- {
-		switch ops[i].State {
-		case selfdev.StateFailed, selfdev.StateRejected, selfdev.StateRolledBack, selfdev.StateApplied:
-			continue
-		}
-		return ops[i], true
+	if op, ok := pickLiveTrajectoryOperation(ops); ok {
+		return op, true
 	}
 	if len(ops) == 0 {
 		return selfdev.Operation{}, false
 	}
 	return ops[len(ops)-1], true
+}
+
+// pickLiveTrajectoryOperation names the newest operation still in flight, and
+// none when every operation on the trajectory is terminal. The Texture run
+// context supervises only a live operation (R10-1): a document whose round
+// failed is not supervising it, and an owner revision on that document is new
+// work, not a forbidden re-run.
+func pickLiveTrajectoryOperation(ops []selfdev.Operation) (selfdev.Operation, bool) {
+	for i := len(ops) - 1; i >= 0; i-- {
+		if operationStateTerminal(ops[i].State) {
+			continue
+		}
+		return ops[i], true
+	}
+	return selfdev.Operation{}, false
 }
 
 func advanceFreezeCandidate(ctx context.Context, operations *selfdev.Store, operation selfdev.Operation) (selfdev.Operation, error) {
