@@ -167,3 +167,33 @@ documents simply refuse the next revise on settlement again.
 
 **Review tier.** Tier 2 (Texture canonical writes: the document pointer and
 desk bindings move in a new reducer transition).
+
+## Staging finding, 2026-10-26 04:48 UTC: the continue lands, Texture never starts (F1-S1)
+
+Deployed in b4b4e551b (services active 04:43). On b@c, FP0 revised the settled
+round 2 document 98d0a421 (trajectory 4e7fd334, settled 01:00:40) at 04:48:03
+with a note-only direction. The revise answered 200 and continued the
+document: new trajectory 909a5aee (subject_refs.continues_trajectory_id
+4e7fd334), owner revision 93ec6437, artifact_head_advanced 04:48:04, and one
+open work item 5b93d8cc assigned to texture:98d0a421. That half works: before
+the fix the same revise answered 409.
+
+No Texture run starts. From 04:48:04 the dispatcher defers both wake
+occurrences for texture:98d0a421 (d633ca0e, afdd1c60) every second, 19 times by
+04:54:42, with the cause "actorruntime: reconcile Texture coagent wake: start
+reconciled Texture revision: replace durable activation: lifecycle invalid
+transition". The trajectory's event list holds only trajectory_started and
+artifact_head_advanced; no lifecycle_work_assigned delivery and no run. The
+document is unchanged at 04:55.
+
+Hypothesis, not yet read in code: the desk's durable activation still belongs
+to the settled trajectory's last run, and replacing it with an activation on
+the continued trajectory is a transition the lifecycle reducer refuses (the
+continue moved the desk binding but not the activation record, or the
+replace path checks the activation's trajectory). The unit tests built the
+continue and the revise handler but never ran the actor's coagent-wake
+reconcile against a continued document.
+
+Effect: an owner revise of a settled document is accepted and silently never
+acted on; the deferral retries every second without end. Severity: the F1
+product promise is not kept; no data loss.
