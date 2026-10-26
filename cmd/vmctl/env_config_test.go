@@ -80,3 +80,26 @@ func TestAdmissionMakeRoomEnv(t *testing.T) {
 		t.Fatalf("make-room bounds = %d victims %s settle, want the caps 10 and 60s", a.MakeRoomMaxVictims, a.MakeRoomSettleWait)
 	}
 }
+
+// Density D4: the wake-cost estimate is behind VMCTL_ADMISSION_NEED, and
+// the code default is today's peak estimate until the staging proof
+// (docs/problems/density-station-d-failure-modes-2026-10-26.md, M8).
+// Ways it could fail: unset or unknown does not mean peak; the wake value is
+// not read.
+func TestAdmissionNeedEnv(t *testing.T) {
+	if a := hostAdmissionConfigFromEnv(); a.NeedMode != vmctl.HostAdmissionNeedPeak {
+		t.Fatalf("need default = %q, want peak", a.NeedMode)
+	}
+	t.Setenv("VMCTL_ADMISSION_NEED", "wake")
+	if a := hostAdmissionConfigFromEnv(); a.NeedMode != vmctl.HostAdmissionNeedWake {
+		t.Fatalf("need wake = %q", a.NeedMode)
+	}
+	t.Setenv("VMCTL_ADMISSION_NEED", "peak")
+	if a := hostAdmissionConfigFromEnv(); a.NeedMode != vmctl.HostAdmissionNeedPeak {
+		t.Fatalf("need peak = %q", a.NeedMode)
+	}
+	t.Setenv("VMCTL_ADMISSION_NEED", "settled-ish")
+	if a := hostAdmissionConfigFromEnv(); a.NeedMode != vmctl.HostAdmissionNeedPeak {
+		t.Fatalf("unknown need = %q, want peak", a.NeedMode)
+	}
+}
