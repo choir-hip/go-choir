@@ -342,3 +342,52 @@ func TestSnapshotWithoutLaunchTargetValidatesAsToday(t *testing.T) {
 		t.Fatalf("a record of epoch 99 was read for epoch 7: %+v", rec)
 	}
 }
+
+// Review 318 DeepSeek 2 (H1 on the other cold boots): a cold ResumeVM and a
+// RecoverVM rebuild from the stored config, whose kernel parameters were
+// filled at the original launch. After a NixOS switch (and before the vmctl
+// restart) they must read the new file, as a fresh boot and a refresh do.
+func TestColdResumeAndRecoverReadKernelParamsAtLaunch(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		boot func(f *snapshotFixture) error
+	}{
+		{"ResumeVM", func(f *snapshotFixture) error {
+			f.mgr.mu.Lock()
+			f.inst.State = StateHibernated
+			f.mgr.mu.Unlock()
+			_, err := f.mgr.ResumeVM(f.vmID)
+			return err
+		}},
+		{"RecoverVMWithConfig", func(f *snapshotFixture) error {
+			_, err := f.mgr.RecoverVMWithConfig(f.vmID, VMConfig{})
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newSnapshotFixture(t)
+			file := filepath.Join(f.mgr.cfg.StateDir, "kernel-params")
+			f.mgr.cfg.KernelParamsFile = file
+			f.mgr.cfg.BootReadyTimeout = 300 * time.Millisecond
+			// The stored config carries the parameters read at its launch.
+			f.inst.Config.KernelParams = "root=fstab init=/nix/store/init-a"
+			if err := os.WriteFile(file, []byte("root=fstab init=/nix/store/init-b"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.mgr.firecrackerStarter = func(string, []string) error { return nil }
+			_ = tc.boot(f) // readiness may time out; the launch config is what is under test
+			raw, err := os.ReadFile(filepath.Join(f.mgr.vmStateDir(f.vmID), "fc-config.json"))
+			if err != nil {
+				t.Fatalf("no launch config written: %v", err)
+			}
+			var fc map[string]interface{}
+			if err := json.Unmarshal(raw, &fc); err != nil {
+				t.Fatal(err)
+			}
+			args := bootArgsOf(t, fc)
+			if !strings.Contains(args, "init=/nix/store/init-b") || strings.Contains(args, "init-a") {
+				t.Fatalf("%s booted with %q; want the kernel parameters read at launch (init-b)", tc.name, args)
+			}
+		})
+	}
+}

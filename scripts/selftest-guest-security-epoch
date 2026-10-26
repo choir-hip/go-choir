@@ -22,7 +22,7 @@ GATE_EFFECT='Security-Effect: gate change; narrows the list on purpose, reviewed
 
 policy() { printf '{"security_epoch":%s,"guest_abi":1,"guest_abi_min":1}\n' "$1"; }
 
-ci_yml() { # with the step
+ci_yml() { # with the step, the check job's wiring and the deploy gate
 	cat <<'YML'
 name: CI
 jobs:
@@ -32,12 +32,22 @@ jobs:
       - run: echo plan
   v1-inventory:
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.non_docs == 'true'
     steps:
       - run: scripts/check-guest-security-epoch --base "$BASE" --head HEAD
   check:
     runs-on: ubuntu-latest
+    needs: [plan, v1-inventory]
     steps:
-      - run: echo check
+      - run: |
+          require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: always() && needs.check.result == 'success'
+    steps:
+      - run: echo deploy
 YML
 }
 
@@ -69,6 +79,15 @@ rev() { git -C "$1" rev-parse "${2:-HEAD}"; }
 # when the base has one, and the head's copy; both must pass.
 ci_run() {
 	local d=$1 base=$2 head=$3 rc=0
+	# Review 318 DeepSeek 3: a base that is not in the checkout is fetched
+	# before "first adoption" is decided, and an unreadable base fails the step.
+	if ! git -C "$d" cat-file -e "$base^{commit}" 2>/dev/null; then
+		git -C "$d" fetch --no-tags --depth=1 origin "$base" >/dev/null 2>&1 || true
+		if ! git -C "$d" cat-file -e "$base^{commit}" 2>/dev/null; then
+			echo "guest-security-epoch: FAIL: base $base cannot be read here"
+			return 1
+		fi
+	fi
 	if git -C "$d" cat-file -e "$base:scripts/check-guest-security-epoch" 2>/dev/null; then
 		git -C "$d" show "$base:scripts/check-guest-security-epoch" >"$tmp/base-copy"
 		chmod +x "$tmp/base-copy"
@@ -158,6 +177,9 @@ expect "a raise earlier in the range passes the range" 0 "$r" "$base" "$(rev "$r
 base2=$(rev "$r" HEAD~1)
 touch_surface "$r"; commit "$r" "another surface change"
 expect "a later range starting after the raise is not covered by it" 1 "$r" "$base2" "$(rev "$r")"
+
+r=$tmp/r1b; new_repo "$r"
+expect "the CI step fails closed on an unreadable base (no first-adoption escape)" 1 "$r" deadbeefdeadbeefdeadbeefdeadbeefdeadbeef "$(rev "$r")"
 
 # --- exclusions -------------------------------------------------------------
 r=$tmp/r11; new_repo "$r"; base=$(rev "$r")
@@ -287,9 +309,61 @@ awk '{print} /^  v1-inventory:/{print "    continue-on-error: true"}' "$r/.githu
 mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "$(msg 'v1-inventory may fail' "$GATE_EFFECT" "$OK_REVIEW")"
 expect "a v1-inventory job that may fail fails" 1 "$r" "$base" "$(rev "$r")"
 
+# review 318 (both seats, HIGH): ANY ci.yml change is a gate change, because a
+# step `if:`, an `exit 0` in the run block, or a dropped needs: line disables
+# the gate without touching a line that names the script.
 r=$tmp/g10; new_repo "$r"; base=$(rev "$r")
 sed 's|echo plan|echo plan2|' "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "unrelated ci.yml change"
-expect "an unrelated ci.yml change needs no trailers" 0 "$r" "$base" "$(rev "$r")"
+expect "any ci.yml change needs the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+git -C "$r" commit -q --amend -m "$(msg 'unrelated ci.yml change, gate trailers' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "an unrelated ci.yml change with the gate trailers passes" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g10a; new_repo "$r"; base=$(rev "$r")
+# a step-level if: must sit between the "- run" and a sibling key; build it explicitly
+cat >"$r/ci.new" <<'YML'
+name: CI
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo plan
+  v1-inventory:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.non_docs == 'true'
+    steps:
+      - if: ${{ false }}
+        run: scripts/check-guest-security-epoch --base "$BASE" --head HEAD
+  check:
+    runs-on: ubuntu-latest
+    needs: [plan, v1-inventory]
+    steps:
+      - run: |
+          require_success "${{ needs.plan.outputs.non_docs }}" v1-inventory "${{ needs.v1-inventory.result }}"
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [check]
+    if: always() && needs.check.result == 'success'
+    steps:
+      - run: echo deploy
+YML
+mv "$r/ci.new" "$r/.github/workflows/ci.yml"; commit "$r" "$(msg 'skip the step with if false, gate trailers' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a step-level if on the check step fails even with the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g10b; new_repo "$r"; base=$(rev "$r")
+sed 's|needs: \[plan, v1-inventory\]|needs: [plan]|' "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"
+commit "$r" "$(msg 'check no longer needs v1-inventory' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a check job that no longer needs v1-inventory fails even with the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g10c; new_repo "$r"; base=$(rev "$r")
+grep -v 'require_success' "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"
+commit "$r" "$(msg 'check stops requiring v1-inventory' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a check job that no longer requires v1-inventory's success fails even with the gate trailers" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/g10d; new_repo "$r"; base=$(rev "$r")
+sed "s|needs.check.result == 'success'|true|" "$r/.github/workflows/ci.yml" >"$r/ci.new"; mv "$r/ci.new" "$r/.github/workflows/ci.yml"
+commit "$r" "$(msg 'deploy no longer requires check' "$GATE_EFFECT" "$OK_REVIEW")"
+expect "a deploy job that no longer requires check's success fails even with the gate trailers" 1 "$r" "$base" "$(rev "$r")"
 
 r=$tmp/g11; new_repo "$r"; base=$(rev "$r")
 echo '# changed' >>"$r/.github/scripts/deploy-base-select"; commit "$r" "change the base selection"
