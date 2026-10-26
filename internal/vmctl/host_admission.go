@@ -357,6 +357,10 @@ type HostAdmissionDecision struct {
 	// Reason explains a make-room refusal (host_admission_make_room.go).
 	MadeRoomVMIDs []string `json:"made_room_vm_ids,omitempty"`
 	Reason        string   `json:"reason,omitempty"`
+	// CacheReturned are the computers make-room's step 0 asked to return
+	// page cache before it planned any victim, with the RSS fall the host
+	// measured (density D6 S4; host_admission_cache_return.go).
+	CacheReturned []CacheReturnedVM `json:"cache_returned,omitempty"`
 }
 
 // AdmissionReservationView is one reservation as health shows it.

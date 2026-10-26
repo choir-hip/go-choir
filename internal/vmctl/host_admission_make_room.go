@@ -270,6 +270,22 @@ func (r *OwnershipRegistry) makeRoomAndAdmit(ctx context.Context, own *VMOwnersh
 		return ticket, nil
 	}
 	cur := first
+	// Density D6 S4, step 0: idle computers return cold page cache before any
+	// victim is planned, inside this one slot and one deadline. Pending
+	// return is never counted: only a fresh sample admits.
+	if ticket, latest, sampled, acted := r.makeRoomCacheReturn(ctx, own, class, cfg, acfg, sampler, r.guestCacheReturnConfig()); len(acted) > 0 {
+		first.CacheReturned = acted
+		if ticket != nil {
+			r.recordMakeRoom(first, "admit_after_cache_return", nil, "")
+			return ticket, nil
+		}
+		if sampled {
+			cur = latest // the shortfall below is the latest fresh sample's
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("make-room cancelled: %w", err)
+		}
+	}
 	shortfall := admissionShortfall(cur)
 	hold := r.hibernationHoldReason(r.guestBusy(), r.now)
 	var made []string
