@@ -95,6 +95,8 @@ announce_platform_step() { # what
   printf '%s\n' "$1" > "$OUT/awaiting-fp0.txt"
 }
 record() { jq -n "$@" >> "$OUT/steps.jsonl"; }
+FAILED=0
+fail_step() { log "FAIL: $*"; FAILED=1; }
 
 log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
@@ -283,7 +285,11 @@ if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
     sleep 120
     ntraj=$(api GET "/api/texture/documents/$N" | jq -r .trajectory_id)
     cli trace export "$ntraj" --out "$OUT/neg-trace.json" >/dev/null
-    grep -q "stack_base_moved" "$OUT/neg-trace.json" && log "negative ok: today's stack_base_moved refusal text" || log "negative FAILED: no stack_base_moved refusal in the trace"
+    if grep -q "stack_base_moved" "$OUT/neg-trace.json"; then
+      log "negative ok: today's stack_base_moved refusal text"; record '{step:9, negative:"ordinary_request_at_stack_base_moved", result:"pass"}'
+    else
+      fail_step "negative: no stack_base_moved refusal in the trace"; record '{step:9, negative:"ordinary_request_at_stack_base_moved", result:"fail"}'
+    fi
     setting source.rebase_offer true
     # [needs base-join] a hand-made Cast with a wrong or superseded notice id is
     # refused at admission (rebase_notice_mismatch / rebase_notice_superseded);
@@ -291,8 +297,10 @@ if [ "$PHASE" = all ] || [ "$PHASE" = negatives ]; then
     # the admission unit tests plus the absence of any second claim:
     log "negative: no second rebase assignment may exist for the pair"
   else
-    log "negatives skipped: the computer is not at stack_base_moved ($P)"
+    log "negatives SKIPPED: the computer is not at stack_base_moved ($P)"
+    record '{step:9, negative:"all", result:"skipped"}'
   fi
 fi
 
-jq -s '{steps: .}' "$OUT/steps.jsonl" 2>/dev/null | tee "$OUT/evidence.json"
+jq -s --argjson failed "$FAILED" '{verdict: (if $failed == 0 then "pass" else "fail" end), skipped: ([.[] | select(.result == "skipped")] | length), steps: .}' "$OUT/steps.jsonl" 2>/dev/null | tee "$OUT/evidence.json"
+[ "$FAILED" = 0 ] || exit 1

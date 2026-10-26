@@ -154,9 +154,13 @@ func (s *Store) requireRebaseNoticeAdmission(ctx context.Context, req types.Open
 	refuse := func(code, format string, args ...any) error {
 		return fmt.Errorf("co-super assignment: records admission: %s: "+format+": %w", append(append([]any{code}, args...), ErrEngineeringAssignmentInvalid)...)
 	}
+	// The Cast is the record the binding names as its parent control; the
+	// ordinary admission has already refused a command whose record to the
+	// assigned inbox is any other (review 321: do not rely on that ordering).
 	var cast *types.CommitmentRecord
 	for i := range records.Records {
-		if strings.TrimSpace(records.Records[i].Inbox) == req.Binding.AssignedAgentID {
+		if strings.TrimSpace(records.Records[i].RecordID) == strings.TrimSpace(req.Binding.ParentControlID) &&
+			strings.TrimSpace(records.Records[i].Inbox) == req.Binding.AssignedAgentID {
 			cast = &records.Records[i]
 		}
 	}
