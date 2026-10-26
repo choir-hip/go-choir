@@ -73,18 +73,11 @@ func (d *gatewayDecider) Decide(ctx context.Context, _ string, request gateway.J
 	return answer, nil
 }
 
-// newDecider picks how the scorer reaches Jev. The gateway is the default.
-// Direct mode (the scorer's own OpenRouter transport) is an explicit opt-in,
-// FRONT_IMPORTANCE_DIRECT=1, kept for one release as the rollback; it needs
-// the key and is the bypass SEC-16 removes. The gateway URL must be loopback:
-// the host-internal credential is never sent off the host.
+// newDecider picks how the scorer reaches Jev: through the gateway's host
+// route (SEC-16; the old direct OpenRouter path, FRONT_IMPORTANCE_DIRECT=1,
+// was deleted 2026-10-26). The gateway URL must be loopback: the
+// host-internal credential is never sent off the host.
 func newDecider(getenv func(string) string, client *http.Client) (decider, string, error) {
-	if v := strings.ToLower(strings.TrimSpace(getenv("FRONT_IMPORTANCE_DIRECT"))); v == "1" || v == "true" || v == "on" {
-		if strings.TrimSpace(getenv("OPENROUTER_API_KEY")) == "" {
-			return nil, "direct", fmt.Errorf("direct mode needs the OpenRouter credential")
-		}
-		return gateway.NewJevTransportFromEnv(true), "direct", nil
-	}
 	target := strings.TrimSpace(getenv("FRONT_IMPORTANCE_GATEWAY_URL"))
 	if target == "" {
 		target = defaultGatewayJudgmentsURL
