@@ -588,6 +588,13 @@ type OwnershipRegistry struct {
 	// guestReportsCapsules is each guest's last answer to "does your /health
 	// carry live_capsules", from a live probe.
 	guestReportsCapsules map[string]bool
+	// guestLastBusyAt is when a probe last found each guest busy (density
+	// D3, PR-09). Work is activity: LastActiveAt tracks ownership
+	// resolutions only, so a computer that built for 14 minutes with no
+	// traffic reads idle the moment its apply restart boots a guest with no
+	// work. Idle is measured from the later of the two. Not persisted: a
+	// vmctl restart forgets it, and the guest's own busy fields still fence.
+	guestLastBusyAt map[string]time.Time
 	// legacyGuestIdleTimeout is the idle timeout of a guest whose /health
 	// does not report live_capsules: such a guest cannot be told from one
 	// holding a parked capsule, so the shorter idleTimeout does not apply
@@ -3626,7 +3633,7 @@ func (r *OwnershipRegistry) checkIdleOwnerships(busy func(*VMOwnership) bool) []
 	sampler := r.pressureSampler
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
+		ownerships = append(ownerships, r.cloneWithActivityLocked(own))
 	}
 	r.mu.RUnlock()
 
@@ -3689,6 +3696,12 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 				r.guestBusySeen = make(map[string]bool)
 			}
 			r.guestBusySeen[own.VMID] = reading.Busy
+			if reading.Busy {
+				if r.guestLastBusyAt == nil {
+					r.guestLastBusyAt = make(map[string]time.Time)
+				}
+				r.guestLastBusyAt[own.VMID] = r.now()
+			}
 			if r.guestReportsCapsules == nil {
 				r.guestReportsCapsules = make(map[string]bool)
 			}
@@ -3697,6 +3710,19 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 		}
 		return reading.Busy
 	}
+}
+
+// cloneWithActivityLocked is cloneOwnership with LastActiveAt moved to the
+// later of it and the last time a probe found the guest busy, for the
+// hibernation deciders' idle arithmetic (density D3). The caller holds r.mu.
+func (r *OwnershipRegistry) cloneWithActivityLocked(own *VMOwnership) *VMOwnership {
+	c := cloneOwnership(own)
+	if c != nil {
+		if busyAt := r.guestLastBusyAt[c.VMID]; busyAt.After(c.LastActiveAt) {
+			c.LastActiveAt = busyAt
+		}
+	}
+	return c
 }
 
 // holdReasonLegacyGuest is why a hibernation decider leaves a guest alone
