@@ -116,3 +116,68 @@ func TestPackagePublishSendsTheOperationAndPackage(t *testing.T) {
 		}
 	}
 }
+
+// Library S3 at the client (design 4.4, 14): share, withdraw and reinstate
+// are owner acts on PATCH /api/catalog/records/<id>/listing, naming the
+// computer whose packages.share gates them; a widening carries the paths
+// digest the owner confirmed; history names one track and a page.
+func TestPackageListingVerbsSendTheOwnersChange(t *testing.T) {
+	id := strings.Repeat("a", 64)
+	var path string
+	var posted []byte
+	servePackageHost(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.Method + " " + r.URL.RequestURI()
+		posted, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"release_id":"r","changed":true}`))
+	})
+	for _, c := range []struct {
+		args []string
+		want map[string]any
+	}{
+		{[]string{"package", "share", "--computer", "c1", "--release", id, "--owners", "owner-b,owner-c", "--confirm-paths", strings.Repeat("f", 64)},
+			map[string]any{"computer_id": "c1", "scopes": []any{"owner", "shared"}, "shared_with": map[string]any{"owners": []any{"owner-b", "owner-c"}}, "confirm_paths": strings.Repeat("f", 64)}},
+		{[]string{"package", "share", "--computer", "c1", "--release", id, "--public", "--confirm-paths", strings.Repeat("f", 64)},
+			map[string]any{"computer_id": "c1", "scopes": []any{"owner", "public"}, "confirm_paths": strings.Repeat("f", 64)}},
+		{[]string{"package", "share", "--computer", "c1", "--release", id, "--private"},
+			map[string]any{"computer_id": "c1", "scopes": []any{"owner"}}},
+		{[]string{"package", "withdraw", "--computer", "c1", "--release", id, "--reason", "broken"},
+			map[string]any{"computer_id": "c1", "state": "withdrawn", "reason": "broken"}},
+		{[]string{"package", "reinstate", "--computer", "c1", "--release", id},
+			map[string]any{"computer_id": "c1", "state": "listed"}},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(c.args, &stdout, &stderr); code != 0 {
+			t.Fatalf("%v exit %d: %s", c.args, code, stderr.String())
+		}
+		var body map[string]any
+		if path != "PATCH /api/catalog/records/"+id+"/listing" || json.Unmarshal(posted, &body) != nil {
+			t.Fatalf("%v request = %s %s", c.args, path, posted)
+		}
+		want, _ := json.Marshal(c.want)
+		got, _ := json.Marshal(body)
+		if string(want) != string(got) {
+			t.Fatalf("%v body = %s, want %s", c.args, got, want)
+		}
+	}
+	// A share names exactly one audience change.
+	for _, args := range [][]string{
+		{"package", "share", "--computer", "c1", "--release", id},
+		{"package", "share", "--computer", "c1", "--release", id, "--private", "--public"},
+		{"package", "share", "--computer", "c1", "--release", id, "--private", "--owners", "owner-b"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code == 0 {
+			t.Fatalf("%v was sent", args)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"package", "history", "--package", "reader", "--track", "owner-b", "--limit", "2", "--before-seq", "3"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("history exit %d: %s", code, stderr.String())
+	}
+	for _, want := range []string{"GET /api/catalog/packages/reader/releases?", "track=owner-b", "limit=2", "before_seq=3"} {
+		if !strings.Contains(path, want) {
+			t.Fatalf("history request %s lacks %q", path, want)
+		}
+	}
+}
