@@ -145,3 +145,24 @@ func (h *Handler) HandleBalloonStats(w http.ResponseWriter, r *http.Request) {
 		"units": balloonStatsUnits,
 	})
 }
+
+func (h *Handler) ownershipForMemory(vmID, computerID string) *VMOwnership {
+	vmID, computerID = strings.TrimSpace(vmID), strings.TrimSpace(computerID)
+	if computerID != "" {
+		own := h.registry.GetOwnershipByComputerID(computerID)
+		if own == nil || (vmID != "" && own.VMID != vmID) {
+			return nil
+		}
+		return own
+	}
+	if vmID == "" {
+		return nil
+	}
+	for _, own := range h.registry.ListOwnerships() {
+		if own != nil && own.VMID == vmID {
+			snapshot := *own
+			return &snapshot
+		}
+	}
+	return nil
+}

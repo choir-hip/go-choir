@@ -32,8 +32,8 @@ import (
 // VM's RSS reaches need; after that the VM is just part of MemAvailable. A
 // VM that later grows past its last measured peak (a long agent run, a
 // page-cache fill) is invisible to the next start's check, so admission
-// bounds starts, not total host use. The backstops are pressure reclaim and
-// the memory leases, not this check.
+// bounds starts, not total host use. The backstop is pressure reclaim, not
+// this check.
 //
 // Rollback: VMCTL_ADMISSION_MODE=guest-size restores the old rule exactly.
 
@@ -211,10 +211,6 @@ type hostMemoryLedger struct {
 	// taken. Memory only, one entry per VM.
 	expired map[string]*admissionReservation
 	recent  []HostAdmissionDecision
-	// leases are memory hotplug leases (memory_hotplug.go): bytes plugged
-	// or requested above a computer's base, held at full size until the
-	// unplug completes, so starts and grows see each other.
-	leases map[string]uint64
 }
 
 func (l *hostMemoryLedger) initLocked() {
@@ -229,9 +225,6 @@ func (l *hostMemoryLedger) initLocked() {
 	}
 	if l.expired == nil {
 		l.expired = map[string]*admissionReservation{}
-	}
-	if l.leases == nil {
-		l.leases = map[string]uint64{}
 	}
 }
 
@@ -279,18 +272,6 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 			view.SettledAt = res.settledAt.UTC().Format(time.RFC3339)
 		}
 		views = append(views, view)
-	}
-	for vmID, bytes := range l.leases {
-		if bytes == 0 {
-			continue
-		}
-		total += bytes
-		views = append(views, AdmissionReservationView{
-			VMID:             vmID,
-			NeedBytes:        bytes,
-			NeedSource:       memoryLeaseNeedSource,
-			OutstandingBytes: bytes,
-		})
 	}
 	sort.Slice(views, func(i, j int) bool {
 		if views[i].ID != views[j].ID {
@@ -770,4 +751,16 @@ func absDiff(a, b uint64) uint64 {
 		return a - b
 	}
 	return b - a
+}
+
+// latestVMResidentBytes is the admission ledger's latest RSS sample per VM.
+func (r *OwnershipRegistry) latestVMResidentBytes() map[string]uint64 {
+	led := &r.admissionLedger
+	led.mu.Lock()
+	defer led.mu.Unlock()
+	out := make(map[string]uint64, len(led.rss))
+	for vmID, obs := range led.rss {
+		out[vmID] = obs.bytes
+	}
+	return out
 }

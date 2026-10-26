@@ -232,15 +232,6 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	}
 	tl.markDetail("guest_fenced", fmt.Sprintf("capability_expires_at=%s", prepared.CapabilityExpiresAt.UTC().Format(time.RFC3339)))
 
-	// Shrink a hotplugged computer to its base before the snapshot, so it
-	// does not carry a browser's pages (memory_hotplug.go). Bounded; the
-	// snapshot proceeds with whatever the guest could not unplug.
-	if launchConfigHasMemoryHotplug(launchConfig) {
-		if detail := unplugBeforeSnapshot(api, vmID, cfg.MachineMemSizeMib, snapshotUnplugTimeout); detail != "" {
-			tl.markDetail("hotplug_unplug", detail)
-		}
-	}
-
 	// Density D6 S3: ask the fenced guest to return its cold page cache and
 	// wait for the host to see the fall, so the snapshot does not write it.
 	// Its own bounded call after prepare and unplug; any failure skips it
@@ -264,7 +255,7 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	}
 	m.mu.Unlock()
 	snap.ColdOrigin = coldOrigin
-	snap.DiffRefused = m.diffSnapshotRefusal(cfg, coldOrigin, pid, launchConfigHasMemoryHotplug(launchConfig), func() string {
+	snap.DiffRefused = m.diffSnapshotRefusal(cfg, coldOrigin, pid, func() string {
 		return firecrackerBuildVersion(m.launchedVMM(vmID).Firecracker)
 	})
 

@@ -146,3 +146,10 @@ func TestCapsuleTunnelEnforceSelectionRefusesAnObserveSnapshot(t *testing.T) {
 		})
 	}
 }
+
+func bootArgsOf(t *testing.T, fc map[string]interface{}) string {
+	t.Helper()
+	boot, _ := fc["boot-source"].(map[string]interface{})
+	args, _ := boot["boot_args"].(string)
+	return args
+}

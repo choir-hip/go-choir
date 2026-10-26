@@ -43,9 +43,8 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 		return nil, false, fmt.Errorf("secure capsule artifact directory: %w", err)
 	}
 	// The capsule budget is 3/4 of MemTotal, read again at every admission
-	// so a memory lease that plugged memory raises it (job_memory.go; F18
-	// in docs/reports/memory-hotplug-controller-design-2026-10-14.md). This
-	// boot reading is the floor check and the fallback.
+	// so the budget follows the guest's memory (job_memory.go). This boot
+	// reading is the floor check and the fallback.
 	memoryTotal := int64(0)
 	staticBudget := false
 	if raw := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_MEMORY_TOTAL_BYTES")); raw != "" {

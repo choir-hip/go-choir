@@ -1792,17 +1792,6 @@ in
         # "*" (scripts/check-host-firecracker-pin.sh checks it).
         "VM_DATA_DISCARD=1"
         "VM_DATA_DISCARD_ONLY=*"
-        # Memory hotplug (virtio-mem) for test computers only (it cannot plug
-        # on Node B's 39-bit CPU; see the problem record above): a selected
-        # computer boots with a 4 GiB unplugged region and grows under
-        # admitted, TTL-bound leases (capsule jobs that declare memory_mib).
-        # Takes effect at each test computer's next cold boot. Rollback:
-        # delete both lines (new boots get no device; leases end at their
-        # TTL) (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
-        # Off 2026-10-24: disproved on Node B (no plug ever succeeded; the
-        # 39-bit CPU cannot address the region). The code goes in a later
-        # change (docs/evidence/switched-off-inventory-2026-10-24.md, dead list).
-        "VM_MEMORY_HOTPLUG=off"
         # S3 snapshot hibernate (docs/reports/s3-snapshot-hibernate-design-
         # 2026-10-14.md): an idle hibernate fences the guest and writes a
         # Firecracker memory snapshot; the next wake loads it once instead of

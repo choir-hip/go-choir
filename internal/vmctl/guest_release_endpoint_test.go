@@ -11,7 +11,7 @@ import (
 // delete) and the release fields in vmctl health.
 
 type fakeGuestReleaseManager struct {
-	*fakeMemoryManager
+	*rssVMManager
 	answer  string
 	current string
 	byVM    map[string]GuestReleaseVMStatus
@@ -29,8 +29,8 @@ func (m *fakeGuestReleaseManager) GuestReleaseHealth() (string, map[string]Guest
 
 func TestGuestReleasesEndpoint(t *testing.T) {
 	mgr := &fakeGuestReleaseManager{
-		fakeMemoryManager: newFakeMemoryManager(),
-		answer:            `{"retain":true,"current":"c","complete":true,"in_use":[{"id":"a","running":["vm-a"],"snapshots":[]}]}`,
+		rssVMManager: newRSSVMManager(),
+		answer:       `{"retain":true,"current":"c","complete":true,"in_use":[{"id":"a","running":["vm-a"],"snapshots":[]}]}`,
 	}
 	reg, _ := hostCapacityRegistry(t, mgr)
 	h := NewHandler(reg)
@@ -61,7 +61,7 @@ func TestGuestReleasesEndpoint(t *testing.T) {
 
 	// A manager without the reader answers 404, which retention reads as "an
 	// older vmctl: nothing in use".
-	reg2, _ := hostCapacityRegistry(t, newFakeMemoryManager())
+	reg2, _ := hostCapacityRegistry(t, newRSSVMManager())
 	if rec := serveThroughHostauth(NewHandler(reg2).HandleGuestReleases, http.MethodGet, "/internal/vmctl/guest-releases", "127.0.0.1:5000", "", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("without a reader = %d, want 404", rec.Code)
 	}
@@ -69,8 +69,8 @@ func TestGuestReleasesEndpoint(t *testing.T) {
 
 func TestHealthCarriesGuestReleases(t *testing.T) {
 	mgr := &fakeGuestReleaseManager{
-		fakeMemoryManager: newFakeMemoryManager(),
-		current:           "r2",
+		rssVMManager: newRSSVMManager(),
+		current:      "r2",
 		byVM: map[string]GuestReleaseVMStatus{
 			"vm-old": {GuestRelease: "r1", Behind: true},
 			"vm-new": {GuestRelease: "r2"},

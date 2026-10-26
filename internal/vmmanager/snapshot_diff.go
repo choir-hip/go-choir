@@ -63,11 +63,7 @@ const (
 	diffRefusedMaySwap       = "guest_memory_may_swap"
 	diffRefusedTHP           = "guest_memory_thp_or_unknown"
 	diffRefusedCreateFailed  = "diff_create_failed"
-	// diffRefusedHotplugShape: the launch's virtio-mem device and vmctl's
-	// hotplug selection disagree, so the memory file's length would not be
-	// the one the meta expects (round 2, F1).
-	diffRefusedHotplugShape = "hotplug_shape_mismatch"
-	// diffRefusedLengthAtCreate: the Diff file was not (mem + hotplug) MiB
+	// diffRefusedLengthAtCreate: the Diff file was not the base memory's MiB
 	// long after the create; the hibernate took Full instead.
 	diffRefusedLengthAtCreate = "diff_length_mismatch_at_create"
 )
@@ -84,7 +80,7 @@ func normalizeSnapshotTypeConfig(raw string) string {
 // a Diff snapshot, else why not. It only reads, and runs before the pause.
 // firecrackerBanner is called only once the cheap checks pass, so a
 // hibernate in full mode never runs `firecracker --version` for it.
-func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, launchHasHotplug bool, firecrackerBanner func() string) string {
+func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, firecrackerBanner func() string) string {
 	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff {
 		return diffRefusedOff
 	}
@@ -96,9 +92,6 @@ func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, la
 	}
 	if pid <= 0 {
 		return diffRefusedNoPID
-	}
-	if launchHasHotplug != (cfg.MemoryHotplugMiB > 0) {
-		return diffRefusedHotplugShape
 	}
 	if !firecrackerAtLeast(firecrackerBanner(), diffMinFirecrackerMajor, diffMinFirecrackerMinor) {
 		return diffRefusedFirecracker
@@ -298,7 +291,7 @@ func (m *Manager) diffSnapshotRefusalReason(dir string, meta *SnapshotMeta) stri
 	if err != nil {
 		return snapshotReasonFilesMissing
 	}
-	want := int64(meta.MemSizeMiB+meta.Config.MemoryHotplugMiB) << 20
+	want := int64(meta.MemSizeMiB) << 20
 	if meta.MemSizeMiB <= 0 || info.Size() != want {
 		return snapshotReasonDiffLength
 	}
@@ -306,7 +299,7 @@ func (m *Manager) diffSnapshotRefusalReason(dir string, meta *SnapshotMeta) stri
 }
 
 // diffMemoryLength is the length a complete memory file of cfg's guest has:
-// base memory plus the virtio-mem region (reading R3: 8 + 4 GiB).
+// base memory.
 func diffMemoryLength(cfg VMConfig) int64 {
-	return int64(cfg.MachineMemSizeMib+cfg.MemoryHotplugMiB) << 20
+	return int64(cfg.MachineMemSizeMib) << 20
 }

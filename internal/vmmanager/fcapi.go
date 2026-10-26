@@ -140,13 +140,6 @@ func (c *fcAPIClient) createSnapshot(ctx context.Context, snapshotType, statePat
 	})
 }
 
-// PatchMemoryHotplug sets the virtio-mem target above the base memory
-// (PATCH /hotplug/memory {"requested_size_mib": N}; Firecracker 1.15.1
-// swagger MemoryHotplugSizeUpdate).
-func (c *fcAPIClient) PatchMemoryHotplug(ctx context.Context, requestedMiB int) error {
-	return c.do(ctx, http.MethodPatch, "/hotplug/memory", map[string]int{"requested_size_mib": requestedMiB})
-}
-
 // LoadSnapshot restores a full snapshot into a fresh Firecracker process
 // (only valid before any other configuration) and resumes the VM. A failed
 // load ends the Firecracker process (snapshot-support.md, "Loading
