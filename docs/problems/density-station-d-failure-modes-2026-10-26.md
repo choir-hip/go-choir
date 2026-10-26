@@ -390,7 +390,7 @@ No code asks a running guest to free cache outside a capsule's teardown
 ### Design
 
 [density-d6-page-cache-return-2026-10-26.md](../design/density-d6-page-cache-return-2026-10-26.md)
-(revision 2, after review 320). A guest-side, bounded, cold-first
+(revision 3, after review 320 and re-review 326). A guest-side, bounded, cold-first
 `memory.reclaim` act on the daemon's own cgroup (route
 `POST /internal/runtime/memory/cache-return`, host-peer only), triggered by
 vmctl: idle (S2), before hibernate (S3), before make-room (S4). One switch,
@@ -439,11 +439,15 @@ build covers S0 to S2; S3 and S4 wait for the tier 2 re-review.
   record is written; D6's candidate rule keeps its own non-empty-URL check
   as defense in depth.
 - **D6-M25** the act writes to a cgroup other than the configured scope, or
-  falls back silently when the scope's file is absent.
+  falls back silently when the scope's file is absent (the report's `method`
+  and `path` make every fallback visible).
+- **D6-M26** the hibernate act and settle push the time from fence close to
+  the end of the pause past the 2-minute fence TTL, so the fence lifts
+  mid-snapshot (re-review 326; S3 skips the act past a 60 s fence budget).
 
 Slice map: S1 pins M1, M3, M4, M21, M23, M25; S2 pins M1, M6, M9, M10, M11,
 M12, M14, M15, M16, M17, M19, M24 (M20 in the nix comment); S3 pins M7, M8,
-M15, M18, M22, M23; S4 pins M12, M13.
+M15, M18, M22, M23, M26; S4 pins M12, M13.
 
 ### Protected surfaces, evidence, rollback
 
