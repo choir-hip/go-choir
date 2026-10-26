@@ -268,13 +268,8 @@ func checkHypothesisClock(recordID string, i int, h types.CastHypothesis, now ti
 // inboxRecordWakes reports whether a record mints a wake row for its
 // recipient: RecordWakesReader, the one predicate the runtime's post-turn
 // re-check also asks (management delegation R2-3). A desk's record wakes.
-// A system record does not (D5): a round closure is minted at boot, and
-// waking its caster there would resume work after a crash. The system
-// records that do wake ask a desk to act and are minted only by live work,
-// never at a crash boot: a support failure
-// (support-judgement-to-jev-design-2026-10-14), a capture arrival (Cut 2
-// 2b; a crash boot closes every schedule, so no poll runs at boot), and a
-// management task's final Report that is not clean.
+// A system record does not (D5), except the live-minted kinds that
+// RecordWakesReader lists; that comment is the one list.
 func inboxRecordWakes(rec types.CommitmentRecord) bool {
 	return RecordWakesReader(rec)
 }

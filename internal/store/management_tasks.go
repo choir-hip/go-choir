@@ -56,13 +56,20 @@ const (
 //
 // A desk's record wakes its reader. A source inbox has no reader. A system
 // record does not wake (D5: a closure is minted at boot, and waking there
-// would resume work after a crash), except five minted only by live work:
-// an engineering progress relay to a Texture (the platform telling the
-// owner's document what engineering reported),
-// a support failure, a capture arrival that is not held for its events
-// (event layer §15), and a management task's final Report that is not
-// clean and was not written by a crash boot. A clean
-// task Report waits, unread, for the parent's next turn.
+// would resume work after a crash), except six minted only by live work:
+//   - an engineering progress relay to a Texture (the platform telling the
+//     owner's document what engineering reported);
+//   - an owner-act record (the owner's decision on a candidate, projected
+//     into the document that supervises it);
+//   - a stack rebase notice (the runtime's live timer asking the root
+//     Texture RLM for a rebase; U4);
+//   - a support failure;
+//   - a capture arrival that is not held for its events (event layer §15);
+//   - a management task's final Report that is not clean and was not
+//     written by a crash boot.
+//
+// A clean task Report waits, unread, for the parent's next turn. This is the
+// one list of waking system records (inboxRecordWakes points here).
 func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if strings.HasPrefix(rec.Inbox, "source:") {
 		return false
@@ -81,6 +88,14 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 	// the live act (the decision request, or a live apply), never by a
 	// crash boot's settlement, so waking its reader resumes nothing.
 	if types.IsSelfDevelopmentOwnerAct(rec) {
+		return true
+	}
+	// A rebase notice asks the root Texture RLM to rebase the applied stack.
+	// It is minted only by the runtime's live timer, after the stay-up
+	// interval since boot, never inside a boot or by a crash boot's
+	// settlement; a pre-boot notice's wake is interrupted by the generic
+	// crash-boot gate.
+	if types.IsStackRebaseNotice(rec) {
 		return true
 	}
 	if rec.Support != nil && len(rec.Support.Failures) > 0 {

@@ -110,6 +110,10 @@ func DefaultRegistry() *Registry {
 		// The Texture root marker (PD3 S1): which document is the computer's
 		// master document, and its generation, claimed by compare-and-set.
 		{Kind: "choir.texture_root", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.TextureRoot"},
+		// The claim of a stack rebase notice by the assignment that serves it
+		// (U4): one per (operation, booted base), written by the assignment
+		// open's own transaction.
+		{Kind: "choir.rebase_notice_claim", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.StackRebaseClaim"},
 		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
 		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime},
 		// The event layer's V1 (docs/reports/event-layer-at-ingestion-design-2026-10-16.md).

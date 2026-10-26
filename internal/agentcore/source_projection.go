@@ -244,6 +244,13 @@ func (rt *Runtime) ReconcileSourceProjection(ctx context.Context, reason string)
 	if result.Changed || len(result.LocksCleared) > 0 {
 		rt.appendSourceProjectionFact(reason, result)
 	}
+	// U4: a stack on a moved base arms the rebase notice timer. Arming only
+	// sets an in-memory timer (due no earlier than bootedAt + the stay-up
+	// interval), so a boot reconcile mints nothing. The timer's own reconcile
+	// never arms.
+	if reason != rebaseReconcileReason {
+		rt.armRebaseNotice(ctx, result)
+	}
 	return result, nil
 }
 

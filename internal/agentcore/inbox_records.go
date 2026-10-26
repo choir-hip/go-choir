@@ -365,6 +365,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "progress"
 	case types.IsSelfDevelopmentOwnerAct(rec):
 		return "owner_act"
+	case types.IsStackRebaseNotice(rec):
+		return "rebase_notice"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
