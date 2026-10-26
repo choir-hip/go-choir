@@ -231,6 +231,28 @@ func TestPromptCorePutsTheOwnersIntentionFirst(t *testing.T) {
 	}
 }
 
+// A cast names the owner's revisions and the runtime attaches the owner's
+// words (docs/problems/texture-retypes-owner-directions-2026-10-25.md,
+// chosen fix): Texture retyped a direction into a Go string, a backtick
+// broke the cell, and the retry paraphrased it. Ways the prompt can fail:
+// it still asks Texture to carry the owner's words without saying how, so
+// Texture types them; it does not name the packet key the runtime reads;
+// it does not say where this turn's revision id is; the line blows the
+// budget.
+func TestPromptCoreCastsTheOwnersWordsByRevision(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"never retype them",
+		`"owner_revision"`,
+		"choir.ReadDoc().OwnerRevision",
+		"owner_directions",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+}
+
 // PD3 S1: the root's instructions are a section chosen from the texture_root
 // marker, never part of the prompt core every Texture reads
 // (docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
