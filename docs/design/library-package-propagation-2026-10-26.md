@@ -9,6 +9,8 @@ and its goal file is [choir-sr9-library-2026-10-26.md](../definitions/choir-sr9-
 - **Revision 2.** This revision answers review 257 (both seats requested
   changes; the disposition is in section 21). It also adds the owner's
   2026-10-26 02:0x question about the platform base image (section 10.5).
+  Review 265 (Devin, one seat) approved it with six required edits, which
+  are applied here (section 21, last row).
 - **Base.** Written on lane `lane/sr9-design` from `origin/main` at
   `355c603ad`.
 - **Starting point.** The read-only investigation of 2026-10-25 (the SR9
@@ -193,6 +195,7 @@ PackageRelease {
   track:      <publisher owner id>                 // a publisher's line of this package (3.4)
   parent:     { kind: "base",    commit, tree }    // the package subtree in a platform base commit
             | { kind: "release", release_id, tree }// or a previously listed release on the same track
+  parent_patch?: { sha256, bytes }                 // base parent only: binary diff empty-tree -> the full-path tree holding only root/ at the parent (3.2, check 3)
   source: {
     root:          "frontend/src/packages/<name>"
     tree:          <git tree id of the subtree at root>
@@ -267,9 +270,43 @@ they are not circular.
    requires its id to equal `source.tree` (review 257 F8: compare the
    subtree, not the full-path tree).
 3. **The review patch matches.** `review_patch`, applied to the parent
-   subtree (the base subtree is read from the base commit the host image
-   was built from; a parent release's subtree is read from its stored
-   blobs), yields the same subtree.
+   subtree, yields the same subtree. Where the parent subtree comes from
+   (review 265, finding 2):
+   - **A parent release:** from that release's stored `tree_patch`, which
+     corpusd already holds and checked when it listed that release.
+   - **A base parent:** the publisher carries the parent subtree as one
+     more blob, `parent_patch`, in the `package` namespace (an empty-tree
+     diff, like `tree_patch`). corpusd applies it to the empty tree, runs
+     checks 1 and 2 on the result, and requires the subtree id at `root`
+     to equal `parent.tree`. It then requires `parent.tree` to equal the
+     tree the host itself holds for that base: `git rev-parse
+     <parent.commit>:<root>` in the deploy checkout's object store.
+   - **What the host holds** [V]. The deploy keeps `/opt/go-choir` as a
+     full clone, created by `git clone` and moved by `git fetch` of each
+     deploy commit, then `git reset --hard` and `git clean -ffdx`
+     (`.github/scripts/node-b-ci-deploy:219-236`). Reset and clean change
+     the worktree, never the object store, and every deployed main
+     commit is an ancestor of the current deploy, so its objects stay
+     reachable there. corpusd already reads that object
+     store, read only, for the P5 host build (`CORPUSD_HOST_BUILD_SOURCE_DIR=/opt/go-choir`
+     with git on its path, `nix/node-b.nix:1176-1281`; the builder checks
+     out a computer's base commit from it, `internal/builder/request.go:38-50`).
+     So this check needs one more read-only git command in a process that
+     already runs git there. It needs no new host capability, no network
+     fetch and no mirror. The worktree itself is never read, because it
+     holds only the current deploy.
+   - **A base the host does not hold** (never deployed, or the store
+     lost it) refuses with `package_parent_unverifiable`. Nothing is
+     listed on the publisher's word.
+   - **The live store is checked, not assumed.** The code above shows how
+     the store is made, not that the live one was made that way. S2's
+     corpusd runs `git rev-parse --is-shallow-repository` on the store at
+     start and reports the answer in its health detail, so FP0 reads it
+     without SSH before S2's proof. A shallow store would refuse every
+     base parent older than the deploy, which fails closed.
+   - The internal/platform package has no git code today. The tree read
+     lives in `internal/pkgrelease`, beside the subtree extraction that
+     checks 1 and 2 already need.
 4. **No secrets.** The secret scan runs over `tree_patch`.
 5. **Manifest rules.** The manifest validates, and before S12 any
    `kinds` refuses with `package_kinds_need_platform` (first-party kinds
@@ -472,7 +509,16 @@ see. It stores nothing of its own.
 registered `Writer: system:runtime`, written only on a verified owner-act
 subscription request, the same pattern as `choir.computer_setting`
 (`registry.go:109`; settings are booleans, `computer_setting.go:205`).
-The registry has no "owner" writer (review 257 F15 and Devin 7).
+
+Why not the owner writer (review 265, finding 6, correcting revision 2,
+which said there was none): `WriterOwner` exists
+(`internal/objectgraph/writer.go:64`), but it is never a kind's writer.
+A kind admits it only with `OwnerEdits` (`writerAdmits`, `writer.go:212`).
+An owner edit of a subscription would come through the owner's edit path,
+not through the proxy, so it would carry no proxy-signed `computer_tier`
+and would skip the class floor below. So the kind is `WriterRuntime`
+without `OwnerEdits`, and the guest refuses a write that has no receipt
+(review 257 F15 and Devin 7).
 
 ```text
 PackageSubscription { package: <name> | "*", track: <owner id> | "own", mode: auto | propose | pinned,
@@ -705,17 +751,25 @@ order:
 3. **The host's outcome.** The host-written `choir.package_outcome` for
    this (release, computer), read through the computer's capability.
 
-**The precedence:**
+**The precedence.** The rows are read top to bottom, and the first that
+matches decides. Together they cover every non-terminal state of 15.2,
+under both boot kinds, with the applied fact present or absent (review
+265, finding 5, added the planned-restart rows with the fact present).
 
 | Boot kind | The row was in | The applied fact | Result |
 |---|---|---|---|
-| any | any | present, and the host outcome is `healthy` | `healthy` |
-| markerless (a crash) | `applying`, `probation` or any state | present, no outcome yet | **probation failed (crash)**. One forward revert is opened as *new work* after the boot settles, under the restart bounds. It is not a resume. If that revert crashes the computer, the next markerless boot finds `reverting` and ends in `revert_failed_hold`. |
-| markerless | `building`, `frozen` or `applying` | absent | `interrupted`. It counts one strike for (computer, release). The next tick may offer it once more, and a second `interrupted` closes the release for this computer. |
-| marker present (a planned restart) | `building` or `applying` | absent | **one resume**, because the marker is consumed first. If the resumed work crashes, the next boot is markerless, which gives the row above. |
-| marker present | `probation` | present | the probation window restarts once from the boot |
+| any | any | present, and the host outcome is `healthy` or `reverted` | that outcome |
 | any | `awaiting_approval` | absent | stays `awaiting_approval`: a durable decision, not work, as self-development candidates are today |
-| any | `building` with a terminal assignment, or older than 60 minutes | absent | closed with the assignment's fate, or `interrupted (stale)` |
+| any | `revert_proposed` | present | stays `revert_proposed`: a decision waiting for the owner (8.3) |
+| any | `failed` | present | the one forward revert is opened as *new work* after the boot settles (on protected computers it is proposed, 8.3) |
+| markerless | `reverting` | present | `revert_failed_hold` (8.3). Nothing further runs automatically. |
+| marker present | `reverting` | present | **one resume** of the revert, because the marker is consumed first. If it crashes, the next boot is markerless, which gives the row above. |
+| markerless (a crash) | any other state | present | **probation failed (crash)**. One forward revert is opened as *new work* after the boot settles, under the restart bounds. It is not a resume. If that revert crashes the computer, the next markerless boot finds `reverting` and ends in `revert_failed_hold`. |
+| marker present (a planned restart) | any other state, for example `applying` or `probation` | present | **the probation window restarts once from the boot.** The fact wins over the row: an apply that landed before a planned restart, with its row write lost (the row still reads `applying`), enters probation as it would have. |
+| any | `building`, with a terminal assignment or older than 60 minutes | absent | closed with the assignment's fate, or `interrupted (stale)` |
+| markerless | `offered`, `building`, `frozen`, `admitted`, `approved` or `applying` | absent | `interrupted`. It counts one strike for (computer, release). The next tick may offer it once more, and a second `interrupted` closes the release for this computer. |
+| marker present | `offered`, `building`, `frozen`, `admitted`, `approved` or `applying` | absent | **one resume**, because the marker is consumed first. If the resumed work crashes, the next boot is markerless, which gives the row above. |
+| any | `probation`, `failed`, `reverting` or `revert_proposed` | absent | cannot arise, since each is written after the applied fact. The row closes `interrupted (inconsistent)` with no strike, and the owner is told. Nothing runs. |
 
 The host projects its outcome onto the guest row through this reconcile
 and the next tick. The host is never a second writer of the row: the row's
@@ -1040,7 +1094,7 @@ awaiting_approval -> rejected | approved
 approved|admitted -> applying -> probation -> healthy
 probation -> failed -> reverting -> reverted | revert_failed_hold
 probation -> failed -> revert_proposed (protected classes)
-building|frozen|admitted|applying -> interrupted (crash before the applied fact; 8.5)
+offered|building|frozen|admitted|approved|applying -> interrupted (crash before the applied fact; 8.5)
 any not yet applying -> superseded
 healthy -> upstreamed | set_aside (yank) | replaced
 ```
@@ -1072,7 +1126,7 @@ adopted(R) -> package_base_moved -> adopted(R) re-materialized (approval, Q1) | 
 | L7 | A model-mediated step fails | the job makes zero model calls | provider-call counter = 0 |
 | L8 | The adopter's own changes are overwritten | the three-way check gives `conflict` | test, and the S5 leg |
 | L9 | A crash mid-adoption resumes | 8.5's precedence: `interrupted` before the applied fact; two strikes close the release | tests for each row of 8.5 |
-| L9b | A crash after the applied fact leaves a broken package | the applied fact wins; probation fails on the crash; one forward revert as new work | test: kill after `materialization_applied`, before the row write |
+| L9b | A crash after the applied fact leaves a broken package | the applied fact wins; probation fails on the crash; one forward revert as new work | test: kill after `materialization_applied`, before the row write; the same with the planned-restart marker present, where probation restarts |
 | L9c | A `building` row with no worker | closed by the assignment's fate, or by the 60-minute stale rule | test |
 | L10 | A revert loop | one revert, then a hold | test |
 | L11 | Probation passes but the app is broken | the host smoke check | S7 leg |
@@ -1150,12 +1204,21 @@ among them.
 - d@e's key lists none of them (200, empty) and gets 404 on a known id;
 - T-B, minted for this step, reads them through its own capability.
 
+T-B joins `test_computers` only through the enabling change of section
+18, and only once its precondition holds: T-B is named by computer id in
+`CHOIR_VISUAL_CAPTURE_COMPUTERS`, so `test_class_idle` keeps it.
+
 ### S2. Package releases and owner-scope publish (red, tier 2)
 
 **Scope:**
 
 - `internal/pkgrelease/`, new: the record, canonical form, the host checks
   of 3.2, and subtree extraction;
+- the base-parent check of 3.2 check 3: the `parent_patch` blob, and the
+  read-only tree read (`git rev-parse <commit>:<root>`) from the deploy
+  checkout's object store that the host build already uses, refusing
+  `package_parent_unverifiable` when the base is not there, and the
+  store's shallow flag in corpusd's health detail;
 - `internal/platform/packages.go`, new: publish and listing, at scope
   `owner` only;
 - the `package` content namespace;
@@ -1167,8 +1230,10 @@ among them.
 - the owner-act `request.submit` intent, if the [H] in 4.1 needs it;
 - the setting `packages.publish`.
 
-**Tests first:** L1, L2, L3, L6, L15, L23, L25, L27, `track_moved`, and
-the skip test.
+**Tests first:** L1, L2, L3, L6, L15, L23, L25, L27, `track_moved`, a
+`parent_patch` whose tree differs from the host's base tree (refused), a
+base commit the store does not hold (refused with
+`package_parent_unverifiable`), and the skip test.
 
 **Rollback:** the setting off, or a revert. Rows stay inert.
 
@@ -1580,17 +1645,79 @@ ephemeral and `test_computers` is empty. So **their computers read as
 just after T-B is minted):
 
 - add T-A, T-B and T-C to `test_computers` in `computer-tiers.json`, each
-  with a note;
-- T-D is added too if it should be `test`; leave it out to keep a
-  primary-class computer for the S5 and S9 primary legs (FP0's default).
+  with a note, by computer id;
+- never list T-D. It stays `primary` for the S5 and S9 primary legs.
+- never make b@c or d@e a test *account*. Both accounts are `primary` by
+  the code, and that stays so: the list names computers, not accounts, so
+  b@c's other computers and d@e's computer keep their class.
 
 **Effects of that change:**
 
 - the computers become `test` class, so they are hibernated first under
   memory pressure, and the standing arm admits them;
-- **no retention deletion**: deletion keys on ephemeral accounts, not on
-  this list (`internal/vmctl/retention_prune.go:574`);
-- **rollback**: delete the lines.
+- **they become subject to a retention rule that destroys computers**
+  (review 265, finding 1). Revision 2 said no retention deletion applied.
+  That was wrong. It cited only the ephemeral-account rule
+  (`internal/vmctl/retention_prune.go:574`). A second rule,
+  `test_class_idle`, is active on Node B
+  (`VMCTL_RETENTION_TEST_IDLE_MODE=active`, `VMCTL_RETENTION_TEST_IDLE_MIN_AGE=168h`,
+  `nix/node-b.nix:1884-1885`) [V]. It destroys a test-class computer's
+  state and its ownership (`internal/vmctl/retention_test_class.go:173-215`),
+  and listing a computer in `test_computers` is enough to make it test
+  class (`warmness_policy.go:129`).
+- **What the rule keeps** (`testIdleKeepReasons`, the same checks again
+  at destroy time). A test-class computer is kept when any of these holds:
+  - it is held (a maintenance hold);
+  - a per-computer selector in vmctl's environment names it by VM id or
+    computer id (`selectorEnvKeyRE`, `retention_test_class.go:111`: the
+    `VM_*_ONLY`, `VMCTL_*_ONLY`, `CHOIR_*_COMPUTERS` and `CHOIR_*_ONLY`
+    lists). A `class:test` or `*` token names no computer and protects
+    none;
+  - it is not an interactive computer, or not on the account's primary
+    desktop;
+  - it is running, so not stopped, hibernated or failed;
+  - it was stopped to recover, or was never active;
+  - it was active within the last 7 days;
+  - its directory holds a recovery that has not finished, or a young
+    quarantine.
+
+  The companion `quarantine_age_out` rule also covers test-class
+  computers. It removes only the quarantined image of a recovery that
+  finished more than 7 days ago, never the computer.
+- **Today's exposure.** T-A is named by two selectors today
+  (`CHOIR_VISUAL_CAPTURE_COMPUTERS` and `CHOIR_CLAUDE_DELEGATE_COMPUTERS`,
+  `nix/node-b.nix:1769,1813`), so it is kept. If T-B and T-C are further
+  desktops of b@c, the "not on the primary desktop" check keeps them too.
+  That is a detail of the rule's present shape, so this design does not
+  rely on it. A test computer can sit hibernated for more than a week
+  between steps, so the protection must be explicit.
+- **Rollback**: delete the lines.
+
+**Precondition of the enabling change** (review 265, finding 1). By the
+deploy that carries the `computer-tiers.json` change, in that deploy or
+an earlier one, T-A, T-B and T-C are each named by computer id in a
+per-computer selector in vmctl's environment. vmctl reads the selectors
+at start (`cmd/vmctl/main.go:758`), so one deploy carrying both is enough.
+
+- The selector is `CHOIR_VISUAL_CAPTURE_COMPUTERS`. T-A is already in it,
+  and T-B and T-C need the visual capture grant anyway. Use explicit
+  computer ids, not `class:test`, which protects nothing.
+- A maintenance hold is not used. A held computer is skipped by deploy
+  refresh (`internal/vmctl/deploy_refresh.go:414`), and S6's proof needs
+  a deploy to reach T-B.
+- FP0 reads the active retention plan after the deploy
+  (`/internal/vmctl/retention-plan`, as `scripts/proofs/fp0-vm-retention.sh`
+  does). Each of T-A, T-B and T-C must show verdict `keep` with reason
+  `selector_named`.
+  If any of them does not, revert the tiers change first.
+- T-C, minted by S7, is added to the selector in the same change that
+  lists it in `test_computers`, never after.
+- Removing a test computer from that selector later, for example as a
+  rollback of its capture grant, takes it out of `test_computers` first.
+- **Class of the precondition.** The selector entry is a line of vmctl's
+  environment in `nix/node-b.nix`, so it is red by the repo's classes. It
+  is tier 1: additive, rolled back by deleting the id, and visible in the
+  retention plan within minutes of the deploy.
 
 **The test computers:**
 
@@ -1601,13 +1728,16 @@ just after T-B is minted):
   - `source.projection` on;
   - an owner-minted API key with `owner:acts`, which only the owner can
     mint, signed in;
-  - the class-test visual capture grant;
+  - the visual capture grant, by computer id in
+    `CHOIR_VISUAL_CAPTURE_COMPUTERS`, which also keeps it from
+    `test_class_idle` (the precondition above);
   - the `packages.*` switches turned on by FP0 as each step lands;
   - no standing work.
-- **T-C: a third b@c computer**, `test`, set up like T-B. It is minted by
-  S7 at the latest, and serves as the second adopter for suspension
-  (review 257 F9).
-- **T-D: d@e's computer**, the second owner.
+- **T-C: a third b@c computer**, `test`, set up like T-B, including the
+  selector entry. It is minted by S7 at the latest, and serves as the
+  second adopter for suspension (review 257 F9).
+- **T-D: d@e's computer**, the second owner. Class `primary`, never listed
+  in `test_computers`.
   - d@e's key is used in S1, S2 and S3 for privacy;
   - T-D itself is used in S5 for the cross-owner refusal (and, while it
     is primary class, for the class-floor refusal), in S9 as the primary
@@ -1696,3 +1826,4 @@ so its review is tier 2.
 | DeepSeek, the yank-survives-restore leg presumes SR7 | **Rejected with reason.** The restore runs on the current binary to an earlier tape head, so no older binary reads a newer tape. SR7 is not involved (L22). |
 | DeepSeek, #5's primary leg names no primary computer | **Fixed.** T-D, while it is primary class, is that leg (18, S9). |
 | Owner addition 02:0x, the platform base image | **Added**: section 10.5, steps S4 and S4b, the `platform` scope, admin acts, the pull exporter and Q7. |
+| Review 265 (Devin, one seat, approved with six required edits) | **All six applied.** (1) Section 18 no longer says retention never deletes: it names `test_class_idle` and its keeps, and makes naming T-A, T-B and T-C in `CHOIR_VISUAL_CAPTURE_COMPUTERS` (checked in the retention plan) a precondition of the enabling change; b@c and d@e stay `primary` accounts and T-D is never listed. (2) Host check 3 names its mechanism: a `parent_patch` blob for a base parent, checked against the tree id the host reads from the deploy checkout's object store, which the host build already reads (3.2, S2). (3) and (4) The goal file says S14, not S5, and T-D, not T-C. (5) Section 8.5's table is read first-match and covers every non-terminal state; a planned restart with the applied fact present restarts probation. (6) Section 6.1 names `WriterOwner` and says why the subscription does not use it. |
