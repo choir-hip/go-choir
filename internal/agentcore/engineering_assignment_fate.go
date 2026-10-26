@@ -1020,6 +1020,17 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 		if reportExists {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("stored terminal report cannot precede freeze intent")
 		}
+		// R1: check the cited receipts against the tree that is about to
+		// freeze before the durable freeze intent. Past the intent a refusal
+		// left the assignment frozen and not active, so the doorway refused
+		// every later fate, blocked included, and the desk could neither
+		// correct its citation nor report blocked (round 5c on staging,
+		// docs/problems/engineering-completion-path-cluster-2026-10-20.md).
+		if _, err := traceCall(rt, rec.RunID, "complete.preflight_receipts", func() (struct{}, error) {
+			return struct{}{}, rt.preflightAssignmentExecutionReceipts(ctx, fate, rec.RunID, assignment, report)
+		}); err != nil {
+			return types.EngineeringAssignmentCommandResult{}, err
+		}
 		proposal := &types.EngineeringPendingProposal{
 			PropositionDigest: propositionDigest,
 			Report:            report,
@@ -1123,6 +1134,9 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 			return rt.bindFrozenAssignmentExecutionReceipts(ctx, assignment, handle, report, frozenDigest)
 		})
 		if resolveErr != nil {
+			if errors.Is(resolveErr, capsule.ErrFinalSubjectNotCertified) {
+				return rt.endUncertifiedFrozenAssignment(ctx, assignment, resolveErr)
+			}
 			return types.EngineeringAssignmentCommandResult{}, resolveErr
 		}
 		if frozenDigest != assignment.Binding.SubjectDigest && len(report.Mutations) == 0 {
@@ -1619,6 +1633,64 @@ func (rt *Runtime) bindFrozenAssignmentExecutionReceipts(ctx context.Context, as
 		}
 	}
 	return report, nil
+}
+
+// preflightAssignmentExecutionReceipts checks a terminal report's cited
+// receipts against the capsule's live tree, with the binding its result
+// selects, before the saga's durable freeze intent (R1). It changes no state:
+// a refusal returns with the assignment bound, its capsule active and
+// nothing staged, so the desk can cite the receipts that observed this tree
+// or report blocked or failed. The post-freeze bind stays authoritative.
+// Zero cited refs skip it, as they skip the post-freeze bind.
+func (rt *Runtime) preflightAssignmentExecutionReceipts(ctx context.Context, fate assignmentFateExecutor, runID string, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport) error {
+	refs := make([]string, 0, len(report.Commands))
+	for _, command := range report.Commands {
+		refs = append(refs, command.ExecutionRef)
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	handle, err := fate.AssignmentHandle(runID, assignment.Binding.CapsuleID)
+	if err != nil {
+		return fmt.Errorf("resolve exact assignment capability before freeze intent: %w", err)
+	}
+	if err := fate.PreflightGrantedExecutionReceipts(ctx, runID, handle, refs, assignmentSubjectBinding(report.Result)); err != nil {
+		return fmt.Errorf("assignment command evidence refused before the freeze; the assignment is still active (cite the receipts that observed this tree, or report blocked or failed): %w", err)
+	}
+	return nil
+}
+
+// uncertifiedFrozenRevokeReason is the fixed revoke reason of
+// endUncertifiedFrozenAssignment, so its revoke intent is stable across
+// retries.
+const uncertifiedFrozenRevokeReason = "cited receipts do not certify the frozen subject"
+
+// endUncertifiedFrozenAssignment ends an assignment whose terminal report
+// passed the receipt pre-check but whose receipts do not certify the tree
+// that froze: something still alive in the capsule changed the tree between
+// the pre-check and the quiesce (R1's race). The refusal is deterministic
+// (the tree is frozen, the receipts are content-addressed), the staged
+// proposition holds the terminal slot, and frozen -> active is not a fate
+// transition, so no re-drive and no later Complete can record. The saga
+// revokes the capsule as a stopped round's (carry_unfinished may keep the
+// patch) and records a system cancellation that names the refusal: a failed
+// report, and management is told. It returns the refusal, so the desk's
+// claim reads as refused. The caller holds the assignment's saga.
+func (rt *Runtime) endUncertifiedFrozenAssignment(ctx context.Context, assignment types.EngineeringAssignment, cause error) (types.EngineeringAssignmentCommandResult, error) {
+	causeText := cause.Error()
+	if len(causeText) > 400 {
+		causeText = causeText[:400] + "..."
+	}
+	reason := "the cited receipts do not certify the tree that froze (it changed after the pre-check); the capsule is revoked and the assignment cancelled: " + causeText
+	revoked, err := rt.revokeStoppedAssignedCapsule(ctx, assignment, uncertifiedFrozenRevokeReason)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, errors.Join(cause, fmt.Errorf("revoke the uncertified frozen assignment: %w", err))
+	}
+	if _, err := rt.persistSystemEngineeringCancellation(ctx, revoked, reason, false); err != nil {
+		return types.EngineeringAssignmentCommandResult{}, errors.Join(cause, fmt.Errorf("cancel the uncertified frozen assignment: %w", err))
+	}
+	log.Printf("runtime: assignment %s cancelled: %s", assignment.AssignmentID, reason)
+	return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("%w; the assignment is cancelled with this cause and management is told", cause)
 }
 
 // executionEvidenceCountError names why cited execution evidence did not

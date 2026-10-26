@@ -1511,6 +1511,38 @@ func (e *Executor) ResolveGrantedExecutionReceiptsFor(ctx context.Context, agent
 	return receipts, nil
 }
 
+// PreflightGrantedExecutionReceipts checks the cited receipts against the
+// capsule's live worktree with the binder and binding the post-freeze
+// resolver applies, before the terminal saga writes its durable freeze
+// intent (R1, docs/problems/engineering-completion-path-cluster-2026-10-20.md):
+// a refusal after that intent left the assignment frozen and every later
+// fate refused. It does not freeze, and it mints and persists nothing, so a
+// refusal leaves the capsule and the assignment as they were. The
+// post-freeze resolver stays authoritative: a process still alive in the
+// capsule can change the tree before the quiesce.
+func (e *Executor) PreflightGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string, binding SubjectBinding) error {
+	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
+	if err != nil || capability.AgentRole != RoleEngineering {
+		return fmt.Errorf("capsule execution evidence unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateActive && state != StateFrozen {
+		return fmt.Errorf("capsule execution evidence unavailable in state %s", state)
+	}
+	var worktreeDigest string
+	err = e.traceStep(caps.ID, "capsule.digest_worktree_preflight", func() (digestErr error) {
+		worktreeDigest, digestErr = digestCapsuleWorktree(ctx, caps)
+		return digestErr
+	})
+	if err != nil {
+		return err
+	}
+	_, err = bindGrantedReceipts(e.OpenExecutionReceipt, refs, binding, agentRunID, computerevent.DigestBytes([]byte(handle)), caps.ID, caps.SourceSnapshotDigest, worktreeDigest)
+	return err
+}
+
 func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
 	receipts := make([]ExecutionReceipt, 0, len(refs))
 	for _, ref := range refs {

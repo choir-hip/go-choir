@@ -3,6 +3,7 @@ package capsule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,6 +71,14 @@ func TestBindGrantedReceiptsReceiptlessMutationBlocksOnlyACertifiedClaim(t *test
 	if err == nil || !strings.Contains(err.Error(), "does not bind the final frozen subject") ||
 		!strings.Contains(err.Error(), atWrite) || !strings.Contains(err.Error(), frozen) {
 		t.Fatalf("certified binding of a receipt-less mutation = %v", err)
+	}
+	// The terminal saga ends an assignment on this refusal alone (R1's
+	// race), so it is typed; an authenticity refusal is not.
+	if !errors.Is(err, ErrFinalSubjectNotCertified) {
+		t.Fatalf("the final-subject refusal is not ErrFinalSubjectNotCertified: %v", err)
+	}
+	if _, foreignErr := bindGrantedReceipts(open, refs, SubjectCertified, "another-run", "handle", "capsule", source, frozen); foreignErr == nil || errors.Is(foreignErr, ErrFinalSubjectNotCertified) {
+		t.Fatalf("a foreign-run refusal = %v; want a refusal that is not the final-subject one", foreignErr)
 	}
 	// Complete("blocked"): binds, and reports the latest receipt's digest for
 	// the side-by-side record next to the frozen digest.
