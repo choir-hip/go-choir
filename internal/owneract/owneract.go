@@ -75,6 +75,10 @@ const (
 	// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). Its
 	// subject carries computer_tier, which the proxy reads from vmctl.
 	ActSelfDevAutonomyArm = "selfdev.autonomy.arm"
+	// ActPackagePublish is publishing one package release at scope owner
+	// (Library S2, docs/design/library-package-propagation-2026-10-26.md
+	// 4.1). Its subject binds the release id and the scopes.
+	ActPackagePublish = "package.publish"
 )
 
 // Auth methods.
