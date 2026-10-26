@@ -56,3 +56,40 @@ So one cancelled run froze b@c's projection base at event 33,305.
 - Open: whether other wrapped transient errors (store I/O, lease loss) also
   land in `blocked`; whether the paper or owner computers log jobs to the same
   journal (only three computers appear in 14 days).
+
+## Audit of `blocked` sites (2026-10-26, lane/projection-cancel)
+
+The wrap that lost the cause: `internal/projectionbase/verify.go:97`
+(`"%w: read-back witness: %v"`) formats the witness error with `%v`, so
+`errors.Is(err, context.Canceled)` is false even though the text says
+"context canceled". The lane's first test reproduces the production error
+string exactly.
+
+`fail("blocked", ...)` sites in `cmd/checkpointd/worker.go`:
+
+| Site | Verdict |
+| --- | --- |
+| missing base beyond bootstrap bound | deterministic (needs genesis repair) |
+| `GetKeyEscrow` error | **mixed**: `ErrKeyEscrowNotFound` is deterministic; any other error is store I/O or a cancelled context (transient) |
+| escrow record JSON invalid | deterministic |
+| escrow digest changed since admission | deterministic (admission re-admits on a key change) |
+| `OpenDEK` unwrap refused | deterministic (local crypto, no I/O) |
+| `NewRebuilder` config refused | deterministic |
+| `rebuilder.Run` returns `ErrBaseRefused` | **mixed**, see below |
+| result does not match frozen target | deterministic |
+
+`ErrBaseRefused` wrap sites on the worker's `Run` / `VerifyPublishedBase` path:
+
+- Carry a ctx- or I/O-bearing cause through `%v` (transient-capable):
+  `verify.go:97` read-back witness, `seed.go:220` seed witness,
+  `rebuilder.go:536` tail-start read, `resolve.go:47` tail read, and
+  `rebuilder.go:498` (wraps the last rejected seed candidate's error).
+- Local filesystem sites (`rebuilder.go:226/231/242/265/489`, `seed.go:204-248`,
+  scratch open/head): can fail on ENOSPC or a transient I/O error but equally on
+  a corrupt scratch; the cause is not distinguishable by type. Left `blocked`
+  as a named residual; the worker's `ctx.Err()` backstop still demotes any of
+  them when the job context itself was cancelled.
+- Validation sites (descriptor, digest, witness mismatch, ancestry, reducer or
+  schema version, bounds): deterministic.
+- `source_http.go`, `install.go`, `advertise.go`, `rebase.go`: not on the
+  checkpoint worker's path (restore and advertise callers); not changed.
