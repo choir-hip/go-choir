@@ -19,6 +19,7 @@ package platform
 // edge; a role change tombstones the old role's edge.
 
 import (
+	"errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -111,18 +112,18 @@ func (s *Service) RecordStoryEntities(ctx context.Context, req types.StoryEntiti
 	for _, c := range checked {
 		if c.row != nil {
 			if _, err := og.InsertObjectIfAbsent(ctx, *c.row); err != nil {
-				return 0, fmt.Errorf("story entities: write %s: %w", c.canonical, err)
+				return 0, storeFailed(fmt.Errorf("story entities: write %s: %w", c.canonical, err))
 			}
 			// The lexicon learns the name now: the next request matches it.
 			s.noteEntityWritten(strings.TrimSpace(req.OwnerID), c.lex)
 		}
 		if err := og.PutEdge(ctx, makeEdge(pub, c.canonical, edgeMentionsEntity, now, mentionMetadata(c.role))); err != nil {
-			return 0, fmt.Errorf("story entities: write the mention of %s: %w", c.canonical, err)
+			return 0, storeFailed(fmt.Errorf("story entities: write the mention of %s: %w", c.canonical, err))
 		}
 		// One live role per story and entity: retract the other role's edge.
 		edges, err := og.ListEdges(ctx, objectgraph.EdgeFilter{FromID: pub, ToID: c.canonical, Kind: edgeMentionsEntity, Tombstone: &live, Limit: 4})
 		if err != nil {
-			return 0, fmt.Errorf("story entities: read the mentions of %s: %w", c.canonical, err)
+			return 0, storeFailed(fmt.Errorf("story entities: read the mentions of %s: %w", c.canonical, err))
 		}
 		for _, e := range edges {
 			if mentionRole(e) == c.role {
@@ -130,7 +131,7 @@ func (s *Service) RecordStoryEntities(ctx context.Context, req types.StoryEntiti
 			}
 			e.Tombstone = true
 			if err := og.PutEdge(ctx, e); err != nil {
-				return 0, fmt.Errorf("story entities: retract %s: %w", e.EdgeID, err)
+				return 0, storeFailed(fmt.Errorf("story entities: retract %s: %w", e.EdgeID, err))
 			}
 		}
 	}
@@ -139,10 +140,25 @@ func (s *Service) RecordStoryEntities(ctx context.Context, req types.StoryEntiti
 	}
 	if req.Review != nil {
 		if err := s.learnFromReview(ctx, og, strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), pub, *req.Review); err != nil {
-			return 0, err
+			return 0, storeFailed(err)
 		}
 	}
 	return len(checked), nil
+}
+
+// storeFailure marks an error of the store, not of the request: the route
+// answers it 503, so a computer tells the platform failing from the
+// platform refusing (review 304 item 2). An unmarked error is a refusal.
+type storeFailure struct{ err error }
+
+func (e storeFailure) Error() string { return e.err.Error() }
+func (e storeFailure) Unwrap() error { return e.err }
+
+func storeFailed(err error) error {
+	if err == nil {
+		return nil
+	}
+	return storeFailure{err: err}
 }
 
 // checkStoryEntities is every check of an entities request, shared by the
@@ -179,7 +195,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 	}
 	og := s.ogStore()
 	if og == nil {
-		return "", nil, nil, fmt.Errorf("story entities: store unavailable")
+		return "", nil, nil, storeFailed(fmt.Errorf("story entities: store unavailable"))
 	}
 	pub, err := publicationCanonicalFor(owner, strings.TrimSpace(req.Story))
 	if err != nil {
@@ -221,7 +237,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 		existing, err := og.GetObject(ctx, canonical)
 		exists := err == nil && !existing.Tombstone
 		if err != nil && notFoundIsNil(err) != nil {
-			return "", nil, nil, fmt.Errorf("entity %d: read %s: %w", n, id, err)
+			return "", nil, nil, storeFailed(fmt.Errorf("entity %d: read %s: %w", n, id, err))
 		}
 		if !e.New {
 			if !exists {
@@ -258,7 +274,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 		// R1: another node of the same normalised name is a duplicate.
 		same, err := og.ListObjectsByMetadataForOwner(ctx, string(ogKindEntity), "$.normalized", norm, owner, 4)
 		if err != nil {
-			return "", nil, nil, fmt.Errorf("entity %d: look up %q: %w", n, name, err)
+			return "", nil, nil, storeFailed(fmt.Errorf("entity %d: look up %q: %w", n, name, err))
 		}
 		for _, other := range same {
 			if other.CanonicalID == canonical || other.Tombstone {
@@ -294,7 +310,7 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 func (s *Service) checkPublicAutopaperStory(ctx context.Context, og *ObjectGraphStore, owner, pub string) error {
 	pubs, err := s.relatedPublications(ctx, og, map[string]bool{pub: true})
 	if err != nil {
-		return err
+		return storeFailed(err)
 	}
 	info, ok := pubs[pub]
 	if !ok || !info.eligible || info.obj.OwnerID != owner {
@@ -302,7 +318,7 @@ func (s *Service) checkPublicAutopaperStory(ctx context.Context, og *ObjectGraph
 	}
 	manifest, err := s.frontManifest(ctx, og, info.latest)
 	if err != nil {
-		return err
+		return storeFailed(err)
 	}
 	if !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) {
 		return fmt.Errorf("%s is not on the public route, so its entities would never be shown", pub)
@@ -329,7 +345,12 @@ func (h *Handler) HandleStoryEntities(w http.ResponseWriter, r *http.Request) {
 	n, err := h.service.RecordStoryEntities(r.Context(), req)
 	if err != nil {
 		log.Printf("corpusd: story entities from %s: %v", strings.TrimSpace(req.ComputerID), err)
-		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		status := http.StatusBadRequest
+		var failed storeFailure
+		if errors.As(err, &failed) {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(w, status, apiError{Error: err.Error()})
 		return
 	}
 	if req.ValidateOnly {
