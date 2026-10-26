@@ -15,16 +15,6 @@ import (
 // bound-identity-2026-10-26.md). These tests run with the D2 switch off: no
 // release directories exist.
 
-func bootArgsOf(t *testing.T, fc map[string]interface{}) string {
-	t.Helper()
-	bootSource, ok := fc["boot-source"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("no boot-source in %v", fc)
-	}
-	args, _ := bootSource["boot_args"].(string)
-	return args
-}
-
 // H1, S1b test 1: kernel parameters are read at each launch, so a launch
 // after the NixOS switch repointed the guest link (and before vmctl
 // restarted) does not pair the new kernel and store disk with the old init=
@@ -65,7 +55,7 @@ func TestKernelParamsReadAtEachLaunch(t *testing.T) {
 
 	// A launch that arrives with blank params (refreshConfigForCurrentDeploy)
 	// is filled from the file too, at the boot-args step as well.
-	blank := VMConfig{VMID: "vm-h1", GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 64}
+	blank := VMConfig{VMID: "vm-h1", GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 64, StoreDiskPath: "/guest/storedisk.erofs"}
 	if args := bootArgsOf(t, mgr.buildFirecrackerConfig(blank, 9001)); !strings.Contains(args, "init=/nix/store/init-b") {
 		t.Fatalf("boot args for blank params = %q; want the file's contents", args)
 	}
@@ -169,11 +159,12 @@ func TestLaunchWritesLaunchRecordBeforeSpawn(t *testing.T) {
 	hostPort, _ := w.mgr.hostPortFromHostURL(w.guestS.URL)
 	fc := w.mgr.buildFirecrackerConfig(w.cfg, hostPort)
 	spawned := false
+	wantTarget := w.imageA
 	w.mgr.firecrackerStarter = func(string, []string) error {
 		spawned = true
 		rec := w.launchRecord(t)
-		if rec.ImageTarget != w.imageA || rec.Epoch != 7 || rec.Release != "" || rec.LaunchedAt.IsZero() {
-			t.Fatalf("launch record at spawn = %+v; want image_target %s, epoch 7, legacy release", rec, w.imageA)
+		if rec.ImageTarget != wantTarget || rec.Epoch != 7 || rec.Release != "" || rec.LaunchedAt.IsZero() {
+			t.Fatalf("launch record at spawn = %+v; want image_target %s, epoch 7, legacy release", rec, wantTarget)
 		}
 		return nil
 	}
@@ -186,6 +177,7 @@ func TestLaunchWritesLaunchRecordBeforeSpawn(t *testing.T) {
 
 	// A second launch after the link moved rewrites the record.
 	w.repoint(t, w.imageB)
+	wantTarget = w.imageB
 	if err := w.mgr.launchFirecracker(w.cfg, fc, hostPort); err != nil {
 		t.Fatal(err)
 	}
@@ -196,6 +188,7 @@ func TestLaunchWritesLaunchRecordBeforeSpawn(t *testing.T) {
 	// No link configured or an unreadable link: a record without a target, so
 	// the snapshot guard stays off for that launch (it validates as today).
 	w.mgr.cfg.GuestReleaseLink = filepath.Join(w.mgr.cfg.StateDir, "no-such-link")
+	wantTarget = ""
 	if err := w.mgr.launchFirecracker(w.cfg, fc, hostPort); err != nil {
 		t.Fatal(err)
 	}
