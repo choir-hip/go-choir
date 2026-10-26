@@ -231,3 +231,34 @@ func TestHTTPGuestHealthEmptyComputerURLIsBusy(t *testing.T) {
 		t.Fatalf("the idle sweep took a computer with no address: %v", got)
 	}
 }
+
+// Review 312 Medium: the legacy 30 minute hold measures idle from the same
+// folded activity time as the plan (the later of LastActiveAt and the last
+// time a probe found the guest busy). A guest that reports no live_capsules,
+// idle 40m by its clock but seen busy 12m ago, is inside its legacy window;
+// make-room must leave it as the sweep and reclaim do.
+func TestMakeRoomLegacyGuestHoldSeesWorkAsActivity(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.reg.SetPressureReclaimConfig(PressureReclaimConfig{
+		Mode: PressureReclaimModeActive, Signal: PressureReclaimSignalSustained,
+		MinMemoryAvailableBytes: 4 * gib, MinIdle: 10 * time.Minute,
+	})
+	f.reg.SetLegacyGuestIdleTimeout(30 * time.Minute)
+	f.reg.setGuestHealthProbeForTest(func(*VMOwnership) guestHealthReading {
+		return guestHealthReading{ReportsCapsules: false}
+	})
+	f.activeComputer("old", "vm-old", 40*time.Minute, 3*gib)
+	f.reg.mu.Lock()
+	f.reg.guestLastBusyAt = map[string]time.Time{"vm-old": f.now.Add(-12 * time.Minute)}
+	f.reg.mu.Unlock()
+	f.setAvail(5 * gib)
+	_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	if RecoveryRefusalFrom(err) == nil || len(f.mr.hibernates()) != 0 {
+		t.Fatalf("err=%v hibernates=%v, want the legacy guest seen busy 12 minutes ago left running", err, f.mr.hibernates())
+	}
+	// The sweep's decider is the same function: held on the folded time.
+	own := f.reg.GetOwnershipByVMID("vm-old")
+	if reason := f.reg.hibernationHoldReason(func(*VMOwnership) bool { return false }, f.reg.now)(own); reason != holdReasonLegacyGuest {
+		t.Fatalf("hold reason = %q, want %q", reason, holdReasonLegacyGuest)
+	}
+}

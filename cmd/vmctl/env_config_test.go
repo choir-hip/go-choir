@@ -146,3 +146,17 @@ func TestPrimaryKeepaliveModeEnv(t *testing.T) {
 		t.Fatalf("keepalive under-capacity = %q", got)
 	}
 }
+
+// Review 312 nit 5: the legacy window is never shorter than the idle timeout
+// it protects a guest from, so a typo cannot switch the rule off.
+func TestLegacyGuestIdleTimeoutIsFlooredAtTheIdleTimeout(t *testing.T) {
+	t.Setenv("VMCTL_IDLE_TIMEOUT", "10m")
+	t.Setenv("VMCTL_IDLE_TIMEOUT_LEGACY_GUEST", "30s")
+	if d := legacyGuestIdleTimeoutFromEnv(); d != 10*time.Minute {
+		t.Fatalf("legacy guest idle = %s, want the 10m idle timeout as its floor", d)
+	}
+	t.Setenv("VMCTL_IDLE_TIMEOUT_LEGACY_GUEST", "20m")
+	if d := legacyGuestIdleTimeoutFromEnv(); d != 20*time.Minute {
+		t.Fatalf("legacy guest idle = %s, want 20m", d)
+	}
+}
