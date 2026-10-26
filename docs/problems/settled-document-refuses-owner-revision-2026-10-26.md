@@ -127,11 +127,12 @@ lifecycle events and engineering assignments stay the settled trajectory's
 own; the new trajectory's event cursor starts at 1 (a client reconnects on
 the new trajectory); per-episode subject refs are dropped; nothing is
 reopened. Late evidence for the settled trajectory arriving after the
-document moved on (`QueueLifecycleUpdate` and producer reports'
-late-evidence branch, `texture_evidence_embed.go`) is refused, fail closed,
-because those paths require `document.TrajectoryID == req.TrajectoryID`.
-Settlement already requires no open work, no pending updates, no unread
-records and no open rounds, so this is narrow.
+document moved on is still admitted (review 260): `QueueLifecycleUpdate`'s
+late branch and `texture_evidence_embed.go` accept a trajectory in the
+bounded lineage (`LifecycleTrajectoryLineage`) of the document's current
+trajectory, and the embed commits on the current one. The live branch of
+`QueueLifecycleUpdate` and the other pointer checks still require
+`document.TrajectoryID == req.TrajectoryID`.
 
 **Failure modes (each has a test).** The 409 itself; the settled trajectory
 rewritten; the pointer or the desk left behind; the head not carried; no
@@ -140,10 +141,12 @@ cancelled or stale-head revise continuing; the settled snapshot no longer
 reading; the chain not extending; the archive race; the carry losing the
 earlier round; a lineage that follows another document's trajectory, loops
 or ignores its bound; a desk run still owning the activation (refused,
-since it would rebind the desk back when it ends; not reachable through the
-store today). Tests: `internal/textureowner/texture_settled_continue_test.go`
-(C1-C11), `internal/store/lifecycle_continue_test.go` (S1-S8),
-`internal/agentcore/carried_patch_lineage_test.go` (L1-L3).
+since it would rebind the desk back when it ends); a late update or an
+evidence embed for the settled trajectory after the continue (admitted by
+lineage). Tests: `internal/textureowner/texture_settled_continue_test.go`
+(C1-C11), `internal/store/lifecycle_continue_test.go` (S1-S10),
+`internal/agentcore/carried_patch_lineage_test.go` (L1-L3),
+`internal/textureowner/texture_evidence_embed_test.go` (the embed after a continue).
 
 **Residuals.**
 - An open document stream in another tab stays on the settled trajectory
