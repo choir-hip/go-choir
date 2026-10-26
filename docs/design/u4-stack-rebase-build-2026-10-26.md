@@ -192,384 +192,488 @@ Found while reading (additional):
 
 ## Decision (2026-10-26, FP0 design worker): route D, the root Texture RLM is the parent
 
+Revision 2. This version answers design review 303 (Devin and DeepSeek,
+`_runs/bunch303`). Both reviewers confirmed that route D works and that the cast
+gate cannot be forged. They sent the doc back before any build. "What changed
+after review 303", at the end of this section, lists every change.
+
 Owner rulings this section follows: "we need to rebase not reject security
 updates. Security comes first." And on the route: "it shouldn't be a
 platform-minted assignment. Use the root texture rlm." Terminology (owner): the
 **Texture desk** is all of a computer's Texture RLMs, one desk per computer; the
 master document's own RLM, `texture:<masterDoc>`, is **the root Texture RLM**.
-Read against `1a7cac668` (code at `618727c97`, unchanged since).
+Read against code at `618727c97`, which is unchanged under `internal/` since.
 
 **Option A** (a platform-minted assignment) is ruled out by the owner. **B** stays
 available as an owner act; it is not automatic. **C** (host-side rebase) is still
 the later half of U4 and does not answer the automatic guest round.
 
+**Not in U4: the base join.** A self-development apply that does not check its
+candidate's base against the booted base is its own security slice. It is built
+unconditionally (not behind any U4 switch) on `lane/base-join`, from
+`docs/problems/selfdev-apply-has-no-base-join-2026-10-26.md`. U4 depends on it
+for failure mode 2 (the base moves again before apply), and the U4 staging proof
+runs only after it has landed.
+
+The first version of this doc overstated the security case. The accurate claim
+has two parts:
+- the apply has a provenance gap: the materializer never joins the frozen
+  bundle's `SourcePatchBaseCommit` to the booted base;
+- H1: computers on a self-development stack do not receive the platform's
+  frontend fixes (R&D doc §1.1).
+
+At `stack_base_moved`, the computer already serves the old base's frontend, and
+an open operation blocks a newer Freeze. So a stale candidate there does not
+revert a live fix. A revert needs the narrower state in which a newer-base
+release is already current while an old-base candidate is frozen (DeepSeek's
+trace).
+
 ### The route in one paragraph
 
-When reconcile answers `stack_base_moved` with the switch on, and the computer
-has stayed up a short interval, the runtime mints one **rebase notice**: a system
-Note into the root Texture RLM's inbox, with the owner-act record's shape. The
-notice wakes the root Texture RLM through the ordinary records wake. The root
-opens a round with management: an ordinary Texture Cast whose packet names the
-notice. Management casts an ordinary `implementation` assignment with the usual
-`{"parent": <the root's Cast>}`. `planEngineeringCast` finds the notice through
-that parent and admits the cast while the computer is at `stack_base_moved`, but
-only for the current stack top and booted base. It pins the capsule to `B'`
-instead of HEAD. The carried offer mounts the stack top's patch `P`. Freeze,
-verify, the owner's decision and the reports all run on the existing path.
-There is no new cast authority, no new assignment kind, no binding field, no
-bundle field and no store schema change. `rebase_of` is never typed by a model.
-It is derived from the tape: assignment, then management's Cast, then its
-`ParentID` (the root's Cast), then the packet's `rebase_notice`, then the notice
-record, which names the operation and `B'`.
+1. When reconcile answers `stack_base_moved` with the switch on, and the computer
+   has stayed up a short interval, the runtime mints one **rebase notice**.
+2. The notice is a system Note into the root Texture RLM's inbox, with the
+   owner-act record's shape. It wakes the root through the ordinary records wake.
+3. The root opens a round with management: an ordinary Texture Cast whose packet
+   names the notice.
+4. Management casts an ordinary `implementation` assignment. Its spec gives the
+   usual `parent` and also names the notice, the operation and the base. Its
+   objective names the notice.
+5. `planEngineeringCast` checks the live facts: the current stack top and the
+   booted base. It then pins the capsule to `B'` instead of HEAD.
+6. The store's records admission binds the notice to this one assignment inside
+   the open's own transaction.
+7. The rebase offer mounts the stack top's patch `P`. Freeze, verify, the owner's
+   decision and the reports run on the existing path.
+8. At materialization, the rebase path checks that the candidate really contains
+   `P`, and writes the verified lineage as a receipt.
 
-### The six questions, answered from the code
+There is no new cast authority and no new assignment kind. There is no binding
+field and no bundle field. The store gains one additive object kind, the notice
+claim, and no table or column changes.
+
+If the root or management misses its turn, or a crash comes before any
+assignment exists, the pair is re-offered under a new attempt id. There are at
+most three attempts per pair.
+
+### The questions, answered from the code
 
 1. **Can the root Texture RLM open a round on an event that is not owner text?**
    Yes. Three pieces of code already allow it:
    - A Texture records turn needs no owner text and no open work item
-     (`textureowner/texture_agent_revision.go:663-670`, `request_source: inbox_record`).
+     (`internal/textureowner/texture_agent_revision.go:664-666`,
+     `request_source: inbox_record`).
    - System records already wake Texture RLMs: support failures and owner acts
-     (`store/management_tasks.go:66-100`).
+     (`internal/store/management_tasks.go:66-100`).
    - A Texture's Cast to `management` is an ordinary records route
-     (`agentcore/inbox_records.go:57-69`).
+     (`internal/agentcore/inbox_records.go:66-70`).
 
    The master document's trajectory is the one parent that never settles. Its
-   standing work item is clamped open (`textureowner/texture_turn_runtime.go:207-213`),
-   so TX-01 cannot bite. A dead master is replaced at the next digest
-   (`texture_root.go:427-473`).
+   standing work item is clamped open
+   (`internal/textureowner/texture_turn_runtime.go:212-214`). A dead master is
+   replaced at the next digest (`texture_root.go:427-473`).
 
-   The records admission is satisfied unchanged
-   (`store/engineering_assignments.go:742-800`):
-   - the parent is a Texture's Cast (`texture:<masterDoc>`) into
-     `management:<owner>`;
+   The records admission accepts the root's Cast unchanged
+   (`internal/store/engineering_assignments.go:742-800`):
+   - the parent is a Texture's Cast into `management:<owner>`;
    - its round is open;
-   - the master document's `TrajectoryID` is the binding's trajectory, and that
-     trajectory is live.
+   - the document names the binding's trajectory.
 
-   The only thing that stops the root from casting today is a prompt sentence:
-   "You never cast to research or management" (`textureprompts/texture_root.txt:7`).
-   No code check backs it; the root's only code clamps are the work disposition
-   and the 48 KiB bound. Discovered, not introduced: the ban is prompt-only, so the
-   root could already cast ordinary engineering from owner text on the master
-   document. Route D narrows the prompt exception to a rebase notice. The code
-   check that matters is the gate exception below.
-2. **What delivers to it.** A records wake, not a digest. The notice is committed
-   with `CommitInboxRecords`. That commit writes its own `inbox_record` wake row,
-   and the actor-wake outbox delivers it (`runtime.go:975-980`: "the actor-wake
-   outbox projector is the sole post-restart delivery path"). The notice is
-   `types.CommitmentEmitterSystem`, so it must join the closed allowlist in
-   `store.RecordWakesReader` (`management_tasks.go:66-100`). The precedent is the
-   owner-act record (`types/commitment_owner_act.go`, `agentcore/selfdev_owner_act_wake.go:15-29`):
-   a system Note from a non-desk sender, which opens and closes no round. A
-   digest is the wrong carrier for three reasons:
-   - it is coalesced and debounced, and holds documents, not facts;
-   - it lives in memory and starts a full ledger refresh;
-   - it carries no record id for the gate to check against.
+   Admission does not check that the trajectory is live (Devin's nit).
+   `requireEngineeringParentAuthority` does (`:702`), and the open runs it right
+   after admission.
 
-   The root's records turns always start a fresh run, never a parked one
-   (`texture_controller.go:683-692`), so the run reads the ledger and the notice
-   together.
+   Discovered (not introduced): the root's ban on casting is one prompt sentence,
+   "You never cast to research or management"
+   (`internal/textureprompts/texture_root.txt:7`). No code check backs it. Route D
+   adds a prompt exception for rebase notices only; the code checks that matter
+   are the gate and admission below.
+2. **What delivers to it.** A records wake, not a digest.
+   - The notice is committed with `CommitInboxRecords`, which writes its own
+     `inbox_record` wake row. The actor-wake outbox delivers it ("the sole
+     post-restart delivery path", `internal/agentcore/runtime.go:975-980`).
+   - The notice is `EmitterSystem`, so it joins the closed allowlist in
+     `store.RecordWakesReader`. The precedent is the owner-act record
+     (`internal/types/commitment_owner_act.go`,
+     `internal/agentcore/selfdev_owner_act_wake.go:15-29`).
+   - A digest is the wrong carrier for three reasons:
+     - it is coalesced and debounced;
+     - it lives only in memory;
+     - it has no record id that the gate and admission can check.
+   - The root's records turns always start a fresh run, never a parked one
+     (`texture_controller.go:683-692`).
 3. **The restart rules hold.**
-   - *Never at boot.* Boot reconcile runs after the crash closures
-     (`runtime.go:936-942`, then `:963`). Even so, the notice is never minted
-     inside boot. Reconcile only arms an in-memory timer, due at `bootedAt` plus
-     a stay-up interval (default 5 min). A crash forgets the timer, and the next
-     boot recomputes the state from the tape.
-   - *Crash before the root reads the notice.* The pending wake is a pre-boot
-     `inbox_record`, so the generic gate interrupts it (`planned_restart.go:163-207`).
-     The unread notice stays on the tape, but the gate exception refuses a notice
+   - *Never inside boot.* Boot reconcile runs after the crash closures
+     (`runtime.go:936-942`, then `:963`). Even so, reconcile only arms an
+     in-memory timer, due at `bootedAt` plus the stay-up interval (default 5
+     min). A crash forgets the timer, and the next boot recomputes everything from
+     the tape.
+   - *Crash before the root reads a notice.* The pending wake is a pre-boot
+     `inbox_record`, so the generic gate interrupts it
+     (`planned_restart.go:163-207`). The gate and admission refuse a notice
      committed before `rt.bootedAt` on a markerless boot, with the fate
-     "interrupted by a restart". The same `createdAt.Before(rt.bootedAt)` test is
-     in `planned_restart.go:207`.
-   - *Crash during the round.* The crash boot closes the round and the assignment
-     as today (`closeOpenRoundsAfterCrash`, `closePreBootRunsAfterCrash`). The
-     notice exists, so the pair is decided and nothing is re-minted. One crash
-     spends the pair's automatic round, as the design's failure mode 4 requires.
-   - *Why minting after a crash boot is allowed.* It is new work, not resumed
+     "interrupted by a restart". That attempt stays closed forever. After the
+     stay-up interval, the timer may mint the next attempt (question 4).
+   - *Crash after an assignment claimed the notice.* The crash boot closes the
+     round and the assignment as today. The pair is then spent: capsule work has
+     started, and that work may be what crashes the computer. A spent pair needs
+     the owner's retry act (slice 8) or the next base.
+   - *Why a re-mint after a crash boot is allowed.* It is new work, not resumed
      work, by the schedule precedent in CLAUDE.md and
-     `recoverSourceSchedulesAtBoot` (`source_schedule.go:323-333`): "standing
-     owner intents survive a crash; their occurrences do not", and the schedule's
+     `recoverSourceSchedulesAtBoot` (`internal/agentcore/source_schedule.go:323-333`):
+     "standing owner intents survive a crash; their occurrences do not", and the
      next tick is "armed one interval after boot, never at once: new work on a
      computer that has stayed up that long".
-     - The standing intent here is the owner's switch `source.rebase_offer`
-       ("keep my stack on the booted base").
-     - The occurrence is one round per (stack operation, booted base).
-     - It reopens nothing that was open before the boot, and it fires only after
-       the computer has stayed up.
-     - It is stricter than the schedule's two-crash rule: a pair whose round
-       crashes the computer is never tried again automatically.
+     - The standing intent is the owner's switch, `source.rebase_offer`.
+     - The occurrence is one attempt.
+     - An attempt never reopens an earlier attempt's record, round or wake. It is
+       a new record under a new id, minted by a live timer after the stay-up
+       interval.
+     - The bound mirrors the schedule's crash-loop limit (two crashes): three
+       attempts per pair, and none after an assignment exists.
      - No boot-time resumer is added.
-     - The comment above `inboxRecordWakes` (`store/inbox.go:270-277`) lists the
-       waking system records "minted only by live work, never at a crash boot".
-       The notice joins that list in those words, because it is minted by a live
-       timer after the stay-up interval.
    - *Planned restart.* A planned (marker) restart parks and resumes a live round
-     as the existing rules do. The notice check passes, because a planned boot
-     keeps pre-boot work. If the planned restart also moved the base to `B''`, the
-     resumed round is stale; the materializer check refuses it at apply (below).
-4. **How "one automatic round per pair" is remembered.** On the tape, not in a
-   guest file, so there is one state authority (standing question 4).
-   - The notice's record id is `rebase-notice:<operation id>:<B' full sha>`.
-     Its existence means the pair is decided.
-   - `CommitInboxRecords` with that command id replays and never mints twice.
-   - The gate admits at most one assignment per notice: it scans the master
-     trajectory's assignments and derives each one's notice.
-   - The timer does not mint while any non-terminal rebase of the same operation
-     exists on another base. It re-arms instead, so the rebase onto `B''` waits
-     for the stale round onto `B'` to end.
-   - A product restore that rewinds the tape past the notice makes the pair
+     as the existing rules do. If the base also moved to `B''`, the base join
+     (`lane/base-join`) refuses the stale candidate at apply. That makes a new
+     pair, whose notice waits until the stale round is terminal.
+4. **How attempts are remembered, and the re-mint bound.** On the tape, as the
+   one state authority.
+   - *The notice.* Attempt `n` of pair (operation, `B'`) has the record id
+     `rebase-notice:<op>:<B' full sha>:<n>`, for `n` = 1, 2, 3. The cap is 3. It
+     is committed with **command id equal to record id**.
+     - The same command replays.
+     - A retry under any other command id is refused by the store's record-id
+       uniqueness: `planInboxRecords` returns "record ... is already committed"
+       (`internal/store/inbox.go:486-490`).
+     - So both ids are pinned, and slice 1 tests both.
+   - *The claim.* `rebase_notice_claim`, keyed by pair (not by attempt), is
+     written once by the assignment open (question 5). Its existence means the
+     pair is spent.
+   - *At timer fire, the next attempt `n+1` is minted only when all of these
+     hold:*
+     - the switches are on and the state still holds (question 7, slice 2);
+     - no claim exists for the pair;
+     - `n < 3`;
+     - attempt `n` is closed, meaning any one of:
+       - it predates a markerless boot, or
+       - no Cast from the current root names it within the answer window
+         (default 30 min after its commit), or
+       - a Cast named it but that round closed with no claim (management missed
+         its turn, or a crash closed the round).
+   - The gate and admission admit only the **latest** attempt, so an older
+     attempt's late Cast is refused (`rebase_notice_superseded`).
+   - After attempt 3 closes, or once a claim exists, nothing more is automatic.
+   - A product restore that rewinds the tape past these records makes the pair
      undecided again. That is correct, because the restore is the owner's act.
-5. **The carried offer can come from the stack top without ordinary assignments
+5. **Management's Cast is bound, and one notice opens one assignment (atomic).**
+   - *What management must send.*
+     - Spec: `{"parent": <root Cast id>, "rebase_notice": <latest attempt id>,
+       "rebase_of": <operation id>, "base": <B' full sha>}`.
+     - Objective: must contain the notice id.
+     - The root's Cast packet must carry the same `rebase_notice`.
+   - *The runtime gate (`planEngineeringCast`)* checks the live facts the store
+     cannot see:
+     - `stack_base_moved`, with the booted base's objects present;
+     - spec `rebase_of` equals `result.OperationID`, and spec `base` equals
+       `result.BootedBase`;
+     - the switches are on.
+   - *The store's records admission (`requireEngineeringRecordsAdmission`)*
+     checks the rest inside the open's own transaction. `OpenEngineeringAssignment`
+     holds `trajectoryMu` from replay check to batch
+     (`internal/store/engineering_assignments.go:1169-1261`). When management's
+     Cast spec names a `rebase_notice`, admission requires all of these:
+     - the notice record exists and passes `IsStackRebaseNotice`;
+     - its inbox is the parent Cast's sender;
+     - the parent's packet names the same notice id;
+     - management's spec `rebase_of` and `base` equal the notice's subject refs;
+     - the objective contains the notice id;
+     - it is the latest attempt for its pair;
+     - it is not before `bootedAt` on a markerless boot (the runtime passes
+       `bootedAt` and `planned` in the request; the store does not read the
+       clock).
+     - no `rebase_notice_claim` exists for the pair.
+
+     The open's batch then creates the claim (pair key, assignment id, attempt)
+     under an object condition. Two racing opens cannot both commit: the mutex
+     serializes them and the condition makes it atomic.
+
+     This replaces the gate-side scan of the first version, which had a
+     time-of-check gap (Devin).
+   - *Spec missing.* A spec without `rebase_notice` takes today's path, so at
+     `stack_base_moved` it is refused exactly as now.
+   - `rebaseOfAssignment` reads the lineage from management's Cast spec, one hop
+     from `Binding.ParentControlID`. Admission has already proved that it agrees
+     with the notice.
+6. **The carried offer can come from the stack top without ordinary assignments
    ever carrying an applied operation.**
-   - The new branch is chosen only when `rebaseOfAssignment` derives a notice
-     from the tape chain. That needs a system notice, a parent sent by the
-     current root Texture RLM, and the notice's own record id in that parent's
-     packet.
-   - The source is `rt.boundSourcePatch(top)`: `P` and its base `B`, both already
-     read by `sourceProjectionInput`.
+   - The branch is chosen only for an assignment whose pair claim names it.
+   - The source is `rt.boundSourcePatch(top)`: `P` and its base `B`.
    - The ordinary path (`selectCarriedCandidate`, `roundCarriable` at
-     `carried_patch.go:221`) is not touched, so an applied operation is still
-     never an ordinary candidate.
-   - Unlike an ordinary carry, a rebase offer mounts `P` even when it conflicts
-     with `B'`, and names `ConflictPaths` and `CleanPaths`. The engineer redoes
-     only the conflicting paths (design step 4).
-   - The offer file gains `RebaseOf` and `RebaseNotice` with omitempty. The decode
-     is a plain `json.Unmarshal` (`carried_patch.go:687`), so older code reads the
-     file.
-6. **The materializer's base check.**
-   - Where: in `materializeSelfDevelopmentOperation`, after the bundle validates
-     and before the host-build decision (`self_development_materializer.go:331-354`).
-   - When: never when `journalOnly` (a crash-boot settlement), and only with the
-     switch on. Under those conditions it refuses a bundle whose
-     `SourcePatchBaseCommit` is set and is not `rt.bootedBaseCommit()`. The
-     refusal goes through `recordMaterializationFailed` with reason
-     `base_moved_since_freeze`; the computer keeps its release.
-   - Why the host check is not enough: the host already refuses Go candidates
-     (`hostbuild/service.go:387-399`, `base_commit_mismatch`). The guest check
-     covers frontend-only candidates, which never reach the host, and names the
-     reason earlier.
-   - After a refusal: the stack top is unchanged, so reconcile answers
-     `stack_base_moved` for (`P`'s operation, `B''`). That is a new pair, and the
-     next notice follows.
-   - Lineage needs no bundle field. The materializer decodes with
-     `DisallowUnknownFields` (`:331`), so a lineage field would make the bundle
-     undecodable after a platform rollback. The lineage is read from the tape:
-     operation, then `freeze-open:<assignment>` (`store/engineering_assignments.go:904`),
-     then `rebaseOfAssignment`.
-
-### D against A (one line, as asked)
-
-A was ruled out by the owner. For the record, the comparison is lopsided:
-- *Size of new authority:* D adds a waking system record kind and one gate
-  exception, and both are refusal-shaped. A adds a cast authority, a store open
-  variant and a report path.
-- *Protected surfaces:* D touches the cast gate, the root Texture RLM's prompt, a
-  wake allowlist and the materializer refusal. A also touches the store schema,
-  Validate, and about a dozen kind switches.
-- *New failure modes:* D's are model steps that fail visibly in the ledger
-  (D1-D3 below). A's are silent ones in the store.
+     `carried_patch.go:221`) is untouched.
+   - A rebase offer mounts `P` even on conflict, and names `ConflictPaths` and
+     `CleanPaths`.
+   - *Rollback (DeepSeek 8, refused, not documented away).* Rebase offers are
+     written at `<root>/carried/rebase-offers/<assignment>-<attempt>.json` with
+     schema `choir.rebase_patch_offer.v1`. They are never written at
+     `carriedOfferPath`.
+     - Old code reads only `carried/offers/` with schema
+       `choir.carried_patch_offer.v1` (`carried_patch.go:427-429`, `:687`). It
+       never sees a rebase offer, so it can never present `P` as an ordinary
+       carry.
+     - After a full revert, an admitted rebase assignment would start from `B'`
+       with no mount. The rollback procedure cancels open rebase assignments
+       first.
+7. **Content is verified at materialization (DeepSeek 4).**
+   - When an operation's assignment (`freeze-open:<assignment>`,
+     `internal/store/engineering_assignments.go:905`) holds a pair claim, the
+     materializer runs `verifyRebaseContent` before apply. It never runs for
+     `journalOnly`.
+   - In a scratch work tree from the guest repository (which holds `B` and
+     `B'`), it computes three trees:
+     - `T_P` = `B'` with `P` applied using `git apply --3way`, recording which
+       paths applied cleanly;
+     - `T_C` = `B'` with the bundle's patch applied;
+     - and it requires `SourcePatchBaseCommit == B'`.
+   - It requires all of these:
+     - every clean path of `P` is byte-equal in `T_C` and `T_P`;
+     - every conflict path of `P` (the offer's `ConflictPaths`) differs in `T_C`
+       from `B'`, so it was resolved and not dropped;
+     - paths the bundle changes outside `P` are allowed and listed.
+   - A failure refuses the apply with `rebase_content_mismatch`, naming the
+     paths. The computer keeps its release.
+   - On success it writes the lineage receipt
+     `<root>/rebase/lineage/<operation id>.json`, schema
+     `choir.rebase_lineage.v1`, holding:
+     - `rebase_of`, the attempt id, `stack_base` `B` and `base` `B'`;
+     - the digests of `P` and of the bundle patch;
+     - the clean, resolved and extra paths;
+     - the verdict.
+   - The receipt's sha256 goes into a `source_projection_rebased` fact, and the
+     owner-act "apply" record body names it, so it reaches the master document.
+   - The same check runs once at Freeze, so a bad candidate fails before the
+     owner sees it. The materializer's run is the authority.
+   - No bundle field is added, because the materializer decodes with
+     `DisallowUnknownFields` (`self_development_materializer.go:331`).
 
 ### Failure modes added by route D (written before code; the original 13 stand)
 
 - **D1. The root Texture RLM does not cast, or copies the notice id wrong.** The
-  gate refuses with the code `rebase_notice_mismatch`, management reports it, and
-  the master document shows it. The pair is spent; a retry is an owner act (slice
-  8). *Test:* a root Cast that names an unknown id, or another pair's id, is
-  refused.
-- **D2. Management does not cast, or casts without the root's parent.** The
-  ordinary gate refuses `stack_base_moved` as today. *Test:* an ordinary parent at
-  `stack_base_moved` is still refused.
+  gate or admission refuses (`rebase_notice_mismatch`), the attempt closes, and
+  the next attempt follows after the answer window. Bounded at 3.
+  *Test:* a wrong id is refused, and attempt 2 is minted after the window.
+- **D2. Management does not cast, or casts without the notice fields.** Without
+  `rebase_notice` the spec takes today's refusal. A missing turn closes the
+  attempt as in D1. *Test:* a spec without the notice is refused
+  `stack_base_moved`.
+- **D2a. Management names the notice but sends unrelated work.** Each of these
+  is refused at admission (DeepSeek 3):
+  - an objective without the notice id;
+  - a spec whose `rebase_of` or `base` differs from the notice.
+
+  *Tests:* both, under a valid latest notice. The objective test is the one the
+  reviewers asked for.
 - **D3. An owner request on the master document, cast by the root without a
   notice.** It goes down today's path and is refused at `stack_base_moved`.
-  Nothing is misread as a rebase. *Test:* a root Cast with no `rebase_notice` is
-  refused.
 - **D4. Progress relays and owner acts wake the root on every report, and each
-  root run reads a full ledger refresh.** This cost bypasses the digest's
-  debounce. *Measured* in the staging proof (root runs during one rebase round).
-  If the count is more than about 12, a follow-up gives root records turns the
-  documents their records name instead of a full refresh.
-- **D5. The master document is replaced between the notice and the Cast.** The
-  notice's inbox is no longer the current root's, so the gate refuses
-  (`rebase_notice_mismatch`) and the pair is spent. This is a residual; it is rare
-  because replacement needs a settle that the clamp missed.
-- **D6. A notice from before a crash is read after it.** It is refused,
-  "interrupted by a restart" (question 3).
-- **D7. A forged notice.** Agents' records are always `EmitterAgent` with their own
-  sender (`inboxRecordForIntent`, `inbox_records.go:394-405`).
-  `IsStackRebaseNotice` requires all of these:
+  root run reads a full ledger refresh.** These wakes bypass the digest's
+  debounce. *Measured* in the staging proof. If the count is more than about 12,
+  a follow-up narrows the root's records turns.
+- **D5. The master document is replaced between the notice and the Cast.**
+  Refused, because the notice's inbox is not the parent's sender. The attempt
+  closes and the next attempt goes to the new master.
+- **D6. A notice from before a crash is acted on after it.** Refused, "interrupted
+  by a restart". The next attempt follows after the stay-up interval.
+- **D7. A forged notice.** Agents' records are always `EmitterAgent` from their
+  own inbox (`inboxRecordForIntent`, `inbox_records.go:394-405`, and
+  `outwardSender` at `:448-453`). `IsStackRebaseNotice` requires all of these:
   - `EmitterSystem`;
   - sender `selfdev-rebase:<op>`;
-  - a record id equal to `StackRebaseNoticeID(op, base)`;
-  - subject refs naming both.
-
-  *Test:* each mismatch fails the predicate.
+  - a record id equal to `StackRebaseNoticeID(op, base, n)` with `n` in 1..3;
+  - matching subject refs.
 - **D8. The root Texture RLM is off, or the marker is missing.** Nothing is
-  minted, the pair stays undecided, and the timer re-arms each interval while
-  the state holds. *Test:* with `texture.root_desk` off, no notice is minted and
-  the cast refusal is unchanged.
+  minted, and no attempt is used up.
+- **D9. Two opens race on one notice.** One commits and the other fails the claim
+  condition (question 5). *Test:* two concurrent opens in the store, and exactly
+  one claim.
+- **D10. A re-mint loop.** Attempts are capped at 3, and none is minted after a
+  claim. *Test:* repeated misses mint exactly 3 attempts, and later timer fires
+  mint none.
+- **D11. A rebased candidate that is not `P`.** Refused at materialization with
+  `rebase_content_mismatch` (question 7). *Tests:* a dropped clean hunk is
+  refused; an unresolved conflict path is refused; extra paths are listed and
+  allowed.
 
 ### The switch
 
 `source.rebase_offer`, a computer setting in `store.KnownComputerSettings`,
 default false. It is effective only when `source.projection` and
-`texture.root_desk` are also on, and the runtime reads all three together
-(`rt.rebaseOfferOn`). The proof also turns on `texture.owner_act_wakes`, so the
-owner's decision reaches the master document. With the switch off:
-- no timer runs and no notice is minted;
-- the gate exception never admits, so today's refusal text is unchanged;
-- the materializer check is skipped;
-- the root prompt's exception is inert, because no notice exists to act on.
+`texture.root_desk` are also on (`rt.rebaseOfferOn`). The proof also turns on
+`texture.owner_act_wakes`, so the owner's decision reaches the master document.
+With the switch off:
+- no timer runs and no attempt is minted;
+- the gate never admits a rebase spec, so today's refusal text is unchanged;
+- the content check is skipped, because no claim can exist;
+- the root prompt's exception is inert.
+
+The base join is not behind this switch (`lane/base-join`).
 
 ### The rollback
 
 - *One act:* turn `source.rebase_offer` off. It takes effect at the next timer
-  fire, gate read or apply. A round already admitted runs as an ordinary
-  implementation round; its candidate still needs the owner's approval, and the
-  owner can cancel the assignment.
-- *Full:* revert the slice commits. Notices already on the tape are inert to old
-  code: `inboxRecordKind` shows them as `closure`, and `RecordWakesReader` returns
-  false. No schema, bundle or binding changed, so a platform rollback decodes
-  everything.
+  fire or gate read. A round already admitted runs on as an implementation round;
+  its candidate still passes the content check, because the claim exists. The
+  candidate still needs the owner's approval, and the owner can cancel the
+  assignment.
+- *Full:* first cancel open rebase assignments, then revert the slice commits.
+  What old code sees afterwards:
+  - Notices on the tape are inert to old code: they show as `closure`, and
+    `RecordWakesReader` returns false.
+  - Claim objects are an unknown kind that old code never reads.
+  - Rebase offers sit at a path old code never reads (question 6).
+  - No table, column, bundle or binding changed.
 
-### Slices, in order (each red unless marked; tests first in every slice)
+### Slices, in order (tests first in every slice)
 
-**Slice 1 (red, tier 2): the notice record and the switch.**
+**Slice 1 (red, tier 2): the notice record, the claim kind and the switch.**
 - *Files:*
-  - `internal/types/commitment_rebase_notice.go` (new): `StackRebaseNoticeID(op, base)`,
-    `StackRebaseSenderInbox(op)` = `selfdev-rebase:<op>`, `NewStackRebaseNotice(...)`
-    and `IsStackRebaseNotice(rec)`. The record is a system Note with subject refs
-    `operation_id`, `booted_base`, `stack_base` and `doc_id`, and its body states
-    the exact call the root makes, with the record id in it.
+  - `internal/types/commitment_rebase_notice.go` (new):
+    - `StackRebaseNoticeID(op, base, n)` and `StackRebasePairKey(op, base)`;
+    - `StackRebaseSenderInbox(op)` = `selfdev-rebase:<op>`;
+    - `NewStackRebaseNotice(...)`: a system Note with subject refs `operation_id`,
+      `booted_base`, `stack_base`, `attempt` and `doc_id`. Its body states the
+      exact root Cast, with the id;
+    - `IsStackRebaseNotice(rec)`.
   - `internal/store/management_tasks.go`: `RecordWakesReader` returns true for a
-    notice.
-  - `internal/store/inbox.go:270-277`: the comment lists the notice.
+    notice. Fix the stale comment at `:55-65`: it says "five" and lists four;
+    list all six, adding the owner act and the notice.
+  - `internal/store/inbox.go:270-277`: replace the stale three-item list with a
+    pointer to `RecordWakesReader`'s comment, so there is one list.
   - `internal/agentcore/inbox_records.go` `inboxRecordKind`: `rebase_notice`,
-    placed before the `closure` case.
-  - `internal/store/computer_setting.go`: `SettingSourceRebaseOffer = "source.rebase_offer"`,
-    false, with its doc comment.
-- *Failure modes:* a notice that does not wake; any other system record starting
-  to wake; a record id that is not deterministic; the predicate accepting an agent
-  record.
+    before `closure`.
+  - `internal/store/rebase_notice_claim.go` (new): the
+    `ogKindRebaseNoticeClaim` object and its get.
+  - `internal/store/computer_setting.go`: `SettingSourceRebaseOffer`.
+- *Failure modes:* D7; another system record starts waking; a duplicate notice
+  under a new command id.
 - *Tests:*
   - the D7 predicate table;
   - `RecordWakesReader` is true for a notice and false for a closure;
-  - a store commit of the same notice twice replays;
-  - an unknown key is still refused.
+  - the same command replays;
+  - a **new command id with the same record id is refused** (DeepSeek 7);
+  - an unknown setting key is still refused.
 
-**Slice 2 (red, tier 2): the trigger.**
+**Slice 2 (red, tier 2): the trigger and the bounded re-mint.**
 - *Files:* `internal/agentcore/rebase_notice.go` (new) and
   `internal/agentcore/source_projection.go`:
-  - after `ReconcileSourceProjection` stores its result, call
-    `rt.armRebaseNotice(result)`;
-  - the timer is a mutex-guarded singleton on `Runtime`, and its stay-up interval
-    is a field that tests override.
+  - after `ReconcileSourceProjection`, call `rt.armRebaseNotice(result)`;
+  - the timer is a mutex-guarded singleton;
+  - the stay-up interval (5 min) and the answer window (30 min) are fields that
+    tests override.
 - *At fire:*
   - check the switches;
-  - reconcile again with reason `rebase`;
-  - require `StateBaseMoved` with `sourceproj.HasCommit(repo, booted)` (not the
-    objects-missing branch, failure mode 10);
-  - require a non-genesis top with a readable patch;
-  - read the live root through the store: `GetTextureRoot`, the document, its
-    trajectory live and the standing item open (the `textureRootLive` logic);
-  - stop if the notice id already exists (decided);
-  - re-arm while a non-terminal rebase of the same operation exists;
-  - then commit the notice.
-- *Failure modes:* a mint inside boot; a mint after a crash before the computer
-  has stayed up; a second mint per pair; a mint while the root is off; a mint at
-  `base_objects_missing`; a timer storm.
+  - reconcile again;
+  - require `StateBaseMoved` with `sourceproj.HasCommit(repo, booted)` and a
+    readable non-genesis top;
+  - require a live root, read through the store;
+  - require no claim for the pair;
+  - require no non-terminal rebase of the same operation (defer if one exists);
+  - compute the latest attempt `n` from the tape;
+  - mint attempt 1 if none exists, or attempt `n+1` under question 4's rule;
+  - re-arm while the state holds and attempts remain.
+- *Failure modes:*
+  - a mint inside boot;
+  - a mint after a crash before the stay-up interval;
+  - D8, D10;
+  - a mint at `base_objects_missing`.
 - *Tests:*
-  - due time is no earlier than `bootedAt + interval`;
-  - two reconciles and a simulated reboot mint once (failure mode 3);
-  - a crash-boot runtime with the notice already present mints nothing (failure
-    mode 4);
-  - each switch off mints nothing (failure mode 7, D8);
-  - objects missing mints nothing (failure mode 10);
-  - a live rebase of the same operation defers the mint.
+  - the due time is no earlier than `bootedAt + interval`;
+  - two reconciles and a simulated reboot with attempt 1 answered mint once;
+  - on a crash boot with an unanswered pre-boot attempt 1, attempt 2 is minted
+    only after the interval, and attempt 1 stays refused;
+  - after a claim, nothing more is minted;
+  - the cap is 3;
+  - each switch off mints nothing;
+  - objects missing mints nothing.
 
-**Slice 3 (red, tier 2): the gate exception and the `B'` preflight.**
+**Slice 3 (red, tier 2): the gate exception, admission binding and the `B'`
+preflight.**
 - *Files:*
   - `internal/agentcore/source_projection.go`:
-    `sourceProjectionCastGate(ctx, parent *types.CommitmentRecord) (sourceRef string, err error)`.
-    `""` means HEAD as today. Update every caller and test.
-  - `internal/agentcore/rebase_notice.go`: `rebaseForParent(ctx, parent, result)`
-    and `rebaseOfAssignment(ctx, assignment)`.
-  - `internal/agentcore/engineering_assignment_runtime.go:258-261`: pass the
-    parent, and preflight `sourceRef` when it is set.
-  - `internal/capsule/executor.go`: `PreflightSourceCommit(ctx, commit)` gives
-    `commitDigest` and `capsule-source-git:<commit>:sha256:<digest>`, with a stub
-    in `stub_other.go`.
-- *The exception admits only when all of these hold:*
-  - `result.State == stack_base_moved` and the switch is on;
-  - the parent's sender is the current root's inbox;
-  - its packet's `rebase_notice` loads a notice that passes `IsStackRebaseNotice`;
-  - the notice's inbox is that sender;
-  - the notice's operation is `result.OperationID` and its base is
-    `result.BootedBase`;
-  - the notice is not before `bootedAt` on a markerless boot;
-  - no other assignment derives this notice (replay excepted);
-  - no non-terminal rebase of the operation exists.
-
-  Anything else refuses with the existing `stack_base_moved:` text plus a named
-  sub-reason.
-- *Failure modes:* failure modes 6 and 9, D1-D3, D5, D6.
-- *Tests:* each condition is false in turn, and each is refused. The admitted
-  binding's `SourceArtifactRef` commit equals `B'`, and the capsule's
-  `emitSourcePatch` base is `B'`.
-
-**Slice 4 (red, tier 1): the offer from the stack top, and its notice.**
-- *Files:* `internal/agentcore/carried_patch.go`:
-  - `offerCarriedPatchForAssignment` branches on `rebaseOfAssignment`;
-  - a new `offerRebasePatch` reads `P` through `boundSourcePatch`, checks digest,
-    size (`CarriedPatchMaxBytes`) and paths, and runs `CheckCarriedPatchApplies(P, B' ref)`;
-  - the offer is recorded once with `RebaseOf`, `RebaseNotice`, `ConflictPaths`
-    and `CleanPaths`, and is mounted even on a conflict;
-  - `carriedPatchNotice` gets the rebase wording: what `P` is, the bases, and
-    `git apply --3way /selfdev/carried/source.patch`, then resolve only the named
-    paths, rebuild, test and Freeze.
-- *Failure modes:* failure modes 1, 11 and 12; an ordinary assignment carrying
-  an applied operation; a patch over the bound; a root mismatch between the
-  bundle patch and `/workspace/platform` paths.
+    `sourceProjectionCastGate(ctx, spec rebaseSpec) (sourceRef string, err error)`.
+    Update every caller and test.
+  - `internal/agentcore/engineering_assignment_runtime.go:166-172` and `:258-261`:
+    - `engineeringCastSpec` gains `RebaseNotice`, `RebaseOf` and `Base`;
+    - preflight `sourceRef` when it is set;
+    - pass `bootedAt` and `planned` into the open request.
+  - `internal/types/engineering_assignment.go`: the open request (not the
+    binding) carries `RebaseBootedAt` and `RebasePlannedBoot`, which are inputs
+    to the command digest.
+  - `internal/store/engineering_assignments.go`:
+    - `requireEngineeringRecordsAdmission` runs the notice checks (question 5);
+    - `OpenEngineeringAssignment` adds the claim object and its condition to the
+      batch.
+  - `internal/capsule/executor.go`: `PreflightSourceCommit(ctx, commit)`, with a
+    stub in `stub_other.go`.
+- *Failure modes:* failure modes 6, 9 and 10; D1, D2, D2a, D3, D5, D6, D9.
 - *Tests:*
-  - a fixture `B'` already holding one of `P`'s two hunks names that path as a
-    conflict (failure mode 1);
-  - an ordinary assignment on a trajectory whose round is applied gets no offer;
-  - the rebased Freeze's `SourcePatchBaseCommit == B'`, and `Cumulative` leaves
-    the patch unchanged when the pin is not a projection commit
-    (`sourceproj/compose.go:46-49`, failure mode 11);
-  - an old bundle's digest is unchanged (failure mode 12, trivially: no field).
+  - each admission condition is false in turn, and each is refused;
+  - an unrelated objective under a valid notice is refused;
+  - a superseded attempt is refused;
+  - two concurrent opens produce one claim;
+  - the admitted binding's `SourceArtifactRef` commit equals `B'`.
+
+**Slice 4 (red, tier 1): the rebase offer and its notice.**
+- *Files:* `internal/agentcore/carried_patch.go`:
+  - `offerRebasePatch` writes to `carried/rebase-offers/`;
+  - the spawn mount reads that path for a claimed assignment;
+  - `carriedPatchNotice` gets the rebase wording.
+- *Failure modes:* failure modes 1, 11 and 12; an ordinary assignment carrying an
+  applied operation; old code reading a rebase offer.
+- *Tests:*
+  - a `B'` already holding one of `P`'s two hunks names that path as a conflict;
+  - an ordinary assignment on an applied trajectory gets no offer;
+  - `carried/offers/` holds nothing for a rebase assignment;
+  - the rebased Freeze's `SourcePatchBaseCommit == B'`, with `Cumulative`'s
+    passthrough (`sourceproj/compose.go:46-49`).
 
 **Slice 5 (yellow, tier 1): the prompts.**
 - *Files:*
-  - `internal/textureprompts/texture_root.txt`: one exception sentence. "A
-    `rebase_notice` record asks you to open one round: make the Cast its body
-    gives, exactly once, and list it under 'Waits on the owner'."
-  - `internal/runtimeprompts/overlays/rlm_management_runtime.yaml`: "a Cast from
-    the root Texture RLM that names a rebase_notice is a rebase request: cast it
-    to engineering with {\"parent\": r.RecordID} and its objective unchanged."
-- *Failure modes:* the prompt core grows; the root reads the exception as leave
-  to cast for other things.
-- *Tests:* `textureprompts` tests contain the sentence;
-  `TestPromptCoreRetiresTheOldWriteSurface` is unchanged (the root section is not
-  in the core).
+  - `internal/textureprompts/texture_root.txt`: one exception sentence for a
+    `rebase_notice` record. Make the Cast its body gives, exactly once, and list
+    it under "Waits on the owner".
+  - `internal/runtimeprompts/overlays/rlm_management_runtime.yaml`: a root Cast
+    naming a `rebase_notice` gets an engineering Cast with the spec of question 5,
+    and an objective that contains the notice id.
+- *Tests:* the root section contains the sentence;
+  `TestPromptCoreRetiresTheOldWriteSurface` is unchanged.
 
-**Slice 6 (red, tier 1): the materializer base check.**
-- *Files:* `internal/agentcore/self_development_materializer.go` (question 6).
-- *Failure modes:* failure mode 2; refusing ordinary projected candidates;
-  running on `journalOnly`.
+**Slice 6 (red, tier 2): rebase content verification.**
+- *Files:*
+  - `internal/agentcore/rebase_content.go` (new): `verifyRebaseContent`,
+    reusing `sourceproj`'s scratch-tree helpers;
+  - `internal/agentcore/self_development_materializer.go`: a call after the
+    bundle validates, `!journalOnly`, rebase path only;
+  - the Freeze path, the same call;
+  - the `source_projection_rebased` fact kind.
+- *Failure modes:* D11; refusing a correct resolution; running on non-rebase
+  operations or `journalOnly`.
 - *Tests:*
-  - a bundle on a non-booted base is refused `base_moved_since_freeze`, and the
-    next reconcile is a new pair;
-  - a bundle on the booted base passes;
-  - with the switch off, the old behavior holds;
+  - a clean rebase passes and writes the receipt;
+  - a dropped clean hunk is refused;
+  - an unresolved conflict path is refused;
+  - extra paths are listed;
+  - a non-rebase operation is never checked;
   - `journalOnly` never checks.
 
-**Slice 7 (proof): staging on the test computer d@e** (below), with the
-receipts recorded here and in the R&D doc's U4 section.
+**Slice 7 (proof): staging on the test computer d@e** (below), after
+`lane/base-join` has landed on `main`.
 
-**Slice 8 (orange, later, optional): the owner retry act.** An owner product API,
-not on management's ProductAPI allowlist, mints `rebase-notice:<op>:<B'>:<n>` for a
-spent pair. Until it lands, a spent pair waits for the next base move. This is a
-named residual.
+**Slice 8 (orange, tier 1, later): the owner retry act.**
+- An owner product API, not on management's ProductAPI allowlist, re-opens a
+  spent pair under a fourth and later attempt with an owner-act stamp.
+- The claim then records attempt-scoped history: the claim key becomes
+  (pair, owner generation).
+- Until this lands, a spent pair waits for the next base.
 
 All slices: `scripts/go-test-runtime-shards` for `internal/agentcore`, plus the
 repo gates (`check-v1-writer-purity`, `check-decode-roots`,
@@ -584,52 +688,82 @@ has a dry run and writes one JSON artifact with every id.
    `source.projection`, `texture.root_desk`, `texture.owner_act_wakes` and
    `source.rebase_offer`, all on.
 2. In a fresh document, request a small source change A. Approve it and see it
-   applied. `/health` shows `source_projection.state = projected`, with the
-   operation `opA` and base `B`.
-3. Land an unrelated `main` commit, giving `B'`. d@e refreshes at idle, and
-   `/health` shows `booted_base = B'` and `stack_base_moved`.
-4. After the stay-up interval, check the ledger (`choir trajectory` on the
-   master):
-   - the notice `rebase-notice:opA:B'` is in `texture:<master>`'s inbox;
+   applied. `/health` shows `projected`, with the operation `opA` and base `B`.
+3. Land an unrelated `main` commit, giving `B'`. d@e refreshes, and `/health`
+   shows `booted_base = B'` and `stack_base_moved`.
+4. After the stay-up interval, check the ledger:
+   - attempt 1, `rebase-notice:opA:B':1`, is in `texture:<master>`'s inbox;
    - the root's Cast names it;
-   - management's Cast has `parent` set to the root's Cast;
-   - the assignment's `SourceArtifactRef` commit is `B'`;
-   - the offer is `offered` with `rebase_of = opA`.
-5. Freeze. The candidate's `SourcePatchBaseCommit` is `B'`, and its tree equals
-   A applied to `B'` (the script recomputes this with `git apply` in a scratch
-   clone). The master document lists it under "Waits on the owner".
-6. Approve it and see it applied. `/health` shows `projected` on `B'` with the
-   new operation, and a fresh ordinary cast in another document is admitted.
+   - management's spec names the notice, `opA` and `B'`;
+   - the claim exists;
+   - `SourceArtifactRef` is at `B'`;
+   - the rebase offer is under `carried/rebase-offers/`.
+5. Freeze. The bundle's base is `B'`, and its tree equals A applied to `B'`. The
+   master document lists it under "Waits on the owner".
+6. Approve it and see it applied:
+   - the lineage receipt exists with verdict pass;
+   - the "apply" owner-act record names its sha256;
+   - `/health` shows `projected` on `B'`;
+   - a fresh ordinary cast is admitted.
 7. Conflict run: apply A2, then land `B''` that edits one file of A2. The offer
-   names exactly that path in `ConflictPaths`, and the rest are `CleanPaths`.
-8. Negatives, run while d@e is at `stack_base_moved`. The cast refusal text is
-   today's when:
-   - the switch is off;
-   - an ordinary document requests engineering;
-   - the root's Cast names a wrong notice id.
-9. Measure D4: count root runs between the notice and the final Report.
+   names exactly that path in `ConflictPaths`. The receipt lists it as resolved.
+8. Negatives, while d@e is at `stack_base_moved`:
+   - switch off;
+   - an ordinary document's engineering request;
+   - a hand-made Cast that names a wrong or superseded notice id.
 
-Crash-path receipts are the runtime tests in slices 2 and 3 (failure modes 3 and
-4, D6). A deployed crash probe runs only if a no-SSH crash act exists; otherwise
-it stays a named residual.
+   Each is refused with today's or the named text.
+9. Measure D4: count root runs between attempt 1 and the final Report.
+
+Crash and re-mint receipts come from the runtime tests in slices 2 and 3. A
+deployed crash probe runs only if a no-SSH crash act exists; otherwise it stays
+a named residual.
 
 ### Class, heresy delta, residuals
 
-- *Class:* red. Protected surfaces: the cast gate (run acceptance path), a waking
-  system record (Trace/evidence), the root Texture RLM's prompt (the Texture
-  control plane, with no canonical-write change) and the materializer refusal.
-- *Review:* tier 2 (Devin and DeepSeek) for slices 1-3; tier 1 for slices 4-6.
+- *Class:* red. Protected surfaces:
+  - the cast gate and records admission (run acceptance);
+  - a waking system record and a claim object (Trace/evidence, store);
+  - the root Texture RLM's prompt (the Texture control plane, with no
+    canonical-write change);
+  - the materializer's rebase content check.
+- *Review tiers:* slices 1, 2, 3 and 6 are tier 2 (Devin and DeepSeek); slice 4
+  is tier 1; slice 5 is tier 1.
 - *This commit:* green.
 - *Heresy delta:*
-  - discovered: the root Texture RLM's cast ban is prompt-only
-    (`texture_root.txt:7`). Also a hypothesis to investigate before slice 6: a
-    frontend-only candidate frozen on `B` could apply over `B'` with no base check
-    at all, and could revert part of a security fix in `B'`. Not yet traced.
+  - discovered: the root's cast ban is prompt-only (`texture_root.txt:7`); the
+    apply has no base join (`docs/problems/selfdev-apply-has-no-base-join-2026-10-26.md`,
+    fixed on `lane/base-join`); the stale wake-allowlist comments
+    (`internal/store/inbox.go:270-277`, `internal/store/management_tasks.go:55-65`).
   - introduced: none.
   - repaired: none yet.
 - *Residuals:*
-  - a spent pair needs an owner act (slice 8);
-  - D5 (master replaced mid-flight);
+  - a pair spent after its claim, or after 3 attempts, needs slice 8;
   - D4's cost, until measured;
-  - widening the materializer base check from `source.rebase_offer` to every
-    `source.projection` computer, after this proof.
+  - the host check lives at `internal/hostbuild/service.go:388-401`. It covers
+    only host-built candidates, which is why the base join is its own lane.
+
+### What changed after review 303
+
+1. The base check left U4. The old switch-gated slice 6 is gone; the base join is
+   now `lane/base-join`, unconditional. The security claim is restated as the
+   provenance gap plus H1.
+2. A bounded re-mint was added: attempt ids `:<n>`, a cap of 3, closure rules,
+   and only the latest attempt is admissible. It is checked against the restart
+   rule (question 3).
+3. Management's Cast is bound: its spec must name the notice, operation and base,
+   and its objective must name the notice. There is a test for an unrelated
+   objective.
+4. Rebase content is verified at materialization (and at Freeze), and a lineage
+   receipt is written.
+5. "One assignment per notice" moved into the store's open transaction as a claim
+   object under an object condition, replacing the gate-side scan.
+6. The record id and the command id are pinned, with a new-command-id test.
+   Rebase offers moved to a path old code never reads.
+7. Nits:
+   - citations corrected (`:905`, `:212-214`, `:664-666`, `:66-70`, `:702`,
+     `internal/hostbuild/service.go:388-401`);
+   - both stale allowlist comments are fixed in slice 1;
+   - tiers set: slices 1-3 and 6 at tier 2, including the gate exception and the
+     new slice 6;
+   - option A is reduced to the owner's ruling.
