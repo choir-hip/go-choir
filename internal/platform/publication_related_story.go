@@ -206,52 +206,79 @@ func publicationCanonicalFor(ownerID, publicationID string) (string, error) {
 
 var publicationPublicIDRE = regexp.MustCompile(`^pub-[0-9a-f]{32}$`)
 
+// storyRelationPair is one relation between two canonical publication ids,
+// stored once with a < b.
+type storyRelationPair struct{ a, b, relation string }
+
 // RecordStoryRelations stores a computer's judged pair relations in Store B
 // as related_story edges. It accepts a platform-tier computer only (a private
 // computer cannot write the public paper's graph), only pairs of that
-// owner's published Autopaper stories, and no pair that would take a story
-// past MaxRelatedEdges neighbours. The request is checked whole before
-// anything is written. It returns how many distinct edges it wrote.
+// owner's published Autopaper stories that the public route shows, and no
+// pair that would take a story past MaxRelatedEdges neighbours. The request
+// is checked whole before anything is written. It returns how many distinct
+// edges it wrote; with ValidateOnly it runs the same checks, writes nothing
+// and returns how many distinct edges it would write.
 func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelationsRequest) (int, error) {
+	pairs, og, err := s.checkStoryRelations(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	if req.ValidateOnly {
+		return len(pairs), nil
+	}
+	now := time.Now().UTC()
+	for _, p := range pairs {
+		edge := makeEdge(p.a, p.b, edgeRelatedStory, now, relatedStoryMetadata(p.relation))
+		if err := og.PutEdge(ctx, edge); err != nil {
+			return 0, fmt.Errorf("story relations: write %s: %w", edge.EdgeID, err)
+		}
+	}
+	s.related.reset()
+	return len(pairs), nil
+}
+
+// checkStoryRelations is every check of a relations request, shared by the
+// write and the validate-only call so the two cannot disagree. It returns the
+// distinct pairs to write.
+func (s *Service) checkStoryRelations(ctx context.Context, req types.StoryRelationsRequest) ([]storyRelationPair, *ObjectGraphStore, error) {
 	owner, computer := strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID)
 	if owner == "" {
-		return 0, fmt.Errorf("owner_id is required")
+		return nil, nil, fmt.Errorf("owner_id is required")
 	}
 	if computer == "" {
-		return 0, fmt.Errorf("computer_id is required")
+		return nil, nil, fmt.Errorf("computer_id is required")
 	}
 	if n := len(req.Relations); n == 0 || n > maxStoryRelationsPerRequest {
-		return 0, fmt.Errorf("a relations request carries 1 to %d relations, got %d", maxStoryRelationsPerRequest, n)
+		return nil, nil, fmt.Errorf("a relations request carries 1 to %d relations, got %d", maxStoryRelationsPerRequest, n)
 	}
 	tier := s.relationTier
 	if tier == nil {
 		tier = platformComputer
 	}
 	if platform, err := tier(computer); err != nil || !platform {
-		return 0, fmt.Errorf("story relations are accepted from a platform computer only")
+		return nil, nil, fmt.Errorf("story relations are accepted from a platform computer only")
 	}
 	og := s.ogStore()
 	if og == nil {
-		return 0, fmt.Errorf("story relations: store unavailable")
+		return nil, nil, fmt.Errorf("story relations: store unavailable")
 	}
 
-	type pair struct{ a, b, relation string }
-	var pairs []pair
-	seen := map[pair]bool{}
+	var pairs []storyRelationPair
+	seen := map[storyRelationPair]bool{}
 	ids := map[string]bool{}
 	for i, r := range req.Relations {
 		a, b, relation := strings.TrimSpace(r.StoryA), strings.TrimSpace(r.StoryB), strings.TrimSpace(r.Relation)
 		if _, known := storyRelationRank[relation]; !known {
-			return 0, fmt.Errorf("relation %d: unknown relation %q", i+1, relation)
+			return nil, nil, fmt.Errorf("relation %d: unknown relation %q", i+1, relation)
 		}
 		if a == b {
-			return 0, fmt.Errorf("relation %d: a story cannot be related to itself", i+1)
+			return nil, nil, fmt.Errorf("relation %d: a story cannot be related to itself", i+1)
 		}
 		var canon [2]string
 		for j, id := range []string{a, b} {
 			c, err := publicationCanonicalFor(owner, id)
 			if err != nil {
-				return 0, fmt.Errorf("relation %d: %q is not a publication id", i+1, id)
+				return nil, nil, fmt.Errorf("relation %d: %q is not a publication id", i+1, id)
 			}
 			canon[j] = c
 		}
@@ -260,7 +287,7 @@ func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelat
 		if a > b {
 			a, b = b, a
 		}
-		p := pair{a, b, relation}
+		p := storyRelationPair{a, b, relation}
 		if seen[p] {
 			continue
 		}
@@ -271,15 +298,24 @@ func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelat
 
 	pubs, err := s.relatedPublications(ctx, og, ids)
 	if err != nil {
-		return 0, err
+		return nil, nil, err
 	}
 	for id := range ids {
 		info, ok := pubs[id]
 		if !ok || !info.eligible {
-			return 0, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
+			return nil, nil, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
 		}
 		if info.obj.OwnerID != owner {
-			return 0, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
+			return nil, nil, fmt.Errorf("%s is not a published Autopaper story of owner %s", id, owner)
+		}
+		// The read shows a story only on the public route; a story it would
+		// never show must not take one of the 20 edges of its neighbours.
+		manifest, err := s.frontManifest(ctx, og, info.latest)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) {
+			return nil, nil, fmt.Errorf("%s is not on the public route, so a relation to it would never be shown", id)
 		}
 	}
 
@@ -304,32 +340,24 @@ func (s *Service) RecordStoryRelations(ctx context.Context, req types.StoryRelat
 	for _, p := range pairs {
 		sa, err := load(p.a)
 		if err != nil {
-			return 0, err
+			return nil, nil, err
 		}
 		sb, err := load(p.b)
 		if err != nil {
-			return 0, err
+			return nil, nil, err
 		}
 		for _, end := range []struct {
 			id, other string
 			set       map[string]bool
 		}{{p.a, p.b, sa}, {p.b, p.a, sb}} {
 			if !end.set[end.other] && len(end.set) >= bound {
-				return 0, fmt.Errorf("story %s is at its bound of %d related stories; relations for it are refused", end.id, bound)
+				return nil, nil, fmt.Errorf("story %s is at its bound of %d related stories; relations for it are refused", end.id, bound)
 			}
 			end.set[end.other] = true
 		}
 	}
 
-	now := time.Now().UTC()
-	for _, p := range pairs {
-		edge := makeEdge(p.a, p.b, edgeRelatedStory, now, relatedStoryMetadata(p.relation))
-		if err := og.PutEdge(ctx, edge); err != nil {
-			return 0, fmt.Errorf("story relations: write %s: %w", edge.EdgeID, err)
-		}
-	}
-	s.related.reset()
-	return len(pairs), nil
+	return pairs, og, nil
 }
 
 // HandleStoryRelations serves POST types.StoryRelationsPath for a computer
@@ -353,6 +381,10 @@ func (h *Handler) HandleStoryRelations(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("corpusd: story relations from %s: %v", strings.TrimSpace(req.ComputerID), err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if req.ValidateOnly {
+		writeJSON(w, http.StatusOK, map[string]any{"validated": n})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recorded": n})
