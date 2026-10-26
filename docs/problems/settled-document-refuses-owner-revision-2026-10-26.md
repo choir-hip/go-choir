@@ -197,3 +197,19 @@ reconcile against a continued document.
 Effect: an owner revise of a settled document is accepted and silently never
 acted on; the deferral retries every second without end. Severity: the F1
 product promise is not kept; no data loss.
+
+## Staging proof, 2026-10-26 05:49 UTC
+
+Deployed 39a1be5c5 (train 3, with e51c99113; deployed 05:48:47; b@c reports
+that build). The activation deferred since 04:48 (F1-S1) did not resume: at
+05:49 trajectory 909a5aee was live, its work item open, its activation
+passivated, its lifecycle two events long (started, head advanced), and the
+head still the 04:48 owner revision 93ec6437. A fresh owner revise of the
+settled document 98d0a421 (05:49:47, owner revision 00966d98) continued on
+909a5aee and Texture committed revision 79a4e04a at 05:49:54, seven seconds
+later: the requested sentence appended, nothing else changed, metadata
+`trajectory_id` = 909a5aee. F1 is proved on the product path. Residual: the
+04:48 occurrence was closed without a run and without a visible fate on the
+document (observed only; whether the 05:48 boot carried a planned-restart
+marker was not checked). The owner revision's own label (review 277 LOW) is
+fixed on lane/f1-label (review 280), not yet deployed.
