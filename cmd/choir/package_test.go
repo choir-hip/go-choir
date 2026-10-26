@@ -44,6 +44,17 @@ func testPackageRecord(t *testing.T) (string, json.RawMessage) {
 	return id, raw
 }
 
+func testPackageID(t *testing.T) string {
+	id, _ := testPackageRecord(t)
+	return id
+}
+
+func testPackageReply(t *testing.T) string {
+	id, raw := testPackageRecord(t)
+	out, _ := json.Marshal(map[string]any{"release_id": id, "record": raw})
+	return string(out)
+}
+
 func servePackageHost(t *testing.T, handler http.HandlerFunc) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
