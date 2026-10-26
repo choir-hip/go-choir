@@ -19,8 +19,8 @@ import (
 // Releases at the proxy (P7, docs/reports/p6-p8-release-adopt-2026-10-15.md).
 //
 //	POST /api/computers/<id>/releases   publish an applied operation   owner act
-//	GET  /api/releases                  list published releases        read
-//	GET  /api/releases/<release id>     one published release          read
+//	GET  /api/releases                  list published releases (the caller's, under owner reads)   read
+//	GET  /api/releases/<release id>     one published release (the caller's, under owner reads)    read
 //
 // Publish is the owner's act from the originating computer: the proxy reads
 // the record the computer drafts from its own tape and bundle, verifies it,
@@ -169,9 +169,9 @@ func (h *Handler) HandleComputerReleasePublish(w http.ResponseWriter, r *http.Re
 	relayJSON(w, status, raw)
 }
 
-// HandleReleases serves the release list and one release to any
-// authenticated caller with the read scope (a publication is readable on
-// this cloud).
+// HandleReleases serves the release list and one release to an authenticated
+// caller with the read scope. The caller's owner rides every read to corpusd,
+// which scopes it to that owner when CHOIR_RELEASE_READS=owner (Library S1).
 func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -190,7 +190,10 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	var upstream string
 	switch {
 	case rest == "":
-		query := url.Values{}
+		// The proxy names the owner it authenticated; corpusd scopes the list
+		// to that owner when CHOIR_RELEASE_READS=owner. A caller-supplied
+		// owner is never forwarded.
+		query := url.Values{"owner_id": {authResult.UserID}}
 		if limit := strings.TrimSpace(r.URL.Query().Get("limit")); limit != "" {
 			query.Set("limit", limit)
 		}
@@ -199,9 +202,11 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 		}
 		upstream = "/internal/platform/releases?" + query.Encode()
 	case computerevent.IsSHA256(strings.ToLower(rest)):
-		// corpusd binds every single-release read to a computer; the proxy
-		// reads as the host.
-		upstream = "/internal/platform/releases/" + strings.ToLower(rest) + "?computer_id=host"
+		// corpusd binds every single-release read to a computer, and the
+		// proxy has no guest's capability: it is the host-internal caller
+		// (computer_id=host) carrying the authenticated owner, so corpusd
+		// can answer 404 for a release that owner did not publish.
+		upstream = "/internal/platform/releases/" + strings.ToLower(rest) + "?" + url.Values{"computer_id": {"host"}, "owner_id": {authResult.UserID}}.Encode()
 	default:
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "release id must be a sha256"})
 		return

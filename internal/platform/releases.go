@@ -60,6 +60,7 @@ type releaseStore interface {
 	InsertObjectIfAbsent(ctx context.Context, obj objectgraph.Object) (bool, error)
 	GetObjectByMetadata(ctx context.Context, kind, jsonPath, value string) (objectgraph.Object, error)
 	ListObjects(ctx context.Context, filter objectgraph.ListFilter) ([]objectgraph.Object, error)
+	ListObjectsByMetadata(ctx context.Context, kind, jsonPath, value string, limit int) ([]objectgraph.Object, error)
 }
 
 func (h *Handler) releaseStore() releaseStore {
@@ -94,14 +95,21 @@ type ReleaseView struct {
 // HandleReleases serves
 //
 //	POST /internal/platform/releases                  publish        host only
-//	GET  /internal/platform/releases?limit=&publisher_computer_id=   host only
-//	GET  /internal/platform/releases/<id>?computer_id= host, or a guest with its own event:read
+//	GET  /internal/platform/releases?limit=&publisher_computer_id=&owner_id=   host only
+//	GET  /internal/platform/releases/<id>?computer_id=&owner_id= host, or a guest with its own event:read
 //	PUT  /internal/platform/releases/blobs/<sha>      upload patch   host only
-//	GET  /internal/platform/releases/blobs/<sha>?computer_id= host, or a guest with its own event:read
+//	GET  /internal/platform/releases/blobs/<sha>?computer_id=&owner_id= host, or a guest with its own event:read
 //
 // A guest never writes here: publication is the owner's act through the
-// proxy (failure mode R3). Any bound guest may read any published release:
-// a publication is readable on this cloud.
+// proxy (failure mode R3).
+//
+// Reads follow CHOIR_RELEASE_READS (Library S1, failure mode L4). At open,
+// any bound guest may read any published release, as before. At owner, a
+// release is served only to the owner who published it: a guest's owner is
+// the one vmctl binds its network address to (never a parameter), and the
+// proxy's host call names the authenticated owner in owner_id. A release
+// the reader may not see answers 404 exactly as a missing one does. A host
+// call that names no owner is unscoped, as before.
 func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, releasesRoute), "/")
 	switch {
@@ -124,7 +132,12 @@ func (h *Handler) HandleReleases(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
 			return
 		}
-		view, err := h.readRelease(r.Context(), rest)
+		scope, status, refusal := h.releaseReadScope(r, strings.TrimSpace(r.URL.Query().Get("computer_id")))
+		if status != 0 {
+			writeJSON(w, status, apiError{Error: refusal})
+			return
+		}
+		view, err := h.readRelease(r.Context(), rest, scope)
 		switch {
 		case errors.Is(err, objectgraph.ErrNotFound):
 			writeJSON(w, http.StatusNotFound, apiError{Error: "release not published"})
@@ -166,6 +179,16 @@ func (h *Handler) handleReleaseBlob(w http.ResponseWriter, r *http.Request, dige
 	case http.MethodGet:
 		if !h.authorizeFileCAS(r, strings.TrimSpace(r.URL.Query().Get("computer_id")), "event:read") {
 			writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
+			return
+		}
+		scope, status, refusal := h.releaseReadScope(r, strings.TrimSpace(r.URL.Query().Get("computer_id")))
+		if status != 0 {
+			writeJSON(w, status, apiError{Error: refusal})
+			return
+		}
+		if scope != "" && !h.ownerPublishedPatch(r.Context(), scope, digest) {
+			// The same answer as a blob nobody published.
+			writeJSON(w, http.StatusNotFound, apiError{Error: "release blob unavailable"})
 			return
 		}
 		raw, err := store.ReadVerified(digest, release.MaxPatchBytes)
@@ -262,7 +285,7 @@ func (h *Handler) publishRelease(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "release publish: " + err.Error()})
 		return
 	}
-	view, err := h.readRelease(r.Context(), releaseID)
+	view, err := h.readRelease(r.Context(), releaseID, "")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "release publish: read back"})
 		return
@@ -274,9 +297,56 @@ func (h *Handler) publishRelease(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, view)
 }
 
+// releaseReadScope names the owner whose releases this read may see. An
+// empty scope with status 0 is an unscoped read: the mode is open, or the
+// caller is the host and named no owner. A nonzero status is a refusal the
+// caller writes. The caller has already passed authorizeFileCAS for
+// computerID.
+func (h *Handler) releaseReadScope(r *http.Request, computerID string) (scope string, status int, refusal string) {
+	if h.releaseReads != ReleaseReadsOwner {
+		return "", 0, ""
+	}
+	if trustedInternalCaller(r) {
+		// The proxy names the owner it authenticated.
+		return strings.TrimSpace(r.URL.Query().Get("owner_id")), 0, ""
+	}
+	// A guest is scoped by the owner vmctl binds its address to, never by a
+	// parameter it sends, and only for the computer its capability names.
+	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
+	if err != nil || strings.TrimSpace(ownership.UserID) == "" {
+		return "", http.StatusServiceUnavailable, "computer owner unresolved"
+	}
+	if strings.TrimSpace(ownership.ComputerID) != computerID {
+		return "", http.StatusForbidden, "computer capability required"
+	}
+	return strings.TrimSpace(ownership.UserID), 0, ""
+}
+
+// ownerPublishedPatch reports whether ownerID published a release whose
+// patch is the blob digest. Two owners may publish the same bytes, so this
+// asks for every release naming the digest, not the first.
+func (h *Handler) ownerPublishedPatch(ctx context.Context, ownerID, digest string) bool {
+	store := h.releaseStore()
+	if store == nil {
+		return false
+	}
+	objects, err := store.ListObjectsByMetadata(ctx, string(SoftwareReleaseKind), "$.patch_sha256", digest, 200)
+	if err != nil {
+		return false
+	}
+	for _, obj := range objects {
+		if obj.ObjectKind == SoftwareReleaseKind && !obj.Tombstone && obj.OwnerID == ownerID {
+			return true
+		}
+	}
+	return false
+}
+
 // readRelease finds a release by its id and re-verifies the stored record
-// against it: the store is not trusted by name either (A3).
-func (h *Handler) readRelease(ctx context.Context, releaseID string) (ReleaseView, error) {
+// against it: the store is not trusted by name either (A3). A non-empty
+// ownerID limits the read to that owner's releases; another owner's release
+// is objectgraph.ErrNotFound, the same as one nobody published.
+func (h *Handler) readRelease(ctx context.Context, releaseID, ownerID string) (ReleaseView, error) {
 	store := h.releaseStore()
 	if store == nil {
 		return ReleaseView{}, errors.New("release store unavailable")
@@ -284,6 +354,9 @@ func (h *Handler) readRelease(ctx context.Context, releaseID string) (ReleaseVie
 	obj, err := store.GetObjectByMetadata(ctx, string(SoftwareReleaseKind), "$.release_id", releaseID)
 	if err != nil {
 		return ReleaseView{}, err
+	}
+	if ownerID != "" && obj.OwnerID != ownerID {
+		return ReleaseView{}, objectgraph.ErrNotFound
 	}
 	return releaseViewFromObject(obj)
 }
@@ -319,9 +392,16 @@ func (h *Handler) listReleases(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	objects, err := store.ListObjects(r.Context(), objectgraph.ListFilter{
+	filter := objectgraph.ListFilter{
 		Kind: SoftwareReleaseKind, ComputerID: strings.TrimSpace(r.URL.Query().Get("publisher_computer_id")), Limit: limit,
-	})
+	}
+	if h.releaseReads == ReleaseReadsOwner {
+		// The proxy names the owner it authenticated. The list is host only,
+		// so no guest reaches this branch; a host call naming no owner is
+		// unscoped, as before.
+		filter.OwnerID = strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	}
+	objects, err := store.ListObjects(r.Context(), filter)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "release list unavailable"})
 		return
