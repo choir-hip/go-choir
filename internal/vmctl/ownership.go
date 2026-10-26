@@ -476,6 +476,11 @@ type VMManagerConfig struct {
 	// empty values to "cold".
 	BootKind string
 
+	// NewComputer marks a computer's first creation (the mint path in
+	// resolveDesktopContext). Only it may take the data image template
+	// (vmmanager data_image_template.go, VMCTL_DATA_IMAGE_TEMPLATE).
+	NewComputer bool
+
 	// OfflineMaintenance runs on a refresh between the kill and the boot,
 	// with the data image path (store_compaction.go). Refresh only.
 	OfflineMaintenance func(dataImagePath string) error
@@ -2437,6 +2442,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				OwnerID:                    userID,
 				DesktopID:                  desktopID,
 				WarmnessClass:              string(warmness),
+				NewComputer:                true,
 			})
 		}
 		if err != nil {

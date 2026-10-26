@@ -352,6 +352,7 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		OfflineMaintenance:         toManagerOfflineMaintenance(cfg.OfflineMaintenance),
 		PostMaintenanceCredential:  cfg.PostMaintenanceCredential,
 		WarmnessClass:              cfg.WarmnessClass,
+		NewComputer:                cfg.NewComputer,
 	}
 }
 
