@@ -324,3 +324,27 @@ func TestResolveVerdictsAtBaseJudgesOnlyTheMatchingHead(t *testing.T) {
 		t.Fatalf("a verdict was recorded though its base could not be pinned: %+v", failing.resolved)
 	}
 }
+
+// Pins are for apply checkpoints. A cadence (owner-recovery) checkpoint comes
+// every few minutes and a pin has no release path until the retention slice:
+// pinning each would grow the host's disk without bound. Its base is kept by
+// the newest-two rule while it is new.
+func TestReconcileDoesNotPinTheBaseOfACadenceCheckpoint(t *testing.T) {
+	store := newFakeVerdictStore()
+	head, blob := hex64('1'), hex64('9')
+	store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	cp := store.checkpoints[hex64('d')]
+	cp.Request.OwnerRecovery = true
+	store.checkpoints[hex64('d')] = cp
+	store.bases["c1/100"] = blob
+	d := descriptorOf("c1", 100, head, blob, witnessOf(tablesA))
+	if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+		t.Fatal(err)
+	}
+	if v := store.resolved[hex64('d')]; v.Status != selfdevprotocol.CheckpointVerdictVerified {
+		t.Fatalf("verdict = %+v", v)
+	}
+	if len(store.pinned) != 0 {
+		t.Fatalf("a cadence checkpoint pinned %v", store.pinned)
+	}
+}

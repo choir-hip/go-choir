@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -264,15 +263,8 @@ func TestCheckpointBindBusyComputerPublishesRestorableHead(t *testing.T) {
 	if report.BoundEventHead != published.Request.AcceptedEventHead {
 		t.Fatalf("bind report head %s is not the published head %s", report.BoundEventHead, published.Request.AcceptedEventHead)
 	}
-	pinRef := projectionbase.CheckpointPinReference(published.Request.AcceptedEventHead)
-	pinned := false
-	for _, pin := range fx.base.pins {
-		if strings.HasSuffix(pin, " "+pinRef) {
-			pinned = true
-		}
-	}
-	if !pinned {
-		t.Errorf("base pins %v do not name the published head %s", fx.base.pins, pinRef)
+	if len(fx.base.pins) != 0 {
+		t.Errorf("a cadence bind pinned bases %v; pins are for apply checkpoints", fx.base.pins)
 	}
 
 	result, err := fx.restore(t, published)
