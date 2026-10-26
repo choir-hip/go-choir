@@ -325,6 +325,15 @@ type FileChange struct {
 	Whiteout bool
 }
 
+// GrantedWorktree is a read of a granted capsule's live tree that changes
+// no state: the digest of /workspace/platform (the receipts' and the frozen
+// subject's digest) and the capsule's diff. A second Freeze compares it with
+// the candidate the first one froze (R9-1).
+type GrantedWorktree struct {
+	Digest  string
+	Changes []FileChange
+}
+
 type FrozenReleaseFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`

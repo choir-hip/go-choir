@@ -1687,6 +1687,40 @@ func (e *Executor) ThawGranted(ctx context.Context, agentRunID, handle string) e
 	return caps.Thaw(ctx)
 }
 
+// InspectGrantedWorktree reads the capsule's live tree without quiescing
+// it: the /workspace/platform digest the receipts and the frozen subject use,
+// and the diff. It changes no state, so a capsule the terminal saga froze
+// stays frozen and an active one stays active. A second Freeze on a frozen
+// operation compares it with the candidate (R9-1,
+// docs/problems/freeze-replays-a-changed-tree-2026-10-26.md); Freeze has
+// already refused while a job runs, so nothing the executor started is
+// writing the tree.
+func (e *Executor) InspectGrantedWorktree(ctx context.Context, agentRunID, handle string) (GrantedWorktree, error) {
+	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
+	if err != nil || capability.AgentRole != RoleEngineering {
+		return GrantedWorktree{}, fmt.Errorf("capsule granted worktree unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateActive && state != StateFrozen {
+		return GrantedWorktree{}, fmt.Errorf("capsule granted worktree unavailable in state %s", state)
+	}
+	var out GrantedWorktree
+	err = e.traceStep(caps.ID, "capsule.digest_worktree_inspect", func() (digestErr error) {
+		out.Digest, digestErr = digestCapsuleWorktree(ctx, caps)
+		return digestErr
+	})
+	if err != nil {
+		return GrantedWorktree{}, err
+	}
+	err = e.traceStep(caps.ID, "capsule.diff_inspect", func() (diffErr error) { out.Changes, diffErr = caps.Diff(ctx); return diffErr })
+	if err != nil {
+		return GrantedWorktree{}, err
+	}
+	return out, nil
+}
+
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleEngineering {

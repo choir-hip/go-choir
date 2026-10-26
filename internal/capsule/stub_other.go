@@ -62,6 +62,9 @@ func (e *Executor) ResolveOwnedCapsuleID(string, string) (string, error) {
 func (e *Executor) ExtractGranted(context.Context, string, string) ([]FileChange, error) {
 	return nil, stubErr("diff")
 }
+func (e *Executor) InspectGrantedWorktree(context.Context, string, string) (GrantedWorktree, error) {
+	return GrantedWorktree{}, stubErr("inspect worktree")
+}
 func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
