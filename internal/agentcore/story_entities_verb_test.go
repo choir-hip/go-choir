@@ -37,6 +37,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -140,7 +141,8 @@ func (f *entityFixture) entityEvents(t *testing.T) []types.EventRecord {
 	t.Helper()
 	var out []types.EventRecord
 	for _, e := range f.tape(t) {
-		if e.Kind == types.EventStoryEntities {
+		// Attachments only: a platform failure's marker is not one.
+		if e.Kind == types.EventStoryEntities && e.Phase == storyEntitiesPhaseRecorded {
 			out = append(out, e)
 		}
 	}
@@ -332,7 +334,10 @@ func TestRelateRecordsNothingThePlatformRefuses(t *testing.T) { // E5, E6
 	f.turnOn(t)
 	receipt := f.judgedEntity(t, "run-e5", "q1")
 
-	f.epub.checkErr = fmt.Errorf(`entity 1: "Aleksandar Vucic" matches the existing entity %s ("Aleksandar Vučić"); attach it by entity_id`, types.MintedEntityID("Aleksandar Vucic"))
+	// The platform's own check refuses with a 4xx: a fixable refusal
+	// (review 304 item 2).
+	f.epub.checkErr = &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusUnprocessableEntity,
+		Body: fmt.Sprintf(`entity 1: "Aleksandar Vucic" matches the existing entity %s ("Aleksandar Vučić"); attach it by entity_id`, types.MintedEntityID("Aleksandar Vucic"))}
 	_, err := f.attach(agentprofile.Research, "run-e5", newVucic(receipt, "q1", types.EntityRoleCentral))
 	if err == nil || !strings.Contains(err.Error(), "matches the existing entity") || !strings.Contains(err.Error(), "nothing was recorded") {
 		t.Fatalf("err = %v, want the platform's match named and nothing recorded", err)
