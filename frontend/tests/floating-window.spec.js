@@ -297,7 +297,7 @@ test('floating window can be dragged on mobile-sized screens', async ({ page, au
 // ---------------------------------------------------------------
 // Test: floating window resize via bottom-right handle only (VAL-SHELL-018)
 // ---------------------------------------------------------------
-test('floating window has only bottom-right resize handle', async ({ page, authenticator }) => {
+test('floating window resizes from four edges and four corners', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -306,13 +306,14 @@ test('floating window has only bottom-right resize handle', async ({ page, authe
   const windowEl = page.locator('[data-window]').first();
   await expect(windowEl).toBeVisible({ timeout: 5000 });
 
-  // Should have exactly one resize handle at the bottom-right
-  const resizeHandle = windowEl.locator('[data-resize-handle]');
-  await expect(resizeHandle).toHaveCount(1);
-
-  // The handle should be the se (south-east / bottom-right) handle
-  const handleClass = await resizeHandle.getAttribute('class');
-  expect(handleClass).toContain('resize-se');
+  // Eight resize zones: the four edges and the four corners. The bottom-right
+  // corner is still the south-east one.
+  const resizeHandles = windowEl.locator('[data-resize-handle]');
+  await expect(resizeHandles).toHaveCount(8);
+  await expect(windowEl.locator('[data-resize-handle].resize-se')).toHaveCount(1);
+  for (const edge of ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']) {
+    await expect(windowEl.locator('[data-resize-handle].resize-' + edge)).toHaveCount(1);
+  }
 });
 
 // ---------------------------------------------------------------
@@ -489,7 +490,7 @@ test('window close transfers focus to next window', async ({ page, authenticator
 // ---------------------------------------------------------------
 // Test: maximized window not draggable (VAL-SHELL-017)
 // ---------------------------------------------------------------
-test('maximized window is not draggable', async ({ page, authenticator }) => {
+test('dragging a maximized window restores it under the pointer', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
@@ -511,8 +512,8 @@ test('maximized window is not draggable', async ({ page, authenticator }) => {
     targetPosition: { x: 100, y: 100 },
   });
 
-  // Window position should not change (still maximized)
+  // The window leaves the maximized rect and follows the pointer instead.
+  expect(await windowEl.getAttribute('data-window-mode')).toBe('normal');
   const afterBox = await windowEl.boundingBox();
-  expect(Math.abs(afterBox.x - maxBox.x)).toBeLessThan(5);
-  expect(Math.abs(afterBox.y - maxBox.y)).toBeLessThan(5);
+  expect(Math.abs(afterBox.y - maxBox.y)).toBeGreaterThan(5);
 });

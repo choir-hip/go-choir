@@ -254,12 +254,21 @@ test.describe('Mobile breakpoint (<768px)', () => {
     const windowEl = page.locator('[data-window]').first();
     await expect(windowEl).toBeVisible();
 
+    // A phone opens every window maximized, edge to edge above the prompt bar.
+    expect(await windowEl.getAttribute('data-window-mode')).toBe('maximized');
     const winBox = await windowEl.boundingBox();
-    expect(winBox.width).toBeLessThan(375);
-    expect(winBox.x).toBeGreaterThan(0);
+    expect(winBox.x).toBeLessThanOrEqual(1);
+    expect(winBox.width).toBeGreaterThanOrEqual(374);
 
-    const resizeHandle = windowEl.locator('[data-resize-handle]');
-    await expect(resizeHandle).toHaveCount(1);
+    // Restore leaves a near full-screen, resizable window: eight zones, and no
+    // resize zones while maximized.
+    await expect(windowEl.locator('[data-resize-handle]')).toHaveCount(0);
+    await windowEl.locator('[data-window-maximize]').click();
+    await page.waitForTimeout(250);
+    expect(await windowEl.getAttribute('data-window-mode')).toBe('normal');
+    const restoredBox = await windowEl.boundingBox();
+    expect(restoredBox.width).toBeGreaterThanOrEqual(Math.round(375 * 0.92) - 1);
+    await expect(windowEl.locator('[data-resize-handle]')).toHaveCount(8);
   });
 
   // VAL-RESP-009: Mobile — prompt bar full width with >=44px touch target
@@ -344,9 +353,11 @@ test.describe('Cross-breakpoint checks', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
 
+    // Narrowing to a phone maximizes the open window to the new free area.
     const box = await windowEl.boundingBox();
-    expect(box.x).toBeGreaterThanOrEqual(7);
-    expect(box.x + box.width).toBeLessThanOrEqual(383);
+    expect(box.x).toBeLessThanOrEqual(1);
+    expect(box.x + box.width).toBeLessThanOrEqual(391);
+    expect(box.y + box.height).toBeLessThanOrEqual(844);
   });
 
   // VAL-RESP-012: Breakpoint transition is smooth (no layout flash)
