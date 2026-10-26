@@ -39,14 +39,25 @@ const (
 	// writes: 220 to 310 KiB per event measured on the paper, 141 KiB on the
 	// local tape harness.
 	replayScratchPerEventBytes = uint64(320) << 10
-	// replayScratchReserveBytes is the free space the probe leaves to the
-	// live store, which shares the volume and keeps writing while the probe
-	// replays (the paper's journal grows up to 1.6 GiB in 10 minutes).
-	replayScratchReserveBytes = uint64(2) << 30
+	// replayScratchMinReserveBytes is the floor of the free space the probe
+	// leaves to the live store, which shares the volume and keeps writing
+	// while the probe replays (the paper's journal grows up to 1.6 GiB in 10
+	// minutes). The reserve is max(this, 10% of the volume).
+	replayScratchMinReserveBytes = uint64(2) << 30
 	// replayScratchPollInterval is how often a running probe reads free
 	// space. A replay page writes at most a few hundred MiB per second.
 	replayScratchPollInterval = time.Second
 )
+
+// replayScratchReserve is the free space a probe leaves to the live store on a
+// volume of totalBytes: max(2 GiB, 10% of the volume). Admission and the
+// in-flight watch both derive it from the same Usage.
+func replayScratchReserve(totalBytes uint64) uint64 {
+	if tenth := totalBytes / 10; tenth > replayScratchMinReserveBytes {
+		return tenth
+	}
+	return replayScratchMinReserveBytes
+}
 
 // activeReplayScratch holds the roots of probes running in this process, so
 // the start-time sweep never removes a live probe's root.
@@ -75,8 +86,13 @@ func (rt *Runtime) replayScratchFree(dir string) (persistentdisk.Usage, error) {
 	if rt != nil && rt.replayScratchUsage != nil {
 		return rt.replayScratchUsage(dir)
 	}
-	return persistentdisk.Statfs(dir)
+	return defaultReplayScratchUsage(dir)
 }
+
+// defaultReplayScratchUsage reads the volume's free space. Tests replace it:
+// the reserve is a percentage of the volume, so a test must not depend on how
+// full the machine running it is.
+var defaultReplayScratchUsage = persistentdisk.Statfs
 
 // replayScratchEstimate is the scratch a probe at the current head needs:
 // twice the base blob (the download and its unpacked copy coexist during the
@@ -127,9 +143,10 @@ func (rt *Runtime) admitReplayScratch(ctx context.Context, computerID, parent st
 	if err != nil {
 		return fmt.Errorf("%w: read free space on %s: %v", ErrReplayScratchInsufficient, parent, err)
 	}
-	if usage.AvailBytes < need+replayScratchReserveBytes {
+	reserve := replayScratchReserve(usage.TotalBytes)
+	if usage.AvailBytes < need+reserve {
 		return fmt.Errorf("%w: the probe needs about %d bytes plus a %d-byte reserve on %s; %d are free",
-			ErrReplayScratchInsufficient, need, replayScratchReserveBytes, parent, usage.AvailBytes)
+			ErrReplayScratchInsufficient, need, reserve, parent, usage.AvailBytes)
 	}
 	return nil
 }
@@ -156,11 +173,15 @@ func (rt *Runtime) watchReplayScratch(ctx context.Context, dir string) (context.
 				return
 			case <-ticker.C:
 				usage, err := rt.replayScratchFree(dir)
-				if err != nil || usage.AvailBytes >= replayScratchReserveBytes {
+				if err != nil {
+					continue
+				}
+				reserve := replayScratchReserve(usage.TotalBytes)
+				if usage.AvailBytes >= reserve {
 					continue
 				}
 				cause := fmt.Errorf("%w: free space on %s fell to %d bytes, under the %d-byte reserve, while the probe replayed",
-					ErrReplayScratchInsufficient, dir, usage.AvailBytes, replayScratchReserveBytes)
+					ErrReplayScratchInsufficient, dir, usage.AvailBytes, reserve)
 				log.Printf("replay completeness: %v; stopping the probe", cause)
 				cancel(cause)
 				return

@@ -204,9 +204,20 @@ const (
 	selfdevSettlementAttemptLimit  = 2
 )
 
-// selfdevSettlementCrashedTwice is the cause on an operation whose
-// settlement crashed the computer twice.
-const selfdevSettlementCrashedTwice = "the settlement crashed the computer twice: the apply is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides"
+// selfdevSettlementUnfinished is the cause on an operation whose settlement
+// started on two crash boots and did not finish on either. The count is starts
+// (a boot that crashed, or one the base source or control plane failed), so the
+// cause says what was counted, not that the computer crashed. last is the state
+// the operation was in when the bound closed it.
+func selfdevSettlementUnfinished(last string) string {
+	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): the apply is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides", last)
+}
+
+// selfdevSettlementUnfinishedNothingInstalled is the cause on an operation
+// closed before it installed anything.
+func selfdevSettlementUnfinishedNothingInstalled(last string) string {
+	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): nothing was installed; the operation is failed", last)
+}
 
 // spendSelfDevelopmentSettlementAttempt durably counts this boot's start of
 // the operation's settlement, once per boot: every commit triggers a
@@ -216,7 +227,7 @@ func (rt *Runtime) spendSelfDevelopmentSettlementAttempt(operationID string) err
 	if rt.selfdevSettlementSpent[operationID] {
 		return nil
 	}
-	if err := spendGuestAttempt(rt.cfg.StorePath, selfdevSettlementAttemptReason, operationID, selfdevSettlementAttemptLimit); err != nil {
+	if err := spendSettlementAttempt(rt.cfg.StorePath, selfdevSettlementAttemptReason, operationID, selfdevSettlementAttemptLimit); err != nil {
 		return err
 	}
 	if rt.selfdevSettlementSpent == nil {
@@ -226,21 +237,36 @@ func (rt *Runtime) spendSelfDevelopmentSettlementAttempt(operationID string) err
 	return nil
 }
 
-// closeSelfDevelopmentSettlementDegraded closes an operation whose
-// settlement crashed the computer twice. The applied release and the
-// materialization-applied event stay; no checkpoint is bound and the route is
-// not promoted. An operation already degraded keeps the cause it has.
+// closeSelfDevelopmentSettlementDegraded closes an operation whose settlement
+// started on two crash boots without finishing. An operation that reached
+// materializing or later has installed something: it closes `degraded`, which
+// means applied with an unsettled tail and stays open to an owner act; the
+// applied release and the materialization-applied event stay, no checkpoint is
+// bound and the route is not promoted. An operation still `accepted` installed
+// nothing and has no accepted -> degraded edge: it settles `failed`. An
+// operation already degraded keeps the cause it has.
 func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, operation selfdev.Operation) error {
-	if operation.State == selfdev.StateDegraded {
+	switch operation.State {
+	case selfdev.StateDegraded:
+		return nil
+	case selfdev.StateAccepted:
+		// recordMaterializationFailed also discharges the accepted
+		// transition on the tape, as the unstarted-apply settlement does.
+		cause := selfdevSettlementUnfinishedNothingInstalled(operation.State)
+		if err := rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(cause), operation.State); err != nil {
+			return fmt.Errorf("fail the accepted operation whose settlement did not finish: %w", err)
+		}
+		log.Printf("selfdev: crash boot: %s failed from %s: %s", operation.OperationID, operation.State, cause)
 		return nil
 	}
+	cause := selfdevSettlementUnfinished(operation.State)
 	if _, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
-		next.TerminalError = selfdevSettlementCrashedTwice
+		next.TerminalError = cause
 		return nil
 	}); err != nil {
-		return fmt.Errorf("close the operation whose settlement crashed twice: %w", err)
+		return fmt.Errorf("close the operation whose settlement did not finish: %w", err)
 	}
-	log.Printf("selfdev: crash boot: %s closed degraded from %s: %s", operation.OperationID, operation.State, selfdevSettlementCrashedTwice)
+	log.Printf("selfdev: crash boot: %s closed degraded from %s: %s", operation.OperationID, operation.State, cause)
 	return nil
 }
 

@@ -238,14 +238,6 @@ type replayProbe struct {
 	stopWatch func()
 }
 
-// replayCtx is the guarded context for replay work on the probe's store.
-func (p *replayProbe) replayCtx(fallback context.Context) context.Context {
-	if p == nil || p.ctx == nil {
-		return fallback
-	}
-	return p.ctx
-}
-
 // scratchErr names a replay error the scratch watch caused.
 func (p *replayProbe) scratchErr(err error) error {
 	if p == nil {

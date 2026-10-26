@@ -307,6 +307,21 @@ func spendGuestAttempt(storePath, reason, target string, limit int) error {
 	return syncParentDir(path)
 }
 
+// errSettlementUnbounded refuses a crash-boot settlement that cannot keep a
+// durable attempt count: with no count across boots nothing bounds it, and an
+// unbounded settlement is the crash loop the bound exists to stop.
+var errSettlementUnbounded = errors.New("crash-boot settlement refused: no durable attempt count, so it cannot be bounded; an owner act is needed")
+
+// spendSettlementAttempt is spendGuestAttempt for a crash-boot settlement,
+// which fails closed where an apply's count does not: a runtime without a
+// store path refuses the settlement instead of running it unbounded.
+func spendSettlementAttempt(storePath, reason, target string, limit int) error {
+	if GuestApplyAttemptsPath(storePath) == "" {
+		return fmt.Errorf("%w (%s %s)", errSettlementUnbounded, reason, target)
+	}
+	return spendGuestAttempt(storePath, reason, target, limit)
+}
+
 // markPlannedRestart spends one of the apply's attempts and announces that
 // the apply about to run restarts this guest on purpose. It refuses the apply
 // (and writes no marker) once the attempts are spent. The returned func

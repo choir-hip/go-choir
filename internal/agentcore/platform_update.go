@@ -834,7 +834,7 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 		// No pending transition — but an applied event whose tail never
 		// committed is still a strand: applied clears the pending ref, so
 		// the pending gate is blind to it.
-		rt.resumeStrandedPlatformUpdateTail(ctx)
+		rt.resumeStrandedPlatformUpdateTail(ctx, false)
 		return
 	}
 	if !ok {
@@ -878,7 +878,13 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 // and re-pushes its pinned offer through ApplyPlatformUpdate — which detects
 // the strand and drives only the missing tail. A committed `failed` sibling
 // ends the update; nothing resumes a lost transition.
-func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context) {
+//
+// On a crash boot the re-drive is bounded: it spends a durable attempt before
+// the work, shared with the pending path (platformUpdateSettlementAttemptLimit
+// boots per update), and stops once they are spent. A planned, marker-backed
+// restart resumes once and spends none: a resume that crashes the computer is
+// a markerless boot, which is bounded here.
+func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context, crashBoot bool) {
 	appliedEvent, found, err := rt.store.LatestComputerEventByIdempotencyPrefix(ctx, rt.selfdevComputerID, "platform-update-applied-")
 	if err != nil || !found {
 		return // no update has ever applied
@@ -913,6 +919,9 @@ func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context) {
 	var offer selfdevprotocol.PlatformUpdateOffer
 	if err := json.Unmarshal(raw, &offer); err != nil {
 		log.Printf("runtime: platform update resume: stranded offer payload decode: %v", err)
+		return
+	}
+	if crashBoot && !rt.spendPlatformUpdateSettlementAttempt(updateID) {
 		return
 	}
 	log.Printf("runtime: platform update resume: re-driving stranded tail for update %s", updateID)
@@ -969,7 +978,7 @@ var errPlatformUpdateInterruptedByRestart = errors.New("interrupted by a restart
 func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
 	offer, acceptedDigest, noPending, ok := rt.pendingPlatformUpdate(ctx)
 	if noPending {
-		rt.resumeStrandedPlatformUpdateTail(ctx)
+		rt.resumeStrandedPlatformUpdateTail(ctx, true)
 		return
 	}
 	if !ok {
@@ -1007,6 +1016,11 @@ func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
 	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
 	switch {
 	case journaled.Result.Outcome == "applied":
+		// Recording the apply drives the tail, which can crash the computer:
+		// the attempt is spent durably first and a spent update is held.
+		if !rt.spendPlatformUpdateSettlementAttempt(offer.UpdateID) {
+			return
+		}
 		report := PlatformUpdateReport{UpdateID: offer.UpdateID, ComputerID: offer.ComputerID, AcceptedEventHead: acceptedDigest}
 		if _, err := rt.commitPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, journaled.Result, resolver, "platform-update-"+offer.UpdateID, report); err != nil {
 			log.Printf("runtime: crash boot: platform update %s: record journaled apply: %v", offer.UpdateID, err)
@@ -1019,6 +1033,36 @@ func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
 	default:
 		log.Printf("runtime: crash boot: platform update %s left pending: journal outcome %q has no verified recovery", offer.UpdateID, journaled.Result.Outcome)
 	}
+}
+
+// platformUpdateSettlementAttemptReason and platformUpdateSettlementAttemptLimit
+// bound the crash-boot re-drive of one platform update's checkpoint and route
+// tail across boots (review 309, finding 1): the same bound the self-development
+// settlement has.
+const (
+	platformUpdateSettlementAttemptReason = "platform_update_settlement"
+	platformUpdateSettlementAttemptLimit  = 2
+)
+
+// spendPlatformUpdateSettlementAttempt durably counts this crash boot's
+// re-drive of the update's tail before the work, and reports whether the work
+// may run. Once the limit is spent, or when no durable count exists, the tail
+// is not re-driven: the cause is logged and the update stays where the tape
+// has it (a pending transition keeps refusing later updates, fail-closed; an
+// applied update keeps its applied event without its checkpoint and route). An
+// owner act decides.
+func (rt *Runtime) spendPlatformUpdateSettlementAttempt(updateID string) bool {
+	err := spendSettlementAttempt(rt.cfg.StorePath, platformUpdateSettlementAttemptReason, updateID, platformUpdateSettlementAttemptLimit)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, ErrGuestApplyAttemptsSpent) {
+		log.Printf("runtime: crash boot: platform update %s: the settlement did not finish on %d boots; its checkpoint and route tail are not re-driven; an owner act decides: %v",
+			updateID, platformUpdateSettlementAttemptLimit, err)
+	} else {
+		log.Printf("runtime: crash boot: platform update %s: tail not re-driven: %v", updateID, err)
+	}
+	return false
 }
 
 func (rt *Runtime) logPlatformUpdateCrashSettlement(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, outcome string) {
