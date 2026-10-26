@@ -197,6 +197,11 @@ func DefaultRegistry() *Registry {
 		// name. Written once by corpusd, as the export of the research desk's
 		// story.entities tape records.
 		{Kind: "choir.entity", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityRow"},
+		// The entity lexicon's learning loop (slice c0 §6): one review of a
+		// story's entities per tape record, and a phrase's not-an-entity
+		// evidence and stoplist state. Written by corpusd from the export.
+		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityReviewRow"},
+		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityStopwordRow"},
 		// A published software release record (P7,
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
 		// executable bytes; the patch lives in the host content store.

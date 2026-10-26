@@ -129,6 +129,10 @@ type StoryEntitiesRequest struct {
 	Story        string        `json:"story"`
 	Entities     []StoryEntity `json:"entities"`
 	ValidateOnly bool          `json:"validate_only,omitempty"`
+	// Review is the review that produced the attachments (slice c0 §6): its
+	// counts, and what it taught the lexicon. With a review the request may
+	// carry no attachments (a story about none of its candidates).
+	Review *StoryEntityReview `json:"review,omitempty"`
 }
 
 // StoryEntity is the part of an attachment Store B keeps: the entity id and

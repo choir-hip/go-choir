@@ -41,6 +41,9 @@ const (
 	maxStoryEntitiesPerRequest = 12
 	// mentionEdgeLimit bounds one edge read of a publication's entities.
 	mentionEdgeLimit = 200
+	// maxReviewItems bounds a review's not-entity phrases and its aliases:
+	// at most the 24 candidates' worth, with room.
+	maxReviewItems = 48
 )
 
 // entityRow is a choir.entity row's body: identity and display only (ontology
@@ -53,6 +56,9 @@ type entityRow struct {
 	Normalized string `json:"normalized"`
 	// ComputerID is the computer whose judgment minted it.
 	ComputerID string `json:"computer_id"`
+	// Aliases are other forms of its name the learning loop recorded (slice
+	// c0 §6), at most types.EntityAliasesMax.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 // entityCanonicalFor is the canonical id of an owner's entity from its key.
@@ -128,7 +134,14 @@ func (s *Service) RecordStoryEntities(ctx context.Context, req types.StoryEntiti
 			}
 		}
 	}
-	s.related.reset()
+	if len(checked) > 0 {
+		s.related.reset()
+	}
+	if req.Review != nil {
+		if err := s.learnFromReview(ctx, og, strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), pub, *req.Review); err != nil {
+			return 0, err
+		}
+	}
 	return len(checked), nil
 }
 
@@ -142,8 +155,20 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 	if computer == "" {
 		return "", nil, nil, fmt.Errorf("computer_id is required")
 	}
-	if n := len(req.Entities); n == 0 || n > maxStoryEntitiesPerRequest {
-		return "", nil, nil, fmt.Errorf("an entities request carries 1 to %d entities, got %d", maxStoryEntitiesPerRequest, n)
+	min := 1
+	if req.Review != nil {
+		// A review may attach nothing: the story is about none of its
+		// candidates, and the review's counts and lessons still count.
+		min = 0
+		if strings.TrimSpace(req.Review.RecordID) == "" {
+			return "", nil, nil, fmt.Errorf("a review needs its record_id")
+		}
+		if len(req.Review.NotEntities) > maxReviewItems || len(req.Review.Aliases) > maxReviewItems {
+			return "", nil, nil, fmt.Errorf("a review carries at most %d not-entities and %d aliases", maxReviewItems, maxReviewItems)
+		}
+	}
+	if n := len(req.Entities); n < min || n > maxStoryEntitiesPerRequest {
+		return "", nil, nil, fmt.Errorf("an entities request carries %d to %d entities, got %d", min, maxStoryEntitiesPerRequest, n)
 	}
 	tier := s.relationTier
 	if tier == nil {
