@@ -615,3 +615,83 @@ func TestEvidenceEmbedLabelsTheRecordsTrajectory(t *testing.T) {
 		t.Fatalf("evidence embed: metadata trajectory_id=%q record=%q, want both %q", got, head.TrajectoryID, rec.TrajectoryID)
 	}
 }
+
+// A commit on a settled trajectory is Unbound: the store erases the record's
+// trajectory field, so the label names the trajectory the commit ran under.
+func TestRevisionsRouteOnSettledDocumentLabelsTheTrajectoryItRanUnder(t *testing.T) {
+	core, handler := testAPISetup(t)
+	s := core.Store()
+	start := startObservationLifecycle(t, s, func(req *types.StartLifecycleRequest) {
+		req.InitialRevision.Metadata = json.RawMessage(staleTrajectoryLabel)
+	})
+	settleDocumentTrajectory(t, s, start.OwnerID, start.ComputerID, start.InitialDocument.DocID, start.TrajectoryID)
+	settled, err := s.GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "owner edit after settling", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "label-settled-edit", ExpectedLifecycleVersion: settled.Trajectory.LifecycleVersion,
+	})
+	response := httptest.NewRecorder()
+	handler.HandleTextureRevisions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("settled edit status=%d body=%s", response.Code, response.Body.String())
+	}
+	var created textureRevisionResponse
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := s.GetLifecycleRevision(t.Context(), start.OwnerID, start.ComputerID, created.RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(stored.Metadata, &meta); err != nil {
+		t.Fatalf("decode metadata %s: %v", stored.Metadata, err)
+	}
+	if got, _ := meta["trajectory_id"].(string); got != start.TrajectoryID {
+		t.Fatalf("settled commit: metadata trajectory_id=%q, want the trajectory it ran under %q (record field %q)", got, start.TrajectoryID, stored.TrajectoryID)
+	}
+}
+
+// A record with no trajectory carries no trajectory label, not a client's or a
+// parent's.
+func TestRevisionsRouteOnUnboundDocumentCarriesNoTrajectoryLabel(t *testing.T) {
+	_, handler := testAPISetup(t)
+	createW := httptest.NewRecorder()
+	handler.HandleTextureCreateDocument(createW, textureRequest(t, http.MethodPost, "/api/texture/documents", textureCreateDocRequest{Title: "Unbound label"}))
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create doc status=%d body=%s", createW.Code, createW.Body.String())
+	}
+	var created textureCreateDocResponse
+	if err := json.NewDecoder(createW.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	post := func(content, metadata, parent string) textureRevisionResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		handler.HandleTextureRevisions(w, textureRequest(t, http.MethodPost, "/api/texture/documents/"+created.DocID+"/revisions", textureCreateRevisionRequest{
+			Content: content, Metadata: json.RawMessage(metadata), ParentRevisionID: parent,
+		}))
+		if w.Code != http.StatusCreated {
+			t.Fatalf("revision status=%d body=%s", w.Code, w.Body.String())
+		}
+		var rev textureRevisionResponse
+		if err := json.NewDecoder(w.Body).Decode(&rev); err != nil {
+			t.Fatal(err)
+		}
+		return rev
+	}
+	first := post("first", `{"trajectory_id":"client-claim"}`, "")
+	second := post("second", `{}`, first.RevisionID)
+	for _, rev := range []textureRevisionResponse{first, second} {
+		var meta map[string]any
+		if err := json.Unmarshal(rev.Metadata, &meta); err != nil {
+			t.Fatalf("decode metadata %s: %v", rev.Metadata, err)
+		}
+		if got, ok := meta["trajectory_id"]; ok {
+			t.Fatalf("unbound revision %s carries trajectory_id=%v in %s", rev.RevisionID, got, rev.Metadata)
+		}
+	}
+}
