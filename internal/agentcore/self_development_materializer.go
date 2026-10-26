@@ -1087,13 +1087,14 @@ func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.O
 		return selfdevVerificationEvidence{}, fmt.Errorf("materializer: verification payload unavailable: %w", err)
 	}
 	var payload struct {
+		SchemaVersion int      `json:"schema_version"`
 		OperationID   string   `json:"operation_id"`
 		BundleDigest  string   `json:"bundle_digest"`
 		Decision      string   `json:"decision"`
 		VerifierRefs  []string `json:"verifier_refs"`
 		VerifierRunID string   `json:"verifier_run_id"`
 	}
-	if err := json.Unmarshal(raw, &payload); err != nil ||
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.SchemaVersion != 1 ||
 		!rt.verificationPayloadNamesOperation(ctx, operation, payload.OperationID) ||
 		payload.Decision != "pass" || len(payload.VerifierRefs) == 0 || payload.VerifierRunID == "" ||
 		!computerevent.IsSHA256(payload.BundleDigest) {
