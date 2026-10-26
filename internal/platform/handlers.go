@@ -37,7 +37,14 @@ type Handler struct {
 	packageBase       pkgrelease.BaseTrees
 	packageBaseStatus *PackageBaseStatus
 	packageOwnerActs  *OwnerActAuthority
-	packageMu         sync.Mutex
+	// packageMu serializes package publishes: the track head read, the
+	// seq and the listing write. It is the only thing that keeps a track
+	// linear, and it holds only while one corpusd process writes Store B
+	// (today's single-writer deployment). A second writer (an HA pair, a
+	// second corpusd on the same store) needs a store constraint on
+	// (owner, package, seq) or a store-level compare-and-set first (review
+	// 274 F5).
+	packageMu sync.Mutex
 }
 type healthResponse struct {
 	Status  string         `json:"status"`

@@ -164,6 +164,13 @@ func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's package draft names another publisher, track or package"})
 		return
 	}
+	// The owner's act names one operation; a draft of another (or of an
+	// operation the computer made up) is not what the owner published. The
+	// request carries no bundle digest, so the operation id is the binding.
+	if record.Operation.OperationID != strings.TrimSpace(body.OperationID) {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's package draft is of operation " + record.Operation.OperationID + ", not " + strings.TrimSpace(body.OperationID)})
+		return
+	}
 
 	// The patches, then the record, with the publisher the proxy authorized.
 	for _, patch := range patches {

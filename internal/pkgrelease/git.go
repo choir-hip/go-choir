@@ -42,7 +42,9 @@ func gitRun(ctx context.Context, dir string, env []string, stdin []byte, args ..
 			base = append(base, kv)
 		}
 	}
-	cmd.Env = append(append(base, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull), env...)
+	// GIT_NO_LAZY_FETCH: a missing object in a partial clone (the deploy
+	// tree, should it ever be one) is a refusal, never a promisor fetch.
+	cmd.Env = append(append(base, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_NO_LAZY_FETCH=1"), env...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
@@ -224,9 +226,9 @@ func (s *scratch) entries(ctx context.Context, tree string) ([]treeEntry, error)
 
 // confined requires every entry of a full-path tree to lie under root (its
 // ancestors are trees), every file under root to be a regular file of mode
-// 100644 or 100755, and no .gitattributes or .gitmodules: no symlink, no
-// submodule, no attribute that changes how an adopter checks the bytes out
-// (design 3.2, check 1; L2, L3).
+// 100644 or 100755, and no .gitattributes or .gitmodules in any case: no
+// symlink, no submodule, no attribute that changes how an adopter checks
+// the bytes out (design 3.2, check 1; L2, L3).
 func (s *scratch) confined(ctx context.Context, tree, root string) error {
 	entries, err := s.entries(ctx, tree)
 	if err != nil {
@@ -247,7 +249,9 @@ func (s *scratch) confined(ctx context.Context, tree, root string) error {
 			tricks = append(tricks, e.path+" (a symlink)")
 		case e.mode != "100644" && e.mode != "100755":
 			tricks = append(tricks, e.path+" (mode "+e.mode+")")
-		case path.Base(e.path) == ".gitattributes" || path.Base(e.path) == ".gitmodules":
+		case strings.EqualFold(path.Base(e.path), ".gitattributes") || strings.EqualFold(path.Base(e.path), ".gitmodules"):
+			// Case-insensitive: on a case-insensitive checkout .GITATTRIBUTES
+			// is .gitattributes.
 			tricks = append(tricks, e.path)
 		}
 	}

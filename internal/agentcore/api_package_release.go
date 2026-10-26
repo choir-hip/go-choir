@@ -64,7 +64,11 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	repo := h.rt.releaseRepo()
-	before, beforeLabel := h.rt.packageSourceBefore(ctx, repo, operation, base)
+	before, beforeLabel, err := h.rt.packageSourceBefore(ctx, repo, operation, base)
+	if err != nil {
+		writePackageDraftRefusal(w, err)
+		return
+	}
 	source, err := pkgrelease.DraftPackage(ctx, pkgrelease.DraftInput{
 		Repo: repo, Name: name, Base: base, Patch: patch, Before: before, BeforeLabel: beforeLabel,
 		HeadReleaseID: headID, HeadTree: headTree,
@@ -142,26 +146,27 @@ func writePackageDraftRefusal(w http.ResponseWriter, err error) {
 
 // packageSourceBefore is the commit whose tree is the effective source just
 // before operation applied: the projection commit the source projection
-// left for the applied operation before it on the same stack base (U1's
-// patches are cumulative from that base), or the base itself. It walks the
-// applied operations created before this one, newest first, and takes the
-// first with a projection ref; a ref on another stack base means the stack
-// restarted (upstreamed or moved), so the base is the source before.
+// left for the applied operation immediately before it (U1's patches are
+// cumulative from the stack base), or the base itself when there is no
+// earlier applied operation or that one's ref is on another stack base
+// (the stack restarted: upstreamed or moved).
+//
+// Only the immediately preceding operation stands in. When it changed
+// source and left no ref (the projection names only the top of the stack
+// it projects, so an operation applied between two projections has none),
+// the source before is unknown and the draft refuses
+// package_parent_unpublished: an older ref, or the base, would put that
+// operation's change inside the root into this release as its own
+// (review 274 F2). An earlier operation that changed no source is passed
+// over, since it changed no tree.
 //
 // The order is creation order: the cast refuses while an apply is pending,
-// so the operation created before this one applied before it was cast. A
-// wrong "before" can only refuse a release (a false not-confined or
-// parent-unpublished), never let a path outside the root travel: the host
-// carries the root's subtree and nothing else.
-func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string) {
+// so the operation created before this one applied before it was cast.
+func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string, error) {
 	baseLabel := "the base " + base
 	operations, err := rt.selfdevOperations.ListByStates(ctx, operation.ComputerID, selfdev.StateApplied)
 	if err != nil {
-		return base, baseLabel
-	}
-	refs, err := pkgrelease.AppliedRefs(ctx, repo)
-	if err != nil || len(refs) == 0 {
-		return base, baseLabel
+		return "", "", err
 	}
 	index := -1
 	for i, candidate := range operations {
@@ -170,15 +175,27 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 			break
 		}
 	}
+	var refs map[string]pkgrelease.AppliedRef
 	for i := index - 1; i >= 0; i-- {
-		ref, ok := refs[operations[i].OperationID]
+		previous := operations[i]
+		if refs == nil {
+			if refs, err = pkgrelease.AppliedRefs(ctx, repo); err != nil {
+				return "", "", err
+			}
+		}
+		ref, ok := refs[previous.OperationID]
 		if !ok {
-			continue
+			if _, _, err := rt.boundSourcePatch(previous); errors.Is(err, errNoSourcePatch) {
+				continue
+			}
+			return "", "", &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentUnpublished, Detail: "operation " + previous.OperationID +
+				" applied just before " + operation.OperationID + " and changed source, and the source projection left no ref for it: the package before " +
+				operation.OperationID + " is unknown, so the release cannot be shown to carry only this operation's change"}
 		}
 		if !strings.EqualFold(ref.StackBase, base) {
-			break
+			return base, baseLabel, nil
 		}
-		return ref.Commit, "operation " + operations[i].OperationID
+		return ref.Commit, "operation " + previous.OperationID, nil
 	}
-	return base, baseLabel
+	return base, baseLabel, nil
 }
