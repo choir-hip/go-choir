@@ -434,3 +434,26 @@ Engineering ran 80 s in 5b and about 1m45s in 5c to the Freeze (DeepSeek V4.1 Fl
 - R8-2 The verify's reason is not recorded (repeat of R6-3 and SD-09): `Verify` takes no reason and the verify cell is not exported. Real defect.
 - R8-3 Management's verify judged the same capture limitation pass in 5a and fail in 5b. Process gap; the direction should name a capture that can show the state, or the verify should rest on the static check, stated in the direction.
 - R8-4 SD-07 holds on staging: three rounds of owner directions with backticks reached engineering byte-identical. Closes the SD-07 staging proof.
+
+## Round 9: window manager rounds 1, 1-follow-up and 2 (selfdev-12c347f9, 7d9f19ce, 7fc55caa), 2026-10-26 05:50-07:52
+
+Trajectories 0d7560d4 and 2b229b5d, document 99e044ce. Read by a Sonnet reviewer from the trace exports, capsule evidence and operations, 08:1x UTC; read only.
+
+### What happened
+- Round 2 ran 51m09s: provider calls 490 s (101 calls), tool cells 43 s, job waits 2512 s (82%) over 23 jobs, of which six Playwright runs took 5 to 9 minutes each (07:04:47 to 07:46:23) trying to make signed-in specs pass signed out. Two frontend builds (7 s, 5 s); no Go build.
+- Freeze reused the running binary ("release_binary_origin":"reused_running", 07:49:59). This does not prove the binary-reuse gate fix: the patch base df5480a77 equals the running build, so `runningCommit == sourceCommit` returns before the differ is consulted (the old code did the same). The disputed case needs a follow-up round after an apply.
+- The 17 frontend/test-results files: a Playwright job at 07:03:43 ran in /workspace/platform/frontend; later runs moved to /tmp. The engineer saw the files in the Freeze result at 07:50:02, removed them at 07:50:06 and froze again at 07:50:10; the second Freeze replayed the already-frozen operation (same bundle 359777e1, same handle), so the candidate kept the files while the Complete said they were removed. `settleFreezePrecommits` documents that a replayed freeze settles nothing.
+- The ReferenceError came from round 1: its carried patch already deleted `function withoutShowDesktopMarkers` while eight callers remained; the round-1 engineer's own probe printed `function withoutShowDesktopMarkers( -1` at 05:55:09 and went on. Round 2 re-applied the tree; `vite build` does not check names.
+- Round 2's verify (report record cell:1c834be6, 07:51:58) passed "based on the available candidate and check evidence" with "authenticated window interactions ... unavailable"; it ran 8 iterations (07:50:57 to 07:52:00) and its run is not exported. Round 1 and its follow-up failed on the same lack of runtime evidence.
+- Round 1's follow-up was Texture's request ("the single bounded follow-up to the failed verification", cast 06:10:04.6), relayed by management; the engineer made no source change, ran two Playwright jobs that timed out (478 s, 719 s) against an authenticated bootstrap that answered 502 ("ComputerVersion route authority is not configured"), and the verify failed it.
+- No receipt pre-check refusal and no completion-guard retry in round 2; its Complete passed first time. Round 1's follow-up hit three Freeze refusals before train 4 (06:56:20 the latest receipt did not bind; 06:56:35 and :39 cited jobs had timed out) and recovered by citing a passing receipt.
+- Models: engineering DeepSeek V4.1 Flash only (101, 137 and 107 calls); Texture and management gpt-6-luna; zero `choir-delegate` calls.
+
+### Problems from this round
+- R9-1 A second Freeze on a frozen operation replays it silently: edits made after the first freeze are not in the candidate, and the engineer is told nothing. Real defect (red: Freeze and candidate identity). Proposed: a Freeze whose tree differs from the frozen bundle answers an error naming the difference (the operation is frozen; open a new round), not a replay.
+- R9-2 A Playwright run inside the workspace leaves test-results in the candidate; nothing flags untracked output (no .git in the capsule; `paths_confined` settled "no" without consequence). Real defect and process gap. Proposed: Freeze lists paths outside the direction's or Precommit's confined set as a refusal or a named warning.
+- R9-3 A deleted helper survived two rounds and two verifies; the engineer's own probe showed it missing. Real defect (process). Mitigated for the window manager by a tsc undefined-name gate in the direction (02dadf0fa).
+- R9-4 Verify passed round 2 on less runtime evidence than it failed round 1 on, and its run is not exported (repeat of R7-5, R8-2, R8-3). Real defect; docs/problems/selfdev-verify-cannot-see-signed-in-surfaces-2026-10-26.md; reason field on lane verify-reason.
+- R9-5 The binary-reuse gate fix is not proved on staging. Process gap; prove it on a follow-up round after an apply.
+- R9-6 47 minutes went to making signed-in specs run signed out, which cannot work. Process gap; round 4's direction gives the mocked-backend method.
+- R9-7 Delegate unused again (repeat of R7-6). Observed.
