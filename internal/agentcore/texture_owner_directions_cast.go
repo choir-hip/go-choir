@@ -31,6 +31,13 @@ const (
 	// and the newest directions the request turn prints
 	// (textureOwnerDirectionKeep there is 8).
 	castOwnerRevisionMax = 8
+	// castOwnerTextMax bounds the owner's words one Cast carries, well under
+	// the tray's 256 KiB, so too much is refused by name and not by a size
+	// error later (review 272 F4). The request turn prints a request to 16k
+	// characters and each direction to 4k.
+	castOwnerTextMax = 64 << 10
+	// castPacketScanDepth bounds the walk for a forged owner_directions.
+	castPacketScanDepth = 32
 )
 
 // castOwnerDirection is one owner revision's words on a Cast's packet.
@@ -63,22 +70,47 @@ func castPacketObject(raw string) (map[string]json.RawMessage, bool) {
 }
 
 // refuseCellOwnerDirections refuses a Cast whose packet sets
-// owner_directions (in any letter case): only the reducer writes them, so no
-// cell, on any desk, labels its own text as the owner's.
+// owner_directions, at any depth and in any letter case: only the reducer
+// writes them, so no cell, on any desk, labels its own text as the owner's.
 func refuseCellOwnerDirections(in yaegikernel.StagedIntent) error {
-	if in.Kind != yaegikernel.IntentCast {
+	if in.Kind != yaegikernel.IntentCast || strings.TrimSpace(in.Statement) == "" {
 		return nil
 	}
-	spec, ok := castPacketObject(in.Statement)
-	if !ok {
+	var packet any
+	if err := json.Unmarshal([]byte(in.Statement), &packet); err != nil {
 		return nil
 	}
-	for key := range spec {
-		if strings.EqualFold(strings.TrimSpace(key), castOwnerDirectionsKey) {
-			return fmt.Errorf("reduce: cast %s: owner_directions is the runtime's; name the owner's revisions with owner_revision and it attaches their words", in.LocalID)
-		}
+	if jsonHasKeyFold(packet, castOwnerDirectionsKey, castPacketScanDepth) {
+		return fmt.Errorf("reduce: cast %s: owner_directions is the runtime's, written only on a Texture Cast that names the owner's revisions as owner_revision; never set or copy it (an engineer reads the Texture request its assignment serves)", in.LocalID)
 	}
 	return nil
+}
+
+// jsonHasKeyFold reports whether a decoded JSON value has an object key equal
+// to key in any letter case, within depth levels. A value nested deeper is
+// treated as having it, so the bound never lets a forged key through.
+func jsonHasKeyFold(v any, key string, depth int) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		if depth <= 0 {
+			return true
+		}
+		for k, child := range t {
+			if strings.EqualFold(strings.TrimSpace(k), key) || jsonHasKeyFold(child, key, depth-1) {
+				return true
+			}
+		}
+	case []any:
+		if depth <= 0 {
+			return true
+		}
+		for _, child := range t {
+			if jsonHasKeyFold(child, key, depth-1) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // attachCastOwnerDirections expands every Cast whose packet names
@@ -108,12 +140,17 @@ func attachCastOwnerDirections(intents []yaegikernel.StagedIntent, scope ownerRe
 			return nil, fmt.Errorf("reduce: Texture cast %s: %w", in.LocalID, err)
 		}
 		directions := make([]castOwnerDirection, 0, len(ids))
+		textBytes := 0
 		for _, id := range ids {
 			direction, err := ownerDirectionFromRevision(id, scope, load)
 			if err != nil {
 				return nil, fmt.Errorf("reduce: Texture cast %s: %w", in.LocalID, err)
 			}
 			directions = append(directions, direction)
+			textBytes += len(direction.Text)
+		}
+		if textBytes > castOwnerTextMax {
+			return nil, fmt.Errorf("reduce: Texture cast %s: the owner's words in the revisions named are %d bytes; a Cast carries at most %d: name fewer revisions in this Cast and the rest in another", in.LocalID, textBytes, castOwnerTextMax)
 		}
 		attached, err := marshalVerbatim(directions)
 		if err != nil {
@@ -189,7 +226,11 @@ func ownerDirectionFromRevision(id string, scope ownerRevisionScope, load func(s
 		return castOwnerDirection{}, fmt.Errorf("owner_revision %s is not this computer's owner's revision", id)
 	case strings.TrimSpace(rev.DocID) != strings.TrimSpace(scope.DocID):
 		return castOwnerDirection{}, fmt.Errorf("owner_revision %s is a revision of another document, not this one", id)
-	case strings.TrimSpace(scope.TrajectoryID) != "" && strings.TrimSpace(rev.TrajectoryID) != strings.TrimSpace(scope.TrajectoryID):
+	case strings.TrimSpace(scope.TrajectoryID) == "":
+		// An owner revise is lifecycle-bound; a run with no trajectory
+		// cannot place one in it (review 272 F3).
+		return castOwnerDirection{}, fmt.Errorf("owner_revision %s: this run names no trajectory", id)
+	case strings.TrimSpace(rev.TrajectoryID) != strings.TrimSpace(scope.TrajectoryID):
 		return castOwnerDirection{}, fmt.Errorf("owner_revision %s belongs to another trajectory, not this one", id)
 	case rev.AuthorKind != types.AuthorUser:
 		return castOwnerDirection{}, fmt.Errorf("owner_revision %s is not an owner revision (its author is %s)", id, rev.AuthorKind)

@@ -1065,6 +1065,13 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Metadata["actor_reactivated_from_passivated"] = true
 	rec.Metadata["actor_resume_source_loop_id"] = rec.RunID
 	rec.Metadata["current_revision_id"] = strings.TrimSpace(doc.CurrentRevisionID)
+	// The head's author kind moves with its id: the frame names the owner's
+	// revision from the pair (review 272 F1). A head that does not load
+	// leaves no author kind, so the frame names none.
+	delete(rec.Metadata, "current_author_kind")
+	if head, headErr := rt.getTextureRevision(ctx, ownerID, strings.TrimSpace(doc.CurrentRevisionID)); headErr == nil && strings.TrimSpace(head.DocID) == docID {
+		rec.Metadata["current_author_kind"] = string(head.AuthorKind)
+	}
 	if sourceRunID, ok, err := rt.Core.LatestTextureActorMemorySourceRun(ctx, ownerID, textureAgentID); err != nil {
 		return nil, false, fmt.Errorf("load passivated Texture memory source: %w", err)
 	} else if ok && sourceRunID != "" {

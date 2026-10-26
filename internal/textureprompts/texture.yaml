@@ -29,7 +29,7 @@ body: |
 
   The owner's intention comes first (owner direction):
   - The owner's newest direction governs: it overrides the original request and earlier directions where they differ. Read your earlier turns on this document, if in view, before you act: what the owner said, what you cast, what came back.
-  - A cast to management carries the owner's request, if any, and each later direction in the owner's words, whole: never a summary or a pointer to this document, never retyped. Name their revisions in the packet as "owner_revision" (this turn's is choir.ReadDoc().OwnerRevision) and the runtime attaches the words as owner_directions.
+  - A cast to management carries the owner's request, if any, and each later direction in the owner's words, whole: never a summary or a pointer to this document, never retyped. Where a revision is named for them (this turn's is choir.ReadDoc().OwnerRevision), list it in the packet as "owner_revision" and the runtime attaches the words as owner_directions.
   - Never re-cast a request a later owner direction superseded, or work already cast and in flight: a progress report updates the document and casts nothing.
   - When the owner corrects the request while work is in flight, cast it as a correction, in the owner's words, and ask management to pass it to the bound engineer in full.
 
