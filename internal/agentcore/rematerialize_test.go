@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -529,13 +530,8 @@ func TestRestoreFromTapeAppendsIntentAndStopsAtTarget(t *testing.T) {
 func TestCheckpointBindRefusesWhenAuthorityUnavailable(t *testing.T) {
 	computerID := "computer-checkpoint-unavailable"
 	rt := &Runtime{cfg: provideriface.Config{ComputerID: computerID}}
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
-	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response := httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("checkpoint status=%d body=%s", response.Code, response.Body.String())
+	if _, err := rt.BindCheckpointRestoreSet(context.Background(), computerID); !errors.Is(err, ErrRematerializeUnavailable) {
+		t.Fatalf("bind without the event authority: %v", err)
 	}
 }
 
@@ -552,13 +548,8 @@ func TestCheckpointBindRefusesMissingSPAAndBindsLiveOnlyRows(t *testing.T) {
 	defer live.Close()
 	rt, cas, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
 	seedRestoreBase(t, context.Background(), rt, cas, computerID, 1)
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
-	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response := httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "served SPA is underivable") {
-		t.Fatalf("missing SPA checkpoint status=%d body=%s", response.Code, response.Body.String())
+	if _, err := rt.BindCheckpointRestoreSet(context.Background(), computerID); err == nil || !strings.Contains(err.Error(), "served SPA is underivable") {
+		t.Fatalf("missing SPA checkpoint: %v", err)
 	}
 
 	updaterRoot := filepath.Join(t.TempDir(), "updater")
@@ -571,13 +562,8 @@ func TestCheckpointBindRefusesMissingSPAAndBindsLiveOnlyRows(t *testing.T) {
 	if _, err := live.DB().ExecContext(context.Background(), "INSERT INTO rematerialize_live_only (id, value) VALUES ('live', 'only')"); err != nil {
 		t.Fatal(err)
 	}
-	request = httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
-	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response = httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("live-only checkpoint status=%d body=%s", response.Code, response.Body.String())
+	if _, err := rt.BindCheckpointRestoreSet(context.Background(), computerID); err != nil {
+		t.Fatalf("live-only checkpoint: %v", err)
 	}
 }
 
@@ -609,13 +595,8 @@ func TestCheckpointBindRefusesUntrustedBaselineWhenCurrentMissing(t *testing.T) 
 	rt, _, _ := rematerializeTapeRuntime(t, computerID, storePath, live)
 	rt.selfdevUpdaterRoot = filepath.Join(t.TempDir(), "updater-empty")
 	t.Setenv("CHOIR_BASELINE_RELEASE_ROOT", t.TempDir())
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
-	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response := httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "served SPA is underivable") {
-		t.Fatalf("untrusted baseline checkpoint status=%d body=%s", response.Code, response.Body.String())
+	if _, err := rt.BindCheckpointRestoreSet(context.Background(), computerID); err == nil || !strings.Contains(err.Error(), "served SPA is underivable") {
+		t.Fatalf("untrusted baseline checkpoint: %v", err)
 	}
 }
 
@@ -633,17 +614,9 @@ func TestCheckpointBindAcceptsEligibleRestoreSet(t *testing.T) {
 	digest, identity := pinFrontendRelease(t, updaterRoot, computerID, "<html>checkpoint</html>")
 	pointCurrent(t, updaterRoot, digest)
 	rt.selfdevUpdaterRoot = updaterRoot
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/lifecycle/checkpoint", nil)
-	request.Header.Set("X-Authenticated-User", "owner-checkpoint")
-	request.Header.Set("X-Authenticated-Computer", computerID)
-	response := httptest.NewRecorder()
-	NewAPIHandler(rt).HandleComputersRouter(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("eligible checkpoint status=%d body=%s", response.Code, response.Body.String())
-	}
-	var report CheckpointBindReport
-	if err := json.Unmarshal(response.Body.Bytes(), &report); err != nil {
-		t.Fatal(err)
+	report, err := rt.BindCheckpointRestoreSet(context.Background(), computerID)
+	if err != nil {
+		t.Fatalf("eligible checkpoint: %v", err)
 	}
 	if !report.CheckpointEligible || report.ReleaseDigest != digest || report.FrontendIdentity != identity {
 		t.Fatalf("unexpected checkpoint bind %#v", report)

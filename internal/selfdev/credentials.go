@@ -749,3 +749,14 @@ func (r PlatformKeyResolver) ResolveReceiptKey(domain, computerID, keyID string,
 	}
 	return append(ed25519.PublicKey(nil), r.PublicKey...), nil
 }
+
+// ListCheckpoints reads this computer's checkpoint listing, newest first.
+func (g *GuestCredentials) ListCheckpoints(ctx context.Context, computerID string, limit int) (selfdevprotocol.CheckpointList, error) {
+	return selfdevprotocol.CheckpointList{}, fmt.Errorf("not implemented")
+}
+
+// FetchCheckpointByDigest returns one published checkpoint with its receipt,
+// verified against the platform-control key, or nil when there is none.
+func (g *GuestCredentials) FetchCheckpointByDigest(ctx context.Context, computerID, checkpointDigest string) (*selfdevprotocol.CheckpointResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}

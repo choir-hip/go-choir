@@ -128,13 +128,15 @@ func TestImportResidueSnapshotUsesDedicatedTimeout(t *testing.T) {
 	}
 }
 
-func TestCheckpointUsesDedicatedTimeout(t *testing.T) {
+// Restore keeps the dedicated long budget (the manual checkpoint bind that
+// shared it is deleted: docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4).
+func TestRestoreUsesDedicatedTimeout(t *testing.T) {
 	var requests int
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		time.Sleep(50 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "published_checkpoint": false})
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "witness_matched": true})
 	}))
 	defer autoputer.Close()
 
@@ -152,18 +154,16 @@ func TestCheckpointUsesDedicatedTimeout(t *testing.T) {
 
 	handler, privateKey, _, _ := testProxyEnvWithAuthStore(t)
 	handler.vmctlClient = vmctl.NewClient(ownership.URL)
-	// Ordinary routes have a short budget; checkpoint must use the dedicated
-	// long budget or this request would fail before the backend completes.
 	handler.autoputerHTTP = &http.Client{Timeout: 10 * time.Millisecond}
 	handler.replayAutoputerHTTP = &http.Client{Timeout: 500 * time.Millisecond}
 
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/checkpoint", strings.NewReader("{}"))
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/lifecycle/restore", strings.NewReader("{}"))
 	request.Header.Set("Content-Type", "application/json")
 	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-user")})
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
 	if response.Code != http.StatusOK {
-		t.Fatalf("checkpoint status=%d body=%s", response.Code, response.Body.String())
+		t.Fatalf("restore status=%d body=%s", response.Code, response.Body.String())
 	}
 	if requests != 1 {
 		t.Fatalf("upstream requests=%d, want 1", requests)

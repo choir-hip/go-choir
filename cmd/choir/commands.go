@@ -432,7 +432,17 @@ func buildRegistry() []*command {
 		computerGet("replay-completeness", "Capture live-versus-event-replay state evidence", "/self-development/replay-completeness", selfDevRead),
 		computerPost("replace-workspace", "Quarantine the VM-local workspace onto current DDL", "/lifecycle/replace-workspace", nil, true),
 		ownerAct(computerCheckpointed("rematerialize-from-tape", "Rebuild VM-local state from the event tape", "/lifecycle/rematerialize-from-tape", nil)),
-		computerPost("checkpoint", "Bind a restore-set checkpoint or refuse live-only/underivable SPA", "/lifecycle/checkpoint", map[string]any{}, false),
+		{
+			path: []string{"computer", "checkpoints"}, summary: "List the computer's checkpoints with the host's verdict on each, or fetch one for restore",
+			params: []param{
+				computerParam(),
+				pStr("digest", "Fetch this checkpoint (with its receipt) instead of listing; the output is a restore --checkpoint-file operand"),
+			},
+			usage:  "--computer is required",
+			scopes: lifecycle, readOnly: true,
+			handler: func(x *call) (any, error) { return nil, fmt.Errorf("not implemented") },
+		},
+		ownerAct(computerPost("resume-checkpoints", "Reopen the automatic checkpoint cadence a crashed bind closed", "/lifecycle/resume-checkpoints", nil, false)),
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
 		ownerAct(computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"})),
 		ownerAct(computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true)),
