@@ -228,9 +228,13 @@ func TestHostRefusesATreePatchOutsideTheRoot(t *testing.T) {
 func TestHostRefusesSymlinksSubmodulesAndGitattributes(t *testing.T) {
 	f := newFixture(t)
 	for name, e := range map[string]map[string]entry{
-		"symlink":        {testRoot + "/link": {"120000", "../../app.css"}},
-		"submodule":      {testRoot + "/sub": {"160000", f.base}},
-		"gitattributes":  {testRoot + "/.gitattributes": {"100644", "*.svelte filter=x\n"}},
+		"symlink":       {testRoot + "/link": {"120000", "../../app.css"}},
+		"submodule":     {testRoot + "/sub": {"160000", f.base}},
+		"gitattributes": {testRoot + "/.gitattributes": {"100644", "*.svelte filter=x\n"}},
+		// Review 274: a case variant is the same file on a case-insensitive
+		// checkout (macOS, Windows), so the ban ignores case.
+		"GITATTRIBUTES":  {testRoot + "/.GITATTRIBUTES": {"100644", "*.svelte filter=x\n"}},
+		"Gitmodules":     {testRoot + "/lib/.GitModules": {"100644", "[submodule \"x\"]\n"}},
 		"nested symlink": {testRoot + "/lib/link": {"120000", "/etc/passwd"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -504,5 +508,25 @@ func TestOutsideRootAndDiffPaths(t *testing.T) {
 	paths, err := DiffPaths(context.Background(), f.repo, f.base, full)
 	if err != nil || strings.Join(paths, ",") != "frontend/src/app.css,"+testRoot+"/App.svelte" {
 		t.Fatalf("diff paths = %v %v", paths, err)
+	}
+}
+
+// Review 274 F8: no git this package runs may fetch a missing object from a
+// promisor remote (a partial clone of the deploy tree): a missing object is
+// a refusal, never a network call. A fake git on PATH prints the
+// environment it was given.
+func TestGitNeverFetchesLazily(t *testing.T) {
+	bin := t.TempDir()
+	script := "#!/bin/sh\nenv\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := gitRun(context.Background(), t.TempDir(), nil, nil, "status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains("\n"+string(out), "\nGIT_NO_LAZY_FETCH=1\n") {
+		t.Fatalf("git ran without GIT_NO_LAZY_FETCH=1:\n%s", out)
 	}
 }

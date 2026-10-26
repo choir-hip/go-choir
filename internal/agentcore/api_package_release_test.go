@@ -34,7 +34,10 @@ import (
 //	G3   the draft's tree_patch carries a path outside the root, or the
 //	     draft does not pass the host's own checks on the guest's base;
 //	G4   the draft writes (it is GET only);
-//	G5   an added secret is drafted.
+//	G5   an added secret is drafted;
+//	L1b  the operation just before this one left no projection ref, and an
+//	     older ref stands in for the source before (review 274 F2): the
+//	     diff would carry the skipped operation's change inside the root.
 
 const draftRoot = "frontend/src/packages/reader"
 
@@ -215,10 +218,13 @@ func TestPackageDraftNeedsTheSettingAndAnAppliedOperation(t *testing.T) {
 
 func TestPackageDraftRefusesAMixedOperationNamingItsPaths(t *testing.T) {
 	w := newDraftWorld(t)
-	w.operation("op-mixed", selfdev.StateApplied, map[string]string{
+	mixed := w.operation("op-mixed", selfdev.StateApplied, map[string]string{
 		draftRoot + "/App.svelte": "<p>v2</p>\n",
 		"frontend/src/app.css":    "body { color: red }\n",
 	})
+	// The projection left op-mixed's ref, so the operation after it is
+	// measured from it (without one it would refuse first, see L1b).
+	projectApplied(t, w.repo, w.base, "op-mixed", mixed)
 	got := wantDraftReason(t, w.draft("op-mixed", nil), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
 	if !strings.Contains(got.Error, "frontend/src/app.css") || strings.Contains(got.Error, draftRoot+"/App.svelte") || !strings.Contains(got.Error, "choir platform publish") {
 		t.Fatalf("L15 refusal = %q, want the outside path named and the platform proposal pointed to", got.Error)
@@ -288,6 +294,30 @@ func TestPackageDraftRefusesKindsAndSecrets(t *testing.T) {
 	withKinds := strings.Replace(draftManifest, `"kinds": []`, `"kinds": [{"kind": "choir.app.reader.note"}]`, 1)
 	w.operation("op-kinds", selfdev.StateApplied, map[string]string{draftRoot + "/choir-package.json": withKinds})
 	wantDraftReason(t, w.draft("op-kinds", nil), http.StatusUnprocessableEntity, pkgrelease.ReasonKindsNeedPlatform)
+	// The secret on its own computer: after op-kinds without a ref, the
+	// draft would refuse first (L1b).
+	w = newDraftWorld(t)
 	w.operation("op-secret", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "GITHUB_TOKEN=ghp_" + strings.Repeat("A", 36) + "\n"})
 	wantDraftReason(t, w.draft("op-secret", nil), http.StatusUnprocessableEntity, pkgrelease.ReasonSecretFound)
+}
+
+func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
+	w := newDraftWorld(t)
+	// op-1 changed the reader and the shell and left its projection ref.
+	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
+	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	// op-2 changed the reader again; the projection never left its ref.
+	w.operation("op-0002", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"})
+	// op-3 changes the reader once more (cumulative from the stack base).
+	w.operation("op-0003", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
+
+	// The reader at op-1 is the track head. Measured from op-1's ref, op-3
+	// would carry op-2's unpublished change to the reader as its own.
+	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
+	got := wantDraftReason(t, w.draft("op-0003", url.Values{"head_release_id": {strings.Repeat("f", 64)}, "head_tree": {headTree}}), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
+	if !strings.Contains(got.Error, "op-0002") {
+		t.Fatalf("L1b refusal does not name the operation without a ref: %q", got.Error)
+	}
+	// And with no head: the base cannot stand in either.
+	wantDraftReason(t, w.draft("op-0003", nil), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
 }
