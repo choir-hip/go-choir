@@ -36,3 +36,19 @@ if not, bump to 6.18.58 or newer.
 Issues #72 and #79 say Firecracker is behind (1.15.1 and 1.16.1 to 1.17.0); the
 host has run 1.17.0 since 1fc348938. The two Firecracker advisories in #73
 (CVE-2026-5747, CVE-2026-1386) need a check that 1.17.0 carries their fixes.
+
+## Update 13:2x: the kernel and Firecracker items are clear
+
+A read-only check against NVD, the CVE.org record API, the Debian tracker,
+cdn.kernel.org changelogs and the Firecracker advisories found 6.18.57 fixed for
+all seven: CVE-2025-39964 (AF_ALG, fixed in mainline 6.17, so in the 6.18 base),
+CVE-2026-53266 (ebt_snat, fixed in 6.18.36), and the five pre-2024 entries (each
+fix in v6.18 by tag containment). Both kernel CNA records exist; the watch's
+"no CNA record" lookup missed them, so issue #73's S0 premise is wrong. Firecracker
+1.17.0 is past both advisories (CVE-2026-5747 fixed in 1.14.4/1.15.1 and 1.16.0;
+CVE-2026-1386 fixed in 1.13.2/1.14.1 and 1.15.0); Choir does use virtio-pci
+(`--enable-pci` on every launch) and the jailer, so both applied and both are
+fixed. Remaining: the watch's CVE lookup should read the CVE.org record API; issues
+#72, #73 and #79 can be closed with this evidence (owner's repository; left for
+the owner); 6.18.58 is optional hygiene for a maintenance window
+(`nix/kernel-security-floor`, then `nix flake update nixpkgs-kernel`).
