@@ -102,7 +102,8 @@ type CheckpointRequest struct {
 	// (DepositModeRetained or DepositModeUpcast; absent on checkpoints bound
 	// before the field existed). The host's verdict needs it: its rebuild
 	// always upcasts, so a mismatch against a retained store is not proof
-	// that the rows are underivable (residual R1).
+	// that the rows are underivable (residual R1). It is not part of the
+	// checkpoint digest (CheckpointFromRequest).
 	DepositMode string `json:"deposit_mode,omitempty"`
 }
 
@@ -261,7 +262,14 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 	default:
 		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: unknown deposit mode %q", request.DepositMode)
 	}
-	canonical, err := computerevent.CanonicalJSON(request)
+	// The deposit mode is advisory metadata for the host's verdict, not part of
+	// what the checkpoint commits to: the digest is of the request without it,
+	// so a guest that predates the field (and drops it on decode) computes the
+	// same digest, and a rollback below the field keeps every checkpoint
+	// restorable (review 329). It stays in the stored request.
+	committed := request
+	committed.DepositMode = ""
+	canonical, err := computerevent.CanonicalJSON(committed)
 	if err != nil {
 		return Checkpoint{}, nil, err
 	}

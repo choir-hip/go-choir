@@ -366,6 +366,12 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
+	// The host's early word comes before anything is written: a refused
+	// restore leaves no restore intent on the tape.
+	if err := h.rt.refuseNotDerivableCheckpoint(r.Context(), computerID, request.Checkpoint); err != nil {
+		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
+		return
+	}
 	if err := h.rt.appendRestoreIntent(r.Context(), computerID, request.Checkpoint); err != nil {
 		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
 		return

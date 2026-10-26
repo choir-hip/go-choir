@@ -1752,6 +1752,18 @@ in
         # computer: empty the list and redeploy (it cold boots into
         # observe); the image line set to off does not override it.
         "VM_CAPSULE_TUNNEL_ENFORCE_ONLY=computer-9648031f92e131adc1fb65ec455c5903"
+        # Automatic checkpoint cadence (X1 slice 3,
+        # internal/vmmanager/checkpoint_cadence.go): the guest compiles it off;
+        # the computers named here run it, every
+        # VM_CHECKPOINT_CADENCE_EVERY_EVENTS events (default 2500) or
+        # VM_CHECKPOINT_CADENCE_EVERY (default 60m). The live extract a bind makes
+        # holds the computer's appends for a time unmeasured on the paper (design
+        # R2): name ONE computer, read last_bind_millis in
+        # `choir computer checkpoints`, widen only then. Empty: none. Never "*" or
+        # class:, and not the paper until measured. A named computer cold boots
+        # once (boot arguments are in the launch-config hash). Rollback: empty
+        # the list and redeploy; the cadence is off at the next launch.
+        "VM_CHECKPOINT_CADENCE_ONLY="
         # Data drive discard (RES-16; docs/problems/guest-data-image-never-
         # trims-2026-10-20.md, docs/problems/node-b-disk-fills-from-the-paper-
         # data-image-2026-10-22.md). Every computer gets virtio-blk discard on
