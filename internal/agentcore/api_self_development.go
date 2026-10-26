@@ -221,6 +221,14 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.releaseDraft(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
+	case len(parts) == 5 && parts[1] == "packages" && parts[2] == "operations" && parts[4] == "release-draft":
+		// Library S2: the package release this computer would publish; read
+		// only.
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.packageReleaseDraft(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "release-witness":
 		// S6-0: the joined release witness for any operation in any state;
 		// a projection of the tape, read only.

@@ -194,6 +194,12 @@ func DefaultRegistry() *Registry {
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
 		// executable bytes; the patch lives in the host content store.
 		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "release.Record"},
+		// The Choir Library (S2, docs/design/library-package-propagation-2026-10-26.md
+		// section 13): a package release, one package's own change as source,
+		// immutable; and a record's listing, one object per version, naming its
+		// predecessor. corpusd writes both, on the owner's act.
+		{Kind: "choir.package_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "pkgrelease.Record"},
+		{Kind: "choir.release_listing", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "pkgrelease.Listing"},
 	} {
 		r.RegisterKind(k)
 	}

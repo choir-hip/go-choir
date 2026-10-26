@@ -255,6 +255,11 @@ func (h *Handler) ownedComputerURL(w http.ResponseWriter, r *http.Request, authR
 }
 
 func (h *Handler) guestJSON(ctx context.Context, guestURL, method, path string, authResult *AuthResult, computerID string, body []byte) (int, []byte, error) {
+	return h.guestJSONLimit(ctx, guestURL, method, path, authResult, computerID, body, 4<<20)
+}
+
+// guestJSONLimit is guestJSON reading at most limit bytes of the answer.
+func (h *Handler) guestJSONLimit(ctx context.Context, guestURL, method, path string, authResult *AuthResult, computerID string, body []byte, limit int64) (int, []byte, error) {
 	target, err := joinBasePath(guestURL, strings.SplitN(path, "?", 2)[0])
 	if err != nil {
 		return 0, nil, err
@@ -283,11 +288,17 @@ func (h *Handler) guestJSON(ctx context.Context, guestURL, method, path string, 
 		return 0, nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	raw, err := io.ReadAll(io.LimitReader(response.Body, limit))
 	return response.StatusCode, raw, err
 }
 
 func (h *Handler) corpusdCall(ctx context.Context, method, path, contentType string, body []byte) (int, []byte, error) {
+	return h.corpusdCallHeaders(ctx, method, path, contentType, nil, body)
+}
+
+// corpusdCallHeaders is corpusdCall with extra request headers (the
+// owner-act receipt).
+func (h *Handler) corpusdCallHeaders(ctx context.Context, method, path, contentType string, headers map[string]string, body []byte) (int, []byte, error) {
 	base, err := joinBasePath(h.cfg.CorpusdURL, strings.SplitN(path, "?", 2)[0])
 	if err != nil {
 		return 0, nil, err
@@ -301,6 +312,9 @@ func (h *Handler) corpusdCall(ctx context.Context, method, path, contentType str
 	}
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
+	}
+	for name, value := range headers {
+		request.Header.Set(name, value)
 	}
 	hostauth.MarkInternal(request)
 	client := h.corpusd
