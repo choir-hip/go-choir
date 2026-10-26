@@ -33,15 +33,19 @@ let
   # from, and wakes snapshots onto, those directories. Off: no release is
   # made, launches are byte-identical to today's, every release-bound snapshot
   # refuses (R0), and the retention job prunes all but current and previous.
-  # S6 turns it on, after S5 and the R9 floor measurement. Rollback: false.
-  snapshotReleaseRetain = false;
+  # S6: on since 2026-10-26 (owner: "I don't want to wait a week for
+  # snapshots to survive a deploy"). The R9 floor-share wait was a worth-it
+  # measurement, not a safety gate; it continues as a record
+  # (docs/evidence/density-d2-floor-share-2026-10-26.md). Rollback: false.
+  snapshotReleaseRetain = true;
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
   # commit's copy of scripts/check-guest-security-epoch over deployed..target,
   # a control the target commit cannot edit (the in-repo CI step can be
-  # skipped by the commit it judges; review 331). Ships off: observe first,
-  # then enforce, each with a staging proof. Rollback: "off".
-  ciGateEpochCheck = "off";
+  # skipped by the commit it judges; review 331). Observe from 2026-10-26
+  # with D2 on; enforce after one deploy that observes no false refusal.
+  # Rollback: "off".
+  ciGateEpochCheck = "observe";
   # Release materialization and retention (scripts/node-b-guest-release-*;
   # tests: scripts/test-node-b-guest-release-retention.sh).
   guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
@@ -52,6 +56,9 @@ let
   guestReleaseRetention = pkgs.writeShellScript "go-choir-guest-release-retention"
     ''
       export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gawk pkgs.gnugrep pkgs.jq pkgs.btrfs-progs ]}:$PATH"
+      # R7 (2026-10-26): a release is 3.75 GiB, over the design's 3 GiB line,
+      # so the cap is 4, not the script's 8 (about 15 GiB exclusive at worst).
+      export GO_CHOIR_GUEST_RELEASE_KEEP_MAX="''${GO_CHOIR_GUEST_RELEASE_KEEP_MAX:-4}"
       ${builtins.readFile ../scripts/node-b-guest-release-retention}
     '';
   # Auth signing material lives in this writable runtime directory.
