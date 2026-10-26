@@ -166,7 +166,7 @@ if [ "$PHASE" = all ] || [ "$PHASE" = rebase ]; then
   done
   [ -n "$ASSIGN" ] || { log "no rebase assignment"; exit 1; }
   log "rebase assignment $ASSIGN"
-  cli lifecycle capsule-evidence "$mtraj" --assignment "$ASSIGN" > "$OUT/capsule-evidence.json" || true
+  cli lifecycle capsule-evidence --attempt 1 "$mtraj" "$ASSIGN" > "$OUT/capsule-evidence.json" || true
   # Step 5: wait for the rebase candidate and read its patch.
   opR=""; for i in $(seq 1 160); do opR=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty'); [ -n "$opR" ] && [ "$opR" != "$opAid" ] && break; sleep 15; done
   [ -n "$opR" ] || { log "no rebase candidate"; exit 1; }
@@ -213,10 +213,14 @@ if [ "$PHASE" = all ] || [ "$PHASE" = conflict ]; then
   mtraj=$(api GET "/api/texture/documents/$MASTER" | jq -r .trajectory_id)
   known() { cli self-dev list | jq -r '[(.operations // .)[] | .operation_id] | .[]' | sort; }
   known > "$OUT/ops-before-a2.txt"
-  A2=$(cli texture create --title "U4 proof A2: conflict file" --content "Create the new file $A2 containing exactly the line 'U4 proof A2 from the owner'. Build, test and freeze it." --request-id "u4-proof-A2-$(date +%s)" | jq -r .doc_id)
+  # A2_DOC reuses a document a previous run already opened.
+  A2=${A2_DOC:-}; [ -n "$A2" ] || A2=$(cli texture create --title "U4 proof A2: conflict file" --content "Create the new file $A2FILE containing exactly the line 'U4 proof A2 from the owner'. Build, test and freeze it." --request-id "u4-proof-A2-$(date +%s)" | jq -r .doc_id)
   log "document A2=$A2"
+  # Select A2's own candidate by its trajectory: step 6's ordinary document
+  # (U4 proof Z) can freeze a candidate in the same window.
+  a2traj=$(api GET "/api/texture/documents/$A2" | jq -r .trajectory_id)
   opA2=""; for i in $(seq 1 160); do
-    opA2=$(cli self-dev list --state awaiting_approval | jq -r '[(.operations // .)[]] | sort_by(.created_at) | last | .operation_id // empty')
+    opA2=$(cli self-dev list --state awaiting_approval | jq -r --arg t "$a2traj" '[(.operations // .)[] | select(.trajectory_id == $t)] | sort_by(.created_at) | last | .operation_id // empty')
     [ -n "$opA2" ] && ! grep -qx "$opA2" "$OUT/ops-before-a2.txt" && break; opA2=""; sleep 15
   done
   [ -n "$opA2" ] || { log "no candidate for A2"; exit 1; }
