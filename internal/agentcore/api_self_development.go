@@ -302,7 +302,18 @@ func (h *APIHandler) listSelfDevelopmentOperations(w http.ResponseWriter, r *htt
 		return
 	}
 	slices.Reverse(operations)
-	writeAPIJSON(w, http.StatusOK, map[string]any{"operations": operations})
+	listing := map[string]any{"operations": operations}
+	// The route slot's current generation is what a rollback's
+	// expected_route_generation must equal. It is read through the resolver
+	// the rollback check uses, and left out when the route does not resolve.
+	if h.rt.selfdevRoute != nil {
+		if slotID, slotErr := routeledger.RouteSlotID(h.rt.selfdevRouteOwnerID, h.rt.selfdevRouteDesktopID); slotErr == nil {
+			if route, routeErr := h.rt.selfdevRoute.ResolveComputerVersionRoute(r.Context(), slotID); routeErr == nil && route.Slot.Generation != 0 {
+				listing["route_generation"] = route.Slot.Generation
+			}
+		}
+	}
+	writeAPIJSON(w, http.StatusOK, listing)
 }
 
 func operationReceiptProjection(operation selfdev.Operation) map[string]any {
