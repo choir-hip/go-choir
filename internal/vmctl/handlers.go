@@ -71,6 +71,14 @@ type vmctlHealthResponse struct {
 	// Admission is the start admission ledger: reservations for starts in
 	// flight and the recent decisions with their inputs.
 	Admission HostAdmissionSummary `json:"admission"`
+	// Memory is what vmctl does about guest memory beyond admission: the
+	// guest page cache return trigger and its recent acts (density D6).
+	Memory vmctlMemoryHealth `json:"memory"`
+}
+
+// vmctlMemoryHealth is the memory block of vmctl's /health.
+type vmctlMemoryHealth struct {
+	CacheReturn GuestCacheReturnSummary `json:"cache_return"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -242,6 +250,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Warmness:        h.registry.WarmnessSummary(idleEligible),
 		Processes:       h.registry.LastProcessReconcile(),
 		Admission:       h.registry.HostAdmissionSummary(),
+		Memory:          vmctlMemoryHealth{CacheReturn: h.registry.GuestCacheReturnSummary()},
 	})
 }
 

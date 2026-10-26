@@ -118,6 +118,17 @@ func main() {
 	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s make_room=%s make_room_max_victims=%d make_room_settle=%s",
 		registry.HostAdmissionSummary().Mode, admission.DefaultNeedBytes>>20, admission.MinNeedBytes>>20, admission.HeadroomBytes>>20, admission.Settle,
 		admission.MakeRoom, admission.MakeRoomMaxVictims, admission.MakeRoomSettleWait)
+	// Density D6: guests return cold page cache to the host. Off unless
+	// VMCTL_GUEST_CACHE_RETURN is exactly observe or active; the sweeper
+	// carries the idle trigger, so a non-off switch starts it.
+	cacheReturn := guestCacheReturnConfigFromEnv()
+	registry.SetGuestCacheReturnConfig(cacheReturn)
+	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s",
+		cacheReturn.Mode, strings.Join(cacheReturn.Only, ","), strings.Join(cacheReturn.Triggers, ","), cacheReturn.Scope,
+		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget)
+	if cacheReturn.Mode != vmctl.GuestCacheReturnOff {
+		idleSweeperEnabled = true
+	}
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -751,6 +762,20 @@ func hostAdmissionConfigFromEnv() vmctl.HostAdmissionConfig {
 		}
 	}
 	return cfg
+}
+
+// guestCacheReturnConfigFromEnv reads the D6 switch and its bounds. Only the
+// exact words observe and active enable it; rollback is off.
+func guestCacheReturnConfigFromEnv() vmctl.GuestCacheReturnConfig {
+	return vmctl.GuestCacheReturnConfigFromValues(vmctl.GuestCacheReturnValues{
+		Mode:           os.Getenv("VMCTL_GUEST_CACHE_RETURN"),
+		Only:           os.Getenv("VMCTL_GUEST_CACHE_RETURN_ONLY"),
+		Triggers:       os.Getenv("VMCTL_GUEST_CACHE_RETURN_TRIGGERS"),
+		Scope:          os.Getenv("VMCTL_GUEST_CACHE_RETURN_SCOPE"),
+		Idle:           os.Getenv("VMCTL_GUEST_CACHE_RETURN_IDLE"),
+		PressureIdle:   os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_IDLE"),
+		PressureBudget: os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET"),
+	})
 }
 
 func retentionPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {
