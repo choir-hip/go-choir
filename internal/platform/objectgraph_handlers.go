@@ -239,15 +239,17 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
+	// The release kinds are refused before the object is validated: a guest
+	// learns nothing about what a well-formed forgery would need.
+	if status, msg := genericReleaseWriteRefusal(r, obj.ObjectKind); status != 0 {
+		writeJSON(w, status, apiError{Error: msg})
+		return
+	}
 	if err := validateObject(obj); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
 	if status, msg := genericCaptureWriteRefusal(r, obj.ObjectKind, obj.Body); status != 0 {
-		writeJSON(w, status, apiError{Error: msg})
-		return
-	}
-	if status, msg := genericReleaseWriteRefusal(r, obj.ObjectKind); status != 0 {
 		writeJSON(w, status, apiError{Error: msg})
 		return
 	}

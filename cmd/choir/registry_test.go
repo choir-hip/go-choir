@@ -47,7 +47,10 @@ import (
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
-	"computer restore", "help", "mcp", "precommit import-ledger",
+	"computer restore", "help", "mcp",
+	// Owner act (Library S2): publishing a package release.
+	"package publish",
+	"precommit import-ledger",
 	// Owner acts (P7/P8): publishing and adopting a release.
 	"release adopt", "release publish", "self-dev approve",
 	"self-dev mode set", "self-dev wait", "texture watch", "trace export", "version",
