@@ -23,6 +23,7 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/eventtablegrant"
+	"github.com/yusefmosiah/go-choir/internal/guestmem"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
@@ -231,6 +232,11 @@ type Runtime struct {
 	// hibernate is the S3 snapshot-hibernate work admission fence
 	// (hibernate.go).
 	hibernate hibernateFence
+	// cacheReturn runs the host-triggered page cache return act
+	// (memory_cache_return.go); cacheReturnReads overrides /health's store
+	// reads for its busy rule (tests).
+	cacheReturn      guestmem.Reclaimer
+	cacheReturnReads func(ctx context.Context, budget time.Duration) healthStoreReads
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
