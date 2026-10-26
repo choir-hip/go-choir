@@ -368,3 +368,74 @@ Residuals, named and not fixed here:
 - **R312-9** D4 `wake` charges the previous start's settled RSS; a wake that
   settled low followed by a deploy-voided snapshot and a cold boot
   undercharges. The staging proof must exercise that transition.
+
+## D2. A platform deploy voids every hibernation snapshot
+
+### Problem
+
+Every deploy that runs a NixOS switch builds a new guest image, because the
+commit is stamped into it (`buildCommit`, `build.json`, the guest manifest,
+the Go `-X` ldflags). The guest is launched from stable paths under
+`/var/lib/go-choir/guest`, a symlink the switch repoints to the new image.
+A hibernated computer's snapshot therefore fails its launch-config hash and
+its bound-file identity at the next wake, and the wake cold boots. In the
+week to 2026-10-26, 13 snapshot hibernates produced 2 resumes and 5
+`launch_config_mismatch` fallbacks; the real incompatibility is only the
+store disk (the guest's page cache and file-backed text describe the old
+erofs blocks), and most of the other checks are conservative. Two defects of
+today's code ride along (H1, H6 in the design; their own record is
+`docs/problems/guest-image-switch-window-kernel-params-and-bound-identity-2026-10-26.md`).
+Evidence and the mechanism with citations: design §1.
+
+### Design
+
+[docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md](../design/density-d2-snapshots-survive-deploys-2026-10-26.md)
+(tier 2 reviews 306 and 313, answered in its §12). Release directories keep
+the old bytes; a snapshot resumes onto its own release when the floor
+digest, security epoch and guest ABI are unchanged and the release is
+inside the support window, then the computer is updated at its next idle
+moment through the existing planned, marker-backed refresh. The switch
+(`snapshotReleaseRetain`) stays off until S5 has landed and the deploy-level
+floor share (R9) is at least 50%. Slices S1, S1b, S1c are built first; S1b
+and S5 repair defects of today's code and land whether or not S6 ever does.
+
+### Failure modes (each pinned by a test or a reading in the design)
+
+| # | Failure | Answer |
+|---|---|---|
+| M1 | Resume onto a deleted or overwritten release | R1 `release_missing`; bound-file identity (S3 test 5). Retention never deletes a running or young release by any rule, the support-window rule included, and deleting a snapshot's release only cold boots it. |
+| M2 | Resume below the floor or the security epoch | R3 and R4, compared at every wake with the current release. S3 test 4. |
+| M3 | A behind computer is never refreshed | Every release-bound resume enrolls; the sweep resolves the current release each pass, with a 1-minute sweep and a 2-minute user-idle gate. The entry survives a vmctl restart, not a hibernate; the next wake re-validates and re-enrolls. A computer that never goes idle is the residual in §6.7. The CI refresh at the next deploy also reaches it. Health lists `behind`. |
+| M4 | Disk growth from retained releases | Kept: current, previous, young, in use; the cap (8); deletion past the support window. R7 sizes a release before S6. Logged per run. The snapshot budget (`VM_SNAPSHOT_BUDGET_GIB=48`) is separate and unchanged. |
+| M5 | Jailer paths | The source is the release path, so the shared copy is stable per release (§4.2). `confinement_mismatch` and the uid checks are kept. S3 test 8. |
+| M6 | Snapshot vault | No vault under the jailer (snapshot_lifecycle.go:131); vault metas are counted in `in_use` (S3 test 10). |
+| M7 | Credential delivery on resume | Unchanged. An old guest that cannot install the new envelope fails the handshake and cold boots. |
+| M8 | A vmctl restart resumes something | Nothing new runs at boot. Reattach reads the launch record. The pending set only asks guests for planned refreshes. |
+| M9 | The switch races a launch | Launch resolves the link once and binds the resolved release paths. A release under 2 h old and the previous one are never pruned. |
+| M10 | A reattached VM records the wrong release (today's `m.cfg` paths) | §4.3. With no launch record, the next snapshot is legacy, which is safe. S3 test 7. |
+| M11 | `kernel-params` goes stale between the NixOS switch and the vmctl restart (H1) | With the switch on, every launch reads `kernel-params` from the resolved release. S3 test 2. |
+| M12 | A planned-restart marker is captured in a snapshot, mark-then-fence or fence-then-mark | S5 item 1, both orderings; S6 waits for S5. |
+| M13 | Silent host-guest protocol skew | R5 `guest_abi`, plus the fail-closed handshake. The same skew already exists for deferred computers. |
+| M14 | Floor list drift: a floor dependency missing from the digest, including the build recipe | `scripts/check-guest-floor-paths` in CI. `flake.nix` and `flake.lock` are listed whole. The `guest-floor-commit-free` flake check. Over-approximation is safe. |
+| M15 | CPU features change under a resumed guest | S5 item 2: every core, and an unknown fingerprint refuses a release-bound meta. |
+| M16 | Rollback loads wrong bytes | Off: R0 refuses. Revert: the launch hash mismatches (§7 S3 rollback). Neither path loads. |
+| M17 | A behind computer is hibernated again before its refresh (idle sweep, make-room) | Allowed: the snapshot names the old release, which stays in use. Each cycle stays bounded by R6 and the max age. |
+| M18 | The update restarts a computer in front of its user | The user-idle gate (S4). The CI refresh at deploy time keeps today's semantics for every active computer, unchanged by D2. |
+| M19 | A security fix outside the floor ships without an epoch bump | Refused by the CI check (§6.6, S1c) unless a reviewed "no security effect" marker is wrong; then M25. |
+| M20 | A hibernate and wake inside the switch-to-restart window load a legacy guest against the new erofs (H6) | S1b: the launch record's `image_target` and `image_moved_since_launch`; kernel parameters read at each launch. Release-bound launches are immune. S1b tests 2 and 4. |
+| M21 | A wake validates just before the link moves, loads the old release with `Behind=false`, and is never refreshed | Every release-bound resume enrolls; the sweep resolves the current release itself (§5.1). S4 test 2. |
+| M22 | Materializing a release fails the NixOS switch | A separate activation snippet in a subshell that checks every step and always exits 0 (§4.1). S2 test. |
+| M23 | R6 refuses snapshots of the current release after a quiet week, or after a rollback makes an old release current again | R6 exempts the current release. S3 test 4. |
+| M24 | Retention deletes a vault snapshot's release while the vault is unreadable | The endpoint reports `complete: false`; the script then deletes only past-window releases not running. S2 and S3 tests. |
+| M25 | A "no security effect" marker is wrong | A reviewed claim the check cannot verify (§6.6). Bounded as in §6.7: the computer refreshes at its first idle moment (user away 2 minutes, guest not busy); any later deploy's refresh asks again at its first not-busy minute; and a later raise or floor move refuses its snapshot at the next wake. No hard time bound for a computer that is never idle. |
+
+### Protected surfaces, evidence, rollback
+
+- **Protected surfaces:** VM launch and hibernate (vmmanager), snapshot
+  validation, the boot path, deploy activation (`nix/node-b.nix`), the CI
+  deploy gate (S1c). S1 is orange, S1b and S2 to S5 are red, S1c is yellow.
+- **Evidence:** the staging proof is design §9 (P0 baseline, P1 acceptance),
+  run by FP0 on d@e or a test account, never b@c, the paper, public_platform
+  or the owner's computers.
+- **Rollback:** S1, S1b and S1c are `git revert`; S1c alone is "remove the CI
+  step". The switch is one let-binding (`snapshotReleaseRetain = false`).
