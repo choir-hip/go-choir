@@ -12,7 +12,7 @@
  *   C2 The continue submit does not carry continue_doc_id for that document,
  *      or changes the owner's text.
  *   C3 A continue opens a new Texture window instead of keeping the
- *      document's.
+ *      document's, or the window does not take the receipt.
  *   C4 One tap does not switch to "New document", or the override still
  *      sends continue_doc_id, or it leaks to the next document in view.
  *   C5 A chip shows, or continue_doc_id is sent, with no Texture document
@@ -161,6 +161,8 @@ test('C1 C2 C3: the chip defaults to continuing the document in view', async ({ 
 
   await expect(page.locator('[data-window][data-window-app-id="texture"]')).toHaveCount(1);
   await expect(page.locator('[data-window-tray-item][data-window-id="win-tides"]')).toHaveAttribute('data-window-tray-item-active', 'true');
+  // The window took the receipt: its desk shows as working.
+  await expect(page.locator('[data-window][data-window-app-id="texture"] [data-texture-save-status]').first()).toContainText(/Writing first draft|Revising/);
 });
 
 test('C4: one tap switches to a new document, and the override does not leak', async ({ page }) => {

@@ -56,7 +56,9 @@ proved on staging 05:49); the prompt bar does not use it.
      build on the document as it now is). The revise's own head check still
      fences a head that moves between read and commit.
    - Idempotency: the prompt bar's `command_id` is the revise's
-     `client_request_id`, so a retried submit replays one owner revision.
+     `client_request_id`, so a retried submit cannot commit a second owner
+     revision (see "Found while building" for why it is a 409, not a
+     replay).
    - Text: the owner's text, trimmed exactly as the new-document path trims
      it, is the revision's `owner_prompt` unchanged (SD-07: never retyped).
    - A desk's in-process call (empty RemoteAddr, the management desk's
@@ -120,6 +122,19 @@ proved on staging 05:49); the prompt bar does not use it.
   another app's window gets no chip.
 - The default continue is a product change on deploy for every owner; the
   chip makes it visible and one tap undoes it per send.
+
+## Found while building
+
+- A retried continue with the same `command_id` is not a replay: the
+  revise's head check answers first (the head is already the owner's
+  revision), so the retry is a 409 and nothing is committed twice. `/revise`
+  behaves the same today with the same client request id. P8's test asserts
+  the real guarantee (one revision, the retry a replay or a 409). A true
+  replay needs the revise to look up its command before the head check: a
+  change to the shared revise path, left out of this slice. The frontend
+  sends a fresh `command_id` per send, so only a transport-level retry of
+  one request can hit it, and it shows as an error after a successful
+  revise.
 
 ## Rollback
 

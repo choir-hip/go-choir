@@ -283,7 +283,11 @@ func TestPromptBarWithoutContinueCreatesNewDocument(t *testing.T) {
 	}
 }
 
-// P8: a retried submit with the same command_id replays one revision.
+// P8: a retried submit with the same command_id commits no second
+// revision. The revise it reuses does not replay a commit whose head has
+// already moved (its head check answers first, as /revise does today), so
+// the retry is a replay or a 409; either way the head stays the first
+// revision.
 func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	core, handler := testAPISetup(t)
 	s := core.Store()
@@ -298,12 +302,14 @@ func TestPromptBarContinueRetryCommitsOneRevision(t *testing.T) {
 	}
 	firstReceipt := decodeContinueReceipt(t, first)
 	retry := postPromptBar(t, handler, start.OwnerID, body, false)
-	if retry.Code != http.StatusAccepted {
+	switch retry.Code {
+	case http.StatusAccepted:
+		if receipt := decodeContinueReceipt(t, retry); receipt.RevisionID != firstReceipt.RevisionID || !receipt.Replay {
+			t.Fatalf("P8: accepted retry receipt=%+v, want a replay of %s", receipt, firstReceipt.RevisionID)
+		}
+	case http.StatusConflict:
+	default:
 		t.Fatalf("P8: retry status=%d body=%s", retry.Code, retry.Body.String())
-	}
-	retryReceipt := decodeContinueReceipt(t, retry)
-	if retryReceipt.RevisionID != firstReceipt.RevisionID || !retryReceipt.Replay {
-		t.Fatalf("P8: retry receipt=%+v, want a replay of %s", retryReceipt, firstReceipt.RevisionID)
 	}
 	doc, err := s.GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, docID)
 	if err != nil || doc.CurrentRevisionID != firstReceipt.RevisionID {

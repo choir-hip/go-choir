@@ -106,6 +106,10 @@
   let editorValue = '';
   let editorBodyDoc = null;
   let initializedKey = '';
+  // A prompt-bar continue of this document (FE-02 step 1) arrives as a
+  // receipt on the window context. The one present at mount is history (a
+  // restored desktop), so only a later receipt is followed.
+  let promptBarContinueSeen = String(appContext?.promptBarContinue?.requestId || '');
   let latestHeadRevisionId = '';
   let pendingHeadRevisionId = '';
   let newVersionAvailable = false;
@@ -490,6 +494,25 @@
   function synthStatusLabel() {
     return hasAppAgentRevision() ? 'Revising…' : 'Writing first draft…';
   }
+
+  // followPromptBarContinue treats a prompt-bar continue like this window's
+  // own revise: the desk is working, and a settled document moved to a new
+  // trajectory (F1), so the stream follows it there.
+  function followPromptBarContinue(receipt) {
+    const requestId = String(receipt?.requestId || '');
+    if (!requestId || requestId === promptBarContinueSeen) return;
+    if (!currentDoc?.doc_id || receipt.docId !== currentDoc.doc_id) return;
+    promptBarContinueSeen = requestId;
+    agentPending = true;
+    const nextTrajectoryId = String(receipt.trajectoryId || '');
+    if (nextTrajectoryId && nextTrajectoryId !== (currentDoc.trajectory_id || '')) {
+      currentDoc = { ...currentDoc, trajectory_id: nextTrajectoryId };
+      void connectDocumentStream(currentDoc.doc_id, nextTrajectoryId);
+    }
+    saveStatus = synthStatusLabel();
+  }
+
+  $: followPromptBarContinue(appContext?.promptBarContinue);
 
   function applyDocumentWorkState(doc) {
     agentPending = !!doc?.agent_revision_pending;
