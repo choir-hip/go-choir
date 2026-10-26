@@ -24,7 +24,7 @@ against a mocked backend, on the three presets at desktop and phone width (see
    the app has: empty, loading, loaded, error. A missing screenshot is a fail.
 2. **Colors come from tokens.** No hex, `rgb()` or `hsl()` literal in app CSS
    or markup; `frontend/tests/theme-contract.spec.js` is the check (it fails
-   today with 73 violations repo-wide and is not in CI). The window body is
+   today with 73 violations in frontend/src and is not in CI). The window body is
    `--choir-surface-app`. Toolbars and sidebars use `--choir-surface-pane`.
    Cards, controls, inputs and wells use `--choir-surface-card`,
    `--choir-surface-control`, `--choir-surface-input` and
@@ -88,8 +88,9 @@ against a mocked backend, on the three presets at desktop and phone width (see
     `--choir-text-subtle` fails everywhere (2.9:1 Salmon, 3.8:1 Noir, 3.6:1
     Kintsugi), so it is for decoration and disabled states only.
     `--choir-text-muted` passes (6.1, 7.6, 7.8). Text on an accent fill uses
-    `--choir-text-on-accent`; in Noir that is only 3.0:1, so keep it 14px bold
-    or larger.
+    `--choir-text-on-accent`; in Noir that is only 3.0:1, which passes only for
+    large text (at least 18.66px bold or 24px regular); smaller text on an
+    accent fill needs 4.5:1, so add or adjust a token rather than use it.
 12. **Robust layout and reviewable markup.** Grid templates match the children
     actually rendered: a conditional child (an upload bar, a hint line, an
     alert) must not push the content out of the `1fr` track. Use
@@ -185,7 +186,7 @@ which is progress. It also buried the slide in application chrome.
   backgrounds. Radii are 5, 8, 10, 11 and 12px literals, and the shadow is
   `rgb(0 0 0 / 18%)`. Arrows are Unicode. `handleStageClick` is still defined
   but no longer bound, so clicking the slide no longer advances it. All the
-  markup is on eight lines of up to 1,050 characters.
+  markup is on eight lines of up to 1,055 characters.
 - **The error state** reads "Source fetch failed (404)", and the retry
   control is a bare italic word.
 
@@ -195,7 +196,8 @@ which is progress. It also buried the slide in application chrome.
 `.active` and `.selected` inside every `.app-content` with `!important`. That
 is right for chrome and wrong for content. Add an opt-out attribute, for example
 `data-choir-content`, and exclude it from those selectors (for example
-`.app-content :is(p, small, …):not([data-choir-content] *)`). Then put it on
+`.app-content :is(p, small, …):not([data-choir-content], [data-choir-content] *)`,
+which exempts the carrier and its descendants). Then put it on
 the Reader's `.reader-sheet` and `.reader-pdf-text` and on Slides'
 `.slide-document`. Without it, any app that shows a document renders it in grey.
 This is a small shell change and should land before, or with, either app fix.
@@ -310,7 +312,8 @@ Paste-ready for a self-development request. File:
    reason ("The file was not found." for 404, "This file type is not supported
    yet." for an unknown extension), the raw detail in muted 0.78rem, and a Try
    again button.
-9. Phone, 760px container and narrower: the stage comes first and takes the
+9. Phone, at the existing `@media (max-width: 760px)` query and narrower
+   (a viewport query; `.slides-shell` has no container-type): the stage comes first and takes the
    flexible row, the filmstrip becomes a 72px horizontal strip under it, and
    then the 44px bar comes last. Make every track `minmax(0, 1fr)` so the slide
    image cannot widen the layout. All three controls stay visible at 390px.
