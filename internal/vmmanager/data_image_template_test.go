@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,18 @@ import (
 //     seed) is promoted;
 //   - lock: the global manager lock is held while the template is built,
 //     or not held while the template is cloned into the VM's directory.
+//
+// Review 267 findings, pinned before their fixes:
+//
+//   - a clone is written at data.img itself, so a crash mid-clone leaves a
+//     partial image every later boot reads as an existing one; a leftover
+//     temporary clone in the VM directory is not swept;
+//   - NewComputer persists in the tracked instance's config, so a later
+//     recover or refresh of it with a lost data.img would take the template;
+//   - prune and the temporaries sweep delete by loose prefix, so a file that
+//     is not a template or an exact temporary name is removed;
+//   - a configured but unreadable seed repo is cached as an unseeded
+//     template that prunes the seeded one.
 
 const templateTestSizeMB = 8
 
@@ -694,5 +707,208 @@ func TestDataImageTemplateWithRealTools(t *testing.T) {
 	out, err := exec.Command("debugfs", "-R", "cat /files/Source/platform/README.md", dataImg).Output()
 	if err != nil || strings.TrimSpace(string(out)) != "seed" {
 		t.Fatalf("seed not in the computer's image: %q %v", out, err)
+	}
+}
+
+// vmDirClones lists the temporary clones in a VM directory.
+func vmDirClones(t *testing.T, dataImg string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Dir(dataImg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "data.img.building-") {
+			out = append(out, e.Name())
+		}
+	}
+	return out
+}
+
+func TestDataImageTemplateCloneIsAtomicAtTheFinalName(t *testing.T) {
+	m, _ := templateManager(t, true)
+	pick := m.dataImageTemplateForBoot(VMConfig{VMID: "vm-atomic", NewComputer: true}, templateTestSizeMB)
+	if pick.Path == "" {
+		t.Fatalf("pick: %+v", pick)
+	}
+	dataImg := newDataImgPath(t, m, "vm-atomic")
+	exact := regexp.MustCompile(`^data\.img\.building-[0-9a-f]+$`)
+
+	// While the clone runs, data.img does not exist: the bytes land in a
+	// same-directory temporary that is renamed into place once synced.
+	var finalDuringClone bool
+	var tempsDuringClone []string
+	m.templateCloneFn = func(dst, src *os.File) error {
+		if _, err := os.Lstat(dataImg); err == nil {
+			finalDuringClone = true
+		}
+		tempsDuringClone = vmDirClones(t, dataImg)
+		return sparseCloneForTest(dst, src)
+	}
+	if source, err := m.prepareNewDataImage(dataImg, templateTestSizeMB, pick); err != nil || !strings.HasPrefix(source, "template") {
+		t.Fatalf("prepare: %q %v", source, err)
+	}
+	if finalDuringClone {
+		t.Fatal("data.img existed while the clone was still being written")
+	}
+	if len(tempsDuringClone) != 1 || !exact.MatchString(tempsDuringClone[0]) {
+		t.Fatalf("temporaries during the clone = %v, want one data.img.building-<hex>", tempsDuringClone)
+	}
+	if left := vmDirClones(t, dataImg); len(left) != 0 {
+		t.Fatalf("temporary clone left after the rename: %v", left)
+	}
+	if info, err := os.Stat(dataImg); err != nil || info.Size() != int64(templateTestSizeMB)*1024*1024 {
+		t.Fatalf("cloned image: %v %v", info, err)
+	}
+	if err := os.Remove(dataImg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A failed clone leaves neither the final name nor a temporary.
+	m.templateCloneFn = func(dst, src *os.File) error {
+		_, _ = dst.Write([]byte("partial"))
+		return errors.ErrUnsupported
+	}
+	if source, err := m.prepareNewDataImage(dataImg, templateTestSizeMB, pick); err != nil || !strings.HasPrefix(source, "built") {
+		t.Fatalf("fallback: %q %v", source, err)
+	}
+	if left := vmDirClones(t, dataImg); len(left) != 0 {
+		t.Fatalf("failed clone left %v", left)
+	}
+	if err := os.Remove(dataImg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A crash mid-clone (no return, no cleanup) leaves no data.img for the
+	// next boot to read as an existing image, only a temporary.
+	m.templateCloneFn = func(dst, src *os.File) error {
+		_, _ = dst.Write([]byte("partial"))
+		panic("test: process killed mid-clone")
+	}
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = m.prepareNewDataImage(dataImg, templateTestSizeMB, pick)
+	}()
+	if _, err := os.Lstat(dataImg); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a crashed clone left a data.img for the next boot to adopt: %v", err)
+	}
+	if left := vmDirClones(t, dataImg); len(left) != 1 {
+		t.Fatalf("crashed clone temporaries = %v, want the one that was in flight", left)
+	}
+
+	// The next creation is a new image: the leftover temporary is neither
+	// mistaken for data.img nor kept.
+	m.templateCloneFn = sparseCloneForTest
+	if source, err := m.prepareNewDataImage(dataImg, templateTestSizeMB, pick); err != nil || !strings.HasPrefix(source, "template") {
+		t.Fatalf("after the crash: %q %v", source, err)
+	}
+	if left := vmDirClones(t, dataImg); len(left) != 0 {
+		t.Fatalf("leftover temporary clone not swept: %v", left)
+	}
+	if info, err := os.Stat(dataImg); err != nil || info.Size() != int64(templateTestSizeMB)*1024*1024 {
+		t.Fatalf("image after the crash: %v %v", info, err)
+	}
+}
+
+func TestBootedInstanceDoesNotKeepNewComputer(t *testing.T) {
+	m, _ := templateManager(t, true)
+	m.cfg.KernelImagePath = "/nonexistent/kernel"
+	m.cfg.RootfsPath = "/nonexistent/rootfs"
+	h, _ := newFakeHostNetWithEgress(t, newFakeIPTables(t), newFakeIP(nil))
+	m.hostNet = h
+	m.firecrackerStarter = func(string, []string) error { return errors.New("test: no firecracker") }
+	if _, err := m.BootVM(VMConfig{VMID: "vm-minted", NewComputer: true}); err == nil {
+		t.Fatal("boot succeeded without firecracker")
+	}
+	m.mu.Lock()
+	inst := m.vms["vm-minted"]
+	m.mu.Unlock()
+	if inst == nil {
+		t.Fatal("no tracked instance")
+	}
+	if inst.Config.NewComputer {
+		t.Fatal("the tracked instance keeps NewComputer: a later recover or refresh with a lost data.img would clone the template")
+	}
+	// A merge of the stored config with the recover/refresh overrides is
+	// not a first creation either, whatever the stored config carried.
+	if got := mergeVMConfigOverrides(VMConfig{VMID: "vm-minted", NewComputer: true}, VMConfig{VMID: "vm-minted"}); got.NewComputer {
+		t.Fatal("mergeVMConfigOverrides carries NewComputer from the stored config")
+	}
+}
+
+func TestDataImageTemplatePruneAndSweepTouchOnlyTheirOwnNames(t *testing.T) {
+	m, _ := templateManager(t, true)
+	dir := m.dataImageTemplateDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	id, err := m.dataImageSeedIdentity(templateTestSizeMB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hex64 := strings.Repeat("a", 64)
+	stale := "data-" + hex64 + ".img"
+	staleTmp := ".building-" + id + "-0123abcd.img"
+	keep := []string{
+		"data-notes.img",
+		"data-" + strings.Repeat("a", 63) + ".img",
+		"data-" + strings.Repeat("g", 64) + ".img",
+		"data-" + hex64 + ".img.bak",
+		"data-" + hex64 + ".img.metadata.json",
+		".building-notes",
+		".building-" + id + ".img",
+		".building-" + id + "-xyz.img",
+		"unrelated.txt",
+	}
+	for _, name := range append([]string{stale, staleTmp}, keep...) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pick := m.dataImageTemplateForBoot(VMConfig{VMID: "vm-names", NewComputer: true}, templateTestSizeMB)
+	if pick.Path == "" {
+		t.Fatalf("pick: %+v", pick)
+	}
+	for _, name := range keep {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("%s is not a template or an exact temporary name and was removed: %v", name, err)
+		}
+	}
+	for _, name := range []string{stale, staleTmp} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s was not removed: %v", name, err)
+		}
+	}
+}
+
+func TestDataImageTemplateUnreadableSeedIsNotCachedAsUnseeded(t *testing.T) {
+	m, repo := templateManager(t, true)
+	pick := m.dataImageTemplateForBoot(VMConfig{VMID: "vm-seeded", NewComputer: true}, templateTestSizeMB)
+	if pick.Path == "" {
+		t.Fatalf("seeded pick: %+v", pick)
+	}
+	seeded := pick.Path
+
+	// The configured seed repo goes unreadable: the build fails (the boot
+	// builds in place, as today) rather than caching an unseeded template
+	// that prunes the seeded one.
+	if err := os.Rename(filepath.Join(repo, ".git"), filepath.Join(repo, ".git-away")); err != nil {
+		t.Fatal(err)
+	}
+	var built atomic.Bool
+	m.templateStagingHook = func(string) error { built.Store(true); return nil }
+	again := m.dataImageTemplateForBoot(VMConfig{VMID: "vm-unreadable", NewComputer: true}, templateTestSizeMB)
+	if again.Path != "" || !strings.HasPrefix(again.Reason, "seed_identity") {
+		t.Fatalf("unreadable seed: pick = %+v, want a seed_identity fallback", again)
+	}
+	if built.Load() {
+		t.Fatal("built a template for an unreadable seed")
+	}
+	if final, building := templateFiles(t, m.dataImageTemplateDir()); len(final) != 1 || len(building) != 0 || final[0] != filepath.Base(seeded) {
+		t.Fatalf("templates after an unreadable seed = %v %v, want only the seeded one", final, building)
+	}
+	if _, err := os.Lstat(seeded); err != nil {
+		t.Fatalf("seeded template pruned: %v", err)
 	}
 }
