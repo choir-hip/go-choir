@@ -29,8 +29,14 @@ import (
 func fencedHibernateRuntime(t *testing.T) *Runtime {
 	t.Helper()
 	rt, _ := testRuntime(t)
-	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
-	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	// testRuntime's store path is fixed per test name: remove the marker and
+	// the apply-attempts sidecar so a repeated run starts clean (review 331).
+	clean := func() {
+		_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+		_ = os.Remove(rt.cfg.StorePath + ".apply-attempts")
+	}
+	clean()
+	t.Cleanup(clean)
 	rt.hibernate.credential = &fakeHibernateCredential{expiresAt: time.Date(2026, 10, 26, 12, 30, 0, 0, time.UTC)}
 	prevSync := syncFilesystems
 	syncFilesystems = func() {}
@@ -183,4 +189,54 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// Review 331 (both seats, HIGH): a third marker writer, the self-development
+// restore restart, wrote the planned-restart marker without the hibernate
+// fence. A restore accepted after the fence closed could put a fresh marker
+// into the snapshot being taken.
+func TestRestoreRestartMarkerRefusedWhileFenced(t *testing.T) {
+	rt := fencedHibernateRuntime(t)
+	restarted := 0
+	rt.selfdevRestartCurrent = func(context.Context) error { restarted++; return nil }
+	if _, ok := rt.hibernate.close(time.Minute); !ok {
+		t.Fatal("setup: fence did not close")
+	}
+	if err := rt.writeRestoreRestartMarker("ckpt"); err == nil {
+		t.Fatal("the restore-restart marker was written through a closed fence")
+	}
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+		t.Fatalf("a marker exists after a fenced write: %v", err)
+	}
+	// An immediate restore request while fenced is deferred, not written and
+	// not restarted.
+	prevPoll, prevWindow := restoreRestartIdlePoll, restoreRestartIdleWindow
+	restoreRestartIdlePoll, restoreRestartIdleWindow = 20*time.Millisecond, 5*time.Second
+	t.Cleanup(func() { restoreRestartIdlePoll, restoreRestartIdleWindow = prevPoll, prevWindow })
+	scheduled, deferred := rt.requestRestoreRestart(context.Background(), "ckpt")
+	if scheduled || deferred == "" {
+		t.Fatalf("requestRestoreRestart while fenced = scheduled %v deferred %q; want deferred", scheduled, deferred)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+		t.Fatalf("the idle poller wrote a marker through a closed fence: %v", err)
+	}
+	if restarted != 0 {
+		t.Fatalf("restarted %d times while fenced", restarted)
+	}
+	// The fence lifts: the deferred restart goes ahead.
+	rt.hibernate.lift()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); err != nil {
+		t.Fatalf("the deferred restore restart never wrote its marker after the fence lifted: %v", err)
+	}
+	if n, ok := rt.hibernate.close(time.Minute); !ok || n != 0 {
+		t.Fatalf("a finished restore-restart write left a work slot taken: inflight=%d ok=%v", n, ok)
+	}
 }

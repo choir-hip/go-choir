@@ -614,3 +614,31 @@ func TestGuestReleaseUsageErrorsAreNotSwallowed(t *testing.T) {
 	}
 	_ = errors.New
 }
+
+// Review 331 DeepSeek 3: the health reader builds its map under the manager
+// lock; run with -race while a lifecycle mutates the instance.
+func TestGuestReleaseHealthReadsUnderTheManagerLock(t *testing.T) {
+	r := newReleaseFixture(t)
+	r.point(t, relR2)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			r.mgr.mu.Lock()
+			r.inst.State = StateHibernated
+			r.inst.Config.GuestRelease = relR1
+			r.inst.State = StateRunning
+			r.mgr.mu.Unlock()
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		current, byVM := r.mgr.GuestReleaseHealth()
+		if current != relR2 {
+			t.Fatalf("current = %q", current)
+		}
+		if st, ok := byVM[r.vmID]; ok && (st.GuestRelease != relR1 || !st.Behind) {
+			t.Fatalf("status = %+v; want R1 and behind", st)
+		}
+	}
+	<-done
+}

@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Tests for the guest security-epoch gate in scripts/node-b-ci-gate (D2 S1c;
+# review 331 DeepSeek 1). The in-repo CI step can be switched off by the commit
+# it is meant to judge (a step `if:`, a neutered script): the deploy gate on
+# Node B is the control point that commit cannot edit, because it is the
+# previously deployed copy. For a deploy it runs the BASE's copy of
+# scripts/check-guest-security-epoch (the deployed commit's) over
+# base..commit. Mode (a root-owned file, set by nix): off (default), observe
+# (log the verdict, never refuse), enforce (refuse the deploy).
+#
+# Ways this could fail, written first:
+#  - the head's copy of the script (or ci.yml) decides the verdict;
+#  - observe refuses, or off runs the check;
+#  - a failing check deploys in enforce mode;
+#  - a base without the script (first adoption) refuses every deploy;
+#  - an unknown mode value reads as off.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+gate="$root/scripts/node-b-ci-gate"
+fail() { echo "node-b-ci-gate-epoch-test: $*" >&2; exit 1; }
+
+epoch_dir=$(mktemp -d)
+trap 'rm -rf "$epoch_dir"' EXIT
+erepo="$epoch_dir/repo"
+git init -q "$erepo"
+ecommit() { git -C "$erepo" add -A && git -C "$erepo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "$1" && git -C "$erepo" rev-parse HEAD; }
+mkdir -p "$erepo/scripts" "$erepo/internal/agentcore" "$erepo/nix" "$erepo/.github/workflows"
+cp "$root/scripts/check-guest-security-epoch" "$erepo/scripts/check-guest-security-epoch"
+cp "$root/.github/workflows/ci.yml" "$erepo/.github/workflows/ci.yml"
+cp "$root/nix/guest-security-surfaces.txt" "$root/nix/guest-floor-paths.txt" "$root/nix/guest-release-policy.json" "$erepo/nix/"
+echo 'package agentcore' >"$erepo/internal/agentcore/a.go"
+eb=$(ecommit base)
+# one commit that skips the CI step, neuters the script, and changes a surface
+awk '{print} /name: Check the guest security epoch/{print "        if: ${{ false }}"}' "$erepo/.github/workflows/ci.yml" >"$erepo/ci.new" && mv "$erepo/ci.new" "$erepo/.github/workflows/ci.yml"
+printf '#!/bin/sh\nexit 0\n' >"$erepo/scripts/check-guest-security-epoch"
+echo '// weakened' >>"$erepo/internal/agentcore/a.go"
+eh=$(ecommit "weaken the check and change a surface")
+ed=$(ecommit "empty")
+
+gate_epoch() { "$gate" --test-epoch "$erepo" "$1" "$2" "$3"; }
+epoch_ok() {
+  local out
+  out=$(gate_epoch "$@" 2>&1) || fail "--test-epoch $* refused: $out"
+}
+epoch_refused() {
+  local out status=0
+  out=$(gate_epoch "$@" 2>&1) || status=$?
+  [ "$status" -eq 2 ] || fail "--test-epoch $*: status $status (want 2): $out"
+  [[ "$out" == *"guest security epoch"* ]] || fail "--test-epoch $*: want a guest security epoch refusal, got: $out"
+}
+epoch_ok "$eb" "$eh" off
+epoch_ok "$eb" "$eh" observe
+epoch_refused "$eb" "$eh" enforce
+# the neutered head copy alone passes its own commit: the verdict is the base's
+status=0
+(cd "$erepo" && git checkout -q "$eh" && ./scripts/check-guest-security-epoch --base "$eb" --head "$eh" >/dev/null 2>&1) || status=$?
+[ "$status" -eq 0 ] || fail "setup: the neutered head copy should pass its own commit (status $status)"
+# a range the base's copy accepts passes in enforce
+epoch_ok "$eh" "$ed" enforce
+# a base without the script (first adoption) runs the head's copy
+git -C "$erepo" checkout -q --orphan fresh && git -C "$erepo" rm -rfq . && echo hi >"$erepo/readme"
+f0=$(ecommit "no script here")
+git -C "$erepo" checkout -q -f "$ed"
+epoch_ok "$f0" "$ed" enforce
+status=0
+out=$(gate_epoch "$eb" "$eh" sometimes 2>&1) || status=$?
+[ "$status" -eq 2 ] || fail "an unknown mode must refuse, got status $status: $out"
+
+# the live deploy path calls the gate from the base the receipt names
+run_body=$(sed -n '/^run() {/,/^}/p' "$gate")
+grep -Fq 'epoch_gate' <<<"$run_body" || fail "the live deploy path does not call epoch_gate"
+grep -Fq 'ci-gate-epoch-mode' "$gate" || fail "the gate's mode file moved"
+grep -Fq 'ci-gate-epoch-mode' "$root/nix/node-b.nix" || fail "nix/node-b.nix does not set the gate's epoch mode"
+grep -Eq '^\s*ciGateEpochCheck = "off";' "$root/nix/node-b.nix" || fail "nix/node-b.nix: ciGateEpochCheck must ship off"
+
+echo "node-b-ci-gate-epoch-test passed"
