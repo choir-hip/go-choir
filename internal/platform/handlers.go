@@ -28,6 +28,7 @@ type Handler struct {
 	keyEscrow            *keyEscrowRuntime
 	guestLookup          guestOwnershipLookup
 	hostBuild            *hostbuild.Service
+	releaseReads         ReleaseReadsMode
 }
 type healthResponse struct {
 	Status  string         `json:"status"`
