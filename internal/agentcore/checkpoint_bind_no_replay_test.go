@@ -139,15 +139,32 @@ func TestCheckpointBindCreatesNoScratchAndInstallsNoBase(t *testing.T) {
 	if published.AcceptedEventHead != headBefore {
 		t.Fatalf("published head %s, want the head the bind read %s", published.AcceptedEventHead, headBefore)
 	}
-	want := nf.base.descriptor.BlobSHA256 + " " + projectionbase.CheckpointPinReference(headBefore)
-	pinned := false
-	for _, pin := range nf.base.pins {
-		if pin == want {
-			pinned = true
-		}
+	// The owner-recovery bind is the cadence's: a checkpoint every few minutes
+	// must not pin a base each (a pin has no release path until the retention
+	// slice; docs/design/apply-checkpoint-without-replay-2026-10-26.md, Build
+	// findings). Apply binds pin (TestApplyBindPinsTheAdvertisedBase...).
+	if len(nf.base.pins) != 0 {
+		t.Fatalf("an owner-recovery (cadence) bind pinned bases %v; pins are for apply checkpoints", nf.base.pins)
 	}
-	if !pinned {
-		t.Fatalf("base pins %v do not pin the advertised base as %q", nf.base.pins, want)
+}
+
+// Failure mode 5, for the apply: its bind pins the advertised base under the
+// checkpoint's head, so a restore to that checkpoint, or a rollback of that
+// apply, still has a start point after the advertised base moves on.
+func TestApplyBindPinsTheAdvertisedBaseUnderTheCheckpointHead(t *testing.T) {
+	nf := newNoReplayFixture(t, "computer-apply-bind-pins")
+	ctx := context.Background()
+	manifest, err := nf.rt.ensureCheckpointReleaseManifest(ctx, nf.rt.cfg.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, _, err := nf.rt.bindCheckpointAtHead(ctx, nf.rt.cfg.ComputerID, manifest.ContentDigest, manifest.Files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := nf.base.descriptor.BlobSHA256 + " " + projectionbase.CheckpointPinReference(binding.Head.CanonicalEventHead)
+	if len(nf.base.pins) != 1 || nf.base.pins[0] != want {
+		t.Fatalf("apply bind pins %v, want [%q]", nf.base.pins, want)
 	}
 }
 
