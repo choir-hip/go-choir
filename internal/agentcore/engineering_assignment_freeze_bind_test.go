@@ -330,3 +330,34 @@ func TestOtherPostFreezeBindFailuresKeepTheRedrive(t *testing.T) {
 			after.Disposition, after.CapsuleDisposition, assignedEngineeringFatePending(after))
 	}
 }
+
+// A re-drive of a saga that already froze (the watchdog or planned-restart
+// resume of the staged proposal) does not run the pre-check again: it starts
+// past the freeze intent, and the post-freeze bind is its check (review 281,
+// DeepSeek 5).
+func TestResumedFrozenSagaSkipsThePreCheck(t *testing.T) {
+	f := newR1Fixture(t, "owner-r1-resume")
+	f.caps.bindErr = fmt.Errorf("persist executor receipt artifact: disk full")
+	if _, err := f.complete(t, types.EngineeringResultCompleted, "rlm-complete:r1:resume", f.edit, f.check); err == nil {
+		t.Fatal("fixture: the transient post-freeze failure recorded")
+	}
+	stranded := f.get(t)
+	if !assignedEngineeringFatePending(stranded) || f.caps.preflights != 1 || f.caps.freezes != 1 {
+		t.Fatalf("fixture: %s/%s pending %v, preflights %d, freezes %d; want a frozen strand after one pre-check",
+			stranded.Disposition, stranded.CapsuleDisposition, assignedEngineeringFatePending(stranded), f.caps.preflights, f.caps.freezes)
+	}
+
+	f.caps.bindErr = nil
+	if err := f.rt.resumeStrandedFrozenAssignmentCommit(context.Background(), stranded); err != nil {
+		t.Fatalf("resume of the frozen saga: %v", err)
+	}
+	if f.caps.preflights != 1 {
+		t.Fatalf("the resumed frozen saga ran the pre-check again (%d pre-checks)", f.caps.preflights)
+	}
+	if f.caps.freezes != 1 {
+		t.Fatalf("the resumed frozen saga froze again (%d freezes)", f.caps.freezes)
+	}
+	if after := f.get(t); after.Disposition != types.EngineeringAssignmentCompleted {
+		t.Fatalf("the resumed saga left the assignment %s/%s, want completed", after.Disposition, after.CapsuleDisposition)
+	}
+}
