@@ -740,25 +740,39 @@ rebased onto origin/main 4eec2c61d. Nothing is deployed yet.
   no attachments. It frees the final Report and is exported as the
   review alone. Without that call, such a story could never satisfy the
   finish rule.
+- Slice d, the backfill (95f99ea4f / 564d11fbc). An entities request
+  is a sibling kind on the reader's request path: record id
+  `related-review:<client id>`, objective "Record what this story is
+  about.", no story text and no source questions, and an empty final
+  Report. The owner's `POST /api/texture/related-review {batch_id, limit}`
+  asks the research desks of stories with no entities record, newest
+  first. It replays by batch id and skips busy stories.
+  **Deviation:** an act asks at most 200 stories, not the design's 2,000,
+  which keeps one act inside a day's System 1 calls. Run more acts for
+  more stories.
 - The deployed spec: the growth shape, convergence and the coverage
-  floor.
+  floor. It lists 5 tests.
 
 With the prompt and overlay landed, the lane is deployable: the finish
 rule now asks for what it requires.
 
-**Not built yet:**
-- **Slice d**: the backfill owner act on the reader-request route. The
-  tests are written and parked outside the repo.
-- **Slice e**: the run on d@e. The spec and the labelled set are done; the
-  proof is not run.
+**Not done yet:**
+- **Slice e**: the run on d@e. The spec and the labelled set are done. The
+  proof needs the lane deployed, the setting on for the paper, and the
+  owner's backfill act on the paper computer; it is not run.
 - **Named residuals:**
   - the owner-act surface for `RevokeEntityStopword`;
   - the single corpusd writer;
   - the 10k-event channel window (a cross-run replay past it pays again,
     once);
   - the growth read's hit rate counts existing-unmatched attachments as
-    hits.
+    hits;
+  - each backfilled story costs one Texture turn: research's final Report
+    wakes Texture, as every research Report does. The request asks for a
+    Report that says nothing needs to change; Texture's prompt has no line
+    for it;
+  - the backfill route is on the computer. Reaching the paper computer's
+    route needs the paper owner's session, and no proxy route is added.
 
-**Next.** Slice d against its parked tests, then the slice e proof on
-d@e. Before deploying, run the full agentcore and store suites on the
-agents VM with `-timeout 50m`.
+**Next.** Deploy the lane, turn on `research.related_story` for the paper,
+run the owner's backfill act, then the slice e proof on d@e.
