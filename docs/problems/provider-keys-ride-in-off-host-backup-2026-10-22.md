@@ -33,3 +33,20 @@ KEK, named `provider-vault-kek*`
 
 Whether existing snapshots should be pruned of these files after the
 vault lands. That is a retention decision, recorded here and not taken.
+
+## Interim fix (2026-10-26)
+
+Owner, 2026-10-26 02:4x, accepting FP0's default: exclude the provider keys
+from future backups by name; keep the existing snapshots untouched (pruning
+them is a destructive retention decision, still open). `scripts/off-host-backup.sh`
+no longer adds `gateway-provider.env` or `codex-auth.json` as paths and
+excludes both names at any depth, the way it excludes `key-escrow-kek*`.
+Test: `scripts/off-host-backup-provider-keys-exclude-test.sh`.
+
+Restore consequence: after an off-host restore, the provider keys and the
+ChatGPT OAuth token set are written back by hand to
+`/var/lib/go-choir/gateway-provider.env` and `codex-auth.json` (the files the
+gateway units read, `nix/node-b.nix` about lines 506 and 2452), as the vault
+design already assumes for its KEK. Rollback: `git revert` of the fix commit; the next backup carries
+the files again. The vault (sealed records in the backup, KEK kept out)
+remains the durable fix.
