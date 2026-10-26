@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/rssfall"
 )
 
 // The switch. Only the exact words enable; anything else is off.
@@ -58,12 +59,7 @@ const (
 	// cacheReturnRingSize is the size of admission.recent.
 	cacheReturnRingSize = 20
 
-	cacheReturnSettleCap  = 5 * time.Second
-	cacheReturnSettlePoll = 250 * time.Millisecond
-	// cacheReturnSettleMin: under this the guest returned too little to wait
-	// for; stable within cacheReturnSettleStable ends a wait.
-	cacheReturnSettleMin    = 128 << 20
-	cacheReturnSettleStable = 16 << 20
+	cacheReturnSettleCap = rssfall.DefaultCap
 
 	cacheReturnPath = "/internal/runtime/memory/cache-return"
 )
@@ -521,6 +517,48 @@ func (r *OwnershipRegistry) waitGuestCacheReturn(d time.Duration) bool {
 	}
 }
 
+// --- the hibernate option (S3) --------------------------------------------
+
+// HibernateCacheReturn asks the manager to return the guest's cold page
+// cache between the fence and the snapshot of one hibernate. It is a
+// per-call option, never part of a VM's configuration or launch.
+type HibernateCacheReturn struct {
+	Scope  string
+	DryRun bool
+}
+
+// hibernateCacheReturnManager is implemented by a manager whose snapshot
+// hibernate can take the option.
+type hibernateCacheReturnManager interface {
+	HibernateVMWithCacheReturn(vmID string, opt HibernateCacheReturn) error
+}
+
+// hibernateCacheReturnForLocked is the option for hibernating own, or nil: the
+// switch is on, the hibernate trigger is listed, the selector names the
+// computer, and it is not the paper or a public platform computer. The
+// caller holds r.mu.
+func (r *OwnershipRegistry) hibernateCacheReturnForLocked(own *VMOwnership) *HibernateCacheReturn {
+	cfg := r.cacheReturnCfg
+	if cfg.Mode == "" && cfg.Scope == "" {
+		cfg = DefaultGuestCacheReturnConfig()
+	}
+	cfg = cfg.normalized()
+	if own == nil || cfg.Mode == GuestCacheReturnOff || len(cfg.Only) == 0 || !cfg.TriggerOn("hibernate") {
+		return nil
+	}
+	if isPlatformOwnership(own) {
+		return nil
+	}
+	class := warmnessClassForOwnership(own, r.warmnessPolicy)
+	if class == WarmnessClassCriticalProtected || class == WarmnessClassPublicPlatform {
+		return nil
+	}
+	if !cacheReturnSelected(own, cfg.Only, class) {
+		return nil
+	}
+	return &HibernateCacheReturn{Scope: cfg.Scope, DryRun: cfg.Mode == GuestCacheReturnObserve}
+}
+
 // --- the pass -------------------------------------------------------------
 
 // runGuestCacheReturnPass is the idle trigger: one pass of the idle sweep's
@@ -799,43 +837,21 @@ type cacheReturnSettle struct {
 	Exit string // fell, cap, no_wait, gone
 }
 
-// waitRSSFall waits for the host to see a guest's return. A quiet guest's
-// RSS is already flat when it starts, and free page reporting runs on a 2
-// second delay, so "two close readings" would end the wait before the return
-// began. This waits for a fall of half the bytes the guest says it reclaimed
-// and then for the last two readings to agree, up to the cap. The guest's
-// number only sizes the wait; under 128 MiB there is nothing to wait for.
-// Time is counted in polls so tests need no clock.
+// waitRSSFall waits for the host to see a guest's return (internal/rssfall
+// holds the rule, shared with the hibernate path in internal/vmmanager). It
+// keeps the full reading (anon, file) the rule sees only the total of.
 func waitRSSFall(read func() (cacheReturnRSS, bool), sleep func(time.Duration), rss0 cacheReturnRSS, reclaimed uint64, limit time.Duration) cacheReturnSettle {
-	if reclaimed < cacheReturnSettleMin {
+	last := rss0
+	res := rssfall.Wait(func() (uint64, bool) {
 		cur, ok := read()
-		if !ok {
-			return cacheReturnSettle{RSS: rss0, Exit: "no_wait"}
+		if ok {
+			last = cur
 		}
-		return cacheReturnSettle{RSS: cur, Exit: "no_wait"}
+		return cur.Total, ok
+	}, sleep, rss0.Total, reclaimed, limit)
+	out := cacheReturnSettle{RSS: last, MS: res.MS, Exit: res.Exit}
+	if res.Exit == rssfall.ExitGone {
+		out.RSS = rss0
 	}
-	prev := rss0
-	var elapsed time.Duration
-	for {
-		sleep(cacheReturnSettlePoll)
-		elapsed += cacheReturnSettlePoll
-		cur, ok := read()
-		if !ok {
-			return cacheReturnSettle{RSS: prev, MS: elapsed.Milliseconds(), Exit: "gone"}
-		}
-		fell := rss0.Total >= cur.Total && rss0.Total-cur.Total >= reclaimed/2
-		var moved uint64
-		if cur.Total >= prev.Total {
-			moved = cur.Total - prev.Total
-		} else {
-			moved = prev.Total - cur.Total
-		}
-		if fell && moved < cacheReturnSettleStable {
-			return cacheReturnSettle{RSS: cur, MS: elapsed.Milliseconds(), Exit: "fell"}
-		}
-		prev = cur
-		if elapsed >= limit {
-			return cacheReturnSettle{RSS: cur, MS: elapsed.Milliseconds(), Exit: "cap"}
-		}
-	}
+	return out
 }

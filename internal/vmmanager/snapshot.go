@@ -259,6 +259,9 @@ type SnapshotTimeline struct {
 	SnapshotType string `json:"snapshot_type,omitempty"`
 	ColdOrigin   bool   `json:"cold_origin,omitempty"`
 	DiffRefused  string `json:"diff_refused,omitempty"`
+	// CacheReturn is the cache return before this hibernate's snapshot
+	// (density D6 S3); nil when the hibernate did not ask for one.
+	CacheReturn *CacheReturnTimeline `json:"cache_return,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
