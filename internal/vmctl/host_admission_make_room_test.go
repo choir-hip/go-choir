@@ -469,6 +469,14 @@ func TestMakeRoomForANewComputer(t *testing.T) {
 	f := newMakeRoomFixture(t, makeRoomAdmission())
 	f.activeComputer("idle", "vm-idle", 2*time.Hour, 3*gib)
 	f.setAvail(4*gib + 1*gib + 1*gib) // a new computer needs the 2 GiB default
+	// The manager tracks what it booted, as vmmanager does, so the request
+	// that joins after the boot reads it as running rather than booting it
+	// again.
+	f.mgr.bootHook = func(cfg VMManagerConfig) {
+		f.mgr.mu.Lock()
+		f.mgr.getVMs[cfg.VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}
+		f.mgr.mu.Unlock()
+	}
 	var lockHeld int32
 	f.mr.onHibernate = func(string) {
 		// The other request may hold the lock for a moment; a lock held
@@ -512,7 +520,13 @@ func TestMakeRoomForANewComputer(t *testing.T) {
 		t.Fatalf("two requests for one new computer got %+v and %+v", results[0], results[1])
 	}
 	if n := len(f.mgr.boots); n != 1 {
-		t.Fatalf("boots = %d, want one new computer", n)
+		t.Fatalf("boots = %d (%v), want one new computer", n, func() []string {
+			var ids []string
+			for _, b := range f.mgr.boots {
+				ids = append(ids, b.VMID)
+			}
+			return ids
+		}())
 	}
 	if got := f.mr.hibernates(); len(got) != 1 || got[0] != "vm-idle" {
 		t.Fatalf("hibernates = %v, want vm-idle", got)
