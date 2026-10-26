@@ -529,6 +529,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 			if request := strings.TrimSpace(root.Content); request != "" {
 				promptMetadata = cloneMetadata(metadata)
 				promptMetadata["seed_prompt"] = truncatePromptSnippet(request, textureOriginalRequestMaxChars)
+				// Its revision, so a cast names it and the runtime attaches
+				// the request verbatim (texture-retypes-owner-directions-2026-10-25).
+				promptMetadata[texturePromptSeedRevisionKey] = strings.TrimSpace(root.RevisionID)
 			}
 		}
 	}
@@ -808,6 +811,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString("\n\nThe owner's request:\n")
 		}
 		b.WriteString(seedPrompt)
+		if revisionID := metadataString(metadata, texturePromptSeedRevisionKey); revisionID != "" {
+			b.WriteString("\n(revision " + revisionID + ")")
+		}
 	}
 	if len(ownerDirections) > 0 {
 		writeTextureOwnerDirections(&b, ownerDirections)
