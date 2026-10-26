@@ -1885,6 +1885,12 @@ in
         "VMCTL_RETENTION_TEST_IDLE_MIN_AGE=168h"
         "VMCTL_RETENTION_QUARANTINE_MODE=active"
         "VMCTL_RETENTION_QUARANTINE_MIN_AGE=168h"
+        # A new computer's data image is a reflink clone of a prebuilt,
+        # identity-free template instead of a fresh mkfs under the global lock
+        # (docs/problems/new-computer-creation-14s-2026-10-26.md; the state
+        # dir is btrfs, so FICLONE works). Any failure falls back to today's
+        # in-place build. Rollback: delete this line.
+        "VMCTL_DATA_IMAGE_TEMPLATE=on"
         # Shadow retention mirrors the active policy as an observation endpoint
         # so reports can compare deletion pressure before and after sweeps.
         "VMCTL_RETENTION_SHADOW_PRUNE_MODE=dry-run"
