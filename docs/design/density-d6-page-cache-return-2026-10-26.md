@@ -21,6 +21,12 @@ red). Evidence:
   the act is scoped to the guest daemon's own cgroup by default and sized
   from that cgroup's `memory.stat`; compaction is out; S5 waits for a
   recorded owner decision.
+- **Revision 3** (2026-10-26), after re-review 326 (Devin, one seat,
+  nothing blocking): the empty-URL premise corrected (fixed by D3a);
+  Firecracker pin v1.17.0 and the no-PAGE_POISON fact re-read there; S3
+  skips the act past a 60 s fence budget (D6-M26); one status code for
+  unanswered store reads; S4 names mode `idle`; the report's `method` and
+  `path`. Adjudicated in §13.1.
 - **Mutation class of this document:** green. Build slices: S0 green, S1
   orange, S2 red, S3 and S4 red, S5 red.
 - **Review tier:** this design was reviewed at tier 2 (320). S1 tier 1
@@ -267,8 +273,11 @@ balloon is decided then (S6's gate).
 - `idle` mode, before the first step: `RunningCount() > 0`, or
   `readHealthStore(ctx, 1 s)` with any read unanswered, desk pending > 0,
   selfdev active > 0, or `live_capsules` nil or > 0. Any of these is busy:
-  outcome `busy` (409), no write. This is exactly `/health`'s view, so the
-  guest and vmctl's probe agree.
+  409 with outcome `busy` and a `reason` (`running`, `store_unanswered`,
+  `desk_pending`, `selfdev_active`, `live_capsules`), no write. An
+  unanswered read is the same 409 as any other busy answer; the route has
+  no 503. This is exactly `/health`'s view, so the guest and vmctl's probe
+  agree.
 - `idle` mode, between steps: `RunningCount() > 0` or the hibernate fence
   closed (a hibernate started) stops the act as `stopped_busy`. A new run
   shows in `RunningCount` at once; the store-backed reads are not repeated
@@ -293,10 +302,14 @@ costs only post-wake refaults). Never in other modes.
 **Route.** `POST /internal/runtime/memory/cache-return`, host-peer only
 (`requireInternalRuntimeCaller`, as the hibernate routes). Body, decoded
 strictly: `{"mode":"idle"|"hibernate"|"busy_cold","scope":"daemon"|"root","dry_run":bool}`.
-Answers: 200 with a report; 409 `busy`, `in_progress`, `not_fenced`; 503
-when the store reads cannot answer. Report: `outcome` (`returned`,
+Answers: 200 with a report; 409 `busy` (with its `reason`, unanswered
+store reads included), `in_progress`, `not_fenced`; 400 for a bad body;
+403 for a non-host caller. No 503. Report: `outcome` (`returned`,
 `partial`, `stopped_busy`, `nothing_to_return`, `unsupported`,
-`swap_present`, `refault_stop`), `mode`, `scope`, `cgroup`, `target_bytes`,
+`swap_present`, `refault_stop`), `method` (`memory_reclaim`,
+`drop_caches`, `none`) and `path` (the file written, or the
+`memory.reclaim` path found absent), so the hibernate-mode fallback is
+visible in every report, `mode`, `scope`, `cgroup`, `target_bytes`,
 `reclaimed_bytes` (the scope's `memory.stat` `file` before minus after),
 `steps`, `ms`, `swappiness_key`, `reporting_negotiated` (existing
 memreturn reader), and `before` and `after` blocks: the scope's
@@ -320,9 +333,10 @@ decisions for that tick. A computer is a candidate when every rule holds:
   ownership (computer ids, `class:test`, `class:primary`,
   `class:premium`, `*`; using the ownership's own `WarmnessClass`);
 - not `critical_protected` and not `public_platform`;
-- has a non-empty `ComputerURL` (the shared busy probe answers *not busy*
-  for an empty URL, `ownership.go` `httpGuestBusy`; D6 does not rely on
-  it, §13 DeepSeek F4);
+- has a non-empty `ComputerURL` (defense in depth: the shared probe,
+  `httpGuestHealth` in `ownership.go`, already answers busy for an empty
+  URL since D3a, dfdef0855; D6 does not call a guest it has no address
+  for);
 - running and active, not held, no lifecycle claim, not hibernating or
   starting;
 - idle at least `VMCTL_GUEST_CACHE_RETURN_IDLE` (3 minutes) by the
@@ -373,8 +387,18 @@ exit "fell"  when rss0 - rss >= R/2 and the last two readings differ by < 16 MiB
 exit "cap"   at 5 s
 ```
 
-Typical exit is 2.5 to 4 s. The guest is fenced throughout (fence TTL 2
-minutes; the pause bound is separate, 10 s). The timeline gains
+Typical exit is 2.5 to 4 s; S3 adds at most 10 s (5 s call, 5 s settle).
+
+**Fence margin (re-review 326).** The guest's fence lifts 2 minutes
+(`hibernateFenceTTL`) after it closes, and the host's worst case before
+D6 was already 110 s (prepare 90 s, unplug 10 s, pause 10 s). If the fence
+lifted before the pause, a run could be admitted mid-snapshot. So the host
+records `fenceStart` (the moment it sends prepare, which is no later than
+the guest's close) and **skips the act when `now − fenceStart` exceeds
+`snapshotCacheReturnFenceBudget` = 60 s** after the unplug, recording
+`cache_return skipped=fence_budget`. With the act taken, the worst case is
+60 + 5 + 5 + 10 = 80 s from fence start to the end of the pause, 40 s
+inside the TTL. The guest is fenced throughout. The timeline gains
 `cache_return` (outcome, reclaimed MiB, rss0, rss at exit, settle ms, exit
 reason); the hibernate log line gains `cache_return_mib=`, `rss_fell_mib=`
 and `settle_ms=`.
@@ -399,7 +423,8 @@ victim, inside D1's `makeRoomMu` slot:
 2. **One step-0 deadline, `VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET`
    (default 12 s), covers everything**: the calls, the settles and the
    re-samples (review 320 Devin F6). The start's context also ends it.
-3. For each candidate in order, at most 3: call the act (HTTP bound
+3. For each candidate in order, at most 3: call the act with
+   `{"mode":"idle"}` (`hibernate` needs a fence; `busy_cold` is S5) (HTTP bound
    `min(10 s, remaining)`), settle as in 4.3 (cap `min(5 s, remaining)`),
    then one admission attempt on a **fresh** MemAvailable sample. Admit
    (`admit_after_cache_return`, with each VM id and its RSS fall in
@@ -438,7 +463,7 @@ guest route left behind is inert when uncalled.
   guest_target_mib= guest_reclaimed_mib= rss_before_mib= rss_after_mib=
   rss_anon_before/after_mib= rss_file_before/after_mib=
   host_avail_before/after_mib= settle_ms= settle_exit= ms=`.
-- vmctl health: `memory.cache_return.recent` (ring of 32, like
+- vmctl health: `memory.cache_return.recent` (ring of 20, the size of
   `admission.recent`) and per-VM `last_cache_return_at`.
 - Only host measurements feed decisions.
 
@@ -462,9 +487,13 @@ refuse reporting unless the device offers `VIRTIO_BALLOON_F_PAGE_POISON`
    `kernel_config` shows `CONFIG_INIT_ON_FREE_DEFAULT_ON` and
    `CONFIG_PAGE_POISONING` not set (read from the manifest, no guest
    shell);
-3. reading R6: Firecracker v1.15.1's balloon does not offer
-   `VIRTIO_BALLOON_F_PAGE_POISON` (source, at the tag), so the driver's
-   refusal above is the guard.
+3. Firecracker v1.17.0 (the pin, `flake.nix`) does not offer
+   `VIRTIO_BALLOON_F_PAGE_POISON`: its balloon's `avail_features` are
+   `VIRTIO_F_VERSION_1` plus, as configured, `DEFLATE_ON_OOM` (2),
+   `STATS_VQ` (1), `FREE_PAGE_HINTING` (3) and `FREE_PAGE_REPORTING` (5),
+   never bit 4 (`src/vmm/src/devices/virtio/balloon/device.rs` and
+   `mod.rs` at tag v1.17.0, read 2026-10-26). So the driver's refusal above
+   is the guard. R6 re-reads it at each Firecracker bump.
 
 **Ordering.** The act and its settle run after the unplug and before
 `diffSnapshotRefusal` and the pause (§4.3), so nothing runs in frozen time
@@ -634,10 +663,15 @@ Expected return (estimates; S2's observe readings confirm them before any
 - **D6-M22** the settle exits before the return happens (review 320 F1).
 - **D6-M23** the hibernate mode runs on an unfenced guest (bypassing the
   busy check).
-- **D6-M24** a candidate with no `ComputerURL` reads as idle (review 320
-  DeepSeek F4).
+- **D6-M24** a candidate with no `ComputerURL` is acted on (fixed in the
+  shared probe by D3a, which answers busy for an empty URL; D6 keeps its
+  own non-empty-URL rule as defense in depth).
 - **D6-M25** the act writes to a cgroup other than the configured scope, or
-  falls back silently when the scope's file is absent.
+  falls back silently when the scope's file is absent (the report's
+  `method` and `path` make every fallback visible).
+- **D6-M26** the hibernate act and settle push the time from fence close to
+  the end of the pause past the 2-minute fence TTL, so the fence lifts
+  mid-snapshot (re-review 326).
 
 ## 8. Tests-first rules for the builder
 
@@ -659,13 +693,8 @@ calls a guest or hibernates may hold `r.mu`.
 
 - Add the D6 section to
   `docs/problems/density-station-d-failure-modes-2026-10-26.md` (Problem,
-  Design pointer to this file, D6-M1..M25, protected surfaces, evidence,
+  Design pointer to this file, D6-M1..M26, protected surfaces, evidence,
   rollback). Commit alone.
-- Write the problem record for D6-M24's shared cause:
-  `docs/problems/busy-probe-reads-idle-without-computer-url-2026-10-26.md`
-  (`httpGuestBusy` returns not-busy for an empty `ComputerURL`; who calls
-  it: idle sweep, pressure reclaim, make-room). D6 does not fix it; it is
-  the successor for the D1/D3 owner.
 - FP0 takes readings R1 to R6 (§11) when convenient; S1 and S2 do not wait
   for them, S2's `active` does.
 
@@ -697,13 +726,16 @@ injectable writer; no real cgroup writes in tests):
   later writes bare and sets `swappiness_key=false`.
 - **M25** scope `daemon` writes only to the cgroup named by a fixture
   `/proc/self/cgroup`; scope `root` only to the root; a missing
-  `memory.reclaim` gives `unsupported` naming the path in `idle` mode and
-  one `drop_caches` write in `hibernate` mode.
+  `memory.reclaim` gives `unsupported` with `method: none` and `path`
+  naming the absent file in `idle` mode, and one `drop_caches` write with
+  `method: drop_caches` in `hibernate` mode; a normal act reports
+  `method: memory_reclaim` and the scope's file as `path`.
 - One act at a time: a second concurrent call answers `in_progress`
   (`-race`).
 - `dry_run` writes nothing and reports the target.
-- Route: a non-host caller gets 403; an unknown body field gets 400; 503
-  when the store reads cannot answer.
+- Route: a non-host caller gets 403; an unknown body field gets 400;
+  unanswered store reads get 409 `busy` with reason `store_unanswered`
+  (never 503).
 - The prepare route is unchanged (an existing prepare test still passes;
   no new test needed).
 
@@ -761,7 +793,7 @@ Failure list and tests:
 - **M22** settle: a fake RSS reader flat for 3 s then falling by R/2: the
   settle does not exit before the fall and exits `fell` after it; flat for
   5 s: exits `cap` at 5 s; R < 128 MiB: no wait.
-- **M8** a guest that answers 503, times out (bound 5 s with a fake slow
+- **M8** a guest that answers 409 or 500, times out (bound 5 s with a fake slow
   server) or returns garbage: the snapshot is taken exactly as without the
   option, and the timeline records the failure.
 - **M7** order: the L3a decision runs after the settle (a fake decision
@@ -773,6 +805,9 @@ Failure list and tests:
 - **M15** option off: no cache-return call is made.
 - **M23** the call is made only after a successful prepare (a refused
   prepare makes no call).
+- **M26** fence margin: with a fake clock, a prepare plus unplug that took
+  61 s makes no call and records `skipped=fence_budget`; one that took
+  59 s makes the call; in both cases the snapshot proceeds.
 
 Evidence (FP0): §10 step 3. Rollback: remove `hibernate` from the trigger
 list, or `off`.
@@ -856,8 +891,9 @@ D7 (the density bench) records D6's numbers with the rest.
 - **R4. Restored-guest discard:** on a computer woken from a snapshot,
   `RssAnon` and `RssFile` before and after an act.
 - **R5. The DAMON-on reading** owed since 10-22 (S5's gate).
-- **R6. Firecracker v1.15.1 balloon features:** the feature bits the device
-  offers, at the tag (source read): no `VIRTIO_BALLOON_F_PAGE_POISON`.
+- **R6. Firecracker balloon features, at each pinned tag:** the feature
+  bits the device offers (source read): no `VIRTIO_BALLOON_F_PAGE_POISON`.
+  Done for v1.17.0 on 2026-10-26 (§5.1 pin 3); repeat at every bump.
 
 ## 12. Heresy delta, conjecture, owner questions
 
@@ -870,8 +906,6 @@ D7 (the density bench) records D6's numbers with the rest.
   `VmRSS` charge over-counts restored guests (recorded, no change).
 - L3b's correctness argument must cover pages discarded after a restore.
 - Guest tmpfs never returns without swap (X1 fills guest `/tmp`).
-- `httpGuestBusy` answers not-busy for an ownership with no
-  `ComputerURL` (S0 writes the record; successor: the D1/D3 owner).
 
 **Introduced:** a host-to-guest memory act (a host-peer route), bounded and
 stateless by design.
@@ -912,7 +946,7 @@ labels in brackets.
 | Settle exits before the return: a fenced guest's RSS is already stable [F1 HIGH] | DeepSeek F1 | **Adopted.** Settle waits for a fall of R/2 then stability, cap 5 s; S4 admits only on fresh samples after each settle | §4.3, §4.4, S3 test M22 |
 | Hibernate act rides the 90 s prepare body and can fail the hibernate; act ran before the unplug [F2 HIGH] | DeepSeek F2 | **Adopted.** Separate call after prepare and unplug, bound 5 s, failure skips; prepare body unchanged; hibernate mode only while fenced | §4.1, §4.3, S3 tests M8, M18, M23 |
 | `Inactive(file)` includes shmem [F3 MED-HIGH] | DeepSeek F3, Devin F1 | **Adopted as a clamp; premise disputed.** Linux keeps shmem on the anonymous LRU (swap-backed), so `inactive_file` should exclude it; the target nonetheless takes `min(inactive_file, file − shmem)`, correct either way. Sizing moved to the scope cgroup's `memory.stat` | §4.1, S1 test M21 |
-| Busy probe not fail-closed for an empty `ComputerURL` | DeepSeek F4 | **Adopted for D6** (candidates need a URL); **deferred** for the shared probe to a problem record S0 writes, successor the D1/D3 owner | §4.2, §9 S0, M24 |
+| Busy probe not fail-closed for an empty `ComputerURL` | DeepSeek F4 | **Premise false; already fixed by D3a** (dfdef0855: `httpGuestHealth` answers busy for an empty URL; re-review 326). D6 keeps the non-empty-URL candidate rule as defense in depth; no problem record | §4.2, M24 |
 | The "one-flight 3 s cache" on `plannedRestartBusy` does not exist [nit] | Devin F5, DeepSeek F5 | **Adopted.** The cache that exists (D3a, `health_live_capsules.go`) serves `readHealthStore`; the act's predicate is `readHealthStore` plus `RunningCount`, not `plannedRestartBusy` | §1, §4.1 |
 | `internal/guestmem` exists; `writeCgroupFile` is unexported | DeepSeek F6 | **Adopted.** Extend `internal/guestmem`; copy the raw-write idiom | §4.1, S1 |
 | Budget is advisory; idle reclaim can write back dirty pages; host bound vs guest worst case | DeepSeek F7 | **Adopted.** Dirty and writeback subtracted; 64 MiB steps; `pgpgout` recorded; host bound 10 s over a 2 to 3 s guest budget; host timeout recorded | §4.1, §4.2, M21 |
@@ -927,6 +961,19 @@ labels in brackets.
 | Paper ratification should be the owner's explicit call | DeepSeek answers | **Adopted.** S5 ships only after a recorded owner decision; default no | §5.5, §12 |
 | Add a proof that `pgsteal_proactive` moves after a write | DeepSeek confidence note | **Adopted.** | §10 step 2 |
 | Target the daemon cgroup rather than root first | DeepSeek dissent | **Adopted.** `VMCTL_GUEST_CACHE_RETURN_SCOPE=daemon` default; root after R2 | §4.1, §4.5 |
-| Kill S3 outright | DeepSeek dissent | **Rejected.** With F1 and F2 fixed it adds at most 5 s before a pause and only when the guest reclaimed at least 128 MiB, and it shrinks D5's Diff and the Full file's real bytes; S3 is its own trigger and can stay off | §4.3, §4.5 |
+| Kill S3 outright | DeepSeek dissent | **Rejected.** With F1 and F2 fixed it adds at most 10 s before a pause (5 s call, 5 s settle) and only when the guest reclaimed at least 128 MiB, and it shrinks D5's Diff and the Full file's real bytes; S3 is its own trigger and can stay off | §4.3, §4.5 |
 | Prefer the balloon (guest-independent, beats fragmentation) | DeepSeek dissent | **Rejected for now; S6 is its successor** if outcome B appears; a hostile guest can refuse either mechanism | §3, S6 |
 | "Planned refresh" for the paper is operator sequencing, not code | DeepSeek answers | **Adopted as stated** | §5.5 |
+
+### 13.1 Re-review 326 adjudication (Devin, on 7910eb8af)
+
+| Finding | Severity | Disposition | Where |
+|---|---|---|---|
+| F4's premise is false: `httpGuestHealth` already answers busy for an empty `ComputerURL` (D3a, dfdef0855) | MED (doc) | **Adopted.** S0's problem-record bullet dropped; §4.2, M24, §12 and §13 reworded to "fixed by D3a; D6 keeps the URL rule as defense in depth" | §4.2, §7 M24, §9 S0, §12, §13 |
+| R6 cites Firecracker v1.15.1; the pin is v1.17.0 | LOW | **Adopted.** Re-read at v1.17.0: `avail_features` are VERSION_1 plus DEFLATE_ON_OOM, STATS_VQ, FREE_PAGE_HINTING, FREE_PAGE_REPORTING; no PAGE_POISON (bit 4). R6 repeats at each bump | §5.1 pin 3, §11 R6 |
+| S3 can consume the last fence margin (worst case reaches the 120 s TTL) | LOW | **Adopted.** Skip the act when more than 60 s have passed since the host sent prepare; worst case 80 s; new D6-M26 and its S3 test | §4.3, §7 M26, §9 S3 |
+| 409 vs 503 for unanswered store reads | LOW | **Adopted.** One code: 409 `busy`, reason `store_unanswered`; the route has no 503 | §4.1, §9 S1 |
+| S4 does not name the act's mode | LOW | **Adopted.** S4 calls `{"mode":"idle"}` | §4.4 |
+| `admission.recent` holds 20, not a ring of 32 | nit | **Adopted.** `memory.cache_return.recent` is a ring of 20 | §4.6 |
+| S3 adds up to 10 s, not 5 s | nit | **Adopted** | §4.3, §13 |
+| The hibernate-mode `drop_caches` fallback is invisible in the report (M25 half-closed) | nit | **Adopted.** The report carries `method` (`memory_reclaim`, `drop_caches`, `none`) and `path`; S1's M25 test asserts both | §4.1, §7 M25, §9 S1 |
