@@ -265,7 +265,10 @@ type Runtime struct {
 		GetEngineeringAssignment(context.Context, string, string, string, uint64) (types.EngineeringAssignment, error)
 	}
 	assignmentRuntime assignmentCapsuleRuntime
-	bootLog           *bootLogRing
+	// assignmentFateRuntime replaces the capsule executor in the terminal
+	// report saga; nil uses capsuleExecutor (assignmentFate).
+	assignmentFateRuntime assignmentFateExecutor
+	bootLog               *bootLogRing
 	// storeStall rate-limits /health's store_stalled holder log
 	// (api_health_stall_holder.go).
 	storeStall            storeStallCapture

@@ -86,6 +86,21 @@ type assignmentCapsuleRuntime interface {
 	PersistRevocationReceipt(string, string, string, string) (capsule.CapsuleRevocationReceipt, error)
 }
 
+// assignmentFateExecutor is the executor surface the terminal report saga
+// drives (recordAssignedEngineeringReportOnce): freeze, digest, freeze
+// receipt, the receipt binding, the candidate export. The capsule executor
+// implements it; a test substitutes it (Runtime.assignmentFateRuntime) to
+// drive the saga without a guest kernel.
+type assignmentFateExecutor interface {
+	AssignmentHandle(string, string) (string, error)
+	ExtractGranted(context.Context, string, string) ([]capsule.FileChange, error)
+	InspectCapsuleRaw(string) (*capsule.CapsuleDiagnostics, error)
+	ResolveGrantedWorktreeDigest(context.Context, string, string) (string, error)
+	PersistGrantedFreezeReceipt(context.Context, string, string) (capsule.CapsuleFateReceipt, error)
+	ResolveGrantedExecutionReceiptsFor(context.Context, string, string, []string, capsule.SubjectBinding) ([]capsule.ExecutionReceipt, error)
+	PersistGrantedCandidate(context.Context, string, string) (capsule.SourcePreflight, error)
+}
+
 type AssignedEngineeringStart struct {
 	Assignment types.EngineeringAssignment
 	Run        types.RunRecord
