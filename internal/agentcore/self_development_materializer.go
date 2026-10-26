@@ -178,20 +178,51 @@ func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context,
 	case !journaled.Terminal:
 		return errSelfDevJournalMidFlight
 	}
-	// A terminal journal is recorded through the normal path, which binds a
-	// checkpoint and promotes the route. The step is bounded: a settlement
-	// that started on two crash boots and never finished closes the operation
-	// instead of running a third time.
-	if spentErr := rt.spendSelfDevelopmentSettlementAttempt(operation.OperationID); spentErr != nil {
-		if errors.Is(spentErr, ErrGuestApplyAttemptsSpent) {
-			return rt.closeSelfDevelopmentSettlementDegraded(ctx, operation)
+	// Only an `applied` journal has a tail: a checkpoint bind and a route
+	// promotion, the work that can crash the computer. Any other terminal
+	// outcome (a refusal, a failure with a recovery receipt) installed nothing
+	// that stays; it settles through the normal path with no bound, because it
+	// has no tail to bound and the bound must never keep it from settling.
+	if journaled.Result.Outcome == "applied" {
+		// The applied event is recorded first, outside the bound: it is O(1),
+		// the journal says what happened, and it closes the pending
+		// transition, so a store that refuses appends for a while cannot spend
+		// the bound or leave later updates refused.
+		if err := rt.recordSettlementApplied(ctx, operation, journaled.Result, rollback); err != nil {
+			return err
 		}
-		return spentErr
+		// The tail is bounded: a settlement that started on two crash boots
+		// and never finished closes the operation instead of running a third
+		// time.
+		if spentErr := rt.spendSelfDevelopmentSettlementAttempt(operation.OperationID); spentErr != nil {
+			if errors.Is(spentErr, ErrGuestApplyAttemptsSpent) {
+				return rt.closeSelfDevelopmentSettlementDegraded(ctx, operation, rollback)
+			}
+			return spentErr
+		}
 	}
 	if rollback {
 		return rt.rollbackSelfDevelopmentOperation(ctx, operation, true)
 	}
 	return rt.materializeSelfDevelopmentOperation(ctx, operation, true)
+}
+
+// recordSettlementApplied verifies the journaled applied result's receipts and
+// commits its applied (or rollback-applied) event.
+func (rt *Runtime) recordSettlementApplied(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, rollback bool) error {
+	ref, publicKey, err := rt.selfdevUpdater.PublicKey(ctx)
+	if err != nil {
+		return err
+	}
+	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
+	if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
+		return fmt.Errorf("materializer: invalid applied receipts")
+	}
+	eventKind := computerevent.EventMaterializationApplied
+	if rollback {
+		eventKind = computerevent.EventRollbackApplied
+	}
+	return rt.appendMaterializationAppliedEvent(ctx, operation, result, eventKind)
 }
 
 // selfdevSettlementAttemptReason and selfdevSettlementAttemptLimit bound the
@@ -208,9 +239,15 @@ const (
 // started on two crash boots and did not finish on either. The count is starts
 // (a boot that crashed, or one the base source or control plane failed), so the
 // cause says what was counted, not that the computer crashed. last is the state
-// the operation was in when the bound closed it.
-func selfdevSettlementUnfinished(last string) string {
-	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): the apply is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides", last)
+// the operation was in when the bound closed it. The applied event is recorded
+// before the bound is spent, so "recorded on the tape" is true; for a rollback
+// it is the rollback that is recorded.
+func selfdevSettlementUnfinished(last string, rollback bool) string {
+	recorded := "the apply"
+	if rollback {
+		recorded = "the rollback"
+	}
+	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): %s is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides", last, recorded)
 }
 
 // selfdevSettlementUnfinishedNothingInstalled is the cause on an operation
@@ -245,7 +282,7 @@ func (rt *Runtime) spendSelfDevelopmentSettlementAttempt(operationID string) err
 // bound and the route is not promoted. An operation still `accepted` installed
 // nothing and has no accepted -> degraded edge: it settles `failed`. An
 // operation already degraded keeps the cause it has.
-func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, operation selfdev.Operation) error {
+func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, operation selfdev.Operation, rollback bool) error {
 	switch operation.State {
 	case selfdev.StateDegraded:
 		return nil
@@ -271,7 +308,7 @@ func (rt *Runtime) closeSelfDevelopmentSettlementDegraded(ctx context.Context, o
 		log.Printf("selfdev: crash boot: %s failed from %s: %s", operation.OperationID, operation.State, cause)
 		return nil
 	}
-	cause := selfdevSettlementUnfinished(operation.State)
+	cause := selfdevSettlementUnfinished(operation.State, rollback)
 	if _, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateDegraded, func(next *selfdev.Operation) error {
 		next.TerminalError = cause
 		return nil
@@ -781,9 +818,48 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	return rt.settleSelfDevelopmentRefusal(ctx, operation, applyErr)
 }
 
-func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, closure computerversion.CodeClosure, program computerversion.ArtifactProgram, eventKind computerevent.EventKind, expectedState, nextState string, routeKind routeledger.TransitionKind, decisionScope, terminalNote string) error {
+// appendMaterializationAppliedEvent commits the applied (or rollback-applied)
+// event, which records what the updater did and closes the pending transition.
+// It is idempotent on the decision event. It is the cheap, known half of
+// recordMaterializationApplied: the crash-boot settlement runs it before, and
+// outside, the settlement's attempt bound, so a store that refuses the append
+// for a while never spends the bound and never leaves the transition pending.
+func (rt *Runtime) appendMaterializationAppliedEvent(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, eventKind computerevent.EventKind) error {
 	payload, err := computerevent.CanonicalJSON(result)
 	if err != nil {
+		return err
+	}
+	idempotency := "selfdev-" + string(eventKind) + "-" + operation.DecisionEvent
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
+		return lookupErr
+	} else if found {
+		return nil
+	}
+	head, headErr := rt.store.Head(ctx, operation.ComputerID)
+	if headErr != nil || head == nil {
+		return fmt.Errorf("materializer: desired projection unavailable")
+	}
+	eventID, eventErr := computerevent.NewEventID()
+	if eventErr != nil {
+		return eventErr
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
+		EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+		ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+		ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
+		ResultingEffectiveCommitment: head.DesiredStateCommitment,
+		ReducerVersion:               computerevent.ReducerVersionV1,
+	}
+	if _, _, eventErr = appendEventPayload(rt, ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
+		return eventErr
+	}
+	return nil
+}
+
+func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, closure computerversion.CodeClosure, program computerversion.ArtifactProgram, eventKind computerevent.EventKind, expectedState, nextState string, routeKind routeledger.TransitionKind, decisionScope, terminalNote string) error {
+	if err := rt.appendMaterializationAppliedEvent(ctx, operation, result, eventKind); err != nil {
 		return err
 	}
 	receiptBytes, err := result.MaterializationReceipt.CanonicalBytes()
@@ -792,30 +868,6 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	}
 	receiptDigest := computerevent.DigestBytes(receiptBytes)
 	idempotency := "selfdev-" + string(eventKind) + "-" + operation.DecisionEvent
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
-		return lookupErr
-	} else if !found {
-		head, headErr := rt.store.Head(ctx, operation.ComputerID)
-		if headErr != nil || head == nil {
-			return fmt.Errorf("materializer: desired projection unavailable")
-		}
-		eventID, eventErr := computerevent.NewEventID()
-		if eventErr != nil {
-			return eventErr
-		}
-		event := computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
-			EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
-			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
-			ResultingEffectiveCommitment: head.DesiredStateCommitment,
-			ReducerVersion:               computerevent.ReducerVersionV1,
-		}
-		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
-			return eventErr
-		}
-	}
 	if head, err := rt.store.Head(ctx, operation.ComputerID); err != nil || head == nil {
 		return fmt.Errorf("materializer: applied projection unavailable")
 	}
