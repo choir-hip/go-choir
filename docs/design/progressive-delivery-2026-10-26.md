@@ -4,6 +4,12 @@ Design for one switch registry, a ring order, and a host controller that
 promotes and reverts switches on measured evidence, so the owner stops
 ruling on each switch.
 
+- **Status:** proposed. Awaiting owner ratification of the policy table
+  (section 3.3) and the three open questions (section 10). **Review 340**
+  (Devin): code claims verified; findings F1 to F7 folded in (class tokens on
+  protected rings, security revert is hold-and-page, 4 releases kept, finding
+  number, OG gate not in nix, controller expiry, seed rows by id). Receipt:
+  `_runs/bunch340/devin.out`.
 - **Mutation class of this document:** green. Nothing here is built. Every
   build slice carries its own class and review tier in section 8.
 - **Review tier:** a design that a build will follow is reviewed like the
@@ -105,7 +111,7 @@ prerequisites asked for are: **metric**, **control group**, **soak**,
 | **Prefer static configuration in source control** | S4: toggle config should "move through the same delivery pipeline as code" | Declaration in git. | Declaration in git (`switches/registry.yaml`). Runtime state (current ring) is separate and lives on the host (section 4.2). |
 | **Stale-flag detection** | S7 (Unleash, from memory): flags carry a type with an expected lifetime and are marked potentially stale when they outlive it | A type, a creation date. | The lint and the controller's "ready to retire" report. |
 | **Error budget gates the pace of change** | S8 (SRE Workbook, from memory): when the budget is spent, releases freeze except for reliability and security fixes | An SLO and a measurement. | A **rollout budget** (section 5.6), not an SLO budget. |
-| **Automatic rollback on a failed gate** | S2, S3 | A last-known-good target kept ready. | Per kind of switch in section 6. D2 already keeps up to 8 guest releases. |
+| **Automatic rollback on a failed gate** | S2, S3 | A last-known-good target kept ready. | Per kind of switch in section 6. D2 keeps 4 guest releases on Node B (`GO_CHOIR_GUEST_RELEASE_KEEP_MAX`, default 4). |
 
 ### 2.2 Does not transfer, and why
 
@@ -134,10 +140,23 @@ audit: `test`, `primary`, `premium_always_on`, `public_platform`,
 |---|---|---|
 | **R0 proof** | d@e (`computer-59c902c5...`), the designated proof computer; plus a disposable test computer when a probe needs a fresh one | 1 to 2 |
 | **R1 test** | `class:test`: every test account's computer, including the DAMON pair (9648031f, 71afbf14) and fp0-jobpark-1024b. b@c is **excluded** while X1 leaves it crash-looping at boot (D2 §proof computers) | single digits; **unverified**, the controller's first act is to count them from vmctl |
-| **R2 owner** | `class:premium_always_on`: the owner's own computers | few; **unverified** |
+| **R2 owner** | the owner's own computers, named by **explicit computer id** (not `class:`; see below) | few; **unverified** |
 | **R3 primary** | `class:primary`: every other user's ordinary computer, and every new computer | **unverified**; possibly 0 to a few |
-| **R4 platform** | `class:public_platform` | 1 |
-| **R5 paper** | `class:critical_protected`: the paper, always busy | 1 |
+| **R4 platform** | `public_platform`, by explicit computer id | 1 |
+| **R5 paper** | `critical_protected`, by explicit computer id: the paper, always busy | 1 |
+
+**Ring membership is by id, except R1 (review 340 F1).** `WarmnessClass` is
+a boot-only input: the ownership and resume paths (`internal/vmctl/ownership.go`
+around :1750 and :1840) never set it, so a `class:` token can miss a resumed
+or re-adopted computer. The repo already bans `class:` selection for protected
+computers (`capsule_tunnel_identity.go:14`, `guest_dns.go:20`,
+`checkpoint_cadence.go:55-71`). So R0, R2, R3, R4 and R5 are lists of explicit
+computer ids that the controller derives from vmctl's computer table and
+records in `state.json`; only R1 may use `class:test`. R3 (primary) is "every
+computer not named in another ring", resolved by the controller at each tick,
+so a new computer lands there. `follow:<id>` expands to ids (plus `class:test`
+for R1), never to the other class tokens. Making class reliable (set on
+resume) is a prerequisite for any later switch to class-based rings.
 
 Two consequences of the sizes. First, **an empty or tiny ring is normal**: a
 ring with no eligible computer is skipped, and a ring smaller than the
@@ -271,7 +290,7 @@ effect at each computer's next launch with no deploy.
 
 ### 4.3 How F-0 and "follow the ring" work
 
-F-0 (audit finding 1, item 24): today `computerSettingOn`
+F-0 (audit section 0 finding 2, item 24): today `computerSettingOn`
 (`agentcore/computer_settings.go:36-48`) and six other direct readers read
 "no stored row" as off and never consult `KnownComputerSettings`, so all 26
 settings are off for every new computer.
@@ -526,11 +545,17 @@ Three rules first.
    never creates a boot-time resumer. This keeps the restart doctrine intact:
    a crash restart closes work; a planned update may resume it; the marker is
    consumed before resuming.
-2. **A revert goes to the previous ring, not necessarily to off.** If the
+2. **A revert goes to the previous ring, not necessarily to off (non-security switches).** If the
    same switch is reverted twice in 24 hours it goes to `off` and is
    **quarantined**: it cannot re-enter the walk until a new commit changes
    its entry's `revision` (a fix, or a changed bound). That is hysteresis
    against flapping.
+   **Security-enforcement switches (review 340 F2):** reverting enforce to
+   observe or off is a security downgrade. At or above the first
+   human-confirmed ring, a breach is **hold-and-page**: the ring stops
+   advancing, the owner is alerted immediately, and a person decides the
+   revert. Below that ring (R0, R1 under the policy table) the automatic
+   revert stays, because the exposure is test computers. Security first.
 3. **A revert must land before the next boot.** If the switch is crashing a
    computer, the markerless boot that follows a crash closes work and
    boots under the *reverted* selection, because the file write is
@@ -544,10 +569,10 @@ Per kind of switch:
 | **Host selector** (`*_ONLY`) with `follow:` | `VM_SNAPSHOT_DIFF_ONLY`, `VM_CHECKPOINT_CADENCE_ONLY`, `VMCTL_JAILER_ONLY`, `VM_BALLOON_STATS_ONLY` | controller writes the previous ring list | **At each computer's next launch.** Computers already launched under the switch keep it until then | None needed for soft reverts. For a revert that cannot wait (the switch corrupts state) the controller may *request* a planned refresh through vmctl's deferred-refresh sweep: idle computers now, busy ones at their next idle moment, marker-backed with reason `switch revert: <id>`. The paper and `public_platform` are never refreshed this way by the controller; only a human requests it. |
 | **Host env mode read by a daemon** (`VMCTL_ADMISSION_NEED`, `VMCTL_GUEST_CACHE_RETURN`, `VMCTL_STORE_COMPACT_PRESSURE`, `GATEWAY_*` modes) | D4, D6, row 14 | the daemon re-reads the mode from `state.json` on each decision (mtime-cached); controller writes the previous mode | **Hot**, within one decision | No restart. This is the cheapest kind to revert and the first to convert from a plain nix env to `follow`. |
 | **Let-binding** (nix compile-time: `snapshotReleaseRetain`, `ciGateEpochCheck`, `hostFetchVMs`, `gatewayModelScheduler`, `platformDoltSquashTimerEnabled`) | rows 1, 2, 6, 12, 17 | the controller **cannot** change these; they are baked into units by a nix build | Only by a commit and a deploy | `git revert` of the flip commit is the repo rollback path (CLAUDE.md). The controller's role is to *detect* the breach, freeze other promotions and print the exact revert commit. Convert the ones with a runtime reader to `follow` over time: `ciGateEpochCheck` is already read from a file (`/var/lib/go-choir/ci-gate-epoch-mode`, written by a tmpfiles rule), so the state file can be its source at once. `snapshotReleaseRetain` can become `follow` through the existing env it feeds (`VM_SNAPSHOT_RELEASE_RETAIN`). |
-| **Guest env** (`CHOIR_*` in `nix/autoputer-vm.nix`) | `CHOIR_OG_WRITER_GATE`, `CHOIR_DOCUMENT_TOOL_SANDBOX`, `CHOIR_RUNTIME_CAPABILITY_FLOOR`, capsule memory policy | the AV:523 pattern: vmctl passes a per-computer value at boot; the guest env default is the safe mode | At the computer's **next boot** (boot arguments are in the launch-config hash, so changing the value voids that computer's snapshot and it cold boots: a real cost the soak must price in). Hot only if the guest re-reads the mode live, which is **unverified** per variable | A boot argument change is a launch-time change; it takes effect at the next planned or natural launch and never forces one. |
+| **Guest env** (`CHOIR_*` in `nix/autoputer-vm.nix`) | `CHOIR_OG_WRITER_GATE` (not in `nix/autoputer-vm.nix` today: unset, code default observe, `objectgraph/writer.go:134-143`; registering it adds the line), `CHOIR_DOCUMENT_TOOL_SANDBOX`, `CHOIR_RUNTIME_CAPABILITY_FLOOR`, capsule memory policy | the AV:523 pattern: vmctl passes a per-computer value at boot; the guest env default is the safe mode | At the computer's **next boot** (boot arguments are in the launch-config hash, so changing the value voids that computer's snapshot and it cold boots: a real cost the soak must price in). Hot only if the guest re-reads the mode live, which is **unverified** per variable | A boot argument change is a launch-time change; it takes effect at the next planned or natural launch and never forces one. |
 | **Setting** (per-computer, in the object graph) | the 26 `KnownComputerSettings` | with step 2 of F-0, retreat changes what "no row" resolves to; explicit rows are untouched | Within the guest cache TTL (about 60 s), no restart | Settings that start background work (`source.projection`, `texture.root_desk`) apply through their idempotent apply functions; a revert calls the same apply with `false`. Check that each such apply tolerates being turned off mid-run (**unverified**; see failure mode 9.5). |
 | **Code deploy** (host services) | any train | no automatic revert exists. The deploy script records `previous_receipt`, `frontend-previous`, `<service>-previous` and the NixOS profile in the incomplete receipt, but I found no post-switch health check that rolls back on its own (**unverified**; I read `node-b-ci-deploy` only for the receipt shape) | Manual `git revert` plus a train, or the recorded previous profile | Slice 6: a post-deploy health probe that, on failure, selects the previous NixOS generation. One host means no canary here; the defence is the pre-deploy gates (`node-b-ci-gate`, the classifier, CI) and a fast post-deploy check. |
-| **Code deploy** (guest image, D2 on) | any guest-image change | stop refreshing outer rings (they stay on the previous release, which is the control and the free rollback); for rings already refreshed, a planned refresh back onto the previous release directory | Behind computers are untouched. Refreshed ones return at their next idle moment | The return refresh is a planned update, marker-backed, so it may resume work, same as the forward one. Release directories are retained up to 8, within the one-week support window (`VM_GUEST_RELEASE_SUPPORT_WINDOW=168h`). Never during a self-development apply or a live capsule. |
+| **Code deploy** (guest image, D2 on) | any guest-image change | stop refreshing outer rings (they stay on the previous release, which is the control and the free rollback); for rings already refreshed, a planned refresh back onto the previous release directory | Behind computers are untouched. Refreshed ones return at their next idle moment | The return refresh is a planned update, marker-backed, so it may resume work, same as the forward one. Release directories are retained up to 4 on Node B (`GO_CHOIR_GUEST_RELEASE_KEEP_MAX`), within the one-week support window (`VM_GUEST_RELEASE_SUPPORT_WINDOW=168h`). Never during a self-development apply or a live capsule. |
 
 Self-development rollback (just fixed, never yet run) and the U4 stack
 rebase are per-computer rollback paths for engineering changes to a
@@ -589,7 +614,13 @@ From S4 (expiry, time bombs, a cap) with Choir's speed:
    addition of a new one. The 52 rows are a backlog; the cap applies once
    deletions and the first walks bring the live count under it (the baseline
    is recorded in the lint's config and ratchets down).
-7. **Retire is part of the definition.** Every mission Definition that adds a
+7. **The controller is a switch too (review 340 F6).** The shadow-mode
+   controller (S3a) is built-but-off, the exact habit this design targets. It
+   has a registry entry (`life: release`, expiry 14 days from S3a landing,
+   `decision_by` the date shadow mode must be promoted to acting or deleted,
+   with the shadow-versus-hand-walk comparison as the evidence). The debt rule
+   applies to it.
+8. **Retire is part of the definition.** Every mission Definition that adds a
    switch names its retire step and its owner (standing-questions: decision
    provenance, deletion citers, registry hygiene). The registry is the
    registry-hygiene answer.
@@ -602,7 +633,7 @@ tier 1; red where a defect is silent or irreversible: tier 2).
 
 | Slice | What | Class | Review | Removes |
 |---|---|---|---|---|
-| **S0** | Owner ratifies the policy table. `switches/registry.yaml` seeded from the audit (data only, 44 entries, 5 holds). A hand ring walk by FP0 under section 3's soaks and the same guards, starting with the 14 "ON NOW" items; the flips themselves keep their own class and review (row 1 is red). | green (the registry and policy); each flip keeps its class | none for the registry; the flips per their tier | The per-switch rulings: 14 ON NOW, and the 25 "named step" rows become gates the walk checks. **No code.** |
+| **S0** | Owner ratifies the policy table. `switches/registry.yaml` seeded from the audit by named switch id (data only; the held ids are `intake.event_wakes`, `store.event_table` with `CHOIR_EVENT_TABLE_COMPUTERS`, `CI_REUSE_GREEN_PR_RUN`, and the unwired `appdesk`/`appnet`/`egressgrant`; counts are the audit's, re-derived by the seed script). A hand ring walk by FP0 under section 3's soaks and the same guards, starting with the 14 "ON NOW" items; the flips themselves keep their own class and review (row 1 is red). | green (the registry and policy); each flip keeps its class | none for the registry; the flips per their tier | The per-switch rulings: 14 ON NOW, and the 25 "named step" rows become gates the walk checks. **No code.** |
 | **S1** | The registry lint: unregistered switch fails, expiry warns, cap, `where` check; the audit seed script | yellow | tier 0 (the checks are the review) | New debt. The ruling about whether a switch may be added. |
 | **S2** | F-0 step 1: `store.SettingDefault`, fallback in `GetComputerSetting` and the seven readers; a roadmap W2 commit sets the default for the owner-approved settings; explicit `false` rows for the paper where meaningless | red (settings plane) | tier 2 (every desk reads it) | New computers get the proved set without a POST. Row 43. |
 | **S3a** | `follow:<id>` token in `selectsComputer`, `state.json` reader in vmctl, `switches status` read endpoint and CLI; the controller in **shadow mode**: samples, evaluates guards, logs "would advance / would revert", writes nothing | orange | tier 1 | None yet; it measures the controller against the hand walk for a week of real flips (a replay of the audit's past incidents is the test: section 9.2). |
