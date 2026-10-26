@@ -290,6 +290,17 @@ type ManagerConfig struct {
 	// vmmanager appends its per-VM runtime parameters to this base cmdline.
 	KernelParams string
 
+	// KernelParamsFile is VM_KERNEL_PARAMS_FILE. When set and readable, a
+	// launch reads the kernel parameters from it at that moment instead of
+	// using the value cached at vmctl start (D2 S1b, H1).
+	KernelParamsFile string
+
+	// GuestReleaseLink is the stable symlink the guest image is launched
+	// from (VM_GUEST_RELEASE_LINK, /var/lib/go-choir/guest on Node B). Each
+	// launch records its target; a snapshot whose launch target is not the
+	// link's target now is refused (D2 S1b, H6). Empty disables the guard.
+	GuestReleaseLink string
+
 	// GuestPort is the port the guest autoputer listens on.
 	GuestPort int
 
@@ -1243,7 +1254,7 @@ func (m *Manager) applyLaunchDefaults(cfg *VMConfig) {
 		cfg.StoreDiskPath = m.cfg.StoreDiskPath
 	}
 	if cfg.KernelParams == "" {
-		cfg.KernelParams = m.cfg.KernelParams
+		cfg.KernelParams = m.kernelParams()
 	}
 	if cfg.GuestPort == 0 {
 		cfg.GuestPort = m.cfg.GuestPort
@@ -2008,7 +2019,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	var bootArgs string
 	kernelParams := strings.TrimSpace(cfg.KernelParams)
 	if kernelParams == "" {
-		kernelParams = strings.TrimSpace(m.cfg.KernelParams)
+		kernelParams = strings.TrimSpace(m.kernelParams())
 	}
 	if cfg.StoreDiskPath != "" && kernelParams != "" {
 		runtimeArgs := []string{
@@ -2315,6 +2326,11 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 	configPath := filepath.Join(configDir, "fc-config.json")
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		return fmt.Errorf("write firecracker config: %w", err)
+	}
+	// The launch record pins the image the link names now, before any spawn,
+	// for direct and jailed launches alike (D2 S1b, H6).
+	if err := m.writeLaunchRecord(cfg); err != nil {
+		return fmt.Errorf("launch record for VM %s: %w", vmID, err)
 	}
 	m.recordConfinementLocked(vmID, receipt)
 

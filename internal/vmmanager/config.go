@@ -45,9 +45,16 @@ func LoadConfigFromEnv() ManagerConfig {
 		cfg.KernelParams = strings.TrimSpace(v)
 	}
 	if v := os.Getenv("VM_KERNEL_PARAMS_FILE"); v != "" {
+		// The file is also re-read at every launch (Manager.kernelParams):
+		// the NixOS switch repoints it before vmctl restarts.
+		cfg.KernelParamsFile = v
 		if data, err := os.ReadFile(v); err == nil {
 			cfg.KernelParams = strings.TrimSpace(string(data))
 		}
+	}
+	cfg.GuestReleaseLink = "/var/lib/go-choir/guest"
+	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASE_LINK")); v != "" {
+		cfg.GuestReleaseLink = v
 	}
 
 	if v := os.Getenv("VM_GUEST_PORT"); v != "" {

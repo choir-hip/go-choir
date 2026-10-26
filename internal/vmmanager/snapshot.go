@@ -85,23 +85,27 @@ const (
 // Fallback reasons: the snapshot was not used and the caller cold boots, or
 // the hibernate used the kill path. They are recorded on the timelines.
 const (
-	snapshotReasonModeKill         = "mode_kill"
-	snapshotReasonNoAPISocket      = "no_api_socket"
-	snapshotReasonDiskBudget       = "disk_budget"
-	snapshotReasonGuestBusy        = "guest_busy"
-	snapshotReasonGuestNoEndpoint  = "guest_prepare_unsupported"
-	snapshotReasonGuestPrepare     = "guest_prepare_failed"
-	snapshotReasonPauseFailed      = "pause_failed"
-	snapshotReasonCreateFailed     = "snapshot_create_failed"
-	snapshotReasonCommitFailed     = "snapshot_commit_failed"
-	snapshotReasonNoSnapshot       = "no_snapshot"
-	snapshotReasonUnreadable       = "metadata_unreadable"
-	snapshotReasonConsumed         = "consumed"
-	snapshotReasonVersion          = "metadata_version"
-	snapshotReasonIdentity         = "vm_identity_mismatch"
-	snapshotReasonFirecracker      = "firecracker_version_mismatch"
-	snapshotReasonHostKernel       = "host_kernel_mismatch"
-	snapshotReasonLaunchConfig     = "launch_config_mismatch"
+	snapshotReasonModeKill        = "mode_kill"
+	snapshotReasonNoAPISocket     = "no_api_socket"
+	snapshotReasonDiskBudget      = "disk_budget"
+	snapshotReasonGuestBusy       = "guest_busy"
+	snapshotReasonGuestNoEndpoint = "guest_prepare_unsupported"
+	snapshotReasonGuestPrepare    = "guest_prepare_failed"
+	snapshotReasonPauseFailed     = "pause_failed"
+	snapshotReasonCreateFailed    = "snapshot_create_failed"
+	snapshotReasonCommitFailed    = "snapshot_commit_failed"
+	snapshotReasonNoSnapshot      = "no_snapshot"
+	snapshotReasonUnreadable      = "metadata_unreadable"
+	snapshotReasonConsumed        = "consumed"
+	snapshotReasonVersion         = "metadata_version"
+	snapshotReasonIdentity        = "vm_identity_mismatch"
+	snapshotReasonFirecracker     = "firecracker_version_mismatch"
+	snapshotReasonHostKernel      = "host_kernel_mismatch"
+	snapshotReasonLaunchConfig    = "launch_config_mismatch"
+	// snapshotReasonImageMoved: the guest link named another image when the
+	// snapshot's guest was launched than it does now, or cannot be read (D2
+	// S1b, H6). The guest's memory describes the launch-time store disk.
+	snapshotReasonImageMoved       = "image_moved_since_launch"
 	snapshotReasonDisk             = "disk_identity_mismatch"
 	snapshotReasonFilesMissing     = "snapshot_files_missing"
 	snapshotReasonCredentialWindow = "credential_window_passed"
@@ -224,6 +228,11 @@ type SnapshotMeta struct {
 	// no version bump.
 	SnapshotType string `json:"snapshot_type,omitempty"`
 	ColdOrigin   bool   `json:"cold_origin,omitempty"`
+	// LaunchImageTarget is the target of the guest link when the captured
+	// guest was launched (the launch record, D2 S1b); empty for a guest
+	// launched before the record existed, which validates as before.
+	// Additive, no version bump.
+	LaunchImageTarget string `json:"launch_image_target,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -567,6 +576,9 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	}
 	if meta.HostKernelRelease == "" || meta.HostKernelRelease != v.HostKernelRelease {
 		return snapshotReasonHostKernel
+	}
+	if m.imageMovedSinceLaunch(meta) {
+		return snapshotReasonImageMoved
 	}
 	expectCfg, fcConfig := m.expectedLaunchConfig(meta, v.Expect)
 	if m.snapshotConfinementMismatch(dir, meta, expectCfg) {

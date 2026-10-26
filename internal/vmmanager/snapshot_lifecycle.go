@@ -440,6 +440,10 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 		meta.Confinement = ConfinementJailer
 		meta.VMMUID = conf.UID
 	}
+	// What the link named when this guest was launched (D2 S1b, H6).
+	if rec, ok := m.readLaunchRecord(vmID, cfg.Epoch); ok {
+		meta.LaunchImageTarget = rec.ImageTarget
+	}
 	if meta.FirecrackerVersion == "" || meta.HostKernelRelease == "" {
 		return nil, fmt.Errorf("firecracker version or host kernel release unknown")
 	}
@@ -623,6 +627,11 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		return fallback(snapshotReasonConsumeFailed, err)
 	}
 	tl.mark("snapshot_consumed")
+	// The running guest keeps the launch it had: rewrite the record from the
+	// meta so the next hibernate carries the original target (D2 S1b).
+	if err := m.storeLaunchRecord(vmID, launchRecord{ImageTarget: meta.LaunchImageTarget, Epoch: meta.Epoch, LaunchedAt: time.Now().UTC()}); err != nil {
+		log.Printf("vmmanager: warning: could not rewrite the launch record of VM %s at resume: %v", vmID, err)
+	}
 	m.recordLaunchedVMM(vmID, vmm)
 	m.reserveHostURLLocked(meta.HostURL)
 	inst := &VMInstance{
