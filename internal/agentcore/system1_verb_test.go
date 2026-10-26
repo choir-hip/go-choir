@@ -39,6 +39,9 @@ type fakeSystem1Judge struct {
 	omit string
 	// probs overrides the first choice's probability (default 0.7).
 	first float64
+	// prefer ranks a question's named choice first instead of its first
+	// choice, by question id.
+	prefer map[string]string
 }
 
 func (f *fakeSystem1Judge) Judge(_ context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
@@ -64,15 +67,19 @@ func (f *fakeSystem1Judge) Judge(_ context.Context, state json.RawMessage, quest
 		_ = json.Unmarshal(raw, &q)
 		probs := map[string]float64{}
 		rest := math.Round((1-first)/float64(len(q.Choices)-1)*100) / 100
-		for i, c := range q.Choices {
-			if i == 0 {
+		top := q.Choices[0]
+		if want, ok := f.prefer[id]; ok {
+			top = want
+		}
+		for _, c := range q.Choices {
+			if c == top {
 				probs[c] = first
 			} else {
 				probs[c] = rest
 			}
 		}
 		// A "choice" is what the transport returns too; the verb must not hand it on.
-		answers[id] = map[string]any{"type": "choice", "choice": q.Choices[0], "probabilities": probs, "confidence": 0.9}
+		answers[id] = map[string]any{"type": "choice", "choice": top, "probabilities": probs, "confidence": 0.9}
 	}
 	return json.Marshal(map[string]any{"id": "gen-system1-test", "model": "typesafe/jev-1.13", "answers": answers,
 		"usage": map[string]any{"input_tokens": 500, "output_tokens": 20, "cost": 0.00003}})
