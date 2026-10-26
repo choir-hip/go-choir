@@ -102,6 +102,30 @@ over.
 - **M14** restart semantics: make-room runs only inside a start; a vmctl
   restart resumes and hibernates nothing.
 
+Added by review 302 (Devin and DeepSeek on abcf4f577), each pinned by a test
+before its code:
+
+- **M15** a victim that became working, held, recently used or unroutable
+  between plan time and its own hibernate is still hibernated: the plan is
+  re-read from the live registry and the victim probed busy immediately
+  before each hibernate.
+- **M16** a guest that answers busy at the hibernate fence is killed (the
+  kill path) instead of left running; it is now a skip for every caller
+  (`docs/problems/busy-guest-hibernate-takes-kill-path-2026-10-26.md`).
+- **M17** the victim set is chosen once for the first shortfall, and another
+  path's in-flight hibernate counts as this start's room, so a start refuses
+  after evicting while eligible victims remain, with false refusal text. Now
+  one victim at a time, the shortfall recomputed from a fresh sample after
+  each, pending memory only waited for, never counted; a refusal is on a
+  fresh sample.
+- **M18** a typo or an observation word turns make-room on: the code default
+  is off and only `active`, `on`, `enabled`, `true`, `1` enable it.
+- **M19** a start superseded after it hibernated victims leaves no record
+  (`abandon_make_room` names them).
+- **M20** unbounded env overrides (capped at 10 victims and 60 s) and a
+  cancelled start that keeps evicting (the start's context stops it and
+  reaches the route guard).
+
 ### Protected surfaces, evidence, rollback
 
 Protected: vmctl admission, hibernate (VM lifecycle), the idle sweep and
