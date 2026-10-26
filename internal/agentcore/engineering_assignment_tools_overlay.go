@@ -86,6 +86,11 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 		toolCtx.EventProjection = rt.store
 		toolCtx.Ledger = rt.store // R4 learning-claims gate lookups
 	}
+	if rt != nil && rt.store != nil {
+		toolCtx.VerifyRebase = func(callCtx context.Context, staged *capsule.StagedRelease, patch []byte) error {
+			return rt.verifyRebaseAtFreeze(callCtx, rec, staged, patch)
+		}
+	}
 	if rt != nil && rt.selfdevOperations != nil && metadataStringValue(rec.Metadata, "assignment_kind") != string(types.EngineeringAssignmentVerification) {
 		assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 		objective := rec.Prompt
