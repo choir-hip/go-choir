@@ -408,6 +408,14 @@ func TestStoryEntitiesStoreFailureIsAServerErrorAndARefusalIsNot(t *testing.T) {
 	if rec := post(NewHandler(l.svc), dup); rec.Code != http.StatusBadRequest {
 		t.Fatalf("a duplicate = %d %s, want 400", rec.Code, rec.Body.String())
 	}
+	// A story that is not published yet is a 409, apart from the other
+	// refusals: the computer exports it when the story publishes (review
+	// 324 F2), and only then.
+	unpublished := l.entitiesReq(a, newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral))
+	unpublished.Story = types.StoryPublicationID(labOwner, "doc-not-published")
+	if rec := post(NewHandler(l.svc), unpublished); rec.Code != http.StatusConflict {
+		t.Fatalf("a story not published yet = %d %s, want 409", rec.Code, rec.Body.String())
+	}
 	broken := &Service{relationTier: l.svc.relationTier}
 	if rec := post(NewHandler(broken), l.entitiesReq(a, newEntity("Aleksandar Vucic", types.EntityTypePerson, types.EntityRoleCentral))); rec.Code < 500 {
 		t.Fatalf("no store = %d %s, want a 5xx", rec.Code, rec.Body.String())

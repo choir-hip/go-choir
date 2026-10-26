@@ -232,7 +232,7 @@ func TestOwnStoryIsCheckedPendingAndExportedWhenItPublishes(t *testing.T) { // F
 	f.turnOn(t)
 	a := f.analyse(t, agentprofile.Research, "run-f6", "doc-story")
 	zelenskyy, anthropic := a.Candidates[0], a.Candidates[1]
-	unpublished := &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusBadRequest, Body: "pub-x is not a published Autopaper story of owner o"}
+	unpublished := &platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusConflict, Body: "pub-x is not a published Autopaper story of owner o"}
 	f.epub.entityErrs = []error{unpublished, unpublished}
 
 	got, err := f.relateEntities(t, "run-f6",
@@ -331,5 +331,24 @@ func TestRelateRecordsAStoryAboutNoneOfItsCandidates(t *testing.T) {
 	f.rt.publishStoryVersion(context.Background(), f.epub, StoryVersion{OwnerID: f.owner, ComputerID: f.computer, DocID: "doc-story", RevisionID: "rev-doc-story", Revision: 1})
 	if after := f.epub.entityCalls()[before:]; len(after) != 1 || len(after[0].Entities) != 0 || after[0].Review == nil {
 		t.Fatalf("export at publish = %+v, want the review alone", after)
+	}
+}
+
+// Review 324 F2: only the platform's "not published yet" (409) makes the
+// own story's export pending; any other refusal of the write is an export
+// error the desk sees, since no publish would carry it out.
+func TestOwnStoryWriteRefusedOtherwiseIsAnExportError(t *testing.T) {
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	a := f.analyse(t, agentprofile.Research, "run-f2", "doc-story")
+	zelenskyy := a.Candidates[0]
+	f.epub.entityErrs = []error{&platformStatusError{Path: types.StoryEntitiesPath, Status: http.StatusBadRequest, Body: "entity 1 matches the existing entity wd:Q1"}}
+	got, err := f.relateEntities(t, "run-f2",
+		yaegikernel.RelateEntity{EntityID: zelenskyy.EntityID, Role: types.EntityRoleCentral, JudgmentRef: zelenskyy.Role.ReceiptRef, QuestionID: zelenskyy.Role.QuestionID})
+	if err != nil {
+		t.Fatalf("relate: %v", err)
+	}
+	if got.Exported || got.ExportPending || got.ExportError == "" {
+		t.Fatalf("result = %+v, want an export error, not pending", got)
 	}
 }
