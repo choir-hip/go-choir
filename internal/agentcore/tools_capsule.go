@@ -61,6 +61,19 @@ type CapsuleToolCtx struct {
 	// capture in it so the owner's browser can read it by digest
 	// (visual_evidence_slice V22). Nil leaves captures unresolvable.
 	Images visualAssetStore
+	// frozenTree is the executor read a second Freeze on a frozen operation
+	// takes to compare the capsule's tree with the candidate (R9-1); nil
+	// uses Executor. A test substitutes it to drive the replay check
+	// without a guest kernel.
+	frozenTree frozenTreeReader
+}
+
+// frozenTreeReader is the executor surface of the replay check: the
+// receipts the frozen bundle cites and a read of the live tree that changes
+// no capsule state.
+type frozenTreeReader interface {
+	ResolveExecutionReceipts([]string) ([]capsule.ExecutionReceipt, error)
+	InspectGrantedWorktree(context.Context, string, string) (capsule.GrantedWorktree, error)
 }
 
 // releaseBinaryStillRunning refuses a verification pass on a bundle whose
@@ -194,6 +207,12 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	if operation.State != selfdev.StateExecuting {
 		if operation.BundleDigest != "" && (operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
+			// A replay answers only a Freeze of the tree that froze: an
+			// edit after the freeze is not in the candidate, and a replay
+			// told the desk it was (R9-1).
+			if err := frozenCandidateTreeChanged(ctx, toolCtx, handle, operation); err != nil {
+				return nil, err
+			}
 			return map[string]any{
 				"handle": handle, "bundle_digest": operation.BundleDigest,
 				"operation_id": operation.OperationID, "state": operation.State,
@@ -348,6 +367,141 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	// what resolved, and leave the runtime's observation for the rule pass.
 	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, out)
 	return out, nil
+}
+
+// frozenTreeChangeListMax bounds the paths a changed-tree refusal lists.
+const frozenTreeChangeListMax = 20
+
+// frozenCandidateTreeChanged decides whether a Freeze on an already frozen
+// operation may replay it: nil when the capsule's tree is the one that froze,
+// otherwise an error the desk can read (R9-1,
+// docs/problems/freeze-replays-a-changed-tree-2026-10-26.md). The frozen
+// tree's digest is the worktree digest of the latest receipt the bundle
+// cites, which the first Freeze's certified binding required to be the frozen
+// tree, so nothing new is stored. The live read changes no capsule state.
+// Both the /workspace/platform digest and the classified effect set (Ignored
+// and Unknown left out: /tmp and toolchain caches never enter a bundle) must
+// match. A tree that cannot be compared is not an unchanged one: that refuses
+// too. A refusal changes nothing; the desk can still Complete.
+func frozenCandidateTreeChanged(ctx context.Context, toolCtx *CapsuleToolCtx, handle string, operation selfdev.Operation) error {
+	frozen := fmt.Sprintf("this assignment's candidate is already frozen as bundle %s (operation %s, %s)", operation.BundleDigest, operation.OperationID, operation.State)
+	unchecked := func(reason string) error {
+		return fmt.Errorf("Freeze refused: %s, and Freeze could not check that this capsule's tree is the one that froze (%s), so it does not answer for it. "+
+			"The frozen candidate is what will be reviewed; Complete to end this round. A change made after the freeze needs a new round", frozen, reason)
+	}
+	var reader frozenTreeReader = toolCtx.frozenTree
+	if reader == nil {
+		if toolCtx.Executor == nil {
+			return unchecked("capsule executor unavailable")
+		}
+		reader = toolCtx.Executor
+	}
+	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest), operation)
+	if err != nil {
+		return unchecked(err.Error())
+	}
+	refs := append([]string{bundle.BuildRecipeRef}, bundle.TestReceipts...)
+	refs = append(refs, bundle.DependencyToolchainRefs...)
+	receipts, err := reader.ResolveExecutionReceipts(trimNonEmptyStrings(refs))
+	if err != nil || len(receipts) == 0 {
+		return unchecked(fmt.Sprintf("the frozen bundle's receipts are unavailable: %v", err))
+	}
+	// The latest receipt by occurrence, as the binder picks it.
+	latestAt, frozenDigest := "", ""
+	for _, receipt := range receipts {
+		if receipt.OccurredAt > latestAt {
+			latestAt, frozenDigest = receipt.OccurredAt, receipt.WorktreeDigest
+		}
+	}
+	live, err := reader.InspectGrantedWorktree(ctx, toolCtx.AgentRunID, handle)
+	if err != nil {
+		return unchecked(err.Error())
+	}
+	current, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(bundle.CapsuleIdentity, live.Changes)
+	if err != nil {
+		return unchecked(err.Error())
+	}
+	changed := frozenTreeChanges(bundle.Groups, current.Groups)
+	if frozenDigest == "" || live.Digest == "" {
+		return unchecked("a tree digest is unavailable")
+	}
+	if strings.TrimPrefix(frozenDigest, "sha256:") == strings.TrimPrefix(live.Digest, "sha256:") && len(changed) == 0 {
+		return nil
+	}
+	what := "the files already in the candidate changed"
+	if len(changed) > 0 {
+		listed := changed
+		if len(listed) > frozenTreeChangeListMax {
+			listed = listed[:frozenTreeChangeListMax]
+		}
+		what = strings.Join(listed, ", ")
+		if more := len(changed) - len(listed); more > 0 {
+			what += fmt.Sprintf(" and %d more", more)
+		}
+	}
+	return fmt.Errorf("Freeze refused: %s, and this capsule's tree changed since: %s (/workspace/platform was %s at the freeze, is %s now). "+
+		"The change is not in the candidate: the frozen candidate is what will be reviewed. Complete to end this round (a completed Complete cites a receipt that observed the current tree); "+
+		"to put this change in a candidate, the round must end and a new round start", frozen, what, frozenDigest, live.Digest)
+}
+
+// frozenTreeChanges lists, sorted by path, how the classified effect set
+// moved from the frozen bundle's to the live tree's: "added", "removed" or
+// "modified" since the freeze, per path. A path the candidate added and the
+// tree no longer changes was removed; one the candidate deleted and the tree
+// no longer deletes was added back.
+func frozenTreeChanges(frozenGroups, liveGroups map[string][]transaction.ChangeRecord) []string {
+	flatten := func(groups map[string][]transaction.ChangeRecord) map[string]transaction.ChangeRecord {
+		out := map[string]transaction.ChangeRecord{}
+		for _, records := range groups {
+			for _, record := range records {
+				out[record.Path] = record
+			}
+		}
+		return out
+	}
+	frozen, live := flatten(frozenGroups), flatten(liveGroups)
+	paths := map[string]string{}
+	for path, before := range frozen {
+		after, still := live[path]
+		switch {
+		case !still && before.Kind == "added":
+			paths[path] = "removed"
+		case !still && before.Kind == "deleted":
+			paths[path] = "added"
+		case !still:
+			paths[path] = "modified"
+		case after.Kind == before.Kind && after.Mode == before.Mode:
+		case after.Kind == "deleted":
+			paths[path] = "removed"
+		case before.Kind == "deleted":
+			paths[path] = "added"
+		default:
+			paths[path] = "modified"
+		}
+	}
+	for path, after := range live {
+		if _, inFrozen := frozen[path]; inFrozen {
+			continue
+		}
+		switch after.Kind {
+		case "added":
+			paths[path] = "added"
+		case "deleted":
+			paths[path] = "removed"
+		default:
+			paths[path] = "modified"
+		}
+	}
+	sorted := make([]string, 0, len(paths))
+	for path := range paths {
+		sorted = append(sorted, path)
+	}
+	sort.Strings(sorted)
+	out := make([]string, len(sorted))
+	for i, path := range sorted {
+		out[i] = paths[path] + " " + path
+	}
+	return out
 }
 
 // publishFrozenDraft writes the draft into the staged tree and publishes the
