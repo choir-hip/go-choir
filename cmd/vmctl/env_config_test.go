@@ -39,13 +39,28 @@ func TestPressureAndAdmissionEnvDefaultsAndRollback(t *testing.T) {
 	}
 }
 
-// Density D1: make-room is on by default and its rollback is one env value
+// Density D1: make-room fails closed (review 302 F3). It is off unless
+// VMCTL_ADMISSION_MAKE_ROOM names an enabling word exactly; nix/node-b.nix
+// sets "active" explicitly, and "off" is the rollback
 // (docs/problems/density-station-d-failure-modes-2026-10-26.md, M13).
-// Ways it could fail: the off value is not read; a malformed victim bound
-// or settle wait zeroes the bound.
+// Ways it could fail: a typo or an observation word turns it on; the off
+// value is not read; a malformed or enormous victim bound or settle wait
+// reaches the registry (F5 caps them at 10 and 60s).
 func TestAdmissionMakeRoomEnv(t *testing.T) {
-	if a := hostAdmissionConfigFromEnv(); a.MakeRoom != vmctl.HostAdmissionMakeRoomActive {
-		t.Fatalf("make-room default = %q, want active", a.MakeRoom)
+	if a := hostAdmissionConfigFromEnv(); a.MakeRoom != vmctl.HostAdmissionMakeRoomOff {
+		t.Fatalf("make-room default = %q, want off", a.MakeRoom)
+	}
+	for value, want := range map[string]string{
+		"active": vmctl.HostAdmissionMakeRoomActive, "on": vmctl.HostAdmissionMakeRoomActive,
+		"enabled": vmctl.HostAdmissionMakeRoomActive, "true": vmctl.HostAdmissionMakeRoomActive,
+		"1": vmctl.HostAdmissionMakeRoomActive, "off": vmctl.HostAdmissionMakeRoomOff,
+		"observe": vmctl.HostAdmissionMakeRoomOff, "of": vmctl.HostAdmissionMakeRoomOff,
+		"activ": vmctl.HostAdmissionMakeRoomOff, "yes please": vmctl.HostAdmissionMakeRoomOff,
+	} {
+		t.Setenv("VMCTL_ADMISSION_MAKE_ROOM", value)
+		if got := hostAdmissionConfigFromEnv().MakeRoom; got != want {
+			t.Fatalf("VMCTL_ADMISSION_MAKE_ROOM=%q gives %q, want %q", value, got, want)
+		}
 	}
 	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM", "off")
 	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS", "2")
@@ -58,5 +73,10 @@ func TestAdmissionMakeRoomEnv(t *testing.T) {
 	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE", "-1s")
 	if a := hostAdmissionConfigFromEnv(); a.MakeRoomMaxVictims <= 0 || a.MakeRoomSettleWait <= 0 {
 		t.Fatalf("malformed make-room bounds = %+v, want the defaults", a)
+	}
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_MAX_VICTIMS", "1000")
+	t.Setenv("VMCTL_ADMISSION_MAKE_ROOM_SETTLE", "1h")
+	if a := hostAdmissionConfigFromEnv(); a.MakeRoomMaxVictims != 10 || a.MakeRoomSettleWait != 60*time.Second {
+		t.Fatalf("make-room bounds = %d victims %s settle, want the caps 10 and 60s", a.MakeRoomMaxVictims, a.MakeRoomSettleWait)
 	}
 }

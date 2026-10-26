@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,12 @@ type makeRoomVMManager struct {
 	inFlight    int32
 	maxInFlt    int32
 	onHibernate func(vmID string)
+	// failWith, when set, is asked before a hibernate frees anything; a
+	// non-nil answer is the manager's error and the VM keeps running.
+	failWith func(vmID string) error
+	// afterFirst is a hook for tests that change a second victim once the
+	// first has been hibernated.
+	afterFirst func()
 }
 
 func (m *makeRoomVMManager) HibernateVM(vmID string) error {
@@ -43,6 +50,11 @@ func (m *makeRoomVMManager) HibernateVM(vmID string) error {
 	m.hmu.Unlock()
 	if hook != nil {
 		hook(vmID)
+	}
+	if fail := m.failWith; fail != nil {
+		if err := fail(vmID); err != nil {
+			return err
+		}
 	}
 	m.rmu.Lock()
 	freed := m.rss[vmID]
@@ -580,8 +592,13 @@ func TestMakeRoomOffIsTodaysRefusal(t *testing.T) {
 	if d := lastDecision(t, f.reg); d.Decision != "refuse" {
 		t.Fatalf("decision = %q, want refuse", d.Decision)
 	}
-	if def := normalizeHostAdmissionConfig(HostAdmissionConfig{}); def.MakeRoom != HostAdmissionMakeRoomActive {
-		t.Fatalf("default make-room = %q, want active (built features are on)", def.MakeRoom)
+	// Review 302 F3: red features fail closed. The code default is off;
+	// nix/node-b.nix sets active explicitly.
+	if def := normalizeHostAdmissionConfig(HostAdmissionConfig{}); def.MakeRoom != HostAdmissionMakeRoomOff {
+		t.Fatalf("default make-room = %q, want off", def.MakeRoom)
+	}
+	if def := DefaultHostAdmissionConfig(); def.MakeRoom != HostAdmissionMakeRoomOff {
+		t.Fatalf("DefaultHostAdmissionConfig make-room = %q, want off", def.MakeRoom)
 	}
 }
 
@@ -595,5 +612,376 @@ func TestMakeRoomOnlyInsideAStart(t *testing.T) {
 	f.reg.pressureMonitorTick(context.Background(), allowAllRoutes)
 	if got := f.mr.hibernates(); len(got) != 0 {
 		t.Fatalf("pressure monitor without a start hibernated %v", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Review 302 (Devin and DeepSeek, lane/density abcf4f577) fixes. Each test
+// below fails on abcf4f577.
+// ---------------------------------------------------------------------------
+
+// busyHibernateError is what the Firecracker manager returns when the
+// guest's fence answered 409: the guest is working and was left running.
+type busyHibernateError struct{}
+
+func (busyHibernateError) Error() string            { return "guest busy: running_runs=1" }
+func (busyHibernateError) HibernateGuestBusy() bool { return true }
+
+// twoVictimPlan is a start that needs both v1 and v2: 2.5 GiB short, two
+// 1.5 GiB computers.
+func twoVictimPlan(t *testing.T) *makeRoomFixture {
+	t.Helper()
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 4*gib - 2560*mib)
+	return f
+}
+
+// F1: the plan is a snapshot. Between selecting a victim and hibernating it
+// (after the previous victim's snapshot write and settle wait) the computer
+// may have become working, held, recently used or unroutable. Immediately
+// before each hibernate make-room re-reads the live ownership and probes
+// again; a victim that no longer qualifies is spared.
+func TestMakeRoomRechecksEachVictimBeforeItsHibernate(t *testing.T) {
+	cases := []struct {
+		name string
+		turn func(f *makeRoomFixture, flip *int32)
+	}{
+		{"busy", func(f *makeRoomFixture, flip *int32) {
+			f.reg.setGuestBusyProbeForTest(func(own *VMOwnership) bool {
+				return own.VMID == "vm-v2" && atomic.LoadInt32(flip) != 0
+			})
+		}},
+		{"held", func(f *makeRoomFixture, flip *int32) {
+			f.mr.afterFirst = func() {
+				f.reg.mu.Lock()
+				f.reg.vmByID["vm-v2"].HoldStatus = &MaintenanceHold{Reason: "operator"}
+				f.reg.mu.Unlock()
+			}
+		}},
+		{"touched", func(f *makeRoomFixture, flip *int32) {
+			f.mr.afterFirst = func() {
+				f.reg.mu.Lock()
+				f.reg.vmByID["vm-v2"].LastActiveAt = *f.now
+				f.reg.mu.Unlock()
+			}
+		}},
+		{"route", func(f *makeRoomFixture, flip *int32) {
+			f.reg.SetMakeRoomRouteGuard(func(_ context.Context, userID, _ string) error {
+				if userID == "v2" && atomic.LoadInt32(flip) != 0 {
+					return errors.New("route moved")
+				}
+				return nil
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := twoVictimPlan(t)
+			var flip int32
+			tc.turn(f, &flip)
+			f.mr.onHibernate = func(vmID string) {
+				if vmID != "vm-v1" {
+					return
+				}
+				atomic.StoreInt32(&flip, 1)
+				if f.mr.afterFirst != nil {
+					f.mr.afterFirst()
+				}
+			}
+			_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 4*gib), WarmnessClassPrimary)
+			if RecoveryRefusalFrom(err) == nil {
+				t.Fatalf("err = %v, want a refusal: the second victim stopped qualifying", err)
+			}
+			if got := f.mr.hibernates(); len(got) != 1 || got[0] != "vm-v1" {
+				t.Fatalf("hibernates = %v, want only vm-v1; vm-v2 turned %s before its hibernate", got, tc.name)
+			}
+			if st, _ := f.state("vm-v2"); st != VMStateActive {
+				t.Fatalf("vm-v2 state = %s, want left running", st)
+			}
+		})
+	}
+}
+
+// Substrate (docs/problems/busy-guest-hibernate-takes-kill-path-2026-10-26.md):
+// a guest that answers busy at the fence is left running by every caller. The
+// manager's skip error must not turn into a recorded hibernate, and the idle
+// sweep counts it as nothing stopped.
+func TestHibernateGuestBusyIsASkipForTheIdleSweepAndTheNextSweepRetries(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.reg.SetIdleTimeout(30 * time.Minute)
+	f.activeComputer("w", "vm-w", 3*time.Hour, 1*gib)
+	var busy int32 = 1
+	f.mr.failWith = func(string) error {
+		if atomic.LoadInt32(&busy) != 0 {
+			return busyHibernateError{}
+		}
+		return nil
+	}
+	if n := f.reg.StopIdleVMs(context.Background(), allowAllRoutes); n != 0 {
+		t.Fatalf("idle sweep stopped %d computers although the guest answered busy", n)
+	}
+	if st, by := f.state("vm-w"); st != VMStateActive || by != "" {
+		t.Fatalf("state=%s stopped_by=%q, want the busy guest left active", st, by)
+	}
+	f.reg.mu.RLock()
+	claims := len(f.reg.lifecycle)
+	f.reg.mu.RUnlock()
+	if claims != 0 {
+		t.Fatalf("%d lifecycle claims left after a skipped hibernate", claims)
+	}
+	if err := f.reg.hibernateVMForDesktopWithReason("w", PrimaryDesktopID, "idle"); err == nil {
+		t.Fatalf("a skipped hibernate returned nil, the caller would record a hibernate")
+	}
+	atomic.StoreInt32(&busy, 0)
+	if n := f.reg.StopIdleVMs(context.Background(), allowAllRoutes); n != 1 {
+		t.Fatalf("next sweep stopped %d, want the now-idle computer hibernated", n)
+	}
+}
+
+// Substrate in make-room: a victim whose fence answers busy is spared and
+// counted as a skip; the start goes on to the next victim, and the refusal
+// names the skip when nothing else can make room.
+func TestMakeRoomCountsABusyFenceAsASkip(t *testing.T) {
+	f := twoVictimPlan(t)
+	f.activeComputer("v3", "vm-v3", 1*time.Hour, 1536*mib)
+	f.mr.failWith = func(vmID string) error {
+		if vmID == "vm-v1" {
+			return busyHibernateError{}
+		}
+		return nil
+	}
+	ticket, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 4*gib), WarmnessClassPrimary)
+	if err != nil {
+		t.Fatalf("start refused although vm-v2 and vm-v3 could make room: %v", err)
+	}
+	ticket.finish(true)
+	if st, by := f.state("vm-v1"); st != VMStateActive || by != "" {
+		t.Fatalf("vm-v1 state=%s stopped_by=%q, want the busy computer left running", st, by)
+	}
+	d := lastDecision(t, f.reg)
+	if d.Decision != "admit_after_make_room" || strings.Join(d.MadeRoomVMIDs, " ") != "vm-v2 vm-v3" {
+		t.Fatalf("decision = %+v, want admit naming only the computers actually hibernated", d)
+	}
+
+	g := twoVictimPlan(t)
+	g.mr.failWith = func(string) error { return busyHibernateError{} }
+	_, err = g.reg.admitHostMemory(hibernated("starter", "vm-s", 4*gib), WarmnessClassPrimary)
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil || !strings.Contains(refusal.Reason, "hibernate_busy=2") {
+		t.Fatalf("err = %v, want a refusal that counts the two busy fences as skips", err)
+	}
+	for _, id := range []string{"vm-v1", "vm-v2"} {
+		if st, _ := g.state(id); st != VMStateActive {
+			t.Fatalf("%s state = %s, want left running", id, st)
+		}
+	}
+}
+
+// F2 (DeepSeek): the shortfall is recomputed from a fresh sample after each
+// hibernate. A concurrent start took the room the first victim freed, so the
+// first victim alone no longer covers it; the next eligible victim goes.
+func TestMakeRoomReplansAfterEachVictim(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.activeComputer("v3", "vm-v3", 1*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 1*gib) // 1 GiB short for a 2 GiB start
+	f.mr.onHibernate = func(vmID string) {
+		if vmID == "vm-v1" {
+			// Another start's reservation lands as v1's memory frees.
+			f.mu.Lock()
+			f.avail -= 1536 * mib
+			f.mu.Unlock()
+		}
+	}
+	ticket, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	if err != nil {
+		t.Fatalf("start refused although vm-v2 could make room: %v", err)
+	}
+	ticket.finish(true)
+	if got := f.mr.hibernates(); strings.Join(got, " ") != "vm-v1 vm-v2" {
+		t.Fatalf("hibernates = %v, want [vm-v1 vm-v2]", got)
+	}
+	if st, _ := f.state("vm-v3"); st != VMStateActive {
+		t.Fatalf("vm-v3 state = %s, want left running: only as many as needed", st)
+	}
+}
+
+// F2 (DeepSeek): another path's in-flight hibernate (the idle sweep) is not
+// this start's room when deciding to refuse. Its memory may never show; the
+// start still hibernates a victim of its own rather than giving up.
+func TestMakeRoomDoesNotCountAnotherHibernateAsItsOwnRoom(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	pending := f.activeComputer("sweep-victim", "vm-x", 3*time.Hour, 3*gib)
+	f.activeComputer("y", "vm-y", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 1*gib)
+	f.reg.mu.Lock()
+	f.reg.lifecycle[ownershipKey(pending.UserID, pending.DesktopID)] = lifecycleHibernate
+	f.reg.mu.Unlock()
+
+	ticket, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	if err != nil {
+		t.Fatalf("start refused although vm-y could make room while vm-x's hibernate never landed: %v", err)
+	}
+	ticket.finish(true)
+	if got := f.mr.hibernates(); strings.Join(got, " ") != "vm-y" {
+		t.Fatalf("hibernates = %v, want [vm-y]", got)
+	}
+}
+
+// When the other hibernate does land, the start admits on it and hibernates
+// nobody.
+func TestMakeRoomAdmitsOnAnotherHibernateThatLands(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	pending := f.activeComputer("sweep-victim", "vm-x", 3*time.Hour, 3*gib)
+	f.activeComputer("y", "vm-y", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 1*gib)
+	key := ownershipKey(pending.UserID, pending.DesktopID)
+	f.reg.mu.Lock()
+	f.reg.lifecycle[key] = lifecycleHibernate
+	f.reg.mu.Unlock()
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		f.addAvail(3 * gib)
+		f.reg.mu.Lock()
+		delete(f.reg.lifecycle, key)
+		f.reg.mu.Unlock()
+	}()
+	ticket, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	if err != nil {
+		t.Fatalf("start refused: %v", err)
+	}
+	ticket.finish(true)
+	if got := f.mr.hibernates(); len(got) != 0 {
+		t.Fatalf("hibernates = %v, want none: the other hibernate made the room", got)
+	}
+}
+
+// Nit: the refusal for a start that hibernated nothing does not claim it
+// made room, and one that waited for nothing does not say memory "did not
+// show".
+func TestMakeRoomRefusalTextIsTrue(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	pending := f.activeComputer("sweep-victim", "vm-x", 3*time.Hour, 3*gib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 1*gib)
+	f.reg.mu.Lock()
+	f.reg.lifecycle[ownershipKey(pending.UserID, pending.DesktopID)] = lifecycleHibernate
+	f.reg.mu.Unlock()
+	_, err := f.reg.admitHostMemory(hibernated("starter", "vm-s", 2*gib), WarmnessClassPrimary)
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	if strings.Contains(refusal.Reason, "hibernating []") || strings.Contains(refusal.Reason, "made room") {
+		t.Fatalf("refusal %q claims room was made; nothing was hibernated", refusal.Reason)
+	}
+	if !strings.Contains(refusal.Reason, "already being hibernated") {
+		t.Fatalf("refusal %q does not say the memory is another hibernate's", refusal.Reason)
+	}
+
+	g := twoVictimPlan(t)
+	g.freeOnHibernate = false
+	_, err = g.reg.admitHostMemory(hibernated("starter", "vm-s", 4*gib), WarmnessClassPrimary)
+	refusal = RecoveryRefusalFrom(err)
+	if refusal == nil || !strings.Contains(refusal.Reason, "vm-v1") || !strings.Contains(refusal.Reason, "vm-v2") {
+		t.Fatalf("err = %v, want a refusal naming both computers it hibernated", err)
+	}
+}
+
+// F4: a start superseded after it hibernated victims leaves a decision
+// naming them; the victims would otherwise stay hibernated with no record.
+func TestMakeRoomSupersededStartRecordsWhatItHibernated(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 2560*mib) // a new computer's 2 GiB default
+	f.mgr.bootHook = func(cfg VMManagerConfig) {
+		f.mgr.mu.Lock()
+		f.mgr.getVMs[cfg.VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}
+		f.mgr.mu.Unlock()
+	}
+	f.mr.onHibernate = func(vmID string) {
+		if vmID != "vm-v1" {
+			return
+		}
+		// Another request registers the same computer while this one waits,
+		// and boots it (the manager tracks it, so it needs no admission).
+		f.mgr.mu.Lock()
+		f.mgr.getVMs["vm-raced"] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}
+		f.mgr.mu.Unlock()
+		addOwnership(f.reg, &VMOwnership{VMID: "vm-raced", UserID: "new-user", DesktopID: PrimaryDesktopID,
+			Kind: VMKindInteractive, ComputerID: "computer-raced", State: VMStateActive, LastActiveAt: *f.now,
+			ComputerURL: "http://127.0.0.1:9001", Epoch: 1})
+	}
+	_, _ = f.reg.ResolveOrAssign("new-user")
+	if got := f.mr.hibernates(); strings.Join(got, " ") != "vm-v1" {
+		t.Fatalf("hibernates = %v, want [vm-v1] before the supersede was seen", got)
+	}
+	named := false
+	for _, d := range f.reg.HostAdmissionSummary().Recent {
+		for _, id := range d.MadeRoomVMIDs {
+			if id == "vm-v1" {
+				named = true
+			}
+		}
+	}
+	if !named {
+		t.Fatalf("no admission decision names vm-v1: %+v", f.reg.HostAdmissionSummary().Recent)
+	}
+}
+
+// F5: a cancelled start stops making room. The route guard is asked with the
+// start's context, not context.Background().
+func TestMakeRoomStopsWhenTheStartIsCancelled(t *testing.T) {
+	f := newMakeRoomFixture(t, makeRoomAdmission())
+	f.activeComputer("v1", "vm-v1", 3*time.Hour, 1536*mib)
+	f.activeComputer("v2", "vm-v2", 2*time.Hour, 1536*mib)
+	f.setAvail(4*gib + 1*gib + 2*gib - 2560*mib)
+	f.mgr.bootHook = func(cfg VMManagerConfig) {
+		f.mgr.mu.Lock()
+		f.mgr.getVMs[cfg.VMID] = &VMInstanceInfo{HostURL: "http://127.0.0.1:9001", Epoch: 1, Healthy: true, State: "running"}
+		f.mgr.mu.Unlock()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.reg.SetMakeRoomRouteGuard(func(gctx context.Context, _, _ string) error { return gctx.Err() })
+	f.mr.onHibernate = func(vmID string) {
+		if vmID == "vm-v1" {
+			cancel()
+		}
+	}
+	_, err := f.reg.ResolveOrAssignDesktopContext(ctx, "new-user", PrimaryDesktopID)
+	if err == nil {
+		t.Fatalf("a cancelled start was admitted")
+	}
+	if got := f.mr.hibernates(); strings.Join(got, " ") != "vm-v1" {
+		t.Fatalf("hibernates = %v, want the cancelled start to stop after vm-v1", got)
+	}
+}
+
+// F3: red features fail closed. Only an exact enabling word turns make-room
+// on; a typo or an observation word is off.
+func TestMakeRoomConfigFailsClosed(t *testing.T) {
+	for value, want := range map[string]string{
+		"": HostAdmissionMakeRoomOff, "of": HostAdmissionMakeRoomOff, "observe": HostAdmissionMakeRoomOff,
+		"garbage": HostAdmissionMakeRoomOff, "off": HostAdmissionMakeRoomOff, "false": HostAdmissionMakeRoomOff,
+		"activee": HostAdmissionMakeRoomOff,
+		"active":  HostAdmissionMakeRoomActive, " Active ": HostAdmissionMakeRoomActive, "ON": HostAdmissionMakeRoomActive,
+		"enabled": HostAdmissionMakeRoomActive, "true": HostAdmissionMakeRoomActive, "1": HostAdmissionMakeRoomActive,
+	} {
+		if got := normalizeHostAdmissionConfig(HostAdmissionConfig{MakeRoom: value}).MakeRoom; got != want {
+			t.Errorf("MakeRoom %q normalizes to %q, want %q", value, got, want)
+		}
+	}
+}
+
+// F5: the bounds are capped where they are read, so a mistyped override
+// cannot evict a hundred computers or wait an hour.
+func TestMakeRoomBoundsAreCapped(t *testing.T) {
+	cfg := normalizeHostAdmissionConfig(HostAdmissionConfig{MakeRoom: "active", MakeRoomMaxVictims: 1000, MakeRoomSettleWait: time.Hour})
+	if cfg.MakeRoomMaxVictims != 10 || cfg.MakeRoomSettleWait != 60*time.Second {
+		t.Fatalf("bounds = %d victims, %s settle, want 10 and 60s", cfg.MakeRoomMaxVictims, cfg.MakeRoomSettleWait)
 	}
 }

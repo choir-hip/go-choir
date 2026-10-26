@@ -434,6 +434,41 @@ func TestFCAPIClientOverUnixSocket(t *testing.T) {
 	}
 }
 
+// Density D1 (docs/problems/busy-guest-hibernate-takes-kill-path-2026-10-26.md):
+// a guest that answers 409 at the prepare fence is working. The hibernate is
+// abandoned and the VM stays running and healthy; it is never killed, so its
+// work is not closed as "interrupted by a restart". The error is distinct so
+// every caller counts a skip. Other prepare failures keep the kill path
+// (TestHibernateSnapshotFallsBackToKill).
+func TestHibernateSnapshotGuestBusyLeavesTheVMRunning(t *testing.T) {
+	f := newSnapshotFixture(t)
+	f.serveLaunchAPI(t)
+	f.guest.prepareStatus = http.StatusConflict
+	err := f.mgr.HibernateVM(f.vmID)
+	var busy interface{ HibernateGuestBusy() bool }
+	if err == nil || !errors.As(err, &busy) || !busy.HibernateGuestBusy() {
+		t.Fatalf("HibernateVM = %v, want a guest-busy skip error", err)
+	}
+	f.mgr.mu.Lock()
+	state, healthy := f.inst.State, f.inst.Healthy
+	f.mgr.mu.Unlock()
+	if state != StateRunning || !healthy {
+		t.Fatalf("state=%s healthy=%v, want the busy guest left running and healthy", state, healthy)
+	}
+	for _, call := range f.fc.paths() {
+		if call != "GET /" {
+			t.Fatalf("busy guest must never be paused or snapshotted; calls=%v", f.fc.paths())
+		}
+	}
+	if _, statErr := os.Stat(f.mgr.snapshotDir(f.vmID)); !os.IsNotExist(statErr) {
+		t.Fatalf("no snapshot may be left for a running VM: %v", statErr)
+	}
+	tl := readHibernateTimeline(t, f.mgr, f.vmID)
+	if tl.Snapshot == nil || tl.Snapshot.Outcome != "skip" || tl.Snapshot.Reason != snapshotReasonGuestBusy || tl.BootKind == "hibernate_kill" {
+		t.Fatalf("timeline = %+v %+v, want a skip for guest_busy", tl.BootKind, tl.Snapshot)
+	}
+}
+
 // Failure items 1, 3 (fence fallback) and 20 (no API socket): the kill path
 // is today's behavior, and the guest is never paused when it refuses.
 func TestHibernateSnapshotFallsBackToKill(t *testing.T) {
@@ -451,26 +486,6 @@ func TestHibernateSnapshotFallsBackToKill(t *testing.T) {
 		}
 		if f.guest.prepares != 0 {
 			t.Fatal("guest must not be fenced without an API socket")
-		}
-	})
-	t.Run("guest busy", func(t *testing.T) {
-		f := newSnapshotFixture(t)
-		f.serveLaunchAPI(t)
-		f.guest.prepareStatus = http.StatusConflict
-		if err := f.mgr.HibernateVM(f.vmID); err != nil {
-			t.Fatalf("HibernateVM: %v", err)
-		}
-		if f.inst.State != StateHibernated {
-			t.Fatalf("state = %s", f.inst.State)
-		}
-		for _, call := range f.fc.paths() {
-			if call != "GET /" {
-				t.Fatalf("busy guest must never be paused or snapshotted; calls=%v", f.fc.paths())
-			}
-		}
-		tl := readHibernateTimeline(t, f.mgr, f.vmID)
-		if tl.Snapshot == nil || tl.Snapshot.Outcome != "kill" || tl.Snapshot.Reason != snapshotReasonGuestBusy {
-			t.Fatalf("timeline snapshot = %+v", tl.Snapshot)
 		}
 	})
 	t.Run("old guest without endpoint", func(t *testing.T) {
