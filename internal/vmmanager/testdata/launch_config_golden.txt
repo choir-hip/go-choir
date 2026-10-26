@@ -1,0 +1,33 @@
+{
+  "boot-source": {
+    "boot_args": "root=fstab init=/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-nixos-system/init regInfo=/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-reginfo/registration console=ttyS0,115200 reboot=k panic=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd guest_port=8085 persistent=/mnt/persistent vm_id=vm-golden epoch=3 choir.gateway_url=http://10.200.1.1:8084 choir.vmctl_url=http://10.200.1.1:8083 choir.maild_url=http://10.200.1.1:8087 choir.platform_url=http://10.200.1.1:8086 choir.proxy_url=http://10.200.1.1:8082 ip=10.200.1.2::10.200.1.1:255.255.255.252::eth0:off choir.computer_id=computer-golden choir.realization_id=real-1 choir.owner_id=owner choir.desktop_id=primary",
+    "initrd_path": "/var/lib/go-choir/guest/initrd",
+    "kernel_image_path": "/var/lib/go-choir/guest/vmlinux"
+  },
+  "drives": [
+    {
+      "drive_id": "store",
+      "is_read_only": true,
+      "is_root_device": false,
+      "path_on_host": "/var/lib/go-choir/guest/storedisk.erofs"
+    },
+    {
+      "drive_id": "data",
+      "is_read_only": false,
+      "is_root_device": false,
+      "path_on_host": "/var/lib/go-choir/vm-state/vm-golden/data.img"
+    }
+  ],
+  "machine-config": {
+    "mem_size_mib": 512,
+    "vcpu_count": 2
+  },
+  "network-interfaces": [
+    {
+      "guest_mac": "AA:FC:00:00:00:29",
+      "host_dev_name": "vm-nt36ozplysth",
+      "iface_id": "eth0"
+    }
+  ]
+}
+launch_config_sha256=8c6b51fef3d876922864548428fd3928891ccb24c55f1f1e0675c68da2e7fb02
