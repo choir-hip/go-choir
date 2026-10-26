@@ -147,14 +147,20 @@ boundaries:
 now:
   status: working
   slice: >-
-    The Reader redesign: candidate selfdev-aae30fb7 awaits approval on b@c;
-    its embedded capture (/read.html, 1280x800) shows one toolbar, dark body
-    text and the default theme. Its patch and visual routes answer 409
-    after a refresh; a read-only investigation is running. Then Slides,
-    Files, Calendar, Podcasts (requests in _runs/design/).
-  source_ref: a03d5266a
-  deploy_identity: staging a03d5266a
-  candidate: {id: selfdev-aae30fb75aa73afab4e6897823facfdc, state: awaiting_approval, ref: b@c, base: a03d5266a's predecessor (built before the refresh), digest: ed0ee483, scope: [frontend/src/packages/reader, frontend/src/app.css, frontend/src/reader.js, frontend/reader-chrome.css, frontend/read.html, frontend/src/lib/theme.ts]}
+    The Reader passed the bar (rounds 3 and 4, applied, upstreamed at
+    b4b4e551b). Its round 5 (review 270's nits) failed three times, the
+    last on a platform defect (R8-1, fixed on lane fp0-freeze-bind,
+    reviews 281 approve); its nits and the mid-word snippet ride a later
+    round confined to frontend/src/packages/reader, which also proves
+    Library S2's publish. Now: the window manager (sent on b@c 05:50,
+    _runs/design/wm-request.txt). Then the four desktop themes (owner
+    2026-10-26 06:0x: Frutiger Aero, Vector Heart, Liquid Metal and the
+    combined Aero Chrome Heart as the default; _runs/design/themes-request.txt),
+    then the confined Reader round, then Slides, Files, Calendar, Podcasts,
+    each judged in all seven presets.
+  source_ref: 39a1be5c5
+  deploy_identity: staging 39a1be5c5
+  candidate: {id: pending (window manager round on b@c, doc 99e044ce, trajectory 0d7560d4, sent 2026-10-26 05:50:41), state: building, ref: b@c, base: 39a1be5c5}
   conjecture:
     id: T1a-1
     claim: >-
@@ -184,20 +190,22 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
-      The delegate is available on b@c but was not called; DeepSeek, given
-      the design bar, built the Reader redesign in 12 minutes and it looks
-      right in its one capture; its diff is unreadable until the binding
-      mismatch is understood.
+      The design bar works: the Reader passed it in two rounds with
+      DeepSeek and no delegate call. Round failures since are platform
+      defects (the stranded freeze, a verify with no recorded reason, a
+      capture that cannot show signed-in states), not the bar.
     main_uncertainty: >-
-      Whether a refresh while a candidate awaits approval breaks the
-      candidate for good, or only its read routes.
-    next_observation: the investigation's cause and whether approval would also fail
+      Whether a large chrome change (the window manager, then four themes)
+      passes in one or two rounds, and whether apps judged in three presets
+      hold in seven.
+    next_observation: the window manager candidate rendered in the real shell
   blocker_or_risk: >-
-    The binding mismatch above; until it is fixed, avoid deploys while a
-    candidate awaits approval on b@c.
+    Avoid a deploy while a candidate awaits approval on b@c (a refresh broke
+    a pending candidate's read routes once, aae30fb7). Train 4 waits for the
+    window manager's decision.
   next_action: >-
-    Diagnose the binding mismatch; if the candidate cannot be read, repair
-    by texture revise (a fresh freeze on the carried tree) and judge that.
+    Judge the window manager candidate at three presets and two widths;
+    approve or send back; then send the themes request.
 
 receipts: []
 ---
