@@ -66,6 +66,8 @@ type ChoirScope struct {
 	// committed/addressed acts joined with resolution observations —
 	// score-free by construction (types.ActingPack has no score fields).
 	pack *types.ActingPack
+	// analysis is a story research desk's entity analysis (story_analysis.go).
+	analysis *StoryAnalysis
 	// updates is the cell-start snapshot of pending update_coagent records
 	// (RLM prompt-as-variable): read via Updates(). The wake turn in chat
 	// carries only update ids; the payload lives here.
@@ -204,6 +206,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
 			s.pack = frame.Pack
+			s.analysis = frame.Analysis
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
@@ -221,6 +224,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.inbox = nil
 			s.doc = nil
 			s.pack = nil
+			s.analysis = nil
 			s.updates = nil
 			s.emits = nil
 			s.records = nil
@@ -397,6 +401,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"System1":          func() reflect.Value { return reflect.ValueOf(s.System1) },
 		"RelateStories":    func() reflect.Value { return reflect.ValueOf(s.RelateStories) },
 		"Relate":           func() reflect.Value { return reflect.ValueOf(s.Relate) },
+		"StoryAnalysis":    func() reflect.Value { return reflect.ValueOf(s.StoryAnalysis) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
 		"ListEvidence":     func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
