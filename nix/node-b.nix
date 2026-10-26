@@ -1763,7 +1763,8 @@ in
         # class:, and not the paper until measured. A named computer cold boots
         # once (boot arguments are in the launch-config hash). Rollback: empty
         # the list and redeploy; the cadence is off at the next launch.
-        "VM_CHECKPOINT_CADENCE_ONLY="
+        # 2026-10-26: on for d@e, the proof computer (re-review 338 approved).
+        "VM_CHECKPOINT_CADENCE_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
         # Data drive discard (RES-16; docs/problems/guest-data-image-never-
         # trims-2026-10-20.md, docs/problems/node-b-disk-fills-from-the-paper-
         # data-image-2026-10-22.md). Every computer gets virtio-blk discard on
