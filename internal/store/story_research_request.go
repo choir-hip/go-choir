@@ -406,6 +406,10 @@ func (s *Store) storyEntitiesQuietReport(ctx context.Context, ownerID, computerI
 }
 
 func reportCarriesNothing(rec types.CommitmentRecord) bool {
+	// A Report that cites sources tells Texture research read something.
+	if len(rec.EvidenceRefs) > 0 {
+		return false
+	}
 	if rec.Captures != nil && len(rec.Captures.Items) > 0 {
 		return false
 	}

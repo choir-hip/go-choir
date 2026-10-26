@@ -164,9 +164,11 @@ type analysisUnanswered struct {
 }
 
 // analysisAnswered reports whether any of the analysis's questions has a
-// System 1 answer.
+// System 1 answer; one that carries an error is none (review 327 Low 3).
 func analysisAnswered(a *yaegikernel.StoryAnalysis) bool {
-	answered := func(ans *yaegikernel.StoryAnalysisAnswer) bool { return ans != nil && ans.ReceiptRef != "" }
+	answered := func(ans *yaegikernel.StoryAnalysisAnswer) bool {
+		return ans != nil && ans.ReceiptRef != "" && ans.Error == ""
+	}
 	if answered(a.Novelty) {
 		return true
 	}
@@ -242,6 +244,9 @@ func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.Exe
 	}
 	if len(a.Candidates) > 0 {
 		rt.askAnalysisQuestions(ctx, exec, owner, computer, runID, a)
+		if a.Error == "" && !analysisAnswered(a) {
+			a.Error = "System 1 gave no usable answer to the analysis questions"
+		}
 	}
 	fitStoryAnalysis(a)
 	return a
