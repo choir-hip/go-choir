@@ -32,8 +32,11 @@ const ReleaseListingKind objectgraph.ObjectKind = "choir.release_listing"
 
 const packagesRoute = "/internal/platform/packages"
 
-// maxTrackListings bounds one (owner, package) listing read. S2 lists one
-// version per release; S3's state changes add versions.
+// maxTrackListings bounds one (owner, package) listing read, and one
+// owner's catalog read. S2 lists one version per release; S3's state
+// changes add versions. A read is never answered truncated: past the cap it
+// refuses track_full, and a publish refuses at it, so seq and the head are
+// never counted from part of a track (review 274 F7). A var for the test.
 var maxTrackListings = 1000
 
 // PackageBaseStatus is the package base store in corpusd's health detail:
@@ -178,7 +181,8 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	reason := pkgrelease.ReasonOf(err)
 	status := http.StatusUnprocessableEntity
 	switch reason {
-	case pkgrelease.ReasonTrackMoved, pkgrelease.ReasonParentUnverifiable, pkgrelease.ReasonBlobMismatch:
+	case pkgrelease.ReasonTrackMoved, pkgrelease.ReasonParentUnverifiable, pkgrelease.ReasonBlobMismatch,
+		pkgrelease.ReasonTrackFull, pkgrelease.ReasonRecordUnlisted, pkgrelease.ReasonListingConflict:
 		status = http.StatusConflict
 	case pkgrelease.ReasonBlobTooLarge:
 		status = http.StatusRequestEntityTooLarge
@@ -189,6 +193,16 @@ func writePackageRefusal(w http.ResponseWriter, err error) {
 	writeJSON(w, status, packageAPIError{Error: err.Error(), Reason: reason})
 }
 
+// writeListingsError answers a failed track read: a refusal (track_full)
+// by its reason, anything else as the store being unavailable.
+func writeListingsError(w http.ResponseWriter, err error) {
+	if pkgrelease.ReasonOf(err) != "" {
+		writePackageRefusal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listings unavailable"})
+}
+
 // PackagePublishSubject is the owner-act subject of a package publish: the
 // release id and the one scope S2 lists at.
 func PackagePublishSubject(releaseID string) map[string]any {
@@ -197,10 +211,13 @@ func PackagePublishSubject(releaseID string) map[string]any {
 
 // packagePublishActor verifies the publish's owner-act receipt and names
 // the listing's state actor. status is nonzero for a refusal.
-func (h *Handler) packagePublishActor(r *http.Request, ownerID, computerID, releaseID string) (actor string, status int, refusal string) {
+func (h *Handler) packagePublishActor(r *http.Request, ownerID, computerID, releaseID string) (actor string, status int, refusal packageAPIError) {
 	authority := h.packageOwnerActs
 	if authority == nil {
-		return "owner_act:unverified", 0, ""
+		// No authority is a wiring fault, not observe: a red route's
+		// unconfigured default refuses (review 274 F3). cmd/corpusd always
+		// configures one, in the mode CHOIR_OWNER_ACT_MODE names.
+		return "", http.StatusServiceUnavailable, packageAPIError{Error: "package publish: no owner-act authority is configured", Reason: "owner_act_unconfigured"}
 	}
 	verified, err := func() (owneract.Verified, error) {
 		receipt, err := owneract.Decode(r.Header.Get(owneract.Header))
@@ -219,13 +236,13 @@ func (h *Handler) packagePublishActor(r *http.Request, ownerID, computerID, rele
 	}()
 	if err != nil {
 		if refused := authority.refuse(ErrOwnerActRefused, "package publish", computerID, err.Error()); refused != nil {
-			return "", http.StatusForbidden, refused.Error()
+			return "", http.StatusForbidden, packageAPIError{Error: refused.Error()}
 		}
-		return "owner_act:unverified", 0, ""
+		return "owner_act:unverified", 0, packageAPIError{}
 	}
 	// A receipt replayed inside its five minutes can only republish the
 	// release it names, which is idempotent.
-	return "owner_act:" + verified.Digest, 0, ""
+	return "owner_act:" + verified.Digest, 0, packageAPIError{}
 }
 
 func packageReleaseCanonicalID(ownerID, releaseID string) (string, error) {
@@ -289,14 +306,22 @@ func verifiedListing(obj objectgraph.Object, ownerID string) (pkgrelease.Listing
 // trackListings is each record's current listing on ownerID's track of a
 // package: the newest version whose chain of predecessor digests is intact
 // back to version 1.
-func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[string]pkgrelease.Listing, error) {
+//
+// It also answers how many listing objects the track holds. More than
+// maxTrackListings refuses track_full rather than answer from part of the
+// track.
+func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[string]pkgrelease.Listing, int, error) {
 	store := h.releaseStore()
 	if store == nil {
-		return nil, errors.New("package store unavailable")
+		return nil, 0, errors.New("package store unavailable")
 	}
-	objects, err := store.ListObjectsByMetadataForOwner(ctx, string(ReleaseListingKind), "$.package", pkg, ownerID, maxTrackListings)
+	objects, err := store.ListObjectsByMetadataForOwner(ctx, string(ReleaseListingKind), "$.package", pkg, ownerID, maxTrackListings+1)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	if len(objects) > maxTrackListings {
+		return nil, len(objects), &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
+			"the %s track of %s holds more than %d listings, more than one read returns", pkg, ownerID, maxTrackListings)}
 	}
 	versions := map[string]map[int]pkgrelease.Listing{}
 	for _, obj := range objects {
@@ -328,7 +353,7 @@ func (h *Handler) trackListings(ctx context.Context, ownerID, pkg string) (map[s
 		}
 		current[recordID] = listing
 	}
-	return current, nil
+	return current, len(objects), nil
 }
 
 // trackHead is the latest listing on the track that can be a parent (not
@@ -450,7 +475,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	}
 	actor, status, refusal := h.packagePublishActor(r, ownerID, computerID, releaseID)
 	if status != 0 {
-		writeJSON(w, status, apiError{Error: refusal})
+		writeJSON(w, status, refusal)
 		return
 	}
 	in := pkgrelease.HostInput{Record: record, Base: h.packageBase}
@@ -467,13 +492,15 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 
 	// One publish at a time: the track head and the next seq are read and
 	// written under this lock, so two publishes cannot both take the head as
-	// their parent (corpusd is one process).
+	// their parent. The lock is the whole guarantee: it assumes one corpusd
+	// writes the store (it does; see packageMu). The store has no unique
+	// (owner, package, seq) constraint.
 	h.packageMu.Lock()
 	defer h.packageMu.Unlock()
 	ctx := r.Context()
-	listings, err := h.trackListings(ctx, ownerID, record.Package.Name)
+	listings, count, err := h.trackListings(ctx, ownerID, record.Package.Name)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listings unavailable"})
+		writeListingsError(w, err)
 		return
 	}
 	existing, _, existingErr := h.readPackageRecord(ctx, ownerID, releaseID)
@@ -487,12 +514,28 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		// The record was stored and its listing was not (a crash between the
 		// two writes): list it now, under the same checks.
 	}
+	if count >= maxTrackListings {
+		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
+			"the %s track holds %d listings, the most one read returns; another would be counted from part of the track", record.Package.Name, count)})
+		return
+	}
 	head, hasHead, maxSeq := trackHead(listings)
+	// moved refuses a parent that is not the head. A record stored without
+	// its listing gets its own reason: it stays stored and unlisted, inert,
+	// and the owner publishes again on the head (review 274 F6).
+	moved := func(detail string) {
+		reason := pkgrelease.ReasonTrackMoved
+		if existingErr == nil {
+			reason = pkgrelease.ReasonRecordUnlisted
+			detail = "this release's record was stored without its listing (a publish interrupted between the two writes), and the track has moved since: " +
+				detail + "; the record stays unlisted and is no release, so publish again on the head"
+		}
+		writePackageRefusal(w, &pkgrelease.Refusal{Reason: reason, Detail: detail})
+	}
 	switch record.Parent.Kind {
 	case pkgrelease.ParentBase:
 		if hasHead {
-			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackMoved, Detail: fmt.Sprintf(
-				"the track already has release %s (seq %d) as its head; a new release's parent is that head, not the base", head.RecordID, head.Seq)})
+			moved(fmt.Sprintf("the track already has release %s (seq %d) as its head; a new release's parent is that head, not the base", head.RecordID, head.Seq))
 			return
 		}
 	case pkgrelease.ParentRelease:
@@ -501,7 +544,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 			if hasHead {
 				detail = fmt.Sprintf("the parent %s is not the track head; the head is %s (seq %d)", record.Parent.ReleaseID, head.RecordID, head.Seq)
 			}
-			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackMoved, Detail: detail})
+			moved(detail)
 			return
 		}
 		_, parent, err := h.readPackageRecord(ctx, ownerID, record.Parent.ReleaseID)
@@ -569,8 +612,18 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listing: " + err.Error()})
 		return
 	}
-	if _, err := store.InsertObjectIfAbsent(ctx, listingObj); err != nil {
+	listed, err := store.InsertObjectIfAbsent(ctx, listingObj)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listing: " + err.Error()})
+		return
+	}
+	if !listed {
+		// The id is held by an object the track read did not take for this
+		// release's listing (it does not verify): this publish listed
+		// nothing, and says so rather than describe a listing it did not
+		// store.
+		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonListingConflict, Detail: "the listing id " + listingObj.CanonicalID +
+			" is held by an object that is not this release's listing; the record is stored and unlisted"})
 		return
 	}
 	view := packageView(obj, releaseID, listing.Normalize())
@@ -606,9 +659,9 @@ func (h *Handler) readPackageRelease(w http.ResponseWriter, r *http.Request, rel
 		writeJSON(w, http.StatusNotFound, errPackageNotPublished)
 		return
 	}
-	listings, err := h.trackListings(r.Context(), reader, record.Package.Name)
+	listings, _, err := h.trackListings(r.Context(), reader, record.Package.Name)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listings unavailable"})
+		writeListingsError(w, err)
 		return
 	}
 	listing, ok := listings[releaseID]
@@ -639,9 +692,15 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
-	objects, err := store.ListObjects(r.Context(), objectgraph.ListFilter{Kind: ReleaseListingKind, OwnerID: reader, Limit: maxTrackListings})
+	objects, err := store.ListObjects(r.Context(), objectgraph.ListFilter{Kind: ReleaseListingKind, OwnerID: reader, Limit: maxTrackListings + 1})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
+		return
+	}
+	if len(objects) > maxTrackListings {
+		// A catalog from part of the listings would drop packages silently.
+		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackFull, Detail: fmt.Sprintf(
+			"the owner holds more than %d listings, more than one catalog read returns", maxTrackListings)})
 		return
 	}
 	names := map[string]bool{}
@@ -652,9 +711,9 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := []PackageCatalogEntry{}
 	for name := range names {
-		listings, err := h.trackListings(r.Context(), reader, name)
+		listings, _, err := h.trackListings(r.Context(), reader, name)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
+			writeListingsError(w, err)
 			return
 		}
 		visible := map[string]pkgrelease.Listing{}
@@ -684,9 +743,9 @@ func (h *Handler) packageHistory(w http.ResponseWriter, r *http.Request, name st
 	}
 	views := []PackageReleaseView{}
 	if objectgraph.ValidPackageName(name) {
-		listings, err := h.trackListings(r.Context(), reader, name)
+		listings, _, err := h.trackListings(r.Context(), reader, name)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package history unavailable"})
+			writeListingsError(w, err)
 			return
 		}
 		for id, listing := range listings {
@@ -721,9 +780,9 @@ func (h *Handler) packageTrackHead(w http.ResponseWriter, r *http.Request, name 
 		writeJSON(w, http.StatusNotFound, noHead)
 		return
 	}
-	listings, err := h.trackListings(r.Context(), reader, name)
+	listings, _, err := h.trackListings(r.Context(), reader, name)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listings unavailable"})
+		writeListingsError(w, err)
 		return
 	}
 	head, found, _ := trackHead(listings)
