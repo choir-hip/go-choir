@@ -331,6 +331,11 @@ may take it to tier 2. D2's design is reviewed like the change it designs.
 
 ## D2 build spec: snapshots survive a deploy where safe (design, then stop)
 
+**Design delivered 2026-10-26:**
+[docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md](../design/density-d2-snapshots-survive-deploys-2026-10-26.md)
+(supersedes the fp10 L20 section; awaiting tier 2 review; slices S0-S6
+there are the build spec). The notes below are the brief it answers.
+
 Deliverable of this item is a **design**, not code: the change spans the
 deploy (nix), vmmanager and vmctl and needs owner-ruled inputs, so it is
 bigger than one slice. Write it as a new section "L20 revised 2026-10-26" in
