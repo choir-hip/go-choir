@@ -174,3 +174,20 @@ func TestHibernateWithTheOptionKeepsBusyAndErrorHandling(t *testing.T) {
 		t.Fatalf("a busy guest was marked %s", got.State)
 	}
 }
+
+// Review 334 LOW: a held computer is never asked, as in the shared candidate
+// rule, even when an operator hibernates it.
+func TestHibernateOfAHeldComputerAsksForNoCacheReturn(t *testing.T) {
+	mgr := newOptsManager()
+	reg := hibernateRegistry(t, hibernateCfg(GuestCacheReturnActive, "hibernate"), mgr)
+	own := activeComputer(reg, "vm-held")
+	reg.mu.Lock()
+	own.HoldStatus = &MaintenanceHold{Reason: "maintenance"}
+	reg.mu.Unlock()
+	if err := reg.hibernateVMForDesktopWithReason(own.UserID, own.DesktopID, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if len(mgr.withOpts) != 0 || len(mgr.plain) != 1 {
+		t.Fatalf("plain=%v opts=%+v, want a plain hibernate for a held computer", mgr.plain, mgr.withOpts)
+	}
+}

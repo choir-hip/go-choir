@@ -489,3 +489,110 @@ func TestPressureCandidatesUseThePressureFloorAndASixtySecondRepeatGuard(t *test
 		t.Fatalf("candidates = %s, want acted (acted before, not in the last minute) and ok", got)
 	}
 }
+
+// Review 334 MED: the one deadline covers candidate selection. A guest that
+// answers its busy probe slowly (or never) must not hold step 0, inside the
+// make-room slot, for minutes: each probe is clipped to what remains, and
+// selection stops when under a quarter of the budget is left.
+func TestPressureCacheReturnDeadlineCoversCandidateSelection(t *testing.T) {
+	budget := 500 * time.Millisecond
+	f := pressureCR(t, budget)
+	var probes atomic.Int32
+	f.reg.setGuestBusyProbeForTest(func(*VMOwnership) bool {
+		probes.Add(1)
+		time.Sleep(300 * time.Millisecond) // a hung guest, up to its own 4 s client timeout
+		return true
+	})
+	guests := make([]*mrGuest, 0, 6)
+	for i := 0; i < 6; i++ {
+		g := newMRGuest(t, "g", nil)
+		f.computer("vm-"+string(rune('a'+i)), time.Duration(40+i)*time.Minute, 2*gib, 1*gib, g)
+		guests = append(guests, g)
+	}
+	f.shortBy(5 * gib)
+	f.reg.mu.RLock()
+	cfg, acfg, sampler := f.reg.pressureReclaim, f.reg.hostAdmission, f.reg.pressureSampler
+	f.reg.mu.RUnlock()
+	started := time.Now()
+	ticket, _, _, _ := f.reg.makeRoomCacheReturn(context.Background(), f.starter(), WarmnessClassPrimary, cfg, acfg, sampler, f.reg.guestCacheReturnConfig())
+	elapsed := time.Since(started)
+	if ticket != nil {
+		ticket.finish(true)
+	}
+	if elapsed > budget+250*time.Millisecond {
+		t.Fatalf("step 0 took %s with %d probes started, deadline %s: selection is outside the deadline", elapsed, probes.Load(), budget)
+	}
+	if n := probes.Load(); n > 3 {
+		t.Fatalf("%d probes started inside a %s budget with 300 ms probes", n, budget)
+	}
+	for _, g := range guests {
+		if g.calls.Load() != 0 {
+			t.Fatal("a computer whose probe never answered idle was asked")
+		}
+	}
+}
+
+// Review 334 LOW: the settle's cap is what remains after the call, not what
+// remained before it. A call that used most of the budget leaves the settle a
+// short wait, and a step that is out of time makes no re-sample.
+func TestPressureCacheReturnSettleCapIsRecomputedAfterTheCall(t *testing.T) {
+	budget := 600 * time.Millisecond
+	f := pressureCR(t, budget)
+	g := newMRGuest(t, "slow", nil)
+	g.delay = 400 * time.Millisecond
+	g.report = claim(1 * gib) // a real claim: the settle waits, and nothing falls
+	f.computer("vm-slow", 40*time.Minute, 2*gib, 1*gib, g)
+	f.shortBy(5 * gib)
+	f.reg.mu.RLock()
+	cfg, acfg, sampler := f.reg.pressureReclaim, f.reg.hostAdmission, f.reg.pressureSampler
+	f.reg.mu.RUnlock()
+	started := time.Now()
+	ticket, _, _, acted := f.reg.makeRoomCacheReturn(context.Background(), f.starter(), WarmnessClassPrimary, cfg, acfg, sampler, f.reg.guestCacheReturnConfig())
+	if ticket != nil {
+		ticket.finish(true)
+	}
+	if len(acted) != 1 {
+		t.Fatalf("acted = %v", acted)
+	}
+	recs := f.reg.GuestCacheReturnSummary().Recent
+	if len(recs) != 1 {
+		t.Fatalf("records = %+v", recs)
+	}
+	// About 200 ms remained after the call: the settle is two polls, not the
+	// 600 ms (before the call) or 5 s it would be otherwise.
+	if recs[0].SettleExit != "cap" || recs[0].SettleMS > 500 {
+		t.Fatalf("settle = %d ms exit %s, want a cap under 500 ms", recs[0].SettleMS, recs[0].SettleExit)
+	}
+	_ = started
+}
+
+// With the budget gone by the time the call returns, the settle does not run
+// at all and no re-sample is taken.
+func TestPressureCacheReturnOutOfTimeAfterTheCallSkipsSettleAndResample(t *testing.T) {
+	budget := 500 * time.Millisecond
+	f := pressureCR(t, budget)
+	g := newMRGuest(t, "late", nil)
+	g.delay = 450 * time.Millisecond
+	g.report = claim(1 * gib)
+	f.computer("vm-late", 40*time.Minute, 2*gib, 1*gib, g)
+	f.shortBy(5 * gib)
+	var samples atomic.Int32
+	prev := f.reg.pressureSampler
+	f.reg.setPressureSamplerForTest(func(c PressureReclaimConfig) HostPressureSample {
+		samples.Add(1)
+		return prev(c)
+	})
+	f.reg.mu.RLock()
+	cfg, acfg, sampler := f.reg.pressureReclaim, f.reg.hostAdmission, f.reg.pressureSampler
+	f.reg.mu.RUnlock()
+	// Let the call end after the deadline, as a slow guest does.
+	g.delay = 560 * time.Millisecond
+	samples.Store(0)
+	ticket, _, attempted, _ := f.reg.makeRoomCacheReturn(context.Background(), f.starter(), WarmnessClassPrimary, cfg, acfg, sampler, f.reg.guestCacheReturnConfig())
+	if ticket != nil {
+		ticket.finish(true)
+	}
+	if attempted || samples.Load() != 0 {
+		t.Fatalf("a step out of time took %d samples (attempted=%v); D1's plan takes its own", samples.Load(), attempted)
+	}
+}
