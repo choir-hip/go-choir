@@ -255,10 +255,6 @@ func computerRestoreComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "restore")
 }
 
-func computerCheckpointComputerID(path string) (string, bool) {
-	return computerLifecycleGuestComputerID(path, "checkpoint")
-}
-
 func computerImportResidueSnapshotComputerID(path string) (string, bool) {
 	return computerLifecycleGuestComputerID(path, "import-residue-snapshot")
 }
@@ -287,11 +283,6 @@ func isComputerRestorePath(path string) bool {
 	return ok
 }
 
-func isComputerCheckpointPath(path string) bool {
-	_, ok := computerCheckpointComputerID(path)
-	return ok
-}
-
 func isComputerImportResidueSnapshotPath(path string) bool {
 	_, ok := computerImportResidueSnapshotComputerID(path)
 	return ok
@@ -307,9 +298,6 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	}
 	if !ok {
 		computerID, ok = computerRestoreComputerID(r.URL.Path)
-	}
-	if !ok {
-		computerID, ok = computerCheckpointComputerID(r.URL.Path)
 	}
 	if !ok {
 		computerID, ok = computerImportResidueSnapshotComputerID(r.URL.Path)
@@ -422,7 +410,7 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 	// matching replay completeness. Route them through replayAutoputerHTTP (10m on staging).
 	if isComputerImportResidueSnapshotPath(r.URL.Path) && h.residueImportAutoputerHTTP != nil {
 		client = h.residueImportAutoputerHTTP
-	} else if (isComputerCheckpointPath(r.URL.Path) || isComputerRestorePath(r.URL.Path) || isComputerRematerializePath(r.URL.Path)) && h.replayAutoputerHTTP != nil {
+	} else if (isComputerRestorePath(r.URL.Path) || isComputerRematerializePath(r.URL.Path)) && h.replayAutoputerHTTP != nil {
 		client = h.replayAutoputerHTTP
 	}
 	if client == nil {

@@ -8,33 +8,46 @@ import (
 	"time"
 )
 
-// computerProducerReportsComputerID matches the two computer-scoped
-// producer-report settlement routes that forward to the guest runtime:
-// GET  /api/computers/<id>/lifecycle/producer-reports
-// POST /api/computers/<id>/lifecycle/settle-producer-reports
-func computerProducerReportsComputerID(path string) (computerID string, settle bool, ok bool) {
+// computerLifecycleForward is a computer-scoped lifecycle route the proxy
+// forwards to the guest runtime with the authenticated computer binding.
+type computerLifecycleForward struct {
+	method string
+	// ownerAct names the owner act the route is, if it is one: it needs the
+	// owner's own session or an API key minted with owner:acts.
+	ownerAct string
+}
+
+// computerLifecycleForwards are the computer-scoped routes handled here:
+//
+//	GET  /api/computers/<id>/lifecycle/producer-reports
+//	POST /api/computers/<id>/lifecycle/settle-producer-reports
+//	GET  /api/computers/<id>/lifecycle/checkpoints          (the checkpoints bound automatically, with the host's verdicts)
+//	POST /api/computers/<id>/lifecycle/resume-checkpoints   (owner act: reopen a cadence two crashed binds closed)
+var computerLifecycleForwards = map[string]computerLifecycleForward{
+	"producer-reports":        {method: http.MethodGet},
+	"settle-producer-reports": {method: http.MethodPost},
+	"checkpoints":             {method: http.MethodGet},
+	"resume-checkpoints":      {method: http.MethodPost, ownerAct: "computer resume-checkpoints"},
+}
+
+func computerProducerReportsComputerID(path string) (computerID string, action string, ok bool) {
 	const prefix = "/api/computers/"
 	if !strings.HasPrefix(path, prefix) {
-		return "", false, false
+		return "", "", false
 	}
 	rest := strings.TrimPrefix(path, prefix)
 	rawID, action, found := strings.Cut(rest, "/lifecycle/")
 	if !found || strings.TrimSpace(rawID) == "" || strings.Contains(rawID, "/") {
-		return "", false, false
+		return "", "", false
 	}
-	switch action {
-	case "producer-reports":
-		settle = false
-	case "settle-producer-reports":
-		settle = true
-	default:
-		return "", false, false
+	if _, known := computerLifecycleForwards[action]; !known {
+		return "", "", false
 	}
 	computerID, err := url.PathUnescape(rawID)
 	if err != nil || strings.TrimSpace(computerID) == "" {
-		return "", false, false
+		return "", "", false
 	}
-	return strings.TrimSpace(computerID), settle, true
+	return strings.TrimSpace(computerID), action, true
 }
 
 // HandleComputerProducerReports forwards the owner-scoped producer-report
@@ -44,16 +57,13 @@ func computerProducerReportsComputerID(path string) (computerID string, settle b
 // computer:lifecycle scope, never Texture revision authority and never
 // Management consumption.
 func (h *Handler) HandleComputerProducerReports(w http.ResponseWriter, r *http.Request) {
-	computerID, settle, ok := computerProducerReportsComputerID(r.URL.Path)
+	computerID, action, ok := computerProducerReportsComputerID(r.URL.Path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	if settle && r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
-		return
-	}
-	if !settle && r.Method != http.MethodGet {
+	forward := computerLifecycleForwards[action]
+	if r.Method != forward.method {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
@@ -68,6 +78,9 @@ func (h *Handler) HandleComputerProducerReports(w http.ResponseWriter, r *http.R
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing exact computer:lifecycle scope"})
 			return
 		}
+	}
+	if forward.ownerAct != "" && !authorizeOwnerAct(w, authResult, forward.ownerAct) {
+		return
 	}
 	var target *resolvedComputerTarget
 	if authResult.AuthMethod == "api_key" {

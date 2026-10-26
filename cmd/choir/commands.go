@@ -440,7 +440,13 @@ func buildRegistry() []*command {
 			},
 			usage:  "--computer is required",
 			scopes: lifecycle, readOnly: true,
-			handler: func(x *call) (any, error) { return nil, fmt.Errorf("not implemented") },
+			handler: func(x *call) (any, error) {
+				path := computerPath(x, "/lifecycle/checkpoints")
+				if digest := x.trim("digest"); digest != "" {
+					path += "?" + url.Values{"checkpoint_digest": {digest}}.Encode()
+				}
+				return getRaw(x, path)
+			},
 		},
 		ownerAct(computerPost("resume-checkpoints", "Reopen the automatic checkpoint cadence a crashed bind closed", "/lifecycle/resume-checkpoints", nil, false)),
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
@@ -897,7 +903,7 @@ func computerCheckpointed(verb, summary, route string, operandScopes []string) *
 		params: []param{
 			computerParam(),
 			pStr("checkpoint_file", "JSON checkpoint artifact").req().onlyCLI("reads the caller's local filesystem; MCP passes the checkpoint inline"),
-			pJSON("checkpoint", "Checkpoint artifact: a Checkpoint, a CheckpointResponse, or the bind report choir computer checkpoint writes").req().
+			pJSON("checkpoint", "Checkpoint artifact: a Checkpoint or a CheckpointResponse (what choir computer checkpoints --digest prints)").req().
 				onlyMCP("the CLI reads the artifact from --checkpoint-file"),
 		},
 		usage:  "--computer and --checkpoint-file are required",

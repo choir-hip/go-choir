@@ -107,9 +107,9 @@ func judgeFromHeldBase(ctx context.Context, store verdictStore, loadBase func(st
 }
 
 // judgeAgainstBase compares the checkpoint's witness with the host's rebuild
-// d at the checkpoint's head, pins d under the checkpoint so a restore to it
-// starts from d with no tail, and records the verdict. The pin comes first: a
-// verdict is only recorded once the base it rests on is retained.
+// d at the checkpoint's head, pins d under an apply checkpoint so a restore to
+// it starts from d with no tail, and records the verdict. The pin comes first:
+// a verdict is only recorded once the base it rests on is retained.
 func judgeAgainstBase(ctx context.Context, store verdictStore, rec platform.CheckpointVerdictRecord, d projectionbase.Descriptor) error {
 	if d.CanonicalHead != rec.AcceptedHead || d.Sequence != rec.Verdict.AcceptedSequence {
 		_, err := store.ResolveCheckpointVerdict(ctx, rec.ComputerID, rec.CheckpointDigest, selfdevprotocol.CheckpointVerdict{
@@ -122,8 +122,13 @@ func judgeAgainstBase(ctx context.Context, store verdictStore, rec platform.Chec
 	if err != nil {
 		return fmt.Errorf("read checkpoint: %w", err)
 	}
-	if err := store.PinProjectionBase(ctx, rec.ComputerID, d.BlobSHA256, projectionbase.CheckpointPinReference(rec.AcceptedHead)); err != nil {
-		return fmt.Errorf("pin base %s: %w", d.BlobSHA256, err)
+	// Pins are for apply and platform-update checkpoints. A cadence checkpoint
+	// comes every few minutes and a pin has no release path until the retention
+	// slice; its base is kept by the newest-two rule while it is new.
+	if !checkpoint.Request.OwnerRecovery {
+		if err := store.PinProjectionBase(ctx, rec.ComputerID, d.BlobSHA256, projectionbase.CheckpointPinReference(rec.AcceptedHead)); err != nil {
+			return fmt.Errorf("pin base %s: %w", d.BlobSHA256, err)
+		}
 	}
 	verdict := selfdevprotocol.JudgeCheckpointWitness(checkpoint.Request.DepositMode, checkpoint.Request.VMLocalContentWitness, d.VMLocalContentWitness)
 	verdict.BaseRef = d.BlobSHA256

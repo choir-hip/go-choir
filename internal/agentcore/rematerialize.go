@@ -429,30 +429,6 @@ func (rt *Runtime) appendRestoreIntent(ctx context.Context, computerID string, c
 	return nil
 }
 
-func (h *APIHandler) bindComputerCheckpoint(w http.ResponseWriter, r *http.Request, computerID string) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if h == nil || h.rt == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "tape checkpoint authority unavailable"})
-		return
-	}
-	if r.Body != nil {
-		defer r.Body.Close()
-	}
-	report, err := h.rt.BindCheckpointRestoreSet(r.Context(), computerID)
-	if err != nil {
-		status := http.StatusConflict
-		if errors.Is(err, ErrRematerializeUnavailable) || errors.Is(err, ErrReplayCompletenessUnavailable) {
-			status = http.StatusServiceUnavailable
-		}
-		writeAPIJSON(w, status, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, report)
-}
-
 type CheckpointBindReport struct {
 	ComputerID string `json:"computer_id"`
 	// CheckpointEligible is false only when the host has judged the checkpoint
@@ -470,7 +446,9 @@ type CheckpointBindReport struct {
 	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
 	// BoundEventHead is the head the witness was taken at (and, when
 	// published, the checkpoint's accepted head).
-	BoundEventHead      string                              `json:"bound_event_head,omitempty"`
+	BoundEventHead string `json:"bound_event_head,omitempty"`
+	// BoundSequence is the event sequence of BoundEventHead.
+	BoundSequence       uint64                              `json:"bound_sequence,omitempty"`
 	PublishedCheckpoint *selfdevprotocol.CheckpointResponse `json:"published_checkpoint,omitempty"`
 }
 
@@ -494,7 +472,7 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 			return rt.publishOwnerRecoveryCheckpoint(ctx, computerID, manifest, binding)
 		}
 	}
-	binding, published, err := rt.bindCheckpointAtHead(ctx, computerID, manifest.ContentDigest, manifest.Files, publish)
+	binding, published, err := rt.bindCheckpoint(ctx, computerID, manifest.ContentDigest, manifest.Files, publish, false)
 	if err != nil {
 		return report, err
 	}
@@ -513,6 +491,9 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 	report.VMLocalContentWitness = binding.Witness
 	report.FrontendIdentity = binding.Frontend
 	report.BoundEventHead = headDigest(binding.Head)
+	if binding.Head != nil {
+		report.BoundSequence = binding.Head.Sequence
+	}
 	report.PublishedCheckpoint = published
 	return report, nil
 }
