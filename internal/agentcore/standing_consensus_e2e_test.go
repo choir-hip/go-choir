@@ -382,7 +382,7 @@ func (f *p4Fixture) freezeWithPatch(t *testing.T, key, page string, patch []byte
 	t.Helper()
 	ctx := context.Background()
 	operation, err := f.operations.Start(ctx, selfdev.StartRequest{
-		ComputerID: f.computerID, IdempotencyKey: key, PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+		ComputerID: f.computerID, IdempotencyKey: key, TrajectoryID: f.trajectoryID, PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
 	})
 	if err != nil {
 		t.Fatal(err)
