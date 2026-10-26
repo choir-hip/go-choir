@@ -105,6 +105,29 @@ type StartLifecycleRequest struct {
 	Agent              AgentRecord       `json:"agent"`
 }
 
+// TrajectoryRefContinues is the subject ref a trajectory carries when it
+// continues an earlier, settled trajectory of the same document (F1,
+// docs/problems/settled-document-refuses-owner-revision-2026-10-26.md). A
+// trajectory is one episode of work; a document outlives its episodes.
+const TrajectoryRefContinues = "continues_trajectory_id"
+
+// ContinueLifecycleDocumentRequest starts the next live trajectory on a
+// document whose trajectory settled. The settled trajectory stays settled;
+// the document's trajectory pointer, its head and its desks move to the new
+// one. It is a start (command kind start, event trajectory_started) on an
+// existing document.
+type ContinueLifecycleDocumentRequest struct {
+	OwnerID                 string         `json:"owner_id"`
+	ComputerID              string         `json:"computer_id"`
+	CommandID               string         `json:"command_id"`
+	CommandDigest           string         `json:"command_digest"`
+	TrajectoryID            string         `json:"trajectory_id"`
+	PredecessorTrajectoryID string         `json:"predecessor_trajectory_id"`
+	DocID                   string         `json:"doc_id"`
+	ExpectedHeadRevisionID  string         `json:"expected_head_revision_id"`
+	InitialWork             WorkItemRecord `json:"initial_work"`
+}
+
 type ApplyLifecycleRelatedUpdate struct {
 	TargetAgentID    string            `json:"target_agent_id"`
 	ProducerAgentID  string            `json:"producer_agent_id"`
