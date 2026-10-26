@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 // CapabilityFunc mints the bearer capability for platform reads.
@@ -243,3 +244,31 @@ func (s *HTTPSource) PinnedBases(ctx context.Context, computerID, reference stri
 	}
 	return listing.BaseRefs, nil
 }
+
+// CheckpointVerdict reads the host's verdict on a published checkpoint. A
+// checkpoint the host has no verdict row for reports found=false.
+func (s *HTTPSource) CheckpointVerdict(ctx context.Context, computerID, checkpointDigest string) (selfdevprotocol.CheckpointVerdict, bool, error) {
+	computerID = strings.TrimSpace(computerID)
+	checkpointDigest = strings.TrimSpace(checkpointDigest)
+	if computerID == "" || checkpointDigest == "" {
+		return selfdevprotocol.CheckpointVerdict{}, false, fmt.Errorf("%w: computer and checkpoint digest are required", ErrBaseRefused)
+	}
+	resp, err := s.get(ctx, "/internal/computers/checkpoints/verdict", url.Values{"computer_id": {computerID}, "checkpoint_digest": {checkpointDigest}})
+	if err != nil {
+		return selfdevprotocol.CheckpointVerdict{}, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return selfdevprotocol.CheckpointVerdict{}, false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return selfdevprotocol.CheckpointVerdict{}, false, fmt.Errorf("projection base: checkpoint verdict status %d", resp.StatusCode)
+	}
+	var verdict selfdevprotocol.CheckpointVerdict
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&verdict); err != nil {
+		return selfdevprotocol.CheckpointVerdict{}, false, fmt.Errorf("projection base: decode checkpoint verdict: %w", err)
+	}
+	return verdict, true, nil
+}
+
+var _ CheckpointVerdictSource = (*HTTPSource)(nil)

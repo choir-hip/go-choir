@@ -989,6 +989,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			MaterializationReceiptDigest: receiptDigest, VerifierCertificateDigest: verifierDigest,
 			VerifierCertificate: verifierCertificate, ReducerVersion: head.ReducerVersion,
 			VMLocalContentWitness: binding.Witness, FrontendIdentity: binding.Frontend,
+			DepositMode: binding.DepositMode,
 		})
 	})
 	if err != nil {

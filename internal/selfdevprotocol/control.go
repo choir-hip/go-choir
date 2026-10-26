@@ -256,6 +256,11 @@ func CheckpointFromRequest(request CheckpointRequest) (Checkpoint, []byte, error
 	if err := ValidateTapeCompleteness(request.TapeCompleteness, request.CompleteFromHead); err != nil {
 		return Checkpoint{}, nil, err
 	}
+	switch request.DepositMode {
+	case "", DepositModeRetained, DepositModeUpcast:
+	default:
+		return Checkpoint{}, nil, fmt.Errorf("self-development checkpoint: unknown deposit mode %q", request.DepositMode)
+	}
 	canonical, err := computerevent.CanonicalJSON(request)
 	if err != nil {
 		return Checkpoint{}, nil, err
