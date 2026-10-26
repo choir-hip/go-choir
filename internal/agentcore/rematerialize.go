@@ -100,6 +100,12 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		return report, err
 	}
+	// The host's early word: a checkpoint it proved not derivable is refused
+	// before any base is installed. Anything else goes on to the
+	// reconstruction gate below, which stays the enforcement.
+	if err := rt.refuseNotDerivableCheckpoint(ctx, computerID, checkpoint); err != nil {
+		return report, err
+	}
 	priorReleaseDigest, err := rt.verifyPinnedFrontend(checkpoint)
 	if err != nil {
 		return report, err
@@ -379,7 +385,7 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 // refused required base is a conflict the operator resolves by publishing or
 // selecting a compatible base, never a server error to retry blindly.
 func rematerializeRefusalStatus(err error) int {
-	if errors.Is(err, projectionbase.ErrBaseRefused) {
+	if errors.Is(err, projectionbase.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) {
 		return http.StatusConflict
 	}
 	if errors.Is(err, ErrRematerializeUnavailable) {
@@ -449,12 +455,11 @@ func (h *APIHandler) bindComputerCheckpoint(w http.ResponseWriter, r *http.Reque
 
 type CheckpointBindReport struct {
 	ComputerID string `json:"computer_id"`
-	// CheckpointEligible is a placeholder: true whenever a checkpoint was
-	// bound. The bind no longer proves derivability (no replay); restore does,
-	// and refuses a witness mismatch. Slice 2 of
-	// docs/design/apply-checkpoint-without-replay-2026-10-26.md replaces it
-	// with the host's verified / not_derivable verdict.
-	CheckpointEligible    bool                                  `json:"checkpoint_eligible"`
+	// CheckpointEligible is false only when the host has judged the checkpoint
+	// not_derivable. The bind no longer proves derivability (no replay): the
+	// host does, after the publish (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+	// slice 2), and restore enforces it again whenever the checkpoint is used.
+	CheckpointEligible bool `json:"checkpoint_eligible"`
 	// CheckpointVerdict is the host's verdict at the time of the answer:
 	// pending right after a publish (the host judges later), verified,
 	// not_derivable or unverified once it has. Empty when nothing was
@@ -494,7 +499,16 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 		return report, err
 	}
 	report.ComputerID = computerID
+	// Eligible unless the host has already said the checkpoint is not
+	// derivable. Right after a publish the verdict is pending (the host
+	// judges within minutes); the listing shows it once it arrives.
 	report.CheckpointEligible = true
+	if published != nil {
+		if verdict, found := rt.checkpointVerdict(ctx, computerID, published.Checkpoint); found {
+			report.CheckpointVerdict = verdict.Status
+			report.CheckpointEligible = verdict.Status != selfdevprotocol.CheckpointVerdictNotDerivable
+		}
+	}
 	report.ReleaseDigest = manifest.ContentDigest
 	report.VMLocalContentWitness = binding.Witness
 	report.FrontendIdentity = binding.Frontend
@@ -545,6 +559,7 @@ func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerI
 		OwnerRecovery:            true,
 		VMLocalContentWitness:    witness,
 		FrontendIdentity:         frontend,
+		DepositMode:              binding.DepositMode,
 	})
 }
 

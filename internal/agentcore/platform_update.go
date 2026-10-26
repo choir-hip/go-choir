@@ -423,6 +423,7 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 				MaterializationReceiptDigest: receiptDigest,
 				PlatformFollow:               true, ReducerVersion: head.ReducerVersion,
 				VMLocalContentWitness: binding.Witness, FrontendIdentity: binding.Frontend,
+				DepositMode: binding.DepositMode,
 			})
 		})
 		if bindErr != nil {

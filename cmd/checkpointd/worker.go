@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -67,6 +68,18 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	if err := store.ReconcileProjectionJobs(ctx); err != nil {
 		reconcileProblem = "reconcile: " + err.Error()
 		log.Printf("checkpoint %s", reconcileProblem)
+	}
+	// Judge published checkpoints, and queue the rebuild of the oldest
+	// unjudged one per computer (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+	// slice 2). Best effort: a verdict problem is recorded on the heartbeat
+	// and never stops the cadence jobs queued above.
+	loadBase := func(computerID, baseRef string) (projectionbase.Descriptor, error) {
+		d, _, err := projectionbase.LoadPublishedBase(svc.ArtifactsRoot(), computerID, baseRef)
+		return d, err
+	}
+	if err := reconcileCheckpointVerdicts(ctx, store, loadBase); err != nil {
+		reconcileProblem = strings.TrimSpace(reconcileProblem + " verdicts: " + err.Error())
+		log.Printf("checkpoint verdicts: %v", err)
 	}
 	if err := store.CheckpointHeartbeat(ctx, reconcileProblem); err != nil {
 		return nil, err
@@ -258,6 +271,11 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	j.WatermarkSequence = uint64(wm)
 	j.BaseRef = ref
 	log.Printf("checkpoint published computer=%s target=%d bytes=%d duration=%s", j.ComputerID, d.Sequence, d.BlobSizeBytes, time.Since(started))
+	// The base is at exactly this head: judge the checkpoints bound to it. A
+	// failure leaves them pending for the next pass; the job has succeeded.
+	if err := resolveVerdictsAtBase(ctx, store, d); err != nil {
+		log.Printf("checkpoint verdicts computer=%s: %v", j.ComputerID, err)
+	}
 	if err := removeScratchDir(scratch); err != nil {
 		log.Printf("checkpoint scratch cleanup computer=%s: %v", j.ComputerID, err)
 	}

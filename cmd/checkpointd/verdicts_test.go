@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -104,7 +105,7 @@ func (f *fakeVerdictStore) PinProjectionBase(_ context.Context, computerID, base
 	return nil
 }
 
-var errNoJob = errors.New("sql: no rows in result set")
+var errNoJob = sql.ErrNoRows
 
 func hex64(c byte) string { return strings.Repeat(string(c), 64) }
 

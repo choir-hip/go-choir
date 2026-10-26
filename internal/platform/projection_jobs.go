@@ -186,6 +186,17 @@ func blockedByContextCancel(errorText string) bool {
 }
 
 func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool) (ProjectionJob, error) {
+	return s.enqueueProjectionJob(ctx, computerID, reason, genesisRepair, nil)
+}
+
+// projectionTarget freezes a job at a head other than the computer's current
+// one: a checkpoint's own head, which the host rebuilds to compare witnesses.
+type projectionTarget struct {
+	sequence uint64
+	head     string
+}
+
+func (s *Store) enqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool, at *projectionTarget) (ProjectionJob, error) {
 	if !safeFileCASComponent(computerID) || len(computerID) > 128 || len(reason) > 255 {
 		return ProjectionJob{}, fmt.Errorf("invalid checkpoint request")
 	}
@@ -209,6 +220,21 @@ func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason str
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return ProjectionJob{}, err
 	}
+	if at != nil {
+		// A checkpoint's job targets the checkpoint's head, and seeds from a
+		// base at or below it.
+		if at.sequence > head {
+			return ProjectionJob{}, fmt.Errorf("invalid checkpoint request: target %d is beyond the head %d", at.sequence, head)
+		}
+		var seedSequence uint64
+		if seed, seedSequence, err = checkpointBaseSeed(ctx, tx, computerID, at.sequence, wm, seed); err != nil {
+			return ProjectionJob{}, err
+		}
+		if err := refuseUnreachableBase(seed, at.sequence); err != nil {
+			return ProjectionJob{}, err
+		}
+		wm, head, target = seedSequence, at.sequence, at.head
+	}
 	old, err := scanProjectionJob(tx.QueryRowContext(ctx, `SELECT `+projectionJobColumns+` FROM computer_projection_jobs WHERE computer_id=? FOR UPDATE`, computerID))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return ProjectionJob{}, err
@@ -230,7 +256,7 @@ func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason str
 		// can be deleted once none remain.
 		retriable := old.Status == "failed" || (old.Status == "blocked" && blockedByContextCancel(old.Error))
 		failedBackingOff := retriable && sameInputs && now.Sub(old.UpdatedAt) < failedJobRetryBackoff(old.Failures)
-		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable) || failedBackingOff {
+		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (at == nil && old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable) || failedBackingOff {
 			return old, tx.Commit()
 		}
 		if old.SeedBaseRef != seed || old.KeyDigest != keyDigest {
@@ -417,7 +443,16 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 		return err
 	}
 	if priorSeq > sequence {
-		return tx.Commit()
+		// A base below the advertised one: a checkpoint's verification rebuild.
+		// It is not advertised, but the platform records it so it can be found
+		// by sequence (the checkpoint pins it against collection).
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, j.ComputerID, blobSHA256, sequence, time.Now().UTC()); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return s.store.commitBoundary(ctx, "record verification base "+j.ComputerID)
 	}
 	if priorRef != seedBaseRef && priorRef != blobSHA256 {
 		return fmt.Errorf("checkpoint seed advertisement changed")

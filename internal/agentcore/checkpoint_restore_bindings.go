@@ -28,6 +28,9 @@ type checkpointBinding struct {
 	Head     *computerevent.Head
 	Witness  selfdevprotocol.VMLocalContentWitness
 	Frontend selfdevprotocol.FrontendIdentity
+	// DepositMode is the live store's deposit mode at the hold, published with
+	// the checkpoint so the host's verdict can name residual R1.
+	DepositMode string
 }
 
 // checkpointPublishFunc publishes a checkpoint for a binding. It runs while
@@ -78,7 +81,11 @@ func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, release
 			if err != nil {
 				return err
 			}
-			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend}
+			depositMode, err := depositModeOf(rt.store)
+			if err != nil {
+				return fmt.Errorf("self-development checkpoint: %w", err)
+			}
+			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, DepositMode: depositMode}
 			if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
 				return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
 			}
