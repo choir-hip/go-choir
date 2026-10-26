@@ -57,8 +57,8 @@ proved on staging 05:49); the prompt bar does not use it.
      fences a head that moves between read and commit.
    - Idempotency: the prompt bar's `command_id` is the revise's
      `client_request_id`, so a retried submit cannot commit a second owner
-     revision (see "Found while building" for why it is a 409, not a
-     replay).
+     revision (see "Found while building": the retry is a 409 command
+     digest conflict, not a replay).
    - Text: the owner's text, trimmed exactly as the new-document path trims
      it, is the revision's `owner_prompt` unchanged (SD-07: never retyped).
    - A desk's in-process call (empty RemoteAddr, the management desk's
@@ -125,20 +125,52 @@ proved on staging 05:49); the prompt bar does not use it.
 
 ## Found while building
 
-- A retried continue with the same `command_id` is not a replay: the
-  revise's head check answers first (the head is already the owner's
-  revision), so the retry is a 409 and nothing is committed twice. `/revise`
-  behaves the same today with the same client request id. P8's test asserts
-  the real guarantee (one revision, the retry a replay or a 409). A true
-  replay needs the revise to look up its command before the head check: a
-  change to the shared revise path, left out of this slice. The frontend
-  sends a fresh `command_id` per send, so only a transport-level retry of
-  one request can hit it, and it shows as an error after a successful
-  revise.
+- A retried continue with the same `command_id` is a 409, not a replay,
+  and commits nothing. The mechanism, settled from the code and P8's test
+  (review 284 item 7, where the two reviewers disagreed): the prompt-bar
+  continue sends no expected head, so the retry takes the document's
+  current head, which is now the first owner revision. The handler's head
+  check passes, but the retry's command (the same
+  `owner-revise:<command_id>`, with a new expected head and parent, and a
+  new prompt timestamp) has a different digest, so the store's
+  `replayLifecycleCommand` (internal/store/lifecycle.go) finds the stored
+  command and answers `ErrLifecycleCommandConflict`: 409 "lifecycle command
+  digest conflict". A 202 replay would need a byte-identical command, which
+  a retry after the head moved cannot send. The in-window `/revise` sends no
+  expected head either and behaves the same; a `/revise` caller that sends
+  the old head explicitly is refused earlier, by the handler's head check.
+  A true replay needs the revise to look its command up before deriving the
+  head: a change to the shared revise path, left out of this slice. The
+  frontend sends a fresh `command_id` per send, so only a transport-level
+  retry of one request can hit it, and it shows as an error after a
+  successful revise.
+- Review 284 fixes (frontend): a single URL defaults the chip to "New
+  document" so the link reaches the display app the conductor classifies
+  (`content.ClassifyPromptBarContentIntent`); the owner can still tap to
+  continue. With a target in view, a send waits for the previous one to
+  settle (the text stays in the field), and the owner's choice clears when
+  the send settles or the document in view changes. The chip's tap target
+  fills the field's height (at least 40px on phones) with no change to the
+  bar. A window closed before the receipt returns is reopened and follows
+  the continue (the shell marks the receipt live until the window follows
+  it). A minimized or hidden document window is restored, not only focused.
+  A sign-in replay carries the continue target.
+
+## Residuals after review 284
+
+- The document read treats a store error as "document not found" (404), so
+  a transient read failure looks like a missing document (Devin 4). This is
+  inherited from `/revise`'s `getTextureDocument` handling and unchanged
+  here.
 
 ## Rollback
 
-Revert the implementation commit. The API field is optional and the old
-frontend never sends it; the revise refactor carries no stored-state change.
+Revert the frontend and the server together, in one deploy. The old
+frontend never sends `continue_doc_id`, but the old server decodes the
+prompt-bar request with `DisallowUnknownFields` (prompt_bar.go), so a
+cached new frontend against a reverted server gets 400 "invalid prompt-bar
+request" on every send made with the chip on continue (sends with no
+Texture document in view, or with "New document", still work). The revise
+refactor carries no stored-state change.
 Revisions already committed by a prompt-bar continue are ordinary owner
 revisions on the document's chain.
