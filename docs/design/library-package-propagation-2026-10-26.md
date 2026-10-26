@@ -1230,6 +1230,14 @@ T-B joins `test_computers` only through the enabling change of section
 - the owner-act `request.submit` intent, if the [H] in 4.1 needs it;
 - the setting `packages.publish`.
 
+`packages.publish` is a rollout switch, not a security control (review
+274). The guest enforces it: with the setting off, the guest refuses to
+draft (`packages_publish_off`), so a stock computer sends nothing to
+publish. Neither the proxy nor corpusd can read it, because it lives in the
+computer's own settings. A compromised guest can still draft with the
+setting off, and an owner act would then publish it. The controls that
+hold against that guest are the owner act and the host checks of 3.2.
+
 **Tests first:** L1, L2, L3, L6, L15, L23, L25, L27, `track_moved`, a
 `parent_patch` whose tree differs from the host's base tree (refused), a
 base commit the store does not hold (refused with
