@@ -121,9 +121,34 @@ export function snippetAround(text, needle, before, after) {
   if (!match) return '';
   const lead = Number.isFinite(before) ? before : 42;
   const trail = Number.isFinite(after) ? after : 72;
-  const start = Math.max(0, match.index - lead);
-  const end = Math.min(flat.length, match.index + match[0].length + trail);
+  const rawStart = Math.max(0, match.index - lead);
+  const rawEnd = Math.min(flat.length, match.index + match[0].length + trail);
+  const start = rawStart > 0 ? cutOutward(flat, rawStart, -1, match.index) : 0;
+  const end = rawEnd < flat.length ? cutOutward(flat, rawEnd, 1, match.index + match[0].length) : flat.length;
   return (start > 0 ? '...' : '') + flat.slice(start, end) + (end < flat.length ? '...' : '');
+}
+
+// Move a cut that fell inside a word out to the nearest word boundary
+// (whitespace), at most SNIPPET_CUT_SLACK characters, and never past the match
+// itself: a snippet starts and ends on whole words instead of mid-word.
+const SNIPPET_CUT_SLACK = 16;
+export function cutOutward(text, index, direction, limit) {
+  // The cut may travel between the window edge and the match, so the wall it
+  // stops at is on the far side of `index` from the direction it moves.
+  const low = direction < 0 ? Math.max(0, Math.min(limit, index - SNIPPET_CUT_SLACK)) : 0;
+  const high = direction < 0 ? text.length : Math.min(text.length, Math.max(limit, index + SNIPPET_CUT_SLACK));
+  let at = Math.max(0, Math.min(text.length, index));
+  for (let steps = 0; steps <= SNIPPET_CUT_SLACK; steps += 1) {
+    // A backward cut starts before text[at], a forward cut just after
+    // text[at - 1]; whitespace or the text's own edge means it already ends on
+    // a whole word.
+    const edge = direction < 0 ? text[at] : text[at - 1];
+    if (edge === undefined || /\s/.test(edge)) return at;
+    const next = at + direction;
+    if (next < low || next > high) return at;
+    at = next;
+  }
+  return at;
 }
 
 // Search every block of every section. Matches carry where they are so the
