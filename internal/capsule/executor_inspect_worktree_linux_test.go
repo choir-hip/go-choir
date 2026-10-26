@@ -4,8 +4,11 @@ package capsule
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -79,5 +82,72 @@ func TestInspectGrantedWorktreeReadsTheLiveTreeAndChangesNothing(t *testing.T) {
 	caps.State = StateDestroyed
 	if _, err := executor.InspectGrantedWorktree(ctx, "run-inspect", "handle-inspect"); err == nil {
 		t.Fatal("inspect of a destroyed capsule passed")
+	}
+}
+
+// Review finding 1 of R9-1: the release tree is outside the
+// /workspace/platform digest, so the read must hash it the way
+// StageGrantedRelease does (sha256 of the content, mode & 0o555 or 0o444) and
+// follow a same-path rewrite.
+func TestInspectGrantedWorktreeHashesTheLiveReleaseTree(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	merged := filepath.Join(root, "merged")
+	upper := filepath.Join(root, "upper")
+	for _, base := range []string{merged, upper} {
+		release := filepath.Join(base, filepath.FromSlash(ReleaseTreePrefix))
+		if err := os.MkdirAll(filepath.Join(release, "bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(release, "frontend"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(release, "bin", "autoputer"), []byte("build one"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(release, "frontend", "index.html"), []byte("<html>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(merged, "workspace", "platform"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	caps := &Capsule{ID: "capsule-release", State: StateActive, MergedDir: merged, UpperDir: upper}
+	capability := &Capability{
+		CapabilityID: "cap-release", Handle: "handle-release", AgentRunID: "run-release",
+		AgentRole: RoleEngineering, TargetCapsule: caps.ID, ExpiresAt: time.Now().Add(time.Hour),
+	}
+	executor := &Executor{
+		stateDir:     t.TempDir(),
+		capsules:     map[string]*Capsule{caps.ID: caps},
+		capabilities: map[capKey]*Capability{{AgentRunID: "run-release", Handle: "handle-release"}: capability},
+		revokedCaps:  map[string]bool{},
+	}
+	sum := func(content string) string { h := sha256.Sum256([]byte(content)); return hex.EncodeToString(h[:]) }
+	want := []FrozenReleaseFile{
+		{Path: "bin/autoputer", SHA256: sum("build one"), Mode: 0o755 & 0o555},
+		{Path: "frontend/index.html", SHA256: sum("<html>"), Mode: 0o444},
+	}
+	live, err := executor.InspectGrantedWorktree(ctx, "run-release", "handle-release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(live.ReleaseFiles, want) {
+		t.Fatalf("release files = %+v, want %+v", live.ReleaseFiles, want)
+	}
+	// A same-path rebuild moves that file's hash and nothing else.
+	if err := os.WriteFile(filepath.Join(merged, filepath.FromSlash(ReleaseTreePrefix), "bin", "autoputer"), []byte("build two"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	after, err := executor.InspectGrantedWorktree(ctx, "run-release", "handle-release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want[0].SHA256 = sum("build two")
+	if !reflect.DeepEqual(after.ReleaseFiles, want) {
+		t.Fatalf("release files after a rebuild = %+v, want %+v", after.ReleaseFiles, want)
+	}
+	if after.Digest != live.Digest {
+		t.Fatalf("the /workspace/platform digest moved with a release rebuild: %s -> %s", live.Digest, after.Digest)
 	}
 }

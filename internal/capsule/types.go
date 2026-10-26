@@ -332,6 +332,11 @@ type FileChange struct {
 type GrantedWorktree struct {
 	Digest  string
 	Changes []FileChange
+	// ReleaseFiles is the live release tree (var/lib/artifact/release/),
+	// each regular file hashed and moded as StageGrantedRelease records it
+	// in the bundle's RuntimeFiles, sorted by path. The /workspace/platform
+	// digest does not cover it.
+	ReleaseFiles []FrozenReleaseFile
 }
 
 type FrozenReleaseFile struct {
