@@ -7,7 +7,7 @@ package agentcore
 //
 //   1. P is mounted only when it applies cleanly, so a conflict leaves the
 //      engineer with no patch and no names -> ...MountsPEvenOnConflictAndNamesThePaths
-//   2. an over-bound, digest-mismatched or outside-the-tree P is mounted
+//   2. an over-bound, empty or outside-the-tree P is mounted
 //      -> ...RefusesWhatTheOrdinaryOfferRefuses
 //   3. a rebase offer is written where old code reads it, so a revert shows P
 //      as an ordinary carry -> ...WritesWhereOldCodeNeverReads
@@ -30,7 +30,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func rebaseOfferDeps(t *testing.T, deriver carriedPatchDeriver, patch capsule.CarriedPatch, base string) rebaseOfferDeps {
+func newRebaseOfferDeps(t *testing.T, deriver carriedPatchDeriver, patch capsule.CarriedPatch, base string) rebaseOfferDeps {
 	t.Helper()
 	return rebaseOfferDeps{
 		Deriver: deriver, Root: t.TempDir(),
@@ -43,7 +43,7 @@ func rebaseOfferDeps(t *testing.T, deriver carriedPatchDeriver, patch capsule.Ca
 	}
 }
 
-func rebaseOfferInput() rebaseOfferInput {
+func newRebaseOfferInput() rebaseOfferInput {
 	return rebaseOfferInput{
 		OwnerID: "owner", ComputerID: "computer", AssignmentID: "assignment-r", Attempt: 1, RetryBaseRef: baseB,
 		Lineage: rebaseLineage{NoticeID: types.StackRebaseNoticeID("op-a", strings.Repeat("b", 40), 1), OperationID: "op-a", BootedBase: strings.Repeat("b", 40), Attempt: 1},
@@ -53,8 +53,8 @@ func rebaseOfferInput() rebaseOfferInput {
 func TestRebaseOfferMountsPCleanly(t *testing.T) {
 	patch := testCarriedPatch("a.go", "b.go")
 	deriver := &fakeCarriedDeriver{}
-	deps := rebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
-	offer := offerRebasePatch(context.Background(), deps, rebaseOfferInput())
+	deps := newRebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
+	offer := offerRebasePatch(context.Background(), deps, newRebaseOfferInput())
 	if offer.Status != carriedOffered || offer.PatchSHA256 != patch.SHA256 || offer.Dir == "" || carriedPatchDirForSpawn(offer) != offer.Dir {
 		t.Fatalf("offer %+v", offer)
 	}
@@ -72,8 +72,8 @@ func TestRebaseOfferMountsPCleanly(t *testing.T) {
 func TestRebaseOfferMountsPEvenOnConflictAndNamesThePaths(t *testing.T) {
 	patch := testCarriedPatch("a.go", "b.go")
 	deriver := &fakeCarriedDeriver{applyErr: &capsule.CarriedPatchConflictError{Paths: []string{"a.go"}, Clean: []string{"b.go"}}}
-	deps := rebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
-	offer := offerRebasePatch(context.Background(), deps, rebaseOfferInput())
+	deps := newRebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
+	offer := offerRebasePatch(context.Background(), deps, newRebaseOfferInput())
 	if offer.Status != carriedOffered || offer.Dir == "" {
 		t.Fatalf("a conflicting P must still be mounted: %+v", offer)
 	}
@@ -95,13 +95,12 @@ func TestRebaseOfferRefusesWhatTheOrdinaryOfferRefuses(t *testing.T) {
 	big := capsule.CarriedPatch{Patch: []byte(strings.Repeat("x", capsule.CarriedPatchMaxBytes+1)), Files: []string{"a.go"}}
 	big.SHA256 = testCarriedPatch("a.go").SHA256
 	outside := testCarriedPatch("../escape.go")
-	mismatch := testCarriedPatch("a.go")
-	mismatch.Patch = append(mismatch.Patch, []byte("# tampered\n")...)
-	for name, patch := range map[string]capsule.CarriedPatch{"over the size bound": big, "outside the source tree": outside, "digest mismatch": mismatch} {
+	empty := capsule.CarriedPatch{}
+	for name, patch := range map[string]capsule.CarriedPatch{"over the size bound": big, "outside the source tree": outside, "empty": empty} {
 		t.Run(name, func(t *testing.T) {
 			deriver := &fakeCarriedDeriver{}
-			deps := rebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
-			offer := offerRebasePatch(context.Background(), deps, rebaseOfferInput())
+			deps := newRebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
+			offer := offerRebasePatch(context.Background(), deps, newRebaseOfferInput())
 			if offer.Status != carriedRefused || offer.Dir != "" || carriedPatchDirForSpawn(offer) != "" {
 				t.Fatalf("offer %+v; want a refusal and no mount", offer)
 			}
@@ -117,8 +116,8 @@ func TestRebaseOfferRefusesWhatTheOrdinaryOfferRefuses(t *testing.T) {
 
 func TestRebaseOfferWritesWhereOldCodeNeverReads(t *testing.T) {
 	patch := testCarriedPatch("a.go")
-	deps := rebaseOfferDeps(t, &fakeCarriedDeriver{}, patch, strings.Repeat("a", 40))
-	in := rebaseOfferInput()
+	deps := newRebaseOfferDeps(t, &fakeCarriedDeriver{}, patch, strings.Repeat("a", 40))
+	in := newRebaseOfferInput()
 	offer := offerRebasePatch(context.Background(), deps, in)
 	if offer.Status != carriedOffered {
 		t.Fatalf("offer %+v", offer)
@@ -151,12 +150,12 @@ func TestRebaseOfferWritesWhereOldCodeNeverReads(t *testing.T) {
 func TestRebaseOfferIsDecidedOnce(t *testing.T) {
 	patch := testCarriedPatch("a.go")
 	deriver := &fakeCarriedDeriver{}
-	deps := rebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
-	first := offerRebasePatch(context.Background(), deps, rebaseOfferInput())
+	deps := newRebaseOfferDeps(t, deriver, patch, strings.Repeat("a", 40))
+	first := offerRebasePatch(context.Background(), deps, newRebaseOfferInput())
 	// A restart replays the spawn: the recorded decision stands, even if the
 	// source read would now answer differently.
 	deps.SourcePatch = func(context.Context, string) (string, []byte, error) { return "", nil, errors.New("gone") }
-	second := offerRebasePatch(context.Background(), deps, rebaseOfferInput())
+	second := offerRebasePatch(context.Background(), deps, newRebaseOfferInput())
 	if second.Status != first.Status || second.PatchSHA256 != first.PatchSHA256 || second.Dir != first.Dir {
 		t.Fatalf("replay changed the decision: %+v vs %+v", first, second)
 	}
@@ -166,9 +165,11 @@ func TestRebaseOfferIsDecidedOnce(t *testing.T) {
 }
 
 func TestRebaseOfferAnUnreadableSourceIsRefusedNotRecorded(t *testing.T) {
-	deps := rebaseOfferDeps(t, &fakeCarriedDeriver{}, testCarriedPatch("a.go"), strings.Repeat("a", 40))
-	deps.SourcePatch = func(context.Context, string) (string, []byte, error) { return "", nil, errors.New("bundle unavailable") }
-	in := rebaseOfferInput()
+	deps := newRebaseOfferDeps(t, &fakeCarriedDeriver{}, testCarriedPatch("a.go"), strings.Repeat("a", 40))
+	deps.SourcePatch = func(context.Context, string) (string, []byte, error) {
+		return "", nil, errors.New("bundle unavailable")
+	}
+	in := newRebaseOfferInput()
 	offer := offerRebasePatch(context.Background(), deps, in)
 	if offer.Status != carriedRefused || offer.Dir != "" {
 		t.Fatalf("offer %+v", offer)

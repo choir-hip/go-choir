@@ -202,6 +202,14 @@ type carriedPatchOffer struct {
 	ConflictPaths []string `json:"conflict_paths,omitempty"`
 	CleanPaths    []string `json:"clean_paths,omitempty"`
 
+	// RebaseOf, RebaseNotice and StackBase are set only on a rebase offer
+	// (rebase_offer.go, schema choir.rebase_patch_offer.v1): the applied
+	// operation whose patch is mounted, the notice it answers and the base
+	// that patch was built on.
+	RebaseOf     string `json:"rebase_of,omitempty"`
+	RebaseNotice string `json:"rebase_notice,omitempty"`
+	StackBase    string `json:"stack_base,omitempty"`
+
 	// Dir is the staged directory; derived from the root and the digest on
 	// every read, never trusted from disk.
 	Dir string `json:"-"`
@@ -628,7 +636,11 @@ func verifyStagedCarriedPatch(dir, sha string) error {
 }
 
 func writeCarriedOffer(root string, offer carriedPatchOffer) {
-	path := carriedOfferPath(root, offer.AssignmentID, offer.Attempt)
+	writeOfferFile(carriedOfferPath(root, offer.AssignmentID, offer.Attempt), offer)
+}
+
+// writeOfferFile records an offer decision at path, read only.
+func writeOfferFile(path string, offer carriedPatchOffer) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		log.Printf("agentcore: carried patch: record offer: %v", err)
 		return
@@ -742,6 +754,9 @@ func carriedBaseLabel(ref string) string {
 // rejected (or failed) finished candidate is named as the starting point,
 // with the reason, so the engineer revises the delta instead of rebuilding.
 func carriedPatchNotice(offer carriedPatchOffer) string {
+	if offer.Schema == rebaseOfferSchema {
+		return rebasePatchNotice(offer)
+	}
 	switch offer.Status {
 	case carriedRefused:
 		var b strings.Builder
@@ -1021,6 +1036,15 @@ func (rt *Runtime) offerCarriedPatchForAssignment(ctx context.Context, assignmen
 		binding.Kind != types.EngineeringAssignmentImplementation {
 		return carriedPatchOffer{}
 	}
+	// U4: an assignment the rebase pair claim names is offered the applied
+	// stack top's patch instead, and never anything from the ordinary history
+	// (which never carries an applied operation).
+	if lineage, ok := rt.rebaseLineage(ctx, assignment); ok {
+		return offerRebasePatch(ctx, rt.rebaseOfferDeps(), rebaseOfferInput{
+			OwnerID: binding.OwnerID, ComputerID: binding.ComputerID, AssignmentID: assignment.AssignmentID, Attempt: binding.Attempt,
+			RetryBaseRef: retryBaseRef, Lineage: lineage,
+		})
+	}
 	return offerCarriedPatch(ctx, carriedPatchDeps{History: storeCarriedHistory{rt: rt}, Deriver: rt.capsuleExecutor, Root: rt.selfdevUpdaterRoot,
 		CarryUnfinished: rt.carryUnfinishedOn(ctx, binding.OwnerID, binding.ComputerID)},
 		carriedPatchInput{OwnerID: binding.OwnerID, ComputerID: binding.ComputerID, TrajectoryID: binding.TrajectoryID,
@@ -1036,6 +1060,11 @@ func (rt *Runtime) carriedPatchNoticeForRun(rec *types.RunRecord) string {
 	}
 	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
 	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	// A rebase assignment's offer lives beside the ordinary ones, where old
+	// code never reads it; only an assignment the pair claim names has one.
+	if rebase := readRebaseOffer(rt.selfdevUpdaterRoot, assignmentID, attempt); rebase.Status != "" {
+		return carriedPatchNotice(rebase)
+	}
 	offer := readCarriedOffer(rt.selfdevUpdaterRoot, assignmentID, attempt)
 	if offer.SourceUnfinished && !rt.carryUnfinishedOn(context.Background(), rec.OwnerID, rec.ComputerID) {
 		return ""
