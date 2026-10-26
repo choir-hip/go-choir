@@ -1,6 +1,7 @@
 package pkgrelease
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -18,7 +19,8 @@ const (
 	RecordKindPlatformProposal = "platform_proposal"
 )
 
-// Scopes. S2 lists at owner only; the others are S3 and S4.
+// Scopes. S2 lists at owner only; S3 adds shared and public; platform is
+// S4's.
 const (
 	ScopeOwner    = "owner"
 	ScopeShared   = "shared"
@@ -56,17 +58,18 @@ type SharedWith struct {
 	Computers []string `json:"computers"`
 }
 
-// Normalize fills nil slices so a listing has one canonical form.
+// Normalize fills nil slices and sorts the scope set and the named owners
+// and computers, so a listing has one canonical form. It never drops a
+// duplicate: Validate refuses one.
 func (l Listing) Normalize() Listing {
-	if l.Scopes == nil {
-		l.Scopes = []string{}
+	sorted := func(in []string) []string {
+		out := append([]string{}, in...)
+		sort.Strings(out)
+		return out
 	}
-	if l.SharedWith.Owners == nil {
-		l.SharedWith.Owners = []string{}
-	}
-	if l.SharedWith.Computers == nil {
-		l.SharedWith.Computers = []string{}
-	}
+	l.Scopes = sorted(l.Scopes)
+	l.SharedWith.Owners = sorted(l.SharedWith.Owners)
+	l.SharedWith.Computers = sorted(l.SharedWith.Computers)
 	return l
 }
 
@@ -89,9 +92,12 @@ func (l Listing) Digest() (string, error) {
 	return computerevent.DigestBytes(raw), nil
 }
 
-// Validate checks the listing's shape. S2 lists package releases at scope
-// owner only; the other scopes and record kinds arrive with S3 and S4, and
-// a listing that names them before then is refused, not ignored.
+// Validate checks the listing's shape. Every scope set holds owner; shared
+// names at least one owner other than the track's, and only shared names
+// any; public admits every owner. The platform scope (S4) and named
+// computers (no computer reads packages before S5) refuse
+// scope_not_built: a scope this build cannot enforce is refused, never
+// stored and ignored. Platform proposals arrive with S4b.
 func (l Listing) Validate() error {
 	l = l.Normalize()
 	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, "listing: "+format, args...) }
@@ -104,8 +110,8 @@ func (l Listing) Validate() error {
 	if l.Seq < 1 || l.Version < 1 {
 		return fail("seq and version start at 1")
 	}
-	if len(l.Scopes) != 1 || l.Scopes[0] != ScopeOwner || len(l.SharedWith.Owners) != 0 || len(l.SharedWith.Computers) != 0 {
-		return fail("scopes must be [owner] until S3")
+	if err := l.validateScopes(); err != nil {
+		return err
 	}
 	switch l.State {
 	case StateListed, StateWithdrawn, StateSuspended, StateYanked:
@@ -117,6 +123,47 @@ func (l Listing) Validate() error {
 	}
 	if (l.Version == 1) != (l.PrevVersionDigest == "") || (l.PrevVersionDigest != "" && !computerevent.IsSHA256(l.PrevVersionDigest)) {
 		return fail("version 1 names no predecessor; every later version names its predecessor's digest")
+	}
+	return nil
+}
+
+func (l Listing) validateScopes() error {
+	fail := func(format string, args ...any) error { return refuse(ReasonInvalid, "listing: "+format, args...) }
+	seen := map[string]bool{}
+	for _, scope := range l.Scopes {
+		switch scope {
+		case ScopeOwner, ScopeShared, ScopePublic:
+		case ScopePlatform:
+			return refuse(ReasonScopeNotBuilt, "listing: the platform scope arrives with S4")
+		default:
+			return fail("scope %q is not a scope", scope)
+		}
+		if seen[scope] {
+			return fail("scope %q is named twice", scope)
+		}
+		seen[scope] = true
+	}
+	if !seen[ScopeOwner] {
+		return fail("every scope set holds owner")
+	}
+	if len(l.SharedWith.Computers) != 0 {
+		return refuse(ReasonScopeNotBuilt, "listing: sharing with named computers arrives when a computer reads packages (S5); share with their owners")
+	}
+	owners := map[string]bool{}
+	for _, owner := range l.SharedWith.Owners {
+		if !safeIdentity.MatchString(owner) {
+			return fail("shared owner %q is not an owner id", owner)
+		}
+		if owner == l.Track {
+			return fail("the track's owner sees its own listing; it is not shared with itself")
+		}
+		if owners[owner] {
+			return fail("shared owner %q is named twice", owner)
+		}
+		owners[owner] = true
+	}
+	if seen[ScopeShared] != (len(owners) > 0) {
+		return fail("the shared scope and the named owners go together")
 	}
 	return nil
 }

@@ -576,6 +576,52 @@ func (o *ObjectGraphStore) ListObjectsByMetadataForOwner(ctx context.Context, ki
 	return out, rows.Err()
 }
 
+// ListObjectsByMetadataPage is one keyset page of a kind's objects in
+// canonical id order, strictly after afterCanonicalID: those whose metadata
+// jsonPath equals value (no filter when jsonPath is empty), and only
+// ownerID's when it is not empty. A caller reads to the end by passing the
+// last id of each full page, so no answer is ever a truncated read (Library
+// S3, bunch279-I2). The comparison is the JSON one, never the lookup key,
+// whose seek is capped.
+func (o *ObjectGraphStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPath, value, ownerID, afterCanonicalID string, limit int) (out []objectgraph.Object, err error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	done := o.store.retrievalTimer(retrievalListByMetadata)
+	defer func() { done("json_page", len(out), err) }()
+	where := `object_kind = ?`
+	args := []any{kind}
+	if jsonPath != "" {
+		where += ` AND ` + metadataJSONEq
+		args = append(args, jsonPath, value)
+	}
+	if ownerID != "" {
+		where += ` AND owner_id = ?`
+		args = append(args, ownerID)
+	}
+	rows, err := o.store.corpus().QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE `+where+` AND canonical_id > ?
+		 ORDER BY canonical_id ASC LIMIT ?`,
+		append(args, afterCanonicalID, objectgraph.NormalizedLimit(limit))...)
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: list by metadata page: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		obj, bodyRef, err := scanObjectGraphObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
 // GetEdge finds a single edge by from_id + kind.
 func (o *ObjectGraphStore) GetEdge(ctx context.Context, fromID string, kind objectgraph.EdgeKind) (_ objectgraph.Edge, err error) {
 	if o == nil || o.store == nil || o.store.db == nil {

@@ -21,9 +21,6 @@ const (
 	ReasonKindsNeedPlatform  = "package_kinds_need_platform"
 	ReasonUnchanged          = "package_unchanged"
 	ReasonTrackMoved         = "track_moved"
-	// ReasonTrackFull: the track holds the most listings one read returns;
-	// seq and the head would be counted from a truncated read.
-	ReasonTrackFull = "track_full"
 	// ReasonRecordUnlisted: the record was stored and its listing was not
 	// (a crash between the two writes), and the track has since moved, so
 	// it can no longer be listed where it would have been.
