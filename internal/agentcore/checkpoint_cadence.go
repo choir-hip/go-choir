@@ -24,14 +24,14 @@ import (
 // twice turns the cadence off, with that cause, until the owner reopens it.
 
 const (
-	// defaultCheckpointEveryEvents is today's checkpointd cadence, whose
-	// rebuild cost is measured (43 to 56 s), and keeps any restore tail under
-	// a quarter of MaxRecoveryTailEvents.
-	defaultCheckpointEveryEvents uint64 = 2500
-	// defaultCheckpointEvery bounds how old the newest restore point of a
-	// quiet computer can be.
-	defaultCheckpointEvery = 60 * time.Minute
-
+	// The cadence compiles OFF (review 329): the live extract a bind makes holds
+	// appends for a time unmeasured on the paper (design R2), so the host names
+	// the computers that run it, with the values (vmctl's
+	// VM_CHECKPOINT_CADENCE_ONLY, internal/vmmanager/checkpoint_cadence.go),
+	// and widens the list only after reading last_bind_millis. The design's
+	// values, 2,500 events (checkpointd's measured cadence) and 60 minutes
+	// (how old a quiet computer's newest restore point may be), are the host's
+	// defaults.
 	envCheckpointEveryEvents = "CHOIR_CHECKPOINT_EVERY_EVENTS"
 	envCheckpointEvery       = "CHOIR_CHECKPOINT_EVERY"
 
@@ -65,23 +65,22 @@ type checkpointCadenceConfig struct {
 
 func (c checkpointCadenceConfig) disabled() bool { return c.EveryEvents == 0 && c.Every == 0 }
 
-// checkpointCadenceConfigFromEnv reads the two overrides the host can write to
-// the guest's environment file. An unparsable or negative value keeps the
-// default, loudly: a typo must not turn automatic checkpoints off.
+// checkpointCadenceConfigFromEnv reads the selection the host writes to the
+// guest's environment file. Unset, unparsable or negative is off, loudly.
 func checkpointCadenceConfigFromEnv(getenv func(string) string) checkpointCadenceConfig {
-	cfg := checkpointCadenceConfig{EveryEvents: defaultCheckpointEveryEvents, Every: defaultCheckpointEvery}
+	var cfg checkpointCadenceConfig
 	if raw := strings.TrimSpace(getenv(envCheckpointEveryEvents)); raw != "" {
 		if n, err := strconv.ParseUint(raw, 10, 64); err == nil {
 			cfg.EveryEvents = n
 		} else {
-			log.Printf("runtime: %s=%q is not a count; keeping %d", envCheckpointEveryEvents, raw, cfg.EveryEvents)
+			log.Printf("runtime: %s=%q is not a count; that trigger stays off", envCheckpointEveryEvents, raw)
 		}
 	}
 	if raw := strings.TrimSpace(getenv(envCheckpointEvery)); raw != "" {
 		if d, err := time.ParseDuration(raw); err == nil && d >= 0 {
 			cfg.Every = d
 		} else {
-			log.Printf("runtime: %s=%q is not a duration; keeping %s", envCheckpointEvery, raw, cfg.Every)
+			log.Printf("runtime: %s=%q is not a duration; that trigger stays off", envCheckpointEvery, raw)
 		}
 	}
 	return cfg
@@ -283,7 +282,12 @@ func (rt *Runtime) checkpointCadenceTick(ctx context.Context, now time.Time) (ca
 			rt.closeCheckpointCadence("no durable attempt count, so a crashing bind could not be bounded")
 			return cadenceOff, nil
 		default:
-			return cadenceSkipped, fmt.Errorf("checkpoint cadence: %w", err)
+			// The count cannot be read, so a crashing bind could not be
+			// bounded: close with that cause instead of skipping every tick
+			// while the status reads on (review 329). Repairing the file is an
+			// operator act: it also bounds apply and settlement crash loops.
+			rt.closeCheckpointCadence(fmt.Sprintf("the attempt count file cannot be read, so a crashing bind could not be bounded: %v", err))
+			return cadenceOff, nil
 		}
 	}
 	started := time.Now()

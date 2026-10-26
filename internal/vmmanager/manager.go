@@ -2110,6 +2110,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		runtimeArgs = append(runtimeArgs, m.guestReclaimKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.capsuleTunnelIdentityKernelParams(cfg)...)
+		runtimeArgs = append(runtimeArgs, m.checkpointCadenceKernelParams(cfg)...)
 		runtimeArgs = append(runtimeArgs, m.guestDNSKernelParams(cfg, hostIP)...)
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
@@ -2142,6 +2143,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			bootArgs += " " + arg
 		}
 		for _, arg := range m.capsuleTunnelIdentityKernelParams(cfg) {
+			bootArgs += " " + arg
+		}
+		for _, arg := range m.checkpointCadenceKernelParams(cfg) {
 			bootArgs += " " + arg
 		}
 		for _, arg := range m.guestDNSKernelParams(cfg, hostIP) {

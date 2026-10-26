@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { pinNewestCheckpoint } from './checkpoint_pick.mjs';
 
 // Playwright ships to this repo via frontend's @playwright/test; resolve
 // chromium through the frontend manifest so pnpm's layout stays hidden.
@@ -424,18 +425,21 @@ try {
   const bootstrap = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/bootstrap-chain`, {});
   result.bootstrap_chain = bootstrap.json ?? bootstrap.text;
 
-  // Pin the pre-episode head: the M9a restore target. The checkpoint mint is
-  // idempotent authority work on the canonical head (rematerialize.go
-  // bindComputerCheckpoint -> published_checkpoint.checkpoint).
-
-  const checkpointBind = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
-  result.pre_episode_checkpoint_bind = checkpointBind.json ?? checkpointBind.text;
-  const pinnedCheckpoint = checkpointBind.json?.published_checkpoint?.checkpoint ?? checkpointBind.json?.checkpoint;
-  if (pinnedCheckpoint) {
-    result.pinned_checkpoint_digest = pinnedCheckpoint.digest;
+  // Pin the newest checkpoint the computer has bound: the M9a restore target.
+  // POST /lifecycle/checkpoint is deleted; the computer binds its own
+  // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4), and a
+  // fresh owner computer has bound none until its cadence runs (it runs only
+  // on computers the host selected), so a missing one is a recorded gap.
+  const lifecycle = (rest) => `/api/computers/${encodeURIComponent(computerID)}/lifecycle/${rest}`;
+  const readApi = async (p) => { const r = await fetchJSON(page, p); return { status: r.status, body: r.json, error: r.text }; };
+  const pinned = await pinNewestCheckpoint(readApi, lifecycle);
+  const pinnedCheckpoint = pinned.checkpoint;
+  result.pre_episode_checkpoint_bind = pinned.checkpoint ?? pinned.error;
+  if (pinned.checkpoint) {
+    result.pinned_checkpoint_digest = pinned.checkpoint.checkpoint_digest ?? pinned.checkpoint.digest;
     mark('pre_episode_checkpoint', {digest: result.pinned_checkpoint_digest});
   } else {
-    result.pre_episode_checkpoint_gap = `checkpoint mint returned no checkpoint: ${JSON.stringify(result.pre_episode_checkpoint_bind)}`;
+    result.pre_episode_checkpoint_gap = `no checkpoint to pin: ${pinned.error}`;
   }
   mark('bootstrap_chain', {computer: computerID});
 
@@ -515,16 +519,20 @@ try {
       // After apply the desks resume, and a replay over a chain that is still
       // growing ends in "projection repair required" (rerun 12). Retry while
       // the computer settles; the attempts are recorded, never hidden.
-      let postApplyCheckpoint;
+      // The apply binds a checkpoint at its own head. After apply the desks
+      // resume and the listing can lag the bind; poll it, recording the
+      // attempts, until a checkpoint other than the pre-episode one is listed.
+      let postApplyCheckpoint = {status: null, json: null};
       let checkpointMinted = false;
       result.post_apply_checkpoint_attempts = [];
       for (let attempt = 0; attempt < 10 && !checkpointMinted; attempt++) {
         if (attempt > 0) await page.waitForTimeout(60_000);
-        postApplyCheckpoint = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
-        checkpointMinted = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
+        postApplyCheckpoint = await fetchJSON(page, lifecycle('checkpoints'));
+        const listed = postApplyCheckpoint.json?.checkpoints ?? [];
+        checkpointMinted = listed.some((row) => row.checkpoint_digest && row.checkpoint_digest !== result.pinned_checkpoint_digest && row.verdict?.status !== 'not_derivable');
         const errorText = String(postApplyCheckpoint.json?.error ?? postApplyCheckpoint.text ?? '');
-        result.post_apply_checkpoint_attempts.push({at: new Date().toISOString(), status: postApplyCheckpoint.status, error: errorText.slice(0, 200)});
-        if (!checkpointMinted && !/projection repair required|head moved|not exactly-once/.test(errorText)) break;
+        result.post_apply_checkpoint_attempts.push({at: new Date().toISOString(), status: postApplyCheckpoint.status, listed: listed.length, error: errorText.slice(0, 200)});
+        if (!checkpointMinted && postApplyCheckpoint.status !== 200 && !/unavailable/.test(errorText)) break;
       }
       result.post_apply_checkpoint = {status: postApplyCheckpoint.status, body: postApplyCheckpoint.json ?? postApplyCheckpoint.text};
       // mark() flips the leg it names, so a failed check marks a log-only name.
@@ -629,7 +637,7 @@ try {
         result.restore_blocker = `pinned-head restore did not complete: ${JSON.stringify(result.restore)}`;
       }
     } else if (!pinnedCheckpoint) {
-      result.restore_blocker = 'no pre-episode checkpoint was minted; restore target unavailable';
+      result.restore_blocker = 'the computer had bound no checkpoint before the episode (its cadence runs only where the host selected it); restore target unavailable';
     }
     updatePredicate();
   }

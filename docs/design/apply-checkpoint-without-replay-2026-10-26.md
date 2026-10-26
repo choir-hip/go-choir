@@ -425,8 +425,9 @@ back to this morning" is not delivered until slice 4's one-per-day keep.
 Reversal: the `pinBase` argument of `bindCheckpoint` and the
 `OwnerRecovery` test in `judgeAgainstBase`.
 
-**F6. The cadence is built; its host plumbing and its measurement are not.**
-Defaults are compiled in (2,500 events, 60 minutes); `CHOIR_CHECKPOINT_EVERY_EVENTS`
+**F6. The cadence is built; its measurement is not (superseded by "Review 329"
+below: it now compiles OFF and the host selects computers).**
+Defaults were compiled in (2,500 events, 60 minutes); `CHOIR_CHECKPOINT_EVERY_EVENTS`
 and `CHOIR_CHECKPOINT_EVERY` are read from the process environment (`0` turns a
 trigger off; a typo keeps the default). The path that writes them into the
 guest (vmctl, kernel cmdline, `go-choir-extract-cmdline` into
@@ -492,3 +493,74 @@ at the checkpoint's head and the watermark is current), so the rate is the same
 as today's. The extra rebuilds are the time-triggered ones (a quiet computer,
 every 60 minutes with at least one event) and each apply's. The queue is one
 job per computer, so a burst on one computer cannot starve another.
+
+## Review 329 (2026-10-26): what was adopted and what was deferred
+
+Reviewed by Devin and DeepSeek v4.1 flash (tier 2); both CHANGES REQUIRED. The
+lane is rebased onto `origin/main` at train 20 (`dd2725016`); the settlement
+code (`recordPlatformUpdateApplied`, `recordSettlementApplied`, run before any
+spend) is main's, untouched, and the density, base-join and live-capsule
+reverts were the stale base, gone with the rebase.
+
+Adopted:
+
+- **Cadence compiles OFF, host-selected per computer (F6 superseded).** The
+  guest reads `CHOIR_CHECKPOINT_EVERY_EVENTS` / `CHOIR_CHECKPOINT_EVERY`; unset,
+  zero or bad is off. vmctl's `VM_CHECKPOINT_CADENCE_ONLY` (computer ids; the
+  same selector family as the tunnel enforce and the DAMON reclaim) names the
+  computers, with `VM_CHECKPOINT_CADENCE_EVERY_EVENTS` (2500) and
+  `VM_CHECKPOINT_CADENCE_EVERY` (60m), as two kernel boot arguments; the guest
+  boot script validates them (digits; digits and one unit) before it writes the
+  environment file. `nix/node-b.nix` ships the list empty. Procedure: name d@e,
+  redeploy (it cold boots once), read `last_bind_millis` in `choir computer
+  checkpoints`, widen one computer at a time; the paper stays off until measured.
+  Rollback: empty the list and redeploy.
+- **Proof scripts moved off the deleted bind.** `scripts/reeng_tracer.mjs` and
+  `scripts/m11_selfdev_episode_probe.mjs` read `GET .../lifecycle/checkpoints`,
+  pin the newest checkpoint restore would not refuse, fetch it by digest, and
+  restore to it (`scripts/checkpoint_pick.mjs`, tested). The restore leg no
+  longer demands the pinned checkpoint's head equal the pre-apply head (a
+  cadence checkpoint is older by up to a cadence): it demands the restore
+  matched, restored that checkpoint, and that the apply had moved the head past
+  it. On a computer the host did not select there is no checkpoint to pin: the
+  run records the gap. A drill that needs a restore target must run on a
+  selected computer.
+- **Verification starvation (Devin 6, DeepSeek 4).** checkpointd queues the
+  checkpoint rebuilds before its own cadence jobs, so a busy computer's job row
+  is not retaken every minute; and a refusal or a backoff of the computer's job
+  at another target no longer blocks a checkpoint's rebuild (a refusal at the
+  checkpoint's own target still stands).
+- **Version-skew verdicts (DeepSeek 6, Devin 7).** A mismatch across reducer
+  versions (host rebuild vs the checkpoint's) is `unverified / version_skew`,
+  never `not_derivable`; equal content is verified whatever the versions. The
+  base is not pinned for a checkpoint judged `not_derivable`.
+- **Deposit mode outside the digest (DeepSeek 5).** The digest is of the request
+  without `deposit_mode`, so a guest rolled back below the field recomputes the
+  same digest and every checkpoint stays restorable. The mode stays in the stored
+  request for the host. A rolled-back guest's strict `FetchCheckpoint` decode
+  still refuses a checkpoint carrying the field, which affects only a platform
+  update tail resuming across the rollback.
+- **Restore refuses before it writes (DeepSeek 7):** the not_derivable refusal
+  precedes the restore intent on the restore route.
+- **Unreadable attempt file (DeepSeek 8):** the cadence closes with that cause
+  instead of reading `on` while skipping.
+- Stale docs (the CLI parity row, the drill problem doc) now name the deleted
+  route.
+
+Deferred, with reasons:
+
+- **Owner rejudge of a verdict.** `not_derivable` now needs the same reducer, a
+  same-mode mismatch and a base at the exact head; a rejudge is a way to rerun a
+  proof that has no demonstrated need. Add it when a good point is refused.
+- **Repairing a corrupt attempt file on `resume-checkpoints`.** The file also
+  bounds apply and settlement crash loops; deleting it is an operator act, not
+  a side effect of an owner CLI verb.
+- **Crash bound counts only binds that never returned (Devin 5, DeepSeek 2).**
+  A bind that publishes and then crashes the guest before returning is not
+  counted, so a repeating crash there would not close the cadence. It is named
+  here as a residual; the platform-side and unit restart limits still bound it.
+- **A vocabulary or schema version in the skew check.** The checkpoint carries
+  a reducer version only; `deposit_mode: upcast` already implies the V2
+  vocabulary. Adding versions to the checkpoint repeats F3's cost.
+- **`last_bound_*` in the status is memory-only** (zero after each boot); the
+  listing's checkpoints are the platform's and survive.
