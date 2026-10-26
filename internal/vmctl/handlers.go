@@ -76,6 +76,14 @@ type vmctlHealthResponse struct {
 	// behind (guest_release.go). Absent while the switch is off.
 	GuestReleaseCurrent string                 `json:"guest_release_current,omitempty"`
 	GuestReleases       []GuestReleaseComputer `json:"guest_releases,omitempty"`
+	// Memory is what vmctl does about guest memory beyond admission: the
+	// guest page cache return trigger and its recent acts (density D6).
+	Memory vmctlMemoryHealth `json:"memory"`
+}
+
+// vmctlMemoryHealth is the memory block of vmctl's /health.
+type vmctlMemoryHealth struct {
+	CacheReturn GuestCacheReturnSummary `json:"cache_return"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -261,6 +269,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 		GuestReleaseCurrent: releaseCurrent,
 		GuestReleases:       releaseComputers,
+		Memory:              vmctlMemoryHealth{CacheReturn: h.registry.GuestCacheReturnSummary()},
 	})
 }
 
