@@ -160,12 +160,20 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		return nil, fmt.Errorf("choir.Relate: read the tape: %w", err)
 	}
 	answered := map[string]types.EventRecord{}
+	// noCandidates: this run's analysis of the story was built and found no
+	// candidate (review 324 F1), the basis of an empty list.
+	noCandidates := false
 	latest := map[string]string{}                // story, entity -> the latest recorded role
 	minted := map[string]storyEntityAttachment{} // entities this tape minted
 	for _, ev := range tape {
 		switch {
 		case ev.Kind == types.EventSystem1Judgment && ev.Phase == system1PhaseAnswered && ev.RunID == runID:
 			answered[ev.EventID] = ev
+		case ev.Kind == types.EventStoryEntities && ev.Phase == storyEntitiesPhaseAnalysisUnanswered && ev.RunID == runID:
+			var marker analysisUnanswered
+			if json.Unmarshal(ev.Payload, &marker) == nil && marker.Story == req.Story && marker.Candidates == 0 && marker.Error == "" {
+				noCandidates = true
+			}
 		case ev.Kind == types.EventStoryEntities && ev.Phase == storyEntitiesPhaseRecorded:
 			var rec storyEntitiesRecord
 			if json.Unmarshal(ev.Payload, &rec) != nil || (rec.Computer != "" && rec.Computer != computer) {
@@ -188,7 +196,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	result := relateResult{Story: req.Story}
 	model := ""
 	analysed := readAnalysisBasis(answered, req.Story)
-	if len(req.Entities) == 0 && !analysed.present {
+	if len(req.Entities) == 0 && !analysed.present && !noCandidates {
 		return nil, fmt.Errorf("choir.Relate needs at least one entity: an empty list records that your story is about none of its candidates, and it needs this run's choir.StoryAnalysis() of the story")
 	}
 	var counts types.StoryEntityCounts
@@ -240,8 +248,8 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 
 	// The record's review, under the id the record will take.
 	recordID := uuid.New().String()
-	if analysed.present {
-		export.Review = analysed.buildReview(recordID, counts, gaps, attachments, rt.analyses.built(runID+"\x00"+strings.TrimPrefix(exec.AgentID, yaegikernel.SessionRoleResearch+":")))
+	if analysed.present || noCandidates {
+		export.Review = analysed.buildReview(recordID, counts, gaps, attachments, rt.analyses.built(runID+"\x00"+deskDocOf(exec.AgentID)))
 	}
 
 	publisher, ok := rt.storyPublisher().(StoryEntityPublisher)
@@ -291,7 +299,7 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 	err = publisher.PublishEntities(ectx, export)
 	cancel()
 	switch {
-	case err != nil && own && platformRefused(err):
+	case err != nil && own && platformNotPublished(err):
 		// Checked pending, refused on write: the story is not published
 		// yet. The record goes out when it publishes (publishStoryVersion).
 		result.ExportPending = true
@@ -302,6 +310,13 @@ func (rt *Runtime) relateEgress(ctx context.Context, deskRole string, exec toolr
 		result.Exported = true
 	}
 	return json.Marshal(result)
+}
+
+// deskDocOf is the doc named by a research desk's agent id, normalised as
+// researchDeskDoc does, so the analysis memo key matches.
+func deskDocOf(agentID string) string {
+	doc, _ := strings.CutPrefix(strings.TrimSpace(agentID), yaegikernel.SessionRoleResearch+":")
+	return strings.TrimSpace(doc)
 }
 
 // researchDeskDoc is the doc a research desk is bound to: its agent id is

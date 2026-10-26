@@ -882,6 +882,12 @@ func (r *rlmCallReduction) requireStoryEntitiesRecorded(ctx context.Context) err
 			return nil
 		case ev.Phase == storyEntitiesPhasePlatformFailed && ev.RunID == runID:
 			return nil
+		case ev.Phase == storyEntitiesPhaseAnalysisUnanswered && ev.RunID == runID:
+			// This run's analysis failed: no call can meet the rule.
+			var marker analysisUnanswered
+			if json.Unmarshal(ev.Payload, &marker) == nil && marker.Error != "" {
+				return nil
+			}
 		}
 	}
 	return fmt.Errorf("before the final Report, record what this story is about with choir.Relate(\"\", entities), citing choir.StoryAnalysis()'s System 1 answers; send interim packets meanwhile")

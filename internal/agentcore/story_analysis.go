@@ -8,7 +8,10 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/entitytext"
@@ -137,9 +140,59 @@ func (rt *Runtime) storyAnalysisFor(ctx context.Context, deskRole string, exec t
 	e := rt.analyses.entry(runID + "\x00" + doc)
 	e.once.Do(func() {
 		e.analysis = rt.buildStoryAnalysis(ctx, exec, owner, computer, runID, doc)
+		rt.markAnalysisUnanswered(ctx, exec, owner, computer, runID, e.analysis)
 		e.done.Store(true)
 	})
 	return e.analysis
+}
+
+// storyEntitiesPhaseAnalysisUnanswered marks a run whose analysis of its
+// story carries no System 1 answer (review 324 F1), so choir.Relate has no
+// basis from it. With no candidates and no error the story is about none
+// of them: choir.Relate("", nil) records that. With an error (System 1
+// off, no decision model, the judge or the candidates read failing) the
+// desk cannot meet the finish rule, and the marker frees this run's final
+// Report as a platform failure does.
+const storyEntitiesPhaseAnalysisUnanswered = "analysis_unanswered"
+
+// analysisUnanswered is the marker's payload.
+type analysisUnanswered struct {
+	Computer   string `json:"computer_id"`
+	Story      string `json:"story"`
+	Candidates int    `json:"candidates"`
+	Error      string `json:"error,omitempty"`
+}
+
+// analysisAnswered reports whether any of the analysis's questions has a
+// System 1 answer.
+func analysisAnswered(a *yaegikernel.StoryAnalysis) bool {
+	answered := func(ans *yaegikernel.StoryAnalysisAnswer) bool { return ans != nil && ans.ReceiptRef != "" }
+	if answered(a.Novelty) {
+		return true
+	}
+	for _, c := range a.Candidates {
+		if answered(c.Role) || answered(c.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
+// markAnalysisUnanswered puts the marker on the tape, once a run (the
+// analysis is built once a run).
+func (rt *Runtime) markAnalysisUnanswered(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID string, a *yaegikernel.StoryAnalysis) {
+	if a == nil || analysisAnswered(a) {
+		return
+	}
+	raw, err := json.Marshal(analysisUnanswered{Computer: computer, Story: a.Story.PublicationID, Candidates: len(a.Candidates), Error: a.Error})
+	if err == nil {
+		ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: owner, AgentID: exec.AgentID,
+			ChannelID: system1Channel(computer), Kind: types.EventStoryEntities, Phase: storyEntitiesPhaseAnalysisUnanswered, Payload: raw}
+		err = rt.store.AppendEvent(context.WithoutCancel(ctx), &ev)
+	}
+	if err != nil {
+		log.Printf("story analysis: mark the unanswered analysis of %s on run %s: %v", a.Story.PublicationID, runID, err)
+	}
 }
 
 func (rt *Runtime) buildStoryAnalysis(ctx context.Context, exec toolregistry.ExecutionContext, owner, computer, runID, docID string) *yaegikernel.StoryAnalysis {
