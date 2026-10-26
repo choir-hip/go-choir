@@ -335,3 +335,55 @@ func TestStoryEntitiesRefuseAnOverlongName(t *testing.T) {
 		t.Fatalf("a name at the bound: %v", err)
 	}
 }
+
+// The computer names a story by the id corpusd gives its publication (slice
+// c: a story desk passes "" and the host derives it without a read).
+func TestStoryPublicationIDMatchesThePlatform(t *testing.T) {
+	for _, c := range [][2]string{{"owner-1", "doc-1"}, {labOwner, "doc-a"}} {
+		ident, err := publicationIdentityFor(c[0], c[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := types.StoryPublicationID(c[0], c[1]); got != ident.PublicationID {
+			t.Fatalf("types.StoryPublicationID(%q, %q) = %s, platform %s", c[0], c[1], got, ident.PublicationID)
+		}
+	}
+}
+
+// Slice c, F6 and review 304 item 4: a story not yet published is checked
+// with pending, validate-only: every entity check runs (types, ids, R1) and
+// only the published-story check is skipped. Pending is never a write.
+func TestStoryEntitiesPendingIsValidateOnlyAndKeepsEveryEntityCheck(t *testing.T) {
+	l := newEntityLab(t)
+	a := l.publish("doc-a", 1, "Vucic concedes", l.capture("https://wire.example/a", "", "Vucic conceded"))
+	l.attachEntities(a, newEntity("Anthropic", types.EntityTypeOrganization, types.EntityRoleCentral))
+	unpublished := types.StoryPublicationID(labOwner, "doc-unpublished")
+	req := types.StoryEntitiesRequest{OwnerID: labOwner, ComputerID: labComputer, Story: unpublished, Pending: true, ValidateOnly: true,
+		Entities: []types.StoryEntity{newEntity("Halvorsen Dynamics", types.EntityTypeOrganization, types.EntityRoleCentral)}}
+	if n, err := l.svc.RecordStoryEntities(context.Background(), req); err != nil || n != 1 {
+		t.Fatalf("pending validate of an unpublished story = %d, %v; want 1", n, err)
+	}
+	dup := req
+	dup.Entities = []types.StoryEntity{{EntityID: "wd:Q116758847", Name: "Anthropic", Type: types.EntityTypeOrganization, WikidataID: "Q116758847", New: true, Role: types.EntityRoleCentral}}
+	if _, err := l.svc.RecordStoryEntities(context.Background(), dup); err == nil || !strings.Contains(err.Error(), "matches the existing entity") {
+		t.Fatalf("pending skipped R1: %v", err)
+	}
+	bad := req
+	bad.Entities = []types.StoryEntity{{EntityID: types.MintedEntityID("X Corp"), Name: "X Corp", Type: "event", New: true, Role: types.EntityRoleCentral}}
+	if _, err := l.svc.RecordStoryEntities(context.Background(), bad); err == nil {
+		t.Fatal("pending skipped the type check")
+	}
+	write := req
+	write.ValidateOnly = false
+	if _, err := l.svc.RecordStoryEntities(context.Background(), write); err == nil || !strings.Contains(err.Error(), "pending") {
+		t.Fatalf("a pending write was accepted: %v", err)
+	}
+	notPub := req
+	notPub.Pending = false
+	if _, err := l.svc.RecordStoryEntities(context.Background(), notPub); err == nil {
+		t.Fatal("an unpublished story was validated without pending")
+	}
+	if _, ok := l.entityRow(labOwner, types.MintedEntityID("Halvorsen Dynamics")); ok {
+		t.Fatal("pending validation wrote a row")
+	}
+}
