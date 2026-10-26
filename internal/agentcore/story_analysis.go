@@ -117,7 +117,7 @@ func (rt *Runtime) storyAnalysisFor(ctx context.Context, deskRole string, exec t
 	if !rt.computerSettingOn(ctx, owner, computer, store.SettingResearchRelatedStory) {
 		return nil
 	}
-	doc, err := rt.researchDeskDoc(ctx, exec, owner, computer)
+	doc, err := rt.researchDeskDoc(ctx, exec.AgentID, owner, computer)
 	if err != nil {
 		return nil
 	}
