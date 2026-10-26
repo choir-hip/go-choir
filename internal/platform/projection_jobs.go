@@ -47,6 +47,20 @@ CREATE TABLE IF NOT EXISTS computer_projection_base_pins (
  created_at DATETIME(6) NOT NULL,
  PRIMARY KEY(computer_id,base_ref,reference_id)
 );
+CREATE TABLE IF NOT EXISTS computer_checkpoint_verdicts (
+ computer_id VARCHAR(128) NOT NULL,
+ checkpoint_digest CHAR(64) NOT NULL,
+ accepted_sequence BIGINT UNSIGNED NOT NULL,
+ accepted_head CHAR(64) NOT NULL,
+ status VARCHAR(32) NOT NULL,
+ reason VARCHAR(64) NOT NULL,
+ detail TEXT NOT NULL,
+ differing_tables TEXT NOT NULL,
+ base_ref VARCHAR(255) NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ updated_at DATETIME(6) NOT NULL,
+ PRIMARY KEY(computer_id,checkpoint_digest)
+);
 CREATE TABLE IF NOT EXISTS projection_worker_status (
  worker_id VARCHAR(64) PRIMARY KEY,
  heartbeat DATETIME(6) NOT NULL,
