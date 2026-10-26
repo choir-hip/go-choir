@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -198,6 +199,9 @@ func (s *Service) checkStoryEntities(ctx context.Context, req types.StoryEntitie
 		norm := types.NormalizeEntityName(name)
 		if norm == "" {
 			return "", nil, nil, fmt.Errorf("entity %d: a new entity needs a name", n)
+		}
+		if utf8.RuneCountInString(name) > types.EntityNameMaxRunes {
+			return "", nil, nil, fmt.Errorf("entity %d: a name is at most %d characters", n, types.EntityNameMaxRunes)
 		}
 		if !types.EntityTypes[typ] {
 			return "", nil, nil, fmt.Errorf("entity %d: unknown type %q", n, typ)

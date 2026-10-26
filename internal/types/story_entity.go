@@ -53,6 +53,10 @@ var EntityTypes = map[string]bool{
 // EntityIDRE is an entity id: minted (ent:<24 hex>) or Wikidata (wd:Q<n>).
 var EntityIDRE = regexp.MustCompile(`^(ent:[0-9a-f]{24}|wd:Q[1-9][0-9]{0,11})$`)
 
+// EntityNameMaxRunes bounds a new entity's name, at the verb and at the
+// corpusd route alike.
+const EntityNameMaxRunes = 120
+
 // WikidataQIDRE is a Wikidata item id.
 var WikidataQIDRE = regexp.MustCompile(`^Q[1-9][0-9]{0,11}$`)
 
