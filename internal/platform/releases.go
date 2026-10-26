@@ -22,6 +22,38 @@ const SoftwareReleaseKind objectgraph.ObjectKind = "choir.software_release"
 
 const releasesRoute = "/internal/platform/releases"
 
+// ReleaseReadsMode is CHOIR_RELEASE_READS (Library S1,
+// docs/design/library-package-propagation-2026-10-26.md 4.3): open serves a
+// published release to any reader, as before; owner serves a release only to
+// the owner who published it. It is read once at startup (SetReleaseReads).
+type ReleaseReadsMode string
+
+const (
+	ReleaseReadsOpen  ReleaseReadsMode = "open"
+	ReleaseReadsOwner ReleaseReadsMode = "owner"
+
+	// EnvReleaseReads names the switch.
+	EnvReleaseReads = "CHOIR_RELEASE_READS"
+)
+
+// ParseReleaseReads reads the switch value. Unset or "open" is open. Any
+// other value is owner: a typo narrows reads, it never opens them.
+func ParseReleaseReads(raw string) ReleaseReadsMode {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", string(ReleaseReadsOpen):
+		return ReleaseReadsOpen
+	default:
+		return ReleaseReadsOwner
+	}
+}
+
+// SetReleaseReads sets the mode once at startup, before the handler serves.
+func (h *Handler) SetReleaseReads(mode ReleaseReadsMode) {
+	if h != nil {
+		h.releaseReads = mode
+	}
+}
+
 // releaseStore is the slice of the Store B object graph the release routes
 // use; *ObjectGraphStore is it.
 type releaseStore interface {

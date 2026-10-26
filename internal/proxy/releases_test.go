@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -36,6 +37,7 @@ type releaseProxyEnv struct {
 	calls   []string
 	draft   func() []byte
 	adopted []byte
+	store   *auth.Store
 }
 
 func (e *releaseProxyEnv) record(call string) {
@@ -76,7 +78,7 @@ func newReleaseProxyEnv(t *testing.T) *releaseProxyEnv {
 	t.Cleanup(env.guest.Close)
 	env.corpusd = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		env.record("corpusd " + r.Method + " " + r.URL.Path + " internal=" + r.Header.Get("X-Internal-Caller") + " " + string(body))
+		env.record("corpusd " + r.Method + " " + r.URL.Path + " internal=" + r.Header.Get("X-Internal-Caller") + " query=" + r.URL.RawQuery + " " + string(body))
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodPut:
@@ -99,6 +101,7 @@ func newReleaseProxyEnv(t *testing.T) *releaseProxyEnv {
 		t.Fatal(err)
 	}
 	env.user = user.ID
+	env.store = store
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
