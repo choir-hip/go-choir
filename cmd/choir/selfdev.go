@@ -152,8 +152,22 @@ func runSelfDevWait(args []string, stdout, stderr io.Writer) int {
 		}
 		return 2
 	}
-	path := selfDevPath(computerID, "operations/"+url.PathEscape(strings.TrimSpace(*operationID)))
-	giveUp := time.Now().Add(*deadline)
+	raw, code := pollSelfDevOperation(c, "choir self-dev wait", computerID, strings.TrimSpace(*operationID), states, *interval, *deadline)
+	if raw != nil {
+		if rc := writeJSON(stdout, raw); code == 0 {
+			code = rc
+		}
+	}
+	return code
+}
+
+// pollSelfDevOperation polls one operation until it reaches one of states.
+// It returns the operation's JSON and 0 when it does; the JSON and 1 when the
+// operation settles in another state; nil and 1 at the deadline. Progress
+// goes to the client's stderr, prefixed with label.
+func pollSelfDevOperation(c *client, label, computerID, operationID string, states []string, interval, deadline time.Duration) (json.RawMessage, int) {
+	path := selfDevPath(computerID, "operations/"+url.PathEscape(operationID))
+	giveUp := time.Now().Add(deadline)
 	last := ""
 	for {
 		var raw json.RawMessage
@@ -163,26 +177,25 @@ func runSelfDevWait(args []string, stdout, stderr io.Writer) int {
 			err = json.Unmarshal(raw, &operation)
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "choir self-dev wait: %v\n", err)
+			fmt.Fprintf(c.stderr, "%s: %v\n", label, err)
 		} else {
 			if operation.State != last {
-				fmt.Fprintf(stderr, "%s %s\n", time.Now().UTC().Format(time.RFC3339), operation.State)
+				fmt.Fprintf(c.stderr, "%s %s\n", time.Now().UTC().Format(time.RFC3339), operation.State)
 				last = operation.State
 			}
 			if slices.Contains(states, operation.State) {
-				return writeJSON(stdout, raw)
+				return raw, 0
 			}
 			if slices.Contains(selfDevSettledStates, operation.State) {
-				fmt.Fprintf(stderr, "choir self-dev wait: operation settled %s, not %s\n", operation.State, strings.Join(states, "|"))
-				writeJSON(stdout, raw)
-				return 1
+				fmt.Fprintf(c.stderr, "%s: operation settled %s, not %s\n", label, operation.State, strings.Join(states, "|"))
+				return raw, 1
 			}
 		}
-		if time.Now().Add(*interval).After(giveUp) {
-			fmt.Fprintf(stderr, "choir self-dev wait: deadline passed in state %q\n", last)
-			return 1
+		if time.Now().Add(interval).After(giveUp) {
+			fmt.Fprintf(c.stderr, "%s: deadline passed in state %q\n", label, last)
+			return nil, 1
 		}
-		time.Sleep(*interval)
+		time.Sleep(interval)
 	}
 }
 
@@ -403,4 +416,184 @@ func renderSelfDevVisual(w io.Writer, result any, x *call) int {
 		}
 	}
 	return code
+}
+
+// selfDevRollbackTarget is the part of an operation a rollback to it binds.
+type selfDevRollbackTarget struct {
+	OperationID            string `json:"operation_id"`
+	State                  string `json:"state"`
+	BaseHead               string `json:"base_head"`
+	EffectiveHead          string `json:"effective_head"`
+	MaterializationReceipt string `json:"materialization_receipt"`
+	CheckpointRef          string `json:"checkpoint_ref"`
+	DecisionActor          string `json:"decision_actor"`
+}
+
+const (
+	selfDevGenesisOperationPrefix = "genesis-"
+	selfDevGenesisActor           = "external-owner-genesis"
+	selfDevCheckpointPrefix       = "checkpoint:sha256:"
+)
+
+// selfDevRollbackResult is what the rollback handler hands the CLI renderer:
+// the server's operation JSON and the exit code (1 when --wait saw it fail).
+type selfDevRollbackResult struct {
+	raw  json.RawMessage
+	code int
+}
+
+func renderSelfDevRollback(w io.Writer, result any, _ *call) int {
+	r := result.(*selfDevRollbackResult)
+	if r.raw != nil {
+		if rc := writeJSON(w, r.raw); r.code == 0 {
+			return rc
+		}
+	}
+	return r.code
+}
+
+// selfDevRollback assembles the guest's seven rollback bindings from public
+// read routes and posts them. Nothing is loosened: the guest rechecks every
+// binding, and its answer (409 included) reaches the caller unchanged.
+//
+//	to_applied_head, prior_materialization, prior_checkpoint
+//	    GET self-development/operations/{target}: effective_head,
+//	    materialization_receipt, checkpoint_ref
+//	expected_desired_head, current_applied_head
+//	    GET self-development/head: desired_event_head, effective_event_head
+//	expected_route_generation
+//	    GET /api/compute/status?computer_id=: current_computer.immutable_identity.route_generation
+//	idempotency_key
+//	    --idempotency-key, or cli-rollback:<target>:<current head prefix>
+func selfDevRollback(x *call) (any, error) {
+	computerID, targetID := x.trim("computer"), x.trim("to_operation")
+	var target selfDevRollbackTarget
+	if err := x.c.do(http.MethodGet, selfDevPath(computerID, "operations/"+url.PathEscape(targetID)), nil, &target); err != nil {
+		return nil, err
+	}
+	if target.OperationID != targetID {
+		return nil, fmt.Errorf("route answered operation %q, not %q", target.OperationID, targetID)
+	}
+	if target.State != "applied" {
+		return nil, fmt.Errorf("operation %s is %s, not applied: a rollback returns the computer to the state an applied operation left", targetID, target.State)
+	}
+	if strings.HasPrefix(target.OperationID, selfDevGenesisOperationPrefix) || target.DecisionActor == selfDevGenesisActor {
+		return nil, fmt.Errorf("operation %s is the genesis baseline: rollback to it is not supported, it has no verification evidence to record the rollback against", targetID)
+	}
+	if !selfDevDigestPattern.MatchString(target.EffectiveHead) {
+		return nil, fmt.Errorf("operation %s records no effective head to roll back to", targetID)
+	}
+	if !selfDevDigestPattern.MatchString(target.MaterializationReceipt) {
+		return nil, fmt.Errorf("operation %s records no materialization receipt (prior_materialization)", targetID)
+	}
+	if !strings.HasPrefix(target.CheckpointRef, selfDevCheckpointPrefix) || !selfDevDigestPattern.MatchString(strings.TrimPrefix(target.CheckpointRef, selfDevCheckpointPrefix)) {
+		return nil, fmt.Errorf("operation %s records no checkpoint (prior_checkpoint) to restore from", targetID)
+	}
+
+	var head selfDevHead
+	if err := x.c.do(http.MethodGet, selfDevPath(computerID, "head"), nil, &head); err != nil {
+		return nil, err
+	}
+	if !selfDevDigestPattern.MatchString(head.DesiredEventHead) || !selfDevDigestPattern.MatchString(head.EffectiveEventHead) {
+		return nil, errors.New("the event head route answered no desired or effective head")
+	}
+	if head.EffectiveEventHead == target.EffectiveHead {
+		return nil, fmt.Errorf("operation %s is the computer's current state (effective head %s); there is nothing to roll back to", targetID, head.EffectiveEventHead[:12])
+	}
+	if head.PendingTransitionRef != "" {
+		// A first call that landed but lost its answer leaves the head
+		// pending on its own rollback event: answer with that operation.
+		if existing, err := selfDevInFlightRollback(x.c, computerID, target.EffectiveHead); err != nil {
+			return nil, err
+		} else if existing != nil {
+			fmt.Fprintf(x.c.stderr, "choir self-dev rollback: a rollback to %s is already in flight; not posting another\n", targetID)
+			return selfDevRollbackFinish(x, computerID, existing)
+		}
+		return nil, fmt.Errorf("a transition is pending on the event head (%s); wait for it to settle (choir self-dev list --computer %s) before rolling back", head.PendingTransitionRef, computerID)
+	}
+
+	generation, err := selfDevRouteGeneration(x.c, computerID)
+	if err != nil {
+		return nil, err
+	}
+	key := x.trim("idempotency_key")
+	if key == "" {
+		key = "cli-rollback:" + targetID + ":" + head.EffectiveEventHead[:12]
+	}
+	raw, err := sendRaw(x, http.MethodPost, selfDevPath(computerID, "rollbacks"), map[string]any{
+		"expected_desired_head":     head.DesiredEventHead,
+		"current_applied_head":      head.EffectiveEventHead,
+		"to_applied_head":           target.EffectiveHead,
+		"prior_materialization":     target.MaterializationReceipt,
+		"prior_checkpoint":          target.CheckpointRef,
+		"expected_route_generation": generation,
+		"idempotency_key":           key,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return selfDevRollbackFinish(x, computerID, raw.(json.RawMessage))
+}
+
+// selfDevRollbackFinish returns the rollback operation, after polling it to
+// its end under --wait.
+func selfDevRollbackFinish(x *call, computerID string, raw json.RawMessage) (any, error) {
+	if !x.flag("wait") {
+		return &selfDevRollbackResult{raw: raw}, nil
+	}
+	var operation selfDevOperation
+	if err := json.Unmarshal(raw, &operation); err != nil || operation.OperationID == "" {
+		return nil, fmt.Errorf("the rollback answer names no operation to wait on: %s", truncate(string(raw), 200))
+	}
+	settled, code := pollSelfDevOperation(x.c, "choir self-dev rollback", computerID, operation.OperationID, []string{"rolled_back"}, x.dur("interval"), x.dur("deadline"))
+	if settled == nil {
+		settled = raw
+	}
+	return &selfDevRollbackResult{raw: settled, code: code}, nil
+}
+
+// selfDevInFlightRollback is the open rollback operation whose target is the
+// given effective head, if there is one.
+func selfDevInFlightRollback(c *client, computerID, targetHead string) (json.RawMessage, error) {
+	var listing struct {
+		Operations []json.RawMessage `json:"operations"`
+	}
+	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"rollback_pending"}}.Encode()
+	if err := c.do(http.MethodGet, path, nil, &listing); err != nil {
+		return nil, err
+	}
+	for _, raw := range listing.Operations {
+		var operation selfDevRollbackTarget
+		if json.Unmarshal(raw, &operation) == nil && operation.BaseHead == targetHead {
+			return raw, nil
+		}
+	}
+	return nil, nil
+}
+
+// selfDevRouteGeneration reads the computer's current route generation from
+// the compute status route, the public read of the ComputerVersion route
+// slot the guest compares expected_route_generation against.
+func selfDevRouteGeneration(c *client, computerID string) (uint64, error) {
+	var status struct {
+		CurrentComputer struct {
+			ComputerID        string `json:"computer_id"`
+			ImmutableIdentity *struct {
+				RouteGeneration uint64 `json:"route_generation"`
+				RouteAbsent     bool   `json:"route_absent"`
+				Joined          bool   `json:"joined"`
+			} `json:"immutable_identity"`
+		} `json:"current_computer"`
+	}
+	if err := c.do(http.MethodGet, "/api/compute/status?"+url.Values{"computer_id": []string{computerID}}.Encode(), nil, &status); err != nil {
+		return 0, fmt.Errorf("read route generation: %w", err)
+	}
+	current := status.CurrentComputer
+	if current.ComputerID != computerID {
+		return 0, fmt.Errorf("compute status answered computer %q, not %q; refusing its route generation", current.ComputerID, computerID)
+	}
+	if current.ImmutableIdentity == nil || current.ImmutableIdentity.RouteAbsent || !current.ImmutableIdentity.Joined || current.ImmutableIdentity.RouteGeneration == 0 {
+		return 0, fmt.Errorf("the compute status reports no joined route generation for %s", computerID)
+	}
+	return current.ImmutableIdentity.RouteGeneration, nil
 }

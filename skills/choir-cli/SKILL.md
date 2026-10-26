@@ -35,6 +35,7 @@ which `admin` does not imply; reject stays an agent act.
 | Preview the screenshots | `choir self-dev visual --operation=ID [--out=DIR]` (frozen or later; 409 before Freeze, 404 with no captures; `--out` fetches each PNG, re-hashes it against its digest, writes `<route>-<digest12>.png` mode 0600 and exits 1 if any capture is unresolvable or fails; MCP `self_dev_visual` lists only) | sha256-verified PNGs, manifest with the capture receipt |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
+| Roll back (owner) | `choir self-dev rollback --to-operation=ID [--wait]` | `rollback_requested` event, rollback operation to `rolled_back` |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
 | Publish a release (owner) | `choir release publish --computer=A --operation=ID [--test-command=CMD]` (applied operation; source only) | release id, `choir.software_release` in Store B |
 | Find releases | `choir release list`, `choir release show --release=ID` (record verified against its id) | the release record |
@@ -48,7 +49,13 @@ candidate and the computer's event head, arms `accept_once` bound to exactly
 that operation, bundle, heads and commitments (15-minute window, `--window`),
 and posts the approve decision, which consumes it. It refuses before any write
 unless the operation is `awaiting_approval`. Rollback of an applied operation
-is `POST /api/computers/<id>/self-development/rollbacks` (no CLI yet).
+is `choir self-dev rollback --computer=ID --to-operation=APPLIED_OP [--idempotency-key=K] [--wait]`
+(an owner act: the key needs `owner:acts`, plus `computer:self_development:rollback`,
+`computer:self_development:read` and `read:runtime`). It resolves the guest's seven
+bindings from the target operation, `self-dev head` and the compute status route
+generation, refuses a target that is not applied, is the current state or is the
+genesis baseline before posting, and prints the guest's answer unchanged (a 409
+included); `--wait` polls the rollback operation to `rolled_back`.
 
 Effects default to `off`. `accept_once` authorizes only its exact canonical
 approval request and returns to `propose_only` before that approval reaches the
