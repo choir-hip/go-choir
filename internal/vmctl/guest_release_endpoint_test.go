@@ -21,6 +21,8 @@ func (m *fakeGuestReleaseManager) GuestReleases() (json.RawMessage, error) {
 	return json.RawMessage(m.answer), nil
 }
 
+func (m *fakeGuestReleaseManager) CurrentGuestReleaseInfo() (string, string) { return m.current, "" }
+
 func (m *fakeGuestReleaseManager) GuestReleaseHealth() (string, map[string]GuestReleaseVMStatus) {
 	return m.current, m.byVM
 }
