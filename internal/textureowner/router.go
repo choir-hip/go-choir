@@ -24,6 +24,9 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	case "/api/texture/lifecycle-documents":
 		h.HandleTextureLifecycleCreate(w, r)
 		return
+	case relatedReviewPath:
+		h.HandleTextureRelatedReview(w, r)
+		return
 	}
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
 		h.HandleTextureRevision(w, r)
