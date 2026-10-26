@@ -54,6 +54,10 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		// P8: GET lists (read); POST adopts a published release (the
 		// owner's act). The method picks the action.
 		return strings.TrimSpace(decoded), "adoptions", true
+	case "rebase-retry":
+		// U4 slice 8: the owner re-opens a spent rebase pair. POST only, and
+		// an owner act like an approval.
+		return strings.TrimSpace(decoded), "rebase-retry", true
 	}
 	parts := strings.Split(strings.Trim(after, "/"), "/")
 	if len(parts) == 2 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" {
@@ -78,7 +82,7 @@ func isSelfDevelopmentGuestPath(path string) bool {
 
 func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 	switch action {
-	case "approve", "rollback":
+	case "approve", "rollback", "rebase-retry":
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
@@ -454,6 +458,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	requiredScope := "computer:self_development:" + action
+	if action == "rebase-retry" {
+		// An approval-class act: the approve scope plus the owner-act gate below.
+		requiredScope = "computer:self_development:approve"
+	}
 	if action == "adopt" {
 		// Adopting a release is an approval-class act (P8): the approve
 		// scope plus the owner-act gate below.
@@ -483,6 +491,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		}
 	case "adopt":
 		if !authorizeOwnerAct(w, authResult, "release adoption") {
+			return
+		}
+	case "rebase-retry":
+		if !authorizeOwnerAct(w, authResult, "rebase retry") {
 			return
 		}
 	}

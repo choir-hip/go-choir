@@ -179,7 +179,7 @@ func NewStackRebaseNotice(n StackRebaseNotice) (CommitmentRecord, bool) {
 		EmitterKind: CommitmentEmitterSystem,
 		ComputerID:  strings.TrimSpace(n.ComputerID),
 		Inbox:       inbox, SenderInbox: StackRebaseSenderInbox(op), Addressee: inbox,
-		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: stackRebaseNoticeBody(op, booted, stack, id)},
+		Directive:    &CommitmentDirective{Subtype: CommitmentDirectiveNote, Body: body},
 		EvidenceRefs: []string{op},
 		SubjectRefs:  refs,
 	}, true

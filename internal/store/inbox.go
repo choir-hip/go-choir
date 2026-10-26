@@ -635,13 +635,18 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
-	ownerID, computerID := req.OwnerID, req.ComputerID
 	if s.ogStore == nil {
 		return types.InboxCommitReceipt{}, fmt.Errorf("commit inbox records: object graph not initialized")
 	}
 
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
+	return s.commitInboxRecordsLocked(ctx, req)
+}
+
+// commitInboxRecordsLocked is CommitInboxRecords with trajectoryMu held.
+func (s *Store) commitInboxRecordsLocked(ctx context.Context, req types.CommitInboxRecordsRequest) (types.InboxCommitReceipt, error) {
+	ownerID, computerID := req.OwnerID, req.ComputerID
 	if replay, found, err := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || err != nil {
 		return replay, err
 	}
