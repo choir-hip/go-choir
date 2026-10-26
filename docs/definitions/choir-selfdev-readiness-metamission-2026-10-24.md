@@ -228,8 +228,8 @@ metamission:
         Synthetic DeepSeek. Specs per app: the 2026-10-24 v7 brief
         (_runs/apprewrite/v7/request.txt) is the starting list.
     - id: SR9
-      path: none yet (intent; investigation running 2026-10-26)
-      readiness: intent
+      path: docs/definitions/choir-sr9-library-2026-10-26.md (design docs/design/library-package-propagation-2026-10-26.md; the Choir Library)
+      readiness: drafted
       status: pending
       depends_on: [SR5]
       note: >-
