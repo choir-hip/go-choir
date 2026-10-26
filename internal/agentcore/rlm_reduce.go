@@ -110,6 +110,11 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 	engineeringCasts := 0
 	fromDesk, _, _ := strings.Cut(strings.TrimSpace(scope.FromRole), ":")
 	for i, in := range intents {
+		// Only the reducer writes a Cast's owner_directions (the owner's
+		// words, texture_owner_directions_cast.go); a cell never does.
+		if err := refuseCellOwnerDirections(in); err != nil {
+			return err
+		}
 		// One engineering Cast per cell (C1e D4): each opens its own
 		// assignment in the cell's one records transaction.
 		if engineeringCastIntent(in) {
@@ -1008,6 +1013,11 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
 		var folded []yaegikernel.StagedIntent
 		var err error
+		// A Cast that names the owner's revisions carries their words,
+		// attached here from the store and never typed by the cell.
+		if intents, err = r.attachTextureOwnerDirections(ctx, intents); err != nil {
+			return err
+		}
 		intents, folded, err = foldTextureDispatch(intents, r.scope, r.records)
 		if err != nil {
 			return err

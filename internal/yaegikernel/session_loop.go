@@ -66,6 +66,11 @@ type DocSnapshot struct {
 	Content    string                `json:"content"`
 	Blocks     []texturewrite.Block  `json:"blocks,omitempty"`
 	Sources    []texturewrite.Source `json:"sources,omitempty"`
+	// OwnerRevision is the revision that woke this run when the owner wrote
+	// it, empty otherwise. A Cast names it as owner_revision and the
+	// reducer attaches the owner's words, so the cell never retypes them
+	// (docs/problems/texture-retypes-owner-directions-2026-10-25.md).
+	OwnerRevision string `json:"owner_revision,omitempty"`
 }
 
 // SessionResult is one newline-delimited JSON response. Value-carrying cells
