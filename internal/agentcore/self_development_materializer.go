@@ -320,16 +320,24 @@ func selfDevelopmentBundleMatchesOperation(bundle transaction.CapsuleEffectBundl
 func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	bundlePath := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest, "bundle.json")
 	rawBundle, err := os.ReadFile(bundlePath)
-	if err != nil || computerevent.DigestBytes(rawBundle) != operation.BundleDigest {
+	if err != nil {
 		return fmt.Errorf("materializer: frozen bundle unavailable")
+	}
+	if computerevent.DigestBytes(rawBundle) != operation.BundleDigest {
+		return fmt.Errorf("materializer: frozen bundle digest does not match the operation")
 	}
 	var bundle transaction.CapsuleEffectBundle
 	decoder := json.NewDecoder(strings.NewReader(string(rawBundle)))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&bundle); err != nil || bundle.Validate(true) != nil ||
-		!selfDevelopmentBundleMatchesOperation(bundle, operation) ||
-		len(operation.VerifierRefs) == 0 || !selfDevelopmentContainsString(bundle.VerifierReceipts, operation.VerifierRefs[0]) {
-		return fmt.Errorf("materializer: invalid frozen bundle")
+	switch {
+	case decoder.Decode(&bundle) != nil:
+		return fmt.Errorf("materializer: invalid frozen bundle: does not decode")
+	case bundle.Validate(true) != nil:
+		return fmt.Errorf("materializer: invalid frozen bundle: incomplete")
+	case !selfDevelopmentBundleMatchesOperation(bundle, operation):
+		return fmt.Errorf("materializer: invalid frozen bundle: names another computer, trajectory, capsule or base")
+	case len(operation.VerifierRefs) == 0 || !selfDevelopmentContainsString(bundle.VerifierReceipts, operation.VerifierRefs[0]):
+		return fmt.Errorf("materializer: invalid frozen bundle: does not carry the operation's verifier receipt")
 	}
 
 	// P5: a candidate that touched Go input runs only as a host-built layered

@@ -149,12 +149,7 @@ func ConsumePlannedRestartMarker(storePath string, now time.Time) (PlannedRestar
 }
 
 func syncParentDir(path string) error {
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return fmt.Errorf("planned restart marker: open dir: %w", err)
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
+	if err := syncPath(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("planned restart marker: sync dir: %w", err)
 	}
 	return nil
@@ -533,6 +528,10 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	marker.WorkStateEpoch = CurrentWorkStateEpoch
+	// The kill skips every fsync the guest's writers left to the kernel (a
+	// frozen bundle, the visual captures): flush them all before the answer
+	// that lets the host kill (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
+	syncFilesystems()
 	log.Printf("runtime: host requested a planned restart (%s %s; allow_busy=%v, interrupting %d running run(s))", marker.Reason, marker.Target, allowBusy, work.Running)
 	writeAPIJSON(w, http.StatusOK, plannedRestartWrittenResponse{PlannedRestart: marker, InterruptedRunningRuns: work.Running})
 }
