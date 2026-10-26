@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
@@ -379,6 +380,14 @@ func publishFrozenDraft(temporaryRoot, frozenRoot string, draft []byte) error {
 	return nil
 }
 
+// verdictReasonKey is the extra field that carries a verdict's reason into
+// recordSelfDevelopmentVerdict.
+const verdictReasonKey = "reason"
+
+// selfDevelopmentJudgmentRejected is the fixed prefix of a failed operation's
+// error; a verdict's reason, when it has one, follows ": ".
+const selfDevelopmentJudgmentRejected = "independent judgment rejected the frozen bundle"
+
 // recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
 // verification event, then frozen -> verified -> awaiting_approval on pass or
 // frozen -> failed on fail. The legacy verifier slot and the decision-model
@@ -426,10 +435,20 @@ func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, 
 		// verifier flows predating the ledger.
 		"claim_gate": learningClaimGate(ctx, toolCtx, verifierRefs),
 	}
+	// The verdict's optional reason is bounded plain text. It joins the event
+	// payload (omitted when empty, so a verdict without one is unchanged) and
+	// the failed operation's error, never the idempotency key.
+	reason := ""
+	if raw, ok := extra[verdictReasonKey].(string); ok {
+		reason = yaegikernel.NormalizeVerifyReason(raw)
+	}
 	for key, value := range extra {
-		if _, taken := record[key]; !taken {
+		if _, taken := record[key]; !taken && key != verdictReasonKey {
 			record[key] = value
 		}
+	}
+	if reason != "" {
+		record[verdictReasonKey] = reason
 	}
 	payload, err := computerevent.CanonicalJSON(record)
 	if err != nil {
@@ -478,7 +497,10 @@ func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, 
 	if decision == "fail" {
 		operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateFailed, func(next *selfdev.Operation) error {
 			next.VerifierRefs = []string{verifierRef}
-			next.TerminalError = "independent judgment rejected the frozen bundle"
+			next.TerminalError = selfDevelopmentJudgmentRejected
+			if reason != "" {
+				next.TerminalError += ": " + reason
+			}
 			return nil
 		})
 	} else {

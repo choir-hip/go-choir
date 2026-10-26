@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -362,7 +364,10 @@ type StagedIntent struct {
 	Packet string `json:"packet,omitempty"`
 	// Disposition fields (management's choir.Feed and choir.Decline, L2a
 	// R2-5): a Note that disposes of captures carries which (feed or
-	// decline), the capture ids and management's reason.
+	// decline), the capture ids and management's reason. A Verify also
+	// carries its optional reason here, bounded by NormalizeVerifyReason; the
+	// reducer records it on the verification event and, on a fail, on the
+	// operation's error.
 	Disposition string   `json:"disposition,omitempty"`
 	Captures    []string `json:"captures,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
@@ -453,7 +458,9 @@ func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRe
 // bundleDigest is the exact digest the verdict is about; the reducer asserts
 // it equals the operation's durable bundle digest, so a decision can never
 // land on a bundle other than the one named.
-func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string) error {
+// An optional trailing reason says why, as plain text; it is bounded and
+// stripped of control characters (NormalizeVerifyReason).
+func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string, reason ...string) error {
 	assignmentID = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(assignmentID), "assignment:"))
 	if assignmentID == "" {
 		return fmt.Errorf("tray: verify names the assignment whose candidate it judges")
@@ -466,12 +473,15 @@ func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bund
 	if strings.TrimSpace(bundleDigest) == "" {
 		return fmt.Errorf("tray: verify requires the inspected bundle digest")
 	}
+	if len(reason) > 1 {
+		return fmt.Errorf("tray: verify takes one reason, not %d", len(reason))
+	}
 	for _, in := range t.intents {
 		if in.Kind == IntentVerify {
 			return fmt.Errorf("tray: at most one verify per cell")
 		}
 	}
-	_, err := t.stage(StagedIntent{Kind: IntentVerify, TargetRef: assignmentID, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest})
+	_, err := t.stage(StagedIntent{Kind: IntentVerify, TargetRef: assignmentID, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest, Reason: NormalizeVerifyReason(reason...)})
 	return err
 }
 
@@ -739,4 +749,34 @@ type CellHooks struct {
 	// choir.CellOut and shown cut (LR lever 6, cell_output.go). Nil means no
 	// cut, since no store could serve a handle (the capsule path).
 	KeepOutput func(stdout string) string
+}
+
+// MaxVerifyReasonChars bounds a Verify reason, the truncation marker included.
+const MaxVerifyReasonChars = 2000
+
+// VerifyReasonTruncationMarker ends a reason that was cut to the bound.
+const VerifyReasonTruncationMarker = " [truncated]"
+
+// NormalizeVerifyReason makes a Verify reason plain text of bounded length:
+// the first of reasons (none gives ""), invalid UTF-8 and control characters
+// other than newline and tab dropped, trimmed, and cut to MaxVerifyReasonChars
+// characters ending in VerifyReasonTruncationMarker when it was longer. The
+// tray and the reducer both apply it, so the bound holds wherever the intent
+// came from.
+func NormalizeVerifyReason(reasons ...string) string {
+	if len(reasons) == 0 {
+		return ""
+	}
+	clean := strings.Map(func(r rune) rune {
+		if r == utf8.RuneError || (unicode.IsControl(r) && r != '\n' && r != '\t') {
+			return -1
+		}
+		return r
+	}, reasons[0])
+	runes := []rune(strings.TrimSpace(clean))
+	if len(runes) <= MaxVerifyReasonChars {
+		return string(runes)
+	}
+	keep := MaxVerifyReasonChars - len([]rune(VerifyReasonTruncationMarker))
+	return strings.TrimSpace(string(runes[:keep])) + VerifyReasonTruncationMarker
 }
