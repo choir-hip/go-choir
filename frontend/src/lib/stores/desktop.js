@@ -39,10 +39,29 @@ let windowCounter = 0;
 
 const MIN_WINDOW_WIDTH = 200;
 const MIN_WINDOW_HEIGHT = 120;
-const PROMPT_SURFACE_SIZE = 64;
+// Fallbacks only: the prompt bar's real height is published into
+// --choir-prompt-surface-size / -bottom-offset by PromptSurface on mount and
+// on every resize. Before that first measurement the bar's real 56px is used.
+const PROMPT_SURFACE_SIZE = 56;
 const COMPACT_BREAKPOINT = 768;
 const DEFAULT_VIEWPORT_WIDTH = 1280;
 const DEFAULT_VIEWPORT_HEIGHT = 800;
+// Share of the free desktop a new window asks for on desktop; the larger of
+// this and the app's registry default, capped at the free area.
+const NEW_WINDOW_FREE_AREA_RATIO = 0.7;
+// Desktop cascade step, and how many steps before the cascade wraps.
+const CASCADE_STEP = 24;
+const CASCADE_WRAP = 6;
+// A restored (non-maximized) window on a phone is at least this much of the
+// screen, so restoring from maximized stays usable.
+const COMPACT_RESTORE_WIDTH_RATIO = 0.92;
+const COMPACT_RESTORE_HEIGHT_RATIO = 0.85;
+// The title bar must keep at least this much on screen so a window dragged or
+// resized past an edge can always be dragged back.
+const TITLEBAR_REACHABLE = 40;
+// How far past the top of the free area a title bar must be dragged (and held)
+// for the snap-to-maximize preview to appear.
+const SNAP_TOP_THRESHOLD = 1;
 const WINDOW_Z_INDEX_COMPACT_AT = 80;
 function generateWindowId() {
   windowCounter++;
@@ -56,6 +75,20 @@ function clamp(value, min, max) {
 function parsePixelValue(value, fallback = 0) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+// The shell applies env(safe-area-inset-*) once, on the desktop area (see
+// Desktop.svelte and app.css); the store reads those computed values so window
+// geometry agrees with the pixels the windows are positioned in. 0 on every
+// screen without a notch.
+function readSafeAreaInset(side = 'top') {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return 0;
+  const target = document.querySelector('[data-desktop-windows]');
+  if (!target) return 0;
+  return parsePixelValue(
+    window.getComputedStyle(target).getPropertyValue('--choir-safe-area-inset-' + side),
+    0
+  );
 }
 
 function getPromptSurfaceOffsets(viewportHeight) {
@@ -85,42 +118,35 @@ function getViewportMetrics() {
   const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : DEFAULT_VIEWPORT_HEIGHT;
   const promptSurfaceOffsets = getPromptSurfaceOffsets(viewportHeight);
   const compact = viewportWidth < COMPACT_BREAKPOINT;
-  const margin = compact ? 10 : 24;
-  const workspaceStartY = margin + promptSurfaceOffsets.top;
-  const preferredWorkspaceStartX = compact ? margin + 8 : margin + 124;
-  const workspaceStartX = Math.min(
-    preferredWorkspaceStartX,
-    Math.max(margin, viewportWidth - MIN_WINDOW_WIDTH - margin)
-  );
-  const workspaceWidth = Math.max(MIN_WINDOW_WIDTH, viewportWidth - workspaceStartX - margin);
-  const maxWidth = Math.max(MIN_WINDOW_WIDTH, viewportWidth - margin * 2);
-  const maxHeight = Math.max(
-    MIN_WINDOW_HEIGHT,
-    viewportHeight - promptSurfaceOffsets.top - promptSurfaceOffsets.bottom - margin * 2
-  );
-  const compactWindowWidth = Math.max(
-    MIN_WINDOW_WIDTH,
-    Math.min(Math.round(viewportWidth * 0.88), workspaceWidth)
-  );
-  const compactWindowHeight = Math.max(
-    MIN_WINDOW_HEIGHT,
-    Math.min(Math.round(maxHeight * 0.78), maxHeight)
-  );
-  const baseWidth = Math.min(compact ? compactWindowWidth : 650, workspaceWidth);
-  const baseHeight = Math.min(compact ? compactWindowHeight : 450, maxHeight);
+
+  // The windows live inside the desktop area, which the shell insets once by
+  // the safe-area insets (a notch or a rounded phone edge; 0 on a desktop).
+  const insetTop = readSafeAreaInset('top');
+  const insetLeft = readSafeAreaInset('left');
+  const insetRight = readSafeAreaInset('right');
+
+  // The one free area every window lives in: from the top of the desktop area
+  // to the top of the prompt bar, edge to edge. No margin. A maximized window
+  // is exactly this rectangle, and dragging/resizing may reach every edge of
+  // it (the title bar stays reachable, see constrainWindowGeometry).
+  const freeArea = {
+    x: insetLeft,
+    y: insetTop + promptSurfaceOffsets.top,
+    width: Math.max(MIN_WINDOW_WIDTH, viewportWidth - insetLeft - insetRight),
+    height: Math.max(
+      MIN_WINDOW_HEIGHT,
+      viewportHeight - insetTop - promptSurfaceOffsets.top - promptSurfaceOffsets.bottom
+    ),
+  };
+
   return {
     compact,
-    margin,
     viewportWidth,
     viewportHeight,
     promptSurfaceOffsets,
-    workspaceStartX,
-    workspaceStartY,
-    workspaceWidth,
-    maxWidth,
-    maxHeight,
-    baseWidth,
-    baseHeight,
+    freeArea,
+    maxWidth: freeArea.width,
+    maxHeight: freeArea.height,
   };
 }
 
@@ -139,50 +165,234 @@ function appMinimums(appId, metrics) {
   };
 }
 
-function constrainWindowGeometry({ x, y, width, height, appId = '' }) {
+/**
+ * The one constraint every position and size passes through (drag, resize,
+ * launch, restore, saved state). Geometry may touch all four edges of the free
+ * area; the only extra rule is that TITLEBAR_REACHABLE px of the title bar
+ * always stays inside it, so a window can always be dragged back.
+ *
+ * The anchor says which edges stay put when a minimum size has to win:
+ *   'nw' — the right/bottom edges move (dragging, or resizing from se/s/e)
+ *   'ne' — the left/bottom edges move (resizing from sw/w)
+ *   'sw' — the right/top edges move (resizing from ne/n)
+ *
+ * resizing: a resize stops with its edges exactly on the free area's left, right
+ *   and top and the prompt bar's top and no further (a move keeps the title-bar
+ *   reachability rule, so it may slide off screen as long as 40px stays).
+ */
+function constrainWindowGeometry({ x, y, width, height, appId = '', anchor = 'nw', resizing = false }) {
   const metrics = getViewportMetrics();
+  const area = metrics.freeArea;
   const minimums = appMinimums(appId, metrics);
-  const clampedWidth = clamp(width, Math.min(minimums.width, metrics.maxWidth), metrics.maxWidth);
-  const clampedHeight = clamp(height, Math.min(minimums.height, metrics.maxHeight), metrics.maxHeight);
-  const maxX = Math.max(metrics.margin, metrics.viewportWidth - clampedWidth - metrics.margin);
-  const maxY = Math.max(
-    metrics.workspaceStartY,
-    metrics.viewportHeight - metrics.promptSurfaceOffsets.bottom - clampedHeight - metrics.margin
-  );
+  const clampedWidth = Math.round(clamp(width, Math.min(minimums.width, area.width), area.width));
+  const clampedHeight = Math.round(clamp(height, Math.min(minimums.height, area.height), area.height));
+
+  const minX = area.x + TITLEBAR_REACHABLE - clampedWidth;
+  const minY = area.y;
+  const maxX = area.x + area.width - TITLEBAR_REACHABLE;
+  let maxY = area.y + area.height - TITLEBAR_REACHABLE;
+  if (anchor === 'sw') {
+    // Resizing from the north edge: the bottom edge is fixed, so the top may
+    // travel down to the prompt bar's top but never below the title bar rule.
+    maxY = Math.max(minY, area.y + area.height - clampedHeight);
+  }
+  const clampedX = Math.round(clamp(x, Math.min(minX, maxX), maxX));
+
+  if (resizing) {
+    // A resize stops at the free area's edges: a window's left, right, and top
+    // edges may land exactly on the viewport's left and right edges and the
+    // prompt bar's top, and no further. Dragging the right edge or a right
+    // corner past the screen therefore never grows the window off screen; the
+    // anchor's fixed edge stays put and the app minimum still wins.
+    const resizedWidth = Math.round(clamp(width, Math.min(minimums.width, area.width), area.width));
+    const resizedHeight = Math.round(clamp(height, Math.min(minimums.height, area.height), area.height));
+    const maxRight = area.x + area.width;
+    const maxBottom = area.y + area.height;
+    // A north or west drag stops the dragged edge on the free area's top/left
+    // edge and keeps the opposite edge (the bottom for 'sw', the right for
+    // 'ne') exactly where it was, so the window shrinks instead of sliding.
+    let resizedWidthAfterEdge = resizedWidth;
+    let fixedRightEdge = x + width;
+    if (anchor === 'ne' && x < area.x) {
+      resizedWidthAfterEdge = Math.max(
+        Math.round(clamp(fixedRightEdge - area.x, Math.min(minimums.width, area.width), area.width)),
+        resizedWidthAfterEdge
+      );
+      fixedRightEdge = area.x + resizedWidthAfterEdge;
+    }
+    let resizedHeightAfterEdge = resizedHeight;
+    let fixedBottomEdge = y + height;
+    if (anchor === 'sw' && y < area.y) {
+      resizedHeightAfterEdge = Math.max(
+        Math.round(clamp(fixedBottomEdge - area.y, Math.min(minimums.height, area.height), area.height)),
+        resizedHeightAfterEdge
+      );
+      fixedBottomEdge = area.y + resizedHeightAfterEdge;
+    }
+    let resizedX;
+    if (anchor === 'ne' || anchor === 'sw') {
+      // The right edge is fixed: the left moves, and the width may not push it
+      // past the free area's left edge.
+      const fixedRight = Math.round(clamp(fixedRightEdge, area.x + resizedWidthAfterEdge, maxRight));
+      resizedX = fixedRight - resizedWidthAfterEdge;
+    } else {
+      resizedX = clamp(x, area.x, maxRight - resizedWidthAfterEdge);
+    }
+    let resizedY;
+    if (anchor === 'sw') {
+      // The bottom edge is fixed: the top travels up to the free area's top
+      // and no further, shrinking the window there.
+      const fixedBottom = Math.round(clamp(fixedBottomEdge, area.y + resizedHeightAfterEdge, maxBottom));
+      resizedY = fixedBottom - resizedHeightAfterEdge;
+    } else {
+      resizedY = clamp(y, area.y, maxBottom - resizedHeightAfterEdge);
+    }
+    return {
+      x: Math.round(resizedX),
+      y: Math.round(resizedY),
+      width: resizedWidthAfterEdge,
+      height: resizedHeightAfterEdge,
+    };
+  }
+  const clampedY = Math.round(clamp(y, minY, Math.max(minY, maxY)));
 
   return {
-    x: Math.round(clamp(x, metrics.margin, maxX)),
-    y: Math.round(clamp(y, metrics.workspaceStartY, maxY)),
-    width: Math.round(clampedWidth),
-    height: Math.round(clampedHeight),
+    x: clampedX,
+    y: clampedY,
+    width: clampedWidth,
+    height: clampedHeight,
   };
 }
 
+/**
+ * Geometry for a new window.
+ * Phone (<768px): windows always open maximized (see openApp); the geometry
+ *   kept underneath is the free area.
+ * Desktop: the larger of the app's registry default and 70% of the free area,
+ *   capped at the free area. The first window is centered in the free area;
+ *   later windows cascade by CASCADE_STEP from the top-left of it.
+ */
 function getNewWindowGeometry(openCount, appId = '') {
   const metrics = getViewportMetrics();
-  const offsetStep = metrics.compact ? 16 : 30;
-  const offset = (openCount % 6) * offsetStep;
+  const area = metrics.freeArea;
   const preference = getAppWindowPreference(appId);
   const desktopPref = preference.desktop || {};
+  const compactPref = preference.compact || {};
 
   if (metrics.compact) {
-    const compactPref = preference.compact || {};
+    const compactWidth = Math.min(compactPref.width || area.width, area.width);
+    const compactHeight = Math.min(compactPref.height || area.height, area.height);
+    if (openCount === 0) {
+      return constrainWindowGeometry({
+        x: area.x + Math.round((area.width - compactWidth) / 2),
+        y: area.y + Math.round((area.height - compactHeight) / 2),
+        width: compactWidth,
+        height: compactHeight,
+        appId,
+      });
+    }
+    const compactOffset = (openCount % CASCADE_WRAP) * CASCADE_STEP;
     return constrainWindowGeometry({
-      x: metrics.workspaceStartX + offset,
-      y: metrics.workspaceStartY + offset,
-      width: Math.min(compactPref.width || metrics.baseWidth, metrics.maxWidth),
-      height: Math.min(compactPref.height || metrics.baseHeight, metrics.maxHeight),
+      x: area.x + compactOffset,
+      y: area.y + compactOffset,
+      width: compactWidth,
+      height: compactHeight,
       appId,
     });
   }
 
+  const defaultWidth = desktopPref.width || area.width;
+  const defaultHeight = desktopPref.height || area.height;
+  const width = Math.min(
+    area.width,
+    Math.max(defaultWidth, Math.round(area.width * NEW_WINDOW_FREE_AREA_RATIO))
+  );
+  const height = Math.min(
+    area.height,
+    Math.max(defaultHeight, Math.round(area.height * NEW_WINDOW_FREE_AREA_RATIO))
+  );
+
+  if (openCount === 0) {
+    return constrainWindowGeometry({
+      x: area.x + Math.round((area.width - width) / 2),
+      y: area.y + Math.round((area.height - height) / 2),
+      width,
+      height,
+      appId,
+    });
+  }
+
+  const offset = (openCount % CASCADE_WRAP) * CASCADE_STEP;
   return constrainWindowGeometry({
-    x: metrics.workspaceStartX + offset,
-    y: metrics.workspaceStartY + offset,
-    width: Math.min(desktopPref.width || metrics.baseWidth, metrics.workspaceWidth),
-    height: desktopPref.height || metrics.baseHeight,
+    x: area.x + offset,
+    y: area.y + offset,
+    width,
+    height,
     appId,
   });
+}
+
+/**
+ * Geometry to settle on when a window leaves 'maximized'. On a phone the
+ * restored window is at least 92% wide and 85% of the free height; on desktop
+ * the last normal geometry is used as-is (constrained to the free area).
+ */
+function getRestoredGeometry(windowState) {
+  const metrics = getViewportMetrics();
+  const area = metrics.freeArea;
+  const requested = windowState.restoredGeometry || {
+    x: windowState.x,
+    y: windowState.y,
+    width: windowState.width,
+    height: windowState.height,
+  };
+
+  if (!metrics.compact) {
+    return constrainWindowGeometry({ ...requested, appId: windowState.appId });
+  }
+
+  const minimums = appMinimums(windowState.appId, metrics);
+  const width = Math.min(
+    area.width,
+    Math.max(requested.width || 0, Math.round(area.width * COMPACT_RESTORE_WIDTH_RATIO), minimums.width)
+  );
+  const height = Math.min(
+    area.height,
+    Math.max(requested.height || 0, Math.round(area.height * COMPACT_RESTORE_HEIGHT_RATIO), minimums.height)
+  );
+  return constrainWindowGeometry({
+    x: requested.x ?? area.x,
+    y: requested.y ?? area.y,
+    width,
+    height,
+    appId: windowState.appId,
+  });
+}
+
+// Geometry a saved window settles on when the desktop is loaded. Under 768px
+// every window shows maximized, so the saved normal geometry becomes the
+// window's restoredGeometry (kept for the wider screen) and the window itself
+// takes the free area. Nothing saved is rewritten.
+function getCompactLoadGeometry(windowState, geometry, appId) {
+  const metrics = getViewportMetrics();
+  const area = metrics.freeArea;
+  const saved = windowState.restoredGeometry || geometry;
+  return {
+    geometry: constrainWindowGeometry({
+      x: area.x,
+      y: area.y,
+      width: area.width,
+      height: area.height,
+      appId,
+    }),
+    restoredGeometry: constrainWindowGeometry({
+      x: saved.x ?? area.x,
+      y: saved.y ?? area.y,
+      width: saved.width || geometry.width,
+      height: saved.height || geometry.height,
+      appId,
+    }),
+  };
 }
 
 function applyLaunchWindowGeometry(baseGeometry, appContext = {}, appId = '') {
@@ -201,14 +411,40 @@ function applyLaunchWindowGeometry(baseGeometry, appContext = {}, appId = '') {
 function normalizeWindowGeometry(windowState) {
   const appId = normalizeAppId(windowState.appId);
   const geometry = constrainWindowGeometry({ ...windowState, appId });
+  // A maximized window keeps its stored geometry untouched at load: it is
+  // drawn over the free area, but its normal geometry (and restoredGeometry)
+  // must survive a reload exactly as saved, so restoring after a reload lands
+  // where the window left off. A smaller screen is handled when the window is
+  // actually restored (restoreWindow -> getRestoredGeometry).
+  const desktopGeometry = windowState.mode === 'maximized'
+    ? {
+        x: windowState.x,
+        y: windowState.y,
+        width: windowState.width,
+        height: windowState.height,
+      }
+    : geometry;
   const restoredGeometry = windowState.restoredGeometry
     ? constrainWindowGeometry({ ...windowState.restoredGeometry, appId })
     : null;
 
+  // Under 768px a saved window shows maximized too, and its saved geometry
+  // becomes restoredGeometry instead of being rewritten.
+  if (windowWidthIsCompact() && windowState.mode !== 'minimized') {
+    const compactLoad = getCompactLoadGeometry(windowState, geometry, appId);
+    return {
+      ...windowState,
+      appId,
+      ...compactLoad.geometry,
+      mode: 'maximized',
+      restoredGeometry: compactLoad.restoredGeometry,
+    };
+  }
+
   return {
     ...windowState,
     appId,
-    ...geometry,
+    ...desktopGeometry,
     restoredGeometry,
   };
 }
@@ -217,11 +453,6 @@ function normalizeIconPositions(positions = {}) {
   return Object.fromEntries(
     Object.entries(positions || {}).map(([appId, position]) => [normalizeAppId(appId), position])
   );
-}
-
-function withoutShowDesktopMarkers(windowState) {
-  const { _showDesktopMinimized, _showDesktopPrevMode, ...rest } = windowState;
-  return rest;
 }
 
 // ---- Default icon grid positions ----
@@ -281,6 +512,20 @@ export const visibleWindows = derived(windows, ($windows) =>
  * Most apps are single-instance per appId. Texture is multi-instance so
  * prompt/file opens create fresh windows.
  */
+// A phone shows one window at a time; every launch and every switch from the
+// prompt bar's app switcher lands on the maximized window.
+function isCompactViewport() {
+  return typeof window !== 'undefined' && window.innerWidth < COMPACT_BREAKPOINT;
+}
+
+// Whether the screen being laid out is a phone. Same rule as
+// isCompactViewport(), but safe while the desktop is loaded from a saved
+// state during server-side rendering (no window): the saved widths stand in.
+function windowWidthIsCompact() {
+  if (typeof window !== 'undefined') return isCompactViewport();
+  return getViewportMetrics().viewportWidth < COMPACT_BREAKPOINT;
+}
+
 export function openApp(appId, appName, icon, appContext = {}) {
   windows.update(($windows) => {
     const canonicalAppId = normalizeAppId(appId);
@@ -293,6 +538,7 @@ export function openApp(appId, appName, icon, appContext = {}) {
     if (existing) {
       // Focus existing window and apply any launch context such as a deep link.
       activeWindowId.set(existing.windowId);
+      const compactExisting = isCompactViewport();
       let updated = $windows.map((w) =>
         w.windowId === existing.windowId
           ? {
@@ -304,6 +550,10 @@ export function openApp(appId, appName, icon, appContext = {}) {
               },
               zIndex: getNextZIndex(),
               mode: w.mode === 'minimized' ? (w._showDesktopPrevMode || 'normal') : w.mode,
+              ...(compactExisting ? {
+                mode: 'maximized',
+                restoredGeometry: w.restoredGeometry || { x: w.x, y: w.y, width: w.width, height: w.height },
+              } : {}),
             }
           : w
       );
@@ -322,8 +572,11 @@ export function openApp(appId, appName, icon, appContext = {}) {
 
     const windowId = generateWindowId();
     const openCount = $windows.filter((w) => w.mode !== 'closed').length;
+    const compact = isCompactViewport();
     const geometry = applyLaunchWindowGeometry(getNewWindowGeometry(openCount, canonicalAppId), appContext, canonicalAppId);
-    const preferredMode = appContext.windowMode === 'maximized' ? 'maximized' : 'normal';
+    // A phone has one window on screen at a time; every window opens maximized
+    // and the prompt bar's app switcher is how one moves between them.
+    const preferredMode = appContext.windowMode === 'maximized' || compact ? 'maximized' : 'normal';
     const newWindow = {
       windowId,
       appId: canonicalAppId,
@@ -414,7 +667,7 @@ export function maximizeWindow(windowId) {
         return {
           ...w,
           mode: 'maximized',
-          restoredGeometry: { x: w.x, y: w.y, width: w.width, height: w.height },
+          restoredGeometry: w.restoredGeometry || { x: w.x, y: w.y, width: w.width, height: w.height },
         };
       }
       return w;
@@ -445,7 +698,9 @@ export function restoreWindow(windowId) {
           };
         }
         if (w.mode === 'maximized' && w.restoredGeometry) {
-          const geo = constrainWindowGeometry({ ...w.restoredGeometry, appId: w.appId });
+          // On a phone the restored window is at least 92% wide and 85% of the
+          // free height; on desktop it is the geometry it had before maximizing.
+          const geo = getRestoredGeometry(w);
           return {
             ...withoutShowDesktopMarkers(w),
             mode: 'normal',
@@ -489,11 +744,11 @@ export function moveWindow(windowId, x, y) {
 }
 
 /** Resize a window */
-export function resizeWindow(windowId, x, y, width, height) {
+export function resizeWindow(windowId, x, y, width, height, anchor = 'nw') {
   windows.update(($windows) =>
     $windows.map((w) => {
       if (w.windowId !== windowId) return w;
-      const geometry = constrainWindowGeometry({ x, y, width, height, appId: w.appId });
+      const geometry = constrainWindowGeometry({ x, y, width, height, appId: w.appId, resizing: true, anchor });
       return { ...w, ...geometry };
     })
   );
@@ -636,6 +891,16 @@ export function toggleShowDesktop() {
 }
 
 // ---- Internal helpers ----
+
+// Show-desktop markers are transient. Focusing, restoring, re-opening, or a
+// plain restore drops them, so an ordinary restore never resurrects a stale
+// previous mode. This is the same removal toggleShowDesktop does inline.
+function withoutShowDesktopMarkers(windowState) {
+  if (!windowState) return windowState;
+  if (!windowState._showDesktopMinimized && !windowState._showDesktopPrevMode) return windowState;
+  const { _showDesktopMinimized, _showDesktopPrevMode, ...rest } = windowState;
+  return rest;
+}
 
 function getNextZIndex() {
   let current;

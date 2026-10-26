@@ -1,30 +1,3 @@
-<!--
-  FloatingWindow — simplified desktop window with bottom-right resize only.
-
-  Rewrites Window.svelte with:
-    - Title bar drag (no drag on buttons)
-    - Single resize handle at bottom-right corner (no 8-handle system)
-    - Minimum dimensions: width >= 200px, height >= 120px
-    - Maximized fills desktop area excluding the prompt surface
-    - Maximize button icon changes to restore icon when maximized
-    - Restore returns to pre-maximize geometry
-    - Minimize hides window, shows indicator in the prompt surface tray
-    - Restore from minimized returns to pre-minimize geometry
-    - Clicking window brings it to front (z-index management)
-    - Active window uses elevated shadow and accent glow
-    - Cascade positioning: 30px offset per window, wraps after 8
-    - Window close transfers focus to next highest z-index window
-
-  Data attributes for test targeting:
-    data-window          — root container
-    data-window-id       — window identifier
-    data-window-titlebar — title bar for drag and window controls
-    data-window-close    — close button
-    data-window-minimize — minimize button
-    data-window-maximize — maximize/restore button
-    data-window-content  — content area hosting the app
-    data-resize-handle   — bottom-right resize handle (se only)
--->
 <script>
   import { createEventDispatcher } from 'svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -51,35 +24,70 @@
   const dispatch = createEventDispatcher();
 
   // ---- Constants ----
+
   const MIN_WIDTH = 200;
   const MIN_HEIGHT = 120;
   const DEFAULT_VIEWPORT_WIDTH = 1280;
   const DEFAULT_VIEWPORT_HEIGHT = 800;
-  const DEFAULT_PROMPT_SURFACE_SIZE = 64;
+  // Fallback only: the prompt bar publishes its measured height into
+  // --choir-prompt-surface-size / -bottom-offset; 56px is the bar's real height
+  // before the first measurement.
+  const DEFAULT_PROMPT_SURFACE_SIZE = 56;
   const MOBILE_BREAKPOINT = 768;
-  const TABLET_BREAKPOINT = 1024;
+  const EDGE_RESIZE_ZONE = 8;
+  const CORNER_RESIZE_ZONE = 16;
+  const MOBILE_CORNER_RESIZE_ZONE = 28;
+  const TITLEBAR_REACHABLE = 40;
+  // How far past the top of the free area a title bar has to be dragged, and
+  // held, before the snap-to-maximize preview shows.
+  const SNAP_TOP_THRESHOLD = 1;
+  // How far a press on a maximized title bar must travel before the window
+  // restores under the pointer; below this a plain click keeps it maximized.
+  const DRAG_RESTORE_THRESHOLD = 6;
+
+  // ---- Free-area measurement ----
 
   let viewportWidth = DEFAULT_VIEWPORT_WIDTH;
   let viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
   let promptSurfaceTopOffset = 0;
   let promptSurfaceBottomOffset = DEFAULT_PROMPT_SURFACE_SIZE;
+  let safeAreaTop = 0;
+  let safeAreaLeft = 0;
+  let safeAreaRight = 0;
   let promptSurfaceObserver = null;
+  let desktopAreaObserver = null;
 
   // ---- Drag state ----
+
   let dragging = false;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
   let dragPointerId = null;
   let dragPointerTarget = null;
+  let snapPreviewActive = false;
+  // A press on a maximized title bar only restores the window once it has
+  // travelled DRAG_RESTORE_THRESHOLD px; until then a plain click or a
+  // double-click keeps the window maximized.
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragTraveled = false;
 
   // ---- Resize state ----
+
   let resizing = false;
+  let resizeDirection = '';
   let resizeStartX = 0;
   let resizeStartY = 0;
+  let resizeStartLeft = 0;
+  let resizeStartTop = 0;
   let resizeStartWidth = 0;
   let resizeStartHeight = 0;
   let resizePointerId = null;
   let resizePointerTarget = null;
+  // The window the title bar's pointerdown landed on. Move and resize handlers
+  // listen on window, so each window ignores listeners for another window's
+  // gesture.
+  let gestureWindowId = '';
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -90,20 +98,18 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  function readRootPixelValue(name, fallback) {
+    if (typeof document === 'undefined') return fallback;
+    return parsePixelValue(window.getComputedStyle(document.documentElement).getPropertyValue(name), fallback);
+  }
+
   function readPromptSurfaceOffsets() {
     if (typeof document === 'undefined') {
       return { top: 0, bottom: DEFAULT_PROMPT_SURFACE_SIZE };
     }
 
-    const root = window.getComputedStyle(document.documentElement);
-    const themeTop = parsePixelValue(
-      root.getPropertyValue('--choir-prompt-surface-top-offset'),
-      0
-    );
-    const themeBottom = parsePixelValue(
-      root.getPropertyValue('--choir-prompt-surface-bottom-offset'),
-      DEFAULT_PROMPT_SURFACE_SIZE
-    );
+    const themeTop = readRootPixelValue('--choir-prompt-surface-top-offset', 0);
+    const themeBottom = readRootPixelValue('--choir-prompt-surface-bottom-offset', DEFAULT_PROMPT_SURFACE_SIZE);
 
     const promptSurface = document.querySelector('[data-prompt-surface]');
     if (!promptSurface) return { top: themeTop, bottom: themeBottom };
@@ -127,6 +133,15 @@
     const promptOffsets = readPromptSurfaceOffsets();
     promptSurfaceTopOffset = promptOffsets.top;
     promptSurfaceBottomOffset = promptOffsets.bottom;
+    // The desktop area applies env(safe-area-inset-*) once (see app.css);
+    // read those values so this window matches the pixels it lives in.
+    const desktopArea = document.querySelector('[data-desktop-windows]');
+    if (desktopArea) {
+      const computed = window.getComputedStyle(desktopArea);
+      safeAreaTop = parsePixelValue(computed.getPropertyValue('--choir-safe-area-inset-top'), 0);
+      safeAreaLeft = parsePixelValue(computed.getPropertyValue('--choir-safe-area-inset-left'), 0);
+      safeAreaRight = parsePixelValue(computed.getPropertyValue('--choir-safe-area-inset-right'), 0);
+    }
   }
 
   function refreshViewportBoundsAfterThemeChange() {
@@ -190,46 +205,106 @@
     if (overviewOpen) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('button')) return;
-    if (mode === 'maximized') return;
 
+    // A maximized window drags too: the first movement restores it under the
+    // pointer (see handleDragMove).
     dragging = true;
+    gestureWindowId = windowId;
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragTraveled = false;
     dragOffsetX = event.clientX - renderedX;
     dragOffsetY = event.clientY - renderedY;
     dragPointerId = event.pointerId;
     dragPointerTarget = event.currentTarget;
     trySetPointerCapture(dragPointerTarget, dragPointerId);
 
+    // A double-click on a maximized title bar still restores it: the press that
+    // starts it never travels, so the window stays maximized until the
+    // dblclick handler fires (see handleTitlebarDoubleClick).
     handleFocusWindow();
     event.preventDefault();
   }
 
   function handleDragMove(event) {
-    if (!dragging) return;
+    if (!dragging || gestureWindowId !== windowId) return;
     if (dragPointerId != null && event.pointerId !== dragPointerId) return;
+
+    if (mode === 'maximized') {
+      // Dragging a maximized title bar restores the window, but only after the
+      // press has travelled DRAG_RESTORE_THRESHOLD px: a plain click (or the
+      // first click of a double-click) leaves it maximized.
+      if (!dragTraveled) {
+        const distance = Math.hypot(event.clientX - dragStartX, event.clientY - dragStartY);
+        if (distance <= DRAG_RESTORE_THRESHOLD) return;
+        dragTraveled = true;
+
+        // Restore under the pointer, keeping the pointer at the same relative
+        // position along the title bar it grabbed: the restored window is the
+        // one it had before maximizing, shifted so the grab point stays put,
+        // with its title bar under the pointer's height.
+        //
+        // The ratio is taken against the title bar's normal width, not the
+        // maximized one: a button or double-click maximize leaves the stored
+        // normal geometry (and this component renders it) underneath, while a
+        // snap-to-top maximize grows the rendered frame to the free area. The
+        // grab point is therefore measured in the rendered frame's fraction
+        // of the normal frame's width, so both origins give the same, exact
+        // grab offset (a click at 25% of the title bar stays at 25%).
+        const normalWidth =
+          restoredGeometry?.width ||
+          (mode === 'maximized' && renderedWidth < freeArea.width
+            ? renderedWidth
+            : Math.round(freeArea.width * 0.7));
+        const grabRatio = Math.min(
+          Math.max((dragStartX - renderedX) / Math.max(1, renderedWidth), 0),
+          1
+        );
+        dragOffsetX = Math.round(normalWidth * grabRatio);
+        dragOffsetY = Math.round(Math.min(TITLEBAR_REACHABLE, 18));
+        dispatch('restore', { windowId });
+      }
+    }
+
     const newX = event.clientX - dragOffsetX;
     const newY = event.clientY - dragOffsetY;
     dispatch('move', { windowId, x: newX, y: newY });
+
+    // Snap: held at the top edge of the free area -> preview the maximized
+    // area; release maximizes (see handleDragEnd).
+    snapPreviewActive = event.clientY <= freeArea.y + SNAP_TOP_THRESHOLD;
   }
 
   function handleDragEnd(event) {
-    if (!dragging) return;
+    if (!dragging || gestureWindowId !== windowId) return;
     if (dragPointerId != null && event?.pointerId != null && event.pointerId !== dragPointerId) return;
     tryReleasePointerCapture(dragPointerTarget, dragPointerId);
+    const shouldSnap = snapPreviewActive && mode !== 'maximized';
     dragging = false;
+    snapPreviewActive = false;
+    dragTraveled = false;
     dragPointerId = null;
     dragPointerTarget = null;
+    gestureWindowId = '';
+    if (shouldSnap) {
+      dispatch('maximize', { windowId });
+    }
   }
 
-  // ---- Resize handler (bottom-right handle only) ----
+  // ---- Resize handlers (four edges, four corners, normal mode) ----
 
-  function handleResizeStart(event) {
+  function handleResizeStart(event, direction) {
     if (overviewOpen) return;
     if (mode !== 'normal') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     resizing = true;
+    resizeDirection = direction;
+    gestureWindowId = windowId;
     resizeStartX = event.clientX;
     resizeStartY = event.clientY;
+    resizeStartLeft = renderedX;
+    resizeStartTop = renderedY;
     resizeStartWidth = renderedWidth;
     resizeStartHeight = renderedHeight;
     resizePointerId = event.pointerId;
@@ -242,25 +317,76 @@
   }
 
   function handleResizeMove(event) {
-    if (!resizing) return;
+    if (!resizing || gestureWindowId !== windowId) return;
     if (resizePointerId != null && event.pointerId !== resizePointerId) return;
 
     const dx = event.clientX - resizeStartX;
     const dy = event.clientY - resizeStartY;
+    const dir = resizeDirection;
 
-    const newWidth = Math.max(MIN_WIDTH, resizeStartWidth + dx);
-    const newHeight = Math.max(MIN_HEIGHT, resizeStartHeight + dy);
+    let newX = resizeStartLeft;
+    let newY = resizeStartTop;
+    let newWidth = resizeStartWidth;
+    let newHeight = resizeStartHeight;
 
-    dispatch('resize', { windowId, x: renderedX, y: renderedY, width: newWidth, height: newHeight });
+    if (dir.includes('e')) {
+      newWidth = resizeStartWidth + dx;
+    }
+    if (dir.includes('s')) {
+      newHeight = resizeStartHeight + dy;
+    }
+    if (dir.includes('w')) {
+      // The right edge stays put while the left edge follows the pointer.
+      newWidth = resizeStartWidth - dx;
+      newX = resizeStartLeft + (resizeStartWidth - newWidth);
+    }
+    if (dir.includes('n')) {
+      // The bottom edge stays put while the top edge follows the pointer.
+      newHeight = resizeStartHeight - dy;
+      newY = resizeStartTop + (resizeStartHeight - newHeight);
+    }
+
+    // The minimum size always wins over the anchored edge, so the dragged edge
+    // stops at a fixed position instead of drifting.
+    if (newWidth < MIN_WIDTH) {
+      if (dir.includes('w')) newX = resizeStartLeft + resizeStartWidth - MIN_WIDTH;
+      newWidth = MIN_WIDTH;
+    }
+    if (newHeight < MIN_HEIGHT) {
+      if (dir.includes('n')) newY = resizeStartTop + resizeStartHeight - MIN_HEIGHT;
+      newHeight = MIN_HEIGHT;
+    }
+
+    // A resize stops at the free area's edges. Pulling the top edge past the
+    // free area's top (or the left edge past its left) stops that edge exactly
+    // there and keeps the opposite edge where it was, so the window shrinks
+    // instead of sliding: the bottom edge stays at resizeStartTop +
+    // resizeStartHeight and the right edge at resizeStartLeft + resizeStartWidth.
+    if (dir.includes('n') && newY < freeArea.y) {
+      newY = freeArea.y;
+      newHeight = resizeStartTop + resizeStartHeight - newY;
+    }
+    if (dir.includes('w') && newX < freeArea.x) {
+      newX = freeArea.x;
+      newWidth = resizeStartLeft + resizeStartWidth - newX;
+    }
+
+    // The anchor names the edge that stays put when the store's own constraint
+    // has to move an edge: a west drag keeps the right edge, a north drag keeps
+    // the bottom edge, and a plain east/south drag keeps the left/top.
+    const anchor = dir.includes('w') ? 'ne' : dir.includes('n') ? 'sw' : 'nw';
+    dispatch('resize', { windowId, x: newX, y: newY, width: newWidth, height: newHeight, anchor });
   }
 
   function handleResizeEnd(event) {
-    if (!resizing) return;
+    if (!resizing || gestureWindowId !== windowId) return;
     if (resizePointerId != null && event?.pointerId != null && event.pointerId !== resizePointerId) return;
     tryReleasePointerCapture(resizePointerTarget, resizePointerId);
     resizing = false;
+    resizeDirection = '';
     resizePointerId = null;
     resizePointerTarget = null;
+    gestureWindowId = '';
   }
 
   // ---- Global pointer event wiring ----
@@ -276,10 +402,19 @@
     window.addEventListener('resize', refreshViewportBounds);
     window.addEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
 
-    const promptSurface = document.querySelector('[data-prompt-surface]');
-    if (typeof ResizeObserver !== 'undefined' && promptSurface) {
-      promptSurfaceObserver = new ResizeObserver(refreshViewportBounds);
-      promptSurfaceObserver.observe(promptSurface);
+    if (typeof ResizeObserver !== 'undefined') {
+      const promptSurface = document.querySelector('[data-prompt-surface]');
+      if (promptSurface) {
+        promptSurfaceObserver = new ResizeObserver(refreshViewportBounds);
+        promptSurfaceObserver.observe(promptSurface);
+      }
+      // The desktop area is where the safe-area insets land, so watching it
+      // keeps the free area right when a notch appears or the screen rotates.
+      const desktopArea = document.querySelector('[data-desktop-windows]');
+      if (desktopArea) {
+        desktopAreaObserver = new ResizeObserver(refreshViewportBounds);
+        desktopAreaObserver.observe(desktopArea);
+      }
     }
   });
 
@@ -293,39 +428,64 @@
     window.removeEventListener('resize', refreshViewportBounds);
     window.removeEventListener('choir-theme-change', refreshViewportBoundsAfterThemeChange);
     promptSurfaceObserver?.disconnect();
+    desktopAreaObserver?.disconnect();
   });
 
-  // ---- Computed styles ----
+  // ---- Free area and rendering ----
 
-  $: viewportMargin = viewportWidth <= MOBILE_BREAKPOINT
-    ? 8
-    : viewportWidth <= TABLET_BREAKPOINT
-    ? 16
-    : 12;
-  $: maxNormalWidth = Math.max(MIN_WIDTH, viewportWidth - viewportMargin * 2);
-  $: maxNormalHeight = Math.max(
-    MIN_HEIGHT,
-    viewportHeight - promptSurfaceTopOffset - promptSurfaceBottomOffset - viewportMargin * 2
-  );
-  $: minRenderedY = viewportMargin + promptSurfaceTopOffset;
-  $: renderedWidth = Math.min(Math.max(width, MIN_WIDTH), maxNormalWidth);
-  $: renderedHeight = Math.min(Math.max(height, MIN_HEIGHT), maxNormalHeight);
-  $: maxRenderedX = Math.max(viewportMargin, viewportWidth - renderedWidth - viewportMargin);
-  $: maxRenderedY = Math.max(
-    minRenderedY,
-    viewportHeight - promptSurfaceBottomOffset - renderedHeight - viewportMargin
-  );
-  $: renderedX = clamp(x, viewportMargin, maxRenderedX);
-  $: renderedY = clamp(y, minRenderedY, maxRenderedY);
+  // The one free area: the viewport inset once by the safe-area insets, from
+  // the top edge to the top of the prompt bar. The store clamps geometry to
+  // exactly this rectangle; nothing here adds a margin of its own.
+  $: freeArea = {
+    x: safeAreaLeft,
+    y: safeAreaTop + promptSurfaceTopOffset,
+    width: Math.max(MIN_WIDTH, viewportWidth - safeAreaLeft - safeAreaRight),
+    height: Math.max(
+      MIN_HEIGHT,
+      viewportHeight - safeAreaTop - promptSurfaceTopOffset - promptSurfaceBottomOffset
+    ),
+  };
+
+  // The title bar's height, read from its box: 36px, or 40px under 768px.
+  let titlebarHeight = 36;
+  let windowElement = null;
+
+  $: if (windowElement) measureTitlebar(windowElement);
+
+  function measureTitlebar(target) {
+    const bar = target?.querySelector?.('[data-window-titlebar]');
+    if (!bar) return;
+    const height = bar.getBoundingClientRect().height;
+    if (height > 0) titlebarHeight = Math.round(height);
+  }
+
+  // Render what the store holds. Only the title bar's 40px reachability is
+  // enforced here, so a window can never be dragged fully off the free area.
+  $: renderedWidth = clamp(width, MIN_WIDTH, freeArea.width);
+  $: renderedHeight = clamp(height, MIN_HEIGHT, freeArea.height);
+  $: renderedX = clamp(x, freeArea.x + TITLEBAR_REACHABLE - renderedWidth, freeArea.x + freeArea.width - TITLEBAR_REACHABLE);
+  $: renderedY = clamp(y, freeArea.y, freeArea.y + freeArea.height - TITLEBAR_REACHABLE);
 
   $: windowStyle = mode === 'maximized'
-    ? `left:0; top:${promptSurfaceTopOffset}px; width:100%; height:calc(100dvh - ${promptSurfaceTopOffset + promptSurfaceBottomOffset}px);`
+    ? `left:${freeArea.x}px; top:${freeArea.y}px; width:${freeArea.width}px; height:${freeArea.height}px;`
     : mode === 'minimized'
     ? 'display:none;'
     : `left:${renderedX}px; top:${renderedY}px; width:${renderedWidth}px; height:${renderedHeight}px;`;
 
+  $: snapPreviewStyle = `left:${freeArea.x}px; top:${freeArea.y}px; width:${freeArea.width}px; height:${freeArea.height}px;`;
+  $: showSnapPreview = snapPreviewActive && dragging && mode !== 'maximized';
+
   $: maxRestoreTitle = mode === 'maximized' ? 'Restore' : 'Maximize';
-  $: showResizeHandle = mode === 'normal' && !overviewOpen;
+  $: showResizeHandles = mode === 'normal' && !overviewOpen;
+  // Eight zones: every edge is an 8px strip on every screen; only the four
+  // corners grow to 28px under 768px for a finger. The top edge and the top
+  // corners start below the title bar, so no zone ever covers the title bar's
+  // minimize/maximize/close buttons (a pointerdown there must reach them).
+  $: compactZones = viewportWidth < MOBILE_BREAKPOINT;
+  $: cornerZone = compactZones ? MOBILE_CORNER_RESIZE_ZONE : CORNER_RESIZE_ZONE;
+  $: edgeZone = EDGE_RESIZE_ZONE;
+  // Keep every resize zone out from under the title bar and its buttons.
+  $: topZoneInset = Math.max(cornerZone, titlebarHeight + edgeZone);
   $: overviewClass = overviewOpen ? `overview-preview overview-preview-${overviewPreviewState}` : '';
   $: effectiveZIndex = overviewOpen
     ? overviewPreviewState === 'live'
@@ -334,6 +494,12 @@
     : zIndex;
   $: combinedStyle = `${windowStyle} z-index: ${effectiveZIndex}; ${overviewOpen ? overviewPreviewStyle : ''}`;
 </script>
+
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+{#if showSnapPreview}
+  <div class="snap-preview" style={snapPreviewStyle} data-snap-preview aria-hidden="true"></div>
+{/if}
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -346,6 +512,7 @@
   data-window-mode={mode}
   data-window-active={active ? 'true' : 'false'}
   data-overview-preview-state={overviewOpen ? overviewPreviewState : 'normal'}
+  bind:this={windowElement}
   on:pointerdown={handleFocusWindow}
 >
   <!-- Title bar -->
@@ -406,15 +573,66 @@
     <slot />
   </div>
 
-  <!-- Resize handle: bottom-right corner only (normal mode, not mobile) -->
-  {#if showResizeHandle}
+  <!--
+    Resize zones: four edges and four corners, normal mode only. Edges are
+    thin strips of the window's outer 8px; corners own the outer corner square
+    (16px on desktop, 28px under 768px). Each zone covers only its own strip,
+    so a pointer aimed at an edge never lands in a corner zone. The top edge
+    and the top corners start below the title bar, since a zone above them
+    would intercept the pointer aimed at the title bar's buttons.
+  -->
+  {#if showResizeHandles}
     <div
-      class="resize-handle resize-se"
+      class="resize-zone resize-e"
       data-resize-handle
-      on:pointerdown|stopPropagation={handleResizeStart}
+      style="top:{cornerZone}px; bottom:{cornerZone}px; width:{edgeZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'e')}
+    ></div>
+    <div
+      class="resize-zone resize-w"
+      data-resize-handle
+      style="top:{cornerZone}px; bottom:{cornerZone}px; width:{edgeZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'w')}
+    ></div>
+    <div
+      class="resize-zone resize-s"
+      data-resize-handle
+      style="left:{cornerZone}px; right:{cornerZone}px; height:{edgeZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 's')}
+    ></div>
+    <div
+      class="resize-zone resize-n"
+      data-resize-handle
+      style="left:{cornerZone}px; right:{cornerZone}px; top:{titlebarHeight}px; height:{edgeZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'n')}
+    ></div>
+    <div
+      class="resize-zone resize-ne"
+      data-resize-handle
+      style="top:{topZoneInset}px; width:{cornerZone}px; height:{cornerZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'ne')}
+    ></div>
+    <div
+      class="resize-zone resize-nw"
+      data-resize-handle
+      style="top:{topZoneInset}px; width:{cornerZone}px; height:{cornerZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'nw')}
+    ></div>
+    <div
+      class="resize-zone resize-se"
+      data-resize-handle
+      style="width:{cornerZone}px; height:{cornerZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'se')}
+    ><span class="resize-grip" aria-hidden="true"></span></div>
+    <div
+      class="resize-zone resize-sw"
+      data-resize-handle
+      style="width:{cornerZone}px; height:{cornerZone}px;"
+      on:pointerdown|stopPropagation={(event) => handleResizeStart(event, 'sw')}
     ></div>
   {/if}
 </div>
+
 
 <style>
   .window {
@@ -432,10 +650,30 @@
       0 28px 80px color-mix(in srgb, var(--choir-shadow-color) 48%, transparent),
       0 10px 30px color-mix(in srgb, var(--choir-accent) 10%, transparent);
     transform-origin: top left;
-    transition: box-shadow 0.15s, filter 0.15s;
+    transition: box-shadow 0.15s, filter 0.15s, border-radius 0.12s;
     user-select: none;
-    max-width: calc(100vw - 24px);
-    max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 16px);
+    /* No max-width / max-height: the store already sized and clamped this
+       window to the free area, and a cap here would hold a maximized window
+       off the screen edge (the wasted strip this rewrite removes). */
+  }
+
+  /* Maximized means the whole free area, edge to edge: square corners, no
+     shadow, no border. The style attribute from Svelte carries the rect. */
+  .window[data-window-mode='maximized'] {
+    border-radius: 0;
+    box-shadow: none;
+    border: 0;
+    max-width: none;
+    max-height: none;
+  }
+
+  .snap-preview {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: var(--choir-radius-panel, 26px);
+    border: 2px dashed color-mix(in srgb, var(--choir-accent) 70%, transparent);
+    background: color-mix(in srgb, var(--choir-accent) 12%, transparent);
   }
 
   .window.overview-preview {
@@ -482,6 +720,10 @@
     box-shadow:
       0 30px 88px color-mix(in srgb, var(--choir-shadow-color) 52%, transparent),
       0 0 54px color-mix(in srgb, var(--choir-accent) 24%, transparent);
+  }
+
+  .window[data-window-mode='maximized'].window-active {
+    box-shadow: none;
   }
 
   /* ---- Title bar ---- */
@@ -580,24 +822,67 @@
     overflow: hidden;
   }
 
-  /* ---- Resize handle: bottom-right corner only ---- */
-  .resize-handle {
+  /* ---- Resize zones: four edges, four corners ---- */
+  .resize-zone {
     position: absolute;
     z-index: 10;
+    touch-action: none;
+  }
+
+  .resize-e {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    cursor: ew-resize;
+  }
+
+  .resize-w {
+    top: 0;
+    left: 0;
+    bottom: 0;
+    cursor: ew-resize;
+  }
+
+  .resize-s {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: ns-resize;
+  }
+
+  .resize-n {
+    left: 0;
+    right: 0;
+    top: 0;
+    cursor: ns-resize;
+  }
+
+  .resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+  }
+
+  .resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
   }
 
   .resize-se {
     bottom: 0;
     right: 0;
-    width: 16px;
-    height: 16px;
-    cursor: se-resize;
-    touch-action: none;
+    cursor: nwse-resize;
   }
 
-  /* Subtle visual indicator for the resize handle */
-  .resize-se::after {
-    content: '';
+  .resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+  }
+
+  /* Subtle visual indicator on the bottom-right corner, as before. */
+  .resize-grip {
     position: absolute;
     bottom: 3px;
     right: 3px;
@@ -605,20 +890,10 @@
     height: 8px;
     background: radial-gradient(circle at 100% 100%, var(--choir-surface-card), transparent 60%);
     border-radius: 999px;
-  }
-
-  @media (max-width: 1024px) and (min-width: 769px) {
-    .window {
-      max-width: calc(100vw - 32px);
-    }
+    pointer-events: none;
   }
 
   @media (max-width: 768px) {
-    .window {
-      max-width: calc(100vw - 16px);
-      max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 8px);
-    }
-
     .titlebar {
       height: 40px;
       min-height: 40px;
@@ -628,14 +903,10 @@
       width: 32px;
       height: 32px;
     }
-
-    .resize-se {
-      width: 28px;
-      height: 28px;
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .window,
     .window.overview-preview-live {
       transition: none;
     }

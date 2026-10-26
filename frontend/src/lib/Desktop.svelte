@@ -1202,7 +1202,8 @@
       event.detail.x,
       event.detail.y,
       event.detail.width,
-      event.detail.height
+      event.detail.height,
+      event.detail.anchor
     );
     scheduleSave();
   }

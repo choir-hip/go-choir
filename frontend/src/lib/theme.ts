@@ -49,7 +49,11 @@ const base: Omit<ChoirTheme, 'id' | 'name' | 'colors' | 'effects'> = {
   },
   layout: {
     promptSurfacePlacement: 'bottom',
-    promptSurfaceMinHeight: '72px',
+    // The prompt bar's real height. It publishes its measured height into
+    // --choir-prompt-surface-size / -bottom-offset on mount; this is the
+    // fallback before that first measurement, and reserving more than the bar
+    // is what left a dead strip between a window and the bar.
+    promptSurfaceMinHeight: '56px',
     deskSheetHeight: '56dvh',
   },
   fonts: {

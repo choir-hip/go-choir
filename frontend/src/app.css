@@ -1,17 +1,24 @@
 :root {
   color-scheme: light;
-  --choir-prompt-surface-size: 64px;
+  /* Fallbacks only; PromptSurface publishes the prompt bar's measured height. */
+  --choir-prompt-surface-size: 56px;
   --choir-prompt-surface-top-offset: 0px;
-  --choir-prompt-surface-bottom-offset: 64px;
+  --choir-prompt-surface-bottom-offset: 56px;
+  /* How much of the viewport the notch (or a phone's rounded edge) takes. */
+  --choir-safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --choir-safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --choir-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --choir-safe-area-inset-left: env(safe-area-inset-left, 0px);
   font-family: var(--choir-font-ui, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
 
-/* macOS transparent title bar: pad content so it doesn't go under the drag area */
-@supports (padding: env(safe-area-inset-top)) {
-  body {
-    padding-top: env(safe-area-inset-top, 0px);
-  }
-}
+/*
+  The safe-area insets are applied exactly once, on the desktop area (below),
+  so the windows, the maximized area and the desktop icons all share one
+  coordinate space. The body carries no padding: padding it pushed the desktop
+  down while .desktop stayed 100dvh, which lost a strip at the top and pushed
+  maximized windows under the prompt bar whenever an inset was nonzero.
+*/
 
 :root:is([data-theme-id='futuristic-noir'], [data-theme-id='carbon-fiber-kintsugi']) {
   color-scheme: dark;
@@ -21,6 +28,20 @@ body {
   background: var(--choir-body-background);
   color: var(--choir-text-primary);
 }
+
+/*
+  The desktop area is the whole screen minus the safe-area insets (a notch on a
+  phone; 0 on every desktop browser). Windows size themselves against this
+  area; the store and FloatingWindow read these same values, so a maximized
+  window is flush with every edge and still clears the prompt bar.
+*/
+[data-desktop-windows] {
+  padding-top: var(--choir-safe-area-inset-top, 0px);
+  padding-right: var(--choir-safe-area-inset-right, 0px);
+  padding-left: var(--choir-safe-area-inset-left, 0px);
+  box-sizing: border-box;
+}
+
 
 :root[data-theme-id='carbon-fiber-kintsugi'] body {
   background: var(--choir-body-background);
@@ -50,6 +71,20 @@ body {
   box-shadow:
     0 8px 16px color-mix(in srgb, var(--choir-status-warning) 14%, transparent),
     0 1px 0 color-mix(in srgb, var(--choir-shadow-color) 72%, transparent) inset !important;
+}
+
+/*
+  A maximized window has no shadow and no outer border in every preset: the
+  theme rules above carry !important, so this rule matches their specificity
+  with two theme-scoped selectors and wins by coming later in the cascade.
+  (FloatingWindow's own scoped rule sets the same for any other theme.)
+*/
+:root :is(.window, .floating-window, [data-window], [data-floating-window])[data-window-mode='maximized'],
+:root :is(.window, .floating-window, [data-window], [data-floating-window])[data-window-mode='maximized'][data-window-active],
+:root :is(.window, .floating-window, [data-window], [data-floating-window])[data-window-mode='maximized']:is(.overview-preview, .overview-preview-live, .overview-preview-live.window-active) {
+  box-shadow: none !important;
+  border: 0 !important;
+  border-color: transparent !important;
 }
 
 .window :is(.titlebar, [data-window-titlebar]),
