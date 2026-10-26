@@ -132,7 +132,10 @@ func TestOwnerReviseOnSettledDocumentStartsNextTrajectory(t *testing.T) {
 	core, handler := testAPISetup(t)
 	s := core.Store()
 	ctx := t.Context()
-	start := startObservationLifecycle(t, s)
+	start := startObservationLifecycle(t, s, func(req *types.StartLifecycleRequest) {
+		// A produced head names its trajectory in metadata, as the desk's revisions do.
+		req.InitialRevision.Metadata = json.RawMessage(`{"trajectory_id":"trajectory-observation"}`)
+	})
 	docID := start.InitialDocument.DocID
 	mu, dispatches := recordContinueDispatches(core)
 	settleDocumentTrajectory(t, s, start.OwnerID, start.ComputerID, docID, start.TrajectoryID)
@@ -197,6 +200,15 @@ func TestOwnerReviseOnSettledDocumentStartsNextTrajectory(t *testing.T) {
 	}
 	if head.Content != parent.Content {
 		t.Fatalf("C4: owner revision content %q differs from the carried head %q", head.Content, parent.Content)
+	}
+	// C4b: the metadata label names the live trajectory the record is on, not
+	// the settled one the carried-forward head metadata still names.
+	var headMeta map[string]any
+	if err := json.Unmarshal(head.Metadata, &headMeta); err != nil {
+		t.Fatalf("C4b: decode owner revision metadata %s: %v", head.Metadata, err)
+	}
+	if got, _ := headMeta["trajectory_id"].(string); got != doc.TrajectoryID {
+		t.Fatalf("C4b: owner revision metadata trajectory_id=%q, want live trajectory %q (settled %q)", got, doc.TrajectoryID, start.TrajectoryID)
 	}
 	var metadata map[string]any
 	if err := json.Unmarshal(head.Metadata, &metadata); err != nil || metadata["owner_prompt"] != "build on this: add a section on costs" || metadata["input_origin"] != textureInputOriginUserPrompt {
