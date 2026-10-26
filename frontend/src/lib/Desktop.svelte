@@ -1226,10 +1226,41 @@
       requestAuth({ kind: 'prompt', text });
       return;
     }
-    submitPromptText(text);
+    submitPromptText(text, {
+      continueDocId: event.detail?.continueDocId || '',
+      continueWindowId: event.detail?.continueWindowId || '',
+    });
   }
 
-  async function submitPromptText(text) {
+  // showContinuedDocument keeps a prompt-bar continue in the document's own
+  // window: it focuses that window (or opens one on the document if it was
+  // closed) and hands it the receipt, so it follows the trajectory the
+  // revision committed on (FE-02 step 1).
+  function showContinuedDocument(receipt, preferredWindowId = '') {
+    const docId = receipt.doc_id || '';
+    const promptBarContinue = {
+      docId,
+      trajectoryId: receipt.trajectory_id || '',
+      revisionId: receipt.revision_id || '',
+      requestId: receipt.request_id || '',
+    };
+    const isDocWindow = (win) => normalizeAppId(win.appId) === 'texture' && win.mode !== 'closed' && win.appContext?.docId === docId;
+    const target = $windows.find((win) => win.windowId === preferredWindowId && isDocWindow(win)) || $windows.find(isDocWindow);
+    if (target) {
+      if (target.mode === 'minimized') restoreWindow(target.windowId);
+      else focusWindow(target.windowId);
+      updateWindowAppContext(target.windowId, { promptBarContinue });
+    } else {
+      openApp('texture', 'Texture', getAppIcon('texture'), { docId, allowMultiple: true, promptBarContinue });
+    }
+    scheduleSave();
+    promptStatus = `Continuing ${target?.title || 'the document'}...`;
+    setTimeout(() => {
+      if (promptStatus.startsWith('Continuing ')) promptStatus = '';
+    }, 1800);
+  }
+
+  async function submitPromptText(text, { continueDocId = '', continueWindowId = '' } = {}) {
     if (!desktopReady) {
       showToast('Desktop is still connecting');
       return;
@@ -1238,9 +1269,14 @@
     const fallbackWindowTitle = text.length > 28 ? `${text.slice(0, 28)}…` : text;
 
     try {
-      promptStatus = 'Routing through conductor...';
+      promptStatus = continueDocId ? 'Sending to the document...' : 'Routing through conductor...';
       promptRouting = true;
-      const submission = await submitConductorPrompt(text);
+      const submission = await submitConductorPrompt(text, { continueDocId });
+      if (submission.continued === true) {
+        promptRouting = false;
+        showContinuedDocument(submission, continueWindowId);
+        return;
+      }
       const conductorSubmissionId = submission.submission_id || '';
       promptStatus = 'Waiting for conductor decision...';
       const decision = await waitForConductorDecision(conductorSubmissionId).finally(() => {

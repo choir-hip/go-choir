@@ -27,6 +27,27 @@ const promptBarCommitTimeout = 120 * time.Second
 type promptBarSubmitRequest struct {
 	Text      string `json:"text"`
 	CommandID string `json:"command_id,omitempty"`
+	// ContinueDocID names the owner's document the prompt builds on: the
+	// submit is that document's owner revise instead of a new document
+	// (FE-02 step 1, docs/problems/prompt-bar-always-creates-a-new-document-2026-10-26.md).
+	ContinueDocID string `json:"continue_doc_id,omitempty"`
+}
+
+const promptBarContinueSchemaV1 = "choir.prompt_bar_continue.v1"
+
+// promptBarContinueResponse is the 202 of a continue: the owner revision is
+// the receipt and there is no conductor submission to poll. TrajectoryID is
+// the trajectory the revision committed on, a new one when a settled
+// document continued (F1), so the window follows it.
+type promptBarContinueResponse struct {
+	Schema       string `json:"schema"`
+	Continued    bool   `json:"continued"`
+	CommandID    string `json:"command_id"`
+	DocID        string `json:"doc_id"`
+	TrajectoryID string `json:"trajectory_id"`
+	RevisionID   string `json:"revision_id"`
+	RequestID    string `json:"request_id"`
+	Replay       bool   `json:"replay"`
 }
 
 type promptBarSubmitResponse struct {
@@ -87,6 +108,10 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 
 	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
 	defer commitCancel()
+	if docID := strings.TrimSpace(req.ContinueDocID); docID != "" {
+		h.continuePromptBarDocument(commitCtx, w, r, ownerID, docID, text, commandID)
+		return
+	}
 	commitCtx = ownerTextContext(commitCtx, r)
 	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true)
 	if err != nil {
@@ -108,6 +133,29 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		DocID:              handoff.Conductor.DocID, RevisionID: handoff.Conductor.UserRevisionID,
 		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
 		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
+	})
+}
+
+// continuePromptBarDocument answers a prompt-bar submit that builds on
+// docID: the owner revise of that document, with the same authority, head
+// and idempotency rules as /revise (the command id is its client request
+// id) and the owner's text as typed. A desk's in-process call is refused:
+// product_api refuses a desk any Texture write, and an owner-authored
+// revision through the prompt bar must not open that door.
+func (h *Handler) continuePromptBarDocument(ctx context.Context, w http.ResponseWriter, r *http.Request, ownerID, docID, text, commandID string) {
+	if strings.TrimSpace(r.RemoteAddr) == "" {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "continue_doc_id is an owner act; only the Texture desk writes a Texture, so address the Texture desk"})
+		return
+	}
+	receipt, err := h.reviseOwnerDocument(ctx, ownerID, docID, textureAgentRevisionRequest{Prompt: text, ClientRequestID: commandID})
+	if err != nil {
+		writeOwnerRevisionRefusal(w, err)
+		return
+	}
+	writeAPIJSON(w, http.StatusAccepted, promptBarContinueResponse{
+		Schema: promptBarContinueSchemaV1, Continued: true, CommandID: commandID,
+		DocID: receipt.DocID, TrajectoryID: receipt.TrajectoryID, RevisionID: receipt.RevisionID,
+		RequestID: receipt.RequestID, Replay: receipt.Replay,
 	})
 }
 
