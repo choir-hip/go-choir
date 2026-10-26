@@ -935,20 +935,24 @@ func (rt *Runtime) resumeStrandedPlatformUpdateTail(ctx context.Context, crashBo
 		return
 	}
 	if crashBoot {
-		// ApplyPlatformUpdate refuses an offer pinned to a retired realization
-		// or past its expiry before it reaches the tail: spend nothing on a
-		// re-drive that cannot start.
-		if offer.Realization != rt.selfdevRealizationID {
-			log.Printf("runtime: crash boot: platform update %s: stranded tail not re-driven: its offer binds a retired realization", updateID)
-			return
-		}
-		if offerErr := selfdevprotocol.PlatformUpdateOfferFromRequest(offer, time.Now().UTC()); offerErr != nil {
-			log.Printf("runtime: crash boot: platform update %s: stranded tail not re-driven: %v", updateID, offerErr)
-			return
-		}
 		offerDigest, digestErr := offer.Digest()
 		if digestErr != nil {
 			log.Printf("runtime: crash boot: platform update %s: offer digest: %v", updateID, digestErr)
+			return
+		}
+		// ApplyPlatformUpdate refuses an offer pinned to a retired realization
+		// or past its expiry before it reaches the tail: spend nothing on a
+		// re-drive that cannot start, and leave the held state on the tape.
+		if offer.Realization != rt.selfdevRealizationID {
+			cause := "the checkpoint and route tail are not re-driven: its offer binds a retired realization"
+			log.Printf("runtime: crash boot: platform update %s: %s", updateID, cause)
+			rt.recordPlatformUpdateSettlementHeld(ctx, updateID, appliedEvent.DecisionRef, offerDigest, cause)
+			return
+		}
+		if offerErr := selfdevprotocol.PlatformUpdateOfferFromRequest(offer, time.Now().UTC()); offerErr != nil {
+			cause := fmt.Sprintf("the checkpoint and route tail are not re-driven: %v", offerErr)
+			log.Printf("runtime: crash boot: platform update %s: %s", updateID, cause)
+			rt.recordPlatformUpdateSettlementHeld(ctx, updateID, appliedEvent.DecisionRef, offerDigest, cause)
 			return
 		}
 		if !rt.spendPlatformUpdateSettlementAttempt(ctx, updateID, appliedEvent.DecisionRef, offerDigest) {
