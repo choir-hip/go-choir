@@ -66,3 +66,7 @@ Hypothesis to verify, not asserted: why one small scaling icon costs 33% of a co
 Landing: orange, frontend only; needs the landing loop (CI, staging deploy) and a deployed check that a signed-in desktop with windows reads under 5% GPU past 150 s (harness: `real.mjs` and `measure2.mjs`/`measure3.mjs`, kept outside the repo in `/Users/wiz/Dev/lanes/tabcpu2-harness/`).
 
 Heresy delta: discovered: the 10-26 fix froze one animation source and left two infinite CSS animations; introduced: the sheen animation (round 6, 670f9ea50) added a second source on every window; repaired: none.
+
+## Fixed by (lane/idle-pause)
+
+`frontend/src/lib/idle.ts` is now the one owner of idle (120 s, `localStorage choir.idleMs` as the test hook): it sets `data-idle` on the root, ChoirField subscribes instead of keeping its own timer, input and visibility return clear it, and one `app.css` rule pauses every animation under `:root[data-idle]`. Mocked 3-window desktop (Texture, Files, Settings), default theme, 140 s idle, 10 s window, GPU process percent of one core: **97.9 before, 7.66 after** (renderer 1.37 to 0.4; the 4 infinite animations report paused; machine load was high, so the after-figure is an upper bound). Regression spec: `frontend/tests/idle-pause.spec.js`. Still owed: the deployed check on a signed-in desktop (under 5% past 150 s).
