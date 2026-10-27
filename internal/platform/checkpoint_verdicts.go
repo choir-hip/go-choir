@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -187,7 +188,7 @@ func checkpointBaseSeed(ctx context.Context, tx *sql.Tx, computerID string, sequ
 	var ref string
 	var seq uint64
 	// Bases refused twice are skipped (paper-never-checkpointed S1).
-	err := tx.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_bases WHERE computer_id=? AND sequence<=? AND base_ref NOT IN (SELECT base_ref FROM computer_projection_base_refusals WHERE computer_id=? AND refusals>=2) ORDER BY sequence DESC, created_at DESC LIMIT 1`, computerID, sequence, computerID).Scan(&ref, &seq)
+	err := tx.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_bases WHERE computer_id=? AND sequence<=? AND base_ref NOT IN (SELECT base_ref FROM computer_projection_base_refusals WHERE computer_id=? AND build_commit=? AND refusals>=2) ORDER BY sequence DESC, created_at DESC LIMIT 1`, computerID, sequence, computerID, buildinfo.Commit).Scan(&ref, &seq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, nil
 	}

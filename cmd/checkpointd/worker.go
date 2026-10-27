@@ -316,7 +316,8 @@ func checkpointJobContext(parent context.Context) (context.Context, context.Canc
 }
 
 // countsAgainstSeedBase reports whether a job outcome is a deterministic
-// refusal of its seed base, the only kind that counts toward quarantine.
+// refusal of its seed base's own bytes (ErrSeedRefused), the only kind that
+// counts toward quarantine; target, tail, scratch and IO causes do not.
 func countsAgainstSeedBase(status, seedBaseRef string, err error) bool {
-	return status == "blocked" && seedBaseRef != "" && errors.Is(err, projectionbase.ErrBaseRefused) && !transientProjectionCause(err)
+	return status == "blocked" && seedBaseRef != "" && errors.Is(err, projectionbase.ErrSeedRefused) && !transientProjectionCause(err)
 }

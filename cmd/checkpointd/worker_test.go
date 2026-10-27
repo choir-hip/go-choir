@@ -65,9 +65,13 @@ func TestCheckpointJobContextHasDeadlineBelowServiceTimeout(t *testing.T) {
 
 // S1: only a deterministic refusal of a seed counts toward quarantine.
 func TestCountsAgainstSeedBase(t *testing.T) {
-	refused := fmt.Errorf("%w: installed base does not open", projectionbase.ErrBaseRefused)
+	refused := fmt.Errorf("%w: %w: installed base does not open", projectionbase.ErrSeedRefused, projectionbase.ErrBaseRefused)
+	tailSide := fmt.Errorf("%w: tail is empty after seed watermark 5", projectionbase.ErrBaseRefused)
 	if !countsAgainstSeedBase("blocked", "abc", refused) {
 		t.Fatal("deterministic refusal of a seed must count")
+	}
+	if countsAgainstSeedBase("blocked", "abc", tailSide) {
+		t.Fatal("a tail-side ErrBaseRefused must not count against the seed")
 	}
 	if countsAgainstSeedBase("blocked", "", refused) {
 		t.Fatal("a refusal with no seed has nothing to quarantine")
@@ -75,7 +79,7 @@ func TestCountsAgainstSeedBase(t *testing.T) {
 	if countsAgainstSeedBase("failed", "abc", refused) {
 		t.Fatal("a failed (transient) run must not count")
 	}
-	if countsAgainstSeedBase("blocked", "abc", fmt.Errorf("%w: x: %w", projectionbase.ErrBaseRefused, context.DeadlineExceeded)) {
+	if countsAgainstSeedBase("blocked", "abc", fmt.Errorf("%w: %w: x: %w", projectionbase.ErrSeedRefused, projectionbase.ErrBaseRefused, context.DeadlineExceeded)) {
 		t.Fatal("a timeout wrapped in a refusal must not count")
 	}
 	if countsAgainstSeedBase("blocked", "abc", errors.New("checkpoint escrow changed")) {

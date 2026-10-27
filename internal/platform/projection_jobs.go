@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
  refusals INT NOT NULL,
  last_error TEXT NOT NULL,
  updated_at DATETIME(6) NOT NULL,
+ build_commit VARCHAR(128) NOT NULL DEFAULT '',
  PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_bases (
@@ -205,14 +206,16 @@ const baseQuarantineRefusals = 2
 const blockedLogInterval = time.Hour
 
 // RecordBaseRefusal counts one deterministic refusal of a seed base for a
-// computer and reports whether the base is now quarantined. A quarantined base
+// computer and reports whether the base is now quarantined. Refusals are
+// counted per worker build (a new build may open what the old one could not),
+// and a successful publish for the computer clears them. A quarantined base
 // is skipped by job enqueue and seed selection, which fall back to the next
 // older base or to no seed (docs/problems/paper-never-checkpointed-2026-10-27.md).
 func (s *Store) RecordBaseRefusal(ctx context.Context, computerID, baseRef, errorText string) (bool, error) {
 	if !safeFileCASComponent(computerID) || baseRef == "" || len(baseRef) > 255 {
 		return false, fmt.Errorf("invalid base refusal")
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_refusals (computer_id,base_ref,refusals,last_error,updated_at) VALUES (?,?,1,?,?) ON DUPLICATE KEY UPDATE refusals=refusals+1,last_error=VALUES(last_error),updated_at=VALUES(updated_at)`, computerID, baseRef, errorText, time.Now().UTC()); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_refusals (computer_id,base_ref,refusals,last_error,updated_at,build_commit) VALUES (?,?,1,?,?,?) ON DUPLICATE KEY UPDATE refusals=IF(build_commit=VALUES(build_commit),refusals+1,1),last_error=VALUES(last_error),updated_at=VALUES(updated_at),build_commit=VALUES(build_commit)`, computerID, baseRef, errorText, time.Now().UTC(), buildinfo.Commit); err != nil {
 		return false, err
 	}
 	quarantined, err := baseQuarantined(ctx, s.db, computerID, baseRef)
@@ -228,7 +231,7 @@ type singleRowQuerier interface {
 
 func baseRefusals(ctx context.Context, q singleRowQuerier, computerID, baseRef string) (int, error) {
 	var n int
-	err := q.QueryRowContext(ctx, `SELECT refusals FROM computer_projection_base_refusals WHERE computer_id=? AND base_ref=?`, computerID, baseRef).Scan(&n)
+	err := q.QueryRowContext(ctx, `SELECT refusals FROM computer_projection_base_refusals WHERE computer_id=? AND base_ref=? AND build_commit=?`, computerID, baseRef, buildinfo.Commit).Scan(&n)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
 	}
@@ -318,8 +321,11 @@ func (s *Store) enqueueProjectionJobAtBuild(ctx context.Context, computerID, rea
 	now := time.Now().UTC()
 	failures := old.Failures
 	if err == nil {
-		// Request traffic cannot reset a lease or deterministic refusal. Dependency
-		// changes (seed/key) admit a new attempt; head growth alone does not.
+		// Request traffic cannot reset a lease. A deterministic refusal waits for
+		// changed inputs (seed/key); head growth alone does not admit it. Two
+		// exceptions below: the worker's own build changing, and a base refusal
+		// not yet confirmed by a second one (request traffic can spend that, at
+		// most baseQuarantineRefusals times per seed).
 		sameInputs := old.SeedBaseRef == seed && old.KeyDigest == keyDigest && old.GenesisRepair == genesisRepair
 		// A failed job is transient trouble (lease loss, store error), not a
 		// deterministic refusal: it is re-admitted after a growing backoff so
@@ -606,6 +612,11 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, j.ComputerID, sequence, blobSHA256, now); err != nil {
+		return err
+	}
+	// A verified publish ends the computer's refusal history: whatever was
+	// quarantined is superseded, and a later refusal starts a new count.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM computer_projection_base_refusals WHERE computer_id=?`, j.ComputerID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

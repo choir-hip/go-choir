@@ -209,18 +209,18 @@ func installSeedCandidate(ctx context.Context, candidate SeedCandidate, scratchD
 	defer os.RemoveAll(stagingRoot)
 
 	if err := unpackVerified(candidate.BlobPath, stagingRoot, descriptor.BlobSHA256); err != nil {
-		return err
+		return seedRefused(err)
 	}
 	if err := verifyInstalledHead(stagingRoot, "runtime.db", descriptor); err != nil {
-		return err
+		return seedRefused(err)
 	}
 	workspace := choirstore.TextureWorkspacePath(filepath.Join(stagingRoot, "runtime.db"))
 	got, err := witnessForWorkspace(ctx, descriptor.ComputerID, descriptor.CanonicalHead, workspace)
 	if err != nil {
-		return fmt.Errorf("%w: seed witness: %w", ErrBaseRefused, err)
+		return seedRefused(fmt.Errorf("%w: seed witness: %w", ErrBaseRefused, err))
 	}
 	if err := selfdevprotocol.WitnessContentMatches(got, descriptor.VMLocalContentWitness); err != nil {
-		return fmt.Errorf("%w: seed content witness mismatch: %v", ErrBaseRefused, err)
+		return seedRefused(fmt.Errorf("%w: seed content witness mismatch: %v", ErrBaseRefused, err))
 	}
 
 	// Adopt: clear the scratch entries this tool owns, stamp the seed identity,
