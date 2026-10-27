@@ -43,3 +43,36 @@ The paper serves nothing while the pass runs (published stories are
 served by the host; the paper's desks, publishing and the owner's
 surfaces on it are down). Every deploy that lands while the paper has a
 one-row tail can repeat it.
+
+## 18:07: a second deploy killed the boot mid-rescan
+
+- FP0's docs push ed6a0776c ran the full CI and deployed, because staging
+  was still on 052c75484 after run 40552500965 failed: the deploy carried
+  68eb6bbbc's code. It restarted vmctl at 18:07:29, which closed the
+  paper's in-flight boot (`interrupted-by-vmctl-restart`, `destructive
+  kill … cause=reap-unmanaged:orphan`) about 19 minutes into the rescan.
+- The paper booted again at 18:07:37 as `restart kind=crash_or_stop`
+  (`tail=0`), so its open work closes as interrupted, and the vocabulary
+  pass started over at 18:07:44.
+- Lesson: while a protected computer is in a long boot, any push that
+  reaches a deploy restarts vmctl and kills that boot. FP0 holds pushes to
+  main until the paper is healthy. A deploy that would restart vmctl
+  while a critical_protected boot is in flight is a candidate gate.
+
+## 18:31: out of memory, a boot loop
+
+- Console: `Out of memory: Killed process 705 (autoputer) … anon-rss:7752140kB`
+  at guest uptime 1425 s (18:31), in the vocabulary pass; the runtime
+  restarted (pid 1080, `restart kind=crash_or_stop`, `tail=0`) and began
+  the pass again at 18:31:23. The 17:48 attempt (Firecracker RSS 8.3 GB
+  at 12 min) was most likely headed the same way.
+- The pass runs on every boot until one completes and stamps the fence,
+  so the paper loops: about 23 minutes per attempt, each ending in OOM.
+- The guest has 8 GiB (`VM_INTERACTIVE_MEM_MIB=8192`, one global setting
+  for every interactive computer; `GOMEMLIMIT` is half of it, 3969 MiB, so
+  most of the 7.75 GB is outside Go's limit, hypothesis: Dolt).
+- Options: (a) 12 GiB for interactive guests (lane/paper-mem 6878e651b,
+  held for the owner: it changes every computer's shape at next boot, and
+  whether 12 GiB suffices is unknown); (b) a red boot-path change so the
+  pass streams instead of holding the whole table; (c) let the paper's
+  pass run with the desks off, if a boot mode allows it (unread).
