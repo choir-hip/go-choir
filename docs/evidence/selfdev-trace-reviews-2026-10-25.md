@@ -70,7 +70,9 @@ run still took 277 s: **hypothesis**, Chromium dumps of the "Reconnecting" page
 cost about 20 s each.
 
 The 433 s park is a cold Go module cache: the egress log shows 466 `ok` GETs to
-`goproxy.choir.internal` (about 50 MB) at 01:37:34-38. The change was
+`goproxy.choir.internal` (about 50 MB) at 01:37:34-38. (Since 2026-10-27 that
+per-connection count is on the capsule's egress ledger only; the guest log
+carries a digest with JSON summary counts.) The change was
 frontend-only; the cast asked for "relevant legacy/package checks".
 
 Avoidable: yes. A 10 s smoke probe before a full test, per-step timeouts of 15

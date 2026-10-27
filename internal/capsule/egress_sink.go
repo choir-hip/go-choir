@@ -1,17 +1,14 @@
 package capsule
 
 import (
-	"bufio"
 	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
-
-// egressSinkFlushEvery bounds how long a ledger record may sit in the write
-// buffer before it reaches the file.
-const egressSinkFlushEvery = time.Second
 
 // egressSinkLogEvery is the default gap between summary lines for one host.
 const egressSinkLogEvery = 10 * time.Second
@@ -19,34 +16,44 @@ const egressSinkLogEvery = 10 * time.Second
 type egressLogKey struct{ host, outcome string }
 
 type egressLogState struct {
-	suppressed int
 	lastLog    time.Time
-	lastReason string
+	suppressed map[string]int // reason -> records not logged since lastLog
+}
+
+// egressSummary is the process-log line that stands for records the log did
+// not print one by one. It is JSON, like the per-record lines, so a reader of
+// `capsule-egress:` lines can tell the two apart by kind and still count.
+type egressSummary struct {
+	Kind     string         `json:"kind"`
+	Host     string         `json:"host"`
+	Outcome  string         `json:"outcome"`
+	Count    int            `json:"count"`
+	Reasons  map[string]int `json:"reasons"`
+	WindowMS int64          `json:"window_ms"`
 }
 
 // egressSink receives every EgressRecord of one capsule. Every record goes to
-// the ledger file, which is opened once and written through a buffer flushed
-// every second and at Close. The process log (the guest journal and serial
+// the ledger file, which is opened once and kept open; each record is one
+// unbuffered write, so a record is in the file when Record returns and a
+// process stop loses nothing. The process log (the guest journal and serial
 // console) gets the first record for each (host, outcome, reason) at once and
-// then at most one count line per (host, outcome) per interval, so a retry
+// then at most one JSON summary per (host, outcome) per interval, so a retry
 // loop of tens of thousands of refused connections is not tens of thousands
 // of synchronous console writes (H9 in docs/problems/
-// capsule-frontend-build-hangs-b-c-runtime-2026-10-27.md).
+// capsule-frontend-build-hangs-b-c-runtime-2026-10-27.md). The ledger is the
+// only per-connection record; the log is a digest.
 type egressSink struct {
 	path     string
 	logf     func(format string, args ...any)
 	now      func() time.Time
 	interval time.Duration
 
-	mu      sync.Mutex
-	f       *os.File
-	w       *bufio.Writer
-	opened  bool
-	closed  bool
-	seen    map[egressLogKey]map[string]bool
-	state   map[egressLogKey]*egressLogState
-	stop    chan struct{}
-	stopped chan struct{}
+	mu         sync.Mutex
+	f          *os.File
+	closed     bool
+	openFailed bool // the open failure was logged once; Record keeps retrying
+	seen       map[egressLogKey]map[string]bool
+	state      map[egressLogKey]*egressLogState
 }
 
 func newEgressSink(path string, logf func(format string, args ...any), now func() time.Time, interval time.Duration) *egressSink {
@@ -59,62 +66,61 @@ func newEgressSink(path string, logf func(format string, args ...any), now func(
 	if interval <= 0 {
 		interval = egressSinkLogEvery
 	}
-	s := &egressSink{
+	return &egressSink{
 		path: path, logf: logf, now: now, interval: interval,
 		seen:  map[egressLogKey]map[string]bool{},
 		state: map[egressLogKey]*egressLogState{},
-		stop:  make(chan struct{}), stopped: make(chan struct{}),
-	}
-	go s.flushLoop()
-	return s
-}
-
-func (s *egressSink) flushLoop() {
-	defer close(s.stopped)
-	t := time.NewTicker(egressSinkFlushEvery)
-	defer t.Stop()
-	for {
-		select {
-		case <-s.stop:
-			return
-		case <-t.C:
-			s.mu.Lock()
-			if s.w != nil {
-				_ = s.w.Flush()
-			}
-			s.mu.Unlock()
-		}
 	}
 }
 
 // Record writes the record to the ledger and, subject to aggregation, the log.
 func (s *egressSink) Record(record EgressRecord) {
-	line, _ := json.Marshal(record)
-	line = append(line, '\n')
+	line, err := json.Marshal(record)
+	if err != nil {
+		s.logf("capsule-egress: record for %s not encodable: %v", record.Host, err)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.writeLedgerLocked(line)
+	s.writeLedgerLocked(append(line, '\n'))
 	s.logLocked(record, line)
+}
+
+func openLedger(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 }
 
 func (s *egressSink) writeLedgerLocked(line []byte) {
 	if s.closed {
 		// A proxy goroutine finishing after the capsule ended: the record is
 		// still evidence, so append it directly.
-		if f, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		if f, err := openLedger(s.path); err == nil {
 			_, _ = f.Write(line)
 			_ = f.Close()
 		}
 		return
 	}
-	if !s.opened {
-		s.opened = true
-		if f, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-			s.f, s.w = f, bufio.NewWriterSize(f, 32<<10)
+	if s.f == nil {
+		// Retried on every record until it succeeds: a transient failure
+		// (EMFILE under a connection flood, a mount not ready) costs only the
+		// records written while it lasts, and is logged once.
+		f, err := openLedger(s.path)
+		if err != nil {
+			if !s.openFailed {
+				s.openFailed = true
+				s.logf("capsule-egress: ledger %s not writable: %v; retrying on each record", s.path, err)
+			}
+			return
 		}
+		s.f = f
 	}
-	if s.w != nil {
-		_, _ = s.w.Write(line)
+	if _, err := s.f.Write(line); err != nil {
+		s.logf("capsule-egress: ledger %s write: %v; reopening on the next record", s.path, err)
+		_ = s.f.Close()
+		s.f = nil
 	}
 }
 
@@ -128,52 +134,58 @@ func (s *egressSink) logLocked(record EgressRecord, line []byte) {
 	}
 	st := s.state[key]
 	if st == nil {
-		st = &egressLogState{lastLog: now}
+		st = &egressLogState{lastLog: now, suppressed: map[string]int{}}
 		s.state[key] = st
 	}
 	if !reasons[record.Reason] {
 		reasons[record.Reason] = true
-		st.lastLog = now
-		s.logf("capsule-egress: %s", line[:len(line)-1])
+		s.logf("capsule-egress: %s", line)
 		return
 	}
-	st.suppressed++
-	st.lastReason = record.Reason
+	st.suppressed[record.Reason]++
 	if now.Sub(st.lastLog) >= s.interval {
 		s.summaryLocked(key, st, now)
 	}
 }
 
 func (s *egressSink) summaryLocked(key egressLogKey, st *egressLogState, now time.Time) {
-	s.logf("capsule-egress: %d more %s connections to %s in the last %ds (reason: %s); every one is on the capsule's egress ledger",
-		st.suppressed, key.outcome, key.host, int(now.Sub(st.lastLog).Seconds()), st.lastReason)
-	st.suppressed = 0
+	sum := egressSummary{Kind: "summary", Host: key.host, Outcome: key.outcome, Reasons: st.suppressed, WindowMS: now.Sub(st.lastLog).Milliseconds()}
+	for _, n := range st.suppressed {
+		sum.Count += n
+	}
+	line, _ := json.Marshal(sum)
+	s.logf("capsule-egress: %s", line)
+	st.suppressed = map[string]int{}
 	st.lastLog = now
 }
 
-// Close logs any suppressed counts, flushes and closes the ledger file. It is
-// safe to call more than once.
+// Close logs any suppressed counts and closes the ledger file. It is safe to
+// call more than once.
 func (s *egressSink) Close() {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed {
-		s.mu.Unlock()
 		return
 	}
 	s.closed = true
 	now := s.now()
-	for key, st := range s.state {
-		if st.suppressed > 0 {
+	keys := make([]egressLogKey, 0, len(s.state))
+	for key := range s.state {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].host != keys[j].host {
+			return keys[i].host < keys[j].host
+		}
+		return keys[i].outcome < keys[j].outcome
+	})
+	for _, key := range keys {
+		if st := s.state[key]; len(st.suppressed) > 0 {
 			s.summaryLocked(key, st, now)
 		}
 	}
-	if s.w != nil {
-		_ = s.w.Flush()
-	}
 	if s.f != nil {
 		_ = s.f.Close()
+		s.f = nil
 	}
-	s.w, s.f = nil, nil
-	close(s.stop)
-	s.mu.Unlock()
-	<-s.stopped
 }

@@ -2,6 +2,7 @@ package capsule
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,13 @@ import (
 // guest. Ways the fix could fail, pinned below:
 //   - ledger records are lost (the ledger is evidence: one line per record,
 //     including after Close and under concurrent proxy goroutines);
-//   - the ledger file is left open after the capsule ends (Close must flush
-//     and close it) or is only flushed at Close (a crash would lose it);
+//   - the ledger file is left open after the capsule ends (Close must close
+//     it), or a record is not on disk when Record returns (a process stop
+//     would lose it; review 350);
+//   - a failed first open stops the ledger for the capsule's life, silently
+//     (review 350 F1: it must retry and say so once);
+//   - a summary mixes reasons under one label, or is not JSON, so a reader
+//     of capsule-egress lines cannot count (review 350 F2, F3);
 //   - the suppressed count is wrong, or the final count is not logged at Close;
 //   - a host never gets its first line (a second host must log at once, and
 //     a new reason on a known host too);
@@ -127,17 +133,13 @@ func TestEgressSinkSummaryAfterIntervalAndAtClose(t *testing.T) {
 	}
 }
 
-func TestEgressSinkLedgerFlushedWithinASecondAndClosed(t *testing.T) {
+func TestEgressSinkLedgerWrittenAtOnceAndClosed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cap1.jsonl")
 	var lc logCapture
 	s := newEgressSink(path, lc.logf, time.Now, 10*time.Second)
 	s.Record(refusedRecord("a.example"))
-	deadline := time.Now().Add(3 * time.Second)
-	for ledgerLinesQuiet(path) != 1 {
-		if time.Now().After(deadline) {
-			t.Fatal("record not on disk within 3s without Close")
-		}
-		time.Sleep(20 * time.Millisecond)
+	if got := ledgerLinesQuiet(path); got != 1 {
+		t.Fatalf("ledger has %d lines right after Record, want 1 (unbuffered)", got)
 	}
 	s.Close()
 	s.Close() // idempotent
@@ -171,5 +173,67 @@ func TestEgressSinkConcurrentRecords(t *testing.T) {
 	s.Close()
 	if got := ledgerLines(t, path); got != 4000 {
 		t.Fatalf("ledger has %d lines, want 4000", got)
+	}
+}
+
+func TestEgressSinkRetriesAFailedOpenAndSaysSoOnce(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "egress")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil { // a file where the directory must go
+		t.Fatal(err)
+	}
+	path := filepath.Join(blocker, "cap1.jsonl")
+	var lc logCapture
+	s := newEgressSink(path, lc.logf, time.Now, 10*time.Second)
+	defer s.Close()
+	s.Record(refusedRecord("a.example"))
+	s.Record(refusedRecord("a.example"))
+	notWritable := 0
+	for _, l := range lc.snapshot() {
+		if strings.Contains(l, "not writable") {
+			notWritable++
+		}
+	}
+	if notWritable != 1 {
+		t.Fatalf("open failure logged %d times, want once: %v", notWritable, lc.snapshot())
+	}
+	if err := os.Remove(blocker); err != nil {
+		t.Fatal(err)
+	}
+	s.Record(refusedRecord("a.example"))
+	if got := ledgerLines(t, path); got != 1 {
+		t.Fatalf("after the path became writable the ledger has %d lines, want 1 (the open is retried)", got)
+	}
+}
+
+func TestEgressSinkSummaryIsJSONWithPerReasonCounts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cap1.jsonl")
+	var lc logCapture
+	clk := &fakeClock{t: time.Unix(1000, 0)}
+	s := newEgressSink(path, lc.logf, clk.now, 10*time.Second)
+	a, b := refusedRecord("h.example"), refusedRecord("h.example")
+	b.Reason = "other reason"
+	s.Record(a) // first line for reason a
+	s.Record(b) // first line for reason b
+	for i := 0; i < 3; i++ {
+		s.Record(a)
+	}
+	for i := 0; i < 2; i++ {
+		s.Record(b)
+	}
+	s.Close()
+	lines := lc.snapshot()
+	if len(lines) != 3 {
+		t.Fatalf("want two first lines and one summary, got %v", lines)
+	}
+	var sum egressSummary
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[2], "capsule-egress: ")), &sum); err != nil {
+		t.Fatalf("summary is not JSON: %q: %v", lines[2], err)
+	}
+	if sum.Kind != "summary" || sum.Count != 5 || sum.Reasons[a.Reason] != 3 || sum.Reasons[b.Reason] != 2 || sum.Host != "h.example" {
+		t.Fatalf("summary = %+v, want count 5 split 3 and 2", sum)
+	}
+	if got := ledgerLines(t, path); got != 7 {
+		t.Fatalf("ledger has %d lines, want 7", got)
 	}
 }

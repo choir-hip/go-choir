@@ -194,9 +194,13 @@ pypi.org, registry.npmjs.org and github.com with 403, and no tunnel is judged.
    every check `"got":"pass"`; the `sni-mismatch` line shows `HTTP/1.1 200
    Connection Established | SSLCertVerificationError` (the tunnel was relayed
    and github.com answered with its own certificate); `"failures":0`.
-3. Read that capsule's egress ledger: either
-   `/mnt/persistent/capsule-artifacts/egress/<capsule>.jsonl` in the guest,
-   or the `capsule-egress:` lines in the guest log. Count verdicts per host:
+3. Read that capsule's egress ledger,
+   `/mnt/persistent/capsule-artifacts/egress/<capsule>.jsonl` in the guest.
+   (Since 2026-10-27 the `capsule-egress:` lines in the guest log are a
+   digest, the first record per host, outcome and reason plus JSON
+   `"kind":"summary"` counts, so they cannot be counted per connection;
+   docs/problems/capsule-frontend-build-hangs-b-c-runtime-2026-10-27.md H9.)
+   Count verdicts per host:
    `jq -s 'map(select(.method=="CONNECT")) | group_by(.host) | map({host:.[0].host, n:length, pass:(map(select(.tunnel_identity=="pass"))|length), would_refuse:(map(select(.tunnel_identity=="would_refuse"))|length)})'`.
    Expected on a computer with no mirror grant:
    - `would_refuse` 0 on every host except github.com (pypi.org,
