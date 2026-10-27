@@ -41,6 +41,10 @@ import (
 // output differs. An edit on main adjacent to a hunk conflicts and is "not
 // contained", the safe false negative (it lands as stack_base_moved).
 //
+// When the content says no, patch identity is asked (upstreamedByPatchID):
+// a verbatim promotion to main followed by an edit beside it is a conflict to
+// the merge but the same commit to git.
+//
 // An error means git failed, not "no".
 func Contained(ctx context.Context, repo, booted, base string, patch []byte, patchedTreeID string) (bool, error) {
 	touched, err := treeDiffPaths(ctx, repo, base, patchedTreeID, nil)
@@ -50,6 +54,15 @@ func Contained(ctx context.Context, repo, booted, base string, patch []byte, pat
 	if len(touched) == 0 {
 		return true, nil // a patch that changes nothing is in every base
 	}
+	in, err := containedByContent(ctx, repo, booted, base, patchedTreeID, touched)
+	if err != nil || in {
+		return in, err
+	}
+	return upstreamedByPatchID(ctx, repo, booted, base, patch, patchedTreeID, touched)
+}
+
+// containedByContent is the exact test, then the three-way test per path.
+func containedByContent(ctx context.Context, repo, booted, base, patchedTreeID string, touched []string) (bool, error) {
 	differing, err := treeDiffRaw(ctx, repo, patchedTreeID, booted, touched)
 	if err != nil {
 		return false, err
