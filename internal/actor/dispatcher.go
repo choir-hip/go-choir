@@ -133,6 +133,32 @@ type Dispatcher struct {
 	// that bounds the retries is durable.
 	heldUntil map[string]time.Time
 	jitter    func() float64
+	// slots is the shared cap now: opts.MaxConcurrent at start, changed live
+	// by SetSharedSlots. Guarded by mu.
+	slots int
+}
+
+// defaultSharedSlots is the shared cap when the options set none.
+const defaultSharedSlots = 8
+
+// SetSharedSlots changes the shared cap while the dispatcher runs (0 or less
+// is the default). A raise admits waiting work at once; a lower lets running
+// activations finish and admits new ones only below the new cap.
+func (d *Dispatcher) SetSharedSlots(n int) {
+	if n <= 0 {
+		n = defaultSharedSlots
+	}
+	d.mu.Lock()
+	d.slots = n
+	d.mu.Unlock()
+	d.Notify()
+}
+
+// SharedSlots is the shared cap now.
+func (d *Dispatcher) SharedSlots() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.slots
 }
 
 // activationWaitLogAfter is how long an activation's oldest due update may
@@ -218,7 +244,7 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 		opts.PollInterval = 250 * time.Millisecond
 	}
 	if opts.MaxConcurrent <= 0 {
-		opts.MaxConcurrent = 8
+		opts.MaxConcurrent = defaultSharedSlots
 	}
 	if opts.MaxDeferrals <= 0 {
 		opts.MaxDeferrals = 64
@@ -227,6 +253,7 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 		log:       log,
 		handler:   handler,
 		opts:      opts,
+		slots:     opts.MaxConcurrent,
 		running:   make(map[string]time.Time),
 		heldUntil: make(map[string]time.Time),
 		jitter:    rand.Float64,
@@ -431,7 +458,7 @@ func (d *Dispatcher) runningInLocked(lane int) int {
 // free slot. Callers hold d.mu.
 func (d *Dispatcher) hasRoomLocked(agentID string) bool {
 	lane := d.laneOf(agentID)
-	limit := d.opts.MaxConcurrent
+	limit := d.slots
 	if lane >= 0 {
 		limit = max(d.opts.Lanes[lane].MaxConcurrent, 1)
 	}
@@ -686,11 +713,11 @@ func (d *Dispatcher) logActivationWait(agentID string, pending []Update) {
 		return
 	}
 	lane := d.laneOf(agentID)
-	limit := d.opts.MaxConcurrent
+	d.mu.Lock()
+	limit := d.slots
 	if lane >= 0 {
 		limit = max(d.opts.Lanes[lane].MaxConcurrent, 1)
 	}
-	d.mu.Lock()
 	slots, due := d.runningInLocked(lane), d.dueAgents
 	d.mu.Unlock()
 	log.Printf("dispatcher: activation wait agent=%s waited=%s updates=%d slots=%d/%d due_agents=%d", actorLogName(agentID), now.Sub(oldest).Round(time.Second), len(pending), slots, limit, due)

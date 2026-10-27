@@ -148,6 +148,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	rt.SetDispatchActorRedrive(a.dispatchRedrive)
 	rt.SetScheduleActorRedrive(a.scheduleRedrive)
 	rt.SetActorObligationsReader(a.actorObligations)
+	rt.SetSharedSlotsActor(a.actorRT.SetSharedSlots)
 
 	return a
 }

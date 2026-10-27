@@ -140,6 +140,15 @@ func (rt *Runtime) InFlightActivations() map[string]time.Time {
 	return rt.kernel.InFlight()
 }
 
+// SetSharedSlots changes the dispatcher's shared cap live (see
+// Dispatcher.SetSharedSlots).
+func (rt *Runtime) SetSharedSlots(n int) {
+	if rt == nil || rt.kernel == nil {
+		return
+	}
+	rt.kernel.SetSharedSlots(n)
+}
+
 // StartKernel launches the dispatcher loop. The pending projection is the
 // recovery rule, so no separate boot scan is needed. Call once after
 // NewKernelRuntime.
