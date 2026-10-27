@@ -796,13 +796,11 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 	appender.SetReplayMode(false)
 	if err == nil {
 		// Replay deposits are upcast to V2 at deposit time (versioned
-		// projection-deposit upcast); MigrateAndFence verifies/fences (and
-		// migrates retained V1 rows) before the health gate opens or the
-		// runtime serves. Runs on the replay-only host drive too so the
-		// materialized store is V2 before the guest takes over. A boot that
-		// replayed zero events over a previously fenced store skips the
-		// rescan; the gate heartbeat keeps the host stall detector alive
-		// while scans run.
+		// projection-deposit upcast); FenceServingVocabularyAtBoot checks the
+		// rows this boot replayed (an unfenced store takes the one-time
+		// migration) before the health gate opens or the runtime serves. A
+		// fenced store never pays the whole-store pass here (station V); the
+		// gate heartbeat keeps the host stall detector alive while checks run.
 		// replayed means rows were actually applied this boot — not that the
 		// local head sits at a nonzero sequence. Sequence>0 conflates the
 		// head position with the delta (docs/problems/s0-vocab-rescan-fires-

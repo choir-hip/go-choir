@@ -40,11 +40,11 @@ type MigrationReport struct {
 	// skip the rescan: replay is the only unguarded writer, and the write
 	// guard has refused non-V2 rows since the report existed.
 	FencedAt string `json:"fenced_at,omitempty"`
-	// ReplayOpenedAt marks that replay wrote this fenced store after the
-	// fence. It is persisted before the first replayed deposit commits and
-	// cleared only when the fence is stamped again, so a replay that spans
-	// processes (resume quantum, crash) is never trusted on the fast path
-	// (problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md).
+	// ReplayOpenedAt is a legacy field: builds before station V persisted it
+	// at the first replayed deposit and sent every later boot to the
+	// whole-store pass. Nothing sets it now; a boot clears it on sight. A
+	// rebuild that spans processes distrusts the fence instead
+	// (DistrustVocabularyFence).
 	ReplayOpenedAt string `json:"replay_opened_at,omitempty"`
 	// OGObjects records every migrated og_objects row for INV-PROV revert:
 	// the original canonical ID plus every changed leaf's original value.
@@ -264,6 +264,10 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 		mergeVocabReports(prior, rep)
 		rep = prior
 	}
+	// The fence stamp is earned only after verify below: a kill between this
+	// persist and that stamp must leave an unfenced report, or a resumed
+	// rebuild would narrow over a half-applied pass (review 361, finding 2).
+	rep.FencedAt = ""
 	if depositLedger != nil {
 		rep.DepositUpcastVersion = depositLedger.Version
 		rep.DepositUpcastAliases = len(depositLedger.Objects) + len(depositLedger.Edges)
@@ -309,19 +313,27 @@ func (s *Store) FenceServingVocabularyAtBoot(ctx context.Context, replayed bool,
 		return s.MigrateAndFenceServingVocabulary(ctx, replayed, progress)
 	}
 	stale := prior.ReplayOpenedAt != ""
+	if stale {
+		// An older build's marker is cleared, not obeyed.
+		log.Printf("vocab fence: clearing an older build's replay marker (%s); report aliases %d", prior.ReplayOpenedAt, prior.DepositUpcastAliases)
+		prior.ReplayOpenedAt = ""
+	}
+	restamp := false
 	if replayed {
 		stays, err := s.vocabReplayStaysFenced(ctx, prior, progress)
 		if err != nil {
 			return nil, err
 		}
-		if !stays {
-			log.Printf("vocab fence: this boot's replayed rows are not all provably at the V2 fixpoint; serving without the whole-store pass (a rebuild migrates them)")
+		if stays {
+			restamp = true
+			prior.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		} else {
+			// The stamp keeps its date: nothing verified this replay.
+			finalized, objects, edges, overflow := s.vocabReplay.counts()
+			log.Printf("vocab fence: this boot's replayed rows are not all provably at the V2 fixpoint (events %d, objects %d, edges %d, overflow %t); serving without the whole-store pass (a rebuild migrates them)", finalized, objects, edges, overflow)
 		}
-		prior.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	if replayed || stale {
-		// An older build's marker is cleared, not obeyed.
-		prior.ReplayOpenedAt = ""
+	if stale || restamp {
 		if err := s.persistVocabMigrationReport(prior); err != nil {
 			return nil, err
 		}
@@ -329,6 +341,19 @@ func (s *Store) FenceServingVocabularyAtBoot(ctx context.Context, replayed bool,
 	s.vocabReplay.reset()
 	s.vocabCutover.Store(true)
 	return prior, nil
+}
+
+// DistrustVocabularyFence clears the fence stamp so the next
+// MigrateAndFenceServingVocabulary takes the full pass. A rebuild resumed from
+// a durable scratch calls it: an earlier process replayed rows this process's
+// narrowed check never sees (review 361, finding 1).
+func (s *Store) DistrustVocabularyFence() error {
+	prior, err := s.loadVocabMigrationReport()
+	if err != nil || prior == nil || prior.FencedAt == "" {
+		return err
+	}
+	prior.FencedAt = ""
+	return s.persistVocabMigrationReport(prior)
 }
 
 // mergeVocabReports folds a fresh migration report into the persisted one.

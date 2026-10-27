@@ -122,3 +122,45 @@ func TestBootVocabFenceMigratesAnUnfencedStore(t *testing.T) {
 		t.Fatal("the V1 agent was not renamed")
 	}
 }
+
+// A rebuild resumed from a durable scratch (projectionbase rebuilder) runs in
+// a second process over rows an earlier process replayed and never fenced.
+// The narrowed check sees only this process's rows, so the rebuilder distrusts
+// the fence first and the full pass migrates the earlier rows (review 361,
+// finding 1; reproduction by the DeepSeek seat).
+func TestResumedRebuildDistrustsTheFenceAndMigratesAnEarlierProcessReplay(t *testing.T) {
+	at := time.Date(2026, 10, 16, 16, 0, 0, 0, time.UTC)
+	agentV1 := vocabUpcastAgentID(t, "super:root")
+	base := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastAgentObject(t, "super:root", "super", "a", false, at, at))}
+	unproven := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastEventObject(t, agentV1, "management", at.Add(time.Hour)))}
+	clean := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastAgentObject(t, "management:tail", "management", "running", false, at, at))}
+	tape := vocabReplayFenceTape(t, base, unproven, clean)
+	path := vocabUpcastStorePath(t, "resumed-rebuild")
+	vocabReplayFenceCutOver(t, path, tape)
+
+	p1 := vocabReplayFenceReopen(t, path)
+	vocabUpcastApplyTapeEvent(t, p1, tape[2])
+	if !strings.Contains(vocabReplayFenceBodies(t, p1), agentV1) {
+		t.Fatal("fixture: the upcast already rewrote the cutover-renamed reference")
+	}
+	if err := p1.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s := vocabReplayFenceReopen(t, path)
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.DistrustVocabularyFence(); err != nil {
+		t.Fatalf("distrust: %v", err)
+	}
+	vocabUpcastApplyTapeEvent(t, s, tape[3])
+	rep, ticks := vocabReplayFenceRun(t, s, true)
+	if ticks < vocabReplayFenceTicksFull {
+		t.Fatalf("full pass skipped (%d ticks < %d)", ticks, vocabReplayFenceTicksFull)
+	}
+	if strings.Contains(vocabReplayFenceBodies(t, s), agentV1) {
+		t.Fatal("the earlier process's V1 reference survived the rebuild")
+	}
+	if rep.FencedAt == "" || vocabReplayFenceOnDisk(t, s).FencedAt == "" {
+		t.Fatal("the full pass did not fence the store")
+	}
+}

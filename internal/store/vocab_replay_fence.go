@@ -67,6 +67,13 @@ type eventTablePosition struct {
 	opIndex int
 }
 
+// counts reports this process's replay record for the boot's log line.
+func (t *vocabReplayTrack) counts() (finalized, objects, edges int, overflow bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.finalized, len(t.objects), len(t.edges), t.overflow
+}
+
 func (t *vocabReplayTrack) reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -135,7 +142,8 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, seq
 // leave a fenced store fenced: none would change under the migration plan
 // (no leaf migrates, no reference, column or endpoint names a renamed ID, the
 // upcast renamed nothing) and their role fields pass the serving fence.
-// false means the full pass must decide; it is never a refusal.
+// false sends a rebuild to the full pass and a boot to a log line; it is
+// never a refusal.
 func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationReport, progress func()) (bool, error) {
 	t := &s.vocabReplay
 	t.mu.Lock()
