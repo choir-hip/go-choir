@@ -24,8 +24,7 @@ type rollbackStub struct {
 	// routeGeneration is the listing's route_generation (0 omits it, as a
 	// guest whose route does not resolve does).
 	routeGeneration uint64
-	// settled is what GET /operations?state=applied&state=degraded&state=failed&state=rolled_back
-	// lists, authored in ascending created_at order.
+	// settled is what GET /operations (unfiltered) lists, authored in ascending created_at order.
 	settled []map[string]any
 	// inflight is what GET /operations?state=rollback_pending lists.
 	inflight []map[string]any
@@ -60,7 +59,7 @@ func (s *rollbackStub) serve(w http.ResponseWriter, r *http.Request) {
 			listing["route_generation"] = s.routeGeneration
 		}
 		_ = json.NewEncoder(w).Encode(listing)
-	case key == "GET /operations?state=applied&state=degraded&state=failed&state=rolled_back":
+	case key == "GET /operations":
 		// The real listing is newest-created first; tests author ascending.
 		newest := make([]map[string]any, len(s.settled))
 		for i, op := range s.settled {
@@ -442,6 +441,18 @@ func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 			o[1]["updated_at"] = "2026-10-26T12:00:05Z"
 			return o
 		},
+		"materializing since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "materializing", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
+		"accepted since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "accepted", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
+		"rollback pending since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("rollback-1", "rollback_pending", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", rhex("a")))
+		},
+		"awaiting approval since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "awaiting_approval", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
 		"unparseable time": func(o []map[string]any) []map[string]any { o[1]["updated_at"] = "soon"; return o },
 	} {
 		stub.settled = mutate(base())
@@ -458,6 +469,35 @@ func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 // "…:00Z" sorts after "…:00.5Z" as a string but is the earlier instant, so a
 // string comparison would call the older operation a late write and disarm
 // the refusal.
+// A rejected operation never moves the head: it does not disarm the refusal.
+func TestSelfDevRollbackRejectedOperationsDoNotDisarmTheRefusal(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	stub.settled = []map[string]any{
+		lop("op-old", "applied", "2026-10-26T10:00:00Z", "2026-10-26T10:05:00Z", ""),
+		lop("rollback-0", "rolled_back", "2026-10-26T12:00:00Z", "2026-10-26T12:00:10Z", rhex("a")),
+		lop("op-no", "rejected", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""),
+	}
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code == 0 || !strings.Contains(stderr, "already rolled back") {
+		t.Fatalf("code=%d stderr=%q, want the refusal", code, stderr)
+	}
+}
+
+// A landed operation whose created_at cannot be parsed cannot be ordered; it
+// anchors the key (so the key rotates rather than naming its predecessor).
+func TestSelfDevRollbackUnparseableCreatedAtAnchorsTheKey(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	stub.settled = []map[string]any{
+		lop("op-old", "applied", "2026-10-26T10:00:00Z", "2026-10-26T10:05:00Z", ""),
+		lop("op-odd", "applied", "garbage", "2026-10-26T11:05:00Z", ""),
+	}
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if k := stub.postedKey(0); !strings.Contains(k, "op-odd") {
+		t.Fatalf("key %q does not name the unorderable newest-landed op-odd", k)
+	}
+}
+
 func TestSelfDevRollbackComparesTimesAsInstants(t *testing.T) {
 	stub, server := newRollbackStub(t)
 	stub.settled = []map[string]any{
@@ -487,7 +527,7 @@ func TestSelfDevRollbackHelpSaysHowToRetryAfterAFailure(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	run([]string{"self-dev", "rollback", "--help"}, &stdout, &stderr)
 	help := stdout.String() + stderr.String()
-	if !strings.Contains(help, "fresh --idempotency-key") {
-		t.Fatalf("help does not tell the caller to pass a fresh --idempotency-key after a failed rollback:\n%s", help)
+	if !strings.Contains(help, "rotates after a failed rollback") || strings.Contains(help, "replays a failed rollback") || strings.Contains(help, "fresh --idempotency-key") {
+		t.Fatalf("help must say the default key rotates after a failed rollback, not that it replays it:\n%s", help)
 	}
 }
