@@ -126,8 +126,8 @@ func TestVocabReplayFenceChecksOnlyReplayedRows(t *testing.T) {
 	s := vocabReplayFenceReopen(t, path)
 	t.Cleanup(func() { _ = s.Close() })
 	vocabUpcastApplyTapeEvent(t, s, tape[2])
-	if vocabReplayFenceOnDisk(t, s).ReplayOpenedAt == "" {
-		t.Fatal("a replayed deposit committed without durably opening the fenced report")
+	if vocabReplayFenceOnDisk(t, s).ReplayOpenedAt != "" {
+		t.Fatal("a replayed deposit wrote a durable marker (station V deleted it)")
 	}
 	rep, ticks := vocabReplayFenceRun(t, s, true)
 	if ticks >= vocabReplayFenceTicksFull {
@@ -201,41 +201,9 @@ func TestVocabReplayFenceFallsBackWhenReplayRenames(t *testing.T) {
 	}
 }
 
-func TestVocabReplayFenceDistrustsAReplayFromAnotherProcess(t *testing.T) {
-	at := time.Date(2026, 10, 16, 16, 0, 0, 0, time.UTC)
-	tail := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastAgentObject(t, "management:tail", "management", "running", false, at, at))}
-	tape := vocabReplayFenceTape(t, nil, tail)
-	path := vocabUpcastStorePath(t, "crash")
-	vocabReplayFenceCutOver(t, path, tape)
-
-	// Process 2 replays the tail and stops before the fence (a crash, or the
-	// end of a resume quantum).
-	crashed := vocabReplayFenceReopen(t, path)
-	vocabUpcastApplyTapeEvent(t, crashed, tape[2])
-	if err := crashed.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Process 3 applies nothing; the rows process 2 wrote were never checked.
-	s := vocabReplayFenceReopen(t, path)
-	_, ticks := vocabReplayFenceRun(t, s, false)
-	if ticks < vocabReplayFenceTicksFull {
-		t.Fatalf("a replay opened by another process was trusted on the fast path (%d ticks)", ticks)
-	}
-	if vocabReplayFenceOnDisk(t, s).ReplayOpenedAt != "" {
-		t.Fatal("the full fence left the replay marker set")
-	}
-	if err := s.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Process 4: fenced, nothing replayed since, so the fast path holds again.
-	again := vocabReplayFenceReopen(t, path)
-	t.Cleanup(func() { _ = again.Close() })
-	if _, ticks := vocabReplayFenceRun(t, again, false); ticks != 0 {
-		t.Fatalf("a clean fenced store paid a pass (%d ticks)", ticks)
-	}
-}
+// TestVocabReplayFenceDistrustsAReplayFromAnotherProcess pinned the durable
+// marker that sent an earlier process's replay to the full pass; station V
+// deleted it (vocab_boot_fence_test.go pins the boot without it).
 
 // An alias can reach the durable upcast ledger without a replay marker: a
 // process that crashed between recording the alias and marking the report,

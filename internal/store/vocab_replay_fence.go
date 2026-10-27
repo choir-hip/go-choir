@@ -13,11 +13,14 @@ package store
 // is still fenced. Anything the narrowed check cannot prove falls back to the
 // full pass.
 //
-// The first replayed deposit on a fenced store durably marks the report
-// (ReplayOpenedAt) before it commits. Only the process that set the marker
-// may take the narrowed path, so rows a crashed or resumed earlier process
-// replayed are always re-checked by the full pass, on a replaying boot and on
-// a zero-replay boot alike.
+// A boot never falls back to the full pass on a fenced store (station V,
+// docs/definitions/choir-v-boot-vocab-pass-removal-2026-10-27.md): what the
+// narrowed check cannot prove is logged and served, with the write guard
+// armed. Rebuilds (projectionbase, rematerialize) keep the fallback. The
+// durable replay marker (ReplayOpenedAt) is gone: an earlier process's
+// replay, which the marker used to send to the full pass, held the paper in
+// an OOM boot loop on 2026-10-27. The field stays in the report so an older
+// build reads it; nothing sets it.
 //
 // Rows written live since the fence are trusted exactly as the zero-replay
 // fast path trusts them: the write guard checked their role fields.
@@ -30,7 +33,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -46,10 +48,9 @@ type vocabReplayTrack struct {
 	mu sync.Mutex
 	// finalized counts replayed events this store finalized.
 	finalized int
-	// opened: this process marked the fenced report. foreign: the report
-	// already carried a marker from another process. unfenced: the store had
-	// no fenced report when replay began.
-	opened, foreign, unfenced bool
+	// opened: this process replayed onto a fenced report. unfenced: the
+	// store had no fenced report when replay began.
+	opened, unfenced bool
 	// overflow: more IDs than vocabReplayTrackLimit; the sets were dropped.
 	overflow bool
 	objects  map[string]struct{}
@@ -70,14 +71,14 @@ func (t *vocabReplayTrack) reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.finalized = 0
-	t.opened, t.foreign, t.unfenced, t.overflow = false, false, false, false
+	t.opened, t.unfenced, t.overflow = false, false, false
 	t.objects, t.edges, t.stamped = nil, nil, nil
 }
 
 // noteVocabReplayDeposit records one replayed event's deposit after the
-// upcast and before it commits. The first call in a process marks a fenced
-// report durably, so a crash after the commit leaves the marker behind.
-// sequence is the event's tape position, which keys a stamped op's row.
+// upcast and before it commits, in memory: the boot fence of this process
+// checks those rows. sequence is the event's tape position, which keys a
+// stamped op's row.
 func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, sequence uint64) error {
 	t := &s.vocabReplay
 	t.mu.Lock()
@@ -87,16 +88,9 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, seq
 		if err != nil {
 			return err
 		}
-		switch {
-		case rep == nil || rep.FencedAt == "":
+		if rep == nil || rep.FencedAt == "" {
 			t.unfenced = true
-		case rep.ReplayOpenedAt != "":
-			t.foreign = true
-		default:
-			rep.ReplayOpenedAt = time.Now().UTC().Format(time.RFC3339Nano)
-			if err := s.persistVocabMigrationReport(rep); err != nil {
-				return err
-			}
+		} else {
 			t.opened = true
 		}
 	}
@@ -145,7 +139,7 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, seq
 func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationReport, progress func()) (bool, error) {
 	t := &s.vocabReplay
 	t.mu.Lock()
-	ok := t.opened && !t.foreign && !t.unfenced && !t.overflow && t.finalized > 0
+	ok := t.opened && !t.unfenced && !t.overflow && t.finalized > 0
 	objects := make([]string, 0, len(t.objects))
 	for id := range t.objects {
 		objects = append(objects, id)
@@ -159,7 +153,7 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 		stamped = append(stamped, pos)
 	}
 	t.mu.Unlock()
-	if !ok || prior == nil || prior.FencedAt == "" || prior.ReplayOpenedAt == "" {
+	if !ok || prior == nil || prior.FencedAt == "" {
 		return false, nil
 	}
 	if s.depositUpcastAliasesAdded() > 0 {

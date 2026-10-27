@@ -737,7 +737,7 @@ func Run() {
 		// Vocabulary cutover: migrate any retained V1 rows and hold the
 		// serving fence closed before the runtime starts serving authority.
 		doneVocab := objectgraph.BootPhase("autoputer: startup", "vocabulary-migration")
-		_, vocabErr := db.MigrateAndFenceServingVocabulary(ctx, false, nil)
+		_, vocabErr := db.FenceServingVocabularyAtBoot(ctx, false, nil)
 		doneVocab(vocabErr)
 		if vocabErr != nil {
 			boot.fatalf("autoputer: vocabulary migration refused: %v", vocabErr)
@@ -811,7 +811,7 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 		replayed := appender.ReplaySnapshot().AppliedRows > 0
 		bootMark("reconstruct_done") // raw tape apply complete
 		doneVocab := objectgraph.BootPhase("autoputer: startup", "vocabulary-migration")
-		_, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick)
+		_, migErr := db.FenceServingVocabularyAtBoot(bootstrapCtx, replayed, gate.tick)
 		doneVocab(migErr)
 		if migErr != nil {
 			boot.fatalf("autoputer: vocabulary migration refused: %v", migErr)
