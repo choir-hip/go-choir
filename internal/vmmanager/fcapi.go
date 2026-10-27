@@ -124,6 +124,16 @@ func (c *fcAPIClient) Resume(ctx context.Context) error {
 	return c.do(ctx, http.MethodPatch, "/vm", map[string]string{"state": "Resumed"})
 }
 
+// State reads the VM's state from GET / (swagger InstanceInfo.state:
+// "Not started", "Running" or "Paused").
+func (c *fcAPIClient) State(ctx context.Context) (string, error) {
+	var info struct {
+		State string `json:"state"`
+	}
+	err := c.doJSON(ctx, http.MethodGet, "/", nil, &info)
+	return info.State, err
+}
+
 // CreateFullSnapshot writes the VM state and the full guest memory. The VM
 // must be paused.
 func (c *fcAPIClient) CreateFullSnapshot(ctx context.Context, statePath, memPath string) error {

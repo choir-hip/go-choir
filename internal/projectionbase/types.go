@@ -144,19 +144,66 @@ type Descriptor struct {
 	VocabularyVersion     string                                `json:"vocabulary_version"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	CreatedAt             time.Time                             `json:"created_at"`
-	// Origin is how the base's state was made: empty for a replay of the
-	// tape (every base before S2), OriginLiveCaptured for a capture of a
-	// running computer's store and every base replayed on top of one.
+	// Origin is how the base's state was made: empty for a replay (from
+	// genesis or from a seed), OriginLiveCaptured for a capture of a running
+	// computer's store, which is an epoch root.
 	Origin string `json:"origin,omitempty"`
+	// EpochRoot names the captured base a replayed base descends from, when
+	// it does: derivability is measured from that root, and the tape below
+	// it is never replayed again.
+	EpochRoot *EpochRootRef `json:"epoch_root,omitempty"`
 }
 
-// OriginLiveCaptured marks a base whose state was captured from a running
-// computer's data image rather than rebuilt from the tape (S2 of
-// docs/problems/paper-never-checkpointed-2026-10-27.md). Its head is checked
-// against the tape and its witness is of its own bytes, but nothing proves
-// the tape derives that state: its witness is a live witness. Every base
-// seeded from it inherits the mark, until a genesis repair.
+// OriginLiveCaptured marks an epoch root: a base whose state was captured
+// from a running computer's data image rather than rebuilt from the tape (S2
+// of docs/problems/paper-never-checkpointed-2026-10-27.md). Its head is
+// checked against the tape and its witness is of its own bytes. The owner
+// made it the definition of state at its sequence (2026-10-27: "maybe we
+// lose some event log data and restart it from here"): bases replayed from
+// it are ordinary derived bases that record it (EpochRoot), and nothing
+// replays the tape below it. The prefix is not deleted.
 const OriginLiveCaptured = "live_captured"
+
+// liveCapturedVocabularySuffix is appended to an epoch root's vocabulary
+// version. A build from before S2 ignores the origin field (ParseDescriptor
+// allows unknown fields) and refuses any vocabulary outside {v1, v2}, so the
+// suffix makes it fail closed on a root instead of reading it as a replay of
+// the tape (review 364).
+const liveCapturedVocabularySuffix = "+" + OriginLiveCaptured
+
+// EpochRootRef names an epoch root: its blob and the sequence it is at.
+type EpochRootRef struct {
+	BaseRef  string `json:"base_ref"`
+	Sequence uint64 `json:"sequence"`
+}
+
+// VocabularyVersionFor is the vocabulary version a base of this origin is
+// published under.
+func VocabularyVersionFor(origin string) string {
+	if origin == OriginLiveCaptured {
+		return CurrentVocabularyVersion + liveCapturedVocabularySuffix
+	}
+	return CurrentVocabularyVersion
+}
+
+// EffectiveVocabularyVersion is the protocol vocabulary the base speaks,
+// without an epoch root's suffix.
+func (d Descriptor) EffectiveVocabularyVersion() string {
+	return strings.TrimSuffix(strings.TrimSpace(d.VocabularyVersion), liveCapturedVocabularySuffix)
+}
+
+// EpochFloor is the sequence below which no replay onto this base's line may
+// start: the root's own sequence for an epoch root, the recorded root's for
+// its descendants, zero otherwise.
+func (d Descriptor) EpochFloor() uint64 {
+	if d.Origin == OriginLiveCaptured {
+		return d.Sequence
+	}
+	if d.EpochRoot != nil {
+		return d.EpochRoot.Sequence
+	}
+	return 0
+}
 
 // Validate verifies the integrity of the descriptor. A missing or unknown
 // vocabulary version refuses: pre-seam bases are uninstallable, not legacy.
@@ -185,14 +232,26 @@ func (d Descriptor) Validate() error {
 	if strings.TrimSpace(d.VocabularyVersion) == "" {
 		return fmt.Errorf("descriptor: vocabulary version is required")
 	}
-	if !IsKnownVocabularyVersion(d.VocabularyVersion) {
+	if d.Origin != "" && d.Origin != OriginLiveCaptured {
+		return fmt.Errorf("descriptor: unknown origin %q", d.Origin)
+	}
+	// The root's mark and its vocabulary suffix agree both ways.
+	if tagged := strings.HasSuffix(strings.TrimSpace(d.VocabularyVersion), liveCapturedVocabularySuffix); tagged != (d.Origin == OriginLiveCaptured) {
+		return fmt.Errorf("descriptor: vocabulary version %q does not match origin %q", d.VocabularyVersion, d.Origin)
+	}
+	if !IsKnownVocabularyVersion(d.EffectiveVocabularyVersion()) {
 		return fmt.Errorf("descriptor: unknown vocabulary version %q", d.VocabularyVersion)
 	}
 	if err := d.VMLocalContentWitness.Validate(); err != nil {
 		return fmt.Errorf("descriptor: %w", err)
 	}
-	if d.Origin != "" && d.Origin != OriginLiveCaptured {
-		return fmt.Errorf("descriptor: unknown origin %q", d.Origin)
+	if d.EpochRoot != nil {
+		if d.Origin == OriginLiveCaptured {
+			return fmt.Errorf("descriptor: an epoch root records no root of its own")
+		}
+		if !computerevent.IsSHA256(d.EpochRoot.BaseRef) || d.EpochRoot.Sequence == 0 || d.EpochRoot.Sequence > d.Sequence {
+			return fmt.Errorf("descriptor: invalid epoch root %+v", *d.EpochRoot)
+		}
 	}
 	return nil
 }

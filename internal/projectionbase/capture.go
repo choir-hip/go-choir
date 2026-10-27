@@ -3,6 +3,7 @@ package projectionbase
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,8 +25,9 @@ import (
 // What is checked: the store opens, its head is the tape's event at that
 // sequence (so the base is at a head the tape has), and the published blob
 // re-verifies like every base (digest, head, witness of its own bytes). What
-// is not: that the tape derives the state. The base is marked
-// OriginLiveCaptured so nothing downstream reads its witness as a rebuild's.
+// is not: that the tape derives the state. It does not need to: the base is
+// an epoch root (OriginLiveCaptured), the definition of state at its
+// sequence, and derivability is measured from it (owner, 2026-10-27).
 
 // captureStagingDirName is where the store is moved on the capture before it
 // is packed, so the blob holds the store and nothing else from the guest.
@@ -45,6 +47,10 @@ type CaptureConfig struct {
 	// MinFreeBytes is the free space the artifacts filesystem must keep
 	// after each large write (compaction, blob, read-back).
 	MinFreeBytes uint64
+	// CaptureFS is a path on the filesystem that holds the capture image
+	// (empty: not checked). Compaction inside the mounted image diverges
+	// the reflink there; it keeps MinFreeBytes too.
+	CaptureFS string
 	// FreeBytes reads free space (nil: statfs).
 	FreeBytes func(path string) (uint64, error)
 }
@@ -62,11 +68,8 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 	}
 	marker := filepath.Clean(cfg.StoreMarker)
 	workspace := choirstore.TextureWorkspacePath(marker)
-	if info, err := os.Stat(marker); err != nil || info.IsDir() {
-		return nil, fmt.Errorf("%w: captured store marker %s: %v", ErrBaseRefused, marker, err)
-	}
-	if info, err := os.Stat(workspace); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("%w: captured store workspace %s: %v", ErrBaseRefused, workspace, err)
+	if err := checkCapturedStoreTree(marker, workspace); err != nil {
+		return nil, err
 	}
 
 	// Move the store alone into a staging directory under the names a base
@@ -98,7 +101,20 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 	if err != nil {
 		return nil, err
 	}
-	if err := cfg.room(uint64(workspaceBytes(stagedWorkspace))); err != nil {
+	// Compaction writes up to the store's size again: inside the mounted
+	// image (bounded by its own free space), onto the capture's filesystem
+	// (the reflink diverges as it does), and the blob and its read-back
+	// follow on the artifacts filesystem (review 364).
+	storeBytes := uint64(workspaceBytes(stagedWorkspace))
+	if err := cfg.roomOn(staging, "the capture image", storeBytes, 0); err != nil {
+		return nil, err
+	}
+	if cfg.CaptureFS != "" {
+		if err := cfg.roomOn(cfg.CaptureFS, "the capture's filesystem", storeBytes, cfg.MinFreeBytes); err != nil {
+			return nil, err
+		}
+	}
+	if err := cfg.room(storeBytes); err != nil {
 		return nil, err
 	}
 	compacted, err := CompactWorkspace(ctx, cfg.ComputerID, head.CanonicalEventHead, stagedWorkspace)
@@ -134,7 +150,7 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 		BlobSizeBytes:         blobSize,
 		ReducerVersion:        head.ReducerVersion,
 		SchemaVersion:         int(computerevent.SchemaVersionV1),
-		VocabularyVersion:     CurrentVocabularyVersion,
+		VocabularyVersion:     VocabularyVersionFor(OriginLiveCaptured),
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 		Origin:                OriginLiveCaptured,
@@ -204,15 +220,49 @@ func settleCapturedStore(ctx context.Context, cfg CaptureConfig, marker string) 
 	return head, nil
 }
 
+// checkCapturedStoreTree refuses a store tree the host should not open. The
+// tree is the guest's: before anything opens, stages or packs it, the
+// marker must be a regular file and the workspace a real directory (neither
+// a symlink, nor under one), and nothing under the workspace may be a
+// symlink, device, fifo or socket (review 364). The mount itself is
+// nosuid,nodev,noexec (checkpointd capture-base).
+func checkCapturedStoreTree(marker, workspace string) error {
+	parent := filepath.Dir(marker)
+	if info, err := os.Lstat(parent); err != nil || !info.IsDir() {
+		return fmt.Errorf("%w: captured store directory %s is not a directory: %v", ErrBaseRefused, parent, err)
+	}
+	if info, err := os.Lstat(marker); err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: captured store marker %s is not a regular file: %v", ErrBaseRefused, marker, err)
+	}
+	if info, err := os.Lstat(workspace); err != nil || !info.IsDir() {
+		return fmt.Errorf("%w: captured store workspace %s is not a directory: %v", ErrBaseRefused, workspace, err)
+	}
+	return filepath.WalkDir(workspace, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("%w: walk captured store: %v", ErrBaseRefused, err)
+		}
+		if t := entry.Type(); !entry.IsDir() && !t.IsRegular() {
+			return fmt.Errorf("%w: captured store holds %s, which is not a file or directory (%s)", ErrBaseRefused, path, t)
+		}
+		return nil
+	})
+}
+
 // room refuses a write of need bytes that would leave the artifacts
 // filesystem below the floor.
 func (cfg CaptureConfig) room(need uint64) error {
-	free, err := cfg.FreeBytes(cfg.ArtifactsRoot)
+	return cfg.roomOn(cfg.ArtifactsRoot, "the artifacts filesystem", need, cfg.MinFreeBytes)
+}
+
+// roomOn refuses a write of need bytes that would leave path's filesystem
+// below floor.
+func (cfg CaptureConfig) roomOn(path, what string, need, floor uint64) error {
+	free, err := cfg.FreeBytes(path)
 	if err != nil {
-		return fmt.Errorf("capture: read free space: %w", err)
+		return fmt.Errorf("capture: read free space of %s: %w", what, err)
 	}
-	if free < need+cfg.MinFreeBytes {
-		return fmt.Errorf("%w: capture needs %d bytes with a %d-byte floor, %d free", ErrBaseRefused, need, cfg.MinFreeBytes, free)
+	if free < need+floor {
+		return fmt.Errorf("%w: capture needs %d bytes on %s with a %d-byte floor, %d free", ErrBaseRefused, need, what, floor, free)
 	}
 	return nil
 }

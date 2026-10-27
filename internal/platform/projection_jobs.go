@@ -52,6 +52,12 @@ CREATE TABLE IF NOT EXISTS computer_projection_bases (
  created_at DATETIME(6) NOT NULL,
  PRIMARY KEY(computer_id,base_ref)
 );
+CREATE TABLE IF NOT EXISTS computer_projection_epoch_roots (
+ computer_id VARCHAR(128) PRIMARY KEY,
+ base_ref VARCHAR(255) NOT NULL,
+ sequence BIGINT UNSIGNED NOT NULL,
+ created_at DATETIME(6) NOT NULL
+);
 CREATE TABLE IF NOT EXISTS computer_projection_base_pins (
  computer_id VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
@@ -243,6 +249,25 @@ func baseQuarantined(ctx context.Context, q singleRowQuerier, computerID, baseRe
 	return n >= baseQuarantineRefusals, err
 }
 
+// EpochRoot returns the computer's epoch root (its base and sequence), or
+// an empty ref when it has none.
+func (s *Store) EpochRoot(ctx context.Context, computerID string) (string, uint64, error) {
+	if s == nil || s.db == nil || !safeFileCASComponent(computerID) {
+		return "", 0, fmt.Errorf("epoch root: computer ID is required")
+	}
+	return epochRoot(ctx, s.db, computerID)
+}
+
+func epochRoot(ctx context.Context, q singleRowQuerier, computerID string) (string, uint64, error) {
+	var ref string
+	var seq uint64
+	err := q.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_epoch_roots WHERE computer_id=?`, computerID).Scan(&ref, &seq)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, nil
+	}
+	return ref, seq, err
+}
+
 func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool) (ProjectionJob, error) {
 	return s.enqueueProjectionJob(ctx, computerID, reason, genesisRepair, nil)
 }
@@ -286,28 +311,46 @@ func (s *Store) enqueueProjectionJobAtBuild(ctx context.Context, computerID, rea
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return ProjectionJob{}, err
 	}
+	// An epoch root is the floor of every replay this computer is admitted:
+	// the tape below it is not replayed again (owner, 2026-10-27).
+	rootRef, rootSeq, err := epochRoot(ctx, tx, computerID)
+	if err != nil {
+		return ProjectionJob{}, err
+	}
 	if at == nil && seed != "" {
-		// A seed refused twice is quarantined: seed from the next older base,
-		// else from none (genesis).
+		// A seed refused twice is quarantined: seed from the next older base
+		// at or above the epoch root, else from none (genesis, or the root).
 		quarantined, qerr := baseQuarantined(ctx, tx, computerID, seed)
 		if qerr != nil {
 			return ProjectionJob{}, qerr
 		}
 		if quarantined {
-			if seed, wm, err = checkpointBaseSeed(ctx, tx, computerID, head, wm, seed); err != nil {
+			if seed, wm, err = checkpointBaseSeed(ctx, tx, computerID, head, wm, seed, rootSeq); err != nil {
 				return ProjectionJob{}, err
 			}
 		}
 	}
+	if at == nil && rootRef != "" && (seed == "" || wm < rootSeq || genesisRepair) {
+		// Never below the root: a genesis repair of this computer starts
+		// from it, and a quarantined root with nothing above it is kept (its
+		// job fails closed and blocks) rather than replaced by the prefix.
+		seed, wm = rootRef, rootSeq
+	}
 	if at != nil {
 		// A checkpoint's job targets the checkpoint's head, and seeds from a
-		// base at or below it.
+		// base at or below it, at or above the epoch root.
 		if at.sequence > head {
 			return ProjectionJob{}, fmt.Errorf("invalid checkpoint request: target %d is beyond the head %d", at.sequence, head)
 		}
+		if rootRef != "" && at.sequence < rootSeq {
+			return ProjectionJob{}, fmt.Errorf("%w (checkpoint at %d is below the epoch root at %d; the tape below the root is not replayed)", ErrNoVerificationBase, at.sequence, rootSeq)
+		}
 		var seedSequence uint64
-		if seed, seedSequence, err = checkpointBaseSeed(ctx, tx, computerID, at.sequence, wm, seed); err != nil {
+		if seed, seedSequence, err = checkpointBaseSeed(ctx, tx, computerID, at.sequence, wm, seed, rootSeq); err != nil {
 			return ProjectionJob{}, err
+		}
+		if rootRef != "" && seed == "" {
+			seed, seedSequence = rootRef, rootSeq
 		}
 		if err := refuseUnreachableBase(seed, at.sequence); err != nil {
 			return ProjectionJob{}, err

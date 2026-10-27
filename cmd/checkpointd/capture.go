@@ -40,9 +40,13 @@ import (
 //     that the base's head is the tape's at that sequence;
 //  4. the capture is unmounted and deleted on every path.
 //
-// A refusal at any step leaves no advertised base and no published one.
-// Run it as root (mount), in its own unit at low priority, with the
-// host-internal credential (see the runbook in the problem doc).
+// A refusal at any step leaves no advertised base and no published one; an
+// advertisement whose outcome is uncertain keeps the published base.
+// The base is an epoch root (owner, 2026-10-27): replays start from it, and
+// the tape below it is not replayed again. Run it with CAP_SYS_ADMIN
+// (mount), in its own transient unit at low priority, with the host-internal
+// credential: the runbook is the "S2 runbook" section of
+// docs/problems/paper-never-checkpointed-2026-10-27.md.
 
 // captureGrant is vmctl's answer to a capture request.
 type captureGrant struct {
@@ -89,10 +93,116 @@ type captureReport struct {
 	Error         string `json:"error,omitempty"`
 }
 
-// errAdvertiseUnknown: the advertisement may have landed (no answer, and no
-// readback). The published base is kept, so an advertised base never loses
+// errAdvertiseUnknown: the advertisement may have landed (the readback
+// failed). The published base is kept, so an advertised base never loses
 // its bytes.
 var errAdvertiseUnknown = errors.New("advertisement outcome unknown")
+
+// errAdvertiseRefused: the readback shows the base is not advertised and
+// cannot be (no watermark, a lower one, or another base at its sequence).
+// Only this retracts the published base.
+var errAdvertiseRefused = errors.New("advertisement refused")
+
+// captureLockName is the run lock under the mount root: one capture-base
+// at a time, and the sweep runs only under it.
+const captureLockName = ".capture-base.lock"
+
+// captureSweep is the start of a run (review 364): hold the run lock, then
+// remove what a killed run left. isMount and unmount are seams.
+type captureSweep struct {
+	isMount func(dir string) bool
+	unmount func(dir string) error
+}
+
+// begin takes the run lock (refusing when another run holds it) and sweeps:
+// every mount under mountRoot is unmounted and its empty mount point
+// removed, and every <stateDir>/<vm>/data.img.capture without a vmctl pause
+// marker beside it is removed (with a marker, vmctl is inside the pause or
+// resumes the VM and removes it at reattach). Only this job creates either.
+// The returned function releases the lock.
+func (s captureSweep) begin(mountRoot, stateDir string) (func(), error) {
+	if err := os.MkdirAll(mountRoot, 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(filepath.Join(mountRoot, captureLockName), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("another capture-base run holds %s: %w", lock.Name(), err)
+	}
+	release := func() {
+		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = lock.Close()
+	}
+	entries, err := os.ReadDir(mountRoot)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	for _, e := range entries {
+		dir := filepath.Join(mountRoot, e.Name())
+		if !e.IsDir() {
+			continue
+		}
+		if s.isMount(dir) {
+			if err := s.unmount(dir); err != nil {
+				release()
+				return nil, fmt.Errorf("sweep stale capture mount %s: %w", dir, err)
+			}
+			log.Printf("capture-base: unmounted a stale capture mount %s", dir)
+		}
+		// Remove only an empty mount point; a directory with files is not ours.
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+			log.Printf("capture-base: left %s: %v", dir, err)
+		}
+	}
+	vms, err := os.ReadDir(stateDir)
+	if err != nil && !os.IsNotExist(err) {
+		release()
+		return nil, err
+	}
+	for _, vm := range vms {
+		if !vm.IsDir() {
+			continue
+		}
+		vmDir := filepath.Join(stateDir, vm.Name())
+		if _, err := os.Lstat(filepath.Join(vmDir, "capture-pause.json")); err == nil {
+			continue
+		}
+		stale := filepath.Join(vmDir, "data.img.capture")
+		if err := os.Remove(stale); err == nil {
+			log.Printf("capture-base: removed a stale capture %s", stale)
+		} else if !os.IsNotExist(err) {
+			release()
+			return nil, fmt.Errorf("sweep stale capture %s: %w", stale, err)
+		}
+	}
+	return release, nil
+}
+
+// isMountPoint reports whether dir is on another device than its parent.
+func isMountPoint(dir string) bool {
+	var self, parent syscall.Stat_t
+	if syscall.Lstat(dir, &self) != nil || syscall.Lstat(filepath.Dir(dir), &parent) != nil {
+		return false
+	}
+	return self.Dev != parent.Dev
+}
+
+func umountDir(dir string) error {
+	if out, err := exec.Command("umount", dir).CombinedOutput(); err != nil {
+		return fmt.Errorf("umount %s: %v: %s", dir, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// loopMountArgs mounts the guest's image so nothing on it can run, carry a
+// set-id bit, or open a device node.
+func loopMountArgs(image, dir string) []string {
+	return []string{"-o", "loop,nosuid,nodev,noexec", image, dir}
+}
 
 func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) (report captureReport, err error) {
 	started := time.Now()
@@ -136,6 +246,7 @@ func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) 
 		ComputerID:    opts.ComputerID,
 		StoreMarker:   filepath.Join(mountDir, "state"),
 		ArtifactsRoot: opts.ArtifactsRoot,
+		CaptureFS:     filepath.Dir(grant.CapturePath),
 		MinFreeBytes:  opts.MinFreeBytes,
 		TapeHeadAt: func(ctx context.Context, computerID string, sequence uint64) (string, error) {
 			return deps.tapeHeadAt(ctx, grant.UserID, computerID, sequence)
@@ -147,7 +258,9 @@ func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) 
 	d := result.Descriptor
 	report.Sequence, report.CanonicalHead, report.BaseRef, report.BlobBytes, report.Origin = d.Sequence, d.CanonicalHead, d.BlobSHA256, d.BlobSizeBytes, d.Origin
 	if err := deps.advertise(ctx, opts.ComputerID, d.Sequence, d.BlobSHA256); err != nil {
-		if !errors.Is(err, errAdvertiseUnknown) {
+		// Only a definitive refusal retracts: an advertised base never
+		// loses its bytes, so anything less certain keeps it.
+		if errors.Is(err, errAdvertiseRefused) {
 			if rerr := deps.retract(opts.ArtifactsRoot, d.BlobSHA256); rerr != nil {
 				log.Printf("capture-base: retract %s: %v", d.BlobSHA256, rerr)
 			}
@@ -180,6 +293,7 @@ func captureBaseMain(args []string) int {
 	computerID := fs.String("computer", "", "computer to capture (computer-...)")
 	artifactsRoot := fs.String("artifacts-root", "/var/lib/go-choir/platform-artifacts", "platform artifacts root")
 	mountRoot := fs.String("mount-root", "/var/lib/go-choir/capture-base", "where the capture is mounted")
+	stateDir := fs.String("state-dir", "/var/lib/go-choir/vm-state", "vmctl's VM state directory (stale captures are swept from it)")
 	vmctlURL := fs.String("vmctl-url", "http://127.0.0.1:8083", "vmctl internal URL")
 	platformURL := fs.String("platform-url", "http://127.0.0.1:8086", "corpusd internal URL")
 	minFreeGiB := fs.Uint64("min-free-gib", 24, "free space the artifacts filesystem keeps after each large write")
@@ -199,16 +313,28 @@ func captureBaseMain(args []string) int {
 		fmt.Fprintln(os.Stderr, "capture-base:", err)
 		return 1
 	}
+	release, err := captureSweep{isMount: isMountPoint, unmount: umountDir}.begin(*mountRoot, *stateDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "capture-base:", err)
+		return 1
+	}
+	defer release()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	client := &http.Client{Timeout: 2 * time.Minute, Transport: internalTransport{}}
 	deps := captureDeps{
-		capture:    func(ctx context.Context, id string) (captureGrant, error) { return requestCapture(ctx, client, *vmctlURL, id) },
-		mount:      loopMount,
-		publish:    projectionbase.PublishCapturedBase,
-		advertise:  func(ctx context.Context, id string, seq uint64, ref string) error { return advertiseBase(ctx, client, *platformURL, id, seq, ref) },
-		retract:    retractPublishedBase,
-		tapeHeadAt: func(ctx context.Context, owner, id string, seq uint64) (string, error) { return tapeHeadAt(ctx, *platformURL, owner, id, seq) },
+		capture: func(ctx context.Context, id string) (captureGrant, error) {
+			return requestCapture(ctx, client, *vmctlURL, id)
+		},
+		mount:   loopMount,
+		publish: projectionbase.PublishCapturedBase,
+		advertise: func(ctx context.Context, id string, seq uint64, ref string) error {
+			return advertiseBase(ctx, client, *platformURL, id, seq, ref)
+		},
+		retract: retractPublishedBase,
+		tapeHeadAt: func(ctx context.Context, owner, id string, seq uint64) (string, error) {
+			return tapeHeadAt(ctx, *platformURL, owner, id, seq)
+		},
 	}
 	report, err := runCaptureBase(ctx, deps, captureOptions{
 		ComputerID: strings.TrimSpace(*computerID), ArtifactsRoot: *artifactsRoot, MountRoot: *mountRoot,
@@ -281,36 +407,52 @@ type watermarkAnswer struct {
 }
 
 // advertiseBase asks corpusd, the watermark's sole writer, to advertise the
-// base. corpusd keeps a higher watermark and answers 200 either way, so the
-// answer must name this base. On a lost answer the watermark is read back.
+// base. Only a clean answer naming this base is success without a second
+// look; on any other answer (an error status, an undecodable body, another
+// watermark) the watermark is read back (review 364):
+//   - it names this base: advertised;
+//   - it is higher: this base was not advertised but is kept (an error that
+//     is not errAdvertiseRefused);
+//   - it is absent (404), lower, or another base at this sequence:
+//     errAdvertiseRefused, and the caller retracts the base;
+//   - the readback fails: errAdvertiseUnknown, and the base is kept.
 func advertiseBase(ctx context.Context, client *http.Client, platformURL, computerID string, sequence uint64, baseRef string) error {
 	base := strings.TrimRight(platformURL, "/")
 	var got watermarkAnswer
-	status, err := postJSON(ctx, client, base+"/internal/computers/files/watermark", map[string]any{
+	_, err := postJSON(ctx, client, base+"/internal/computers/files/watermark", map[string]any{
 		"computer_id": computerID, "watermark_sequence": sequence, "base_ref": baseRef,
 	}, &got)
-	if err != nil && status == 0 {
-		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, base+"/internal/computers/files/watermark?"+url.Values{"computer_id": {computerID}}.Encode(), nil)
-		if rerr != nil {
-			return fmt.Errorf("%w: %v", errAdvertiseUnknown, err)
-		}
-		resp, rerr := client.Do(req)
-		if rerr != nil {
-			return fmt.Errorf("%w: %v; readback: %v", errAdvertiseUnknown, err, rerr)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&got) != nil {
-			return fmt.Errorf("%w: %v; readback status %d", errAdvertiseUnknown, err, resp.StatusCode)
-		}
-		err = nil
+	if err == nil && got.Sequence == sequence && got.BaseRef == baseRef {
+		return nil
 	}
-	if err != nil {
-		return err
+	answer := err
+	if answer == nil {
+		answer = fmt.Errorf("corpusd answered watermark %d (%s)", got.Sequence, got.BaseRef)
 	}
-	if got.Sequence != sequence || got.BaseRef != baseRef {
-		return fmt.Errorf("corpusd advertises %d (%s), not this base %d (%s)", got.Sequence, got.BaseRef, sequence, baseRef)
+	req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, base+"/internal/computers/files/watermark?"+url.Values{"computer_id": {computerID}}.Encode(), nil)
+	if rerr != nil {
+		return fmt.Errorf("%w: %v; readback: %v", errAdvertiseUnknown, answer, rerr)
 	}
-	return nil
+	resp, rerr := client.Do(req)
+	if rerr != nil {
+		return fmt.Errorf("%w: %v; readback: %v", errAdvertiseUnknown, answer, rerr)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("%w: %v; readback: no watermark", errAdvertiseRefused, answer)
+	}
+	var back watermarkAnswer
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&back) != nil {
+		return fmt.Errorf("%w: %v; readback status %d", errAdvertiseUnknown, answer, resp.StatusCode)
+	}
+	switch {
+	case back.Sequence == sequence && back.BaseRef == baseRef:
+		return nil
+	case back.Sequence > sequence:
+		return fmt.Errorf("corpusd advertises a higher watermark %d (%s), not this base %d (%s); the base is kept: %v", back.Sequence, back.BaseRef, sequence, baseRef, answer)
+	default:
+		return fmt.Errorf("%w: corpusd advertises %d (%s), not this base %d (%s): %v", errAdvertiseRefused, back.Sequence, back.BaseRef, sequence, baseRef, answer)
+	}
 }
 
 // tapeHeadAt reads the computer's event at sequence from corpusd's replay
@@ -334,19 +476,19 @@ func tapeHeadAt(ctx context.Context, platformURL, ownerID, computerID string, se
 	return page[0].Request.EventDigest, nil
 }
 
-// loopMount mounts image read-write on dir (the ext4 journal of a capture
-// taken from a running guest is replayed at mount; the capture is
-// disposable). The returned function unmounts it.
+// loopMount mounts image read-write on dir, nosuid,nodev,noexec (the ext4
+// journal of a capture taken from a running guest is replayed at mount; the
+// capture is disposable). The returned function unmounts it.
 func loopMount(ctx context.Context, image, dir string) (func() error, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	if out, err := exec.CommandContext(ctx, "mount", "-o", "loop", image, dir).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("mount -o loop %s: %v: %s", image, err, strings.TrimSpace(string(out)))
+	if out, err := exec.CommandContext(ctx, "mount", loopMountArgs(image, dir)...).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("mount %s: %v: %s", image, err, strings.TrimSpace(string(out)))
 	}
 	return func() error {
-		if out, err := exec.Command("umount", dir).CombinedOutput(); err != nil {
-			return fmt.Errorf("umount %s: %v: %s", dir, err, strings.TrimSpace(string(out)))
+		if err := umountDir(dir); err != nil {
+			return err
 		}
 		return os.Remove(dir)
 	}, nil

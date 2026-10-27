@@ -2,6 +2,7 @@ package vmmanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -25,14 +26,29 @@ import (
 //
 // The clone is a FICLONE reflink on the host's btrfs: proportional to the
 // image's extent count, not its size, and it shares every block until one
-// side writes. The pause covers only the clone.
+// side writes. The pause covers only the clone, which has a deadline.
+//
+// A VM is never left paused (review 364): a durable marker is written before
+// the pause and removed only once the VM is seen running; every pause error
+// is followed by a resume; the state is probed before a VM is reported
+// paused; and a vmctl that dies inside the pause resumes the VM at reattach
+// (recoverCapturePause).
 
 const (
-	captureImageName     = "data.img.capture"
-	capturePauseTimeout  = 10 * time.Second
-	captureResumeTimeout = 10 * time.Second
-	captureResumeTries   = 3
+	captureImageName       = "data.img.capture"
+	capturePauseMarkerName = "capture-pause.json"
+	capturePauseTimeout    = 10 * time.Second
+	captureResumeTimeout   = 10 * time.Second
+	captureResumeTries     = 3
+	// captureCloneTimeout bounds the guest's pause. A reflink of the
+	// paper's image (about 56 GiB allocated) is expected in seconds; past
+	// this the clone is abandoned and the VM resumed.
+	captureCloneTimeout = 30 * time.Second
 )
+
+// ErrVMOperationInProgress refuses a capture of a VM another operation
+// holds (hibernate, refresh, stop, another capture).
+var ErrVMOperationInProgress = errors.New("VM operation in progress")
 
 // DataImageCapture is one capture: the clone's path and how long the guest
 // was paused (PausedFor) and the clone took (ClonedFor).
@@ -42,15 +58,23 @@ type DataImageCapture struct {
 	ClonedFor time.Duration
 }
 
+// capturePauseMarker is the durable record that a capture may hold a VM
+// paused.
+type capturePauseMarker struct {
+	VMID     string    `json:"vm_id"`
+	Socket   string    `json:"socket"`
+	PausedAt time.Time `json:"paused_at"`
+}
+
 // CaptureDataImage pauses a running VM, reflinks its data image to
 // <state>/<vm>/data.img.capture, and resumes it. An existing capture is
 // never overwritten (a processor may still be reading it); the caller
-// removes the capture when done. A failed clone leaves no capture. The VM is
-// resumed on every path after a successful pause.
+// removes the capture when done. A failed or abandoned clone leaves no
+// capture, and a capture is handed out only once the VM is seen running.
 func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 	unlock, ok := m.tryLockVMOperation(vmID)
 	if !ok {
-		return DataImageCapture{}, fmt.Errorf("capture data image %s: VM operation in progress", vmID)
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, ErrVMOperationInProgress)
 	}
 	defer unlock()
 	sock, _, err := m.runningAPISocket(vmID)
@@ -62,22 +86,24 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 	if err != nil {
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, err)
 	}
-	defer src.Close()
 	dstPath := filepath.Join(vmDir, captureImageName)
 	dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
+		_ = src.Close()
+		if os.IsExist(err) {
 			return DataImageCapture{}, fmt.Errorf("capture data image %s: %s exists (a capture is in use or was left behind; remove it first)", vmID, dstPath)
 		}
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, err)
 	}
-	keep := false
-	defer func() {
+	discard := func() {
 		_ = dst.Close()
-		if !keep {
-			_ = os.Remove(dstPath)
-		}
-	}()
+		_ = src.Close()
+		_ = os.Remove(dstPath)
+	}
+	if err := writeCapturePauseMarker(vmDir, capturePauseMarker{VMID: vmID, Socket: sock, PausedAt: time.Now().UTC()}); err != nil {
+		discard()
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: pause marker: %w", vmID, err)
+	}
 
 	api := newFCAPIClient(sock)
 	clone := m.captureCloneFn
@@ -88,30 +114,84 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 	err = api.Pause(pauseCtx)
 	cancel()
 	if err != nil {
-		// Firecracker's own refusal means the VM was not paused. Any other
-		// error (a timeout, a dropped connection) may have paused it.
-		var refused *fcAPIError
-		if !errors.As(err, &refused) {
-			if resumeErr := resumeAfterCapture(api); resumeErr != nil {
-				log.Printf("vmmanager: data image capture %s: resume after an unanswered pause: %v", vmID, resumeErr)
-			}
+		// Any error may come from a VM that did pause (a 5xx after the
+		// pause, a timeout, a dropped connection): resume regardless.
+		discard()
+		if resumeErr := confirmResumed(api); resumeErr != nil {
+			return DataImageCapture{}, fmt.Errorf("capture data image %s: pause: %v; VM MAY BE LEFT PAUSED: %w (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s)", vmID, err, resumeErr, sock)
 		}
+		removeCapturePauseMarker(vmDir)
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: pause: %w", vmID, err)
 	}
 	paused := time.Now()
-	cloneErr := clone(dst, src)
+	deadline := m.captureCloneDeadline
+	if deadline <= 0 {
+		deadline = captureCloneTimeout
+	}
+	done := make(chan error, 1)
+	go func() { done <- clone(dst, src) }()
+	timer := time.NewTimer(deadline)
+	var cloneErr error
+	abandoned := false
+	select {
+	case cloneErr = <-done:
+		timer.Stop()
+	case <-timer.C:
+		// FICLONE cannot be interrupted: the clone runs on, and the
+		// files are released and the torn clone removed when it returns.
+		abandoned = true
+		cloneErr = fmt.Errorf("clone past its %s deadline; abandoned", deadline)
+		go func() {
+			<-done
+			discard()
+			log.Printf("vmmanager: data image capture %s: removed the abandoned clone", vmID)
+		}()
+	}
 	cloned := time.Since(paused)
-	resumeErr := resumeAfterCapture(api)
+	resumeErr := confirmResumed(api)
 	pausedFor := time.Since(paused)
 	log.Printf("vmmanager: data image capture %s: paused %s (clone %s) clone_err=%v resume_err=%v", vmID, pausedFor.Round(time.Millisecond), cloned.Round(time.Millisecond), cloneErr, resumeErr)
 	if resumeErr != nil {
-		return DataImageCapture{}, fmt.Errorf("capture data image %s: VM LEFT PAUSED, resume failed: %w (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s)", vmID, resumeErr, sock)
+		if !abandoned {
+			discard()
+		}
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: VM LEFT PAUSED, resume failed: %w (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s; the marker resumes it at vmctl's next reattach)", vmID, resumeErr, sock)
 	}
+	removeCapturePauseMarker(vmDir)
 	if cloneErr != nil {
+		if !abandoned {
+			discard()
+		}
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: reflink: %w", vmID, cloneErr)
 	}
-	keep = true
+	// Off the pause: the clone's bytes are fixed once FICLONE returns.
+	if err := dst.Sync(); err != nil {
+		discard()
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: sync clone: %w", vmID, err)
+	}
+	_ = dst.Close()
+	_ = src.Close()
 	return DataImageCapture{Path: dstPath, PausedFor: pausedFor, ClonedFor: cloned}, nil
+}
+
+// confirmResumed resumes the VM, retrying a refused or timed-out call, and
+// when every try fails probes its state: a resume whose answer was lost
+// leaves a running VM that a retry's refusal must not call paused.
+func confirmResumed(api *fcAPIClient) error {
+	err := resumeAfterCapture(api)
+	if err == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), captureResumeTimeout)
+	state, probeErr := api.State(ctx)
+	cancel()
+	if probeErr != nil {
+		return fmt.Errorf("%v; state probe: %w", err, probeErr)
+	}
+	if state == "Running" {
+		return nil
+	}
+	return fmt.Errorf("%v; state probe answers %q", err, state)
 }
 
 // resumeAfterCapture resumes the VM, retrying a refused or timed-out call: a
@@ -127,4 +207,84 @@ func resumeAfterCapture(api *fcAPIClient) error {
 		}
 	}
 	return err
+}
+
+// writeCapturePauseMarker writes the marker durably (file and directory
+// synced) before the pause is sent.
+func writeCapturePauseMarker(vmDir string, marker capturePauseMarker) error {
+	raw, err := json.Marshal(marker)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(vmDir, capturePauseMarkerName)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(raw); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return syncDirectory(vmDir)
+}
+
+func removeCapturePauseMarker(vmDir string) {
+	if err := os.Remove(filepath.Join(vmDir, capturePauseMarkerName)); err != nil && !os.IsNotExist(err) {
+		log.Printf("vmmanager: remove capture pause marker in %s: %v", vmDir, err)
+		return
+	}
+	_ = syncDirectory(vmDir)
+}
+
+// recoverCapturePause resumes a VM that a capture held paused when vmctl
+// died inside the pause (its marker outlived the capture), then removes the
+// marker and the capture, which was never handed out. It runs at reattach.
+//
+// Resuming a paused VM continues the same guest process from the
+// instruction it stopped at: it is not a boot, so the restart rule (a crash
+// restart closes open work, CLAUDE.md "Restarts End Work") does not apply.
+// The guest sees only a jump of its clock.
+func (m *Manager) recoverCapturePause(vmID string) {
+	vmDir := filepath.Join(m.cfg.StateDir, vmID)
+	if _, err := os.Lstat(filepath.Join(vmDir, capturePauseMarkerName)); err != nil {
+		return
+	}
+	unlock, ok := m.tryLockVMOperation(vmID)
+	if !ok {
+		log.Printf("vmmanager: capture pause marker of VM %s not recovered: VM operation in progress", vmID)
+		return
+	}
+	defer unlock()
+	sock, _, err := m.runningAPISocket(vmID)
+	if err != nil {
+		log.Printf("vmmanager: capture pause marker of VM %s not recovered: %v", vmID, err)
+		return
+	}
+	if err := confirmResumed(newFCAPIClient(sock)); err != nil {
+		log.Printf("vmmanager: VM %s LEFT PAUSED by an interrupted capture; resume failed: %v (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s)", vmID, err, sock)
+		return
+	}
+	_ = os.Remove(filepath.Join(vmDir, captureImageName))
+	removeCapturePauseMarker(vmDir)
+	log.Printf("vmmanager: resumed VM %s after an interrupted data image capture; removed its capture", vmID)
+}
+
+// clearCapturePause removes a capture's marker and capture when the VM
+// boots: no process of it runs, so nothing is paused, and a capture beside
+// a marker was never handed out.
+func (m *Manager) clearCapturePause(vmID string) {
+	vmDir := filepath.Join(m.cfg.StateDir, vmID)
+	if _, err := os.Lstat(filepath.Join(vmDir, capturePauseMarkerName)); err != nil {
+		return
+	}
+	_ = os.Remove(filepath.Join(vmDir, captureImageName))
+	removeCapturePauseMarker(vmDir)
+	log.Printf("vmmanager: cleared an interrupted data image capture of VM %s at boot", vmID)
 }

@@ -189,11 +189,12 @@ func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if errors.Is(readErr, ErrNoWatermark) || input.WatermarkSequence > current {
-			if err := h.validateProjectionAdvertisement(r.Context(), input); err != nil {
+			binding, err := h.validateProjectionAdvertisement(r.Context(), input)
+			if err != nil {
 				writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 				return
 			}
-			if err := h.service.store.RecordReplayWatermark(r.Context(), input.ComputerID, input.WatermarkSequence, input.BaseRef); err != nil {
+			if err := h.service.store.RecordReplayWatermarkWithRoot(r.Context(), input.ComputerID, input.WatermarkSequence, input.BaseRef, binding.epochRoot()); err != nil {
 				writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark publication failed"})
 				return
 			}

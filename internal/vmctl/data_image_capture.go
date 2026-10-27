@@ -62,20 +62,22 @@ func (h *Handler) HandleCaptureDataImage(w http.ResponseWriter, r *http.Request)
 		writeVMCTLJSON(w, http.StatusNotImplemented, vmctlErrorResponse{Error: "data image capture unsupported by this VM manager"})
 		return
 	}
-	ownerships, err := h.listOwnershipResponses(r.Context())
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
+	// A direct registry lookup: one computer's capture does not wait on
+	// classifying every other ownership (review 364).
 	computerID := strings.TrimSpace(req.ComputerID)
-	for _, own := range ownerships {
-		if own.ComputerID != computerID || own.State != string(VMStateActive) || (own.Kind != "" && own.Kind != VMKindInteractive) {
+	for _, own := range h.registry.ListOwnerships() {
+		if stableComputerID(own.UserID, own.DesktopID, own.ComputerID) != computerID || own.State != VMStateActive || (own.Kind != "" && own.Kind != VMKindInteractive) {
 			continue
 		}
 		c, err := capturer.CaptureDataImage(own.VMID)
 		if err != nil {
 			log.Printf("vmctl: data image capture %s (computer %s): %v", own.VMID, computerID, err)
-			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: err.Error()})
+			code := http.StatusInternalServerError
+			if strings.Contains(err.Error(), "VM operation in progress") {
+				// Another operation holds the VM: contention, not failure.
+				code = http.StatusConflict
+			}
+			writeVMCTLJSON(w, code, vmctlErrorResponse{Error: err.Error()})
 			return
 		}
 		log.Printf("vmctl: data image capture %s (computer %s): %s paused %s", own.VMID, computerID, c.Path, c.PausedFor.Round(time.Millisecond))

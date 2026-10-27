@@ -320,6 +320,23 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		}
 		targetSequence = resolved
 	}
+	// The tape below an epoch root is not replayed again (owner,
+	// 2026-10-27): a replay that would start under the computer's highest
+	// published floor refuses, whatever its seed policy (an explicit genesis
+	// repair, a pre-root seed, a resumed scratch, a target below the root).
+	epochFloor, err := publishedEpochFloor(cfg.ArtifactsRoot, cfg.ComputerID)
+	if err != nil {
+		return nil, err
+	}
+	if epochFloor > 0 {
+		start := uint64(0)
+		if localHead != nil {
+			start = localHead.Sequence
+		}
+		if start < epochFloor {
+			return nil, fmt.Errorf("%w: replay would start at %d, below the epoch root at %d; seed from the root (a genesis repair of this computer starts there)", ErrBaseRefused, start, epochFloor)
+		}
+	}
 	if localHead == nil && seed == nil && cfg.SeedPolicy == SeedAuto {
 		// Routine path fell back to genesis: refuse beyond the first-base bound.
 		switch {
@@ -447,7 +464,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		VocabularyVersion:     CurrentVocabularyVersion,
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
-		Origin:                inheritedOrigin(seed, meta),
+		EpochRoot:             inheritedEpochRoot(seed, meta),
 	}
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("rebuilder: validate descriptor: %w", err)

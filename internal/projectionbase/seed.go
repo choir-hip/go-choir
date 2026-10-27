@@ -30,22 +30,70 @@ type seedMeta struct {
 	Sequence      uint64 `json:"sequence"`
 	CanonicalHead string `json:"canonical_head"`
 	InstalledAt   string `json:"installed_at"`
-	// Origin is the seed's Descriptor.Origin, so a rebuild resumed from this
-	// scratch keeps a captured seed's mark.
-	Origin string `json:"origin,omitempty"`
+	// EpochRoot is the epoch root the seed is or descends from, so a rebuild
+	// resumed from this scratch records it.
+	EpochRoot *EpochRootRef `json:"epoch_root,omitempty"`
 }
 
-// inheritedOrigin is the Origin of a base replayed onto seed (or onto the
-// seed a resumed scratch recorded): a captured seed's mark carries forward;
-// a genesis replay has none.
-func inheritedOrigin(seed *Descriptor, meta *seedMeta) string {
+// epochRootOf is the epoch root a base replayed onto d descends from: d
+// itself when it is a root, else the root d records.
+func epochRootOf(d Descriptor) *EpochRootRef {
+	if d.Origin == OriginLiveCaptured {
+		return &EpochRootRef{BaseRef: d.BlobSHA256, Sequence: d.Sequence}
+	}
+	if d.EpochRoot != nil {
+		root := *d.EpochRoot
+		return &root
+	}
+	return nil
+}
+
+// inheritedEpochRoot is the EpochRoot of a base replayed onto seed (or onto
+// the seed a resumed scratch recorded); a genesis replay has none.
+func inheritedEpochRoot(seed *Descriptor, meta *seedMeta) *EpochRootRef {
 	switch {
 	case seed != nil:
-		return seed.Origin
-	case meta != nil:
-		return meta.Origin
+		return epochRootOf(*seed)
+	case meta != nil && meta.EpochRoot != nil:
+		root := *meta.EpochRoot
+		return &root
 	}
-	return ""
+	return nil
+}
+
+// publishedEpochFloor is the highest epoch floor among this computer's
+// published bases: no replay for the computer may start below it, because
+// the tape under an epoch root is not replayed again (owner, 2026-10-27).
+// An unreadable descriptor is skipped, as the seeding scan skips it.
+func publishedEpochFloor(artifactsRoot, computerID string) (uint64, error) {
+	dir := filepath.Join(filepath.Clean(artifactsRoot), "sha256", Namespace)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("projection base: scan published bases: %w", err)
+	}
+	computerID = strings.TrimSpace(computerID)
+	var floor uint64
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".descriptor.json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		descriptor, err := ParseDescriptor(raw)
+		if err != nil || descriptor.ComputerID != computerID {
+			continue
+		}
+		if f := descriptor.EpochFloor(); f > floor {
+			floor = f
+		}
+	}
+	return floor, nil
 }
 
 // SeedCandidate is a published base descriptor paired with its blob path.
@@ -251,7 +299,7 @@ func installSeedCandidate(ctx context.Context, candidate SeedCandidate, scratchD
 		Sequence:      descriptor.Sequence,
 		CanonicalHead: descriptor.CanonicalHead,
 		InstalledAt:   time.Now().UTC().Format(time.RFC3339Nano),
-		Origin:        descriptor.Origin,
+		EpochRoot:     epochRootOf(descriptor),
 	}
 	if err := writeSeedMeta(filepath.Join(scratchDir, seedMetaFileName), meta); err != nil {
 		return fmt.Errorf("%w: stamp seed: %v", ErrBaseRefused, err)

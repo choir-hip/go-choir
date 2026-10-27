@@ -71,6 +71,15 @@ func (s *Store) LatestFileRoots(ctx context.Context, computerID string, limit in
 }
 
 func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, seq int64, baseRef string) error {
+	return s.RecordReplayWatermarkWithRoot(ctx, computerID, seq, baseRef, false)
+}
+
+// RecordReplayWatermarkWithRoot advances the watermark; epochRoot records the
+// base as the computer's epoch root in the same transaction (its sidecar is
+// marked live_captured): from then on no job the platform admits for the
+// computer replays the tape below it (owner, 2026-10-27). A root only moves
+// up, because the watermark does.
+func (s *Store) RecordReplayWatermarkWithRoot(ctx context.Context, computerID string, seq int64, baseRef string, epochRoot bool) error {
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) || seq < 0 || strings.TrimSpace(baseRef) == "" {
 		return fmt.Errorf("file cas: invalid replay watermark")
 	}
@@ -79,6 +88,12 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 		return err
 	}
 	defer tx.Rollback()
+	// The job row is locked before the watermark row, the order
+	// PublishCheckpointResult takes (review 364).
+	var jobGeneration uint64
+	if err := tx.QueryRowContext(ctx, `SELECT generation FROM computer_projection_jobs WHERE computer_id=? FOR UPDATE`, computerID).Scan(&jobGeneration); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 	var priorSeq int64
 	var priorRef string
 	err = tx.QueryRowContext(ctx, `SELECT watermark_sequence,base_ref FROM computer_replay_watermarks WHERE computer_id=? FOR UPDATE`, computerID).Scan(&priorSeq, &priorRef)
@@ -101,14 +116,20 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, computerID, seq, baseRef, now); err != nil {
 		return fmt.Errorf("file cas: record replay watermark: %w", err)
 	}
-	// A cadence job whose frozen target the new base covers would only
-	// rebuild an older base, from an older seed: supersede it, so its worker's
-	// next lease renewal stops it, it is never reclaimed, and the next
-	// reconcile re-admits the row on the new base (S2,
-	// docs/problems/paper-never-checkpointed-2026-10-27.md). Checkpoint
-	// verification jobs and genesis repairs are their own targets.
-	if _, err := tx.ExecContext(ctx, `UPDATE computer_projection_jobs SET status='superseded',error_text=?,lease_token='',updated_at=? WHERE computer_id=? AND status IN ('queued','running','retry','failed','blocked') AND target_sequence<=? AND genesis_repair=FALSE AND reason NOT LIKE ?`,
-		fmt.Sprintf("superseded by base %s at %d", baseRef, seq), now, computerID, seq, checkpointVerifyReason+"%"); err != nil {
+	if epochRoot {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_epoch_roots (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE base_ref=VALUES(base_ref),sequence=VALUES(sequence),created_at=VALUES(created_at)`, computerID, baseRef, seq, now); err != nil {
+			return fmt.Errorf("file cas: record epoch root: %w", err)
+		}
+	}
+	// A cadence job replaying from another seed below the new base would
+	// only rebuild from further back: supersede it, so its worker's next
+	// lease renewal stops it, it is never reclaimed, and the next reconcile
+	// re-admits the row on the new base (S2,
+	// docs/problems/paper-never-checkpointed-2026-10-27.md; by seed and
+	// watermark, not target, review 364). Checkpoint verification jobs and
+	// genesis repairs are their own targets.
+	if _, err := tx.ExecContext(ctx, `UPDATE computer_projection_jobs SET status='superseded',error_text=?,lease_token='',updated_at=? WHERE computer_id=? AND status IN ('queued','running','retry','failed','blocked') AND seed_base_ref<>? AND watermark_sequence<? AND genesis_repair=FALSE AND reason NOT LIKE ?`,
+		fmt.Sprintf("superseded by base %s at %d", baseRef, seq), now, computerID, baseRef, seq, checkpointVerifyReason+"%"); err != nil {
 		return fmt.Errorf("file cas: supersede covered projection job: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

@@ -590,8 +590,10 @@ type Manager struct {
 	templateStagingHook func(staging string) error
 	templateCloneFn     func(dst, src *os.File) error
 	// captureCloneFn is the data image capture's clone (nil = FICLONE), a
-	// test seam (data_image_capture.go).
-	captureCloneFn func(dst, src *os.File) error
+	// test seam (data_image_capture.go), and captureCloneDeadline bounds it
+	// (0 = captureCloneTimeout).
+	captureCloneFn       func(dst, src *os.File) error
+	captureCloneDeadline time.Duration
 }
 
 func (m *Manager) StateDir() string {
@@ -984,6 +986,8 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		// Only stale metadata remains: a dead PID file or a leftover tap.
 		m.cleanupOrphanedFirecrackerLocked(cfg.VMID, "boot")
 	}
+	// No process of this VM runs, so no capture holds it paused.
+	m.clearCapturePause(cfg.VMID)
 
 	// Assign a host port/subnet for this VM. A vmctl restart can leave stale
 	// linkdown tap devices from failed boots holding old /30 routes; reclaim
@@ -1299,8 +1303,13 @@ func (m *Manager) applyLaunchDefaults(cfg *VMConfig) {
 	}
 }
 
-// StopVM cleanly stops a running VM.
+// StopVM cleanly stops a running VM. It takes the VM's operation lock, so
+// it never kills a VM inside another operation's window (a data image
+// capture's pause; review 364). A shutdown waits at most for that
+// operation's own bounds.
 func (m *Manager) StopVM(vmID string) error {
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1341,9 +1350,13 @@ func (m *Manager) HibernateVMWithOptions(vmID string, opts HibernateOptions) err
 	if m.hibernateMode() == HibernateModeSnapshot {
 		return m.hibernateVMSnapshot(vmID, opts)
 	}
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
 	return m.hibernateVMKill(vmID)
 }
 
+// hibernateVMKill kills the VM; the caller holds its operation lock
+// (HibernateVMWithOptions, or hibernateVMSnapshot's fallback).
 func (m *Manager) hibernateVMKill(vmID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1593,6 +1606,7 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	m.reconcileTapIsolation(vmID, hostURL)
 	m.ensureGuestEgressPolicy()
 	m.adoptConsole(vmID, pid, inst.confinement.jailed())
+	m.recoverCapturePause(vmID)
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
