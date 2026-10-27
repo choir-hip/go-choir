@@ -450,3 +450,29 @@ func TestReconcileProjectionWorkQueuesVerificationBeforeTheCadenceJob(t *testing
 		t.Fatalf("calls %v problem %q: both problems must be reported and neither may stop the other", calls, problem)
 	}
 }
+
+// A base captured from a running computer's disk (S2,
+// docs/problems/paper-never-checkpointed-2026-10-27.md) carries a live
+// witness, not a rebuild from the tape: agreeing with it proves the
+// checkpoint is that state, not that the tape derives it, and disagreeing
+// with it proves nothing about the tape. Neither may read as a tape verdict.
+func TestReconcileNeverCallsALiveCapturedBaseATapeVerdict(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		tables map[string]string
+	}{{"equal", tablesA}, {"different", tablesB}} {
+		store := newFakeVerdictStore()
+		head, blob := hex64('1'), hex64('9')
+		store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+		store.bases["c1/100"] = blob
+		d := descriptorOf("c1", 100, head, blob, witnessOf(tc.tables))
+		d.Origin = projectionbase.OriginLiveCaptured
+		if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+			t.Fatal(err)
+		}
+		v := store.resolved[hex64('d')]
+		if v.Status != selfdevprotocol.CheckpointVerdictUnverified || v.Reason != verdictReasonLiveCaptured {
+			t.Fatalf("%s: verdict = %+v, want unverified/%s", tc.name, v, verdictReasonLiveCaptured)
+		}
+	}
+}
