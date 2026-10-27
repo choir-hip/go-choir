@@ -380,6 +380,40 @@ func TestAbandonedCloneCleanupRemovesOnlyItsOwnFiles(t *testing.T) {
 	}
 }
 
+// Review 366 (DeepSeek): a later capture that writes its marker over one a
+// failed unlink left gets a new file, so the abandoned cleanup keeps it.
+func TestAbandonedCloneCleanupKeepsAMarkerRewrittenInPlace(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneDeadline = 50 * time.Millisecond
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	mgr.captureAbandonedDone = func() { close(finished) }
+	mgr.captureCloneFn = func(dst, src *os.File) error {
+		<-release
+		return copyClone(dst, src)
+	}
+	if _, err := mgr.CaptureDataImage("vm-c"); err == nil {
+		t.Fatal("hung clone returned no error")
+	}
+	vmDir := filepath.Join(mgr.cfg.StateDir, "vm-c")
+	if err := os.Remove(capturePath(mgr)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeCapturePauseMarker(vmDir, capturePauseMarker{VMID: "vm-c", PausedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("abandoned clone cleanup never ran")
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); err != nil {
+		t.Fatalf("the later capture's marker after the abandoned cleanup: %v, want it kept", err)
+	}
+}
+
 // Review 365 (item 6): when the marker cannot be removed the capture is not
 // handed out (a marker beside a handed-out capture would let a reattach
 // delete it).

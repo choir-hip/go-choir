@@ -501,6 +501,25 @@ func TestReconcileJudgesAgainstAnEpochRootLikeAnyBase(t *testing.T) {
 // never Verified, even against a pre-root base the platform still holds at
 // its exact sequence. It settles unverified/no_base, before any judge, and
 // pins nothing.
+// Review 366 (Devin 2): a published base below the root judges nothing,
+// so the path after a publish is closed by the guard, not by chance.
+func TestResolveVerdictsAtBaseBelowTheEpochRootJudgesNothing(t *testing.T) {
+	store := newFakeVerdictStore()
+	store.roots = map[string]uint64{"c1": 6000}
+	head, blob := hex64('1'), hex64('9')
+	store.addPending("c1", hex64('d'), 5000, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	d := descriptorOf("c1", 5000, head, blob, witnessOf(tablesA))
+	if err := resolveVerdictsAtBase(t.Context(), store, d); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := store.resolved[hex64('d')]; ok && v.Status == selfdevprotocol.CheckpointVerdictVerified {
+		t.Fatalf("verdict below the root = %+v, want never verified", v)
+	}
+	if len(store.pinned) != 0 {
+		t.Fatalf("pinned %v below the root", store.pinned)
+	}
+}
+
 func TestCheckpointBelowTheEpochRootIsNeverVerified(t *testing.T) {
 	store := newFakeVerdictStore()
 	store.roots = map[string]uint64{"c1": 6000}

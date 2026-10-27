@@ -169,7 +169,7 @@ func TestCaptureBaseRefusedAdvertisementRetractsTheBase(t *testing.T) {
 func TestCaptureBaseKeepsTheBaseUnlessTheRefusalIsDefinitive(t *testing.T) {
 	for _, advertErr := range []error{
 		fmt.Errorf("%w: readback failed", errAdvertiseUnknown),
-		errors.New("corpusd advertises a higher watermark"),
+		errors.New("corpusd answered 500"),
 		errors.New("status 503"),
 	} {
 		f := newFakeCaptureJob(t)
@@ -239,7 +239,9 @@ func TestAdvertiseBaseReadsBackEveryUnclearAnswer(t *testing.T) {
 		{"503, readback names it", answerStatus(503, "busy"), answerWatermark(seq, ours), true, false, false, 1},
 		{"200 garbage, readback names it", answerStatus(200, "{not json"), answerWatermark(seq, ours), true, false, false, 1},
 		{"409, readback names it", answerStatus(409, "refused"), answerWatermark(seq, ours), true, false, false, 1},
-		{"200 higher, readback higher", answerWatermark(seq+5, other), answerWatermark(seq+5, other), false, false, false, 1},
+		// Review 366 (Devin 1): corpusd records only a higher sequence, so
+		// a higher watermark means this base never will be advertised.
+		{"200 higher, readback higher", answerWatermark(seq+5, other), answerWatermark(seq+5, other), false, true, false, 1},
 		{"503, readback fails", answerStatus(503, "busy"), nil, false, false, true, 1},
 		{"409, readback absent", answerStatus(409, "refused"), answerStatus(404, "404 page not found"), false, true, false, 1},
 		{"409, readback lower", answerStatus(409, "refused"), answerWatermark(seq-10, other), false, true, false, 1},
@@ -359,6 +361,26 @@ func TestLoopMountIsNosuidNodevNoexec(t *testing.T) {
 // Review 365 (DeepSeek, MEDIUM): a computer whose tape is not above its
 // watermark is refused before any pause; otherwise the watermark is handed
 // to the publisher, which refuses a store head at or below it.
+// Review 366: an empty -state-dir would skip the stale-capture sweep.
+func TestCaptureBaseMainRefusesAnEmptyStateDir(t *testing.T) {
+	if code := captureBaseMain([]string{"-computer", "computer-x", "-state-dir", " "}); code != 2 {
+		t.Fatalf("exit = %d, want 2 (usage)", code)
+	}
+}
+
+// Review 366 (DeepSeek): a vmctl that ignores dry_run captures; its answer
+// carries a capture path, and the precheck refuses it.
+func TestPrecheckRefusesADryRunThatCaptured(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"vm_id": "vm-x", "computer_id": "computer-x", "user_id": "u", "capture_path": "/s/vm-x/data.img.capture"})
+	}))
+	t.Cleanup(srv.Close)
+	_, err := precheckWatermark(t.Context(), srv.Client(), srv.URL, srv.URL, "computer-x")
+	if err == nil || !strings.Contains(err.Error(), "did not honor dry_run") {
+		t.Fatalf("err = %v, want a refusal naming dry_run", err)
+	}
+}
+
 func TestCaptureBaseChecksTheWatermarkBeforePausing(t *testing.T) {
 	f := newFakeCaptureJob(t)
 	f.precheckErr = errors.New("tape head 4394600 is not above the watermark 4394600")
