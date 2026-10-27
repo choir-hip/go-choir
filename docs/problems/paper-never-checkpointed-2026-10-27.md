@@ -51,6 +51,55 @@ row with unchanged inputs never retries and logs nothing, so the alert
 reached no one. Next: why the seed base lacks the `texture` database, and
 the smallest reseed (design pass running).
 
+## Design pass (Opus, read-only, 2026-10-27)
+
+Verified:
+- The seed `abacf6b0…` belongs to the paper alone: sequence 34660,
+  vocabulary v2, 462 MB, made 2026-10-13 18:43. Its texture workspace is
+  only `.darc` archive files, which the repo's own GC no longer writes
+  (archive level 0 since 10-19, `squash.go:251`).
+- The engine finds the `texture` database but cannot load it: the error comes
+  from `verifyInstalledHead` (`install.go:274-281`) via bootstrap. The
+  likely cause is damage, from Dolt bug #11747 or archive-version skew; this
+  is a hypothesis until S0 opens it.
+- Turning on the guest cadence today would not help: `checkpointBaseSeed`
+  (`checkpoint_verdicts.go:174-177`) hands the host the same broken base to
+  verify against.
+- The guest bind runs a full `SELECT *` under the append hold
+  (`checkpoint_restore_bindings.go:87-135`, `dolt_state_extractor.go:389`).
+  That is 2.2 s on d@e and minutes on the paper, so it cannot be the paper's
+  checkpoint as built.
+- A host genesis rebuild runs about 42 to 50 events/s, which is 24 to 29
+  hours for 4.39M events. The 10-minute service run, the up-to-16 h failure
+  backoff and the scratch prune on re-enqueue keep it from finishing.
+- Every publish writes a full tar (`publisher.go:63-127`). At the paper's
+  size that would be terabytes a day.
+- Periodic memory snapshots of a busy computer buy nothing safe: restoring
+  one after a crash resumes work, which the restart rule forbids. A snapshot
+  belongs only to a planned stop.
+
+Slices, in order:
+- S0, operator read: open the seed with the current binary in checkpointd
+  scratch, to confirm the cause.
+- S1, orange, tier 1:
+  - quarantine a base refused twice and fall back to an older one;
+  - re-admit a blocked row when the build changes;
+  - log blocked rows hourly;
+  - give checkpointd a per-job deadline below its service timeout.
+- S2, red, tier 2, owner decision: a host capture as the paper's first base.
+  - Hold the guest's appends, pause it, reflink its data image, and resume.
+  - On the host, at low priority, compact and check that the head equals H.
+  - Publish the result typed `live_captured`.
+  - From there, incremental replay at about 50 events/s keeps up with the
+    paper's 7 to 12.
+- S3, red, tier 2: witness v2, a hash-only bind (per-table Dolt root hashes)
+  in milliseconds. Lift the class refusal; cadence for every computer.
+- S4, red, tier 2: incremental base publication (content-addressed table
+  files plus journal segments).
+- S5, red, tier 2: a busy hibernate on planned host stops (hold, pause,
+  snapshot, stop; on wake, resume).
+- S6, orange, tier 1: diff snapshots for every non-protected computer.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
