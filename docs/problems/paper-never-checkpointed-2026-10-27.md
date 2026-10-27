@@ -136,6 +136,21 @@ sources and its tape. So a captured base being wrong costs a rebuild, not
 data loss. That lowers S2's risk class for the paper. The ephemeral-sandbox
 idea is recorded, not pursued.
 
+## Owner decision, epoch root (2026-10-27 21:5x UTC)
+
+Owner asked "Why do we need to replay?" and then said: "it's cool to have
+the same event log for the autoputer. If we can make it work, we should. But
+maybe we lose some event log data and restart it from here?"
+
+The decision: the paper's captured base is an epoch root. Derivability is
+measured from the root. Every later base replays only the tape above it, and
+checkpoints are judged against it the usual way, so the paper joins the
+fleet's ordinary checkpoint loop. The tape below the root is no longer needed
+for any proof. Nothing deletes it: archiving or deleting the pre-root prefix
+is a separate, irreversible owner act. The cost is that the state at the root
+is no longer proven derivable from the paper's own history; the owner
+accepts this because the paper holds no unique data.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
