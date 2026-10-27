@@ -51,6 +51,10 @@ type CaptureConfig struct {
 	// (empty: not checked). Compaction inside the mounted image diverges
 	// the reflink there; it keeps MinFreeBytes too.
 	CaptureFS string
+	// AboveSequence is the computer's advertised watermark: a store whose
+	// head is not above it can never become the root, and refuses before
+	// compaction (review 365). Zero: no watermark.
+	AboveSequence uint64
 	// FreeBytes reads free space (nil: statfs).
 	FreeBytes func(path string) (uint64, error)
 }
@@ -191,6 +195,9 @@ func settleCapturedStore(ctx context.Context, cfg CaptureConfig, marker string) 
 	}
 	if head == nil || head.Sequence == 0 || !computerevent.IsSHA256(head.CanonicalEventHead) {
 		return nil, fmt.Errorf("%w: captured store has no head for %s", ErrBaseRefused, cfg.ComputerID)
+	}
+	if head.Sequence <= cfg.AboveSequence {
+		return nil, fmt.Errorf("%w: captured store head %d is not above the advertised watermark %d; it cannot become the root", ErrBaseRefused, head.Sequence, cfg.AboveSequence)
 	}
 	onTape, err := cfg.TapeHeadAt(ctx, cfg.ComputerID, head.Sequence)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 )
 
@@ -95,15 +96,26 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 		}
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, err)
 	}
-	discard := func() {
+	// The discard removes only the file this call made: an abandoned
+	// clone's late cleanup must not delete a newer capture made after a
+	// recovery removed this one.
+	dstInfo, err := dst.Stat()
+	if err != nil {
 		_ = dst.Close()
 		_ = src.Close()
 		_ = os.Remove(dstPath)
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, err)
+	}
+	discard := func() {
+		_ = dst.Close()
+		_ = src.Close()
+		removeIfSame(dstPath, dstInfo)
 	}
 	if err := writeCapturePauseMarker(vmDir, capturePauseMarker{VMID: vmID, Socket: sock, PausedAt: time.Now().UTC()}); err != nil {
 		discard()
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: pause marker: %w", vmID, err)
 	}
+	markerInfo, markerErr := os.Lstat(filepath.Join(vmDir, capturePauseMarkerName))
 
 	api := newFCAPIClient(sock)
 	clone := m.captureCloneFn
@@ -120,7 +132,9 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 		if resumeErr := confirmResumed(api); resumeErr != nil {
 			return DataImageCapture{}, fmt.Errorf("capture data image %s: pause: %v; VM MAY BE LEFT PAUSED: %w (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s)", vmID, err, resumeErr, sock)
 		}
-		removeCapturePauseMarker(vmDir)
+		if rmErr := removeCapturePauseMarker(vmDir); rmErr != nil {
+			log.Printf("vmmanager: data image capture %s: %v", vmID, rmErr)
+		}
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: pause: %w", vmID, err)
 	}
 	paused := time.Now()
@@ -133,18 +147,34 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 	timer := time.NewTimer(deadline)
 	var cloneErr error
 	abandoned := false
+	// resumed tells the abandoned cleanup the VM runs again: a marker of a
+	// VM left paused stays for the reattach. The cleanup takes the lock this
+	// call holds, so it reads the flag after this call returns.
+	var resumed atomic.Bool
 	select {
 	case cloneErr = <-done:
 		timer.Stop()
 	case <-timer.C:
 		// FICLONE cannot be interrupted: the clone runs on, and the
 		// files are released and the torn clone removed when it returns.
+		// The marker stays until then, so a vmctl death inside the clone
+		// still leaves its record. The cleanup takes the VM's operation
+		// lock and removes only the files this call made.
 		abandoned = true
 		cloneErr = fmt.Errorf("clone past its %s deadline; abandoned", deadline)
 		go func() {
 			<-done
+			unlock := m.lockVMOperation(vmID)
 			discard()
+			if markerErr == nil && resumed.Load() {
+				removeIfSame(filepath.Join(vmDir, capturePauseMarkerName), markerInfo)
+				_ = syncDirectory(vmDir)
+			}
+			unlock()
 			log.Printf("vmmanager: data image capture %s: removed the abandoned clone", vmID)
+			if m.captureAbandonedDone != nil {
+				m.captureAbandonedDone()
+			}
 		}()
 	}
 	cloned := time.Since(paused)
@@ -157,11 +187,18 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 		}
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: VM LEFT PAUSED, resume failed: %w (resume by hand: PATCH /vm {\"state\":\"Resumed\"} on %s; the marker resumes it at vmctl's next reattach)", vmID, resumeErr, sock)
 	}
-	removeCapturePauseMarker(vmDir)
+	resumed.Store(true)
+	if abandoned {
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: reflink: %w", vmID, cloneErr)
+	}
+	// A marker beside a capture means "never handed out" to a reattach or a
+	// boot, which delete the capture: one that stays fails the handoff.
+	if err := removeCapturePauseMarker(vmDir); err != nil {
+		discard()
+		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w; capture discarded", vmID, err)
+	}
 	if cloneErr != nil {
-		if !abandoned {
-			discard()
-		}
+		discard()
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: reflink: %w", vmID, cloneErr)
 	}
 	// Off the pause: the clone's bytes are fixed once FICLONE returns.
@@ -235,12 +272,24 @@ func writeCapturePauseMarker(vmDir string, marker capturePauseMarker) error {
 	return syncDirectory(vmDir)
 }
 
-func removeCapturePauseMarker(vmDir string) {
+func removeCapturePauseMarker(vmDir string) error {
 	if err := os.Remove(filepath.Join(vmDir, capturePauseMarkerName)); err != nil && !os.IsNotExist(err) {
-		log.Printf("vmmanager: remove capture pause marker in %s: %v", vmDir, err)
+		return fmt.Errorf("remove capture pause marker: %w", err)
+	}
+	if err := syncDirectory(vmDir); err != nil {
+		return fmt.Errorf("remove capture pause marker: sync %s: %w", vmDir, err)
+	}
+	return nil
+}
+
+// removeIfSame removes path only while it is still the file recorded in
+// want (same device and inode).
+func removeIfSame(path string, want os.FileInfo) {
+	got, err := os.Lstat(path)
+	if err != nil || !os.SameFile(got, want) {
 		return
 	}
-	_ = syncDirectory(vmDir)
+	_ = os.Remove(path)
 }
 
 // recoverCapturePause resumes a VM that a capture held paused when vmctl
@@ -272,7 +321,9 @@ func (m *Manager) recoverCapturePause(vmID string) {
 		return
 	}
 	_ = os.Remove(filepath.Join(vmDir, captureImageName))
-	removeCapturePauseMarker(vmDir)
+	if err := removeCapturePauseMarker(vmDir); err != nil {
+		log.Printf("vmmanager: VM %s: %v", vmID, err)
+	}
 	log.Printf("vmmanager: resumed VM %s after an interrupted data image capture; removed its capture", vmID)
 }
 
@@ -285,6 +336,8 @@ func (m *Manager) clearCapturePause(vmID string) {
 		return
 	}
 	_ = os.Remove(filepath.Join(vmDir, captureImageName))
-	removeCapturePauseMarker(vmDir)
+	if err := removeCapturePauseMarker(vmDir); err != nil {
+		log.Printf("vmmanager: VM %s: %v", vmID, err)
+	}
 	log.Printf("vmmanager: cleared an interrupted data image capture of VM %s at boot", vmID)
 }

@@ -173,7 +173,9 @@ func (s *Store) EnqueueCheckpointVerificationJob(ctx context.Context, record Che
 // from: the advertised watermark when it is at or below the target, else the
 // newest recorded base that is.
 func checkpointBaseSeed(ctx context.Context, tx *sql.Tx, computerID string, sequence, watermark uint64, advertised string, floor uint64) (string, uint64, error) {
-	if watermark <= sequence {
+	// The advertised base is the seed when it is at or below the target and
+	// at or above the epoch root (floor; review 365).
+	if watermark <= sequence && watermark >= floor {
 		quarantined := false
 		if advertised != "" {
 			var err error

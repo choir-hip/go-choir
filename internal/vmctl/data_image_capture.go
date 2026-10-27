@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -22,8 +23,14 @@ type dataImageCapturer interface {
 	CaptureDataImage(vmID string) (DataImageCapture, error)
 }
 
+// ErrVMOperationInProgress is a capture refused because another operation
+// holds the VM; the manager adapter wraps the manager's own error in it.
+var ErrVMOperationInProgress = errors.New("VM operation in progress")
+
 type captureDataImageRequest struct {
 	ComputerID string `json:"computer_id"`
+	// DryRun names the computer's VM and owner without pausing it.
+	DryRun bool `json:"dry_run,omitempty"`
 }
 
 type captureDataImageResponse struct {
@@ -63,17 +70,26 @@ func (h *Handler) HandleCaptureDataImage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// A direct registry lookup: one computer's capture does not wait on
-	// classifying every other ownership (review 364).
+	// classifying every other ownership (review 364). The route-authority
+	// classification listOwnershipResponses adds (constructed-version
+	// identity, disk receipt) is not needed here: the capture reads the
+	// active interactive VM's own data image, whatever version built it, and
+	// the base it yields is checked against the tape off the guest, so an
+	// unavailable route authority need not block it (review 365).
 	computerID := strings.TrimSpace(req.ComputerID)
 	for _, own := range h.registry.ListOwnerships() {
 		if stableComputerID(own.UserID, own.DesktopID, own.ComputerID) != computerID || own.State != VMStateActive || (own.Kind != "" && own.Kind != VMKindInteractive) {
 			continue
 		}
+		if req.DryRun {
+			writeVMCTLJSON(w, http.StatusOK, captureDataImageResponse{VMID: own.VMID, ComputerID: computerID, UserID: own.UserID})
+			return
+		}
 		c, err := capturer.CaptureDataImage(own.VMID)
 		if err != nil {
 			log.Printf("vmctl: data image capture %s (computer %s): %v", own.VMID, computerID, err)
 			code := http.StatusInternalServerError
-			if strings.Contains(err.Error(), "VM operation in progress") {
+			if errors.Is(err, ErrVMOperationInProgress) {
 				// Another operation holds the VM: contention, not failure.
 				code = http.StatusConflict
 			}

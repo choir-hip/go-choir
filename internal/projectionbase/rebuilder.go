@@ -336,6 +336,25 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		if start < epochFloor {
 			return nil, fmt.Errorf("%w: replay would start at %d, below the epoch root at %d; seed from the root (a genesis repair of this computer starts there)", ErrBaseRefused, start, epochFloor)
 		}
+		// At or above the floor the replay must also be on the root's line:
+		// its seed (or a resumed scratch's recorded seed) is the root or a
+		// base that records it. A pre-root base at the root's own sequence,
+		// or a scratch replayed from genesis, is not (review 365).
+		if line := inheritedEpochRoot(seed, meta); line == nil || line.Sequence < epochFloor {
+			if seed == nil && localHead != nil {
+				// A resumed scratch with no record of the root (a genesis
+				// repair's, or one whose bookkeeping was cleaned before a
+				// failed publish): discard it. The error is transient, so
+				// the job retries and its next attempt seeds afresh.
+				closed = true
+				_ = scratchStore.Close()
+				if err := resetScratchContent(scratchDir); err != nil {
+					return nil, fmt.Errorf("%w: discard scratch off the epoch root's line: %v", ErrBaseRefused, err)
+				}
+				return nil, fmt.Errorf("rebuilder: resumed scratch at %d is not on the epoch root's line (root at %d); discarded, the next attempt seeds from the root", start, epochFloor)
+			}
+			return nil, fmt.Errorf("%w: replay from %d is not on the epoch root's line (root at %d); seed from the root", ErrBaseRefused, start, epochFloor)
+		}
 	}
 	if localHead == nil && seed == nil && cfg.SeedPolicy == SeedAuto {
 		// Routine path fell back to genesis: refuse beyond the first-base bound.

@@ -60,6 +60,10 @@ type captureGrant struct {
 
 // captureDeps are the job's effects, one function each.
 type captureDeps struct {
+	// precheck returns the computer's advertised watermark, refusing when
+	// the tape is not above it: no store head could exceed it, so a pause
+	// would be for nothing (review 365).
+	precheck   func(ctx context.Context, computerID string) (uint64, error)
 	capture    func(ctx context.Context, computerID string) (captureGrant, error)
 	mount      func(ctx context.Context, image, dir string) (unmount func() error, err error)
 	publish    func(ctx context.Context, cfg projectionbase.CaptureConfig) (*projectionbase.Result, error)
@@ -218,6 +222,10 @@ func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) 
 		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
 		defer cancel()
 	}
+	watermark, err := deps.precheck(ctx, opts.ComputerID)
+	if err != nil {
+		return report, fmt.Errorf("precheck (nothing paused): %w", err)
+	}
 	grant, err := deps.capture(ctx, opts.ComputerID)
 	if err != nil {
 		return report, fmt.Errorf("capture: %w", err)
@@ -247,6 +255,7 @@ func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) 
 		StoreMarker:   filepath.Join(mountDir, "state"),
 		ArtifactsRoot: opts.ArtifactsRoot,
 		CaptureFS:     filepath.Dir(grant.CapturePath),
+		AboveSequence: watermark,
 		MinFreeBytes:  opts.MinFreeBytes,
 		TapeHeadAt: func(ctx context.Context, computerID string, sequence uint64) (string, error) {
 			return deps.tapeHeadAt(ctx, grant.UserID, computerID, sequence)
@@ -323,6 +332,9 @@ func captureBaseMain(args []string) int {
 	defer cancel()
 	client := &http.Client{Timeout: 2 * time.Minute, Transport: internalTransport{}}
 	deps := captureDeps{
+		precheck: func(ctx context.Context, id string) (uint64, error) {
+			return precheckWatermark(ctx, client, *vmctlURL, *platformURL, id)
+		},
 		capture: func(ctx context.Context, id string) (captureGrant, error) {
 			return requestCapture(ctx, client, *vmctlURL, id)
 		},
@@ -399,6 +411,51 @@ func requestCapture(ctx context.Context, client *http.Client, vmctlURL, computer
 		return grant, fmt.Errorf("vmctl answered an incomplete capture: %+v", grant)
 	}
 	return grant, nil
+}
+
+// precheckWatermark asks vmctl, without pausing, for the computer's owner
+// (a dry run), reads the tape head as that owner and the advertised
+// watermark, and refuses when the head is not above the watermark: no
+// captured store head could exceed it. It returns the watermark (0: none).
+func precheckWatermark(ctx context.Context, client *http.Client, vmctlURL, platformURL, computerID string) (uint64, error) {
+	var who captureGrant
+	if _, err := postJSON(ctx, client, strings.TrimRight(vmctlURL, "/")+"/internal/vmctl/capture-data-image", map[string]any{"computer_id": computerID, "dry_run": true}, &who); err != nil {
+		return 0, err
+	}
+	if who.ComputerID != computerID || who.UserID == "" {
+		return 0, fmt.Errorf("vmctl answered an incomplete dry run: %+v", who)
+	}
+	events, err := computerevent.NewHTTPClient(platformURL, &http.Client{Timeout: time.Minute, Transport: internalTransport{owner: who.UserID}},
+		func(context.Context) (string, error) { return "internal", nil }, true)
+	if err != nil {
+		return 0, err
+	}
+	head, err := events.Head(ctx, computerID)
+	if err != nil {
+		return 0, fmt.Errorf("tape head: %w", err)
+	}
+	if head == nil {
+		return 0, fmt.Errorf("computer %s has no tape", computerID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(platformURL, "/")+"/internal/computers/files/watermark?"+url.Values{"computer_id": {computerID}}.Encode(), nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("watermark: %w", err)
+	}
+	defer resp.Body.Close()
+	var wm watermarkAnswer
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+	case resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&wm) != nil:
+		return 0, fmt.Errorf("watermark: status %d", resp.StatusCode)
+	}
+	if head.Sequence <= wm.Sequence {
+		return 0, fmt.Errorf("tape head %d is not above the advertised watermark %d (%s): a capture could not become the root; nothing to do", head.Sequence, wm.Sequence, wm.BaseRef)
+	}
+	return wm.Sequence, nil
 }
 
 type watermarkAnswer struct {

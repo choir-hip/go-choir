@@ -591,9 +591,11 @@ type Manager struct {
 	templateCloneFn     func(dst, src *os.File) error
 	// captureCloneFn is the data image capture's clone (nil = FICLONE), a
 	// test seam (data_image_capture.go), and captureCloneDeadline bounds it
-	// (0 = captureCloneTimeout).
+	// (0 = captureCloneTimeout). captureAbandonedDone, when set, runs
+	// when an abandoned clone's cleanup ends (a test seam).
 	captureCloneFn       func(dst, src *os.File) error
 	captureCloneDeadline time.Duration
+	captureAbandonedDone func()
 }
 
 func (m *Manager) StateDir() string {
@@ -986,8 +988,14 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		// Only stale metadata remains: a dead PID file or a leftover tap.
 		m.cleanupOrphanedFirecrackerLocked(cfg.VMID, "boot")
 	}
-	// No process of this VM runs, so no capture holds it paused.
-	m.clearCapturePause(cfg.VMID)
+	// No process of this VM runs, so no capture holds it paused. A process
+	// that outlived forceCleanup's kill keeps its marker: clearing it would
+	// lose the record that the VM may be paused.
+	if m.liveFirecrackerForVMLocked(cfg.VMID) {
+		log.Printf("vmmanager: VM %s: a Firecracker process outlived the boot cleanup; its capture pause marker is kept", cfg.VMID)
+	} else {
+		m.clearCapturePause(cfg.VMID)
+	}
 
 	// Assign a host port/subnet for this VM. A vmctl restart can leave stale
 	// linkdown tap devices from failed boots holding old /30 routes; reclaim
@@ -1306,7 +1314,13 @@ func (m *Manager) applyLaunchDefaults(cfg *VMConfig) {
 // StopVM cleanly stops a running VM. It takes the VM's operation lock, so
 // it never kills a VM inside another operation's window (a data image
 // capture's pause; review 364). A shutdown waits at most for that
-// operation's own bounds.
+// operation's own bounds. For a capture that is, worst case, the pause
+// call (capturePauseTimeout, 10s) plus the clone deadline
+// (captureCloneTimeout, 30s) plus every resume try (3 x 10s) plus the
+// state probe (10s): 80s, a few seconds when nothing fails. An abandoned
+// clone's cleanup takes the lock only after FICLONE returns, and only for
+// two unlinks. Callers that hold r.mu while they stop a VM (logout,
+// rescue) wait as long (review 365, DeepSeek 7).
 func (m *Manager) StopVM(vmID string) error {
 	unlock := m.lockVMOperation(vmID)
 	defer unlock()
@@ -1573,6 +1587,9 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	if inst, ok := m.vms[vmID]; ok {
 		if inst.State == StateRunning {
 			m.mu.Unlock()
+			// A marker a busy recovery could not take (its tryLock lost
+			// to an operation) is retried on every later reattach call.
+			m.recoverCapturePause(vmID)
 			return inst, nil
 		}
 	}

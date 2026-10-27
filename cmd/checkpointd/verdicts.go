@@ -29,6 +29,7 @@ type verdictStore interface {
 	EnqueueCheckpointVerificationJob(ctx context.Context, record platform.CheckpointVerdictRecord) (platform.ProjectionJob, error)
 	ProjectionJob(ctx context.Context, computerID string) (platform.ProjectionJob, error)
 	PinProjectionBase(ctx context.Context, computerID, baseRef, reference string) error
+	EpochRoot(ctx context.Context, computerID string) (string, uint64, error)
 }
 
 // reconcileCheckpointVerdicts judges every pending checkpoint it can from a
@@ -51,6 +52,25 @@ func reconcileCheckpointVerdicts(ctx context.Context, store verdictStore, loadBa
 			return errors.Join(append(errs, err)...)
 		}
 		if handled[rec.ComputerID] {
+			continue
+		}
+		// Below the epoch root nothing is judged: the tape there is no
+		// longer the definition of state, and a pre-root base still held at
+		// the checkpoint's sequence must not certify it (review 365).
+		_, rootSeq, err := store.EpochRoot(ctx, rec.ComputerID)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("checkpoint %s: epoch root: %w", rec.CheckpointDigest, err))
+			handled[rec.ComputerID] = true
+			continue
+		}
+		if rootSeq > 0 && rec.Verdict.AcceptedSequence < rootSeq {
+			if _, err := store.ResolveCheckpointVerdict(ctx, rec.ComputerID, rec.CheckpointDigest, selfdevprotocol.CheckpointVerdict{
+				Status: selfdevprotocol.CheckpointVerdictUnverified, Reason: selfdevprotocol.VerdictReasonNoBase,
+				Detail: fmt.Sprintf("checkpoint at %d is below the epoch root at %d", rec.Verdict.AcceptedSequence, rootSeq),
+			}); err != nil {
+				errs = append(errs, fmt.Errorf("checkpoint %s: %w", rec.CheckpointDigest, err))
+				handled[rec.ComputerID] = true
+			}
 			continue
 		}
 		judged, err := judgeFromHeldBase(ctx, store, loadBase, rec)

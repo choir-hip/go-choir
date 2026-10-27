@@ -520,6 +520,9 @@ func (a *vmManagerAdapter) GuestMemoryStats(vmID string) (vmctl.GuestMemoryStats
 // (internal/vmctl/data_image_capture.go).
 func (a *vmManagerAdapter) CaptureDataImage(vmID string) (vmctl.DataImageCapture, error) {
 	c, err := a.mgr.CaptureDataImage(vmID)
+	if errors.Is(err, vmmanager.ErrVMOperationInProgress) {
+		return vmctl.DataImageCapture{}, fmt.Errorf("%w: %v", vmctl.ErrVMOperationInProgress, err)
+	}
 	if err != nil {
 		return vmctl.DataImageCapture{}, err
 	}

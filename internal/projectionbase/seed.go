@@ -1,6 +1,7 @@
 package projectionbase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -82,11 +83,23 @@ func publishedEpochFloor(artifactsRoot, computerID string) (uint64, error) {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue // removed since the listing
+		}
 		if err != nil {
-			continue
+			// Unreadable, so it may be this computer's root: fail closed.
+			return 0, fmt.Errorf("%w: epoch floor: read %s: %v", ErrBaseRefused, name, err)
 		}
 		descriptor, err := ParseDescriptor(raw)
-		if err != nil || descriptor.ComputerID != computerID {
+		if err != nil {
+			// A torn root must not lower the floor: refuse when the bytes
+			// name this computer; another computer's is not ours to judge.
+			if bytes.Contains(raw, []byte(`"`+computerID+`"`)) {
+				return 0, fmt.Errorf("%w: epoch floor: descriptor %s names %s and does not parse: %v", ErrBaseRefused, name, computerID, err)
+			}
+			continue
+		}
+		if descriptor.ComputerID != computerID {
 			continue
 		}
 		if f := descriptor.EpochFloor(); f > floor {
