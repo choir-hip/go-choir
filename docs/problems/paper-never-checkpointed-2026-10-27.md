@@ -100,6 +100,22 @@ Slices, in order:
   snapshot, stop; on wake, resume).
 - S6, orange, tier 1: diff snapshots for every non-protected computer.
 
+## Owner decision, S2 (2026-10-27 20:43 UTC)
+
+Owner: "Yes, Paper's first checkpoint is a copy of its live desk [disk].
+Notice that the auto paper actually doesn't have unique data. It doesn't
+have its own file system. So it's really something which can be run in a
+very lightweight way. I mean, I could even imagine it running on a
+ephemeral sandbox ... not that I want to go that way right now, but yes,
+first copy."
+
+S2 is authorized: the paper's first base is a host capture of its live
+data image, typed `live_captured`. A second point carries weight: the paper
+holds no data that exists nowhere else; everything it has comes from its
+sources and its tape. So a captured base being wrong costs a rebuild, not
+data loss. That lowers S2's risk class for the paper. The ephemeral-sandbox
+idea is recorded, not pursued.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
