@@ -100,6 +100,26 @@ Slices, in order:
   snapshot, stop; on wake, resume).
 - S6, orange, tier 1: diff snapshots for every non-protected computer.
 
+## Correction: the seed base opens (FP0, 2026-10-27 21:0x UTC)
+
+S1 (6d7a37d07, deployed 21:02:30) re-admitted the paper's blocked row on
+the new build. Generation 22 is `running`. It installed the seed
+`abacf6b0…` and is replaying from event 34660, at about 1024 events per
+30 s; the replay page fetch alone takes 8 to 9.5 s. So the seed is not
+damaged. The 10-15 refusal came from code that has since been fixed, and
+the row sat blocked for twelve days only because a blocked row never
+retried. The design pass's damage hypothesis is refuted, and S0 is moot.
+
+What follows:
+- The replay must cover about 4.38M events, roughly 36 hours at this rate.
+  S1's 8-minute job deadline ends each attempt. A failed row re-enqueues
+  under a new generation and prunes its scratch, so a host replay of the
+  paper never converges. It only burns up to 8 minutes of a core per
+  attempt, under the backoff.
+- S2, the host capture, stays the route to the paper's first base. The
+  fetch time is a residual: about 9 s per 1024 events from the artifacts
+  store, investigated separately.
+
 ## Owner decision, S2 (2026-10-27 20:43 UTC)
 
 Owner: "Yes, Paper's first checkpoint is a copy of its live desk [disk].
