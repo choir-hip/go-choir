@@ -196,3 +196,42 @@ Fix candidates (red, capsule egress):
 
 H7 (the trim timer) and H8 (the derived-key pass) are no longer needed to
 explain this stall. Neither is ruled out as a contributor.
+
+## Update 07:0x: what sent npm to the registry (read in the round's trace)
+
+The stalled job is job-31e0c2d7e10c (attempt 3, started 02:20:56, stopped
+02:43:26, trajectory 150b7de5…). Its script is the frontend build from
+engineering's runtime prompt
+(`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml:58`):
+
+```
+if cmp -s package.json $d/package.json && cmp -s package-lock.json $d/package-lock.json && test -d $d/node_modules; then
+  ln -s $d/node_modules node_modules      # the locked deps from the Nix store, no network
+else
+  npm ci --no-audit --no-fund             # needs the registry
+fi
+```
+
+with `d=$CHOIR_FRONTEND_DEPS`. The job's tail at 02:23:48 shows a Node
+process leaking socket listeners (`MaxListenersExceededWarning … 11 socket
+listeners added to [ClientRequest]`), which is npm retrying. So the `cmp`
+check failed and the build fell to `npm ci`, in a capsule with no grant
+for the registry: the 52,434 refused connections of H9.
+
+Neither package file changed in the release: their last change is
+448b40150 (2026-10-15), already in train 28. So the mismatch is between
+the capsule's tree and the guest's `$CHOIR_FRONTEND_DEPS`, and it began
+between 00:18 (attempt 1 linked the deps) and 01:09. Candidates:
+
+- the capsule's base tree is b@c's own source (U4 source projection is on
+  for b@c), and its package files differ from the platform's, for example
+  from an applied self-development candidate;
+- or the refreshed guest's `$CHOIR_FRONTEND_DEPS` carries package files
+  that differ from the platform tree.
+
+The next observation is one cell in the next capsule:
+`cmp package.json $d/package.json; cmp package-lock.json $d/package-lock.json; ls -l $d`
+from /workspace/platform/frontend. Train 33 (036a216eb) fixes the flood, so
+a refused `npm ci` is now one log line and a failed build, not a stalled
+guest. The prompt's rule still applies: a change to the package files needs
+a second round with the ecosystem grant.
