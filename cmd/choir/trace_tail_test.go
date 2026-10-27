@@ -412,7 +412,7 @@ func TestTraceTailSurvivesTransientErrors(t *testing.T) {
 		func() {}, // recovered
 	}
 	// After the first successful (initial) poll, make later polls fail then recover.
-	code, out, errOut, _ := tailRun(t, w, []string{"--history", "--until", "settled", tailTraj}, steps, 4)
+	code, out, errOut, _ := tailRun(t, w, []string{"--history", "--until", "settled", tailTraj}, steps, 6)
 	if code != tailExitStopped {
 		t.Fatalf("exit=%d; transient errors must not end the tail\nout:%s\nerr:%s", code, out, errOut)
 	}

@@ -57,7 +57,7 @@ var wantCLIOnly = []string{
 	// Owner acts (P7/P8): publishing and adopting a release.
 	"release adopt", "release publish", "self-dev approve",
 	// Owner act: rolling an applied operation back.
-	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "version",
+	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
 }
 
 func TestRegistryParityCLIAndMCP(t *testing.T) {

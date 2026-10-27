@@ -701,6 +701,20 @@ func buildRegistry() []*command {
 			cliOnly: "writes an unredacted owner trace bundle to a local 0600 file; inline it would put a multi-megabyte bundle into model context, and a hosted server has no local file. Planned: a resource choir://trajectories/{id}/trace-bundle",
 			legacy:  runTraceExport,
 		},
+		{
+			path: []string{"trace", "tail"}, summary: "Follow a trajectory's lifecycle, runs, tools and candidates, one line per event (read-only; exit codes name the terminal state)",
+			params: []param{
+				pStr("trajectory_id", "Trajectory id").req().one(),
+				pDuration("interval", "Poll interval (floor 1s)").dflt(5 * time.Second),
+				pDuration("grace", "Revoked capsule with no new assignment ends the tail after this long").dflt(120 * time.Second),
+				pStr("until", "Only these terminal states end the tail: candidate, restart, revoked, owner, settled"),
+				pBool("history", "Also print events from before the tail started"),
+				pBool("json", "JSONL output"),
+			},
+			scopes: []string{"read:runtime", "read:texture", "computer:self_development:read"}, readOnly: true,
+			cliOnly: "streams until a terminal state and reports it as the process exit code; an MCP tools/call returns once (Claude caps a call at 240s). Use `trace export` for a snapshot",
+			legacy:  runTraceTailCLI,
+		},
 
 		// precommitments (calibration level 2)
 		{

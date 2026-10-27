@@ -926,7 +926,11 @@ func defaultTraceOut(trajectoryID string) (string, error) {
 
 // splitTraceArgs lets the trajectory id come before or after the flags.
 func splitTraceArgs(args []string) (flagArgs, positional []string) {
-	valueFlags := map[string]bool{"out": true, "api-key-file": true, "host": true, "computer": true, "timeout": true}
+	return splitTraceArgsWith(args, map[string]bool{"out": true, "api-key-file": true, "host": true, "computer": true, "timeout": true})
+}
+
+// splitTraceArgsWith is splitTraceArgs with the value-taking flags named.
+func splitTraceArgsWith(args []string, valueFlags map[string]bool) (flagArgs, positional []string) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
