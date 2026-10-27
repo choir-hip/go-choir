@@ -9,11 +9,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
-// Shared dispatcher slots with dispatch.wide_slots off and on.
-const (
-	dispatchSlotsDefault = 8
-	dispatchSlotsWide    = 12
-)
+// dispatchSlotsWide is the shared dispatcher cap with dispatch.wide_slots
+// on. Off asks the dispatcher for its own default (8).
+const dispatchSlotsWide = 12
 
 // SetSharedSlotsActor binds the dispatcher's live cap and applies the
 // computer's dispatch.wide_slots setting to it at once, so a boot starts at
@@ -44,10 +42,10 @@ func (rt *Runtime) applyDispatchSlotsSetting(value bool) {
 	if fn == nil {
 		return
 	}
-	n := dispatchSlotsDefault
+	n := 0 // the dispatcher's default
 	if value {
 		n = dispatchSlotsWide
 	}
 	fn(n)
-	log.Printf("dispatcher: shared slots set to %d (%s)", n, store.SettingDispatchWideSlots)
+	log.Printf("dispatcher: shared slots set to %d, 0 is the default (%s)", n, store.SettingDispatchWideSlots)
 }

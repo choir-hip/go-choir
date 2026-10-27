@@ -44,8 +44,8 @@ func TestDispatchWideSlotsSettingSetsTheDispatcherCap(t *testing.T) {
 		t.Fatalf("on: cap calls = %v, want [12]", got)
 	}
 	post("false")
-	if len(got) != 2 || got[1] != 8 {
-		t.Fatalf("off: cap calls = %v, want [12 8]", got)
+	if len(got) != 2 || got[1] != 0 {
+		t.Fatalf("off: cap calls = %v, want [12 0] (0 is the dispatcher's default)", got)
 	}
 
 	// A boot with the setting stored on starts at 12.
