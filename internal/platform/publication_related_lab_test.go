@@ -43,6 +43,9 @@ func newRelatedLab(t *testing.T) *relatedLab {
 	// overrun answers empty (related-stories-test-overruns-its-budget-under-ci-2026-10-22.md).
 	// The budget test sets its own values.
 	svc.related.tuning.Budget = 30 * time.Second
+	// The lab pins the strong signals; the floor (MinLinks) has its own
+	// tests in publication_related_floor_test.go and turns it on there.
+	svc.related.tuning.MinLinks = 0
 	bodies := &CaptureBodyStore{root: CaptureBodiesRoot(artifactsRoot)}
 	return &relatedLab{
 		t: t, svc: svc, store: store, artifactsRoot: artifactsRoot,

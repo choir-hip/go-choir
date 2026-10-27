@@ -130,6 +130,14 @@ type relatedTuning struct {
 	CacheCap int
 	// VersionPubCap bounds the version to publication memo.
 	VersionPubCap int
+	// MinLinks is the floor: a list shorter than this is filled with weaker
+	// links (publication_related_floor.go); 0 turns the floor off.
+	MinLinks int
+	// PoolSize, PoolTTL and PoolReadTimeout bound the floor's pool of recent
+	// stories, read outside the request's Budget.
+	PoolSize        int
+	PoolTTL         time.Duration
+	PoolReadTimeout time.Duration
 }
 
 func defaultRelatedTuning() relatedTuning {
@@ -151,6 +159,10 @@ func defaultRelatedTuning() relatedTuning {
 		TTL:              5 * time.Minute,
 		CacheCap:         500,
 		VersionPubCap:    50000,
+		MinLinks:         3,
+		PoolSize:         150,
+		PoolTTL:          2 * time.Minute,
+		PoolReadTimeout:  10 * time.Second,
 	}
 }
 
@@ -191,6 +203,9 @@ type RelatedShared struct {
 	// Entities counts the central entities both stories are about (each
 	// central to at most HubEntityStories stories).
 	Entities int `json:"entities"`
+	// Terms counts the title and dek terms a floor link shares (reason
+	// similar); 0 for every other link.
+	Terms int `json:"terms,omitempty"`
 }
 
 // relatedCache is the in-process state of the related walk: the answer
@@ -208,6 +223,11 @@ type relatedCache struct {
 	versionPub map[string]string
 	storyN     int
 	storyNAt   time.Time
+	// pool is the floor's recent stories, read at poolAt; poolMu lets one
+	// request read it while the others wait (never held with mu).
+	pool   []FrontStory
+	poolAt time.Time
+	poolMu sync.Mutex
 }
 
 type relatedEntry struct {
@@ -261,6 +281,7 @@ func (c *relatedCache) reset() {
 	c.order = nil
 	c.versionPub = map[string]string{}
 	c.storyN, c.storyNAt = 0, time.Time{}
+	c.pool, c.poolAt = nil, time.Time{}
 }
 
 func (c *relatedCache) size() int {
@@ -569,6 +590,9 @@ func (s *Service) RelatedStories(ctx context.Context, routePath string, limit in
 	t := c.tune()
 	now := c.clock()
 	out := &RelatedStories{Route: strings.TrimSpace(routePath), Links: []RelatedLink{}, GeneratedAt: now.UTC(), Basis: RelatedBasis{Mode: relatedMode()}}
+	if relatedFloorOn(t) {
+		out.Basis.Mode += relatedModeFloorSuffix
+	}
 	if relatedDisabled() {
 		out.Basis.Mode = relatedModeOff
 		return out, nil
@@ -647,6 +671,9 @@ func (s *Service) relatedWalk(ctx context.Context, bare string, limit int, t rel
 		return nil, err
 	}
 	out.Links = rankRelated(self, cands, now, t, limit)
+	if relatedFloorOn(t) && len(out.Links) < min(t.MinLinks, limit) {
+		out.Links = floorRelated(self, out.Links, s.relatedFloorPool(ctx, t), now, t, min(t.MinLinks, limit))
+	}
 	c.put(key, out)
 	return out, nil
 }
