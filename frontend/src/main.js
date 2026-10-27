@@ -4,7 +4,10 @@ import './lib/desktop-motion.css';
 import { exposeBuildInfo } from './lib/build-info.js';
 import { installTetraMarkFavicon } from './lib/tetramark';
 
+import { installIdleWatcher } from './lib/idle';
+
 exposeBuildInfo();
+installIdleWatcher();
 installTetraMarkFavicon();
 
 const app = new App({

@@ -17,6 +17,7 @@
   and whenever prefers-reduced-motion asks for stillness.
 -->
 <script lang="ts">
+  import { isIdle, onIdleChange } from './idle';
   import { onDestroy, onMount } from 'svelte';
 
   export let density: 'intro' | 'ambient' = 'intro';
@@ -293,15 +294,13 @@
     raf = 0;
   }
 
-  // Ambient only: after IDLE_MS without input the field freezes on its last
-  // frame (0 CPU, 0 compositor work) and wakes on the next input.
-  const IDLE_MS = 120_000;
-  let idleTimer: ReturnType<typeof setTimeout> | null = null;
-  function onInput() {
+  // Ambient only: the shared idle module (idle.ts) owns "idle"; the field
+  // freezes on its last frame (0 CPU, 0 compositor work) and wakes on input.
+  let unsubIdle: (() => void) | null = null;
+  function onIdle(idle: boolean) {
     if (density !== 'ambient') return;
-    if (idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(stop, IDLE_MS);
-    if (visible) start();
+    if (idle) stop();
+    else if (visible) start();
   }
 
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -315,8 +314,7 @@
   function onVisibility() {
     visible = document.visibilityState === 'visible';
     if (visible) {
-      onInput();
-      start();
+      if (!isIdle()) start();
     } else stop();
   }
 
@@ -332,8 +330,7 @@
         stop();
         render(performance.now());
       } else {
-        onInput();
-        start();
+        if (!isIdle()) start();
       }
     });
     resize();
@@ -341,10 +338,7 @@
     else start();
     window.addEventListener('resize', onResize, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
-    for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
-      window.addEventListener(ev, onInput, { passive: true });
-    }
-    onInput();
+    unsubIdle = onIdleChange(onIdle);
   });
 
   onDestroy(() => {
@@ -353,11 +347,8 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
-      for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
-        window.removeEventListener(ev, onInput);
-      }
     }
-    if (idleTimer) clearTimeout(idleTimer);
+    unsubIdle?.();
   });
 </script>
 
