@@ -548,10 +548,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			cleanupErr = errors.Join(cleanupErr, caps.listener.Close())
 			caps.listener = nil
 		}
-		if caps.egress != nil {
-			caps.egress.Close()
-			caps.egress = nil
-		}
+		caps.closeEgress()
 		if caps.Cgroup != nil {
 			cleanupErr = errors.Join(cleanupErr, caps.Cgroup.Delete())
 		}
@@ -777,7 +774,6 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 	ledgerDir := filepath.Join(e.artifactRoot(), "egress")
 	_ = os.MkdirAll(ledgerDir, 0o700)
 	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
-	var ledgerMu sync.Mutex
 	// The grant is read once per capsule: its route, allowlist and client
 	// settings come from the same reading.
 	var mirrors mirrorgrant.Status
@@ -786,16 +782,9 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 			caps.mirrors = mirrors.Ecosystems
 		}
 	}
-	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate, mirrors), func(record EgressRecord) {
-		line, _ := json.Marshal(record)
-		log.Printf("capsule-egress: %s", line)
-		ledgerMu.Lock()
-		defer ledgerMu.Unlock()
-		if f, err := os.OpenFile(ledgerPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-			_, _ = f.Write(append(line, '\n'))
-			_ = f.Close()
-		}
-	})
+	sink := newEgressSink(ledgerPath, log.Printf, time.Now, egressSinkLogEvery)
+	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate, mirrors), sink.Record)
+	caps.egressSink = sink
 	caps.egress = proxy
 	go func() { _ = proxy.Serve(listener) }()
 	return nil
@@ -962,10 +951,7 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		_ = caps.listener.Close()
 		caps.listener = nil
 	}
-	if caps.egress != nil {
-		caps.egress.Close()
-		caps.egress = nil
-	}
+	caps.closeEgress()
 	var cleanupErr error
 	if caps.Process != nil {
 		_ = caps.Process.Signal(signal)

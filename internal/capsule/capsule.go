@@ -46,6 +46,7 @@ type Capsule struct {
 	wait                 func() error
 	listener             net.Listener
 	egress               *EgressProxy // ecosystem_proxy (L2) capsules only
+	egressSink           *egressSink  // the proxy's ledger and log aggregation; closed with it
 	mirrors              []string     // ecosystems routed to the host package mirror (mirror.go)
 	processDone          chan struct{}
 	processErr           error
@@ -292,4 +293,17 @@ func (c *Capsule) IsPinned() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Pinned
+}
+
+// closeEgress stops the egress proxy, then closes its sink, which logs the
+// suppressed counts and flushes and closes the ledger file.
+func (c *Capsule) closeEgress() {
+	if c.egress != nil {
+		c.egress.Close()
+		c.egress = nil
+	}
+	if c.egressSink != nil {
+		c.egressSink.Close()
+		c.egressSink = nil
+	}
 }
