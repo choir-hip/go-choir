@@ -91,8 +91,8 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 	if ph.stop == "" {
 		ph.stop = "error"
 	}
-	log.Printf("related review: batch %s: tape %s (%d events), list %s (%d stories), loop %s, scanned %d, requested %d, stop %s, total %s, err=%v",
-		batchID, ph.tape.Round(time.Millisecond), ph.events, ph.list.Round(time.Millisecond), ph.stories, ph.loop.Round(time.Millisecond),
+	log.Printf("related review: batch %q: tape %s (%d events), list %s (%d stories), loop %s, scanned %d, requested %d, stop %s, total %s, err=%v",
+		out.BatchID, ph.tape.Round(time.Millisecond), ph.events, ph.list.Round(time.Millisecond), ph.stories, ph.loop.Round(time.Millisecond),
 		out.Scanned, len(out.Requested), ph.stop, time.Since(start).Round(time.Millisecond), err)
 	return out, err
 }
@@ -150,12 +150,12 @@ func (rt *Runtime) storyEntitiesBackfillFrom(ctx context.Context, owner, compute
 	for i, doc := range docs {
 		if i > 0 {
 			switch {
+			case time.Since(start) >= storyEntitiesBackfillWallMax:
+				ph.stop = "wall"
 			case len(out.Requested) >= limit:
 				ph.stop = "limit"
 			case out.Scanned >= scanMax:
 				ph.stop = "scan"
-			case time.Since(start) >= storyEntitiesBackfillWallMax:
-				ph.stop = "wall"
 			}
 		}
 		if ph.stop != "" {
