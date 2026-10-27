@@ -222,6 +222,10 @@ transient unit with:
 Because it holds the platform's internal token and its default paths are
 Node B's, run it only on Node B, by the operator.
 
+**Deploy order.** vmctl before checkpointd: the precheck needs vmctl's dry
+run. Both ship in the same release, so one deploy brings both; a
+checkpointd that meets an older vmctl refuses at the precheck.
+
 ```sh
 sudo systemd-run --unit=choir-capture-base --collect --wait --pipe \
   -p Nice=19 -p IOSchedulingClass=idle -p CPUQuota=100% \
@@ -242,12 +246,14 @@ It prints one JSON line with these fields: `vm_id`, `paused_ms`,
 
 **What a run does, in order.**
 1. Takes the run lock (`/var/lib/go-choir/capture-base/.capture-base.lock`;
-   a second run refuses). Then, before anything pauses, asks vmctl for a
-   dry run (the VM and its owner), reads the tape head and the advertised
-   watermark, and refuses when the head is not above the watermark.
-2. Sweeps what a killed run left: mounts under the mount root, and any
-   `vm-state/<vm>/data.img.capture` that has no `capture-pause.json` beside
-   it.
+   a second run refuses), then sweeps what a killed run left: mounts under
+   the mount root, and any `vm-state/<vm>/data.img.capture` that has no
+   `capture-pause.json` beside it. An empty `-state-dir` is refused.
+2. Before anything pauses, asks vmctl for a dry run (the VM and its
+   owner), reads the tape head and the advertised watermark, and refuses
+   when the head is not above the watermark. A dry-run answer that carries
+   a `capture_path` is refused ("vmctl did not honor dry_run"): that vmctl
+   predates the dry run and captured.
 3. Asks vmctl for the capture: a durable pause marker, a pause, a reflink
    with a 30 s deadline and a resume watchdog, a resume confirmed by
    `GET /`, and an fsync of the clone. A marker that cannot be removed
@@ -268,7 +274,17 @@ It prints one JSON line with these fields: `vm_id`, `paused_ms`,
 10. Unmounts, then removes the clone.
 
 On an advertisement error the watermark is read back. The base is
-retracted only on a definite absent or lower watermark.
+retracted on a definite answer that it is not advertised: an absent, lower
+or higher watermark, or another base at its sequence. corpusd records only
+a higher sequence, so a higher watermark means this base never will be;
+a `live_captured` sidecar kept then would raise the host rebuilder's floor
+and block the computer's jobs (review 366).
+
+**On "advertise outcome unknown"** (the readback failed), the base is kept,
+because the POST may have landed. Once corpusd answers, read
+`GET /internal/computers/files/watermark?computer_id=...` once. If it does
+not name the base's `base_ref`, remove the base's blob and its
+`.descriptor.json` sidecar; a sidecar left behind keeps the floor.
 
 **A vmctl that dies inside the pause.** The marker stays behind. At
 reattach, vmctl resumes the VM, confirms it with `GET /`, and removes the
