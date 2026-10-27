@@ -262,7 +262,7 @@ func TestRelateRecordsTheAttachmentOnTheTapeAndExportsIt(t *testing.T) {
 			Name        string  `json:"name"`
 			Type        string  `json:"type"`
 			New         bool    `json:"new"`
-			Role        string  `json:"role"`
+			Role        string  `json:"entity_role"`
 			Probability float64 `json:"probability"`
 			JudgmentRef string  `json:"judgment_ref"`
 			QuestionID  string  `json:"question_id"`
@@ -274,7 +274,7 @@ func TestRelateRecordsTheAttachmentOnTheTapeAndExportsIt(t *testing.T) {
 	if payload.Computer != f.computer || payload.Story != f.a || len(payload.Attachments) != 2 {
 		t.Fatalf("payload = %s", evs[0].Payload)
 	}
-	if p := payload.Attachments[0]; p.EntityID != minted || p.Name != "Aleksandar Vucic" || p.Type != "person" || !p.New || p.Probability != 0.7 || p.JudgmentRef != receipt || p.QuestionID != "q1" {
+	if p := payload.Attachments[0]; p.EntityID != minted || p.Name != "Aleksandar Vucic" || p.Type != "person" || !p.New || p.Role != "central" || p.Probability != 0.7 || p.JudgmentRef != receipt || p.QuestionID != "q1" {
 		t.Fatalf("attachment = %+v", p)
 	}
 
