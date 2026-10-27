@@ -533,3 +533,35 @@ func TestRelateOwnStoryBindsToTheDesksDocAndAnUnboundDeskRefuses(t *testing.T) {
 		t.Fatalf("tape record story = %q, %v; want %q", rec.Story, err, want)
 	}
 }
+
+// A store that has cut over to the v2 vocabulary (the way a computer has it:
+// the fenced migration arms the write guard) must still take a Relate record.
+// The attachment's entity role is `entity_role`: a bare `role` leaf is read as
+// a desk role and refused (docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md).
+func TestRelateRecordsOnAStoreThatHasCutOver(t *testing.T) {
+	f := newEntityFixture(t)
+	f.turnOn(t)
+	if _, err := f.s.MigrateAndFenceServingVocabulary(context.Background(), false, nil); err != nil {
+		t.Fatal(err)
+	}
+	receipt := f.judgedEntity(t, "run-cut", "q1")
+	raw, err := f.attach(agentprofile.Research, "run-cut", newVucic(receipt, "q1", types.EntityRoleCentral))
+	if err != nil && strings.Contains(err.Error(), "vocab") {
+		t.Fatalf("the cut-over store refused the entities record: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = raw
+	events := f.entityEvents(t)
+	if len(events) != 1 {
+		t.Fatalf("tape holds %d story.entities events, want 1", len(events))
+	}
+	var rec storyEntitiesRecord
+	if err := json.Unmarshal(events[0].Payload, &rec); err != nil || len(rec.Attachments) == 0 || rec.Attachments[0].Role != types.EntityRoleCentral {
+		t.Fatalf("read back %s: %v", events[0].Payload, err)
+	}
+	if !strings.Contains(string(events[0].Payload), `"entity_role":"central"`) {
+		t.Fatalf("payload %s does not carry entity_role", events[0].Payload)
+	}
+}
