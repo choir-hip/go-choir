@@ -31,7 +31,8 @@ const StoryEntitiesBackfillMax = 200
 var storyEntitiesBackfillScanMax = 2000
 
 // storyEntitiesBackfillWallMax bounds one act's wall time, from its start,
-// so its receipt is written inside the guest server's 120 s write timeout;
+// so its receipt is written inside the server's default 120 s write
+// timeout (internal/server; the guest sets none);
 // past it the act stops after the story in hand and returns Next.
 var storyEntitiesBackfillWallMax = 90 * time.Second
 
