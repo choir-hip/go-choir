@@ -149,3 +149,50 @@ The next observation, cheapest first:
 
 Change 1 above (capsule jobs below the runtime in cpu and io weight;
 health without disk IO) stays the substrate fix whatever the cause.
+
+## Update 05:3x: H9, a refused-egress log flood (strongest so far)
+
+b@c's surviving guest console (02:37 to 02:58; earlier files rotated
+away) shows the build's npm retrying connections to `registry.npmjs.org`
+and the capsule's egress proxy refusing every one ("host is not on the
+npm ecosystem allowlist; ask management for a wider grant"):
+
+- **52,434 refused records,** all for registry.npmjs.org: 11,243 lines in
+  the 02:37 minute and 41,178 in the 02:40 minute. About 22 MB of console
+  output was written from 02:40:06 to 02:40:46, so the log rotated four
+  times in 40 seconds.
+- **14 kernel RCU stall messages** in the same files ("GPs behind …
+  detected by"). The guest kernel itself was starved.
+
+Each refused record does three writes (`internal/capsule/executor.go:789`):
+a `log.Printf` line that the runtime unit sends to the journal and the
+serial console (`StandardOutput = "journal+console"`,
+`nix/autoputer-vm.nix`), and an open, append and close of the capsule's
+egress ledger file on `/mnt/persistent`. A 52,000-connection retry loop
+is then about 52,000 file opens and appends, 52,000 journal writes and
+52,000 synchronous serial-console lines. That matches what was measured:
+guest IO pressure "full" 43 to 63%, memory pressure 0, and the host
+nearly idle (a serial console and a guest journal are guest-side waits).
+
+The paper's console has no egress lines and no RCU stalls, so its
+health flaps have a different cause
+([derived-key-validation-reruns-every-boot-2026-10-27.md](derived-key-validation-reruns-every-boot-2026-10-27.md)).
+
+Still unexplained: why the 00:18 build did not retry against the registry
+and the later builds did. Candidates: the capsule's npm mirror grant
+(`capsuleMirrorsLocked`) reading differently after the cold boot, or the
+shared node_modules not matching the package files in the later attempts,
+so npm went to the network. Not read yet.
+
+Fix candidates (red, capsule egress):
+1. Aggregate refusals: log the first refusal per host and capsule, then a
+   count every N seconds, never one line per connection.
+2. Keep egress records off the serial console: journal only, or the
+   ledger only.
+3. Batch ledger writes: keep the file open, or buffer.
+4. Make a refused registry fail the build fast (npm's fetch-retries,
+   offline mode when the mirror is not granted), so a missing grant reads
+   as "needs a grant" in seconds, not a 15-minute stall.
+
+H7 (the trim timer) and H8 (the derived-key pass) are no longer needed to
+explain this stall. Neither is ruled out as a contributor.
