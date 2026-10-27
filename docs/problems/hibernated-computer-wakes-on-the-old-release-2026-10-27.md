@@ -79,3 +79,20 @@ with no log line and no deadline. Fix candidates:
 
 Recommendation: A, as the standing design (resume, then update when idle) is
 right and only its gate is unbounded.
+
+## Revision (13:0x): the likely holder was FP0's own watcher; fix A withdrawn
+
+From 12:36:30 to 12:56 FP0's watcher polled b@c's API every 30 s
+(`self-dev list`, `lifecycle events`, b@c's key). That is the traffic that
+keeps `LastActiveAt` fresh, so the gate most likely saw a present user and
+held, as designed. Fix A (cap the gate) is withdrawn: it would restart a
+computer in front of its user, a failure mode `deploy_refresh_behind_test.go`
+guards. What remains:
+
+1. The hold is silent: no log line says an update waits on the user-idle
+   gate, so the wait looked like a lost update. Small fix: log the first
+   hold per entry (orange, vmctl log only).
+2. Open design question: should read-only API polling count as a user
+   present? An open tab polling has the same effect. Not decided here.
+3. FP0 practice: after a deploy, refresh a test computer by hand before a
+   proof round, or poll it less often than the gate's 2 minutes.
