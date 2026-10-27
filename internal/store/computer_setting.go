@@ -198,6 +198,13 @@ const SettingPackagesPublish = "packages.publish"
 // is the read side's.
 const SettingPackagesShare = "packages.share"
 
+// SettingDispatchWideSlots raises the dispatcher's shared slots from 8 to
+// 12 at once, without a restart (the owner for the paper, 2026-10-27: "I
+// have the tokens for it"; docs/problems/related-stories-not-showing-on-the-paper-2026-10-27.md
+// saw slots 8/8 with 94 to 114 agents due). Off by default; off is the
+// rollback: running activations finish and new ones wait for one of 8.
+const SettingDispatchWideSlots = "dispatch.wide_slots"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -224,6 +231,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureOwnerActWakes:         false,
 	SettingPackagesPublish:              false,
 	SettingPackagesShare:                false,
+	SettingDispatchWideSlots:            false,
 }
 
 // ComputerSetting is one switch's value on one computer.

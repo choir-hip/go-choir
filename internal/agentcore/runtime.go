@@ -191,7 +191,10 @@ type Runtime struct {
 	dispatchActorRedrive func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 	// scheduleActor durably appends a deferred actor occurrence. It is bound
 	// only in kernel mode, where NotBefore is interpreted by the dispatcher.
-	scheduleActor        func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
+	scheduleActor func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
+	// setSharedSlots changes the actor dispatcher's shared cap live. Bound
+	// by the adapter; nil before it.
+	setSharedSlots       func(int)
 	scheduleActorRedrive func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string, notBefore time.Time) error
 	// admissionNow is the clock engineering admission reads to decide a
 	// queued request's expiry. Nil is the wall clock; tests set it so expiry

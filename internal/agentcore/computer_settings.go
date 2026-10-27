@@ -118,6 +118,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applySourceProjectionSetting(value)
 			case store.SettingSourceRebaseOffer, store.SettingTextureRootDesk:
 				rt.applyRebaseOfferSetting(value)
+			case store.SettingDispatchWideSlots:
+				rt.applyDispatchSlotsSetting(value)
 			}
 			resp := map[string]any{"setting": current}
 			if value {
@@ -136,6 +138,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			rt.applyTelemetryBatchingSetting(value)
 		case store.SettingEventTable:
 			rt.applyEventTableSetting(value)
+		case store.SettingDispatchWideSlots:
+			rt.applyDispatchSlotsSetting(value)
 		}
 		if key == store.SettingDebouncedCheckpoint {
 			rt.applyGuestCheckpointSetting(value)
