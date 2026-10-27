@@ -729,3 +729,11 @@ body {
 :root:is([data-theme-id='frutiger-aero'], [data-theme-id='vector-heart'], [data-theme-id='liquid-metal'], [data-theme-id='aero-chrome-heart']) [data-desktop-icon].icon-selected .icon-emoji {
   background-image: var(--choir-chrome-icon-tile-hover);
 }
+
+/* Idle (set by lib/idle.ts after 2 idle minutes): no animation may keep the
+   compositor drawing. Cleared on input; the look while active is unchanged. */
+:root[data-idle] *,
+:root[data-idle] *::before,
+:root[data-idle] *::after {
+  animation-play-state: paused !important;
+}
