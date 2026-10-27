@@ -195,6 +195,41 @@ egress, revisions, publications, obligations and boot. Each layer is
 0600, unredacted owner data; stdout prints the path, sha256 and per-layer
 statuses. The key needs `read:runtime` and `read:texture`.
 
+### Trace tail
+
+```sh
+choir trace tail <trajectory-id> [-v|-vv|-vvv] [--interval 5s] [--grace 120s] [--until candidate,restart,...] [--history] [--json] [--for 10m]
+```
+
+The verbose watcher: the data `trace export` snapshots, followed by cursor
+(lifecycle events by `reducer_seq`, each run's events by `seq`, the snapshot
+status, and the self-development operations listing), one line per event:
+UTC time, agent or loop, kind, summary. Read-only, no server change; CLI
+only (it runs until a terminal state and reports it as the exit code).
+Starts at the current head (`--history` also prints what came before and
+never ends the tail on it). `-v` (default): turns, assignments, capsule
+fates, run terminalizations. `-vv`: tool calls (first code line, the argv of
+`choir.Start` jobs, exit codes). `-vvv`: truncated stdout/stderr heads and
+loop progress. A failed read (a computer restart answers 5xx for ~30s) prints
+one `read failed` line and the tail keeps going; a refused first read (bad
+key, wrong computer) exits 1. `--interval` floors at 1s. `--until` restricts
+which terminal states end the tail; the others print as ignored.
+
+| exit | meaning |
+| --- | --- |
+| 0 | a candidate of this trajectory reached `awaiting_approval` |
+| 1 | fatal: the first read was refused or unreadable |
+| 2 | usage error |
+| 10 | an assignment was cancelled `interrupted_by_restart` |
+| 11 | a capsule was revoked and no assignment opened within `--grace` |
+| 12 | a Texture turn says it waits on the owner or requester |
+| 13 | the trajectory settled |
+| 20 | `--for` elapsed or interrupted, no terminal state |
+
+Needs `read:runtime`, `read:texture` and `computer:self_development:read`
+(without the last, candidate detection is reported unavailable and the rest
+still works).
+
 ### Search
 
 ```sh
