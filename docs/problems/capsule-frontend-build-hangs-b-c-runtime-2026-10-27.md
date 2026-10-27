@@ -112,3 +112,40 @@ tool results of engineering assignment 31a8b049…).
    attempt's cause before it re-dispatches. The 01:10 restart cause was in
    the trace, but attempt 3 was sent without it until FP0 added it. This
    is the precommitment and ICRL thread.
+
+## Update 03:1x: H4 is weak; a new suspect, the guest's trim timer
+
+A read-only code read of the diff from train 28 (f6bd05924) to train 29
+(cba66873b) found no change to the guest image: no change to
+`nix/autoputer-vm.nix`, the flake, the kernel config, mount options,
+`internal/capsule`, the workspace overlay, the shared node_modules,
+cgroups, fsync or the store's write path. The guest Go changes are a
+comment, an observability field, and the job-memory lease path (already
+ruled out). The b@c nix lines for balloon stats and visual capture were
+no-ops for b@c, which was already named. So **H4 is weakened**: the
+release did not change how a capsule does IO.
+
+What the refresh did do was cold boot the guest. That gives a new
+hypothesis:
+
+- **H7, the trim timer.** `choir-data-fstrim` (`nix/autoputer-vm.nix`
+  about line 862) runs 10 minutes after boot, then hourly, and trims
+  `/mnt/persistent` (discard has been on for every computer since before
+  train 28). On a fresh mount ext4 has forgotten what it already trimmed,
+  so the first trim covers the whole free space. The host side is a
+  copy-on-write btrfs file with 10,644 extents, where each discard is a
+  hole punch. A long trim could hold the guest's virtio queue, and its
+  `IOSchedulingClass=idle` protects only guest IO priority, not the
+  device queue. **Against it:** a trim at about 00:40 or 01:20 (after the
+  01:10 cold boot) would need to last tens of minutes to cover the build
+  windows (01:09; 02:21 to 02:43). Not confirmed.
+
+The next observation, cheapest first:
+1. The guest journal for `choir-data-fstrim` since 00:30 (start, stop,
+   `fstrim -v` bytes), and the data drive's `discard_max_bytes`.
+2. The host journal at 00:30: cold boot or snapshot resume (whether the
+   hotplug removal changed b@c's launch config).
+3. A build with the trim timer stopped, against one with it running.
+
+Change 1 above (capsule jobs below the runtime in cpu and io weight;
+health without disk IO) stays the substrate fix whatever the cause.
