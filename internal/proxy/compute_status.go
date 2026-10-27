@@ -233,6 +233,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	identity, identityErr := h.currentImmutableIdentity(r.Context(), authResult.UserID, desktopID)
 	if identityErr != nil {
+		log.Printf("proxy compute status: immutable identity unavailable computer=%s desktop=%s: %v", own.ComputerID, desktopID, identityErr)
 		resp.Status = "degraded"
 		resp.Warnings = append(resp.Warnings, "immutable identity evidence unavailable")
 	} else {
@@ -275,7 +276,7 @@ func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopI
 	}
 	receipt := resolution.LatestReceipt
 	version := resolution.Slot.Current
-	if !version.Valid() || receipt.Validate() != nil || resolution.Slot.ID != slotID || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != version || receipt.CommittedGeneration != resolution.Slot.Generation || resolution.CodeClosure.Ref != version.CodeRef || len(resolution.CodeClosure.SourceCommit) != 40 {
+	if !version.Valid() || receipt.Validate() != nil || resolution.Slot.ID != slotID || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != version || receipt.CommittedGeneration != resolution.Slot.Generation || resolution.CodeClosure.Ref != version.CodeRef || !computerversion.ValidSourceCommit(resolution.CodeClosure.SourceCommit) {
 		return nil, fmt.Errorf("route slot and receipt evidence do not join")
 	}
 	return &computeImmutableIdentity{

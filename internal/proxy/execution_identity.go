@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
@@ -353,7 +354,7 @@ func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildi
 			proxyArtifact.Status == "active" &&
 			host.Commit == target &&
 			host.DeployedCommit == target
-	} else if !executionIdentityFullCommit(routeCommit) {
+	} else if !computerversion.ValidSourceCommit(routeCommit) {
 		return false
 	}
 	rawArtifact, present := receipt.Artifacts["proxy"]
@@ -418,6 +419,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	}
 	routeIdentity, err := h.currentImmutableIdentity(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
+		log.Printf("proxy execution identity: route join unavailable computer=%s desktop=%s: %v", ownership.ComputerID, desktopID, err)
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity route join unavailable"})
 		return
 	}
