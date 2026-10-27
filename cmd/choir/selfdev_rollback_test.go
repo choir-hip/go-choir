@@ -442,12 +442,6 @@ func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 			o[1]["updated_at"] = "2026-10-26T12:00:05Z"
 			return o
 		},
-		// 10:00:00Z is later than 10:00:00.5Z lexically, not chronologically.
-		"fractional seconds compare as times": func(o []map[string]any) []map[string]any {
-			o[2]["created_at"] = "2026-10-26T12:00:00.5Z"
-			o[1]["updated_at"] = "2026-10-26T12:00:00.25Z"
-			return o
-		},
 		"unparseable time": func(o []map[string]any) []map[string]any { o[1]["updated_at"] = "soon"; return o },
 	} {
 		stub.settled = mutate(base())
@@ -458,6 +452,21 @@ func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 		if stub.posted() != n+1 {
 			t.Fatalf("%s: did not post", name)
 		}
+	}
+}
+
+// "…:00Z" sorts after "…:00.5Z" as a string but is the earlier instant, so a
+// string comparison would call the older operation a late write and disarm
+// the refusal.
+func TestSelfDevRollbackComparesTimesAsInstants(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	stub.settled = []map[string]any{
+		lop("op-old", "applied", "2026-10-26T10:00:00Z", "2026-10-26T10:05:00Z", ""),
+		lop("op-cur", "applied", "2026-10-26T11:00:00Z", "2026-10-26T12:00:00Z", ""),
+		lop("rollback-0", "rolled_back", "2026-10-26T12:00:00.5Z", "2026-10-26T12:00:10Z", rhex("a")),
+	}
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code == 0 || !strings.Contains(stderr, "already rolled back") {
+		t.Fatalf("code=%d stderr=%q, want the refusal", code, stderr)
 	}
 }
 
