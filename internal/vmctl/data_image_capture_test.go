@@ -113,4 +113,21 @@ func TestCaptureDataImageRouteRefusals(t *testing.T) {
 			t.Fatalf("failed capture: %d %v, want 500 with the error", code, resp)
 		}
 	})
+	// Review 364 lows: contention is told apart from failure, and the
+	// lookup of one computer does not depend on classifying every other.
+	t.Run("VM busy", func(t *testing.T) {
+		mgr := &captureVMManager{mockVMManager: &mockVMManager{}, err: errors.New("capture data image vm-x: VM operation in progress")}
+		h, own := captureFixture(t, mgr)
+		if code, _ := postCapture(t, h, `{"computer_id":"`+own.ComputerID+`"}`, ""); code != http.StatusConflict {
+			t.Fatalf("busy VM: %d, want 409", code)
+		}
+	})
+	t.Run("route authority unavailable", func(t *testing.T) {
+		mgr := &captureVMManager{mockVMManager: &mockVMManager{}}
+		h, own := captureFixture(t, mgr)
+		h.routeAuthorityRequired = true
+		if code, resp := postCapture(t, h, `{"computer_id":"`+own.ComputerID+`"}`, ""); code != http.StatusOK {
+			t.Fatalf("capture with route authority down: %d %v, want 200", code, resp)
+		}
+	})
 }

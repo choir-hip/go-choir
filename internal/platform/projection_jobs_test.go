@@ -52,6 +52,22 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 	if again.Generation != j.Generation || again.Status != "running" || again.TargetHead != lease.TargetHead {
 		t.Fatalf("running job replaced: %+v / %+v", lease, again)
 	}
+	// A stale worker may not finish a newer job. (Checked before any base is
+	// advertised: an advertised base supersedes a job on another seed below
+	// it, review 364.)
+	stale := *lease
+	stale.Generation++
+	if err := s.FinishProjectionJob(ctx, stale, "failed", "wrong worker", 0, ""); err == nil {
+		t.Fatal("stale job completion admitted")
+	}
+	if err := s.FinishProjectionJob(ctx, *lease, "failed", "deterministic refusal", 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	reconstructed := NewStore(s.db)
+	got, err := reconstructed.ProjectionJob(ctx, "computer-jobs")
+	if err != nil || got.Status != "failed" || got.Error != "deterministic refusal" {
+		t.Fatalf("durable refusal lost %+v %v", got, err)
+	}
 	a, b, c := strings.Repeat("c", 64), strings.Repeat("d", 64), strings.Repeat("e", 64)
 	for i, ref := range []string{a, b, c} {
 		if err := s.RecordReplayWatermark(ctx, "computer-jobs", int64(i+1), ref); err != nil {
@@ -81,20 +97,6 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 	}
 	if _, ok := pins[a]; !ok {
 		t.Fatal("explicit restore pin lost")
-	}
-	// A stale worker may not finish a newer job.
-	stale := *lease
-	stale.Generation++
-	if err := s.FinishProjectionJob(ctx, stale, "failed", "wrong worker", 0, ""); err == nil {
-		t.Fatal("stale job completion admitted")
-	}
-	if err := s.FinishProjectionJob(ctx, *lease, "failed", "deterministic refusal", 0, ""); err != nil {
-		t.Fatal(err)
-	}
-	reconstructed := NewStore(s.db)
-	got, err := reconstructed.ProjectionJob(ctx, "computer-jobs")
-	if err != nil || got.Status != "failed" || got.Error != "deterministic refusal" {
-		t.Fatalf("durable refusal lost %+v %v", got, err)
 	}
 }
 

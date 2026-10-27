@@ -451,28 +451,40 @@ func TestReconcileProjectionWorkQueuesVerificationBeforeTheCadenceJob(t *testing
 	}
 }
 
-// A base captured from a running computer's disk (S2,
-// docs/problems/paper-never-checkpointed-2026-10-27.md) carries a live
-// witness, not a rebuild from the tape: agreeing with it proves the
-// checkpoint is that state, not that the tape derives it, and disagreeing
-// with it proves nothing about the tape. Neither may read as a tape verdict.
-func TestReconcileNeverCallsALiveCapturedBaseATapeVerdict(t *testing.T) {
+// An epoch root (a base captured from a running computer's disk, S2 of
+// docs/problems/paper-never-checkpointed-2026-10-27.md) is the definition of
+// state at its sequence (owner, 2026-10-27), and a base replayed from it is
+// an ordinary derived base. Against either, a witness match is Verified and
+// a mismatch is NotDerivable (review 364 finding 4: a mismatch is never
+// softened).
+func TestReconcileJudgesAgainstAnEpochRootLikeAnyBase(t *testing.T) {
+	root := projectionbase.EpochRootRef{BaseRef: hex64('7'), Sequence: 50}
+	asRoot := func(d *projectionbase.Descriptor) { d.Origin = projectionbase.OriginLiveCaptured }
+	asDescendant := func(d *projectionbase.Descriptor) { d.EpochRoot = &root }
 	for _, tc := range []struct {
 		name   string
 		tables map[string]string
-	}{{"equal", tablesA}, {"different", tablesB}} {
-		store := newFakeVerdictStore()
-		head, blob := hex64('1'), hex64('9')
-		store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
-		store.bases["c1/100"] = blob
-		d := descriptorOf("c1", 100, head, blob, witnessOf(tc.tables))
-		d.Origin = projectionbase.OriginLiveCaptured
-		if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
-			t.Fatal(err)
-		}
-		v := store.resolved[hex64('d')]
-		if v.Status != selfdevprotocol.CheckpointVerdictUnverified || v.Reason != verdictReasonLiveCaptured {
-			t.Fatalf("%s: verdict = %+v, want unverified/%s", tc.name, v, verdictReasonLiveCaptured)
-		}
+		mark   func(*projectionbase.Descriptor)
+		want   string
+	}{
+		{"root, equal", tablesA, asRoot, string(selfdevprotocol.CheckpointVerdictVerified)},
+		{"root, different", tablesB, asRoot, string(selfdevprotocol.CheckpointVerdictNotDerivable)},
+		{"descendant, equal", tablesA, asDescendant, string(selfdevprotocol.CheckpointVerdictVerified)},
+		{"descendant, different", tablesB, asDescendant, string(selfdevprotocol.CheckpointVerdictNotDerivable)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeVerdictStore()
+			head, blob := hex64('1'), hex64('9')
+			store.addPending("c1", hex64('d'), 100, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+			store.bases["c1/100"] = blob
+			d := descriptorOf("c1", 100, head, blob, witnessOf(tc.tables))
+			tc.mark(&d)
+			if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+				t.Fatal(err)
+			}
+			if v := store.resolved[hex64('d')]; string(v.Status) != tc.want {
+				t.Fatalf("verdict = %+v, want %s", v, tc.want)
+			}
+		})
 	}
 }

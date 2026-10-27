@@ -56,17 +56,49 @@ func TestAdvertisedBaseSupersedesAStaleRunningJob(t *testing.T) {
 	}
 }
 
+// Review 364 (DeepSeek, MEDIUM): supersession is by seed and watermark, not
+// by target. A job replaying from an older seed is superseded even when its
+// target is past the new base (the next one starts from the new base and
+// replays less); a job already on the advertised seed is left alone.
+func TestAdvertisedBaseSupersedesAnOlderSeedPastItsTarget(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	id := "computer-supersede-past"
+	insertTestHead(t, s, id, 7000)
+	if err := s.RecordReplayWatermark(ctx, id, 100, strings.Repeat("c", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := s.ClaimProjectionJob(ctx)
+	if err != nil || lease == nil || lease.TargetSequence != 7000 {
+		t.Fatalf("claim: %+v %v", lease, err)
+	}
+	if err := s.RecordReplayWatermark(ctx, id, 6000, strings.Repeat("d", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RenewProjectionJob(ctx, *lease); err == nil {
+		t.Fatal("a job on an older seed, past the new base, still renews")
+	}
+	if got, _ := s.ProjectionJob(ctx, id); got.Status != "superseded" {
+		t.Fatalf("job status = %q, want superseded", got.Status)
+	}
+}
+
 func TestAdvertisedBaseLeavesJobsItDoesNotCover(t *testing.T) {
 	ctx := context.Background()
+	advertised := strings.Repeat("d", 64)
 	for _, tc := range []struct {
 		name    string
 		target  uint64
 		reason  string
 		genesis bool
+		seed    string
 	}{
-		{"target past the base", 7000, "cadence", false},
-		{"checkpoint verification", 5000, checkpointVerifyReason + strings.Repeat("e", 64), false},
-		{"genesis repair", 5000, "repair", true},
+		{"already on the advertised seed", 7000, "cadence", false, advertised},
+		{"checkpoint verification", 5000, checkpointVerifyReason + strings.Repeat("e", 64), false, ""},
+		{"genesis repair", 5000, "repair", true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _ := openTestPlatformStore(t)
@@ -75,7 +107,7 @@ func TestAdvertisedBaseLeavesJobsItDoesNotCover(t *testing.T) {
 			if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", tc.genesis); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET reason=? WHERE computer_id=?`, tc.reason, id); err != nil {
+			if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET reason=?,seed_base_ref=? WHERE computer_id=?`, tc.reason, tc.seed, id); err != nil {
 				t.Fatal(err)
 			}
 			lease, err := s.ClaimProjectionJob(ctx)

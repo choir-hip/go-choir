@@ -1,13 +1,16 @@
 package vmmanager
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // A host capture of a running computer's data image (S2 of
@@ -119,7 +122,8 @@ func TestCaptureDataImageCloneFailureResumesAndRemoves(t *testing.T) {
 	}
 }
 
-// 2: a refused pause clones nothing and does not resume a VM it never paused.
+// 2: a refused pause clones nothing, and a resume is still attempted (a
+// refusal may come from a VM that did pause; review 364).
 func TestCaptureDataImagePauseFailureClonesNothing(t *testing.T) {
 	api := &fakeFirecrackerAPI{failPath: "/vm"}
 	mgr := captureTestVM(t, api)
@@ -130,6 +134,9 @@ func TestCaptureDataImagePauseFailureClonesNothing(t *testing.T) {
 	}
 	if cloned {
 		t.Fatal("cloned after a refused pause")
+	}
+	if s := vmStates(api); len(s) < 2 || s[0] != "Paused" || s[1] != "Resumed" {
+		t.Fatalf("vm states = %v, want a pause then a resume attempt", s)
 	}
 	if _, err := os.Stat(filepath.Join(mgr.cfg.StateDir, "vm-c", "data.img.capture")); !os.IsNotExist(err) {
 		t.Fatalf("capture left after a refused pause: %v", err)
@@ -168,5 +175,280 @@ func TestCaptureDataImageRefusesWithoutRunningVMOrSocket(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(mgr.cfg.StateDir, "vm-c", "data.img.capture")); !os.IsNotExist(err) {
 		t.Fatalf("capture left behind: %v", err)
+	}
+}
+
+// Review 364 (DeepSeek, HIGH): a VM is never left paused. More ways to
+// fail, written before the code:
+//  8. vmctl dies between pause and resume: nothing durable says the VM is
+//     paused, and nothing resumes it;
+//  9. a pause answered with an error (a 5xx after the VM did pause) is not
+//     followed by a resume;
+// 10. a clone that hangs holds the guest paused without bound;
+// 11. a resume whose answer is lost is reported as a VM left paused when it
+//     runs (no probe), or a VM that is paused is reported as running;
+// 12. a stop or kill-mode hibernate runs during a capture's pause.
+
+// statefulFC is a Firecracker API that keeps the VM's state: a pause pauses
+// it (and may then answer pauseStatus anyway), a resume of a paused VM
+// resumes it unless resumeFails, and GET / reports the state.
+type statefulFC struct {
+	mu          sync.Mutex
+	state       string
+	pauseStatus int
+	resumeFails bool
+	onPause     func()
+	calls       []string
+}
+
+func (f *statefulFC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var body map[string]string
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, r.Method+" "+r.URL.Path+" "+body["state"])
+	if r.Method == http.MethodGet && r.URL.Path == "/" {
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "vm", "state": f.state})
+		return
+	}
+	if r.Method != http.MethodPatch || r.URL.Path != "/vm" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	switch body["state"] {
+	case "Paused":
+		if f.onPause != nil {
+			f.onPause()
+		}
+		f.state = "Paused"
+		if f.pauseStatus != 0 {
+			w.WriteHeader(f.pauseStatus)
+			_, _ = w.Write([]byte(`{"fault_message":"injected"}`))
+			return
+		}
+	case "Resumed":
+		if f.resumeFails || f.state != "Paused" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"fault_message":"not resumed"}`))
+			return
+		}
+		f.state = "Running"
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (f *statefulFC) now() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.state
+}
+
+func captureStatefulVM(t *testing.T, fc *statefulFC) *Manager {
+	t.Helper()
+	mgr := captureTestVM(t, nil)
+	serveUnix(t, mgr.apiSocketPath("vm-c"), fc)
+	return mgr
+}
+
+func pauseMarkerPath(mgr *Manager) string {
+	return filepath.Join(mgr.cfg.StateDir, "vm-c", "capture-pause.json")
+}
+
+func capturePath(mgr *Manager) string {
+	return filepath.Join(mgr.cfg.StateDir, "vm-c", "data.img.capture")
+}
+
+// 8: the pause marker is durable before the pause and gone after a
+// confirmed resume.
+func TestCaptureDataImageMarksThePauseDurably(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	markedAtPause := false
+	fc.onPause = func() {
+		_, err := os.Stat(pauseMarkerPath(mgr))
+		markedAtPause = err == nil
+	}
+	mgr.captureCloneFn = copyClone
+	if _, err := mgr.CaptureDataImage("vm-c"); err != nil {
+		t.Fatalf("CaptureDataImage: %v", err)
+	}
+	if !markedAtPause {
+		t.Fatal("no pause marker when the pause was sent")
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); !os.IsNotExist(err) {
+		t.Fatalf("pause marker left after a confirmed resume: %v", err)
+	}
+}
+
+// 9: a pause answered 5xx after the VM did pause is resumed; nothing is
+// cloned and no marker stays.
+func TestCaptureDataImageResumesAfterAPauseError(t *testing.T) {
+	fc := &statefulFC{state: "Running", pauseStatus: http.StatusInternalServerError}
+	mgr := captureStatefulVM(t, fc)
+	cloned := false
+	mgr.captureCloneFn = func(dst, src *os.File) error { cloned = true; return nil }
+	if _, err := mgr.CaptureDataImage("vm-c"); err == nil {
+		t.Fatal("a pause error returned no error")
+	}
+	if fc.now() != "Running" {
+		t.Fatalf("VM state after a pause error = %s, want Running", fc.now())
+	}
+	if cloned {
+		t.Fatal("cloned after a pause error")
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); !os.IsNotExist(err) {
+		t.Fatalf("pause marker left after a confirmed resume: %v", err)
+	}
+}
+
+// 10: a clone past its deadline is abandoned: the VM is resumed while the
+// clone still runs, the call fails, and the torn clone is removed when the
+// clone returns.
+func TestCaptureDataImageCloneDeadlineResumes(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneDeadline = 50 * time.Millisecond
+	release := make(chan struct{})
+	mgr.captureCloneFn = func(dst, src *os.File) error {
+		<-release
+		return copyClone(dst, src)
+	}
+	start := time.Now()
+	_, err := mgr.CaptureDataImage("vm-c")
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("hung clone: err = %v, want a deadline error", err)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("hung clone held the call %s", time.Since(start))
+	}
+	if fc.now() != "Running" {
+		t.Fatalf("VM state while the clone hangs = %s, want Running", fc.now())
+	}
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(capturePath(mgr)); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("abandoned clone was never removed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// 11: a resume whose answers all fail on a VM that runs is not an outage;
+// the probe decides, and the capture stands.
+func TestCaptureDataImageProbesBeforeCallingItPaused(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneFn = func(dst, src *os.File) error {
+		// The resume lands but every answer is lost: here, the VM runs
+		// and every resume is refused.
+		fc.mu.Lock()
+		fc.state = "Running"
+		fc.resumeFails = true
+		fc.mu.Unlock()
+		return copyClone(dst, src)
+	}
+	got, err := mgr.CaptureDataImage("vm-c")
+	if err != nil {
+		t.Fatalf("running VM reported as: %v", err)
+	}
+	if _, err := os.Stat(got.Path); err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); !os.IsNotExist(err) {
+		t.Fatalf("pause marker left on a running VM: %v", err)
+	}
+}
+
+// 11: a VM the probe shows paused is reported loudly and keeps its marker,
+// so a restart of vmctl resumes it.
+func TestCaptureDataImageLeftPausedKeepsTheMarker(t *testing.T) {
+	fc := &statefulFC{state: "Running", resumeFails: true}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneFn = copyClone
+	_, err := mgr.CaptureDataImage("vm-c")
+	if err == nil || !strings.Contains(err.Error(), "LEFT PAUSED") {
+		t.Fatalf("err = %v, want VM LEFT PAUSED", err)
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); err != nil {
+		t.Fatalf("pause marker of a paused VM: %v", err)
+	}
+	if _, err := os.Stat(capturePath(mgr)); !os.IsNotExist(err) {
+		t.Fatalf("capture handed out with the VM paused: %v", err)
+	}
+}
+
+// 8: at reattach, a marker resumes the VM it names and removes the stale
+// capture; resuming continues the same guest process, so it is not a boot.
+func TestRecoverCapturePauseResumesAndCleans(t *testing.T) {
+	fc := &statefulFC{state: "Paused"}
+	mgr := captureStatefulVM(t, fc)
+	if err := os.WriteFile(pauseMarkerPath(mgr), []byte(`{"vm_id":"vm-c"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(capturePath(mgr), []byte("torn"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr.recoverCapturePause("vm-c")
+	if fc.now() != "Running" {
+		t.Fatalf("VM state after recovery = %s, want Running", fc.now())
+	}
+	for _, p := range []string{pauseMarkerPath(mgr), capturePath(mgr)} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Fatalf("%s left after recovery: %v", p, err)
+		}
+	}
+}
+
+// 8: without a marker, recovery touches nothing (a capture in use stays).
+func TestRecoverCapturePauseWithoutMarkerIsANoop(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	if err := os.WriteFile(capturePath(mgr), []byte("in use"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr.recoverCapturePause("vm-c")
+	fc.mu.Lock()
+	calls := len(fc.calls)
+	fc.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("recovery without a marker called the API %d times", calls)
+	}
+	if _, err := os.Stat(capturePath(mgr)); err != nil {
+		t.Fatalf("capture in use removed: %v", err)
+	}
+}
+
+// 12: StopVM and a kill-mode hibernate wait for a VM's operation lock, so
+// neither runs inside a capture's pause.
+func TestStopAndKillHibernateWaitForTheOperationLock(t *testing.T) {
+	for name, op := range map[string]func(*Manager) error{
+		"stop":      func(m *Manager) error { return m.StopVM("vm-c") },
+		"hibernate": func(m *Manager) error { return m.HibernateVM("vm-c") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			mgr := captureTestVM(t, nil)
+			unlock := mgr.lockVMOperation("vm-c")
+			done := make(chan error, 1)
+			go func() { done <- op(mgr) }()
+			select {
+			case err := <-done:
+				unlock()
+				t.Fatalf("%s ran while the operation lock was held (err=%v)", name, err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			unlock()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("%s never ran after the lock was released", name)
+			}
+		})
 	}
 }
