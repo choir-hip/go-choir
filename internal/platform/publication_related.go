@@ -133,10 +133,12 @@ type relatedTuning struct {
 	// MinLinks is the floor: a list shorter than this is filled with weaker
 	// links (publication_related_floor.go); 0 turns the floor off.
 	MinLinks int
-	// PoolSize, PoolTTL and PoolReadTimeout bound the floor's pool of recent
-	// stories, read outside the request's Budget.
+	// PoolSize, PoolTTL, PoolRetry and PoolReadTimeout bound the floor's pool
+	// of recent stories, read outside the request's Budget. PoolSize is at
+	// most the front list's own cap (frontMaxLimit, 100).
 	PoolSize        int
 	PoolTTL         time.Duration
+	PoolRetry       time.Duration
 	PoolReadTimeout time.Duration
 }
 
@@ -160,8 +162,9 @@ func defaultRelatedTuning() relatedTuning {
 		CacheCap:         500,
 		VersionPubCap:    50000,
 		MinLinks:         3,
-		PoolSize:         150,
+		PoolSize:         100,
 		PoolTTL:          2 * time.Minute,
+		PoolRetry:        30 * time.Second,
 		PoolReadTimeout:  10 * time.Second,
 	}
 }
@@ -223,11 +226,16 @@ type relatedCache struct {
 	versionPub map[string]string
 	storyN     int
 	storyNAt   time.Time
-	// pool is the floor's recent stories, read at poolAt; poolMu lets one
-	// request read it while the others wait (never held with mu).
-	pool   []FrontStory
-	poolAt time.Time
-	poolMu sync.Mutex
+	// pool is the floor's recent stories, read at poolAt (poolFailAt: the
+	// last failed read). poolMu lets one request read it while the others
+	// wait. Lock order: poolMu, then mu; mu is never held while poolMu is
+	// taken. reset clears pool under mu alone, so a read in flight may land a
+	// pool from before the reset: at most PoolTTL stale, and the front list's
+	// membership does not depend on what reset is called for.
+	pool       []FrontStory
+	poolAt     time.Time
+	poolFailAt time.Time
+	poolMu     sync.Mutex
 }
 
 type relatedEntry struct {
@@ -281,7 +289,7 @@ func (c *relatedCache) reset() {
 	c.order = nil
 	c.versionPub = map[string]string{}
 	c.storyN, c.storyNAt = 0, time.Time{}
-	c.pool, c.poolAt = nil, time.Time{}
+	c.pool, c.poolAt, c.poolFailAt = nil, time.Time{}, time.Time{}
 }
 
 func (c *relatedCache) size() int {

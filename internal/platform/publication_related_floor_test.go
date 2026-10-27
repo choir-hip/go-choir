@@ -24,6 +24,7 @@ package platform
 //  F8 An opinion piece is offered as a related story.
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -126,8 +127,6 @@ func TestFloorSkipsOpinionAndStopsAtThePool(t *testing.T) { // F8, F5
 func TestRelatedFloorThroughTheWalk(t *testing.T) { // F1, F6, F7
 	l := newRealisticLab(t)
 	l.svc.related.tuning.MinLinks = 3
-	// The production budget: the pool read must not count against it.
-	l.svc.related.tuning.Budget = 400 * time.Millisecond
 	l.publish("doc-e1", 1, "Israel votes as polls point to Netanyahu coalition losing majority")
 	l.publish("doc-e2", 1, "Israel's election campaign sidelines Palestinian future")
 	self := l.publish("doc-self", 1, "Israelis vote amid uncertainty over Netanyahu's future")
@@ -143,9 +142,31 @@ func TestRelatedFloorThroughTheWalk(t *testing.T) { // F1, F6, F7
 		t.Fatalf("the shared-terms story leads: %+v", got.Links[0])
 	}
 
+	// F6: the cache keys on the mode. Without a reset, the floor-on answer
+	// is cached; with the floor off the same story must not get it.
+	l.svc.related.reset()
+	if on, err := l.svc.RelatedStories(context.Background(), self.RoutePath, 0); err != nil || len(on.Links) != 3 {
+		t.Fatalf("cached floor-on answer: %v %v", err, on)
+	}
 	t.Setenv(relatedFloorEnv, "off")
+	if cached, err := l.svc.RelatedStories(context.Background(), self.RoutePath, 0); err != nil || len(cached.Links) != 0 {
+		t.Fatalf("with the floor off the cache served the floor-on answer: %v %v", err, cached)
+	}
 	off := l.related(self.RoutePath)
 	if len(off.Links) != 0 || strings.HasSuffix(off.Basis.Mode, relatedModeFloorSuffix) {
 		t.Fatalf("the switch off restores the strong-only answer and mode: %v %q", relatedRoutes(off), off.Basis.Mode)
+	}
+}
+
+// F7: the pool read does not run on the request's context. A request whose
+// context is already cancelled still gets a pool.
+func TestFloorPoolReadIgnoresTheRequestDeadline(t *testing.T) {
+	l := newRealisticLab(t)
+	l.svc.related.reset()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	pool := l.svc.relatedFloorPool(ctx, l.svc.related.tune())
+	if len(pool) == 0 {
+		t.Fatal("a cancelled request context emptied the pool read")
 	}
 }

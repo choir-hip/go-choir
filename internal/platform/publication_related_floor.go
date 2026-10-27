@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"log"
 	"math"
 	"os"
 	"sort"
@@ -152,19 +153,29 @@ func (s *Service) relatedFloorPool(ctx context.Context, t relatedTuning) []Front
 	defer c.poolMu.Unlock()
 	now := c.clock()
 	c.mu.Lock()
-	pool, at := c.pool, c.poolAt
+	pool, at, failAt := c.pool, c.poolAt, c.poolFailAt
 	c.mu.Unlock()
 	if pool != nil && now.Sub(at) < t.PoolTTL {
+		return pool
+	}
+	// A failed read is not retried for PoolRetry, so a failing store costs
+	// one read per PoolRetry, not one serialized read per request (review
+	// 354, 1).
+	if !failAt.IsZero() && now.Sub(failAt) < t.PoolRetry {
 		return pool
 	}
 	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), t.PoolReadTimeout)
 	defer cancel()
 	page, err := s.ListFrontStories(readCtx, t.PoolSize, "")
 	if err != nil || page == nil {
+		log.Printf("related: floor pool unavailable, serving the last pool (%d stories): %v", len(pool), err)
+		c.mu.Lock()
+		c.poolFailAt = now
+		c.mu.Unlock()
 		return pool // the last good pool, or none
 	}
 	c.mu.Lock()
-	c.pool, c.poolAt = page.Stories, now
+	c.pool, c.poolAt, c.poolFailAt = page.Stories, now, time.Time{}
 	c.mu.Unlock()
 	return page.Stories
 }
