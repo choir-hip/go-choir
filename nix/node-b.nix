@@ -44,8 +44,9 @@ let
   # a control the target commit cannot edit (the in-repo CI step can be
   # skipped by the commit it judges; review 331). Observe from 2026-10-26
   # with D2 on; enforce after one deploy that observes no false refusal.
-  # Rollback: "off".
-  ciGateEpochCheck = "observe";
+  # Enforce from 2026-10-27: trains 28 (f6bd05924) and 29 (cba66873b) both
+  # observed PASS, with reviewed trailers recognized. Rollback: "observe".
+  ciGateEpochCheck = "enforce";
   # Release materialization and retention (scripts/node-b-guest-release-*;
   # tests: scripts/test-node-b-guest-release-retention.sh).
   guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
