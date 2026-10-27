@@ -315,6 +315,10 @@ func captureBaseMain(args []string) int {
 		fmt.Fprintln(os.Stderr, "capture-base: -computer is required")
 		return 2
 	}
+	if strings.TrimSpace(*stateDir) == "" {
+		fmt.Fprintln(os.Stderr, "capture-base: -state-dir is required (the stale-capture sweep reads it)")
+		return 2
+	}
 	if os.Getenv("GOMEMLIMIT") == "" && *memoryLimit > 0 {
 		debug.SetMemoryLimit(*memoryLimit << 20)
 	}
@@ -422,6 +426,9 @@ func precheckWatermark(ctx context.Context, client *http.Client, vmctlURL, platf
 	if _, err := postJSON(ctx, client, strings.TrimRight(vmctlURL, "/")+"/internal/vmctl/capture-data-image", map[string]any{"computer_id": computerID, "dry_run": true}, &who); err != nil {
 		return 0, err
 	}
+	if who.CapturePath != "" {
+		return 0, fmt.Errorf("vmctl did not honor dry_run: it captured %s (deploy vmctl with checkpointd; the next run sweeps the capture)", who.CapturePath)
+	}
 	if who.ComputerID != computerID || who.UserID == "" {
 		return 0, fmt.Errorf("vmctl answered an incomplete dry run: %+v", who)
 	}
@@ -468,10 +475,9 @@ type watermarkAnswer struct {
 // look; on any other answer (an error status, an undecodable body, another
 // watermark) the watermark is read back (review 364):
 //   - it names this base: advertised;
-//   - it is higher: this base was not advertised but is kept (an error that
-//     is not errAdvertiseRefused);
-//   - it is absent (404), lower, or another base at this sequence:
-//     errAdvertiseRefused, and the caller retracts the base;
+//   - it is absent (404), lower, higher (corpusd records only a higher
+//     sequence, so this base never will be), or another base at this
+//     sequence: errAdvertiseRefused, and the caller retracts the base;
 //   - the readback fails: errAdvertiseUnknown, and the base is kept.
 func advertiseBase(ctx context.Context, client *http.Client, platformURL, computerID string, sequence uint64, baseRef string) error {
 	base := strings.TrimRight(platformURL, "/")
@@ -506,7 +512,11 @@ func advertiseBase(ctx context.Context, client *http.Client, platformURL, comput
 	case back.Sequence == sequence && back.BaseRef == baseRef:
 		return nil
 	case back.Sequence > sequence:
-		return fmt.Errorf("corpusd advertises a higher watermark %d (%s), not this base %d (%s); the base is kept: %v", back.Sequence, back.BaseRef, sequence, baseRef, answer)
+		// corpusd records only a higher sequence (file_cas_http.go), so this
+		// base will never be advertised. A kept live_captured sidecar would
+		// still raise the host rebuilder's floor and wedge the computer's
+		// jobs (review 366, Devin 1): retract it.
+		return fmt.Errorf("%w: corpusd advertises a higher watermark %d (%s), not this base %d (%s): %v", errAdvertiseRefused, back.Sequence, back.BaseRef, sequence, baseRef, answer)
 	default:
 		return fmt.Errorf("%w: corpusd advertises %d (%s), not this base %d (%s): %v", errAdvertiseRefused, back.Sequence, back.BaseRef, sequence, baseRef, answer)
 	}

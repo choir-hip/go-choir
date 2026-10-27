@@ -204,6 +204,15 @@ func resolveVerdictsAtBase(ctx context.Context, store verdictStore, d projection
 	if err != nil {
 		return fmt.Errorf("list pending checkpoints: %w", err)
 	}
+	// A base below the computer's epoch root judges nothing; the reconcile
+	// pass settles those checkpoints unverified/no_base (review 366).
+	_, rootSeq, err := store.EpochRoot(ctx, d.ComputerID)
+	if err != nil {
+		return fmt.Errorf("epoch root: %w", err)
+	}
+	if rootSeq > 0 && d.Sequence < rootSeq {
+		return nil
+	}
 	var errs []error
 	for _, rec := range pending {
 		if rec.ComputerID != d.ComputerID || rec.Verdict.AcceptedSequence != d.Sequence || rec.AcceptedHead != d.CanonicalHead {

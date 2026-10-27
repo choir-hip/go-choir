@@ -247,26 +247,41 @@ func resumeAfterCapture(api *fcAPIClient) error {
 }
 
 // writeCapturePauseMarker writes the marker durably (file and directory
-// synced) before the pause is sent.
+// synced) before the pause is sent. It writes a temp file and renames it, so
+// every capture's marker is a new inode: an abandoned clone's cleanup, which
+// removes only its own marker by inode, never removes a later capture's
+// marker written over one a failed unlink left (review 366).
 func writeCapturePauseMarker(vmDir string, marker capturePauseMarker) error {
 	raw, err := json.Marshal(marker)
 	if err != nil {
 		return err
 	}
 	path := filepath.Join(vmDir, capturePauseMarkerName)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.CreateTemp(vmDir, capturePauseMarkerName+".tmp-*")
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(raw); err != nil {
+	tmp := f.Name()
+	fail := func(err error) error {
 		_ = f.Close()
+		_ = os.Remove(tmp)
 		return err
+	}
+	if err := f.Chmod(0o600); err != nil {
+		return fail(err)
+	}
+	if _, err := f.Write(raw); err != nil {
+		return fail(err)
 	}
 	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return err
+		return fail(err)
 	}
 	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	return syncDirectory(vmDir)
