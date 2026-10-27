@@ -204,6 +204,11 @@ func artifactProgramEntryHash(entry ArtifactProgramEntry) (string, error) {
 	return immutableInputSHA256Hex(payload), nil
 }
 
+// ValidSourceCommit reports whether value is a source id a code closure may
+// carry: a 40-hex git commit or a 64-hex source-tree digest. Consumers that
+// join a closure must use this rather than their own length check.
+func ValidSourceCommit(value string) bool { return validSourceCommit(value) }
+
 func validSourceCommit(value string) bool {
 	value = strings.TrimSpace(value)
 	return (len(value) == 40 || len(value) == 64) && validHex(value)
