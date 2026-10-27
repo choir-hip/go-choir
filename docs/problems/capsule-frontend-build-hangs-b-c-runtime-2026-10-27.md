@@ -235,3 +235,12 @@ from /workspace/platform/frontend. Train 33 (036a216eb) fixes the flood, so
 a refused `npm ci` is now one log line and a failed build, not a stalled
 guest. The prompt's rule still applies: a change to the package files needs
 a second round with the ecosystem grant.
+
+## Probe result (13:00, citation attempt 6)
+
+Attempt 6 started from the clean booted base (b@c on train 34, the applied
+stack now upstreamed) and engineering's first cell recorded both `cmp`
+comparisons against `$CHOIR_FRONTEND_DEPS` passing. So the package files
+match the guest's frontend deps on the clean base; the mismatch of attempts
+2 and 3 came with the stale stack tree (an old base plus the applied patch),
+which the patch-identity containment (train 34) now retires.
