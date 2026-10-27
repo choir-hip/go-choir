@@ -19,6 +19,11 @@ import (
 // leaving it pending behind a job that will not run again soon.
 const verificationFailureLimit = 3
 
+// verdictReasonLiveCaptured: the base the host judged against descends from
+// a capture of the live store (projectionbase.OriginLiveCaptured), so the
+// host cannot say whether the tape derives the checkpoint.
+const verdictReasonLiveCaptured = "live_captured_base"
+
 // verdictStore is the slice of the control store the checkpoint verdict pass
 // uses; the real store satisfies it.
 type verdictStore interface {
@@ -131,6 +136,13 @@ func judgeAgainstBase(ctx context.Context, store verdictStore, rec platform.Chec
 	if verdict.Status == selfdevprotocol.CheckpointVerdictNotDerivable && d.ReducerVersion != checkpoint.Request.ReducerVersion {
 		verdict.Status, verdict.Reason = selfdevprotocol.CheckpointVerdictUnverified, selfdevprotocol.VerdictReasonVersionSkew
 		verdict.Detail = fmt.Sprintf("host rebuilt with reducer %d, the checkpoint was bound under %d: %s", d.ReducerVersion, checkpoint.Request.ReducerVersion, verdict.Detail)
+	}
+	// A base captured from the live store, or replayed on one, holds a live
+	// witness: agreement is identity, not derivation from the tape, and a
+	// difference proves nothing about the tape (S2).
+	if d.Origin == projectionbase.OriginLiveCaptured {
+		verdict.Detail = fmt.Sprintf("base %s descends from a live capture (%s): %s", d.BlobSHA256, verdict.Status, verdict.Detail)
+		verdict.Status, verdict.Reason = selfdevprotocol.CheckpointVerdictUnverified, verdictReasonLiveCaptured
 	}
 	// Pins are for apply and platform-update checkpoints. A cadence checkpoint
 	// comes every few minutes and a pin has no release path until the retention

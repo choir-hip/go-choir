@@ -516,6 +516,16 @@ func (a *vmManagerAdapter) GuestMemoryStats(vmID string) (vmctl.GuestMemoryStats
 	}, nil
 }
 
+// CaptureDataImage serves vmctl's data image capture route
+// (internal/vmctl/data_image_capture.go).
+func (a *vmManagerAdapter) CaptureDataImage(vmID string) (vmctl.DataImageCapture, error) {
+	c, err := a.mgr.CaptureDataImage(vmID)
+	if err != nil {
+		return vmctl.DataImageCapture{}, err
+	}
+	return vmctl.DataImageCapture{Path: c.Path, PausedFor: c.PausedFor, ClonedFor: c.ClonedFor}, nil
+}
+
 func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 	return a.mgr.CheckHealth(vmID)
 }

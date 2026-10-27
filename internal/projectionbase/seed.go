@@ -30,6 +30,22 @@ type seedMeta struct {
 	Sequence      uint64 `json:"sequence"`
 	CanonicalHead string `json:"canonical_head"`
 	InstalledAt   string `json:"installed_at"`
+	// Origin is the seed's Descriptor.Origin, so a rebuild resumed from this
+	// scratch keeps a captured seed's mark.
+	Origin string `json:"origin,omitempty"`
+}
+
+// inheritedOrigin is the Origin of a base replayed onto seed (or onto the
+// seed a resumed scratch recorded): a captured seed's mark carries forward;
+// a genesis replay has none.
+func inheritedOrigin(seed *Descriptor, meta *seedMeta) string {
+	switch {
+	case seed != nil:
+		return seed.Origin
+	case meta != nil:
+		return meta.Origin
+	}
+	return ""
 }
 
 // SeedCandidate is a published base descriptor paired with its blob path.
@@ -235,6 +251,7 @@ func installSeedCandidate(ctx context.Context, candidate SeedCandidate, scratchD
 		Sequence:      descriptor.Sequence,
 		CanonicalHead: descriptor.CanonicalHead,
 		InstalledAt:   time.Now().UTC().Format(time.RFC3339Nano),
+		Origin:        descriptor.Origin,
 	}
 	if err := writeSeedMeta(filepath.Join(scratchDir, seedMetaFileName), meta); err != nil {
 		return fmt.Errorf("%w: stamp seed: %v", ErrBaseRefused, err)

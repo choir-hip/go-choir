@@ -144,7 +144,19 @@ type Descriptor struct {
 	VocabularyVersion     string                                `json:"vocabulary_version"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	CreatedAt             time.Time                             `json:"created_at"`
+	// Origin is how the base's state was made: empty for a replay of the
+	// tape (every base before S2), OriginLiveCaptured for a capture of a
+	// running computer's store and every base replayed on top of one.
+	Origin string `json:"origin,omitempty"`
 }
+
+// OriginLiveCaptured marks a base whose state was captured from a running
+// computer's data image rather than rebuilt from the tape (S2 of
+// docs/problems/paper-never-checkpointed-2026-10-27.md). Its head is checked
+// against the tape and its witness is of its own bytes, but nothing proves
+// the tape derives that state: its witness is a live witness. Every base
+// seeded from it inherits the mark, until a genesis repair.
+const OriginLiveCaptured = "live_captured"
 
 // Validate verifies the integrity of the descriptor. A missing or unknown
 // vocabulary version refuses: pre-seam bases are uninstallable, not legacy.
@@ -178,6 +190,9 @@ func (d Descriptor) Validate() error {
 	}
 	if err := d.VMLocalContentWitness.Validate(); err != nil {
 		return fmt.Errorf("descriptor: %w", err)
+	}
+	if d.Origin != "" && d.Origin != OriginLiveCaptured {
+		return fmt.Errorf("descriptor: unknown origin %q", d.Origin)
 	}
 	return nil
 }

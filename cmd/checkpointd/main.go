@@ -20,6 +20,11 @@ import (
 const storeOpenTimeout = 60 * time.Second
 
 func main() {
+	// The operator capture job (capture.go) holds no escrow key and runs
+	// outside the timer's unit.
+	if len(os.Args) > 1 && os.Args[1] == "capture-base" {
+		os.Exit(captureBaseMain(os.Args[2:]))
+	}
 	// This is intentionally NOT a corpusd environment flag: the plaintext key
 	// privilege belongs only to this isolated maintenance process.
 	if os.Getenv("CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED") != "true" {

@@ -13,8 +13,8 @@ import (
 )
 
 // fcAPIClient speaks the Firecracker HTTP API over a VM's unix socket. It is
-// used only in snapshot hibernate mode (S3): pause, snapshot create, and
-// snapshot load. Firecracker 1.15.1 serves the API alongside --config-file
+// used in snapshot hibernate mode (S3): pause, snapshot create, and snapshot
+// load; for balloon statistics; and for a data image capture (pause, resume). Firecracker 1.15.1 serves the API alongside --config-file
 // when --api-sock is given (docs/getting-started.md; main.rs run_with_api).
 type fcAPIClient struct {
 	sock string
@@ -117,6 +117,11 @@ func (c *fcAPIClient) WaitReady(ctx context.Context) error {
 // Pause stops the vCPUs (PATCH /vm {"state":"Paused"}).
 func (c *fcAPIClient) Pause(ctx context.Context) error {
 	return c.do(ctx, http.MethodPatch, "/vm", map[string]string{"state": "Paused"})
+}
+
+// Resume restarts the vCPUs of a paused VM (PATCH /vm {"state":"Resumed"}).
+func (c *fcAPIClient) Resume(ctx context.Context) error {
+	return c.do(ctx, http.MethodPatch, "/vm", map[string]string{"state": "Resumed"})
 }
 
 // CreateFullSnapshot writes the VM state and the full guest memory. The VM

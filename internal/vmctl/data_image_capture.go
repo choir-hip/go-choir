@@ -1,0 +1,89 @@
+package vmctl
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// DataImageCapture is one host capture of a running computer's data image:
+// a reflink clone taken while the VM was paused (vmmanager
+// data_image_capture.go; S2 of docs/problems/paper-never-checkpointed-2026-10-27.md).
+type DataImageCapture struct {
+	Path      string
+	PausedFor time.Duration
+	ClonedFor time.Duration
+}
+
+// dataImageCapturer is implemented by the Firecracker manager adapter.
+type dataImageCapturer interface {
+	CaptureDataImage(vmID string) (DataImageCapture, error)
+}
+
+type captureDataImageRequest struct {
+	ComputerID string `json:"computer_id"`
+}
+
+type captureDataImageResponse struct {
+	VMID        string `json:"vm_id"`
+	ComputerID  string `json:"computer_id"`
+	UserID      string `json:"user_id"`
+	CapturePath string `json:"capture_path"`
+	PausedMS    int64  `json:"paused_ms"`
+	ClonedMS    int64  `json:"cloned_ms"`
+}
+
+// HandleCaptureDataImage serves POST /internal/vmctl/capture-data-image
+// {"computer_id"}: pause the computer's VM, reflink its data image beside it,
+// resume. The caller (`checkpointd capture-base`) owns the capture and
+// removes it. An operator act for one named computer; nothing calls it on a
+// schedule.
+func (h *Handler) HandleCaptureDataImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req captureDataImageRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || strings.TrimSpace(req.ComputerID) == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "computer_id is required"})
+		return
+	}
+	h.registry.mu.RLock()
+	mgr := h.registry.vmManager
+	h.registry.mu.RUnlock()
+	capturer, ok := mgr.(dataImageCapturer)
+	if !ok || capturer == nil {
+		writeVMCTLJSON(w, http.StatusNotImplemented, vmctlErrorResponse{Error: "data image capture unsupported by this VM manager"})
+		return
+	}
+	ownerships, err := h.listOwnershipResponses(r.Context())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	computerID := strings.TrimSpace(req.ComputerID)
+	for _, own := range ownerships {
+		if own.ComputerID != computerID || own.State != string(VMStateActive) || (own.Kind != "" && own.Kind != VMKindInteractive) {
+			continue
+		}
+		c, err := capturer.CaptureDataImage(own.VMID)
+		if err != nil {
+			log.Printf("vmctl: data image capture %s (computer %s): %v", own.VMID, computerID, err)
+			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: err.Error()})
+			return
+		}
+		log.Printf("vmctl: data image capture %s (computer %s): %s paused %s", own.VMID, computerID, c.Path, c.PausedFor.Round(time.Millisecond))
+		writeVMCTLJSON(w, http.StatusOK, captureDataImageResponse{
+			VMID: own.VMID, ComputerID: computerID, UserID: own.UserID, CapturePath: c.Path,
+			PausedMS: c.PausedFor.Milliseconds(), ClonedMS: c.ClonedFor.Milliseconds(),
+		})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no active computer " + computerID})
+}

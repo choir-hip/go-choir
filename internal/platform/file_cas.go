@@ -101,6 +101,16 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, computerID, seq, baseRef, now); err != nil {
 		return fmt.Errorf("file cas: record replay watermark: %w", err)
 	}
+	// A cadence job whose frozen target the new base covers would only
+	// rebuild an older base, from an older seed: supersede it, so its worker's
+	// next lease renewal stops it, it is never reclaimed, and the next
+	// reconcile re-admits the row on the new base (S2,
+	// docs/problems/paper-never-checkpointed-2026-10-27.md). Checkpoint
+	// verification jobs and genesis repairs are their own targets.
+	if _, err := tx.ExecContext(ctx, `UPDATE computer_projection_jobs SET status='superseded',error_text=?,lease_token='',updated_at=? WHERE computer_id=? AND status IN ('queued','running','retry','failed','blocked') AND target_sequence<=? AND genesis_repair=FALSE AND reason NOT LIKE ?`,
+		fmt.Sprintf("superseded by base %s at %d", baseRef, seq), now, computerID, seq, checkpointVerifyReason+"%"); err != nil {
+		return fmt.Errorf("file cas: supersede covered projection job: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}

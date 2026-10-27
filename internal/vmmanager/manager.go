@@ -589,6 +589,9 @@ type Manager struct {
 	templateWait        time.Duration
 	templateStagingHook func(staging string) error
 	templateCloneFn     func(dst, src *os.File) error
+	// captureCloneFn is the data image capture's clone (nil = FICLONE), a
+	// test seam (data_image_capture.go).
+	captureCloneFn func(dst, src *os.File) error
 }
 
 func (m *Manager) StateDir() string {

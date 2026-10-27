@@ -1,0 +1,226 @@
+package projectionbase
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
+)
+
+// A projection base captured from a running computer's store, not rebuilt
+// from its tape (S2 of docs/problems/paper-never-checkpointed-2026-10-27.md;
+// owner, 2026-10-27). The paper's only base is 4.36M events behind its tape,
+// and a host replay runs at about 50 events/s: a day of replay for one base.
+// The host instead reflinks the running guest's data image (vmmanager
+// CaptureDataImage), mounts the clone, and publishes the store on it here.
+//
+// What is checked: the store opens, its head is the tape's event at that
+// sequence (so the base is at a head the tape has), and the published blob
+// re-verifies like every base (digest, head, witness of its own bytes). What
+// is not: that the tape derives the state. The base is marked
+// OriginLiveCaptured so nothing downstream reads its witness as a rebuild's.
+
+// captureStagingDirName is where the store is moved on the capture before it
+// is packed, so the blob holds the store and nothing else from the guest.
+const captureStagingDirName = ".capture-base"
+
+// CaptureConfig names one captured store and where its base is published.
+type CaptureConfig struct {
+	ComputerID string
+	// StoreMarker is the guest store's marker on the mounted capture
+	// (<mount>/state); its workspace is <mount>/state.texture. The capture
+	// is disposable: the store is moved, compacted and packed in place.
+	StoreMarker   string
+	ArtifactsRoot string
+	// TapeHeadAt returns the canonical head of the computer's event at
+	// sequence, from the platform's tape.
+	TapeHeadAt func(ctx context.Context, computerID string, sequence uint64) (string, error)
+	// MinFreeBytes is the free space the artifacts filesystem must keep
+	// after each large write (compaction, blob, read-back).
+	MinFreeBytes uint64
+	// FreeBytes reads free space (nil: statfs).
+	FreeBytes func(path string) (uint64, error)
+}
+
+// PublishCapturedBase publishes the captured store as a projection base
+// marked OriginLiveCaptured, at the store's own head. Any refusal leaves no
+// blob and no descriptor; the capture itself is the caller's to remove.
+func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error) {
+	cfg.ComputerID = strings.TrimSpace(cfg.ComputerID)
+	if cfg.ComputerID == "" || strings.TrimSpace(cfg.StoreMarker) == "" || strings.TrimSpace(cfg.ArtifactsRoot) == "" || cfg.TapeHeadAt == nil {
+		return nil, fmt.Errorf("%w: capture needs a computer, a store, an artifacts root and the tape", ErrBaseRefused)
+	}
+	if cfg.FreeBytes == nil {
+		cfg.FreeBytes = statfsFree
+	}
+	marker := filepath.Clean(cfg.StoreMarker)
+	workspace := choirstore.TextureWorkspacePath(marker)
+	if info, err := os.Stat(marker); err != nil || info.IsDir() {
+		return nil, fmt.Errorf("%w: captured store marker %s: %v", ErrBaseRefused, marker, err)
+	}
+	if info, err := os.Stat(workspace); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("%w: captured store workspace %s: %v", ErrBaseRefused, workspace, err)
+	}
+
+	// Move the store alone into a staging directory under the names a base
+	// blob carries (VerifyPublishedBase reads runtime.db).
+	staging := filepath.Join(filepath.Dir(marker), captureStagingDirName)
+	if err := os.RemoveAll(staging); err != nil {
+		return nil, fmt.Errorf("capture: clear staging: %w", err)
+	}
+	if err := os.Mkdir(staging, 0o755); err != nil {
+		return nil, fmt.Errorf("capture: create staging: %w", err)
+	}
+	stagedMarker := filepath.Join(staging, "runtime.db")
+	stagedWorkspace := choirstore.TextureWorkspacePath(stagedMarker)
+	if err := os.Rename(marker, stagedMarker); err != nil {
+		return nil, fmt.Errorf("capture: stage store marker: %w", err)
+	}
+	if err := os.Rename(workspace, stagedWorkspace); err != nil {
+		return nil, fmt.Errorf("capture: stage store workspace: %w", err)
+	}
+	// Dolt's temp files go on the capture, not the host's /tmp; they are
+	// removed before the store is packed.
+	restoreTemp, err := UseStoreTempDir(stagedWorkspace, compactionDatabase)
+	if err != nil {
+		return nil, err
+	}
+	defer restoreTemp()
+
+	head, err := settleCapturedStore(ctx, cfg, stagedMarker)
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.room(uint64(workspaceBytes(stagedWorkspace))); err != nil {
+		return nil, err
+	}
+	compacted, err := CompactWorkspace(ctx, cfg.ComputerID, head.CanonicalEventHead, stagedWorkspace)
+	if err != nil {
+		return nil, fmt.Errorf("capture: compact: %w", err)
+	}
+	log.Printf("capture: compacted computer=%s commits %d->%d bytes %d->%d", cfg.ComputerID, compacted.CommitsBefore, compacted.CommitsAfter, compacted.NomsBytesBefore, compacted.NomsBytesAfter)
+	witness, err := witnessForWorkspace(ctx, cfg.ComputerID, head.CanonicalEventHead, stagedWorkspace)
+	if err != nil {
+		return nil, err
+	}
+	restoreTemp()
+	if err := cfg.room(uint64(workspaceBytes(staging))); err != nil {
+		return nil, err
+	}
+
+	publisher := NewPublisher(cfg.ArtifactsRoot)
+	blobSHA256, blobSize, err := publisher.PublishDir(staging)
+	if err != nil {
+		return nil, fmt.Errorf("capture: publish blob: %w", err)
+	}
+	published := false
+	defer func() {
+		if !published {
+			_ = os.Remove(filepath.Join(cfg.ArtifactsRoot, "sha256", Namespace, blobSHA256))
+		}
+	}()
+	descriptor := Descriptor{
+		ComputerID:            cfg.ComputerID,
+		Sequence:              head.Sequence,
+		CanonicalHead:         head.CanonicalEventHead,
+		BlobSHA256:            blobSHA256,
+		BlobSizeBytes:         blobSize,
+		ReducerVersion:        head.ReducerVersion,
+		SchemaVersion:         int(computerevent.SchemaVersionV1),
+		VocabularyVersion:     CurrentVocabularyVersion,
+		VMLocalContentWitness: witness,
+		CreatedAt:             time.Now().UTC(),
+		Origin:                OriginLiveCaptured,
+	}
+	if err := descriptor.Validate(); err != nil {
+		return nil, fmt.Errorf("capture: validate descriptor: %w", err)
+	}
+	if err := cfg.room(uint64(blobSize)); err != nil {
+		return nil, err
+	}
+	if err := VerifyPublishedBase(ctx, cfg.ArtifactsRoot, descriptor); err != nil {
+		return nil, err
+	}
+	if _, err := publisher.PublishDescriptor(descriptor, blobSHA256); err != nil {
+		return nil, fmt.Errorf("capture: publish descriptor: %w", err)
+	}
+	published = true
+	return &Result{
+		Descriptor:     descriptor,
+		BlobPath:       filepath.Join(cfg.ArtifactsRoot, "sha256", Namespace, blobSHA256),
+		TargetSequence: head.Sequence,
+	}, nil
+}
+
+// settleCapturedStore opens the captured store, proves its head is on the
+// tape, and brings it to the state at that head: an append the guest had
+// prepared but not yet finalized is not part of it, and the serving
+// vocabulary fence is the one every base carries.
+func settleCapturedStore(ctx context.Context, cfg CaptureConfig, marker string) (*computerevent.Head, error) {
+	store, err := choirstore.Open(marker)
+	if err != nil {
+		return nil, fmt.Errorf("%w: captured store does not open: %v", ErrBaseRefused, err)
+	}
+	defer store.Close()
+	head, err := store.Head(ctx, cfg.ComputerID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: captured store head: %v", ErrBaseRefused, err)
+	}
+	if head == nil || head.Sequence == 0 || !computerevent.IsSHA256(head.CanonicalEventHead) {
+		return nil, fmt.Errorf("%w: captured store has no head for %s", ErrBaseRefused, cfg.ComputerID)
+	}
+	onTape, err := cfg.TapeHeadAt(ctx, cfg.ComputerID, head.Sequence)
+	if err != nil {
+		return nil, fmt.Errorf("%w: tape event at %d: %v", ErrBaseRefused, head.Sequence, err)
+	}
+	if onTape != head.CanonicalEventHead {
+		return nil, fmt.Errorf("%w: captured head at %d is %s, the tape's is %s", ErrBaseRefused, head.Sequence, head.CanonicalEventHead, onTape)
+	}
+	prepared, err := store.Prepared(ctx, cfg.ComputerID)
+	if err != nil {
+		return nil, fmt.Errorf("capture: read prepared events: %w", err)
+	}
+	for _, p := range prepared {
+		if err := store.DiscardPrepared(ctx, cfg.ComputerID, p.EventDigest); err != nil {
+			return nil, fmt.Errorf("capture: discard prepared event %d: %w", p.Event.Sequence, err)
+		}
+	}
+	if len(prepared) > 0 {
+		log.Printf("capture: computer=%s discarded %d prepared, unfinalized event(s) above head %d", cfg.ComputerID, len(prepared), head.Sequence)
+	}
+	if _, err := store.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
+		return nil, fmt.Errorf("capture: vocabulary fence refused: %w", err)
+	}
+	if err := store.Close(); err != nil {
+		return nil, fmt.Errorf("capture: close captured store: %w", err)
+	}
+	return head, nil
+}
+
+// room refuses a write of need bytes that would leave the artifacts
+// filesystem below the floor.
+func (cfg CaptureConfig) room(need uint64) error {
+	free, err := cfg.FreeBytes(cfg.ArtifactsRoot)
+	if err != nil {
+		return fmt.Errorf("capture: read free space: %w", err)
+	}
+	if free < need+cfg.MinFreeBytes {
+		return fmt.Errorf("%w: capture needs %d bytes with a %d-byte floor, %d free", ErrBaseRefused, need, cfg.MinFreeBytes, free)
+	}
+	return nil
+}
+
+func statfsFree(path string) (uint64, error) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return 0, fmt.Errorf("statfs %s: %w", path, err)
+	}
+	return uint64(st.Bavail) * uint64(st.Bsize), nil
+}

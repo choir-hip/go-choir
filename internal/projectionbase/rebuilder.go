@@ -241,6 +241,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 			if err := resetScratchContent(scratchDir); err != nil {
 				return nil, fmt.Errorf("%w: reset partial seed scratch: %v", ErrBaseRefused, err)
 			}
+			meta = nil
 			if cfg.SeedPolicy != SeedNone {
 				seed, targetSequence, err = r.seedScratch(ctx, source, scratchDir, targetSequence)
 				if err != nil {
@@ -273,6 +274,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		if err := resetScratchContent(scratchDir); err != nil {
 			return nil, fmt.Errorf("%w: reset partial seed scratch: %v", ErrBaseRefused, err)
 		}
+		meta = nil
 		if cfg.SeedPolicy != SeedNone {
 			seed, targetSequence, err = r.seedScratch(ctx, source, scratchDir, targetSequence)
 			if err != nil {
@@ -445,6 +447,7 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		VocabularyVersion:     CurrentVocabularyVersion,
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
+		Origin:                inheritedOrigin(seed, meta),
 	}
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("rebuilder: validate descriptor: %w", err)
