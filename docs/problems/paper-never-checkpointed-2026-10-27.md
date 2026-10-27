@@ -151,6 +151,150 @@ is a separate, irreversible owner act. The cost is that the state at the root
 is no longer proven derivable from the paper's own history; the owner
 accepts this because the paper holds no unique data.
 
+## Epoch root: what the code does (lane/ckpt-capture)
+
+The owner decision above changes what `live_captured` means. A captured base is an **epoch
+root**: it defines state at its sequence. Derivability is measured from
+it. Proofs no longer need the tape below it. Nothing deletes that prefix;
+it stays where it is, and deleting it would be a separate owner act.
+
+- **The root itself.** It is marked `origin: live_captured` and keeps that
+  mark.
+- **Bases replayed from the root.** They are ordinary derived bases with no
+  origin mark. Each records `epoch_root {base_ref, sequence}` so the
+  provenance stays visible. Their own descendants record the same root.
+- **Verdicts.** A checkpoint is judged against the nearest base, as before,
+  and that includes the root. A match is Verified and a mismatch is
+  NotDerivable (review 364, finding 4).
+- **The floor.** No replay starts below the root. A genesis repair of the
+  computer starts from the root. A quarantined root with no base above it
+  stays the seed, so its job fails closed and blocks; it never falls back
+  to a pre-root base or to genesis. A checkpoint below the root settles
+  `unverified/no_base`.
+- **Where the floor is enforced.** In two places:
+  - corpusd: the epoch-root row, read at job admission;
+  - the host rebuilder: the highest floor among the computer's published
+    descriptors, checked whatever the seed policy.
+- **Rollback safety.** The root's descriptor carries
+  `vocabulary_version: "v2+live_captured"`. A pre-S2 reader refuses it
+  (fails closed); descendants read normally.
+
+## S2 runbook
+
+`checkpointd capture-base` (cmd/checkpointd/capture.go) does one named
+computer per run. Nothing schedules it.
+
+**What it needs.** The `go-choir-checkpointd` unit cannot run it: the
+shared hardening blocks `@mount` and has no capabilities. So it runs in a
+transient unit with:
+- root, with `CAP_SYS_ADMIN` in the bounding set (a loop mount);
+- access to `/dev/loop*`, so no `PrivateDevices`;
+- the host-internal token as the `choir-internal-token` credential, with
+  `CHOIR_INTERNAL_AUTH_MODE=enforce` (Node B's mode, nix/node-b.nix);
+- a writable `HOME` for Dolt.
+
+Because it holds the platform's internal token and its default paths are
+Node B's, run it only on Node B, by the operator.
+
+```sh
+sudo systemd-run --unit=choir-capture-base --collect --wait --pipe \
+  -p Nice=19 -p IOSchedulingClass=idle -p CPUQuota=100% \
+  -p MemoryHigh=6G -p MemoryMax=8G -p MemorySwapMax=0 -p OOMScoreAdjust=1000 \
+  -p RuntimeMaxSec=3h \
+  -p CapabilityBoundingSet="CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER" \
+  -p LoadCredential=choir-internal-token:/var/lib/go-choir/secrets/internal-service-token \
+  -p StateDirectory=go-choir/capture-base-home \
+  -E CHOIR_INTERNAL_AUTH_MODE=enforce \
+  -E HOME=/var/lib/go-choir/capture-base-home -E GOMEMLIMIT=6GiB \
+  /var/lib/go-choir/services/checkpointd/bin/checkpointd capture-base \
+    -computer <computer-id> -min-free-gib 24
+```
+
+It prints one JSON line with these fields: `vm_id`, `paused_ms`,
+`cloned_ms`, `sequence`, `canonical_head`, `base_ref`, `blob_bytes`,
+`origin`, `advertised`, `duration` and `error`.
+
+**What a run does, in order.**
+1. Takes the run lock (`/var/lib/go-choir/capture-base/.capture-base.lock`;
+   a second run refuses).
+2. Sweeps what a killed run left: mounts under the mount root, and any
+   `vm-state/<vm>/data.img.capture` that has no `capture-pause.json` beside
+   it.
+3. Asks vmctl for the capture: a durable pause marker, a pause, a reflink
+   with a 30 s deadline and a resume watchdog, a resume confirmed by
+   `GET /`, and an fsync of the clone.
+4. Mounts the clone `loop,nosuid,nodev,noexec`.
+5. Refuses a symlink, device, fifo or socket anywhere in the store tree.
+6. Checks the head against the tape and drops prepared rows.
+7. Checks free space inside the image, on the capture's filesystem and on
+   the artifacts filesystem.
+8. Compacts, witnesses, packs, reads back, and publishes the root.
+9. Advertises it. corpusd records the epoch root because the sidecar says
+   `live_captured`.
+10. Unmounts, then removes the clone.
+
+On an advertisement error the watermark is read back. The base is
+retracted only on a definite absent or lower watermark.
+
+**A vmctl that dies inside the pause.** The marker stays behind. At
+reattach, vmctl resumes the VM, confirms it with `GET /`, and removes the
+marker and the clone. Resuming continues the same guest process: it is not
+a boot, so the restart rule does not apply. If a boot finds a marker, it
+clears it.
+
+**d@e proof first** (`computer-59c902c5d46caecc0a180a8557164e72`,
+`vm-70070cf7337d45f2d46eafc83b9783b9`). Run the command and record:
+- `paused_ms` and `cloned_ms` from the report, and the vmctl journal line
+  `data image capture ... paused`. Expect under 1 s for a small image.
+- The ext4 journal replay at mount: `journalctl -k`, looking for
+  `EXT4-fs ... recovery complete` or `mounted filesystem`.
+- Compaction before and after (the `capture: compacted` line), and the
+  total duration.
+- Readback: `GET /internal/computers/files/watermark?computer_id=...` names
+  `base_ref`, and corpusd's `computer_projection_epoch_roots` row names it.
+- The guest stays healthy after the pause: its health endpoint answers, and
+  no restart or interrupted work appears in its journal.
+- Cleanup: no `data.img.capture` and no `capture-pause.json` in the VM dir,
+  no mount under `/var/lib/go-choir/capture-base` (`findmnt`), and no
+  `.capture-base` or `.projection-base-readback-*` left behind.
+- The next cadence job seeds from the root. Its base records `epoch_root`,
+  and its verdicts judge normally.
+
+**The paper** (`computer-1355b83bced1613eb048ee28d66688a8`,
+`vm-1669020adcece51c2f5ff9b6df399ef5`). Run the same command after the
+04:00 daily store compaction, while the store is near 22 GiB and the
+capture's own compaction is close to a no-op.
+
+Peak extra space on `/` is roughly:
+- 22 GiB for the blob;
+- 22 GiB for the readback;
+- the reflink divergence: the guest's writes over the run, about 5 GiB/h,
+  plus any compaction writes.
+
+At 84 GiB free with a 24 GiB floor, that fits. Run before the 04:00
+compaction, with the store at 35-37 GiB, and it refuses at a floor check.
+That is the intended outcome, not a fault. The running cadence job on seed
+`abacf6b0…` is superseded when the root is advertised, because it has
+another seed and a lower watermark.
+
+**Rollback.**
+1. Revert the S2 commits (`git revert`).
+2. Before the old build runs checkpointd, point the computer's watermark
+   back at its last pre-root base, because a pre-S2 reader refuses the root
+   descriptor:
+   ```sql
+   UPDATE computer_replay_watermarks
+      SET watermark_sequence=<prior>, base_ref='<prior ref>'
+    WHERE computer_id='<id>';
+   DELETE FROM computer_projection_epoch_roots WHERE computer_id='<id>';
+   ```
+3. Base the job reset on that row.
+4. The epoch-roots table can stay; an old build ignores it.
+5. Retract the root's blob and sidecar only after nothing pins it.
+
+Once the watermark points at a pre-root base again, the computer can still
+replay the prefix, because nothing deleted it.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
