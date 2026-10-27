@@ -199,3 +199,20 @@ which counts empty reviews too.
   `Relate` (the log names runs `4413ff18`, `7e1104a1`, `bcf82095`).
 - Heresy delta: discovered 1 (the guard refuses the entity record), introduced 0,
   repaired 0.
+
+## Fixed by (lane/entity-role)
+
+Smallest fix 1, rename option: the `story.entities` tape attachment's `Role`
+field is now `entity_role` (`storyEntityAttachment` in
+`internal/agentcore/story_entities_verb.go`). The vocabulary write guard is
+unchanged. Every reader of the tape record decodes through the same struct
+(`story_entities_verb.go`, `story_entities_source.go`,
+`story_entities_backfill.go`), so none needed a separate edit; the desk-facing
+`choir.Relate` result and the corpusd wire (`types.StoryEntity`) keep `role`
+(neither is a tape event). No migration: no attachment-bearing record was ever
+stored, and a stored record with `role` could not exist. A reader of an old
+record would see an empty role, not an error. Tests: a cut-over store accepts
+the event and reads it back; a bare `role=central` and `role=boss` stay
+refused (`internal/store/story_entities_vocab_fence_test.go`,
+`TestRelateRecordsOnAStoreThatHasCutOver`). Smallest fixes 2 to 5 remain open
+(backfill re-ask after deploy, honest receipt, refusal metric).
