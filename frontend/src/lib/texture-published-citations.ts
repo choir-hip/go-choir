@@ -16,6 +16,7 @@
 // never calls a computer.
 
 import { escapeHTML, sourceEntityID, sourceEntityTitle, sourceEntityTargetURL } from './texture-source-renderer';
+import { citationNoteIDForAnchor } from './texture-citation-marker';
 
 export type CheckState = 'exact' | 'tolerant' | 'pending' | 'unread' | 'failed';
 
@@ -305,7 +306,7 @@ export function renderPublishedCitationRef(ctx: PublishedCitationContext, anchor
   const number = String(source.number);
   const entityID = source.entityID;
   const label = `Source ${number}: ${source.title}, quote check ${citation.check}`;
-  return `<span class="texture-source-ref texture-source-ref--cited" data-texture-source-ref data-texture-citation-transclusion data-texture-source-node-id="${escapeHTML(anchorId)}" data-source-display-mode="numbered_ref" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(number)}" data-source-number="${escapeHTML(number)}" data-citation-anchor="${escapeHTML(anchorId)}" data-check="${citation.check}" data-source-expansion-surface="journal" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(label)}">
+  return `<span class="texture-source-ref texture-source-ref--cited" data-texture-source-ref data-texture-citation-transclusion data-texture-source-node-id="${escapeHTML(anchorId)}" data-source-display-mode="numbered_ref" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(number)}" data-source-number="${escapeHTML(number)}" data-citation-anchor="${escapeHTML(anchorId)}" data-check="${citation.check}" data-source-expansion-surface="journal" contenteditable="false" tabindex="0" role="button" aria-expanded="true" aria-pressed="true" aria-controls="${escapeHTML(citationNoteIDForAnchor(anchorId))}" aria-label="${escapeHTML(label)}">
     <span class="texture-source-ref-label">${escapeHTML(number)}</span>
     <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(source.title)}</strong>
@@ -333,4 +334,74 @@ export function renderPublishedSourcesHTML(ctx: PublishedCitationContext | null)
     <h2>Sources</h2>
     <ol>${items}</ol>
   </section>`;
+}
+/**
+ * The plain citation note a marker toggles. It sits in the flow of the text
+ * under the paragraph that cites it, carries the same quote-in-source-block
+ * body and live check the Sources list shows, and is never a popover: the note
+ * is the only surface a marker opens (owner direction, 2026-10-27). The inline
+ * popover span stays on the marker for every existing reader of it, but the
+ * stylesheet in texture-citation-notes.css keeps it out of view.
+ */
+export function renderCitationNoteHTML(ctx: PublishedCitationContext | null, anchorId: string): string {
+  if (!ctx) return '';
+  const citation = ctx.byAnchor.get(anchorId);
+  if (!citation) return '';
+  const source = ctx.sourceByKey.get(citation.sourceKey);
+  if (!source) return '';
+  const number = String(source.number);
+  // The note is plain text plus one Close button: no link and no nested action,
+  // so a press anywhere in it is never mistaken for a marker press or a
+  // navigation. The source's actions stay on the marker and the Sources list
+  // (owner direction, 2026-10-27).
+  return `<aside class="texture-citation-note" id="${escapeHTML(citationNoteIDForAnchor(anchorId))}" data-texture-source-note data-citation-anchor="${escapeHTML(anchorId)}" data-citation-source-key="${escapeHTML(source.key)}" data-citation-number="${escapeHTML(number)}" data-citation-check="${escapeHTML(citation.check)}" data-citation-note-open="true" role="note" aria-label="${escapeHTML(`Source ${number} note`)}">`
+    + `<div class="texture-citation-note-head"><span class="texture-source-number">[${escapeHTML(number)}]</span> <span class="texture-published-source-title">${escapeHTML(source.title)}</span></div>`
+    // A note shows the citation's own quoted words and its live check, never a
+    // source's captured page text: a whole-resource embed republishes nothing
+    // (docs/problems/published-embeds-republish-source-text-2026-10-16.md).
+    + (citation.quote ? citationBodyHTML({ ...citation, blocks: [] }, 'blockquote') : '')
+    + `<button type="button" class="texture-citation-note-close" data-citation-note-close aria-label="${escapeHTML(`Close source ${number} note`)}">Close</button>`
+    + '</aside>';
+}
+
+/**
+ * The citation notes for the citations an HTML fragment marks, in reading
+ * order, one per anchor, wrapped in one block placed under the fragment's
+ * paragraph. Empty when the fragment cites nothing this bundle resolves.
+ */
+export function renderCitationNotesHTML(ctx: PublishedCitationContext | null, anchors: string[] = []): string {
+  if (!ctx || !anchors.length) return '';
+  const seen = new Set<string>();
+  const notes = anchors
+    .map((anchorId) => String(anchorId || '').trim())
+    .filter((anchorId) => {
+      if (!anchorId || seen.has(anchorId)) return false;
+      seen.add(anchorId);
+      return true;
+    })
+    .map((anchorId) => renderCitationNoteHTML(ctx, anchorId))
+    .filter(Boolean)
+    .join('');
+  if (!notes) return '';
+  // One notes block follows the paragraph that cites it, and each note is a
+  // direct child of it: a note's own previousElementSibling is the notes
+  // block's parent paragraph, so the note reads as sitting under the
+  // paragraph it belongs to (owner direction, 2026-10-27).
+  return `<div class="texture-citation-notes" data-texture-citation-notes aria-label="Citation notes">${notes}</div>`;
+}
+
+/**
+ * The citation anchors an HTML fragment marks, in reading order. The markers
+ * carry an escaped anchor id in a dedicated attribute and never a quote, so
+ * reading that attribute back finds every citation in a block.
+ */
+export function citationAnchorsInHTML(html: string): string[] {
+  const anchors: string[] = [];
+  const re = / data-citation-anchor="([^"<>\s]+)"/g;
+  let match = re.exec(html);
+  while (match) {
+    anchors.push(match[1]);
+    match = re.exec(html);
+  }
+  return anchors;
 }

@@ -4,6 +4,8 @@ import {
   sourceEntityID,
 } from './texture-source-renderer';
 import {
+  citationAnchorsInHTML,
+  renderCitationNotesHTML,
   renderPublishedCitationRef,
   type PublishedCitationContext,
 } from './texture-published-citations';
@@ -131,6 +133,9 @@ function serializeBlockNode(node: any, nextID: (kind: string) => string, existin
   // the DOM (station TE).
   if (matches(node, '[data-texture-embed]')) return serializeEmbedElement(node, existingDoc) as StructuredNode | null;
   if (matches(node, '[data-texture-source-flow]') || matches(node, '[data-texture-source-entity]')) return null;
+  // Citation notes are rendered chrome under a paragraph, never typed text:
+  // a note must never serialize back into the document (texture-citation-marker).
+  if (matches(node, '[data-texture-source-note]') || matches(node, '[data-texture-citation-notes]')) return null;
   const tag = elementTag(node);
   if (/^h[1-6]$/.test(tag)) {
     return {
@@ -269,8 +274,15 @@ export function sourceRefQuote(node: StructuredNode): string {
   return String(ref?.quote || '').trim();
 }
 
+// A paragraph carries its citation notes in the flow under it: each marker
+// toggles its own note and nothing overlays the text (owner direction,
+// 2026-10-27). The notes are rendered from the same inline HTML the markers
+// came from, so they name exactly the citations the paragraph makes and are
+// resolved from the same published citation context.
 function renderParagraph(node: StructuredNode, rc: RenderContext): string {
-  return `<p>${renderInlineContent(node.content || [], rc)}</p>`;
+  const inlineHTML = renderInlineContent(node.content || [], rc);
+  const notes = renderCitationNotesHTML(rc.citations, citationAnchorsInHTML(inlineHTML));
+  return `<p>${inlineHTML}</p>${notes}`;
 }
 
 function renderBlockNode(node: StructuredNode, rc: RenderContext): string {

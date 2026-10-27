@@ -49,7 +49,8 @@
     serializeEditorStructuredDoc,
     sourceEntitiesForStructuredDoc,
   } from './texture-structured-editor-doc';
-  import { clearSourceJournalFlows, mountSourceJournalFlow } from './texture-source-flow';
+  import { clearSourceJournalFlows } from './texture-source-flow';
+  import { closeCitationNote, settleCitationNotes, toggleCitationNote } from './texture-citation-marker';
   import {
     sourceDecisionEvidence,
     sourceDiagnosisSummary,
@@ -81,6 +82,7 @@
   import { fetchRelatedStories, relatedLinkTarget, renderRelatedHTML } from './texture-related-stories';
   import './texture-source-flow.css';
   import './texture-published-citations.css';
+  import './texture-citation-notes.css';
   import './texture-related-stories.css';
   import './texture-embeds.css';
   import { hydrateEmbedIdentity, markEmbedUnresolvable } from './texture-embeds';
@@ -175,9 +177,6 @@
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
   const TOOLBAR_HIDE_SCROLL_TOP = 56;
   const TOOLBAR_HIDE_SETTLE_MS = 260;
-  const SOURCE_FLOW_MIN_WIDTH = 620;
-  const SOURCE_FLOW_GAP = 24;
-  const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
   const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'research', 'management'];
   const PUBLISHED_POLL_MS = 60_000;
@@ -1671,8 +1670,8 @@
     if (collapse) {
       event.preventDefault();
       event.stopPropagation();
-      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
-        node.setAttribute('data-expanded', 'false');
+      editorSurface?.querySelectorAll?.('[data-texture-source-ref]').forEach((node) => {
+        closeCitationMarkerNote(node);
       });
       clearSourceJournalFlows(editorSurface);
       return;
@@ -1688,9 +1687,21 @@
       handleSourceOpenButton(button);
       return;
     }
+    // The note's own Close button closes the note it sits in.
+    const noteClose = event.target?.closest?.('[data-citation-note-close]');
+    if (noteClose) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCitationNote(noteClose.closest?.('[data-texture-source-note]'), editorSurface);
+      return;
+    }
     const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
     if (sourceRef) {
       event.preventDefault();
+      // Touch already toggled on pointerdown; any mouse details the tap still
+      // emits must not turn the same note back.
+      if (event.detail === 0 && event.pointerType && event.pointerType !== 'mouse') return;
+      if (!event.pointerType || event.pointerType === 'mouse' || event.detail > 0) toggleCitationMarker(sourceRef);
       return;
     }
     const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
@@ -1715,7 +1726,7 @@
     if (sourceRef && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       event.stopPropagation();
-      toggleInlineSourceRef(sourceRef);
+      toggleCitationMarker(sourceRef);
       return;
     }
     const button = event.target?.closest?.('[data-texture-open-source]');
@@ -1725,66 +1736,41 @@
     handleSourceOpenButton(button);
   }
 
+  // A marker press turns that marker's own note and no other: the plain note
+  // in the text flow under its paragraph (texture-citation-marker). The marker
+  // keeps its box and the paragraph is never re-laid, so nothing overlays the
+  // text and the sentence around the marker does not change shape.
+  function toggleCitationMarker(sourceRef) {
+    if (!sourceRef) return;
+    toggleCitationNote(sourceRef, editorSurface);
+  }
+
+  function closeCitationMarkerNote(sourceRef) {
+    if (!sourceRef) return;
+    closeCitationNote(sourceRef, editorSurface);
+  }
+
   function refreshSourceJournalFlow() {
-    const expanded = editorSurface?.querySelector?.('[data-texture-source-ref][data-expanded="true"]');
-    if (!expanded) return;
-    clearSourceJournalFlows(editorSurface);
-    requestAnimationFrame(() => mountSourceJournalFlow(expanded, {
-      minWidth: SOURCE_FLOW_MIN_WIDTH,
-      gap: SOURCE_FLOW_GAP,
-      lineHeight: SOURCE_FLOW_LINE_HEIGHT,
-    }));
-  }
-
-  function renderedSourceRefForEntity(entityID) {
-    if (!entityID || !editorSurface) return null;
-    return Array.from(editorSurface.querySelectorAll?.('[data-texture-source-ref]') || [])
-      .find((node) => !node.closest?.('[data-texture-source-flow]') && node.getAttribute?.('data-source-entity-id') === entityID) || null;
-  }
-
-  function expandSourceRefAsJournalFlow(sourceRef) {
-    if (!sourceRef) return;
-    sourceRef.setAttribute('data-expanded', 'true');
-    requestAnimationFrame(() => mountSourceJournalFlow(sourceRef, {
-      minWidth: SOURCE_FLOW_MIN_WIDTH,
-      gap: SOURCE_FLOW_GAP,
-      lineHeight: SOURCE_FLOW_LINE_HEIGHT,
-    }));
-  }
-
-  function toggleInlineSourceRef(sourceRef) {
-    if (!sourceRef) return;
-    const flow = sourceRef.closest?.('[data-texture-source-flow]');
-    if (flow) {
-      const entityID = sourceRef.getAttribute('data-source-entity-id') || '';
-      const ownerID = flow.getAttribute('data-source-flow-owner-id') || '';
-      clearSourceJournalFlows(editorSurface);
-      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
-        node.setAttribute('data-expanded', 'false');
-      });
-      if (!entityID || entityID === ownerID) return;
-      expandSourceRefAsJournalFlow(renderedSourceRefForEntity(entityID));
-      return;
-    }
-    const expanded = sourceRef.getAttribute('data-expanded') === 'true';
-    clearSourceJournalFlows(editorSurface);
-    editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
-      if (node !== sourceRef) node.setAttribute('data-expanded', 'false');
-    });
-    sourceRef.setAttribute('data-expanded', expanded ? 'false' : 'true');
-    if (!expanded) {
-      expandSourceRefAsJournalFlow(sourceRef);
-    }
+    // A hidden note keeps its box, so a resize never re-lays a paragraph for
+    // a citation; the markers are re-settled against their notes instead.
+    settleCitationNotes(editorSurface);
   }
 
   function handleEditorPointerDown(event) {
     const collapse = event.target?.closest?.('[data-texture-source-flow-collapse]');
     if (collapse) {
       event.preventDefault();
-      editorSurface?.querySelectorAll?.('[data-texture-source-ref][data-expanded="true"]').forEach((node) => {
-        node.setAttribute('data-expanded', 'false');
+      editorSurface?.querySelectorAll?.('[data-texture-source-ref]').forEach((node) => {
+        closeCitationMarkerNote(node);
       });
       clearSourceJournalFlows(editorSurface);
+      return;
+    }
+    const noteClose = event.target?.closest?.('[data-citation-note-close]');
+    if (noteClose) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCitationNote(noteClose.closest?.('[data-texture-source-note]'), editorSurface);
       return;
     }
     const sourceOpen = event.target?.closest?.('[data-texture-open-source]');
@@ -1798,7 +1784,10 @@
     const sourceRef = event.target?.closest?.('[data-texture-source-ref]');
     if (sourceRef) {
       event.preventDefault();
-      toggleInlineSourceRef(sourceRef);
+      event.stopPropagation();
+      // A touch toggles on pointerdown (the tap's destination); a mouse press
+      // is left to the click that follows it, so one press turns the note once.
+      if (event.pointerType && event.pointerType !== 'mouse') toggleCitationMarker(sourceRef);
       return;
     }
     const relatedRef = event.target?.closest?.('[data-texture-related-ref]');
@@ -2304,20 +2293,6 @@
     cursor: pointer;
   }
 
-  .rendered-doc :global(.texture-source-ref[data-source-expansion-surface="media"][data-expanded="true"]) {
-    display: inline-grid;
-    grid-template-columns: auto minmax(12rem, 1fr);
-    align-items: start;
-    min-width: min(24rem, 100%);
-    max-width: min(30rem, 100%);
-    margin: 0.28rem 0.08rem;
-    border-radius: 8px;
-    padding: 0.18rem 0.22rem;
-    font-size: 0.88rem;
-    line-height: 1.35;
-    vertical-align: baseline;
-  }
-
   .rendered-doc :global(.texture-source-ref:focus-visible) {
     outline: 2px solid var(--choir-state-active-glow);
     outline-offset: 2px;
@@ -2376,45 +2351,9 @@
     gap: 0.42rem;
   }
 
-  .rendered-doc :global(.texture-source-ref-popover) {
-    position: absolute;
-    z-index: 30;
-    left: 0;
-    top: calc(100% + 0.35rem);
-    display: none;
-    width: min(22rem, calc(100vw - 3rem));
-    border: 1px solid var(--choir-border-strong);
-    border-radius: 8px;
-    padding: 0.58rem 0.64rem;
-    color: var(--choir-text-accent);
-    background: var(--choir-surface-pane);
-    box-shadow: 0 18px 42px color-mix(in srgb, var(--choir-shadow-color) 28%, transparent);
-    font-size: 0.82rem;
-    font-weight: 620;
-    line-height: 1.35;
-    text-transform: none;
-  }
-
-  .rendered-doc :global(.texture-source-ref[data-source-expansion-surface="media"][data-expanded="true"] .texture-source-ref-popover) {
-    position: static;
-    z-index: auto;
-    display: grid;
-    width: auto;
-    margin-left: 0.42rem;
-    border-color: color-mix(in srgb, var(--choir-border-strong) 72%, transparent);
-    background: color-mix(in srgb, var(--choir-surface-pane) 88%, transparent);
-    box-shadow: none;
-  }
-
-  .rendered-doc :global(.texture-source-ref-popover strong),
-  .rendered-doc :global(.texture-source-ref-popover span) {
-    display: block;
-  }
-
-  .rendered-doc :global(.texture-source-ref:not([data-expanded="true"]):hover .texture-source-ref-popover),
-  .rendered-doc :global(.texture-source-ref:not([data-expanded="true"]):focus .texture-source-ref-popover) {
-    display: block;
-  }
+  /* Nothing overlays the text: the marker keeps its popover span for every
+     existing reader of it, but texture-citation-notes.css takes that span out
+     of flow and out of view in every state, hover and focus included. */
 
   .rendered-doc :global(code) {
     border-radius: 0.35rem;

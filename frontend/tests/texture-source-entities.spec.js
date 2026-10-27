@@ -798,13 +798,19 @@ test('Texture renders source entities as expandable sources and opens owning med
   const rendered = textureWindow.locator('[data-texture-rendered]');
   await expect(rendered.locator('[data-texture-source-ref]')).toBeVisible({ timeout: 10000 });
   await expect(rendered.locator('[data-texture-source-ref]')).toHaveAttribute('data-texture-citation-transclusion', '');
-  await rendered.locator('[data-texture-source-ref]').click();
   const citation = rendered.locator('[data-texture-source-ref]');
-  await expect(citation).toHaveAttribute('data-expanded', 'true');
-  await expect(citation).toHaveAttribute('data-source-expansion-surface', 'media');
-  await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('YouTube source fixture');
-  await expect(citation.locator('[data-texture-inline-transclusion] iframe')).toHaveAttribute('src', /youtube\.com\/embed\/dQw4w9WgXcQ/);
+  // The marker is a toggle in every state: pressing it opens the plain note
+  // under its paragraph and never expands a card in the sentence.
+  await citation.click();
+  await expect(citation).toHaveAttribute('aria-expanded', 'true');
+  await expect(citation).toHaveAttribute('aria-pressed', 'true');
+  await expect(citation.locator('[data-texture-source-ref-popover]')).toBeHidden();
+  const mediaNote = rendered.locator('[data-texture-source-note]').first();
+  await expect(mediaNote).toBeVisible();
+  await expect(mediaNote).toContainText('YouTube source fixture');
 
+  await mediaNote.locator('[data-citation-note-close]').click();
+  await expect(citation).toHaveAttribute('aria-expanded', 'false');
   await citation.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-window]').filter({ hasText: 'YouTube source fixture' }).last()).toBeVisible({ timeout: 10000 });
 });
@@ -923,10 +929,12 @@ test('Texture opens content-item text sources as reader-mode markdown', async ({
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-reader-mode"]');
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  const flowNote = rendered.locator('[data-texture-source-flow-note]');
+  const flowNote = rendered.locator('[data-texture-source-note]').filter({ hasText: 'Full cleaned reader source detail supports the cited claim' });
   await expect(flowNote).toBeVisible();
-  await expect(flowNote).toContainText('Full cleaned reader source detail supports the cited claim');
-  await flowNote.locator('[data-texture-open-source][data-source-entity-id="src-reader-mode"]').click();
+  await expect(rendered.locator('[data-texture-source-ref-popover]:visible')).toHaveCount(0);
+  await flowNote.locator('[data-citation-note-close]').click();
+  await expect(flowNote).toBeHidden();
+  await citation.locator('[data-texture-source-ref-label]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -1069,7 +1077,7 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-url-source-viewer"]');
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source]').click();
+  await citation.locator('[data-texture-open-source]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -1081,7 +1089,7 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
   const explicitBrowserCitation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-url-web-lens"]').first();
   await expect(explicitBrowserCitation).toBeVisible({ timeout: 10000 });
   await explicitBrowserCitation.click();
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-url-web-lens"]').click();
+  await explicitBrowserCitation.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-browser-app]')).toHaveCount(1);
 });
 
@@ -1278,13 +1286,14 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
   await expect(sourceViewerCitation).toBeVisible({ timeout: 10000 });
   await expect(sourceViewerCitation).toHaveAttribute('data-texture-citation-transclusion', '');
   await expect(sourceViewerCitation).toHaveAttribute('data-source-display-mode', 'numbered_ref');
-  await expect(sourceViewerCitation).toHaveAttribute('data-source-expansion-surface', 'journal');
+  // Every marker is a toggle that opens the plain note under its paragraph.
+  await expect(sourceViewerCitation).toHaveAttribute('aria-expanded', 'true');
   await sourceViewerCitation.click();
-  const sourceViewerFlowNote = rendered.locator('[data-texture-source-flow-note]');
+  const sourceViewerFlowNote = rendered.locator('[data-texture-source-note]').first();
   await expect(sourceViewerFlowNote).toContainText('Graph-only Source Viewer fixture');
   await expect(sourceViewerFlowNote).toContainText(inlineSourceViewerQuote);
   await expect(sourceViewerFlowNote).not.toContainText(graphSourceViewerReaderBody);
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-graph-ui-source-viewer"]').click();
+  await sourceViewerCitation.locator('[data-texture-open-source]').click();
 
   const sourceWindow = page.locator('[data-content-viewer]').last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
@@ -1299,7 +1308,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
   await expect(webLensCitation).toBeVisible({ timeout: 10000 });
   await expect(webLensCitation).toHaveAttribute('data-texture-citation-transclusion', '');
   await webLensCitation.click();
-  await rendered.locator('[data-texture-source-flow-note] [data-texture-open-source][data-source-entity-id="src-graph-ui-web-lens"]').click();
+  await webLensCitation.locator('[data-texture-open-source]').click();
   await expect(page.locator('[data-browser-app]')).toHaveCount(1);
   expect(servedGraphOnlyRevision).toBe(true);
 });
@@ -1519,7 +1528,10 @@ test('Texture source panel omits retired artifact attachment UI while structured
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-attach-text"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
-  await expect(citation).toHaveAttribute('data-expanded', 'true');
+  // The marker stays a toggle: its note shows the attachment's words and the
+  // sentence keeps the marker where it was.
+  await expect(citation).toHaveAttribute('aria-expanded', 'true');
+  await expect(rendered.locator('[data-texture-source-ref-popover]:visible')).toHaveCount(0);
   await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('Attachable source fixture');
   await expect(citation.locator('[data-texture-inline-transclusion]')).toContainText('Readable attachment confirms the cited claim.');
 });
@@ -1643,76 +1655,35 @@ test('Texture lays out expanded text sources as noncanonical journal flow', asyn
   const rendered = textureWindow.locator('[data-texture-rendered]');
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-fixture-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
-  await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
+  // The marker is a toggle now: the note sits in the text flow under its
+  // paragraph, the paragraph is never re-laid, and no popover ever shows.
   await citation.click();
-  const flow = rendered.locator('[data-texture-source-flow]');
-  await expect(flow).toBeVisible({ timeout: 5000 });
-  await expect(flow).toContainText('ABA Formal Opinion 512 fixture');
-  await expect(flow).not.toContainText('source available');
-  await expect(flow).not.toContainText('public source');
-  await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
-  expect(await rendered.locator('p[data-texture-source-flow-hidden]').count()).toBeGreaterThanOrEqual(2);
-  expect(await flow.evaluate((node) => getComputedStyle(node).position)).toBe('relative');
-  const note = flow.locator('[data-texture-source-flow-note]');
-  expect(await note.evaluate((node) => getComputedStyle(node).position)).toBe('absolute');
-  await expect(note.locator('[data-texture-source-flow-note-title]')).toContainText('ABA Formal Opinion 512 fixture');
-  await expect(note.locator('[data-texture-source-ref-popover]')).toHaveCount(0);
-  await expect(note.locator('[data-texture-source-flow-note-actions] [data-texture-open-source]')).toBeVisible();
-  await expect(flow).toHaveAttribute('data-texture-source-flow-routed-lines', /^[3-9]\d*$/);
-  const journalGeometry = await flow.evaluate((node) => {
-    const note = node.querySelector('[data-texture-source-flow-note]');
-    const flowBox = node.getBoundingClientRect();
-    const noteBox = note.getBoundingClientRect();
-    const noteBottom = note.getBoundingClientRect().bottom - node.getBoundingClientRect().top;
-    const besideLines = Array.from(node.querySelectorAll('[data-texture-source-flow-line-beside-note]'));
-    const besideLineCount = besideLines.length;
-    const sideColumnIsClear = besideLines.every((line) => {
-      const lineBox = line.getBoundingClientRect();
-      return lineBox.right <= noteBox.left - 10;
-    });
-    const secondParagraphBesideNote = Array.from(node.querySelectorAll('.texture-source-journal-line')).some((line) => {
-      const top = line.getBoundingClientRect().top - node.getBoundingClientRect().top;
-      const lineBox = line.getBoundingClientRect();
-      return top >= 0 && top < noteBottom && lineBox.right <= noteBox.left - 10 && line.textContent.includes('Second paragraph');
-    });
-    return { besideLineCount, sideColumnIsClear, secondParagraphBesideNote };
-  });
-  const continuedBelowFlow = await rendered.evaluate((node) => {
-    const flow = node.querySelector('[data-texture-source-flow]');
-    const followingParagraph = Array.from(node.querySelectorAll('p')).find((paragraph) => paragraph.textContent.includes('Fourth paragraph'));
-    if (!flow || !followingParagraph) return false;
-    const flowBox = flow.getBoundingClientRect();
-    const paragraphBox = followingParagraph.getBoundingClientRect();
-    return paragraphBox.top >= flowBox.bottom - 1;
-  });
-  expect(journalGeometry.besideLineCount).toBeGreaterThanOrEqual(3);
-  expect(journalGeometry.sideColumnIsClear).toBe(true);
-  expect(journalGeometry.secondParagraphBesideNote).toBe(true);
-  expect(continuedBelowFlow).toBe(true);
+  await expect(citation).toHaveAttribute('aria-expanded', 'true');
+  await expect(rendered.locator('[data-texture-source-ref-popover]:visible')).toHaveCount(0);
+  const note = rendered.locator('[data-texture-source-note][data-citation-anchor="ref-fixture-flow"]');
+  await expect(note).toBeVisible({ timeout: 5000 });
+  await expect(note).toContainText('ABA Formal Opinion 512 fixture');
+  await expect(note).not.toContainText('source available');
+  await expect(rendered.locator('[data-texture-source-flow]')).toHaveCount(0);
+  expect(await rendered.locator('p[data-texture-source-flow-hidden]').count()).toBe(0);
+  expect(await note.evaluate((node) => getComputedStyle(node).position)).toBe('static');
   await expect(note.locator('.texture-source-facts')).toHaveCount(0);
-  const nestedCitation = flow.locator('[data-texture-source-ref][data-source-entity-id="src-fixture-nested"]');
+  // A second marker in the next paragraph toggles its own note and leaves the
+  // first note as it is.
+  const nestedCitation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-fixture-nested"]').first();
   await expect(nestedCitation).toBeVisible();
-  await expect(nestedCitation.locator('[data-texture-inline-transclusion]')).toBeHidden();
   await nestedCitation.click();
-  const remountedFlow = rendered.locator('[data-texture-source-flow]');
-  await expect(remountedFlow).toHaveCount(1);
-  await expect(remountedFlow.locator('[data-texture-source-flow-note]')).toContainText('ABA Model Rule 1.6 fixture');
-  await expect(remountedFlow.locator('[data-texture-source-flow-note]')).not.toContainText('ABA Formal Opinion 512 fixture');
-  const remountedState = await rendered.evaluate((node) => {
-    const flow = node.querySelector('[data-texture-source-flow]');
-    const mounted = node.querySelector('[data-texture-source-ref][data-source-entity-id="src-fixture-nested"][data-source-flow-mounted="true"]');
-    const expandedInsideFlow = flow?.querySelector('[data-texture-source-ref][data-expanded="true"]');
-    return {
-      owner: flow?.getAttribute('data-source-flow-owner-id') || '',
-      hasMountedOriginal: !!mounted && !mounted.closest('[data-texture-source-flow]'),
-      hasExpandedInsideFlow: !!expandedInsideFlow,
-    };
-  });
-  expect(remountedState.owner).toBe('src-fixture-nested');
-  expect(remountedState.hasMountedOriginal).toBe(true);
-  expect(remountedState.hasExpandedInsideFlow).toBe(false);
+  const nestedNote = rendered.locator('[data-texture-source-note][data-citation-anchor="ref-fixture-nested"]');
+  await expect(nestedNote).toBeVisible();
+  await expect(nestedNote).toContainText('ABA Model Rule 1.6 fixture');
+  await expect(note).toBeVisible();
+  await expect(rendered.locator('[data-texture-source-note][data-citation-note-open="true"]')).toHaveCount(2);
+  await expect(rendered.locator('[data-texture-source-ref-popover]:visible')).toHaveCount(0);
+  await nestedNote.locator('[data-citation-note-close]').click();
+  await expect(nestedNote).toBeHidden();
+  await expect(note).toBeVisible();
 
-  await remountedFlow.locator('[data-texture-open-source][data-source-entity-id="src-fixture-nested"]').click();
+  await note.locator('[data-texture-open-source]').click();
   const sourceWindow = page.locator('[data-window]').filter({ hasText: 'ABA Model Rule 1.6 fixture' }).last();
   await expect(sourceWindow).toBeVisible({ timeout: 10000 });
 });
@@ -1812,33 +1783,28 @@ test('Texture uses stacked journal flow instead of old source card when side rou
   const citation = rendered.locator('[data-texture-source-ref][data-source-entity-id="src-stacked-flow"]').first();
   await expect(citation).toBeVisible({ timeout: 10000 });
   await expect(citation).toHaveAttribute('data-source-expansion-surface', 'journal');
+  // The stacked-journal card is gone: the same marker opens its plain note
+  // under the paragraph, after the text, never over it.
   await citation.click();
+  await expect(citation).toHaveAttribute('aria-expanded', 'true');
+  const note = rendered.locator('[data-texture-source-note][data-citation-anchor="ref-stacked-flow"]');
+  await expect(note).toBeVisible({ timeout: 5000 });
+  await expect(note).toContainText('Stacked journal source fixture');
+  await expect(note).not.toContainText('source available');
+  await expect(rendered.locator('[data-texture-source-flow]')).toHaveCount(0);
+  await expect(rendered.locator('[data-texture-source-ref-popover]:visible')).toHaveCount(0);
 
-  const flow = rendered.locator('[data-texture-source-flow]');
-  await expect(flow).toBeVisible({ timeout: 5000 });
-  await expect(flow).toHaveAttribute('data-texture-source-flow-mode', 'stacked');
-  await expect(flow).toHaveAttribute('data-texture-source-flow-routed-lines', '0');
-  await expect(citation).toHaveAttribute('data-source-flow-mounted', 'true');
-  await expect(flow.locator('[data-texture-source-ref-popover]')).toHaveCount(0);
-  await expect(flow.locator('[data-texture-source-flow-note]')).toContainText('Stacked journal source fixture');
-  await expect(flow.locator('[data-texture-source-flow-note]')).not.toContainText('source available');
-
-  const geometry = await flow.evaluate((node) => {
-    const flowBox = node.getBoundingClientRect();
-    const note = node.querySelector('[data-texture-source-flow-note]');
-    const lines = Array.from(node.querySelectorAll('.texture-source-journal-line'));
-    const noteBox = note?.getBoundingClientRect();
-    const lastLineBottom = Math.max(...lines.map((line) => line.getBoundingClientRect().bottom - flowBox.top));
-    const lineLayerHasOldCard = !!node.querySelector('.texture-source-ref[data-expanded="true"] .texture-source-ref-popover');
+  const geometry = await note.evaluate((node) => {
+    const noteBox = node.getBoundingClientRect();
+    const paragraph = node.previousElementSibling;
+    const paragraphBox = paragraph?.getBoundingClientRect();
     return {
-      lineCount: lines.length,
-      noteAfterLines: !!noteBox && noteBox.top - flowBox.top >= lastLineBottom - 1,
-      lineLayerHasOldCard,
+      afterParagraph: !!paragraphBox && noteBox.top >= paragraphBox.bottom - 1,
+      sameWidth: !!paragraphBox && Math.abs(noteBox.width - paragraphBox.width) <= 2,
     };
   });
-  expect(geometry.lineCount).toBeGreaterThan(0);
-  expect(geometry.noteAfterLines).toBe(true);
-  expect(geometry.lineLayerHasOldCard).toBe(false);
+  expect(geometry.afterParagraph).toBe(true);
+  expect(geometry.sameWidth).toBe(true);
 });
 
 test('Texture mobile source journal flow stays within the reader width', async ({ desktopSession }) => {
@@ -1932,15 +1898,15 @@ test('Texture mobile source journal flow stays within the reader width', async (
   await expect(citation).toBeVisible({ timeout: 10000 });
   await citation.click();
 
-  const flow = rendered.locator('[data-texture-source-flow]');
+  const flowNote = rendered.locator('[data-texture-source-note]').filter({ hasText: 'NixOS reproducible configuration and rollback' });
   await expect(flow).toBeVisible({ timeout: 5000 });
-  await expect(flow.locator('[data-texture-source-flow-note]')).toContainText('NixOS reproducible configuration and rollback');
+  await expect(flowNote).toBeVisible({ timeout: 5000 });
   await page.screenshot({ path: test.info().outputPath('texture-mobile-source-flow.png'), fullPage: true });
 
   const geometry = await rendered.evaluate((node) => {
     const rendered = /** @type {HTMLElement} */ (node);
-    const flow = rendered.querySelector('[data-texture-source-flow]');
-    const note = rendered.querySelector('[data-texture-source-flow-note]');
+    const flow = rendered.querySelector('[data-texture-citation-notes]');
+    const note = rendered.querySelector('[data-texture-source-note][data-citation-note-open="true"]');
     const paragraph = Array.from(rendered.querySelectorAll('p')).find((item) => item.textContent?.includes('Base architecture'));
     const renderedBox = rendered.getBoundingClientRect();
     const flowBox = flow?.getBoundingClientRect();

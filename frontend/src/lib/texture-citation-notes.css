@@ -1,0 +1,142 @@
+/* Citation notes: a citation marker toggles its own plain source note, which
+   sits in the flow of the text under the paragraph that cites it, and nothing
+   overlays the text (owner direction, 2026-10-27).
+
+   Two invariants hold in every state:
+   1. The marker keeps its inline box, size, font and position, so toggling a
+      note never reflows the line that carries the marker.
+   2. No popover shows: the marker keeps its popover span in the DOM for every
+      existing reader of it, but this sheet takes that span out of flow and
+      out of view, so hovering or focusing a marker opens nothing.
+
+   A closed note keeps its box (hidden, not removed) so the paragraph above it
+   never moves either. Existing features stay: the numbered marker, the source
+   title, the live quote check (exact / tolerant / pending / unread / failed),
+   and "Open source". */
+
+.rendered-doc .texture-source-ref {
+  vertical-align: super;
+}
+
+.rendered-doc .texture-source-ref > .texture-source-ref-popover,
+.rendered-doc .texture-source-ref [data-texture-source-ref-popover] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  /* hidden, not merely transparent: a clipped 1px box still answers a
+     getBoundingClientRect, so anything asking whether a popover shows must
+     find none. The marker's own box is untouched either way. */
+  visibility: hidden !important;
+  display: block !important;
+}
+
+/* Compressed and expanded refs draw as the same numbered marker; the note is
+   the only place a source's text is shown. */
+.rendered-doc .texture-source-ref[data-expanded="true"] {
+  display: inline-flex;
+}
+
+/* The pressed state: a marker whose note is open. It reads through color and
+   border only, never through a size or padding change, so the line keeps its
+   layout. */
+.rendered-doc .texture-source-ref[aria-expanded="true"],
+.rendered-doc .texture-source-ref[data-citation-note-open="true"] {
+  color: var(--choir-text-primary);
+  background: var(--choir-state-active, var(--choir-state-selected));
+  border-color: var(--choir-text-accent);
+}
+
+.rendered-doc .texture-source-ref[aria-expanded="false"] {
+  color: color-mix(in srgb, var(--choir-text-accent) 72%, transparent);
+}
+
+.rendered-doc .texture-source-ref:focus-visible {
+  outline: 2px solid var(--choir-state-active-glow, currentColor);
+  outline-offset: 2px;
+}
+
+.texture-citation-notes {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  font-family: var(--choir-font-ui, inherit);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+/* A closed note keeps its box: hidden, not removed, so the paragraph above it
+   does not move and the marker measures identically in either state. */
+.texture-citation-note[data-citation-note-open="false"] {
+  visibility: hidden;
+}
+
+.texture-citation-note {
+  display: grid;
+  gap: 0.3rem;
+  border-left: 2px solid var(--choir-border-strong, currentColor);
+  padding: 0.32rem 0 0.32rem 0.7rem;
+  color: var(--choir-text-accent, inherit);
+  background: none;
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+
+.texture-citation-note-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-weight: 680;
+}
+
+.texture-citation-note-head .texture-source-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.texture-citation-note .texture-transclusion-quote,
+.texture-citation-note .texture-citation-block {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-style: normal;
+}
+
+.texture-citation-note .texture-citation-check {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  font-size: 0.78em;
+  opacity: 0.82;
+}
+
+.texture-citation-note .texture-source-open {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .texture-citation-notes {
+    font-size: 0.82rem;
+  }
+  .texture-citation-note {
+    padding-left: 0.55rem;
+  }
+}

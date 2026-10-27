@@ -159,6 +159,10 @@ test('structured docs render expanded_ref source refs as an inline numbered mark
   expect(html).toMatch(/^<p><span class="texture-source-ref" data-texture-source-ref[^>]*data-source-display-mode="expanded_ref"/);
   expect(html).toContain('data-texture-source-node-id="ref-expanded"');
   expect(html).toContain('<span class="texture-source-ref-label">1</span>');
+  // The popover span stays for existing readers, but the reading surface is
+  // the plain note under the paragraph, inside the citation notes block.
+  // Without a published citation context there is no note; the marker keeps
+  // the source's title in its (never shown) popover, exactly as before.
   expect(html).toMatch(/data-texture-source-ref-popover[^]*Carrier service advisory[^]*Open source/);
   expect(html).not.toContain('data-embed-block');
   expect(html).not.toContain('texture-source-ref-block');
@@ -245,6 +249,8 @@ test('a Write citation popover shows the citation quote', () => {
   }]), [writeEntity('src_a', 'Introducing Claude Haiku 5.5', 'https://example.com/haiku')]);
 
   expect(html).toContain('data-texture-source-node-id="ref-1"');
+  // Without a published citation context there is no note: the marker keeps the
+  // citation's quote in its (never shown) popover, exactly as before.
   expect(html).toMatch(/data-texture-source-ref-popover[^]*texture-transclusion-quote[^]*On average, it now costs around 75% less to run\./);
 });
 
@@ -321,7 +327,8 @@ test('a published embed renders as an inline marker and never prints its pinned 
   const html = renderStructuredTextureDocHTML(bodyDoc, [], { citations });
 
   expect(html.startsWith('<p>Commercial goods stay out.<span class="texture-source-ref')).toBe(true);
-  expect(html.endsWith(' Talks continue.</p>')).toBe(true);
+  // The sentence keeps its markers, and the citations' notes follow it.
+  expect(html).toMatch(/ Talks continue\.<\/p><div class="texture-citation-notes"[^]*data-texture-source-note[^]*<\/aside><\/div>$/);
   expect(html).not.toContain('data-embed-block');
   expect(html).not.toContain('Save');
   expect(html).not.toContain('Share');
@@ -344,4 +351,101 @@ test('literal ** in an unmarked text node renders bold; other asterisks and mark
   expect(html).toContain('<p><strong>EU AI Act enforcement begins.</strong> The Commission enforces it.</p>');
   expect(html).toContain('<p><strong>Marked</strong> text.</p>');
   expect(html).not.toContain('**');
+});
+
+// Citation notes (owner direction, 2026-10-27): a numbered marker is a toggle
+// whose note is plain text in the flow under the paragraph that cites it.
+// The note is rendered chrome, never document content: it must never
+// serialize back into the doc, or a save would type the notes into the text.
+test('citation markers carry toggle state and the note sits under its paragraph', () => {
+  const bodyDoc = writeDoc([
+    {
+      type: 'paragraph',
+      attrs: { id: 'p-a' },
+      content: [
+        { type: 'text', text: 'First claim' },
+        writeRef('ref-a', 'src_a', 'numbered_ref', 'First quote.'),
+        { type: 'text', text: ' and second claim' },
+        writeRef('ref-b', 'src_b', 'numbered_ref', 'Second quote.'),
+        { type: 'text', text: '.' },
+      ],
+    },
+    { type: 'paragraph', attrs: { id: 'p-b' }, content: [{ type: 'text', text: 'Another paragraph.' }] },
+  ]);
+  const bundle = {
+    artifact: { body_doc: bodyDoc },
+    payload: {
+      manifest: JSON.stringify({ anchors: [
+        { anchor_id: 'ref-a', relation: 'cites', ref: { doc: 'cap-a', version: 'v1', cid: 'a1', quote: 'First quote.' }, cids: ['a1'] },
+        { anchor_id: 'ref-b', relation: 'cites', ref: { doc: 'cap-b', version: 'v1', cid: 'b1', quote: 'Second quote.' }, cids: ['b1'] },
+      ] }),
+      resolved_blocks: [
+        { doc: 'cap-a', cid: 'a1', text: 'First quote.', kind: 'p', url: 'https://example.com/a', title: 'Source A' },
+        { doc: 'cap-b', cid: 'b1', text: 'Second quote.', kind: 'p', url: 'https://example.com/b', title: 'Source B' },
+      ],
+    },
+    checks: { citations: [
+      { anchor_id: 'ref-a', state: 'exact', quote: 'exact' },
+      { anchor_id: 'ref-b', state: 'exact', quote: 'exact' },
+    ] },
+  };
+  const citations = buildPublishedCitationContext(bundle, []);
+  const html = renderStructuredTextureDocHTML(bodyDoc, [], { citations });
+
+  // The markers stay inside their sentence and report their toggle state.
+  const firstParagraph = html.slice(0, html.indexOf('</p>'));
+  expect(firstParagraph).toContain('data-citation-anchor="ref-a"');
+  expect(firstParagraph).toContain('data-citation-anchor="ref-b"');
+  expect(firstParagraph).not.toContain('data-texture-source-note');
+  expect(html).toMatch(/data-citation-anchor="ref-a"[^>]*aria-expanded="true"[^>]*aria-pressed="true"[^>]*aria-controls="texture-source-note-ref-a"/);
+
+  // One notes block follows the paragraph, one note per citation, in order;
+  // each note is a direct child of that block, so the note reads as sitting
+  // under the paragraph that cites it.
+  expect(html).toContain('</p><div class="texture-citation-notes" data-texture-citation-notes');
+  const notesBlock = html.slice(html.indexOf('data-texture-citation-notes'));
+  const noteOrder = Array.from(notesBlock.matchAll(/data-texture-source-note data-citation-anchor="([^"]+)"/g)).map((m) => m[1]);
+  expect(noteOrder).toEqual(['ref-a', 'ref-b']);
+  expect(notesBlock).toContain('id="texture-source-note-ref-a"');
+  expect(notesBlock).toContain('data-citation-note-open="true"');
+  expect(notesBlock).toContain('First quote.');
+  expect(notesBlock).toContain('Second quote.');
+  // The note carries the live check and a Close button, and no link.
+  expect(notesBlock).toContain('data-check-badge="exact"');
+  expect(notesBlock).toContain('data-citation-note-close');
+  const beforeSecondParagraph = notesBlock.slice(0, notesBlock.indexOf('Another paragraph.') >= 0 ? notesBlock.indexOf('Another paragraph.') : notesBlock.length);
+  expect(beforeSecondParagraph).not.toContain('<a ');
+  // The second paragraph carries no notes block of its own.
+  expect(html.endsWith('Another paragraph.</p>')).toBe(true);
+});
+
+test('a rendered citation note never serializes back into the document', () => {
+  const note = element('aside', {
+    'data-texture-source-note': '',
+    'data-citation-anchor': 'ref-a',
+    'data-citation-note-open': 'true',
+  }, [text('First quote.')]);
+  const notes = element('div', { 'data-texture-citation-notes': '' }, [note]);
+  const paragraph = element('p', {}, [
+    text('First claim'),
+    element('span', {
+      'data-texture-source-ref': '',
+      'data-texture-source-node-id': 'ref-a',
+      'data-source-entity-id': 'src_a',
+      'data-source-display-mode': 'numbered_ref',
+    }, [text('1')]),
+    text('.'),
+  ]);
+  const roundTrip = serializeEditorStructuredDoc(element('div', {}, [paragraph, notes]));
+
+  expect(roundTrip.doc.content).toHaveLength(1);
+  expect(roundTrip.doc.content[0]).toMatchObject({
+    type: 'paragraph',
+    content: [
+      { type: 'text', text: 'First claim' },
+      { type: 'source_ref', attrs: { id: 'ref-a', source_entity_id: 'src_a', display_mode: 'numbered_ref' } },
+      { type: 'text', text: '.' },
+    ],
+  });
+  expect(JSON.stringify(roundTrip)).not.toContain('First quote.');
 });

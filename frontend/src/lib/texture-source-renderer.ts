@@ -382,7 +382,7 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
   const title = sourceEntityTitle(entity);
   const marker = sourceEntities.indexOf(entity) + 1 || '';
   const expansionSurface = sourceEntityExpansionSurface(entity);
-  return `<span class="texture-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-display-mode="${mode}" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
+  return `<span class="texture-source-ref" data-texture-source-ref data-texture-citation-transclusion data-source-display-mode="${mode}" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-expanded="true" aria-pressed="true" aria-label="${escapeHTML(`Source: ${title}`)}">
     <span class="texture-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
     <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
