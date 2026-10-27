@@ -60,7 +60,8 @@ metamission:
         "hibernate at will" is "cold boot at will";
         D3 idle hibernation reaches primary computers (keepalive
         under-capacity off) and the idle timer drops from 30 min to minutes,
-        never a computer with a live run, capsule, apply, nor the paper (red);
+        never a computer with a live run, capsule, apply (red; the paper
+        joins under D8);
         D4 admission charges the wake cost (0.3 to 1.4 GiB), not the last
         peak (7.8 GiB for b@c; page cache never returns) (red);
         D5 diff snapshots on (built, RES-13 L3a, off): the resident pages only,
@@ -68,9 +69,27 @@ metamission:
         (estimate; on disk btrfs compression already holds a full snapshot to
         0.7 to 1.5 GB); L3b, diff after a restored guest, is unbuilt (red);
         D6 balloon inflation returns guest page cache (unbuilt; red);
-        D7 the density bench, run (yellow). Acceptance: on staging, five test computers started in a
+        D7 the density bench, run (yellow).
+        D8 (owner 2026-10-27 19:1x: "We need snapshotting and hibernation
+        everywhere automatically"): automatic checkpoints, snapshots and
+        hibernation for every computer, the paper included; first find why
+        the host checkpoint service has no job for the paper (its base
+        watermark is 34660 against a tape of 4.39M) and measure on d@e how
+        long a self-checkpoint holds a computer's appends. Acceptance: on staging, five test computers started in a
         row with no hand stop, each wake under one second, host memory and
         snapshot bytes recorded.
+    - id: V
+      path: docs/definitions/choir-v-boot-vocab-pass-removal-2026-10-27.md
+      readiness: drafted
+      status: working
+      depends_on: []
+      note: >-
+        Owner 2026-10-27 19:1x: "when you bring the paper back, skip the
+        rescan. Fix it and get rid of that dead code." The boot vocabulary
+        full pass held the paper down 17:48 to 19:19 (OOM loop;
+        docs/problems/paper-down-on-full-vocabulary-rescan-2026-10-27.md).
+        Delete it from boot; rebuilds keep the migration; guests back to
+        8 GiB in the same train.
     - id: X
       path: docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md
       readiness: drafted
