@@ -645,11 +645,11 @@ func buildRegistry() []*command {
 		{
 			path:    []string{"self-dev", "rollback"},
 			summary: "Owner's rollback: return the computer to the state an applied operation left (--to-operation)",
-			desc:    "Roll the computer back to the state an applied operation left. The CLI resolves the guest's seven bindings from public read routes (the target operation, the event head, the operations listing's route generation), refuses a target that is not applied, is the current state or is the genesis baseline, and posts them under its own idempotency key; the guest rechecks every binding and its answer, a 409 included, is printed unchanged. --wait polls the rollback operation to rolled_back (exit 1 if it fails; --interval has a 100ms floor). A repeat of a rollback already settled to the same target, with nothing landed since, is refused when the CLI is certain. The same key replays a failed rollback: pass a fresh --idempotency-key to retry after one. An owner act: the key needs owner:acts, which admin does not imply.",
+			desc:    "Roll the computer back to the state an applied operation left. The CLI resolves the guest's seven bindings from public read routes (the target operation, the event head, the operations listing's route generation), refuses a target that is not applied, is the current state or is the genesis baseline, and posts them under its own idempotency key; the guest rechecks every binding and its answer, a 409 included, is printed unchanged. --wait polls the rollback operation to rolled_back (exit 1 if it fails; --interval has a 100ms floor). A repeat of a rollback already settled to the same target, with nothing landed since, is refused when the CLI is certain. The default key rotates after a failed rollback, so a plain re-run retries it. An owner act: the key needs owner:acts, which admin does not imply.",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
 				pStr("to_operation", "Applied operation ID whose resulting state the computer returns to").req(),
-				idempotencyParam("Rollback idempotency key (default derives from the target and the latest applied, degraded, failed or rolled_back operation, so a retry repeats it; pass a fresh --idempotency-key to retry after a failed rollback)"),
+				idempotencyParam("Rollback idempotency key (default derives from the target and the latest applied, degraded, failed or rolled_back operation, so a retry repeats it and the key rotates after a failed rollback)"),
 				pBool("wait", "Poll the rollback operation until it reaches rolled_back (exit 1 if it fails)"),
 				pDuration("interval", "Poll interval with --wait").dflt(5 * time.Second),
 				pDuration("deadline", "Give up waiting after this long").dflt(30 * time.Minute),
