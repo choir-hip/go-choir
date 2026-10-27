@@ -178,6 +178,32 @@ it stays where it is, and deleting it would be a separate owner act.
 - **Rollback safety.** The root's descriptor carries
   `vocabulary_version: "v2+live_captured"`. A pre-S2 reader refuses it
   (fails closed); descendants read normally.
+- **Review 365.**
+  - A checkpoint below the root settles `unverified/no_base` in the
+    checkpointd verdict pass too, before the held-base judge: a held
+    pre-root base that matches never makes it Verified.
+  - The seed fast path (the advertised watermark) applies the floor.
+  - At the floor's sequence a seed must be the root or one of its
+    descendants. A resumed genesis scratch with no root provenance is
+    discarded, and the next attempt seeds from the root (one transient
+    retry, never a blocked job).
+  - The floor scan fails closed on a descriptor that names the computer
+    and cannot be read or parsed.
+  - A capture whose tape head, or whose captured store head, is not above
+    the advertised watermark is refused: before the pause for the tape
+    head, at settle for the store head.
+
+**Residuals.**
+- **Guest restore below the root.** The guest's own restore and
+  rematerialize (`internal/agentcore/restore_base.go`) can still replay
+  the pre-root tape. That code is a guest security surface; the fix is a
+  follow-up, not part of this lane.
+- A resumed scratch left by a failed publish costs one transient retry
+  before the job seeds from the root.
+- The boot path keeps a capture pause marker when a Firecracker process
+  outlives the boot cleanup, and the reattach path retries a marker on
+  every later reattach call. Both read `/proc`, so they have no unit test
+  on a non-Linux host.
 
 ## S2 runbook
 
@@ -216,13 +242,21 @@ It prints one JSON line with these fields: `vm_id`, `paused_ms`,
 
 **What a run does, in order.**
 1. Takes the run lock (`/var/lib/go-choir/capture-base/.capture-base.lock`;
-   a second run refuses).
+   a second run refuses). Then, before anything pauses, asks vmctl for a
+   dry run (the VM and its owner), reads the tape head and the advertised
+   watermark, and refuses when the head is not above the watermark.
 2. Sweeps what a killed run left: mounts under the mount root, and any
    `vm-state/<vm>/data.img.capture` that has no `capture-pause.json` beside
    it.
 3. Asks vmctl for the capture: a durable pause marker, a pause, a reflink
    with a 30 s deadline and a resume watchdog, a resume confirmed by
-   `GET /`, and an fsync of the clone.
+   `GET /`, and an fsync of the clone. A marker that cannot be removed
+   fails the handoff. An abandoned clone keeps the marker until FICLONE
+   returns, and its cleanup removes only the files it made (inode check).
+   While the capture holds the VM's operation lock, a StopVM waits for
+   it: 80 s at worst (10 s pause call, 30 s clone, 3 x 10 s resume, 10 s
+   probe), a few seconds when nothing fails. Logout and rescue, which
+   hold the router lock while they stop a VM, wait as long.
 4. Mounts the clone `loop,nosuid,nodev,noexec`.
 5. Refuses a symlink, device, fifo or socket anywhere in the store tree.
 6. Checks the head against the tape and drops prepared rows.
@@ -291,6 +325,12 @@ another seed and a lower watermark.
 3. Base the job reset on that row.
 4. The epoch-roots table can stay; an old build ignores it.
 5. Retract the root's blob and sidecar only after nothing pins it.
+
+To undo the root while keeping the S2 build, do steps 2 and 3 and also
+remove the root's `.descriptor.json` sidecar (and every descendant's
+whose `epoch_root` names it). The host rebuilder reads its floor from the
+published sidecars, not from corpusd, so a sidecar left behind keeps the
+floor.
 
 Once the watermark points at a pre-root base again, the computer can still
 replay the prefix, because nothing deleted it.
