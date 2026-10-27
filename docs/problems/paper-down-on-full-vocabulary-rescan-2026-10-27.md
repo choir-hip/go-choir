@@ -77,7 +77,7 @@ one-row tail can repeat it.
   pass streams instead of holding the whole table; (c) let the paper's
   pass run with the desks off, if a boot mode allows it (unread).
 
-## 18:44 to 19:29: 12 GiB, a two-seat rejection, the disk edit, the paper back
+## 18:44 to 19:19: 12 GiB, a two-seat rejection, the disk edit, the paper back
 
 - b9045445d (12 GiB, owner's one-time go) deployed at 18:43; its vmctl
   restart killed the boot again (`start-interrupted-repeatedly-by-vmctl-
@@ -101,12 +101,12 @@ one-row tail can repeat it.
   10-27 11:06. Backups (sha256 9d5e4fdad642…, c4bf477efbcb…) in
   `/var/lib/go-choir/fp0-paper-vocab-backup-20261027.GLfl/` on Node B.
   Edit: `replay_opened_at` "" and `deposit_upcast_aliases` 12; fence date
-  unchanged. Unheld; the 19:29 boot: `vocabulary-migration … complete
+  unchanged. Unheld; the 19:19:29 boot: `vocabulary-migration … complete
   duration=0s`; a guest route answered 200 in 0.2 s.
 - **Residual:** the 8 aliases recorded since the fence were never swept,
   so rows may still reference those old event IDs (dangling references to
   at most 8 choir.event objects; no data rewritten wrongly).
-- Owner, 19:2x: "when you bring the paper back, skip the rescan. Fix it
+- Owner, 19:1x: "when you bring the paper back, skip the rescan. Fix it
   and get rid of that dead code. We need snapshotting and hibernation
   everywhere automatically." Next: delete the boot-blocking full pass
   (a station goal file), return guests to 8 GiB, and a station for
