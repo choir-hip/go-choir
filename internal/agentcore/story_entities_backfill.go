@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -84,7 +85,28 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 // at most storyEntitiesBackfillScanMax stories from the cursor, for at most
 // storyEntitiesBackfillWallMax.
 func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, computer, batchID string, limit int, from StoryEntitiesBackfillCursor) (StoryEntitiesBackfillResult, error) {
+	var ph storyEntitiesBackfillPhases
 	start := time.Now()
+	out, err := rt.storyEntitiesBackfillFrom(ctx, owner, computer, batchID, limit, from, start, &ph)
+	if ph.stop == "" {
+		ph.stop = "error"
+	}
+	log.Printf("related review: batch %s: tape %s (%d events), list %s (%d stories), loop %s, scanned %d, requested %d, stop %s, total %s, err=%v",
+		batchID, ph.tape.Round(time.Millisecond), ph.events, ph.list.Round(time.Millisecond), ph.stories, ph.loop.Round(time.Millisecond),
+		out.Scanned, len(out.Requested), ph.stop, time.Since(start).Round(time.Millisecond), err)
+	return out, err
+}
+
+// storyEntitiesBackfillPhases is where one act's wall time went, for its
+// log line (docs/problems/related-review-act-outlives-its-request-2026-10-27.md).
+type storyEntitiesBackfillPhases struct {
+	tape, list, loop time.Duration
+	events, stories  int
+	// stop: limit, scan, wall, end; empty when the act failed.
+	stop string
+}
+
+func (rt *Runtime) storyEntitiesBackfillFrom(ctx context.Context, owner, computer, batchID string, limit int, from StoryEntitiesBackfillCursor, start time.Time, ph *storyEntitiesBackfillPhases) (StoryEntitiesBackfillResult, error) {
 	owner, computer, batchID = strings.TrimSpace(owner), strings.TrimSpace(computer), strings.TrimSpace(batchID)
 	out := StoryEntitiesBackfillResult{BatchID: batchID, Requested: []string{}}
 	if rt == nil || rt.store == nil {
@@ -99,7 +121,9 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 	if !rt.computerSettingOn(ctx, owner, computer, store.SettingResearchRelatedStory) {
 		return out, ErrStoryEntitiesBackfillOff
 	}
+	t0 := time.Now()
 	tape, err := rt.system1ChannelTape(ctx, owner, computer)
+	ph.tape, ph.events = time.Since(t0), len(tape)
 	if err != nil {
 		return out, fmt.Errorf("related review: read the tape: %w", err)
 	}
@@ -115,12 +139,26 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 	}
 	scanMax := max(storyEntitiesBackfillScanMax, 1)
 	// One more than the act may read tells whether older stories remain.
+	t0 = time.Now()
 	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, from.Before, from.BeforeDoc, scanMax+1)
+	ph.list, ph.stories = time.Since(t0), len(docs)
 	if err != nil {
 		return out, fmt.Errorf("related review: list the stories: %w", err)
 	}
+	t0 = time.Now()
+	defer func() { ph.loop = time.Since(t0) }()
 	for i, doc := range docs {
-		if i > 0 && (len(out.Requested) >= limit || out.Scanned >= scanMax || time.Since(start) >= storyEntitiesBackfillWallMax) {
+		if i > 0 {
+			switch {
+			case len(out.Requested) >= limit:
+				ph.stop = "limit"
+			case out.Scanned >= scanMax:
+				ph.stop = "scan"
+			case time.Since(start) >= storyEntitiesBackfillWallMax:
+				ph.stop = "wall"
+			}
+		}
+		if ph.stop != "" {
 			// Stopped before the oldest: go on after the last story read.
 			last := docs[i-1]
 			out.Next = &StoryEntitiesBackfillCursor{Before: last.UpdatedAt, BeforeDoc: last.DocID}
@@ -170,6 +208,9 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 		if receipt.Replay {
 			out.Replayed++
 		}
+	}
+	if ph.stop == "" {
+		ph.stop = "end"
 	}
 	return out, nil
 }

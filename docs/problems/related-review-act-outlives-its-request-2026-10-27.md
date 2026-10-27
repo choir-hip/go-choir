@@ -71,3 +71,18 @@ whose scans alone near 120 s on a contended paper still loses its
 receipt (review 356 F1, residual). The durable answer is fix 3 (bounded
 reads), not a smaller number. A wall stop is not distinguished from a
 limit stop in the receipt (F2, deferred to fix 3).
+
+## Staging proof (052c75484, 17:2x)
+
+- 17:24:55, three minutes after the paper's deploy refresh: batch b41
+  (limit 10) got a 502 after 276 s (`upstream transport error … EOF`); the
+  paper's console showed `store_stalled` holders and `desk_go_eval` calls
+  of 37 s to 6 min. The bound is between stories, so a slow scan or story
+  under boot load still overruns (F1, observed).
+- 17:30:18, the same batch id again: `202` in 91.6 s, scanned 150,
+  recorded 61, busy 84, empty 5, requested 0, `next` set. The wall bound
+  returned the receipt.
+- Open, hypothesis: 84 of 150 stories read as busy, meaning
+  `TextureActiveRunByAgent(research:<doc>)` says a research run is
+  active. If those runs are stale, the act never asks those stories.
+  The act's phase log line (next commit) and a read of those runs decide it.
