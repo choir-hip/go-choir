@@ -7,13 +7,13 @@ definition_version: 4
 # this garbage"; "Is the rescan even necessary? Can we just skip it?"; "when
 # you bring the paper back, skip the rescan. Fix it and get rid of that dead
 # code."
-readiness: drafted
+readiness: executable
 
 review:
-  reviewer: none yet (tier 2 on the landed candidate: Devin and DeepSeek)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: tier 2, review 361 (Devin and DeepSeek), then review 362 (Devin) on the fix
+  frozen_ref: lane/vocab-boot c71c6fc3d (landed as 8f8b2a26c)
+  verdict: accept (362, no new defect; 361's blocking finding, a resumed rebuild trusting an earlier process's rows, fixed)
+  evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch361/, bunch362/devin.out
 
 start:
   observed_at: 2026-10-27 19:25 UTC
@@ -91,14 +91,28 @@ boundaries:
     - vocabulary fence and write guard (internal/store/vocab_*.go)
 
 now:
-  status: working
-  slice: tests first for the boot path, then the deletion
+  status: checkpoint_incomplete
+  slice: landed and deployed; b@c start on 8 GiB not yet observed
   bridge_conjecture: >-
     If boot checks only what it replayed and every live write is guarded,
     then a resume boot cannot serve non-V2 vocabulary that the full pass
     would have caught, except references to IDs renamed by V1-era replay,
     which only a rebuild performs.
-  believed_state: the full pass at boot exists only to guard a migration that finished in October
-  main_uncertainty: whether any boot path other than a rebuild replays V1-era tape (a computer whose local store is far behind its tape)
-  next_observation: the replay range a resume boot can apply (recoveryplan), against the cutover's tape position
-  next_action: write the failing boot-path tests in internal/store
+  believed_state: >-
+    Deployed 8f8b2a26c (CI run 40575882836 success 20:24:49 UTC). The
+    paper's planned refresh at 20:21:49 ran the vocabulary phase in 0 s
+    (status=complete duration=0s), on an 8192 MiB guest, and was running
+    desk tool loops by 20:24. Rebuilds resumed from a durable scratch
+    distrust the fence and take the full pass.
+  main_uncertainty: whether b@c starts with no hand stop on host memory now that the paper is back to 8 GiB
+  next_observation: b@c's next start (owner's page or a scoped start) and vmctl's capacity decision
+  next_action: observe b@c's next start; then settle complete
+  residuals:
+    - Devin 362 LOW, a seeded scratch resumed with nothing replayed still pays the full pass (cost only)
+    - Devin 362 NIT, stale comments (rematerialize.go:208-210, vocab_replay_fence_test.go:19-28, FencedAt doc)
+    - unfenced stores still take the one-time migration at boot (required by must_preserve)
+    - the paper's 8 alias references recorded since 2026-10-26 21:54 (excluded; own slice)
+
+receipts:
+  - 49ddad6a2, 8a5f6f605, 8f8b2a26c on main; CI 40575882836 success; staging build 8f8b2a26c at 20:24:50 UTC
+  - paper console 2026-10-27 20:21:49 "startup phase=vocabulary-migration status=complete duration=0s"; mem_size_mib 8192
