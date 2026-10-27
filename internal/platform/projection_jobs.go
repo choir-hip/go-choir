@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 )
 
 // Operational projection work lives in Store A, never in the semantic tape.
@@ -31,7 +33,16 @@ CREATE TABLE IF NOT EXISTS computer_projection_jobs (
  failures INT NOT NULL,
  lease_token VARCHAR(64) NOT NULL,
  lease_until DATETIME(6) NOT NULL,
- updated_at DATETIME(6) NOT NULL
+ updated_at DATETIME(6) NOT NULL,
+ build_commit VARCHAR(128) NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
+ computer_id VARCHAR(128) NOT NULL,
+ base_ref VARCHAR(255) NOT NULL,
+ refusals INT NOT NULL,
+ last_error TEXT NOT NULL,
+ updated_at DATETIME(6) NOT NULL,
+ PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_bases (
  computer_id VARCHAR(128) NOT NULL,
@@ -185,6 +196,50 @@ func blockedByContextCancel(errorText string) bool {
 	return strings.Contains(errorText, "context canceled") || strings.Contains(errorText, "context deadline exceeded")
 }
 
+// baseQuarantineRefusals is how many deterministic refusals of the same seed
+// base quarantine it: the first could be an accident, the second confirms it.
+const baseQuarantineRefusals = 2
+
+// blockedLogInterval is the least time between two log lines for one blocked
+// row, so a row blocked for days does not fill the journal.
+const blockedLogInterval = time.Hour
+
+// RecordBaseRefusal counts one deterministic refusal of a seed base for a
+// computer and reports whether the base is now quarantined. A quarantined base
+// is skipped by job enqueue and seed selection, which fall back to the next
+// older base or to no seed (docs/problems/paper-never-checkpointed-2026-10-27.md).
+func (s *Store) RecordBaseRefusal(ctx context.Context, computerID, baseRef, errorText string) (bool, error) {
+	if !safeFileCASComponent(computerID) || baseRef == "" || len(baseRef) > 255 {
+		return false, fmt.Errorf("invalid base refusal")
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_refusals (computer_id,base_ref,refusals,last_error,updated_at) VALUES (?,?,1,?,?) ON DUPLICATE KEY UPDATE refusals=refusals+1,last_error=VALUES(last_error),updated_at=VALUES(updated_at)`, computerID, baseRef, errorText, time.Now().UTC()); err != nil {
+		return false, err
+	}
+	quarantined, err := baseQuarantined(ctx, s.db, computerID, baseRef)
+	if err != nil {
+		return false, err
+	}
+	return quarantined, s.commitBoundary(ctx, "record projection base refusal "+computerID)
+}
+
+type singleRowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func baseRefusals(ctx context.Context, q singleRowQuerier, computerID, baseRef string) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, `SELECT refusals FROM computer_projection_base_refusals WHERE computer_id=? AND base_ref=?`, computerID, baseRef).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return n, err
+}
+
+func baseQuarantined(ctx context.Context, q singleRowQuerier, computerID, baseRef string) (bool, error) {
+	n, err := baseRefusals(ctx, q, computerID, baseRef)
+	return n >= baseQuarantineRefusals, err
+}
+
 func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool) (ProjectionJob, error) {
 	return s.enqueueProjectionJob(ctx, computerID, reason, genesisRepair, nil)
 }
@@ -197,6 +252,14 @@ type projectionTarget struct {
 }
 
 func (s *Store) enqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool, at *projectionTarget) (ProjectionJob, error) {
+	return s.enqueueProjectionJobAtBuild(ctx, computerID, reason, genesisRepair, at, "")
+}
+
+// enqueueProjectionJobAtBuild is enqueueProjectionJob for a caller that is the
+// worker's own build: a `blocked` row last written by another build is
+// re-admitted once, because the refusal may be the old build's fault. An empty
+// build never re-admits (request traffic from other services).
+func (s *Store) enqueueProjectionJobAtBuild(ctx context.Context, computerID, reason string, genesisRepair bool, at *projectionTarget, build string) (ProjectionJob, error) {
 	if !safeFileCASComponent(computerID) || len(computerID) > 128 || len(reason) > 255 {
 		return ProjectionJob{}, fmt.Errorf("invalid checkpoint request")
 	}
@@ -219,6 +282,19 @@ func (s *Store) enqueueProjectionJob(ctx context.Context, computerID, reason str
 	err = tx.QueryRowContext(ctx, `SELECT key_digest FROM computer_key_escrows WHERE computer_id=? AND protector='custodian'`, computerID).Scan(&keyDigest)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return ProjectionJob{}, err
+	}
+	if at == nil && seed != "" {
+		// A seed refused twice is quarantined: seed from the next older base,
+		// else from none (genesis).
+		quarantined, qerr := baseQuarantined(ctx, tx, computerID, seed)
+		if qerr != nil {
+			return ProjectionJob{}, qerr
+		}
+		if quarantined {
+			if seed, wm, err = checkpointBaseSeed(ctx, tx, computerID, head, wm, seed); err != nil {
+				return ProjectionJob{}, err
+			}
+		}
 	}
 	if at != nil {
 		// A checkpoint's job targets the checkpoint's head, and seeds from a
@@ -264,7 +340,25 @@ func (s *Store) enqueueProjectionJob(ctx context.Context, computerID, reason str
 			failedBackingOff = false
 			sameInputs = false
 		}
-		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (at == nil && old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable) || failedBackingOff {
+		// A `blocked` row is also re-admitted when the worker's build changed
+		// since it was written, and once more when it is a base refusal not yet
+		// confirmed by a second refusal of the same seed (quarantine).
+		readmit := false
+		if old.Status == "blocked" && sameInputs && !retriable {
+			blockedBuild := ""
+			if err := tx.QueryRowContext(ctx, `SELECT build_commit FROM computer_projection_jobs WHERE computer_id=?`, computerID).Scan(&blockedBuild); err != nil {
+				return ProjectionJob{}, err
+			}
+			readmit = build != "" && blockedBuild != build
+			if !readmit && seed != "" && strings.Contains(old.Error, recoveryplan.ErrBaseRefused.Error()) {
+				n, rerr := baseRefusals(ctx, tx, computerID, seed)
+				if rerr != nil {
+					return ProjectionJob{}, rerr
+				}
+				readmit = n < baseQuarantineRefusals
+			}
+		}
+		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (at == nil && old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs && !retriable && !readmit) || failedBackingOff {
 			return old, tx.Commit()
 		}
 		if old.SeedBaseRef != seed || old.KeyDigest != keyDigest {
@@ -317,11 +411,38 @@ func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
 	// of the fleet; every failure is returned for the worker's heartbeat.
 	var failures []error
 	for _, id := range due {
-		if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
+		if _, err := s.enqueueProjectionJobAtBuild(ctx, id, "cadence", false, nil, buildinfo.Commit); err != nil {
 			failures = append(failures, fmt.Errorf("enqueue %s: %w", id, err))
 		}
 	}
+	s.logBlockedJobs(ctx, now)
 	return errors.Join(failures...)
+}
+
+// logBlockedJobs logs each blocked row at most once per blockedLogInterval: a
+// blocked row never retries and otherwise says nothing (the paper's job sat
+// blocked and silent from 2026-10-15). Best effort.
+func (s *Store) logBlockedJobs(ctx context.Context, now time.Time) {
+	jobs, err := s.ListProjectionJobs(ctx)
+	if err != nil {
+		return
+	}
+	s.blockedLogMu.Lock()
+	defer s.blockedLogMu.Unlock()
+	if s.blockedLogged == nil {
+		s.blockedLogged = map[string]time.Time{}
+	}
+	for _, j := range jobs {
+		if j.Status != "blocked" {
+			delete(s.blockedLogged, j.ComputerID)
+			continue
+		}
+		if last, ok := s.blockedLogged[j.ComputerID]; ok && now.Sub(last) < blockedLogInterval {
+			continue
+		}
+		s.blockedLogged[j.ComputerID] = now
+		log.Printf("checkpoint job blocked computer=%s reason=%s failures=%d error=%q", j.ComputerID, j.Reason, j.Failures, j.Error)
+	}
 }
 
 func (s *Store) ClaimProjectionJob(ctx context.Context) (*ProjectionJob, error) {
@@ -370,7 +491,7 @@ func (s *Store) FinishProjectionJob(ctx context.Context, j ProjectionJob, status
 	if status != "succeeded" {
 		failures++
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET status=?,error_text=?,watermark_sequence=?,base_ref=?,failures=?,lease_until=?,updated_at=? WHERE computer_id=? AND generation=? AND lease_token=? AND status='running'`, status, message, watermark, baseRef, failures, time.Now().UTC().Add(time.Minute), time.Now().UTC(), j.ComputerID, j.Generation, j.LeaseToken)
+	result, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET status=?,error_text=?,watermark_sequence=?,base_ref=?,failures=?,lease_until=?,updated_at=?,build_commit=? WHERE computer_id=? AND generation=? AND lease_token=? AND status='running'`, status, message, watermark, baseRef, failures, time.Now().UTC().Add(time.Minute), time.Now().UTC(), buildinfo.Commit, j.ComputerID, j.Generation, j.LeaseToken)
 	if err != nil {
 		return err
 	}
@@ -463,7 +584,17 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 		return s.store.commitBoundary(ctx, "record verification base "+j.ComputerID)
 	}
 	if priorRef != seedBaseRef && priorRef != blobSHA256 {
-		return fmt.Errorf("checkpoint seed advertisement changed")
+		// A quarantined advertised base is replaced by a fallback seed on
+		// purpose; any other difference is a concurrent advertisement.
+		quarantined := false
+		if priorRef != "" {
+			if quarantined, err = baseQuarantined(ctx, tx, j.ComputerID, priorRef); err != nil {
+				return err
+			}
+		}
+		if !quarantined {
+			return fmt.Errorf("checkpoint seed advertisement changed")
+		}
 	}
 	now := time.Now().UTC()
 	if priorRef != "" {
