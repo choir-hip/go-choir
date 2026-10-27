@@ -61,3 +61,13 @@ the store. Pins: `internal/agentcore/story_entities_backfill_test.go`,
 
 Since train 34 every story shows 3+ related stories (the floor), so the
 backfill now improves link quality only; nothing waits on it.
+
+## As built (fix 2, review 356: approve)
+
+The act stops before the next story once 90 s have passed since it
+started, and returns the partial receipt with `next`. The bound covers
+the two scans (they run inside it) but not the story in hand, so an act
+whose scans alone near 120 s on a contended paper still loses its
+receipt (review 356 F1, residual). The durable answer is fix 3 (bounded
+reads), not a smaller number. A wall stop is not distinguished from a
+limit stop in the receipt (F2, deferred to fix 3).
