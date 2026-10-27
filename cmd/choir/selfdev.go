@@ -465,7 +465,7 @@ func renderSelfDevRollback(w io.Writer, result any, _ *call) int {
 //	    GET self-development/operations?state=rollback_pending: route_generation
 //	    (the guest's own route slot generation, the value its check compares)
 //	idempotency_key
-//	    --idempotency-key, or cli-rollback:<target>:<latest applied or rolled_back operation id>
+//	    --idempotency-key, or cli-rollback:<target>:<latest applied, degraded, failed or rolled_back operation id>
 func selfDevRollback(x *call) (any, error) {
 	computerID, targetID := x.trim("computer"), x.trim("to_operation")
 	if x.flag("wait") && x.dur("interval") < selfDevMinPollInterval {
@@ -504,15 +504,18 @@ func selfDevRollback(x *call) (any, error) {
 	if head.EffectiveEventHead == target.EffectiveHead {
 		return nil, fmt.Errorf("operation %s is the computer's current state (effective head %s); there is nothing to roll back to", targetID, head.EffectiveEventHead[:12])
 	}
-	// The latest settled operation names this rollback intent: it does not
+	// The latest landed operation names this rollback intent: it does not
 	// move when a rollback lands (the head does), so a re-run after success
-	// is the same intent, and a new apply is a new one.
-	latest, err := selfDevLatestSettled(x.c, computerID)
+	// is the same intent, a new apply is a new one, and so is a failed rollback
+	// (its retry is not a replay of the failure). The refusal below fires only
+	// when the CLI is certain; otherwise the guest's checks decide.
+	landed, err := selfDevLatestLanded(x.c, computerID)
 	if err != nil {
 		return nil, err
 	}
-	if latest != nil && latest.State == "rolled_back" && latest.BaseHead == target.EffectiveHead {
-		return nil, fmt.Errorf("already rolled back to %s by %s, and nothing has applied since", targetID, latest.OperationID)
+	latest := landed.op
+	if landed.certain && latest != nil && latest.State == "rolled_back" && latest.BaseHead == target.EffectiveHead {
+		return nil, fmt.Errorf("already rolled back to %s by %s, and nothing has landed since", targetID, latest.OperationID)
 	}
 	// The listing of open rollbacks also carries the route slot's current
 	// generation, the one binding no other public read exposes.
@@ -579,27 +582,63 @@ type selfDevSettledOperation struct {
 	OperationID string `json:"operation_id"`
 	State       string `json:"state"`
 	BaseHead    string `json:"base_head"`
+	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
 
-// selfDevLatestSettled returns the most recently updated applied or
-// rolled_back operation (nil when there is none). The listing is in created_at
-// order; a later list position breaks an updated_at tie.
-func selfDevLatestSettled(c *client, computerID string) (*selfDevSettledOperation, error) {
+// selfDevLatestLanded is the operation that anchors a rollback intent: the
+// newest-created of the operations whose head landed or whose attempt ended
+// (applied, degraded, failed, rolled_back), plus whether the CLI is certain
+// that no other operation could have landed after it.
+//
+// The operation payload carries no settle time. updated_at is bumped by late
+// refusals and degrade/fail transitions, so it is not used to order; created_at
+// is never rewritten, and head-moving acts are serialized, so it orders them.
+// Certainty needs more: every other operation must have been last written
+// before this one was created (updated_at never precedes the true settle time).
+// An unparseable time or a later write leaves certain false, and the caller
+// falls through to the guest's own checks.
+type selfDevLanded struct {
+	op      *selfDevSettledOperation
+	certain bool
+}
+
+func selfDevLatestLanded(c *client, computerID string) (selfDevLanded, error) {
 	var listing struct {
 		Operations []selfDevSettledOperation `json:"operations"`
 	}
-	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"applied", "rolled_back"}}.Encode()
+	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"applied", "degraded", "failed", "rolled_back"}}.Encode()
 	if err := c.do(http.MethodGet, path, nil, &listing); err != nil {
-		return nil, err
+		return selfDevLanded{}, err
 	}
+	certain := true
 	var latest *selfDevSettledOperation
+	var latestAt time.Time
 	for i := range listing.Operations {
-		if latest == nil || listing.Operations[i].UpdatedAt >= latest.UpdatedAt {
-			latest = &listing.Operations[i]
+		created, err := time.Parse(time.RFC3339Nano, listing.Operations[i].CreatedAt)
+		if err != nil {
+			certain = false
+			continue
+		}
+		// The listing is newest-created first, so strict > keeps the newest on a tie.
+		if latest == nil || created.After(latestAt) {
+			latest, latestAt = &listing.Operations[i], created
 		}
 	}
-	return latest, nil
+	if latest == nil {
+		return selfDevLanded{certain: certain}, nil
+	}
+	for i := range listing.Operations {
+		other := &listing.Operations[i]
+		if other == latest {
+			continue
+		}
+		updated, err := time.Parse(time.RFC3339Nano, other.UpdatedAt)
+		if err != nil || !updated.Before(latestAt) {
+			certain = false
+		}
+	}
+	return selfDevLanded{op: latest, certain: certain}, nil
 }
 
 // selfDevOpenRollbacks lists the computer's rollback_pending operations and
