@@ -109,7 +109,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	if err != nil || j == nil {
 		return j, err
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := checkpointJobContext(ctx)
 	defer cancel()
 	stop := make(chan struct{})
 	stopped := make(chan struct{})
@@ -154,6 +154,15 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 		}
 		finishCtx, done := context.WithTimeout(context.Background(), 10*time.Second)
 		defer done()
+		// A seed refused deterministically is counted; twice quarantines it
+		// and the next enqueue falls back to an older base or to none.
+		if countsAgainstSeedBase(status, j.SeedBaseRef, problem) {
+			if quarantined, qerr := store.RecordBaseRefusal(finishCtx, j.ComputerID, j.SeedBaseRef, problem.Error()); qerr != nil {
+				log.Printf("checkpoint base refusal computer=%s: %v", j.ComputerID, qerr)
+			} else if quarantined {
+				log.Printf("checkpoint base quarantined computer=%s base=%s", j.ComputerID, j.SeedBaseRef)
+			}
+		}
 		if status == "failed" && j.Failures < 1 {
 			status = "retry"
 		}
@@ -294,4 +303,20 @@ func projectionFailStatus(status string, err error) string {
 		return "failed"
 	}
 	return status
+}
+
+// checkpointJobDeadline bounds one job below the service's TimeoutStartSec of
+// 10 minutes (nix/node-b.nix), leaving time to record the outcome: without it
+// one large job runs until systemd kills the unit, records nothing, and starves
+// every job behind it. Expiry is a transient cause (`failed`, backed off).
+const checkpointJobDeadline = 8 * time.Minute
+
+func checkpointJobContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, checkpointJobDeadline)
+}
+
+// countsAgainstSeedBase reports whether a job outcome is a deterministic
+// refusal of its seed base, the only kind that counts toward quarantine.
+func countsAgainstSeedBase(status, seedBaseRef string, err error) bool {
+	return status == "blocked" && seedBaseRef != "" && errors.Is(err, projectionbase.ErrBaseRefused) && !transientProjectionCause(err)
 }

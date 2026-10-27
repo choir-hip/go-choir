@@ -18,8 +18,11 @@ import (
 )
 
 type Store struct {
-	db        *sql.DB
-	committer *doltbatch.Committer
+	db *sql.DB
+	// blockedLogged is when reconcile last logged each blocked projection job.
+	blockedLogMu  sync.Mutex
+	blockedLogged map[string]time.Time
+	committer     *doltbatch.Committer
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate
@@ -405,6 +408,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, projectionJobSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap projection jobs: %w", err)
+	}
+	if err := s.ensureColumn(ctx, "computer_projection_jobs", "build_commit", "ALTER TABLE computer_projection_jobs ADD COLUMN build_commit VARCHAR(128) NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("platform store: projection job build column: %w", err)
 	}
 	if err := s.ensureTapeTombstoneSchema(ctx); err != nil {
 		return err

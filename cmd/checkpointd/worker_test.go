@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
@@ -45,5 +46,39 @@ func TestProjectionFailStatusDemotesTransientCauseOfBlockedSite(t *testing.T) {
 	}
 	if got := projectionFailStatus("failed", errors.New("x")); got != "failed" {
 		t.Fatalf("failed site = %q", got)
+	}
+}
+
+// S1: a job runs under a deadline below the service's TimeoutStartSec=10min,
+// so one large job cannot starve the run; its expiry is a transient cause.
+func TestCheckpointJobContextHasDeadlineBelowServiceTimeout(t *testing.T) {
+	ctx, cancel := checkpointJobContext(context.Background())
+	defer cancel()
+	d, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("job context has no deadline")
+	}
+	if left := time.Until(d); left <= 0 || left >= 10*time.Minute {
+		t.Fatalf("deadline in %s, want inside (0, 10min)", left)
+	}
+}
+
+// S1: only a deterministic refusal of a seed counts toward quarantine.
+func TestCountsAgainstSeedBase(t *testing.T) {
+	refused := fmt.Errorf("%w: installed base does not open", projectionbase.ErrBaseRefused)
+	if !countsAgainstSeedBase("blocked", "abc", refused) {
+		t.Fatal("deterministic refusal of a seed must count")
+	}
+	if countsAgainstSeedBase("blocked", "", refused) {
+		t.Fatal("a refusal with no seed has nothing to quarantine")
+	}
+	if countsAgainstSeedBase("failed", "abc", refused) {
+		t.Fatal("a failed (transient) run must not count")
+	}
+	if countsAgainstSeedBase("blocked", "abc", fmt.Errorf("%w: x: %w", projectionbase.ErrBaseRefused, context.DeadlineExceeded)) {
+		t.Fatal("a timeout wrapped in a refusal must not count")
+	}
+	if countsAgainstSeedBase("blocked", "abc", errors.New("checkpoint escrow changed")) {
+		t.Fatal("a non-base refusal must not count")
 	}
 }

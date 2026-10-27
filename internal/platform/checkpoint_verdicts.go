@@ -173,11 +173,21 @@ func (s *Store) EnqueueCheckpointVerificationJob(ctx context.Context, record Che
 // newest recorded base that is.
 func checkpointBaseSeed(ctx context.Context, tx *sql.Tx, computerID string, sequence, watermark uint64, advertised string) (string, uint64, error) {
 	if watermark <= sequence {
-		return advertised, watermarkOrZero(advertised, watermark), nil
+		quarantined := false
+		if advertised != "" {
+			var err error
+			if quarantined, err = baseQuarantined(ctx, tx, computerID, advertised); err != nil {
+				return "", 0, err
+			}
+		}
+		if !quarantined {
+			return advertised, watermarkOrZero(advertised, watermark), nil
+		}
 	}
 	var ref string
 	var seq uint64
-	err := tx.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_bases WHERE computer_id=? AND sequence<=? ORDER BY sequence DESC, created_at DESC LIMIT 1`, computerID, sequence).Scan(&ref, &seq)
+	// Bases refused twice are skipped (paper-never-checkpointed S1).
+	err := tx.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_bases WHERE computer_id=? AND sequence<=? AND base_ref NOT IN (SELECT base_ref FROM computer_projection_base_refusals WHERE computer_id=? AND refusals>=2) ORDER BY sequence DESC, created_at DESC LIMIT 1`, computerID, sequence, computerID).Scan(&ref, &seq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, nil
 	}
