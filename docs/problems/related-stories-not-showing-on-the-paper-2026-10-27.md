@@ -205,12 +205,15 @@ which counts empty reviews too.
 Smallest fix 1, rename option: the `story.entities` tape attachment's `Role`
 field is now `entity_role` (`storyEntityAttachment` in
 `internal/agentcore/story_entities_verb.go`). The vocabulary write guard is
-unchanged. Every reader of the tape record decodes through the same struct
+unchanged. The readers of the attachments decode through the same struct
 (`story_entities_verb.go`, `story_entities_source.go`,
-`story_entities_backfill.go`), so none needed a separate edit; the desk-facing
+`story_entities_backfill.go`), and the finish rule (`inbox_records.go`)
+reads only the computer and story, so none needed a separate edit; the desk-facing
 `choir.Relate` result and the corpusd wire (`types.StoryEntity`) keep `role`
 (neither is a tape event). No migration: no attachment-bearing record was ever
-stored, and a stored record with `role` could not exist. A reader of an old
+stored. That is inferred, not scanned: the feature landed after the guard,
+and every serving boot fences the vocabulary before the runtime starts
+(review 349). A reader of an old
 record would see an empty role, not an error. Tests: a cut-over store accepts
 the event and reads it back; a bare `role=central` and `role=boss` stay
 refused (`internal/store/story_entities_vocab_fence_test.go`,
