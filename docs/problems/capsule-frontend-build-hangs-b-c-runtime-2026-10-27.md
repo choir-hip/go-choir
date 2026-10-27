@@ -1,4 +1,4 @@
-# A capsule frontend build hung b@c's runtime and vmctl recovered it (2026-10-27)
+# A capsule frontend build stalls b@c on disk IO and hung b@c's runtime and vmctl recovered it (2026-10-27)
 
 Status: open; the cause is not confirmed. Mutation class of any fix:
 unknown. Documented before any fix.
@@ -51,3 +51,64 @@ Repeat the build with instruments: the capsule records `/proc/pressure/*`
 and `free -m` every 5 s during the build to a file. Prefer
 `nice -n 10` and a bounded Node heap. FP0 sends this as the third attempt
 of the citation round.
+
+## Update 02:5x: the third attempt, instrumented (learning from the failed runs' traces)
+
+The third attempt ran every build under `nice -n 10` with a 2 GiB Node
+heap, and it sampled `/proc/pressure/*` and `free -m` inside the capsule
+every 5 s. The samples are in the round's trace (`choir trace export`, the
+tool results of engineering assignment 31a8b049…).
+
+- **Memory is not the cause.** Memory pressure stayed 0; about 3 GB of
+  7.9 GB was used, with 2.7 to 3 GB free and no swap. H1 is weakened.
+- **CPU is partly busy.** Some pressure was 32 to 40%.
+- **Disk IO is the stall.** IO pressure was some 61 to 65%, full 43 to
+  63%. Every runnable task in the guest waited on disk for about half the
+  time.
+- **The runtime.** Its health check failed 75 times from 02:21 to 02:43.
+  vmctl marked b@c degraded at 02:42:46 and re-promoted it at 02:43:47
+  without a restart (the lower priority helped). The build hit its time
+  limit and no candidate was frozen.
+- **The host is not the bottleneck.** Host IO pressure was about 4%, and
+  the VM's cgroup io.pressure was 0. Firecracker was not waiting on the
+  host disk; the guest waited on its virtio disk.
+- **A regression.** The first attempt's build on b@c (00:18 to 00:19, before
+  the 00:30 refresh onto train 29) took about one minute. Both builds since
+  (01:09, then 02:21 to 02:43) ran over 15 minutes and stalled on IO.
+
+### Ruled out
+
+- Firecracker drive rate limiters: none on any drive.
+- D6 cache return: never touched b@c.
+- Balloon free-page reporting: d@e has had it since train 22, and its
+  capsule builds passed. The only balloon difference on b@c is 5 s stats
+  polling.
+- Host disk contention.
+
+### Remaining hypotheses (not confirmed)
+
+- **H4.** Something in train 29's guest image or capsule executor slowed
+  capsule file IO. The capsule_executor_linux and job_memory deletions
+  are the guest-side changes to read first.
+- **H5.** b@c's data image. 15 GB is allocated (10,644 extents, against
+  d@e's 5 GB and 2,496 extents), with the Sync IO engine on a
+  copy-on-write btrfs file. It can be slow, but it was the same file at
+  00:18.
+- **H6.** The store image's page cache was cold after the refresh, so the
+  build read node_modules from disk. But a cold cache costs once, not 15
+  minutes twice.
+
+### Changes this suggests (owner, 02:5x: "maybe we need to make some changes")
+
+1. **A capsule job never starves the runtime.** Put capsule jobs in a
+   guest cgroup with lower cpu.weight and io.weight than the runtime, and
+   make the health handler answer without disk IO. A busy build is then
+   slow, never a "computer down". Whatever the cause, this is the
+   substrate fix.
+2. **Measure, don't guess.** Record a timing receipt for every capsule
+   job (wall time, IO bytes, pressure peaks), so a 1-minute build becoming
+   15 minutes is a visible regression in the next round's context.
+3. **Learn from failed attempts.** Management should read the previous
+   attempt's cause before it re-dispatches. The 01:10 restart cause was in
+   the trace, but attempt 3 was sent without it until FP0 added it. This
+   is the precommitment and ICRL thread.
