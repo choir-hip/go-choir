@@ -22,6 +22,20 @@ import (
 // realization unchanged; it must never fall through to genesis replay.
 var ErrBaseRefused = recoveryplan.ErrBaseRefused
 
+// ErrSeedRefused marks a refusal of the seed base's own bytes (corrupt blob,
+// an installed store that does not open or has the wrong head, a content
+// witness mismatch). It is always wrapped together with ErrBaseRefused, so
+// existing checks still match. Only this class counts toward quarantining a
+// seed: target, tail, scratch and install-IO refusals say nothing about it.
+var ErrSeedRefused = errors.New("projection seed base refused")
+
+func seedRefused(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", ErrSeedRefused, err)
+}
+
 // ErrReceiptUnverifiable is the typed refusal for replay sources that cannot
 // verify original signed event head receipts. Offline publication never replays
 // events on an unverified receipt path: a source without receipt trust fails
