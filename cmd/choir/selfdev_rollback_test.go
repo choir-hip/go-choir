@@ -24,8 +24,8 @@ type rollbackStub struct {
 	// routeGeneration is the listing's route_generation (0 omits it, as a
 	// guest whose route does not resolve does).
 	routeGeneration uint64
-	// settled is what GET /operations?state=applied&state=rolled_back lists,
-	// in the server's created_at order.
+	// settled is what GET /operations?state=applied&state=degraded&state=failed&state=rolled_back
+	// lists, authored in ascending created_at order.
 	settled []map[string]any
 	// inflight is what GET /operations?state=rollback_pending lists.
 	inflight []map[string]any
@@ -60,8 +60,13 @@ func (s *rollbackStub) serve(w http.ResponseWriter, r *http.Request) {
 			listing["route_generation"] = s.routeGeneration
 		}
 		_ = json.NewEncoder(w).Encode(listing)
-	case key == "GET /operations?state=applied&state=rolled_back":
-		_ = json.NewEncoder(w).Encode(map[string]any{"operations": s.settled})
+	case key == "GET /operations?state=applied&state=degraded&state=failed&state=rolled_back":
+		// The real listing is newest-created first; tests author ascending.
+		newest := make([]map[string]any, len(s.settled))
+		for i, op := range s.settled {
+			newest[len(s.settled)-1-i] = op
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"operations": newest})
 	case key == "POST /rollbacks":
 		var body map[string]any
 		raw, _ := io.ReadAll(r.Body)
@@ -352,50 +357,66 @@ func (s *rollbackStub) postedKey(i int) string {
 	return k
 }
 
+// op builds a listing row. created is when it was created; updated is its
+// last write (which a late refusal or a degrade bumps past its settle time).
+func lop(id, state, created, updated, baseHead string) map[string]any {
+	return map[string]any{"operation_id": id, "state": state, "created_at": created, "updated_at": updated, "base_head": baseHead}
+}
+
 // The default key names one rollback intent: the target and the latest
-// settled (applied or rolled_back) operation before the call. The effective
-// head moves when a rollback lands, so it must not be in the key, or a re-run
-// after success starts a second rollback.
+// head-landing operation (applied, degraded, failed or rolled_back) by
+// created_at, which no later write moves. The effective head moves when a
+// rollback lands, so it must not be in the key, or a re-run after success
+// starts a second rollback.
 func TestSelfDevRollbackDefaultKeySurvivesTheHeadMoving(t *testing.T) {
 	stub, server := newRollbackStub(t)
 	stub.settled = []map[string]any{
-		{"operation_id": "op-old", "state": "applied", "updated_at": "2026-10-26T10:00:00Z"},
-		{"operation_id": "op-cur", "state": "applied", "updated_at": "2026-10-26T11:00:00Z"},
+		lop("op-old", "applied", "2026-10-26T10:00:00Z", "2026-10-26T10:05:00Z", ""),
+		lop("op-cur", "applied", "2026-10-26T11:00:00Z", "2026-10-26T11:05:00Z", ""),
 	}
 	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
 		t.Fatalf("first run code=%d stderr=%s", code, stderr)
 	}
 	stub.head["effective_event_head"] = rhex("9") // the head moved; nothing settled since
+	// A late refusal bumps an older operation's updated_at; the anchor must not drift.
+	stub.settled[0]["updated_at"] = "2026-10-26T11:30:00Z"
 	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
 		t.Fatalf("second run code=%d stderr=%s", code, stderr)
 	}
 	first, second := stub.postedKey(0), stub.postedKey(1)
 	if first == "" || first != second {
-		t.Fatalf("default key changed with the head: %q then %q", first, second)
+		t.Fatalf("default key changed with the head or a late bump: %q then %q", first, second)
 	}
 	if !strings.Contains(first, "op-old") || !strings.Contains(first, "op-cur") || strings.Contains(first, rhex("e")[:12]) {
-		t.Fatalf("default key %q must name the target and the latest settled operation, not the head", first)
+		t.Fatalf("default key %q must name the target and the latest operation, not the head", first)
 	}
-
-	// A new apply starts a new intent.
-	stub.settled = append(stub.settled, map[string]any{"operation_id": "op-new", "state": "applied", "updated_at": "2026-10-26T12:00:00Z"})
-	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
-		t.Fatalf("third run code=%d stderr=%s", code, stderr)
-	}
-	if third := stub.postedKey(2); third == first || !strings.Contains(third, "op-new") {
-		t.Fatalf("key after a new apply = %q, want a new one naming op-new (was %q)", third, first)
+	for _, state := range []string{"applied", "degraded", "failed"} {
+		stub.settled = append(stub.settled[:2], lop("op-new", state, "2026-10-26T12:00:00Z", "2026-10-26T12:00:00Z", ""))
+		stub.mu.Lock()
+		n := len(stub.posts)
+		stub.mu.Unlock()
+		if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+			t.Fatalf("%s run code=%d stderr=%s", state, code, stderr)
+		}
+		if k := stub.postedKey(n); k == first || !strings.Contains(k, "op-new") {
+			t.Fatalf("key after a %s op = %q, want a new one naming op-new (was %q)", state, k, first)
+		}
 	}
 }
 
-// A rollback to the target that is already the latest settled act, with
-// nothing applied since, is refused before any POST.
+// A rollback to the target that is already the latest act, with nothing
+// else started or written since, is refused before any POST. When unsure the
+// CLI falls through and lets the guest decide.
 func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 	stub, server := newRollbackStub(t)
-	stub.settled = []map[string]any{
-		{"operation_id": "op-old", "state": "applied", "updated_at": "2026-10-26T10:00:00Z"},
-		{"operation_id": "op-cur", "state": "applied", "updated_at": "2026-10-26T11:00:00Z"},
-		{"operation_id": "rollback-0", "state": "rolled_back", "base_head": rhex("a"), "updated_at": "2026-10-26T12:00:00Z"},
+	base := func() []map[string]any {
+		return []map[string]any{
+			lop("op-old", "applied", "2026-10-26T10:00:00Z", "2026-10-26T10:05:00Z", ""),
+			lop("op-cur", "applied", "2026-10-26T11:00:00Z", "2026-10-26T11:05:00Z", ""),
+			lop("rollback-0", "rolled_back", "2026-10-26T12:00:00Z", "2026-10-26T12:00:10Z", rhex("a")),
+		}
 	}
+	stub.settled = base()
 	code, _, stderr := runRollback(server, "--to-operation=op-old")
 	if code == 0 || !strings.Contains(stderr, "already rolled back to op-old by rollback-0") {
 		t.Fatalf("code=%d stderr=%q, want the already-rolled-back refusal", code, stderr)
@@ -404,16 +425,39 @@ func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
 		t.Fatalf("posted %d times after the refusal", stub.posted())
 	}
 
-	// A rollback to a different target is not a repeat.
-	stub.settled[2]["base_head"] = rhex("b")
-	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
-		t.Fatalf("different earlier target: code=%d stderr=%s", code, stderr)
-	}
-	// Nor is one after something applied since.
-	stub.settled[2]["base_head"] = rhex("a")
-	stub.settled = append(stub.settled, map[string]any{"operation_id": "op-new", "state": "applied", "updated_at": "2026-10-26T13:00:00Z"})
-	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
-		t.Fatalf("applied since: code=%d stderr=%s", code, stderr)
+	for name, mutate := range map[string]func([]map[string]any) []map[string]any{
+		"different earlier target": func(o []map[string]any) []map[string]any { o[2]["base_head"] = rhex("b"); return o },
+		"applied since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "applied", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
+		"degraded since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "degraded", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
+		"failed since": func(o []map[string]any) []map[string]any {
+			return append(o, lop("op-new", "failed", "2026-10-26T13:00:00Z", "2026-10-26T13:00:00Z", ""))
+		},
+		// Created before the rollback began but written after it began: it may
+		// have landed after, so the refusal is not certain.
+		"older op written during the rollback": func(o []map[string]any) []map[string]any {
+			o[1]["updated_at"] = "2026-10-26T12:00:05Z"
+			return o
+		},
+		// 10:00:00Z is later than 10:00:00.5Z lexically, not chronologically.
+		"fractional seconds compare as times": func(o []map[string]any) []map[string]any {
+			o[2]["created_at"] = "2026-10-26T12:00:00.5Z"
+			o[1]["updated_at"] = "2026-10-26T12:00:00.25Z"
+			return o
+		},
+		"unparseable time": func(o []map[string]any) []map[string]any { o[1]["updated_at"] = "soon"; return o },
+	} {
+		stub.settled = mutate(base())
+		n := stub.posted()
+		if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+			t.Fatalf("%s: code=%d stderr=%s, want the POST to proceed", name, code, stderr)
+		}
+		if stub.posted() != n+1 {
+			t.Fatalf("%s: did not post", name)
+		}
 	}
 }
 
