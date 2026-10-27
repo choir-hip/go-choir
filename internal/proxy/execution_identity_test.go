@@ -21,6 +21,16 @@ import (
 )
 
 func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
+	executionIdentityJoinsRoute(t, "1234567890abcdef1234567890abcdef12345678")
+}
+
+// A self-development promote stores a 64-hex source-tree digest as the route
+// closure's source commit; the closure validator admits it, so the join must.
+func TestExecutionIdentityJoinsSelfDevelopmentSourceTreeRoute(t *testing.T) {
+	executionIdentityJoinsRoute(t, strings.Repeat("9f", 32))
+}
+
+func executionIdentityJoinsRoute(t *testing.T, routeSource string) {
 	const commit = "1234567890abcdef1234567890abcdef12345678"
 	const targetCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	var ownerID string
@@ -90,7 +100,7 @@ func TestExecutionIdentityJoinsGuestVMCTLRouteAndDeployReceipt(t *testing.T) {
 	defer guest.Close()
 
 	createdAt := time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC)
-	closure, err := computerversion.NewCodeClosure(commit, []computerversion.CodeArtifact{{Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer"}}, createdAt)
+	closure, err := computerversion.NewCodeClosure(routeSource, []computerversion.CodeArtifact{{Name: "autoputer", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-autoputer"}}, createdAt)
 	if err != nil {
 		t.Fatal(err)
 	}
