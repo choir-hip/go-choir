@@ -251,10 +251,19 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 			if err != nil {
 				return nil, fmt.Errorf("rebuilder: open seeded scratch store: %w", err)
 			}
-		} else if head != nil && meta != nil {
-			if err := validateResumedSeed(head, meta); err != nil {
+		} else if head != nil {
+			if meta != nil {
+				if err := validateResumedSeed(head, meta); err != nil {
+					_ = opened.Close()
+					return nil, err
+				}
+			}
+			// An earlier process replayed onto this scratch; this process's
+			// narrowed vocabulary check cannot see those rows, so the
+			// migration below takes the full pass (review 361, finding 1).
+			if err := opened.DistrustVocabularyFence(); err != nil {
 				_ = opened.Close()
-				return nil, err
+				return nil, fmt.Errorf("rebuilder: distrust resumed scratch vocabulary fence: %w", err)
 			}
 		}
 		scratchStore = opened
