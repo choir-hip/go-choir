@@ -296,7 +296,7 @@ func (c *Capsule) IsPinned() bool {
 }
 
 // closeEgress stops the egress proxy, then closes its sink, which logs the
-// suppressed counts and flushes and closes the ledger file.
+// suppressed counts and closes the ledger file.
 func (c *Capsule) closeEgress() {
 	if c.egress != nil {
 		c.egress.Close()

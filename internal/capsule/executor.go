@@ -772,7 +772,6 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 		return fmt.Errorf("capsule egress socket mode: %w", err)
 	}
 	ledgerDir := filepath.Join(e.artifactRoot(), "egress")
-	_ = os.MkdirAll(ledgerDir, 0o700)
 	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
 	// The grant is read once per capsule: its route, allowlist and client
 	// settings come from the same reading.

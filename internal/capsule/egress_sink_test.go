@@ -204,6 +204,43 @@ func TestEgressSinkRetriesAFailedOpenAndSaysSoOnce(t *testing.T) {
 	if got := ledgerLines(t, path); got != 1 {
 		t.Fatalf("after the path became writable the ledger has %d lines, want 1 (the open is retried)", got)
 	}
+	again := 0
+	for _, l := range lc.snapshot() {
+		if strings.Contains(l, "writable again; 2 records were not written") {
+			again++
+		}
+	}
+	if again != 1 {
+		t.Fatalf("recovery with the dropped count logged %d times, want once: %v", again, lc.snapshot())
+	}
+	// A second episode is logged once again (review 351 F2).
+	if err := os.Rename(blocker, blocker+".d"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		s.Record(refusedRecord("a.example"))
+	}
+	// The held-open file still points at the renamed directory, so these
+	// writes succeed; force a reopen through a failing path instead.
+	s.mu.Lock()
+	_ = s.f.Close()
+	s.f = nil
+	s.mu.Unlock()
+	for i := 0; i < 100; i++ {
+		s.Record(refusedRecord("a.example"))
+	}
+	notWritable = 0
+	for _, l := range lc.snapshot() {
+		if strings.Contains(l, "not writable") {
+			notWritable++
+		}
+	}
+	if notWritable != 2 {
+		t.Fatalf("two fault episodes logged %d times, want 2 (one each, not one per record): %v", notWritable, lc.snapshot())
+	}
 }
 
 func TestEgressSinkSummaryIsJSONWithPerReasonCounts(t *testing.T) {

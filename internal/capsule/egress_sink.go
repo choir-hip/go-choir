@@ -48,12 +48,17 @@ type egressSink struct {
 	now      func() time.Time
 	interval time.Duration
 
-	mu         sync.Mutex
-	f          *os.File
-	closed     bool
-	openFailed bool // the open failure was logged once; Record keeps retrying
-	seen       map[egressLogKey]map[string]bool
-	state      map[egressLogKey]*egressLogState
+	mu     sync.Mutex
+	f      *os.File
+	closed bool
+	// faulted is set while the ledger cannot be opened or written; its first
+	// failure is logged, later ones only counted into dropped, so a faulted
+	// disk is one log line, not one per record. A successful write clears it,
+	// so each new episode is logged once.
+	faulted bool
+	dropped int
+	seen    map[egressLogKey]map[string]bool
+	state   map[egressLogKey]*egressLogState
 }
 
 func newEgressSink(path string, logf func(format string, args ...any), now func() time.Time, interval time.Duration) *egressSink {
@@ -97,30 +102,49 @@ func (s *egressSink) writeLedgerLocked(line []byte) {
 	if s.closed {
 		// A proxy goroutine finishing after the capsule ended: the record is
 		// still evidence, so append it directly.
-		if f, err := openLedger(s.path); err == nil {
-			_, _ = f.Write(line)
+		f, err := openLedger(s.path)
+		if err == nil {
+			_, err = f.Write(line)
 			_ = f.Close()
 		}
+		s.noteLedgerLocked(err)
 		return
 	}
 	if s.f == nil {
 		// Retried on every record until it succeeds: a transient failure
 		// (EMFILE under a connection flood, a mount not ready) costs only the
-		// records written while it lasts, and is logged once.
+		// records written while it lasts.
 		f, err := openLedger(s.path)
 		if err != nil {
-			if !s.openFailed {
-				s.openFailed = true
-				s.logf("capsule-egress: ledger %s not writable: %v; retrying on each record", s.path, err)
-			}
+			s.noteLedgerLocked(err)
 			return
 		}
 		s.f = f
 	}
 	if _, err := s.f.Write(line); err != nil {
-		s.logf("capsule-egress: ledger %s write: %v; reopening on the next record", s.path, err)
 		_ = s.f.Close()
-		s.f = nil
+		s.f = nil // reopened on the next record
+		s.noteLedgerLocked(err)
+		return
+	}
+	s.noteLedgerLocked(nil)
+}
+
+// noteLedgerLocked records the outcome of one ledger write: the first failure
+// of an episode is logged, later ones are counted, and a success ends the
+// episode with the count.
+func (s *egressSink) noteLedgerLocked(err error) {
+	if err == nil {
+		if s.faulted {
+			s.logf("capsule-egress: ledger %s writable again; %d records were not written", s.path, s.dropped)
+			s.faulted, s.dropped = false, 0
+		}
+		return
+	}
+	s.dropped++
+	if !s.faulted {
+		s.faulted = true
+		s.logf("capsule-egress: ledger %s not writable: %v; retrying on each record, failures counted", s.path, err)
 	}
 }
 
@@ -187,5 +211,8 @@ func (s *egressSink) Close() {
 	if s.f != nil {
 		_ = s.f.Close()
 		s.f = nil
+	}
+	if s.faulted {
+		s.logf("capsule-egress: ledger %s still not writable at close; %d records were not written", s.path, s.dropped)
 	}
 }
