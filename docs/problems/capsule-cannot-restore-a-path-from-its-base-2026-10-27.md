@@ -52,7 +52,21 @@ turns and capsule fates, not only the operation list.
    recovered by a fresh capsule from the base, never by asking the owner.
    This is cheap, and it applies even after 1 or 2 land.
 
-## Workaround used
+## Workaround used, and the rule that replaces it
 
 FP0 revised the round document at 00:36 to continue in a fresh capsule,
 which starts from the clean base, with a rule against deleting any file.
+The owner (2026-10-27) called that rule weird: deleting files is normal,
+for example when a feature is removed. The rule, from 01:5x on:
+
+- A deletion is allowed when it is part of the requested change.
+- Before Freeze, management lists every deleted or moved path with a
+  one-line reason.
+- An undeclared deletion, or a deletion outside the request's scope,
+  blocks Freeze.
+- A mistake is undone (today by a fresh capsule; after fix 1 or 2 by a
+  restore from the base), never escalated to the owner.
+
+The approval review checks the declared list against the patch. The
+failure on 10-27 was an undeclared, unrecoverable deletion, not a
+deletion as such.
