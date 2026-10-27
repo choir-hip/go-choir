@@ -84,3 +84,30 @@ Entries before 12:1x on 2026-10-26 are in
   missing render evidence, management's own rejection) and lands harness,
   REPL, data and prompt changes through self-dev; then the same loop moves
   inside Choir. Related: `docs/problems/external-agent-gets-no-feedback-when-a-round-stops-2026-10-27.md`.
+
+## 2026-10-27 16:0x
+
+- **Citation round done on b@c:** attempt 6 admitted on train 34 (b@c
+  refreshed by hand to epoch 51 first); management rejected its own first
+  candidate (stray `frontend/test-results/.last-run.json`, missing specs)
+  and the correction (selfdev-5de7f406) froze clean: 9 frontend files,
+  +787 −214, unit cases 10/10, renders at 390x844 and 1280x800 inside the
+  capsule (not attached as visual evidence; authenticated desktopSession
+  specs unrun). FP0 approved with the b@c key, applied 15:07, published
+  release 4320be523bb1….
+- **The owner could not adopt it:** `release adopt` answered 404 "release
+  not published". Release reads are owner-scoped (`releaseReadScope`,
+  `internal/platform/releases.go:312`; `CHOIR_RELEASE_READS` unset) and b@c
+  is another user's computer. FP0's handoff should have caught that.
+- **Owner (16:0x):** "i dont like the api of it. should be a choir library
+  install command or something like that. we should think about the system
+  before we continue with making it work rn." Release adoption is paused
+  for a design pass (identity of the installable thing, visibility across
+  owners, install/update/remove verbs, what an install proves).
+- The verbatim promotion of the citation patch is committed on
+  `lane/cite-promote` (75d6bc366), not reviewed, not on main: held until
+  the owner says whether it should reach main now or wait for the install
+  path.
+- **Backfill loop stopped (16:03):** b40 never got a receipt in 20 tries
+  (each 6 to 15 min); entities still grew 147 → 190 server-side. The act's
+  duration is the next investigation.
