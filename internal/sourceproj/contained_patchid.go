@@ -132,8 +132,14 @@ func laterLeavesChange(ctx context.Context, repo, made, booted string, change []
 	if bytes.Contains(later, []byte("\nBinary files ")) || bytes.HasPrefix(later, []byte("Binary files ")) {
 		return false, nil
 	}
-	pAdded, pRemoved := diffLines(change)
-	lAdded, lRemoved := diffLines(later)
+	pAdded, pRemoved := diffLines(change, meaningful)
+	lAdded, lRemoved := diffLines(later, meaningful)
+	if len(pAdded) == 0 && len(pRemoved) == 0 {
+		// Every line the patch changed is punctuation: judge on its non-blank
+		// lines instead of not at all (review 355, N1).
+		pAdded, pRemoved = diffLines(change, nonBlank)
+		lAdded, lRemoved = diffLines(later, nonBlank)
+	}
 	for key := range lRemoved {
 		if pAdded[key] {
 			return false, nil // a line the patch added is gone
@@ -147,11 +153,14 @@ func laterLeavesChange(ctx context.Context, repo, made, booted string, change []
 	return true, nil
 }
 
-// diffLines are a unified diff's added and removed lines, keyed by path and
-// text. A line with no letter or digit (blank, or only "}") carries nothing
-// and is left out: the evidence appended a blank line and a "}" beside a
-// deletion that removed both. A real re-add brings back lettered lines.
-func diffLines(diff []byte) (added, removed map[string]bool) {
+// diffLines are a unified diff's added and removed lines that keep accepts,
+// keyed by path and text without its surrounding whitespace (a line
+// re-added at another indentation is the same line; review 355, N2). The
+// caller passes meaningful first: a line with no letter or digit (blank, or
+// only "}") carries nothing, and the evidence appended a blank line and a "}"
+// beside a deletion that removed both. A real re-add brings back lettered
+// lines.
+func diffLines(diff []byte, keep func(string) bool) (added, removed map[string]bool) {
 	added, removed = map[string]bool{}, map[string]bool{}
 	path, header := "", false
 	for _, line := range strings.Split(string(diff), "\n") {
@@ -170,11 +179,11 @@ func diffLines(diff []byte) (added, removed map[string]bool) {
 			}
 		case header:
 		case strings.HasPrefix(line, "+"):
-			if text := line[1:]; meaningful(text) {
+			if text := strings.TrimSpace(line[1:]); keep(text) {
 				added[path+"\x00"+text] = true
 			}
 		case strings.HasPrefix(line, "-"):
-			if text := line[1:]; meaningful(text) {
+			if text := strings.TrimSpace(line[1:]); keep(text) {
 				removed[path+"\x00"+text] = true
 			}
 		}
@@ -186,6 +195,9 @@ func diffLines(diff []byte) (added, removed map[string]bool) {
 func meaningful(text string) bool {
 	return strings.IndexFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) >= 0
 }
+
+// nonBlank reports whether a line has anything but whitespace.
+func nonBlank(text string) bool { return strings.TrimSpace(text) != "" }
 
 // patchID is the stable patch-id of a patch, empty when it has no diff.
 func patchID(ctx context.Context, repo string, patch []byte) (string, error) {
