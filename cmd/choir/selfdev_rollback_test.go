@@ -24,6 +24,9 @@ type rollbackStub struct {
 	// routeGeneration is the listing's route_generation (0 omits it, as a
 	// guest whose route does not resolve does).
 	routeGeneration uint64
+	// settled is what GET /operations?state=applied&state=rolled_back lists,
+	// in the server's created_at order.
+	settled []map[string]any
 	// inflight is what GET /operations?state=rollback_pending lists.
 	inflight []map[string]any
 	// postStatus and postBody are the rollbacks POST answer.
@@ -57,6 +60,8 @@ func (s *rollbackStub) serve(w http.ResponseWriter, r *http.Request) {
 			listing["route_generation"] = s.routeGeneration
 		}
 		_ = json.NewEncoder(w).Encode(listing)
+	case key == "GET /operations?state=applied&state=rolled_back":
+		_ = json.NewEncoder(w).Encode(map[string]any{"operations": s.settled})
 	case key == "POST /rollbacks":
 		var body map[string]any
 		raw, _ := io.ReadAll(r.Body)
@@ -310,7 +315,7 @@ func TestSelfDevRollbackFindsAnInFlightRollbackToTheSameTarget(t *testing.T) {
 func TestSelfDevRollbackWaitPollsToRolledBack(t *testing.T) {
 	stub, server := newRollbackStub(t)
 	stub.rollbackStates = []string{"rollback_pending", "rollback_pending", "rolled_back"}
-	code, stdout, stderr := runRollback(server, "--to-operation=op-old", "--wait", "--interval=5ms", "--deadline=5s")
+	code, stdout, stderr := runRollback(server, "--to-operation=op-old", "--wait", "--interval=100ms", "--deadline=5s")
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -320,7 +325,7 @@ func TestSelfDevRollbackWaitPollsToRolledBack(t *testing.T) {
 
 	stub, server = newRollbackStub(t)
 	stub.rollbackStates = []string{"rollback_pending", "failed"}
-	code, stdout, stderr = runRollback(server, "--to-operation=op-old", "--wait", "--interval=5ms", "--deadline=5s")
+	code, stdout, stderr = runRollback(server, "--to-operation=op-old", "--wait", "--interval=100ms", "--deadline=5s")
 	if code != 1 || !strings.Contains(stdout, `"failed"`) || !strings.Contains(stderr, "failed") {
 		t.Fatalf("a failed rollback: code=%d stdout=%q stderr=%q, want 1, the operation and a message", code, stdout, stderr)
 	}
@@ -334,5 +339,102 @@ func TestSelfDevRollbackHelpNamesTheOwnerActScope(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Fatalf("help does not mention %q:\n%s", want, help)
 		}
+	}
+}
+
+func (s *rollbackStub) postedKey(i int) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if i >= len(s.posts) {
+		return ""
+	}
+	k, _ := s.posts[i]["idempotency_key"].(string)
+	return k
+}
+
+// The default key names one rollback intent: the target and the latest
+// settled (applied or rolled_back) operation before the call. The effective
+// head moves when a rollback lands, so it must not be in the key, or a re-run
+// after success starts a second rollback.
+func TestSelfDevRollbackDefaultKeySurvivesTheHeadMoving(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	stub.settled = []map[string]any{
+		{"operation_id": "op-old", "state": "applied", "updated_at": "2026-10-26T10:00:00Z"},
+		{"operation_id": "op-cur", "state": "applied", "updated_at": "2026-10-26T11:00:00Z"},
+	}
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("first run code=%d stderr=%s", code, stderr)
+	}
+	stub.head["effective_event_head"] = rhex("9") // the head moved; nothing settled since
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("second run code=%d stderr=%s", code, stderr)
+	}
+	first, second := stub.postedKey(0), stub.postedKey(1)
+	if first == "" || first != second {
+		t.Fatalf("default key changed with the head: %q then %q", first, second)
+	}
+	if !strings.Contains(first, "op-old") || !strings.Contains(first, "op-cur") || strings.Contains(first, rhex("e")[:12]) {
+		t.Fatalf("default key %q must name the target and the latest settled operation, not the head", first)
+	}
+
+	// A new apply starts a new intent.
+	stub.settled = append(stub.settled, map[string]any{"operation_id": "op-new", "state": "applied", "updated_at": "2026-10-26T12:00:00Z"})
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("third run code=%d stderr=%s", code, stderr)
+	}
+	if third := stub.postedKey(2); third == first || !strings.Contains(third, "op-new") {
+		t.Fatalf("key after a new apply = %q, want a new one naming op-new (was %q)", third, first)
+	}
+}
+
+// A rollback to the target that is already the latest settled act, with
+// nothing applied since, is refused before any POST.
+func TestSelfDevRollbackRefusesARepeatToTheSameTarget(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	stub.settled = []map[string]any{
+		{"operation_id": "op-old", "state": "applied", "updated_at": "2026-10-26T10:00:00Z"},
+		{"operation_id": "op-cur", "state": "applied", "updated_at": "2026-10-26T11:00:00Z"},
+		{"operation_id": "rollback-0", "state": "rolled_back", "base_head": rhex("a"), "updated_at": "2026-10-26T12:00:00Z"},
+	}
+	code, _, stderr := runRollback(server, "--to-operation=op-old")
+	if code == 0 || !strings.Contains(stderr, "already rolled back to op-old by rollback-0") {
+		t.Fatalf("code=%d stderr=%q, want the already-rolled-back refusal", code, stderr)
+	}
+	if stub.posted() != 0 {
+		t.Fatalf("posted %d times after the refusal", stub.posted())
+	}
+
+	// A rollback to a different target is not a repeat.
+	stub.settled[2]["base_head"] = rhex("b")
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("different earlier target: code=%d stderr=%s", code, stderr)
+	}
+	// Nor is one after something applied since.
+	stub.settled[2]["base_head"] = rhex("a")
+	stub.settled = append(stub.settled, map[string]any{"operation_id": "op-new", "state": "applied", "updated_at": "2026-10-26T13:00:00Z"})
+	if code, _, stderr := runRollback(server, "--to-operation=op-old"); code != 0 {
+		t.Fatalf("applied since: code=%d stderr=%s", code, stderr)
+	}
+}
+
+func TestSelfDevRollbackRefusesABusyPollInterval(t *testing.T) {
+	stub, server := newRollbackStub(t)
+	for _, interval := range []string{"0s", "1ms", "-1s"} {
+		code, _, stderr := runRollback(server, "--to-operation=op-old", "--wait", "--interval="+interval, "--deadline=200ms")
+		if code == 0 || !strings.Contains(stderr, "interval") {
+			t.Fatalf("--interval=%s: code=%d stderr=%q, want an interval refusal", interval, code, stderr)
+		}
+	}
+	if stub.posted() != 0 {
+		t.Fatalf("posted %d times with a busy interval", stub.posted())
+	}
+}
+
+func TestSelfDevRollbackHelpSaysHowToRetryAfterAFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	run([]string{"self-dev", "rollback", "--help"}, &stdout, &stderr)
+	help := stdout.String() + stderr.String()
+	if !strings.Contains(help, "fresh --idempotency-key") {
+		t.Fatalf("help does not tell the caller to pass a fresh --idempotency-key after a failed rollback:\n%s", help)
 	}
 }
