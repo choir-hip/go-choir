@@ -62,3 +62,25 @@ Entries before 12:1x on 2026-10-26 are in
 - **Backfill:** the act runs past the client's wait on the busy paper;
   receipts lost, work continues (entities 147). Loop now waits 15 min per
   request and records durations.
+
+## 2026-10-27 14:2x
+
+- **Owner direction (14:2x), not for now, the coming days:** "close the
+  loop on the precommitment records into ICRL, and self-dev, so that we
+  are tuning the system (the harness and the REPL / data / prompts) so that
+  it works better. The goal is to get this to happen all inside of Choir.
+  But we will bootstrap by doing it with an external agent like yourself
+  initially."
+- Where it stands: the design is
+  `docs/design/tasks-precommit-icrl-2026-10-24.md` (round 4, green, nothing
+  built; its last revision never re-reviewed: residual ST-08), with the
+  status read `docs/design/psa-precommitment-icrl-status-2026-10-24.md`
+  (three precommitment loops in code, none feeds another, none closes the
+  in-context loop). The self-dev readiness metamission places "the ICRL
+  build and Autopaper forecasting" after SR5.
+- Bootstrap shape, to define as a station: FP0 reads settled
+  precommitments and failed-round traces (today's citation rounds are the
+  first corpus: refused admissions, the stray test-results file, the
+  missing render evidence, management's own rejection) and lands harness,
+  REPL, data and prompt changes through self-dev; then the same loop moves
+  inside Choir. Related: `docs/problems/external-agent-gets-no-feedback-when-a-round-stops-2026-10-27.md`.
