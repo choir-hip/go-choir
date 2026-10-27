@@ -596,7 +596,7 @@ type selfDevSettledOperation struct {
 // is never rewritten, and head-moving acts are serialized, so it orders them.
 // Certainty needs more: every other operation must have been last written
 // before this one was created (updated_at never precedes the true settle time).
-// An unparseable time or a later write leaves certain false, and the caller
+// An operation in any open state, an unparseable time or a later write leaves certain false, and the caller
 // falls through to the guest's own checks.
 type selfDevLanded struct {
 	op      *selfDevSettledOperation
@@ -607,29 +607,42 @@ func selfDevLatestLanded(c *client, computerID string) (selfDevLanded, error) {
 	var listing struct {
 		Operations []selfDevSettledOperation `json:"operations"`
 	}
-	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"applied", "degraded", "failed", "rolled_back"}}.Encode()
-	if err := c.do(http.MethodGet, path, nil, &listing); err != nil {
+	// Unfiltered: an operation in an open state (materializing, accepted,
+	// rollback_pending, ...) may be moving the head with no landed row yet.
+	if err := c.do(http.MethodGet, selfDevPath(computerID, "operations"), nil, &listing); err != nil {
 		return selfDevLanded{}, err
 	}
 	certain := true
+	var landed []*selfDevSettledOperation
+	for i := range listing.Operations {
+		op := &listing.Operations[i]
+		switch op.State {
+		case "applied", "degraded", "failed", "rolled_back":
+			landed = append(landed, op)
+		case "rejected":
+			// Terminal and never moves the head.
+		default:
+			certain = false
+		}
+	}
 	var latest *selfDevSettledOperation
 	var latestAt time.Time
-	for i := range listing.Operations {
-		created, err := time.Parse(time.RFC3339Nano, listing.Operations[i].CreatedAt)
+	for _, op := range landed {
+		created, err := time.Parse(time.RFC3339Nano, op.CreatedAt)
 		if err != nil {
-			certain = false
-			continue
+			// It cannot be ordered, so it anchors the key (a rotation, not a
+			// silent replay of its predecessor's key) and nothing is certain.
+			return selfDevLanded{op: op}, nil
 		}
 		// The listing is newest-created first, so strict > keeps the newest on a tie.
 		if latest == nil || created.After(latestAt) {
-			latest, latestAt = &listing.Operations[i], created
+			latest, latestAt = op, created
 		}
 	}
 	if latest == nil {
 		return selfDevLanded{certain: certain}, nil
 	}
-	for i := range listing.Operations {
-		other := &listing.Operations[i]
+	for _, other := range landed {
 		if other == latest {
 			continue
 		}
