@@ -100,10 +100,23 @@ answer to "is this change already upstream" is patch identity (`git cherry`,
 `git rebase` skipping applied commits). Proposed: `Contained` also answers
 yes when a non-merge commit in `B..B'` has P's stable patch-id. Exact
 content and the three-way test stay as they are; patch identity only adds
-yeses that a verbatim promotion guarantees. Residual of that rule, the same
-as git's: a promotion later reverted on main still counts as upstreamed (main
-removed it deliberately). If the guest repository lacks the `B..B'`
+yeses that a verbatim promotion guarantees. If the guest repository lacks the `B..B'`
 history, the answer falls back to today's.
+
+**As built (review 353, Devin and DeepSeek; both found that an exact-reverse
+check misses non-exact undos, a merge sharpest of all):** the match counts
+only when the content test holds at the matching commit C (the
+duplicated-block pin), and then the tree diff C..booted must leave the
+change alone: no touched path deleted, re-moded or binary, no line the patch
+added removed, no line it removed added back (lines with a letter or digit;
+a blank or a lone `}` says nothing, and the evidence has both). A revert,
+exact or not, and a merge that drops the change, therefore read as not
+contained, which is correct: the rebase that follows re-applies the change,
+so it is not empty. Errors other than missing objects propagate. Named
+limits: a promotion folded into one commit with another edit of the same
+paths, or split over two commits, has a different patch-id and falls back
+(the old false negative); the walk is one path-limited `git log -p` over
+`B..B'`, only when the content test says no.
 
 Options 1 and 2 above stand as written; option 1 (the owner chose it,
 "Rebase") cannot succeed until containment sees the promotion.
