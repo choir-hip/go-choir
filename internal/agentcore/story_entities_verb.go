@@ -70,12 +70,15 @@ type relateResult struct {
 
 // storyEntityAttachment is one attachment as the tape records it.
 type storyEntityAttachment struct {
-	EntityID    string  `json:"entity_id"`
-	Name        string  `json:"name,omitempty"`
-	Type        string  `json:"type,omitempty"`
-	WikidataID  string  `json:"wikidata_id,omitempty"`
-	New         bool    `json:"new,omitempty"`
-	Role        string  `json:"role"`
+	EntityID   string `json:"entity_id"`
+	Name       string `json:"name,omitempty"`
+	Type       string `json:"type,omitempty"`
+	WikidataID string `json:"wikidata_id,omitempty"`
+	New        bool   `json:"new,omitempty"`
+	// Role is the entity's role in the story (central or incidental). The
+	// tape name is entity_role: the store's vocabulary write guard reads a
+	// leaf named "role" as a desk role and refuses central and incidental.
+	Role        string  `json:"entity_role"`
 	Probability float64 `json:"probability"`
 	Top         bool    `json:"top"`
 	Overrode    bool    `json:"overrode"`
