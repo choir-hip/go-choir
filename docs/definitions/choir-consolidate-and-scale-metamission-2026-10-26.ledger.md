@@ -44,3 +44,21 @@ Entries before 12:1x on 2026-10-26 are in
   mirror running.
 - **Backfill:** entities 120 → 138 (b13 to b16); b17 retrying a client
   timeout with the same batch id.
+
+## 2026-10-27 12:3x
+
+- **Train 34 live (1ebe74f85, deployed 12:34, CI green).** Related-stories
+  floor (orange; review 354 PASS, findings taken) and patch-identity
+  containment (red; review 353 tier 2, 355 one seat; three rounds on the
+  mechanism, the third round's two stricter-only findings pinned and fixed
+  without a fourth round). Problem docs 988402765, 1c3b64c9d.
+- **Related proof on staging (12:3x):** the 40 newest stories: 35 with 3
+  links, 2 with 4, 3 with 5; none partial; mode
+  `captures+relations+entities+floor`. Before (11:42): 25 with none.
+  Reasons across the 40: 88 similar, 18 entity, 12 source, 10 capture;
+  `recent` never needed.
+- **b@c:** hibernated; citation attempt 5 opened 12:3x (revision e3456d83,
+  trajectory 150b7de5) to wake it on train 34 and pass the cast gate.
+- **Backfill:** the act runs past the client's wait on the busy paper;
+  receipts lost, work continues (entities 147). Loop now waits 15 min per
+  request and records durations.
