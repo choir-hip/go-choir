@@ -55,3 +55,26 @@ this is closed. No owner computer is affected.
   last applied operation, not the head.
 - **Guest.** A rollback that is a no-op settles `rolled_back` (or
   `refused: already at target`) immediately and never stays pending.
+
+## CLI fix landed on lane/rollback-cli-key; residuals (2026-10-27)
+
+The CLI now keys a rollback by `cli-rollback:<target>:<newest-created applied, degraded,
+failed or rolled_back operation>`, refuses a repeat only when certain (the newest landed
+operation is a `rolled_back` to this target, every other operation was last written before
+it was created, and no operation is in an open state), and floors `--interval` at 100ms.
+Reviews 343 to 346. The guest-side no-op settle (H1/H2 above) is not touched.
+
+Residuals, deliberately not fixed in the CLI (review 346):
+
+- **Row-less head movement.** `EventResearchUpdate` (reducer.go:127-137) moves the effective
+  and desired heads with no operation row; the CLI's "certain" is blind to it. No production
+  emitter exists today. If one is wired, the refusal can block indefinitely; the tighter
+  premise is `head.DesiredEventHead == latest.DecisionEvent` (every later head-mover moves
+  desired away), which would also remove the need for the open-state rule.
+- **Chained rollback.** The CLI refuses a `rolled_back` target that the guest admits
+  (selfdev.go target-state check vs operations.go:399, api_self_development.go:905).
+- **Pending-wedge refusal.** The CLI's hard refusal when a transition is pending on the head
+  (and no in-flight rollback matches) preempts the guest's `replayHead` repair path
+  (api_self_development.go:892) for the event-committed, operation-missing case.
+- **Open-state rule is coarse.** Any long-lived open operation (for example awaiting_approval)
+  disarms the repeat refusal; the POST then proceeds and the guest decides.
