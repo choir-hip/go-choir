@@ -32,36 +32,40 @@ wording. Silence looks the same as progress.
 deeper integration of pre-commitment records and PSA. We have to think
 about this more deeply."
 
-## Why precommitment records are the frame, not a notification channel
+## The shape of the solution (owner, 2026-10-27, refining the first draft)
 
-A notification channel (a typed attention event, a `wait` command, a
-webhook) would answer "how do I hear about it". It would not answer "what
-did I expect, and what do I learn when it does not happen".
-Precommitment records ([precommitment-records.md](../precommitment-records.md);
-status in
-[design/psa-precommitment-icrl-status-2026-10-24.md](../design/psa-precommitment-icrl-status-2026-10-24.md))
-already hold that shape:
+"It wouldn't really be for you as the external agent to make a
+pre-commitment. That may be, but it would really be that the engineering
+would be, yes, it would be making an event on the tape, but the event on the
+tape would also be resolving the pre-commitment as basically a failure. And
+that is what would be sent as a notification to the auto radio app."
 
-- **The requester's side.** The requester commits to an expectation when
-  it submits. For example: "a frozen candidate with these checks by T,
-  p=0.7". The round stopping is then a settlement of that commitment,
-  false, scored. The feedback is that settlement, addressed to the
-  committer. Calibration level 2 (`/api/precommit`, `choir precommit`)
-  exists for agents outside the desks, and nobody uses it routinely.
-- **The round's side.** Engineering already makes rule-settled
-  precommitments in its capsule (Freeze, Verify, the assignment's end).
-  Management's "waiting on the owner" is itself a claim about who must act
-  next, and it was wrong here: the base tree was the recovery source.
-  Recorded as a commitment, that claim could be settled and scored.
-- **ICRL.** A settled-false commitment fed back to the committer's next
-  context is the in-context learning loop the status document finds open
-  for every desk. It is open for agents outside the computer too.
+So the commitment belongs to the desk doing the work, not to the
+requester:
+
+- **The commitment.** Engineering precommits to its outcome when it takes
+  the assignment, for example "a frozen candidate that passes these checks".
+  It already makes rule-settled precommitments in its capsule (Freeze,
+  Verify, the assignment's end; see
+  [design/psa-precommitment-icrl-status-2026-10-24.md](../design/psa-precommitment-icrl-status-2026-10-24.md)).
+- **The settlement.** When the work stops, engineering's event on the tape
+  (blocked, capsule revoked) also resolves that precommitment as a failure.
+  The stop and its settlement are one fact, not two.
+- **The notification.** The settlement is what reaches the owner, as a
+  notification in the Autoradio app. Delivery is a projection of the
+  settled record, never a second state authority. An outside agent that
+  started the round reads the same settlement, but its own precommitment
+  is optional, not the mechanism.
+- **ICRL.** A settled failure in the desk's next context is the in-context
+  learning loop the status document finds open (precommitment-records.md
+  §1.2).
 
 ## Open questions for the design
 
-1. **Commitments at submit time.** Should a round's submit carry the
-   requester's precommitment (expected outcome, deadline, probability), so
-   that a stop or a missed deadline settles it?
+1. **Which commitment.** Which commitment does engineering open at the
+   start of an assignment (outcome, checks, deadline, probability), and
+   which events settle it: Freeze, blocked, revoked, Verify, the owner's
+   decision?
 2. **Delivery.** How does a settlement reach a committer that is outside
    the computer and may be offline: a stream it subscribes to, MCP, the
    owner's app notifications (Autoradio)? Delivery should be a projection
@@ -81,5 +85,4 @@ already hold that shape:
 ## Interim practice (FP0)
 
 Tail the round's trajectory turns and capsule fates, and do not watch only
-for a frozen candidate. Consider recording a `choir precommit` for each
-round FP0 starts.
+for a frozen candidate.
