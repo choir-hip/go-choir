@@ -58,7 +58,7 @@ func Contained(ctx context.Context, repo, booted, base string, patch []byte, pat
 	if err != nil || in {
 		return in, err
 	}
-	return upstreamedByPatchID(ctx, repo, booted, base, patch, patchedTreeID, touched)
+	return upstreamedByPatchID(ctx, repo, booted, base, patchedTreeID, touched)
 }
 
 // containedByContent is the exact test, then the three-way test per path.
