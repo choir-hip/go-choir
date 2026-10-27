@@ -62,10 +62,21 @@ requester:
 
 ## Open questions for the design
 
-1. **Which commitment.** Which commitment does engineering open at the
-   start of an assignment (outcome, checks, deadline, probability), and
-   which events settle it: Freeze, blocked, revoked, Verify, the owner's
-   decision?
+1. **Whose commitment: Texture's or engineering's?** (Owner, 2026-10-27:
+   "is it engineering's pre-commitment or is it textual [Texture's]? I'm
+   not quite sure.") There are two layers:
+   - Texture's commitment to the owner, the round's promise ("this change,
+     proved, frozen for approval"). The round opened in the owner's
+     Texture document, and Texture renders the commitment ledger as the
+     supervision surface.
+   - Engineering's commitment to management, its assignment in one
+     capsule.
+
+   Engineering's stop settles its own commitment as a failure. It does not
+   by itself fail Texture's, because management may retry in a fresh
+   capsule (it did on 10-27). The open questions are which settlement
+   notifies the owner, or both with different weight, and which events
+   settle each one: Freeze, blocked, revoked, Verify, the owner's decision.
 2. **Delivery.** How does a settlement reach a committer that is outside
    the computer and may be offline: a stream it subscribes to, MCP, the
    owner's app notifications (Autoradio)? Delivery should be a projection
