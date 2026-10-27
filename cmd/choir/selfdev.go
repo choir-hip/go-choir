@@ -465,9 +465,12 @@ func renderSelfDevRollback(w io.Writer, result any, _ *call) int {
 //	    GET self-development/operations?state=rollback_pending: route_generation
 //	    (the guest's own route slot generation, the value its check compares)
 //	idempotency_key
-//	    --idempotency-key, or cli-rollback:<target>:<current head prefix>
+//	    --idempotency-key, or cli-rollback:<target>:<latest applied or rolled_back operation id>
 func selfDevRollback(x *call) (any, error) {
 	computerID, targetID := x.trim("computer"), x.trim("to_operation")
+	if x.flag("wait") && x.dur("interval") < selfDevMinPollInterval {
+		return nil, fmt.Errorf("--interval %s is below the %s floor (a shorter poll is a busy loop against the guest)", x.dur("interval"), selfDevMinPollInterval)
+	}
 	var target selfDevRollbackTarget
 	if err := x.c.do(http.MethodGet, selfDevPath(computerID, "operations/"+url.PathEscape(targetID)), nil, &target); err != nil {
 		return nil, err
@@ -501,6 +504,16 @@ func selfDevRollback(x *call) (any, error) {
 	if head.EffectiveEventHead == target.EffectiveHead {
 		return nil, fmt.Errorf("operation %s is the computer's current state (effective head %s); there is nothing to roll back to", targetID, head.EffectiveEventHead[:12])
 	}
+	// The latest settled operation names this rollback intent: it does not
+	// move when a rollback lands (the head does), so a re-run after success
+	// is the same intent, and a new apply is a new one.
+	latest, err := selfDevLatestSettled(x.c, computerID)
+	if err != nil {
+		return nil, err
+	}
+	if latest != nil && latest.State == "rolled_back" && latest.BaseHead == target.EffectiveHead {
+		return nil, fmt.Errorf("already rolled back to %s by %s, and nothing has applied since", targetID, latest.OperationID)
+	}
 	// The listing of open rollbacks also carries the route slot's current
 	// generation, the one binding no other public read exposes.
 	existing, generation, err := selfDevOpenRollbacks(x.c, computerID, target.EffectiveHead)
@@ -521,7 +534,11 @@ func selfDevRollback(x *call) (any, error) {
 	}
 	key := x.trim("idempotency_key")
 	if key == "" {
-		key = "cli-rollback:" + targetID + ":" + head.EffectiveEventHead[:12]
+		since := "none"
+		if latest != nil {
+			since = latest.OperationID
+		}
+		key = "cli-rollback:" + targetID + ":" + since
 	}
 	raw, err := sendRaw(x, http.MethodPost, selfDevPath(computerID, "rollbacks"), map[string]any{
 		"expected_desired_head":     head.DesiredEventHead,
@@ -553,6 +570,36 @@ func selfDevRollbackFinish(x *call, computerID string, raw json.RawMessage) (any
 		settled = raw
 	}
 	return &selfDevRollbackResult{raw: settled, code: code}, nil
+}
+
+// selfDevMinPollInterval is the shortest --interval a --wait poll accepts.
+const selfDevMinPollInterval = 100 * time.Millisecond
+
+type selfDevSettledOperation struct {
+	OperationID string `json:"operation_id"`
+	State       string `json:"state"`
+	BaseHead    string `json:"base_head"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// selfDevLatestSettled returns the most recently updated applied or
+// rolled_back operation (nil when there is none). The listing is in created_at
+// order; a later list position breaks an updated_at tie.
+func selfDevLatestSettled(c *client, computerID string) (*selfDevSettledOperation, error) {
+	var listing struct {
+		Operations []selfDevSettledOperation `json:"operations"`
+	}
+	path := selfDevPath(computerID, "operations") + "?" + url.Values{"state": []string{"applied", "rolled_back"}}.Encode()
+	if err := c.do(http.MethodGet, path, nil, &listing); err != nil {
+		return nil, err
+	}
+	var latest *selfDevSettledOperation
+	for i := range listing.Operations {
+		if latest == nil || listing.Operations[i].UpdatedAt >= latest.UpdatedAt {
+			latest = &listing.Operations[i]
+		}
+	}
+	return latest, nil
 }
 
 // selfDevOpenRollbacks lists the computer's rollback_pending operations and
