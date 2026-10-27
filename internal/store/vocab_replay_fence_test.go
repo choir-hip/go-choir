@@ -201,7 +201,14 @@ func TestVocabReplayFenceFallsBackWhenReplayRenames(t *testing.T) {
 	}
 }
 
-func TestVocabReplayFenceDistrustsAReplayFromAnotherProcess(t *testing.T) {
+// Owner, 2026-10-27 ("can we just skip it?"): a replay marker left by an
+// earlier process no longer forces the full pass at boot. The paper looped on
+// it: a boot that replayed one row was OOM-killed in the full pass, and every
+// later boot found its marker and paid the pass again
+// (problems/paper-down-on-full-vocabulary-rescan-2026-10-27.md). Replayed
+// deposits are upcast on the way in, and a replay that renamed nothing left
+// the alias ledger as the fence counted it, so its rows are trusted.
+func TestVocabReplayFenceTrustsAnEarlierReplayThatRenamedNothing(t *testing.T) {
 	at := time.Date(2026, 10, 16, 16, 0, 0, 0, time.UTC)
 	tail := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastAgentObject(t, "management:tail", "management", "running", false, at, at))}
 	tape := vocabReplayFenceTape(t, nil, tail)
@@ -216,24 +223,59 @@ func TestVocabReplayFenceDistrustsAReplayFromAnotherProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Process 3 applies nothing; the rows process 2 wrote were never checked.
+	// Process 3 applies nothing and finds process 2's marker: no pass.
 	s := vocabReplayFenceReopen(t, path)
-	_, ticks := vocabReplayFenceRun(t, s, false)
-	if ticks < vocabReplayFenceTicksFull {
-		t.Fatalf("a replay opened by another process was trusted on the fast path (%d ticks)", ticks)
+	if _, ticks := vocabReplayFenceRun(t, s, false); ticks != 0 {
+		t.Fatalf("an earlier replay that renamed nothing paid a pass (%d ticks)", ticks)
 	}
-	if vocabReplayFenceOnDisk(t, s).ReplayOpenedAt != "" {
-		t.Fatal("the full fence left the replay marker set")
+	rep := vocabReplayFenceOnDisk(t, s)
+	if rep.ReplayOpenedAt != "" || rep.FencedAt == "" {
+		t.Fatalf("report after trusting the earlier replay = %+v; want the marker cleared and the fence stamped", rep)
+	}
+	if !s.vocabCutover.Load() {
+		t.Fatal("the write guard is not armed")
 	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Process 4: fenced, nothing replayed since, so the fast path holds again.
+	// Process 4: fenced, nothing replayed since, so the fast path holds.
 	again := vocabReplayFenceReopen(t, path)
 	t.Cleanup(func() { _ = again.Close() })
 	if _, ticks := vocabReplayFenceRun(t, again, false); ticks != 0 {
 		t.Fatalf("a clean fenced store paid a pass (%d ticks)", ticks)
+	}
+}
+
+// An earlier replay that grew the alias ledger renamed a V1 deposit: rows
+// outside the replay may reference the old ID, so the full pass still decides.
+func TestVocabReplayFenceDistrustsAnEarlierReplayThatGrewTheLedger(t *testing.T) {
+	at := time.Date(2026, 10, 16, 16, 0, 0, 0, time.UTC)
+	tail := []computerevent.ProjectionOp{vocabUpcastObjectOp(t, vocabUpcastAgentObject(t, "management:tail", "management", "running", false, at, at))}
+	tape := vocabReplayFenceTape(t, nil, tail)
+	path := vocabUpcastStorePath(t, "crash-alias")
+	vocabReplayFenceCutOver(t, path, tape)
+
+	crashed := vocabReplayFenceReopen(t, path)
+	vocabUpcastApplyTapeEvent(t, crashed, tape[2])
+	upcaster, err := crashed.depositUpcastForBatch(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := upcaster.recordAlias(vocabUpcastAgentID(t, "super:orphan"), vocabUpcastAgentID(t, "management:orphan"), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := crashed.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s := vocabReplayFenceReopen(t, path)
+	t.Cleanup(func() { _ = s.Close() })
+	if _, ticks := vocabReplayFenceRun(t, s, false); ticks < vocabReplayFenceTicksFull {
+		t.Fatalf("an earlier replay that grew the ledger was trusted (%d ticks)", ticks)
+	}
+	if vocabReplayFenceOnDisk(t, s).ReplayOpenedAt != "" {
+		t.Fatal("the full fence left the replay marker set")
 	}
 }
 

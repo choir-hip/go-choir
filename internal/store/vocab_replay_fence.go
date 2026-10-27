@@ -293,3 +293,18 @@ func vocabReplayLeavesAtFixpoint(doc any, seed map[string]string) bool {
 	})
 	return clean
 }
+
+// vocabEarlierReplayRenamedNothing reports whether the append-only alias
+// ledger is the size the fence recorded: a replay an earlier process opened
+// then upcast no V1 deposit, so no row outside it can reference a renamed ID.
+func (s *Store) vocabEarlierReplayRenamedNothing(prior *MigrationReport) (bool, error) {
+	ledger, err := s.depositUpcastSeed(ogSeedFromReport(prior))
+	if err != nil {
+		return false, err
+	}
+	aliases := 0
+	if ledger != nil {
+		aliases = len(ledger.Objects) + len(ledger.Edges)
+	}
+	return aliases == prior.DepositUpcastAliases, nil
+}

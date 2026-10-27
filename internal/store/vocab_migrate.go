@@ -225,6 +225,30 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 		s.vocabCutover.Store(true)
 		return prior, nil
 	}
+	if !replayed && prior != nil && prior.FencedAt != "" && prior.ReplayOpenedAt != "" {
+		// A replay an earlier process opened and never re-fenced (a crash,
+		// an OOM in this pass, a vmctl restart). Its deposits were upcast on
+		// the way in; if the append-only alias ledger is still the size the
+		// fence counted, that replay renamed nothing, so its rows are
+		// trusted as the zero-replay fast path trusts rows written live.
+		// Owner 2026-10-27: the paper looped on this pass, OOM-killed every
+		// boot (problems/paper-down-on-full-vocabulary-rescan-2026-10-27.md).
+		trusted, err := s.vocabEarlierReplayRenamedNothing(prior)
+		if err != nil {
+			return nil, err
+		}
+		if trusted {
+			log.Printf("vocab fence: trusting a replay an earlier process opened at %s (the alias ledger did not grow); no full pass", prior.ReplayOpenedAt)
+			prior.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			prior.ReplayOpenedAt = ""
+			if err := s.persistVocabMigrationReport(prior); err != nil {
+				return nil, err
+			}
+			s.vocabReplay.reset()
+			s.vocabCutover.Store(true)
+			return prior, nil
+		}
+	}
 	if replayed && prior != nil && prior.FencedAt != "" {
 		// Narrowed path: check only the rows this process replayed
 		// (vocab_replay_fence.go). Anything it cannot prove takes the full
