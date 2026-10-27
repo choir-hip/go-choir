@@ -240,3 +240,28 @@ func TestStoryEntitiesBackfillScanBoundIsAtLeastOne(t *testing.T) {
 		t.Fatalf("act = %+v, %v; want one story read and the cursor", got, err)
 	}
 }
+
+// An act past its wall-time bound stops with the stories it asked and the
+// cursor to go on from, so its receipt returns before the guest server's
+// write timeout (docs/problems/related-review-act-outlives-its-request-2026-10-27.md).
+func TestStoryEntitiesBackfillWallBoundReturnsThePartialReceipt(t *testing.T) {
+	f := newAnalysisFixture(t)
+	f.turnOn(t)
+	ctx := context.Background()
+	defer func(d time.Duration) { storyEntitiesBackfillWallMax = d }(storyEntitiesBackfillWallMax)
+	storyEntitiesBackfillWallMax = time.Nanosecond
+	var docs []string
+	for i := 0; i < 3; i++ {
+		docs = append(docs, seedStory(t, f.s, f.owner, f.computer, fmt.Sprintf("doc-wall-%d", i), fmt.Sprintf("Story %d", i), "A harbor reopens."))
+		time.Sleep(5 * time.Millisecond)
+	}
+	first, err := f.rt.StoryEntitiesBackfill(ctx, f.owner, f.computer, "batch-wall", 10)
+	if err != nil || first.Scanned != 1 || len(first.Requested) != 1 || first.Requested[0] != docs[2] || first.Next == nil || first.Next.BeforeDoc != docs[2] {
+		t.Fatalf("first act = %+v, %v; want the newest story asked and the cursor after it", first, err)
+	}
+	storyEntitiesBackfillWallMax = time.Hour
+	next, err := f.rt.StoryEntitiesBackfillFrom(ctx, f.owner, f.computer, "batch-wall", 10, *first.Next)
+	if err != nil || next.Scanned != 2 || len(next.Requested) != 2 || next.Next != nil {
+		t.Fatalf("next act = %+v, %v; want the two older stories asked and no cursor", next, err)
+	}
+}

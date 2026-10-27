@@ -30,6 +30,11 @@ const StoryEntitiesBackfillMax = 200
 // 325 F2); the result's Next is the cursor to go on from.
 var storyEntitiesBackfillScanMax = 2000
 
+// storyEntitiesBackfillWallMax bounds one act's wall time, from its start,
+// so its receipt is written inside the guest server's 120 s write timeout;
+// past it the act stops after the story in hand and returns Next.
+var storyEntitiesBackfillWallMax = 90 * time.Second
+
 var (
 	// ErrStoryEntitiesBackfillOff refuses the act while the computer's
 	// research.related_story setting is off.
@@ -75,8 +80,10 @@ func (rt *Runtime) StoryEntitiesBackfill(ctx context.Context, owner, computer, b
 }
 
 // StoryEntitiesBackfillFrom runs one batch of at most limit asks, reading
-// at most storyEntitiesBackfillScanMax stories from the cursor.
+// at most storyEntitiesBackfillScanMax stories from the cursor, for at most
+// storyEntitiesBackfillWallMax.
 func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, computer, batchID string, limit int, from StoryEntitiesBackfillCursor) (StoryEntitiesBackfillResult, error) {
+	start := time.Now()
 	owner, computer, batchID = strings.TrimSpace(owner), strings.TrimSpace(computer), strings.TrimSpace(batchID)
 	out := StoryEntitiesBackfillResult{BatchID: batchID, Requested: []string{}}
 	if rt == nil || rt.store == nil {
@@ -112,7 +119,7 @@ func (rt *Runtime) StoryEntitiesBackfillFrom(ctx context.Context, owner, compute
 		return out, fmt.Errorf("related review: list the stories: %w", err)
 	}
 	for i, doc := range docs {
-		if i > 0 && (len(out.Requested) >= limit || out.Scanned >= scanMax) {
+		if i > 0 && (len(out.Requested) >= limit || out.Scanned >= scanMax || time.Since(start) >= storyEntitiesBackfillWallMax) {
 			// Stopped before the oldest: go on after the last story read.
 			last := docs[i-1]
 			out.Next = &StoryEntitiesBackfillCursor{Before: last.UpdatedAt, BeforeDoc: last.DocID}
