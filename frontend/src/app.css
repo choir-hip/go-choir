@@ -732,6 +732,7 @@ body {
 
 /* Idle (set by lib/idle.ts after 2 idle minutes): no animation may keep the
    compositor drawing. Cleared on input; the look while active is unchanged. */
+:root[data-idle],
 :root[data-idle] *,
 :root[data-idle] *::before,
 :root[data-idle] *::after {

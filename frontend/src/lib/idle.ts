@@ -5,7 +5,7 @@
 // when nothing changes (docs/problems/idle-tab-cpu-after-the-field-fix-2026-10-27.md).
 
 export const IDLE_MS = 120_000;
-const EVENTS = ['pointermove', 'pointerdown', 'keydown', 'wheel'] as const;
+const EVENTS = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'focus'] as const;
 
 type Listener = (idle: boolean) => void;
 const listeners = new Set<Listener>();
@@ -54,8 +54,11 @@ export function installIdleWatcher() {
   poke();
 }
 
+/** Subscribes and calls fn with the current state at once, so a subscriber
+ * that arrives while the page is idle freezes too (review 347 M1). */
 export function onIdleChange(fn: Listener): () => void {
   installIdleWatcher();
   listeners.add(fn);
+  fn(idle);
   return () => listeners.delete(fn);
 }

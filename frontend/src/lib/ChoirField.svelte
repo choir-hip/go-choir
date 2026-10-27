@@ -334,8 +334,10 @@
       }
     });
     resize();
-    if (reduced) render(performance.now());
-    else start();
+    // One frame first, so a field that mounts while idle shows its still
+    // frame; the idle subscription below then stops it (review 347 M1).
+    render(performance.now());
+    if (!reduced) start();
     window.addEventListener('resize', onResize, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
     unsubIdle = onIdleChange(onIdle);
