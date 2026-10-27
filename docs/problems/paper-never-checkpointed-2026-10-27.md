@@ -38,6 +38,19 @@ everywhere automatically." Investigation: Sonnet, read-only, 19:3x.
   `apply-checkpoint-without-replay-2026-10-26.md`, R2). On d@e one
   checkpoint took 5.5 s and 118 MB.
 
+## Hypothesis A confirmed (FP0, 2026-10-27, corpusd job read)
+
+The paper's projection-base job row reads `status: blocked`,
+`reason: cadence`, `failures: 9`, `updated_at: 2026-10-15T02:42:29Z`,
+`target_sequence: 402176`, `watermark_sequence: 34660`,
+`cold_tail: 4365298`, `alert: urgent_tail,repeated_failure`, with the error
+`projection base refused: installed base does not open: runtime store:
+bootstrap: apply schema: Error 1049: database not found: texture`, on the
+seed base `abacf6b0…`. The job has been blocked for twelve days; a blocked
+row with unchanged inputs never retries and logs nothing, so the alert
+reached no one. Next: why the seed base lacks the `texture` database, and
+the smallest reseed (design pass running).
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
