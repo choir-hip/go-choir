@@ -207,8 +207,9 @@ func (s *Store) VerifyServingVocabularyV2(ctx context.Context, progress func()) 
 // rescan is skipped: replay is the only writer that bypasses the write
 // guard, so a fenced store with no replayed events cannot contain non-V2
 // rows. When this process replayed onto a fenced store, only the replayed
-// rows are checked (vocab_replay_fence.go); a replay an earlier process
-// opened always takes the full pass. progress, when non-nil, is ticked once per scanned row so callers
+// rows are checked (vocab_replay_fence.go); what that check cannot prove
+// takes the full pass here, which only rebuilds call; a boot calls
+// FenceServingVocabularyAtBoot. progress, when non-nil, is ticked once per scanned row so callers
 // can expose liveness during long scans (the guest health gate reports it
 // to the host stall detector).
 func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed bool, progress func()) (*MigrationReport, error) {
@@ -216,12 +217,10 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 	if err != nil {
 		return nil, err
 	}
-	if !replayed && prior != nil && prior.FencedAt != "" && prior.ReplayOpenedAt == "" {
+	if !replayed && prior != nil && prior.FencedAt != "" {
 		// Fast path: nothing replayed and the fence already verified this
 		// store. The write guard has refused non-V2 rows since the report
-		// existed, so the serving vocabulary is still V2. A replay marker
-		// means an earlier process replayed rows after the fence and never
-		// re-fenced them: the full pass decides.
+		// existed, so the serving vocabulary is still V2.
 		s.vocabCutover.Store(true)
 		return prior, nil
 	}
@@ -291,6 +290,45 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 	s.vocabReplay.reset()
 	s.vocabCutover.Store(true)
 	return rep, nil
+}
+
+// FenceServingVocabularyAtBoot is the boot's vocabulary step (station V,
+// docs/definitions/choir-v-boot-vocab-pass-removal-2026-10-27.md). A store
+// the cutover never fenced takes the one-time migration. A fenced store
+// never pays the whole-store pass at boot: the rows this process replayed
+// are checked, what the check cannot prove is logged and served with the
+// write guard armed, and a rebuild migrates it. The pass held the paper in
+// an OOM boot loop on 2026-10-27
+// (docs/problems/paper-down-on-full-vocabulary-rescan-2026-10-27.md).
+func (s *Store) FenceServingVocabularyAtBoot(ctx context.Context, replayed bool, progress func()) (*MigrationReport, error) {
+	prior, err := s.loadVocabMigrationReport()
+	if err != nil {
+		return nil, err
+	}
+	if prior == nil || prior.FencedAt == "" {
+		return s.MigrateAndFenceServingVocabulary(ctx, replayed, progress)
+	}
+	stale := prior.ReplayOpenedAt != ""
+	if replayed {
+		stays, err := s.vocabReplayStaysFenced(ctx, prior, progress)
+		if err != nil {
+			return nil, err
+		}
+		if !stays {
+			log.Printf("vocab fence: this boot's replayed rows are not all provably at the V2 fixpoint; serving without the whole-store pass (a rebuild migrates them)")
+		}
+		prior.FencedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if replayed || stale {
+		// An older build's marker is cleared, not obeyed.
+		prior.ReplayOpenedAt = ""
+		if err := s.persistVocabMigrationReport(prior); err != nil {
+			return nil, err
+		}
+	}
+	s.vocabReplay.reset()
+	s.vocabCutover.Store(true)
+	return prior, nil
 }
 
 // mergeVocabReports folds a fresh migration report into the persisted one.
