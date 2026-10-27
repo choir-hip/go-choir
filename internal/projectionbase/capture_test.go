@@ -345,6 +345,111 @@ func TestPublishCapturedBaseRefusesAFullImageOrCaptureFilesystem(t *testing.T) {
 	}
 }
 
+// Review 365 (DeepSeek 3, 5): at the floor's own sequence, and on a resumed
+// scratch above it, a replay is admitted only on the root's line: a pre-root
+// base at exactly the root's sequence, or a scratch replayed from genesis
+// (no recorded root), refuses.
+func TestRebuildAtOrAboveTheFloorNeedsTheRootsLine(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-capture-line"
+	root, mount, digests, _ := captureFixture(t, computerID, 5, 3)
+	cfg := func(target int, scratch string) Config {
+		return Config{
+			ComputerID: computerID, TargetHead: digests[target-1], ArtifactsRoot: root,
+			ScratchDir: scratch, KeyMaterial: fixtureKey(40), BatchSize: 100,
+			MemoryLimitRSS: 512 * 1024 * 1024, TargetSequence: uint64(target),
+		}
+	}
+	// Before the root: a tape replay at the root's sequence, and a genesis
+	// scratch left at 4.
+	preRootCfg := cfg(3, t.TempDir())
+	preRootCfg.SeedPolicy = SeedNone
+	preRoot := runRebuild(t, ctx, preRootCfg, fixtureReplay(NewDiskEventSource(root, computerID, digests[2])))
+	genesisScratch := t.TempDir()
+	scratchCfg := cfg(4, genesisScratch)
+	scratchCfg.SeedPolicy = SeedNone
+	runRebuild(t, ctx, scratchCfg, fixtureReplay(NewDiskEventSource(root, computerID, digests[3])))
+	captured, err := PublishCapturedBase(ctx, CaptureConfig{
+		ComputerID: computerID, StoreMarker: filepath.Join(mount, "state"),
+		ArtifactsRoot: root, TapeHeadAt: tapeOf(digests),
+	})
+	if err != nil {
+		t.Fatalf("PublishCapturedBase: %v", err)
+	}
+	if captured.Descriptor.BlobSHA256 == preRoot.Descriptor.BlobSHA256 {
+		t.Fatal("fixture: the root and the pre-root base are one blob")
+	}
+	run := func(c Config) error {
+		r, err := NewRebuilder(c)
+		if err != nil {
+			return err
+		}
+		_, err = r.Run(ctx, fixtureReplay(NewDiskEventSource(root, computerID, digests[4])))
+		return err
+	}
+	pinned := cfg(5, t.TempDir())
+	pinned.SeedPolicy, pinned.SeedBaseRef, pinned.SeedRequired = SeedPinned, preRoot.Descriptor.BlobSHA256, true
+	if err := run(pinned); !errors.Is(err, ErrBaseRefused) || !strings.Contains(err.Error(), "epoch root") {
+		t.Fatalf("pre-root seed at the root's sequence: err = %v, want an epoch-root refusal", err)
+	}
+	// A resumed scratch with no record of the root is discarded, and the
+	// error is transient (not ErrBaseRefused, which would block the job):
+	// the next attempt on the same scratch seeds from the root.
+	resumed := cfg(5, genesisScratch)
+	resumed.SeedPolicy, resumed.SeedBaseRef, resumed.SeedRequired = SeedPinned, captured.Descriptor.BlobSHA256, true
+	if err := run(resumed); err == nil || errors.Is(err, ErrBaseRefused) || !strings.Contains(err.Error(), "epoch root") {
+		t.Fatalf("resumed genesis scratch above the root: err = %v, want a transient epoch-root error", err)
+	}
+	if err := run(resumed); err != nil {
+		t.Fatalf("next attempt on the discarded scratch: %v", err)
+	}
+	fromRoot := cfg(5, t.TempDir())
+	fromRoot.SeedPolicy, fromRoot.SeedBaseRef, fromRoot.SeedRequired = SeedPinned, captured.Descriptor.BlobSHA256, true
+	if err := run(fromRoot); err != nil {
+		t.Fatalf("replay from the root: %v", err)
+	}
+}
+
+// Review 365 (DeepSeek 4): the floor scan fails closed on a descriptor of
+// this computer it cannot parse (a torn root sidecar must not lower the
+// floor), and ignores another computer's.
+func TestEpochFloorFailsClosedOnATornDescriptor(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "sha256", Namespace)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	torn := DescriptorSidecarName(strings.Repeat("a", 64))
+	if err := os.WriteFile(filepath.Join(dir, torn), []byte(`{"computer_id":"computer-torn","sequence":6000,"orig`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publishedEpochFloor(root, "computer-torn"); err == nil {
+		t.Fatal("a torn descriptor of this computer did not fail the floor scan")
+	}
+	if floor, err := publishedEpochFloor(root, "computer-other"); err != nil || floor != 0 {
+		t.Fatalf("another computer's torn descriptor: floor %d err %v, want 0, nil", floor, err)
+	}
+}
+
+// Review 365 (DeepSeek, MEDIUM): a captured store whose head is at or
+// behind the advertised watermark can never become the root (corpusd keeps
+// the higher watermark). It refuses before compaction and publishes nothing.
+func TestPublishCapturedBaseRefusesAHeadAtOrBelowTheWatermark(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-capture-behind"
+	root, mount, digests, _ := captureFixture(t, computerID, 3, 3)
+	_, err := PublishCapturedBase(ctx, CaptureConfig{
+		ComputerID: computerID, StoreMarker: filepath.Join(mount, "state"),
+		ArtifactsRoot: root, TapeHeadAt: tapeOf(digests), AboveSequence: 3,
+	})
+	if !errors.Is(err, ErrBaseRefused) || !strings.Contains(err.Error(), "watermark") {
+		t.Fatalf("err = %v, want a refusal naming the watermark", err)
+	}
+	if files := publishedBaseFiles(t, root); len(files) != 0 {
+		t.Fatalf("refusal left published files: %v", files)
+	}
+}
+
 // 4: an unknown origin is refused, so a descriptor this build cannot read
 // correctly is never installed as a replayed base.
 func TestDescriptorRefusesUnknownOrigin(t *testing.T) {

@@ -337,6 +337,76 @@ func TestCaptureDataImageCloneDeadlineResumes(t *testing.T) {
 	}
 }
 
+// Review 365 (item 6): an abandoned clone keeps the pause marker until the
+// clone returns (a vmctl death in between still finds it), and its cleanup
+// removes only the files it made: a newer capture and marker written after
+// a recovery stay.
+func TestAbandonedCloneCleanupRemovesOnlyItsOwnFiles(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneDeadline = 50 * time.Millisecond
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	mgr.captureAbandonedDone = func() { close(finished) }
+	mgr.captureCloneFn = func(dst, src *os.File) error {
+		<-release
+		return copyClone(dst, src)
+	}
+	if _, err := mgr.CaptureDataImage("vm-c"); err == nil {
+		t.Fatal("hung clone returned no error")
+	}
+	if _, err := os.Stat(pauseMarkerPath(mgr)); err != nil {
+		t.Fatalf("pause marker while the abandoned clone runs: %v, want it kept", err)
+	}
+	// A recovery removed both, and a newer capture made its own.
+	for _, p := range []string{pauseMarkerPath(mgr), capturePath(mgr)} {
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("newer"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("abandoned clone cleanup never ran")
+	}
+	for _, p := range []string{pauseMarkerPath(mgr), capturePath(mgr)} {
+		if raw, err := os.ReadFile(p); err != nil || string(raw) != "newer" {
+			t.Fatalf("%s after the abandoned cleanup = %q %v, want the newer file kept", p, raw, err)
+		}
+	}
+}
+
+// Review 365 (item 6): when the marker cannot be removed the capture is not
+// handed out (a marker beside a handed-out capture would let a reattach
+// delete it).
+func TestCaptureDataImageFailsWhenTheMarkerStays(t *testing.T) {
+	fc := &statefulFC{state: "Running"}
+	mgr := captureStatefulVM(t, fc)
+	mgr.captureCloneFn = func(dst, src *os.File) error {
+		// Turn the marker into a directory that os.Remove refuses.
+		if err := os.Remove(pauseMarkerPath(mgr)); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Join(pauseMarkerPath(mgr), "pin"), 0o755); err != nil {
+			return err
+		}
+		return copyClone(dst, src)
+	}
+	if _, err := mgr.CaptureDataImage("vm-c"); err == nil || !strings.Contains(err.Error(), "pause marker") {
+		t.Fatalf("err = %v, want a pause marker error", err)
+	}
+	if _, err := os.Stat(capturePath(mgr)); !os.IsNotExist(err) {
+		t.Fatalf("capture handed out beside a marker: %v", err)
+	}
+	if fc.now() != "Running" {
+		t.Fatalf("VM state = %s, want Running", fc.now())
+	}
+}
+
 // 11: a resume whose answers all fail on a VM that runs is not an outage;
 // the probe decides, and the capture stands.
 func TestCaptureDataImageProbesBeforeCallingItPaused(t *testing.T) {

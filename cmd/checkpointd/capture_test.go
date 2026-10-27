@@ -36,10 +36,19 @@ type fakeCaptureJob struct {
 	publish   func(projectionbase.CaptureConfig) (*projectionbase.Result, error)
 	advertErr error
 	retracted []string
+	// watermark and precheckErr are the precheck's answer; publishedAbove
+	// is the AboveSequence the publisher received.
+	watermark      uint64
+	precheckErr    error
+	publishedAbove uint64
 }
 
 func (f *fakeCaptureJob) deps() captureDeps {
 	return captureDeps{
+		precheck: func(_ context.Context, computerID string) (uint64, error) {
+			f.events = append(f.events, "precheck")
+			return f.watermark, f.precheckErr
+		},
 		capture: func(_ context.Context, computerID string) (captureGrant, error) {
 			f.events = append(f.events, "capture "+computerID)
 			if err := os.WriteFile(f.image, []byte("clone"), 0o600); err != nil {
@@ -62,6 +71,7 @@ func (f *fakeCaptureJob) deps() captureDeps {
 		},
 		publish: func(_ context.Context, cfg projectionbase.CaptureConfig) (*projectionbase.Result, error) {
 			f.events = append(f.events, "publish "+filepath.Base(cfg.StoreMarker))
+			f.publishedAbove = cfg.AboveSequence
 			return f.publish(cfg)
 		},
 		advertise: func(_ context.Context, computerID string, seq uint64, ref string) error {
@@ -110,7 +120,7 @@ func TestCaptureBasePublishesAdvertisesAndRemovesTheImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runCaptureBase: %v", err)
 	}
-	want := "capture computer-paper,mount data.img.capture,publish state,advertise,unmount"
+	want := "precheck,capture computer-paper,mount data.img.capture,publish state,advertise,unmount"
 	if got := strings.Join(f.events, ","); got != want {
 		t.Fatalf("events = %s\nwant     %s", got, want)
 	}
@@ -343,6 +353,28 @@ func TestLoopMountIsNosuidNodevNoexec(t *testing.T) {
 	args := strings.Join(loopMountArgs("/s/data.img.capture", "/m/vm"), " ")
 	if args != "-o loop,nosuid,nodev,noexec /s/data.img.capture /m/vm" {
 		t.Fatalf("mount args = %q", args)
+	}
+}
+
+// Review 365 (DeepSeek, MEDIUM): a computer whose tape is not above its
+// watermark is refused before any pause; otherwise the watermark is handed
+// to the publisher, which refuses a store head at or below it.
+func TestCaptureBaseChecksTheWatermarkBeforePausing(t *testing.T) {
+	f := newFakeCaptureJob(t)
+	f.precheckErr = errors.New("tape head 4394600 is not above the watermark 4394600")
+	if _, err := runCapture(t, f); err == nil || !strings.Contains(err.Error(), "watermark") {
+		t.Fatalf("err = %v, want the precheck refusal", err)
+	}
+	if strings.Join(f.events, ",") != "precheck" {
+		t.Fatalf("events after a refused precheck = %v, want no pause", f.events)
+	}
+	f = newFakeCaptureJob(t)
+	f.watermark = 4390000
+	if _, err := runCapture(t, f); err != nil {
+		t.Fatal(err)
+	}
+	if f.publishedAbove != 4390000 {
+		t.Fatalf("publisher got AboveSequence %d, want the watermark 4390000", f.publishedAbove)
 	}
 }
 

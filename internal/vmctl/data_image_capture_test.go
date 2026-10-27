@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,6 +56,23 @@ func postCapture(t *testing.T, h *Handler, body, remote string) (int, map[string
 	var resp map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	return rec.Code, resp
+}
+
+// Review 365: a dry run names the computer's VM and owner without pausing
+// it, so the operator job can check the tape against the watermark first.
+func TestCaptureDataImageRouteDryRunPausesNothing(t *testing.T) {
+	mgr := &captureVMManager{mockVMManager: &mockVMManager{}}
+	h, own := captureFixture(t, mgr)
+	code, resp := postCapture(t, h, `{"computer_id":"`+own.ComputerID+`","dry_run":true}`, "")
+	if code != http.StatusOK {
+		t.Fatalf("dry run: %d %v", code, resp)
+	}
+	if len(mgr.calls) != 0 {
+		t.Fatalf("dry run called the manager: %v", mgr.calls)
+	}
+	if resp["vm_id"] != own.VMID || resp["user_id"] != own.UserID || resp["capture_path"] != "" {
+		t.Fatalf("dry run answer = %v", resp)
+	}
 }
 
 func TestCaptureDataImageRouteCapturesTheNamedComputer(t *testing.T) {
@@ -116,10 +134,18 @@ func TestCaptureDataImageRouteRefusals(t *testing.T) {
 	// Review 364 lows: contention is told apart from failure, and the
 	// lookup of one computer does not depend on classifying every other.
 	t.Run("VM busy", func(t *testing.T) {
-		mgr := &captureVMManager{mockVMManager: &mockVMManager{}, err: errors.New("capture data image vm-x: VM operation in progress")}
+		mgr := &captureVMManager{mockVMManager: &mockVMManager{}, err: fmt.Errorf("capture data image vm-x: %w", ErrVMOperationInProgress)}
 		h, own := captureFixture(t, mgr)
 		if code, _ := postCapture(t, h, `{"computer_id":"`+own.ComputerID+`"}`, ""); code != http.StatusConflict {
 			t.Fatalf("busy VM: %d, want 409", code)
+		}
+	})
+	// Review 365 (DeepSeek 7): the 409 is by error identity, not text.
+	t.Run("text alone is not contention", func(t *testing.T) {
+		mgr := &captureVMManager{mockVMManager: &mockVMManager{}, err: errors.New("operation in progress, said someone")}
+		h, own := captureFixture(t, mgr)
+		if code, _ := postCapture(t, h, `{"computer_id":"`+own.ComputerID+`"}`, ""); code != http.StatusInternalServerError {
+			t.Fatalf("plain error: %d, want 500", code)
 		}
 	})
 	t.Run("route authority unavailable", func(t *testing.T) {

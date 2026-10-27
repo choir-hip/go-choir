@@ -37,6 +37,7 @@ type fakeVerdictStore struct {
 	jobs        map[string]platform.ProjectionJob     // by computer
 	enqueueErr  map[string]error                      // by computer
 	pinErr      error
+	roots       map[string]uint64 // computer -> epoch root sequence
 
 	enqueued []platform.CheckpointVerdictRecord
 	resolved map[string]selfdevprotocol.CheckpointVerdict // by digest
@@ -74,6 +75,13 @@ func (f *fakeVerdictStore) StoredCheckpoint(_ context.Context, computerID, diges
 		return selfdevprotocol.Checkpoint{}, errors.New("no such checkpoint")
 	}
 	return c, nil
+}
+
+func (f *fakeVerdictStore) EpochRoot(_ context.Context, computerID string) (string, uint64, error) {
+	if seq, ok := f.roots[computerID]; ok {
+		return hex64('7'), seq, nil
+	}
+	return "", 0, nil
 }
 
 func (f *fakeVerdictStore) ProjectionBaseAtSequence(_ context.Context, computerID string, sequence uint64) (string, bool, error) {
@@ -486,5 +494,28 @@ func TestReconcileJudgesAgainstAnEpochRootLikeAnyBase(t *testing.T) {
 				t.Fatalf("verdict = %+v, want %s", v, tc.want)
 			}
 		})
+	}
+}
+
+// Review 365 (DeepSeek, blocker): a checkpoint below the epoch root is
+// never Verified, even against a pre-root base the platform still holds at
+// its exact sequence. It settles unverified/no_base, before any judge, and
+// pins nothing.
+func TestCheckpointBelowTheEpochRootIsNeverVerified(t *testing.T) {
+	store := newFakeVerdictStore()
+	store.roots = map[string]uint64{"c1": 6000}
+	head, blob := hex64('1'), hex64('9')
+	store.addPending("c1", hex64('d'), 5000, head, witnessOf(tablesA), selfdevprotocol.DepositModeUpcast)
+	store.bases["c1/5000"] = blob
+	d := descriptorOf("c1", 5000, head, blob, witnessOf(tablesA))
+	if err := reconcileCheckpointVerdicts(t.Context(), store, loader(d)); err != nil {
+		t.Fatal(err)
+	}
+	v := store.resolved[hex64('d')]
+	if v.Status != selfdevprotocol.CheckpointVerdictUnverified || v.Reason != selfdevprotocol.VerdictReasonNoBase {
+		t.Fatalf("verdict below the root = %+v, want unverified/%s", v, selfdevprotocol.VerdictReasonNoBase)
+	}
+	if len(store.pinned) != 0 || len(store.enqueued) != 0 {
+		t.Fatalf("pinned %v, enqueued %d below the root", store.pinned, len(store.enqueued))
 	}
 }

@@ -74,6 +74,30 @@ func TestEpochRootFloorsEveryAdmittedJob(t *testing.T) {
 	}
 }
 
+// Review 365 (DeepSeek 3): the advertised-watermark fast path of seed
+// selection applies the floor too. A watermark below the root (only a hand
+// rollback leaves one) is not used as a seed.
+func TestVerificationSeedFastPathHonorsTheRoot(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	id := "computer-epoch-fast"
+	insertTestHead(t, s, id, 9000)
+	preRoot, root := strings.Repeat("c", 64), strings.Repeat("d", 64)
+	if err := s.RecordReplayWatermark(ctx, id, 100, preRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordReplayWatermarkWithRoot(ctx, id, 6000, root, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE computer_replay_watermarks SET watermark_sequence=100,base_ref=? WHERE computer_id=?`, preRoot, id); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.enqueueProjectionJob(ctx, id, checkpointVerifyReason+"fast", false, &projectionTarget{sequence: 7000, head: strings.Repeat("e", 64)})
+	if err != nil || v.SeedBaseRef != root || v.WatermarkSequence != 6000 {
+		t.Fatalf("verification seed = %+v %v, want the root, never the pre-root watermark", v, err)
+	}
+}
+
 // Without a root nothing changes: a computer with none has no floor.
 func TestNoEpochRootIsNoFloor(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
