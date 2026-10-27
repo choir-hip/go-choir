@@ -214,3 +214,28 @@ func TestPatchIDPunctuationOnlyLinesAreNotEvidence(t *testing.T) {
 		t.Fatalf("the deleted block is back: not contained, got %v %v", ok, err)
 	}
 }
+
+// Review 355, N1 and N2: a patch whose every changed line is punctuation
+// still gets the later check (on its non-blank lines), and a removed line
+// that comes back re-indented is still back.
+func TestPatchIDPunctuationOnlyPatchAndReindentedReadd(t *testing.T) {
+	repo, root := baseRepo(t)
+	src := "a: {\n  one: x\n}\n}\n"
+	base := platformMoved(t, repo, root, func(r string) { write(t, r, "frontend/src/c.txt", src) })
+
+	dropBrace := func(r string) { write(t, r, "frontend/src/c.txt", "a: {\n  one: x\n}\n") }
+	patch := patchFrom(t, repo, base, dropBrace)
+	promoted := platformMoved(t, repo, base, dropBrace)
+	back := platformMoved(t, repo, promoted, func(r string) { appendTo(t, r, "frontend/src/c.txt", "}\n") })
+	if ok, err := containedAt(t, repo, base, patch, back); err != nil || ok {
+		t.Fatalf("N1: the patch removed a lone }, main put it back: not contained, got %v %v", ok, err)
+	}
+
+	dropOne := func(r string) { write(t, r, "frontend/src/c.txt", "a: {\n}\n}\n") }
+	patch = patchFrom(t, repo, base, dropOne)
+	promoted = platformMoved(t, repo, base, dropOne)
+	reindented := platformMoved(t, repo, promoted, func(r string) { write(t, r, "frontend/src/c.txt", "a: {\n    one: x\n}\n}\n") })
+	if ok, err := containedAt(t, repo, base, patch, reindented); err != nil || ok {
+		t.Fatalf("N2: the removed line is back, indented deeper: not contained, got %v %v", ok, err)
+	}
+}
