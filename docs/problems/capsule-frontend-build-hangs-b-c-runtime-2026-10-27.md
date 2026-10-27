@@ -1,4 +1,4 @@
-# A capsule frontend build stalls b@c on disk IO and hung b@c's runtime and vmctl recovered it (2026-10-27)
+# A capsule frontend build stalls b@c's guest on disk IO and starves its runtime (2026-10-27)
 
 Status: open; the cause is not confirmed. Mutation class of any fix:
 unknown. Documented before any fix.
