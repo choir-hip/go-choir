@@ -1697,9 +1697,12 @@ in
         # RTT, health unreachable) and was rolled back per the owner-approved
         # plan (docs/problems/guest-store-history-bloat-and-memory-shape-
         # 2026-10-09.md). Host swap is bounded by the memory budget, not by
-        # guest size. This is the only memory setting.
+        # guest size. This is the only memory setting. 12 GiB since
+        # 2026-10-27: the paper's boot vocabulary rescan was OOM-killed at
+        # 7.75 GB RSS of 8 GiB on every boot
+        # (problems/paper-down-on-full-vocabulary-rescan-2026-10-27.md).
         "VM_INTERACTIVE_CPU_COUNT=4"
-        "VM_INTERACTIVE_MEM_MIB=8192"
+        "VM_INTERACTIVE_MEM_MIB=12288"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
         "VM_BOOT_READY_TIMEOUT=30m"
