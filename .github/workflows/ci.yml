@@ -484,6 +484,22 @@ jobs:
         shell: bash
         run: scripts/check-test-hang-guards.sh
 
+      # Every switch is declared in switches/registry.yaml; an unregistered
+      # switch, an expired entry that blocks a new switch, or a switch that lands
+      # off for every computer fails here
+      # (docs/design/progressive-delivery-2026-10-26.md section 7).
+      - name: Run switch-registry lint
+        shell: bash
+        run: |
+          python3 -I scripts/selftest-switch-registry
+          base=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="--base origin/${{ github.base_ref }}"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            base="--base ${{ github.event.before }}"
+          fi
+          python3 -I scripts/check-switch-registry $base
+
       # The host-internal token goes only to loopback internal ports
       # (docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
       - name: Run guest-token scanner

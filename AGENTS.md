@@ -189,7 +189,7 @@ should be more judicious, allocating code review to hard stuff and trusting
 that we can handle the easy stuff cold"; "make devin the go-to reviewer").
 Cheap checks run before any review, every time: the repo gates
 (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
-`selftest-guest-token`), a nix eval of both systems when `nix/` or the flake
+`selftest-guest-token`, `check-switch-registry`), a nix eval of both systems when `nix/` or the flake
 changed, a dry run of every touched proof script, the CI mirror, and a rebase
 onto the current deploy tree. The tiers are a default and FP0 judges by
 context. Tier 0, no model review: green and yellow changes by default (an

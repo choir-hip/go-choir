@@ -31,6 +31,10 @@ require "$ci" 'scripts/go-test-non-runtime-shards -race'
 # The guest-token scanner runs with the script gates on every non-docs change
 # (docs/problems/host-internal-token-sent-to-guests-by-fp0-probes-2026-10-22.md).
 require "$ci" 'run: python3 -I scripts/selftest-guest-token'
+# The switch registry lint and its selftest run with the script gates
+# (docs/design/progressive-delivery-2026-10-26.md section 7).
+require "$ci" 'python3 -I scripts/check-switch-registry'
+require "$ci" 'python3 -I scripts/selftest-switch-registry'
 # Main pushes plan against the live staging commit, so a docs push that
 # superseded a queued code run cannot skip testing and deploying that code.
 require "$ci" 'Plan base: live staging commit'

@@ -1,0 +1,2455 @@
+{
+ "schema": 1,
+ "policy": {
+  "auto_ceiling": "R4",
+  "paper_ring": "R5 advances only by a human act (owner answers 2026-10-28)",
+  "expiry_grace_days": 7,
+  "release_cap_baseline": 64,
+  "soak_multiplier_security_and_irreversible": 2,
+  "seed": "seeded 2026-10-28 from docs/evidence/switched-off-inventory-2026-10-26.md and nix/node-b.nix"
+ },
+ "switches": [
+  {
+   "id": "vm_snapshot_diff",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "density",
+   "class": "red",
+   "surface": "snapshot",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_SNAPSHOT_DIFF_ONLY",
+    "VM_SNAPSHOT_TYPE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,R1",
+   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72,class:test",
+   "promote": [
+    {
+     "metric": "wake_to_healthy_ms_p95",
+     "bound": "<= max(2 x own 24h baseline, 1500)"
+    },
+    {
+     "metric": "snapshot_refusals_integrity",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete VM_SNAPSHOT_DIFF_ONLY; Diff becomes the code default",
+   "probe": "scripts/density/accept_five.py",
+   "revert": {
+    "mode": "ring_state",
+    "effect": "next_launch"
+   },
+   "note": "R0 d@e and R1 class:test on; R2..R4 by explicit computer id as each ring soaks. First hand-walk switch."
+  },
+  {
+   "id": "vm_snapshot_release_retain",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "density",
+   "class": "red",
+   "surface": "snapshot",
+   "introduced": "2026-10-28",
+   "nix": [
+    "snapshotReleaseRetain"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "true",
+   "promote": [
+    {
+     "metric": "snapshot_release_refusals",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the let-binding; release directories are made unconditionally",
+   "ready_to_retire": true,
+   "note": "D2 on since 2026-10-26 (design row 1)."
+  },
+  {
+   "id": "ci_gate_epoch_check",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "density",
+   "class": "red",
+   "surface": "ci",
+   "introduced": "2026-10-28",
+   "nix": [
+    "ciGateEpochCheck"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "epoch_gate_false_refusals",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the off/observe modes; the gate is enforce",
+   "ready_to_retire": true,
+   "note": "Enforce since 2026-10-27 after trains 28 and 29 observed PASS."
+  },
+  {
+   "id": "vm_checkpoint_cadence",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "selfdev",
+   "class": "red",
+   "surface": "checkpoint",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_CHECKPOINT_CADENCE_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0",
+   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72",
+   "promote": [
+    {
+     "metric": "last_bind_millis",
+     "bound": "unset: the first d@e reading sets it (X1 design R2)"
+    }
+   ],
+   "retire": "delete the selector; the cadence is a guest default",
+   "gate": {
+    "act": "read last_bind_millis in `choir computer checkpoints` before widening"
+   },
+   "note": "Never class: or * until measured; not the paper until measured (nix comment)."
+  },
+  {
+   "id": "vm_balloon_stats",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_BALLOON_STATS_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R1,ids:1",
+   "nix_value": "computer-6c50d6e566143ae32cdb660faa60e24d,class:test",
+   "promote": [
+    {
+     "metric": "balloon_probe_exit",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the selector; the balloon stats device is unconditional",
+   "probe": "scripts/res10_balloon_stats_probe.sh"
+  },
+  {
+   "id": "vm_guest_reclaim_damon",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_GUEST_RECLAIM_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "ids:2",
+   "nix_value": "computer-9648031f92e131adc1fb65ec455c5903,computer-71afbf1461dffabcce8eeebe558d03bd",
+   "promote": [
+    {
+     "metric": "host_rss_vs_control",
+     "bound": "no worse than control (reading not yet taken)"
+    }
+   ],
+   "retire": "delete the selector or the DAMON boot args, per the control reading",
+   "blocked_by": "a control host-RSS reading (audit: LEAVE until it exists)",
+   "note": "9648031f and 71afbf14 only; D6 never names them (D6-M20)."
+  },
+  {
+   "id": "vm_capsule_tunnel_identity",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "egress",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_CAPSULE_TUNNEL_ENFORCE_ONLY",
+    "CHOIR_CAPSULE_EGRESS_TUNNEL_IDENTITY"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "nix_value": "computer-9648031f92e131adc1fb65ec455c5903",
+   "promote": [
+    {
+     "metric": "tunnel_identity_would_refuse",
+     "bound": "== 0 on the claude-mode capsule pass"
+    }
+   ],
+   "retire": "delete the selector; enforce becomes the image default",
+   "gate": {
+    "act": "a Claude-mode capsule's api.anthropic.com pass is recorded"
+   },
+   "note": "Name computer ids only (nix comment); the image line flips last."
+  },
+  {
+   "id": "vmctl_guest_dns",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "egress",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_GUEST_DNS_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "R1,R3",
+   "nix_value": "class:test,class:primary",
+   "promote": [
+    {
+     "metric": "guest_dns_probe_exit",
+     "bound": "== 0"
+    },
+    {
+     "metric": "start_refusals",
+     "bound": "<= control + 1"
+    }
+   ],
+   "retire": "delete the selector; the guest always resolves through host Unbound",
+   "gate": {
+    "act": "paper and public_platform at a watched planned refresh, cold boot once"
+   }
+  },
+  {
+   "id": "vmctl_jailer",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "vmm",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_JAILER",
+    "VMCTL_JAILER_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "vmm_confinement_verify_exit",
+     "bound": "== 0"
+    },
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete VMCTL_JAILER_ONLY; the jailer is unconditional",
+   "probe": "scripts/vmm_confinement_verify.py",
+   "gate": {
+    "act": "R4/R5: alone, at a watched planned refresh, not the 04:00 compaction"
+   }
+  },
+  {
+   "id": "vm_data_discard",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "density",
+   "class": "red",
+   "surface": "snapshot",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_DATA_DISCARD",
+    "VM_DATA_DISCARD_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "1",
+   "promote": [
+    {
+     "metric": "data_image_trim_bytes",
+     "bound": "> 0"
+    }
+   ],
+   "retire": "delete both lines; discard is unconditional (citer: scripts/check-host-firecracker-pin.sh checks VM_DATA_DISCARD_ONLY=*)",
+   "ready_to_retire": true
+  },
+  {
+   "id": "vm_balloon_free_page_reporting",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_BALLOON_FREE_PAGE_REPORTING"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "1",
+   "promote": [
+    {
+     "metric": "host_rss_fall_on_idle",
+     "bound": "> 0"
+    }
+   ],
+   "retire": "delete the line; free page reporting is unconditional",
+   "ready_to_retire": true
+  },
+  {
+   "id": "vm_hibernate_mode",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "density",
+   "class": "red",
+   "surface": "snapshot",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VM_HIBERNATE_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "snapshot",
+   "promote": [
+    {
+     "metric": "snapshot_wake_success_rate",
+     "bound": ">= control"
+    }
+   ],
+   "retire": "keep: kill is the rollback; review_by only",
+   "note": "Rollback lever: removing the line returns the code default (kill)."
+  },
+  {
+   "id": "vmctl_guest_cache_return",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_GUEST_CACHE_RETURN_ONLY",
+    "VMCTL_GUEST_CACHE_RETURN"
+   ],
+   "ladder": [
+    "observe",
+    "active"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72,computer-734d0344e9d5d7e51eef11df61f58a5b",
+   "promote": [
+    {
+     "metric": "host_rss_fall_pct_of_reclaimed_10s",
+     "bound": ">= 70"
+    },
+    {
+     "metric": "guest_process_exits",
+     "bound": "== 0"
+    },
+    {
+     "metric": "refaults",
+     "bound": "<= 2 x before"
+    }
+   ],
+   "retire": "delete VMCTL_GUEST_CACHE_RETURN_ONLY; the return is the code default",
+   "note": "D6 design section 10. Never names the DAMON pair."
+  },
+  {
+   "id": "vmctl_admission_need",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_ADMISSION_NEED"
+   ],
+   "ladder": [
+    "peak",
+    "wake"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "peak",
+   "promote": [
+    {
+     "metric": "admission_need_source",
+     "bound": "== settled for a woken computer"
+    },
+    {
+     "metric": "host_floor_held",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the peak mode",
+   "note": "The nix value peak is the OLD mode; the wake stage (D4) is on nowhere. First walk candidate in effect."
+  },
+  {
+   "id": "vmctl_admission_make_room",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_ADMISSION_MAKE_ROOM"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "active",
+   "promote": [
+    {
+     "metric": "start_refusals",
+     "bound": "<= control"
+    }
+   ],
+   "retire": "delete the line; active is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "vmctl_admission_mode",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_ADMISSION_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "measured",
+   "promote": [
+    {
+     "metric": "start_refusals",
+     "bound": "<= control"
+    }
+   ],
+   "retire": "delete the line; measured is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "vmctl_pressure_reclaim",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_PRESSURE_RECLAIM_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "active",
+   "promote": [
+    {
+     "metric": "host_available_memory",
+     "bound": ">= floor"
+    }
+   ],
+   "retire": "delete the line; active is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "vmctl_primary_keepalive",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "density",
+   "class": "orange",
+   "surface": "memory",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_PRIMARY_KEEPALIVE_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "none",
+   "nix_value": "off",
+   "promote": [
+    {
+     "metric": "primary_idle_hibernate_rate",
+     "bound": ">= control"
+    }
+   ],
+   "retire": "delete the mode if no caller remains (check citers)",
+   "off_ok": "off is the normal state: primary computers idle-hibernate (D3); on is the rollback"
+  },
+  {
+   "id": "vmctl_store_compact_pressure",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_STORE_COMPACT_PRESSURE"
+   ],
+   "ladder": [
+    "observe",
+    "active"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "all",
+   "nix_value": "observe",
+   "promote": [
+    {
+     "metric": "compact_dry_runs_clean",
+     "bound": "== all"
+    }
+   ],
+   "retire": "delete the observe mode once active",
+   "blocked_by": "a rehearsed pressure trigger on a test image"
+  },
+  {
+   "id": "vmctl_retention",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_RETENTION_PRUNE_MODE",
+    "VMCTL_RETENTION_TEST_IDLE_MODE",
+    "VMCTL_RETENTION_QUARANTINE_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "active",
+   "promote": [
+    {
+     "metric": "retention_deletes_unplanned",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep: shadow/observe are the rollback; review_by only",
+   "note": "Deletes; bounded by VMCTL_RETENTION_MAX_DELETES/BYTES."
+  },
+  {
+   "id": "choir_visual_capture",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "selfdev",
+   "class": "orange",
+   "surface": "capsule",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_VISUAL_CAPTURE_COMPUTERS"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R1,ids:2",
+   "nix_value": "computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,cla...",
+   "promote": [
+    {
+     "metric": "capture_job_success",
+     "bound": "== all in ring"
+    }
+   ],
+   "retire": "delete the selector; capture is a capsule default"
+  },
+  {
+   "id": "choir_event_table_computers",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_EVENT_TABLE_COMPUTERS"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "nix_value": "",
+   "retire": "delete with store.event_table if R7 supersedes",
+   "hold": "owner",
+   "hold_question": "R7 may make choir_events redundant; lease, grant and R7 decision (audit row 41)",
+   "grandfathered_off_until": "2026-11-25",
+   "note": "ComputerIDs only; once a computer stamps, deploy 1 is its rollback floor."
+  },
+  {
+   "id": "choir_capsule_mirrors",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "capsule-net",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_CAPSULE_MIRROR_COMPUTERS",
+    "CHOIR_CAPSULE_MIRROR_ECOSYSTEMS",
+    "CHOIR_CAPSULE_MIRRORS_ONLY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "none",
+   "nix_value": "",
+   "promote": [
+    {
+     "metric": "net02_mirrors_probe_exit",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the selectors; capsules always use the host mirror",
+   "probe": "scripts/proofs/net02-mirrors.sh",
+   "grandfathered_off_until": "2026-11-04",
+   "note": "Deploy G inert. Walk: one test computer builds through it (R0), then class:test, then MIRRORS_ONLY=1."
+  },
+  {
+   "id": "host_fetch_vms",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "egress",
+   "introduced": "2026-10-28",
+   "nix": [
+    "hostFetchVMs"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "none",
+   "nix_value": "",
+   "promote": [
+    {
+     "metric": "net01_host_fetch_probe_exit",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the let-binding; guest fetches always go through the host",
+   "probe": "scripts/proofs/net01-host-fetch.sh",
+   "grandfathered_off_until": "2026-11-04",
+   "note": "High security value; closes direct egress. Also feeds CHOIR_HOST_FETCH_VMS in the vmctl and gateway units."
+  },
+  {
+   "id": "choir_claude_delegate",
+   "kind": "host_selector",
+   "life": "experiment",
+   "owner": "selfdev",
+   "class": "red",
+   "surface": "capsule",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_CLAUDE_DELEGATE_COMPUTERS",
+    "CHOIR_CLAUDE_DELEGATE_EXPIRES"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-03",
+   "ring": "ids:2",
+   "nix_value": "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d",
+   "promote": [
+    {
+     "metric": "delegate_capsule_runs_ok",
+     "bound": "== all in ring"
+    }
+   ],
+   "retire": "delete the selector and the token path, or renew by edit",
+   "gate": {
+    "act": "owner renews the nix expiry by edit (not a flip)"
+   },
+   "note": "Its own nix expiry is 2026-11-03T00:00:00Z."
+  },
+  {
+   "id": "proxy_expand_requesters",
+   "kind": "host_selector",
+   "life": "release",
+   "owner": "front",
+   "class": "orange",
+   "surface": "proxy",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PROXY_EXPAND_REQUESTERS"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "nix_value": "",
+   "promote": [
+    {
+     "metric": "private_door_requests_ok",
+     "bound": "== all"
+    }
+   ],
+   "retire": "add the owner id (ON NOW) or delete the key and the private door (a feature removal and test rewrite; lane/delete-dead refused it)",
+   "grandfathered_off_until": "2026-11-04",
+   "note": "The 10-26 audit item 49: NOT deleted."
+  },
+  {
+   "id": "proxy_expand_public",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "front",
+   "class": "orange",
+   "surface": "proxy",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PROXY_EXPAND_PUBLIC"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "public_door_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the line; public expansion is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "corpusd_related_story",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CORPUSD_RELATED_STORY"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "related_story_pairs_audited",
+     "bound": ">= 1 audit read"
+    }
+   ],
+   "retire": "delete the line; the read half follows the setting",
+   "gate": {
+    "act": "FP0 audited the first pairs (design section 7); recorded once"
+   },
+   "ready_to_retire": true,
+   "note": "On in nix; the audit listed the env-file value as unknown. Verify the unit-env file and nix agree."
+  },
+  {
+   "id": "corpusd_opinion_listing",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "front",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CORPUSD_OPINION_LISTING"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "opinion_listing_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: off removes every opinion piece from the front at once (kill switch)"
+  },
+  {
+   "id": "maild_digest",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "mail",
+   "class": "orange",
+   "surface": "mail",
+   "introduced": "2026-10-28",
+   "nix": [
+    "MAILD_DIGEST"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "digest_sends_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the line; digest is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "maild_send_gate_mode",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "mail",
+   "class": "red",
+   "surface": "mail",
+   "introduced": "2026-10-28",
+   "nix": [
+    "MAILD_SEND_GATE_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "guest_send_refusals_unexpected",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep: legacy is the rollback; review_by only"
+  },
+  {
+   "id": "platform_artifact_gc",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PLATFORM_ARTIFACT_GC_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "active",
+   "promote": [
+    {
+     "metric": "gc_deletes_unreachable_only",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: shadow mode is the rollback; review_by only"
+  },
+  {
+   "id": "platform_tape_sweep",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PLATFORM_TAPE_SWEEP_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "active",
+   "promote": [
+    {
+     "metric": "tape_sweep_deletes_planned_only",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: shadow mode is the rollback; review_by only"
+  },
+  {
+   "id": "platform_tape_segments",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PLATFORM_TAPE_SEGMENTS"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "write",
+   "promote": [
+    {
+     "metric": "tape_segment_writes_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: the rollback is the previous mode; review_by only"
+  },
+  {
+   "id": "proxy_object_graph_internal_auth",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "PROXY_OBJECT_GRAPH_INTERNAL_AUTH"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "internal_auth_would_refuse",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "ready_to_retire": true
+  },
+  {
+   "id": "auth_cookie_secure",
+   "kind": "host_env",
+   "life": "permission",
+   "owner": "security",
+   "class": "orange",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "AUTH_COOKIE_SECURE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "true",
+   "promote": [
+    {
+     "metric": "session_renewals_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: a permission setting; review_by only"
+  },
+  {
+   "id": "checkpoint_maintenance_authorized",
+   "kind": "host_env",
+   "life": "permission",
+   "owner": "selfdev",
+   "class": "red",
+   "surface": "checkpoint",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "true",
+   "promote": [
+    {
+     "metric": "checkpoint_maintenance_runs_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: a permission setting; review_by only"
+  },
+  {
+   "id": "vmctl_platform_wire_enabled",
+   "kind": "host_env",
+   "life": "permission",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_PLATFORM_WIRE_ENABLED"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "true",
+   "promote": [
+    {
+     "metric": "autopaper_tick_success",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep until the Autopaper code rename (design TODO); review_by only",
+   "note": "'Wire' is a retired name for Autopaper."
+  },
+  {
+   "id": "vmctl_stop_managed_on_exit",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "density",
+   "class": "red",
+   "surface": "vm-lifecycle",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_STOP_MANAGED_ON_EXIT"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "none",
+   "nix_value": "false",
+   "promote": [
+    {
+     "metric": "vmctl_restart_leaves_vms_running",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep; review_by only",
+   "off_ok": "false is the intended state: computers stay on when vmctl exits (CLAUDE.md)"
+  },
+  {
+   "id": "vmctl_data_image_template",
+   "kind": "host_env",
+   "life": "release",
+   "owner": "store",
+   "class": "orange",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "VMCTL_DATA_IMAGE_TEMPLATE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "new_computer_boot_ok",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the line; the template is the code default",
+   "ready_to_retire": true
+  },
+  {
+   "id": "go_choir_nix_retention",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "host",
+   "introduced": "2026-10-28",
+   "nix": [
+    "GO_CHOIR_NIX_RETENTION_MODE"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "nix_gc_planned_only",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: the rollback is the previous mode; review_by only"
+  },
+  {
+   "id": "issuer_auth_mode",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "issuerAuthMode"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "observe",
+   "promote": [
+    {
+     "metric": "issuer_would_refuse_24h",
+     "bound": "== 0 incl. a paper boot"
+    }
+   ],
+   "retire": "delete the observe mode once enforce",
+   "note": "A wrong flip stops boots. The count is a journal grep today (FP0 only)."
+  },
+  {
+   "id": "internal_auth_mode",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "internalAuthMode"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "internal_auth_would_refuse",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "ready_to_retire": true
+  },
+  {
+   "id": "owner_act_mode",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "ownerActMode"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-25",
+   "ring": "all",
+   "nix_value": "observe",
+   "retire": "delete the observe mode once enforce",
+   "hold": "owner",
+   "hold_question": "observe by owner ruling 2026-10-24 17:5x; when does enforce start?"
+  },
+  {
+   "id": "dolt_auth_stage",
+   "kind": "let_binding",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "doltAuthStage"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "nix_value": "locked",
+   "promote": [
+    {
+     "metric": "dolt_auth_failures",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep; review_by only"
+  },
+  {
+   "id": "gateway_bearer_binding",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "gateway",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-28",
+   "nix": [
+    "gatewayBearerBindingMode"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "bearer_binding_would_refuse",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "ready_to_retire": true
+  },
+  {
+   "id": "gateway_body_caps",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "gateway",
+   "class": "red",
+   "surface": "gateway",
+   "introduced": "2026-10-28",
+   "nix": [
+    "gatewayBodyCaps"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "enforce",
+   "promote": [
+    {
+     "metric": "body_caps_would_refuse_model",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "ready_to_retire": true,
+   "note": "Rollback coupling to gatewayModelScheduler (nix comment)."
+  },
+  {
+   "id": "gateway_model_scheduler",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "gateway",
+   "class": "red",
+   "surface": "gateway",
+   "introduced": "2026-10-28",
+   "nix": [
+    "gatewayModelScheduler"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "nix_value": "off",
+   "promote": [
+    {
+     "metric": "second_computer_latency_during_burst",
+     "bound": "~ one call"
+    }
+   ],
+   "retire": "delete the let-binding; the fair queue is the code default",
+   "probe": "proof 9 (40 concurrent calls from one test computer)",
+   "grandfathered_off_until": "2026-11-04",
+   "note": "Built (ec25d61ff, 72caf899d); proof 9 never run. Flip as its own deploy."
+  },
+  {
+   "id": "platform_dolt_squash_timer",
+   "kind": "let_binding",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "nix": [
+    "platformDoltSquashTimerEnabled"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "nix_value": "false",
+   "promote": [
+    {
+     "metric": "squash_backup_verified",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the let-binding; the timer is unconditional",
+   "gate": {
+    "act": "supervised first squash in a window (owner: one squash, then weekly)"
+   },
+   "grandfathered_off_until": "2026-11-11",
+   "note": "24 GB resource win."
+  },
+  {
+   "id": "choir_document_tool_sandbox",
+   "kind": "guest_env",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "capsule",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_DOCUMENT_TOOL_SANDBOX"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "observe",
+   "promote": [
+    {
+     "metric": "doctool_sandbox_would_refuse_vs_real",
+     "bound": "shadow == real on a test computer"
+    }
+   ],
+   "retire": "delete the observe mode"
+  },
+  {
+   "id": "choir_runtime_capability_floor",
+   "kind": "guest_env",
+   "life": "release",
+   "owner": "security",
+   "class": "red",
+   "surface": "capsule",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_RUNTIME_CAPABILITY_FLOOR"
+   ],
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "observe",
+   "promote": [
+    {
+     "metric": "capability_floor_would_refuse",
+     "bound": "== 0 through a capsule and every desk"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "gate": {
+    "act": "confirm the CAP_SYS_TIME repair (f3cfd4e1f) first"
+   }
+  },
+  {
+   "id": "choir_capsule_memory_policy",
+   "kind": "guest_env",
+   "life": "release",
+   "owner": "selfdev",
+   "class": "red",
+   "surface": "capsule",
+   "introduced": "2026-10-28",
+   "nix": [
+    "CHOIR_CAPSULE_MEMORY_POLICY"
+   ],
+   "ladder": [
+    "observe",
+    "doctrine"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "all",
+   "nix_value": "observe",
+   "promote": [
+    {
+     "metric": "release_build_peak_mib",
+     "bound": "<= 2048 under doctrine"
+    }
+   ],
+   "retire": "delete the observe mode",
+   "gate": {
+    "act": "re-measure a release build under doctrine"
+   }
+  },
+  {
+   "id": "choir_og_writer_gate",
+   "kind": "code",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "objectgraph",
+   "introduced": "2026-10-28",
+   "ladder": [
+    "observe",
+    "enforce"
+   ],
+   "target_ring": "R4",
+   "soak_x": 2,
+   "expires": "2026-11-25",
+   "ring": "all",
+   "promote": [
+    {
+     "metric": "og_writer_gate_would_refuse",
+     "bound": "== 0 (Texture first, paper last)"
+    }
+   ],
+   "retire": "delete the observe mode once enforce",
+   "where": "internal/objectgraph/writer.go:134 (CHOIR_OG_WRITER_GATE unset, code default observe)",
+   "blocked_by": "a counts reader (no SSH), the story-seeding declaration, install kinds (audit row 20)"
+  },
+  {
+   "id": "choir_package_share_reads",
+   "kind": "code",
+   "life": "ops",
+   "owner": "library",
+   "class": "red",
+   "surface": "library",
+   "introduced": "2026-10-28",
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "promote": [
+    {
+     "metric": "package_share_reads_scoped",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: owner is the rollback; review_by only",
+   "where": "corpusd env CHOIR_PACKAGE_SHARE_READS (unset = scoped)",
+   "note": "Normal state; do not flip."
+  },
+  {
+   "id": "choir_release_reads",
+   "kind": "code",
+   "life": "ops",
+   "owner": "library",
+   "class": "red",
+   "surface": "library",
+   "introduced": "2026-10-28",
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "all",
+   "promote": [
+    {
+     "metric": "release_reads_owner",
+     "bound": "true"
+    }
+   ],
+   "retire": "keep: open would widen reads; review_by only",
+   "where": "corpusd env CHOIR_RELEASE_READS (unset = owner)",
+   "note": "Normal state; do not flip."
+  },
+  {
+   "id": "unwired_packages",
+   "kind": "code",
+   "life": "release",
+   "owner": "appdesk",
+   "class": "orange",
+   "surface": "packages",
+   "introduced": "2026-10-28",
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "retire": "decide: wire or delete",
+   "where": "internal/appdesk, internal/appnet, internal/egressgrant (unwired)",
+   "hold": "owner",
+   "hold_question": "wire, or delete the unwired packages (audit row 44)",
+   "grandfathered_off_until": "2026-11-25"
+  },
+  {
+   "id": "ci_reuse_green_pr_run",
+   "kind": "ci_env",
+   "life": "release",
+   "owner": "ci",
+   "class": "red",
+   "surface": "ci",
+   "introduced": "2026-10-28",
+   "ci": [
+    "CI_REUSE_GREEN_PR_RUN"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "reuse_skips_only_green_lanes",
+     "bound": "true"
+    }
+   ],
+   "retire": "delete the env; prove-once is the CI default",
+   "gate": {
+    "act": "one green draft PR run"
+   },
+   "grandfathered_off_until": "2026-11-04",
+   "note": "Audit row 42: CI, not a runtime switch."
+  },
+  {
+   "id": "texture_owner_directions",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "texture.owner_directions"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "Proved on b@c and d@e; byte-identical when off. ON NOW."
+  },
+  {
+   "id": "engineering_progress_to_texture",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "engineering.progress_to_texture"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW."
+  },
+  {
+   "id": "engineering_carry_unfinished",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "engineering.carry_unfinished"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW. Known nit: keeps never pruned (bunch230-F7)."
+  },
+  {
+   "id": "texture_owner_act_wakes",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "texture.owner_act_wakes"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW (mints into the Texture inbox)."
+  },
+  {
+   "id": "texture_evidence_embeds",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "texture.evidence_embeds"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW with the visual-capture grant."
+  },
+  {
+   "id": "source_projection",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "source.projection"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW; host base fetch must be reachable."
+  },
+  {
+   "id": "engineering_slots_graph",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "engineering.slots_graph"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW."
+  },
+  {
+   "id": "evidence_graph",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "evidence.graph"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW; turn-on imports the table rows (25 s bounded).",
+   "revert": {
+    "mode": "one_way"
+   }
+  },
+  {
+   "id": "app_packages_objects",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "app_packages.objects"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW."
+  },
+  {
+   "id": "files_object",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "files.object"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW."
+  },
+  {
+   "id": "texture_hold_trajectory",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "texture.hold_trajectory"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R0,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "ON NOW on owner computers; paper after."
+  },
+  {
+   "id": "texture_root_desk",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "texture.root_desk"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "blocked_by": "PD3 S2 F4 fix proved (oldest-first excerpt)",
+   "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master)."
+  },
+  {
+   "id": "packages_publish",
+   "kind": "setting",
+   "life": "release",
+   "owner": "library",
+   "class": "orange",
+   "surface": "library",
+   "introduced": "2026-10-28",
+   "settings": [
+    "packages.publish"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "grandfathered_off_until": "2026-11-04",
+   "gate": {
+    "act": "train 10 deployed, b@c booted it, the Reader's first release published on b@c"
+   }
+  },
+  {
+   "id": "packages_share",
+   "kind": "setting",
+   "life": "release",
+   "owner": "library",
+   "class": "red",
+   "surface": "library",
+   "introduced": "2026-10-28",
+   "settings": [
+    "packages.share"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "grandfathered_off_until": "2026-11-04",
+   "gate": {
+    "act": "train 10 deployed; first real release published on b@c, then shared to d@e"
+   }
+  },
+  {
+   "id": "store_debounced_checkpoint",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "settings": [
+    "store.debounced_checkpoint"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "kill9_drill_durability",
+     "bound": "no acknowledged write lost"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "grandfathered_off_until": "2026-11-04",
+   "probe": "kill -9 durability drill (deploy R procedure) on a throwaway test computer",
+   "note": "Resource win on the paper's write path."
+  },
+  {
+   "id": "intake_events",
+   "kind": "setting",
+   "life": "release",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "settings": [
+    "intake.events"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R5,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "On for the paper; paper feature."
+  },
+  {
+   "id": "intake_labels",
+   "kind": "setting",
+   "life": "release",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "settings": [
+    "intake.labels"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R5,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "On for the paper."
+  },
+  {
+   "id": "research_system1",
+   "kind": "setting",
+   "life": "release",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "settings": [
+    "research.system1"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R5,ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "On for the paper."
+  },
+  {
+   "id": "research_related_story",
+   "kind": "setting",
+   "life": "release",
+   "owner": "intake",
+   "class": "orange",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "settings": [
+    "research.related_story"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "R5",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "note": "On for the paper since 2026-10-26; route refuses non-platform tiers. Read half is CORPUSD_RELATED_STORY."
+  },
+  {
+   "id": "intake_event_wakes",
+   "kind": "setting",
+   "life": "release",
+   "owner": "intake",
+   "class": "red",
+   "surface": "paper",
+   "introduced": "2026-10-28",
+   "settings": [
+    "intake.event_wakes"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete if the structural assessment retires the event layer",
+   "hold": "owner",
+   "hold_question": "false-merge bar failed 3 times (7.0%, 9.5%, 15-30%); structural assessment first (audit row 40)",
+   "grandfathered_off_until": "2026-11-25"
+  },
+  {
+   "id": "store_event_table",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "settings": [
+    "store.event_table"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete if R7 supersedes",
+   "hold": "owner",
+   "hold_question": "R7 may make it redundant; lease, grant and R7 decision (audit row 41)",
+   "grandfathered_off_until": "2026-11-25",
+   "revert": {
+    "mode": "one_way"
+   }
+  },
+  {
+   "id": "store_trace_log",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "orange",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "settings": [
+    "store.trace_log"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete if R7 supersedes",
+   "blocked_by": "R7 S4 reader (no reader exists)",
+   "grandfathered_off_until": "2026-11-25"
+  },
+  {
+   "id": "telemetry_batch",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "orange",
+   "surface": "store",
+   "introduced": "2026-10-28",
+   "settings": [
+    "telemetry.batch"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete",
+   "note": "Owner 2026-10-23: R7 replaces it. Delete with the CHOIR_TELEMETRY_BATCH env twin."
+  },
+  {
+   "id": "calibration_feedback",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-texture",
+   "introduced": "2026-10-28",
+   "settings": [
+    "calibration.feedback"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete",
+   "note": "Owner 2026-10-24: stays off; the ICRL design replaces it."
+  },
+  {
+   "id": "management_serial_tasks",
+   "kind": "setting",
+   "life": "ops",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-texture",
+   "introduced": "2026-10-28",
+   "settings": [
+    "management.serial_tasks"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "review_by": "2027-01-20",
+   "ring": "none",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep; review_by only",
+   "off_ok": "on is the rollback for S2b, not a feature"
+  },
+  {
+   "id": "source_rebase_offer",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "red",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "source.rebase_offer"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-11",
+   "ring": "unknown",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "gate": {
+    "act": "U4 stack rebase has run once on d@e"
+   },
+   "note": "act-gated until the U4 rebase has run (design section 6). Not in the 10-26 audit's settings table."
+  },
+  {
+   "id": "dispatch_wide_slots",
+   "kind": "setting",
+   "life": "release",
+   "owner": "texture",
+   "class": "orange",
+   "surface": "settings-selfdev",
+   "introduced": "2026-10-28",
+   "settings": [
+    "dispatch.wide_slots"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-25",
+   "ring": "unknown",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "blocked_by": "owner of dispatch.wide_slots to state its proof (not in the 10-26 audit)",
+   "note": "Added after the 10-26 audit; no walk data."
+  }
+ ]
+}
