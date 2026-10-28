@@ -326,49 +326,6 @@ func TestDiffSnapshotConditions(t *testing.T) {
 	})
 }
 
-// D5 step 3 (S6): the list reaches every non-protected class by name, and a
-// protected computer takes Full whatever the list holds ("*" included) and
-// whether it is named by class or by id. Both the hibernate and the load
-// check use the same decision.
-func TestDiffSnapshotNeverSelectsProtectedClasses(t *testing.T) {
-	list := []string{"class:test", "class:primary", "class:premium_always_on"}
-	for _, class := range []string{"test", "primary", "premium_always_on"} {
-		t.Run("selected "+class, func(t *testing.T) {
-			d := newDiffFixture(t)
-			d.mgr.cfg.SnapshotDiffOnly = list
-			d.mgr.mu.Lock()
-			d.inst.Config.WarmnessClass = class
-			d.mgr.mu.Unlock()
-			if meta, _ := d.hibernateAndRead(t); meta.SnapshotType != "Diff" {
-				t.Fatalf("type = %q", meta.SnapshotType)
-			}
-		})
-	}
-	for _, class := range []string{"critical_protected", "public_platform"} {
-		for name, only := range map[string][]string{
-			"star":      {"*"},
-			"by id":     {"computer-s3"},
-			"all names": append([]string{"*", "computer-s3", "class:" + class}, list...),
-		} {
-			t.Run(class+" "+name, func(t *testing.T) {
-				d := newDiffFixture(t)
-				d.mgr.cfg.SnapshotDiffOnly = only
-				d.mgr.mu.Lock()
-				d.inst.Config.WarmnessClass = class
-				d.mgr.mu.Unlock()
-				meta, tl := d.hibernateAndRead(t)
-				if meta.SnapshotType != "Full" || tl.Snapshot.DiffRefused != diffRefusedProtected {
-					t.Fatalf("type=%q refused=%q, want Full and %q", meta.SnapshotType, tl.Snapshot.DiffRefused, diffRefusedProtected)
-				}
-				// A Diff written before the list changed is not loaded for it.
-				if r := d.mgr.diffSnapshotRefusalReason("", &SnapshotMeta{SnapshotType: snapshotTypeDiff, ColdOrigin: true, Config: VMConfig{VMID: "x", WarmnessClass: class}}); r != snapshotReasonDiffLeverOff {
-					t.Fatalf("load refusal = %q", r)
-				}
-			})
-		}
-	}
-}
-
 // Failure mode 3: a Diff create error falls back to Full inside the same
 // pause (one PATCH /vm), and no Diff file is left behind.
 func TestDiffSnapshotCreateErrorFallsBackToFullInSamePause(t *testing.T) {

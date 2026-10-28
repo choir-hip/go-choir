@@ -57,7 +57,6 @@ const (
 const (
 	diffRefusedOff           = "diff_off"
 	diffRefusedNotSelected   = "diff_not_selected"
-	diffRefusedProtected     = "diff_protected_class"
 	diffRefusedNotColdOrigin = "not_cold_origin"
 	diffRefusedNoPID         = "no_firecracker_pid"
 	diffRefusedFirecracker   = "firecracker_below_1_15"
@@ -84,9 +83,6 @@ func normalizeSnapshotTypeConfig(raw string) string {
 func (m *Manager) diffSnapshotRefusal(cfg VMConfig, coldOrigin bool, pid int, firecrackerBanner func() string) string {
 	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff {
 		return diffRefusedOff
-	}
-	if checkpointCadenceProtected(cfg.WarmnessClass) {
-		return diffRefusedProtected
 	}
 	if !selectsComputer(m.cfg.SnapshotDiffOnly, cfg) {
 		return diffRefusedNotSelected
@@ -288,7 +284,7 @@ func (m *Manager) diffSnapshotRefusalReason(dir string, meta *SnapshotMeta) stri
 	}
 	// The lever must still select the computer: turning it off (the
 	// rollback) cold boots a pending Diff instead of loading it (F4).
-	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff || checkpointCadenceProtected(meta.Config.WarmnessClass) || !selectsComputer(m.cfg.SnapshotDiffOnly, meta.Config) {
+	if normalizeSnapshotTypeConfig(m.cfg.SnapshotType) != SnapshotTypeConfigDiff || !selectsComputer(m.cfg.SnapshotDiffOnly, meta.Config) {
 		return snapshotReasonDiffLeverOff
 	}
 	info, err := os.Stat(filepath.Join(dir, snapshotMemName))
