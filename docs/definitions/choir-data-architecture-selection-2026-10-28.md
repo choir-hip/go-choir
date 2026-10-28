@@ -207,6 +207,18 @@ now:
     The census for the paper (captured base 5a241cb0), Store A and the
     corpus, by table and by object identity kind, with rates from traces;
     then a budget draft for the owner to edit.
+  census_procedure: >-
+    Host-locality inventory first pass done
+    (docs/evidence/host-locality-inventory-2026-10-28.md). The size census
+    of the paper runs as a planned job, not ad hoc: unpack base 5a241cb0
+    (26.5 GB) into a scratch directory on the root disk (needs about 27 GB
+    free; 83G free at 12:45 UTC); run the per-table and per-kind queries
+    in a systemd-run unit under MemoryMax 6G (host memory available was
+    about 10G with the paper running), Nice and idle IO, streaming
+    aggregates only (COUNT, SUM(LENGTH(...)) per table and per og_objects
+    identity kind); delete the scratch after. Start with d@e's base to
+    validate the queries; then the paper; Store A and the corpus only by
+    owner-approved read-only queries.
   parallel_track: >-
     Stop the bleeding with what exists, ahead of the control measurement:
     the kill -9 drill and ring walk for store.debounced_checkpoint; the
