@@ -100,6 +100,9 @@ func (s *rowSorter) Sum() (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// The open fd keeps the run readable; a crash during the merge
+		// leaves nothing behind.
+		os.Remove(name)
 		zr, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1))
 		if err != nil {
 			f.Close()
