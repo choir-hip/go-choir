@@ -106,16 +106,32 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 		_ = os.Remove(dstPath)
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: %w", vmID, err)
 	}
+	// The comparison runs while dst is still open: the descriptor pins the
+	// inode, so a newer file cannot reuse its number and pass for it.
 	discard := func() {
+		removeIfSame(dstPath, dstInfo)
 		_ = dst.Close()
 		_ = src.Close()
-		removeIfSame(dstPath, dstInfo)
 	}
 	if err := writeCapturePauseMarker(vmDir, capturePauseMarker{VMID: vmID, Socket: sock, PausedAt: time.Now().UTC()}); err != nil {
 		discard()
 		return DataImageCapture{}, fmt.Errorf("capture data image %s: pause marker: %w", vmID, err)
 	}
-	markerInfo, markerErr := os.Lstat(filepath.Join(vmDir, capturePauseMarkerName))
+	// Held open until the cleanup compares it, for the same reason as dst.
+	markerFile, markerErr := os.Open(filepath.Join(vmDir, capturePauseMarkerName))
+	var markerInfo os.FileInfo
+	if markerErr == nil {
+		if markerInfo, markerErr = markerFile.Stat(); markerErr != nil {
+			_ = markerFile.Close()
+			markerFile = nil
+		}
+	}
+	markerHandedOff := false
+	defer func() {
+		if markerFile != nil && !markerHandedOff {
+			_ = markerFile.Close()
+		}
+	}()
 
 	api := newFCAPIClient(sock)
 	clone := m.captureCloneFn
@@ -162,6 +178,7 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 		// lock and removes only the files this call made.
 		abandoned = true
 		cloneErr = fmt.Errorf("clone past its %s deadline; abandoned", deadline)
+		markerHandedOff = true
 		go func() {
 			<-done
 			unlock := m.lockVMOperation(vmID)
@@ -169,6 +186,9 @@ func (m *Manager) CaptureDataImage(vmID string) (DataImageCapture, error) {
 			if markerErr == nil && resumed.Load() {
 				removeIfSame(filepath.Join(vmDir, capturePauseMarkerName), markerInfo)
 				_ = syncDirectory(vmDir)
+			}
+			if markerFile != nil {
+				_ = markerFile.Close()
 			}
 			unlock()
 			log.Printf("vmmanager: data image capture %s: removed the abandoned clone", vmID)
