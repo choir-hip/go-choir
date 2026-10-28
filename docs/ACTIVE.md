@@ -8,23 +8,22 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
-## Active metamission (2026-10-26): consolidate and scale
+## Active goal (2026-10-28): data architecture selection
 
-**Goal:** [`definitions/choir-consolidate-and-scale-metamission-2026-10-26.md`](definitions/choir-consolidate-and-scale-metamission-2026-10-26.md)
-(`readiness: executable`; the owner ratified the spine at 12:1x, "New
-metamission looks good"). Owner, 2026-10-26: "this scalability work is all a
-priority, above other residuals even"; "We shouldn't need to be doing that
-manual memory management"; today is "retracing our steps, cleaning up
-residuals, and completing all the stuff that we started". Stations: L0 land
-what is in flight; D density (admission makes room by hibernating, snapshots
-survive deploys, primary computers hibernate in minutes, wake cost charged,
-diff snapshots, balloon, bench); X the self-development substrate (X1 the
-apply's checkpoint replay, X2 R10-5, X3 the U4 stack rebase, which the owner
-said to build: "we need to rebase not reject security updates. Security
-comes first"); W switches (built features on, failed experiments deleted);
-F finish what started (Library, related stories by shared entities, themes,
-apps, ingestion gate); R residuals; Z deferred (email, PR-12 step-up: "let's
-not build this yet", SR7, SR8, T1b to T3).
+**Goal:** [`definitions/choir-data-architecture-selection-2026-10-28.md`](definitions/choir-data-architecture-selection-2026-10-28.md)
+(`readiness: reviewed`, Devin 381 accept). Owner, 2026-10-28: "the data
+architecture remains the major bottleneck"; design for many hosts and about
+100,000x; memory spikes were the killer. Process: census (memory-capped
+planned job), owner budgets and hard gates (bounded peak memory first),
+candidates with the incumbent as control, tape-replay bake-off, differential
+shadow on d@e, ratify. Working hypothesis in
+[`design/data-rearchitecture-2026-10-28.md`](design/data-rearchitecture-2026-10-28.md).
+
+## Superseded (2026-10-28): consolidate and scale
+
+[`definitions/choir-consolidate-and-scale-metamission-2026-10-26.md`](definitions/choir-consolidate-and-scale-metamission-2026-10-26.md)
+dropped by the owner; its terminal receipt lists what landed and what
+carries forward.
 
 ## Settled (2026-10-26): self-development readiness, checkpoint_incomplete
 

@@ -242,7 +242,7 @@ boundaries:
     - settings read path (W1)
 
 now:
-  status: checkpoint_incomplete
+  status: superseded
   slice: >-
     Data architecture selection
     (docs/definitions/choir-data-architecture-selection-2026-10-28.md,
@@ -280,3 +280,16 @@ now:
     test computer and walk it from R0; take the per-table size census;
     measure the Store A squash per phase on a reflink copy under a 24G cap
     and quote SQL_CHECK_CMD; then finish R7 (trace out of the store).
+
+## Terminal receipt (2026-10-28 ~12:50 UTC): dropped, superseded
+
+The owner dropped this goal. Landed and deployed on its watch (staging
+0bf89ed84): S1, S2 (the paper's first base, live_captured seq 4526210),
+the witness spill, the capture inode pin, S3, S4, S5, S6, V, the switch
+registry, the squash quoting fix; the b@c 8 GiB start observed. Carried
+forward, not done: the paper's store_stalled and the Store A squash memory
+go to docs/definitions/choir-data-architecture-selection-2026-10-28.md
+(its parallel track: the kill -9 drill for store.debounced_checkpoint, the
+squash per-phase measurement, R7); the b@c citation redo waits for
+self-development (docs/problems/cite-promote-expands-all-citations-2026-10-28.md);
+stations D7, X4, W walks, F and R remain as recorded above for a later goal.

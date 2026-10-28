@@ -1383,13 +1383,25 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-data-architecture-selection-2026-10-28
+    title: Data architecture selection — census, owner budgets and hard gates, tape-replay bake-off against the incumbent, differential shadow, ratify
+    path: docs/definitions/choir-data-architecture-selection-2026-10-28.md
+    status: reviewed
+    kind: station
+    entrypoint: true
+    depends_on: [choir-consolidate-and-scale-metamission-2026-10-26]
+    enables: []
+    note: >-
+      Owner 2026-10-28: "the data architecture remains the major
+      bottleneck"; designed for many hosts and about 100,000x; bounded
+      peak memory first. Devin 381 accept.
   - id: choir-consolidate-and-scale-metamission-2026-10-26
     title: Consolidate and scale — computers start without a person making room, then every started thing finished or deleted, then the residuals
     path: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md
     ledger: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md
-    status: working
+    status: superseded  # 2026-10-28, dropped (owner); successor choir-data-architecture-selection-2026-10-28
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-selfdev-readiness-metamission-2026-10-24]
     enables: []
