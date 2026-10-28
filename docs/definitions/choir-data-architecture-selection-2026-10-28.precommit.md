@@ -337,6 +337,30 @@ compare roots from a headless replay on arm64 Linux first.
 **R0c-04 (portability, FP0).** d@e-class T_usable on leg N2: est 6 s,
 80% interval [2, 30]; on the Mac: est 20 s, [5, 90].
 
+## Records (round 0d, FP0, committed 2026-10-28 about 15:05 UTC; the commit is the witness)
+
+Agent density (owner note of 15:05 in the goal file). Measured on a
+d@e-class computer, Firecracker, 1 vCPU unless stated, replaying recorded
+desk turns with model calls stubbed at recorded latency.
+
+**R0d-01.** On today's incumbent, raising dispatch slots from 8 to 24 does
+not raise completed turns per minute by more than 20%: p = 0.75 (the store
+mutex and CPU saturate first). Settler: rule.
+
+**R0d-02.** On the leading refs+CAS candidate, the knee of the curve
+(where p99 turn latency doubles over its 4-desk value) is at est 24
+concurrent desks, 80% interval [10, 64], at 1 vCPU.
+
+**R0d-03.** At the knee, the binding limiter is CPU (not store wait, not
+memory): p = 0.60; store wait: p = 0.25; memory: p = 0.10; other: p = 0.05.
+
+**R0d-04.** Steady host RSS grows by est 15 MiB per added idle-waiting
+desk, [5, 50].
+
+Hard to measure: real model latency and provider limits dominate live
+throughput. Mitigation: stub model calls with recorded latency
+distributions, and report provider-bound throughput separately.
+
 ## Settlements
 
 **R0-06, settled confirmed by Devin's inventory (2026-10-28, independent of

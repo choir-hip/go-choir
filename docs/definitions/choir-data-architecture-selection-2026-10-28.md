@@ -511,3 +511,46 @@ values. It is on the portability critical path: a computer restored on
 another host, a Mac or a self-hosted box must get its secrets back by
 re-mint or transfer. Design research delegated to DeepSeek; review by
 Devin.
+
+## Owner note 2026-10-28 ~15:05 UTC: agent density, then multi-VM per user
+
+"We are working on data architecture to improve stability and
+perf/scalability. Dolt is a major bottleneck and probably not helpful
+actually. Our actual go rlm harness is quite lightweight, so we should be
+able to get high agent density in a single microvm (with Eng agents using
+capsules for isolation), and then we can increase our agent concurrency
+caps. Then we will expand to multi-vm per user as well (through 'choir in
+choir', where one vm controls others). But review this critically."
+
+FP0 critical review (evidence, not a decision):
+- Supported: the harness is light. Desk workers are about 17 MiB private
+  each and Choir's own retained heap about 50 MiB; the daemon's 690 MiB
+  private is mostly the store (docs/evidence/guest-memory-split-balloon-2026-10-14.md;
+  docs/problems/daemon-memory-res18-2026-10-22.md). Dolt's versioning is
+  read by no product path.
+- Not yet supported: that the engine is the concurrency bottleneck. The
+  measured limiter is the store's serialisation and read volume: the engine
+  mutex was held 70% of 122 s on the paper, about 89% of it reads
+  (GetObject 10,701 calls), and the design note's verdict on more slots is
+  "nothing: adds waiters" until the work is reduced
+  (docs/design/store-engine-concurrency-2026-10-21.md). SQLite also has one
+  writer; the win comes from fewer bytes, WAL readers that do not block,
+  and an in-process cache of immutable objects, which the refs+CAS model
+  makes safe. Raise caps only on a measured curve.
+- The likely next limiters at high density are not memory: 1 vCPU (the
+  owner's steady-state target) shared by context assembly, JSON, Yaegi
+  interpretation and GC (allocation churn about 225 MiB/s on the paper,
+  RES-18); provider rate limits and cost; the tape append as the single
+  serialisation point; and capsule spikes (Playwright). Density also means
+  shared fate: one OOM or crash closes every desk's work in that computer.
+- Choir in choir: if one VM controls others, each controlled VM should be
+  its own computer with its own tape and lease (the forked-computer rule:
+  results return by publication and adoption, never direct merge). One
+  computer spanning several VMs would reintroduce multiple writers on one
+  tape, which every gate here assumes away. Multi-VM is warranted for
+  isolation (untrusted code, separate trust domains), for work larger than
+  one VM's ceiling, and for parallel heavy capsules, not as the first lever
+  for agent count.
+- Consequence for the bake-off: add an agent-density curve on the leading
+  candidate (concurrent desks vs p99 turn latency, store wait, CPU, RSS),
+  with predictions in the ledger (round 0d).
