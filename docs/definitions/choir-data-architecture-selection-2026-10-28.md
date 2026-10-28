@@ -554,3 +554,25 @@ FP0 critical review (evidence, not a decision):
 - Consequence for the bake-off: add an agent-density curve on the leading
   candidate (concurrent desks vs p99 turn latency, store wait, CPU, RSS),
   with predictions in the ledger (round 0d).
+
+## Owner note 2026-10-28 ~15:35 UTC: CPU oversubscription, isolation tiers, desktop as the main host
+
+Owner, paraphrased with key phrases quoted: Choir in choir means "each VM
+is its own computer with its own desks, the whole shebang". CPU is the
+density limit, so "we also have to oversubscribe CPUs"; agent load spikes
+then idles, so a bigger host should carry a higher ratio because
+correlated spikes across users are less likely. Concern about cross-tenant
+CPU vulnerabilities; price by isolation: shared (default), dedicated CPU
+(an upcharge), dedicated machine (more), self-hosting (most). Also: the
+user's own Mac/Windows/Linux desktop as the main computer host, operated
+from their phone.
+
+FP0 facts read 2026-10-28 (Node B, read-only): Xeon E-2236, 6 cores / 12
+threads, SMT on; kernel reports l1tf, mds and mmio_stale_data "SMT
+vulnerable"; 3 Firecracker VMs running; load average 0.08, host CPU
+pressure 0. Already recorded: SMT stays on until outside users share the
+host (owner ruling DEC-06, checklist NET-07,
+docs/problems/host-kernel-216-days-unpatched-2026-10-15.md:138-150).
+Delegated: DeepSeek research on oversubscription mechanics, per-hypervisor
+differences, side-channel tiers and the desktop-host lease (evidence doc to
+follow).
