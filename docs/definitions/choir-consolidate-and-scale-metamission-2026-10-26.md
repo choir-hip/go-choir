@@ -242,38 +242,40 @@ boundaries:
     - settings read path (W1)
 
 now:
-  status: working
-  slice: D (D2 next-deploy proof, then D7), with L0 landing the bearer wake, rollback CLI and delete-dead lanes
+  status: checkpoint_incomplete
+  slice: >-
+    Data architecture (docs/design/data-rearchitecture-2026-10-28.md), step 2:
+    the kill -9 durability drill for store.debounced_checkpoint, then the
+    read-only size census.
   bridge_conjecture: >-
-    If admission can make room by hibernating idle computers and a wake
-    costs under a second, then the host serves many more computers than it
-    holds resident and no start falls to a person. It fails if wakes on a
-    loaded host exceed a second, or if a hibernated computer loses work.
+    If immutable content leaves the per-computer Dolt stores (tape as truth,
+    content-addressed host store, small authority store), then memory,
+    disk, contention and checkpoint cost fall by structure, and the host
+    serves more computers per byte. It fails if the census shows the
+    paper's bulk is authority state, not duplicated immutable content.
   belief:
     believed_state: >-
-      Updated 2026-10-26 22:5x. D1, D3a, D3, D4 landed; D5 Diff proved on
-      d@e and on for class:test; D6 observe on two computers; D2 on since
-      train 26b (22:46) but not yet proved across a deploy; X1 slices 1 to 3
-      landed, cadence on for d@e; U4 landed and proved on d@e, not yet on
-      for b@c (SD-01 manual promotion still applies there). Rollback has
-      never run on staging.
+      Updated 2026-10-28 12:2x UTC. Landed and deployed (staging
+      f7e215e54): S1, S2 (the paper's first base live_captured seq 4526210),
+      the witness spill, the capture inode pin, S3, S4, S5, S6, V, the
+      switch registry; b@c 8 GiB start observed. The paper's /health
+      reports store_stalled (online GC on the write connection, then
+      engineMu); the Store A squash OOM'd at 10G and was restored; the old
+      seed is retired (reversible).
     main_uncertainty: >-
-      Whether a snapshot taken on one release resumes in under a second
-      after the next deploy (D2 P1), and whether wakes stay under a second
-      with five computers on one host (D7).
+      What dominates the paper's 26.5 GB and Store A's 51 GB (the
+      tape-index event_json hypothesis is unmeasured), and which squash
+      phase holds more than 10G.
     next_observation: >-
-      d@e hibernates under D2, train 27 deploys, d@e wakes: snapshot outcome
-      snapshot, behind true, wake under 1000 ms, then a planned refresh
-      (journal: deploy refresh caller=retry-sweep planned_restart=true).
+      Per-table sizes of the paper's captured base and Store A, read-only.
   open_decision: >-
-    Continue this metamission with the next agent or open a new goal.
-    FP0's recommendation: continue it. D, X4, W, F and R are still open and
-    this file names their finish lines. Once the owner ratifies the
-    progressive delivery design (docs/design/progressive-delivery-2026-10-26.md),
-    W becomes that design's first station (default-on settings, cohorts,
-    automatic revert) instead of more one-off switch rulings.
+    Owner questions in docs/design/data-rearchitecture-2026-10-28.md: where
+    Dolt's versioning is load-bearing; dedup scope; Autoradio after step 4.
+  blocker: >-
+    Token budget (owner, 2026-10-28: tokens return tomorrow). b@c citation
+    redo waits for self-development with the owner's Claude Code delegate.
   next_action: >-
-    Land the bearer-wake fixes after review 339's round; prove rollback on
-    d@e with the new CLI verb; run the D2 next-deploy proof with train 27;
-    turn U4 on for b@c; land the delete-dead lane and the progressive
-    delivery design (design only); then D7.
+    Run the kill -9 drill for store.debounced_checkpoint on a throwaway
+    test computer and walk it from R0; take the per-table size census;
+    measure the Store A squash per phase on a reflink copy under a 24G cap
+    and quote SQL_CHECK_CMD; then finish R7 (trace out of the store).
