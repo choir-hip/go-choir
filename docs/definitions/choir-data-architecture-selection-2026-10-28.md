@@ -608,3 +608,30 @@ FP0 critical notes (design input, not decisions):
   sees the guest) and is out of scope unless confidential VMs make it safe.
 - Credits need a verifiable contribution: lease-held hours with receipts,
   not self-reported uptime.
+
+## Handoff 2026-10-28 16:12 UTC (FP0, token-limited)
+
+State: nothing executing; the owner holds execution ("I don't want to
+start yet"). All work this session is docs on main; worktree clean.
+
+Landed today (see the review ledger and amendments above): consensus
+verdict, research, revised 6-step roadmap, precommitment ledger (rounds
+0-0d, owner records O-01/O-02, vault V0-01..16), portability inventory and
+verification design, secrets vault design (accepted, Devin round 2 at
+208df8855), owner notes on density, choir-in-choir, CPU oversubscription,
+isolation tiers, desktop-as-host and self-hosting credits.
+
+In flight at handoff: DeepSeek research on CPU oversubscription, hypervisor
+CPU differences, side-channel tiers and the desktop-host lease. Prompt and
+output: `.agentic-consensus/data-arch/cpu-oversub/` (gitignored; answer
+lands in `answer.md`). Next agent: spot-check its sources, write
+docs/evidence/cpu-oversubscription-2026-10-28.md, copy its predictions to
+the ledger as DeepSeek's records.
+
+Queue (not started; owner holds execution): the census; the kill -9 drill
+for store.debounced_checkpoint; split goal files (tape schema v2, byte
+deletions, migration, hypervisor bake-off, progressive delivery,
+optimization pass, multi-host, Qdrant removal, the vault build sequence
+per the accepted design §slices, desktop host and failover); agent-density
+curve in the bake-off (round 0d). Owner yes needed to delete the
+temporary branch lane/fp0-desktop-req.
