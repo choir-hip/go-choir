@@ -301,3 +301,25 @@ plan:
   the census and bake-off: large media objects (content-addressed, by
   reference or cached), streaming reads, per-user preference state, user
   recordings (private until published), low-latency voice paths.
+- Desktop computers and drive sync (owner, 2026-10-28 ~13:50 UTC): Mac
+  app now, Windows and Linux apps later. Computers run as VMs on desktop
+  machines too, and VM state syncs from the cloud to the desktop and back.
+  On top of that, a cloud drive through the platform file-sync APIs
+  (macOS/iOS File Provider, the Windows Cloud Files API, a Linux
+  counterpart), so a file uploaded or downloaded from a desktop or phone
+  goes straight to the user's computer, whether Choir hosts it or the user
+  self-hosts the whole system. FP0 reading of the consequences for the
+  bake-off (to be confirmed by the census and the design, not decided
+  here): the portable unit is the semantic state (tape tail, missing CAS
+  objects, a small authority snapshot), never a VM memory snapshot, which
+  does not cross hypervisors (Virtualization.framework, Hyper-V, KVM) or
+  CPU architectures (arm64 desktops, x86 cloud); one active realization
+  per computer at a time, handed over by a lease; files are refs plus CAS
+  objects in one home (docs/problems/data-has-more-than-one-home-2026-10-24.md),
+  with the tape sequence as the sync anchor and the content hash as the
+  item version, which is the shape the File Provider and Cloud Files APIs
+  expect; the single-box self-hosted install must run the whole stack with
+  no hosted dependency (the object store interface keeps a local
+  directory backend). Open: whether a desktop may keep working offline
+  while the cloud copy also runs (a fork and merge question under the
+  doctrine's publication-only rule).
