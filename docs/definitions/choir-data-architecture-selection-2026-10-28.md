@@ -346,3 +346,27 @@ plan:
   one is saying I would use Choir, but not for that feature"): for now,
   one active realization per computer, handed over by a lease; the
   design must not preclude a later fork-and-reconcile feature.
+- Roadmap and bake-off scope (owner, 2026-10-28 ~14:10 UTC): "bring up
+  the cloud hypervisor stuff into the bake-off". Order of work:
+  1. This selection and the rearchitecture, landing on the single staging
+     host (Node B).
+  2. Progressive delivery systematized on the single host before feature
+     work ("the feature work really benefits from progressive delivery...
+     we're already doing some kind of progressive delivery. It's just not
+     systematized yet"; docs/design/progressive-delivery-2026-10-26.md).
+  3. Feature work and self-development, then Autoradio feature-complete on
+     staging.
+  4. Then the non-functional requirements: multiple hosts, zero-downtime
+     deploys, off-host durability and logging.
+  FP0 consequences: the bake-off adds a hypervisor axis (Firecracker vs
+  Cloud Hypervisor) measured on the leading data model, not as a full
+  factorial: idle and steady per-VM host RSS, hibernate write and wake
+  cost, virtio-mem plug and unplug on Node B, and whether guest page cache
+  can be returned (virtio-mem or balloon); this needs the Cloud Hypervisor
+  backend through the seam to test-ring level first (seam milestones M4-M6,
+  docs/reports/vm-hypervisor-seam-design-2026-10-21.md). Off-host receipts
+  are deferred to step 4: on the single host the acknowledged write is the
+  local fsynced tape append, but segments and the tape schema keep the
+  lease epoch and receipt fields, and the fork-ready event identity
+  (event_id, parents, branch_id), so step 4 and the offline feature are
+  additions, not migrations.
