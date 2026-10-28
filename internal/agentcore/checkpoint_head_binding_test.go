@@ -283,14 +283,8 @@ func TestCheckpointBindIdleComputerBindsCapturedHead(t *testing.T) {
 	fx := newCheckpointHeadFixture(t, computerID)
 	fx.appendDeskEvent(t, "desk-turn-before-checkpoint")
 	before := fx.liveHead(t)
-	probe, err := fx.rt.ReplayCompleteness(context.Background(), computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	probeWitness, err := selfdevprotocol.WitnessFromObservationSets(probe.Live, probe.Replay, probe.Result)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The bind's v2 witness is the tape replay's at the same head (S3).
+	probeWitness := tapeReplayV2Witness(t, fx)
 
 	report, err := fx.rt.BindCheckpointRestoreSet(context.Background(), computerID)
 	if err != nil {
@@ -303,8 +297,8 @@ func TestCheckpointBindIdleComputerBindsCapturedHead(t *testing.T) {
 	if request.AcceptedEventHead != before || request.IdempotencyKey != "owner-recovery-"+before {
 		t.Fatalf("idle checkpoint head/key = %s/%s, want %s", request.AcceptedEventHead, request.IdempotencyKey, before)
 	}
-	if request.VMLocalContentWitness.ContentRoot != probeWitness.ContentRoot || request.VMLocalContentWitness.DerivabilityDigest != probeWitness.DerivabilityDigest {
-		t.Fatal("idle checkpoint witness differs from the probe's witness at the same head")
+	if err := selfdevprotocol.WitnessContentMatches(probeWitness, request.VMLocalContentWitness); err != nil {
+		t.Fatalf("idle checkpoint witness differs from the tape replay's at the same head: %v", err)
 	}
 	if len(fx.platform.requests) != 1 {
 		t.Fatalf("idle checkpoint made %d publish requests, want 1", len(fx.platform.requests))
