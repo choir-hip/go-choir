@@ -2340,7 +2340,9 @@ in
         "DATA_DIR=${platformDoltDir}"
         "DATABASE=platform"
         "BACKUP_ROOT=${platformDoltSquashBackupRoot}"
-        "SQL_CHECK_CMD=${doltLivenessProbe} --sql 13306 platform"
+        # Quoted: systemd splits an unquoted Environment= value on spaces
+        # and drops the probe's arguments (2026-10-28 first run).
+        "\"SQL_CHECK_CMD=${doltLivenessProbe} --sql 13306 platform\""
         "SQUASH_NOTE=weekly"
       ];
     };
