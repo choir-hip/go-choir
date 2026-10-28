@@ -136,6 +136,9 @@ hard_gates (pass/fail before any scoring):
   - security: per-owner encryption and crypto-erase, least-privilege reads;
     zero trust between hosts (signed, hashed, verified data); public
     intelligence objects and private owner data in separate tiers
+  - data tier separable: shared stores (corpus, platform, the corpus
+    tier) reachable by address with authentication and TLS, artifacts by
+    an object-store API, so they can run on their own machines
   - scale-out: state shardable by computer; bytes content-addressed;
     every index rebuildable from the log; no single-host assumption in
     any interface; a computer moves between hosts without copying its
@@ -175,7 +178,13 @@ now:
     The incumbent control is measured after these land.
 
 plan:
-  1: census by table and identity kind, with rates (read-only)
+  1: census by table and identity kind, with rates (read-only); and an
+     inventory of host-locality assumptions (loopback-only DSNs and the
+     loopback-only internal token; artifacts read by path; FICLONE and
+     btrfs reflinks in capture and squash; same-filesystem renames),
+     because the shared stores move off the compute host (owner,
+     2026-10-28) while per-computer state stays local as a projection
+     whose durable truth (tape segments, snapshots) is shipped off-host
   2: budgets, hard gates and decision rule (owner edits; frozen),
      including growth targets for the corpus tier (objects, bytes and
      sources per day; query kinds and latency) at least ten times today
