@@ -336,3 +336,35 @@ The timer stays off until this has been watched once end to end.
   `internal/projectionbase` (checkpointd, corpusd, gateway, proxy,
   autoputer, vmctl) and, with `nix/node-b.nix`, activates the host OS: an
   ordinary deploy, subject to the Landing Loop and the busy-computer rules.
+
+## 2026-10-28 11:52 UTC: first supervised run, OOM-killed, restored (owner-approved GC)
+
+Owner approved a GC of platform-dolt (2026-10-28). Preconditions held (90G
+free, 16 GiB unallocated, no failed dirs, liveness timer live, no deploy in
+flight; staging on f7e215e54). Baseline: 120,335 commits, 1 branch, 0 tags,
+remotes, stashes; 50.89 GiB.
+
+Run 11:52:07 -> 11:57:12: preflight ok (store 53,370,912 KiB), timers and
+corpusd stopped, reflink backup `platform-dolt-squash-backups/platform-dolt.20261028T115258Z`,
+then the `platform-dolt-squash` binary was **OOM-killed at MemoryMax 10G**
+(peak 10,737,422,336; 16.4G read, 12.3G written, 2m20s CPU). `--finish`
+restored the backup; platform-dolt and corpusd active; vmctl NRestarts 0
+-> 0 (it rode out ~5 min of Store A down). The failed store is kept at
+`/var/lib/go-choir/platform-dolt.squash-failed-20261028T115707Z`.
+
+Findings:
+1. The squash's memory exceeds 10G on this store (120k commits, ~51 GB);
+   the 6-10 GB estimate came from the paper's 13.7k-commit store and does
+   not transfer. Which phase holds it (soft reset vs full GC) is not yet
+   known; the in-binary 5 GiB Go limit does not bound it (cgo or mmap).
+2. Unit bug: `SQL_CHECK_CMD=... --sql 13306 platform` is unquoted in the
+   nix Environment list, so systemd drops "--sql", "13306", "platform"
+   ("Invalid environment assignment, ignoring"). The post-squash query
+   check would run the probe with no arguments. Fix: quote the value.
+
+Settled hypothesis: a running vmctl keeps its guests through ~5 minutes of
+Store A down without a restart.
+
+Next (not done): find the memory holder on a reflink copy of the store
+under a high cap (systemd-run, not on the live unit), then size MemoryMax
+or bound the phase; fix the quoting; rerun.
