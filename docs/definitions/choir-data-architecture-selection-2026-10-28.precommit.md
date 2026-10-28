@@ -286,6 +286,11 @@ content-hash kinds carry most write load too, not only bytes: p(at least
 The tape-ack latency kill criterion (p99 over 100 ms) belongs to step 6
 (relay receipts) and gets its record in that goal.
 
+Timestamp correction (2026-10-28 14:42 UTC): the round headers' approximate
+times are off. By the git commits that witness them (rule 1), round 0 was
+committed at 14:34 UTC (e378c3a1d) and round 0b at 14:40 UTC (f8e65155e),
+not ~14:35 and ~14:55.
+
 ## Settlements
 
 None yet.
