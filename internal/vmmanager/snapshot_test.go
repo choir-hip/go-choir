@@ -183,6 +183,8 @@ type fakeGuest struct {
 	// guest without the route (404). cacheReturnBodies records each body.
 	cacheReturn       func(w http.ResponseWriter, r *http.Request)
 	cacheReturnBodies []string
+	// busyBody, when set, is the 409 answer's body (S5 busy hibernate).
+	busyBody map[string]any
 }
 
 func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -214,6 +216,10 @@ func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		if status == http.StatusOK {
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "prepared", "capability_expires_at": g.capExpiresAt, "guest_build": "test-build", "credential_resume": g.credentialResume})
+			return
+		}
+		if g.busyBody != nil {
+			_ = json.NewEncoder(w).Encode(g.busyBody)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "busy", "outcome": "busy", "running_runs": 1})
