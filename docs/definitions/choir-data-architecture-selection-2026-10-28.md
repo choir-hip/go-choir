@@ -624,9 +624,9 @@ isolation tiers, desktop-as-host and self-hosting credits.
 In flight at handoff: DeepSeek research on CPU oversubscription, hypervisor
 CPU differences, side-channel tiers and the desktop-host lease. Prompt and
 output: `.agentic-consensus/data-arch/cpu-oversub/` (gitignored; answer
-lands in `answer.md`). Next agent: spot-check its sources, write
-docs/evidence/cpu-oversubscription-2026-10-28.md, copy its predictions to
-the ledger as DeepSeek's records.
+lands in `answer.md`). Update 16:2x: it completed and is landed verbatim, unverified, at
+docs/evidence/cpu-oversubscription-2026-10-28.md. Next agent: spot-check its
+sources, then copy its predictions to the ledger as DeepSeek's records.
 
 Queue (not started; owner holds execution): the census; the kill -9 drill
 for store.debounced_checkpoint; split goal files (tape schema v2, byte
