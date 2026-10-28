@@ -336,3 +336,13 @@ plan:
   Firecracker-specific mechanism for correctness (snapshot format, diff
   snapshots, Firecracker's balloon behaviour); the hypervisor stays behind
   the VM seam, and the semantic checkpoint stays the portable unit.
+- Follow-ups (owner, 2026-10-28 ~14:00 UTC): the hypervisor deserves its
+  own deeper study ("maybe we need to think about the hypervisor more
+  deeply"), including what moving to Cloud Hypervisor costs (diff
+  snapshots, footprint, attack surface) against what it buys (live
+  migration, virtio-mem). Not a blocker here: no tier may depend on
+  hypervisor-specific mechanisms for correctness. Offline desktop work
+  while the cloud copy also runs is wanted eventually but not now ("no
+  one is saying I would use Choir, but not for that feature"): for now,
+  one active realization per computer, handed over by a lease; the
+  design must not preclude a later fork-and-reconcile feature.
