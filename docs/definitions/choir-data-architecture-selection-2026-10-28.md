@@ -19,7 +19,7 @@ review:
       stop-the-bleeding track kept in parallel.
 
 start:
-  source: main 0bf89ed84 (staging deployed), 2026-10-28 ~12:30 UTC
+  source: main 0bf89ed84, 2026-10-28 ~12:30 UTC (staging /health deployed_commit 0bf89ed84, observed by FP0 after CI success)
   worktrees: none in scope
   facts:
     - Three Dolt stores. Per-computer embedded (the paper 26.5 GB after
@@ -42,8 +42,9 @@ start:
       isolation was once settled for candidate worlds
       (dolt_branch_isolation_pinned_test.go); the current ontology uses
       capsules.
-    - Costs paid: commit-per-write history; Dolt GC memory (the Store A
-      squash OOM at 10G); the online GC on the write connection (81% of
+    - Costs paid: snapshot-commit history at a cadence
+      (defaultFinalizeCheckpointEvery = 100, internal/store/store.go); the
+      Store A squash OOM at 10G (phase unmeasured; parallel track); the online GC on the write connection (81% of
       the paper's non-200 health samples); compaction; a two-hour capture
       with about 72 GiB of clone growth.
 
@@ -83,7 +84,8 @@ homotopy:
   realism_axis: >-
     Fidelity of the workload a candidate is judged on: a frozen d@e tape
     window, then a sampled window of the paper's tape with extrapolation,
-    then the full paper tape for at most two survivors, then a shadow
+    then the paper's base 5a241cb0 plus its tape to a frozen head
+    (receipt key named) for at most two survivors, then a shadow
     projection on d@e (this goal ends at the d@e shadow differential;
     the migration is its own goal).
 
@@ -101,6 +103,7 @@ boundaries:
       writer per kind of data
     - the tape is never modified; candidates are projectors over it
     - no boot-path whole-store pass; no new boot-time resumer
+    - schema changes are online and rollback-safe (no offline migration)
   protected_surfaces: Texture canonical writes; tape and evidence;
     checkpoint and witness; self-development apply.
   excluded:
@@ -125,8 +128,10 @@ boundaries:
 hard_gates (pass/fail before any scoring):
   - durability: no acknowledged write lost under a kill -9 drill
   - crash semantics: the restart rules above hold
-  - witness: a substrate-neutral state hash that a replay reproduces,
-    with a bounded hold on the serving path (successor to witness v2)
+  - witness: a substrate-neutral state root computed in O(tables), not a
+    full scan; live and replay roots equal; judged by checkpointd; a
+    restore derives the same root; bounded hold on the serving path
+    (successor to witness v2)
   - Texture: a sole-writer story and a history read path with no Dolt
     coupling
   - self-development: a candidate-world isolation story (for example a
