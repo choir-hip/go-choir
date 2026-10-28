@@ -415,3 +415,28 @@ is byte-identical to the in-memory sort (existing witnesses still
 re-verify). Spill directory: `CHOIR_WITNESS_SPILL_DIR`, default the system
 temp dir. Killed-run leftovers: the loop mount was unmounted by FP0;
 `data.img.capture` (a reflink) stays for the next run's sweep.
+
+## 2026-10-28 07:45 UTC: what the killed capture left, and its disk cost
+
+Two findings from cleaning up after the 06:14 OOM kill.
+
+1. **The clone's compaction is expensive on disk.** The leftover
+   `data.img.capture` measured 98.9 GiB total, **71.9 GiB exclusive** (btrfs
+   `filesystem du`): the store compaction inside the clone rewrote most of
+   its blocks, so they no longer share with the paper's `data.img`. Root
+   free fell from 58G to 51G while it sat there, and the deploy of
+   203be57db refused at its 60 GiB headroom preflight (run 40647471944).
+   A capture of the paper needs about 75 GB free while it runs; the
+   capture's `-min-free-gib` floor should reflect the clone's growth, not
+   only the staged base.
+2. **The capture's loop mount leaked into service mount namespaces.**
+   go-choir-corpus-dolt, go-choir-platform-dolt and go-choir-corpusd
+   restarted while the capture was mounted; their private mount namespaces
+   copied the mount, so after the kill the loop device stayed attached and
+   the clone's blocks stayed allocated. The capture should mount in its own
+   private namespace (or with private propagation) so no other unit can
+   pin it.
+
+Action taken by FP0 (07:44): unmounted it inside those three namespaces
+(`nsenter -m umount`), confirmed no `capture-pause.json`, and removed the
+marker-less clone, as the capture's own start sweep would. Root free: 122G.
