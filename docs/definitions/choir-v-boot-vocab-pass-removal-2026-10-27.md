@@ -116,3 +116,10 @@ now:
 receipts:
   - 49ddad6a2, 8a5f6f605, 8f8b2a26c on main; CI 40575882836 success; staging build 8f8b2a26c at 20:24:50 UTC
   - paper console 2026-10-27 20:21:49 "startup phase=vocabulary-migration status=complete duration=0s"; mem_size_mib 8192
+
+## Observation 2026-10-28 12:16 UTC: b@c 8 GiB start observed
+
+computer-6c50d6e5 (VM candidate-fleet-bf04bbc7215c4bad1b47fb47) cold-booted
+at 12:02:00 with fc-config `mem_size_mib: 8192, vcpu_count: 4`; up 13 min,
+RSS 2.07 GB; the owner confirmed b@c.com live at about 12:10. The 8 GiB
+guest start is observed on the owner-facing computer.
