@@ -20,7 +20,7 @@ base's copy of the script. A pushed commit cannot gain trailers, and no
 later commit can cover a gate-file change, so every CI run on main fails
 until staging deploys past it, and staging deploys only on a green CI.
 
-## Repair (owner yes, 11:2x UTC)
+## Repair (owner yes, about 11:15 UTC)
 
 Devin review 377 approved the ci.yml change (findings low/nit: a `ring:
 "unknown"` entry skips the off-everywhere rule; an unresolvable `--base`
