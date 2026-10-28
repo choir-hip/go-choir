@@ -285,7 +285,7 @@ func installSeedCandidate(ctx context.Context, candidate SeedCandidate, scratchD
 	}
 	defer os.RemoveAll(stagingRoot)
 
-	if err := unpackVerified(candidate.BlobPath, stagingRoot, descriptor.BlobSHA256); err != nil {
+	if err := materializeLocalBase(artifactsRootOfBlob(candidate.BlobPath), candidate.BlobPath, descriptor.BlobSHA256, descriptor.Format, stagingRoot); err != nil {
 		return seedRefused(err)
 	}
 	if err := verifyInstalledHead(stagingRoot, "runtime.db", descriptor); err != nil {

@@ -11,7 +11,9 @@ package projectionbase
 //   - an older reader takes a parts base for a tar base (must fail closed
 //     on the descriptor, before any download);
 //   - the stream_seq lease untrust marker is lost in the parts form;
-//   - the switch defaults to the parts form;
+//   - a computer publishes the tar form (the parts form is the only
+//     publish form, owner 2026-10-28), or a tar base already published
+//     stops installing or seeding;
 //   - install over HTTP has no way to fetch a part (must refuse, not fall
 //     back);
 //   - GC deletes a part some on-disk manifest names.
@@ -60,18 +62,34 @@ func partCount(t *testing.T, artifactsRoot string) int {
 	return n
 }
 
-func TestParsePublishFormDefaultsToTar(t *testing.T) {
-	for _, raw := range []string{"", " ", "tar", "TAR"} {
-		got, err := ParsePublishForm(raw)
-		if err != nil || got != PublishFormTar {
-			t.Fatalf("ParsePublishForm(%q) = %q, %v; want tar", raw, got, err)
+// The rollout selector (owner 2026-10-28: progressive, on for at least one
+// computer) uses vmctl's *_ONLY token semantics. An empty list selects no
+// one; a class token needs a known class.
+func TestPartsSelectorTokens(t *testing.T) {
+	de := "computer-59c902c5d46caecc0a180a8557164e72"
+	only := ParseComputerSelector(de + ", class:test\n")
+	if len(only) != 2 {
+		t.Fatalf("parsed %q", only)
+	}
+	cases := []struct {
+		computer, class string
+		want            bool
+	}{
+		{de, "", true},
+		{"computer-other", "", false},
+		{"computer-other", "test", true},
+		{"computer-other", "primary", false},
+	}
+	for _, c := range cases {
+		if got := SelectsComputer(only, c.computer, c.class); got != c.want {
+			t.Fatalf("SelectsComputer(%s, %q) = %v, want %v", c.computer, c.class, got, c.want)
 		}
 	}
-	if got, err := ParsePublishForm("parts"); err != nil || got != PublishFormParts {
-		t.Fatalf("ParsePublishForm(parts) = %q, %v", got, err)
+	if SelectsComputer(nil, de, "test") || SelectsComputer(ParseComputerSelector("class:"), "x", "") {
+		t.Fatal("empty selector selected a computer")
 	}
-	if _, err := ParsePublishForm("zip"); err == nil {
-		t.Fatal("unknown publish form accepted")
+	if !SelectsComputer(ParseComputerSelector("*"), "anything", "") {
+		t.Fatal("* did not select")
 	}
 }
 
@@ -298,8 +316,7 @@ func TestRebuilderPartsFormPublishesInstallsAndSeeds(t *testing.T) {
 
 	rebuilder, err := NewRebuilder(Config{
 		ComputerID: computerID, TargetHead: digests[0], ArtifactsRoot: artifactsRoot,
-		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024,
-		PublishForm: PublishFormParts,
+		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024, PublishParts: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -372,8 +389,7 @@ func TestRebuilderPartsFormPublishesInstallsAndSeeds(t *testing.T) {
 	before := partCount(t, artifactsRoot)
 	next, err := NewRebuilder(Config{
 		ComputerID: computerID, TargetHead: digests[2], ArtifactsRoot: artifactsRoot,
-		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024,
-		PublishForm: PublishFormParts,
+		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024, PublishParts: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -409,15 +425,18 @@ func TestRebuilderPartsFormPublishesInstallsAndSeeds(t *testing.T) {
 	}
 }
 
-func TestRebuilderDefaultPublishFormIsTar(t *testing.T) {
+// A tar base published before S4 still installs (over a source that also
+// serves parts) and still seeds; the rebuild it seeds publishes parts.
+func TestTarBaseFromBeforeS4InstallsAndSeedsAPartsBase(t *testing.T) {
 	ctx := context.Background()
 	artifactsRoot := t.TempDir()
-	computerID := "computer-parts-default"
+	computerID := "computer-parts-legacy"
 	keyMaterial := make([]byte, 32)
 	for i := range keyMaterial {
 		keyMaterial[i] = byte(i + 13)
 	}
 	digests := buildInstallChain(t, artifactsRoot, computerID)
+	disk := NewDiskEventSource(artifactsRoot, computerID)
 	rebuilder, err := NewRebuilder(Config{
 		ComputerID: computerID, TargetHead: digests[0], ArtifactsRoot: artifactsRoot,
 		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024,
@@ -425,15 +444,42 @@ func TestRebuilderDefaultPublishFormIsTar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := rebuilder.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[0])))
+	legacy, err := rebuilder.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[0])))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Descriptor.Format != "" || result.Descriptor.VocabularyVersion != CurrentVocabularyVersion {
-		t.Fatalf("default publish is not the tar form: %q %q", result.Descriptor.Format, result.Descriptor.VocabularyVersion)
+	if legacy.Descriptor.Format != "" || legacy.Descriptor.VocabularyVersion != CurrentVocabularyVersion {
+		t.Fatalf("tar base: format %q vocabulary %q", legacy.Descriptor.Format, legacy.Descriptor.VocabularyVersion)
 	}
-	if _, err := os.Stat(filepath.Join(artifactsRoot, "sha256", PartsNamespace)); !os.IsNotExist(err) {
-		t.Fatalf("default publish wrote parts: %v", err)
+
+	blob, err := os.ReadFile(legacy.BlobPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := &partsBaseSource{fakeBaseSource: &fakeBaseSource{sequence: 1, baseRef: legacy.Descriptor.BlobSHA256, descriptor: legacy.Descriptor, blob: blob, disk: disk}, artifactsRoot: artifactsRoot}
+	if _, err := InstallVerifiedBase(ctx, src, t.TempDir(), "runtime.db", computerID, digests[2], 3); err != nil {
+		t.Fatalf("tar base install refused: %v", err)
+	}
+	if len(src.asked) != 0 {
+		t.Fatalf("tar base install fetched %d parts", len(src.asked))
+	}
+
+	next, err := NewRebuilder(Config{
+		ComputerID: computerID, TargetHead: digests[2], ArtifactsRoot: artifactsRoot,
+		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024, PublishParts: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, err := next.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[2])))
+	if err != nil {
+		t.Fatalf("rebuild seeded from a tar base: %v", err)
+	}
+	if seeded.Seed == nil || seeded.Seed.BlobSHA256 != legacy.Descriptor.BlobSHA256 {
+		t.Fatalf("rebuild did not seed from the tar base: %+v", seeded.Seed)
+	}
+	if seeded.Descriptor.Format != FormatParts {
+		t.Fatalf("rebuild after a tar seed published format %q, want parts", seeded.Descriptor.Format)
 	}
 }
 
@@ -456,5 +502,40 @@ func TestManifestPartsInBaseDirFailsClosedOnTornManifest(t *testing.T) {
 	}
 	if _, err := ManifestPartsInBaseDir(artifactsRoot); err == nil {
 		t.Fatal("torn manifest did not fail the parts live set")
+	}
+}
+
+// A captured epoch root publishes in the parts form when its computer is
+// selected: the descriptor carries both suffixes and the read-back runs
+// over the parts.
+func TestCapturedRootInThePartsForm(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-capture-parts"
+	root, mount, digests, _ := captureFixture(t, computerID, 5, 3)
+	result, err := PublishCapturedBase(ctx, CaptureConfig{
+		ComputerID: computerID, StoreMarker: filepath.Join(mount, "state"),
+		ArtifactsRoot: root, TapeHeadAt: tapeOf(digests), PublishParts: true,
+	})
+	if err != nil {
+		t.Fatalf("PublishCapturedBase parts: %v", err)
+	}
+	d := result.Descriptor
+	if d.Format != FormatParts || d.VocabularyVersion != CurrentVocabularyVersion+liveCapturedVocabularySuffix+partsVocabularySuffix || d.Origin != OriginLiveCaptured {
+		t.Fatalf("captured parts descriptor: format %q vocabulary %q origin %q", d.Format, d.VocabularyVersion, d.Origin)
+	}
+	if err := VerifyPublishedBase(ctx, root, d); err != nil {
+		t.Fatalf("captured parts base does not verify: %v", err)
+	}
+	dst := t.TempDir()
+	if err := materializeLocalBase(root, result.BlobPath, d.BlobSHA256, d.Format, dst); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(dst)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if strings.Join(names, ",") != "runtime.db,runtime.texture" {
+		t.Fatalf("parts base holds %v, want the store alone", names)
 	}
 }

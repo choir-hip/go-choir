@@ -1304,7 +1304,7 @@ in
         "PLATFORM_ARTIFACT_GC_INTERVAL=1h"
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
         "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
-        "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks,og"
+        "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,projection-base-parts,platform-update,file-cas-roots,file-cas-chunks,og"
         # Tape sweep (orphan pins, destroyed computers' tapes), on demand only
         # at /internal/platform/artifact-gc/tape. dry-run admits manifests and
         # refuses apply; flip to active only after a dry-run manifest has been
@@ -1379,6 +1379,13 @@ in
         "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+        # S4 (docs/problems/paper-never-checkpointed-2026-10-27.md): bases
+        # of these computers are published as a manifest plus
+        # content-addressed parts, so a publish writes only changed files.
+        # Progressive rollout (owner, 2026-10-28): d@e first. class:test is
+        # listed but selects nothing yet: checkpointd has no class source.
+        # Readers accept both forms everywhere. Rollback: drop the entry.
+        "CHECKPOINTD_BASE_PARTS_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
       ];
     };
   };

@@ -99,7 +99,7 @@ func VerifyPublishedBase(ctx context.Context, artifactsRoot string, d Descriptor
 		return fmt.Errorf("projection base: create read-back directory: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	if err := unpackVerified(blobPath, dir, d.BlobSHA256); err != nil {
+	if err := materializeLocalBase(artifactsRoot, blobPath, d.BlobSHA256, d.Format, dir); err != nil {
 		return err
 	}
 	if err := verifyInstalledHead(dir, "runtime.db", d); err != nil {

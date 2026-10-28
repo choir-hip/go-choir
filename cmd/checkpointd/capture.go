@@ -251,12 +251,14 @@ func runCaptureBase(ctx context.Context, deps captureDeps, opts captureOptions) 
 		}
 	}()
 	result, err := deps.publish(ctx, projectionbase.CaptureConfig{
+		// S4: the parts form for computers CHECKPOINTD_BASE_PARTS_ONLY names.
 		ComputerID:    opts.ComputerID,
 		StoreMarker:   filepath.Join(mountDir, "state"),
 		ArtifactsRoot: opts.ArtifactsRoot,
 		CaptureFS:     filepath.Dir(grant.CapturePath),
 		AboveSequence: watermark,
 		MinFreeBytes:  opts.MinFreeBytes,
+		PublishParts:  publishesParts(opts.ComputerID),
 		TapeHeadAt: func(ctx context.Context, computerID string, sequence uint64) (string, error) {
 			return deps.tapeHeadAt(ctx, grant.UserID, computerID, sequence)
 		},
