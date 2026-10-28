@@ -136,6 +136,32 @@ sources and its tape. So a captured base being wrong costs a rebuild, not
 data loss. That lowers S2's risk class for the paper. The ephemeral-sandbox
 idea is recorded, not pursued.
 
+## S2 d@e proof (FP0, 2026-10-28 00:28 UTC)
+
+S2 landed as 198f89515..0947393dd, plus 825adcbbf (a lease-guard
+exemption CI caught; the CI mirror now runs the store source guards for
+store, projectionbase and agentcore lanes). Reviews: 364, 365, 366
+(Devin and DeepSeek), 367 (Devin). CI 40607091576 passed, and staging is
+on 825adcbbf.
+
+`checkpointd capture-base -computer computer-59c902c5…` from the runbook
+command, 00:28:37 to 00:28:43 UTC:
+- vmctl: `paused 18ms (clone 18ms) clone_err=<nil> resume_err=<nil>`;
+  Firecracker `resume vm` took 173 us.
+- Kernel: `EXT4-fs (loop0): recovery complete`, then mounted, then
+  unmounted at 00:28:43.
+- The base is at sequence 12492, `d12049fcfbf1…`. The watermark readback
+  names it (`watermark_sequence 12492`).
+- The unit ran 6.7 s, used 4.6 s of CPU, peaked at 1017 MB of memory, read
+  949 MB and wrote 465 MB.
+- Cleanup: no `data.img.capture` or `capture-pause.json` in the VM
+  directory, and no mount under the capture root.
+- The guest was not restarted: its Firecracker process was 87810 s old
+  after the capture.
+
+Still open: d@e's next cadence base seeding from the root, with its
+`epoch_root`; and the paper run after the 04:00 compaction.
+
 ## Owner decision, epoch root (2026-10-27 21:5x UTC)
 
 Owner asked "Why do we need to replay?" and then said: "it's cool to have
