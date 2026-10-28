@@ -44,5 +44,14 @@ func witnessForWorkspace(ctx context.Context, computerID, canonicalHead, workspa
 	if err != nil {
 		return selfdevprotocol.VMLocalContentWitness{}, fmt.Errorf("projection base: compute content witness: %w", err)
 	}
+	// The Dolt table hashes, beside the rows, so a v2 (hash-only) checkpoint
+	// can be judged against this base (S3,
+	// docs/problems/paper-never-checkpointed-2026-10-27.md). The row witness's
+	// digests do not cover them, so a v1 reader is unchanged.
+	_, doltTables, err := extractor.WorkspaceTableHashes(ctx)
+	if err != nil {
+		return selfdevprotocol.VMLocalContentWitness{}, fmt.Errorf("projection base: Dolt table hashes: %w", err)
+	}
+	witness.DoltTables = doltTables
 	return witness, nil
 }

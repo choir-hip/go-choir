@@ -2,9 +2,11 @@ package agentcore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -31,6 +33,8 @@ type checkpointBinding struct {
 	// DepositMode is the live store's deposit mode at the hold, published with
 	// the checkpoint so the host's verdict can name residual R1.
 	DepositMode string
+	// WitnessDuration is how long the witness read held appends.
+	WitnessDuration time.Duration
 }
 
 // checkpointPublishFunc publishes a checkpoint for a binding. It runs while
@@ -89,15 +93,17 @@ func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest
 			if err != nil {
 				return fmt.Errorf("self-development checkpoint: read live event head: %w", err)
 			}
+			witnessStart := time.Now()
 			witness, err := rt.liveCheckpointWitness(ctx, head)
 			if err != nil {
 				return err
 			}
+			witnessDuration := time.Since(witnessStart)
 			depositMode, err := depositModeOf(rt.store)
 			if err != nil {
 				return fmt.Errorf("self-development checkpoint: %w", err)
 			}
-			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, DepositMode: depositMode}
+			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, DepositMode: depositMode, WitnessDuration: witnessDuration}
 			if pinBase {
 				if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
 					return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
@@ -125,17 +131,40 @@ func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest
 }
 
 // liveCheckpointWitness is the VM-local content witness of the live store at
-// head. The caller holds appends, so the live store is head's state.
+// head. The caller holds appends, so the live store is head's state. It is the
+// v2 hash-only witness: Dolt's per-table hashes, read through the live store's
+// own pool in one transaction, in milliseconds and without reading a row
+// (docs/problems/paper-never-checkpointed-2026-10-27.md, S3).
 func (rt *Runtime) liveCheckpointWitness(ctx context.Context, head *computerevent.Head) (selfdevprotocol.VMLocalContentWitness, error) {
 	var empty selfdevprotocol.VMLocalContentWitness
 	if head == nil || !computerevent.IsSHA256(head.CanonicalEventHead) {
 		return empty, fmt.Errorf("self-development checkpoint: live event head unavailable")
 	}
-	live, err := replayDoltStateExtractor(rt.store.TexturePath()).Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: replayCompletenessVersion(rt, head)})
-	if err != nil {
-		return empty, fmt.Errorf("self-development checkpoint: extract live Dolt state at sequence %d: %w", head.Sequence, err)
+	db := rt.store.DB()
+	if db == nil {
+		return empty, fmt.Errorf("self-development checkpoint: live store is not open")
 	}
-	return selfdevprotocol.WitnessFromObservationSet(live)
+	witness, err := doltHashWitness(ctx, db, replayDoltStateExtractor(rt.store.TexturePath()))
+	if err != nil {
+		return empty, fmt.Errorf("self-development checkpoint: read live Dolt table hashes at sequence %d: %w", head.Sequence, err)
+	}
+	return witness, nil
+}
+
+// doltHashWitness reads a v2 witness through db in one transaction, so every
+// table hash is of one root.
+func doltHashWitness(ctx context.Context, db *sql.DB, extractor computerversion.DoltStateExtractor) (selfdevprotocol.VMLocalContentWitness, error) {
+	var empty selfdevprotocol.VMLocalContentWitness
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return empty, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	doltHead, tables, err := extractor.TableHashes(ctx, tx)
+	if err != nil {
+		return empty, err
+	}
+	return selfdevprotocol.WitnessV2FromDoltHashes(extractor.Database, doltHead, tables, extractor.OperationalTables())
 }
 
 // pinAdvertisedBase retains the platform's advertised projection base under

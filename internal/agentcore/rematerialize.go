@@ -188,13 +188,20 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		version = replayCompletenessVersion(rt, head)
 	}
 	extractor := replayDoltStateExtractor(staged.TexturePath())
-	replay, err := extractor.Extract(ctx, computerversion.ExtractRequest{Name: "tape-rematerialize", Version: version})
-	if err != nil {
-		_ = staged.Close()
-		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: extract reconstructed witness: %w", err)
+	var got selfdevprotocol.VMLocalContentWitness
+	if checkpoint.Request.VMLocalContentWitness.IsDoltHashWitness() {
+		// A v2 checkpoint is matched by Dolt table hashes (S3).
+		got, err = doltHashWitness(ctx, staged.DB(), extractor)
+	} else {
+		var replay computerversion.ObservationSet
+		replay, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "tape-rematerialize", Version: version})
+		if err != nil {
+			_ = staged.Close()
+			_ = os.RemoveAll(stagingRoot)
+			return report, fmt.Errorf("rematerialize: extract reconstructed witness: %w", err)
+		}
+		got, err = selfdevprotocol.WitnessFromObservationSet(replay)
 	}
-	got, err := selfdevprotocol.WitnessFromObservationSet(replay)
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
