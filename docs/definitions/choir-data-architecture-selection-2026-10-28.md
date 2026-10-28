@@ -346,27 +346,50 @@ plan:
   one is saying I would use Choir, but not for that feature"): for now,
   one active realization per computer, handed over by a lease; the
   design must not preclude a later fork-and-reconcile feature.
-- Roadmap and bake-off scope (owner, 2026-10-28 ~14:10 UTC): "bring up
-  the cloud hypervisor stuff into the bake-off". Order of work:
-  1. This selection and the rearchitecture, landing on the single staging
-     host (Node B).
-  2. Progressive delivery systematized on the single host before feature
-     work ("the feature work really benefits from progressive delivery...
-     we're already doing some kind of progressive delivery. It's just not
-     systematized yet"; docs/design/progressive-delivery-2026-10-26.md).
-  3. Feature work and self-development, then Autoradio feature-complete on
-     staging.
-  4. Then the non-functional requirements: multiple hosts, zero-downtime
-     deploys, off-host durability and logging.
-  FP0 consequences: the bake-off adds a hypervisor axis (Firecracker vs
-  Cloud Hypervisor) measured on the leading data model, not as a full
-  factorial: idle and steady per-VM host RSS, hibernate write and wake
-  cost, virtio-mem plug and unplug on Node B, and whether guest page cache
-  can be returned (virtio-mem or balloon); this needs the Cloud Hypervisor
-  backend through the seam to test-ring level first (seam milestones M4-M6,
-  docs/reports/vm-hypervisor-seam-design-2026-10-21.md). Off-host receipts
-  are deferred to step 4: on the single host the acknowledged write is the
-  local fsynced tape append, but segments and the tape schema keep the
-  lease epoch and receipt fields, and the fork-ready event identity
-  (event_id, parents, branch_id), so step 4 and the offline feature are
-  additions, not migrations.
+- Roadmap and bake-off scope (owner, 2026-10-28 ~14:10 UTC, revised
+  ~14:30): "do the bake-off with Firecracker and then do another
+  hypervisor bake-off... more than just cloud hypervisor... different
+  configurations, like with Apple virtualization"; "in the bake-offs, we
+  should do some light optimization. And then after progressive delivery,
+  we should do another hard core optimization pass. And then we can do
+  feature development with self-dev." Not started: the owner holds
+  execution ("I don't want to start yet"). Order of work:
+  1. Data architecture bake-off on Firecracker (this goal), with light
+     optimization of the candidates, then the rearchitecture landing on the
+     single staging host (Node B).
+  2. Hypervisor bake-off (its own goal file, to be authored): Firecracker
+     and Cloud Hypervisor on the server, in their candidate configurations
+     (restore mode, private vs shared memory, virtio-mem vs balloon,
+     snapshot type), plus the desktop hypervisors the apps need (Apple
+     Virtualization.framework, Linux KVM, Windows HCS/WSL2), with light
+     optimization. Measures: per-VM host RSS idle and steady, hibernate
+     write and wake cost, virtio-mem plug and unplug on Node B, whether
+     guest page cache returns to the host, boot time, confinement, and
+     portability of the semantic checkpoint across them.
+  3. Progressive delivery systematized on the single host
+     (docs/design/progressive-delivery-2026-10-26.md): "the feature work
+     really benefits from progressive delivery... we're already doing some
+     kind of progressive delivery. It's just not systematized yet."
+  4. A hard-core optimization pass across the new architecture and
+     hypervisor, under progressive delivery.
+  5. Feature development with self-development, then Autoradio
+     feature-complete on staging.
+  6. The non-functional requirements: multiple hosts, zero-downtime
+     deploys, off-host durability (relay receipts) and logging.
+  Existing Cloud Hypervisor code, checked 2026-10-28: a backend package
+  (internal/vmmanager/vmbackend: Backend interface, Firecracker and Cloud
+  Hypervisor backends, conformance suite, no caller; CH cold boot, stop,
+  metrics, tap by fd, seccomp, raw images, Landlock opt-in, reboot
+  detection; no snapshot) at b6f27ded4 on origin/recovered/vmbackend-2026-10-14,
+  not on main; it predates the jailer, virtio-mem and FP8 (problem record
+  fe1ebc970). The seam design against current main is on
+  origin/lane/fp10-res20-ch-seam (docs/reports/vm-hypervisor-seam-design-2026-10-21.md,
+  milestones M0-M6). Step 2 starts by rebasing or porting that backend,
+  not writing a new one.
+  FP0 consequences for this goal: off-host receipts are deferred to step
+  6; on the single host the acknowledged write is the local fsynced tape
+  append, but segments and the tape schema keep the lease epoch and
+  receipt fields and the fork-ready event identity (event_id, parents,
+  branch_id), so step 6 and the offline feature are additions, not
+  migrations. No tier chosen in step 1 may depend on a Firecracker-specific
+  mechanism, so step 2 can change the hypervisor without reopening step 1.
