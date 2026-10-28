@@ -253,3 +253,40 @@ Scale path: single host (one SQLite, per-owner shards) → sharded multi-host (s
 - Overall recommendation: **high**, with the explicit fallback: if independent crypto review is unavailable, put OpenBao Transit behind the KMS seam before storing user secrets.
 
 **Key evidence anchors.** Code: `internal/keyescrow/keyescrow.go:71-111,115-227,228-270`; `internal/keyescrow/sealed.go:42-105,286-427`; `internal/computerevent/privacy.go:88-135,255-277`; `internal/computerevent/redaction.go:23-31,143-180`; `internal/filecas/filecas.go:159-240`; `internal/auth/handlers.go:1044-1098`; `internal/auth/store.go:566-633`; `internal/platform/signing.go:42-73`; `internal/platform/key_escrow.go:195-236`; `internal/platform/key_delivery.go:45-140`; `internal/platform/credential_envelope.go:23-39`; `internal/platform/event_capability.go:15-17`; `internal/hostauth/hostauth.go:47-67`; `internal/gateway/handlers.go:772-795`; `internal/gateway/anthropic_relay.go`; `internal/capsule/egress.go`; `nix/node-b.nix:126,149,163,186-187,386,465,543,623,952,1236,2598`; `nix/autoputer-vm.nix:622-626,701,750,961`; `nix/snapshot-vault.nix`. Docs: `docs/choir-doctrine.md:442`; `docs/problems/data-at-rest-snapshots-images-escrow-key-plaintext-2026-10-21.md`; `docs/problems/claude-delegate-key-sits-on-the-guest-disk-2026-10-21.md`; `docs/problems/data-has-more-than-one-home-2026-10-24.md:111-112,164`; `docs/evidence/portability-inventory-and-verification-2026-10-28.md`; `docs/provider-vault-and-model-policy-design-2026-10-22.md`; `docs/evidence/data-architecture-consensus-2026-10-28.md:83,135`; `docs/archive/choir-durable-substrate-2026-08-23.md` §3.2. Web: OpenBao repo/release/license, Transit, seal, migration; Vault LICENSE; Infisical LICENSE/self-hosting; SOPS/age/Tink/sealed-secrets repos; systemd-creds; CryptoKit Secure Enclave; Bitwarden whitepaper; 1Password white paper; KMIP 2.1.
+
+## Review round 1 (Devin, tier 2 seat 1), 2026-10-28
+
+Frozen at a9fa488a3, sha256 f2906084…; verdict **send_back**. About 35
+code citations verified; raw output in
+`.agentic-consensus/data-arch/vault-review/out/devin.out` (gitignored).
+
+Blocking, all accepted by FP0:
+- **B1.** The design never states where owner-ROOT unwrap runs. The
+  inherited code unwraps on the server and returns `root_key` at login
+  (internal/auth/handlers.go:999-1002, verified). FP0 note: that path is
+  dormant today (no browser code sends `unwrap_root`), and
+  docs/reports/account-recovery-protector-design-2026-10-20.md already
+  moves ROOT creation to the browser, so this is a design gap, not a live
+  disclosure; no new problem doc. Fix: unwrap only in owner clients, retire
+  the login `root_key` field, and state the invariant that the platform
+  reaches owner plaintext only through the custodian and deployment-KEK
+  wraps, which sovereign owners decline.
+- **B2.** The vault slice is ambiguous about where secret values live at a
+  source-dead restore. Fix: inline ciphertext (64 KiB or less) or a CAS ref
+  rides the slice; the host SQLite is a serving cache, not the authority.
+- **B3.** No falsifier for silent key loss. Add V0-15 (migration fidelity:
+  every existing wrap unwraps to an identical digest) and V0-16 (a recovery-
+  kit-only drill restores private artifacts with host key files deleted).
+
+Non-blocking, to fold into the revision: inventory misses (searxng.env as
+a third silent-generate secret; gateway-identities.json; Caddy/ACME and
+SSH host keys; the second internal-token copy; unit-env/); the JWT row is
+wrong (only authd holds the private key); citation fixes (appender.go:1196-1215;
+provider.go:3157-3210,863-874); lease use-count needs a broker seen-set;
+the deployment-KEK blast radius; plaintext vault metadata; the DEK keyring
+needs digest-to-key lookup; the platform trust root becomes provisioning
+config; split slice 4 so the computer-DEK owner protector lands earlier;
+per-purpose HKDF info strings and canonical AAD; the evidence class and
+heresy delta sections; the 7-day adoption rule for OpenBao 2.7.2.
+
+Next: DeepSeek revises (author seat), then Devin re-reviews one seat.
