@@ -40,6 +40,7 @@ var leaseSwapPoints = map[string]string{
 // its reason.
 var leaseSwapExempt = map[string]string{
 	"seed.go:installSeedCandidate":                "projectionbase: unpacks a base into the rebuilder's scratch dir; the publisher marks every blob it packs",
+	"capture.go:PublishCapturedBase":              "projectionbase: moves a captured store into staging inside the disposable capture clone, never a live path; the publisher marks every blob it packs",
 	"replay_completeness.go:openProbeReplayStore": "agentcore: a disposable replay-probe store in a temp dir",
 	"workspace_replace.go:ReplaceWorkspace":       "agentcore: delegates to Store.ReplaceWorkspace, which marks the fresh workspace",
 }
