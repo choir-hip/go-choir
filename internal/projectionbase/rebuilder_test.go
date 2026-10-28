@@ -157,6 +157,11 @@ func TestRebuilderReplaysAndPublishesBase(t *testing.T) {
 	if result.Descriptor.CanonicalHead != digest1 {
 		t.Fatalf("Descriptor CanonicalHead = %s, want %s", result.Descriptor.CanonicalHead, digest1)
 	}
+	// S3: a base records the Dolt table hashes beside its row witness, so the
+	// host can judge a v2 (hash-only) checkpoint against it.
+	if w := result.Descriptor.VMLocalContentWitness; len(w.DoltTables) == 0 || w.IsDoltHashWitness() {
+		t.Fatalf("base witness has no Dolt table hashes beside its rows: %+v", w)
+	}
 	if result.Descriptor.Sequence != 1 {
 		t.Fatalf("Descriptor Sequence = %d, want 1", result.Descriptor.Sequence)
 	}

@@ -154,6 +154,41 @@ func loader(ds ...projectionbase.Descriptor) func(string, string) (projectionbas
 	}
 }
 
+// S3: a v2 (hash-only) checkpoint is judged by the Dolt table hashes the
+// host's base records beside its rows; a base without them cannot judge it.
+func TestReconcileJudgesAV2CheckpointByDoltTableHashes(t *testing.T) {
+	dolt := func(c byte) string { return strings.Repeat(string(c), 32) }
+	hashesA := map[string]string{"agents": dolt('a'), "og_objects": dolt('b')}
+	hashesB := map[string]string{"agents": dolt('a'), "og_objects": dolt('c')}
+	v2, err := selfdevprotocol.WitnessV2FromDoltHashes("texture", "h", hashesA, []string{"computer_event_index"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name       string
+		base       map[string]string
+		wantStatus string
+		wantReason string
+	}{
+		{"same hashes", hashesA, selfdevprotocol.CheckpointVerdictVerified, ""},
+		{"a differing table", hashesB, selfdevprotocol.CheckpointVerdictNotDerivable, selfdevprotocol.VerdictReasonWitnessMismatch},
+		{"a base without hashes", nil, selfdevprotocol.CheckpointVerdictUnverified, selfdevprotocol.VerdictReasonWitnessVersion},
+	} {
+		store := newFakeVerdictStore()
+		head, blob := hex64('1'), hex64('9')
+		store.addPending("c1", hex64('d'), 100, head, v2, selfdevprotocol.DepositModeUpcast)
+		store.bases["c1/100"] = blob
+		baseWitness := witnessOf(tablesA)
+		baseWitness.DoltTables = tc.base
+		if err := reconcileCheckpointVerdicts(t.Context(), store, loader(descriptorOf("c1", 100, head, blob, baseWitness))); err != nil {
+			t.Fatal(err)
+		}
+		if v := store.resolved[hex64('d')]; v.Status != tc.wantStatus || v.Reason != tc.wantReason {
+			t.Fatalf("%s: verdict = %+v, want %s/%s", tc.name, v, tc.wantStatus, tc.wantReason)
+		}
+	}
+}
+
 var tablesA = map[string]string{"agents": hex64('a'), "og_objects": hex64('b')}
 var tablesB = map[string]string{"agents": hex64('a'), "og_objects": hex64('c')}
 
