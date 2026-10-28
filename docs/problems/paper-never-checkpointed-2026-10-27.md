@@ -393,3 +393,25 @@ to stand on.
    d@e.
 3. Then the ordinary cadence keeps it current; the same policy for every
    computer, with hibernation and snapshots on top (D2, D3).
+
+## 2026-10-28 06:14 UTC: the paper capture was OOM-killed in the witness
+
+The S2 capture of the paper (unit `choir-capture-base`, started 04:16) paused
+the paper for 989 ms, reflinked, mounted, and compacted the store (26.3 GB,
+done 04:32:39). It then spent about 1h40m in the content witness and was
+killed by the kernel OOM killer at 06:14:11 (`anon-rss:14512556kB`, cgroup
+`choir-capture-base.service`, limits MemoryHigh 14G / MemoryMax 16G). The
+paper itself was unaffected (Firecracker up throughout).
+
+Cause, from code: `computerversion.queryTableContentHash` collects every
+row of a table as a JSON string in one slice and sorts it before hashing. A
+table's memory therefore scales with its full JSON size; the paper's largest
+tables exceed host memory. Raising the cap does not fix this class (host has
+31 GB; the store grows).
+
+Fix (follows this record): an external merge sort. Sorted runs spill to zstd
+files past 512 MiB and are k-way merged into the same sha256, so the digest
+is byte-identical to the in-memory sort (existing witnesses still
+re-verify). Spill directory: `CHOIR_WITNESS_SPILL_DIR`, default the system
+temp dir. Killed-run leftovers: the loop mount was unmounted by FP0;
+`data.img.capture` (a reflink) stays for the next run's sweep.
