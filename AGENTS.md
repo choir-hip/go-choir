@@ -270,6 +270,14 @@ change that durably cuts disk, memory, CPU or write volume may take a
 planned restart, a cold boot or a slow window on any computer, the paper
 included, as long as it has its proof and its rollback.
 
+**On by default, for every computer** (owner, 2026-10-28: "i dont like
+these 'off by default' things. the whole point is to turn these on. we dont
+have users to support. if the implementation is buggy, then we should fix
+it. on by default for *"). A new mechanism ships enabled for `*`, protected
+computers included, with no off switch. A correctness refusal (crash,
+self-development apply, live capsule, release skew) is not a switch and
+stays. A bug is fixed, not hidden behind a flag.
+
 **Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
 optimizing a metric, and investigations; Opus for design and open-ended
 work.
