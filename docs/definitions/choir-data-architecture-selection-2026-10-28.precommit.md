@@ -310,11 +310,56 @@ whose outcome falls on the favourable side of FP0's point (smaller cost,
 higher pass rate, sooner). The owner's direction is supported if that
 share is above one half.
 
+## Records (round 0c, committed 2026-10-28 about 14:54 UTC; the commit is the witness)
+
+**R0c-01 (revises R0b-10, after DeepSeek found it inconsistent with R0-15).**
+R0b-10 (tail under 1 GiB and under 5 s of replay) and R0-15 (harness replay
+about 2,500 events per second) cannot both hold unless the tail is about
+12,000 events or the restore path is a bulk loader faster than the harness.
+FP0 prediction: the design that satisfies both sets the checkpoint cadence
+so the tail stays at or under 20,000 events and restores through a bulk
+loader; p(a d@e-class restore replays its tail in under 5 s at the cadence
+the winning candidate proposes) = 0.65 (down from 0.75). Settler: rule,
+from the restore receipt.
+
+**R0c-02 (portability, FP0).** Source-dead restore on a second NixOS host
+(leg N2) needs zero bytes from the source host on its first attempt after
+the blockers named in docs/evidence/portability-inventory-and-verification-2026-10-28.md
+are fixed: p = 0.55. Falsifier: any byte from the source host, which is
+re-architecture trigger A4. Settler: rule, from edge byte accounting.
+
+**R0c-03 (portability, FP0).** The same tape and release revision give
+identical per-table roots on arm64 (Mac) and x86 on the first comparison:
+p = 0.60. Falsifier: any differing root (trigger A5). Hard to measure: the
+Mac leg can fail for unrelated reasons (signing, entitlements). Mitigation:
+compare roots from a headless replay on arm64 Linux first.
+
+**R0c-04 (portability, FP0).** d@e-class T_usable on leg N2: est 6 s,
+80% interval [2, 30]; on the Mac: est 20 s, [5, 90].
+
 ## Settlements
 
-None yet.
+**R0-06, settled confirmed by Devin's inventory (2026-10-28, independent of
+FP0; evidence docs/evidence/portability-inventory-and-verification-2026-10-28.md).**
+Off-tape authority beyond agent_evidence and co_super_slots was found:
+state.apply-attempts (a crash-loop bound), actor.db snapshots and poison
+counters (volatile), the files tree's model policy and prompt overrides,
+image blobs, and the privacy key's single copy. FP0's p = 0.70; Brier
+0.09. FP0 self-score: confirmed. Learning entry below.
 
 ## Learning ledger
 
-Empty. Entries record: the record id, the discrepancy, the assumption that
-failed, what changes, and the later record that checks the change.
+Entries record: the record id, the discrepancy, the assumption that failed,
+what changes, and the later record that checks the change.
+
+- **R0-06 (confirmed, not a surprise in direction, a surprise in kind).**
+  FP0 expected another table; the larger findings were not tables at all:
+  a key with a single copy, files and config in a second home, and counters
+  that bound crash loops. Assumption weakened: "off-tape state lives in the
+  store". Change: inventories search files, keys and counters, not only
+  tables. Checked by: the portable-unit export set (blocker 3) must list
+  every non-table item, and leg N2's edge byte accounting (R0c-02).
+- **R0b-10 vs R0-15 (inconsistent pair, caught by DeepSeek before any
+  evidence).** Assumption failed: FP0 predicted restore speed and replay
+  throughput independently. Change: predictions that share a mechanism are
+  checked against each other at commit. Revised by R0c-01.
