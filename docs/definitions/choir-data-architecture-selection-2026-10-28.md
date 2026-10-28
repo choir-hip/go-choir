@@ -2,7 +2,7 @@
 
 ```yaml
 definition_version: throughline/1
-readiness: drafted
+readiness: reviewed
 review:
   - round: 1
     reviewer: Devin + DeepSeek v4.1 flash (bunch379)
@@ -17,6 +17,26 @@ review:
       census by identity kind and rates; pre-registered decision rule;
       receipt corrections; dedup and multi-host boundaries; the
       stop-the-bleeding track kept in parallel.
+  - round: 2
+    reviewer: Devin (bunch380)
+    frozen_ref: 2c5944649
+    verdict: send_back
+    evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch380
+    adjudication: >-
+      Adopted in 33d9771ed: online rollback-safe schema gate; cadence
+      commits, not per write; squash phase unmeasured; deploy receipt;
+      frozen base plus tail; witness gate detail.
+  - round: 3
+    reviewer: Devin (bunch381)
+    frozen_ref: 33d9771ed (includes the owner's multi-host, off-host and
+      scale-horizon additions)
+    verdict: accept
+    evidence_ref: /Users/wiz/Dev/lanes/_runs/bunch381
+    adjudication: >-
+      Two nits applied (this ledger; the store list). The owner's
+      bounded-peak-memory gate (c9449418a) landed after the frozen ref; it
+      tightens a gate and is owner-authored; a one-seat check rides the
+      next review.
 
 start:
   source: main 0bf89ed84, 2026-10-28 ~12:30 UTC (staging /health deployed_commit 0bf89ed84, observed by FP0 after CI success)
@@ -152,8 +172,8 @@ hard_gates (pass/fail before any scoring):
   - security: per-owner encryption and crypto-erase, least-privilege reads;
     zero trust between hosts (signed, hashed, verified data); public
     intelligence objects and private owner data in separate tiers
-  - data tier separable: shared stores (corpus, platform, the corpus
-    tier) reachable by address with authentication and TLS, artifacts by
+  - data tier separable: shared stores (the corpus server, platform Store A,
+    and the new corpus tier) reachable by address with authentication and TLS, artifacts by
     an object-store API, so they can run on their own machines
   - scale-out: state shardable by computer; bytes content-addressed;
     every index rebuildable from the log; no single-host assumption in
@@ -168,7 +188,7 @@ decision_rule (pre-registered before the bake-off):
     frozen with the tape head and receipt key before any run
 
 now:
-  status: drafted
+  status: reviewed
   conjecture:
     claim: >-
       Most of the stores' bytes and load are immutable content
