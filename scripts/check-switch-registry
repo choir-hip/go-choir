@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""The switch-registry lint (docs/design/progressive-delivery-2026-10-26.md,
+section 7 flag-debt rule, slice S1). Tooling only (yellow); it reads files and
+changes nothing.
+
+switches/registry.yaml declares every switch (JSON-compatible YAML, so Go and
+bash read it as plain JSON). This lint fails CI when:
+
+  1. a switch-like setting has no registry entry: in nix/node-b.nix (an env
+     string whose name ends _ONLY/_COMPUTERS/_VMS/_REQUESTERS/_ECOSYSTEMS/_MODE
+     or whose value is on/off/observe/enforce/active/shadow/true/false/0/1; a
+     top-level let-binding of the same kinds), in nix/autoputer-vm.nix (a guest
+     env with such a value), or a Setting key in internal/store/*.go;
+  2. a registered name no longer exists in the source it points at (the `where`
+     rot of design 9.7);
+  3. a switch would land off for every computer (an empty selector list, or an
+     off/false value) without a dated `grandfathered_off_until` walk-by date, a
+     `retire: "delete"` verdict, or (life: ops only) an `off_ok` reason. This is
+     the AGENTS.md rule "on, never off everywhere; widen by ring";
+  4. an entry's expiry has passed: a warning from the day of expiry; a failure
+     once it is more than policy.expiry_grace_days past AND the change adds a
+     new switch relative to --base-registry/--base (design 7.5: a debt never
+     blocks the fix for itself). --strict-expiry fails on any expiry at all;
+  5. an entry is malformed (required fields, class, rings above the auto
+     ceiling without confirm: human, duplicate ids, ops review_by beyond 90
+     days, live release-switch count above policy.release_cap_baseline).
+
+Registered `ring` that differs from the ring read from the nix value is a
+warning (registry drift), not a failure: declaration is git, state is the host
+(design 4.2); until the controller exists the nix value is the state.
+
+  scripts/check-switch-registry                run the lint (exit 0 clean, 1 fail)
+  scripts/check-switch-registry --report       print each switch, its ring read
+                                               from nix, and the off-everywhere list
+  options: --root DIR  --today YYYY-MM-DD  --base REF  --base-registry FILE
+           --strict-expiry
+Self-test: python3 -I scripts/selftest-switch-registry
+"""
+import argparse
+import datetime
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+
+KINDS = {"host_selector", "host_env", "let_binding", "guest_env", "setting", "ci_env", "code"}
+LIVES = {"release", "ops", "permission", "experiment"}
+CLASSES = {"green", "yellow", "orange", "red", "black"}
+RINGS = ["R0", "R1", "R2", "R3", "R4", "R5"]
+REQUIRED = ["id", "kind", "life", "owner", "class", "surface", "introduced", "ladder",
+            "target_ring", "ring", "retire"]
+SELECTOR_SUFFIX = ("_ONLY", "_COMPUTERS", "_VMS", "_REQUESTERS", "_ECOSYSTEMS")
+SWITCH_SUFFIX = SELECTOR_SUFFIX + ("_MODE",)
+MODE_VALUES = {"on", "off", "observe", "enforce", "active", "shadow", "true", "false", "0", "1"}
+LET_SUFFIX = ("VMs", "Only", "Computers", "Requesters", "Mode", "Stage", "Enabled", "Retain",
+              "Check", "Caps", "Scheduler")
+OFF_VALUES = {"", "off", "false", "0"}
+PROOF_COMPUTER = "computer-59c902c5"  # d@e, ring R0
+CLASS_RING = {"class:test": "R1", "class:premium_always_on": "R2", "class:primary": "R3",
+              "class:public_platform": "R4", "class:critical_protected": "R5"}
+
+ENV_RE = re.compile(r'^\s*"([A-Z][A-Z0-9_]*)=(.*?)"\s*(?:#.*)?$')
+ATTR_RE = re.compile(r'^\s+([A-Z][A-Z0-9_]*)\s*=\s*"([^"$]*)";')
+LET_RE = re.compile(r'^  ([a-z][A-Za-z0-9]*)\s*=\s*(true|false|"[^"$]*");')
+SETTING_RE = re.compile(r'^\s*(?:const\s+)?Setting\w+\s*=\s*"([a-z0-9_]+\.[a-z0-9_]+)"')
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def is_selector_name(name, value=""):
+    return name.endswith(SELECTOR_SUFFIX) or "class:" in value or "computer-" in value or value.startswith("vm-")
+
+
+def detect_nix(text, guest):
+    """Return {name: value} for switch-like settings in a nix file."""
+    found = {}
+    for line in text.splitlines():
+        m = ENV_RE.match(line) if not guest else None
+        if m:
+            name, val = m.group(1), m.group(2)
+            if "${" in val:
+                continue
+            if name.endswith(SWITCH_SUFFIX) or val in MODE_VALUES:
+                found[name] = val
+            continue
+        m = ATTR_RE.match(line)
+        if m and (guest or True):
+            name, val = m.group(1), m.group(2)
+            if name.endswith(SWITCH_SUFFIX) or val in MODE_VALUES:
+                found[name] = val
+            continue
+        if not guest:
+            m = LET_RE.match(line)
+            if m:
+                name, val = m.group(1), m.group(2).strip('"')
+                if val in MODE_VALUES or val == "locked" or name.endswith(LET_SUFFIX):
+                    found[name] = val
+    return found
+
+
+def ring_of(name, value):
+    """Read the ring set from a nix value: 'none', 'all', or a comma list like 'R0,R1,R3'."""
+    value = value.strip()
+    if is_selector_name(name, value):
+        toks = [t for t in re.split(r"[,\s]+", value) if t]
+        if not toks:
+            return "none"
+        if "*" in toks:
+            return "all"
+        rings, ids = set(), 0
+        for t in toks:
+            if t in CLASS_RING:
+                rings.add(CLASS_RING[t])
+            elif t.startswith(PROOF_COMPUTER):
+                rings.add("R0")
+            else:
+                ids += 1
+        out = ",".join(sorted(rings))
+        if ids:
+            out = (out + "," if out else "") + "ids:%d" % ids
+        return out
+    return "none" if value in OFF_VALUES else "all"
+
+
+def parse_date(s):
+    return datetime.date.fromisoformat(str(s)[:10])
+
+
+def load_registry(text):
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        try:
+            import yaml  # type: ignore
+        except ImportError:
+            raise SystemExit("registry is not JSON (%s) and PyYAML is not installed" % e)
+        return yaml.safe_load(text)
+
+
+def names_of(e):
+    return list(e.get("nix") or []), list(e.get("settings") or []), list(e.get("ci") or [])
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    ap.add_argument("--today", default=None)
+    ap.add_argument("--base", default=None, help="git ref whose switches/registry.yaml is the base")
+    ap.add_argument("--base-registry", default=None, help="file holding the base registry")
+    ap.add_argument("--strict-expiry", action="store_true")
+    ap.add_argument("--report", action="store_true")
+    args = ap.parse_args()
+    root = os.path.abspath(args.root)
+    today = parse_date(args.today) if args.today else datetime.date.today()
+
+    errors, warnings = [], []
+    reg_text = read(os.path.join(root, "switches/registry.yaml"))
+    if reg_text is None:
+        print("FAIL: switches/registry.yaml is missing")
+        return 1
+    reg = load_registry(reg_text)
+    policy = reg.get("policy") or {}
+    entries = reg.get("switches") or []
+    grace = int(policy.get("expiry_grace_days", 7))
+    ceiling = policy.get("auto_ceiling", "R4")
+    cap = policy.get("release_cap_baseline")
+
+    # --- sources ---
+    ci_text = read(os.path.join(root, ".github/workflows/ci.yml")) or ""
+    node = read(os.path.join(root, "nix/node-b.nix")) or ""
+    guest = read(os.path.join(root, "nix/autoputer-vm.nix")) or ""
+    node_found = detect_nix(node, guest=False)
+    guest_found = detect_nix(guest, guest=True)
+    settings_found = set()
+    settings_text = ""
+    for p in sorted(glob.glob(os.path.join(root, "internal/store/*.go"))):
+        if p.endswith("_test.go"):
+            continue
+        t = read(p) or ""
+        settings_text += t
+        for line in t.splitlines():
+            m = SETTING_RE.match(line)
+            if m:
+                settings_found.add(m.group(1))
+
+    registered_nix, registered_settings = set(), set()
+    seen_ids = set()
+    for e in entries:
+        eid = e.get("id", "<no id>")
+        for f in REQUIRED:
+            if f not in e:
+                errors.append("%s: missing required field %r" % (eid, f))
+        if eid in seen_ids:
+            errors.append("%s: duplicate id" % eid)
+        seen_ids.add(eid)
+        n, s, c = names_of(e)
+        if not (n or s or c) and e.get("kind") != "code":
+            errors.append("%s: names no nix, settings or ci entry" % eid)
+        registered_nix.update(n)
+        registered_settings.update(s)
+        if e.get("kind") not in KINDS and "kind" in e:
+            errors.append("%s: kind %r not in %s" % (eid, e["kind"], sorted(KINDS)))
+        if e.get("life") not in LIVES and "life" in e:
+            errors.append("%s: life %r not in %s" % (eid, e["life"], sorted(LIVES)))
+        if e.get("class") not in CLASSES and "class" in e:
+            errors.append("%s: class %r not in %s" % (eid, e["class"], sorted(CLASSES)))
+        if e.get("class") == "black" and not e.get("hold"):
+            errors.append("%s: black class never enters the auto path; it needs hold" % eid)
+        tr = e.get("target_ring")
+        if tr is not None and tr != "none" and tr not in RINGS:
+            errors.append("%s: target_ring %r invalid" % (eid, tr))
+        elif tr in RINGS and RINGS.index(tr) > RINGS.index(ceiling) and e.get("confirm") != "human":
+            errors.append("%s: target_ring %s is beyond the auto ceiling %s; it needs confirm: human"
+                          % (eid, tr, ceiling))
+        if not (e.get("promote") or e.get("hold") or e.get("blocked_by") or e.get("gate")
+                or e.get("retire") == "delete"):
+            errors.append("%s: no promote bound (or hold, blocked_by, gate, retire: delete)" % eid)
+        life = e.get("life")
+        if life in ("release", "experiment") and "expires" not in e and e.get("retire") != "delete":
+            errors.append("%s: life %s needs expires" % (eid, life))
+        if life in ("ops", "permission"):
+            rb = e.get("review_by")
+            if not rb:
+                errors.append("%s: life %s needs review_by (at most 90 days out)" % (eid, life))
+            else:
+                try:
+                    if (parse_date(rb) - today).days > 90:
+                        errors.append("%s: review_by %s is more than 90 days out" % (eid, rb))
+                except ValueError:
+                    errors.append("%s: review_by %r is not a date" % (eid, rb))
+        for key in ("introduced", "expires", "grandfathered_off_until"):
+            if key in e:
+                try:
+                    parse_date(e[key])
+                except ValueError:
+                    errors.append("%s: %s %r is not a date" % (eid, key, e[key]))
+
+    # 1. unregistered
+    for name in sorted(node_found):
+        if name not in registered_nix:
+            errors.append("unregistered switch in nix/node-b.nix: %s=%s (add an entry to switches/registry.yaml)"
+                          % (name, node_found[name]))
+    for name in sorted(guest_found):
+        if name not in registered_nix:
+            errors.append("unregistered switch in nix/autoputer-vm.nix: %s=%s (add an entry to switches/registry.yaml)"
+                          % (name, guest_found[name]))
+    for key in sorted(settings_found):
+        if key not in registered_settings:
+            errors.append("unregistered computer setting: %s (add an entry to switches/registry.yaml)" % key)
+
+    # 2. stale names
+    for e in entries:
+        for name in e.get("nix") or []:
+            if not re.search(r"(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])" % re.escape(name), node + "\n" + guest):
+                errors.append("%s: registered name %s no longer exists in nix/ (delete the entry or fix it)"
+                              % (e.get("id"), name))
+        for name in e.get("ci") or []:
+            if ci_text and name not in ci_text:
+                errors.append("%s: registered ci name %s no longer exists in .github/workflows/ci.yml"
+                              % (e.get("id"), name))
+        for key in e.get("settings") or []:
+            if key not in settings_found and ('"%s"' % key) not in settings_text:
+                errors.append("%s: registered setting %s no longer exists in internal/store (delete the entry)"
+                              % (e.get("id"), key))
+
+    # 3. off for every computer; ring drift
+    all_values = dict(node_found)
+    all_values.update(guest_found)
+    off_list = []
+    for e in entries:
+        n, _, c = names_of(e)
+        primary, value = None, None
+        if n:
+            primary = n[0]
+            value = all_values.get(primary)
+            if value is None:
+                value = _value_of(primary, node + "\n" + guest)
+        elif c and ci_text:
+            primary = c[0]
+            m = re.search(r"^\s*%s:\s*'?([^'\n#]*)'?" % re.escape(primary), ci_text, re.M)
+            value = m.group(1).strip() if m else None
+        elif e.get("ring") == "none":
+            # a switch with no nix value (a per-computer setting, a code default): the
+            # registry's own claim is all there is to read
+            primary, value = e.get("id"), ""
+        if value is None:
+            continue
+        derived = ring_of(primary, value) if (n or c) else "none"
+        e["_derived_ring"] = derived
+        if e.get("ring") not in (None, derived):
+            warnings.append("%s: registered ring %r but %s reads %r in nix (registry drift)"
+                            % (e.get("id"), e.get("ring"), primary, derived))
+        if derived == "none":
+            off_list.append(e)
+            if e.get("retire") == "delete":
+                continue
+            if e.get("life") in ("ops", "permission") and e.get("off_ok"):
+                continue
+            gf = e.get("grandfathered_off_until")
+            if gf:
+                try:
+                    if parse_date(gf) < today:
+                        errors.append("%s: grandfather date %s has passed and %s is still off for every computer; "
+                                      "turn it on at R0 or delete it" % (e.get("id"), gf, primary))
+                    else:
+                        warnings.append("%s: grandfathered off for every computer until %s (walk it)"
+                                        % (e.get("id"), gf))
+                except ValueError:
+                    pass
+                continue
+            errors.append("%s: %s would land off for every computer (value %r). A mechanism ships on at "
+                          "least the proof ring (AGENTS.md: on, never off everywhere; widen by ring). "
+                          "Name d@e in the selector, or set grandfathered_off_until, or retire: delete."
+                          % (e.get("id"), primary, value))
+
+    # 4. expiry
+    base_ids = None
+    if args.base_registry:
+        t = read(args.base_registry)
+        if t is not None:
+            base_ids = {x.get("id") for x in (load_registry(t).get("switches") or [])}
+    elif args.base:
+        try:
+            t = subprocess.run(["git", "-C", root, "show", "%s:switches/registry.yaml" % args.base],
+                               capture_output=True, text=True, check=True).stdout
+            base_ids = {x.get("id") for x in (load_registry(t).get("switches") or [])}
+        except (subprocess.CalledProcessError, OSError):
+            base_ids = None
+    new_ids = sorted(seen_ids - base_ids) if base_ids is not None else []
+    expired_long = []
+    for e in entries:
+        exp = e.get("expires")
+        if not exp:
+            continue
+        try:
+            days = (today - parse_date(exp)).days
+        except ValueError:
+            continue
+        if days > 0:
+            msg = "%s: expired %s (%d day(s) ago); retire it, delete it, or extend with a reason" % (e.get("id"), exp, days)
+            if args.strict_expiry:
+                errors.append(msg)
+            else:
+                warnings.append(msg)
+            if days > grace:
+                expired_long.append(e.get("id"))
+    if expired_long and new_ids and not args.strict_expiry:
+        errors.append("expired more than %d days (%s) and this change adds a new switch (%s): "
+                      "to add one, retire one" % (grace, ", ".join(expired_long), ", ".join(new_ids)))
+
+    # 5. cap
+    live = [e for e in entries if e.get("life") == "release" and e.get("retire") != "delete"]
+    if cap is not None and len(live) > int(cap):
+        errors.append("live release switches: %d exceeds the cap baseline %d (retire one to add one; "
+                      "the baseline ratchets down)" % (len(live), int(cap)))
+
+    if args.report:
+        print("%-38s %-12s %-7s %-12s %-14s %s" % ("id", "kind", "class", "ring(reg)", "ring(nix)", "expires"))
+        for e in entries:
+            print("%-38s %-12s %-7s %-12s %-14s %s" % (e.get("id"), e.get("kind"), e.get("class"),
+                  e.get("ring"), e.get("_derived_ring", "-"), e.get("expires", e.get("review_by", "-"))))
+        print("\nOFF for every computer (first walk candidates):")
+        for e in off_list:
+            print("  %s (%s) %s" % (e.get("id"), ",".join(e.get("nix") or []),
+                  "[retire: delete]" if e.get("retire") == "delete" else ""))
+        print("\n%d switches, %d live release switches" % (len(entries), len(live)))
+        for w in warnings:
+            print("warning: " + w)
+        for er in errors:
+            print("error: " + er)
+        return 0
+
+    for w in warnings:
+        print("warning: " + w)
+    for er in errors:
+        print("FAIL: " + er)
+    if errors:
+        print("check-switch-registry: %d failure(s)" % len(errors))
+        return 1
+    print("check-switch-registry: ok (%d switches, %d warning(s))" % (len(entries), len(warnings)))
+    return 0
+
+
+def _value_of(name, text):
+    m = re.search(r'"%s=([^"]*)"' % re.escape(name), text)
+    if m and "${" not in m.group(1):
+        return m.group(1)
+    m = re.search(r'^\s*%s\s*=\s*"?([^";\n]*)"?;' % re.escape(name), text, re.M)
+    if m and "${" not in m.group(1):
+        return m.group(1)
+    return None
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Selftest for scripts/check-switch-registry (docs/design/progressive-delivery-2026-10-26.md
+section 7, slice S1). Builds throwaway trees and checks the lint's verdicts. Touches
+nothing in this tree.
+
+Run: python3 -I scripts/selftest-switch-registry   (exit 0 when every check passes)
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+LINT = os.path.join(HERE, "check-switch-registry")
+
+NODE = """{ pkgs, ... }:
+let
+  gatewayModelScheduler = "on";
+  hostFetchVMs = "computer-59c902c5d46caecc0a180a8557164e72";
+  frontendRoot = "/var/www/go-choir";
+in {
+  systemd.services.vmctl.serviceConfig.Environment = [
+    "VMCTL_PORT=8083"
+    "VM_FOO_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
+    "VMCTL_BAR_MODE=observe"
+  ];
+}
+"""
+GUEST = """{ ... }:
+{
+  environment.variables = {
+    CHOIR_GUEST_GATE = "observe";
+  };
+}
+"""
+STORE = """package store
+const SettingAlpha = "alpha.one"
+var KnownComputerSettings = map[string]bool{ SettingAlpha: false }
+"""
+
+
+def entry(id_, **kw):
+    e = {"id": id_, "kind": "host_selector", "life": "release", "nix": [], "owner": "density",
+         "class": "orange", "surface": "snapshot", "introduced": "2026-10-20",
+         "expires": "2026-12-01", "ladder": ["on"], "target_ring": "R4", "ring": "R0",
+         "promote": [{"metric": "m", "bound": "== 0"}], "retire": "delete the selector"}
+    e.update(kw)
+    return e
+
+
+def base_entries():
+    return [
+        entry("gateway_model_scheduler", kind="let_binding", nix=["gatewayModelScheduler"], ring="all"),
+        entry("host_fetch", kind="let_binding", nix=["hostFetchVMs"], ring="R0"),
+        entry("foo", nix=["VM_FOO_ONLY"], ring="R0,R1"),
+        entry("bar_mode", kind="host_env", nix=["VMCTL_BAR_MODE"], ring="all"),
+        entry("guest_gate", kind="guest_env", nix=["CHOIR_GUEST_GATE"], ring="all"),
+        entry("alpha_one", kind="setting", settings=["alpha.one"], ring="unknown"),
+    ]
+
+
+def doc(entries, **policy):
+    p = {"release_cap_baseline": 99, "expiry_grace_days": 7, "auto_ceiling": "R4"}
+    p.update(policy)
+    return {"schema": 1, "policy": p, "switches": entries}
+
+
+def build(root, entries=None, node=NODE, guest=GUEST, store=STORE, **policy):
+    for rel, text in (("nix/node-b.nix", node), ("nix/autoputer-vm.nix", guest),
+                      ("internal/store/computer_setting.go", store)):
+        p = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f:
+            f.write(text)
+    os.makedirs(os.path.join(root, "switches"), exist_ok=True)
+    d = doc(base_entries() if entries is None else entries, **policy)
+    with open(os.path.join(root, "switches/registry.yaml"), "w") as f:
+        json.dump(d, f, indent=1)
+    return root
+
+
+fails = 0
+
+
+def expect(name, want, root, *args, grep=None):
+    global fails
+    r = subprocess.run([sys.executable, "-I", LINT, "--root", root, "--today", "2026-11-01", *args],
+                       capture_output=True, text=True)
+    out = r.stdout + r.stderr
+    ok = r.returncode == want and (grep is None or grep in out)
+    print(("ok:   " if ok else "FAIL: ") + name)
+    if not ok:
+        fails += 1
+        print("    exit %d want %d grep %r" % (r.returncode, want, grep))
+        for line in out.splitlines():
+            print("    " + line)
+
+
+tmp = tempfile.mkdtemp()
+try:
+    def fresh(name, **kw):
+        return build(os.path.join(tmp, name), **kw)
+
+    expect("clean tree passes", 0, fresh("clean"))
+
+    expect("unregistered nix selector fails", 1,
+           fresh("u1", node=NODE.replace('"VMCTL_PORT=8083"', '"VMCTL_PORT=8083"\n    "VM_NEW_ONLY=class:test"')),
+           grep="VM_NEW_ONLY")
+    expect("unregistered let-binding fails", 1,
+           fresh("u2", node=NODE.replace("let\n", 'let\n  newThingMode = "observe";\n')), grep="newThingMode")
+    expect("unregistered guest env fails", 1,
+           fresh("u3", guest=GUEST.replace("CHOIR_GUEST_GATE", "CHOIR_OTHER_GATE")), grep="CHOIR_OTHER_GATE")
+    expect("unregistered setting key fails", 1,
+           fresh("u4", store=STORE.replace('SettingAlpha = "alpha.one"', 'SettingAlpha = "alpha.one"\nconst SettingBeta = "beta.two"')),
+           grep="beta.two")
+
+    es = base_entries(); es[2]["nix"] = ["VM_GONE_ONLY"]
+    expect("registered name gone from source fails", 1, fresh("stale", entries=es), grep="VM_GONE_ONLY")
+
+    es = base_entries(); del es[0]["owner"]
+    expect("missing required field fails", 1, fresh("miss", entries=es), grep="owner")
+    es = base_entries(); es[1]["id"] = es[0]["id"]
+    expect("duplicate id fails", 1, fresh("dup", entries=es), grep="duplicate")
+    es = base_entries(); es[0]["class"] = "purple"
+    expect("bad class fails", 1, fresh("cls", entries=es), grep="class")
+    es = base_entries(); es[0]["target_ring"] = "R5"
+    expect("target ring beyond ceiling needs human confirm", 1, fresh("ceil", entries=es), grep="R5")
+    es = base_entries(); es[0]["target_ring"] = "R5"; es[0]["confirm"] = "human"
+    expect("target ring R5 with human confirm passes", 0, fresh("ceil2", entries=es))
+
+    # expiry: today is 2026-11-01, grace 7 days
+    es = base_entries(); es[3]["expires"] = "2026-10-29"
+    expect("expired within grace warns, passes", 0, fresh("exp1", entries=es), grep="expired")
+    expect("--strict-expiry fails any expiry", 1, fresh("exp1s", entries=es), "--strict-expiry", grep="expired")
+    es = base_entries(); es[3]["expires"] = "2026-10-01"
+    expect("long expired, no new switch, passes with warning", 0, fresh("exp2", entries=es), grep="expired")
+    base_path = os.path.join(tmp, "base.json")
+    with open(base_path, "w") as f:
+        json.dump(doc(base_entries()), f)
+    expect("long expired and a new switch fails", 1,
+           fresh("exp3", entries=es + [entry("brand_new", settings=["alpha.one"])]),
+           "--base-registry", base_path, grep="new switch")
+    expect("long expired, nothing new vs base, passes", 0, fresh("exp4", entries=es), "--base-registry", base_path)
+    es = base_entries(); es[3].update(life="ops", review_by="2026-12-01"); del es[3]["expires"]
+    expect("ops switch with review_by and no expiry passes", 0, fresh("ops", entries=es))
+    es = base_entries(); es[3].update(life="ops"); del es[3]["expires"]
+    expect("ops switch without review_by fails", 1, fresh("ops2", entries=es), grep="review_by")
+    es = base_entries(); es[3].update(life="ops", review_by="2027-06-01"); del es[3]["expires"]
+    expect("ops review_by beyond 90 days fails", 1, fresh("ops3", entries=es), grep="90")
+
+    # off for every computer
+    off = NODE.replace("VM_FOO_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test", "VM_FOO_ONLY=")
+    es = base_entries(); es[2]["ring"] = "none"
+    expect("empty selector fails", 1, fresh("off1", node=off, entries=es), grep="off for every computer")
+    es[2]["grandfathered_off_until"] = "2026-11-15"
+    expect("grandfathered empty selector passes with warning", 0, fresh("off2", node=off, entries=es), grep="grandfathered")
+    es[2]["grandfathered_off_until"] = "2026-10-30"
+    expect("grandfather date passed fails", 1, fresh("off3", node=off, entries=es), grep="grandfather")
+    offmode = NODE.replace('gatewayModelScheduler = "on"', 'gatewayModelScheduler = "off"')
+    es = base_entries(); es[0]["ring"] = "none"
+    expect("off-valued let-binding fails", 1, fresh("off4", node=offmode, entries=es), grep="off for every computer")
+    es = base_entries(); es[0].update(ring="none", retire="delete", hold="owner")
+    expect("retire: delete row may stay off", 0, fresh("off5", node=offmode, entries=es))
+    es = base_entries(); es[2]["ring"] = "R5"
+    expect("stale registered ring only warns", 0, fresh("ring", entries=es), grep="ring")
+
+    expect("cap baseline exceeded fails", 1, fresh("cap", release_cap_baseline=2), grep="cap")
+    expect("--report lists rings", 0, fresh("rep"), "--report", grep="ring")
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+
+print("%d failure(s)" % fails)
+sys.exit(1 if fails else 0)
