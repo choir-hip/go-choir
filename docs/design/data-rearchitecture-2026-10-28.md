@@ -111,3 +111,35 @@ routing. Read why each is off and walk it before writing new storage code.
 
 So step 2 starts with the kill -9 drill for `store.debounced_checkpoint`,
 and steps 3-4 should begin by finishing R7 rather than new storage code.
+
+## Working hypothesis after the owner discussion (2026-10-28 afternoon)
+
+To be tested by docs/definitions/choir-data-architecture-selection-2026-10-28.md,
+not yet decided. The owner's aim: intelligibility (hold the whole system in
+one head), resource efficiency, stability and security; storage designed
+and operated in-house on proven open-source parts, not novel engines.
+
+- Per-computer authority state: SQLite (WAL) embedded in the VM. One writer
+  per computer is the model; WAL keeps readers and the writer from
+  blocking each other; the page cache is fixed-size and there is no GC.
+- Shared platform state: Postgres on its own machine eventually (many
+  writers, replication, built-in full text, pgvector). Alternatives kept
+  open: SQLite per service if data ownership is strict; FoundationDB as
+  the later scale-out option.
+- Immutable content: a content-addressed object store (local disk now,
+  self-hosted S3-compatible such as MinIO later), stored once, verified by
+  hash.
+- Retrieval: indexes derived from the log and the content store, one per
+  question kind: full text (Postgres first), vectors (Qdrant already runs
+  on Node B at 6333; pgvector up to tens of millions), entity graph and
+  time series as Postgres tables first. Every index is rebuildable.
+- The log off-host: tape segments and SQLite WAL (Litestream-style) stream
+  to the object store; Postgres WAL archiving for point-in-time recovery;
+  a log bus (NATS JetStream or Redpanda) for the corpus ingest stream
+  later. Losing a host then loses nothing.
+- In-house means owning and operating the architecture and building our
+  own layer (tape, content addressing, projections, witness, streaming),
+  not writing database engines.
+- Dolt taught the requirements by failing them: the tape as truth,
+  immutable content addressed, small authority state, bounded memory,
+  data that can move between hosts.
