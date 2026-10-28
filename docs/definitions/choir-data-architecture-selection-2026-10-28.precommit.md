@@ -291,6 +291,25 @@ times are off. By the git commits that witness them (rule 1), round 0 was
 committed at 14:34 UTC (e378c3a1d) and round 0b at 14:40 UTC (f8e65155e),
 not ~14:35 and ~14:55.
 
+## Authorship and the owner's records (added 2026-10-28 ~14:50 UTC)
+
+Rounds 0 and 0b are FP0's predictions (the orchestrator, Claude Opus 5.5);
+they are scored as FP0's track record. Owner, 2026-10-28: "keep these
+predictions, note that they are yours."
+
+**O-01 (owner).** Implementation through the d@e differential takes 1 to 3
+days of agentic time ("agentic time is really fast"). Scored as an
+interval against the same observation as R0-19 (active days, with elapsed
+days reported beside it); R0-19's FP0 estimate was 3 weeks [1.5, 7], so
+the two forecasts barely overlap and the outcome will discriminate.
+
+**O-02 (owner, directional).** "I'm more optimistic about all the other
+numbers too, but less specifically." Scored as a sign test: across FP0's
+resolved point estimates and probabilities in rounds 0 and 0b, the share
+whose outcome falls on the favourable side of FP0's point (smaller cost,
+higher pass rate, sooner). The owner's direction is supported if that
+share is above one half.
+
 ## Settlements
 
 None yet.
