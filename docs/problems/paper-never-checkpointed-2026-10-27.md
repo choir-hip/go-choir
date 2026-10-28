@@ -440,3 +440,26 @@ Two findings from cleaning up after the 06:14 OOM kill.
 Action taken by FP0 (07:44): unmounted it inside those three namespaces
 (`nsenter -m umount`), confirmed no `capture-pause.json`, and removed the
 marker-less clone, as the capture's own start sweep would. Root free: 122G.
+
+## 2026-10-28 10:30 UTC: the paper's first base is captured and published
+
+Run on 203be57db (witness spill + capture inode pin), started 08:34:12,
+`CHOIR_WITNESS_SPILL_DIR=/var/lib/go-choir/capture-base-home`, MemoryMax
+10G, CPUQuota 300%:
+
+- paused 1684 ms (clone 1684 ms); compaction 08:34 -> 08:37 (274 -> 2
+  commits, 28.2 -> 26.5 GB); witness and staged readback 08:37 -> 10:30.
+- result: `origin=live_captured`, `sequence=4526210`, `canonical_head
+  ae3ace99d10c...44f4b6`, `base_ref 5a241cb0f411...690629`, `blob_bytes
+  26459016704`, `advertised=true`, duration 1h56m30s.
+- unit: 8G memory peak (the 06:14 run was killed at 14G), 46 min CPU, 1.5T
+  read, 225.6G written, no kernel OOM kill.
+- cleanup verified: no `data.img.capture`, no pause marker, no spill runs,
+  no capture mount or loop device. Root free 99G.
+
+The witness pass reads the 26 GB store roughly twice (1.5T read in all), so
+the paper's capture costs about two hours and ~70 GiB of transient clone
+growth. That cost is what an incremental base (S4) and a hash-only bind
+(S3) are for; it also argues for separating the paper's content-addressed
+objects from its authority tables (see the store-engine contention note in
+the 10-28 handoff).
