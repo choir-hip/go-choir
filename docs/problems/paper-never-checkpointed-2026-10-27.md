@@ -377,6 +377,32 @@ floor.
 Once the watermark points at a pre-root base again, the computer can still
 replay the prefix, because nothing deleted it.
 
+## S3 finding: Dolt table hashes match a tape replay (2026-10-28 01:0x UTC)
+
+Measured on the agentcore checkpoint fixture: the live store and a fresh
+tape replay (`ReconstructInto` into `OpenFresh`) at the same head, compared
+by `DOLT_HASHOF_TABLE` per table. 24 of 26 tables match exactly; schema,
+column tags, indexes and collation agree. The two that differ are
+`computer_event_index` and `computer_event_projection_heads`. These are the
+two tables whose wall-clock columns the v1 witness already ignores
+(`prepared_at`/`finalized_at`, `updated_at`). A replay writes those columns
+afresh, so the two tables can never match by construction. The live working
+set is not committed (26 `dolt_status` rows), so an `AS OF HEAD` read after
+the hold is not the state at H.
+
+Decision: witness v2 hashes every table except those two. It names them as
+operational tables: they are the tape's own bookkeeping, and the head H the
+checkpoint is published at commits to it. On the fixture the v2 read under
+the hold took 7.6 ms. The v1 row extract of the same store took 128 ms
+(2.2 s on d@e).
+
+Owner, 2026-10-28: "we shouldnt keep shipping code in off state"; "not on
+for all computers but on for at least one". Rings decide reach, the code
+doesn't. So v2 is the bind for every computer. The cadence's code-level
+refusal of `critical_protected` and `public_platform`, and of `*` and
+`class:` tokens, is removed. The node-b ring becomes d@e (R0) plus
+`class:test` (R1).
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
