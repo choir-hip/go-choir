@@ -12,8 +12,8 @@ import (
 // S5 busy hibernate on a planned host stop
 // (docs/problems/paper-never-checkpointed-2026-10-27.md, slice S5). Written
 // before the code. Ways it can fail:
-//   - F1 the switch is off (the default) and a busy guest is still paused and
-//     captured;
+//   - F1 (owner 2026-10-28: on by default for every computer, no off switch)
+//     a host stop of a busy guest is refused for want of a switch;
 //   - F2 a hibernate that is not a host stop (idle sweep, make-room, operator)
 //     captures a busy guest;
 //   - F3 a guest busy with a self-development apply is captured;
@@ -25,12 +25,10 @@ import (
 //     the stop would write gigabytes for nothing;
 //   - F7 a busy snapshot is resumed onto a different guest release (a guest
 //     code update must cold boot, never resume a busy process);
-//   - F8 a busy snapshot is resumed after the switch was turned off (the
-//     rollback must stop every busy resume);
 //   - F9 a busy snapshot is resumed past its own, shorter age bound;
 //   - F10 a busy capture is not marked busy, so it cannot be told from a
 //     fenced one at wake or in the timeline;
-//   - F11 the env switch accepts a value other than host_stop.
+//   - F11 the age bound cannot be set from the environment.
 
 func busyGuestBody() map[string]any {
 	return map[string]any{"outcome": "busy", "error": "guest is busy; hibernate deferred", "running_runs": 2}
@@ -39,7 +37,6 @@ func busyGuestBody() map[string]any {
 func hostStopReleaseFixture(t *testing.T) *releaseFixture {
 	t.Helper()
 	r := newReleaseFixture(t)
-	r.mgr.cfg.BusyHibernate = BusyHibernateHostStop
 	r.serveLaunchAPI(t)
 	r.guest.prepareStatus = http.StatusConflict
 	r.guest.busyBody = busyGuestBody()
@@ -75,14 +72,15 @@ func assertLeftRunning(t *testing.T, f *snapshotFixture, err error, wantRefused 
 	}
 }
 
-// F1.
-func TestBusyHibernateSwitchOffLeavesBusyGuestRunning(t *testing.T) {
+// F1: no configuration is needed; the default manager captures.
+func TestBusyHibernateIsOnByDefault(t *testing.T) {
 	r := hostStopReleaseFixture(t)
-	r.mgr.cfg.BusyHibernate = ""
-	assertLeftRunning(t, r.snapshotFixture, r.mgr.HibernateVMForHostStop(r.vmID), "")
-	r2 := hostStopReleaseFixture(t)
-	r2.mgr.cfg.BusyHibernate = "on" // not the switch's value
-	assertLeftRunning(t, r2.snapshotFixture, r2.mgr.HibernateVMForHostStop(r2.vmID), "")
+	if err := r.mgr.HibernateVMForHostStop(r.vmID); err != nil {
+		t.Fatalf("HibernateVMForHostStop with the default config: %v", err)
+	}
+	if r.inst.State != StateHibernated {
+		t.Fatalf("state = %s", r.inst.State)
+	}
 }
 
 // F2.
@@ -119,7 +117,6 @@ func TestBusyHibernateRefusesAGuestOffTheCurrentRelease(t *testing.T) {
 	})
 	t.Run("legacy launch", func(t *testing.T) {
 		f := newSnapshotFixture(t)
-		f.mgr.cfg.BusyHibernate = BusyHibernateHostStop
 		f.serveLaunchAPI(t)
 		f.guest.prepareStatus = http.StatusConflict
 		f.guest.busyBody = busyGuestBody()
@@ -190,7 +187,7 @@ func TestHostStopOfAnIdleGuestIsAnOrdinarySnapshot(t *testing.T) {
 	}
 }
 
-// F7, F8, F9.
+// F7, F9.
 func TestBusySnapshotWakeRules(t *testing.T) {
 	capture := func(t *testing.T) (*releaseFixture, string, *SnapshotMeta) {
 		r := hostStopReleaseFixture(t)
@@ -218,13 +215,6 @@ func TestBusySnapshotWakeRules(t *testing.T) {
 			t.Fatalf("validate = %q, want %s", got, snapshotReasonBusyReleaseChanged)
 		}
 	})
-	t.Run("F8 switch off", func(t *testing.T) {
-		r, dir, meta := capture(t)
-		r.mgr.cfg.BusyHibernate = ""
-		if got := r.validate(dir, meta); got != snapshotReasonBusyHibernateOff {
-			t.Fatalf("validate = %q, want %s", got, snapshotReasonBusyHibernateOff)
-		}
-	})
 	t.Run("F9 busy max age", func(t *testing.T) {
 		r, dir, meta := capture(t)
 		meta.CreatedAt = time.Now().Add(-DefaultBusyHibernateMaxAge - time.Minute)
@@ -239,17 +229,13 @@ func TestBusySnapshotWakeRules(t *testing.T) {
 }
 
 // F11.
-func TestBusyHibernateEnvConfig(t *testing.T) {
-	for value, want := range map[string]string{"": "", "host_stop": BusyHibernateHostStop, "HOST_STOP": BusyHibernateHostStop, "on": "", "true": ""} {
-		t.Setenv("VM_BUSY_HIBERNATE", value)
-		t.Setenv("VM_BUSY_HIBERNATE_MAX_AGE", "")
-		cfg := LoadConfigFromEnv()
-		if got := NewManager(cfg).busyHibernateMode(); got != want {
-			t.Fatalf("VM_BUSY_HIBERNATE=%q: mode %q, want %q", value, got, want)
-		}
-	}
+func TestBusyHibernateMaxAgeEnvConfig(t *testing.T) {
 	t.Setenv("VM_BUSY_HIBERNATE_MAX_AGE", "20m")
 	if got := LoadConfigFromEnv().BusyHibernateMaxAge; got != 20*time.Minute {
 		t.Fatalf("max age = %s", got)
+	}
+	t.Setenv("VM_BUSY_HIBERNATE_MAX_AGE", "")
+	if got := NewManager(LoadConfigFromEnv()).busyHibernateMaxAge(); got != DefaultBusyHibernateMaxAge {
+		t.Fatalf("default max age = %s", got)
 	}
 }
