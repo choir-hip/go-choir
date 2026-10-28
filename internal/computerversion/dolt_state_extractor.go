@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -397,7 +398,8 @@ func queryTableContentHash(ctx context.Context, db *sql.DB, table string, ignore
 		return "", fmt.Errorf("columns from %s: %w", table, err)
 	}
 
-	rowJSONs := make([]string, 0)
+	sorter := newRowSorter(os.Getenv(witnessSpillDirEnv), witnessSpillBytes)
+	defer sorter.Close()
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -429,19 +431,15 @@ func queryTableContentHash(ctx context.Context, db *sql.DB, table string, ignore
 		if err != nil {
 			return "", fmt.Errorf("encode row from %s: %w", table, err)
 		}
-		rowJSONs = append(rowJSONs, string(encoded))
+		if err := sorter.Add(string(encoded)); err != nil {
+			return "", fmt.Errorf("digest row from %s: %w", table, err)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("iterate rows from %s: %w", table, err)
 	}
 
-	// Sort row JSONs for determinism regardless of insertion order.
-	sort.Strings(rowJSONs)
-
-	hasher := sha256.New()
-	for _, rj := range rowJSONs {
-		hasher.Write([]byte(rj))
-		hasher.Write([]byte("\n"))
-	}
-	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), nil
+	// Sorted for determinism regardless of insertion order; spills to disk
+	// past witnessSpillBytes so a table larger than memory still digests.
+	return sorter.Sum()
 }
