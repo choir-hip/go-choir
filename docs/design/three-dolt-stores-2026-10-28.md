@@ -48,3 +48,17 @@ The OOM: peak 10,737,422,336 bytes at MemoryMax 10G, 16.4G read, 12.3G written, 
 ## 6. Recommendation
 
 Do the census first (a read-only `og_objects`/table size breakdown on a reflink copy of the paper, the gap named at `data-has-more-than-one-home:150`), then build (d) as an extension of the `choir_events` stamping, starting with the tape index, since it is the largest, append-only, and duplicated by artifacts. Ship (a) now as the cheap symptom fix. Run squash step (1) before any further Store A attempt; no second blind run.
+
+## Correction by FP0 (2026-10-28): option (a) conflicts with a settled decision
+
+"Health answered off the engine" is not a cheap fix. `/health` reads the
+store on purpose (internal/agentcore/api.go:673-700, decision F1 of
+docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md): a
+held write connection answers 503 `store_stalled` at once, never a 200. The
+reads it waits on are authority reads. The effective release is what the
+updater's identity probe checks. The live-capsule count is fail-closed and
+feeds the restart refusals (S5). Serving them from memory would report
+healthy exactly when those answers cannot be trusted. The 503 is an honest
+signal of a held connection. The fix is at the substrate: the online GC's
+hold, which is 81% of the non-200 samples, and the store split (d). Option
+(a) is withdrawn from the ranking unless the owner reverses F1.
