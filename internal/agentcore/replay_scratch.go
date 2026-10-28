@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
 
 // The replay probe's scratch: a whole installed base plus the tail replay's
@@ -123,6 +126,24 @@ func (rt *Runtime) replayScratchEstimate(ctx context.Context, computerID string)
 	var blob, tail uint64
 	if descriptor.BlobSizeBytes > 0 {
 		blob = uint64(descriptor.BlobSizeBytes)
+	}
+	if descriptor.Format == projectionbase.FormatParts {
+		// The blob is a manifest of a few KiB; the store it lists is what
+		// the install writes.
+		var raw bytes.Buffer
+		if err := src.DownloadBlob(ctx, computerID, descriptor.BlobSHA256, &raw); err != nil {
+			return 0, err
+		}
+		manifest, err := basemanifest.Parse(raw.Bytes())
+		if err != nil {
+			return 0, err
+		}
+		blob = 0
+		for _, entry := range manifest.Entries {
+			if entry.Size > 0 {
+				blob += uint64(entry.Size)
+			}
+		}
 	}
 	if head.Sequence > descriptor.Sequence {
 		tail = head.Sequence - descriptor.Sequence

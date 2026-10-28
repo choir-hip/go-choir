@@ -263,7 +263,11 @@ func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 		// An empty live set beside old unreachable files is the wrong-store
 		// signature (2026-10-05). Report it; never sweep on it. file-cas-chunks
 		// liveness is per computer and guarded there.
-		if ns != "file-cas-chunks" && len(live[ns]) == 0 && rep.Eligible > 0 {
+		// projection-base-parts is also exempt once its live set is proven:
+		// it is read off the disk, so a clean scan of an existing base
+		// directory that names no part is authoritative (the S4 rollback
+		// leaves exactly this).
+		if ns != "file-cas-chunks" && !(ns == basemanifest.PartsNamespace && s.baseDirScanned()) && len(live[ns]) == 0 && rep.Eligible > 0 {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: live set is empty but %d old entries exist (namespace not swept)", ns, rep.Eligible))
 			participates = false
 		}
@@ -930,4 +934,11 @@ func (r *GCRunner) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// baseDirScanned reports whether the projection-base directory exists, so an
+// empty parts live set came from a scan and not from a missing store.
+func (s *Service) baseDirScanned() bool {
+	info, err := os.Stat(filepath.Join(filepath.Clean(s.artifactsRoot), "sha256", basemanifest.BaseNamespace))
+	return err == nil && info.IsDir()
 }

@@ -1383,9 +1383,9 @@ in
         # of these computers are published as a manifest plus
         # content-addressed parts, so a publish writes only changed files.
         # Progressive rollout (owner, 2026-10-28): d@e first. class:test is
-        # listed but selects nothing yet: checkpointd has no class source.
+        # not listed: checkpointd has no class source, so it selected nothing.
         # Readers accept both forms everywhere. Rollback: drop the entry.
-        "CHECKPOINTD_BASE_PARTS_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
+        "CHECKPOINTD_BASE_PARTS_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
       ];
     };
   };

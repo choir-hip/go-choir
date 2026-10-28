@@ -271,6 +271,11 @@ func (p *Publisher) PublishDirParts(srcDir string) (string, int64, PartsStats, e
 // of the right size is reused and its mtime refreshed; otherwise the bytes
 // are written to a temporary file, re-hashed, fsync'd and renamed into
 // place. fresh reports whether bytes were written.
+//
+// The refresh is not serialized against the platform GC (a separate process):
+// a GC that unlinks between the Stat and the Chtimes fails the publish loudly
+// (Chtimes errors, or the read-back finds the part missing) and the worker
+// retries; Node B's grace (168h) exceeds any publish. Review 370.
 func (p *Publisher) storePart(partsDir, digest string, size int64, write func(io.Writer) error) (bool, error) {
 	final := filepath.Join(partsDir, digest)
 	if info, err := os.Stat(final); err == nil && info.Mode().IsRegular() && info.Size() == size {
