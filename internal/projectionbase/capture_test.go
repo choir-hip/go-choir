@@ -617,3 +617,33 @@ func TestPublishCapturedBaseDropsAPreparedAppendAboveTheHead(t *testing.T) {
 		t.Fatalf("the prepared row reached the witness: %v", err)
 	}
 }
+
+// Review 370 (DeepSeek 1): a parts capture's blob is the manifest, a few
+// KiB, but the read-back that follows materializes the whole store. The room
+// check before it reserves the store, not the manifest: with room for the
+// manifest only once the publish is done, the capture refuses and advertises
+// nothing.
+func TestPublishCapturedPartsBaseReservesTheReadBackStore(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-capture-parts-room"
+	root, mount, digests, _ := captureFixture(t, computerID, 3, 3)
+	if workspaceBytes(mount) < 40<<10 {
+		t.Skip("fixture store is smaller than the room used below")
+	}
+	_, err := PublishCapturedBase(ctx, CaptureConfig{
+		ComputerID: computerID, StoreMarker: filepath.Join(mount, "state"),
+		ArtifactsRoot: root, TapeHeadAt: tapeOf(digests), PublishParts: true,
+		FreeBytes: func(path string) (uint64, error) {
+			if len(publishedBaseFiles(t, root)) > 0 {
+				return 24 << 10, nil
+			}
+			return 1 << 40, nil
+		},
+	})
+	if !errors.Is(err, ErrBaseRefused) || !strings.Contains(err.Error(), "free") {
+		t.Fatalf("err = %v, want a free-space refusal before the read-back", err)
+	}
+	if files := publishedBaseFiles(t, root); len(files) != 0 {
+		t.Fatalf("refusal left published files: %v", files)
+	}
+}

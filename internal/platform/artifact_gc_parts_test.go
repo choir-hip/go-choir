@@ -190,3 +190,47 @@ func TestProjectionBasePartServingRequiresManifestMembership(t *testing.T) {
 		t.Fatalf("bad part digest = %d, want 400", got.Code)
 	}
 }
+
+// Review 370 (Devin 1): rolling back S4 drops the last manifest, and the
+// parts it named must then be swept, not wedge behind the empty-live-set
+// guard. The parts live set is read off the disk (not a database), so a
+// clean scan of an existing base directory that names no part is proof. A
+// base directory that does not exist proves nothing and keeps the guard.
+func TestRunArtifactGCSweepsPartsWhenNoManifestRemains(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		baseDir   bool
+		wantSwept bool
+	}{{"base dir scanned, no manifests", true, true}, {"base dir absent", false, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, root := openTestPlatformStore(t)
+			ensureGCRouteTables(t, store)
+			artifactsRoot := filepath.Join(root, "artifacts")
+			service := NewService(store, artifactsRoot, "")
+			old := time.Now().Add(-2 * time.Hour)
+			if tc.baseDir {
+				if err := os.MkdirAll(filepath.Join(artifactsRoot, "sha256", "projection-base"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			dir := filepath.Join(artifactsRoot, "sha256", "projection-base-parts")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			part := filepath.Join(dir, strings.Repeat("c", 64))
+			if err := os.WriteFile(part, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(part, old, old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: "active", Grace: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Stat(part)
+			if swept := os.IsNotExist(err); swept != tc.wantSwept {
+				t.Fatalf("part swept = %v (stat err %v), want %v", swept, err, tc.wantSwept)
+			}
+		})
+	}
+}

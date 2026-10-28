@@ -133,7 +133,8 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 		return nil, err
 	}
 	restoreTemp()
-	if err := cfg.room(uint64(workspaceBytes(staging))); err != nil {
+	stagedBytes := uint64(workspaceBytes(staging))
+	if err := cfg.room(stagedBytes); err != nil {
 		return nil, err
 	}
 
@@ -169,7 +170,9 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("capture: validate descriptor: %w", err)
 	}
-	if err := cfg.room(uint64(blobSize)); err != nil {
+	// The read-back materializes the whole store; a parts base's blob is only
+	// its manifest, so the reservation is the store (review 370).
+	if err := cfg.room(max(uint64(blobSize), stagedBytes)); err != nil {
 		return nil, err
 	}
 	if err := VerifyPublishedBase(ctx, cfg.ArtifactsRoot, descriptor); err != nil {
