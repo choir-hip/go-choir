@@ -90,6 +90,15 @@ type hostStopTarget struct {
 // HibernateForHostStop hibernates every running computer for a planned host
 // stop, protected classes first, until ctx is done.
 func (r *OwnershipRegistry) HibernateForHostStop(ctx context.Context) HostStopReport {
+	// Set before the targets are collected. From here no spawn, first boot or
+	// refresh may run (spawnClaimed, the first-boot paths and
+	// refreshVMForDesktop are the gates): a resume consumes the one-shot
+	// snapshot this pass is about to write or has written, a refresh kills
+	// the guest it marks, and the host stop then ends the result as a crash.
+	r.mu.Lock()
+	r.hostStopping.Store(true)
+	r.mu.Unlock()
+
 	r.mu.RLock()
 	targets := make([]hostStopTarget, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
@@ -114,13 +123,6 @@ func (r *OwnershipRegistry) HibernateForHostStop(ctx context.Context) HostStopRe
 		}
 		return targets[i].own.VMID < targets[j].own.VMID
 	})
-
-	// From here no spawn of any kind may run (spawnClaimed is the one gate;
-	// the deploy-refresh retry stops too): a resume consumes the one-shot snapshot this pass is about to write or has
-	// written, and the host stop then ends the resumed guest as a crash.
-	r.mu.Lock()
-	r.hostStopping.Store(true)
-	r.mu.Unlock()
 
 	var report HostStopReport
 	for i, target := range targets {

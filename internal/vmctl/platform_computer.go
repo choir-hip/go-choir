@@ -468,6 +468,16 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		LastActiveAt:  time.Now(),
 	}
 	r.mu.Lock()
+	if r.hostStopping.Load() {
+		// A first boot is a spawn too (spawnClaimed gates the others).
+		waiters := r.pendingWaiters[key]
+		delete(r.pendingWaiters, key)
+		r.mu.Unlock()
+		for _, ch := range waiters {
+			ch <- nil
+		}
+		return nil, errHostStopping
+	}
 	if _, taken := r.ownerships[key]; taken {
 		waiters := r.pendingWaiters[key]
 		delete(r.pendingWaiters, key)

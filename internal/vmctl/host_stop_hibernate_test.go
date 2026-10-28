@@ -3,6 +3,7 @@ package vmctl
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 )
@@ -245,5 +246,45 @@ func TestHostStopRefusesThePlatformWarmAndEverySpawn(t *testing.T) {
 	reg.mu.RUnlock()
 	if state != VMStateHibernated {
 		t.Fatalf("state = %s, want the refused warm to leave it hibernated", state)
+	}
+}
+
+// S5 review 378 F1: a deploy refresh that reaches the handler after the pass
+// began (the direct POST, a sweep iteration past its top check, a compaction
+// refresh) must not write a planned-restart marker into a guest the pass is
+// about to capture, nor kill it.
+func TestHostStopRefusesADeployRefreshBeforeItMarksTheGuest(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "owner-stopping")
+	fake.outcome = guestMarkWritten
+	h.registry.hostStopping.Store(true)
+	code, resp := postDeployRefresh(t, h, `{"user_id":"owner-stopping","desktop_id":"primary","target":"761d94c5"}`)
+	if code != http.StatusConflict || resp.Outcome != deployRefreshDeferred {
+		t.Fatalf("refresh during a host stop: %d %+v, want 409 deferred", code, resp)
+	}
+	if len(fake.marks) != 0 || len(mgr.refreshes) != 0 {
+		t.Fatalf("guest marked %v or refreshed %v during a host stop", fake.marks, mgr.refreshes)
+	}
+	// The registry's own refresh is a gate too (compaction maintenance).
+	own := h.registry.GetOwnershipForDesktop("owner-stopping", PrimaryDesktopID)
+	if _, err := h.registry.RefreshVMForDesktop(own.UserID, own.DesktopID); !errors.Is(err, errHostStopping) {
+		t.Fatalf("RefreshVMForDesktop err = %v, want errHostStopping", err)
+	}
+}
+
+// S5 review 378 F2: first boots are spawns too.
+func TestHostStopRefusesFirstBoots(t *testing.T) {
+	mgr := &mockVMManager{}
+	reg := NewOwnershipRegistry("")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	reg.SetVMManager(mgr)
+	reg.hostStopping.Store(true)
+	if _, err := reg.ResolveOrAssign("owner-new"); !errors.Is(err, errHostStopping) {
+		t.Fatalf("ResolveOrAssign err = %v, want errHostStopping", err)
+	}
+	if _, err := reg.ensureUniversalWirePlatformOwnership(context.Background()); !errors.Is(err, errHostStopping) {
+		t.Fatalf("platform first boot err = %v, want errHostStopping", err)
+	}
+	if len(mgr.boots) != 0 {
+		t.Fatalf("booted %d VM(s) during a host stop", len(mgr.boots))
 	}
 }

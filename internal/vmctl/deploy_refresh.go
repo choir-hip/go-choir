@@ -421,6 +421,13 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		return reply(deployRefreshSkipped, "divergent", http.StatusConflict)
 	}
 
+	// A planned host stop is capturing computers: a marker written now would
+	// be captured with the guest, and the refresh would kill it. The registry
+	// refresh refuses too (under its lock); this check keeps the marker from
+	// being written at all (S5).
+	if h.registry.hostStopping.Load() {
+		return reply(deployRefreshDeferred, errHostStopping.Error(), http.StatusConflict)
+	}
 	marker := h.plannedRestartMarker()
 	outcome, detail := marker.mark(ctx, own, req.Target, allowBusy)
 	planned := false
@@ -457,6 +464,9 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		if planned {
 			// The marker must not outlive a restart that did not happen.
 			marker.clear(ctx, own)
+		}
+		if errors.Is(err, errHostStopping) {
+			return reply(deployRefreshDeferred, err.Error(), http.StatusConflict)
 		}
 		if errors.Is(err, errLifecycleBusy) {
 			// Another start of this computer holds it; nothing was killed.

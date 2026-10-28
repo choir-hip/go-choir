@@ -2424,6 +2424,11 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		}
 		defer func() { ticket.finish(booted) }()
 	}
+	// A first boot is a spawn too (spawnClaimed gates the others).
+	if r.hostStopping.Load() {
+		r.mu.Unlock()
+		return nil, errHostStopping
+	}
 	mgr := r.vmManager
 	epoch := r.nextEpoch()
 
@@ -3501,6 +3506,12 @@ func (r *OwnershipRegistry) refreshVMForDesktop(userID, desktopID string, mainte
 
 	key := ownershipKey(userID, desktopID)
 	r.mu.Lock()
+	// Every refresh (deploy, retry sweep, compaction) ends here; a host stop
+	// is capturing computers and a refresh would kill the one it captures.
+	if r.hostStopping.Load() {
+		r.mu.Unlock()
+		return nil, errHostStopping
+	}
 	own, ok := r.ownerships[key]
 	if !ok {
 		r.mu.Unlock()
