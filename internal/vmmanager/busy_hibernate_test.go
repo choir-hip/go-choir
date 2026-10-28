@@ -1,6 +1,7 @@
 package vmmanager
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
@@ -75,7 +76,7 @@ func assertLeftRunning(t *testing.T, f *snapshotFixture, err error, wantRefused 
 // F1: no configuration is needed; the default manager captures.
 func TestBusyHibernateIsOnByDefault(t *testing.T) {
 	r := hostStopReleaseFixture(t)
-	if err := r.mgr.HibernateVMForHostStop(r.vmID); err != nil {
+	if err := r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true); err != nil {
 		t.Fatalf("HibernateVMForHostStop with the default config: %v", err)
 	}
 	if r.inst.State != StateHibernated {
@@ -103,7 +104,7 @@ func TestBusyHibernateRefusesSelfdevMarkerAndUnknownReasons(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := hostStopReleaseFixture(t)
 			r.guest.busyBody = tc.body
-			assertLeftRunning(t, r.snapshotFixture, r.mgr.HibernateVMForHostStop(r.vmID), tc.want)
+			assertLeftRunning(t, r.snapshotFixture, r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true), tc.want)
 		})
 	}
 }
@@ -113,21 +114,21 @@ func TestBusyHibernateRefusesAGuestOffTheCurrentRelease(t *testing.T) {
 	t.Run("behind", func(t *testing.T) {
 		r := hostStopReleaseFixture(t)
 		r.point(t, relR2) // a deploy moved the link; the guest still runs R1
-		assertLeftRunning(t, r.snapshotFixture, r.mgr.HibernateVMForHostStop(r.vmID), busyRefusedRelease)
+		assertLeftRunning(t, r.snapshotFixture, r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true), busyRefusedRelease)
 	})
 	t.Run("legacy launch", func(t *testing.T) {
 		f := newSnapshotFixture(t)
 		f.serveLaunchAPI(t)
 		f.guest.prepareStatus = http.StatusConflict
 		f.guest.busyBody = busyGuestBody()
-		assertLeftRunning(t, f, f.mgr.HibernateVMForHostStop(f.vmID), busyRefusedRelease)
+		assertLeftRunning(t, f, f.mgr.HibernateVMForHostStop(context.Background(), f.vmID, true), busyRefusedRelease)
 	})
 }
 
 // The capture itself, and F10.
 func TestBusyHibernateCapturesABusyGuestOnAHostStop(t *testing.T) {
 	r := hostStopReleaseFixture(t)
-	if err := r.mgr.HibernateVMForHostStop(r.vmID); err != nil {
+	if err := r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true); err != nil {
 		t.Fatalf("HibernateVMForHostStop: %v", err)
 	}
 	if r.inst.State != StateHibernated {
@@ -175,7 +176,7 @@ func TestBusyHibernateCapturesABusyGuestOnAHostStop(t *testing.T) {
 func TestHostStopOfAnIdleGuestIsAnOrdinarySnapshot(t *testing.T) {
 	r := hostStopReleaseFixture(t)
 	r.guest.prepareStatus = http.StatusOK
-	if err := r.mgr.HibernateVMForHostStop(r.vmID); err != nil {
+	if err := r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true); err != nil {
 		t.Fatal(err)
 	}
 	meta, err := readSnapshotMeta(r.mgr.snapshotDir(r.vmID))
@@ -191,7 +192,7 @@ func TestHostStopOfAnIdleGuestIsAnOrdinarySnapshot(t *testing.T) {
 func TestBusySnapshotWakeRules(t *testing.T) {
 	capture := func(t *testing.T) (*releaseFixture, string, *SnapshotMeta) {
 		r := hostStopReleaseFixture(t)
-		if err := r.mgr.HibernateVMForHostStop(r.vmID); err != nil {
+		if err := r.mgr.HibernateVMForHostStop(context.Background(), r.vmID, true); err != nil {
 			t.Fatal(err)
 		}
 		dir := r.mgr.snapshotDir(r.vmID)
@@ -237,5 +238,27 @@ func TestBusyHibernateMaxAgeEnvConfig(t *testing.T) {
 	t.Setenv("VM_BUSY_HIBERNATE_MAX_AGE", "")
 	if got := NewManager(LoadConfigFromEnv()).busyHibernateMaxAge(); got != DefaultBusyHibernateMaxAge {
 		t.Fatalf("default max age = %s", got)
+	}
+}
+
+// S5 review (both): the host-stop budget bounds a computer's fence, so a
+// spent budget never reaches the pause or the snapshot of a stalled guest.
+func TestBusyHibernateSpentBudgetNeverPausesTheGuest(t *testing.T) {
+	r := hostStopReleaseFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = r.mgr.HibernateVMForHostStop(ctx, r.vmID, true)
+	for _, call := range r.fc.paths() {
+		if call != "GET /" {
+			t.Fatalf("a spent budget must not pause or snapshot; calls=%v", r.fc.paths())
+		}
+	}
+}
+
+// S5 review (DeepSeek): a busy snapshot's capability was not renewed at the
+// fence, so its default age stays inside the 15 minute renewal grace.
+func TestBusyHibernateDefaultAgeIsInsideTheRenewalGrace(t *testing.T) {
+	if DefaultBusyHibernateMaxAge > 15*time.Minute {
+		t.Fatalf("DefaultBusyHibernateMaxAge = %s, want <= 15m", DefaultBusyHibernateMaxAge)
 	}
 }

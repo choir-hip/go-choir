@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 )
@@ -43,11 +44,15 @@ func (m *hostStopManager) HibernateVM(vmID string) error {
 	return m.plainErr[vmID]
 }
 
-func (m *hostStopManager) HibernateVMForHostStop(vmID string) error {
+func (m *hostStopManager) HibernateVMForHostStop(_ context.Context, vmID string, allowBusy bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.hostStop = append(m.hostStop, vmID)
 	m.order = append(m.order, vmID)
+	if !allowBusy { // a stop-budgeted hibernate without the busy capture
+		m.plain = append(m.plain, vmID)
+		return m.plainErr[vmID]
+	}
+	m.hostStop = append(m.hostStop, vmID)
 	return m.stopErr[vmID]
 }
 
@@ -168,5 +173,77 @@ func TestHostStopCancelledDeadlineStartsNothing(t *testing.T) {
 	report := reg.HibernateForHostStop(ctx)
 	if len(mgr.order) != 0 || report.NotStarted != 1 {
 		t.Fatalf("order=%v report=%+v, want nothing started (H9)", mgr.order, report)
+	}
+}
+
+// S5 review (DeepSeek): the idle sweep's always-on warm resumed a computer
+// the pass had just hibernated, consuming its one-shot snapshot before the
+// host stop ended it. Once the pass begins nothing resumes a computer.
+func TestHostStopRefusesEveryResumeOnceThePassBegins(t *testing.T) {
+	mgr := newHostStopManager()
+	reg := hostStopRegistry(t, mgr, map[string]hostStopHealth{"vm-a": freeHealth})
+	own := activeComputer(reg, "vm-a")
+	reg.HibernateForHostStop(context.Background())
+	if got := reg.GetOwnershipByVMID("vm-a"); got.State != VMStateHibernated {
+		t.Fatalf("state = %s, want hibernated", got.State)
+	}
+	if _, _, err := reg.resumeVMForDesktop(own.UserID, own.DesktopID, true); !errors.Is(err, errHostStopping) {
+		t.Fatalf("always-on resume after the pass: %v, want errHostStopping", err)
+	}
+	if _, err := reg.ResumeVMForDesktop(own.UserID, own.DesktopID); err == nil {
+		t.Fatal("a visit resume after the pass succeeded")
+	}
+	if got := reg.GetOwnershipByVMID("vm-a"); got.State != VMStateHibernated {
+		t.Fatalf("state = %s, want still hibernated", got.State)
+	}
+}
+
+// S5 review (both): a computer that is not offered the busy capture still
+// hibernates within the stop budget, not with an unbounded fence.
+func TestHostStopBoundsEveryHibernateByTheBudget(t *testing.T) {
+	mgr := newHostStopManager()
+	reg := hostStopRegistry(t, mgr, map[string]hostStopHealth{"vm-silent": {}})
+	activeComputer(reg, "vm-silent")
+	reg.HibernateForHostStop(context.Background())
+	if len(mgr.order) != 1 || len(mgr.plain) != 1 || len(mgr.hostStop) != 0 {
+		t.Fatalf("order=%v plain=%v hostStop=%v, want one budgeted hibernate without the busy capture", mgr.order, mgr.plain, mgr.hostStop)
+	}
+}
+
+// S5 review 374 (Devin 1): the platform computer's own warm calls the
+// manager without resumeVMForDesktop. Every spawn goes through spawnClaimed,
+// so that is where a host stop refuses it, for this path and any other.
+func TestHostStopRefusesThePlatformWarmAndEverySpawn(t *testing.T) {
+	mgr := &mockVMManager{getVMs: map[string]*VMInstanceInfo{UniversalWirePlatformVMID: {State: "stopped", Epoch: 7}}}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetVMManager(mgr)
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.mu.Lock()
+	own := &VMOwnership{VMID: UniversalWirePlatformVMID, UserID: UniversalWirePlatformOwnerID, DesktopID: UniversalWirePlatformDesktopID,
+		ComputerID: stableComputerID(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, ""), Kind: VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform, State: VMStateHibernated, StoppedBy: StopReasonHostStop, Epoch: 7}
+	reg.ownerships[key] = own
+	reg.vmByID[UniversalWirePlatformVMID] = own
+	reg.mu.Unlock()
+
+	reg.hostStopping.Store(true)
+	allow := func(context.Context, string, string) error { return nil }
+	if warmed := reg.WarmUniversalWirePlatformComputer(context.Background(), allow); warmed != 0 {
+		t.Fatalf("warmed = %d during a host stop", warmed)
+	}
+	if _, err := reg.spawnClaimed(UniversalWirePlatformVMID, bootClaimBoot, 7, func() (*VMInstanceInfo, error) {
+		t.Fatal("a spawn ran during a host stop")
+		return nil, nil
+	}); !errors.Is(err, errHostStopping) {
+		t.Fatalf("spawnClaimed err = %v, want errHostStopping", err)
+	}
+	if len(mgr.resumes)+len(mgr.boots) != 0 {
+		t.Fatalf("manager resumed %v booted %d", mgr.resumes, len(mgr.boots))
+	}
+	reg.mu.RLock()
+	state := reg.ownerships[key].State
+	reg.mu.RUnlock()
+	if state != VMStateHibernated {
+		t.Fatalf("state = %s, want the refused warm to leave it hibernated", state)
 	}
 }

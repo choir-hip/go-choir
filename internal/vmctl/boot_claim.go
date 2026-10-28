@@ -167,6 +167,15 @@ func (r *OwnershipRegistry) repeatedInterruptionBoundLocked(own *VMOwnership) bo
 // open is refused: the shield stays until the close ends the process.
 func (r *OwnershipRegistry) spawnClaimed(vmID, kind string, epoch int64, spawn func() (*VMInstanceInfo, error)) (*VMInstanceInfo, error) {
 	r.mu.Lock()
+	// Every boot, resume and recover of an existing computer spawns here. A
+	// planned host stop's pass hibernates computers and a spawn of one would
+	// consume the snapshot it wrote, so none runs once the pass has begun.
+	// The flag is set under r.mu (HibernateForHostStop), so a spawn either
+	// holds its claim already or is refused.
+	if r.hostStopping.Load() {
+		r.mu.Unlock()
+		return nil, errHostStopping
+	}
 	if _, open := r.interruptedStarts[vmID]; open {
 		r.mu.Unlock()
 		return nil, errStartInterruptedOpen(vmID)

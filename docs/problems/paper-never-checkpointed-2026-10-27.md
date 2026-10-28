@@ -503,21 +503,30 @@ A crash runs no exit code.
 
 **The pass** (`internal/vmctl/host_stop_hibernate.go`). It takes every
 running computer, protected classes first, until a budget runs out
-(`VMCTL_HOST_STOP_BUDGET`, default 75 s, under systemd's 90 s stop
-timeout). Each one is hibernated by snapshot and recorded hibernated with
+(`VMCTL_HOST_STOP_BUDGET`, default 60 s, so with the server's 10 s drain it
+stays under systemd's 90 s stop timeout). Each one is hibernated by snapshot and recorded hibernated with
 `stopped_by=host_stop`, so the next start keeps the snapshot and the next
 wake resumes it. A computer is offered the busy capture only when its
 `/health` answered and says `selfdev_active_operations=0` and
 `live_capsules=0`. Prepare does not count capsules. Otherwise it gets the
 ordinary fenced hibernate, which a busy guest refuses. A computer whose
-deploy refresh is in flight is skipped.
+deploy refresh is in flight is skipped. The budget bounds each computer's
+ping, fence and pause (a stalled guest cannot spend the window of those
+behind it); the snapshot write itself is bounded by the process kill. From
+the pass's first step no spawn of any kind is accepted: `hostStopping` is
+checked in `spawnClaimed`, which every boot, resume and recover of an
+existing computer goes through, and the deploy-refresh retry sweep stops, so
+neither the idle sweep, the platform warm nor a visit can consume a snapshot
+the pass wrote. The create, commit and fsync are not bounded by the budget:
+a stalled create on an early target starves the ones behind it.
 
 **The capture** (`internal/vmmanager/busy_hibernate.go`). The guest is
 still asked to fence. A guest that fences is captured as an idle hibernate.
 A guest that answers busy is captured without the fence only when all of
 these hold:
 - the reply is the plain busy outcome with no reason (a
-  `planned_restart_pending` marker refuses);
+  `planned_restart_pending` marker refuses; the guest checks the marker and
+  its self-development operations on the work-inside reply too);
 - no self-development operation is active;
 - it runs the current guest release.
 
@@ -526,7 +535,7 @@ After Firecracker stops, its data image is fsynced. The meta records
 as a crash, as before.
 
 **The wake.** A busy snapshot loads only onto the release it was captured
-from, and within `VM_BUSY_HIBERNATE_MAX_AGE` (default 1 h). Otherwise it
+from, and within `VM_BUSY_HIBERNATE_MAX_AGE` (default 10 min, inside the capability's 15 min renewal grace). Otherwise it
 cold boots. It is consumed before it loads, so it resumes at most once.
 
 **Expected for the paper (8 GiB, Full; Diff is not selected for it).**
@@ -538,13 +547,24 @@ wrote 0.7 to 2.4 GB on disk. Scaled to 8 GiB:
 
 The fsync comes after the stop, so it is not frozen time.
 
+**Rollback.** A reader that predates `busy_host_stop` ignores the field and
+would resume a busy snapshot without its release and age guards. Before
+rolling the host back: stop vmctl, delete every `busy_host_stop` snapshot
+directory (`grep -l busy_host_stop <state>/snapshots/*/meta.json`), then
+switch. The computers cold boot.
+
 **Residuals.**
+- Deferred from the S5 review: the busy reply lifts the fence before the
+  pause, so a marker or self-development start in that gap is captured; the
+  budget eviction can discard other computers' snapshots without a report;
+  the ownership record is written without fsync; a kill-path success counts
+  as hibernated in the report.
 - Health is read before the fence, so a capsule that starts in between is
   captured.
 - A busy reply carries no capability expiry and no `credential_resume`. A
   busy resume therefore renews the frozen capability (30 min TTL, 15 min
   grace) rather than receiving a fresh envelope. A late resume fails that
-  renewal and cold boots.
+  renewal and cold boots; the 10 min age bound makes that rare.
 - A host reboot together with a guest update cold boots without a marker,
   which is a crash.
 - On a staging host shutdown, still to check: the stop ordering of jailed

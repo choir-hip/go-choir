@@ -248,3 +248,23 @@ func TestRestoreRestartMarkerRefusedWhileFenced(t *testing.T) {
 		t.Fatalf("a finished restore-restart write left a work slot taken: inflight=%d", n)
 	}
 }
+
+// S5 review (Devin, DeepSeek): the busy reply for work inside the fence must
+// carry the same refusals as the other busy replies, or a host-stop busy
+// capture takes a snapshot with a live planned-restart marker in it.
+func TestHibernatePrepareBusyWithWorkInsideStillNamesAPendingMarker(t *testing.T) {
+	rt := fencedHibernateRuntime(t)
+	handler := &APIHandler{rt: rt}
+	if err := WritePlannedRestartMarker(rt.cfg.StorePath, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: "abc", RequestedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	release, err := rt.EnterWork(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	code, body := postHibernate(t, handler, "/internal/runtime/hibernate/prepare", "192.0.2.1:4000", `{}`)
+	if code != http.StatusConflict || body["outcome"] != "busy" || body["reason"] != "planned_restart_pending" {
+		t.Fatalf("busy prepare with work inside and a marker: %d %v; want reason planned_restart_pending", code, body)
+	}
+}

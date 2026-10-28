@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -545,6 +546,9 @@ type OwnershipRegistry struct {
 	// hostStopHealthProbe reads what a planned host stop needs from a guest's
 	// /health (S5, host_stop_hibernate.go); nil is the HTTP probe.
 	hostStopHealthProbe func(*VMOwnership) hostStopHealth
+	// hostStopping is set when a planned host stop's pass begins; it stays set
+	// (the process is exiting) and refuses every resume.
+	hostStopping atomic.Bool
 
 	// resumeEnroller is called after a snapshot resume onto a guest release
 	// (SetResumeEnroller).
@@ -3077,13 +3081,14 @@ func (r *OwnershipRegistry) HibernateVMForDesktop(userID, desktopID string) erro
 }
 
 func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, reason string) error {
-	return r.hibernateVMForDesktop(userID, desktopID, reason, false)
+	return r.hibernateVMForDesktop(userID, desktopID, reason, nil)
 }
 
-// hibernateVMForDesktop is the hibernate. busyHostStop asks a manager that
-// has the call for a host-stop capture, which also takes a guest busy only
-// with runs (S5); only HibernateForHostStop sets it.
-func (r *OwnershipRegistry) hibernateVMForDesktop(userID, desktopID, reason string, busyHostStop bool) error {
+// hibernateVMForDesktop is the hibernate. hostStop asks a manager that has
+// the call for a host-stop capture bounded by the stop budget, which with
+// allowBusy also takes a guest busy only with runs (S5); only
+// HibernateForHostStop sets it.
+func (r *OwnershipRegistry) hibernateVMForDesktop(userID, desktopID, reason string, hostStop *hostStopArg) error {
 	r.mu.Lock()
 	key := ownershipKey(userID, desktopID)
 	own, ok := r.ownerships[key]
@@ -3126,8 +3131,8 @@ func (r *OwnershipRegistry) hibernateVMForDesktop(userID, desktopID, reason stri
 		r.noteHibernateStartLocked()
 		r.mu.Unlock()
 		var mgrErr error
-		if hs, ok := mgr.(hostStopHibernateManager); ok && busyHostStop {
-			mgrErr = hs.HibernateVMForHostStop(vmID)
+		if hs, ok := mgr.(hostStopHibernateManager); ok && hostStop != nil {
+			mgrErr = hs.HibernateVMForHostStop(hostStop.ctx, vmID, hostStop.allowBusy)
 		} else if withOpt, ok := mgr.(hibernateCacheReturnManager); ok && cacheReturn != nil {
 			mgrErr = withOpt.HibernateVMWithCacheReturn(vmID, *cacheReturn)
 		} else {
@@ -3230,6 +3235,9 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 // registry was re-read under the lock, so the sweep's list was stale.
 var errNotAlwaysOnStart = errors.New("not an always-on start now")
 
+// errHostStopping refuses a resume once a planned host stop's pass began.
+var errHostStopping = errors.New("the host is stopping; the computer is not resumed")
+
 // resumeVMForDesktop starts a stopped or hibernated computer under its
 // lifecycle claim. With alwaysOn (the always-on sweep) the eligibility is
 // re-read, a failure stop is charged against the automatic retry, and the
@@ -3242,6 +3250,9 @@ func (r *OwnershipRegistry) resumeVMForDesktop(userID, desktopID string, alwaysO
 			r.ensureExistingGatewayCredential(ensureVMID)
 		}
 	}()
+	if r.hostStopping.Load() {
+		return nil, false, errHostStopping
+	}
 	r.mu.Lock()
 
 	key := ownershipKey(userID, desktopID)
@@ -4186,7 +4197,7 @@ func (r *OwnershipRegistry) markRecoveryFailed(vmID string) {
 func IsTransientStartRefusal(err error) bool { return transientStartRefusal(err) }
 
 func transientStartRefusal(err error) bool {
-	if errors.Is(err, errLifecycleBusy) {
+	if errors.Is(err, errLifecycleBusy) || errors.Is(err, errHostStopping) {
 		return true
 	}
 	refusal := RecoveryRefusalFrom(err)

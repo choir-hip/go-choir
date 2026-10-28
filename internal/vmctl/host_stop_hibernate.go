@@ -43,7 +43,7 @@ const StopReasonHostStop = "host_stop"
 // hostStopHibernateManager is the optional manager call for a host-stop
 // capture (vmmanager.Manager.HibernateVMForHostStop).
 type hostStopHibernateManager interface {
-	HibernateVMForHostStop(vmID string) error
+	HibernateVMForHostStop(ctx context.Context, vmID string, allowBusy bool) error
 }
 
 // hostStopHealth is what a host stop reads from a guest's /health.
@@ -74,6 +74,12 @@ type HostStopReport struct {
 	Failed  int `json:"failed"`
 	// NotStarted: the deadline passed before their turn.
 	NotStarted int `json:"not_started"`
+}
+
+// hostStopArg is the host-stop part of a hibernate.
+type hostStopArg struct {
+	ctx       context.Context
+	allowBusy bool
 }
 
 type hostStopTarget struct {
@@ -109,6 +115,13 @@ func (r *OwnershipRegistry) HibernateForHostStop(ctx context.Context) HostStopRe
 		return targets[i].own.VMID < targets[j].own.VMID
 	})
 
+	// From here no spawn of any kind may run (spawnClaimed is the one gate;
+	// the deploy-refresh retry stops too): a resume consumes the one-shot snapshot this pass is about to write or has
+	// written, and the host stop then ends the resumed guest as a crash.
+	r.mu.Lock()
+	r.hostStopping.Store(true)
+	r.mu.Unlock()
+
 	var report HostStopReport
 	for i, target := range targets {
 		if ctx.Err() != nil {
@@ -122,7 +135,7 @@ func (r *OwnershipRegistry) HibernateForHostStop(ctx context.Context) HostStopRe
 			report.BusyOffered++
 		}
 		started := time.Now()
-		err := r.hibernateVMForDesktop(own.UserID, own.DesktopID, StopReasonHostStop, offer)
+		err := r.hibernateVMForDesktop(own.UserID, own.DesktopID, StopReasonHostStop, &hostStopArg{ctx: ctx, allowBusy: offer})
 		switch {
 		case err == nil:
 			report.Hibernated++

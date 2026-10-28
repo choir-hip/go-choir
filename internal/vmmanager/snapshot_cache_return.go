@@ -48,6 +48,15 @@ type HibernateOptions struct {
 	// whose fence answers busy only with runs is captured without the fence
 	// instead of being left running. Only vmctl's host-stop pass sets it.
 	HostStop bool
+	// Ctx bounds a host-stop capture's ping, fence and pause (nil: none).
+	Ctx context.Context
+}
+
+func (o HibernateOptions) parentCtx() context.Context {
+	if o.Ctx != nil {
+		return o.Ctx
+	}
+	return context.Background()
 }
 
 // CacheReturnOption selects the act's scope and whether it is a dry run

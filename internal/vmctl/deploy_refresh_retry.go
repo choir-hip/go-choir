@@ -386,6 +386,11 @@ func (h *Handler) trackedDeployRefresh(ctx context.Context, req deployRefreshReq
 // SweepDeployRefreshPending asks every deferred computer again, one at a
 // time.
 func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
+	// A planned host stop is hibernating computers: no refresh may mark a
+	// guest (a marker would be captured) or boot a rescue (S5).
+	if h.registry.hostStopping.Load() {
+		return
+	}
 	for _, entry := range h.pendingDeployRefreshes() {
 		if ctx.Err() != nil {
 			return

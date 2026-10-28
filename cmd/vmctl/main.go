@@ -439,8 +439,8 @@ func (a *vmManagerAdapter) HibernateVMWithCacheReturn(vmID string, opt vmctl.Hib
 }
 
 // HibernateVMForHostStop is the S5 host-stop capture.
-func (a *vmManagerAdapter) HibernateVMForHostStop(vmID string) error {
-	return a.mgr.HibernateVMForHostStop(vmID)
+func (a *vmManagerAdapter) HibernateVMForHostStop(ctx context.Context, vmID string, allowBusy bool) error {
+	return a.mgr.HibernateVMForHostStop(ctx, vmID, allowBusy)
 }
 
 func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) {

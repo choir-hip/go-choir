@@ -26,9 +26,9 @@ const (
 	hostStopWhyShutdown   = "host_shutdown"
 	hostStopWhyStopOnExit = "stop_managed_on_exit"
 
-	// defaultHostStopBudget stays under systemd's default 90 s stop timeout:
+	// defaultHostStopBudget stays under systemd's default 90 s stop timeout, after the server's 10 s drain:
 	// after it no new capture starts.
-	defaultHostStopBudget = 75 * time.Second
+	defaultHostStopBudget = 60 * time.Second
 )
 
 type hostStopDecision struct {

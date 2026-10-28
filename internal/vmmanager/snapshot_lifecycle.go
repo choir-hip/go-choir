@@ -199,7 +199,7 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 		return nil, false, snapshotReasonNoAPISocket, err
 	}
 	api := newFCAPIClient(sock)
-	pingCtx, cancel := context.WithTimeout(context.Background(), snapshotPingTimeout)
+	pingCtx, cancel := context.WithTimeout(opts.parentCtx(), snapshotPingTimeout)
 	err := api.Ping(pingCtx)
 	cancel()
 	if err != nil {
@@ -223,7 +223,7 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	// syncs. A busy guest answers 409 and reopens admission itself.
 	fenceStart := time.Now()
 	fenceBegan := m.cacheReturnNow() // for the cache return's fence budget
-	prepareCtx, cancel := context.WithTimeout(context.Background(), snapshotPrepareTimeout)
+	prepareCtx, cancel := context.WithTimeout(opts.parentCtx(), snapshotPrepareTimeout)
 	prepared, reason, err := guestHibernatePrepare(prepareCtx, hostURL)
 	cancel()
 	snap.FenceMS = time.Since(fenceStart).Milliseconds()
@@ -274,7 +274,7 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	})
 
 	pauseStart := time.Now()
-	pauseCtx, cancel := context.WithTimeout(context.Background(), snapshotPauseTimeout)
+	pauseCtx, cancel := context.WithTimeout(opts.parentCtx(), snapshotPauseTimeout)
 	err = api.Pause(pauseCtx)
 	cancel()
 	snap.PauseMS = time.Since(pauseStart).Milliseconds()

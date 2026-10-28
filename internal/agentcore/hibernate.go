@@ -319,10 +319,22 @@ func (h *APIHandler) HandleInternalHibernatePrepare(w http.ResponseWriter, r *ht
 func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareResponse) {
 	inflight, ok := rt.hibernate.close(hibernateFenceTTL)
 	if !ok {
-		return http.StatusConflict, hibernatePrepareResponse{
+		// Work is inside, so the fence stayed open. The host's busy capture
+		// (S5) trusts this reply's refusals, so it carries the same ones as
+		// the closed-fence replies below: a pending marker, an open
+		// self-development operation, or state that cannot be read.
+		resp := hibernatePrepareResponse{
 			Outcome: "busy", Error: "guest is busy; hibernate deferred",
 			InflightWork: inflight,
 		}
+		if plannedRestartMarkerPending(rt.cfg.StorePath, rt.hibernate.clock()) {
+			resp.Reason = "planned_restart_pending"
+		} else if work, err := rt.plannedRestartBusy(ctx, false); err != nil {
+			resp.Reason = "busy_state_unreadable"
+		} else {
+			resp.RunningRuns, resp.SelfdevActiveOps = work.Running, work.SelfdevActive
+		}
+		return http.StatusConflict, resp
 	}
 	// A planned-restart marker on disk would be captured in the snapshot, and
 	// a resumed guest that crashed within the marker's window would boot as

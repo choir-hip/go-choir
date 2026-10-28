@@ -37,14 +37,17 @@ package vmmanager
 // included, with no off switch. The refusals above are correctness rules.
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
 
 // DefaultBusyHibernateMaxAge bounds how long a busy snapshot stays
-// resumable. A busy guest's capability was not renewed at the fence, so a
-// late resume is likelier to fail its renewal; a host stop is minutes.
-const DefaultBusyHibernateMaxAge = time.Hour
+// resumable. A busy guest's capability was not renewed at the fence, so the
+// frozen capability (up to 30 minutes old at capture) renews only within its
+// 15 minute grace (internal/platform capabilityRenewalGrace), so the bound
+// leaves headroom under it; a host stop is minutes.
+const DefaultBusyHibernateMaxAge = 10 * time.Minute
 
 const (
 	// Wake refusals of a busy snapshot.
@@ -60,8 +63,12 @@ const (
 // HibernateVMForHostStop is a snapshot hibernate for a planned host stop: a
 // guest busy only with runs is captured without the fence. Only vmctl's
 // host-stop pass calls it.
-func (m *Manager) HibernateVMForHostStop(vmID string) error {
-	return m.HibernateVMWithOptions(vmID, HibernateOptions{HostStop: true})
+//
+// ctx is the host stop's budget: it bounds the ping, the fence and the pause
+// of this computer, so one stalled guest cannot spend the window of the
+// computers behind it. allowBusy offers the busy capture. The snapshot write itself is not cut by it.
+func (m *Manager) HibernateVMForHostStop(ctx context.Context, vmID string, allowBusy bool) error {
+	return m.HibernateVMWithOptions(vmID, HibernateOptions{HostStop: allowBusy, Ctx: ctx})
 }
 
 func (m *Manager) busyHibernateMaxAge() time.Duration {
