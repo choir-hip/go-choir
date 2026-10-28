@@ -25,8 +25,9 @@ import (
 // computer_event_projection_heads updated_at; the v1 witness ignores those
 // columns). A v2 witness names them as operational tables and leaves them out
 // of its hashes: they are the tape's own bookkeeping, which the head H the
-// checkpoint is published at already commits to. Their v1 row witness is the
-// fallback, and it is never taken under the hold.
+// checkpoint is published at already commits to. There is no row fallback: a
+// v2 witness is judged by table hashes alone, and a restore rebuilds both
+// tables from the tape whatever the live copies held.
 //
 // Fail closed on old readers: a v2 witness has no v1 schema or table maps, so
 // a reader without v2 fails its Validate (the platform refuses the publish,

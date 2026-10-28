@@ -403,6 +403,42 @@ refusal of `critical_protected` and `public_platform`, and of `*` and
 `class:` tokens, is removed. The node-b ring becomes d@e (R0) plus
 `class:test` (R1).
 
+### S3 review adjudication: deploy order, rollback, coverage
+
+Review of the S3 lane (Devin approve, DeepSeek request changes):
+
+- **Deploy order.** Platform and checkpointd first, guest image and the ring
+  second. An old platform strict-decodes and v1-validates the publish, so it
+  refuses a v2 witness and a ring computer's cadence tick fails (loud, fail
+  closed). A ring takes effect at a selected computer's next cold boot (kernel
+  args), not on resume.
+- **Rollback.** Drop the ring and let the selected computers relaunch (or stop
+  their cadence) before reverting binaries: a running guest keeps its
+  boot-time cadence args and would keep publishing v2 to a reverted platform.
+  v2 checkpoints already stored are `invalid_witness` and unrestorable on a
+  pre-v2 build.
+- **Expected `witness_version` window.** Every extant base, d@e's S2 root
+  included, lacks `dolt_tables`, so v2 checkpoints settle
+  `unverified/witness_version` until the computer's next derived base. That is
+  not a regression.
+- **Coverage narrowing.** v1 hashed the non-wall-clock columns of
+  `computer_event_index` and `computer_event_projection_heads`; v2 hashes
+  neither, so a live projection head row that diverged from the tape fold now
+  verifies. Restore rebuilds both tables from the tape and the platform's head
+  CAS still refuses a bad head, so no bad state is installed; the loss is
+  detection only. Kept excluded by owner decision (the index is 4.39M rows on
+  the paper; the head row is one row and could carry a column-filtered digest
+  later if the detection is wanted).
+- **Latent divergence.** `DOLT_HASHOF_TABLE` includes AUTO_INCREMENT state.
+  `wire_publish_debounce_entries` is the only such table and has no writer
+  today; when one lands it must be named operational. "History-independent"
+  holds for the 24 measured tables, not as a theorem.
+- **Single-conn queueing.** The witness read opens its transaction on the
+  store's one-connection pool inside the hold, so the hold also includes any
+  wait behind an in-flight store query; `last_bind_millis` measures it whole.
+- **Security-Effect.** Guest authority is unchanged; the cadence policy moved
+  from code refusal to ring config.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
