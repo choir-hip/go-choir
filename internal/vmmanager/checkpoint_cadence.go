@@ -2,7 +2,6 @@ package vmmanager
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -14,15 +13,16 @@ import (
 // The guest compiles the cadence off. The computers this selector names run it,
 // with the host's values:
 //
-//	VM_CHECKPOINT_CADENCE_ONLY          computer ids (computer_select.go); empty: none
+//	VM_CHECKPOINT_CADENCE_ONLY          the generic selector (computer_select.go:
+//	                                    ids, class:<class>, *); empty: none
 //	VM_CHECKPOINT_CADENCE_EVERY_EVENTS  events between checkpoints, default 2500
 //	VM_CHECKPOINT_CADENCE_EVERY         time between checkpoints, default 60m
 //
-// The live extract a bind makes holds the computer's appends for a time that
-// is unmeasured on the paper (R2). So the deploy names one computer, the
-// operator reads last_bind_millis in its checkpoint listing, and only then
-// widens the list. Name computer ids only; never "*" or class: (the paper is
-// a computer id like any other, and stays off until measured).
+// Rings decide reach, the code doesn't (owner, 2026-10-28;
+// docs/design/progressive-delivery-2026-10-26.md, section 3). The bind is the
+// hash-only witness (S3, docs/problems/paper-never-checkpointed-2026-10-27.md):
+// it holds appends for the Dolt table-hash read, milliseconds whatever the
+// store's size, so no class, the paper's included, is refused in code.
 //
 // The selection is two kernel boot arguments, so neither the guest nor a
 // capsule can set it; the guest boot script validates both before it copies
@@ -36,7 +36,7 @@ const (
 
 // loadCheckpointCadenceFromEnv reads the selector and its values.
 func loadCheckpointCadenceFromEnv(cfg *ManagerConfig) {
-	cfg.CheckpointCadenceOnly = checkpointCadenceIDs(parseComputerSelector(os.Getenv("VM_CHECKPOINT_CADENCE_ONLY")))
+	cfg.CheckpointCadenceOnly = parseComputerSelector(os.Getenv("VM_CHECKPOINT_CADENCE_ONLY"))
 	cfg.CheckpointCadenceEveryEvents = defaultCheckpointCadenceEveryEvents
 	if raw := strings.TrimSpace(os.Getenv("VM_CHECKPOINT_CADENCE_EVERY_EVENTS")); raw != "" {
 		if n, err := strconv.Atoi(raw); err == nil {
@@ -51,53 +51,13 @@ func loadCheckpointCadenceFromEnv(cfg *ManagerConfig) {
 	}
 }
 
-// checkpointCadenceIDs keeps the computer ids of a selector list and drops, with
-// a log line, the tokens this selector refuses: "*" and class:<class> are the
-// generic selector's, and would put the unmeasured live extract on every
-// computer of a class, the paper included (review 336).
-func checkpointCadenceIDs(tokens []string) []string {
-	var ids []string
-	for _, tok := range tokens {
-		// selectsComputer trims each token before it matches, so the drop must
-		// look at the trimmed token too (re-review 338).
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
-		}
-		if tok == "*" || strings.HasPrefix(tok, computerSelectorClassPrefix) {
-			log.Printf("vmmanager: VM_CHECKPOINT_CADENCE_ONLY takes computer ids only; ignoring %q", tok)
-			continue
-		}
-		ids = append(ids, tok)
-	}
-	return ids
-}
-
-// checkpointCadenceProtected reports a warmness class the cadence never runs
-// on, whatever the list names. Not every launch path carries the class: a
-// fresh realization (vmctl's reserveFreshVMConfig: restart, refresh, recover)
-// sets it, so a named protected computer is refused there, while a first boot
-// or a resume of the same computer may not carry it and would select it. The
-// asymmetry is fail-closed for the paths that know the class and relies on the
-// first line for the rest: the list names ids and nothing else, and the nix
-// list ships empty.
-func checkpointCadenceProtected(class string) bool {
-	switch strings.TrimSpace(class) {
-	case "critical_protected", "public_platform":
-		return true
-	}
-	return false
-}
-
 // checkpointCadenceKernelParams is the boot arguments for cfg's launch: nil for
-// a computer the list does not name, and nil when the values give no usable
+// a computer the list does not select, and nil when the values give no usable
 // trigger (a selection must never reach the guest with a bad value; the guest
-// would then run its own off default and read as selected).
+// would then run its own off default and read as selected). A class: token
+// selects only on the launch paths that carry the warmness class.
 func (m *Manager) checkpointCadenceKernelParams(cfg VMConfig) []string {
-	// Ids only, enforced here as well as at the config load: a list built
-	// another way still cannot select by wildcard or class, or a protected
-	// computer.
-	if checkpointCadenceProtected(cfg.WarmnessClass) || !selectsComputer(checkpointCadenceIDs(m.cfg.CheckpointCadenceOnly), cfg) {
+	if !selectsComputer(m.cfg.CheckpointCadenceOnly, cfg) {
 		return nil
 	}
 	// A value that is set but bad refuses the whole selection: half a
