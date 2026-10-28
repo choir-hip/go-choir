@@ -489,3 +489,25 @@ are corrected in place above. The rest:
   porting origin/recovered/vmbackend-2026-10-14 against the seam design);
   progressive delivery on the single host; the hard optimization pass;
   multi-host, zero downtime, off-host receipts and logging; Qdrant removal.
+
+## Owner requirement 2026-10-28 ~14:47 UTC: a secrets vault
+
+"One data system we haven't yet built that we deeply need... a secrets
+vault. Eventually that becomes its own system on its own hardware, or
+cluster, or global replication. But we can start off with that as another
+host side microservice. Because users are going to have secrets. Every user
+is going to need encrypted secrets... for integrating with other services
+and platforms. And there's already some issues of, we have different
+encryption keys, and there are these little odds and ends that are bits of
+data that we're having trouble capturing and holding on to. So we're going
+to be forced to reckon with all this as we work to get portability." Not
+built now; designed and reviewed. It joins the split as its own goal file:
+a host-side vault service first (per-owner encrypted secrets, the key
+hierarchy for per-owner CAS encryption and crypto-erase, consolidation of
+the existing internal/keyescrow and the other scattered keys), behind an
+interface that survives a later move to its own hardware, a cluster and
+global replication. The tape records secret references and acts, never
+values. It is on the portability critical path: a computer restored on
+another host, a Mac or a self-hosted box must get its secrets back by
+re-mint or transfer. Design research delegated to DeepSeek; review by
+Devin.

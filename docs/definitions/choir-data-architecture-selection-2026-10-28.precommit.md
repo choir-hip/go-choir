@@ -291,7 +291,7 @@ times are off. By the git commits that witness them (rule 1), round 0 was
 committed at 14:34 UTC (e378c3a1d) and round 0b at 14:40 UTC (f8e65155e),
 not ~14:35 and ~14:55.
 
-## Authorship and the owner's records (added 2026-10-28 ~14:50 UTC)
+## Authorship and the owner's records (added 2026-10-28 14:43 UTC, commit bcbd1c096; first written as ~14:50, corrected)
 
 Rounds 0 and 0b are FP0's predictions (the orchestrator, Claude Opus 5.5);
 they are scored as FP0's track record. Owner, 2026-10-28: "keep these
