@@ -4,8 +4,8 @@ Design for one switch registry, a ring order, and a host controller that
 promotes and reverts switches on measured evidence, so the owner stops
 ruling on each switch.
 
-- **Status:** proposed. Awaiting owner ratification of the policy table
-  (section 3.3) and the three open questions (section 10). **Review 340**
+- **Status:** ratified by the owner 2026-10-28 (section 10, "Owner
+  answers"), with a more aggressive policy table than proposed. **Review 340**
   (Devin): code claims verified; findings F1 to F7 folded in (class tokens on
   protected rings, security revert is hold-and-page, 4 releases kept, finding
   number, OG gate not in nix, controller expiry, seed rows by id). Receipt:
@@ -747,3 +747,29 @@ repeatable artifact.
    defect before anyone else does. The alternative is to put a disposable
    fleet of simulated-use computers there first, which is slower to build and
    less real. Which do you want, and do you accept that cost?
+
+## Owner answers (2026-10-28 01:2x UTC)
+
+Context, owner: "we should definitely do runtime checks and make sure we
+arent breaking things before rolling out features. but we shouldnt keep
+shipping code in off state. thats getting messy as we have good code not
+on needlessly... basically, we need to design the progressive delivery
+system now."
+
+1. **Policy table: more aggressive than section 3.3.** Every class except
+   black auto-advances through R4 (every computer but the paper) once its
+   guards pass and its soak ends. Security enforcement and silent or
+   irreversible switches included; their soak multiplier (x2) and automatic
+   revert stay. The paper (R5) advances only by a human act. Black never
+   enters the auto path. This supersedes the section 3.3 ceilings.
+2. **A revert may request a planned, marker-backed refresh everywhere,**
+   the paper and `public_platform` included.
+3. **The owner's computers are R2,** the first user-facing ring, ahead of
+   every other user.
+4. **Build order: the registry plus the hand walk first.** The registry
+   file declares every switch, and a CI lint refuses an unregistered
+   switch and enforces expiry. FP0 then walks the "ON NOW" switches through
+   the rings by hand with the controller's readouts. The controller follows.
+
+Standing rule (AGENTS.md): a mechanism never lands off for every computer;
+it ships on at least R0 and widens by ring.
