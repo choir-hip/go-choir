@@ -20,9 +20,15 @@ import "testing"
 // tonight. I'd rather them fail than fallback." and "Don't use Opencode as
 // fallback tonight." The default pool is gpt-6-luna alone, so nothing falls
 // back to OpenCode; the deepseek-v4.1-flash catalog entry stays.
+// Owner 2026-10-28: every desk of a new computer runs on "a pool 50-50
+// between ChatGPT and synthetic DeepSeek ... falling back to one or the
+// other if one is unavailable": both members weighted 1, and the default
+// pool fails over (it is not NoFailover), so a thread on a member that is
+// out moves to the other.
 func TestDefaultPoolMembers(t *testing.T) {
 	pool := Pools()[DefaultPool]
 	want := []PoolMember{
+		{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 		{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 	}
 	if len(pool) != len(want) {
@@ -32,6 +38,9 @@ func TestDefaultPoolMembers(t *testing.T) {
 		if pool[i] != want[i] {
 			t.Fatalf("default pool[%d] = %v, want %v", i, pool[i], want[i])
 		}
+	}
+	if NoFailover(DefaultPool) {
+		t.Fatal("default pool must fail over to its other member")
 	}
 	if _, ok := Lookup("opencode-go", "deepseek-v4.1-flash"); !ok {
 		t.Fatal("deepseek-v4.1-flash should stay in the catalog, out of the pool only")
@@ -121,7 +130,7 @@ func TestLunaSyntheticPool(t *testing.T) {
 		t.Fatal("only synthetic-luna is a no-failover pool")
 	}
 	// The other pools are unchanged.
-	if d := Pools()[DefaultPool]; len(d) != 1 || d[0] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) {
+	if d := Pools()[DefaultPool]; len(d) != 2 || d[0].Provider != "synthetic" || d[1] != (PoolMember{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1}) {
 		t.Fatalf("default pool = %v", d)
 	}
 	if s := Pools()[SyntheticLunaPool]; len(s) != 2 || s[0].SlotWeight() != 1 || s[1].SlotWeight() != 1 || s[0].Provider != "synthetic" {

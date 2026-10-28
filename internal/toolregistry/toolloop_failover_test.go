@@ -105,6 +105,9 @@ func TestModelFailoverErrorClasses(t *testing.T) {
 		{fmt.Errorf("You've hit your usage limit"), true},
 		{fmt.Errorf("model \"gpt-5.5\" is not in the catalog for provider chatgpt"), true},
 		{context.DeadlineExceeded, true},
+		// A pool member whose provider the gateway never registered (its
+		// credential is missing) is "unavailable": fail over to the other.
+		{fmt.Errorf("gateway: status 400: unsupported provider: synthetic"), true},
 	} {
 		if got := IsModelFailoverError(tc.err); got != tc.want {
 			t.Fatalf("IsModelFailoverError(%v) = %v, want %v", tc.err, got, tc.want)

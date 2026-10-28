@@ -31,7 +31,7 @@ const COMPUTER = arg('computer', '');
 const N_PROMPTS = Number(arg('prompts', '3'));
 const TIMEOUT_MIN = Number(arg('timeout-min', '20'));
 const OUT = arg('out', `docs/evidence/m0-model-pools-acceptance-${new Date().toISOString().slice(0, 10)}.json`);
-const POOL = new Set(['opencode-go/deepseek-v4.1-flash', 'chatgpt/gpt-6-luna']);
+const POOL = new Set(['synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017', 'chatgpt/gpt-6-luna']);
 const PROMPTS = [
   'What changed in open-weight language models this week?',
   'Summarize the state of grid-scale battery storage deployments.',

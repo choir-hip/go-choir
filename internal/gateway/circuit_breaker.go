@@ -186,9 +186,9 @@ func providerFailureCounts(ctx context.Context, err error) bool {
 	}
 	// Synthetic's concurrency 429 says the account has too many calls in
 	// flight, not that the model is unhealthy, and a call that ended waiting
-	// for a Synthetic slot never reached the upstream. The pool has no
-	// failover for the open breaker to trigger; counting these failed healthy
-	// calls unsent (docs/problems/synthetic-provider-onboarding-2026-10-22.md,
+	// for a Synthetic slot never reached the upstream. These calls fail over
+	// on their own (the guest treats them as transient); opening the breaker
+	// on them would also fail healthy calls unsent (docs/problems/synthetic-provider-onboarding-2026-10-22.md,
 	// "Staging: concurrency 429s and the circuit breaker"). Other providers'
 	// 429s still count: that is the designed per-model backoff.
 	if errors.Is(err, provider.ErrUpstreamConcurrencyLimit) || errors.Is(err, provider.ErrConcurrencyGateWait) {

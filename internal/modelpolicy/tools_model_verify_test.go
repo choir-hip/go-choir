@@ -102,7 +102,7 @@ func TestVerifyModelCapabilityImageOnPoolLandsOnVisionMember(t *testing.T) {
 		}`)); err != nil {
 			t.Fatalf("verify: %v", err)
 		}
-		if m := provider.request.Model; m != "deepseek-v4.1-flash" && m != "gpt-6-luna" {
+		if m := provider.request.Model; m != "deepseek-v4.1-flash" && m != "gpt-6-luna" && m != "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
 			t.Fatalf("image call assigned to %q, want a vision pool member", m)
 		}
 	}

@@ -68,8 +68,10 @@ model = "gpt-6-luna"
 	if got := override.Resolve(agentprofile.ManagementTask); got.Provider != "opencode-go" || got.Model != "deepseek-v4.1-flash" {
 		t.Fatalf("the owner's override was ignored: %+v", got)
 	}
-	// Through the manager and the run metadata: one model, no failover
-	// list (a pinned task never wraps to a pool member).
+	// Through the manager and the run metadata: one model. Owner
+	// 2026-10-28: every desk falls back to the other default-pool model
+	// when one is out, so the pin's only fallback is the default pool's
+	// other member; never a free or preview model (R2-9).
 	dir := t.TempDir()
 	path := filepath.Join(dir, "model-policy.toml")
 	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n"), 0o644); err != nil {
@@ -80,7 +82,24 @@ model = "gpt-6-luna"
 	if meta[MetadataProvider] != ManagementTaskProvider || meta[MetadataModel] != ManagementTaskModel {
 		t.Fatalf("task run metadata = %+v", meta)
 	}
-	if _, ok := meta[MetadataFallbacks]; ok {
-		t.Fatalf("a pinned task model has fallbacks: %+v", meta)
+	if meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+		t.Fatalf("the pinned task's fallback = %+v, want the default pool's other member", meta)
+	}
+	// An owner override naming the other member falls back to the pin's model.
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"synthetic\"\nmodel = \"hf:deepseek-ai/DeepSeek-V4.1-Flash-1017\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if meta[MetadataProvider] != "synthetic" || meta[MetadataFallbacks] != "chatgpt/gpt-6-luna" {
+		t.Fatalf("synthetic task override metadata = %+v", meta)
+	}
+	// An override outside the default pool fails over to the default pool's
+	// members, never to a free or preview model.
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"deepseek-v4.1-flash\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if fb, _ := meta[MetadataFallbacks].(string); fb != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017,chatgpt/gpt-6-luna" {
+		t.Fatalf("opencode task override fallback = %+v", meta)
 	}
 }

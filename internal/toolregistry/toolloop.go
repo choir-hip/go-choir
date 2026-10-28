@@ -1223,7 +1223,7 @@ func IsModelFailoverError(err error) bool {
 	}
 	text := strings.ToLower(err.Error())
 	for _, marker := range []string{
-		"usage limit", "usage_limit", "quota", "not in the catalog", "unsupported model",
+		"usage limit", "usage_limit", "quota", "not in the catalog", "unsupported model", "unsupported provider",
 		"model_not_found", "model not found", "does not exist", "timeout", "timed out",
 		"circuit open", "breaker open",
 	} {

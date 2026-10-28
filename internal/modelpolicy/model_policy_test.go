@@ -140,9 +140,9 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, map[string]any{"trajectory_id": "traj-1"})
 	member := metadata[MetadataProvider].(string) + "/" + metadata[MetadataModel].(string)
-	// The default pool is gpt-6-luna alone tonight (owner 2026-10-23), so
-	// a thread has no fallback at all; the fallbacks of a larger pool are
-	// the other members in pool order after the assigned one, wrapping.
+	// The default pool is Synthetic DeepSeek 1017 and gpt-6-luna at 1:1
+	// (owner 2026-10-28); a thread's fallbacks are the other members in
+	// pool order after the assigned one, wrapping.
 	pool := modelcatalog.Pools()[modelcatalog.DefaultPool]
 	var rest []string
 	for i, m := range pool {
@@ -156,7 +156,7 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	}
 	other := strings.Join(rest, ",")
 	fallbacks, _ := metadata[MetadataFallbacks].(string)
-	if member != "chatgpt/gpt-6-luna" || fallbacks != other || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
+	if (member != "chatgpt/gpt-6-luna" && member != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017") || fallbacks != other || other == "" || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
 	explicit := map[string]any{MetadataProvider: "custom", MetadataModel: "custom-model"}
@@ -236,12 +236,18 @@ func TestAssignSyntheticLunaSplitsOneToOneAndNeverFailsOver(t *testing.T) {
 	if syn < 1800 || syn > 2200 || syn+luna != 4000 {
 		t.Fatalf("split = %v, want about 2000 each of 4000", seen)
 	}
-	// The default pool is gpt-6-luna alone: no thread falls back to OpenCode.
-	for i := 0; i < 50; i++ {
+	// The default pool (owner 2026-10-28) splits 1:1 too, but each thread
+	// fails over to the other member, and no thread reaches OpenCode.
+	defaultSeen := map[string]int{}
+	for i := 0; i < 4000; i++ {
 		chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, fmt.Sprintf("thread-%d", i))
-		if chosen.Model != "gpt-6-luna" || len(fallbacks) != 0 {
+		defaultSeen[chosen.Provider]++
+		if len(fallbacks) != 1 || fallbacks[0].Provider == chosen.Provider || chosen.Provider == "opencode-go" || fallbacks[0].Provider == "opencode-go" {
 			t.Fatalf("default pool thread-%d: %+v with fallbacks %+v", i, chosen, fallbacks)
 		}
+	}
+	if d := defaultSeen["synthetic"]; d < 1800 || d > 2200 || d+defaultSeen["chatgpt"] != 4000 {
+		t.Fatalf("default split = %v, want about 2000 each of 4000", defaultSeen)
 	}
 	// A concrete member named directly has no fallback either.
 	chosen, fallbacks, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "traj")
@@ -427,7 +433,7 @@ func TestAssignLunaSyntheticGivesLunaEveryThreadAndSyntheticAsFallback(t *testin
 	if _, fb, _ := Assign(provideriface.LLMSelection{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"}, "t"); len(fb) != 0 {
 		t.Fatalf("explicit synthetic pin has fallbacks %+v", fb)
 	}
-	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); chosen.Model != "gpt-6-luna" || len(fb) != 0 {
+	if chosen, fb, _ := Assign(provideriface.LLMSelection{Model: "pool:default"}, "t"); len(fb) != 1 || fb[0].Provider == chosen.Provider {
 		t.Fatalf("default pool changed: %+v %+v", chosen, fb)
 	}
 	seen := map[string]int{}
@@ -461,7 +467,8 @@ func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
 	if !models["synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017"] || !models["chatgpt/gpt-6-luna"] || len(models) != 2 {
 		t.Fatalf("policy selections = %v", models)
 	}
-	// The management task never takes a pool or its fallback.
+	// The management task never takes a pool; its only fallback is the
+	// default pool's other member (owner 2026-10-28), not this pool's.
 	if got := policy.Resolve(agentprofile.ManagementTask); got.Provider != "chatgpt" || got.Model != "gpt-6-luna" {
 		t.Fatalf("management task = %+v", got)
 	}
@@ -473,7 +480,7 @@ func TestPolicyAcceptsLunaSyntheticPool(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if _, ok := meta[MetadataFallbacks]; ok {
+	if meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
 		t.Fatalf("management task carries fallbacks %v", meta[MetadataFallbacks])
 	}
 }

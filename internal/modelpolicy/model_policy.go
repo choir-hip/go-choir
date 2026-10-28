@@ -158,9 +158,11 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	spec := SpecOf(selection)
 	selection, fallbacks, assignment := Assign(selection, thread)
 	if NormalizeRole(role) == ManagementTaskRole {
-		// A pinned task never fails over to a pool member (R2-9): a
-		// failover could land on a free model the pin exists to avoid.
-		fallbacks = nil
+		// A pinned task never fails over to a free or preview model (R2-9).
+		// Owner 2026-10-28: every desk falls back to the other model when
+		// one is out, so the pin fails over to the default pool's other
+		// members only.
+		fallbacks = managementTaskFallbacks(selection)
 	}
 	if assignment == AssignmentUnknownPool {
 		// Fail closed, visibly: never run the role on another pool's model.
@@ -347,6 +349,21 @@ func managementTaskSelection(p Policy) provideriface.LLMSelection {
 		return pin
 	}
 	return fillSelection(selection, p.Defaults)
+}
+
+// managementTaskFallbacks is the pinned task's failover order: the default
+// pool's members other than the pin, in pool order, never a free or preview
+// model.
+func managementTaskFallbacks(pin provideriface.LLMSelection) []provideriface.LLMSelection {
+	var out []provideriface.LLMSelection
+	for _, member := range poolSelections(catalogPools()[modelcatalog.DefaultPool], pin) {
+		model := strings.ToLower(member.Model)
+		if (member.Provider == pin.Provider && member.Model == pin.Model) || strings.HasSuffix(model, "-free") || strings.Contains(model, "preview") {
+			continue
+		}
+		out = append(out, member)
+	}
+	return out
 }
 
 // Resolve returns the effective selection for role.
@@ -552,8 +569,8 @@ requires = ["image", "tool_use"]
 
 func fallbackPolicy(_ provideriface.Config) Policy {
 	// Owner 2026-10-12: every role runs on the default pool, assigned per
-	// thread (since 2026-10-16 every thread on gpt-6-luna, failing over to
-	// deepseek-v4.1-flash; modelcatalog.Pools). Texture
+	// thread (since 2026-10-28 Synthetic DeepSeek 1017 and gpt-6-luna at 1:1,
+	// each failing over to the other; modelcatalog.Pools). Texture
 	// and management keep high effort; opencode-go ignores the setting.
 	pool := func(effort string) provideriface.LLMSelection {
 		return provideriface.LLMSelection{Model: defaultPoolSpec, ReasoningEffort: effort, Source: "platform_fallback"}

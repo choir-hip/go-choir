@@ -320,9 +320,15 @@ func (m PoolMember) SlotWeight() int {
 // 1017 is a fallback-only member, reached only when luna fails, and the pool
 // fails over in the normal way (it is not NoFailover). The default and
 // synthetic-luna pools are unchanged.
+// Owner 2026-10-28: the default pool, which every desk of a new computer
+// names, is "a pool 50-50 between ChatGPT and synthetic DeepSeek ...
+// falling back to one or the other if one is unavailable": Synthetic's
+// DeepSeek 1017 and gpt-6-luna at 1:1, failing over in the normal way, so
+// a thread whose member is out of quota moves to the other.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
+			{Provider: "synthetic", Model: "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017", Weight: 1},
 			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 1},
 		},
 		SyntheticLunaPool: {
