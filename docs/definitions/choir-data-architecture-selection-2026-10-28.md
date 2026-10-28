@@ -186,8 +186,14 @@ plan:
      2026-10-28) while per-computer state stays local as a projection
      whose durable truth (tape segments, snapshots) is shipped off-host
   2: budgets, hard gates and decision rule (owner edits; frozen),
-     including growth targets for the corpus tier (objects, bytes and
-     sources per day; query kinds and latency) at least ten times today
+     written as unit costs (bytes per object, writes per event, CPU per
+     ingested document, memory and disk per computer) and growth targets
+     on two axes (corpus volume; number of computers). Horizons (owner,
+     2026-10-28: about 100,000x, roughly 10x a quarter): the interfaces
+     must hold to 100,000x without redesign; the implementations to the
+     next 10x, replaced component by component at a quarterly scale
+     review (measure, project the next 10x, swap what breaks first,
+     proven on the replay harness before it carries load)
   3: candidates by divergent panel, with candidate 0 the incumbent Dolt
      (after the parallel-track mitigations); cut on paper to three
   4: build the projector harness (today the rebuilder is Dolt-bound:
