@@ -44,6 +44,10 @@ const (
 type HibernateOptions struct {
 	// CacheReturn, when set, adds the step above to a snapshot hibernate.
 	CacheReturn *CacheReturnOption
+	// HostStop marks a planned host stop (S5, busy_hibernate.go): a guest
+	// whose fence answers busy only with runs is captured without the fence
+	// instead of being left running. Only vmctl's host-stop pass sets it.
+	HostStop bool
 }
 
 // CacheReturnOption selects the act's scope and whether it is a dry run

@@ -243,6 +243,12 @@ type SnapshotMeta struct {
 	// HostCPU is the capturing host's CPU fingerprint (host_cpu.go, D2 S5);
 	// empty when it could not be read, and in metas from before S5.
 	HostCPU string `json:"host_cpu,omitempty"`
+	// BusyHostStop records a busy capture on a planned host stop (S5,
+	// busy_hibernate.go): the guest was not fenced. It loads only onto its
+	// own current release. Additive, no version bump: a reader that predates
+	// it ignores the field, so a rollback must discard busy snapshots (the
+	// commit message says how).
+	BusyHostStop bool `json:"busy_host_stop,omitempty"`
 }
 
 // snapshotConfinement is the confinement a snapshot was captured under.
@@ -288,6 +294,10 @@ type SnapshotTimeline struct {
 	// CacheReturn is the cache return before this hibernate's snapshot
 	// (density D6 S3); nil when the hibernate did not ask for one.
 	CacheReturn *CacheReturnTimeline `json:"cache_return,omitempty"`
+	// Busy: a host-stop capture of a guest that answered busy (S5).
+	// BusyRefused: why a host stop left a busy guest running.
+	Busy        bool   `json:"busy,omitempty"`
+	BusyRefused string `json:"busy_refused,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
@@ -591,6 +601,9 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	}
 	if !v.Now.Before(meta.CreatedAt.Add(m.snapshotMaxAge())) {
 		return snapshotReasonMaxAge
+	}
+	if reason := m.busySnapshotRefusal(meta, v.Now); reason != "" {
+		return reason
 	}
 	if !v.CredentialDelivery && meta.resumeWindowPassed(v.Now) {
 		return snapshotReasonCredentialWindow
@@ -1004,6 +1017,7 @@ type guestHibernatePrepareResponse struct {
 	GuestBuild          string    `json:"guest_build,omitempty"`
 	CredentialResume    bool      `json:"credential_resume,omitempty"`
 	RunningRuns         int       `json:"running_runs,omitempty"`
+	InflightWork        int       `json:"inflight_work,omitempty"`
 	SelfdevActiveOps    int       `json:"selfdev_active_operations,omitempty"`
 }
 

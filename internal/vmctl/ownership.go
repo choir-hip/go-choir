@@ -542,6 +542,10 @@ type OwnershipRegistry struct {
 	// marker window, and a snapshot inside it would capture the marker (D2 S5).
 	deployRefreshInFlight func(userID, desktopID string) bool
 
+	// hostStopHealthProbe reads what a planned host stop needs from a guest's
+	// /health (S5, host_stop_hibernate.go); nil is the HTTP probe.
+	hostStopHealthProbe func(*VMOwnership) hostStopHealth
+
 	// resumeEnroller is called after a snapshot resume onto a guest release
 	// (SetResumeEnroller).
 	resumeEnroller func(own VMOwnership, release string)
@@ -3073,6 +3077,13 @@ func (r *OwnershipRegistry) HibernateVMForDesktop(userID, desktopID string) erro
 }
 
 func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, reason string) error {
+	return r.hibernateVMForDesktop(userID, desktopID, reason, false)
+}
+
+// hibernateVMForDesktop is the hibernate. busyHostStop asks a manager that
+// has the call for a host-stop capture, which also takes a guest busy only
+// with runs (S5); only HibernateForHostStop sets it.
+func (r *OwnershipRegistry) hibernateVMForDesktop(userID, desktopID, reason string, busyHostStop bool) error {
 	r.mu.Lock()
 	key := ownershipKey(userID, desktopID)
 	own, ok := r.ownerships[key]
@@ -3115,7 +3126,9 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 		r.noteHibernateStartLocked()
 		r.mu.Unlock()
 		var mgrErr error
-		if withOpt, ok := mgr.(hibernateCacheReturnManager); ok && cacheReturn != nil {
+		if hs, ok := mgr.(hostStopHibernateManager); ok && busyHostStop {
+			mgrErr = hs.HibernateVMForHostStop(vmID)
+		} else if withOpt, ok := mgr.(hibernateCacheReturnManager); ok && cacheReturn != nil {
 			mgrErr = withOpt.HibernateVMWithCacheReturn(vmID, *cacheReturn)
 		} else {
 			mgrErr = mgr.HibernateVM(vmID)

@@ -427,6 +427,11 @@ type ManagerConfig struct {
 	// SnapshotMaxAge bounds how long a snapshot stays resumable
 	// (VM_SNAPSHOT_MAX_AGE, default DefaultSnapshotMaxAge).
 	SnapshotMaxAge time.Duration
+	// BusyHibernateMaxAge bounds how long a busy host-stop snapshot (S5,
+	// busy_hibernate.go) stays resumable (VM_BUSY_HIBERNATE_MAX_AGE, default
+	// DefaultBusyHibernateMaxAge). Busy hibernate itself has no switch
+	// (owner, 2026-10-28).
+	BusyHibernateMaxAge time.Duration
 	// SnapshotType (VM_SNAPSHOT_TYPE) is full (default) or diff; diff
 	// applies only to the computers SnapshotDiffOnly (VM_SNAPSHOT_DIFF_ONLY)
 	// selects, and only when every L3a condition holds (snapshot_diff.go).

@@ -161,6 +161,11 @@ func LoadConfigFromEnv() ManagerConfig {
 			cfg.SnapshotMaxAge = d
 		}
 	}
+	if v := os.Getenv("VM_BUSY_HIBERNATE_MAX_AGE"); v != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil && d > 0 {
+			cfg.BusyHibernateMaxAge = d
+		}
+	}
 
 	// Snapshot vault (snapshot_vault.go). Off unless the dir is set; an
 	// unusable value is kept as given so the probe refuses every capture

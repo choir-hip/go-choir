@@ -156,7 +156,8 @@ func main() {
 		mgr.Start()
 		// Guests outlive vmctl by default: a vmctl exit must not take every
 		// computer with it (vmctl 360 review Phase 0 step 7).
-		if envBool("VMCTL_STOP_MANAGED_ON_EXIT", false) {
+		stopManagedOnExit := envBool("VMCTL_STOP_MANAGED_ON_EXIT", false)
+		if stopManagedOnExit {
 			defer mgr.Stop()
 		} else {
 			defer mgr.StopHealthChecks()
@@ -166,6 +167,20 @@ func main() {
 		// Wire the manager to the registry via an adapter that
 		// translates between the vmctl and vmmanager interfaces.
 		registry.SetVMManager(&vmManagerAdapter{mgr: mgr})
+		// S5: a planned host stop hibernates every running computer by
+		// snapshot, busy ones included where allowed (host_stop.go). Deferred
+		// after the manager's stop, so it runs first.
+		defer func() {
+			decision := decideHostStop(stopManagedOnExit, systemdSystemState)
+			if !decision.Hibernate {
+				return
+			}
+			budget := hostStopBudgetFromEnv()
+			log.Printf("vmctl: planned host stop (%s): hibernating running computers within %s", decision.Why, budget)
+			ctx, cancel := context.WithTimeout(context.Background(), budget)
+			defer cancel()
+			registry.HibernateForHostStop(ctx)
+		}()
 
 		log.Printf("vmctl: Firecracker VM manager started (kernel=%s rootfs=%s)", mgrCfg.KernelImagePath, mgrCfg.RootfsPath)
 	} else {
@@ -421,6 +436,11 @@ func (a *vmManagerAdapter) HibernateVMWithCacheReturn(vmID string, opt vmctl.Hib
 	return a.mgr.HibernateVMWithOptions(vmID, vmmanager.HibernateOptions{
 		CacheReturn: &vmmanager.CacheReturnOption{Scope: opt.Scope, DryRun: opt.DryRun},
 	})
+}
+
+// HibernateVMForHostStop is the S5 host-stop capture.
+func (a *vmManagerAdapter) HibernateVMForHostStop(vmID string) error {
+	return a.mgr.HibernateVMForHostStop(vmID)
 }
 
 func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) {

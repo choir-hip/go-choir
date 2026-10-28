@@ -98,8 +98,8 @@ func (m *Manager) hibernateVMSnapshot(vmID string, opts HibernateOptions) error 
 		}
 		tl.finish("hibernated", nil)
 		m.persistHibernateTimeline(tl)
-		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s%s)",
-			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused, snap.CacheReturn.logSuffix())
+		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s snapshot_type=%s diff_refused=%s busy=%v%s)",
+			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline, snap.SnapshotType, snap.DiffRefused, snap.Busy, snap.CacheReturn.logSuffix())
 		return nil
 	}
 
@@ -110,7 +110,7 @@ func (m *Manager) hibernateVMSnapshot(vmID string, opts HibernateOptions) error 
 	if reason == snapshotReasonGuestBusy {
 		snap.Outcome = "skip"
 		snap.Reason = reason
-		log.Printf("vmmanager: snapshot hibernate of VM %s skipped (%s: %v); the guest is working and stays running", vmID, reason, err)
+		log.Printf("vmmanager: snapshot hibernate of VM %s skipped (%s: %v; host_stop=%v busy_refused=%q); the guest is working and stays running", vmID, reason, err, opts.HostStop, snap.BusyRefused)
 		tl.finish("skipped", err)
 		m.persistHibernateTimeline(tl)
 		return &HibernateGuestBusyError{VMID: vmID, Detail: err}
@@ -227,16 +227,30 @@ func (m *Manager) captureSnapshotInto(vmID string, cfg VMConfig, hostURL string,
 	prepared, reason, err := guestHibernatePrepare(prepareCtx, hostURL)
 	cancel()
 	snap.FenceMS = time.Since(fenceStart).Milliseconds()
+	// S5 (busy_hibernate.go): on a planned host stop a guest busy only with
+	// runs is captured without the fence; any other busy reply leaves it
+	// running, as a busy idle hibernate does.
+	if reason == snapshotReasonGuestBusy && opts.HostStop {
+		if refused := m.busyCaptureRefusal(cfg, prepared); refused != "" {
+			snap.BusyRefused = refused
+			return nil, false, reason, err
+		}
+		snap.Busy = true
+		reason, err = "", nil
+		tl.markDetail("guest_busy_host_stop", fmt.Sprintf("running_runs=%d inflight_work=%d", prepared.RunningRuns, prepared.InflightWork))
+	}
 	if reason != "" {
 		return nil, false, reason, err
 	}
-	tl.markDetail("guest_fenced", fmt.Sprintf("capability_expires_at=%s", prepared.CapabilityExpiresAt.UTC().Format(time.RFC3339)))
+	if !snap.Busy {
+		tl.markDetail("guest_fenced", fmt.Sprintf("capability_expires_at=%s", prepared.CapabilityExpiresAt.UTC().Format(time.RFC3339)))
+	}
 
 	// Density D6 S3: ask the fenced guest to return its cold page cache and
 	// wait for the host to see the fall, so the snapshot does not write it.
 	// Its own bounded call after prepare and unplug; any failure skips it
 	// and the snapshot proceeds as without it (snapshot_cache_return.go).
-	if opts.CacheReturn != nil {
+	if opts.CacheReturn != nil && !snap.Busy {
 		m.snapshotCacheReturn(vmID, hostURL, opts.CacheReturn, fenceBegan, snap)
 		if snap.CacheReturn != nil {
 			tl.markDetail("cache_return", snap.CacheReturn.detail())
@@ -400,6 +414,11 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 			return nil, err
 		}
 	}
+	if snap.Busy {
+		if err := m.syncBusyDataImage(vmID); err != nil {
+			return nil, err
+		}
+	}
 	disks := make([]SnapshotDiskIdentity, 0, 6)
 	for _, path := range m.snapshotBoundPaths(vmID, cfg) {
 		id, err := diskIdentity(path)
@@ -441,6 +460,7 @@ func (m *Manager) commitSnapshot(vmID, root string, vh *vaultHandle, cfg VMConfi
 		Vault:              vault,
 		SnapshotType:       snap.SnapshotType,
 		ColdOrigin:         snap.ColdOrigin,
+		BusyHostStop:       snap.Busy,
 	}
 	if conf.jailed() {
 		meta.Confinement = ConfinementJailer

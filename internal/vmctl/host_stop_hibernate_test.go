@@ -147,7 +147,7 @@ func TestHostStopOrdersProtectedFirstAndTouchesOnlyRunningComputers(t *testing.T
 	activeComputer(reg, "vm-z")
 	paper := activeComputer(reg, "vm-paper")
 	reg.mu.Lock()
-	paper.WarmnessClass = string(WarmnessClassCriticalProtected)
+	paper.WarmnessClass = WarmnessClassCriticalProtected
 	reg.mu.Unlock()
 	stopped := activeComputer(reg, "vm-stopped")
 	reg.mu.Lock()
