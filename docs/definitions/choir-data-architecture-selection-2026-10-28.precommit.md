@@ -361,6 +361,31 @@ Hard to measure: real model latency and provider limits dominate live
 throughput. Mitigation: stub model calls with recorded latency
 distributions, and report provider-bound throughput separately.
 
+## Records (vault, DeepSeek, copied 2026-10-28 about 15:27 UTC from the accepted design)
+
+Authored by the DeepSeek seat in docs/design/secrets-vault-design-2026-10-28.md
+(revision 2, accepted by Devin round 2 at 208df8855). Copied verbatim; the
+design's table is the original. Settlers: the vault build goals.
+
+| ID | Claim | Estimate | Falsifier | Hard to measure / mitigation |
+|---|---|---|---|---|
+| V0-01 | `secretd` steady RSS on Node B | 45 MiB [30, 90] | > 128 MiB | Page cache vs anon; smaps_rollup, 24 h |
+| V0-02 | p99 lease issue (local socket, batched audit) | 7 ms [3, 20] | > 50 ms | audit fsync; client histograms |
+| V0-03 | broker-added p99 latency | 3 ms [1, 12] | > 30 ms | gateway queueing; eBPF/client histograms |
+| V0-04 | portable vault slice per 1,000 secrets (1 KiB median values, 64 KiB cap) | 3 MiB [1.5, 8] | > 12 MiB | cap-heavy fixture reaches ~64 MiB; measure on a fixture, report both |
+| V0-05 | 1,000 secrets restored on a second host (vault portion) | 25 s [10, 90] | > 180 s | tape/CAS fetch dominates; instrument phases |
+| V0-06 | No secret values in tape segments over 7 days | p = 0.85 | one non-fixture match | detector false negatives; known-value hash scan + manual review |
+| V0-07 | Crypto-erase: reads fail < 1 s locally | p = 0.95 | any success | caches; restart + cross-process check |
+| V0-08 | TPM-sealed host root survives 10 NixOS updates without re-enrollment | p = 0.60 | < 5/10 | PCR changes; per-update ledger |
+| V0-09 | ≥90% of gateway provider calls brokered with no key in guest by end of Q1 | p = 0.60 | < 70% | per-provider API shapes; per-provider counters |
+| V0-10 | Guest-root red team cannot obtain a broker-only secret without a grant | p = 0.75 | any success | deny-by-default; red-team receipt |
+| V0-11 | Owner-mediated rewrap to a Mac | 12 s [5, 45] | > 120 s | WebAuthn prompts, network; timed drill |
+| V0-12 | Vault adds < 5% host RSS and < 1% CPU at 1k leases/min | p = 0.70 | > 15% / 5% | noisy host; cgroup accounting |
+| V0-13 | Detector catches ≥95% of injected known values in tape scan | p = 0.50 | < 80% | regex limits; inject a corpus, measure |
+| V0-14 | No secret remains in env files after cutover | p = 0.80 | any `EnvironmentFile` secret | migration discipline; grep the Nix tree |
+| V0-15 | After provider/escrow migration, 100% of existing custodian wraps and privacy keys unwrap to identical key digests through the vault path | p = 0.90 | any digest mismatch or missing wrap | legacy wrap formats; dry-run replay of every Store A row before cutover, not a sample |
+| V0-16 | A recovery-kit-only ceremony (no host key files, no custodian wrap) restores a test computer's private tape artifacts | p = 0.70 | any byte unrecoverable | drill UX; precommit and receipt per drill |
+
 ## Settlements
 
 **R0-06, settled confirmed by Devin's inventory (2026-10-28, independent of

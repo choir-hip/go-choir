@@ -85,7 +85,7 @@ Doctrine already carves secrets out — "secrets and keys (their own vault)", `d
 | Host escrow private key (X25519) | `<artifacts>/key-escrow-key`, base64 0600; `keyescrow.go:71-111`; default `internal/platform/config.go:76`; hidden path `nix/node-b.nix:550` | Optional seal under KEK (`CHOIR_KEY_ESCROW_SEAL` = off, permit, or require; `internal/keyescrow/sealed.go:42-105`); default off | **Yes** | corpusd silently generates a new key if absent (`cmd/corpusd/main.go:176-186`); under SealOff nothing is logged even on generation — a missing mount silently orphans every wrap. [V] |
 | Escrow KEK (32 B) | `CHOIR_KEY_ESCROW_KEK_PATH`, absolute, 0400, outside artifacts and backup (`sealed.go:44-46,286-360`) | Owner-only regular file, no symlink | **Yes** | This is the current root of trust; R5 keeps it out of backups. [V] |
 | Platform signing key (Ed25519) | `PLATFORM_SIGNING_KEY_PATH`, default artifacts/signing-key; `internal/platform/signing.go:42-73`; `internal/platform/config.go:75` | 0600 file; only corpusd/checkpointd mount it | **Yes** | One key signs every computer's `platform-control` receipts; public pinned in `internal/computerevent/appender.go:1196-1215`. Rotation scaffolding has no callers. [V] |
-| Auth JWT signing key (Ed25519) | `/var/lib/go-choir/auth-signing/ed25519-key`; created by auth's `ExecStartPre` (`nix/node-b.nix:949`); only authd sets `AUTH_JWT_PRIVATE_KEY_PATH` (`:952`) | Root 0600; authd signs; the proxy verifies with `ed25519-key.pub` (`:1003`) | **Yes** | Only authd reads the private key: the gateway unit's `InaccessiblePaths` hides the whole `authSigningDir` (`:2603`), and a hidden parent hides the `jwtKey` exemption with it. [V] |
+| Auth JWT signing key (Ed25519) | `/var/lib/go-choir/auth-signing/ed25519-key`; created by auth's `ExecStartPre` (`nix/node-b.nix:932`); only authd sets `AUTH_JWT_PRIVATE_KEY_PATH` (`:952`) | Root 0600; authd signs; the proxy verifies with `ed25519-key.pub` (`:1003`) | **Yes** | Only authd reads the private key: the gateway unit's `InaccessiblePaths` hides the whole `authSigningDir` (`:2603`), and a hidden parent hides the `jwtKey` exemption with it. [V] |
 | Owner-act signing key (Ed25519) | `secrets/owner-act-signing-key`; `nix/node-b.nix:163`; `internal/owneract/owneract.go:59-60,319-322` | systemd `LoadCredential`; proxy only | **Yes** | Signs owner acts; currently no passkey step-up (separate gap). [V] |
 | Host-internal service token | `secrets/internal-service-token`; `nix/node-b.nix:126`; `internal/hostauth/hostauth.go:47-67` | systemd credential, not env; header stripped at ingress; mode off/observe/enforce | **Yes** | One shared token for all host services; per-unit identity is the better end state. [V] |
 | Host-internal token header copy | `${internalTokenFile}.header`; `nix/node-b.nix:129,2684-2693` | Root 0600; a curl header line for root shells | **Yes (same record)** | A second copy of the same token on disk, kept in sync at activation; vault delivery retires the file or derives the header at use. [V] |
@@ -367,3 +367,19 @@ per-purpose HKDF info strings and canonical AAD; the evidence class and
 heresy delta sections; the 7-day adoption rule for OpenBao 2.7.2.
 
 Next: DeepSeek revises (author seat), then Devin re-reviews one seat.
+
+## Review round 2 (Devin, one seat), 2026-10-28
+
+Frozen at 208df8855, sha256 c0e64641…; verdict **accept**, confidence
+high. B1-B3 closed in substance; every checked non-blocking item landed;
+Devin agrees the gateway identity file holds only token hashes
+(internal/gateway/config.go:163-165), withdrawing its round-1 framing. One
+citation drift fixed by FP0 after the review (JWT key creation is
+node-b.nix:932, not :949). Residuals carried to the build goals: decision 1
+covers ROOT creation as well as unwrap (client-only); V0-04's falsifier is
+bound to the 1 KiB-median fixture and must not be swapped; the "no
+mission-critical services from scratch" tension stays a build-time gate
+(thin envelope, independent crypto review, Transit fallback). Raw output:
+`.agentic-consensus/data-arch/vault-review2/out/devin.out` (gitignored).
+Status: design accepted; not built; execution held by the owner.
+
