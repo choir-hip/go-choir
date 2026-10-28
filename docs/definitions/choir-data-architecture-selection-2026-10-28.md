@@ -259,3 +259,45 @@ plan:
      the migration goal is authored (shadow, widen by ring, reads last;
      rollback = drop the shadow)
 ```
+
+## Owner answers (2026-10-28 ~13:00 UTC), binding on steps 2-6
+
+- Objective, not budgets: "see how efficient we can make it". A
+  multidimensional optimization against physics, information theory and
+  sound microeconomics, on trusted open-source parts (no mission-critical
+  services from scratch). The budgets step becomes an objective with
+  measured unit costs; the hard gates stay.
+- Memory model: steady state below 2 GB per computer with 1 vCPU, spiking
+  for capsules (Playwright, many concurrent capsules). High memory caps
+  with oversubscription, not low caps: maximize virtual memory, minimize
+  real (resident) memory. Bounded peaks per operation stay a hard gate;
+  that bound is what makes oversubscription safe.
+- Checkpoint and restore: fast, with minimal resource use while they run
+  and minimal disk growth of the corpus.
+- Downtime: the rearchitecture may take significant downtime while
+  prelaunch. Autoradio is not built until Autoputer and Autopaper are a
+  stable base. After Autoradio ships, no downtime of user computers or
+  the Autopaper is tolerated, so the target architecture must deploy with
+  zero downtime.
+- Public and private: everything is private except what is public (the
+  Autopaper's articles and what users explicitly publish). Published
+  Textures are public; drafts and owners' captures are private.
+  Future-proof for paywall/auth tiers and internal org-wide deployments
+  (not built yet): access is a policy over objects, not a binary flag.
+- Hosts: zero-downtime deploys come first, then scaling users and
+  ingestion, then separating services onto machines (approach open).
+  This connects to the progressive delivery system
+  (docs/design/progressive-delivery-2026-10-26.md).
+- Self-hosting everything is committed: "a bet already paying dividends
+  and will accrue as AI becomes ASI, especially at SRE".
+- Autoradio (to be documented separately; the owner's sketch): an AI DJ
+  playing clips and full episodes of podcasts and videos, interspersed
+  with TTS of Autopaper articles and readings of emails and Textures that
+  represent agentic workloads; a full voice interface so the user can
+  always interrupt and direct it; learns each user's content preferences;
+  users can monologue and record their own takes and publish them (with
+  or without AI editing), which become transcludable sources read by
+  agents and possibly played to other users. Storage implications for
+  the census and bake-off: large media objects (content-addressed, by
+  reference or cached), streaming reads, per-user preference state, user
+  recordings (private until published), low-latency voice paths.
