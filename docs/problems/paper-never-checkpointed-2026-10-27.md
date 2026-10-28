@@ -162,6 +162,52 @@ command, 00:28:37 to 00:28:43 UTC:
 Still open: d@e's next cadence base seeding from the root, with its
 `epoch_root`; and the paper run after the 04:00 compaction.
 
+## S4 build: bases as parts (2026-10-28, branch lane/ckpt-incremental)
+
+Owner direction (2026-10-28): no code ships switched off, and rollout is
+progressive, "on for at least one". The build:
+- A parts-form base is a manifest (`internal/basemanifest`), stored where
+  a tar blob is (`sha256/projection-base/<digest of the manifest>`). It
+  lists every directory and file. Each file's bytes are a part, stored once
+  at `sha256/projection-base-parts/<sha256>`. A publish hashes every file
+  and writes only the parts that do not exist yet. A reused part gets its
+  mtime refreshed, so GC grace covers it until a manifest names it.
+- The descriptor carries `format: "parts/v1"` and a vocabulary version
+  ending in `+parts` (after `+live_captured` on a root). A build from before
+  S4 refuses the descriptor, so it never reads a manifest as a tar.
+- Readers take both forms: host seeding, the publish read-back, and
+  `InstallVerifiedBase`/`InstallPinnedBase`. A guest fetches parts through
+  `HTTPSource.DownloadPart` from corpusd's
+  `/internal/computers/files/projection-base/part`, which serves only a
+  part that base's manifest names, for the computer the descriptor names.
+  The guest's own code (agentcore, autoputer) is unchanged; it calls
+  projectionbase.
+- Selection: `CHECKPOINTD_BASE_PARTS_ONLY`, with vmctl's `*_ONLY` tokens.
+  It is set to d@e and `class:test`. checkpointd has no source for a
+  computer's class, so for now `class:test` selects nothing; only d@e
+  publishes parts. Every other computer keeps publishing tar.
+- GC: the parts live set is every part that any manifest on disk names,
+  for a live base or not. A part outlives the last manifest that names it
+  by one sweep. A blob that looks like a manifest but does not parse aborts
+  the sweep. `projection-base-parts` is now in the default and Node B
+  active namespaces.
+- Evidence from the fixture, with real Dolt: a seeded parts rebuild after
+  tail replay plus `DOLT_GC()` wrote 12.8 KB of new parts and reused
+  36.5 KB. The seed's oldgen table file survived the generational GC
+  unchanged.
+
+Expected bytes per publish on the paper, a hypothesis until d@e and then
+the paper measure it:
+- Parts written: new oldgen table files (the chunks the tail added), plus
+  the journal and the manifests. That is megabytes to low GiB per publish,
+  not 22-37 GiB.
+- Reads: every publish still hashes the whole store.
+- Temporary writes: the publish read-back and the seed install still copy
+  the whole store into scratch. Hard-linking immutable table files there
+  is left open, because a hard-linked journal would be mutated.
+- A `DOLT_GC('--full')` (capture compaction, squash) rewrites every table
+  file, so the publish after one is a full write.
+
 ## Owner decision, epoch root (2026-10-27 21:5x UTC)
 
 Owner asked "Why do we need to replay?" and then said: "it's cool to have
