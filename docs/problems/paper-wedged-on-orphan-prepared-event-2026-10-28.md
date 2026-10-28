@@ -55,6 +55,32 @@ A restart of the paper so `RecoverPrepared` discards the orphan. Owner
 go-ahead 21:2x UTC. The owner also asked that every desk run on Synthetic
 DeepSeek while ChatGPT credits are out (about 90 minutes), then a 1:1 pool.
 
+## Recovery receipts (21:17 to 22:0x UTC)
+
+- 21:17:31 `POST /internal/vmctl/deploy-refresh` (target f7e215e54,
+  caller fp0-paper-orphan-prepared-2026-10-28): `outcome=refreshed
+  planned_restart=true busy_allowed=true`. The boot landed on the current
+  release 0bf89ed84: `restart kind=planned`, `projection recovery resume
+  (local=4642559 W=4526210 H=4642559 tail=0)`, ready at 21:18:33. No
+  `Error 1062` from the new process; every stuck source schedule re-armed
+  (`planned boot: overdue since 15:0x ... re-armed`).
+- Models while ChatGPT credits were out: the paper's
+  `System/model-policy.toml` (previous copy in
+  `~/.config/choir-qa/traces/paper-model-policy-before-2026-10-28T2120Z.toml`)
+  pinned every role to Synthetic DeepSeek 1017. The management task kept
+  its code pin to gpt-6-luna with no fallback (54 calls failed on the open
+  ChatGPT breaker) until a `[roles.management_task]` override at 21:25;
+  after it, 181 of 181 paper calls went to Synthetic, 179 succeeded.
+- First publication reached corpusd at 21:34:52 (outage about 6 h 40 min,
+  14:56 to 21:34).
+- Owner direction: the default pool is Synthetic DeepSeek 1017 and
+  gpt-6-luna 1:1, each failing over to the other, and the management task
+  pin falls back too (2ff909418; Devin tier 1, B1 fixed). CI failed the
+  guest security epoch check (toolloop.go is a surface; trailers cannot be
+  added after push), so d346c6a84 raised the epoch 2 -> 3. Deployed
+  21:58; the paper took a planned refresh onto d346c6a84 at 21:57:40 and
+  its policy names `pool:default` for every role.
+
 ## Fix direction (not started)
 
 - The running appender must not wedge on its own orphan: discard on a
