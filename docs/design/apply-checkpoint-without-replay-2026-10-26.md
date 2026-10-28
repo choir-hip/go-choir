@@ -577,6 +577,7 @@ Deferred, with reasons:
 Devin approved; DeepSeek asked for one blocking fix and recorded three lesser
 points.
 
+- **Superseded by the S3 owner decision (2026-10-28, see paper-never-checkpointed-2026-10-27.md): the code refusal below is removed; rings decide reach.**
 - **Blocking, adopted: the selector refuses wildcards, classes and protected
   computers in code.** `VM_CHECKPOINT_CADENCE_ONLY` takes computer ids only:
   the config load drops `*` and every `class:` token (logging each), and the
