@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 )
 
@@ -110,6 +111,7 @@ func validHexDigest(s string) bool {
 // sweep).
 var artifactGCNamespaces = []string{
 	"projection-base",
+	basemanifest.PartsNamespace,
 	"platform-update",
 	"file-cas-roots",
 	"file-cas-chunks",
@@ -120,7 +122,7 @@ var artifactGCNamespaces = []string{
 // PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES is unset. og is excluded: the
 // pre-teardown corpus bodies are unreferenced since 2026-10-09 and their
 // collection is an explicit owner step (the corpus dump may still name them).
-var DefaultArtifactGCActiveNamespaces = []string{"projection-base", "platform-update", "file-cas-roots", "file-cas-chunks"}
+var DefaultArtifactGCActiveNamespaces = []string{"projection-base", basemanifest.PartsNamespace, "platform-update", "file-cas-roots", "file-cas-chunks"}
 
 // ParseArtifactGCNamespaces reads a comma list. Empty selects the default
 // allowlist; "all" selects every swept namespace.
@@ -411,6 +413,17 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	for ref := range pins {
 		addBase(ref)
 	}
+
+	// projection-base-parts (S4): every part named by any manifest blob
+	// still on disk, live base or not. A part outlives the last manifest
+	// naming it by one sweep, since this run may delete that manifest. A
+	// manifest that does not read or parse aborts the sweep: the live set it
+	// could widen is unprovable.
+	parts, err := basemanifest.LivePartsInBaseDir(s.artifactsRoot)
+	if err != nil {
+		return nil, append(warnings, "projection-base-parts live set: "+err.Error())
+	}
+	live[basemanifest.PartsNamespace] = parts
 
 	// platform-update: every route-table-referenced payload digest (current
 	// slots, every transition receipt's old/new refs — the rollback refs —

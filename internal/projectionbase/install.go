@@ -151,8 +151,30 @@ func installDescriptor(ctx context.Context, src BaseSource, storeDir, markerName
 	defer func() {
 		_ = os.RemoveAll(stagingDir)
 	}()
-	if err := Unpack(tmpPath, stagingDir); err != nil {
-		return Descriptor{}, fmt.Errorf("%w: unpack base: %v", ErrBaseRefused, err)
+	switch descriptor.Format {
+	case "":
+		if err := Unpack(tmpPath, stagingDir); err != nil {
+			return Descriptor{}, fmt.Errorf("%w: unpack base: %v", ErrBaseRefused, err)
+		}
+	case FormatParts:
+		// The downloaded blob is the manifest, already digest-checked; each
+		// part is fetched by digest and checked as it is written.
+		parts, ok := src.(PartSource)
+		if !ok {
+			return Descriptor{}, fmt.Errorf("%w: base %s is in the parts form and this source cannot serve parts", ErrBaseRefused, descriptor.BlobSHA256)
+		}
+		manifest, err := readManifestBlob(tmpPath, descriptor.BlobSHA256)
+		if err != nil {
+			return Descriptor{}, err
+		}
+		fetch := func(ctx context.Context, digest string, dst io.Writer) error {
+			return parts.DownloadPart(ctx, computerID, descriptor.BlobSHA256, digest, dst)
+		}
+		if err := materializeManifest(ctx, manifest, stagingDir, fetch); err != nil {
+			return Descriptor{}, err
+		}
+	default:
+		return Descriptor{}, fmt.Errorf("%w: unknown base format %q", ErrBaseRefused, descriptor.Format)
 	}
 	_ = os.Remove(tmpPath)
 	tmpPath = ""

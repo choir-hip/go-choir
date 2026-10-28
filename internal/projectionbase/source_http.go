@@ -166,6 +166,34 @@ func (s *HTTPSource) DownloadBlob(ctx context.Context, computerID, baseRef strin
 	return nil
 }
 
+// DownloadPart streams one part of a parts-form base. The platform serves
+// only a part the base's manifest names, for the computer its descriptor
+// names; the installer checks the part's digest as it writes it.
+func (s *HTTPSource) DownloadPart(ctx context.Context, computerID, baseRef, partDigest string, dst io.Writer) error {
+	computerID = strings.TrimSpace(computerID)
+	baseRef = strings.TrimSpace(baseRef)
+	partDigest = strings.TrimSpace(partDigest)
+	if computerID == "" || baseRef == "" || partDigest == "" || dst == nil {
+		return fmt.Errorf("%w: computer, base digest, part digest and destination are required", ErrBaseRefused)
+	}
+	resp, err := s.getWith(ctx, s.blobClient, "/internal/computers/files/projection-base/part", url.Values{"computer_id": {computerID}, "base_ref": {baseRef}, "part": {partDigest}})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusConflict, http.StatusBadRequest:
+		return fmt.Errorf("%w: part %s of base %s unavailable (status %d)", ErrBaseRefused, partDigest, baseRef, resp.StatusCode)
+	default:
+		return fmt.Errorf("projection base: part status %d", resp.StatusCode)
+	}
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		return fmt.Errorf("projection base: download part: %w", err)
+	}
+	return nil
+}
+
 // TailPage reads immutable tail events. Page validation (sequence progress,
 // ancestry) belongs to the installer and replay, never to the fetch.
 func (s *HTTPSource) TailPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]computerevent.DurableEvent, error) {

@@ -57,6 +57,8 @@ type CaptureConfig struct {
 	AboveSequence uint64
 	// FreeBytes reads free space (nil: statfs).
 	FreeBytes func(path string) (uint64, error)
+	// PublishParts publishes the root in the parts form (S4).
+	PublishParts bool
 }
 
 // PublishCapturedBase publishes the captured store as a projection base
@@ -136,9 +138,13 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 	}
 
 	publisher := NewPublisher(cfg.ArtifactsRoot)
-	blobSHA256, blobSize, err := publisher.PublishDir(staging)
+	pub, err := publishBaseDir(publisher, staging, publishFormFor(cfg.PublishParts))
 	if err != nil {
 		return nil, fmt.Errorf("capture: publish blob: %w", err)
+	}
+	blobSHA256, blobSize := pub.digest, pub.size
+	if pub.form == PublishFormParts {
+		log.Printf("capture: published parts computer=%s sequence=%d files=%d new_parts=%d new_bytes=%d reused_bytes=%d", cfg.ComputerID, head.Sequence, pub.stats.Files, pub.stats.NewParts, pub.stats.NewBytes, pub.stats.ReusedBytes)
 	}
 	published := false
 	defer func() {
@@ -154,10 +160,11 @@ func PublishCapturedBase(ctx context.Context, cfg CaptureConfig) (*Result, error
 		BlobSizeBytes:         blobSize,
 		ReducerVersion:        head.ReducerVersion,
 		SchemaVersion:         int(computerevent.SchemaVersionV1),
-		VocabularyVersion:     VocabularyVersionFor(OriginLiveCaptured),
+		VocabularyVersion:     VocabularyVersionForForm(OriginLiveCaptured, pub.form),
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 		Origin:                OriginLiveCaptured,
+		Format:                descriptorFormat(pub.form),
 	}
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("capture: validate descriptor: %w", err)

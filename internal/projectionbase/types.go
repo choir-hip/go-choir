@@ -98,6 +98,10 @@ type Config struct {
 	// watermark; the whole chain for genesis) exceeds this many events. Zero
 	// means the caller supplied no explicit bound.
 	MaxTailEvents uint64
+	// PublishParts publishes the base in the parts form (S4): a manifest
+	// plus content-addressed parts, so a publish writes only changed files.
+	// The caller decides it per computer (PartsSelectorEnv).
+	PublishParts bool
 }
 
 // Validate checks the configuration.
@@ -152,6 +156,12 @@ type Descriptor struct {
 	// it does: derivability is measured from that root, and the tape below
 	// it is never replayed again.
 	EpochRoot *EpochRootRef `json:"epoch_root,omitempty"`
+	// Format is how the base's bytes are published: empty for one tar blob
+	// at BlobSHA256 (bases from before S4), FormatParts for a manifest at
+	// BlobSHA256 naming content-addressed parts. BlobSizeBytes is then the
+	// manifest's size. The vocabulary version carries the "+parts" suffix
+	// so a build from before S4 refuses the descriptor.
+	Format string `json:"format,omitempty"`
 }
 
 // OriginLiveCaptured marks an epoch root: a base whose state was captured
@@ -189,7 +199,13 @@ func VocabularyVersionFor(origin string) string {
 // EffectiveVocabularyVersion is the protocol vocabulary the base speaks,
 // without an epoch root's suffix.
 func (d Descriptor) EffectiveVocabularyVersion() string {
-	return strings.TrimSuffix(strings.TrimSpace(d.VocabularyVersion), liveCapturedVocabularySuffix)
+	return strings.TrimSuffix(d.formLessVocabularyVersion(), liveCapturedVocabularySuffix)
+}
+
+// formLessVocabularyVersion is the vocabulary version without the parts
+// form's suffix, the outermost one.
+func (d Descriptor) formLessVocabularyVersion() string {
+	return strings.TrimSuffix(strings.TrimSpace(d.VocabularyVersion), partsVocabularySuffix)
 }
 
 // EpochFloor is the sequence below which no replay onto this base's line may
@@ -236,7 +252,14 @@ func (d Descriptor) Validate() error {
 		return fmt.Errorf("descriptor: unknown origin %q", d.Origin)
 	}
 	// The root's mark and its vocabulary suffix agree both ways.
-	if tagged := strings.HasSuffix(strings.TrimSpace(d.VocabularyVersion), liveCapturedVocabularySuffix); tagged != (d.Origin == OriginLiveCaptured) {
+	if d.Format != "" && d.Format != FormatParts {
+		return fmt.Errorf("descriptor: unknown format %q", d.Format)
+	}
+	// The parts form and its vocabulary suffix agree both ways.
+	if tagged := strings.HasSuffix(strings.TrimSpace(d.VocabularyVersion), partsVocabularySuffix); tagged != (d.Format == FormatParts) {
+		return fmt.Errorf("descriptor: vocabulary version %q does not match format %q", d.VocabularyVersion, d.Format)
+	}
+	if tagged := strings.HasSuffix(d.formLessVocabularyVersion(), liveCapturedVocabularySuffix); tagged != (d.Origin == OriginLiveCaptured) {
 		return fmt.Errorf("descriptor: vocabulary version %q does not match origin %q", d.VocabularyVersion, d.Origin)
 	}
 	if !IsKnownVocabularyVersion(d.EffectiveVocabularyVersion()) {

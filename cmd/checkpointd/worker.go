@@ -231,6 +231,7 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 		SeedPolicy:     projectionbase.SeedPinned,
 		SeedBaseRef:    j.SeedBaseRef,
 		SeedRequired:   true,
+		PublishParts:   publishesParts(j.ComputerID),
 	}
 	if j.SeedBaseRef == "" {
 		cfg.SeedPolicy = projectionbase.SeedNone

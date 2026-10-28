@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 )
 
@@ -309,6 +310,95 @@ func (h *Handler) HandleProjectionBaseBlob(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeContent(w, r, baseRef, info.ModTime(), file)
+}
+
+// HandleProjectionBasePart streams one part of a parts-form base (S4). A
+// digest alone is not a read grant: the part must be named by the manifest
+// of base_ref, and base_ref's descriptor must name computer_id. The
+// installer verifies the part's bytes against its digest.
+func (h *Handler) HandleProjectionBasePart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	baseRef := strings.TrimSpace(r.URL.Query().Get("base_ref"))
+	part := strings.TrimSpace(r.URL.Query().Get("part"))
+	if !h.authorizeFileCAS(r, computerID, "event:read") {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
+		return
+	}
+	if !validFileCASDigest(baseRef) || !validFileCASDigest(part) {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "base and part digests are required"})
+		return
+	}
+	raw, err := h.projectionBaseSidecar(baseRef)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base descriptor unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base descriptor unreadable"})
+		return
+	}
+	var descriptor struct {
+		ComputerID string `json:"computer_id"`
+		BlobSHA256 string `json:"blob_sha256"`
+	}
+	if err := json.Unmarshal(raw, &descriptor); err != nil || descriptor.BlobSHA256 != baseRef || descriptor.ComputerID != computerID {
+		writeJSON(w, http.StatusConflict, apiError{Error: "projection base descriptor binding refused"})
+		return
+	}
+	blobPath, err := h.projectionBaseBlobPath(baseRef)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base unavailable"})
+		return
+	}
+	manifestRaw, ok, err := basemanifest.ReadFile(blobPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base manifest unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base manifest unreadable"})
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusConflict, apiError{Error: "projection base is not in the parts form"})
+		return
+	}
+	sum := sha256.Sum256(manifestRaw)
+	manifest, err := basemanifest.Parse(manifestRaw)
+	if err != nil || hex.EncodeToString(sum[:]) != baseRef {
+		writeJSON(w, http.StatusConflict, apiError{Error: "projection base manifest refused"})
+		return
+	}
+	if !manifest.Contains(part) {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "part is not in this base"})
+		return
+	}
+	partPath, err := h.service.artifactPath(filepath.Join("sha256", basemanifest.PartsNamespace, part))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unavailable"})
+		return
+	}
+	file, err := os.Open(partPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base part unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unreadable"})
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unreadable"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeContent(w, r, part, info.ModTime(), file)
 }
 
 func (h *Handler) HandleFileCASRoots(w http.ResponseWriter, r *http.Request) {
