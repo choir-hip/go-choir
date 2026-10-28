@@ -1,9 +1,12 @@
 # Precommitment ledger: data architecture program (opened 2026-10-28 14:35 UTC)
 
 Companion to docs/definitions/choir-data-architecture-selection-2026-10-28.md.
-It covers that goal and the goals the program splits off: byte deletions,
-tape schema v2, the hypervisor bake-off, progressive delivery and the
-optimization pass. The mechanism and scoring rules are in
+It is the ledger for that goal and, as they are authored, for the goals the
+program splits off (byte deletions, tape schema v2, the hypervisor bake-off,
+progressive delivery, the optimization pass); each of those adds its own
+records before its evidence exists. Round 0 covers the selection goal and a
+first frame for the hypervisor bake-off. (Preamble scope clarified with
+round 0b; no record was edited.) The mechanism and scoring rules are in
 docs/precommitment-records.md, sections 2 and 5. This file applies them by
 hand until desk records carry the work.
 
@@ -192,6 +195,96 @@ virtio-mem unplug or balloon inflation: p = 0.55.
 **R0-23.** Porting the recovered vmbackend package to current main takes
 less effort than writing a new backend; "less" means the port reuses at
 least 60% of its lines: p = 0.75.
+
+## Records (round 0b, committed 2026-10-28 ~14:55 UTC, still before any evidence)
+
+Revisions from Devin plan review 2. Each cites the record it revises; the
+round-0 text stays unedited and is scored as committed, and the revision is
+scored too.
+
+Scoring conventions added: an estimate resolves by its interval on both
+sides (a value outside [lo, hi] either way counts against coverage), and the
+"falsifier" lines name the decision-relevant side. Settlers by section:
+census, memory shape and replay numbers are settled by rule from the
+artifact (the number read by a script, cited); witness tests by rule from
+the test run; attribution, ratification and the hypervisor records by
+Devin from the scorecard; calendar by the owner.
+
+**R0b-01 (revises R0-03).** Falsifier, two-pronged per the consensus kill
+criterion: authority state over 1 GiB logical on the paper, or over 20% of
+logical bytes on either computer. The d@e leg resolves at both 200 MiB and
+20% of d@e's logical bytes: p(under both on d@e) = 0.75; p(under 20% on
+the paper) = 0.80.
+
+**R0b-02 (revises R0-12).** Attribution formula, pre-registered: on the
+frozen scorecard metric (peak RSS across the named operations), model
+share = mean improvement from changing the model, averaged over both
+engines; engine share = mean improvement from changing the engine,
+averaged over both models; each divided by the total delta from the
+incumbent cell (Dolt, incumbent model) to the best cell; the interaction
+term is reported separately and not assigned. Hard to measure: interaction
+can be large, making shares sum far from 1. Mitigation: report all three
+terms; R0-12 resolves on the two main-effect shares as defined. Same
+probabilities as R0-12.
+
+**R0b-03 (revises R0-14).** The quantity is process max RSS during the
+operation minus the pre-operation baseline (operation-attributed
+footprint), with process max RSS reported beside it. Same estimate and
+probability.
+
+**R0b-04 (revises R0-11).** "Either engine" means both: p(at least 50%
+logical-byte reduction on both engines) = 0.70; on at least one = 0.78.
+
+**R0b-05 (revises R0-17).** R0-17 is conditional on a binding
+ratification. p(no candidate ratified binding by the end of this goal,
+because of a hard-gate failure or an unclean differential that is not
+repaired) = 0.15.
+
+**R0b-06 (extends R0-13).** SQLite + refs/CAS steady host RSS is lower
+than Dolt + refs/CAS on the same d@e computer: p = 0.75.
+
+**R0b-07 (revises R0-21).** Ground: Firecracker issue 6255, open, verified
+by the GitHub API on 2026-10-28, and the repo's record
+docs/problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md.
+Same probability.
+
+**R0b-08 (revises R0-22).** The tested configuration set is fixed by the
+hypervisor bake-off's goal file before its runs; this record resolves on
+that set, and "busy" means the census-time paper workload replayed on a
+test computer, never the paper itself. Same probability.
+
+New expectations (kill criteria and better_means items without a record):
+
+**R0b-09.** After the byte deletions, a d@e-class computer's guest-plus-
+agent floor (host RSS at idle, no store activity) is under 2 GiB on
+Firecracker: p = 0.85. Falsifier: at or over 2 GiB, which means thinning
+the guest, not the storage.
+
+**R0b-10.** Restore of a d@e-class computer from its newest semantic
+checkpoint needs a tape tail of under 1 GiB and under 5 s of replay:
+p = 0.75. Hard to measure: the tail depends on checkpoint cadence, which is
+itself a design choice. Mitigation: measure at the cadence the candidate
+proposes and state it.
+
+**R0b-11.** Write amplification (bytes written to disk per byte of event
+appended, over the d@e window) on the best candidate: est 3x, [1.5x, 8x];
+on the incumbent: est 25x, [10x, 80x]. Hard to measure: the guest's
+filesystem and Dolt's journal both write. Mitigation: read the block
+device's write counter for the window and divide by tape bytes appended.
+
+**R0b-12.** Checkpoint cost on the best candidate (bytes written per
+checkpoint of a d@e-class computer): est 20 MiB, [2, 200]; wall time est
+3 s, [0.5, 30].
+
+**R0b-13.** A kill -9 drill on each surviving candidate loses no
+acknowledged write on its first run: p = 0.70 per candidate.
+
+**R0b-14.** The census's write-rate measure shows the tape index and
+content-hash kinds carry most write load too, not only bytes: p(at least
+60% of rows written per hour) = 0.70.
+
+The tape-ack latency kill criterion (p99 over 100 ms) belongs to step 6
+(relay receipts) and gets its record in that goal.
 
 ## Settlements
 

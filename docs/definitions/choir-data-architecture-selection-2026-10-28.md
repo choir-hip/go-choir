@@ -37,6 +37,29 @@ review:
       bounded-peak-memory gate (c9449418a) landed after the frozen ref; it
       tightens a gate and is owner-authored; a one-seat check rides the
       next review.
+  - round: 4
+    reviewer: Devin (plan review 1)
+    frozen_ref: 038adc19b (sha256 67c276a9...; includes the owner answers
+      through the revised roadmap)
+    verdict: send_back
+    evidence_ref: .agentic-consensus/data-arch/plan-review/out/devin.out
+    adjudication: >-
+      All adopted in e378c3a1d: B1 tape-schema claim corrected (schema v2
+      is its own red goal), B2 migration is its own goal, B3 byte
+      deletions placed, B4 candidate floor and witness spike, B5 manifest;
+      non-blocking items in the amendments section. The owner's
+      bounded-peak-memory gate was in scope and drew no finding.
+  - round: 5
+    reviewer: Devin (plan review 2)
+    frozen_ref: e378c3a1d (goal sha256 262c2277..., ledger sha256 20c4b4af...)
+    verdict: send_back (round-1 findings all verified resolved)
+    evidence_ref: .agentic-consensus/data-arch/plan-review2/out/devin.out
+    adjudication: >-
+      N3 corrected in the amendments; N1, N2 and the non-blocking ledger
+      items answered by round-0b revision records in the ledger (round-0
+      records stay unedited). Every finding was doc-level wording in a
+      green file, so per the review tiers no further round runs; the next
+      review is the one that gates execution.
 
 start:
   source: main 0bf89ed84, 2026-10-28 ~12:30 UTC (staging /health deployed_commit 0bf89ed84, observed by FP0 after CI success)
@@ -424,8 +447,7 @@ are corrected in place above. The rest:
   recorded in the companion precommitment ledger
   docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md
   before the evidence that resolves them exists, scored when it arrives,
-  and followed by new predictions. The decision rule's weights are frozen
-  with the first predictions. Hard gates stay gates.
+  and followed by new predictions. The decision rule's weights are set by the owner at plan step 2 and frozen with the tape head and receipt key before any candidate run (correction, Devin plan review 2, N3: an earlier wording froze them "with the first predictions", which round 0 already passed without weights); each phase's predictions cite them. Hard gates stay gates.
 - Byte deletions (B3): event_json out of the tape index, and content-hash
   kinds to refs plus CAS, are separate orange/red goal files sequenced
   between the census and the harness, per the consensus adjudication. The
