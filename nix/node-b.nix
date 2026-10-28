@@ -1766,15 +1766,16 @@ in
         # internal/vmmanager/checkpoint_cadence.go): the guest compiles it off;
         # the computers named here run it, every
         # VM_CHECKPOINT_CADENCE_EVERY_EVENTS events (default 2500) or
-        # VM_CHECKPOINT_CADENCE_EVERY (default 60m). The live extract a bind makes
-        # holds the computer's appends for a time unmeasured on the paper (design
-        # R2): name ONE computer, read last_bind_millis in
-        # `choir computer checkpoints`, widen only then. Empty: none. Never "*" or
-        # class:, and not the paper until measured. A named computer cold boots
-        # once (boot arguments are in the launch-config hash). Rollback: empty
-        # the list and redeploy; the cadence is off at the next launch.
-        # 2026-10-26: on for d@e, the proof computer (re-review 338 approved).
-        "VM_CHECKPOINT_CADENCE_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
+        # VM_CHECKPOINT_CADENCE_EVERY (default 60m). The bind is the hash-only
+        # witness (S3, docs/problems/paper-never-checkpointed-2026-10-27.md):
+        # it holds appends for the Dolt table-hash read, milliseconds. The list
+        # is the ring (docs/design/progressive-delivery-2026-10-26.md, section
+        # 3); the code refuses no class. A selected computer cold boots once
+        # (boot arguments are in the launch-config hash). Rollback: drop the
+        # ring token and redeploy; the cadence is off at the next launch.
+        # 2026-10-26: on for d@e (R0). 2026-10-28: plus class:test (R1); a
+        # class: token selects on the launch paths that carry the class.
+        "VM_CHECKPOINT_CADENCE_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         # Data drive discard (RES-16; docs/problems/guest-data-image-never-
         # trims-2026-10-20.md, docs/problems/node-b-disk-fills-from-the-paper-
         # data-image-2026-10-22.md). Every computer gets virtio-blk discard on

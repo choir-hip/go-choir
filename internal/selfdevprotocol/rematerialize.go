@@ -70,6 +70,12 @@ func WitnessContentMatches(got, want VMLocalContentWitness) error {
 	if err := want.Validate(); err != nil {
 		return fmt.Errorf("rematerialize: checkpoint witness refused: %w", err)
 	}
+	if got.version() != want.version() {
+		return fmt.Errorf("rematerialize: reconstructed witness is version %d, the checkpoint's is %d", got.version(), want.version())
+	}
+	if want.IsDoltHashWitness() {
+		return doltTablesMatch(got, want)
+	}
 	if got.Database != want.Database || got.ContentRoot != want.ContentRoot {
 		return fmt.Errorf("rematerialize: reconstructed content root does not match checkpoint")
 	}

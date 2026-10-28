@@ -33,6 +33,17 @@ type VMLocalContentWitness struct {
 	Tables             map[string]string `json:"tables"`
 	DoltHead           string            `json:"dolt_head"`
 	DerivabilityDigest string            `json:"derivability_digest"`
+	// WitnessVersion is 0 (or 1) for the row witness above and 2 for the
+	// hash-only witness (witness_v2.go). A reader refuses a version it does
+	// not know.
+	WitnessVersion int `json:"witness_version,omitempty"`
+	// DoltTables is the per-table Dolt content hash (DOLT_HASHOF_TABLE) of
+	// every table but the operational ones: a v2 witness's whole content, and
+	// recorded alongside the row hashes on a host base so it can judge v2.
+	DoltTables map[string]string `json:"dolt_tables,omitempty"`
+	// OperationalTables are left out of DoltTables by construction: their
+	// wall-clock columns differ between a live store and a replay.
+	OperationalTables []string `json:"operational_tables,omitempty"`
 }
 
 // FrontendIdentity names the served computer-surface SPA. A checkpoint without
@@ -52,6 +63,18 @@ type RestoreRequest struct {
 }
 
 func (w VMLocalContentWitness) Validate() error {
+	switch w.version() {
+	case WitnessVersionRows:
+	case WitnessVersionDoltHashes:
+		return w.validateV2()
+	default:
+		return fmt.Errorf("self-development checkpoint: unknown VM-local content witness version %d", w.WitnessVersion)
+	}
+	if len(w.DoltTables) > 0 {
+		if err := validateDoltTables(w.DoltTables); err != nil {
+			return err
+		}
+	}
 	database := strings.TrimSpace(w.Database)
 	if database == "" {
 		return fmt.Errorf("self-development checkpoint: VM-local content witness is required")

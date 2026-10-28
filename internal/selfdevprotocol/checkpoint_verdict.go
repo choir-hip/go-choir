@@ -86,6 +86,9 @@ const maxVerdictTables = 32
 // restore's own reconstruction, which replays in the live store's mode. The
 // Dolt HEAD is an audit receipt and never decides.
 func JudgeCheckpointWitness(depositMode string, checkpoint, rebuilt VMLocalContentWitness) CheckpointVerdict {
+	if checkpoint.IsDoltHashWitness() {
+		return judgeCheckpointWitnessV2(depositMode, checkpoint, rebuilt)
+	}
 	if err := checkpoint.Validate(); err != nil {
 		return CheckpointVerdict{Status: CheckpointVerdictUnverified, Reason: VerdictReasonInvalidWitness, Detail: "checkpoint witness: " + err.Error()}
 	}
