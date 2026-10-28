@@ -143,3 +143,19 @@ and operated in-house on proven open-source parts, not novel engines.
 - Dolt taught the requirements by failing them: the tape as truth,
   immutable content addressed, small authority state, bounded memory,
   data that can move between hosts.
+
+## Decision (owner, 2026-10-28): remove Qdrant; vectors later via pgvector
+
+Owner: "Should we just remove Qdrant and plan on using PG Vector? ... I
+don't think the vectors matter until we have enough data that we've
+exhausted our ability to effectively query it with graph traversal through
+SQL." FP0 evidence [V]: Qdrant on Node B holds 124 KiB and uses about 5 MB
+(an empty index); it listens on host loopback only, while the pipeline
+would run in guests (nix/node-b.nix:814-819); the runtime's semantic dedup
+(internal/agentcore/qdrant_runtime.go, internal/qdrant: client, pipeline,
+Ollama embedder) sits behind a breaker that falls back to content-hash
+dedup, which is what runs. Delete: services.qdrant, internal/qdrant, the
+runtime wiring, its health and provider entries (orange; tier 1). Vectors,
+when graph traversal in SQL stops being enough and an embedding pipeline
+exists, use pgvector in the shared Postgres; a dedicated vector engine is
+a later replacement behind the same retrieval interface.
