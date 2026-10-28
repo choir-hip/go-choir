@@ -126,6 +126,17 @@ boundaries:
     system yet.
 
 hard_gates (pass/fail before any scoring):
+  - bounded peak memory: no operation's memory grows with data size
+    (scans, sorts, witnesses and maintenance stream or spill past a fixed
+    buffer; caches are fixed-size; no whole result set materialized; GC,
+    compaction and checkpoints run in bounded steps or are designed out);
+    each operation's bound is written down. Owner, 2026-10-28: memory,
+    not disk or CPU, is the cost limiter, and spikes, not steady state,
+    were the killer (this week: witness 14G, Store A squash >10G, online
+    GC holds, the boot vocabulary pass, capture compaction growth).
+    Bounded spikes give stability, capacity planning (overcommit is
+    safe only when peaks are bounded) and security (unbounded memory in
+    an input's size is a denial-of-service vector).
   - durability: no acknowledged write lost under a kill -9 drill
   - crash semantics: the restart rules above hold
   - witness: a substrate-neutral state root computed in O(tables), not a
@@ -192,7 +203,8 @@ plan:
      whose durable truth (tape segments, snapshots) is shipped off-host
   2: budgets, hard gates and decision rule (owner edits; frozen),
      written as unit costs (bytes per object, writes per event, CPU per
-     ingested document, memory and disk per computer) and growth targets
+     ingested document, steady-state and peak memory and disk per computer
+     and per service) and growth targets
      on two axes (corpus volume; number of computers). Horizons (owner,
      2026-10-28: about 100,000x, roughly 10x a quarter): the interfaces
      must hold to 100,000x without redesign; the implementations to the
@@ -204,7 +216,10 @@ plan:
   4: build the projector harness (today the rebuilder is Dolt-bound:
      internal/projectionbase/rebuilder.go:385-460, cmd/choir-rebuild-base);
      run the d@e window, then a sampled paper window, then the full paper
-     tape for two; kill -9 drill per candidate; per-candidate wall-clock
+     tape for two; kill -9 drill per candidate; peak memory (max RSS,
+     not averages) recorded for every operation including GC,
+     compaction, checkpoint, witness and restore, and under adversarial
+     inputs (huge objects, huge tables, bursts); per-candidate wall-clock
      budget recorded
   5: differential shadow on d@e for the leader; provisional ratification
      before it, binding after it
