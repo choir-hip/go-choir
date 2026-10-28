@@ -555,7 +555,9 @@ FP0 critical review (evidence, not a decision):
   candidate (concurrent desks vs p99 turn latency, store wait, CPU, RSS),
   with predictions in the ledger (round 0d).
 
-## Owner note 2026-10-28 ~15:35 UTC: CPU oversubscription, isolation tiers, desktop as the main host
+## Owner note 2026-10-28 ~16:00 UTC: CPU oversubscription, isolation tiers, desktop as the main host
+
+(Correction: first committed as ~15:35; `date -u` read 16:04 at commit 003d6bdd2.)
 
 Owner, paraphrased with key phrases quoted: Choir in choir means "each VM
 is its own computer with its own desks, the whole shebang". CPU is the
