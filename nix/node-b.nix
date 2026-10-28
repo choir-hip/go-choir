@@ -1818,12 +1818,14 @@ in
         # hibernate wrote 503 MB of an 8.6 GB image in 1.6 s and woke in
         # 287 ms to healthy. Step 2: every test computer (class:test).
         # Step 3 (S6, docs/problems/paper-never-checkpointed-2026-10-27.md):
-        # every computer (owner 2026-10-28: "make all have diff snapshots.
-        # simple"). A Diff that cannot load is refused and the computer cold
-        # boots, as with no snapshot. Rollback: set the list back to the d@e
-        # id plus class:test, or empty.
+        # every computer, walked by ring (owner 2026-10-28: "make all have
+        # diff snapshots", then "progressive rollout ... on for at least
+        # one"): R0 d@e and R1 class:test are on; R2 (owner) to R5 (paper)
+        # follow by explicit computer id as each ring soaks
+        # (docs/design/progressive-delivery-2026-10-26.md, section 3). A Diff
+        # that cannot load is refused and the computer cold boots.
         "VM_SNAPSHOT_TYPE=diff"
-        "VM_SNAPSHOT_DIFF_ONLY=*"
+        "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
         # the right to launch the guest image's Chromium in a capsule capture

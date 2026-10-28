@@ -270,11 +270,13 @@ change that durably cuts disk, memory, CPU or write volume may take a
 planned restart, a cold boot or a slow window on any computer, the paper
 included, as long as it has its proof and its rollback.
 
-**On by default, for every computer** (owner, 2026-10-28: "i dont like
-these 'off by default' things. the whole point is to turn these on. we dont
-have users to support. if the implementation is buggy, then we should fix
-it. on by default for *"). A new mechanism ships enabled for `*`, protected
-computers included, with no off switch. A correctness refusal (crash,
+**On, never off everywhere; widen by ring** (owner, 2026-10-28: "i dont
+like these 'off by default' things. the whole point is to turn these on";
+then "we can still have progressive rollout. not on for all computers but on
+for at least one... we are still designing our progressive delivery
+system"). A new mechanism ships enabled on at least the proof ring (d@e)
+and widens ring by ring (docs/design/progressive-delivery-2026-10-26.md);
+it never lands off for every computer. A correctness refusal (crash,
 self-development apply, live capsule, release skew) is not a switch and
 stays. A bug is fixed, not hidden behind a flag.
 
