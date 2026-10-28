@@ -109,8 +109,18 @@ boundaries:
     - cross-owner dedup of private content (dedup within an owner; across
       owners only for published public objects)
   scope_note: >-
-    Evidence is Node B only. Multi-host and off-host backup are recorded
-    as requirements for the budgets, not tested here.
+    Evidence is Node B only, but the design is for many hosts (owner,
+    2026-10-28: scale hosts vertically and horizontally; the Autopaper is
+    to grow toward processing global open-source intelligence). Two
+    decisions with separate budgets: (A) the per-computer authority
+    engine (small, single-writer, private, sharded by computer, portable
+    between hosts by tape head plus a small snapshot); (B) the corpus
+    tier (a replicated append log, a content-addressed object store,
+    and derived indexes per query kind: full text, vector, entity graph,
+    time series). Build single-host implementations behind interfaces
+    that a distributed backend can replace (local CAS -> S3-compatible;
+    segment files -> a replicated log); do not build a distributed
+    system yet.
 
 hard_gates (pass/fail before any scoring):
   - durability: no acknowledged write lost under a kill -9 drill
@@ -123,7 +133,13 @@ hard_gates (pass/fail before any scoring):
     whole-store clone at authority-store size)
   - differential: the shadow projector's answers and witness match the
     incumbent's on d@e over a frozen window
-  - security: per-owner encryption and crypto-erase, least-privilege reads
+  - security: per-owner encryption and crypto-erase, least-privilege reads;
+    zero trust between hosts (signed, hashed, verified data); public
+    intelligence objects and private owner data in separate tiers
+  - scale-out: state shardable by computer; bytes content-addressed;
+    every index rebuildable from the log; no single-host assumption in
+    any interface; a computer moves between hosts without copying its
+    history
 
 decision_rule (pre-registered before the bake-off):
   - hard gates first; failing one ends a candidate
@@ -160,7 +176,9 @@ now:
 
 plan:
   1: census by table and identity kind, with rates (read-only)
-  2: budgets, hard gates and decision rule (owner edits; frozen)
+  2: budgets, hard gates and decision rule (owner edits; frozen),
+     including growth targets for the corpus tier (objects, bytes and
+     sources per day; query kinds and latency) at least ten times today
   3: candidates by divergent panel, with candidate 0 the incumbent Dolt
      (after the parallel-track mitigations); cut on paper to three
   4: build the projector harness (today the rebuilder is Dolt-bound:
