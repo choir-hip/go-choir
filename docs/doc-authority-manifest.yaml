@@ -712,6 +712,15 @@ documents:
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
 
+  - path: docs/definitions/choir-data-architecture-selection-2026-10-28.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: true}
+    depends_on: [docs/choir-doctrine.md, docs/design/data-rearchitecture-2026-10-28.md, docs/evidence/data-architecture-consensus-2026-10-28.md, docs/evidence/data-architecture-research-2026-10-28.md, docs/precommitment-records.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+
   - path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
     claim_scope: current
     is_root: [authority, entry]

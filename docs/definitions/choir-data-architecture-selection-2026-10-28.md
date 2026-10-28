@@ -354,9 +354,11 @@ plan:
   we should do another hard core optimization pass. And then we can do
   feature development with self-dev." Not started: the owner holds
   execution ("I don't want to start yet"). Order of work:
-  1. Data architecture bake-off on Firecracker (this goal), with light
-     optimization of the candidates, then the rearchitecture landing on the
-     single staging host (Node B).
+  1. Data architecture bake-off on Firecracker (this goal, ending at the
+     d@e shadow differential, as its finish says), with light optimization
+     of the candidates; then the rearchitecture landing on the single
+     staging host (Node B), which is the separate red migration goal this
+     goal authors at its plan step 6.
   2. Hypervisor bake-off (its own goal file, to be authored): Firecracker
      and Cloud Hypervisor on the server, in their candidate configurations
      (restore mode, private vs shared memory, virtio-mem vs balloon,
@@ -388,8 +390,80 @@ plan:
   not writing a new one.
   FP0 consequences for this goal: off-host receipts are deferred to step
   6; on the single host the acknowledged write is the local fsynced tape
-  append, but segments and the tape schema keep the lease epoch and
-  receipt fields and the fork-ready event identity (event_id, parents,
-  branch_id), so step 6 and the offline feature are additions, not
-  migrations. No tier chosen in step 1 may depend on a Firecracker-specific
+  append. Correction 2026-10-28 ~14:40 (Devin plan review 1, B1): the
+  first version of this sentence said the tape schema already keeps lease
+  epoch, receipt and fork-ready fields. It does not. Today an event has
+  event_id (a random UUIDv7), previous_head (one parent: a linear chain)
+  and sequence (internal/computerevent/event.go:78-109); there is no
+  parents[], branch_id or per-append lease epoch; the stream_seq lease is
+  a high-water-mark allocator (internal/store/stream_seq_lease.go), not a
+  fencing epoch; segment records carry namespace, digest and body, and the
+  only receipts are corpus pin acks (internal/tapestore/format.go:33-37).
+  Making the schema fork-ready and fenced (content-derived event identity,
+  parents[], branch_id, the lease epoch on every append, a slot for relay
+  receipts) is a tape schema v2: its own red goal, a predecessor of the
+  per-computer migration, so that step 6 and the offline feature are then
+  additions, not a retrofit. No tier chosen in step 1 may depend on a Firecracker-specific
   mechanism, so step 2 can change the hypervisor without reopening step 1.
+
+## Amendments 2026-10-28 ~14:45 UTC (Devin plan review 1, send_back; owner precommitment ruling)
+
+Review: Devin, frozen at 038adc19b (sha256 67c276a9...), verdict send_back,
+evidence `.agentic-consensus/data-arch/plan-review/out/devin.out`. B1 and B2
+are corrected in place above. The rest:
+
+- Expectations, not budgets (owner, 2026-10-28 ~14:40: "the point is not to
+  have performance targets or a budget, but to have and state our
+  expectations of what sort of performance we can achieve, and then we
+  build it, then we optimize... at each step of the way, we are scoring our
+  predictions... we want to keep this ledger of learning as well. It's not
+  enough merely to make the system work. We also want to extract all of
+  our learnings."). Wherever this file says budgets (finish, plan step 2,
+  decision_rule, now.next_action), read: precommitted expectations with
+  intervals, falsifiers, named measurement difficulties and mitigations,
+  recorded in the companion precommitment ledger
+  docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md
+  before the evidence that resolves them exists, scored when it arrives,
+  and followed by new predictions. The decision rule's weights are frozen
+  with the first predictions. Hard gates stay gates.
+- Byte deletions (B3): event_json out of the tape index, and content-hash
+  kinds to refs plus CAS, are separate orange/red goal files sequenced
+  between the census and the harness, per the consensus adjudication. The
+  incumbent-model scorecard cells are measured from a frozen tape window
+  and base taken before the first deletion. This goal stays read-only.
+- Candidates and the witness spike (B4): plan step 3 refines the
+  consensus record (docs/evidence/data-architecture-consensus-2026-10-28.md)
+  instead of regenerating it, and imports its kill criteria as
+  pre-registered falsifiers. Candidate floor: the 2x2 {Dolt, SQLite} x
+  {incumbent model, refs+CAS}, plus DoltLite (beta 2026-08-31; no WAL, one
+  writer). Before scoring, a witness spike per non-Dolt candidate: a
+  per-table multiset hash (LtHash32 or MuHash3072) over canonical full-row
+  images, maintained in the same transaction, tested against REPLACE
+  (recursive_triggers), VACUUM rowid renumbering, ALTER TABLE ADD COLUMN
+  DEFAULT, and UPSERT (docs/evidence/data-architecture-research-2026-10-28.md).
+- Census memory shape: the census also records smaps_rollup anon and file
+  for the Firecracker process, guest /proc/meminfo, balloon stats and
+  per-file page-cache residency of the store files, so memory conclusions
+  rest on shape, not table bytes.
+- Durability gate, defined: on the single host an acknowledged write is the
+  local fsynced tape append; relay receipts are step 6.
+- Hypervisor conditionality: correctness may not depend on a
+  Firecracker-specific mechanism (above); efficiency results are recorded
+  as Firecracker-conditional, with guest anon and file memory per
+  operation, so the hypervisor bake-off can reason about reclaim.
+- Named residual for step 6: a self-hosted single box cannot produce an
+  off-host receipt (a second machine or NAS, a remote bucket, or a
+  documented weaker guarantee).
+- Stale inputs: MinIO is archived (verified 2026-10-28), so SeaweedFS is
+  the later object-store default and the local CAS directory the first;
+  Qdrant removal is owner-decided (a separate small orange goal), so no
+  candidate plans around a dedicated vector engine.
+- Census procedure is a one-off planned host job (systemd-run under
+  MemoryMax on Node B), named break-glass under standing question 9; a
+  routine census goes through a scoped host-job path.
+- Split (goal files, authored when their turn comes, not now): tape schema
+  v2 (fork-ready, fenced); byte deletions; the migration/rearchitecture
+  (red, authored at plan step 6); the hypervisor bake-off (starts by
+  porting origin/recovered/vmbackend-2026-10-14 against the seam design);
+  progressive delivery on the single host; the hard optimization pass;
+  multi-host, zero downtime, off-host receipts and logging; Qdrant removal.
