@@ -110,3 +110,45 @@ func TestHTTPSourceCheckpointVerdictContract(t *testing.T) {
 		t.Fatalf("502 = found %v err %v, want an error", found, err)
 	}
 }
+
+// S4: the guest's installer fetches parts through HTTPSource. The query
+// surface is pinned like the blob's; a 404/409 is a refusal, a 5xx stays a
+// plain transport error.
+func TestHTTPSourceDownloadPartContract(t *testing.T) {
+	ctx := context.Background()
+	var query string
+	status := http.StatusOK
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/computers/files/projection-base/part", func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("part"))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	var src BaseSource = NewHTTPSource(server.URL, func(ctx context.Context) (string, error) { return "cap", nil })
+	parts, ok := src.(PartSource)
+	if !ok {
+		t.Fatal("HTTPSource cannot serve parts")
+	}
+	var buf strings.Builder
+	base, part := strings.Repeat("b", 64), strings.Repeat("d", 64)
+	if err := parts.DownloadPart(ctx, "computer-x", base, part, &buf); err != nil || buf.String() != "part" {
+		t.Fatalf("DownloadPart = %q %v", buf.String(), err)
+	}
+	for _, want := range []string{"computer_id=computer-x", "base_ref=" + base, "part=" + part} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("part query %q lacks %q", query, want)
+		}
+	}
+	for _, refused := range []int{http.StatusNotFound, http.StatusConflict} {
+		status = refused
+		if err := parts.DownloadPart(ctx, "computer-x", base, part, &strings.Builder{}); !errors.Is(err, ErrBaseRefused) {
+			t.Fatalf("status %d: err = %v, want ErrBaseRefused", refused, err)
+		}
+	}
+	status = http.StatusBadGateway
+	if err := parts.DownloadPart(ctx, "computer-x", base, part, &strings.Builder{}); err == nil || errors.Is(err, ErrBaseRefused) {
+		t.Fatalf("502: err = %v, want a plain error", err)
+	}
+}

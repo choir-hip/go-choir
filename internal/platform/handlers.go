@@ -634,6 +634,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/projection-base/pins", h.HandleProjectionBasePins)
 	s.HandleFunc("/internal/computers/files/projection-base/descriptor", h.HandleProjectionBaseDescriptor)
 	s.HandleFunc("/internal/computers/files/projection-base/blob", h.HandleProjectionBaseBlob)
+	s.HandleFunc("/internal/computers/files/projection-base/part", h.HandleProjectionBasePart)
 	s.HandleFunc("/internal/computers/files/roots", h.HandleFileCASRoots)
 	s.HandleFunc("/internal/platform/control-key", h.HandlePlatformControlPublicKey)
 	s.HandleFunc("/internal/platform/execution-identity/attest", h.HandleExecutionIdentityAttestation)

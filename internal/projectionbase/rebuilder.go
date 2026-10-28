@@ -467,9 +467,13 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 	}
 
 	publisher := NewPublisher(cfg.ArtifactsRoot)
-	blobSHA256, blobSize, err := publisher.PublishDir(scratchDir)
+	published, err := publishBaseDir(publisher, scratchDir, publishFormFor(cfg.PublishParts))
 	if err != nil {
 		return nil, fmt.Errorf("rebuilder: publish projection base blob: %w", err)
+	}
+	blobSHA256, blobSize := published.digest, published.size
+	if published.form == PublishFormParts {
+		log.Printf("rebuilder: published parts computer=%s sequence=%d files=%d new_parts=%d new_bytes=%d reused_bytes=%d", cfg.ComputerID, finalHead.Sequence, published.stats.Files, published.stats.NewParts, published.stats.NewBytes, published.stats.ReusedBytes)
 	}
 
 	descriptor := Descriptor{
@@ -480,10 +484,11 @@ func (r *Rebuilder) Run(ctx context.Context, source CASReplaySource) (*Result, e
 		BlobSizeBytes:         blobSize,
 		ReducerVersion:        finalHead.ReducerVersion,
 		SchemaVersion:         int(computerevent.SchemaVersionV1),
-		VocabularyVersion:     CurrentVocabularyVersion,
+		VocabularyVersion:     VocabularyVersionForForm("", published.form),
 		VMLocalContentWitness: witness,
 		CreatedAt:             time.Now().UTC(),
 		EpochRoot:             inheritedEpochRoot(seed, meta),
+		Format:                descriptorFormat(published.form),
 	}
 	if err := descriptor.Validate(); err != nil {
 		return nil, fmt.Errorf("rebuilder: validate descriptor: %w", err)
