@@ -773,3 +773,8 @@ system now."
 
 Standing rule (AGENTS.md): a mechanism never lands off for every computer;
 it ships on at least R0 and widens by ring.
+
+Later (owner, 2026-10-28): "the progressive delivery system will of course
+evolve. like, id love to have a fleet of simulated users. we will
+definitely get there. but not this week." A simulated-user fleet becomes a
+ring ahead of R2 when it exists; not this week.
