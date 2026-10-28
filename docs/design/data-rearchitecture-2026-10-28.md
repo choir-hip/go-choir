@@ -93,3 +93,21 @@ routing. Read why each is off and walk it before writing new storage code.
    everything else?
 3. Autoradio waits for step 4 (the paper stops being the sizing problem)?
    FP0 recommends yes.
+
+## Switch audit (2026-10-28, from docs/evidence/switched-off-inventory-2026-10-26.md)
+
+- `store.debounced_checkpoint` [V]: guest Dolt history commit off the write
+  path (60 s / 10,000 ops). Shipped in deploy R (0bf8a097d, seven review
+  rounds). The only missing proof is the kill -9 durability drill on a
+  throwaway test computer. Next action: run the drill, then walk R0 -> R5.
+  This is a resource win on the paper's write path and history growth now.
+- `store.trace_log` [V]: no reader; R7 (docs/design/trace-segment-log-2026-10-22.md,
+  "trace lines leave the tape and the store") S3-S6 not landed. Building R7
+  is a step-3-class cut: trace lines out of the store.
+- `store.event_table` [V]: ten telemetry kinds to `choir_events` (F-c); off
+  pending the stream_seq lease readiness, the host grant
+  `CHOIR_EVENT_TABLE_COMPUTERS`, and the R7 decision (R7 may make it
+  redundant).
+
+So step 2 starts with the kill -9 drill for `store.debounced_checkpoint`,
+and steps 3-4 should begin by finishing R7 rather than new storage code.
