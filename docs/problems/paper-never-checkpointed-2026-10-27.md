@@ -485,6 +485,72 @@ Review of the S3 lane (Devin approve, DeepSeek request changes):
 - **Security-Effect.** Guest authority is unchanged; the cadence policy moved
   from code refusal to ring config.
 
+## S5 busy hibernate: the build (lane/busy-hibernate, 2026-10-28)
+
+Owner, 2026-10-28: "on by default for *". There is no switch. The
+refusals below are correctness rules.
+
+**Where vmctl decides.** On Node B, `VMCTL_STOP_MANAGED_ON_EXIT=false` and
+the unit has `KillMode=process`. So a vmctl restart for a deploy leaves
+every guest running, and the next vmctl reattaches it. Nothing is lost, and
+nothing changes there. Deploy refreshes of a new guest release keep their
+marker-backed cold boot. The loss happens at a host shutdown: vmctl exits
+and the guests die with the host, a crash for every computer.
+`cmd/vmctl/host_stop.go` takes vmctl's exit as a planned host stop in two
+cases: systemd's state is `stopping`, or `VMCTL_STOP_MANAGED_ON_EXIT` is
+true. Any other exit, or a state it cannot read, is a restart, as before.
+A crash runs no exit code.
+
+**The pass** (`internal/vmctl/host_stop_hibernate.go`). It takes every
+running computer, protected classes first, until a budget runs out
+(`VMCTL_HOST_STOP_BUDGET`, default 75 s, under systemd's 90 s stop
+timeout). Each one is hibernated by snapshot and recorded hibernated with
+`stopped_by=host_stop`, so the next start keeps the snapshot and the next
+wake resumes it. A computer is offered the busy capture only when its
+`/health` answered and says `selfdev_active_operations=0` and
+`live_capsules=0`. Prepare does not count capsules. Otherwise it gets the
+ordinary fenced hibernate, which a busy guest refuses. A computer whose
+deploy refresh is in flight is skipped.
+
+**The capture** (`internal/vmmanager/busy_hibernate.go`). The guest is
+still asked to fence. A guest that fences is captured as an idle hibernate.
+A guest that answers busy is captured without the fence only when all of
+these hold:
+- the reply is the plain busy outcome with no reason (a
+  `planned_restart_pending` marker refuses);
+- no self-development operation is active;
+- it runs the current guest release.
+
+After Firecracker stops, its data image is fsynced. The meta records
+`busy_host_stop`. A refused guest stays running, and the host stop ends it
+as a crash, as before.
+
+**The wake.** A busy snapshot loads only onto the release it was captured
+from, and within `VM_BUSY_HIBERNATE_MAX_AGE` (default 1 h). Otherwise it
+cold boots. It is consumed before it loads, so it resumes at most once.
+
+**Expected for the paper (8 GiB, Full; Diff is not selected for it).**
+Full snapshots on Node B, measured at 12 GiB, took 5.6 to 9.3 s and
+wrote 0.7 to 2.4 GB on disk. Scaled to 8 GiB:
+- the pause, which is the create, is about 4 to 6 s;
+- about 8.6 GB logical;
+- on disk 1 to 3 GB, more if its page cache is full.
+
+The fsync comes after the stop, so it is not frozen time.
+
+**Residuals.**
+- Health is read before the fence, so a capsule that starts in between is
+  captured.
+- A busy reply carries no capability expiry and no `credential_resume`. A
+  busy resume therefore renews the frozen capability (30 min TTL, 15 min
+  grace) rather than receiving a fresh envelope. A late resume fails that
+  renewal and cold boots.
+- A host reboot together with a guest update cold boots without a marker,
+  which is a crash.
+- On a staging host shutdown, still to check: the stop ordering of jailed
+  VMMs in `system-choirvms.slice` against vmctl, and that vmctl can run
+  `systemctl is-system-running`.
+
 ## Consequences
 
 Any rebuild, rematerialize or fresh realization of the paper replays from
