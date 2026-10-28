@@ -1817,8 +1817,13 @@ in
         # for d@e only, the proof computer. Proved 2026-10-26 20:24: a Diff
         # hibernate wrote 503 MB of an 8.6 GB image in 1.6 s and woke in
         # 287 ms to healthy. Step 2: every test computer (class:test).
+        # Step 3 (S6, docs/problems/paper-never-checkpointed-2026-10-27.md):
+        # every non-protected class, by name, so a launch that carries no
+        # class stays on Full. critical_protected and public_platform are
+        # also refused in code (diff_protected_class), whatever this holds.
+        # Rollback: set the list back to the d@e id plus class:test, or empty.
         "VM_SNAPSHOT_TYPE=diff"
-        "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
+        "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test,class:primary,class:premium_always_on"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
         # the right to launch the guest image's Chromium in a capsule capture
