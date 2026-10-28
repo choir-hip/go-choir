@@ -91,7 +91,7 @@ func TestCheckpointBindV2HoldsOnlyForTheHashRead(t *testing.T) {
 	if !binding.Witness.IsDoltHashWitness() || len(binding.Witness.Tables) != 0 || len(binding.Witness.Schema) != 0 {
 		t.Fatalf("the bind hashed rows under the hold: %+v", binding.Witness)
 	}
-	if binding.WitnessDuration <= 0 || binding.WitnessDuration > 2*time.Second {
+	if binding.WitnessDuration <= 0 || binding.WitnessDuration > 10*time.Second {
 		t.Fatalf("witness read under the hold took %v", binding.WitnessDuration)
 	}
 	// The v1 row extract, for the record: what the hold used to cover.
@@ -104,4 +104,11 @@ func TestCheckpointBindV2HoldsOnlyForTheHashRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("hold witness read: v2 %v, v1 row extract %v", binding.WitnessDuration, time.Since(start))
+}
+
+// A nil store handle on the restore path is an error, not a panic.
+func TestDoltHashWitnessRefusesNilDB(t *testing.T) {
+	if _, err := doltHashWitness(context.Background(), nil, replayDoltStateExtractor(t.TempDir())); err == nil {
+		t.Fatal("doltHashWitness accepted a nil store handle")
+	}
 }

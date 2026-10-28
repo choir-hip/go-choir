@@ -155,6 +155,9 @@ func (rt *Runtime) liveCheckpointWitness(ctx context.Context, head *computereven
 // table hash is of one root.
 func doltHashWitness(ctx context.Context, db *sql.DB, extractor computerversion.DoltStateExtractor) (selfdevprotocol.VMLocalContentWitness, error) {
 	var empty selfdevprotocol.VMLocalContentWitness
+	if db == nil {
+		return empty, fmt.Errorf("self-development checkpoint: store is not open")
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return empty, err
