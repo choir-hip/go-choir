@@ -578,3 +578,33 @@ docs/problems/host-kernel-216-days-unpatched-2026-10-15.md:138-150).
 Delegated: DeepSeek research on oversubscription mechanics, per-hypervisor
 differences, side-channel tiers and the desktop-host lease (evidence doc to
 follow).
+
+## Owner note 2026-10-28 ~16:10 UTC: compute credits for self-hosting, fallback offload
+
+Owner: give users compute credits for running their own computer
+("incentivize users to run the infrastructure for us"); many will run it
+24/7 or on a spare machine, others pay for the cloud, "either way is fine".
+Intensive work offloads to the cloud; with no network "it automatically
+offloads to the cloud for you"; the transition must work "as a fallback,
+not just when it's intentionally triggered".
+
+FP0 critical notes (design input, not decisions):
+- Unplanned failover is a partition, and a partition looks like a crash.
+  The cloud can take over only from the last head it received; the desktop
+  cannot be told to stop. So: (a) the desktop self-fences when its lease
+  expires unrenewed; (b) the unreplicated tail is the data-loss window,
+  bounded only if desktop acks wait for an off-desktop receipt; (c) work in
+  flight at takeover is closed as interrupted (crash rule), standing
+  intents continue on the cloud; a planned handoff (lid close with notice,
+  heavy task) carries the planned-restart marker and resumes.
+- "Desktop keeps working offline while the cloud also runs" is the
+  deferred branch-and-reconcile feature; fallback failover must not quietly
+  become it. Until reconcile exists, an expired desktop lease means the
+  desktop stops writing.
+- Heavy work need not move the whole computer: offload one job to a cloud
+  capsule or a child computer (choir in choir), keeping the lease home.
+- Credits are for hosting one's own computer. Hosting other users'
+  computers on user hardware is a separate trust model (the host operator
+  sees the guest) and is out of scope unless confidential VMs make it safe.
+- Credits need a verifiable contribution: lease-held hours with receipts,
+  not self-reported uptime.
