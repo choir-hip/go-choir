@@ -323,3 +323,16 @@ plan:
   directory backend). Open: whether a desktop may keep working offline
   while the cloud copy also runs (a fork and merge question under the
   doctrine's publication-only rule).
+- Zero downtime, staged (owner, 2026-10-28 ~13:55 UTC): "we could end up
+  doing either, but I kind of think we want to migrate to cloud
+  hypervisor eventually... a staged rollout... keep the cloud hypervisor
+  thing as something to do later on". Stage 1 (Autoradio launch):
+  session continuity on Firecracker: no call drop, p99 audio gap at most
+  250 ms, no lost utterance, at most one invisible reconnect per deploy;
+  the media relay at the host edge, session drain, and a deploy classifier
+  (agent re-exec / rootfs / VMM). Stage 2 (later): Cloud Hypervisor with
+  live migration, so a computer need not restart for host or VMM moves.
+  Consequence for this selection: no tier may depend on a
+  Firecracker-specific mechanism for correctness (snapshot format, diff
+  snapshots, Firecracker's balloon behaviour); the hypervisor stays behind
+  the VM seam, and the semantic checkpoint stays the portable unit.
