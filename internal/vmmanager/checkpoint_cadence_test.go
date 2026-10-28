@@ -138,10 +138,22 @@ func TestNodeBNamesTheCheckpointCadenceSelector(t *testing.T) {
 	if len(m) != 1 {
 		t.Fatalf("node-b sets VM_CHECKPOINT_CADENCE_ONLY %d times, want once", len(m))
 	}
-	for _, tok := range parseComputerSelector(m[0][1]) {
-		if tok == "*" || strings.HasPrefix(tok, computerSelectorClassPrefix) {
-			t.Fatalf("node-b selects %q for the cadence; name computer ids, one at a time, after last_bind_millis is read", tok)
+	// Rings decide reach (docs/design/progressive-delivery-2026-10-26.md,
+	// section 3): R0 is d@e, R1 is class:test. Not "*" yet.
+	toks := parseComputerSelector(m[0][1])
+	has := func(want string) bool {
+		for _, tok := range toks {
+			if tok == want {
+				return true
+			}
 		}
+		return false
+	}
+	if !has("computer-59c902c5d46caecc0a180a8557164e72") || !has("class:test") {
+		t.Fatalf("node-b cadence ring = %q, want d@e (R0) and class:test (R1)", toks)
+	}
+	if has("*") {
+		t.Fatalf("node-b cadence ring = %q: \"*\" is a later ring", toks)
 	}
 }
 
@@ -203,12 +215,13 @@ func TestCheckpointCadenceSelectionRefusesAnUnselectedSnapshot(t *testing.T) {
 	}
 }
 
-// Review 336 (DeepSeek, blocking): the cadence selector names computer ids and
-// nothing else. A wildcard or a class token, or a protected-class computer,
-// must yield no boot arguments in code, so one edit of the host config (a copy
-// of the adjacent VM_DATA_DISCARD_ONLY=*) cannot put the unmeasured live
-// extract on the paper.
-func TestCheckpointCadenceSelectorRefusesWildcardsClassesAndProtectedComputers(t *testing.T) {
+// S3 (docs/problems/paper-never-checkpointed-2026-10-27.md; owner,
+// 2026-10-28: "rings decide reach, the code doesn't"). The bind is the
+// hash-only witness, milliseconds under the hold, so the code no longer
+// refuses a wildcard, a class, or a protected-class computer; the host list is
+// the ring. This supersedes review 336's id-only rule, which existed because
+// the live row extract's hold was unmeasured on the paper.
+func TestCheckpointCadenceSelectorFollowsTheRing(t *testing.T) {
 	launch := func(only []string, class string) string {
 		cfg := balloonTestVMConfig()
 		cfg.ComputerID = "computer-selected"
@@ -227,13 +240,15 @@ func TestCheckpointCadenceSelectorRefusesWildcardsClassesAndProtectedComputers(t
 		want  bool
 	}{
 		{"a named computer", []string{"computer-selected"}, "", true},
-		{"a named ordinary computer of a known class", []string{"computer-selected"}, "test", true},
-		{"wildcard", []string{"*"}, "", false},
-		{"wildcard beside a name", []string{"*", "computer-selected"}, "critical_protected", false},
-		{"class test", []string{"class:test"}, "test", false},
-		{"class critical_protected", []string{"class:critical_protected"}, "critical_protected", false},
-		{"named critical_protected computer", []string{"computer-selected"}, "critical_protected", false},
-		{"named public_platform computer", []string{"computer-selected"}, "public_platform", false},
+		{"another computer named", []string{"computer-other"}, "", false},
+		{"wildcard", []string{"*"}, "", true},
+		{"class test", []string{"class:test"}, "test", true},
+		{"class test, another class", []string{"class:test"}, "standard", false},
+		{"class critical_protected", []string{"class:critical_protected"}, "critical_protected", true},
+		{"named critical_protected computer", []string{"computer-selected"}, "critical_protected", true},
+		{"named public_platform computer", []string{"computer-selected"}, "public_platform", true},
+		{"padded class token", []string{" class:test "}, "test", true},
+		{"empty list", nil, "critical_protected", false},
 	} {
 		got := strings.Contains(launch(tc.only, tc.class), "choir.checkpoint_every")
 		if got != tc.want {
@@ -242,35 +257,12 @@ func TestCheckpointCadenceSelectorRefusesWildcardsClassesAndProtectedComputers(t
 	}
 }
 
-// The host config load drops (and says so) what the selector refuses, so the
-// list the manager holds is ids only.
-func TestCheckpointCadenceConfigDropsWildcardAndClassTokens(t *testing.T) {
-	t.Setenv("VM_CHECKPOINT_CADENCE_ONLY", "computer-1, *, class:test, computer-2")
+// The host config load keeps every selector token the generic selector takes.
+func TestCheckpointCadenceConfigKeepsRingTokens(t *testing.T) {
+	t.Setenv("VM_CHECKPOINT_CADENCE_ONLY", "computer-1, class:test, computer-2")
 	t.Setenv("VM_CHECKPOINT_CADENCE_EVERY_EVENTS", "")
 	t.Setenv("VM_CHECKPOINT_CADENCE_EVERY", "")
-	if got := LoadConfigFromEnv().CheckpointCadenceOnly; !reflect.DeepEqual(got, []string{"computer-1", "computer-2"}) {
-		t.Fatalf("selector = %v, want the two ids only", got)
-	}
-}
-
-// Re-review 338 (Devin, low): selectsComputer trims each token before it
-// matches, so a list built outside parseComputerSelector with " *" or
-// " class:test" must not survive the selector's own drop and then match.
-func TestCheckpointCadenceSelectorDropsPaddedWildcardAndClassTokens(t *testing.T) {
-	if got := checkpointCadenceIDs([]string{" *", "\tclass:test ", "computer-selected "}); !reflect.DeepEqual(got, []string{"computer-selected"}) {
-		t.Fatalf("ids = %q, want the trimmed id only", got)
-	}
-	cfg := balloonTestVMConfig()
-	cfg.ComputerID = "computer-selected"
-	cfg.WarmnessClass = "test"
-	for _, only := range [][]string{{" *"}, {"class:test "}, {" class:test"}} {
-		mgr := balloonTestManager(t, func(c *ManagerConfig) {
-			c.CheckpointCadenceOnly = only
-			c.CheckpointCadenceEveryEvents = 2500
-			c.CheckpointCadenceEvery = "60m"
-		})
-		if got := bootArgsOf(t, mgr.buildFirecrackerConfig(cfg, 9001)); strings.Contains(got, "choir.checkpoint_every") {
-			t.Fatalf("%q selected a computer: %s", only, got)
-		}
+	if got := LoadConfigFromEnv().CheckpointCadenceOnly; !reflect.DeepEqual(got, []string{"computer-1", "class:test", "computer-2"}) {
+		t.Fatalf("selector = %v, want every token", got)
 	}
 }

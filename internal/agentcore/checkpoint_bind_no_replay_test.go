@@ -180,10 +180,12 @@ func TestCheckpointBindWitnessEqualsReplayPathWitness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("replay path: %v", err)
 	}
-	want, err := selfdevprotocol.WitnessFromObservationSets(probe.Live, probe.Replay, probe.Result)
-	if err != nil {
-		t.Fatalf("replay path witness: %v", err)
+	if !probe.Result.Equivalent() {
+		t.Fatal("replay path: live and replay are not equivalent")
 	}
+	// The bind publishes the v2 hash witness (S3); the replay path's is the
+	// same witness read from a tape replay.
+	want := tapeReplayV2Witness(t, nf.checkpointHeadFixture)
 	nf.volume.set(replayScratchTestGiB)
 	nf.rt.replayProbeAfterCapture = func() { nf.probed = true }
 	callsBefore := nf.volume.callCount()
@@ -194,10 +196,10 @@ func TestCheckpointBindWitnessEqualsReplayPathWitness(t *testing.T) {
 		t.Fatal("the bind replayed to get its witness")
 	}
 	got := report.PublishedCheckpoint.Checkpoint.Request.VMLocalContentWitness
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("bind witness differs from the replay path's:\nbind   %+v\nreplay %+v", got, want)
+	if err := selfdevprotocol.WitnessContentMatches(want, got); err != nil {
+		t.Fatalf("bind witness differs from the replay path's: %v\nbind   %+v\nreplay %+v", err, got, want)
 	}
-	if !reflect.DeepEqual(report.VMLocalContentWitness, want) {
+	if !reflect.DeepEqual(report.VMLocalContentWitness, got) {
 		t.Fatalf("bind report witness differs from the replay path's:\nreport %+v\nreplay %+v", report.VMLocalContentWitness, want)
 	}
 }
