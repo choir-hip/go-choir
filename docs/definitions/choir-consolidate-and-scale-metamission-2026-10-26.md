@@ -244,9 +244,10 @@ boundaries:
 now:
   status: checkpoint_incomplete
   slice: >-
-    Data architecture (docs/design/data-rearchitecture-2026-10-28.md), step 2:
-    the kill -9 durability drill for store.debounced_checkpoint, then the
-    read-only size census.
+    Data architecture selection
+    (docs/definitions/choir-data-architecture-selection-2026-10-28.md,
+    drafted): census, owner budgets, candidates, tape-replay bake-off,
+    panel, shadow migration. Dolt versioning is load-bearing nowhere found.
   bridge_conjecture: >-
     If immutable content leaves the per-computer Dolt stores (tape as truth,
     content-addressed host store, small authority store), then memory,
