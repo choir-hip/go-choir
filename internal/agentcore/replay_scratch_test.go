@@ -29,8 +29,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -360,5 +362,32 @@ func TestReplayScratchAdmissionAndWatchUseTheVolumeReserve(t *testing.T) {
 	}
 	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-pct"); !errors.Is(err, ErrReplayScratchInsufficient) {
 		t.Fatalf("probe in flight with 5 GiB free on a 100 GiB volume: %v, want ErrReplayScratchInsufficient", err)
+	}
+}
+
+// A parts-form base's descriptor size is its manifest's; the scratch the
+// probe needs is the store the manifest lists (review 370).
+func TestReplayScratchEstimateCountsAPartsBaseStoreNotItsManifest(t *testing.T) {
+	rt, _, _ := replayScratchRuntime(t, "computer-scratch-parts", 0)
+	fake := rt.restoreBaseSource.(*restoreBaseFake)
+	digest := strings.Repeat("a", 64)
+	manifest, err := basemanifest.Marshal(basemanifest.Manifest{Entries: []basemanifest.Entry{
+		{Path: "db", Type: "dir", Mode: 0o755},
+		{Path: "db/a", Type: "file", Mode: 0o644, Size: 7 << 20, SHA256: digest},
+		{Path: "db/b", Type: "file", Mode: 0o644, Size: 5 << 20, SHA256: digest},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.blob = manifest
+	fake.descriptor.Format = projectionbase.FormatParts
+	fake.descriptor.BlobSizeBytes = int64(len(manifest))
+	need, err := rt.replayScratchEstimate(context.Background(), "computer-scratch-parts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 2 * uint64(12<<20)
+	if need != want {
+		t.Fatalf("estimate = %d, want 2 x the listed store bytes = %d (manifest is %d)", need, want, len(manifest))
 	}
 }

@@ -571,3 +571,20 @@ growth. That cost is what an incremental base (S4) and a hash-only bind
 (S3) are for; it also argues for separating the paper's content-addressed
 objects from its authority tables (see the store-engine contention note in
 the 10-28 handoff).
+
+## S4 review 370 adjudication (lane/ckpt-incremental)
+
+Devin (approve with findings) and DeepSeek (conditional approve). Fixed:
+the capture read-back now reserves the staged store, not the manifest
+(`internal/projectionbase/capture.go`); the replay-scratch estimate sums the
+manifest's file sizes for a parts base (`internal/agentcore/replay_scratch.go`);
+GC sweeps parts once a clean scan of an existing `projection-base` directory
+names none, so the documented rollback does not wedge the namespace;
+`class:test` is dropped from `CHECKPOINTD_BASE_PARTS_ONLY` (it selected
+nothing); the switch is registered (`checkpointd_base_parts`, R0 d@e on).
+Deferred: cross-process flock for the part mtime refresh (the race fails loud;
+comment added); manifest cache in the part endpoint (seconds on d@e, revisit
+before the paper); a scrub verb for a rotted part; manifest `blob_bytes`
+naming; advisory modes. Rollout gate carried in the registry entry: before
+R1 or the paper, the guest image must be a build that reads the parts form,
+since a pre-S4 guest refuses a parts watermark by design.
