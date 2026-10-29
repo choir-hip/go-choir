@@ -941,3 +941,32 @@ cycles), which the ontology calls leftovers, beside the 6 M append receipts
 that are real control state. [H] until the census shows when each of those
 tables was last written and whether any reader remains: if they are dead,
 dropping them, not a history rebuild, is what makes Store A small.
+
+### Receipt: dead tables dropped from Store A; the squash OOMed again (2026-10-29 22:47-22:56 UTC)
+
+- Dropped 38 dead pre-split tables from Store A (the og pair, the six wire
+  tables, `sources`, the June publication/provenance/retrieval/artifact/
+  consent tables, the empty vtext/issues tables), committed as Dolt commit
+  `cgpbr0lk...`. Store A has 35 tables; the four key-escrow tables are
+  intact (279 escrow rows). Evidence: docs/evidence/store-a-pre-split-tables-2026-10-29.md.
+  R0f-01 (no production writer) settles **confirmed** by that evidence.
+- `go-choir-platform-dolt-squash` then ran by hand: preflight ok, reflink
+  backup, squash; **OOM-killed at its 10G MemoryMax after 82 s, 6.6 G read,
+  1.4 G written**; it restored the backup itself; every service came back,
+  the drop survived. The 10-28 run died the same way with the full live set,
+  so the peak does not scale with live data as the three-stores note
+  hypothesised; which phase holds it is unmeasured (the tool reports no
+  phases). Per the owner ("I don't care to solve more dolt problems"), no
+  third attempt: Store A's disk comes back when its live tables are exported
+  to the new engine, not by Dolt maintenance. Failed copy and backup deleted.
+
+### Receipt: the paper is back (2026-10-29 22:39-22:52 UTC)
+
+Down from about 19:42 (host ENOSPC made its ext4 read-only) to 22:52. Held,
+stopped, `e2fsck -fy` (journal recovered, orphan flag cleared, exit 1 =
+fixed), compacted offline on a reflink copy with `projection-compact`
+(55.7 GB -> 29.3 GB, 5,057 commits -> 2, the root unchanged), swapped in,
+unheld, booted by `resolve`; `/health` ready. The host image still holds
+about 81 GiB because the host-side `fstrim` on the loop mount freed nothing
+(its error is swallowed by `|| true` in vmctl's script too); the data drive
+has `discard: true`, so the guest's hourly fstrim should return the space.
