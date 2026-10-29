@@ -107,3 +107,25 @@ Nothing was deleted by this investigation.
 - Growth rates for Store A, Store B, the paper `data.img` and the legacy pin directories were not measured (one full scan only). A `du`-per-day cron into a ledger, or the `btrfs filesystem du` per subvolume, would measure all in one pass.
 - The identity of the computers behind `tape-seg/computer-1355b83b…`, the 26.5 GB base, and the per-computer file-CAS sizes were not mapped to vmctl ids; the GC report (`/internal/platform/artifact-gc`, dry-run) lists live/eligible per namespace and answers the "who references it" question without a tree scan.
 - No btrfs quotas, so per-subvolume exclusive sizes need `btrfs filesystem du` (slow).
+
+## Correction: capture bodies are growing (FP0, 2026-10-29 ~22:45 UTC)
+
+Row 1's "dir mtime 2026-10-13, so not growing" is wrong: it read the 256
+prefix directories' mtimes, which change only when a prefix is first made.
+File mtimes [V `find -newermt`]: 154,332 of 154,487 files (9.37 GB) are
+newer than 2026-10-13, i.e. the store refilled after the 10-09 corpus reset;
+5.70 GB since 10-20, 1.05 GB since 10-27, 0.85 GB since 10-28 (18,979 files),
+0.49 GB on 10-29 so far. Rate about 0.5-0.8 GB and 10-19 K files a day.
+
+What the code does [V `internal/platform/captures.go:78-145,212-240`]: one
+plaintext file per body, `capture-bodies/<2 hex>/<sha256>`, keyed by the
+hash of the plaintext, truncated at 1 MiB, written with fsync and rename,
+never rewritten, no GC namespace. `GET /internal/platform/captures/bodies/<sha>`
+serves any body to any bound guest or internal caller ("captures are shared
+content"), with no owner check and no encryption, and identical bodies dedup
+across owners. That is correct for public web captures. It is a tenancy gap
+for any capture of private content (a logged-in page, an owner's own
+document), which the owner rules private: such a body would be readable by
+every computer that learns its hash, and its hash confirms its presence.
+Input to the object-storage design (public versus per-owner tiers); no
+evidence yet that a private body is in the store.
