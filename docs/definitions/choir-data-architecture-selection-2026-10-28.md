@@ -876,3 +876,27 @@ projection-base retention. Kept: the Autopaper content and object graph
 (irreversible), owner-authorized; rollback for the store resets is the old
 repo directory kept until the new one is verified, plus last night's restic
 snapshot.
+
+### Owner direction: account for the valuable data, then design storage and object storage together (2026-10-29 ~22:30 UTC)
+
+"The most important thing is just to get a handle on this system." The data
+worth keeping is: everything captured, the object graph, the Textures
+produced, and the owner's email. "Beyond that, we don't really have any
+important data." Version history is not needed; the tape is valuable for
+user computers and self-development, not for the Autopaper. Engine leaning:
+PostgreSQL on the host, SQLite in user VMs, "the sooner the better", but not
+the full answer to growth: blobs (capture bodies from news articles,
+self-development screenshots, other external files) need an object-storage
+architecture, multi-tenant and secure, and no S3-compatible service runs
+yet. "Before we really take any big moves we should be thinking about the
+architecture for our object storage as well." Downtime is acceptable now.
+
+Consequence for the order of work: (1) finish the cleanup in flight (history-
+free Store A and B, the paper's fsck and compaction); (2) a keep-set
+accounting, i.e. where each kept kind lives today, its bytes, its writer and
+its blobs; (3) an object-storage design covering every blob class (capture
+bodies, image blobs and screenshots, file CAS chunks, tape payloads,
+projection bases, artifact blobs) with tenancy (public versus per-owner
+encrypted), the interface (local CAS first, S3-compatible later; MinIO is
+archived, SeaweedFS was the earlier research default) and retention; (4) the
+engine design and migration on top of both.
