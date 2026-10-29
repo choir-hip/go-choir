@@ -497,3 +497,36 @@ growth from a replayed day of the paper's write mix. FP0 self-scores; the
 settler is the rule (numbers read from those artifacts).
 
 Timestamp correction: round 0f was committed at 22:46 UTC (c41146911), not about 22:55.
+
+## Records (round 0g, object storage; drafted by the Opus design seat in docs/design/object-storage-2026-10-30.md section 8, committed by FP0 2026-10-29 about 23:37 UTC before any of it is built; the commit is the witness)
+**R0g-01.** Stored bytes of steps 2-4 in the local pack store (headers,
+frames, pack indexes included): est 9.95 GB [9.75, 10.6]. Assumes ≤ 2%
+format overhead on 9.85 GB of referenced bodies plus ~0.25 GB for the
+private copies. Falsifier: over 11 GB. Artifact: `du` of the store plus the
+catalog's byte sum.
+
+**R0g-02.** Files in the store after steps 2-3: est 165 [150, 260] packs and
+indexes, against 176,511 files today. Falsifier: over 1,000.
+
+**R0g-03.** Wall time of the step 2-3 import on Node B under `nice`/`ionice`,
+one writer, every body hashed on read and on write: est 15 min [5, 45].
+Hard to measure: page-cache state; mitigation: drop caches before the run
+and record it.
+
+**R0g-04.** blobd on Node B, 60 KB capture-body reads by a bound guest,
+24 h of production traffic: p99 4 ms [1.5, 15]; group-committed puts p99
+12 ms [4, 40]. Falsifier: read p99 over 25 ms or put p99 over 80 ms.
+
+**R0g-05.** Peak RSS of one full mark-and-sweep over 1 M catalog entries
+and three root providers: est 60 MiB [25, 150]. Falsifier: over 256 MiB,
+which would mean the merge is not streaming.
+
+**R0g-06.** Object-store growth, 30-day mean after cutover at the
+then-current Autopaper rate: est 0.6 GB/day [0.35, 1.1], 95% of it public
+captures. Falsifier: over 1.5 GB/day. Consistent with R0f-06.
+
+**R0g-07.** A red-team pass with a second owner's bound computer, given
+every hash in the capture and og tables, reads zero private or internal
+bytes and gets identical responses for absent and present private refs:
+p = 0.90. Falsifier: any byte read or any distinguishable response.
+
