@@ -33,9 +33,24 @@ Related: the data rearchitecture goal (Dolt as the bottleneck), and
 
 `systemctl set-property --runtime go-choir-corpus-dolt.service
 MemoryHigh=6656M`. The front call from the host answered 200 in 0.64,
-0.38, 0.36 s; the cgroup's full PSI avg10 fell from 69 to 3. Reverts at the
-next unit restart or reboot; MemoryMax stays 7G. At 04:47 the store was at
-6035 MiB and growing, so this buys time, not a fix.
+0.38, 0.36 s; the cgroup's full PSI avg10 fell from 69 to 3. The runtime
+drop-in survives unit restarts and reverts at reboot; MemoryMax stays 7G.
+It bought eight minutes: 6628 MiB at 04:54. Graceful `systemctl restart`
+at 04:54:46 (3 s of connection refused in corpusd); front 200 in 0.31 to
+0.42 s, 326 MiB after.
+
+## Subagent findings (Sonnet, 04:5x UTC)
+
+- The 02:15 SIGKILL was `go-choir-dolt-liveness-probe`
+  (`scripts/dolt-liveness-probe.sh`, `nix/node-b.nix:240`): strike 3/3 at
+  02:14:48, SIGABRT, then a restart whose 20 s stop timeout ended in
+  SIGKILL. A restart of an already throttled store, not the OOM killer.
+- At 04:54 the cgroup held anon 4.9 GB, file 1.95 GB: mostly Go heap. The
+  unit sets no GOMEMLIMIT or GOGC; config.yaml is the stock template.
+- Recommended fix (not applied): `Environment=GOMEMLIMIT=4500MiB` on the
+  unit (`nix/node-b.nix:1153`), orange, one deploy and a store restart.
+- Interim (owner token budget): an hourly watcher from FP0's host restarts
+  the store gracefully above 6200 MiB, for 14 h.
 
 ## Open questions
 
