@@ -28,7 +28,7 @@ keep-set content.
   5,000 rows). `table_rows` is right (it matched `COUNT(*)` for the og tables).
   Logical bytes below are `SUM(octet_length(...))` instead.
 - Owner identity: `users` in `/var/lib/go-choir/auth/auth.db` has 1,063 rows.
-  An exact case-insensitive match on `yusef@mosiah.org` returned **no row** [V].
+  An exact case-insensitive match on the address the orchestrator had on file returned **no row** [V]; superseded by the owner's note below.
   A prefix match on `yusef` returns exactly one user, `5bd6de97-3b58-408c-bf89-c42c81b083de`
   (created 2026-05-26; stored email is 21 characters, not the 16 of the given
   address, so it is a different address from the one in the brief). That user
@@ -340,3 +340,15 @@ Store B captures and they are in the keep set; (b) `information_schema` row
 size fields are overflow garbage on Dolt for large tables; (c) the stated
 owner email matches no `users` row exactly. `introduced`: none. `repaired`:
 none.
+
+## Owner note (2026-10-29 ~23:40 UTC): the owner's accounts and their Textures
+
+The owner has three accounts (user ids `5bd6de97...`, `5885aafc...`,
+`c061de6f...`; addresses not recorded here). Their computers [V
+ownerships.json]: `candidate-fleet-e15cb89f...` (computer-03335285...,
+active, premium_always_on), `vm-70070cf7...` (computer-59c902c5...,
+active), `candidate-fleet-bf04bbc7...` (computer-6c50d6e5..., hibernated
+with an epoch-3 memory snapshot). Owner: "no textures on either account are
+essential. cool if we can copy them for continuity, but idc if we lose
+them." So the owner computers' Textures are **nice-to-keep, not keep-set**:
+copy them if the migration makes it cheap; losing them does not fail it.
