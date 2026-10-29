@@ -900,3 +900,44 @@ projection bases, artifact blobs) with tenancy (public versus per-owner
 encrypted), the interface (local CAS first, S3-compatible later; MinIO is
 archived, SeaweedFS was the earlier research default) and retention; (4) the
 engine design and migration on top of both.
+
+### Receipt: the history-free Store A rebuild was aborted (2026-10-29 22:05-22:38 UTC)
+
+Procedure: services stopped, per-table counts, `dolt dump` of the current
+state, `dolt init` in a new btrfs subvolume, `dolt sql < dump`, counts
+compared, swap only on equal counts (script kept in the session scratchpad;
+old repo never touched). Store A first, Store B after.
+
+- Store A's live state dumped to **35.7 GB of SQL** (73 tables, 22:08-22:19),
+  not the few GB the "small control state" picture implied. The bytes are
+  live rows (receipts and similar), not only history: a history drop alone
+  would not make Store A small.
+- The import read 13.2 GB of the dump in 37 minutes while the new repo grew
+  to **30 GB** (about 2.3x the input; Dolt's journal keeps every batch until
+  a GC), on a course to about 80 GB with 44 GB free. Aborted at 22:38 to
+  avoid a second host ENOSPC; the new subvolume and the dump were deleted;
+  services were restarted on the untouched old repos; corpusd /health ok.
+- Store A was **restarted at 22:27 during the import**, though the script
+  had stopped it: a unit that Wants it pulled it up (vmctl, or a timer). A
+  swap would have dropped writes made after the dump. A re-run must `systemctl
+  mask --runtime` the store units, not only stop them.
+- Store B was not attempted.
+
+Learning: measure live bytes before planning a rebuild, and do not rebuild
+a Dolt store by bulk SQL import without GC in batches (or a table-by-table
+import with `dolt gc` between, or an export to the target engine directly).
+Given the owner's direction toward PostgreSQL, the better use of the 35.7 GB
+dump procedure is the census: which tables hold those bytes, and which of
+them are keep-set at all. Next: a per-table size census of Store A and B
+(row counts were taken: `dolt-reset-20261029T220557Z/platform.old.counts`).
+
+Store A row counts at the dump [V, `platform.old.counts`]: `og_objects`
+6,090,210; `computer_event_append_receipts` 6,049,020; `og_edges` 3,048,316;
+`ingestion_events` 2,996,401; `fetches` 2,382,664; `items` 1,722,666;
+`cycle_events` 170,382; `processor_requests` 151,944; lifecycle receipts
+28,806; `cycles` 25,412; everything else under 4,000. So most of Store A's
+live rows are the pre-split corpus pipeline (og, ingestion, fetches, items,
+cycles), which the ontology calls leftovers, beside the 6 M append receipts
+that are real control state. [H] until the census shows when each of those
+tables was last written and whether any reader remains: if they are dead,
+dropping them, not a history rebuild, is what makes Store A small.
