@@ -970,3 +970,5 @@ unheld, booted by `resolve`; `/health` ready. The host image still holds
 about 81 GiB because the host-side `fstrim` on the loop mount freed nothing
 (its error is swallowed by `|| true` in vmctl's script too); the data drive
 has `discard: true`, so the guest's hourly fstrim should return the space.
+
+Update 23:06 UTC: the guest fstrim returned the space; the paper image is 31 GiB on the host; root fs 360 GB used, 107 GB free (78%).
