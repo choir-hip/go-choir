@@ -829,3 +829,36 @@ growth about 85 GB/day from 10-28 to 10-29. Nothing was deleted by it.
 - Why legacy pin directories are still written, and how many pins a day.
 - Store B growth after 10-28 (the audit script exits on Store A's failure
   before sampling Store B).
+
+### Owner direction on the audit (2026-10-29 ~21:10 UTC)
+
+- **The Autopaper does not need the tape** ("kinda mixing systems really.
+  tape matters for user VMs and for self-dev especially. Not for
+  autopaper"). The paper's 26 of 27 GB of `tape-seg`, its share of the
+  legacy pins, and its 26.5 GB base are the cost of running a corpus
+  workload as a tape-backed computer. Consistent with the consensus verdict
+  that the paper's bulk belongs in the corpus tier; the mechanism (a
+  paper-specific tape retention, or the paper's ingest bypassing the
+  computer tape) is open.
+- **Store A and Store B version history do not matter.** No history
+  requirement for either host engine; nothing needs to be migrated from it.
+- **The local Store A backup copy does not matter**; durable logs streamed
+  off-host are the launch path (step 6 of the roadmap).
+- **The paper's disk growth must be contained**, and the `data.img` at twice
+  its compacted store must be understood (likely Dolt; to be measured).
+- **Per-computer file stores keep security isolation**, but shared open-source
+  system files must not be duplicated into every computer.
+
+Executed the same evening (FP0): deleted `retired-bases-20261028`,
+`taperepack-work`, the restic cache and root's go-build and nix caches;
+`nix-store --gc` found nothing dead (3 generations kept). 452 -> 442 GB
+used. Not deleted, with reasons:
+- the `candidate-fleet-*` and `vm-48bc0981` directories are owned
+  interactive computers (one premium always-on and running), not test junk
+  as the inventory said;
+- `computer-inputs/blobs` is vmctl's live `VMCTL_BASE_BLOB_ROOT`;
+- `/data` waits for an explicit owner yes;
+- the 52 GB backup copy would be rewritten by the 02:34 backup, and a
+  from-scratch resync is a Store A pressure risk. The durable fix is that
+  `scripts/off-host-backup.sh` already snapshots instead of syncing when the
+  store directory is a btrfs subvolume.
