@@ -765,3 +765,67 @@ Node B's observed 98% filesystem use, failed control squash/audit and corpus
 OOM remain operational residuals. No cleanup or runtime repair was authorized
 or performed in this review; documentation landing does not resolve them.
 
+
+## Storage audit 2026-10-29 (FP0): what the disk holds, mapped to the plan
+
+Input: [Node B storage inventory](../evidence/node-b-storage-inventory-2026-10-29.md)
+(read-only, Sonnet, 2026-10-29), after the owner asked for "a better
+accounting of what all our data is and where its saved and what is
+real/valuable/unique and what is junk". It is a host disk audit, not the
+census: it measures allocated bytes per path, not logical bytes per table or
+kind, so it settles no round-0 record. Root fs 475 GiB, 451 used, 15 free;
+growth about 85 GB/day from 10-28 to 10-29. Nothing was deleted by it.
+
+### The host's bytes by the target's three tiers
+
+| Tier in the target | Today, where and how big | Finding |
+|---|---|---|
+| 1. Tape (canonical) | `tape-seg` 27 GB (26 of it the paper), plus the legacy one-file-per-pin layout 47 GB (`pin-receipts` 19.7, `computer-event-payload` 17.8, `computer-event` 9.9; 7.4 M inodes) | The only steady grower: about 2.5 GB/day, almost all the paper. The tape is never modified, so its rate is the floor every other tier sits on; what goes onto it (R7 trace lines, telemetry) is the lever, not deletion. The legacy layout is the same class in a second shape and its directories were still touched today, while corpusd /health counts 5,252 legacy pins and 0 fallbacks: unexplained, to investigate (repack, then retire). |
+| Derived accelerators | `projection-base` 61.6 GB; Store A and B Dolt history | The 10-28 jump is mostly bases: 28.4 GB written that day, one base 26.5 GB (the paper's whole embedded store). GC keeps nearly all of them (7-day grace plus liveness; under 1 GB/day freed). A base is a full copy of the guest store, so it carries `event_json` again: one event lives in tape-seg or a legacy pin, in `computer_event_index`, in every retained base, and transiently in the capture clone. |
+| 2. Immutable content | file CAS chunks 28 GB; `capture-bodies` 9.6 GB (static since 10-13); image blobs (guest) | File CAS is about 150 MB per computer across about 190 computers, likely the same seeded `files/Source` (289 MB on the host) encrypted per computer, so it cannot dedup. Seeded source is public content: a concrete case for owner question 2 (cross-owner dedup for public objects only). |
+| 3. Small current state | Store A current state: 251 head rows | Store A is 53.7 GiB of which 53.4 is oldgen (the profile doc); its live control state is small. The bytes are history, not authority. |
+| Backups | `platform-dolt/.choir-backup` 52 GB exclusive on the same disk; restic adds about 52.7 GB to the remote repo per night (365 GB raw) | Dolt history is paid three times: live, a local copy, and a poorly deduplicated remote copy. The backup of control should be a bounded logical snapshot, not its engine history. |
+| Computer disks | paper `data.img` 55 GiB exclusive (137 GB sparse); hibernated computers hold no local disk (16 vm-state entries vs 145 hibernated) | The paper's disk is twice its compacted store (26.5 GB on 10-28): unexplained, to measure in the census. Hibernated computers live entirely in tier 1, file CAS and bases, so base retention is a wake-path decision, not only a disk one. |
+| Not data | `/nix/store` 49 GB, swap 17, guest releases 12, builder 6, caches about 12 | Out of scope for the engine choice; retention by rule. |
+| Junk | candidate fleets 14 GB plus an 8 GiB memory snapshot, an old VM 3.2, `/data` 9, `computer-inputs` 0.7, retired bases 0.45, `taperepack-work` | Delete with the checks the inventory names (vmctl for VMs); `/data` needs the owner. |
+
+### What this changes in the plan
+
+1. **The bulk is outside the stores the bake-off compares.** Of about 450 GB,
+   the Dolt stores' current state is a few GB. History (Store A 53, Store B
+   14), its backup copy (52), projection bases (62) and the tape in two
+   layouts (74) are the mass. The scorecard's disk metric must therefore be
+   per tier and include retained bases, backups and the tape, as the
+   alternatives research already asks ("retained snapshot/backup space");
+   an engine that wins on table bytes but keeps whole-store bases would not
+   move the host.
+2. **Step 2 (stop the bleeding) gets a measured order:** projection-base
+   retention (latest per computer plus pinned restore points; up to about
+   44-55 GB, and the burst driver); the local Dolt backup copy replaced by a
+   transient snapshot or logical dump (52 GB local, about 52 GB a night
+   remote); the legacy pin repack and why it is still written (47 GB, 7.4 M
+   inodes); then junk. Each is its own change with its own class: base
+   retention and the backup procedure are red (checkpoint, evidence).
+3. **Step 3 (`event_json` out) and step 4 (content to CAS) shrink every base,
+   not only the guest store.** Bases are the place their savings multiply.
+4. **The tape needs a retention design, not only a compaction.** At about
+   2.5 GB/day for one computer, a canonical, never-modified tape is the
+   long-run grower. R7 (trace lines leave the tape and the store) is the
+   first cut; tape schema v2 should carry a payload-class field so
+   telemetry can be retained by rule while semantic events stay forever.
+5. **Shared public bytes are being stored per owner.** Seeded source in every
+   computer's encrypted file CAS is the measurable example; the vault and
+   CAS design should name a public tier for it.
+6. **No time series exists** (the profile doc found none). The census should
+   add a daily per-tier size ledger (`btrfs filesystem du` per subvolume or a
+   `du` per tier into a JSONL file) so growth claims stop resting on mtimes.
+
+### Census additions from the audit
+
+- Logical size of `computer_event_index` versus the paper's `data.img`
+  (55 GiB exclusive against a 26.5 GB store): what fills the difference.
+- Which computer and pin hold each base over 1 GB (the GC dry-run report
+  answers it without a tree scan).
+- Why legacy pin directories are still written, and how many pins a day.
+- Store B growth after 10-28 (the audit script exits on Store A's failure
+  before sampling Store B).

@@ -412,3 +412,27 @@ what changes, and the later record that checks the change.
   evidence).** Assumption failed: FP0 predicted restore speed and replay
   throughput independently. Change: predictions that share a mechanism are
   checked against each other at commit. Revised by R0c-01.
+
+## Records (round 0e, FP0, committed 2026-10-29 about 21:00 UTC; the commit is the witness)
+
+From the host storage audit (docs/evidence/node-b-storage-inventory-2026-10-29.md),
+before the census and before any retention change.
+
+**R0e-01.** In the census, `event_json` plus the rest of
+`computer_event_index` accounts for at least 40% of the logical bytes of the
+paper's newest projection base: p = 0.60. (Consistent with R0-01's 55%
+[40, 70], restated for the base, which is what multiplies on disk.)
+
+**R0e-02.** A projection-base retention rule of the latest base per computer
+plus pinned restore points frees at least 35 GB of `sha256/projection-base`
+once applied: p = 0.65. Hard to measure: which bases are pinned by a
+rollback or restore point. Mitigation: read the GC dry-run's live/eligible
+list before the change and record it.
+
+**R0e-03.** The paper's `data.img` exclusive bytes exceed its store's
+logical bytes by at least 2x at census time: p = 0.70 (Dolt journal, oldgen
+and unreclaimed space rather than live rows).
+
+**R0e-04.** The legacy pin directories are still being written by a live
+path, not only touched by metadata: p = 0.55. Settler: a count of files
+newer than a marker over 24 h.
