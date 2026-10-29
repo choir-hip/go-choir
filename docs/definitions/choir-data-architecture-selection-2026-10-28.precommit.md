@@ -495,3 +495,5 @@ each engine on a scratch host directory (offline, memory-capped), measuring
 `pg_total_relation_size` per table and the SQLite file after `VACUUM`, and
 growth from a replayed day of the paper's write mix. FP0 self-scores; the
 settler is the rule (numbers read from those artifacts).
+
+Timestamp correction: round 0f was committed at 22:46 UTC (c41146911), not about 22:55.
