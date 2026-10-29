@@ -862,3 +862,17 @@ used. Not deleted, with reasons:
   from-scratch resync is a Store A pressure risk. The durable fix is that
   `scripts/off-host-backup.sh` already snapshots instead of syncing when the
   store directory is a btrfs subvolume.
+
+### Owner authorization: get to a good state before the rearchitecture (2026-10-29 ~21:20 UTC)
+
+"Basically, we are now pre-rearchitecture. Let's get to a good state before
+we decide on specific designs and note that since we are still pre-launch we
+can lose some data. I would like to keep the newspaper content and object
+graph and my emails. Everything else is disposable." Authorized: drop Store
+A and Store B version history (fresh repos from current state), delete the
+local Store A backup copy, delete `/data`, investigate the paper's disk, and
+projection-base retention. Kept: the Autopaper content and object graph
+(Store B, capture bodies), the owner's mail (maild). Mutation class black
+(irreversible), owner-authorized; rollback for the store resets is the old
+repo directory kept until the new one is verified, plus last night's restic
+snapshot.
