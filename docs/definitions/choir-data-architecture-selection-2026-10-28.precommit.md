@@ -436,3 +436,62 @@ and unreclaimed space rather than live rows).
 **R0e-04.** The legacy pin directories are still being written by a live
 path, not only touched by metadata: p = 0.55. Settler: a count of files
 newer than a marker over 24 h.
+
+## Records (round 0f, FP0, storage needs of the new engines; committed 2026-10-29 about 22:55 UTC; the commit is the witness)
+
+Owner, 2026-10-29: "before we move to new engines, ... estimate the real
+storage needs of our new engines. thats a key precommitment." Committed
+before the per-table census and before the Store A pre-split liveness
+investigation reports. Target model: PostgreSQL on the host (control and
+corpus as separate instances), SQLite per guest, one object store for blobs;
+no engine history; pre-split leftovers dropped; the keep set only (captures,
+the object graph, produced Textures, the owner's mail, plus the control state
+that running computers need). Sizes are on-disk bytes including indexes and
+the engine's own overhead at steady state after a vacuum/checkpoint, not
+logical bytes. Inputs known at commit: Store A 6.05 M append receipts and
+about 30 K other control rows; Store B 14.7 GiB Dolt with history; capture
+bodies 9.4 GB; the paper's store 26.5 GB after the 10-28 compaction; the
+paper's head went from 4,642,559 (10-28 21:18) to 4,940,220 (10-29 15:38),
+about 400 K events a day.
+
+**R0f-01.** The Store A pre-split tables (og_objects, og_edges,
+ingestion_events, fetches, items, cycle_events, processor_requests, cycles)
+have no production writer on main: p = 0.85. Settler: the liveness
+investigation's code read plus last-write times.
+
+**R0f-02.** PostgreSQL control instance, all retained control tables with
+today's receipts: est 9 GB, 80% interval [3, 20]. Assumes about 1-1.5 KB per
+receipt row with its indexes. Falsifier: over 20 GB, which reopens receipt
+retention and granularity (the closeout's first open item).
+
+**R0f-03.** PostgreSQL corpus instance, the keep set of Store B (objects,
+edges, captures' metadata, publications, capture index): est 6 GB [2, 15].
+Hard to measure: Store B's live versus history bytes are unknown.
+Mitigation: the census reports both, and the estimate is scored against a
+real load of the keep set, not a model.
+
+**R0f-04.** The paper's guest SQLite after `event_json` leaves the index and
+content-hash kinds move to the object store: est 3 GB [1, 10]. A d@e-class
+user computer: est 150 MiB [30, 800].
+
+**R0f-05.** The object store holding the keep set's blobs today (capture
+bodies plus referenced image blobs, published blocks and file contents,
+deduplicated within an owner and for public objects across owners, without
+projection bases): est 12 GB [9.5, 30].
+
+**R0f-06.** Growth at the current Autopaper rate, 30-day mean per day: control
+est 0.5 GB/day [0.15, 1.5] (dominated by receipts at about 400 K paper events
+a day; falls by an order of magnitude if the paper leaves the computer
+tape); corpus est 0.15 GB/day [0.05, 0.6]; blobs est 0.65 GB/day [0.4, 1.2].
+
+**R0f-07.** Total host bytes of the keep set on the new engines (both
+PostgreSQL instances, the paper's SQLite, the object store; excluding VM
+images, Nix, swap, backups and projection bases): est 35 GB [15, 80],
+against about 330 GB of data paths on Node B today.
+
+Hard to measure, all of round 0f: the new engines do not exist yet.
+Mitigation: settle each record by loading the census-frozen keep set into
+each engine on a scratch host directory (offline, memory-capped), measuring
+`pg_total_relation_size` per table and the SQLite file after `VACUUM`, and
+growth from a replayed day of the paper's write mix. FP0 self-scores; the
+settler is the rule (numbers read from those artifacts).
