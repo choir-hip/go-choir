@@ -635,3 +635,133 @@ optimization pass, multi-host, Qdrant removal, the vault build sequence
 per the accepted design §slices, desktop host and failover); agent-density
 curve in the bake-off (round 0d). Owner yes needed to delete the
 temporary branch lane/fp0-desktop-req.
+
+## Owner request 2026-10-29: deepen alternatives before selecting
+
+Owner: "lets not rule them out yet. a bit more setup at first is fine if it
+improves resource utilization or stability longterm", specifically reopening
+MySQL/MariaDB on the host and LMDB/bbolt/RocksDB in guests, plus adjacent
+options. This authorizes comparative research and documentation, not runtime
+code, production experiments, engine ratification or the migration.
+
+The [expanded comparison](../evidence/storage-engine-alternatives-2026-10-29.md)
+records primary sources, positive cases, failure mechanisms and qualitative
+falsifiers. The [direction note](../design/data-rearchitecture-2026-10-28.md)
+now distinguishes hypotheses from deployed properties and carries the review
+perspectives. Neither is a new execution design or consensus ratification.
+
+Research candidates are not restricted to the earlier Dolt/SQLite/DoltLite
+floor. Host control and corpus compare PostgreSQL, Oracle MySQL/InnoDB and
+MariaDB/InnoDB separately; guest research includes SQLite, LMDB, MDBX, bbolt,
+RocksDB and Pebble, with Badger/redb and corpus-oriented hybrids considered
+where their mechanisms fit. Additional setup or loss of SQL is not itself a
+paper-cut rejection. Existing hard gates and limits on measured survivors
+and full-paper replays remain unchanged; the census is still next.
+
+Before any expanded candidate experiment, record its expectations in the
+precommitment ledger and a workload/implementation plan under the existing
+review discipline. Compare equivalent semantics, maintained indexes,
+logical witness and durability, then idiomatic physical layouts with all
+mapping/index costs included. No numerical performance ranking or prediction
+is settled by the research.
+
+In particular:
+
+- Compare sustained reclamation and debt, not the label "no GC": WAL/FTS
+  checkpoint/merge, vacuum, purge, COW page reuse, LSM compaction and value-log
+  GC have different costs and blockers.
+- Count whole-VM/host residency, post-scan cache retention, cold-open and
+  recovery peaks, physical I/O, temporary space and backup retention.
+- Preserve transactional rows/indexes/watermark/root and the repairable
+  prepare -> host CAS -> finalize protocol. The actor SQLite recovery domain
+  and other off-tape state require explicit recovery contracts.
+- Owner clarification: independently operated control/corpus services are
+  required, even when they initially share a host and use the same engine.
+  Schemas/databases/roles do not recreate process/WAL/restart isolation.
+  Shared-instance memory savings do not supersede this deployment boundary.
+- Equal power-loss durability is the starting comparison. A process-kill
+  drill is not proof of VM/OS crash, host-loss or partition behavior.
+- The earlier engine-share/keep-Dolt heuristics are research hypotheses to
+  revisit in the scorecard discussion, not substitutes for lifetime resource
+  and operational-complexity evidence. This note does not silently rewrite
+  the frozen decision rule or select its weights.
+
+### Subsequent owner clarification: corpus drives the shared-engine default
+
+Prefer one server technology for independently operated corpus and control
+services, not a separate engine optimization for each. Corpus is intended to
+grow through data-provider ingestion, then dedicated machines, clusters and
+eventually a multi-region system; these are growth requirements, not claims
+that today's schema or any engine automatically supplies that architecture.
+Control should not share the corpus service's failure/maintenance domain.
+Security ranks first, stability second, scalability and simplicity jointly
+next. Additional setup is acceptable for long-term resource/stability gains.
+
+The [read-only control/corpus investigation](../evidence/control-corpus-resource-profile-2026-10-29.md)
+maps what control actually stores and reconstructs hours of active Autopaper
+publishing alongside corpus database lifetimes and a confirmed OOM. It separates
+current state, accepted-event receipts and physical Dolt history. It also names
+the missing matched historical counters. The owner rejected the initial
+30-second sample; it is excluded from workload characterization and selection
+evidence. Neither the historical findings nor these preferences authorize a
+migration, select an engine or silently revise the frozen acceptance gates.
+
+### Owner preference: PostgreSQL, with MariaDB as the server alternative
+
+The owner prefers not to depend on Oracle, narrowing the active host-server
+shortlist to PostgreSQL and MariaDB. Earlier Oracle MySQL research remains
+comparative evidence, not an active default. The owner leans PostgreSQL for
+its ecosystem/default advantage and the option to use pgvector. This is a
+provisional preference, not engine ratification or migration authorization.
+The guest-engine comparison is unchanged.
+
+pgvector is a credible initial retrieval option, not evidence that one
+PostgreSQL instance will serve every future vector workload. Its useful scale
+depends on vector dimensions/count, index choice, memory, update rate,
+filtering, recall and latency requirements. There is no selected numeric
+cutover to a separate vector service. Keep canonical object identity,
+permissions and embedding/model provenance explicit so a derived search
+index can be rebuilt without becoming a second canonical content authority.
+
+Ordinary PostgreSQL streaming replication does not itself provide transparent
+write sharding or globally distributed multi-writer SQL. Partitioned tables
+are not distributed shards. The remaining work includes shard ownership and
+routing, skew, cross-shard operations, failover/fencing, recovery, and explicit
+regional durability/consistency contracts. MariaDB does not remove the need
+to make those choices. Prefer a sound single-region acceptance path and
+measured growth boundaries over treating a hypothetical future topology as
+already designed. No runtime mechanism or new acceptance gate is selected here.
+
+### Research-session closeout: recorded versus unresolved
+
+This session closes the comparative review, not the architecture-selection
+mission. The existing census and acceptance gates remain in force; no `/goal`
+is completed or superseded by this documentation landing.
+
+Recorded owner constraints: avoid an Oracle dependency; prefer one host server
+technology but independently operated control/corpus services; prioritize
+security, stability, then scalability and simplicity together. PostgreSQL is
+the working preference, MariaDB the active server alternative. pgvector is an
+option, not a mandatory permanent search backend. The guest winner is open.
+
+Before implementation, resolve or precommit measurements for:
+
+- Accepted-event granularity, receipt size and retention, including safe replay,
+  idempotency and verification boundaries. User count and token throughput are
+  not sufficient control-capacity inputs.
+- Guest engine/query mapping, off-tape recovery, portable restore, and the
+  independent logical witness replacing Dolt roots.
+- Corpus unique input bytes/documents, agent reads/writes, query fan-out,
+  permissions/provider-license boundaries, and derived-index rebuild cost.
+- Measured growth boundaries, partition ownership and hot-key behavior;
+  failover/fencing, regional acknowledgement durability, recovery objectives
+  and permission/index freshness. Do not mistake table partitioning or ordinary
+  replicas for a finished sharding/multi-region design.
+- Matched multi-hour resource counters under active use and maintenance.
+  Retrospective publication/lifetime logs establish activity and failure, not
+  complete matched telemetry or a replacement-engine capacity benchmark.
+
+Node B's observed 98% filesystem use, failed control squash/audit and corpus
+OOM remain operational residuals. No cleanup or runtime repair was authorized
+or performed in this review; documentation landing does not resolve them.
+

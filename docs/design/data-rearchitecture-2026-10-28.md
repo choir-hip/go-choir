@@ -21,54 +21,61 @@ revisions) and we keep it in a versioned, mutable SQL engine, then copy it:
   again in every projection base (183 bases, about 58 GiB) [V], again in a
   capture clone (about 72 GiB transient growth) [V], and the witness reads the
   store about twice to checkpoint it (1.5 TB read for the paper) [V];
-- Store A commits per write: 120,335 commits, 50.9 GiB [V]; its weekly squash
+- Store A retained 120,335 commits, 50.9 GiB [V]; snapshot commits are
+  cadence/debounced, not necessarily one per SQL write; its weekly squash
   OOMs at 10G [V];
 - the paper's 503s are mostly the online GC holding the one write
   connection (81% of non-200 samples) [V], and the engine mutex second [V].
 
-Every symptom this week (GC OOM, store_stalled, two-hour capture, deploys
-blocked on disk) is one disease: mutable versioned storage for immutable data,
-plus copies of copies. More hardware moves the cliff; it does not remove it.
+The shared architectural problem is unnecessary retained version history,
+duplicated payloads and expensive, insufficiently bounded operations.
+Immutable rows are not intrinsically a bad fit for SQL. Individual stalls
+still need their own mechanism evidence; this is not one proven engine bug.
 
 ## Target: three tiers, one truth
 
-1. **The tape is the only source of truth**: append-only, content-addressed,
-   hash-chained, signed (exists). Everything else is a derived projection,
-   rebuildable and never checkpointed as if it were state.
-2. **Immutable content in a content-addressed store on the host, encrypted
-   per owner**: events, captures, stories, revisions, published objects,
-   stored once and referenced by hash; computers hold read capabilities, not
-   copies. The corpus already does this for captures [V]; extend that
-   pattern. Publication to the Autopaper object graph becomes a shared ref.
-3. **Small authority state per computer in a small transactional store**:
-   runs, obligations, lifecycle, routes, leases (megabytes). Candidate:
-   SQLite in WAL mode (one writer, concurrent readers by construction, small
-   memory, no GC, no ICU cgo) [H]. Keep Dolt only where versioning is the
-   product (self-development candidate worlds; Texture revision diffs if
-   needed). Store A gets the same split: platform state with an audit log,
-   not per-write commits.
+1. **The tape is the canonical semantic history of a computer**:
+   append-only, hash-chained and signed. Target projections are rebuildable;
+   snapshots accelerate recovery rather than create another history authority.
+   This is not yet complete: actor recovery, files, keys and direct-write
+   state have gaps (the portability inventory). Shared control, identity,
+   corpus and vault state also need their own explicit recovery contracts.
+2. **Substantial immutable content in a content-addressed store, encrypted
+   per owner**: reference bodies by hash; keep small metadata in transactional
+   rows when useful. One canonical home does not prohibit bounded guest caches,
+   replicas or backups. The corpus already externalizes capture bodies [V].
+3. **Small transactional current state per computer**: runs, obligations,
+   document heads and refs. Size is a census hypothesis, not established MB.
+   SQLite WAL is a candidate, not a selection; LMDB, MDBX, bbolt and LSM
+   candidates remain open. Host lifecycle, route and lease authority remains
+   host control state. Dolt's table-root witness needs a replacement; current
+   Texture history uses explicit revisions and self-development uses capsules,
+   not a demonstrated production requirement for Dolt branch/merge.
 
 ## What it buys
 
-- Checkpoint = tape head + authority snapshot (MB) + refs: capture in
-  seconds; witness = hash chain + authority hash; the S2 clone path becomes
-  the fallback.
-- Memory follows the working set, not history: no Dolt GC, smaller guests,
-  higher density (the margin).
-- Stability: no contention by construction (WAL), no GC on the write
-  connection, disk growth linear in new content.
-- Security: fewer copies of private data; per-owner keys make deletion a
-  crypto-erase (key escrow exists); least-privilege read capabilities; a
-  small auditable authority store. Caution: cross-owner dedup leaks
-  possession; dedup within an owner, and across owners only for published
-  public objects.
+- Target checkpoint = tape head + current-state snapshot + content closure +
+  projector/schema/release identity and recoverable keys; actor state must
+  have an explicit inclusion or reconstruction contract. Small/fast capture
+  and a substrate-neutral witness are hypotheses to prove, not shipped gains.
+- Memory: delete unnecessary history and payload duplication, then measure
+  engine, query, maintenance and guest file-cache peaks. A cache target is
+  not a bound on whole-VM memory.
+- Stability: WAL permits concurrent snapshot readers and one writer, not
+  contention-free operation. Bound reader lifetimes, transactions, checkpoint
+  progress and disk headroom; other engines have different reclamation costs.
+- Security: fewer uncontrolled private copies and least-privilege reads.
+  Crypto-erase requires destroying all applicable key protectors, including
+  recovery/backup copies; escrow existing is not proof of that property.
+  Dedup within an owner, and across owners only for published public objects.
 
 ## Existing replacements first (standing rule)
 
 Built and off for every computer (switches/registry.yaml, grandfathered):
-`store_event_table`, `store_debounced_checkpoint` (would cut Store A's
-commit-per-write), `store_trace_log`; and the `choir_events` tape-stamped
-routing. Read why each is off and walk it before writing new storage code.
+`store_event_table`, `store_debounced_checkpoint` (guest Dolt history off the
+write path), `store_trace_log`; and the `choir_events` tape-stamped routing.
+Store A's snapshot control is separate. Read why each is off and walk it
+before writing replacement storage code.
 
 ## Path (each step leaves a working system)
 
@@ -80,15 +87,17 @@ routing. Read why each is off and walk it before writing new storage code.
 3. The tape index stops storing `event_json`; reads come from tape segments.
 4. Immutable kinds move to the content-addressed store (paper stories and
    source entities first).
-5. The authority-store engine decision (SQLite WAL vs small Dolt): a design
-   note and a divergent panel; it touches self-development and Texture.
-6. Checkpoints become tape head + authority snapshot; the heavy capture
-   path retires.
+5. Compare authority engines on the same logical workload and on idiomatic
+   physical layouts; compare host control and corpus separately. The
+   [expanded alternatives research](../evidence/storage-engine-alternatives-2026-10-29.md)
+   keeps SQL, COW KV and LSM candidates open.
+6. Prove portable checkpoints and retire the heavy capture path only after
+   equivalent state, witness, recovery and content/key completeness are shown.
 
 ## Owner questions
 
-1. Where is Dolt's versioning load-bearing: self-development candidate worlds
-   only, or Texture revision diffs too?
+1. Which current-state and host engines meet the semantic/recovery gates with
+   the best lifetime resource use, including the replacement Dolt witness?
 2. Dedup across owners for published objects only, within an owner for
    everything else?
 3. Autoradio waits for step 4 (the paper stops being the sizing problem)?
@@ -119,24 +128,25 @@ not yet decided. The owner's aim: intelligibility (hold the whole system in
 one head), resource efficiency, stability and security; storage designed
 and operated in-house on proven open-source parts, not novel engines.
 
-- Per-computer authority state: SQLite (WAL) embedded in the VM. One writer
-  per computer is the model; WAL keeps readers and the writer from
-  blocking each other; the page cache is fixed-size and there is no GC.
-- Shared platform state: Postgres on its own machine eventually (many
-  writers, replication, built-in full text, pgvector). Alternatives kept
-  open: SQLite per service if data ownership is strict; FoundationDB as
-  the later scale-out option.
-- Immutable content: a content-addressed object store (local disk now,
-  self-hosted S3-compatible such as MinIO later), stored once, verified by
-  hash.
-- Retrieval: indexes derived from the log and the content store, one per
-  question kind: full text (Postgres first), vectors (Qdrant already runs
-  on Node B at 6333; pgvector up to tens of millions), entity graph and
-  time series as Postgres tables first. Every index is rebuildable.
-- The log off-host: tape segments and SQLite WAL (Litestream-style) stream
-  to the object store; Postgres WAL archiving for point-in-time recovery;
-  a log bus (NATS JetStream or Redpanda) for the corpus ingest stream
-  later. Losing a host then loses nothing.
+- Per-computer state: SQLite WAL is the initial relational hypothesis;
+  concurrent readers and a single writer fit the model. It still needs a
+  checkpoint policy and whole-VM memory measurement. LMDB, MDBX, bbolt,
+  RocksDB/Pebble and adjacent candidates are open for research, not rejected
+  for requiring additional setup.
+- Shared state: PostgreSQL is the initial hypothesis; Oracle MySQL/InnoDB
+  and MariaDB/InnoDB are first-class alternatives. Choose control and corpus
+  separately. Two independent instances are the review preference for blast
+  radius; logical databases/schemas alone do not provide equivalent isolation.
+- Immutable bodies: local CAS first, with an object-store API for a later
+  self-hosted backend. The earlier MinIO suggestion is superseded by the
+  research/amendments in the selection goal; no backend is deployed by this note.
+- Retrieval: SQL graph and full text first where they meet the query contract;
+  include all index maintenance in comparisons. Qdrant removal/pgvector later
+  is the owner direction below, not evidence that PostgreSQL has won selection.
+- Off-host durability: asynchronous tape/WAL/object shipping can lose recent
+  acknowledged writes on host loss. Zero-loss acknowledgements need an
+  independently durable receipt before success. The current selection scope
+  uses local fsynced tape; off-host receipts remain later work.
 - In-house means owning and operating the architecture and building our
   own layer (tape, content addressing, projections, witness, streaming),
   not writing database engines.
@@ -159,3 +169,50 @@ runtime wiring, its health and provider entries (orange; tier 1). Vectors,
 when graph traversal in SQL stops being enough and an embedding pipeline
 exists, use pgvector in the shared Postgres; a dedicated vector engine is
 a later replacement behind the same retrieval interface.
+
+## Review and owner-requested reopening (2026-10-29)
+
+The owner requested a deeper alternatives comparison before accepting the
+default pair: extra initial setup is acceptable for better long-term resource
+utilization or stability. The
+[research and primary-source ledger](../evidence/storage-engine-alternatives-2026-10-29.md)
+records the positive case, maintenance mechanism and falsifier for each
+candidate. It is green research, not ratification or an execution design.
+
+Review perspectives carried forward:
+
+- Do not replace an engine without correcting unnecessary history, payload
+  duplication and recovery gaps; do not move every immutable metadata row
+  to a custom file format merely because it is immutable.
+- Owner clarification: use the same host engine by default, but **separate
+  independently operated control and corpus services**. Corpus requirements
+  drive that engine choice; do not add a control-only engine without a concrete
+  unmet requirement. Separate services should permit corpus to move to its own
+  machine and later infrastructure without moving control with it.
+- A purpose-built KV graph is credible if audited named query shapes suffice.
+  Its atomic secondary indexes, query semantics, migrations and logical
+  witness must be included in correctness and resource accounting.
+- Compare equal durability first: fully synced commits for irreplaceable
+  state; weaker sync only for proven projections with already-durable inputs.
+  A process kill is not a VM/OS crash or host/storage-loss proof.
+- Current-state rows and projection watermark remain one transaction.
+  Prepare, host CAS and local finalize remain a cross-system recovery
+  protocol regardless of the engine.
+- Fast stored roots are not independent proof that rows are correct.
+  Canonical witness maintenance needs schema/crash coverage and an
+  independent recomputation path; no new hash construction is selected here.
+- Measure sustained maintenance debt, cold-open/restore peaks, post-scan
+  guest-cache residency, temporary disk and backup retention. Extra setup is
+  acceptable; postponing unbounded work beyond a short benchmark is not.
+- Portable recovery must include or explicitly reconstruct actor state,
+  files, keys and off-tape kinds, with the source unavailable. Engine choice
+  does not make those missing contracts disappear.
+- Priorities: security first, stability second, scalability and simplicity
+  jointly next. A few more setup steps are acceptable for durable resource
+  savings; minimizing engine variety does not mean combining failure domains.
+- The [control/corpus resource investigation](../evidence/control-corpus-resource-profile-2026-10-29.md)
+  maps current control duties and distinguishes live state, receipt retention
+  and Dolt history. Its multi-hour active-paper reconstruction includes actual
+  publishing and corpus memory-limit failure. The initial 30-second idle
+  sample is explicitly excluded from workload and selection evidence.
+
