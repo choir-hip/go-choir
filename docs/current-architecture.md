@@ -7,7 +7,7 @@ hierarchy and `update_coagent` as the agent-to-agent primitive; that model is
 superseded. The working mission set is the R-sequence in `ACTIVE.md`.
 
 This is the current architecture memo for Choir. It is meant to be the first
-document read before changing `texture`, desk routing, workers, Trace, Dolt,
+document read before changing `texture`, desk routing, workers, Trace, the data stores,
 `vmctl`, publication, or appagent behavior. For current vocabulary and project
 direction, read [semantic-registry.md](semantic-registry.md) and
 [choir-doctrine.md](choir-doctrine.md). For the current common platform/default
@@ -233,13 +233,13 @@ per-user computer runtime
   -> app surfaces project durable state
   -> appagents own canonical semantic artifacts when needed
   -> desk actors and capsule-scoped sub-RLMs create evidence; capsule effects remain inert candidates
-  -> embedded Dolt owns private computer product state
+  -> guest SQLite (state.db) owns private computer product state, rebuilt from the tape by replay
 ```
 
 Important boundary rules:
 
 - Caddy is edge/static routing infrastructure, not semantic authority.
-- The browser talks to product APIs, not raw agent, prompt, event, vmctl, Dolt,
+- The browser talks to product APIs, not raw agent, prompt, event, vmctl, database,
   provider, or platform-internal mutation endpoints.
 - `auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, and `maild`
   are host/platform or sidecar services in the current codebase. They should
@@ -270,12 +270,12 @@ acceptance remains separately defined by canonical computer events, frozen
 capsule bundles, verifier/materialization receipts, checkpoints, route
 certificates, and a future owner-ratified Definition's deployed gate.
 
-The embedded Dolt runtime migration is complete on staging. As of commit
-`c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
-tables and Texture tables open in the same embedded Dolt workspace inside the
-user computer. The old `/state` path remains only as an inert workspace marker;
-serving startup does not read or import retired SQLite rows. Host
-auth/session state remains host-owned.
+Per-user runtime/control product tables and Texture tables live in one
+SQLite database (`state.db`) on the user computer's own disk. It is a
+projection of the computer's tape, rebuilt by replay; a lost disk was rebuilt
+from the host alone on 2026-10-30. Host auth/session state remains host-owned,
+in the control database. (The earlier embedded Dolt workspace was deleted in
+the 2026-10-30 data system cutover.)
 
 Runtime model selection is policy-driven. Provider secrets and the platform
 model catalog are platform-owned, but the effective model policy for a user
@@ -292,10 +292,10 @@ per-run/task override -> modality requirement, with owner and management-desk
 edits flowing through product state rather than Node B config patches.
 
 Platform publication now has a first service boundary. A host-side `corpusd`
-service writes to a separate localhost-only `dolt sql-server` primary and owns
+service writes to the graph database on the host's PostgreSQL and owns
 platform-visible publication, route, artifact manifest/blob, retrieval source/
 span, citation edge, provenance, consent/review, verifier, and rollback rows.
-The browser never talks to Dolt. A signed-in user calls the proxy product API to
+The browser never talks to a database. A signed-in user calls the proxy product API to
 publish a Texture; the proxy reads the head revision and the full revision chain
 from the user's resolved computer and submits the public projection plus a
 canonical `version_history` manifest — per-revision content/citations/typed
@@ -346,7 +346,7 @@ Code-present/current foundations:
    private-derivative/proposal flows.
 6. The source substrate is captures: the source schedule
    (`internal/agentcore/source_schedule.go`) polls registry sources
-   (`internal/sources`) into shared block-document captures in Store B
+   (`internal/sources`) into shared block-document captures in the graph database
    behind `corpusd` (`internal/sourcegraph`, `internal/sourcefetch`), and
    research reads pages into captures with `choir.Read`. The sourcecycled
    daemon, `internal/cycle` and research's `source_search` were deleted in
@@ -575,7 +575,7 @@ capsule broker. Neither the desk nor its sub-RLMs receive direct core-VM
 mutation or host authority.
 
 `research` reads local files and the web, then asserts findings/evidence through
-`Report`. Its production registry excludes bash, raw Dolt, writable files,
+`Report`. Its production registry excludes bash, raw database access, writable files,
 capsule commit, acceptance, route, and host authority. Its current read-only
 scope cannot message — a policy redesign is needed for full message authority.
 
@@ -655,7 +655,7 @@ rectification plan and the supervision architecture doc.
 ## Computer Model
 
 The product noun is **computer**. A computer is a persistent user-owned
-machine-world composed from VM/runtime state, Dolt/app state, source/build
+machine-world composed from VM/runtime state, SQLite app state, source/build
 state, content blobs, artifact provenance, and route identity. See
 [computer-ontology.md](computer-ontology.md).
 
@@ -673,7 +673,7 @@ self-development effects are inert bundles, not hibernating computers.
 
 - The durable user-facing object identified by stable ComputerID plus canonical
   event chain.
-- Hosts visible desktop/apps and typed embedded-Dolt state through a replaceable
+- Hosts visible desktop/apps and typed guest-store (SQLite) state through a replaceable
   realization.
 - May diverge from the platform baseline.
 - Is reconstructed from immutable events, receipts, releases, checkpoints, and
@@ -778,28 +778,39 @@ moving bytes.
 
 ## State Placement
 
-Choir uses exactly two Dolt stores.
+Host PostgreSQL plus guest SQLite (data system cutover, 2026-10-30; design:
+[design/choir-data-system-frame-2026-10-30.md](design/choir-data-system-frame-2026-10-30.md)).
+Dolt, Store A, Store B, projection bases, legacy pins and checkpoint JSON are
+deleted.
 
-- **Corpus sql-server (Store B):** the corpus database behind corpusd contains
-  public/source object-graph tables, route-slot tables, and narrow
-  `computer_event_heads`, append/idempotency, key-history, mode, and lifecycle
-  control rows. corpusd mechanically performs authenticated head and
-  platform-control CAS. vmctl alone actuates route-slot CAS. Neither chooses or
-  appends semantic events.
-- **VM-local embedded Dolt:** one workspace per computer realization indexes
-  the externally pinned canonical event chain and materializes accepted
-  effective app state. It is never the sole durable event copy or an alternate
-  head/promotion authority. Every capsule sees only its private overlay and
-  broker-approved typed operations, not raw store access.
+- **Host PostgreSQL, control database:** accounts, computers, sessions, key
+  escrow, mail, and the host side of the tape receipts (`computer_event_heads`,
+  append/idempotency, key-history, mode, lifecycle, route slots). corpusd
+  mechanically performs authenticated head and platform-control CAS. vmctl
+  alone actuates route-slot CAS. Neither chooses or appends semantic events.
+- **Host PostgreSQL, graph database:** the Autopaper object graph and shared
+  publications.
+- **Guest SQLite (`state.db`):** one database per computer on its own disk,
+  materializing accepted effective app state from the tape. It is never the
+  sole durable event copy or an alternate head/promotion authority. Every
+  capsule sees only its private overlay and broker-approved typed operations,
+  not raw store access. The host keeps no projection bases: a guest recovers
+  from its own sealed snapshots plus the tape tail.
+- **The tape:** each computer's events are appended to the host (pinned, then
+  compare-and-swapped, finalized only after the host's receipt verifies).
+  Sealed tape segments live in the host's platform artifacts. Files sync to
+  the host's file CAS every two minutes when changed. Aged `choir.event`
+  trace/unread kinds leave the working store by a tape op (telemetry
+  retirement, on by default).
 
 The trusted guest `ComputerEventAppender` is the sole semantic writer for one
 ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
 reducers, status, checkpoints, routes, and vmctl are projections or actuators.
-Desk reports fate-share the exact embedded mutation with event CAS; other
+Desk reports fate-share the exact guest-store mutation with event CAS; other
 accepted state changes advance desired and effective heads through the declared
 updater state machine.
 
-The embedded store materializes desktop/app graph, appagent state, Texture
+The guest store materializes desktop/app graph, appagent state, Texture
 versions, prompts/policies, typed findings, local trajectory indexes, and
 publication staging metadata. The canonical causal envelope and immutable
 payload/receipt artifacts remain externally pinned. It has no candidate
@@ -808,10 +819,10 @@ branch, tag-promotion, or destructive-reset authority.
 Per-realization filesystems hold release slots, working projections, uploads,
 large media, and caches. Source/build effects and accepted artifacts are pinned
 by digest; runtime caches and opaque machine accidents are not semantic state.
-Texture content remains embedded-Dolt authority with optional filesystem
+Texture content remains guest-store (SQLite) authority with optional filesystem
 aliases.
 
-The corpus store (the Autopaper object graph) also holds publications, public routes, source/retrieval/
+The graph database (the Autopaper object graph) also holds publications, public routes, source/retrieval/
 citation/provenance objects, and public review/control records. Narrow event
 control tables are semantically separate from those objects and from route
 slots. They do not create a third store or grant corpusd semantic authorship.
@@ -825,12 +836,12 @@ Two additional stores are code-present but narrower than product authority:
   append-only journal, derived tree, and content-addressed blobs for sync and
   materialization. Its API helpers are tested but not owned by a deployed
   product service. Base must not become a competing canonical app-state store
-  without a fresh Definition and explicit reconciliation with embedded Dolt,
+  without a fresh Definition and explicit reconciliation with the guest store,
   source/build state, blob state, and `ArtifactProgramRef`.
 
 Do not keep the whole filesystem in git. Source files under a repo belong to the
 source/build ledger. Uploaded files and generated media belong to a
-content-addressed blob ledger with Dolt/artifact metadata. Runtime caches and
+content-addressed blob ledger with guest-store/artifact metadata. Runtime caches and
 temporary files are machine state unless converted into typed artifacts.
 
 ## Messaging And Routing
@@ -980,7 +991,7 @@ Future coding agents should not simplify Choir into:
 - one global agent with tools
 - one active computer that mutable workers freely edit
 - desks patching `texture` text directly
-- the corpus store (Autopaper object graph) as a global polling bus
+- the graph database (Autopaper object graph) as a global polling bus
 - provider-specific product behavior
 - publication as a flat export with no version/provenance model
 

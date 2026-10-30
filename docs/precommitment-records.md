@@ -475,7 +475,7 @@ committed record or query a scorer. The prediction stays visible in the
 agent's transcript by default (append-only context, intact prefix cache);
 blind reading is an option when delegating, and anchoring is an accepted cost.
 Desk-to-desk records are working state on the computer; published edition
-claims, inferences and scores go to the shared Store B, where other computers
+claims, inferences and scores go to the shared graph database (the Autopaper object graph), where other computers
 read and score them and overlays decide whom a reader trusts.
 
 ### 4.6 One schema across desks, editions and sources
@@ -767,7 +767,7 @@ per-sub-RLM signing as a non-functional requirement. Open: platform key custody
 and backup, key scope (recommended: one computer identity), whether the
 operator's ability to forge or backdate until anchoring exists is acceptable,
 the anchor service and cadence, who may revoke, and receipt retention against
-the open Store A history decision.
+the open control-database history decision (Store A was deleted 2026-10-30; this rule's successor is open).
 
 ---
 
@@ -898,7 +898,7 @@ baseline). The cheapest first experiment is predict-before-act in RLM cells
 scored by tests and the compiler. Support: the pretesting effect (Richland
 2009); failure mode: outcome bias (Baron and Hershey 1988). Its ontology
 questions are resolved: episodes live on the object graph and tape, local by
-default and published to Store B by choice.
+default and published to the graph database by choice.
 
 ---
 

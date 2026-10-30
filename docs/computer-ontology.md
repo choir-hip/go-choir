@@ -1,13 +1,13 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-08-13
+**Last updated:** 2026-10-30 (storage facts updated for the data system cutover)
 
 This document names the durable object that Choir operates on.
 
 Choir does not primarily give each user a autoputer. It gives each user a
 persistent **computer**: a stateful private machine-world where apps, agents,
-files, package installs, source trees, local builds, Dolt state, prompts,
+files, package installs, source trees, local builds, SQLite working state, prompts,
 runtime services, user preferences, and the UI that renders that computer can
 diverge from the platform baseline.
 
@@ -54,7 +54,7 @@ self-development effects remain inside guest capsules until accepted.
 ```text
 Computer =
   VM/OS/runtime state
-  + Dolt/app state
+  + SQLite app state (state.db on the computer's own disk)
   + source/build state
   + content blobs
   + artifact/provenance graph
@@ -107,14 +107,14 @@ authority.
 
 **Restore-set boundary (normative for the self-development gate):**
 a user-computer restore addresses an event head and restores the release pointer
-plus VM-local embedded state. Shared corpus Dolt (Store B, the Autopaper object graph:
+plus VM-local SQLite state. The shared graph database on the host (the Autopaper object graph:
 captures, publications) is OUT (restoring them would rewind other computers or
 shared services). Computer-surface frontend (Desktop, Texture, apps, Settings
 computer panes, served asset graph) is IN by doctrine `C15`/`I25`. The
 host-served SPA (`nix/node-b.nix` → `/var/www/go-choir/frontend-current`) is
 current non-conformance, not an acceptable product classification as platform
 control-plane software. Thin platform shell (TLS, Caddy bootstrap, `/auth/*`,
-picker chrome, proxy/vmctl/corpusd, NixOS) remains OUT. Do not claim "the whole
+picker chrome, proxy/vmctl/corpusd, host PostgreSQL, NixOS) remains OUT. Do not claim "the whole
 computer" was put back while the UI remains `frontend-current`. A successor
 serving envelope is required; recording a frontend digest without that join
 fails the invariant. See
@@ -132,37 +132,39 @@ replaced without changing `ComputerID`; reconstruction verifies the immutable
 event chain and receipts, deterministically rebuilds embedded state, and never
 reruns a model, tool, or network observation.
 
-## Dolt Store Taxonomy
+## Store Taxonomy
 
-The Dolt substrate is split into two stores that must never be conflated (see
-D-STORES and D-WIRE in
-[archive/og-dolt-heresy-completion-2026-07-08.md](archive/og-dolt-heresy-completion-2026-07-08.md)):
+(Rewritten 2026-10-30 after the data system cutover. Dolt, Store A, Store B,
+the guest Dolt workspaces, projection bases, legacy pins and checkpoint JSON
+are deleted. Design source:
+[design/choir-data-system-frame-2026-10-30.md](design/choir-data-system-frame-2026-10-30.md).)
 
-- **Platform control store (Store A):** the `platform` database on the
-  platform-dolt sql-server (`:13306`). It holds the narrow
-  `computer_event_heads`, append/idempotency, mode, lifecycle, route-slot and
-  replay-watermark control tables. corpusd mechanically performs
-  authenticated event-head and platform-control CAS here; it does not select
-  semantic events.
-- **Corpus store (Store B, the Autopaper object graph):** the `corpus` database on a separate
-  corpus-dolt sql-server process (`:13307`, `nix/node-b.nix`). It holds the
-  platform `ObjectGraphStore` tables (`og_*`, via `Store.corpus()` in
-  `internal/platform/objectgraph_store.go`) and the source/ingestion tables.
-  corpusd fronts both pools, but the two stores share no sql-server, so a
-  corpus GC-OOM or bulk scan cannot take the canonical log down. Code that
-  reads og or corpus tables must use the corpus pool; reading them from
-  Store A sees only pre-split leftovers.
-  (Corrected 2026-10-05; the earlier "live beside" wording predated the
-  Store A/B split.)
-- **VM-local embedded store:** one embedded Dolt workspace per user VM at
-  `internal/objectgraph/dolt_store.go`. It indexes the externally pinned event
-  chain and materializes the accepted effective state; it is never the sole
-  durable event copy or an alternate head authority.
+The host runs one PostgreSQL server with two databases that must never be
+conflated:
+
+- **Control database:** accounts, computers, sessions, key escrow, mail, and
+  the host side of the tape receipts (event heads, append/idempotency,
+  lifecycle, route slots). corpusd mechanically performs authenticated
+  event-head and platform-control CAS here; it does not select semantic
+  events.
+- **Graph database:** the Autopaper object graph and shared publications
+  (captures, publications, source/ingestion tables). It is separate from
+  control, so a bulk graph scan cannot take the canonical log down.
+- **Guest store (state.db):** one SQLite database per user computer, on the
+  computer's own disk. It is a projection of the computer's tape, rebuilt by
+  replay; it is never the sole durable event copy or an alternate head
+  authority. The host keeps no projection bases: a guest recovers from its own
+  sealed snapshots plus the tape tail.
+- **The tape:** each computer's events are appended to the host (pinned, then
+  compare-and-swapped, finalized only after the host's receipt verifies).
+  Sealed tape segments live in the host's platform artifacts. A lost disk was
+  rebuilt from the host alone on 2026-10-30 (sealed snapshot + tape tail +
+  file root + escrowed key). Files sync to the host's file CAS every two
+  minutes when changed.
 
 The obsolete tag-based embedded-Dolt promotion adapter and its destructive
-`DOLT_RESET --hard` rollback are deleted. VM-local embedded Dolt materializes
-accepted effective state; it does not fork candidate branches, promote tags, or
-act as route authority.
+rollback are deleted. The guest store materializes accepted effective state;
+it does not fork candidate branches, promote tags, or act as route authority.
 
 ## Ledger Split
 
@@ -172,9 +174,9 @@ Do not force every change through one storage abstraction.
 | --- | --- | --- |
 | Canonical computer events | immutable causal envelopes, accepted/rejected effects, desired/effective heads and commitments | one guest `ComputerEventAppender` requests typed corpusd head CAS; no other writer appends semantic events |
 | VM/OS/runtime | realization, installed release, running services, local caches, process environment | root guest updater and lifecycle actuators project an authorized event; realization replacement does not change ComputerID |
-| Dolt/app state | textures, appagent state, research `choir.Report` bodies, event index, accepted effective-state materialization | deterministic reducer plus exact event-head/state preconditions; Report provenance fate-shares with append while its commitment object remains on the tape |
+| SQLite app state | textures, appagent state, research `choir.Report` bodies, event index, accepted effective-state materialization (guest state.db) | deterministic reducer plus exact event-head/state preconditions; Report provenance fate-shares with append while its commitment object remains on the tape |
 | Actor recovery log (narrow SQLite) | durable actor updates and compacted activation snapshots used by `internal/actorruntime` | recovery/replay only; never semantic event, trajectory, acceptance, or promotion truth |
-| Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not canonical computer authority; product wiring must preserve the event/embedded-Dolt boundary |
+| Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not canonical computer authority; product wiring must preserve the event/guest-store boundary |
 | Source/build | CodeRef source, offline recipe/toolchain/dependencies, runtime/service artifacts | capsule effect bundle becomes desired code only through an accepted event |
 | Blob/content store | event bodies, encrypted/private payloads, generated media, bundles, receipts, releases, checkpoints | content-addressed pin receipts before event-head acknowledgement |
 | Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs | evidence projection; cannot append, accept, or materialize an event |
@@ -183,8 +185,8 @@ Do not force every change through one storage abstraction.
 
 The filesystem is not one thing. Source files under a repo are source/build
 state. Uploaded files and generated media are blob state. Runtime caches and temp
-files are machine state. Dolt-backed documents may have filesystem aliases, but
-the canonical semantic state belongs in Dolt.
+files are machine state. Documents held in the guest store may have filesystem aliases, but
+the canonical semantic state belongs in the guest store (SQLite).
 
 Therefore the rule is:
 
@@ -250,7 +252,7 @@ The typed state transition—not a generic filesystem merge—is the authority:
 - Source/build effects are ordered in the frozen bundle and rebuilt from
   pinned offline inputs.
 - Typed research `choir.Report` evidence claims fate-share their exact
-  embedded-Dolt projection with the event append; the corresponding commitment
+  guest-store projection with the event append; the corresponding commitment
   object remains on the tape rather than in a third store.
 - Blobs, private payloads, verifier results, releases, and checkpoints are
   immutable content-addressed artifacts with signed receipts.
@@ -310,7 +312,7 @@ update = merge/rebase platform delta P0->P1 into user delta P0->U1
 
 This requires typed platform deltas. If a platform change is only an opaque VM
 snapshot, it is hard to merge into divergent user computers. If the platform
-change is expressed as source/build deltas, Dolt migrations, blob/package
+change is expressed as source/build deltas, SQLite migrations, blob/package
 updates, prompt/agent package updates, and artifact schema changes, the update
 can be checked ledger by ledger.
 

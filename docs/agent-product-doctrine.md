@@ -33,7 +33,7 @@ operating update.
   Texture renders the commitment ledger into the owner-facing supervision
   surface. Appagents own their own durable app artifacts.
 - **Research** has read-only world and message authority. It reports evidence
-  through `choir.Report`; it has no Bash, raw Dolt, writable files, capsule
+  through `choir.Report`; it has no Bash, raw database access, writable files, capsule
   commit, acceptance, route, or host authority.
 - **Management** is the exactly-one-per-ComputerID coherence, error-correction,
   and resource-arbitration root. It never mutates documents or computer events,
@@ -62,13 +62,15 @@ changes only after verified guest materialization.
   durable identity. `RealizationID` is replaceable machine state.
 - **One event authority:** exactly one trusted guest `ComputerEventAppender`
   validates and sequences semantic events. corpusd mechanically performs typed
-  head CAS; Trace, trajectories, embedded state, vmctl, route tables, status,
+  head CAS; Trace, trajectories, guest-store state, vmctl, route tables, status,
   checkpoints, and reducers are projections or actuators.
-- **Two Dolt stores on the host:** Store A (platform control: event heads,
-  idempotency, lifecycle, route slots) and Store B (the corpus: the Autopaper
-  object graph) are separate servers; the VM-local embedded Dolt indexes the
-  chain and materializes effective state. Neither creates a third semantic
-  store or alternate head. See [computer-ontology.md](computer-ontology.md).
+- **Host PostgreSQL, guest SQLite:** the host runs PostgreSQL with two
+  databases, control (accounts, computers, sessions, key escrow, mail, the host
+  side of the tape receipts) and graph (the Autopaper object graph and shared
+  publications). Each user computer keeps its working state in SQLite
+  (`state.db`) on its own disk, a projection rebuilt from the tape by replay.
+  None creates a third semantic store or alternate head. Dolt, Store A and
+  Store B were deleted 2026-10-30. See [computer-ontology.md](computer-ontology.md).
 - **Acceptance before effect:** an effect bundle is inert until acceptance.
   Guest materialization, checkpoint publication, and route CAS cannot
   acknowledge or substitute for the event.
@@ -90,7 +92,7 @@ changes only after verified guest materialization.
   verifies exact accepted-event, checkpoint, materialization, verifier, and
   route-certificate joins. Post-genesis legacy route authority refuses.
 - **No embedded-store promotion:** the obsolete tag/commit/reset
-  `DoltPromotionAdapter` is deleted; accepted-event materialization is the only
+  promotion adapter is deleted; accepted-event materialization is the only
   self-development path.
 - **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
   server has bounded read/write timeouts (120-second defaults). Staging proved
