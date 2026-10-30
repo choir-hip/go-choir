@@ -360,11 +360,12 @@ type rowIter struct {
 	// pkIdx indexes the source primary-key columns within the selected
 	// columns, for error messages.
 	pkIdx []int
-	// Paged reads (page > 0): the queryer, the page size, the rows read
-	// in the current page, and the last row's primary key.
+	// Paged reads (page > 0): the queryer, the page size, the current
+	// query's key level and rows read, and the last row's primary key.
 	ctx    context.Context
 	q      srcQueryer
 	page   int
+	lvl    int
 	inPage int
 	last   []any
 	// tolerant (dry run) counts text PostgreSQL cannot store instead of
@@ -393,36 +394,37 @@ func (r *runner) openIter(ctx context.Context, q srcQueryer, p pair) (*rowIter, 
 	if len(p.PK) > 0 && len(it.pkIdx) == len(p.PK) {
 		it.ctx, it.q, it.page = ctx, q, r.opts.PageRows
 	}
-	if err := it.query(ctx, q); err != nil {
+	if err := it.query(ctx, q, -1); err != nil {
 		return nil, err
 	}
 	return it, nil
 }
 
-// query opens the next source query: the whole table, or (paged) the next
-// page of up to it.page rows after it.last in primary-key order.
-func (it *rowIter) query(ctx context.Context, q srcQueryer) error {
+// query opens the next source query: the whole table, or (paged) up to
+// it.page rows of the key range at level lvl after it.last, in primary-key
+// order. Level i holds the rows that share it.last's first i key columns and
+// follow it in column i (k1 = ? AND k2 > ?, then k1 > ?): one contiguous
+// index range per query. Dolt planned the single OR of all levels as a scan
+// of the rest of the table per page (C5, 2026-10-30). Level -1 is the first
+// page, with no bound.
+func (it *rowIter) query(ctx context.Context, q srcQueryer, lvl int) error {
 	sq, args := sourceQuery(it.p), []any(nil)
 	if it.page > 0 {
-		where := ""
-		if it.last != nil {
-			// (k1 > ?) OR (k1 = ? AND k2 > ?) OR ...: a form Dolt plans as
-			// index ranges, unlike a row-value comparison.
-			var ors []string
-			for i := range it.p.PK {
-				var ands []string
-				for j := 0; j < i; j++ {
-					ands = append(ands, quoteMySQL(it.p.PK[j])+" = ?")
-					args = append(args, it.last[j])
-				}
-				ands = append(ands, quoteMySQL(it.p.PK[i])+" > ?")
-				args = append(args, it.last[i])
-				ors = append(ors, "("+strings.Join(ands, " AND ")+")")
+		var ands []string
+		for j := 0; j <= lvl; j++ {
+			op := " = ?"
+			if j == lvl {
+				op = " > ?"
 			}
-			where = " WHERE " + strings.Join(ors, " OR ")
+			ands = append(ands, quoteMySQL(it.p.PK[j])+op)
+			args = append(args, it.last[j])
+		}
+		where := ""
+		if len(ands) > 0 {
+			where = " WHERE " + strings.Join(ands, " AND ")
 		}
 		sq = sourceSelect(it.p) + where + sourceOrder(it.p) + fmt.Sprintf(" LIMIT %d", it.page)
-		it.inPage = 0
+		it.lvl, it.inPage = lvl, 0
 	}
 	rows, err := q.QueryContext(ctx, sq, args...)
 	if err != nil {
@@ -460,16 +462,21 @@ func (it *rowIter) nextRow() (out []any, skipped bool) {
 	if it.err != nil {
 		return nil, false
 	}
-	if !it.rows.Next() {
-		if it.err = it.rows.Err(); it.err != nil || it.page == 0 || it.inPage < it.page {
+	for !it.rows.Next() {
+		if it.err = it.rows.Err(); it.err != nil || it.page == 0 {
 			return nil, false
 		}
-		// A full page: read the next one.
+		// A full page may have more rows at the deepest level; a short one
+		// exhausted its level, so move one key column up.
+		lvl := it.lvl - 1
+		if it.inPage == it.page {
+			lvl = len(it.p.PK) - 1
+		}
+		if lvl < 0 || it.last == nil {
+			return nil, false
+		}
 		_ = it.rows.Close()
-		if it.err = it.query(it.ctx, it.q); it.err != nil || !it.rows.Next() {
-			if it.err == nil {
-				it.err = it.rows.Err()
-			}
+		if it.err = it.query(it.ctx, it.q, lvl); it.err != nil {
 			return nil, false
 		}
 	}
