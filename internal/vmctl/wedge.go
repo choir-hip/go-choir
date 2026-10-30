@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/url"
@@ -119,6 +120,9 @@ func (r *OwnershipRegistry) markWedgedStopped(vmID string) {
 		cur.State = VMStateStopped
 		cur.StoppedBy = stoppedByWedged
 		r.discardStoppedSnapshotLocked(cur, stoppedByWedged)
+		// A guest that wedges again and again loops through the boot that
+		// follows each stop, as a crashing one does (crash_loop.go).
+		r.recordCrashLocked(cur, crashKindWedged, fmt.Sprintf("the guest refused connections for %s", wedgedAfterDefault))
 		r.saveLocked()
 	}
 }
