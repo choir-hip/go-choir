@@ -2171,7 +2171,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-27",
-   "ring": "ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -2183,7 +2183,7 @@
     }
    ],
    "retire": "delete the key and its reader; the daily job is the default",
-   "note": "ON for d@e first; the paper next, once d@e's run cost is measured (the paper's first run removes about 2 GB of rows)."
+   "note": "ON for d@e first (2026-10-30 20:07, 0 ops in 140 ms); default ON for every computer from 2026-10-30 (lean system L1). The paper's first run removes about 2 GB of rows in hour slices of at most 2000 ops per group."
   },
   {
    "id": "store_trace_log",

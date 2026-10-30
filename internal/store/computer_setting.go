@@ -204,8 +204,8 @@ const SettingDispatchWideSlots = "dispatch.wide_slots"
 
 // SettingTelemetryRetire runs the daily telemetry retirement job
 // (telemetry_retire.go): aged choir.event rows of the unread and trace kinds
-// leave the working store by a tape op; they stay on the sealed tape. On for
-// the proof ring first: the paper's first run removes about 2 GB of rows.
+// leave the working store by a tape op; they stay on the sealed tape. On by
+// default for every computer (2026-10-30, lean system L1; d@e ran it first).
 // Off is the rollback: no further retire ops are appended.
 const SettingTelemetryRetire = "store.telemetry_retire"
 
@@ -236,7 +236,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingPackagesPublish:              false,
 	SettingPackagesShare:                false,
 	SettingDispatchWideSlots:            false,
-	SettingTelemetryRetire:              false,
+	SettingTelemetryRetire:              true,
 }
 
 // ComputerSetting is one switch's value on one computer.
