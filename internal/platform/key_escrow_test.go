@@ -90,7 +90,8 @@ func TestKeyEscrowFullFlow(t *testing.T) {
 	if err != nil || !bytes.Equal(opened, dek) {
 		t.Fatalf("opened DEK = %x, %v", opened, err)
 	}
-	if err := store.MarkKeyUnwrapRevealed(ctx, request.RequestID); err != nil {
+	payloadOne := []byte(`{"type":"dek_reveal","request_id":"` + request.RequestID + `"}`)
+	if err := store.RevealKeyUnwrap(ctx, request.RequestID, func(time.Time) ([]byte, error) { return payloadOne, nil }); err != nil {
 		t.Fatal(err)
 	}
 	revealed, _, err := store.GetKeyUnwrapRequest(ctx, request.RequestID)
@@ -101,8 +102,8 @@ func TestKeyEscrowFullFlow(t *testing.T) {
 		t.Fatalf("request was not revealed: %#v", revealed)
 	}
 
-	payloadOne := []byte(`{"type":"dek_reveal","request_id":"` + request.RequestID + `"}`)
-	seqOne, hashOne, err := store.AppendKeyEscrowTransparency(ctx, payloadOne)
+	// The reveal's own entry is the first in the chain.
+	seqOne, hashOne, err := store.KeyEscrowTransparencyHead(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

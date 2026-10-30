@@ -246,29 +246,27 @@ func (h *Handler) handleKeyUnwrapReveal(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "invalid escrow record"})
 		return
 	}
-	dek, err := keyescrow.OpenDEK(h.keyEscrow.privateKey, record, request.ComputerID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to open escrow record"})
-		return
-	}
-	if err := h.service.store.MarkKeyUnwrapRevealed(r.Context(), requestID); err != nil {
+	// The reveal and its transparency entry commit together, before the key
+	// is opened: a reveal is audited or it does not happen. A key that then
+	// fails to open leaves an entry for a reveal that delivered nothing,
+	// which over-reports and never hides one.
+	err = h.service.store.RevealKeyUnwrap(r.Context(), requestID, func(revealedAt time.Time) ([]byte, error) {
+		return json.Marshal(map[string]any{
+			"type": "dek_reveal", "request_id": requestID, "computer_id": request.ComputerID,
+			"key_digest": keyDigest, "approvals": approvers, "revealed_at": revealedAt.Format(time.RFC3339Nano),
+		})
+	})
+	if errors.Is(err, ErrKeyUnwrapNotApproved) || errors.Is(err, ErrKeyEscrowNotFound) {
 		writeJSON(w, http.StatusConflict, apiError{Error: "unwrap request is not approved"})
 		return
 	}
-	revealedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	if revealed, _, err := h.service.store.GetKeyUnwrapRequest(r.Context(), requestID); err == nil && revealed.RevealedAt != nil {
-		revealedAt = revealed.RevealedAt.Format(time.RFC3339Nano)
-	}
-	payload, err := json.Marshal(map[string]any{
-		"type": "dek_reveal", "request_id": requestID, "computer_id": request.ComputerID,
-		"key_digest": keyDigest, "approvals": approvers, "revealed_at": revealedAt,
-	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record escrow transparency"})
 		return
 	}
-	if _, _, err := h.service.store.AppendKeyEscrowTransparency(r.Context(), payload); err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record escrow transparency"})
+	dek, err := keyescrow.OpenDEK(h.keyEscrow.privateKey, record, request.ComputerID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to open escrow record"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"dek": base64.RawStdEncoding.EncodeToString(dek), "key_digest": keyDigest})
