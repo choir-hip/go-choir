@@ -612,11 +612,9 @@ func TestRuntimeInjectionAppendFailurePassivatesExactResearchRun(t *testing.T) {
 	// this exercises executeWithToolLoop rather than calling the injector alone.
 	if _, err := s.DB().ExecContext(context.Background(), `
 		CREATE TRIGGER fail_runtime_injection_append
-		BEFORE INSERT ON run_memory_entries FOR EACH ROW
+		BEFORE INSERT ON run_memory_entries FOR EACH ROW WHEN NEW.role = 'runtime_injection'
 		BEGIN
-			IF NEW.role = 'runtime_injection' THEN
-				SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected runtime-memory append failure';
-			END IF;
+			SELECT RAISE(ABORT, 'injected runtime-memory append failure');
 		END`); err != nil {
 		t.Fatal(err)
 	}

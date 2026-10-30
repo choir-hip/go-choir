@@ -159,8 +159,13 @@ func TestObservabilityReportsStorePoolStats(t *testing.T) {
 				t.Fatalf("store_pools.%s lacks %q: %s", pool, key, raw)
 			}
 		}
-		if got := fmt.Sprint(pools[pool]["max_open"]); got != "1" {
-			t.Fatalf("store_pools.%s.max_open=%s want 1", pool, got)
+		// One writer connection; the WAL read pool is wider.
+		want := "1"
+		if pool == "read" {
+			want = "4"
+		}
+		if got := fmt.Sprint(pools[pool]["max_open"]); got != want {
+			t.Fatalf("store_pools.%s.max_open=%s want %s", pool, got, want)
 		}
 	}
 }

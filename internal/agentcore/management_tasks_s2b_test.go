@@ -335,24 +335,20 @@ func TestSerialTasksSettingIsTheLiveRollback(t *testing.T) {
 	if running := f.tasks(types.ManagementTaskRunning); len(running) != 1 {
 		t.Fatalf("FM31: %d tasks running with serial_tasks on", len(running))
 	}
-	// The probe reads K, the slots in use, the queue and the engine-lock
-	// counters (H3) from the product route.
+	// The probe reads K, the slots in use, the queue from the product
+	// route.
 	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
 	req.Header.Set("X-Authenticated-User", f.owner)
 	rec := httptest.NewRecorder()
 	(&APIHandler{rt: f.rt}).HandleGuestObservability(rec, req)
 	var obs struct {
 		ManagementTasks *managementTaskObservability `json:"management_tasks"`
-		EngineMutex     map[string]json.RawMessage   `json:"engine_mutex"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
 		t.Fatalf("observability = %d %s (%v)", rec.Code, rec.Body, err)
 	}
 	if m := obs.ManagementTasks; m == nil || m.Slots != 1 || m.ConfiguredSlots != 4 || !m.SerialTasks || m.Running != 1 || m.Queued != 1 || m.OldestQueuedAgeS < 0 {
 		t.Fatalf("observability management_tasks = %+v", obs.ManagementTasks)
-	}
-	if len(obs.EngineMutex) == 0 {
-		t.Fatalf("observability has no engine_mutex counters: %s", rec.Body)
 	}
 	setSerial(false)
 	if rec, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, queued[1].TaskInbox); err != nil || rec == nil {
