@@ -438,18 +438,25 @@ Protocol:
      classes, release the hold (`released_at = now`, logged), subject to
      the guards;
    - hold provisional, never streamed, in a non-suspended scope,
-     `touched_at` older than the upload grace: abandoned; the audit
-     deletes the hold row (logged).
+     `touched_at` older than the upload grace: for non-keep-set classes,
+     abandoned; the audit deletes the hold row (logged). For keep-set
+     classes the audit never deletes it: "never streamed" cannot be told
+     apart from a provider that omits the row, so it pages and the hold
+     stays. A keep-set provisional hold ends only by its writer's explicit
+     `Release` (a writer whose ref commit fails releases its own
+     provisional holds) or by an operator acknowledgement after the
+     driver has probed the holder row directly and found it absent.
 4. **Purge, after a hold period and a recheck.** An object is
    purge-eligible when it has no unreleased hold, no hold in a suspended
    scope, is absent from a fresh audit, and either (a) it had holds and
    `now - max(latest released_at, last_seen) >= hold period`, or (b) it
    never had a confirmed hold (an abandoned upload) and `now - last_touch
-   >=` the upload grace. Hold period: 7 days for keep-set and migrated
+   >=` the upload grace, for non-keep-set classes only. Hold period: 7 days for keep-set and migrated
    classes, 24 h for scratch classes. Upload grace: 24 h (more than the
    ref window), 14 days for images and capsule artifacts, which is their
-   unheld retention. An abandoned keep-set upload is not a keep-set loss:
-   no holder ever committed it. Before purging, the driver runs a fresh
+   unheld retention. A keep-set object with only provisional holds is never
+   purge-eligible through (b); it leaves only through an explicit
+   `Release` or the operator acknowledgement above, then path (a). Before purging, the driver runs a fresh
    audit; `Purge` then re-reads, under the catalog write lock, each
    object's holds, `last_touch` and `last_seen`, and purges only objects
    still eligible with `last_touch < S` and `last_seen < S` of that fresh
@@ -468,13 +475,15 @@ root provider once mass-deleted live og bodies (2026-10-05,
 - Keep-set classes (capture, og, mail, and platform-tier objects): **zero
   tolerance**. A confirmed, unreleased hold whose holder is absent from a
   fresh stream aborts the run for that scope and pages. A keep-set object
-  leaves the store only after every holder that ever confirmed a hold on it
-  has released it, followed by the 7-day hold period. Abandoned keep-set
-  uploads above 100 in one run per class abort and page, since a provider
-  that never streamed a holder would look the same.
+  leaves the store only after every holder that ever held it, confirmed or
+  provisional, has released it, followed by the 7-day hold period. There
+  is no silent per-run allowance: an unconfirmed keep-set hold past the
+  upload grace pages every run until it is released or acknowledged.
 - Other canonical classes (file chunks, tape segments, held images, cited
   capsule evidence): per (class, scope), audit releases above the larger of
-  1% and 100 holds abort the run.
+  1% and 100 holds abort the run, and an audit release needs two
+  consecutive fresh audits that agree, so one bad provider run cannot
+  empty a small scope.
 - Per-run caps carried over from today (`artifact_gc.go:38-50,283,323-328`;
   Node B: 50,000 deletes, 32 GiB).
 - Each class goes active only after a reviewed dry run whose per-class
@@ -918,3 +927,39 @@ the computer DEK is generated in the guest and exported only for escrow
 Predictions: R0g-10 names the replaced condemn phase; corrected by R0g-14,
 and R0g-15 is new (round 0i, appended to the ledger). No committed record
 is edited.
+
+## Revision 6 log (2026-10-30)
+
+Round-5 reviews (`.agentic-consensus/object-storage-r5/out/`): both seats
+send_back on the same finding, the provisional-hold exit. A keep-set object
+whose holder committed but whose provider omitted the row was deletable after
+24 h with no page, under a 100-per-run allowance. Accepted (§4 audit step 3,
+purge (b), Guards): keep-set provisional holds page and stay until an explicit
+`Release` or an operator acknowledgement after a direct holder probe; no
+per-run allowance.
+
+Notes, all accepted, as rules the build must carry (§4 unless stated):
+- Expected counts come from an independent aggregate query, not from the
+  emitted stream; a mismatch suspends the scope (Devin 1).
+- A ref held only in a retained checkpoint closure stays held; closures of
+  retained checkpoints stream as holders, not only live revisions (Devin 2).
+- Audit releases of non-keep-set canonical holds need two agreeing fresh
+  audits (Devin 3, Guards).
+- Catalog rebuild reconciles pack and offset for every object, replays the
+  deletion-intent log written after the snapshot, and `IfAbsent` verifies the
+  extent exists before discarding an upload (Devin 4, DeepSeek 1).
+- Snapshot times are host-assigned: the read-transaction start on host
+  databases, and for guest closures the host receipt time minus a skew
+  margin. Errors in either direction fail loud (a page), and the repair log,
+  not the page, is the operator signal for a sighting-restored hold
+  (Devin 5, DeepSeek 3).
+- Every sighting sets `first_seen` if null and refreshes `last_seen`; the
+  lost-object check (a stream naming a purged or absent object pages) runs
+  in every branch, not only the no-hold branch (DeepSeek 2).
+- The merge-join uses one defined byte encoding of (ref, provider, scope,
+  key) for streams and the `holds` primary key, and the dry run asserts the
+  orders match (DeepSeek 4).
+- A body held at two tiers is two objects. Publishing copies an og body
+  into the public tier and points the published object's holder at the
+  public ref; the draft keeps its private object. `CanonicalRef` does not
+  infer tier from the encoding (DeepSeek 5, §1 og row, §7 step 3).
