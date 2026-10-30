@@ -433,7 +433,15 @@ the S3 backend and a desktop cache are untrusted storage.
 **Refs.** Each holder records its refs in its own store, in the same
 transaction as the holder. Guest refs reach the host as the **CAS closure**
 of each semantic checkpoint (data rearchitecture §What it buys). Invariant:
-every restorable checkpoint is retained, and its closure is a root.
+every restorable checkpoint is retained, and its closure is a root. The
+invariant covers store-class refs. A checkpoint restores from its pinned
+projection base (`projection_jobs_http.go:92-94`), not from file CAS, so
+version-1 file manifests and their chunks were never restore material: they
+stay under today's namespace GC, which already drops chunks once their root
+leaves the latest root plus grace (`artifact_gc.go:856-886`,
+`file_cas_retire.go:95-117`), and the per-computer file CAS is deleted
+pre-launch (Deleted, not migrated). Version-2 roots are held like any other
+canonical class.
 
 **Root providers, closed list.** Each provider streams canonical
 (ref, provider, holder scope, holder key) tuples sorted by the merge-key
@@ -451,11 +459,11 @@ union every retained checkpoint, one holder per holding object.
 | Provider | Source (holder key) | Classes |
 |---|---|---|
 | corpus, og | `og_objects.body_ref` and a published row's `image_refs` through `CanonicalRef`, with the row's own tier (published: public; else platform or private by owner) and scope as inputs (og object ID) | og |
-| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them. For the by-ref query each blob field also gets a row in the `og_lookup_keys` side table (three rows per capture, one lookup kind per blob field, written in the row's transaction), not a generated column: on Dolt 2.1.9 a virtual generated column corrupts the upsert, a functional index fails it, and a stored column rewrites every `og_objects` row into history (`internal/platform/retrieval_schema.go:34-40` [V]) (capture object ID) | capture |
+| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them. For the by-ref query each blob field also gets a row in the `og_lookup_keys` side table (three rows per capture, one lookup kind per blob field, written in the row's transaction on every write of the row). Today's generic `writeLookupKey` deletes every lookup row for a canonical ID before inserting its one kind (`retrieval_schema.go:140-159`), which would drop these and the `image_refs` rows on any later write of a registered kind; its delete becomes scoped to the kind it writes, and the capture and og writers own their ref rows, not a generated column: on Dolt 2.1.9 a virtual generated column corrupts the upsert, a functional index fails it, and a stored column rewrites every `og_objects` row into history (`internal/platform/retrieval_schema.go:34-40` [V]) (capture object ID) | capture |
 | maild | per-owner `email_attachments.blob_ref` (section 7 step 4), and `email_drafts.attachments_json` resolved through the attachment IDs it names to those rows' `blob_ref`, `maild/attachments.go:24-56,215-275` (attachment or draft ID) | mail |
 | control, releases | the route tables' current and rollback refs, `platformUpdateLiveDigests`, `artifact_gc.go:475` (route slot) | platform-update |
 | control, computers | file roots, through their manifests to the chunks each names (the root row holds only `manifest_ref`, `file_cas.go:13-21`; chunks are inside the manifest, `artifact_gc.go:713-735`); bases and their pins; tape segments by the retained receipt chain, with a segment ref table added before the tape moves into the store (root, base or segment ID) | file-chunk, base, tape-segment |
-| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 step 5, not copied from pin files, which have no unpin), cited capsule evidence, file manifests. A ref held only in a retained checkpoint stays held. A checkpoint taken after section 7 step 5 carries the guest ref table inside its store; one taken before has a host-side sidecar ref table keyed by checkpoint digest (section 7 step 5), so no sealed checkpoint or its witness changes. A checkpoint with neither, or whose sidecar fill failed, makes the provider unable to run for that computer, never an empty closure (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
+| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 step 5, not copied from pin files, which have no unpin), cited capsule evidence, version-2 file manifests. A ref held only in a retained checkpoint stays held. A checkpoint taken after section 7 step 5 carries the guest ref table inside its store; one taken before has a host-side sidecar ref table keyed by checkpoint digest (section 7 step 5), so no sealed checkpoint or its witness changes. A checkpoint with neither, or whose sidecar fill failed, makes the provider unable to run for that computer, never an empty closure (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
 
 A provider that fails, returns an unparseable ref, or is stale makes its
 scopes **suspended** for that run: no hold in a suspended scope is judged
@@ -474,7 +482,9 @@ hit or Touch), `last_seen` (latest stream sighting of any holder),
 hold, below), `purged_at`. `holds`: ref, provider, holder scope, holder key,
 `touched_at`, `first_seen`, `last_seen`, `released_at`,
 `pending_release_at` and `pending_run` (the first of two agreeing runs,
-below), `flag_suppressed_at` (an operator override, below), and for a
+below), `flag_suppressed_at` (an operator override, below; cleared by `Touch`,
+`Release`, a probe that no longer finds the tuple, or a stream naming the
+tuple), and for a
 release or confirmation made by the driver, an operator or a migration
 rollback, `decided_by` (`driver`, `operator`, `rollback`), `decided_at`
 and the evidence (resolver, result, holder state version, the guard page,
@@ -964,7 +974,13 @@ until open question 6 is answered, whatever the week.
    evidence rows (the `artifact:sha256:` keys they embed). The sidecar sits
    beside the checkpoint, not in it, so sealed checkpoints and their
    witnesses do not change; checkpoints taken after the switch carry the
-   ref table in their own store and need none. The map covers the whole
+   ref table in their own store and need none. A restore of a pre-switch checkpoint after the switch re-runs this fill
+   for the restored store before the computer resumes, so the restored
+   store and its later checkpoints carry the table. A sidecar records the
+   checkpoint digest and its own content digest, is verified on every read
+   and rebuilt from the checkpoint when they disagree; a sidecar that
+   cannot be verified makes the provider unable to run, never a source of
+   probe evidence. The map covers the whole
    key set of the live store union every retained checkpoint, each key to
    the `hmac:` ref of its imported object. A key with no imported object
    (bytes in neither the guest directory nor the checkpoint) fails that
@@ -1002,7 +1018,10 @@ rollback after resumed writes first exports those bodies to the old
 layout, and in the same act converts each post-switch holder's ref fields
 back to the legacy form the old resolver reads (capture blob fields and
 og `body_ref` to their `sha256` forms, with `content_hash` recomputed;
-mail `blob_ref` cleared; guest ref rows removed), journaling the values
+mail `blob_ref` cleared; guest ref rows removed; post-switch version-2
+file roots rewritten as version-1 manifests over chunks exported to the
+legacy per-computer hex paths; the tape segment ref table dropped once its
+segments are exported to the legacy tape layout), journaling the values
 it replaces and releasing those holds with `decided_by=rollback`. No
 holder is left with an `hmac:`, `blob_ref` or ref-table ref after a
 rollback.
@@ -1474,3 +1493,17 @@ Not taken as written: file chunks named by a retained checkpoint's
 version-1 manifest are not imported in step 5; they stay legacy under the
 file-chunk rule (§2), which already keeps them outside the store. No
 committed record is edited and no new record is needed (§8 note).
+
+## Revision 11 log (2026-10-30)
+
+Round-10 reviews (`.agentic-consensus/object-storage-r10/out/`): Devin and
+DeepSeek both accept_with_notes; every round-9 item closed. Notes taken:
+
+| Note | Ruling | Where |
+|---|---|---|
+| D1, S1: checkpoint v1 file chunks; closure invariant over-claimed | accepted: the invariant covers store-class refs; checkpoints restore from pinned bases (`projection_jobs_http.go:92-94`); v1 chunks were never restore material and are deleted pre-launch | §4 invariant, guest-closures provider |
+| D2: restoring a pre-switch checkpoint leaves no ref table | accepted: a restore re-runs the fill before the computer resumes | §7 step 5 |
+| D3: sidecar is unwitnessed state feeding probe evidence | accepted: sidecar carries checkpoint and content digests, verified on read, rebuilt on mismatch, unverifiable means cannot run | §7 step 5 |
+| S2: rollback misses v2 file roots and the tape segment ref table | accepted: both converted to legacy layouts in the rollback act | §7 Rollback |
+| S3: `writeLookupKey` deletes every lookup kind for an ID | accepted: its delete is scoped to its own kind; capture and og writers own their ref rows | §4 provider table |
+| S minor: suppression clearing list omits a stream sighting | accepted | §4 Catalog |
