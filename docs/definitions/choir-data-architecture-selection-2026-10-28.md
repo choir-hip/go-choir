@@ -1096,3 +1096,27 @@ Consequences for the restore, audit and object-storage designs:
   the rule that nothing below the root assumes the host holds it.
 - Sequence: this data cutover, then better self-development, then the mobile
   app with passkey-held keys.
+
+## Owner ruling 2026-10-30 (later): one copy of the tape, host-canonical
+
+Owner: "two copies or a single copy. I'm not certain. What's the simple
+choice? The tape on the computer can't restore itself, because if the VM image
+gets corrupted, you can't restore from it. So the tape isn't really valuable on
+the computer, I don't think. I remember we were here and we resolved this like
+a month ago, or 2 months ago or more."
+
+The earlier resolution: `docs/archive/choir-unified-event-tape-design-2026-08-16.md:193`,
+"tape is platform-canonical; projection is guest Dolt ... Platform must store
+payloads; guest must be able to fetch them on replay." Today's code matches
+(platform CAS holds the canonical head; the guest holds envelopes and
+receipts only).
+
+Ruling: **one copy, host-canonical.** Each computer's tape is its own sealed
+history stored on the host (sealed under the computer key), not on the VM's
+disk. The guest store is the projection (working state). This refines the
+earlier "user computers keep their whole tape" direction: the whole tape is
+kept, on the host, sealed; "never offload" means never into a
+platform-readable analytical store. The growth bound for a user computer's
+history is host storage, not the guest disk. The restore window limits restore
+points, not history. Durability of the single copy comes from the object
+store's durability rules and the off-host backup.
