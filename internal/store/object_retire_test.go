@@ -497,6 +497,8 @@ func TestRetireTelemetryAppliesThePolicy(t *testing.T) {
 		{id: "egress-old", kind: types.EventDeskEgress, at: now.Add(-16 * day), stamped: true},
 		{id: "egress-new", kind: types.EventDeskEgress, at: now.Add(-2 * day)},
 		{id: "result-ancient", kind: types.EventToolResult, at: now.Add(-100 * day)},
+		{id: "result-8d", kind: types.EventToolResult, at: now.Add(-8 * day), stamped: true},
+		{id: "result-6d", kind: types.EventToolResult, at: now.Add(-6 * day)},
 		{id: "done-ancient", kind: types.EventRunCompleted, at: now.Add(-100 * day)},
 	}
 	retireSeed(t, h, script)
@@ -509,8 +511,8 @@ func TestRetireTelemetryAppliesThePolicy(t *testing.T) {
 	}
 	got := retireIDs(t, h.store)
 	// A phased progress line past 14 days (cost-old, budget-old) goes with
-	// the trace window; tool.result and the run lifecycle stay.
-	want := []string{"cost-new", "jev-new", "cell-new", "egress-new", "result-ancient", "done-ancient"}
+	// the trace window; tool.result goes past 7 days; the run lifecycle stays.
+	want := []string{"cost-new", "jev-new", "cell-new", "egress-new", "result-6d", "done-ancient"}
 	sort.Strings(want)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("remaining\n got %v\nwant %v", got, want)

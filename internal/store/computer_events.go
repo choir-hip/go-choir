@@ -197,7 +197,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	dry := *batch
 	dry.Ops = make([]computerevent.ProjectionOp, 0, len(batch.Ops))
 	for _, op := range batch.Ops {
-		if strings.TrimSpace(op.Kind) != computerevent.ProjectionOpObjectRetire {
+		if kind := strings.TrimSpace(op.Kind); kind != computerevent.ProjectionOpObjectRetire && kind != computerevent.ProjectionOpRunMemoryRetire {
 			dry.Ops = append(dry.Ops, op)
 		}
 	}

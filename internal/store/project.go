@@ -105,6 +105,8 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 	case computerevent.ProjectionOpObjectRetire:
 		_, err := projectObjectRetire(ctx, tx, op.Body, derived)
 		return err
+	case computerevent.ProjectionOpRunMemoryRetire:
+		return projectRunMemoryRetire(ctx, tx, op.Body)
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}

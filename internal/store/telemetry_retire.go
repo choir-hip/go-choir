@@ -39,6 +39,8 @@ var (
 	// telemetryRetireTraceWindow is how long the trace kinds stay (the
 	// owner's default, section 11.6).
 	telemetryRetireTraceWindow = 14 * 24 * time.Hour
+	// telemetryRetireToolResultWindow is how long tool.result lines stay.
+	telemetryRetireToolResultWindow = 7 * 24 * time.Hour
 )
 
 // telemetryRetireGroup is one retirement the job runs: the kinds, the phase
@@ -52,13 +54,22 @@ type telemetryRetireGroup struct {
 
 func retireNow() time.Duration   { return 0 }
 func retireTrace() time.Duration { return telemetryRetireTraceWindow }
+func retireToolResult() time.Duration {
+	return telemetryRetireToolResultWindow
+}
 
 // telemetryRetireGroups is the retirement policy (section 11.6).
 //
+// tool.result goes after 7 days (L1 step 2). Its readers are the run
+// acceptance synthesis (agentcore/run_acceptance.go, an on-demand POST over the
+// newest 3000 events of a trajectory, run after a deploy proof), the
+// search-provider summary built inside it (trace_helpers.go) and the Texture
+// workflow verifier (textureowner/texture_workflow_verifier.go, at the end of
+// a run); all three read a run's results in the session that proves it, and a
+// stored acceptance record is not recomputed. A week is far past that. The
+// row stays on the sealed tape in the batch that recorded it.
+//
 // Kept on purpose, not listed:
-//   - tool.result: run acceptance and the Texture verifier read it. TODO:
-//     retire it once a run's acceptance can no longer read it (name the
-//     window with the acceptance owner); until then it stays.
 //   - the run lifecycle, Texture revisions, judgments and channel lines:
 //     product reads.
 //
@@ -71,6 +82,7 @@ var telemetryRetireGroups = []telemetryRetireGroup{
 	{name: "unread kinds", kinds: []types.EventKind{types.EventToolInvoked, types.EventTextureAgentRevisionProgress}, window: retireNow},
 	{name: "phaseless loop.progress", kinds: []types.EventKind{types.EventRunProgress}, phase: computerevent.ObjectRetirePhaseNone, window: retireNow},
 	{name: "trace kinds", kinds: []types.EventKind{types.EventDeskCell, types.EventDeskEgress}, window: retireTrace},
+	{name: "tool results", kinds: []types.EventKind{types.EventToolResult}, window: retireToolResult},
 	{name: "phased loop.progress", kinds: []types.EventKind{types.EventRunProgress}, phase: computerevent.ObjectRetirePhaseSome, window: retireTrace},
 }
 
@@ -197,6 +209,13 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 				continue
 			}
 			log.Printf("store: telemetry retirement: %d ops in %s", ops, time.Since(start).Round(time.Millisecond))
+			memStart := time.Now()
+			memOps, memErr := s.RetireRunMemory(ctx, time.Now().UTC())
+			if memErr != nil {
+				log.Printf("store: run memory retirement: after %d ops: %v", memOps, memErr)
+				continue
+			}
+			log.Printf("store: run memory retirement: %d ops in %s", memOps, time.Since(memStart).Round(time.Millisecond))
 		}
 	}()
 }

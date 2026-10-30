@@ -38,6 +38,10 @@ const (
 	// working store; the rows stay on the sealed tape where they were recorded
 	// (docs/design/object-graph-redesign-2026-10-30.md section 11.3).
 	ProjectionOpObjectRetire = "object_retire_recorded"
+	// ProjectionOpRunMemoryRetire removes the run_memory_entries of named,
+	// finished runs from the working store; the entries stay on the sealed
+	// tape in the batches that recorded them.
+	ProjectionOpRunMemoryRetire = "run_memory_retire_recorded"
 	ProjectionBatchMediaType = "application/vnd.choir.projection-batch+json"
 )
 
@@ -63,12 +67,13 @@ var projectionOpKinds = map[string]struct{}{
 	ProjectionOpMediaRecentDelete:          {},
 	ProjectionOpUserPreference:             {},
 	ProjectionOpObjectRetire:               {},
+	ProjectionOpRunMemoryRetire:            {},
 }
 
 func isProjectionV2OnlyKind(kind string) bool {
 	switch kind {
 	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete,
-		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpMediaRecentDelete, ProjectionOpUserPreference, ProjectionOpObjectRetire:
+		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpMediaRecentDelete, ProjectionOpUserPreference, ProjectionOpObjectRetire, ProjectionOpRunMemoryRetire:
 		return true
 	default:
 		return false
@@ -287,6 +292,49 @@ func (p ObjectRetireProjection) Slice() (from, before time.Time, err error) {
 	return from, before, nil
 }
 
+// RunMemoryRetireMaxRuns bounds the runs one run-memory retire op names.
+const RunMemoryRetireMaxRuns = 100
+
+// RunMemoryRetireProjection is the body of a ProjectionOpRunMemoryRetire op:
+// remove from the working store every run_memory_entries row whose loop_id is
+// in RunIDs and whose kind is not in KeepKinds. The decision that a run is
+// finished, old enough and not an actor's latest is made by the emitter and
+// recorded here as the explicit run list, so live apply and replay remove the
+// same rows whatever state a replay holds at that tape position.
+type RunMemoryRetireProjection struct {
+	RunIDs    []string `json:"run_ids"`
+	KeepKinds []string `json:"keep_kinds,omitempty"`
+	Reason    string   `json:"reason,omitempty"`
+}
+
+// DecodeRunMemoryRetire parses and validates a run-memory retire body.
+func DecodeRunMemoryRetire(body json.RawMessage) (RunMemoryRetireProjection, error) {
+	var p RunMemoryRetireProjection
+	if err := json.Unmarshal(body, &p); err != nil {
+		return RunMemoryRetireProjection{}, fmt.Errorf("decode run memory retire: %w", err)
+	}
+	if err := p.Validate(); err != nil {
+		return RunMemoryRetireProjection{}, err
+	}
+	return p, nil
+}
+
+// Validate refuses an empty run list, one over RunMemoryRetireMaxRuns, and a
+// blank or padded run id or kind.
+func (p RunMemoryRetireProjection) Validate() error {
+	if len(p.RunIDs) == 0 || len(p.RunIDs) > RunMemoryRetireMaxRuns {
+		return fmt.Errorf("run memory retire: %d run ids, want 1 to %d", len(p.RunIDs), RunMemoryRetireMaxRuns)
+	}
+	for _, list := range [][]string{p.RunIDs, p.KeepKinds} {
+		for _, v := range list {
+			if strings.TrimSpace(v) == "" || v != strings.TrimSpace(v) {
+				return fmt.Errorf("run memory retire: %q is blank or padded", v)
+			}
+		}
+	}
+	return nil
+}
+
 func (b ProjectionBatch) Validate() error {
 	validVersion := (b.Version == ProjectionBatchV1 && b.ProjectorVersion == ProjectorVersionV1) ||
 		(b.Version == ProjectionBatchV2 && b.ProjectorVersion == ProjectorVersionV2)
@@ -322,6 +370,11 @@ func (b ProjectionBatch) Validate() error {
 		}
 		if kind == ProjectionOpObjectRetire {
 			if _, err := DecodeObjectRetire(op.Body); err != nil {
+				return fmt.Errorf("%w: op %d: %v", ErrProjectionBatchInvalid, i, err)
+			}
+		}
+		if kind == ProjectionOpRunMemoryRetire {
+			if _, err := DecodeRunMemoryRetire(op.Body); err != nil {
 				return fmt.Errorf("%w: op %d: %v", ErrProjectionBatchInvalid, i, err)
 			}
 		}
