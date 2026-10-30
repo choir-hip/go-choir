@@ -399,11 +399,14 @@ boundaries:
 now:
   status: working
   slice: >-
-    D1, the build sheet. D0 closed at 85eb4a55b (frame revision 2, round 1
-    folded) and 5294d3ec6 (precommitment round 0m). A Sonnet census of the
-    Dolt coupling is running and writes
-    docs/evidence/dolt-coupling-census-2026-10-30.md.
-  source_ref: main 3f4dafb7e + this file's commit
+    C1 to C3 build. D0 and D1 are closed. WP0 (the dbx seam) and the two
+    seam contracts are on cutover/data-system at 48048f0e6. Six Sonnet
+    builders run in parallel worktrees, branches cutover/wp-a to wp-f:
+    A guest store, B guest object graph, C witness v3 and snapshot v1,
+    D host control on PostgreSQL, E host graph on PostgreSQL, F
+    migrators, nix and CI. FP0 merges them into cutover/data-system, then
+    writes the C0 drills.
+  source_ref: cutover/data-system 48048f0e6
   deploy_identity: d346c6a84
   candidate:
     id: frame-r1

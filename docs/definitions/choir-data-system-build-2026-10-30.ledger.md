@@ -59,3 +59,4 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - Frame revision 2 is 85eb4a55b; ledger round 0m is 5294d3ec6.
   - D1 started, with the Dolt-coupling census running.
 - 2026-10-30 ~07:35 UTC (FP0). D1 complete: docs/design/data-system-build-sheet-2026-10-30.md. The integration branch cutover/data-system replaces landing on main; main gets the branch at C5. Next: WP0, the dbx seam, built by FP0.
+- 2026-10-30 ~08:20 UTC (FP0). WP0 landed on cutover/data-system: dbx (70a850d31), objectgraph.NewSQLStore (a525e75e5), store.StateDBPath and LegacyDoltWorkspacePath (48048f0e6). Six Sonnet builders launched from 48048f0e6, one worktree and branch each (cutover/wp-a to wp-f), split by package boundary per the build sheet work order.
