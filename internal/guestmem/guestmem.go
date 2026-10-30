@@ -398,10 +398,21 @@ func pageCache(s *scan, label, root string, maxFiles int, probe func(string, int
 	section := "page_cache:" + label
 	stopped := false
 	var walk func(dir string) bool
+	// A root that is a regular file (a SQLite state file) counts that file
+	// and its sidecars in the same directory (<name>-wal, <name>-shm).
+	fileRoot := ""
+	if info, err := os.Lstat(root); err == nil && info.Mode().IsRegular() {
+		fileRoot = filepath.Base(root)
+	}
 	walk = func(dir string) bool {
 		err := s.readDir(dir, section, func(d os.DirEntry) bool {
 			path := filepath.Join(dir, d.Name())
+			if fileRoot != "" && d.Name() != fileRoot && !strings.HasPrefix(d.Name(), fileRoot+"-") {
+				return true
+			}
 			switch {
+			case fileRoot != "" && d.IsDir():
+				return true
 			case d.IsDir():
 				return walk(path)
 			case !d.Type().IsRegular():
@@ -446,7 +457,11 @@ func pageCache(s *scan, label, root string, maxFiles int, probe func(string, int
 		out.Truncated = true
 		return out
 	}
-	walk(root)
+	if fileRoot != "" {
+		walk(filepath.Dir(root))
+	} else {
+		walk(root)
+	}
 	out.Truncated = stopped || s.truncated[section]
 	return out
 }

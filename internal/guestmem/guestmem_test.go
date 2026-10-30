@@ -279,3 +279,32 @@ func TestCgroupsReadsCurrentAndStatAndSkipsDirsWithoutMemory(t *testing.T) {
 		t.Fatalf("bounded = %+v", top)
 	}
 }
+
+// A file root (the SQLite state file) counts the file and its -wal/-shm
+// sidecars, and nothing else in its directory: not a sibling store, not a
+// directory beside it.
+func TestPageCacheFileRootCountsTheFileAndItsSidecars(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, n int) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("state.db", 4096)
+	write("state.db-wal", 1024)
+	write("state.db-shm", 512)
+	write("state-actor.db", 8192)
+	write("state.db.migration.json", 100)
+	if err := os.MkdirAll(filepath.Join(dir, "state.db-dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	probe := func(_ string, size int64, _ *scan) (int64, bool, error) { return size, true, nil }
+	got := pageCache(newScan(context.Background(), DefaultLimits), "store", filepath.Join(dir, "state.db"), 100, probe)
+	if got.Files != 3 || got.Bytes != 4096+1024+512 || got.ResidentBytes != got.Bytes {
+		t.Fatalf("split = %+v, want state.db and its two sidecars", got)
+	}
+	if got.Root != filepath.Join(dir, "state.db") || got.Errors != 0 || got.Truncated {
+		t.Fatalf("split = %+v", got)
+	}
+}
