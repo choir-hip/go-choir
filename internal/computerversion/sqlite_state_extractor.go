@@ -251,8 +251,12 @@ type columnInfo struct {
 	pk   int
 }
 
+// tableColumns returns the table's stored columns in declaration order.
+// Generated columns (hidden 2 virtual, 3 stored) are derivations of other
+// columns and indexes; the witness covers what is stored, so it stays
+// independent of them.
 func tableColumns(ctx context.Context, tx *sql.Tx, table string) ([]columnInfo, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT name, pk FROM pragma_table_info(?) ORDER BY cid`, table)
+	rows, err := tx.QueryContext(ctx, `SELECT name, pk FROM pragma_table_xinfo(?) WHERE hidden IN (0, 1) ORDER BY cid`, table)
 	if err != nil {
 		return nil, fmt.Errorf("table_info %s: %w", table, err)
 	}
@@ -290,7 +294,11 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 	}
 	sort.Slice(pk, func(i, j int) bool { return pk[i].pk < pk[j].pk })
 
-	query := "SELECT * FROM " + quoteIdent(table)
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = quoteIdent(c.name)
+	}
+	query := "SELECT " + strings.Join(names, ", ") + " FROM " + quoteIdent(table)
 	if len(pk) > 0 {
 		order := make([]string, len(pk))
 		for i, c := range pk {

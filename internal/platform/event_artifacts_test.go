@@ -288,11 +288,7 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 		ReleaseDigest: platformTestDigest('e'), ReconstructionDigest: platformTestDigest('f'),
 		MaterializationReceiptDigest: platformTestDigest('1'), VerifierCertificateDigest: computerevent.DigestBytes(verifierJSON),
 		VerifierCertificate: verifierResponse, VerifierTrustBootstrap: true, ReducerVersion: head.ReducerVersion,
-		VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{
-			Database: "choir", ContentRoot: platformTestDigest('7'), DoltHead: platformTestDigest('8'), DerivabilityDigest: platformTestDigest('9'),
-			Schema: map[string]string{"agents": platformTestDigest('a')},
-			Tables: map[string]string{"agents": platformTestDigest('b')},
-		},
+		VMLocalContentWitness: platformTestWitness("choir"),
 		FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: platformTestDigest('c'), Derivation: selfdevprotocol.FrontendDerivationExplicit},
 	}
 	checkpointBody, err := computerevent.CanonicalJSON(checkpointRequest)
@@ -770,4 +766,13 @@ func TestCheckpointVerifierEvidenceRequiresPinnedEngineeringPass(t *testing.T) {
 	if err := authority.verifyVerifierEvidence(t.Context(), request); err == nil {
 		t.Fatal("verifier evidence accepted a substituted bundle")
 	}
+}
+
+// platformTestWitness is a valid v3 witness for checkpoint fixtures.
+func platformTestWitness(database string) selfdevprotocol.VMLocalContentWitness {
+	w, err := selfdevprotocol.NewWitnessV3(database, platformTestDigest('a'), map[string]string{"agents": platformTestDigest('b')})
+	if err != nil {
+		panic(err)
+	}
+	return w
 }

@@ -60,11 +60,7 @@ func ownerRecoveryPlatformFixture(t *testing.T) (*CheckpointAuthority, selfdevpr
 		AcceptedEventHead: canonicalHead, EffectiveEventHead: effectiveHead, EffectiveStateCommitment: stateCommitment,
 		EventHeadReceiptID: "receipt-head-12", ReleaseDigest: platformTestDigest('f'), ReconstructionDigest: platformTestDigest('4'),
 		ReducerVersion: computerevent.ReducerVersionV1, OwnerRecovery: true,
-		VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{
-			Database: "texture", ContentRoot: platformTestDigest('7'), DoltHead: platformTestDigest('8'), DerivabilityDigest: platformTestDigest('9'),
-			Schema: map[string]string{"agents": platformTestDigest('a')},
-			Tables: map[string]string{"agents": platformTestDigest('b')},
-		},
+		VMLocalContentWitness: platformTestWitness("texture"),
 		FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: platformTestDigest('c'), Derivation: selfdevprotocol.FrontendDerivationRelease, ReleaseDigest: platformTestDigest('f')},
 	}
 	return authority, request, root, canonicalHead

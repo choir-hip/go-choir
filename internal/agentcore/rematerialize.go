@@ -237,7 +237,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	quarantinedMarker := filepath.Join(quarantineDir, filepath.Base(originalMarker))
 	quarantinedWorkspace := filepath.Join(quarantineDir, filepath.Base(originalWorkspace))
-	originalState, stagedState := choirstore.StateDBPath(originalMarker), choirstore.StateDBPath(stagedMarker)
+	originalState, stagedState := rt.store.StatePath(), choirstore.StateDBPath(stagedMarker)
 	quarantinedState := filepath.Join(quarantineDir, filepath.Base(originalState))
 	// The original realization goes to quarantine, the staged one takes its
 	// place. A source that does not exist (the legacy marker, a workspace
