@@ -8,6 +8,16 @@ module handed to node-a. Status: problem recorded; design below; client
 (`nix/node-a-choir-backup-target.nix`) written but **disabled and not applied
 anywhere**.
 
+> **Update 2026-10-30 (data system cutover, phase 2 item I7).** The Dolt steps
+> in this record (Store A and Store B syncs and snapshots, the Dolt root
+> credential, the dolt and snap restore-drill pieces) describe a retired
+> system. The client now runs `pg_dump -Fc` of the `control` and `graph`
+> PostgreSQL databases into `staging/pg` before restic, proves each dump with
+> `pg_restore --list`, and ends partial (exit 3) if one fails; the units are
+> enabled again. Restore proof: `scripts/off-host-restore-drill.sh <snapshot>
+> pg`. Test: `scripts/off-host-backup-pg-test.sh`. Snapshots made before the
+> cutover still hold Dolt data and restore with the old pieces.
+
 ## The problem
 
 Node B is a single physical host. Everything Choir would have to rebuild a

@@ -4,7 +4,7 @@
 #   systemd-run --wait --collect -p MemoryHigh=10G -p MemoryMax=12G \
 #     -p MemorySwapMax=0 -p OOMScoreAdjust=1000 -p Environment=GOMEMLIMIT=8GiB \
 #     -p Environment=PATH=/run/current-system/sw/bin -p Nice=19 -p IOSchedulingClass=idle \
-#     bash scripts/off-host-restore-drill.sh <snapshot> tape|dolt|image|snap [vm]
+#     bash scripts/off-host-restore-drill.sh <snapshot> tape|dolt|image|snap|pg [vm]
 # restic needs about 8 GB to walk a 9.6M-file snapshot (the snap piece
 # peaked at 7 GB with no swap, no-off-host-backup record section 13 item
 # 21), so the Go limit is 8 GiB under the backup unit's own 10G and 12G
@@ -15,6 +15,10 @@
 #   dolt:  the corpus Dolt backup (restore, `dolt backup restore`, query,
 #          head compared with the run's), and the platform Dolt backup
 #          directory compared byte for byte with live (no second copy: disk).
+#   pg:    the PostgreSQL dumps of a run made after the cutover (phase 2
+#          item I7): each restored from staging/pg, `pg_restore --list`
+#          read, its entry count compared with the run's manifest. The dolt
+#          and snap pieces apply to snapshots from before the cutover.
 #   image: one stopped test computer's data.img, compared with live and
 #          checked read-only.
 #   snap:  the Dolt stores captured as btrfs snapshots (section 13 item 16):
@@ -27,9 +31,8 @@
 # Secrets are read from files and never printed. Each piece deletes its
 # restore before the next.
 set -euo pipefail
-SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap}"
+SNAP="${1:?snapshot}"; PIECE="${2:?tape|dolt|image|snap|pg}"
 A=/var/lib/go-choir/platform-artifacts/sha256
-# Overridable only for scripts/off-host-backup-dolt-snapshot-test.sh.
 S="${OFFHOST_SECRETS_DIR:-/var/lib/go-choir/secrets/offhost-backup}"
 D="${OFFHOST_DRILL_DIR:-/var/lib/go-choir-restore-drill}"
 # The drill chmods $D and deletes under it: an absolute path below / only
@@ -99,6 +102,21 @@ dolt)
     echo "platform backup directory: differs from live in $(wc -l < "$D/platform-diff.txt") entries (a sync after the snapshot would explain it)"; head -5 "$D/platform-diff.txt"
   fi
   ;;
+pg)
+  M=/var/lib/go-choir/offhost-backup/staging/manifest.json
+  rm -rf "$D/r"; restic --no-lock restore "$SNAP" --target "$D/r" --include "$M" >"$D/restore.log" 2>&1 \
+    || { echo "manifest restore failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
+  ents="$(jq -r '.pg_entries // ""' "$D/r$M")"; echo "manifest pg entries: ${ents:-none}"
+  [ -n "$ents" ] || { echo "the manifest records no PostgreSQL dump"; exit 1; }
+  rm -rf "$D/r2"; restore /var/lib/go-choir/offhost-backup/staging/pg
+  for kv in $ents; do
+    db="${kv%%=*}"; want="${kv#*=}"
+    got="$(pg_restore --list "$D/r2/$db.dump" 2>/dev/null | grep -vc '^;')"
+    if [ "$got" = "$want" ]; then echo "$db: restored dump lists $got entries, as the run recorded"
+    else echo "$db: restored dump lists ${got:-0} entries, the run recorded $want"; exit 1; fi
+  done
+  rm -rf "$D/r2"
+  ;;
 image)
   VM="${3:?vm id}"
   rm -rf "$D/r2"; restore "/var/lib/go-choir/offhost-backup/staging/vm-images/$VM"
@@ -161,5 +179,5 @@ snap)
     rm -rf "$D/r2" "$D/dolt-restored"
   done
   ;;
-  *) echo "piece is tape, dolt, image or snap" >&2; exit 2 ;;
+  *) echo "piece is tape, dolt, image, snap or pg" >&2; exit 2 ;;
 esac

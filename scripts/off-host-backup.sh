@@ -21,22 +21,29 @@
 # 5 a tool the subcommand needs is not on PATH (nothing was done).
 #
 # Credentials: files named restic-password, rest-password, ssh-key, known-hosts
-# and (for backup) dolt-root-password come from $CREDENTIALS_DIRECTORY
+# and (for backup) pg-app-password come from $CREDENTIALS_DIRECTORY
 # (systemd LoadCredential=) or, for an owner-run shell, from
-# $OFFHOST_SECRETS_DIR. They reach tools only through files and environment
-# variables, never argv; nothing secret is echoed. There is no `set -x`.
+# $OFFHOST_SECRETS_DIR (pg-app-password: $ROOT/secrets/pg-app-password, the
+# file the host's services read). They reach tools only through files and
+# environment variables, never argv; nothing secret is echoed. There is no
+# `set -x`. The PostgreSQL password reaches pg_dump only through a PGPASSFILE
+# of mode 0600 that exists for the dumps and no longer.
 set -u
 set -o pipefail
 
 ROOT="${OFFHOST_DATA_ROOT:-/var/lib/go-choir}"
 STATE="${OFFHOST_STATE_DIR:-$ROOT/offhost-backup}"
 SECRETS_DIR="${OFFHOST_SECRETS_DIR:-$ROOT/secrets/offhost-backup}"
-DOLT_ROOT_PW_FILE="${OFFHOST_DOLT_ROOT_PASSWORD_FILE:-$ROOT/secrets/dolt-root-password}"
-# The Dolt servers are retired (data system cutover, 2026-10-30): hosts run
-# PostgreSQL, and its backup is phase 2 item I7. The Dolt sections below run
-# only with OFFHOST_DOLT=on (a host that still serves Dolt); otherwise they
-# are skipped, not failed.
-OFFHOST_DOLT="${OFFHOST_DOLT:-off}"
+# PostgreSQL (data system cutover, phase 2 item I7): one pg_dump per database
+# into $STAGING/pg before restic runs. The role and databases are those of
+# nix/postgresql.nix. The dump level is gzip inside the custom format; 0 would
+# let restic deduplicate across nights at the price of a larger staging area.
+PG_DATABASES="${OFFHOST_PG_DATABASES:-control graph}"; PG_DATABASES="${PG_DATABASES//,/ }"
+PG_HOST="${OFFHOST_PG_HOST:-127.0.0.1}"
+PG_PORT="${OFFHOST_PG_PORT:-5432}"
+PG_USER="${OFFHOST_PG_USER:-choir}"
+PG_COMPRESS="${OFFHOST_PG_COMPRESS:-6}"
+PG_PW_FILE="${OFFHOST_PG_PASSWORD_FILE:-$ROOT/secrets/pg-app-password}"
 ART="$ROOT/platform-artifacts"
 VM_STATE="$ROOT/vm-state"
 # Computers whose guest data.img is cloned into the run, comma or space
@@ -55,26 +62,13 @@ REST_USER="${OFFHOST_REST_USER:-nodeb}"
 QUOTA_GIB="${OFFHOST_QUOTA_GIB:-450}"
 UPLOAD_LIMIT_KIB="${OFFHOST_UPLOAD_LIMIT_KIB:-25000}" # about 200 Mbit/s; 0 = unlimited
 MIN_FREE_GIB="${OFFHOST_MIN_FREE_GIB:-40}"
-# Store A's memory line while its sync runs. DOLT_BACKUP runs in the
-# server, and at the unit's own 3G line the sync stalled the server until
-# the liveness probe aborted it (problem record section 13 item 15).
-DOLT_SYNC_MEMORY_HIGH="${OFFHOST_DOLT_SYNC_MEMORY_HIGH:-8G}"
-PLATFORM_DOLT_UNIT="${OFFHOST_PLATFORM_DOLT_UNIT:-go-choir-platform-dolt.service}"
-# The Dolt servers' data directories (their working directories). When one
-# is its own btrfs subvolume the store is captured as a read-only snapshot
-# of it, atomic across the directory (what a power cut would leave, which
-# Dolt's journal recovers), with no work in the server; otherwise the
-# server-side sync above is the fallback (problem record section 13 item
-# 16; scripts/dolt-data-to-subvolume.sh makes the subvolume).
-PLATFORM_DOLT_DATA="${OFFHOST_PLATFORM_DOLT_DATA:-$ROOT/platform-dolt/platform}"
-CORPUS_DOLT_DATA="${OFFHOST_CORPUS_DOLT_DATA:-$ROOT/corpus-dolt}"
 MAX_AGE_HOURS="${OFFHOST_MAX_AGE_HOURS:-36}"
 MAX_VERIFY_AGE_HOURS="${OFFHOST_MAX_VERIFY_AGE_HOURS:-240}"
 RESTIC_HOST_TAG="go-choir-b"
 
 STATUS="$STATE/status.json"
 STAGING="$STATE/staging"
-DOLT_SNAPS="$STAGING/dolt"
+PG_DIR="$STAGING/pg"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 now() { date -u +%s; }
 log() { printf '%s offhost-backup: %s\n' "$(date -u +%FT%TZ)" "$*"; }
@@ -83,8 +77,8 @@ err() { printf '%s offhost-backup: ERROR: %s\n' "$(date -u +%FT%TZ)" "$*" >&2; }
 cred() { # path of credential file $1
   if [ -n "${CREDENTIALS_DIRECTORY:-}" ] && [ -r "$CREDENTIALS_DIRECTORY/$1" ]; then
     printf '%s/%s' "$CREDENTIALS_DIRECTORY" "$1"
-  elif [ "$1" = dolt-root-password ]; then
-    printf '%s' "$DOLT_ROOT_PW_FILE"
+  elif [ "$1" = pg-app-password ]; then
+    printf '%s' "$PG_PW_FILE"
   else
     printf '%s/%s' "$SECRETS_DIR" "$1"
   fi
@@ -95,7 +89,7 @@ cred() { # path of credential file $1
 # nix/node-b.nix); a root shell on Node B does not. Each subcommand checks
 # the tools it uses before it touches anything, so a hand run refuses
 # instead of ending partial an hour later (problem record section 13 item 5).
-NIX_SHELL_LINE="nix-shell -p restic jq openssh sqlite dolt apacheHttpd util-linux --run '...'"
+NIX_SHELL_LINE="nix-shell -p restic jq openssh sqlite postgresql apacheHttpd util-linux --run '...'"
 need() { # tools...
   local t missing=()
   for t in "$@"; do command -v "$t" >/dev/null 2>&1 || missing+=("$t"); done
@@ -191,7 +185,7 @@ add_path() { # $1 path, $2 required|optional
   fi
 }
 EXCLUDES=(
-  "$ART/sha256/projection-base"   # 47 GB, rebuilt from the tape
+  "$ART/sha256/projection-base"   # 47 GB, rebuilt from the tape; retired at the cutover, excluded until the old data is deleted
   "$ART/checkpoint-scratch"       # regenerable scratch
   "$ROOT/secrets/offhost-backup"  # holds this backup's own key
   "key-escrow-kek*"                # opens the sealed escrow key; the owner keeps it offline (FP9)
@@ -200,8 +194,6 @@ EXCLUDES=(
   "$ROOT/mail/mail.db"            # captured consistently via sqlite3 .backup
   "$ROOT/mail/mail.db-wal"
   "$ROOT/mail/mail.db-shm"
-  "$DOLT_SNAPS/corpus/.choir-backup" # Store B's old sync copy, inside its data directory
-  "$DOLT_SNAPS/**/sql-server.info"   # the live server's lock note; a restore starts without it
 )
 # The escrow KEK the units actually load (finding B3): the source file of a
 # key-escrow-kek* credential and an absolute CHOIR_KEY_ESCROW_KEK_PATH, read
@@ -234,11 +226,6 @@ resolve_paths() {
     [ -n "$kek" ] && EXCLUDES+=("$kek")
   done < <(kek_sources)
   add_path "$ART" required
-  # A snapshotted store travels in $STAGING; its old sync copy is not read.
-  if [ "$OFFHOST_DOLT" = on ]; then
-    is_subvolume "$PLATFORM_DOLT_DATA" || add_path "$ROOT/platform-dolt/.choir-backup/platform" required
-    is_subvolume "$CORPUS_DOLT_DATA" || add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
-  fi
   add_path "$ROOT/secrets" required
   add_path "$ROOT/auth-signing" optional
   # gateway-provider.env and codex-auth.json are excluded by name (PR-13).
@@ -252,7 +239,7 @@ resolve_paths() {
   add_path "$ROOT/mail" optional
   add_path "$ROOT/files" optional
   add_path "$VM_STATE/ownerships.json" optional
-  add_path "$STAGING" optional # sqlite copies, reflink image clones, manifest
+  add_path "$STAGING" optional # PostgreSQL dumps, sqlite copies, reflink image clones, manifest
 }
 
 # ---- guest images ------------------------------------------------------
@@ -335,125 +322,63 @@ repo_pack_bytes() { # $1 = daily | archive
 R() { if [ "$UPLOAD_LIMIT_KIB" != 0 ]; then restic --limit-upload "$UPLOAD_LIMIT_KIB" "$@"; else restic "$@"; fi; }
 
 # ---- staging: consistent copies of things that cannot be read live ------
-dolt_sync() { # $1 port, $2 database, $3 target dir
-  local port="$1" db="$2" dir="$3" pw home rc hash oldhome="${HOME:-}"
-  install -d -m 0700 "$dir"
-  record_rows "$db" "$port" "$db"
-  home="$(mktemp -d)"; export HOME="$home"
-  pw="$(cat "$(cred dolt-root-password)" 2>/dev/null || true)"
-  case "$pw" in *[!A-Za-z0-9]*) pw="" ;; esac
-  # Same rule as go-choir-dolt-ensure-users: root with its password, or
-  # passwordless root while the staged rollout still allows it. The app
-  # user is refused DOLT_BACKUP ("command denied"), so root is required.
-  if [ -n "$pw" ] && printf 'select 1;\n' | DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql >/dev/null 2>&1; then
-    DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" \
-      sql -q "CALL DOLT_BACKUP('sync-url','file://$dir')" >/dev/null 2>"$STATE/run/dolt-$db.err"
-    rc=$?
-    hash="$(printf 'select commit_hash from dolt_log limit 1;\n' | DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" sql -r csv 2>/dev/null | tail -1)"
-  else
-    dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" \
-      sql -q "CALL DOLT_BACKUP('sync-url','file://$dir')" >/dev/null 2>"$STATE/run/dolt-$db.err"
-    rc=$?
-    hash="$(printf 'select commit_hash from dolt_log limit 1;\n' | dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" sql -r csv 2>/dev/null | tail -1)"
-  fi
-  rm -rf "$home"; export HOME="$oldhome"
-  if [ "$rc" -ne 0 ]; then
-    err "dolt backup of $db failed (client stderr class: $(head -c 120 "$STATE/run/dolt-$db.err" | tr -d '\n' | sed -e 's/password[^ ]*/password=?/Ig'))"
+# One consistent custom-format dump per database (pg_dump reads one snapshot
+# per database; the two are not a snapshot of each other). Each dump is proved
+# readable by `pg_restore --list` and its entry count recorded. A dump that
+# fails, or whose listing fails or is empty, is removed and counted as failed:
+# the run ends partial (status 3), never ok. The password is read from a file
+# into a PGPASSFILE (mode 0600, removed before this returns); it is never on
+# argv and never echoed.
+PG_ENTRIES=()
+PG_BYTES=()
+PG_FAILED=()
+pg_stage() {
+  local pwfile pgpass pw db f n rc ok=0
+  PG_ENTRIES=(); PG_BYTES=(); PG_FAILED=()
+  rm -rf "$PG_DIR"
+  install -d -m 0700 "$PG_DIR" "$STATE/run"
+  pwfile="$(cred pg-app-password)"
+  if [ ! -r "$pwfile" ]; then
+    err "pg-app-password is not readable ($(basename "$pwfile")); no PostgreSQL dump was made"
+    for db in $PG_DATABASES; do PG_FAILED+=("$db"); done
     return 1
   fi
-  DOLT_HEADS+=("$db=$hash")
-  log "dolt backup $db synced (head $hash)"
-}
-is_subvolume() { command -v btrfs >/dev/null 2>&1 && btrfs subvolume show "$1" >/dev/null 2>&1; }
-drop_snapshot() { # $1 path; a read-only snapshot needs btrfs to delete it
-  [ -e "$1" ] || return 0
-  btrfs subvolume delete "$1" >/dev/null 2>&1 || { err "could not delete snapshot $1"; return 1; }
-}
-dolt_scalar() { # $1 port, $2 database, $3 query: one value, as root with its password or passwordless
-  local port="$1" db="$2" q="$3" pw home oldhome="${HOME:-}" out
-  home="$(mktemp -d)"; export HOME="$home"
-  pw="$(cat "$(cred dolt-root-password)" 2>/dev/null || true)"
-  case "$pw" in *[!A-Za-z0-9]*) pw="" ;; esac
-  if [ -n "$pw" ] && printf 'select 1;\n' | DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql >/dev/null 2>&1; then
-    out="$(DOLT_CLI_PASSWORD="$pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user root --use-db "$db" sql -r csv -q "$q" 2>/dev/null | tail -1)"
-  else
-    out="$(dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" --use-db "$db" sql -r csv -q "$q" 2>/dev/null | tail -1)"
-  fi
-  rm -rf "$home"; export HOME="$oldhome"
-  printf '%s' "$out"
-}
-dolt_head() { dolt_scalar "$1" "$2" 'select commit_hash from dolt_log limit 1'; } # the newest commit
-# Store A's freshness marker. With PLATFORM_DOLT_SNAPSHOTS=off its newest
-# commit no longer moves, so the head alone cannot show a restore is recent;
-# the event receipt count only grows. Read before the capture, so the capture
-# holds at least this many (docs/problems/platform-dolt-oldgen-rate-and-
-# squash-window-2026-10-22.md, review round 1 R2).
-record_rows() { # $1 name, $2 port, $3 database
-  [ "$3" = platform ] || return 0
-  local n; n="$(dolt_scalar "$2" "$3" 'select count(*) from computer_event_append_receipts')"
-  # An unread count is written as such, so the drill fails it instead of
-  # taking the run for one from before the marker (review round 2 R9).
-  case "$n" in ''|*[!0-9]*) log "dolt $1: receipt count unread"; n=unread ;; esac
-  DOLT_ROWS+=("$1=$n")
-}
-snapshot_store() { # $1 name, $2 port, $3 database, $4 data directory (a subvolume)
-  local name="$1" dst="$DOLT_SNAPS/$1" hash
-  install -d -m 0700 "$DOLT_SNAPS" "$STATE/run"
-  drop_snapshot "$dst" || return 1
-  # The head and the receipt count are read first: the snapshot holds them
-  # or later state.
-  hash="$(dolt_head "$2" "$3")"
-  record_rows "$name" "$2" "$3"
-  if ! btrfs subvolume snapshot -r "$4" "$dst" >/dev/null 2>"$STATE/run/snapshot-$name.err"; then
-    err "btrfs snapshot of $name failed: $(head -c 200 "$STATE/run/snapshot-$name.err" | tr -d '\n')"
-    drop_snapshot "$dst"; return 1
-  fi
-  DOLT_HEADS+=("$name=$hash")
-  log "dolt $name captured as a read-only snapshot (head before it: ${hash:-unread})"
-}
-cleanup_snapshots() { local s; for s in "$DOLT_SNAPS"/*; do [ -e "$s" ] && drop_snapshot "$s"; done; return 0; }
-
-RAISED_UNIT=""
-SAVED_MEMORY_HIGH=""
-raise_dolt_memory() { # $1 unit: raise its MemoryHigh for the sync, remembering the old value
-  local cur
-  cur="$(systemctl show -p MemoryHigh --value "$1" 2>/dev/null)" || return 1
-  [ -n "$cur" ] || return 1
-  systemctl set-property --runtime "$1" "MemoryHigh=$DOLT_SYNC_MEMORY_HIGH" || return 1
-  RAISED_UNIT="$1"; SAVED_MEMORY_HIGH="$cur"
-  log "raised $1 MemoryHigh from $cur to $DOLT_SYNC_MEMORY_HIGH for the sync"
-}
-restore_dolt_memory() { # idempotent; also called from the exit trap
-  [ -n "$RAISED_UNIT" ] || return 0
-  if systemctl set-property --runtime "$RAISED_UNIT" "MemoryHigh=$SAVED_MEMORY_HIGH"; then
-    log "restored $RAISED_UNIT MemoryHigh to $SAVED_MEMORY_HIGH"
-  else
-    err "could not restore $RAISED_UNIT MemoryHigh to $SAVED_MEMORY_HIGH; set it by hand (systemctl set-property --runtime)"
-  fi
-  RAISED_UNIT=""
+  pgpass="$(mktemp "$STATE/run/pgpass.XXXXXX")" || { err "could not create a pgpass file"; return 1; }
+  chmod 0600 "$pgpass"
+  pw="$(cat "$pwfile")"
+  pw="${pw//\\/\\\\}"; pw="${pw//:/\\:}" # PGPASSFILE escapes backslash and colon
+  printf '%s:%s:*:%s:%s\n' "$PG_HOST" "$PG_PORT" "$PG_USER" "$pw" > "$pgpass"
+  pw=""
+  for db in $PG_DATABASES; do
+    case "$db" in ""|*[!A-Za-z0-9_]*) err "refusing database name '$db'"; PG_FAILED+=("$db"); ok=1; continue ;; esac
+    f="$PG_DIR/$db.dump"
+    PGPASSFILE="$pgpass" PGCONNECT_TIMEOUT=30 pg_dump -w -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$db" \
+      -Fc -Z "$PG_COMPRESS" -f "$f" >/dev/null 2>"$STATE/run/pg-$db.err"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      err "pg_dump of $db failed ($(exit_cause "$rc" pg_dump)): $(head -c 200 "$STATE/run/pg-$db.err" | tr -d '\n')"
+      rm -f "$f"; PG_FAILED+=("$db"); ok=1; continue
+    fi
+    if ! pg_restore --list "$f" > "$STATE/run/pg-$db.list" 2>"$STATE/run/pg-$db.err"; then
+      err "pg_restore --list of the $db dump failed: $(head -c 200 "$STATE/run/pg-$db.err" | tr -d '\n')"
+      rm -f "$f"; PG_FAILED+=("$db"); ok=1; continue
+    fi
+    n="$(grep -vc '^;' "$STATE/run/pg-$db.list" 2>/dev/null)"; n="${n:-0}"
+    if ! [ "$n" -gt 0 ] 2>/dev/null; then
+      err "the $db dump lists no entries; not trusted"
+      rm -f "$f"; PG_FAILED+=("$db"); ok=1; continue
+    fi
+    PG_ENTRIES+=("$db=$n")
+    PG_BYTES+=("$db=$(wc -c < "$f" | tr -d ' ')")
+    log "pg_dump $db ok ($n entries, $(wc -c < "$f" | tr -d ' ') bytes)"
+  done
+  rm -f "$pgpass"
+  return "$ok"
 }
 stage() {
   local ok=0 src
   install -d -m 0700 "$STAGING/sqlite" "$STAGING/vm-images" "$STATE/run"
-  DOLT_HEADS=()
-  DOLT_ROWS=()
-  if [ "$OFFHOST_DOLT" != on ]; then
-    log "dolt backup skipped (OFFHOST_DOLT=$OFFHOST_DOLT): the Dolt servers are retired"
-  else
-    if is_subvolume "$PLATFORM_DOLT_DATA"; then
-      snapshot_store platform 13306 platform "$PLATFORM_DOLT_DATA" || ok=1
-    elif raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
-      dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
-      restore_dolt_memory
-    else
-      err "could not raise $PLATFORM_DOLT_UNIT MemoryHigh; platform Dolt sync skipped (at the unit's own line the sync stalled Store A)"; ok=1
-    fi
-    if is_subvolume "$CORPUS_DOLT_DATA"; then
-      snapshot_store corpus 13307 corpus "$CORPUS_DOLT_DATA" || ok=1
-    elif [ -d "$ROOT/corpus-dolt" ]; then
-      dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1
-    fi
-  fi
+  pg_stage || ok=1
   for src in "$ROOT/auth/auth.db" "$ROOT/mail/mail.db"; do
     [ -f "$src" ] || continue
     if sqlite3 "$src" ".backup '$STAGING/sqlite/$(basename "$src")'"; then
@@ -478,18 +403,22 @@ stage() {
     fi
   done
   {
-    printf '{"run_id":"%s","dolt_heads":"%s","dolt_rows":"%s","restic":"%s","dolt":"%s"}\n' \
-      "$RUN_ID" "${DOLT_HEADS[*]:-}" "${DOLT_ROWS[*]:-}" "$(restic version 2>/dev/null | head -1)" "$(dolt version 2>/dev/null | head -1)"
+    jq -nc --arg run "$RUN_ID" --arg ent "${PG_ENTRIES[*]:-}" --arg bytes "${PG_BYTES[*]:-}" \
+      --arg failed "${PG_FAILED[*]:-}" --arg restic "$(restic version 2>/dev/null | head -1)" \
+      --arg pg "$(pg_dump --version 2>/dev/null | head -1)" \
+      '{run_id:$run, pg_entries:$ent, pg_bytes:$bytes, pg_failed:$failed, restic:$restic, pg_dump:$pg}'
   } > "$STAGING/manifest.json"
   return "$ok"
 }
-cleanup_clones() { rm -rf "$STAGING/vm-images" 2>/dev/null || true; cleanup_snapshots; }
+# The dumps are the largest thing staged and are in the snapshot once restic
+# has run; they are removed at the end of every run, with the image clones.
+cleanup_clones() { rm -rf "$STAGING/vm-images" "$PG_DIR" 2>/dev/null || true; rm -f "$STATE"/run/pgpass.* 2>/dev/null || true; }
 
 disk_guard() {
   local free_kib
   free_kib="$(df -Pk "$ROOT" | awk 'NR==2{print $4}')"
   if [ "$((free_kib / 1048576))" -lt "$MIN_FREE_GIB" ]; then
-    err "disk guard: $((free_kib / 1048576)) GiB free on $ROOT, need $MIN_FREE_GIB; the Dolt backup copies and image clones need room"
+    err "disk guard: $((free_kib / 1048576)) GiB free on $ROOT, need $MIN_FREE_GIB; the PostgreSQL dumps and image clones need room"
     return 1
   fi
 }
@@ -497,11 +426,13 @@ disk_guard() {
 # ---- subcommands -------------------------------------------------------
 cmd_plan() {
   [ -z "$IMAGE_COMPUTERS" ] || need jq || return
-  local rc=0
+  local rc=0 db
   resolve_paths
   echo "would back up:"; printf '  %s\n' "${PATHS[@]}"
   echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}"
   echo "absent:";        printf '  %s\n' "${SKIPPED[@]:-}"
+  echo "postgresql dumps (made before restic, removed after; ${PG_USER}@${PG_HOST}:${PG_PORT}):"
+  for db in $PG_DATABASES; do printf '  %s -> %s/%s.dump\n' "$db" "$PG_DIR" "$db"; done
   select_images || rc=3
   echo "guest images: ${IMAGE_COMPUTERS:-every computer}"; printf '  %s\n' "${IMAGES[@]:-}"
   echo "missing images:"; printf '  %s\n' "${IMAGE_MISSING[@]:-}"
@@ -512,10 +443,9 @@ cmd_plan() {
 
 cmd_backup() {
   local result=ok rc ex sid started added
-  need ssh restic jq sqlite3 systemctl || return
-  if [ "$OFFHOST_DOLT" = on ]; then need dolt || return; fi
+  need ssh restic jq sqlite3 systemctl pg_dump pg_restore || return
   started="$(now)"
-  trap 'restore_dolt_memory; cleanup_clones; tunnel_down; attempt_interrupted' EXIT
+  trap 'cleanup_clones; tunnel_down; attempt_interrupted' EXIT
   attempt_start attempt "\"last_attempt_epoch\":$started"
   if ! disk_guard; then
     attempt_end disk-guard ""
@@ -529,6 +459,8 @@ cmd_backup() {
   R unlock >/dev/null 2>&1 || true
   R cat config >/dev/null 2>&1 || { err "repository is not initialised or unreachable (run: off-host-backup.sh init)"; attempt_end no-repo ""; return 1; }
   stage || result=partial
+  local cause=""
+  [ "${#PG_FAILED[@]}" = 0 ] || cause="PostgreSQL dump failed or unusable: ${PG_FAILED[*]}"
   resolve_paths
   [ "$REQUIRED_MISSING" = 0 ] || { err "a required path is absent: ${SKIPPED[*]}"; result=partial; }
   local args=()
@@ -553,7 +485,7 @@ cmd_backup() {
   local raw; raw="$(repo_pack_bytes daily)"
   local skipped_json; skipped_json="$(printf '%s\n' "${SKIPPED[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')"
   status_merge <<EOF
-{"last_attempt_result":"$result","last_attempt_cause":"","last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
+{"last_attempt_result":"$result","last_attempt_cause":$(jq -nc --arg v "$cause" '$v'),"last_pg_entries":$(jq -nc --arg v "${PG_ENTRIES[*]:-}" '$v'),"last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
 EOF
   if [ "$result" = ok ]; then
     local first; first="$(jq -r '.first_success_epoch // empty' "$STATUS" 2>/dev/null)"

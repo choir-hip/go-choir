@@ -53,16 +53,22 @@ check() { # description, condition result (0 = pass)
 nothing_written() { [ -z "$(ls -A "$ROOT/root")" ] && [ -z "$(ls -A "$ROOT/secrets")" ]; }
 
 # 1, 2: backup with no restic refuses before any status write.
-run backup-no-restic backup ssh jq sqlite3 dolt
+run backup-no-restic backup ssh jq sqlite3 pg_dump pg_restore
 check "backup without restic exits 5" "$([ "$RC" = 5 ]; echo $?)"
 check "backup without restic names restic and nix-shell" "$(printf '%s' "$ERR" | grep -q 'restic' && printf '%s' "$ERR" | grep -q 'nix-shell -p'; echo $?)"
 check "backup without restic writes nothing" "$(nothing_written; echo $?)"
 
 # 1, 2: the case that happened: everything but sqlite3.
-run backup-no-sqlite backup ssh restic jq dolt
+run backup-no-sqlite backup ssh restic jq pg_dump pg_restore
 check "backup without sqlite3 exits 5" "$([ "$RC" = 5 ]; echo $?)"
 check "backup without sqlite3 names sqlite3" "$(printf '%s' "$ERR" | grep -q 'sqlite3'; echo $?)"
 check "backup without sqlite3 writes nothing" "$(nothing_written; echo $?)"
+
+# 1, 2: no pg_dump or pg_restore: refuses before anything is written.
+run backup-no-pg backup ssh restic jq sqlite3
+check "backup without pg_dump exits 5" "$([ "$RC" = 5 ]; echo $?)"
+check "backup without pg_dump names pg_dump and pg_restore" "$(printf '%s' "$ERR" | grep -q 'pg_dump' && printf '%s' "$ERR" | grep -q 'pg_restore'; echo $?)"
+check "backup without pg_dump writes nothing" "$(nothing_written; echo $?)"
 
 # 1: init and verify need the tunnel and restic.
 run init-no-ssh init restic

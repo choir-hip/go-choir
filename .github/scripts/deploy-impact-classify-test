@@ -263,7 +263,7 @@ assert_contains "$dolt_ops_output" "deploy_active_vm_refresh=false"
 assert_not_contains "$dolt_ops_output" "unknown deployed path"
 
 # Operator drill and script tests: not deployed.
-dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/off-host-backup-dolt-snapshot-test.sh")"
+dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/off-host-backup-pg-test.sh")"
 assert_contains "$dolt_ops_tooling_output" "deploy_needed=false"
 
 # D2 guest release metadata: the policy file and the floor list are inputs of

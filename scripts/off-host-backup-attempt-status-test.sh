@@ -37,19 +37,14 @@ fails=0
 setup() { # name, restic mode for backup and check: ok | kill9 | term | killbash
   R="$WORK/$1"; local root="$R/root"
   mkdir -p "$R/bin" "$root/platform-artifacts" "$root/secrets" "$root/vm-state" \
-    "$root/platform-dolt/platform/.dolt" "$root/corpus-dolt/.dolt" "$R/sec"
-  for t in ssh sqlite3 dolt; do printf '#!/bin/sh\nexit 0\n' > "$R/bin/$t"; done
+    "$R/sec"
+  for t in ssh sqlite3; do printf '#!/bin/sh\nexit 0\n' > "$R/bin/$t"; done
+  # pg_dump writes its -f file; pg_restore --list prints two entries.
+  printf '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do [ "$1" = -f ] && { echo dump > "$2"; exit 0; }; shift; done\nexit 1\n' > "$R/bin/pg_dump"
+  printf '#!/bin/sh\necho "; header"\necho "1; 0 0 TABLE public t choir"\necho "2; 0 0 TABLE public u choir"\n' > "$R/bin/pg_restore"
+  printf pw > "$R/sec/pg-app-password"
   printf '#!/bin/sh\ncat >/dev/null\necho "[]"\n' > "$R/bin/curl"
   printf '#!/bin/sh\n[ "$1" = show ] && echo 3221225472\nexit 0\n' > "$R/bin/systemctl"
-  cat > "$R/bin/btrfs" <<'EOF'
-#!/bin/sh
-case "$1 $2" in
-  "subvolume show") exit 0 ;;
-  "subvolume snapshot") mkdir -p "$5"; exit 0 ;;
-  "subvolume delete") rm -rf "$3"; exit 0 ;;
-esac
-exit 1
-EOF
   cat > "$R/bin/restic" <<EOF
 #!/usr/bin/env bash
 case " \$* " in *" backup "*|*" check "*) ;; *) exit 0 ;; esac
@@ -73,7 +68,7 @@ seed_ok() { # a previous night's success and verify
 }
 run() { # subcommand
   OUT="$(PATH="$R/bin:$PATH" OFFHOST_DATA_ROOT="$R/root" OFFHOST_SECRETS_DIR="$R/sec" \
-    OFFHOST_DOLT_ROOT_PASSWORD_FILE="$R/sec/none" OFFHOST_NO_TUNNEL=1 OFFHOST_MIN_FREE_GIB=0 \
+    OFFHOST_PG_PASSWORD_FILE="$R/sec/pg-app-password" OFFHOST_NO_TUNNEL=1 OFFHOST_MIN_FREE_GIB=0 \
     bash "$SCRIPT" "$1" 2>&1)"; RC=$?
 }
 field() { jq -r ".$1 // \"\"" "$ST"; }

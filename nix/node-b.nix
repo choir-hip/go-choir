@@ -217,7 +217,16 @@ let
   # that exists only here and in the owner's offline copy; node-a holds
   # ciphertext in an append-only rest-server reached through a restricted SSH
   # port forward (nix/node-a-choir-backup-target.nix, applied by node-a's own
-  # agent, never by us). DISABLED: nothing below exists until `enable` is true.
+  # agent, never by us). The units below exist only while `enable` is true.
+  #
+  # PostgreSQL replaced Dolt in this backup at the data system cutover (phase
+  # 2 item I7): before restic runs, the script pg_dumps the `control` and
+  # `graph` databases (custom format, role choir on 127.0.0.1, password via the
+  # pg-app-password credential) into the staging area and proves each dump with
+  # `pg_restore --list`; a failed dump ends the run partial (status 3). The
+  # 15:17 2026-10-30 manual pg_dump took about 8 minutes and was 2.4 GB
+  # (control) and 312 MB (graph) compressed. The Dolt sections, their
+  # credential and the Dolt tools are deleted.
   #
   # Enable procedure (all of it before flipping `enable`; mutation class red,
   # so it then goes through the Landing Loop):
@@ -239,12 +248,11 @@ let
   offHostBackup = {
     # On 2026-10-20 after two supervised runs and a passing restore drill
     # (docs/reports/off-host-restore-drill-2026-10-20.md); owner approved
-    # node-a as the target the same day.
-    # Off during the data system cutover (owner, 2026-10-30): the script's
-    # Dolt sections are retired and the PostgreSQL backup is phase 2 item I7.
-    # The units below disappear while this is false. Rollback: true (backs up
-    # the images and the tape files, skips Dolt).
-    enable = false;
+    # node-a as the target the same day. Off during the data system cutover
+    # (owner, 2026-10-30) while the Dolt sections were retired; on again with
+    # the PostgreSQL dumps (phase 2 item I7). Rollback: false (the units
+    # disappear; nothing on node-a is touched).
+    enable = true;
     host = "51.81.93.94"; # node-a (docs/node-a-shared-host.md)
     sshPort = 22;
     sshUser = "choir-backup";
@@ -253,7 +261,13 @@ let
     restUser = "nodeb";
     quotaGiB = 450; # must match the node-a module's quotaGiB
     uploadLimitKiB = 25000; # about 200 Mbit/s; 0 = unlimited
-    minFreeGiB = 40; # disk guard: Dolt backup copies and image clones need room
+    # Disk guard. The staging area holds the PostgreSQL dumps (about 3 GB at
+    # 2026-10-30, growing with the data; dumps are removed after each run) and
+    # the reflink image clones, which pin copy-on-write extents while the run
+    # lasts. 20 GiB is about three times the dumps' size at the cutover plus
+    # room for the restic cache and the pinned extents; the Dolt copies that
+    # needed 40 are gone. Raise it as the dumps grow.
+    minFreeGiB = 20;
     # Guest data.img images in the nightly run: the paper and the owner
     # computer only. A computer rebuilds from its tape by design; an image
     # is a recovery-time hedge, and the tracers' test computers need none
@@ -271,7 +285,7 @@ let
   offHostBackupScript = pkgs.writeShellScript "go-choir-offhost-backup"
     (builtins.readFile ../scripts/off-host-backup.sh);
   offHostBackupEnv = [
-    "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.findutils pkgs.util-linux pkgs.jq pkgs.curl pkgs.restic pkgs.openssh pkgs.sqlite pkgs.dolt pkgs.apacheHttpd pkgs.systemd pkgs.btrfs-progs ]}"
+    "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.findutils pkgs.util-linux pkgs.jq pkgs.curl pkgs.restic pkgs.openssh pkgs.sqlite pkgs.postgresql_17 pkgs.apacheHttpd pkgs.systemd ]}"
     "OFFHOST_STATE_DIR=${offHostBackup.stateDir}"
     "OFFHOST_SECRETS_DIR=${offHostBackup.secretsDir}"
     "OFFHOST_HOST=${offHostBackup.host}"
@@ -1976,7 +1990,9 @@ in
       # only with nix-daemon builds, checkpointd and front-importance, and
       # outscores them by size.
       OOMScoreAdjust = 1000;
-      LoadCredential = offHostBackupCredentials;
+      # pg_dump's password (the application role) goes to the daily run only,
+      # from the file the services' credential also names.
+      LoadCredential = offHostBackupCredentials ++ [ "pg-app-password:${pgPasswordFile}" ];
     } // {
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
