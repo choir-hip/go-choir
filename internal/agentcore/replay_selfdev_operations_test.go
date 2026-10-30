@@ -71,10 +71,10 @@ func selfdevReplayRuntime(t *testing.T, computerID string) (*Runtime, *selfdev.S
 		store:         live,
 		eventAppender: appender,
 	}
-	// A fresh probe computer: the platform has published no base, so the
-	// probe replays the full chain. The fake serves the chain as it stands
-	// when the probe runs.
-	rt.restoreBaseSource = &lazyChainBaseSource{cas: cas}
+	// A fresh probe computer: the tape holds no snapshot, so the probe
+	// replays the full chain. The fake serves the chain as it stands when the
+	// probe runs.
+	rt.restoreTape = newRestoreTapeFake(cas.snapshot)
 	return rt, operations
 }
 
@@ -89,22 +89,6 @@ func (r pinnedPayloadReader) FetchPayload(_ context.Context, _, artifactDigest s
 	return nil, fmt.Errorf("artifact %s is not pinned", artifactDigest)
 }
 
-// lazyChainBaseSource is restoreBaseFake with no advertised base whose tail is
-// whatever the chain holds when asked.
-type lazyChainBaseSource struct {
-	restoreBaseFake
-	cas *derivableChainCAS
-}
-
-func (s *lazyChainBaseSource) Watermark(context.Context, string) (uint64, string, error) {
-	return 0, "", nil
-}
-
-func (s *lazyChainBaseSource) TailPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]computerevent.DurableEvent, error) {
-	s.restoreBaseFake.events = s.cas.snapshot()
-	return s.restoreBaseFake.TailPage(ctx, computerID, afterSequence, pageSize)
-}
-
 // TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence
 // pins docs/problems/selfdev-operations-replay-not-equivalent-2026-10-23.md.
 // Store.RecordIntentError used to stamp last_intent_error (and updated_at)
@@ -113,8 +97,8 @@ func (s *lazyChainBaseSource) TailPage(ctx context.Context, computerID string, a
 // store/project.go) had no such column. The live self_development_operations
 // table then differed from the table replayed from the tape, so the
 // replay-completeness witness reported not_equivalent
-// (dolt:texture:table:self_development_operations and
-// dolt:texture:content_root) and the computer was replay-ineligible.
+// (sqlite:texture:table:self_development_operations and
+// sqlite:texture:content_root) and the computer was replay-ineligible.
 func TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -154,7 +138,7 @@ func TestSelfDevelopmentIntentErrorStampIsNotOnTheTapeAndBreaksReplayEquivalence
 			defer probe.close()
 			row := func(db *sql.DB) string {
 				var lastIntentError, updatedAt string
-				if err := db.QueryRow(`SELECT last_intent_error, CAST(updated_at AS CHAR) FROM self_development_operations WHERE operation_id=?`, opened.OperationID).Scan(&lastIntentError, &updatedAt); err != nil {
+				if err := db.QueryRow(`SELECT last_intent_error, CAST(updated_at AS TEXT) FROM self_development_operations WHERE operation_id=?`, opened.OperationID).Scan(&lastIntentError, &updatedAt); err != nil {
 					t.Fatal(err)
 				}
 				return fmt.Sprintf("last_intent_error=%q updated_at=%s", lastIntentError, updatedAt)

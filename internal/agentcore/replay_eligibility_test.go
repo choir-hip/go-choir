@@ -24,7 +24,7 @@ func TestReplayEligibilityAcceptsMatchingNonNilHeadsAndProjection(t *testing.T) 
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	observations := replayManifestObservationSet()
 	for i := range observations.Observations {
-		if observations.Observations[i].Key == "dolt:texture:table:computer_event_index" {
+		if observations.Observations[i].Key == "sqlite:texture:table:computer_event_index" {
 			observations.Observations[i].Value = "content"
 		}
 	}
@@ -45,11 +45,11 @@ func replayManifestObservationSet() computerversion.ObservationSet {
 		observations = append(observations,
 			computerversion.Observation{
 				Kind: computerversion.ObservationDoltHead,
-				Key:  "dolt:texture:schema:" + table, Value: "schema:" + table,
+				Key:  "sqlite:texture:schema:" + table, Value: "schema:" + table,
 			},
 			computerversion.Observation{
 				Kind: computerversion.ObservationDoltHead,
-				Key:  "dolt:texture:table:" + table, Value: emptyDoltTableHash,
+				Key:  "sqlite:texture:table:" + table, Value: computerversion.EmptyTableDigest(table),
 			},
 		)
 	}
@@ -69,8 +69,8 @@ func TestReplayEligibilityRejectsMissingDeclaredTables(t *testing.T) {
 
 func TestReplayEligibilityRejectsRetiredAndUnknownTables(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
-	retired := computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:app_adoptions", Value: "content"}
-	unknown := computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:legacy_state", Value: "content"}
+	retired := computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:app_adoptions", Value: "content"}
+	unknown := computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:legacy_state", Value: "content"}
 	live := computerversion.ObservationSet{Observations: []computerversion.Observation{retired, unknown}}
 	replay := computerversion.ObservationSet{Observations: []computerversion.Observation{retired}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
@@ -89,7 +89,7 @@ func TestReplayEligibilityRejectsRetiredAndUnknownTables(t *testing.T) {
 func TestReplayEligibilityRejectsNonEmptyUnsupportedDirectWrites(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	live := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:co_super_slots", Value: "non-empty",
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:co_super_slots", Value: "non-empty",
 	}}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
 	eligibility := replayEligibility(head, head, live, live, result)
@@ -104,8 +104,8 @@ func TestReplayEligibilityRejectsNonEmptyUnsupportedDirectWrites(t *testing.T) {
 func TestReplayEligibilityRejectsNonEmptyWirePublishDebounceState(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	observations := computerversion.ObservationSet{Observations: []computerversion.Observation{
-		{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:wire_publish_debounce_entries", Value: "pending-batch"},
-		{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:wire_publish_debounce_state", Value: "dispatch-index"},
+		{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:wire_publish_debounce_entries", Value: "pending-batch"},
+		{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:wire_publish_debounce_state", Value: "dispatch-index"},
 	}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
 	eligibility := replayEligibility(head, head, observations, observations, result)
@@ -120,10 +120,10 @@ func TestReplayEligibilityRejectsNonEmptyWirePublishDebounceState(t *testing.T) 
 func TestReplayEligibilityRejectsSchemaDrift(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	live := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:schema:events", Value: "live-schema",
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:schema:events", Value: "live-schema",
 	}}}
 	replay := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:schema:events", Value: "replay-schema",
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:schema:events", Value: "replay-schema",
 	}}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
 	eligibility := replayEligibility(head, head, live, replay, result)
@@ -138,7 +138,7 @@ func TestReplayEligibilityRejectsSchemaDrift(t *testing.T) {
 func TestReplayEligibilityRejectsUnknownTableEvenWhenBothProjectionsContainIt(t *testing.T) {
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	observations := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:unclassified", Value: emptyDoltTableHash,
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:unclassified", Value: computerversion.EmptyTableDigest("unclassified"),
 	}}}
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
 	eligibility := replayEligibility(head, head, observations, observations, result)
@@ -194,7 +194,7 @@ func TestReplayEligibilityOptionalEventTable(t *testing.T) {
 		set := replayManifestObservationSet()
 		kept := set.Observations[:0]
 		for _, o := range set.Observations {
-			if o.Key != "dolt:texture:schema:choir_events" && o.Key != "dolt:texture:table:choir_events" {
+			if o.Key != "sqlite:texture:schema:choir_events" && o.Key != "sqlite:texture:table:choir_events" {
 				kept = append(kept, o)
 			}
 		}
@@ -204,8 +204,8 @@ func TestReplayEligibilityOptionalEventTable(t *testing.T) {
 	with := func(content string) computerversion.ObservationSet {
 		set := without()
 		set.Observations = append(set.Observations,
-			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:schema:choir_events", Value: "schema:choir_events"},
-			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:choir_events", Value: content},
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:schema:choir_events", Value: "schema:choir_events"},
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:choir_events", Value: content},
 		)
 		return set
 	}

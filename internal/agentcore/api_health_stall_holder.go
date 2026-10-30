@@ -187,5 +187,8 @@ func compactFrame(fn string) string {
 		}
 	}
 	fn = strings.TrimPrefix(fn, choirModulePrefix)
-	return strings.TrimPrefix(fn, engineModulePrefix)
+	if strings.HasPrefix(fn, engineModulePrefix) {
+		fn = strings.TrimLeft(strings.TrimPrefix(fn, engineModulePrefix), "./")
+	}
+	return fn
 }

@@ -130,12 +130,6 @@ func TestPlatformUpdatePushAppliesAndRestores(t *testing.T) {
 		t.Fatalf("route slot after A: gen=%d kind=%s", slot.Generation, latestReceipt.Kind)
 	}
 
-	// Pin the advertised base at update-A's head: restore must reach back to a
-	// historical checkpoint while the live chain continues forward.
-	if err := fx.baseSource.pinAtHead(ctx, reportA.AppliedEventHead); err != nil {
-		t.Fatalf("pin base at update-A head: %v", err)
-	}
-
 	// Update 2: advance to release B (SPA file change).
 	offerB := fx.mintPlatformUpdateOffer(t, "update-b", "<html>release-b</html>", fx.currentHead(t))
 	reportB, err := fx.rt.ApplyPlatformUpdate(ctx, offerB)

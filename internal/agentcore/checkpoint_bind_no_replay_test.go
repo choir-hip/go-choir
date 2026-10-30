@@ -3,8 +3,8 @@ package agentcore
 // The checkpoint bind without a replay
 // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 and 4.6
 // slice 1). The bind reads the head and the live witness under one append
-// hold, pins the advertised base and publishes. It installs no base, replays
-// no tape and writes no scratch: the replay proved derivability early, and
+// hold and publishes. It installs no snapshot, replays no tape and writes no
+// scratch: the replay proved derivability early, and
 // restore proves it again whenever the checkpoint is used. Written before the
 // code. Ways this could fail:
 //
@@ -16,46 +16,17 @@ package agentcore
 //  3. a checkpoint the bind published cannot be restored to;
 //  4. a live store with a non-derivable row is refused at the bind (the early
 //     gate is withdrawn), or is restorable: restore alone must refuse it;
-//  5. the bind forgets to pin the advertised base, so a restore to an old
-//     checkpoint has no start point;
-//  6. a base source that cannot answer is treated as "no base": the
-//     checkpoint is published unpinned.
 
 import (
 	"context"
-	"errors"
-	"io"
 	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
-
-// countingBaseSource counts the blobs a caller downloads: an installed base
-// is a download.
-type countingBaseSource struct {
-	*restoreBaseFake
-	mu        sync.Mutex
-	downloads int
-}
-
-func (c *countingBaseSource) DownloadBlob(ctx context.Context, computerID, baseRef string, dst io.Writer) error {
-	c.mu.Lock()
-	c.downloads++
-	c.mu.Unlock()
-	return c.restoreBaseFake.DownloadBlob(ctx, computerID, baseRef, dst)
-}
-
-func (c *countingBaseSource) downloadCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.downloads
-}
 
 // noReplayFixture is a checkpoint fixture whose volume cannot hold any replay
 // scratch (any probe refuses by name) and whose probe seam records a probe,
@@ -63,7 +34,6 @@ func (c *countingBaseSource) downloadCount() int {
 type noReplayFixture struct {
 	*checkpointHeadFixture
 	volume *fakeScratchVolume
-	source *countingBaseSource
 	tmp    string
 	probed bool
 }
@@ -79,8 +49,6 @@ func newNoReplayFixture(t *testing.T, computerID string) *noReplayFixture {
 	nf.volume = &fakeScratchVolume{avail: replayScratchTestGiB} // under the 2 GiB reserve: a probe refuses
 	fx.rt.replayScratchUsage = nf.volume.usage
 	fx.rt.replayProbeAfterCapture = func() { nf.probed = true }
-	nf.source = &countingBaseSource{restoreBaseFake: fx.base}
-	fx.rt.restoreBaseSource = nf.source
 	return nf
 }
 
@@ -112,9 +80,8 @@ func (nf *noReplayFixture) bind(t *testing.T) CheckpointBindReport {
 	return report
 }
 
-// Failure modes 1 and 5: the bind creates no scratch and installs no base,
-// and still pins the advertised base under the checkpoint's head.
-func TestCheckpointBindCreatesNoScratchAndInstallsNoBase(t *testing.T) {
+// Failure mode 1: the bind creates no scratch and installs no snapshot.
+func TestCheckpointBindCreatesNoScratchAndInstallsNoSnapshot(t *testing.T) {
 	nf := newNoReplayFixture(t, "computer-bind-no-scratch")
 	headBefore := nf.liveHead(t)
 
@@ -126,8 +93,8 @@ func TestCheckpointBindCreatesNoScratchAndInstallsNoBase(t *testing.T) {
 	if calls := nf.volume.callCount(); calls != 0 {
 		t.Fatalf("the bind admitted a scratch against the volume %d times; it needs none", calls)
 	}
-	if downloads := nf.source.downloadCount(); downloads != 0 {
-		t.Fatalf("the bind downloaded %d base blobs; it installs no base", downloads)
+	if reads := nf.base.chunkReadCount(); reads != 0 {
+		t.Fatalf("the bind read %d snapshot chunks; it installs no snapshot", reads)
 	}
 	if traces := nf.scratchTraces(t); len(traces) != 0 {
 		t.Fatalf("the bind left scratch traces: %v", traces)
@@ -138,33 +105,6 @@ func TestCheckpointBindCreatesNoScratchAndInstallsNoBase(t *testing.T) {
 	published := report.PublishedCheckpoint.Checkpoint.Request
 	if published.AcceptedEventHead != headBefore {
 		t.Fatalf("published head %s, want the head the bind read %s", published.AcceptedEventHead, headBefore)
-	}
-	// The owner-recovery bind is the cadence's: a checkpoint every few minutes
-	// must not pin a base each (a pin has no release path until the retention
-	// slice; docs/design/apply-checkpoint-without-replay-2026-10-26.md, Build
-	// findings). Apply binds pin (TestApplyBindPinsTheAdvertisedBase...).
-	if len(nf.base.pins) != 0 {
-		t.Fatalf("an owner-recovery (cadence) bind pinned bases %v; pins are for apply checkpoints", nf.base.pins)
-	}
-}
-
-// Failure mode 5, for the apply: its bind pins the advertised base under the
-// checkpoint's head, so a restore to that checkpoint, or a rollback of that
-// apply, still has a start point after the advertised base moves on.
-func TestApplyBindPinsTheAdvertisedBaseUnderTheCheckpointHead(t *testing.T) {
-	nf := newNoReplayFixture(t, "computer-apply-bind-pins")
-	ctx := context.Background()
-	manifest, err := nf.rt.ensureCheckpointReleaseManifest(ctx, nf.rt.cfg.ComputerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	binding, _, err := nf.rt.bindCheckpointAtHead(ctx, nf.rt.cfg.ComputerID, manifest.ContentDigest, manifest.Files, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := nf.base.descriptor.BlobSHA256 + " " + projectionbase.CheckpointPinReference(binding.Head.CanonicalEventHead)
-	if len(nf.base.pins) != 1 || nf.base.pins[0] != want {
-		t.Fatalf("apply bind pins %v, want [%q]", nf.base.pins, want)
 	}
 }
 
@@ -183,9 +123,9 @@ func TestCheckpointBindWitnessEqualsReplayPathWitness(t *testing.T) {
 	if !probe.Result.Equivalent() {
 		t.Fatal("replay path: live and replay are not equivalent")
 	}
-	// The bind publishes the v2 hash witness (S3); the replay path's is the
-	// same witness read from a tape replay.
-	want := tapeReplayV2Witness(t, nf.checkpointHeadFixture)
+	// The bind publishes the v3 witness; the replay path's is the same
+	// witness read from a tape replay.
+	want := tapeReplayWitness(t, nf.checkpointHeadFixture)
 	nf.volume.set(replayScratchTestGiB)
 	nf.rt.replayProbeAfterCapture = func() { nf.probed = true }
 	callsBefore := nf.volume.callCount()
@@ -248,52 +188,17 @@ func TestCheckpointBindOfNonDerivableStoreRefusesAtRestore(t *testing.T) {
 	}
 }
 
-// Failure mode 5: a computer the platform never published a base for binds
-// unpinned (restore then replays its bounded chain from genesis), as the
-// probe did.
-func TestCheckpointBindWithoutAdvertisedBaseBindsUnpinned(t *testing.T) {
-	nf := newNoReplayFixture(t, "computer-bind-no-base")
-	nf.base.emptyWatermark = true
+// A computer whose tape holds no snapshot binds the same checkpoint (restore
+// then replays its bounded chain from genesis), as the probe does.
+func TestCheckpointBindWithoutASnapshotRestoresFromGenesis(t *testing.T) {
+	nf := newNoReplayFixture(t, "computer-bind-no-snapshot")
+	nf.base.snapshotDigest = ""
 
 	report := nf.bind(t)
 
-	if len(nf.base.pins) != 0 {
-		t.Fatalf("pins %v with no advertised base", nf.base.pins)
-	}
 	result, err := nf.restore(t, report.PublishedCheckpoint.Checkpoint)
 	if err != nil || !result.WitnessMatched {
-		t.Fatalf("restore to the unpinned checkpoint: %v %#v", err, result)
-	}
-}
-
-// Failure mode 6: a base source that fails to answer is not "no base". An
-// apply's checkpoint (which pins) is not published unpinned; the bind fails and
-// the caller retries. The cadence's bind pins nothing, so it does not need the
-// source and still publishes.
-func TestApplyCheckpointBindRefusesWhenTheBaseSourceCannotAnswer(t *testing.T) {
-	nf := newNoReplayFixture(t, "computer-bind-source-down")
-	nf.base.watermarkErr = errors.New("corpusd unreachable")
-	ctx := context.Background()
-	manifest, err := nf.rt.ensureCheckpointReleaseManifest(ctx, nf.rt.cfg.ComputerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	published := 0
-	publish := func(context.Context, checkpointBinding) (selfdevprotocol.CheckpointResponse, error) {
-		published++
-		return selfdevprotocol.CheckpointResponse{}, nil
-	}
-
-	if _, _, err := nf.rt.bindCheckpointAtHead(ctx, nf.rt.cfg.ComputerID, manifest.ContentDigest, manifest.Files, publish); err == nil {
-		t.Fatal("an apply bind that could not read the advertised base went on")
-	}
-	if published != 0 {
-		t.Fatalf("%d checkpoints published without a base answer", published)
-	}
-
-	report, err := nf.rt.BindCheckpointRestoreSet(ctx, nf.rt.cfg.ComputerID)
-	if err != nil || report.PublishedCheckpoint == nil {
-		t.Fatalf("the cadence's bind pins nothing and needs no base source: %v", err)
+		t.Fatalf("restore to the checkpoint with no snapshot: %v %#v", err, result)
 	}
 }
 

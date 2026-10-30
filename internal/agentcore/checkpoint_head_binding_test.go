@@ -126,12 +126,12 @@ type checkpointHeadFixture struct {
 	cas      *replayEventCAS
 	live     *choirstore.Store
 	platform *checkpointPlatformFake
-	base     *restoreBaseFake
+	base     *restoreTapeFake
 	genesis  string
 }
 
 // newCheckpointHeadFixture is a computer with a genesis chain, a seeded W=1
-// base, a served release, and owner-recovery platform control wired to the
+// snapshot, a served release, and owner-recovery platform control wired to the
 // fake authority.
 func newCheckpointHeadFixture(t *testing.T, computerID string) *checkpointHeadFixture {
 	t.Helper()
@@ -172,7 +172,7 @@ func newCheckpointHeadFixture(t *testing.T, computerID string) *checkpointHeadFi
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	WithOwnerRecoveryControl(selfdev.GuestCredentialsWithCapability(server.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), publicKey))(rt)
-	fx := &checkpointHeadFixture{rt: rt, cas: cas, live: live, platform: platform, base: rt.restoreBaseSource.(*restoreBaseFake), genesis: genesis}
+	fx := &checkpointHeadFixture{rt: rt, cas: cas, live: live, platform: platform, base: rt.restoreTape.(*restoreTapeFake), genesis: genesis}
 	t.Cleanup(func() {
 		if fx.rt.store != nil {
 			_ = fx.rt.store.Close()
@@ -193,7 +193,6 @@ func (fx *checkpointHeadFixture) appendDeskEvent(t *testing.T, key string) {
 	if _, err := fx.rt.eventAppender.AppendNew(context.Background(), update, computerevent.TransitionInput{TargetStateCommitment: commitment}, nil); err != nil {
 		t.Fatalf("desk append: %v", err)
 	}
-	fx.base.events = fx.cas.events
 }
 
 func (fx *checkpointHeadFixture) liveHead(t *testing.T) string {
@@ -209,7 +208,6 @@ func (fx *checkpointHeadFixture) liveHead(t *testing.T) string {
 // source sees the chain as it is now (events appended after setup included).
 func (fx *checkpointHeadFixture) restore(t *testing.T, checkpoint selfdevprotocol.Checkpoint) (RematerializeReport, error) {
 	t.Helper()
-	fx.base.events = fx.cas.events
 	return fx.rt.RematerializeFromTape(context.Background(), fx.rt.cfg.ComputerID, checkpoint)
 }
 
@@ -263,9 +261,6 @@ func TestCheckpointBindBusyComputerPublishesRestorableHead(t *testing.T) {
 	if report.BoundEventHead != published.Request.AcceptedEventHead {
 		t.Fatalf("bind report head %s is not the published head %s", report.BoundEventHead, published.Request.AcceptedEventHead)
 	}
-	if len(fx.base.pins) != 0 {
-		t.Errorf("a cadence bind pinned bases %v; pins are for apply checkpoints", fx.base.pins)
-	}
 
 	result, err := fx.restore(t, published)
 	if err != nil {
@@ -283,8 +278,8 @@ func TestCheckpointBindIdleComputerBindsCapturedHead(t *testing.T) {
 	fx := newCheckpointHeadFixture(t, computerID)
 	fx.appendDeskEvent(t, "desk-turn-before-checkpoint")
 	before := fx.liveHead(t)
-	// The bind's v2 witness is the tape replay's at the same head (S3).
-	probeWitness := tapeReplayV2Witness(t, fx)
+	// The bind's v3 witness is the tape replay's at the same head.
+	probeWitness := tapeReplayWitness(t, fx)
 
 	report, err := fx.rt.BindCheckpointRestoreSet(context.Background(), computerID)
 	if err != nil {

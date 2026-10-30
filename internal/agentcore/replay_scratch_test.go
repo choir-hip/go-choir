@@ -29,10 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
@@ -189,18 +187,24 @@ func TestReplayProbeRefusesScratchItCannotHold(t *testing.T) {
 	}
 }
 
-// The estimate counts the base install peak (download plus unpack) and the
-// tail; free space that covers the reserve but not the base refuses.
-func TestReplayScratchEstimateCountsTheBaseInstallPeak(t *testing.T) {
+// The estimate counts the installed snapshot and its replayed copy: twice the
+// live state file plus its WAL; free space that covers the reserve but not the
+// estimate refuses.
+func TestReplayScratchEstimateCountsTwiceTheLiveStore(t *testing.T) {
 	rt, _, _ := replayScratchRuntime(t, "computer-scratch-estimate", 3)
-	descriptor := rt.restoreBaseSource.(*restoreBaseFake).descriptor
+	state := choirstore.StateDBPath(rt.store.Path())
+	var size uint64
+	for _, name := range []string{state, state + "-wal"} {
+		if info, err := os.Stat(name); err == nil {
+			size += uint64(info.Size())
+		}
+	}
 	need, err := rt.replayScratchEstimate(context.Background(), "computer-scratch-estimate")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := 2*uint64(descriptor.BlobSizeBytes) + 3*replayScratchPerEventBytes
-	if need != want {
-		t.Fatalf("estimate = %d, want 2 x blob (%d) + 3 tail events x %d = %d", need, descriptor.BlobSizeBytes, replayScratchPerEventBytes, want)
+	if size == 0 || need != 2*size {
+		t.Fatalf("estimate = %d, want 2 x the live store (%d bytes)", need, size)
 	}
 	volume := &fakeScratchVolume{avail: replayScratchReserve(100*replayScratchTestGiB) + need - 1}
 	rt.replayScratchUsage = volume.usage
@@ -297,8 +301,7 @@ func TestReplayProbeBaseTailWitnessEqualsGenesisWitness(t *testing.T) {
 	if fromBase.BaseSequence != 1 || fromBase.TailEventsApplied != 5 {
 		t.Fatalf("base probe replayed base=%d tail=%d, want base 1 and a 5-event tail", fromBase.BaseSequence, fromBase.TailEventsApplied)
 	}
-	rt.restoreBaseSource = restoreBaseFakeFor(rt.restoreBaseSource.(*restoreBaseFake).descriptor, nil, cas.events)
-	rt.restoreBaseSource.(*restoreBaseFake).emptyWatermark = true
+	rt.restoreTape = newRestoreTapeFake(func() []computerevent.DurableEvent { return cas.events })
 	fromGenesis, err := rt.ReplayCompleteness(ctx, computerID)
 	if err != nil {
 		t.Fatalf("genesis probe: %v", err)
@@ -362,32 +365,5 @@ func TestReplayScratchAdmissionAndWatchUseTheVolumeReserve(t *testing.T) {
 	}
 	if _, err := rt.ReplayCompleteness(context.Background(), "computer-scratch-pct"); !errors.Is(err, ErrReplayScratchInsufficient) {
 		t.Fatalf("probe in flight with 5 GiB free on a 100 GiB volume: %v, want ErrReplayScratchInsufficient", err)
-	}
-}
-
-// A parts-form base's descriptor size is its manifest's; the scratch the
-// probe needs is the store the manifest lists (review 370).
-func TestReplayScratchEstimateCountsAPartsBaseStoreNotItsManifest(t *testing.T) {
-	rt, _, _ := replayScratchRuntime(t, "computer-scratch-parts", 0)
-	fake := rt.restoreBaseSource.(*restoreBaseFake)
-	digest := strings.Repeat("a", 64)
-	manifest, err := basemanifest.Marshal(basemanifest.Manifest{Entries: []basemanifest.Entry{
-		{Path: "db", Type: "dir", Mode: 0o755},
-		{Path: "db/a", Type: "file", Mode: 0o644, Size: 7 << 20, SHA256: digest},
-		{Path: "db/b", Type: "file", Mode: 0o644, Size: 5 << 20, SHA256: digest},
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	fake.blob = manifest
-	fake.descriptor.Format = projectionbase.FormatParts
-	fake.descriptor.BlobSizeBytes = int64(len(manifest))
-	need, err := rt.replayScratchEstimate(context.Background(), "computer-scratch-parts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := 2 * uint64(12<<20)
-	if need != want {
-		t.Fatalf("estimate = %d, want 2 x the listed store bytes = %d (manifest is %d)", need, want, len(manifest))
 	}
 }
