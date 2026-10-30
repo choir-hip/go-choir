@@ -1,5 +1,3 @@
-//go:build cutover_migrate
-
 package autoputer
 
 import (
@@ -18,10 +16,6 @@ import (
 // exists and the SQLite state file does not. The migrator only reads the Dolt
 // workspace and keeps it until the cutover deletes it, so a failed migration
 // leaves the old data untouched and the next boot retries.
-//
-// This file is built with the cutover_migrate tag until WP-F's package is on
-// the integration branch; FP0 drops the tag and migrate_hook_default.go at
-// merge.
 func migrateLegacyStoreIfNeeded(ctx context.Context, storePath string) error {
 	statePath := store.StateDBPath(storePath)
 	if _, err := os.Stat(statePath); err == nil {
