@@ -2,15 +2,19 @@ package platform
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 )
 
@@ -80,5 +84,45 @@ func TestFileCASChunkWriteKeepsTheHostFreeSpaceFloor(t *testing.T) {
 
 	if got := fileCASFreeFloorBytes(100 << 30); got != 8<<30 {
 		t.Fatalf("floor of a 100 GiB volume = %d, want the 8 GiB minimum", got)
+	}
+}
+
+// A root that names a chunk the host does not hold is refused, so a guest
+// whose cache vouched for a collected chunk sends it again instead of
+// recording a file nobody can restore.
+func TestFileCASRootRefusesAManifestNamingAMissingChunk(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	service := NewService(store, filepath.Join(root, "artifacts"), "")
+	handler := NewHandler(service)
+	held := []byte("held chunk")
+	heldSum := sha256.Sum256(held)
+	heldDigest := hex.EncodeToString(heldSum[:])
+	if err := service.PinFileChunk(context.Background(), "computer-a", heldDigest, held); err != nil {
+		t.Fatal(err)
+	}
+	missingSum := sha256.Sum256([]byte("never sent"))
+	missingDigest := hex.EncodeToString(missingSum[:])
+	putRoot := func(chunks ...string) (int, string) {
+		manifest, err := filecas.BuildManifest("computer-a", []filecas.FileEntry{{Path: "f", Mode: 0o600, Size: 1, Chunks: chunks}}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := json.Marshal(manifest)
+		body, _ := json.Marshal(fileCASRootRequest{ComputerID: "computer-a", Manifest: string(data), HeadSequence: 1})
+		req := httptest.NewRequest(http.MethodPut, "/internal/computers/files/root", bytes.NewReader(body))
+		req.Header.Set("X-Internal-Caller", "true")
+		result := httptest.NewRecorder()
+		handler.HandleFileCASRoot(result, req)
+		return result.Code, result.Body.String()
+	}
+	if code, body := putRoot(heldDigest, missingDigest); code != http.StatusConflict || !strings.Contains(body, missingDigest) {
+		t.Fatalf("root naming a missing chunk = %d %s, want 409 naming it", code, body)
+	}
+	roots, err := store.LatestFileRoots(context.Background(), "computer-a", 1)
+	if err != nil || len(roots) != 0 {
+		t.Fatalf("a refused root was recorded: %v %v", roots, err)
+	}
+	if code, body := putRoot(heldDigest); code != http.StatusCreated {
+		t.Fatalf("root naming held chunks = %d %s, want 201", code, body)
 	}
 }

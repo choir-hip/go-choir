@@ -852,3 +852,58 @@ func TestFileSyncRebootReusesChunkDigests(t *testing.T) {
 		}
 	}
 }
+
+// A sync whose root is refused has sent chunks no root names; the host
+// collects those after its upload grace. The cache must not vouch for them:
+// the next sync sends them again, and an unchanged tree is skipped only once
+// a root has been recorded.
+func TestFileSyncResendsChunksAfterARefusedRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("contents"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	chunkPuts, refuseRoot := 0, true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/internal/computers/files/chunks/"):
+			chunkPuts++
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodPut && r.URL.Path == "/internal/computers/files/root":
+			if refuseRoot {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	key := make([]byte, 32)
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-test", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := newFileSync(root, server.URL, func(context.Context) (string, error) { return "token", nil }, "computer-test", cipher, func(context.Context) (uint64, error) { return 1, nil }, nil)
+
+	if _, err := service.syncOnce(context.Background()); err == nil {
+		t.Fatal("a refused root reported success")
+	}
+	mu.Lock()
+	refuseRoot = false
+	mu.Unlock()
+	if result, err := service.syncOnce(context.Background()); err != nil || result.chunksUploaded != 1 {
+		t.Fatalf("sync after a refused root = %+v %v, want the chunk sent again", result, err)
+	}
+	if result, err := service.syncOnce(context.Background()); err != nil || result.chunksUploaded != 0 {
+		t.Fatalf("sync after a recorded root = %+v %v, want the unchanged tree skipped", result, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if chunkPuts != 2 {
+		t.Fatalf("%d chunk uploads, want 2", chunkPuts)
+	}
+}

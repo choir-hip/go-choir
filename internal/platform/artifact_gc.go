@@ -154,7 +154,23 @@ type gcCandidate struct {
 	path  string
 	size  int64
 	mtime time.Time
+	// cutoff, when set, is this candidate's own mtime cutoff (a file-CAS
+	// chunk's upload grace); zero means the run's cutoff.
+	cutoff time.Time
 }
+
+// fileCASChunkUploadGrace is how long a chunk no root names is kept from its
+// last write or claim: the time between a chunk upload and the root that
+// declares it. A file sync declares its root at the end of its pass (every
+// 15 minutes) and a snapshot within its time budget (30 minutes by
+// default); a day covers a host outage of hours between the two. A sync that
+// fails drops its cache and sends its chunks again, and the host refuses a
+// root that names a chunk it does not hold, so a longer gap fails loudly. The run's grace still decides which older file roots are live
+// (the owner's file history); this shortens only the wait for chunks that
+// no live root names: a discarded snapshot attempt, or a snapshot dropped
+// from retention. The paper's chunks are tens of GB a snapshot, and a week
+// of them does not fit beside the tape (2026-10-30).
+const fileCASChunkUploadGrace = 24 * time.Hour
 
 // RunArtifactGC performs one reachability sweep across the GC'd artifact
 // namespaces. For each namespace it computes the live set from the
@@ -623,13 +639,17 @@ func (s *Service) classifyFlatDir(ns, dir string, live map[string]struct{}, cuto
 }
 
 func (s *Service) addCandidate(ns, path string, info fs.FileInfo, rep *ArtifactGCNamespaceReport, out *[]gcCandidate) {
+	s.addCandidateWithCutoff(ns, path, info, time.Time{}, rep, out)
+}
+
+func (s *Service) addCandidateWithCutoff(ns, path string, info fs.FileInfo, cutoff time.Time, rep *ArtifactGCNamespaceReport, out *[]gcCandidate) {
 	rel, err := filepath.Rel(s.artifactsRoot, path)
 	if err != nil {
 		return
 	}
 	rep.Eligible++
 	rep.EligibleBytes += info.Size()
-	*out = append(*out, gcCandidate{ns: ns, rel: filepath.ToSlash(rel), path: path, size: info.Size(), mtime: info.ModTime()})
+	*out = append(*out, gcCandidate{ns: ns, rel: filepath.ToSlash(rel), path: path, size: info.Size(), mtime: info.ModTime(), cutoff: cutoff})
 }
 
 // classifyFileCASChunks classifies every file-cas-chunks/<computerID> dir.
@@ -652,6 +672,12 @@ func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, r
 	var out []gcCandidate
 	var warnings []string
 	rootless := 0
+	// Roots stay live by the run's cutoff; an unnamed chunk waits only for
+	// the upload grace (or the run's, when an operator asks for less).
+	chunkCutoff := time.Now().UTC().Add(-fileCASChunkUploadGrace)
+	if cutoff.After(chunkCutoff) {
+		chunkCutoff = cutoff
+	}
 	for _, c := range computers {
 		if err := ctx.Err(); err != nil {
 			return nil, warnings, err
@@ -690,11 +716,11 @@ func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, r
 			if err != nil {
 				return nil
 			}
-			if !info.ModTime().Before(cutoff) {
+			if !info.ModTime().Before(chunkCutoff) {
 				rep.InGrace++
 				return nil
 			}
-			s.addCandidate("file-cas-chunks", path, info, rep, &out)
+			s.addCandidateWithCutoff("file-cas-chunks", path, info, chunkCutoff, rep, &out)
 			return nil
 		})
 		if walkErr != nil && !os.IsNotExist(walkErr) {
@@ -845,6 +871,9 @@ func (s *Service) deleteArtifactCandidates(ctx context.Context, started time.Tim
 // removes it only if it is still a regular file older than the cutoff. A
 // writer that reused (refreshed) it since classification wins.
 func (s *Service) unlinkIfStillUnreachable(c gcCandidate, cutoff time.Time) (string, int64, error) {
+	if !c.cutoff.IsZero() {
+		cutoff = c.cutoff
+	}
 	s.store.casReuseMu.Lock()
 	defer s.store.casReuseMu.Unlock()
 	info, err := os.Lstat(c.path)

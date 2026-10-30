@@ -150,6 +150,15 @@ func (h *Handler) HandleFileCASRoot(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "file storage unavailable"})
 			return
 		}
+		// A root that names a chunk the host does not hold would restore a
+		// file that cannot be read; refuse it so the guest sends it again.
+		if missing, err := h.service.missingFileChunk(r.Context(), input.ComputerID, manifest); err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to check the manifest's chunks"})
+			return
+		} else if missing != "" {
+			writeJSON(w, http.StatusConflict, apiError{Error: "manifest names chunk " + missing + ", which the host does not hold; send it again"})
+			return
+		}
 		manifestRef, err := h.service.pinFileManifest(input.ComputerID, manifest.Root, []byte(input.Manifest))
 		if err == nil {
 			err = h.service.store.RecordFileRoot(r.Context(), input.ComputerID, manifest.Root, manifestRef, input.HeadSequence)

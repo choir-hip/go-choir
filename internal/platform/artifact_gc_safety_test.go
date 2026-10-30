@@ -508,3 +508,63 @@ func TestHandleArtifactGCClampsToConfiguredPolicy(t *testing.T) {
 		t.Fatal("endpoint grace undercut the configured window")
 	}
 }
+
+// A chunk no live root names waits for the upload grace (a day), not the
+// run's week: a discarded snapshot attempt of the paper is tens of GB. Ways
+// it could fail, written before the code:
+//
+//  1. an unnamed chunk younger than the upload grace is deleted (a snapshot
+//     or file save still uploading loses a chunk its root will name);
+//  2. a chunk named only by a file root inside the week is deleted (the
+//     owner's file history shrinks to a day);
+//  3. a chunk of a live snapshot root, or of a computer with no root at all,
+//     is deleted;
+//  4. an unnamed chunk older than the upload grace is still kept a week.
+func TestArtifactGCFileChunksWaitTheUploadGraceNotTheWeek(t *testing.T) {
+	f := newGCFixture(t)
+	chunk := func(computer, name string, age time.Duration) (string, string) {
+		d := gcDigest(computer + "/" + name)
+		return d, f.writeAged("sha256/file-cas-chunks/"+computer+"/"+d, []byte(name), age)
+	}
+	fileRoot := func(computer string, created time.Time, chunks ...string) {
+		manifest, err := filecas.BuildManifest(computer, []filecas.FileEntry{{Path: "f", Mode: 0o600, Size: 1, Chunks: chunks}}, created)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := json.Marshal(manifest)
+		ref, err := f.service.pinFileManifest(computer, manifest.Root, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.RecordFileRoot(f.ctx, computer, manifest.Root, ref, 1); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.db.ExecContext(f.ctx, `UPDATE computer_file_roots SET created_at=? WHERE computer_id=? AND root=?`, created.UTC(), computer, manifest.Root); err != nil {
+			t.Fatal(err)
+		}
+	}
+	history, historyPath := chunk("computer-g", "file history", 30*time.Hour)
+	latest, latestPath := chunk("computer-g", "latest file", 30*time.Hour)
+	fileRoot("computer-g", time.Now().Add(-2*24*time.Hour), history)
+	fileRoot("computer-g", time.Now().Add(-time.Minute), latest)
+	snap, snapPath := chunk("computer-g", "live snapshot", 30*time.Hour)
+	if err := f.store.RecordSnapshotRoot(f.ctx, "computer-g", gcDigest("snapshot root"), 7, []string{snap}); err != nil {
+		t.Fatal(err)
+	}
+	_, discardedPath := chunk("computer-g", "discarded attempt", 30*time.Hour)
+	_, uploadingPath := chunk("computer-g", "still uploading", 20*time.Hour)
+	_, rootlessPath := chunk("computer-rootless", "no root yet", 30*time.Hour)
+
+	report := f.run(activeWindow())
+	if exists(discardedPath) {
+		t.Fatalf("an unnamed chunk past the upload grace was kept (report %+v)", report.Namespaces["file-cas-chunks"])
+	}
+	for name, p := range map[string]string{
+		"file history in the window": historyPath, "latest file root": latestPath, "live snapshot root": snapPath,
+		"inside the upload grace": uploadingPath, "computer with no root": rootlessPath,
+	} {
+		if !exists(p) {
+			t.Fatalf("chunk %q removed (report %+v)", name, report.Namespaces["file-cas-chunks"])
+		}
+	}
+}

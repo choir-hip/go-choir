@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/filecas"
 )
 
 func fileCASChunkRef(computerID, digest string) (string, error) {
@@ -180,4 +182,32 @@ func validFileCASDigest(value string) bool {
 	}
 	_, err := hex.DecodeString(value)
 	return err == nil
+}
+
+// missingFileChunk returns the first chunk the manifest names that this
+// computer's namespace does not hold, or "" when it holds them all.
+func (s *Service) missingFileChunk(ctx context.Context, computerID string, manifest *filecas.Manifest) (string, error) {
+	for _, entry := range manifest.Files {
+		for _, digest := range entry.Chunks {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			ref, err := fileCASChunkRef(computerID, digest)
+			if err != nil {
+				return "", err
+			}
+			path, err := s.artifactPath(ref)
+			if err != nil {
+				return "", err
+			}
+			info, err := os.Stat(path)
+			if errors.Is(err, os.ErrNotExist) || (err == nil && (!info.Mode().IsRegular() || info.Size() == 0)) {
+				return digest, nil
+			}
+			if err != nil {
+				return "", fmt.Errorf("file cas: stat chunk: %w", err)
+			}
+		}
+	}
+	return "", nil
 }

@@ -517,6 +517,18 @@ func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {
 		return fileSyncResult{}, fmt.Errorf("file sync: export DEK: %w", err)
 	}
 	defer clearBytes(dek)
+	// The cache vouches that the host holds a file's chunks. A sync that
+	// fails after sending some has chunks no root names, and the host
+	// collects those after its upload grace; so until a root is recorded the
+	// cache is not trusted, and a failed sync drops it: the next one sends
+	// every chunk again (the host only refreshes the ones it holds).
+	rootRecorded := false
+	defer func() {
+		if !rootRecorded {
+			s.fileCache = make(map[string]cachedSyncedFile)
+			s.chunkCache = make(map[string]map[string]bool)
+		}
+	}()
 
 	s.retryPendingCitation(ctx)
 	entries := make([]filecas.FileEntry, 0)
@@ -584,6 +596,7 @@ func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {
 	if err := s.putRoot(ctx, manifestJSON, headSequence); err != nil {
 		return fileSyncResult{}, err
 	}
+	rootRecorded = true
 	result.root = manifest.Root
 	if err := s.appendRootCommitted(ctx, manifest.Root, manifestJSON); err != nil {
 		s.pendingCitation = &pendingFileRootCitation{root: manifest.Root, manifest: append([]byte(nil), manifestJSON...)}
