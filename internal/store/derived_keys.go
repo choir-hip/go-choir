@@ -80,6 +80,7 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 				err := s.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{
 					PageSize:  derivedKeyPageSize,
 					DutyCycle: derivedKeyDutyCycle,
+					ReadDB:    s.readDB,
 				})
 				lastPass = time.Now()
 				if err != nil && ctx.Err() == nil {

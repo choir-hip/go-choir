@@ -533,6 +533,11 @@ type DerivedKeyValidation struct {
 	DutyCycle float64
 	// Logf receives progress lines. Nil means log.Printf.
 	Logf func(format string, args ...any)
+	// ReadDB, when set, is a read pool on the same database. Pages are
+	// compared there, in one read snapshot each, and the write connection is
+	// taken only to repair the ids that differ: a busy writer then delays a
+	// repair, not the whole pass. Nil compares on the write connection.
+	ReadDB *sql.DB
 }
 
 // derivedKeyRange bounds the canonical ids of a kind: every id built by
@@ -650,7 +655,11 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 	startBadWrites := d.badWrites[fam.Name].Load()
 	startWrites := d.writes[fam.Name].Load()
 
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, string(fam.Kind)).Scan(&p.total)
+	readDB := s.db
+	if opt.ReadDB != nil {
+		readDB = opt.ReadDB
+	}
+	err := readDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, string(fam.Kind)).Scan(&p.total)
 	if err != nil {
 		return fmt.Errorf("objectgraph sql: count %s rows: %w", fam.Kind, err)
 	}
@@ -663,7 +672,11 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 	for done := false; !done; {
 		var last string
 		if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
-			n, last, done, fixed, dropped, bad, err = s.validatePage(ctx, fam, cursor, hi, p.pageSize)
+			if opt.ReadDB != nil {
+				n, last, done, fixed, dropped, bad, err = s.validatePageOnReadPool(ctx, opt.ReadDB, fam, cursor, hi, p.pageSize)
+			} else {
+				n, last, done, fixed, dropped, bad, err = s.validatePage(ctx, fam, cursor, hi, p.pageSize)
+			}
 			return
 		}); err != nil {
 			return err
@@ -674,7 +687,7 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 	// Rows and side rows whose ids are outside the range.
 	var strays []string
 	if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
-		strays, err = s.derivedStrayIDs(ctx, fam, lo, hi)
+		strays, err = derivedStrayIDs(ctx, readDB, fam, lo, hi)
 		return 0, 0, 0, false, err
 	}); err != nil {
 		return err
@@ -685,6 +698,9 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 	for start := 0; start < len(strays); start += p.pageSize {
 		chunk := strays[start:min(start+p.pageSize, len(strays))]
 		if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
+			if opt.ReadDB != nil {
+				return s.validateIDsOnReadPool(ctx, opt.ReadDB, fam, chunk)
+			}
 			return s.validateIDs(ctx, fam, chunk)
 		}); err != nil {
 			return err
@@ -755,35 +771,7 @@ func (s *SQLStore) validatePage(ctx context.Context, fam *derivedFamily, cursor,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	headQuery, headArgs := ogHeadPageSQL(cursor, before, pageSize)
-	rows, err := tx.QueryContext(ctx, headQuery, headArgs...)
-	if err != nil {
-		return 0, cursor, false, 0, 0, false, err
-	}
-	raw, err := scanHeads(rows)
-	if err != nil {
-		return 0, cursor, false, 0, 0, false, err
-	}
-	heads := make([]derivedSideRow, 0, len(raw))
-	for _, h := range raw {
-		if h.kind == string(fam.Kind) {
-			heads = append(heads, h)
-		}
-	}
-	// The key rows over the same id range; past the last head, to the end.
-	sideQuery := `SELECT ` + sideRowColumns + ` FROM ` + DerivedKeysTable + `
-		WHERE key_name = ? AND canonical_id > ? AND canonical_id < ?`
-	sideArgs := []any{fam.Name, cursor, before}
-	if len(raw) == pageSize {
-		sideQuery += ` AND canonical_id <= ?`
-		sideArgs = append(sideArgs, raw[len(raw)-1].id)
-	}
-	sideQuery += ` ORDER BY canonical_id ASC`
-	srows, err := tx.QueryContext(ctx, sideQuery, sideArgs...)
-	if err != nil {
-		return 0, cursor, false, 0, 0, false, err
-	}
-	side, sideOrder, err := scanSideRows(srows)
+	raw, heads, side, sideOrder, err := readValidationPage(ctx, tx, fam, cursor, before, pageSize)
 	if err != nil {
 		return 0, cursor, false, 0, 0, false, err
 	}
@@ -801,26 +789,80 @@ func (s *SQLStore) validatePage(ctx context.Context, fam *derivedFamily, cursor,
 	return len(heads), last, len(raw) < pageSize, fixed, dropped, bad, nil
 }
 
+// validatePageOnReadPool compares one page in a read snapshot on readDB and
+// sends the ids that differ to validateIDs, which re-reads both sides on the
+// write connection and repairs them. A writer that maintains the table never
+// leaves a difference inside one snapshot, so a page with nothing to repair
+// never takes the write connection.
+func (s *SQLStore) validatePageOnReadPool(ctx context.Context, readDB *sql.DB, fam *derivedFamily, cursor, before string, pageSize int) (n int, last string, done bool, fixed, dropped int, bad bool, err error) {
+	tx, err := readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return 0, cursor, false, 0, 0, false, err
+	}
+	raw, heads, side, sideOrder, err := readValidationPage(ctx, tx, fam, cursor, before, pageSize)
+	_ = tx.Rollback()
+	if err != nil {
+		return 0, cursor, false, 0, 0, false, err
+	}
+	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	ids := append(redo, orphans...)
+	sort.Strings(ids)
+	for start := 0; start < len(ids); start += pageSize {
+		_, f, d, b, err := s.validateIDs(ctx, fam, ids[start:min(start+pageSize, len(ids))])
+		if err != nil {
+			return 0, cursor, false, 0, 0, false, err
+		}
+		fixed, dropped, bad = fixed+f, dropped+d, bad || b
+	}
+	last = cursor
+	if len(raw) > 0 {
+		last = raw[len(raw)-1].id
+	}
+	return len(heads), last, len(raw) < pageSize, fixed, dropped, bad, nil
+}
+
+// readValidationPage reads a page of og_objects headers in (cursor, before)
+// and the family's key rows over the same ids, inside tx: raw is every header
+// read, heads only the family's kind.
+func readValidationPage(ctx context.Context, tx *sql.Tx, fam *derivedFamily, cursor, before string, pageSize int) (raw, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string, err error) {
+	headQuery, headArgs := ogHeadPageSQL(cursor, before, pageSize)
+	rows, err := tx.QueryContext(ctx, headQuery, headArgs...)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	raw, err = scanHeads(rows)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	heads = make([]derivedSideRow, 0, len(raw))
+	for _, h := range raw {
+		if h.kind == string(fam.Kind) {
+			heads = append(heads, h)
+		}
+	}
+	// The key rows over the same id range; past the last head, to the end.
+	sideQuery := `SELECT ` + sideRowColumns + ` FROM ` + DerivedKeysTable + `
+		WHERE key_name = ? AND canonical_id > ? AND canonical_id < ?`
+	sideArgs := []any{fam.Name, cursor, before}
+	if len(raw) == pageSize {
+		sideQuery += ` AND canonical_id <= ?`
+		sideArgs = append(sideArgs, raw[len(raw)-1].id)
+	}
+	sideQuery += ` ORDER BY canonical_id ASC`
+	srows, err := tx.QueryContext(ctx, sideQuery, sideArgs...)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	side, sideOrder, err = scanSideRows(srows)
+	return raw, heads, side, sideOrder, err
+}
+
 // reconcile makes the key rows of a set of ids match og_objects: heads are the
 // og_objects rows, side the key rows (in sideOrder) over the same ids. The
 // caller holds the transaction.
 func (s *SQLStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (fixed, dropped int, bad bool, err error) {
-	var redo []string
-	present := make(map[string]bool, len(heads))
-	for _, h := range heads {
-		present[h.id] = true
-		r, have := side[h.id]
-		if have && !r.ok {
-			bad = true
-		}
-		if !have || r.owner != h.owner || r.hash != h.hash || !r.updatedAt.Equal(h.updatedAt) {
-			redo = append(redo, h.id)
-		}
-	}
-	for _, id := range sideOrder {
-		if present[id] {
-			continue
-		}
+	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	for _, id := range orphans {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+DerivedKeysTable+` WHERE canonical_id = ? AND key_name = ?`, id, fam.Name); err != nil {
 			return 0, 0, false, err
 		}
@@ -837,9 +879,32 @@ func (s *SQLStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily
 	return fixed, dropped, bad, nil
 }
 
+// diffSide compares heads (og_objects rows) with the key rows over the same
+// ids: redo are heads with a missing or stale key row, orphans key rows with
+// no head, and bad reports a key row marked malformed.
+func diffSide(heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (redo, orphans []string, bad bool) {
+	present := make(map[string]bool, len(heads))
+	for _, h := range heads {
+		present[h.id] = true
+		r, have := side[h.id]
+		if have && !r.ok {
+			bad = true
+		}
+		if !have || r.owner != h.owner || r.hash != h.hash || !r.updatedAt.Equal(h.updatedAt) {
+			redo = append(redo, h.id)
+		}
+	}
+	for _, id := range sideOrder {
+		if !present[id] {
+			orphans = append(orphans, id)
+		}
+	}
+	return redo, orphans, bad
+}
+
 // derivedStrayIDs lists the ids outside the kind's primary-key range: rows of
 // the kind, and key rows of the family..
-func (s *SQLStore) derivedStrayIDs(ctx context.Context, fam *derivedFamily, lo, hi string) ([]string, error) {
+func derivedStrayIDs(ctx context.Context, db *sql.DB, fam *derivedFamily, lo, hi string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, q := range []struct {
 		query string
@@ -848,7 +913,7 @@ func (s *SQLStore) derivedStrayIDs(ctx context.Context, fam *derivedFamily, lo, 
 		{`SELECT canonical_id FROM og_objects WHERE object_kind = ? AND (canonical_id <= ? OR canonical_id >= ?)`, []any{string(fam.Kind), lo, hi}},
 		{`SELECT canonical_id FROM ` + DerivedKeysTable + ` WHERE key_name = ? AND (canonical_id <= ? OR canonical_id >= ?)`, []any{fam.Name, lo, hi}},
 	} {
-		rows, err := s.db.QueryContext(ctx, q.query, q.args...)
+		rows, err := db.QueryContext(ctx, q.query, q.args...)
 		if err != nil {
 			return nil, err
 		}
@@ -882,26 +947,7 @@ func (s *SQLStore) validateIDs(ctx context.Context, fam *derivedFamily, ids []st
 		return 0, 0, 0, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	args := make([]any, 0, len(ids)+2)
-	for _, id := range ids {
-		args = append(args, id)
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT canonical_id, owner_id, updated_at, content_hash, object_kind FROM og_objects
-		WHERE object_kind = '`+string(fam.Kind)+`' AND canonical_id IN (`+marks+`) ORDER BY canonical_id ASC`, args...)
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-	heads, err := scanHeads(rows)
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-	srows, err := tx.QueryContext(ctx, `SELECT `+sideRowColumns+` FROM `+DerivedKeysTable+`
-		WHERE key_name = ? AND canonical_id IN (`+marks+`) ORDER BY canonical_id ASC`, append([]any{fam.Name}, args...)...)
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-	side, sideOrder, err := scanSideRows(srows)
+	heads, side, sideOrder, err := readValidationIDs(ctx, tx, fam, ids)
 	if err != nil {
 		return 0, 0, 0, false, err
 	}
@@ -913,6 +959,56 @@ func (s *SQLStore) validateIDs(ctx context.Context, fam *derivedFamily, ids []st
 		return 0, 0, 0, false, err
 	}
 	return len(heads), fixed, dropped, bad, nil
+}
+
+// validateIDsOnReadPool compares a chunk of ids in a read snapshot on readDB
+// and repairs only the ids that differ, through validateIDs.
+func (s *SQLStore) validateIDsOnReadPool(ctx context.Context, readDB *sql.DB, fam *derivedFamily, ids []string) (n, fixed, dropped int, bad bool, err error) {
+	tx, err := readDB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	heads, side, sideOrder, err := readValidationIDs(ctx, tx, fam, ids)
+	_ = tx.Rollback()
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	if diff := append(redo, orphans...); len(diff) > 0 {
+		sort.Strings(diff)
+		_, f, d, b, err := s.validateIDs(ctx, fam, diff)
+		if err != nil {
+			return 0, 0, 0, false, err
+		}
+		fixed, dropped, bad = f, d, bad || b
+	}
+	return len(heads), fixed, dropped, bad, nil
+}
+
+// readValidationIDs reads the og_objects headers of the family's kind and the
+// family's key rows for ids, inside tx.
+func readValidationIDs(ctx context.Context, tx *sql.Tx, fam *derivedFamily, ids []string) (heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string, err error) {
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, 0, len(ids)+2)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT canonical_id, owner_id, updated_at, content_hash, object_kind FROM og_objects
+		WHERE object_kind = '`+string(fam.Kind)+`' AND canonical_id IN (`+marks+`) ORDER BY canonical_id ASC`, args...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	heads, err = scanHeads(rows)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	srows, err := tx.QueryContext(ctx, `SELECT `+sideRowColumns+` FROM `+DerivedKeysTable+`
+		WHERE key_name = ? AND canonical_id IN (`+marks+`) ORDER BY canonical_id ASC`, append([]any{fam.Name}, args...)...)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	side, sideOrder, err = scanSideRows(srows)
+	return heads, side, sideOrder, err
 }
 
 // rederive derives the given rows in one statement per batch, falling back to
