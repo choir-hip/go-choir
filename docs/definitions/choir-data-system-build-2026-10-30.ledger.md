@@ -96,3 +96,12 @@ Append-only. One terse entry per pass. Never edit earlier entries.
     - Problem: during the copy, the Store A Dolt server ran at 330% CPU and the paper's /health took 24 s (it was 200 before the copy), with a deploy nix build also running.
     - The copy is bounded to minutes, so it continues under watch. At C5 the paper is stopped, so this contention does not recur.
     - The dry-run mode does not bootstrap the target schema, so it reports every source table as dropped. Use the real copy into a scratch database instead.
+- 2026-10-30 07:33 UTC (FP0). Problem: the live-source host rehearsal made the paper unhealthy.
+  - Evidence: the 6M-row computer_event_append_receipts copy, with --parallel 2 and the deploy's guest-image nix build running at the same time, pushed Node B load to 14.6 and Store A Dolt to 330% CPU.
+    - The paper's /health took 24 s, then returned 503.
+    - vmctl logged it unhealthy from 07:31:01 to 07:31:56.
+  - FP0 killed the migrator at 2.5 minutes. The paper returned to ready at 0.6 s.
+  - Before the kill, the rehearsal verified 26 control tables with counts and digests equal: escrows, transparency, lifecycle receipts, checkpoints, file roots, heads and the rest.
+  - Rule from here:
+    - Never copy the receipts table from the live source. It is copied at C5, when the paper is stopped.
+    - Rehearse the graph only with --parallel 1, under a watchdog that kills the copy when the paper's /health is slow or not 200.
