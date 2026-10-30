@@ -19,7 +19,6 @@ import (
 // docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 // Failure modes guarded here, written before the code:
 //   5. the migration is not idempotent, or a re-run repeats work;
-//   6. the projection enters Dolt history;
 //   7. a failed projection write, a lost table, or captures written before
 //      the migration leave the projection behind its authority for good,
 //      or an unprojectable capture forces a full pass on every check;
@@ -36,34 +35,6 @@ func testCapture(t *testing.T, owner, computer, key, title, url string, at time.
 		FetchedAt: at.Format(time.RFC3339Nano), ContentBlobID: "sha256:r", ExtractedTextBlobID: "sha256:t", BlocksBlobID: "sha256:b", Extractor: "x1", DocHash: "h-" + key})
 	return objectgraph.Object{CanonicalID: id, ObjectKind: objectgraph.WebCaptureObjectKind, OwnerID: owner, ComputerID: computer,
 		ContentHash: "h-" + key, Metadata: meta, CreatedAt: at, UpdatedAt: at}
-}
-
-func TestCaptureProjectionStaysOutOfHistory(t *testing.T) {
-	store, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	if _, err := store.corpus().ExecContext(ctx, "CALL DOLT_ADD('-A')"); err != nil {
-		t.Fatalf("dolt_add: %v", err)
-	}
-	rows, err := store.corpus().QueryContext(ctx, "SELECT table_name FROM dolt_status")
-	if err != nil {
-		t.Fatalf("dolt_status: %v", err)
-	}
-	defer rows.Close()
-	var staged []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatal(err)
-		}
-		staged = append(staged, name)
-	}
-	joined := strings.Join(staged, ",")
-	if strings.Contains(joined, captureIndexTable) || strings.Contains(joined, captureTermsTable) {
-		t.Fatalf("projection tables staged for a commit: %s", joined)
-	}
-	if !strings.Contains(joined, ogLookupKeysTable) {
-		t.Fatalf("og_lookup_keys (versioned with og_objects) not staged: %s", joined)
-	}
 }
 
 func TestCaptureProjectionBackfillsReconcilesAndRepairs(t *testing.T) {
@@ -313,20 +284,18 @@ func TestCaptureSearchQueryPlans(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := store.corpus()
-	assertPlan(t, "term exact", explainPlan(t, db, `SELECT capture_id, 0 AS qt, fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND term = ?`, "owner-a", "computer-a", "ai"),
-		"proj_capture_terms", "owner_id", "computer_id", "term", "capture_id")
-	assertPlan(t, "term prefix", explainPlan(t, db, `SELECT capture_id, 0 AS qt, fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND (term >= ? AND term < ?)`, "owner-a", "computer-a", "harb", "harb\U0010FFFF"),
-		"proj_capture_terms", "owner_id", "computer_id", "term", "capture_id")
-	assertPlan(t, "url key", explainPlan(t, db, `SELECT capture_id, fetched_at, updated_at FROM proj_capture_index WHERE owner_id = ? AND computer_id = ? AND url_key = ? AND has_blocks = TRUE ORDER BY fetched_at DESC LIMIT 20`, "owner-a", "computer-a", captureURLKey("https://example.com/a")),
-		"proj_capture_index", "owner_id", "computer_id", "url_key", "fetched_at")
+	assertPlanIndex(t, "term exact", explainPlan(t, db, `SELECT capture_id, 0 AS qt, fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND term = ?`, "owner-a", "computer-a", "ai"),
+		"proj_capture_terms_pkey")
+	assertPlanIndex(t, "term prefix", explainPlan(t, db, `SELECT capture_id, 0 AS qt, fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND (term >= ? AND term < ?)`, "owner-a", "computer-a", "harb", "harb\U0010FFFF"),
+		"proj_capture_terms_pkey")
+	assertPlanIndex(t, "url key", explainPlan(t, db, `SELECT capture_id, fetched_at, updated_at FROM proj_capture_index WHERE owner_id = ? AND computer_id = ? AND url_key = ? AND has_blocks = TRUE ORDER BY fetched_at DESC NULLS LAST LIMIT 20`, "owner-a", "computer-a", captureURLKey("https://example.com/a")),
+		"idx_pci_url")
 	// The whole candidate query for a CJK word and a short word reads the
 	// term table through its primary key only.
 	plan := explainPlan(t, db, `WITH hits AS (SELECT capture_id, 0 AS qt, MAX(fetched_at) AS fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND (term = ? OR term = ?) GROUP BY capture_id HAVING COUNT(DISTINCT term) >= 2 UNION ALL SELECT capture_id, 1 AS qt, fetched_at FROM proj_capture_terms WHERE owner_id = ? AND computer_id = ? AND term = ?)
 		SELECT capture_id, COUNT(DISTINCT qt) AS words, MAX(fetched_at) AS fetched FROM hits GROUP BY capture_id HAVING COUNT(DISTINCT qt) >= ?`,
 		"owner-a", "computer-a", "人工", "智能", "owner-a", "computer-a", "ai", 1)
-	if strings.Count(plan, "index: [proj_capture_terms.owner_id,proj_capture_terms.computer_id,proj_capture_terms.term,proj_capture_terms.capture_id]") != 2 {
-		t.Fatalf("candidate query does not seek the term key twice:\n%s", plan)
-	}
+	assertPlanIndex(t, "candidate query", plan, "proj_capture_terms_pkey")
 	resp, err := store.SearchCaptures(ctx, CaptureSearchRequest{OwnerID: "owner-a", ComputerID: "computer-a", Words: []string{"人工智能", "ai"}, Need: 1})
 	if err != nil || len(resp.Objects) != 4 {
 		t.Fatalf("search 人工智能 OR ai: %d objects %v", len(resp.Objects), err)

@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -19,7 +20,7 @@ import (
 // docs/reports/object-graph-retrieval-research-2026-10-14.md; problem record
 // docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 //
-// Every step is idempotent (IF NOT EXISTS, or an information_schema check),
+// Every step is idempotent (IF NOT EXISTS, or an index-exists check),
 // none runs inside Bootstrap: index builds over millions of rows take
 // minutes, so corpusd starts serving on the old query shapes and each new
 // shape switches on only once its index or table reports live. A step that
@@ -31,15 +32,9 @@ const (
 	idxEdgesToKind                     = "idx_og_edges_to_kind"
 	// ogLookupKeysTable holds the one metadata value each registered kind
 	// is looked up by, one row per object, written in the same transaction
-	// as the object. It is a side table, not a generated column or a
-	// functional index: on Dolt 2.1.9 a VIRTUAL generated column makes
-	// INSERT … ON DUPLICATE KEY UPDATE … VALUES() write values into the
-	// wrong columns ("'{…}' is not a valid value for 'bigint'"), a
-	// functional index makes the same upsert fail outright ("column
-	// !hidden!… could not be found"), and a STORED column rewrites every
-	// og_objects row into history. The registered kinds are small
-	// (publications, routes, checks, proposals), so the table stays
-	// versioned with og_objects.
+	// as the object. It is a side table rather than an expression index
+	// because the registered kinds are small (publications, routes, checks,
+	// proposals) and the seek is a primary-key range.
 	ogLookupKeysTable = "og_lookup_keys"
 	// ogLookupKeyChars bounds the key. A longer value is truncated in the
 	// key; the lookup still compares the full JSON value, so truncation
@@ -49,12 +44,12 @@ const (
 
 const ogLookupKeysDDL = `
 CREATE TABLE IF NOT EXISTS og_lookup_keys (
-	object_kind  VARCHAR(128) NOT NULL,
-	lookup_key   VARCHAR(255) NOT NULL,
-	canonical_id VARCHAR(255) NOT NULL,
-	PRIMARY KEY (object_kind, lookup_key, canonical_id),
-	INDEX idx_og_lookup_keys_object (canonical_id)
+	object_kind  TEXT NOT NULL,
+	lookup_key   TEXT COLLATE "C" NOT NULL,
+	canonical_id TEXT COLLATE "C" NOT NULL,
+	PRIMARY KEY (object_kind, lookup_key, canonical_id)
 );
+CREATE INDEX IF NOT EXISTS idx_og_lookup_keys_object ON og_lookup_keys(canonical_id);
 `
 
 // metadataLookupKey is one (kind, JSON path) pair served by the lookup key.
@@ -108,8 +103,7 @@ func lookupKeyValue(value string) string {
 	return string([]rune(value)[:ogLookupKeyChars])
 }
 
-// objectLookupKey is an object's key, as JSON_UNQUOTE(JSON_EXTRACT(metadata,
-// '$.<field>')) reads the field: a string's text, any other value's JSON
+// objectLookupKey is an object's key, as metadataJSONEq reads the field: a string's text, any other value's JSON
 // text. ok is false for an unregistered kind, unreadable metadata, or a
 // missing or null field.
 func objectLookupKey(kind string, metadata []byte) (string, bool) {
@@ -154,7 +148,7 @@ func (s *Store) writeLookupKey(ctx context.Context, x sqlExecer, obj objectgraph
 	if !ok {
 		return nil
 	}
-	if _, err := x.ExecContext(ctx, `INSERT IGNORE INTO og_lookup_keys (object_kind, lookup_key, canonical_id) VALUES (?, ?, ?)`,
+	if _, err := x.ExecContext(ctx, `INSERT INTO og_lookup_keys (object_kind, lookup_key, canonical_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
 		string(obj.ObjectKind), key, obj.CanonicalID); err != nil {
 		return fmt.Errorf("write lookup key: %w", err)
 	}
@@ -295,12 +289,8 @@ func validSchemaIdentifier(value string) bool {
 }
 
 // corpusIndexExists reports whether a Store B table has the named index.
-func (s *Store) corpusIndexExists(ctx context.Context, table, index string) (bool, error) {
-	var n int
-	err := s.corpus().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
-		table, index).Scan(&n)
-	return n > 0, err
+func (s *Store) corpusIndexExists(ctx context.Context, _, index string) (bool, error) {
+	return dbx.IndexExists(ctx, s.corpus(), dbx.Postgres, index)
 }
 
 // ensureCorpusIndex creates a Store B index when it is absent.
@@ -321,7 +311,6 @@ func (s *Store) ensureCorpusIndex(ctx context.Context, table, index, columns str
 		return err
 	}
 	log.Printf("corpusd retrieval migrate index=%s table=%s ms=%d", index, table, time.Since(start).Milliseconds())
-	s.markCorpusDirty("retrieval index " + index)
 	return nil
 }
 
@@ -343,7 +332,6 @@ func (s *Store) ensureLookupKeys(ctx context.Context) error {
 		}
 	}
 	if written > 0 {
-		s.markCorpusDirty(fmt.Sprintf("retrieval lookup keys backfill: %d", written))
 		log.Printf("corpusd retrieval migrate lookup_keys backfilled=%d ms=%d", written, time.Since(start).Milliseconds())
 	}
 	s.retrievalState.lookupKeyLive.Store(true)
@@ -406,7 +394,7 @@ func (s *Store) backfillLookupKeys(ctx context.Context, kind string) (int, error
 	for start := 0; start < len(missing); start += 3 * lookupKeysPerInsert {
 		chunk := missing[start:min(start+3*lookupKeysPerInsert, len(missing))]
 		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?), ", len(chunk)/3), ", ")
-		if _, err := s.corpus().ExecContext(ctx, `INSERT IGNORE INTO og_lookup_keys (object_kind, lookup_key, canonical_id) VALUES `+values, chunk...); err != nil {
+		if _, err := s.corpus().ExecContext(ctx, `INSERT INTO og_lookup_keys (object_kind, lookup_key, canonical_id) VALUES `+values+` ON CONFLICT DO NOTHING`, chunk...); err != nil {
 			return 0, err
 		}
 	}
