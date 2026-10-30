@@ -1,12 +1,14 @@
 # Object storage: one store for every blob, by tier and owner (2026-10-30)
 
-Status: design, revision 8 (after the round-7 review,
-`.agentic-consensus/object-storage-r7/`: Devin accept_with_notes, DeepSeek
+Status: design, revision 9 (after the round-8 review,
+`.agentic-consensus/object-storage-r8/`: Devin accept_with_notes, DeepSeek
 send_back). Revision 5 replaced the object-level release state of
 revisions 3-4 with holder-scoped holds; revision 7 ended provisional holds
 by a holder probe; revision 8 makes that probe a by-key holder resolver,
 makes every private holder store its canonical private ref, and makes
-publish copy-only (sections 2, 4, 7). Not ratified; nothing is
+publish copy-only; revision 9 stops the batch guard from discarding probe
+releases and persists the two-run state (sections 2, 4, 7). Not ratified;
+nothing is
 built or deployed by this note. Revision 1 is commit 3294bce10; the
 revision logs at the end map every finding to where it is addressed.
 Mutation class of the work it proposes: **red** (tenancy and encryption of
@@ -102,7 +104,7 @@ from becoming public copies of their captures.
 |---|---|---|---|---|---|
 | Capture bodies (raw, blocks, text) | 154,649 plaintext files, 9.37 GB, `capture-bodies/<2hex>/<sha256>`, no GC, any bound guest reads any hash (`internal/platform/captures.go:86,214,228`) | Autopaper's: platform. Any other owner's: private | canonical (keep set) | while a `web_capture` object holds it; never purged while a hold is unreleased (section 4) | platform: host services; the Autopaper's computers through host-mediated reads. Private: the owner's computers |
 | og blobs (published Texture manifests, resolved blocks, transclusions) | 21,848 referenced `sha256/og/<hex>.bin`, 0.47 GB; written without fsync (`internal/platform/objectgraph_store.go:44-74`); GC active on Node B (`nix/node-b.nix:1307`) | the holding object's tier, passed by the writer to the `Put` and by the provider to `CanonicalRef`, never inferred from the ref's encoding: public for a published object, otherwise platform (the Autopaper) or private (other owners). A row's tier is fixed when the row is created. A body held at two tiers is two objects. Publish is copy-only: the published object is its own row with its own public body object and hold, the draft keeps its own row, object and hold, and no write changes the tier of an existing row | canonical (Autopaper object graph) | refs from `og_objects.body_ref` | per the holding object's publication policy |
-| Image blobs and self-development screenshots | guest `state.image-blobs/sha256/<hex>`, plaintext, not in file CAS; pins are guest files with no unpin and no sweep (`internal/imageblob/imageblob.go:20-60`, `pin.go:13-20`; problem doc violation 11) | private (owner) | canonical when held by a Texture revision or evidence object, live or in a retained checkpoint; otherwise scratch | held: as long as any holder, including a retained checkpoint's closure; unheld: 14 days | the owner's computers. Publishing a revision that embeds one copies it into the public tier as an explicit act |
+| Image blobs and self-development screenshots | guest `state.image-blobs/sha256/<hex>`, plaintext, not in file CAS; pins are guest files with no unpin and no sweep (`internal/imageblob/imageblob.go:20-60`, `pin.go:13-20`; problem doc violation 11) | private (owner) | canonical when held by a Texture revision or evidence object, live or in a retained checkpoint; otherwise scratch | held: as long as any holder, including a retained checkpoint's closure; unheld: 14 days | the owner's computers. Publishing a revision that embeds one copies it into the public tier as an explicit act: the copy is an og-class object (keep-set, public tier, the image's media type) held by the published og row, which names it in its `image_refs` metadata field (section 2, og class rule) |
 | File CAS chunks | 27.9 GB in 197 per-computer dirs; deterministic synthetic nonce under a per-computer DEK (`internal/filecas/filecas.go:143-160`); the seeded `files/Source` probably copied into each [H, inventory §1] | owner files: private. Shared open-source and seeded system files: public | canonical (owner files) | reachable from the computer's retained file roots | the owner's computers; public seed by all |
 | Tape segments and payloads | `tape-seg/` 27.2 GB (26.4 the paper), 64 MiB seal (`internal/tapestore/format.go:106`); legacy one-file-per-pin 47.4 GB, 7.4 M inodes (`event_artifacts.go:118-125`); no segment ref table today (`artifact_gc.go:106-110` excludes the tape) | internal, per computer; private payloads stay envelope-encrypted inside | canonical for user computers and self-development; not for the Autopaper (owner, 21:10) | the retained receipt chain (chain retention, not a sweep) | the host restore path and that computer |
 | Projection bases | 61.6 GB, 425 files, a plaintext copy of the guest store (no AEAD in `internal/projectionbase`, non-test files [V grep]); liveness: watermark, pins, latest two, queued jobs (`projection_jobs.go:570`) | internal, encrypted under the computer DEK | derived (accelerator) | latest two per computer plus pinned restore points, until the new restore path is proven; then revisit | the host restore path only |
@@ -209,6 +211,15 @@ or that a class rule rejects, is a provider error, which suspends the
 provider's scopes, and a resolver error, which makes the probe unable to
 run (section 4).
 
+**Designated ref fields.** Each class rule below names the fields a holder
+may keep refs in. A ref in any other field is not a holder by contract:
+writers must put refs only in designated fields, and no provider, resolver
+or by-ref query reads elsewhere. Before a class goes active, its dry run
+counts canonical-looking strings (`sha256:`, `hmac:`, `sha256/og/` and the
+legacy forms below) outside the designated fields of that class's holders;
+the expected count is zero, and any hit pages and holds the class in dry
+run.
+
 Legacy encodings it accepts, all from the code [V]: `sha256:<hex>`
 (capture metadata); `sha256/og/<hex>.bin` (`og_objects.body_ref`,
 `objectgraph_store.go:49`); `artifact:sha256:<hex>` (image and capsule
@@ -224,22 +235,37 @@ manifests, `filecas.go:31-45,259-265`, and platform-update digests);
 Class rules, one per class; a legacy `sha256` form is accepted only where
 its rule says so:
 
-- capture: `hmac:` is the holder's private object; `sha256:` is the shared
+- capture: designated fields the three blob fields of the
+  `choir.web_capture` metadata. `hmac:` is the holder's private object; `sha256:` is the shared
   platform object (Q5, section 7 step 2), accepted in a private holder only
   as that shared reference; in a platform holder only `sha256:`.
-- og: public and platform holders: `sha256/og/<hex>.bin` or `sha256:`;
-  private holders: `hmac:` only (section 7 step 3). A `sha256` form in a
-  private og row is rejected.
+- og: designated fields `body_ref` and, on a published row, the
+  `image_refs` metadata list. Public and platform holders:
+  `sha256/og/<hex>.bin` or `sha256:`; private holders: `hmac:` only
+  (section 7 step 3). A `sha256` form in a private og row is rejected.
+  Publishing a revision that embeds an image puts a public copy (class og,
+  the image's media type) with the published row as holder and commits the
+  row with the copy's `sha256:` ref in `image_refs`, in the same row write
+  as its `body_ref`; the og provider streams both fields and the og
+  resolver returns both.
 - mail: the attachment row's `blob_ref`, `hmac:` only; the owner-facing
   `sha256` column is never parsed as a ref (section 7 step 4).
 - image and capsule: the holder's guest ref row, `hmac:` only; the
   `artifact:sha256:` string in revision or evidence content is a display
   and lookup key, not a ref (section 7 step 5).
-- file-chunk: a manifest written by the store (manifest version 2) names
-  chunks as `hmac:<hex>`; a version-1 manifest's bare hex and the
+- file-chunk: a version-2 manifest, built by the guest, names chunks as
+  `hmac:<hex>`; a version-1 manifest's bare hex and the
   `sha256/file-cas-*` paths name legacy chunks outside the store, which
   `CanonicalRef` reports as legacy (counted separately, never streamed, and
-  governed by today's namespace GC until deleted, section 7).
+  governed by today's namespace GC until deleted, section 7). Version 2 is
+  a guest/host protocol change [V]: `manifestVersion = 1` and `VerifyRoot`
+  rejects any other version (`filecas.go:24,102`), the host parses
+  manifests at `file_cas_http.go:119` and the guest at
+  `autoputer/file_sync.go:219`, and the guest builds them
+  (`file_sync.go:569`). During the transition both versions parse on both
+  sides; the guest builds version 2 only once its host accepts it; and the
+  chunk fetch path changes from per-computer hex paths to store refs read
+  through blobd.
 - tape-segment and base: internal, `hmac:` only, written so from the start
   by the segment ref table and the base records.
 - platform-update: public, any of its `sha256` forms.
@@ -411,16 +437,18 @@ A snapshot time that is wrong in either direction fails loud (a page), not
 silent. The driver also takes an expected count per (class, scope) from an
 independent aggregate query over the holder's store (a `COUNT` written
 separately from the extraction code, not a count of the emitted stream);
-a stream whose length differs suspends that scope for the run.
+a stream whose length differs suspends that scope for the run. For guest
+closures the count runs over the same set the stream does: the live store
+union every retained checkpoint, one holder per holding object.
 
 | Provider | Source (holder key) | Classes |
 |---|---|---|
-| corpus, og | `og_objects.body_ref` through `CanonicalRef`, with the row's own tier (published: public; else platform or private by owner) and scope as inputs (og object ID) | og |
-| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them (capture object ID) | capture |
+| corpus, og | `og_objects.body_ref` and a published row's `image_refs` through `CanonicalRef`, with the row's own tier (published: public; else platform or private by owner) and scope as inputs (og object ID) | og |
+| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them. Each blob field is also a stored generated column on `og_objects`, indexed, for the by-ref query (capture object ID) | capture |
 | maild | per-owner `email_attachments.blob_ref` (section 7 step 4), and `email_drafts.attachments_json` resolved through the attachment IDs it names to those rows' `blob_ref`, `maild/attachments.go:24-56,215-275` (attachment or draft ID) | mail |
 | control, releases | the route tables' current and rollback refs, `platformUpdateLiveDigests`, `artifact_gc.go:475` (route slot) | platform-update |
 | control, computers | file roots, through their manifests to the chunks each names (the root row holds only `manifest_ref`, `file_cas.go:13-21`; chunks are inside the manifest, `artifact_gc.go:713-735`); bases and their pins; tape segments by the retained receipt chain, with a segment ref table added before the tape moves into the store (root, base or segment ID) | file-chunk, base, tape-segment |
-| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 step 5, not copied from pin files, which have no unpin), cited capsule evidence, file manifests. A ref held only in a retained checkpoint stays held (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
+| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 step 5, not copied from pin files, which have no unpin), cited capsule evidence, file manifests. A ref held only in a retained checkpoint stays held. Every retained checkpoint store carries its own ref table (section 7 step 5); a checkpoint store without one makes the provider unable to run for that computer, never an empty closure (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
 
 A provider that fails, returns an unparseable ref, or is stale makes its
 scopes **suspended** for that run: no hold in a suspended scope is judged
@@ -437,12 +465,15 @@ file extension) and offset, `put_at`, `last_touch` (latest Put, IfAbsent
 hit or Touch), `last_seen` (latest stream sighting of any holder),
 `abandoned_at` and its probe evidence (keep-set objects that never had a
 hold, below), `purged_at`. `holds`: ref, provider, holder scope, holder key,
-`touched_at`, `first_seen`, `last_seen`, `released_at`, and for a release
-or confirmation made by the driver or an operator, `decided_by`,
-`decided_at` and the probe evidence (resolver, result, holder state
-version); primary key the merge-key encoding of (ref, provider, holder scope, holder
+`touched_at`, `first_seen`, `last_seen`, `released_at`,
+`pending_release_at` and `pending_run` (the first of two agreeing runs,
+below), and for a release or confirmation made by the driver, an operator
+or a migration rollback, `decided_by` (`driver`, `operator`, `rollback`),
+`decided_at` and the evidence (resolver, result, holder state version, or
+the journal entry); primary key the merge-key encoding of (ref, provider, holder scope, holder
 key). `Touch(holder, refs)` inserts each
-hold or refreshes `touched_at` and clears `released_at`.
+hold or refreshes `touched_at` and clears `released_at` and the pending
+fields.
 `Release(holder, refs)` sets `released_at` on those holds only; another
 holder's hold on the same object is untouched, so one holder's delete never
 covers another holder's absence. A hold with `first_seen` null is
@@ -463,7 +494,8 @@ WAL with `synchronous=FULL`, and the catalog is the only state that needs
 them. Off host, restic carries a consistent catalog snapshot nightly
 (section 6). Rebuild: restore the latest snapshot; replay the
 deletion-intent log written after it, so every object purged since is
-marked purged again and not resurrected; reconcile pack and offset for
+marked purged again and not resurrected, and the hold rows each record
+lists are deleted again; reconcile pack and offset for
 every object against the packs and their indexes (a record that moved by
 compaction is re-pointed, one that is gone and not purged pages as a lost
 object); adopt records from packs written after the snapshot (record
@@ -524,7 +556,9 @@ Protocol:
    (section 2); memory is the merge cursors plus one batch. In every branch,
    a sighting sets the hold's `first_seen` if null and refreshes the hold's
    and the object's `last_seen`, and a sighting of a purged or absent object
-   names a lost object, which pages. Then, for each tuple:
+   names a lost object, which pages. A sighting, a probe confirmation and
+   a `Touch` also clear `pending_release_at` and `pending_run`. Then, for
+   each tuple:
    - streamed, hold unreleased: nothing more;
    - streamed, hold released: if the stream's snapshot time is after
      `released_at`, the holder still holds the ref (its delete failed, or
@@ -534,11 +568,12 @@ Protocol:
    - streamed, no hold: insert a confirmed hold and log a repair;
    - hold unreleased and confirmed, holder absent from a fresh stream of a
      non-suspended scope, `touched_at < snapshot - ref window`: for
-     keep-set classes, abort the run for that scope, page, and run the
-     **holder probe** (below) on each such hold, so a crash between an og
-     edit's upsert and its `Release` of the old body ends in a probe
-     release rather than freezing the scope; for other classes, release
-     the hold (`released_at = now`, logged), subject to the guards;
+     keep-set classes, page and run the **holder probe** (below) on each
+     such hold, never an audit release, so a crash between an og edit's
+     upsert and its `Release` of the old body ends in a probe release
+     rather than freezing the scope; for other classes, this is an
+     **audit release** (stream absence, no per-holder evidence), subject
+     to the two-run rule and the batch guard;
    - hold provisional, never streamed, in a non-suspended scope,
      `touched_at` older than the upload grace: for every canonical class
      (keep-set, file chunks, tape segments, images and capsule evidence),
@@ -578,32 +613,68 @@ Protocol:
      creates the row, `sourcegraph/captures.go:194-229` [V]). The driver
      calls `Release(holder)` itself, recorded in the catalog (`decided_by`,
      `decided_at`, probe evidence), which sets `released_at`; the hold row
-     stays and the hold period runs (purge path (a)). Probe releases count
-     against the guards below. A later stream sighting newer than the
-     release restores the hold as above;
+     stays and the hold period runs (purge path (a)). This is a **probe
+     release**: for non-keep-set classes it waits for the two-run rule,
+     and it counts in the batch guard's page but is not discarded by it
+     (Guards). A later stream sighting newer than the release restores the
+     hold as above;
    - a returned ref has the hold's ID but a different tier or scope: not a
      decision; it pages and the hold stays;
    - the probe cannot run (`err`, holder service unreachable, guest down,
-     stale read, checkpoint unreadable, a ref `CanonicalRef` rejects): it
+     stale read, checkpoint unreadable or without a ref table, a ref
+     `CanonicalRef` rejects): it
      pages and the hold stays; this is never read as "absent". Only here
      may an operator decide instead, after their own check of the holder;
      the acknowledgement acts as the driver's `Release` and is recorded
      with the same fields (operator, time, what was checked).
 
-   A provider flag clears for each flagged ref when a later stream names
-   it or a probe-verified release ends its hold; the scope resumes when no
-   flagged ref is left.
+   **Two agreeing runs.** A release of a non-keep-set canonical hold (file
+   chunk, tape segment, held image, cited capsule evidence), audit or
+   probe, is two-phase. The first run that would release it records
+   `pending_release_at = now`, `pending_run` (its run ID) and the evidence,
+   and releases nothing. A later run, with a different run ID, that reaches
+   the same decision on the same hold applies the release. Any sighting,
+   probe confirmation or `Touch` in between clears the pending fields, so
+   the next decision starts over. A run in which the scope is suspended
+   judges nothing and leaves the pending fields as they are. A run whose
+   audit releases the batch guard discards writes no pending fields for
+   them, so it counts as neither agreeing run.
+
+   **Flag resolution pass.** A provider flag clears for each flagged ref
+   when a later stream names it or a probe-verified release ends its hold;
+   the scope resumes when no flagged ref is left. Because the suspension
+   stops the audit branches above from probing that scope, every run ends
+   with a pass that probes each flagged ref even inside the suspended
+   scope; a probe that finds the holder does not hold the tuple releases
+   it as above and clears its flag. A probe that keeps confirming a tuple
+   the stream keeps omitting is a persistent resolver/provider
+   disagreement: it pages each run, and an operator, after checking the
+   holder, records an override (confirm the hold and clear the flag, the
+   provider defect tracked as a bug; or release the hold), with the same
+   recorded fields as an operator decision.
 
    **Never-held keep-set objects** (a `Put` without a holder, or a crash
    before the `Touch`): there is no holder key to look up, so after the
    upload grace each provider of the object's class runs a by-ref query
-   over its canonical ref fields (an indexed column; for file chunks, a
-   decode of the scope's retained manifests), and each holder it returns
-   is checked by `HolderRefs`. Only when every provider of the class ran
-   and none found a holder is the object marked abandoned (`abandoned_at`,
+   over its designated ref fields (section 2), and each holder it returns
+   is checked by `HolderRefs`. The query is an index lookup: `body_ref`
+   and `image_refs` for og; for captures, whose refs live in metadata JSON
+   that today is matched only by a JSON predicate
+   (`objectgraph_store.go:447-450,510-540` [V]), the stored generated
+   columns on the three blob fields (provider table); `blob_ref` for mail;
+   the guest ref table, live and in every retained checkpoint, for images
+   and capsule evidence; for file chunks, a decode of the scope's retained
+   manifests. A ref in a non-designated field is not found, by contract
+   (section 2). Only when the class has at least one provider, all of them
+   ran, and none found a holder is the object marked abandoned (`abandoned_at`,
    evidence per provider, logged) and purged after the keep-set hold
    period (path (c)). A provider that cannot run blocks `abandoned_at`
-   and pages; nothing is abandoned on a failed lookup. Found: a confirmed
+   and pages; nothing is abandoned on a failed lookup. A guest provider
+   that cannot run because its computer is permanently gone blocks path
+   (c) only until the owner deletes that computer: then an operator may
+   record a decision for that (provider, computer), with the deletion
+   record as evidence, after which that provider counts as ran and found
+   none; never before the owner's deletion. Found: a confirmed
    hold is inserted for that holder, and its provider is flagged as
    above.
 
@@ -642,23 +713,29 @@ root provider once mass-deleted live og bodies (2026-10-05,
 
 - Keep-set classes (capture, og, mail, and platform-tier objects): **zero
   tolerance**. A confirmed, unreleased hold whose holder is absent from a
-  fresh stream aborts the run for that scope and pages. A keep-set object
+  fresh stream is never audit-released: it pages and is probed. A keep-set object
   leaves the store only after every holder that ever held it, confirmed or
   provisional, has released it, followed by the 7-day hold period; a
   never-held one leaves only through a probe that finds no holder (path
   (c)). There is no silent per-run allowance: an unconfirmed keep-set hold
   past the upload grace, and a confirmed one absent from a fresh stream,
   is probed every run, and is released only on probe evidence that its
-  holder does not hold the tuple, or on a recorded operator decision when
-  the probe cannot run.
-- Every canonical class, keep-set included: per (class, scope), probe
-  releases plus audit releases in one run above the larger of 1% and 100
-  holds abort the run for that scope and page, and none of that run's
-  releases apply.
+  holder does not hold the tuple, on a recorded operator decision when
+  the probe cannot run or after a persistent disagreement, or by a
+  migration rollback (section 7).
+- **Batch guard**, every canonical class, per (class, scope) per run, at
+  the larger of 1% and 100 holds. Audit releases (stream absence without
+  per-holder evidence, non-keep-set classes only) above the threshold are
+  discarded: the run applies none of them for that scope and pages.
+  Probe releases are per-holder evidence and are never discarded by the
+  batch guard: above the threshold the run pages with their count and a
+  sample of the evidence, and the releases apply. They still serve the
+  hold period (7 days for keep-set classes), during which any sighting
+  restores them.
 - Other canonical classes (file chunks, tape segments, held images, cited
   capsule evidence): an audit release or a probe release needs two
-  consecutive runs that agree, so one bad provider or resolver run cannot
-  empty a small scope.
+  agreeing runs, recorded in the hold's pending fields (step 3), so one
+  bad provider or resolver run cannot empty a small scope.
 - Per-run caps carried over from today (`artifact_gc.go:38-50,283,323-328`;
   Node B: 50,000 deletes, 32 GiB).
 - Each class goes active only after a reviewed dry run whose per-class
@@ -834,9 +911,15 @@ until open question 6 is answered, whatever the week.
    key) with the canonical `hmac:` ref; it is written in the same guest
    transaction as the revision or evidence row that embeds the image, and
    the image reader maps a content key to its object through it. The import
-   fills it for the live and retained revisions it carries, writing each
-   inserted row (prior value: none) to a migration journal in the same
-   transaction.
+   fills it in the live store and in every retained checkpoint store the
+   platform keeps, each rebuilt from that checkpoint's own revision and
+   evidence rows (the `artifact:sha256:` keys they embed, mapped to the
+   `hmac:` refs of the imported objects), writing each inserted row (prior
+   value: none) to a migration journal in the same transaction. A
+   checkpoint store the import could not fill has no ref table, and every
+   provider and resolver reading it cannot run (section 4); it is never
+   read as an empty closure. The dry run's expected count for the class
+   uses the same live-union-checkpoint set, one holder per object.
 6. **New writes only, from then on:** guest image blobs and screenshots
    and capsule evidence, each with its guest ref row (step 5); file CAS
    under keyed IDs, with version-2 manifests that name chunks as `hmac:`
@@ -851,7 +934,11 @@ migration journal is replayed backward, restoring each row's prior values
 (capture metadata and `content_hash`; og `body_ref`, metadata and
 `content_hash`; mail `blob_ref`; guest ref rows removed) only where the row
 still matches its migrated value; a row changed since the switch is
-reported, not overwritten. Each step's proof includes this rollback on
+reported, not overwritten. In the same act, for each ref the replay
+removes from a holder, it releases the hold the import wrote for that
+(ref, holder), recorded with `decided_by=rollback` and the journal entry as
+evidence, so the next audit finds no confirmed hold whose holder no
+longer names it and no batch of probe releases follows. Each step's proof includes this rollback on
 staging. Writes made after the switch exist only in the new store, so a
 rollback after resumed writes first exports those bodies to the old layout.
 
@@ -1004,6 +1091,13 @@ record. R0g-14 stands: resolver lookups are point queries, one at a time.
 R0g-15 stands: hold rows of purged objects are deleted, which only lowers
 later counts, and the import purges nothing.
 
+Revision 9 note, no new record. The generated capture columns are on the
+corpus table, not in the store, so R0g-01, R0g-08 and R0g-09 do not move;
+by-ref queries and the flag pass are point queries run one at a time, so
+R0g-14 stands; pending fields add two columns per hold row, not rows, and
+`image_refs` holds come only with publishing after step 3, so R0g-15's
+count and its zero-page first audit stand.
+
 ## 9. Open questions for the owner
 
 1. **Discard pre-launch tapes, legacy pins, bases and file CAS?**
@@ -1060,7 +1154,10 @@ later counts, and the import purges nothing.
   consistent with packs and with the holders, a GC driver that releases
   holds on its own probe evidence, a `HolderRefs` resolver in every holder
   service, new canonical ref fields in private holders (mail `blob_ref`,
-  the guest ref table, version-2 file manifests), a write gate in corpusd,
+  the guest ref table in live and retained checkpoint stores, version-2
+  file manifests, a guest/host protocol change), stored generated columns
+  for the capture blob fields, `image_refs` on published og rows, two-phase
+  release state on holds, a write gate in corpusd,
   and interim owner key custody. `repaired`: none until built.
 
 ## Revision 2 log (2026-10-29)
@@ -1247,5 +1344,29 @@ in `file_cas_blobs.go:20,27`, `platform_update.go:61,94`,
 | S risk: legacy list omits `file-cas-roots`, `platform-update` | accepted | §2 legacy encodings |
 | S risk: hold rows of purged objects never deleted | accepted | §4 Catalog, step 4 |
 | S risk: `IfAbsent` verification read cost against R0g-03 | assessed: no committed prediction moves | §8 revision 8 note |
+
+No committed record is edited and no new record is needed (§8 note).
+
+## Revision 9 log (2026-10-30)
+
+Round-8 reviews (`.agentic-consensus/object-storage-r8/out/`): Devin (D)
+accept_with_notes, DeepSeek (S) send_back. Both close every round-7 item.
+Code claims checked [V]: `filecas.go:24,102` (version 1 only),
+`file_cas_http.go:119` and `autoputer/file_sync.go:219` (both sides parse),
+`file_sync.go:569` (the guest builds the manifest),
+`objectgraph_store.go:447-450,510-540` (capture metadata matched by a JSON
+predicate or a one-field-per-kind lookup key, no column per blob field).
+
+| Finding | Ruling | Addressed in |
+|---|---|---|
+| S B1: the batch guard discards the probe releases the keep-set branch depends on; the step 2-5 rollback is such a batch | accepted; extended to non-keep-set probe releases, which carry the same per-holder evidence | §4 Guards (batch guard: audit releases discarded, probe releases page and apply); step 3 branches; Rollback releases its own holds, `decided_by=rollback` |
+| S note 1: two agreeing runs has no persisted first agreement | accepted | §4 Catalog (`pending_release_at`, `pending_run`); step 3 two agreeing runs |
+| S note 2: the published public image copy has no holder or provider | accepted, copy kept: it is an og-class object held by the published row's `image_refs` | §1 image row; §2 og class rule; §4 provider table, path (c) |
+| D note 1, S note 3: retained checkpoints and the guest ref table | accepted | §7 step 5 (every retained checkpoint store filled from its own rows; unfilled is cannot run); §4 provider table, expected counts, holder probe |
+| D note 2: the flag's release valve is unreachable inside the suspended scope | accepted | §4 step 3 flag resolution pass and operator override |
+| D note 3: path (c) query for captures, vacuous "every provider ran", stray refs | accepted: stored generated columns; at least one provider and all ran; designated fields by contract, dry run counts refs outside them | §2 designated ref fields; §4 provider table, path (c) |
+| S risk: v2 manifests are a guest/host protocol change | accepted, verified | §2 file-chunk rule |
+| S risk: catalog rebuild can resurrect purged objects' hold rows | accepted | §4 Catalog rebuild |
+| S risk: a permanently gone computer blocks path (c) | accepted: a recorded operator decision after the owner deletes the computer | §4 path (c) |
 
 No committed record is edited and no new record is needed (§8 note).
