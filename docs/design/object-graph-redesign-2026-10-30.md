@@ -748,6 +748,18 @@ in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
   disk only. Wire it in, unconditionally.
 - **The file surface fsyncs before it acknowledges** (C0 drill: 313 saves
   read back empty after a SIGKILL; fixed 72640d15c).
+- **The checkpoint cadence stays narrow until a checkpoint names a past
+  head.** The checkpoint publish is an event appended with a CAS on the
+  head it witnessed, so the witness must describe the current head. On a
+  busy computer appends land during the read-pool scan, the head moves, and
+  the next attempt pins appends for the whole scan and publish (d@e under
+  drill load: held 1.131 s on 63 MB; the paper's witness alone takes 4 min
+  12 s). The snapshot record already does it the other way: it names the
+  head it witnessed and appends at whatever head is current, which is why
+  the paper's 31 GB snapshot ran under full load with no hold. Fix, the
+  owner's "a checkpoint is a snapshot whose fingerprint is published": a
+  checkpoint references a snapshot record (head, witness, manifest root) on
+  the tape, so binding one reads no store at all.
 
 ### 11.2 Phase 1, split and reordered (all three seats)
 
