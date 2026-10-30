@@ -734,6 +734,18 @@ in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
      inside that bound;
   4. until then, the bound needs an operator override for a recovery, so a
      lost disk is not a code change at the moment of loss.
+
+  Done the same evening (ec2887f84, b957ef538): the payload prefetch took
+  d@e from 206 to 298 events a second. The rest is apply, about 2.7 ms an
+  event; the likely cause is two WAL syncs per replayed event (a hypothesis
+  until the per-step split is read), which a replay now skips (synchronous
+  NORMAL, then FULL and a checkpoint on every exit). The bound is 720,000
+  events, about 40 minutes at 298 a second, and the producer snapshots
+  when the tail reaches three quarters of it. Reading vmctl for this found
+  a second refusal: its empty-store admission planned against the replay
+  watermark rows of the projection-base era, which nothing writes since
+  the cutover; the watermark is now the newest snapshot root. A
+  lost-disk drill on d@e is the proof still owed.
 - **The first-snapshot lookup is a full scan.** `NewestEventOfKind` walks
   `computer_event_index` by `(computer_id, status, sequence)` and tests the
   kind row by row. On a computer with no snapshot that is every event: about
