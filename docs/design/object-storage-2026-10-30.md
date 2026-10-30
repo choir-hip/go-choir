@@ -1,17 +1,13 @@
 # Object storage: one store for every blob, by tier and owner (2026-10-30)
 
-Status: design, revision 10 (after the round-9 review,
-`.agentic-consensus/object-storage-r9/`: Devin accept_with_notes, DeepSeek
-send_back). Revision 5 replaced the object-level release state of
-revisions 3-4 with holder-scoped holds; revision 7 ended provisional holds
-by a holder probe; revision 8 makes that probe a by-key holder resolver,
-makes every private holder store its canonical private ref, and makes
-publish copy-only; revision 9 stops the batch guard from discarding probe
-releases and persists the two-run state; revision 10 makes the batch guard
-count decisions so audit releases have an exit, and imports every object a
-retained checkpoint holds before its ref table is filled (sections 2, 4,
-7). Not ratified;
-nothing is
+Status: design, revision 12 (after the Codex review of revision 11,
+`.agentic-consensus/object-storage-codex/out/codex.out`: send_back).
+Revision 5 replaced the object-level release state of revisions 3-4 with
+holder-scoped holds; revisions 7-10 made the holder probe a by-key
+resolver and gave the batch guard an exit; revision 12 makes the cutover
+one act, adds directory durability, backup completeness and
+generation-qualified tombstones, retires the pre-cutover checkpoints, and
+drops cross-owner dedup (sections 2, 4, 5, 6, 7). Not ratified; nothing is
 built or deployed by this note. Revision 1 is commit 3294bce10; the
 revision logs at the end map every finding to where it is addressed.
 Mutation class of the work it proposes: **red** (tenancy and encryption of
@@ -27,6 +23,14 @@ there they're all of these data blobs ... we don't yet have a S3 compatible
 service running ... that too has to be multi-tenant and secure." Order of
 priorities: security, stability, then scalability and simplicity. Self-hosting
 is committed; a single local box must run with no hosted dependency.
+
+**Owner ruling (2026-10-30): one cutover, no phased slice.** Captures, og,
+mail, guest file CAS, tape segments, bases, images and capsule evidence
+all move in one major cutover ("measure a dozen times, cut once"). There
+is never a second data system: no class keeps a live legacy reader or
+writer after the cut, and the legacy bytes that stay until the deletion
+order (section 7) are frozen rollback material that nothing reads. The
+scope is not narrowed.
 
 Owner decisions on revision 1 (2026-10-29): Q1-Q4 accepted, Q1 conditional
 on export receipts and a restore drill of the keep set, Q3 with a per-owner
@@ -71,8 +75,10 @@ Evidence, not re-derived here:
 6. **A separate host process, `blobd`,** with its own system user and data
    directory, holding no owner keys and no database credentials. The GC
    driver that reads holders is a separate process.
-7. **Keep set first; the rest is deleted, not migrated, and only after
-   export receipts and a restore drill of the keep set.**
+7. **One cutover for every class, rehearsed many times, cut once.** The
+   keep set is imported; the rest, the pre-cutover checkpoints included,
+   is deleted, not migrated, and only after export receipts and a restore
+   drill of the keep set.
 
 ## 1. Blob classes: today and target
 
@@ -100,8 +106,8 @@ get the articles and what the citation and excerpt policy allows (the
 resolved blocks a published version pins, which are og bodies and public),
 not raw full bodies. Making captures platform rather than public also
 removes the reading-list oracle (any computer probing whether the paper
-captured given bytes) and keeps the 604 bodies shared with other owners
-from becoming public copies of their captures.
+captured given bytes). No private capture references a platform object:
+there is no cross-owner dedup (section 9 Q5).
 
 | Class | Today [V] | Tier | Canonical? | Retention | Who reads |
 |---|---|---|---|---|---|
@@ -189,8 +195,25 @@ if it carries one, and discards the upload, all in one catalog transaction.
 If the extent or record is missing or does not match, the upload is
 written as a new record, the catalog is re-pointed at it, the request's
 hold is set or refreshed as on a hit, and the repair is logged, all in one
-catalog transaction. On an absent or purged ref it writes a new record. Objects have no released or condemned state to undo: release is a
-property of one hold, and purge eligibility is computed (section 4). Extent names are unique (a ULID per
+catalog transaction. On an absent or purged ref it writes a new record. Every write of a
+record (first put, re-put after a purge, repair) increments the object's
+**generation**, and the record header carries it; a hit writes no record
+and keeps the generation. Objects have no released or condemned state to
+undo: release is a property of one hold, and purge eligibility is computed
+(section 4).
+
+**Class is per hold, not per object.** Identity excludes class and media
+type, so the same private bytes can be put first as an image and later as
+a mail attachment, and `IfAbsent` keeps the first record. The object's
+`class` column records the first writing put and decides only packing; the
+catalog's media type is the first put's and is checked against the header,
+while each holder keeps and serves its own media type. Every hold records
+the class of its holder (from the provider, set by `Touch` or the holding
+`Put`). An object's protection is the strongest class among its hold rows,
+released or not (keep-set > other canonical > derived > scratch): it is a
+keep-set object for the audit branches, Guards and hold period while any
+hold row is keep-set, whichever class inserted the bytes. A never-held
+object is judged by its put's class. Extent names are unique (a ULID per
 pack) and the catalog decides identity, so the backend never needs
 `If-None-Match`. Enumerating a holder's refs is the GC driver's job against
 the holder's store (section 4), not a store operation.
@@ -217,13 +240,12 @@ run (section 4).
 **Designated ref fields.** Each class rule below names the fields a holder
 may keep refs in. A ref in any other field is not a holder by contract:
 writers must put refs only in designated fields, and no provider, resolver
-or by-ref query reads elsewhere. Before a class goes active, its dry run
+or by-ref query reads elsewhere. Every cutover rehearsal's dry run
 counts canonical-looking strings (`sha256:`, `hmac:`, `sha256/og/` and the
 legacy forms below) in the values of the other structured fields of that
 class's holders (metadata keys and columns), never in body or content
 text, so a captured page or a revision that quotes a hash is not a hit;
-the expected count is zero, and any hit pages and holds the class in dry
-run.
+the expected count is zero, and any hit pages and blocks the cut.
 
 Legacy encodings it accepts, all from the code [V]: `sha256:<hex>`
 (capture metadata); `sha256/og/<hex>.bin` (`og_objects.body_ref`,
@@ -241,13 +263,13 @@ Class rules, one per class; a legacy `sha256` form is accepted only where
 its rule says so:
 
 - capture: designated fields the three blob fields of the
-  `choir.web_capture` metadata. `hmac:` is the holder's private object; `sha256:` is the shared
-  platform object (Q5, section 7 step 2), accepted in a private holder only
-  as that shared reference; in a platform holder only `sha256:`.
+  `choir.web_capture` metadata. In a private holder `hmac:` only (its own
+  private object; a `sha256` form is rejected); in a platform holder
+  `sha256:` only.
 - og: designated fields `body_ref` and, on a published row, the
   `image_refs` metadata list. Public and platform holders:
   `sha256/og/<hex>.bin` or `sha256:`; private holders: `hmac:` only
-  (section 7 step 3). A `sha256` form in a private og row is rejected.
+  (section 7 part 3). A `sha256` form in a private og row is rejected.
   Publishing a revision that embeds an image puts a public copy (class og,
   the image's media type) with the published row as holder and commits the
   row with the copy's `sha256:` ref in `image_refs`, in the same row write
@@ -256,23 +278,23 @@ its rule says so:
   embed publishable (section 1 image row); until then `image_refs` is
   always empty.
 - mail: the attachment row's `blob_ref`, `hmac:` only; the owner-facing
-  `sha256` column is never parsed as a ref (section 7 step 4).
+  `sha256` column is never parsed as a ref (section 7 part 4).
 - image and capsule: the holder's guest ref row, `hmac:` only; the
   `artifact:sha256:` string in revision or evidence content is a display
-  and lookup key, not a ref (section 7 step 5).
+  and lookup key, not a ref (section 7 part 5).
 - file-chunk: a version-2 manifest, built by the guest, names chunks as
   `hmac:<hex>`; a version-1 manifest's bare hex and the
   `sha256/file-cas-*` paths name legacy chunks outside the store, which
-  `CanonicalRef` reports as legacy (counted separately, never streamed, and
-  governed by today's namespace GC until deleted, section 7). Version 2 is
-  a guest/host protocol change [V]: `manifestVersion = 1` and `VerifyRoot`
-  rejects any other version (`filecas.go:24,102`), the host parses
-  manifests at `file_cas_http.go:119` and the guest at
-  `autoputer/file_sync.go:219`, and the guest builds them
-  (`file_sync.go:569`). During the transition both versions parse on both
-  sides; the guest builds version 2 only once its host accepts it; and the
-  chunk fetch path changes from per-computer hex paths to store refs read
-  through blobd.
+  `CanonicalRef` reports as legacy (counted separately, never streamed;
+  frozen at the cutover, never read after it, and deleted with the
+  per-computer file CAS, section 7). Version 2 is a guest/host protocol
+  change [V]: `manifestVersion = 1` and `VerifyRoot` rejects any other
+  version (`filecas.go:24,102`), the host parses manifests at
+  `file_cas_http.go:119` and the guest at `autoputer/file_sync.go:219`, and
+  the guest builds them (`file_sync.go:569`). There is no mixed period: the
+  cutover release carries both sides, the host accepts only version 2 from
+  the cut, every guest builds only version 2 after its cutover boot, and
+  the chunk fetch path is store refs read through blobd.
 - tape-segment and base: internal, `hmac:` only, written so from the start
   by the segment ref table and the base records.
 - platform-update: public, any of its `sha256` forms.
@@ -286,7 +308,7 @@ Every private and internal holder therefore stores the canonical `hmac:`
 ref in a field of its own row (or of a ref row written in the same
 transaction), alongside any legacy value it keeps for its users. The
 field, transaction and migration journal for each holder are in section 7
-steps 2-6.
+parts 2-6.
 
 **Merge-key encoding.** Streams and the `holds` table sort and compare on
 one byte encoding of the 4-tuple (ref, provider, holder scope, holder key),
@@ -434,19 +456,47 @@ the S3 backend and a desktop cache are untrusted storage.
 transaction as the holder. Guest refs reach the host as the **CAS closure**
 of each semantic checkpoint (data rearchitecture §What it buys). Invariant:
 every restorable checkpoint is retained, and its closure is a root. The
-invariant covers store-class refs. A checkpoint restores from its pinned
-projection base (`projection_jobs_http.go:92-94`), not from file CAS, so
-version-1 file manifests and their chunks were never restore material: they
-stay under today's namespace GC, which already drops chunks once their root
-leaves the latest root plus grace (`artifact_gc.go:856-886`,
-`file_cas_retire.go:95-117`), and the per-computer file CAS is deleted
-pre-launch (Deleted, not migrated). Version-2 roots are held like any other
-canonical class.
+invariant covers store-class refs. Only post-cutover checkpoints exist as
+restore points: the pre-cutover set is retired at the cutover (section 7).
+Version-1 file manifests and their chunks were never restore material (a
+checkpoint restores from its pinned projection base,
+`projection_jobs_http.go:92-94`, not from file CAS) and are deleted with
+the per-computer file CAS (Deleted, not migrated). Version-2 roots are held
+like any other canonical class.
+
+**Checkpoint closures.** A checkpoint is a reconstruction record, not a
+stored store [V]: publication writes the checkpoint JSON and a database
+row (`internal/platform/checkpoints.go:182`), and the bind "installs no
+base, replays no tape" and leaves derivability to restore, which
+reconstructs to the head and refuses a witness mismatch
+(`internal/agentcore/checkpoint_restore_bindings.go:45`). Its closure is
+therefore the guest ref table (section 7 part 5) at the head H it names,
+read from the state the restore path reconstructs: the host's verification
+rebuild for that checkpoint seeds from the previous base and replays to H
+(apply-checkpoint design §4.1, the same path §4.4 uses for restore), and
+judges the witness (`selfdevprotocol/checkpoint_verdict.go`). The rebuild
+writes the ref table it reconstructed at H as **closure rows** in Store A
+(holder kind, holder ID, `hmac:` ref; never the plaintext content key),
+keyed by checkpoint digest, with their digest on the checkpoint row. They
+are accepted only when the rebuilt ref table's own hash equals the
+checkpoint witness's hash for that table (a v2 witness carries per-table
+hashes, `selfdevprotocol/witness_v2.go`; the engine migration's witness
+must keep a per-table hash for this table), so they are proven equal to
+the checkpoint even when a `base_upcast` difference elsewhere leaves the
+verdict `unverified`. A `not_derivable` checkpoint is not a restore point
+(restore refuses it) and holds nothing. A retained checkpoint with no
+accepted closure rows (pending, rebuild refused, table hash differs, rows
+whose digest fails) makes the guest-closures provider unable to run for
+that computer, never an empty closure; one pending for more than 12 h is
+stale (below). Closure rows are deleted with the checkpoint when it leaves
+retention, and are rebuilt by the same reconstruction if lost.
 
 **Root providers, closed list.** Each provider streams canonical
 (ref, provider, holder scope, holder key) tuples sorted by the merge-key
 encoding (section 2) and stamps the stream with a host-assigned snapshot
-time: the start of its read transaction on host databases, and for guest
+time: the start of its read transaction on host databases (for closure rows,
+the read that also checks the checkpoint is still retained, so a retained
+checkpoint holds as of now, not as of its bind), and for live guest
 closures the host's receipt time minus a skew margin, never a guest clock.
 A snapshot time that is wrong in either direction fails loud (a page), not
 silent. The driver also takes an expected count per (class, scope) from an
@@ -460,10 +510,10 @@ union every retained checkpoint, one holder per holding object.
 |---|---|---|
 | corpus, og | `og_objects.body_ref` and a published row's `image_refs` through `CanonicalRef`, with the row's own tier (published: public; else platform or private by owner) and scope as inputs (og object ID) | og |
 | corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them. For the by-ref query each blob field also gets a row in the `og_lookup_keys` side table (three rows per capture, one lookup kind per blob field, written in the row's transaction on every write of the row). Today's generic `writeLookupKey` deletes every lookup row for a canonical ID before inserting its one kind (`retrieval_schema.go:140-159`), which would drop these and the `image_refs` rows on any later write of a registered kind; its delete becomes scoped to the kind it writes, and the capture and og writers own their ref rows, not a generated column: on Dolt 2.1.9 a virtual generated column corrupts the upsert, a functional index fails it, and a stored column rewrites every `og_objects` row into history (`internal/platform/retrieval_schema.go:34-40` [V]) (capture object ID) | capture |
-| maild | per-owner `email_attachments.blob_ref` (section 7 step 4), and `email_drafts.attachments_json` resolved through the attachment IDs it names to those rows' `blob_ref`, `maild/attachments.go:24-56,215-275` (attachment or draft ID) | mail |
+| maild | per-owner `email_attachments.blob_ref` (section 7 part 4), and `email_drafts.attachments_json` resolved through the attachment IDs it names to those rows' `blob_ref`, `maild/attachments.go:24-56,215-275` (attachment or draft ID) | mail |
 | control, releases | the route tables' current and rollback refs, `platformUpdateLiveDigests`, `artifact_gc.go:475` (route slot) | platform-update |
 | control, computers | file roots, through their manifests to the chunks each names (the root row holds only `manifest_ref`, `file_cas.go:13-21`; chunks are inside the manifest, `artifact_gc.go:713-735`); bases and their pins; tape segments by the retained receipt chain, with a segment ref table added before the tape moves into the store (root, base or segment ID) | file-chunk, base, tape-segment |
-| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 step 5, not copied from pin files, which have no unpin), cited capsule evidence, version-2 file manifests. A ref held only in a retained checkpoint stays held. A checkpoint taken after section 7 step 5 carries the guest ref table inside its store; one taken before has a host-side sidecar ref table keyed by checkpoint digest (section 7 step 5), so no sealed checkpoint or its witness changes. A checkpoint with neither, or whose sidecar fill failed, makes the provider unable to run for that computer, never an empty closure (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
+| guest closures | the closure of every retained checkpoint, not only the live state: image refs held by the Texture revisions and evidence objects in that checkpoint (enumerated from their guest ref rows, section 7 part 5, not copied from pin files, which have no unpin), cited capsule evidence, version-2 file manifests. A ref held only in a retained checkpoint stays held. The live store is read from its guest ref table; each retained checkpoint from its accepted closure rows (Checkpoint closures, above). A retained checkpoint without them makes the provider unable to run for that computer, never an empty closure (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
 
 A provider that fails, returns an unparseable ref, or is stale makes its
 scopes **suspended** for that run: no hold in a suspended scope is judged
@@ -474,13 +524,14 @@ suspended scope and how long it has been suspended, so the exemption is
 visible.
 
 **Catalog.** blobd keeps a SQLite (WAL, `synchronous=FULL`) catalog with
-two tables. `objects`: ref, tier, class, media type, plaintext size,
+two tables. `objects`: ref, generation, tier, class (first put's),
+media type, plaintext size,
 cipher digest, per-frame digests (public objects), pack ID (a ULID, no
 file extension) and offset, `put_at`, `last_touch` (latest Put, IfAbsent
 hit or Touch), `last_seen` (latest stream sighting of any holder),
 `abandoned_at` and its probe evidence (keep-set objects that never had a
 hold, below), `purged_at`. `holds`: ref, provider, holder scope, holder key,
-`touched_at`, `first_seen`, `last_seen`, `released_at`,
+class (the holder's), `touched_at`, `first_seen`, `last_seen`, `released_at`,
 `pending_release_at` and `pending_run` (the first of two agreeing runs,
 below), `flag_suppressed_at` (an operator override, below; cleared by `Touch`,
 `Release`, a probe that no longer finds the tuple, or a stream naming the
@@ -498,8 +549,19 @@ holder's hold on the same object is untouched, so one holder's delete never
 covers another holder's absence. A hold with `first_seen` null is
 **provisional**: the holder touched but no stream has yet shown it
 committed. An object's hold rows are deleted in the catalog transaction
-that purges it, and the deletion-intent record lists them, so the catalog
-stays bounded by live objects plus those in their hold period.
+that purges it, and its tombstone lists them, so the catalog stays bounded
+by live objects plus those in their hold period.
+
+**Deletion intent is not deletion.** Two logs, both appended and fsynced
+outside the catalog. The deletion-intent log is written before a purge
+(as `artifact_gc.go:794-825` writes `intent` before the unlink and the
+`deleted` result after it [V]) and is for audit only: nothing replays it.
+A **tombstone** (ref, generation, the hold rows deleted) is appended and
+fsynced after the purge transaction commits, and only a committed purge
+writes one. A record's space becomes dead for compaction only once its
+tombstone is durable; on start, blobd writes the missing tombstone of any
+purged row that lacks one, so a crash between the purge commit and the
+tombstone leaves the bytes in place, never a deletion without a record.
 
 Both calls come **before** the holder's own commit, and a disagreement
 resolves toward retention: a holder that touches and then fails its commit
@@ -510,15 +572,18 @@ transaction across its store and blobd.
 
 There is no separate release journal. Hold changes commit in the catalog's
 WAL with `synchronous=FULL`, and the catalog is the only state that needs
-them. Off host, restic carries a consistent catalog snapshot nightly
-(section 6). Rebuild: restore the latest snapshot; replay the
-deletion-intent log written after it, so every object purged since is
-marked purged again and not resurrected, and the hold rows each record
-lists are deleted again; reconcile pack and offset for
-every object against the packs and their indexes (a record that moved by
-compaction is re-pointed, one that is gone and not purged pages as a lost
-object); adopt records from packs written after the snapshot (record
-headers carry tier, scope, object ID, class and plaintext length); set
+them. Off host, restic carries a consistent catalog snapshot and the
+tombstone log nightly (section 6). Rebuild: restore the latest snapshot;
+replay only the committed tombstones written after it, never an intent
+record: a tombstone marks its (ref, generation) purged and deletes the
+hold rows it lists only when the catalog's object for that ref is at that
+generation; adopt records from packs written after the snapshot (record
+headers carry tier, scope, object ID, generation, class and plaintext
+length), where a record of a higher generation than a tombstone wins over
+it whatever the replay order, so a re-put after a purge survives; reconcile
+pack and offset for every object against the packs and their indexes (a
+record that moved by compaction is re-pointed, one that is gone and not
+purged pages as a lost object); set
 every `last_touch = now`; then run one audit in report-only mode: missing
 holds are repaired from the streams, and unreleased holds absent from the
 streams page. Releases made after the snapshot surface as such pages; the
@@ -617,8 +682,9 @@ Protocol:
    from that state. It is independent of the bulk stream: a different query,
    by key, sharing only `CanonicalRef` and the holding rule. For a guest
    holder it reads the live guest store over the bound-guest channel; a
-   holder held only in a retained checkpoint is read from that checkpoint,
-   and a resolver that cannot open the checkpoint cannot run. A read whose
+   holder held only in a retained checkpoint is read from that
+   checkpoint's accepted closure rows (Checkpoint closures, above), and a
+   checkpoint without them cannot run. A read whose
    snapshot predates the hold's `touched_at` is stale and cannot run.
    Outcomes, comparing the returned tuples with the hold's ref:
    - the tuple is present: the hold is confirmed (`first_seen` set if null,
@@ -642,8 +708,8 @@ Protocol:
    - a returned ref has the hold's ID but a different tier or scope: not a
      decision; it pages and the hold stays;
    - the probe cannot run (`err`, holder service unreachable, guest down,
-     stale read, checkpoint unreadable or with neither its own ref table
-     nor a filled sidecar, a ref `CanonicalRef` rejects): it
+     stale read, a retained checkpoint without accepted closure rows, a
+     ref `CanonicalRef` rejects): it
      pages and the hold stays; this is never read as "absent". Of the
      probe outcomes, only here may an operator decide instead, after their
      own check of the holder;
@@ -696,7 +762,7 @@ Protocol:
    (`objectgraph_store.go:447-450,510-540` [V]), the three `og_lookup_keys`
    rows per capture (provider table); `blob_ref` for mail;
    the guest ref table in the live store and each retained checkpoint's
-   own table or sidecar, for images and capsule evidence; for file chunks, a decode of the scope's retained
+   closure rows, for images and capsule evidence; for file chunks, a decode of the scope's retained
    manifests. A ref in a non-designated field is not found, by contract
    (section 2). Only when the class has at least one provider, all of them
    ran, and none found a holder is the object marked abandoned (`abandoned_at`,
@@ -734,9 +800,10 @@ Protocol:
    still eligible with `last_touch < S` and `last_seen < S` of that fresh
    audit. This is today's `unlinkIfStillUnreachable` recheck
    (`artifact_gc.go:808,831-850`) carried over. Each purge is logged to the
-   deletion-intent JSONL (`artifact_gc.go:760-834`) before it happens; the
-   purge deletes the object's hold rows in the same catalog transaction,
-   and the record's pack space becomes dead for compaction.
+   deletion-intent log before it happens (audit only); the purge deletes
+   the object's hold rows in the same catalog transaction; then its
+   tombstone is made durable, and only then is the record's pack space
+   dead for compaction (Catalog, above).
 
 A sighting refreshes `last_seen`, so an object a flapping provider missed
 once is simply not eligible next run; there is no condemned state to undo.
@@ -782,10 +849,15 @@ root provider once mass-deleted live og bodies (2026-10-05,
   bad provider or resolver run cannot empty a small scope.
 - Per-run caps carried over from today (`artifact_gc.go:38-50,283,323-328`;
   Node B: 50,000 deletes, 32 GiB).
-- Each class goes active only after a reviewed dry run whose per-class
-  counts match the import receipts (ref coverage 100% for keep-set classes,
-  zero repairs and zero pages on the first audit after import), as today's
-  GC admits namespaces one by one.
+- **Activation.** Before the cut, every rehearsal of the cutover runs the
+  GC in dry run over the rehearsal store, and its per-class counts must
+  match the import receipts (ref coverage 100% for keep-set classes, zero
+  repairs and zero pages on the first audit after import). At the cutover
+  every class's GC runs from day one in the one store, except automatic
+  deletion of keep-set objects: it starts report-only (a setting of the
+  same store: audits, probes and releases run, and `Purge` of a keep-set
+  object is reported, not executed), turned on ring by ring, proof ring
+  first, after its reports match reality.
 
 **What it replaces.** The per-namespace walker over `sha256/<ns>/` with mtime
 as liveness and `casReuseMu` with `Chtimes` to protect reuse
@@ -797,17 +869,26 @@ mtime is not a liveness signal on packs or S3.
 
 **Packs.** Objects under 16 MiB append to the open pack of their scope (one
 open pack per public class, per platform class, per owner, per computer).
-A pack seals at 64 MiB or after 1 h idle, matching the tape's 64 MiB seal
-(`tapestore/format.go:106`). Objects of 16 MiB or more (bases, large media)
+A pack seals at 64 MiB (the tape's seal, `tapestore/format.go:106`),
+after 1 h idle, or at the **maximum open-pack age** of 1 h from its
+creation, whichever comes first, so a scope that writes steadily but
+slowly still seals; a backup run also force-seals (section 6). Objects of 16 MiB or more (bases, large media)
 are one extent each, framed the same way. The 154,649 capture-body files
 and 21,862 og files become a few hundred files (R0g-09); the 7.4 M-inode
 legacy pin tree is the lesson that one file per object costs inodes,
 directory scans and backup time far beyond its bytes (inventory §1).
 
-**Write discipline.** Records append to the open pack with a header CRC and
-the cipher digest. Puts are group-committed: up to 5 ms or 8 MiB, then one
+**Write discipline.** A new pack or standalone extent is created
+exclusively, its header written, the file fsynced, then its parent
+directory fsynced, and every directory newly created up the tree, before
+any acknowledgement that depends on it, as tapestore does
+(`startSegment` and `syncTree`, `internal/tapestore/appender.go:508-540`
+[V]: "nothing is acknowledged on top of a directory entry that may not be
+durable"). Then records append to the open pack with a header CRC and the
+cipher digest. Puts are group-committed: up to 5 ms or 8 MiB, then one
 `fdatasync` of the pack, then one catalog transaction, then the
-acknowledgements. The catalog names a pack by ULID; the reader resolves
+acknowledgements. A standalone extent is written, fsynced and its
+directory entry made durable before its catalog commit. The catalog names a pack by ULID; the reader resolves
 `<ulid>.pack`, then `<ulid>.open`. Sealing happens only after the pack's
 last record is catalogued: write the index (sorted refs, offsets), fsync
 it, fsync the pack, rename `*.open` to `*.pack`, fsync the directory.
@@ -816,14 +897,20 @@ it, fsync the pack, rename `*.open` to `*.pack`, fsync the directory.
 record (records whose CRC and digest verify are adopted; a torn tail is
 truncated) and, after an unclean shutdown, compares every pack sealed since
 the last clean checkpoint of the catalog against its index and records,
-adopting any record the catalog lacks. Each crash point (after append,
-after fsync, after catalog commit, after index write, after rename) gets a
-kill test before step 1 ships.
+adopting any record the catalog lacks. Each crash point (after create,
+after directory fsync, after append, after fsync, after catalog commit,
+after tombstone, after index write, after rename) gets a process-kill test
+and a power-loss test (fault injection that drops unsynced file and
+directory writes, e.g. a dm-flakey or `LD_PRELOAD` fsync-drop harness)
+before the cutover's first rehearsal.
 
-**Compaction.** A record's space is dead only when its object is purged;
-nothing else (no hold state, no age) makes it dead. A sealed pack whose
-dead fraction exceeds 40% is rewritten: every record that is not purged is
-copied to a new pack, and the catalog is switched in one transaction.
+**Compaction.** A record's space is dead only when its (ref, generation)
+has a committed tombstone; nothing else (no hold state, no age, no intent
+record) makes it dead. A sealed pack whose dead fraction exceeds 40% is
+rewritten: every record without a committed tombstone is copied to a new
+pack, and the catalog is switched in one transaction. Sealed packs of one
+scope under 8 MiB (age-sealed) are rewritten together the same way, so the
+age bound does not rebuild the inode problem.
 Compaction holds the catalog's GC lock, which `Purge` also takes, for the
 whole rewrite, so the not-purged set of the pack cannot change during the
 copy (a sealed pack gains no records, and a re-put of a purged ref writes
@@ -862,50 +949,71 @@ we do not write. What it does not buy: encryption, identity, refs, tenancy,
 verification and GC, which stay in the Choir layer.
 
 **Off-host copies before SeaweedFS (Q4, accepted):** a nightly restic run
-uploads newly sealed packs, a consistent catalog snapshot (objects and
-holds, taken with SQLite's backup API), and the wrapped key
-material (interim owner KEKs and escrow rows, platform KEK wrap) so the
-private and platform tiers are recoverable from the copy. The run forces a
-seal of idle open packs first; what is still open is the stated loss window
-(at most a day of puts) until a second host.
+(1) takes a consistent catalog snapshot (objects and holds, SQLite's backup
+API); (2) force-seals every pack open at that instant, whatever its size
+or age (new puts go to fresh packs; a pack seals once its pending group
+commit is catalogued); (3) writes an **extent manifest** bound to the
+snapshot: every pack and standalone extent the snapshot names, by ID and
+the SHA-256 of the sealed file and its index, plus the snapshot's own
+digest; (4) uploads those extents not yet uploaded, the snapshot, the
+manifest, the tombstone log and the wrapped key material (interim owner
+KEKs and escrow rows, platform KEK wrap), so the private and platform
+tiers are recoverable from the copy; (5) verifies from the restic
+repository that every manifest entry is present with its digest, and only
+then reports success. A run that cannot verify reports failure and pages;
+it never reports partial success. Loss bound on host loss, stated
+honestly: every put acknowledged after the last successful run's snapshot,
+at most 24 h while runs succeed, plus one more day for each failed run
+(each paged), until a second host.
 
-## 7. Migration, keep set first
+## 7. Migration: one cutover, keep set first
 
-Downtime is acceptable now (owner, 2026-10-29). Every import step runs
-under a **writer drain** for its class, not a rejection alone: a 503 stops
-new requests but not one already inside `sourcegraph.WriteCaptures`, which
-writes the three bodies and then the row synchronously
-(`internal/platform/captures.go:201`, `internal/sourcegraph/captures.go:194-207`
-[V]). The drain: (1) a write gate in corpusd stops accepting capture and og
-writes, HTTP handlers and background jobs alike (the capture endpoint
-returns 503 and the paper's publishing pauses); (2) the import waits until
-the gate's in-flight count, exposed on corpusd's health endpoint, is zero,
-which quiesces body and row writes together; or corpusd is stopped
-instead; (3) only then the import scan, the referenced-set comparison and
-the handler switch; writes resume after the switch. The import writes one
-confirmed hold per (ref, provider, holder scope, holder key) tuple the
-providers stream inside the drain. The
-old directory stays, read-only, until the comparison and a week of reads
-pass; the old og directory, which holds the 12,534 `*.txt`, is not deleted
-until open question 6 is answered, whatever the week.
+**One cutover (owner ruling, 2026-10-30).** Every class moves in one
+cutover under one writer drain: captures, og, mail, guest file CAS, tape
+segments, bases, images, capsule evidence, and with them platform update
+payloads and checkpoint artifacts, so that no namespace walker or legacy
+reader survives the cut. The parts below are the order of work inside
+that one drain, not separately shipped steps. Before the cut the whole
+cutover, its rollback included, is rehearsed end to end many times on the
+proof ring (d@e) and on a copy of Node B's data, each rehearsal producing
+import receipts, dry-run GC counts (section 4, Activation) and timings;
+the cut runs once those match. Red, tier 2.
+
+Downtime is acceptable now (owner, 2026-10-29). The **writer drain** covers
+every writer, not a rejection alone: a 503 stops new requests but not one
+already inside `sourcegraph.WriteCaptures`, which writes the three bodies
+and then the row synchronously (`internal/platform/captures.go:201`,
+`internal/sourcegraph/captures.go:194-207` [V]). The drain: (1) a write
+gate in corpusd stops accepting capture and og writes, HTTP handlers and
+background jobs alike (the capture endpoint returns 503 and the paper's
+publishing pauses), and maild's gate stops attachment staging; (2) every
+computer is stopped as for a planned update, and host replay workers, base
+builds and the legacy GC are stopped; (3) the import waits until each
+gate's in-flight count, exposed on its service's health endpoint, is zero,
+which quiesces body and row writes together, or the service is stopped
+instead; (4) only then the import scan, the referenced-set comparisons and
+the switch of every reader and writer; writes resume after the switch, and
+computers boot onto the cutover release, which writes only the new store.
+The import writes one confirmed hold per (ref, provider, holder scope,
+holder key) tuple the providers stream inside the drain. The legacy
+directories stay frozen (no writer, no reader, rollback material only)
+until the comparison and a week of clean operation pass, and the legacy
+tape, bases, file CAS and pin tree until the deletion order below; the old
+og directory, which holds the 12,534 `*.txt`, is not deleted until open
+question 6 is answered, whatever the week.
 
 1. **Build blobd, the GC driver and `internal/objstore` with the local
-   backend**, shipped on the proof ring first (d@e), then Node B's host.
-   Red, tier 2. GC starts in dry run for every class.
-2. **Capture bodies** (freeze). The Autopaper's 150,811 referenced bodies
-   into the platform tier under unchanged `sha256:` IDs (no row rewrite).
-   The other owners' ~3.8 K into the private tier under their interim keys;
-   under the Q5 default, a body whose sha256 exactly matches a platform
-   object is referenced, not copied (the 604 shared bodies): the row's
-   blob field carries the platform `sha256:` ref, the read is host-mediated
-   under the platform tier's policy, and no private ref aliases a platform
-   extent. Private capture rows therefore carry mixed encodings (`hmac:`
-   for their own bodies, `sha256:` for shared ones); `CanonicalRef` and
-   every capture reader accept both: in a capture row `hmac:` is the
-   holder's private object and `sha256:` the shared platform object, a
-   capture-class rule of `CanonicalRef` (section 2). Their 1,840
-   capture rows are rewritten through the normal objectgraph write path:
-   new `hmac:` blob fields and a recomputed `content_hash`
+   backend**, with every crash and power-loss test of section 5 passing,
+   and rehearse the full cutover (above).
+2. **Capture bodies.** The Autopaper's 150,811 referenced bodies into the
+   platform tier under unchanged `sha256:` IDs (no row rewrite). The other
+   owners' ~3.8 K into the private tier under their interim keys, each its
+   own `hmac:` object, the 604 bodies that equal a platform body included:
+   no private row references a platform object (section 9 Q5), so the
+   owner-readable `content_blob_id` (`internal/platform/captures.go:289`
+   [V]) never tells an owner whether the paper holds the same bytes. Their
+   1,840 capture rows are rewritten through the normal objectgraph write
+   path: new `hmac:` blob fields and a recomputed `content_hash`
    (`objectgraph/object.go:97`, which covers metadata), so derived keys see
    the change and re-derive (`objectgraph/derived_keys.go:490`). The
    canonical ID does not change (captures use an identity key,
@@ -916,10 +1024,10 @@ until open question 6 is answered, whatever the week.
    row, the paper's included (about 197 K rows, an insert into a side
    table, not a rewrite of `og_objects`), and the capture writer writes
    them in the row's transaction from then on.
-   Then verify every referenced ref resolves and hashes, switch `PutBody`,
-   `Body` and every reader listed in section 3, and keep the 36 orphans in
-   the old directory until the week passes.
-3. **og blobs** (freeze). Import the 21,848 referenced bodies by the tier
+   Then verify every referenced ref resolves and hashes, and switch
+   `PutBody`, `Body` and every reader listed in section 3; the 36 orphans
+   stay in the frozen old directory until the week passes.
+3. **og blobs.** Import the 21,848 referenced bodies by the tier
    of their holding object, passed to the `Put` and to `CanonicalRef`; a
    body referenced by holders at two tiers becomes two objects, one per
    tier. `body_ref` is not rewritten for public and platform holders. A
@@ -936,7 +1044,8 @@ until open question 6 is answered, whatever the week.
    question 6. Fix the `nix/node-b.nix:1298` comment, which says og is
    outside the active GC namespaces while `:1307` includes it.
 4. **Mail.** Outbound attachments (10 files) into the private tier; inbound
-   bodies stay in `mail.db` until mail moves into the computer. Each
+   bodies are rows in `mail.db`, not blobs, and stay there until mail moves
+   into the computer. Each
    per-owner `email_attachments` table gains a `blob_ref` column holding
    the canonical `hmac:` ref; the `sha256` column (`maild/attachments.go:133,236`,
    `maild/store.go:829`), an owner-facing API value, is unchanged.
@@ -951,90 +1060,94 @@ until open question 6 is answered, whatever the week.
    (`maild/ingest.go:102-112` [V]) and keep `blob_ref` NULL; a NULL
    `blob_ref` is no holder, and neither the provider nor its expected
    count includes it.
-5. **Guest Textures.** The paper's Texture documents and revisions are
-   rows, not blobs: they move with the guest engine (SQLite) migration, read
+5. **Guest Textures, images and capsule evidence; retire the pre-cutover
+   checkpoints.** The paper's Texture documents and revisions are rows,
+   not blobs: they move with the guest engine (SQLite) migration, read
    offline from a reflink copy (keep-set §8.1). The owner's three
    computers' Textures are nice-to-keep (keep-set owner note): copied if the
-   migration makes it cheap. The import puts into the owner's private
-   tier every image and cited capsule-evidence object held by a revision
-   or evidence row in the live store or in any retained checkpoint, read
-   from the guest image directory or the checkpoint's copy of it. File
-   chunks named by a retained checkpoint's version-1 manifests are not
-   imported here: they stay legacy, outside the store, under today's
-   namespace GC until deleted (section 2, file-chunk rule). Revision and evidence content keeps its
-   `artifact:sha256:<hex>` strings (`imageblob.go:91`): rewriting them would
-   change canonical revision content and its hashes. Instead the guest
-   store gains a ref table, one row per (holder kind, holder ID, content
-   key) with the canonical `hmac:` ref; it is written in the same guest
-   transaction as the revision or evidence row that embeds the image, and
-   the image reader maps a content key to its object through it. The import
-   fills it in the live store, and for every retained checkpoint the
-   platform keeps it writes a **sidecar ref table** on the host, keyed by
-   the checkpoint's digest, rebuilt from that checkpoint's own revision and
-   evidence rows (the `artifact:sha256:` keys they embed). The sidecar sits
-   beside the checkpoint, not in it, so sealed checkpoints and their
-   witnesses do not change; checkpoints taken after the switch carry the
-   ref table in their own store and need none. A restore of a pre-switch checkpoint after the switch re-runs this fill
-   for the restored store before the computer resumes, so the restored
-   store and its later checkpoints carry the table. A sidecar records the
-   checkpoint digest and its own content digest, is verified on every read
-   and rebuilt from the checkpoint when they disagree; a sidecar that
-   cannot be verified makes the provider unable to run, never a source of
-   probe evidence. The map covers the whole
-   key set of the live store union every retained checkpoint, each key to
-   the `hmac:` ref of its imported object. A key with no imported object
-   (bytes in neither the guest directory nor the checkpoint) fails that
-   checkpoint's fill: no row is ever written for a missing object, the
-   sidecar is marked failed, and every provider and resolver reading that
-   checkpoint cannot run (section 4); it is never read as an empty
-   closure. Each inserted row (prior value: none) goes to a migration
-   journal in the same transaction. A sidecar is deleted with its
-   checkpoint when the checkpoint leaves retention. The old image state
-   directory is not retired until every checkpoint fill has succeeded.
-   The dry run's expected count for the class uses the same
-   live-union-checkpoint set, one holder per object.
-6. **New writes only, from then on:** guest image blobs and screenshots
-   and capsule evidence, each with its guest ref row (step 5); file CAS
-   under keyed IDs, with version-2 manifests that name chunks as `hmac:`
-   (section 2, file-chunk rule); the public seed tier for
-   shared system files (written once), bases encrypted under the computer
-   DEK, tape segments of user computers as internal extents (the paper
-   leaves the tape, owner 21:10).
+   migration makes it cheap. Today's checkpoints are reconstruction
+   records, not stored stores (section 4, Checkpoint closures [V]), so no
+   pre-cutover checkpoint has a ref table to read or fill. The cutover
+   **retires the pre-cutover checkpoint set and its restore history**
+   (owner-accepted, section 9 Q1 and Deleted, not migrated): they are
+   marked retired, are no restore points and no roots, and their bytes go
+   by the deletion order below. There is no sidecar and no fill of an old
+   checkpoint. The import puts into the owner's private tier every image
+   and cited capsule-evidence object held by a revision or evidence row in
+   the live store, read from the guest image directory. Revision and
+   evidence content keeps its `artifact:sha256:<hex>` strings
+   (`imageblob.go:91`): rewriting them would change canonical revision
+   content and its hashes. Instead the guest store gains a ref table, one
+   row per (holder kind, holder ID, content key) with the canonical
+   `hmac:` ref; it is written in the same guest transaction as the
+   revision or evidence row that embeds the image, and the image reader
+   maps a content key to its object through it. The import fills it in the
+   live store; a key with no imported object fails that computer's import
+   (no row is ever written for a missing object) and the cut does not
+   proceed until the key is accounted for. Each inserted row (prior value:
+   none) goes to a migration journal in the same transaction. Every
+   checkpoint taken after the cutover carries the ref table in its own
+   state from its first bind, and its closure is enumerated as section 4
+   states. The old image state directory is frozen with the others.
+6. **Tape, bases, file CAS, platform updates and checkpoint artifacts.**
+   Each user computer's tape continues from its drained head as internal
+   extents in the store (the paper leaves the tape, owner 21:10); its
+   first post-cutover restore point is a base captured at that head
+   (`projectionbase.PublishCapturedBase`, the store at its own head) and
+   written to the store as an internal extent encrypted under the computer
+   DEK, with a checkpoint bound at the same head before writes resume.
+   File CAS restarts as version 2 under keyed IDs: each guest's first sync
+   after its cutover boot uploads its file roots from its own disk
+   (within-owner dedup), and the public seed tier holds shared system
+   files, written once. Platform update payloads (1.4 GB) are imported into
+   the public tier, held by the route slots that name them. Checkpoint
+   artifacts (today `computer-checkpoints/<digest>.json`,
+   `internal/platform/checkpoints.go:182` [V]) are written to the store as
+   internal objects held by their checkpoint row. From the cut, every new
+   write of every class goes only to the store: guest image blobs,
+   screenshots and capsule evidence each with its guest ref row (part 5).
 
-**Rollback.** Each step is reversed by one act: the resolver config points
-back at the old directory (never a silent fallback), and for steps 2-5 the
-migration journal is replayed backward, restoring each row's prior values
-(capture metadata and `content_hash`; og `body_ref`, metadata and
-`content_hash`; mail `blob_ref`; guest ref rows and sidecar rows removed)
-only where the row still matches its migrated value; a row changed since
-the switch is not restored to its pre-migration value: it is reported and
-handled as a post-switch holder (below). In the same act, for each ref the replay
-removes from a holder, it releases the hold the import wrote for that
-(ref, holder), recorded with `decided_by=rollback` and the journal entry as
-evidence, so the next audit finds no confirmed hold whose holder no
-longer names it and no batch of probe releases follows. Each step's proof includes this rollback on
-staging. Writes made after the switch exist only in the new store, so a
-rollback after resumed writes first exports those bodies to the old
-layout, and in the same act converts each post-switch holder's ref fields
-back to the legacy form the old resolver reads (capture blob fields and
-og `body_ref` to their `sha256` forms, with `content_hash` recomputed;
-mail `blob_ref` cleared; guest ref rows removed; post-switch version-2
-file roots rewritten as version-1 manifests over chunks exported to the
-legacy per-computer hex paths; the tape segment ref table dropped once its
-segments are exported to the legacy tape layout), journaling the values
-it replaces and releasing those holds with `decided_by=rollback`. No
-holder is left with an `hmac:`, `blob_ref` or ref-table ref after a
-rollback.
+**Rollback.** The cutover is reversed by one act, under the same writer
+drain as the import: gates closed, in-flight counts zero, computers
+stopped, before any post-switch holder is enumerated and until the
+resolvers point back, so no writer can commit a new-form ref in between.
+Inside it: the resolver config points back at the frozen directories
+(never a silent fallback), and the migration journals are replayed
+backward, restoring each row's prior values (capture metadata and
+`content_hash`; og `body_ref`, metadata and `content_hash`; mail
+`blob_ref`; guest ref rows removed) only where the row still matches its
+migrated value; a row changed since the switch is not restored to its
+pre-migration value: it is reported and handled as a post-switch holder
+(below). For each ref the replay removes from a holder, it releases the
+hold the import wrote for that (ref, holder), recorded with
+`decided_by=rollback` and the journal entry as evidence, so the next audit
+finds no confirmed hold whose holder no longer names it and no batch of
+probe releases follows. Writes made after the switch exist only in the new
+store, so a rollback after resumed writes first exports those bodies to
+the old layout, and converts each post-switch holder's ref fields back to
+the legacy form the old resolver reads (capture blob fields and og
+`body_ref` to their `sha256` forms, with `content_hash` recomputed; mail
+`blob_ref` cleared; guest ref rows removed; post-switch version-2 file
+roots rewritten as version-1 manifests over chunks exported to the legacy
+per-computer hex paths; post-switch tape segments and bases exported to
+the legacy layouts and the segment ref table dropped; post-cutover
+checkpoints exported with their artifacts; the retired checkpoints
+un-marked, which is possible only while the deletion order below has not
+run), journaling the values it replaces and releasing those holds with
+`decided_by=rollback`. No holder is left with an `hmac:`, `blob_ref` or
+ref-table ref after a rollback. Every rehearsal runs this rollback.
 
 **Deleted, not migrated** (outside the keep set, pre-launch): legacy pin
 files 47.4 GB and 7.4 M inodes, tape segments including the paper's 26.4
 GB, the 61.6 GB of projection bases, per-computer file CAS 27.9 GB and
-`file-cas-roots` 1.0 GB, capsule artifacts and `computer-inputs` once vmctl
-no longer reads it. Blast radius [I]: every computer, not only the owner's,
-loses its restore history (tape, bases) and its file CAS; running guest
-disks are untouched. Order (Q1, owner-accepted with these conditions):
+`file-cas-roots` 1.0 GB, capsule artifacts, the retired pre-cutover
+checkpoints (records and artifacts), and `computer-inputs` once vmctl no
+longer reads it. Blast radius [I]: every computer, not only the owner's,
+loses its restore history (tape, bases, checkpoints) and its file CAS;
+running guest disks are untouched. Order (Q1, owner-accepted with these
+conditions):
 
-1. the replacing reader is switched for that class;
+1. the cutover has switched every reader;
 2. **export receipts with counts**: the paper's Texture documents and
    revisions, published set reconciled against Store B (3,443 documents,
    11,870 versions at least), and the owner's mail (254 messages, 32
@@ -1042,7 +1155,7 @@ disks are untouched. Order (Q1, owner-accepted with these conditions):
    copied where cheap, with counts recorded either way;
 3. the guest-engine migration of the paper's store has landed;
 4. **a restore drill of the keep set** from the new store and the new
-   engines, without the tape or the bases, compared by count and hash
+   engines, without the legacy tape or bases, compared by count and hash
    against the receipts in 2.
 
 The paper's guest disk image on the host stays until the drill passes.
@@ -1054,7 +1167,7 @@ Round 0g (R0g-01..07) was committed to
 by FP0 on 2026-10-29 about 23:37 UTC (commit 3294bce10). Revision 1 said "not
 committed by this note, so not yet records"; that stopped being true at
 that commit. The ledger's records are never edited. The original text is
-kept below; corrections are new records (rounds 0h and 0i), each naming
+kept below; corrections are new records (rounds 0h, 0i and 0j), each naming
 the record it corrects and why. Settler: the rule, reading the named artifact.
 
 ### Round 0g as committed (unchanged)
@@ -1192,26 +1305,54 @@ scope of R0g-09 and R0g-15. The guard change alters when releases apply,
 not how many holds the import writes, so R0g-15 stands, and R0g-14 stands
 (the guard counts what the merge already visits).
 
+### Round 0j, after revision 12 (new records)
+
+Revision 12 drops cross-owner dedup (section 9 Q5): the 604 bodies that
+equal a platform body get private copies. R0g-08 named that cost (~0.04
+GB, inside its interval) but estimated under the Q5 default, so its
+estimate moves; R0g-08 stays and is scored as committed.
+
+**R0g-16** (corrects R0g-08: no cross-owner dedup; every non-paper owner's
+capture body is its own private object). Stored bytes of the capture, og
+and mail parts of the cutover in the local pack store (headers, frames,
+pack indexes, encryption overhead included): est 9.99 GB [9.89, 10.35].
+Assumes 9.845 GB referenced plus ~0.04 GB of private copies of the 604
+formerly shared bodies, plus ≤ 1% overhead. Falsifier: over 10.6 GB.
+Artifact: `du` of the store plus the catalog's byte sum.
+
+Revision 12 note, no other new record. The parts of section 7 are now one
+cutover; "steps 2-4" and "steps 2-3" in committed records name the same
+class scopes (capture, og, mail; capture, og), and "after step 6" names the
+30 days after the cut, so no scope moves. R0g-15 stands: hold rows are per
+(ref, holder) tuple, and the 604 holders hold their own private objects
+instead of the platform one, one hold each either way. The import fills
+packs to 64 MiB in minutes, so the 1 h open-pack age does not move R0g-09;
+one directory fsync per new pack (about one per thousand 60 KB puts) sits
+beyond R0g-04's p99. Retiring the pre-cutover checkpoints removes
+checkpoint-held imports, which were outside every record's scope (revision
+10 note). R0g-13 stands.
+
 ## 9. Open questions for the owner
 
 1. **Discard pre-launch tapes, legacy pins, bases and file CAS?**
    Accepted 2026-10-29, conditional on the export receipts and the keep-set
    restore drill in section 7. Covers every computer, including the owner's
    three accounts' computers (`5bd6de97`, `5885aafc`, `c061de6f`; the
-   hibernated `candidate-fleet-bf04bbc7` included).
+   hibernated `candidate-fleet-bf04bbc7` included). Revision 12 applies it
+   to the pre-cutover checkpoint set too: retired at the cutover, deleted
+   in the same order (section 7).
 2. **Keep the other 29 owners' 1,840 captures, as private objects?**
    Accepted.
 3. **Interim keys until the vault's owner-KEK slice lands?** Accepted, as a
    per-owner interim KEK (section 3), not a deployment-wide wrap.
 4. **Nightly restic of sealed packs before SeaweedFS?** Accepted, with the
    catalog snapshot and wrapped key material (section 6).
-5. **Cross-owner dedup.** Default, owner confirmation pending: a private
-   capture may reference an existing platform or public object only on an
-   exact sha256 match of the bytes it fetched; the decision runs on the
-   host and gives the caller the same response either way. A user's fetch
-   is never published or promoted to a shared tier on inferred credential
-   or paywall state. If declined, matched bodies get private copies
-   (~0.04 GB today).
+5. **Cross-owner dedup.** Answered 2026-10-30: dropped. Every non-paper
+   owner's capture body is its own private `hmac:` object; no private row
+   references a platform or public object, so neither the upload response
+   nor the stored blob ID (`content_blob_id`, `captures.go:289`) reveals a
+   match. Cost: ~0.04 GB today (R0g-16). A user's fetch is never published
+   or promoted to a shared tier.
 6. **The 12,534 unreferenced `sha256/*.txt` (24.7 MB, hand-kept
    pre-teardown corpus bodies per the inventory).** Import, keep in place,
    or delete? Kept untouched until answered.
@@ -1225,34 +1366,41 @@ not how many holds the import writes, so R0g-15 stands, and R0g-14 stands
 - Conjecture delta: blob bytes leave per-namespace directories and become
   one store with four tiers and two identity schemes; the per-namespace GC,
   the any-guest capture read and plaintext bases are retired; the paper's
-  captures become platform-tier.
+  captures become platform-tier; every class moves in one cutover, and
+  the pre-cutover checkpoints are retired.
 - Protected surfaces: owner-content tenancy, Trace/evidence blobs, the GC
   that deletes them, checkpoint closure, the capture and og read paths,
   key custody (interim owner KEKs).
 - Admissible evidence: full referenced-set comparisons (not samples) inside
-  a writer freeze before each swap; dry-run per-class counts matching the
-  import receipts before any class goes active; the export receipts and the
-  keep-set restore drill before any deletion; the round 0g, 0h and 0i
-  artifacts, including a zero-repair first audit (R0g-15);
+  the writer drain before the switch; process-kill and power-loss tests of
+  every crash point; dry-run per-class counts matching the import receipts
+  in every rehearsal before the cut; a verified backup extent manifest; the
+  export receipts and the keep-set restore drill before any deletion; the
+  round 0g, 0h, 0i and 0j artifacts, including a zero-repair first audit (R0g-15);
   a staging red-team receipt for R0g-13.
-- Rollback: one act per step (resolver config, plus the migration journal
-  for step 2), rehearsed on staging; the old directory stays until the
-  comparison and a week of reads pass. Purges are irreversible and wait for
+- Rollback: one act for the whole cutover, under the same writer drain
+  (resolver config plus the migration journals), run in every rehearsal;
+  the frozen legacy directories stay until the comparison and a week of
+  clean operation pass. Purges are irreversible and wait for
   the 7-day hold.
 - Heresy delta: `discovered`: projection bases are plaintext copies of owner
   stores on the host; og bodies are installed without fsync; capture bodies
   have no GC namespace and an existence oracle by hash; `captureBlockDoc`
   reads bodies with no caller; the `nix/node-b.nix:1298` comment
-  contradicts the active namespace list at `:1307`. `introduced`: a new
+  contradicts the active namespace list at `:1307`; checkpoints are
+  reconstruction records with no stored store, so revisions 9-11's
+  checkpoint sidecar had no substrate. `introduced`: a new
   host service, a GC driver, a catalog with a hold table to keep
   consistent with packs and with the holders, a GC driver that releases
   holds on its own probe evidence, a `HolderRefs` resolver in every holder
   service, new canonical ref fields in private holders (mail `blob_ref`,
-  the guest ref table in the live store, host-side sidecar ref tables for
-  retained checkpoints, version-2 file manifests, a guest/host protocol
+  the guest ref table, checkpoint closure rows written by the
+  verification rebuild, version-2 file manifests, a guest/host protocol
   change), `og_lookup_keys` rows for the capture blob fields and
   `image_refs`, `image_refs` on published og rows, two-phase release state
-  and flag suppression on holds, a write gate in corpusd,
+  and flag suppression on holds, per-hold class, object generations and
+  committed tombstones, a backup extent manifest, write gates in corpusd
+  and maild,
   and interim owner key custody. `repaired`: none until built.
 
 ## Revision 2 log (2026-10-29)
@@ -1507,3 +1655,33 @@ DeepSeek both accept_with_notes; every round-9 item closed. Notes taken:
 | S2: rollback misses v2 file roots and the tape segment ref table | accepted: both converted to legacy layouts in the rollback act | §7 Rollback |
 | S3: `writeLookupKey` deletes every lookup kind for an ID | accepted: its delete is scoped to its own kind; capture and og writers own their ref rows | §4 provider table |
 | S minor: suppression clearing list omits a stream sighting | accepted | §4 Catalog |
+
+## Revision 12 log (2026-10-30)
+
+Review: `.agentic-consensus/object-storage-codex/out/codex.out` (Codex,
+send_back on revision 11). Owner ruling the same day: one cutover for every
+class, never two data systems, scope not narrowed; Codex's "first slice"
+cut is therefore not taken. Code claims checked [V]:
+`tapestore/appender.go:508-540` (`startSegment`, `syncTree`);
+`platform/artifact_gc.go:794-825` (intent before unlink, result after);
+`platform/checkpoints.go:182` (checkpoint JSON plus a row);
+`agentcore/checkpoint_restore_bindings.go:45` (no base, no replay at bind);
+`projectionbase/capture.go:80` (a captured base holds the store alone);
+`platform/captures.go:289` (`content_blob_id` in the owner's response);
+`selfdevprotocol/witness_v2.go`, `checkpoint_verdict.go` (per-table
+hashes; `verified`, `unverified`, `not_derivable`).
+
+| Item | Ruling | Where |
+|---|---|---|
+| Owner: one cutover, no phased slice | accepted | top of note; Decisions 7; §2 file-chunk rule; §4 Activation; §7 preamble, parts 1-6, Rollback, Deleted; Ceremony |
+| B1 pack creation lacks a directory durability barrier | accepted: create, fsync file, fsync parent and new directories, then append, fdatasync, catalog, ack; power-loss tests | §5 Write discipline, Recovery |
+| B2 backup skips non-idle open packs; no completeness check | accepted: 1 h maximum open-pack age; the run force-seals every open pack; snapshot bound to a verified extent manifest; loss bound stated | §5 Packs, Compaction (small-pack merge); §6 |
+| B3 rebuild replays intent as deletion; no re-put ordering | accepted: committed, generation-qualified tombstones; intent is audit only; a higher generation wins; compaction drops only tombstoned (ref, generation) | §2 Conditional put; §4 Catalog, rebuild, step 4; §5 Compaction |
+| B4 retained checkpoints are not stored snapshots | accepted: the pre-cutover set and its restore history are retired; sidecar machinery removed; post-cutover closures are closure rows reconstructed at H by the verification rebuild, accepted on the ref table's witness hash | §4 Refs, Checkpoint closures, providers, holder probe, path (c); §7 part 5, Deleted; §9 Q1 |
+| Note 1 class collisions | accepted: class per hold; protection is the strongest class among an object's holds | §2 Class is per hold; §4 Catalog |
+| Note 2 Q5 oracle via `content_blob_id` | accepted with owner direction: Q5 dropped, every non-paper capture body private; R0g-16 in round 0j | §1; §2 capture rule; §7 part 2; §8 round 0j; §9 Q5 |
+| Note 3 rollback without a drain | accepted: rollback runs under the import's writer drain | §7 Rollback |
+| Owner: keep-set automatic deletion | report-only at cutover in the same store, turned on ring by ring; every other GC from day one | §4 Activation |
+
+Not taken: Codex's deferrals (guest file CAS, tape and bases, group commit,
+compaction) conflict with the owner ruling. Earlier logs are unedited.

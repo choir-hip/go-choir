@@ -600,3 +600,18 @@ fields, plus one per og row). And the first audit after the import repairs
 zero holds and pages zero: p = 0.85. Falsifier: hold rows under 150 K or
 over 400 K, or any repair or page on that first audit. Artifact: the
 catalog's `holds` count and the audit report.
+
+## Records (round 0j, after revision 12; drafted by the design seat in docs/design/object-storage-2026-10-30.md section 8, revision 12, after the Codex review in .agentic-consensus/object-storage-codex/; to be committed by FP0 before any of it is built; the commit is the witness)
+
+No round 0g, 0h or 0i record is edited. Revision 12 drops cross-owner
+dedup (the owner answered Q5: dropped), so the 604 bodies that equal a
+platform body get private copies. R0g-08 named that cost but estimated
+under the Q5 default; it stays and is scored as committed.
+
+**R0g-16** (corrects R0g-08: no cross-owner dedup; every non-paper owner's
+capture body is its own private object). Stored bytes of the capture, og
+and mail parts of the cutover in the local pack store (headers, frames,
+pack indexes, encryption overhead included): est 9.99 GB [9.89, 10.35].
+Assumes 9.845 GB referenced plus ~0.04 GB of private copies of the 604
+formerly shared bodies, plus ≤ 1% overhead. Falsifier: over 10.6 GB.
+Artifact: `du` of the store plus the catalog's byte sum.
