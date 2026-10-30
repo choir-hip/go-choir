@@ -1,9 +1,11 @@
 # Object storage: one store for every blob, by tier and owner (2026-10-30)
 
-Status: design, revision 2 (after the tier-2 review, `.agentic-consensus/object-storage-r1/`;
-both seats returned send_back). Not ratified; nothing is built or deployed by
-this note. Revision 1 is commit 3294bce10; the revision 2 log at the end
-maps every finding to where it is addressed.
+Status: design, revision 5 (after the round-4 review,
+`.agentic-consensus/object-storage-r4/`: Devin accept_with_notes, DeepSeek
+send_back). Revision 5 replaces the object-level release state of
+revisions 3-4 with holder-scoped holds (section 4). Not ratified; nothing is
+built or deployed by this note. Revision 1 is commit 3294bce10; the
+revision logs at the end map every finding to where it is addressed.
 Mutation class of the work it proposes: **red** (tenancy and encryption of
 owner content, Trace/evidence blobs, the GC that deletes them, checkpoint
 closure). Review tier: 2 (Devin and DeepSeek v4.1 flash), because a defect
@@ -47,11 +49,14 @@ Evidence, not re-derived here:
    HMAC-SHA-256 of the plaintext under a per-owner (or per-computer) ID key.
    Every non-public object is encrypted with a random-nonce AEAD under a
    random per-object DEK. No convergent encryption anywhere.
-4. **Refs live with the holder; the catalog lives with the store.** Holders
-   own refs. The store's catalog records existence, location and last
-   touch. GC is mark-and-sweep from a closed list of root providers, with a
-   touch on every ref commit and a recheck before every purge; never
-   reference counts.
+4. **Refs live with the holder; the catalog mirrors them as holds.**
+   Holders own refs. The store's catalog records each object and one
+   **hold** per (ref, holder), set by `Touch` before the holder commits a
+   ref and released by `Release` before it drops one. GC is an audit that
+   reconciles holds against a closed list of root-provider streams, then
+   purges objects with no unreleased hold after a hold period and a locked
+   recheck. Not reference counts: a hold set is reconciled member by
+   member, a counter cannot be (section 4).
 5. **Packs, not one file per object.** Small objects append to 64 MiB
    per-scope packs; write, fsync, rename, pread; no btrfs feature is assumed.
 6. **A separate host process, `blobd`,** with its own system user and data
@@ -68,9 +73,11 @@ Tiers:
   internet is a separate publication policy on the holding object. Plaintext
   at rest.
 - **platform**: held by the Autopaper (the platform owner) and not
-  published. Readable by host services and the Autopaper's own computers;
-  never by another owner's computer, never served raw to the internet.
-  Encrypted at rest under a platform key.
+  published. Read only by host services, which hold the platform key
+  lease; the Autopaper's own computers read platform objects through
+  host-mediated endpoints and never receive the platform content key.
+  Never readable by another owner's computer, never served raw to the
+  internet. Encrypted at rest under a platform key.
 - **private**: one owner; encrypted under that owner's keys.
 - **internal**: one computer; host restore path and that computer only;
   encrypted under the computer DEK.
@@ -89,7 +96,7 @@ from becoming public copies of their captures.
 
 | Class | Today [V] | Tier | Canonical? | Retention | Who reads |
 |---|---|---|---|---|---|
-| Capture bodies (raw, blocks, text) | 154,649 plaintext files, 9.37 GB, `capture-bodies/<2hex>/<sha256>`, no GC, any bound guest reads any hash (`internal/platform/captures.go:86,214,228`) | Autopaper's: platform. Any other owner's: private | canonical (keep set) | while a `web_capture` object refers to it; never condemned while referenced (section 4) | platform: host services, the Autopaper's computers. Private: the owner's computers |
+| Capture bodies (raw, blocks, text) | 154,649 plaintext files, 9.37 GB, `capture-bodies/<2hex>/<sha256>`, no GC, any bound guest reads any hash (`internal/platform/captures.go:86,214,228`) | Autopaper's: platform. Any other owner's: private | canonical (keep set) | while a `web_capture` object holds it; never purged while a hold is unreleased (section 4) | platform: host services; the Autopaper's computers through host-mediated reads. Private: the owner's computers |
 | og blobs (published Texture manifests, resolved blocks, transclusions) | 21,848 referenced `sha256/og/<hex>.bin`, 0.47 GB; written without fsync (`internal/platform/objectgraph_store.go:44-74`); GC active on Node B (`nix/node-b.nix:1307`) | follows the holding object: public when published; otherwise the holder's tier (platform for the Autopaper, private for others) | canonical (Autopaper object graph) | refs from `og_objects.body_ref` | per the holding object's publication policy |
 | Image blobs and self-development screenshots | guest `state.image-blobs/sha256/<hex>`, plaintext, not in file CAS; pins are guest files with no unpin and no sweep (`internal/imageblob/imageblob.go:20-60`, `pin.go:13-20`; problem doc violation 11) | private (owner) | canonical when held by a live Texture revision or evidence object; otherwise scratch | held: as long as a live holder; unheld: 14 days | the owner's computers. Publishing a revision that embeds one copies it into the public tier as an explicit act |
 | File CAS chunks | 27.9 GB in 197 per-computer dirs; deterministic synthetic nonce under a per-computer DEK (`internal/filecas/filecas.go:143-160`); the seeded `files/Source` probably copied into each [H, inventory §1] | owner files: private. Shared open-source and seeded system files: public | canonical (owner files) | reachable from the computer's retained file roots | the owner's computers; public seed by all |
@@ -121,16 +128,29 @@ type Ref struct {
     ID    string // sha256:<hex> (public, platform) or hmac:<hex> (private, internal)
 }
 
+type Holder struct {
+    Provider string // one of the closed provider list (section 4)
+    Scope    string // owner or computer ID; "" for platform-wide holders
+    Key      string // the holding row: capture object ID, og object ID,
+                    // attachment ID, revision or manifest ID, route slot
+}
+
 type Store interface {
     Put(ctx, Caller, PutRequest, io.Reader) (Ref, PutResult, error) // streaming; IfAbsent by default
     Get(ctx, Caller, Ref, Range) (io.ReadCloser, Info, error)        // verifies before or while returning bytes
     Stat(ctx, Caller, Ref) (Info, error)
-    Touch(ctx, Caller, []Ref) ([]TouchResult, error)  // at every ref commit; un-condemns
-    Release(ctx, Caller, []Ref) ([]Ref, error)        // holder's delete of its last ref; starts the hold
-    Condemn(ctx, GCRun, []Ref) ([]Ref, error)         // GC phase 1
-    Purge(ctx, GCRun, []Ref) ([]Ref, error)           // GC phase 2: rechecks, then marks pack space dead
+    Touch(ctx, Caller, Holder, []Ref) ([]TouchResult, error) // before the holder commits refs: insert or refresh holds
+    Release(ctx, Caller, Holder, []Ref) error                // before the holder drops refs: release those holds
+    Sight(ctx, GCRun, []Sighting) ([]Repair, error)          // audit: record stream sightings, repair missing holds
+    Purge(ctx, GCRun, []Ref) ([]Ref, error)                  // rechecks under the catalog lock, then marks pack space dead
 }
 ```
+
+A caller may `Touch` or `Release` only holders of its own provider and
+scope (a guest only its own computer's holders, corpusd only the corpus
+providers), and `Touch` needs read access to the ref, answering absent and
+forbidden alike. `PutRequest` may carry a holder; the put then also sets
+its hold in the same catalog transaction.
 
 `PutRequest` carries tier, scope, class (capture, og, image, file-chunk,
 tape-segment, base, mail, capsule), media type, declared size and, for
@@ -141,10 +161,12 @@ and rejects a mismatch. The writer computes the ID while streaming the
 plaintext to a local spool, then asks the catalog; dedup is decided before
 the upload at the cost of one spool write for large objects.
 
-**Conditional put is a catalog operation**: `IfAbsent` on a live ref
-returns it and touches it; on a condemned or released ref it returns it to `live` in
-the same catalog transaction and discards the upload; on an absent
-or purged ref it writes a new record. Extent names are unique (a ULID per
+**Conditional put is a catalog operation**: `IfAbsent` on a present
+(not purged) ref returns it, sets the object's `last_touch`, sets or
+refreshes the request's hold if it carries one, and discards the upload,
+all in one catalog transaction; on an absent or purged ref it writes a new
+record. Objects have no released or condemned state to undo: release is a
+property of one hold, and purge eligibility is computed (section 4). Extent names are unique (a ULID per
 pack) and the catalog decides identity, so the backend never needs
 `If-None-Match`. Enumerating a holder's refs is the GC driver's job against
 the holder's store (section 4), not a store operation.
@@ -173,11 +195,14 @@ size), then frames of 1 MiB. Encrypted frames are XChaCha20-Poly1305 with a
 STREAM-style nonce (random prefix, counter, last-frame flag) and AAD
 binding `tier || scope || id || class || plaintext length || frame count ||
 frame index`, so a truncated or shortened object fails authentication.
+The AAD also binds the media type, and the catalog records it; a reader
+takes the media type from the catalog and rejects a header that differs.
 HKDF `info` strings are `choir/objstore/v1/<purpose>` (vault design §2.3
 convention). Public objects carry per-frame digests
 `SHA-256(id || frame index || plaintext length || frame bytes)`, and the
-catalog records their Merkle root; a range read checks its frames against
-that root, never against the header alone. Every stored object also has a
+catalog stores the full list (32 bytes per MiB of object); a range read
+checks each frame it returns against the catalog's digest for that frame,
+never against the header or a backend-supplied digest. Every stored object also has a
 **cipher digest**, SHA-256 of its stored bytes, in the catalog and the pack
 index. A reader rejects a short read and a header whose length or frame
 count differs from the catalog's.
@@ -216,9 +241,13 @@ migration if ever needed). Content-key rotation rewraps DEKs. The move to
 the vault's owner KEK rewraps the owner's content and ID keys once; object
 headers and packs do not change, so sealed packs stay immutable. Content-key
 rotation is different: it rewrites each wrapped-DEK header, so it rewrites
-the owner's packs and is a compaction-class operation, not a free one. The
-platform tier has the same structure under a platform KEK held by the
-vault's deployment path. Internal objects use the computer DEK.
+the owner's packs and is a compaction-class operation, not a free one. Its
+order: deliver the new content-key version to the owner's running guests
+(which then hold both versions), then rewrap; the old version is retired
+only after every pack is rewritten. A guest that was down gets the current
+versions at its next boot. The platform tier has the same structure under
+a platform KEK held by the vault's deployment path. Internal objects use
+the computer DEK.
 
 **Who encrypts.** The party that holds the plaintext and a key lease:
 
@@ -229,31 +258,38 @@ vault's deployment path. Internal objects use the computer DEK.
   (`computerevent/privacy.go:100-108`) and only exported upward for escrow
   (`:84-96`). Delivery is new work: the host unwraps the escrowed DEK to
   wrap the owner keys for that guest, or the guest pulls them over an
-  authenticated call. File CAS uses the computer DEK only
-  (`filecas.go:143-160`);
+  authenticated call. A delivery is ephemeral per boot: the guest keeps
+  the owner keys in memory and never writes them, or their wrap, to guest
+  storage, and the host keeps no copy of the delivered wrap. File CAS uses
+  the computer DEK only (`filecas.go:143-160`);
 - host replay workers for projection bases (built host-side), under a
   computer-DEK lease;
 - corpusd for the platform tier (the paper's captures) and for other
   owners' captures, and maild for mail attachments, under a vault lease for
-  that owner. corpusd sees a private capture's plaintext on its request
+  that owner. The platform content key goes to host services only; every
+  platform read by an Autopaper computer is host-mediated. corpusd sees a private capture's plaintext on its request
   path; the tenancy gain is at rest and across tenants, not confidentiality
   from corpusd.
 
 blobd stores ciphertext and never needs a key to store, verify (by cipher
-digest), condemn or purge.
+digest), record holds, audit or purge.
 
 **Crypto-erase.** Destroying an owner's interim KEK and its escrow copies
 makes that owner's private objects unreadable on every host, and only that
 owner's. Backup copies of the wrapped KEK and escrow rows are erased by the
 vault's deletion journal (vault design §2.8); until that journal has run
-against a backup set, that backup can still open the owner's objects. Packs
+against a backup set, that backup can still open the owner's objects. The
+guest delivery path adds no persistent copy: deliveries are per boot and
+never stored (above), and the erase stops the owner's running computers,
+so no wrap of the owner keys survives under a computer DEK. Packs
 are per owner scope, so a deleted owner's packs are also removed physically
 in one pass, without compacting other owners' packs.
 
 **Least-privilege read.** A guest reaches blobd only through the existing
 bound-guest identity (`bindTapCaller`, `objectgraph_handlers.go:379-390`).
 blobd allows a read when the ref is public; platform when the caller is a
-host service or one of the Autopaper's computers; private when the ref's
+host service (an Autopaper computer reads through the host service, which
+checks it); private when the ref's
 scope equals the caller's owner; internal when it equals the caller's
 computer. Absent and forbidden give the same status, body and timing class.
 Browsers and media players get **capabilities**: a host-signed token over
@@ -278,8 +314,8 @@ and `capture_index.go:186`.
 **Zero trust between hosts.** Every reader verifies: a full `Get` checks
 the cipher digest before returning the last byte (and the plaintext hash for
 public and platform objects, or the HMAC for private ones when the reader
-holds the key); a range read checks frame tags or frame digests against the
-catalog's root; a mismatch is an error, never a fallback to another copy
+holds the key); a range read checks frame tags, or for public objects the
+catalog's per-frame digests; a mismatch is an error, never a fallback to another copy
 without verification (the `tapestore` rule, `format.go:13-17`). Replicas,
 the S3 backend and a desktop cache are untrusted storage.
 
@@ -290,105 +326,161 @@ transaction as the holder. Guest refs reach the host as the **CAS closure**
 of each semantic checkpoint (data rearchitecture §What it buys). Invariant:
 every restorable checkpoint is retained, and its closure is a root.
 
-**Root providers, closed list.** Each provider streams canonical refs
-sorted by ref and declares an expected count per (class, scope).
+**Root providers, closed list.** Each provider streams canonical
+(ref, holder) pairs sorted by ref then holder, stamps the stream with its
+snapshot time (the start of its read transaction, or the closure's
+checkpoint time), and declares an expected count per (class, scope).
 
-| Provider | Source | Classes |
+| Provider | Source (holder key) | Classes |
 |---|---|---|
-| corpus, og | `og_objects.body_ref` (through `CanonicalRef`) | og |
-| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON (not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them) | capture |
-| maild | per-owner `email_attachments` and `email_drafts.attachments_json` (`maild/attachments.go:24-56,215-275`) | mail |
-| control, releases | the route tables' current and rollback refs (`platformUpdateLiveDigests`, `artifact_gc.go:475`) | platform-update |
-| control, computers | file roots; bases and their pins; tape segments by the retained receipt chain, with a segment ref table added before the tape moves into the store | file-chunk, base, tape-segment |
-| guest closures | per retained checkpoint: image refs held by live Texture revisions and evidence objects (enumerated from the revision tables, not copied from pin files, which have no unpin), cited capsule evidence, file manifests | image, capsule, file-chunk |
+| corpus, og | `og_objects.body_ref` through `CanonicalRef` (og object ID) | og |
+| corpus, captures | the three blob fields of `choir.web_capture` metadata JSON, not `body_ref`, which is empty for captures; reusing today's og query at `artifact_gc.go:447` would see none of them (capture object ID) | capture |
+| maild | per-owner `email_attachments` and `email_drafts.attachments_json`, `maild/attachments.go:24-56,215-275` (attachment or draft ID) | mail |
+| control, releases | the route tables' current and rollback refs, `platformUpdateLiveDigests`, `artifact_gc.go:475` (route slot) | platform-update |
+| control, computers | file roots; bases and their pins; tape segments by the retained receipt chain, with a segment ref table added before the tape moves into the store (root, base or segment ID) | file-chunk, base, tape-segment |
+| guest closures | per retained checkpoint: image refs held by live Texture revisions and evidence objects (enumerated from the revision tables, not copied from pin files, which have no unpin), cited capsule evidence, file manifests (revision, evidence or manifest ID; one holder per holding object, not per checkpoint) | image, capsule, file-chunk |
 
-A provider that fails, returns an unparseable ref, or is stale aborts the
-sweep for the scopes it covers. A computer whose newest closure is older
-than half the grace counts as stale, so its owner's private and internal
-scopes are not condemned that run. The sweep report lists every skipped
-scope and how long it has been skipped, so the exemption is visible.
+A provider that fails, returns an unparseable ref, or is stale makes its
+scopes **suspended** for that run: no hold in a suspended scope is judged
+absent, and no object with a hold (released or not) in a suspended
+scope, or itself in one, is purged. A computer whose newest closure is
+older than 12 h (half the 24 h upload grace) is stale. The audit report lists every
+suspended scope and how long it has been suspended, so the exemption is
+visible.
 
-**Catalog.** blobd keeps a SQLite (WAL, `synchronous=FULL`) catalog: ref,
-cipher digest, frame root, size, class, pack ID (a ULID, no file extension)
-and offset, `last_touch`, state (`live`, `released`, `condemned`),
-`released_at`, `condemned_at`. `Release` is the only way a keep-set object
-leaves: the holder (maild deleting a message, objectgraph replacing a
-`body_ref`, a capture tombstone) calls it in the same transaction that drops
-its last ref, which moves the object to `released`. A released object whose
-ref no longer appears in any provider stream is purged 7 days after it was
-last seen in a stream (not 7 days after `released_at`). A `Touch`, a fresh
-ref, or the ref's appearance in any provider stream during a mark returns it
-to `live` and voids the release, so a release never outlives the next mark
-that still sees the ref. A shared object released by one holder therefore
-stays live while another holder's ref is streamed, and if that ref later
-vanishes without its own `Release`, the guard aborts and pages. The release
-journal records (ref, `released_at`) and each revival, is fsynced before the
-catalog commit, and fails toward retention: a journal entry with no catalog
-state is ignored, a catalog `released` with no journal entry is treated as
-live. A keep-set ref
-that is absent from the streams without a prior `Release` stays an
-abort-and-page condition. It is
-rebuildable from packs, which are self-describing (each record header
-carries tier, scope, object ID, class and plaintext length; `released`
-state is replayed from the release journal, which restic carries); a rebuild sets
-`last_touch = now`, which only delays GC. When a second host shares one
-store, the catalog moves behind the same interface to the corpus
-PostgreSQL instance.
+**Catalog.** blobd keeps a SQLite (WAL, `synchronous=FULL`) catalog with
+two tables. `objects`: ref, tier, class, media type, plaintext size,
+cipher digest, per-frame digests (public objects), pack ID (a ULID, no
+file extension) and offset, `put_at`, `last_touch` (latest Put, IfAbsent
+hit or Touch), `last_seen` (latest stream sighting of any holder),
+`purged_at`. `holds`: ref, provider, holder scope, holder key,
+`touched_at`, `first_seen`, `last_seen`, `released_at`; primary key (ref,
+provider, holder scope, holder key). `Touch(holder, refs)` inserts each
+hold or refreshes `touched_at` and clears `released_at`.
+`Release(holder, refs)` sets `released_at` on those holds only; another
+holder's hold on the same object is untouched, so one holder's delete never
+covers another holder's absence. A hold with `first_seen` null is
+**provisional**: the holder touched but no stream has yet shown it
+committed.
+
+Both calls come **before** the holder's own commit, and a disagreement
+resolves toward retention: a holder that touches and then fails its commit
+leaves a provisional hold that expires as an abandoned upload (below); a
+holder that releases and then fails its delete is still streamed, and the
+audit restores the hold (below). The holder never needs an atomic
+transaction across its store and blobd.
+
+There is no separate release journal. Hold changes commit in the catalog's
+WAL with `synchronous=FULL`, and the catalog is the only state that needs
+them. Off host, restic carries a consistent catalog snapshot nightly
+(section 6). Rebuild: restore the latest snapshot, adopt records from
+packs written after it (record headers carry tier, scope, object ID, class
+and plaintext length), set every `last_touch = now`, then run one audit in
+report-only mode: missing holds are repaired from the streams, and
+unreleased holds absent from the streams page. Releases made after the
+snapshot surface as such pages; they are reviewed, not auto-released. A
+rebuild with no snapshot gets holds from the audit alone, and no keep-set
+object is purged after it without an operator acknowledgement of the
+report. Every path fails toward retention or a page.
+
+When a second host shares one store, the catalog moves behind the same
+interface to the corpus PostgreSQL instance.
 
 **The GC driver** is a separate process with read access to the holders.
-It produces the sorted ref streams and calls `Condemn` and `Purge`; blobd
-holds no database credentials.
+It produces the sorted streams and calls `Sight` and `Purge`; blobd holds
+no database credentials.
 
-**Mark and sweep, not counts.** Reference counts drift when a crash lands
-between a holder's commit and the store's increment, and there is no atomic
-transaction across PostgreSQL, guest SQLite, maild and blobd. Protocol:
+**Holds, not counts.** Reference counts drift when a crash lands between a
+holder's commit and the store's increment, and there is no atomic
+transaction across PostgreSQL, guest SQLite, maild and blobd. A count also
+cannot be repaired except by recomputing it from scratch, and a wrong count
+says nothing about which holder is wrong. A hold is a named member of an
+explicit set: `Touch` and `Release` are idempotent (twice is once), and
+every member can be checked against its holder's stream. Drift is bounded
+by the audit: a missing hold is repaired from the stream that shows it; an
+extra hold (unreleased, holder absent) is either a holder that never
+committed (provisional, expires) or a holder that vanished without a
+release (pages for keep-set classes, released by the audit under a
+threshold for the others). Neither direction can accumulate silently.
 
-1. **Touch on ref commit.** A holder that commits a ref calls `Put` or
-   `Touch` for it first and commits only within the **ref window** (1 h) of
-   a successful result; a slower holder touches again. This covers a new
-   ref to an old object: a Texture revision pinning a 13-day-old
-   screenshot, a citation of an old capsule artifact, a manifest naming old
-   chunks (batched). A `Touch` of a condemned ref un-condemns it. A `Touch`
-   of a purged or absent ref returns not-found; the holder re-puts the bytes
-   if it has them, or fails the commit loudly. This replaces the
-   serialization `artifactGCMu` gives today ("a pin of an old blob must not
-   commit after the sweep has classified it unreachable",
-   `artifact_gc.go:197-200`).
-2. **Mark.** A sweep records its start `S`, streams every provider and
-   merge-joins with the catalog sorted by ref. Memory is the merge cursors
-   plus one batch, not the live set.
-3. **Condemn.** Refs absent from every stream with `last_touch < S - grace`
-   (grace 24 h, more than the ref window) are condemned, subject to the
-   guards below.
-4. **Purge, after a hold and a recheck.** A condemned ref is purged no
-   sooner than its hold: 7 days for keep-set and migrated classes, 24 h
-   for scratch classes (unheld images and capsule artifacts additionally
-   wait their 14-day retention before condemn). Before purging, the driver
-   runs a fresh mark; `Purge` then re-reads each ref's state and
-   `last_touch` under the catalog write lock and purges only refs still
-   condemned (or released and past the hold), untouched since condemn or
-   release, and absent from the fresh mark. This
-   is today's `unlinkIfStillUnreachable` recheck (`artifact_gc.go:808,831-850`)
-   carried over. Each purge is logged to the deletion-intent JSONL
-   (`artifact_gc.go:760-834`) before it happens; pack space becomes dead
-   for compaction.
+Protocol:
+
+1. **Touch before ref commit.** A holder that commits a ref calls `Touch`
+   (or a `Put` carrying the holder) first and commits only within the
+   **ref window** (1 h) of a successful result; a slower holder touches
+   again. This covers a new ref to an old object: a Texture revision
+   pinning a 13-day-old screenshot, a citation of an old capsule artifact,
+   a manifest naming old chunks (batched). A `Touch` of a purged or absent
+   ref returns not-found; the holder re-puts the bytes if it has them, or
+   fails the commit loudly. This replaces the serialization `artifactGCMu`
+   gives today ("a pin of an old blob must not commit after the sweep has
+   classified it unreachable", `artifact_gc.go:197-200`).
+2. **Release before ref drop.** A holder that drops a ref (maild deleting a
+   message, objectgraph replacing a `body_ref`, a capture tombstone, a
+   guest deleting a revision) calls `Release` for that holder first.
+   Required for keep-set classes; optional elsewhere, where the audit
+   releases holds whose holder is gone.
+3. **Audit.** A run records its start `S`, streams every provider and
+   merge-joins the streams with the `holds` table, both sorted by (ref,
+   holder); memory is the merge cursors plus one batch. For each pair:
+   - streamed, hold unreleased: set the hold's and the object's `last_seen`
+     and, if null, `first_seen`;
+   - streamed, hold released: if the stream's snapshot time is after
+     `released_at`, the holder still holds the ref (its delete failed, or
+     it re-referenced without a Touch): clear `released_at` and log a
+     repair; if the snapshot predates the release, ignore the sighting;
+   - streamed, no hold: insert a confirmed hold and log a repair; if the
+     object is purged or absent, the stream names a lost object, which
+     pages;
+   - hold unreleased and confirmed, holder absent from a fresh stream of a
+     non-suspended scope, `touched_at < snapshot - ref window`: for
+     keep-set classes, abort the run for that scope and page; for other
+     classes, release the hold (`released_at = now`, logged), subject to
+     the guards;
+   - hold provisional, never streamed, in a non-suspended scope,
+     `touched_at` older than the upload grace: abandoned; the audit
+     deletes the hold row (logged).
+4. **Purge, after a hold period and a recheck.** An object is
+   purge-eligible when it has no unreleased hold, no hold in a suspended
+   scope, is absent from a fresh audit, and either (a) it had holds and
+   `now - max(latest released_at, last_seen) >= hold period`, or (b) it
+   never had a confirmed hold (an abandoned upload) and `now - last_touch
+   >=` the upload grace. Hold period: 7 days for keep-set and migrated
+   classes, 24 h for scratch classes. Upload grace: 24 h (more than the
+   ref window), 14 days for images and capsule artifacts, which is their
+   unheld retention. An abandoned keep-set upload is not a keep-set loss:
+   no holder ever committed it. Before purging, the driver runs a fresh
+   audit; `Purge` then re-reads, under the catalog write lock, each
+   object's holds, `last_touch` and `last_seen`, and purges only objects
+   still eligible with `last_touch < S` and `last_seen < S` of that fresh
+   audit. This is today's `unlinkIfStillUnreachable` recheck
+   (`artifact_gc.go:808,831-850`) carried over. Each purge is logged to the
+   deletion-intent JSONL (`artifact_gc.go:760-834`) before it happens; the
+   record's pack space becomes dead for compaction.
+
+A sighting refreshes `last_seen`, so an object a flapping provider missed
+once is simply not eligible next run; there is no condemned state to undo.
 
 **Guards.** Today's per-namespace live-set guard exists because a wrong
 root provider once mass-deleted live og bodies (2026-10-05,
 `artifact_gc.go:443-446`, commit 2fa30b179).
 
 - Keep-set classes (capture, og, mail, and platform-tier objects): **zero
-  tolerance**. Any condemnation of a keep-set object aborts the sweep and
-  pages; a keep-set object leaves the store only through the holder's own
-  delete (`Release`, §4 Catalog) followed by the 7-day hold.
+  tolerance**. A confirmed, unreleased hold whose holder is absent from a
+  fresh stream aborts the run for that scope and pages. A keep-set object
+  leaves the store only after every holder that ever confirmed a hold on it
+  has released it, followed by the 7-day hold period. Abandoned keep-set
+  uploads above 100 in one run per class abort and page, since a provider
+  that never streamed a holder would look the same.
 - Other canonical classes (file chunks, tape segments, held images, cited
-  capsule evidence): per (class, scope), a condemn set above the larger of
-  1% and 100 objects aborts the sweep.
+  capsule evidence): per (class, scope), audit releases above the larger of
+  1% and 100 holds abort the run.
 - Per-run caps carried over from today (`artifact_gc.go:38-50,283,323-328`;
   Node B: 50,000 deletes, 32 GiB).
-- Each class goes active only after a reviewed dry run whose per-class live
-  counts match the import receipts (ref coverage 100% for keep-set classes),
-  as today's GC admits namespaces one by one.
+- Each class goes active only after a reviewed dry run whose per-class
+  counts match the import receipts (ref coverage 100% for keep-set classes,
+  zero repairs and zero pages on the first audit after import), as today's
+  GC admits namespaces one by one.
 
 **What it replaces.** The per-namespace walker over `sha256/<ns>/` with mtime
 as liveness and `casReuseMu` with `Chtimes` to protect reuse
@@ -423,9 +515,16 @@ adopting any record the catalog lacks. Each crash point (after append,
 after fsync, after catalog commit, after index write, after rename) gets a
 kill test before step 1 ships.
 
-**Compaction.** A sealed pack whose dead fraction exceeds 40% is rewritten:
-live records copied to a new pack, catalog switched in one transaction, the
-old pack deleted after a reader grace (10 min local; 24 h and a tombstone
+**Compaction.** A record's space is dead only when its object is purged;
+nothing else (no hold state, no age) makes it dead. A sealed pack whose
+dead fraction exceeds 40% is rewritten: every record that is not purged is
+copied to a new pack, and the catalog is switched in one transaction.
+Compaction holds the catalog's GC lock, which `Purge` also takes, for the
+whole rewrite, so the not-purged set of the pack cannot change during the
+copy (a sealed pack gains no records, and a re-put of a purged ref writes
+a new record to an open pack; puts and touches do not need the GC lock).
+The switch runs under the catalog write lock, re-reads that set and aborts
+if it differs. The old pack is deleted after a reader grace (10 min local; 24 h and a tombstone
 on S3, where an in-flight range read of a deleted object fails rather than
 finishing). Readers re-resolve through the catalog on not-found. Write
 amplification is at most 1/(1 - 0.4) = 1.7x of what is deleted. Compaction
@@ -458,7 +557,8 @@ we do not write. What it does not buy: encryption, identity, refs, tenancy,
 verification and GC, which stay in the Choir layer.
 
 **Off-host copies before SeaweedFS (Q4, accepted):** a nightly restic run
-uploads newly sealed packs, a catalog snapshot, the release journal, and the wrapped key
+uploads newly sealed packs, a consistent catalog snapshot (objects and
+holds, taken with SQLite's backup API), and the wrapped key
 material (interim owner KEKs and escrow rows, platform KEK wrap) so the
 private and platform tiers are recoverable from the copy. The run forces a
 seal of idle open packs first; what is still open is the stated loss window
@@ -467,12 +567,21 @@ seal of idle open packs first; what is still open is the stated loss window
 ## 7. Migration, keep set first
 
 Downtime is acceptable now (owner, 2026-10-29). Every import step runs
-under a **writer freeze** for its class: capture and og writes stop (the
-capture endpoint returns 503 and the paper's publishing pauses; or corpusd
-is down) before the import scan, and resume only after the handler switch.
-The referenced-set comparison runs inside the freeze, so a body written
-mid-step cannot land in the old tree unseen. The old directory stays,
-read-only, until the comparison and a week of reads pass.
+under a **writer drain** for its class, not a rejection alone: a 503 stops
+new requests but not one already inside `sourcegraph.WriteCaptures`, which
+writes the three bodies and then the row synchronously
+(`internal/platform/captures.go:201`, `internal/sourcegraph/captures.go:194-207`
+[V]). The drain: (1) a write gate in corpusd stops accepting capture and og
+writes, HTTP handlers and background jobs alike (the capture endpoint
+returns 503 and the paper's publishing pauses); (2) the import waits until
+the gate's in-flight count, exposed on corpusd's health endpoint, is zero,
+which quiesces body and row writes together; or corpusd is stopped
+instead; (3) only then the import scan, the referenced-set comparison and
+the handler switch; writes resume after the switch. The import writes one
+confirmed hold per (ref, holder) the providers stream inside the drain. The
+old directory stays, read-only, until the comparison and a week of reads
+pass; the old og directory, which holds the 12,534 `*.txt`, is not deleted
+until open question 6 is answered, whatever the week.
 
 1. **Build blobd, the GC driver and `internal/objstore` with the local
    backend**, shipped on the proof ring first (d@e), then Node B's host.
@@ -484,7 +593,9 @@ read-only, until the comparison and a week of reads pass.
    object is referenced, not copied (the 604 shared bodies): the row's
    blob field carries the platform `sha256:` ref, the read is host-mediated
    under the platform tier's policy, and no private ref aliases a platform
-   extent. Their 1,840
+   extent. Private capture rows therefore carry mixed encodings (`hmac:`
+   for their own bodies, `sha256:` for shared ones); `CanonicalRef` and
+   every capture reader accept both, and the tier comes from the encoding. Their 1,840
    capture rows are rewritten through the normal objectgraph write path:
    new `hmac:` blob fields and a recomputed `content_hash`
    (`objectgraph/object.go:97`, which covers metadata), so derived keys see
@@ -519,7 +630,8 @@ read-only, until the comparison and a week of reads pass.
 **Rollback.** Each step is reversed by one act: the resolver config points
 back at the old directory (never a silent fallback), and for step 2 the
 migration journal is replayed backward, restoring each row's prior
-metadata and `content_hash`. Step 2's proof includes this rollback on
+metadata and `content_hash` only where the row still matches its migrated
+value; a row changed since the switch is reported, not overwritten. Step 2's proof includes this rollback on
 staging. Writes made after the switch exist only in the new store, so a
 rollback after resumed writes first exports those bodies to the old layout.
 
@@ -551,8 +663,8 @@ Round 0g (R0g-01..07) was committed to
 by FP0 on 2026-10-29 about 23:37 UTC (commit 3294bce10). Revision 1 said "not
 committed by this note, so not yet records"; that stopped being true at
 that commit. The ledger's records are never edited. The original text is
-kept below; corrections are new records (round 0h), each naming the record
-it corrects and why. Settler: the rule, reading the named artifact.
+kept below; corrections are new records (rounds 0h and 0i), each naming
+the record it corrects and why. Settler: the rule, reading the named artifact.
 
 ### Round 0g as committed (unchanged)
 
@@ -633,6 +745,27 @@ probes each of absent, present-forbidden and malformed refs gets the same
 status and body, with median latencies within 1 ms of each other: p = 0.85.
 Falsifier: any byte read or any distinguishable response.
 
+### Round 0i, after the hold model (new records)
+
+Revision 5 replaces condemn with a hold audit, so R0g-10's "mark, condemn
+and purge-time re-mark" no longer names the mechanism, and the hold table
+is new state with its own checkable count. R0g-10 stays and is scored as
+committed.
+
+**R0g-14** (corrects R0g-10: the GC driver now merge-joins (ref, holder)
+streams against the `holds` table, with no condemn phase). Peak RSS of the
+GC driver for one full audit and one purge-time re-audit over 1 M objects,
+their holds and the six providers: est 60 MiB [25, 150]. Falsifier: over
+256 MiB, which would mean the merge is not streaming.
+
+**R0g-15** (new). Hold rows after steps 2-3, written by the import from the
+provider streams inside the drain: est 220 K [175 K, 320 K] (about three
+blob fields per capture row over ~65.7 K capture rows, less shared
+fields, plus one per og row). And the first audit after the import repairs
+zero holds and pages zero: p = 0.85. Falsifier: hold rows under 150 K or
+over 400 K, or any repair or page on that first audit. Artifact: the
+catalog's `holds` count and the audit report.
+
 ## 9. Open questions for the owner
 
 1. **Discard pre-launch tapes, legacy pins, bases and file CAS?**
@@ -658,7 +791,8 @@ Falsifier: any byte read or any distinguishable response.
    or delete? Kept untouched until answered.
 7. **The Autopaper's captures are platform-tier, not public** (stated
    default, section 1). Override if raw captured bodies should be readable
-   by every computer or published.
+   by every computer or published. Platform reads by the Autopaper's
+   computers are host-mediated; they never hold the platform key.
 
 ## Ceremony
 
@@ -672,7 +806,8 @@ Falsifier: any byte read or any distinguishable response.
 - Admissible evidence: full referenced-set comparisons (not samples) inside
   a writer freeze before each swap; dry-run per-class counts matching the
   import receipts before any class goes active; the export receipts and the
-  keep-set restore drill before any deletion; the round 0g and 0h artifacts;
+  keep-set restore drill before any deletion; the round 0g, 0h and 0i
+  artifacts, including a zero-repair first audit (R0g-15);
   a staging red-team receipt for R0g-13.
 - Rollback: one act per step (resolver config, plus the migration journal
   for step 2), rehearsed on staging; the old directory stays until the
@@ -683,7 +818,8 @@ Falsifier: any byte read or any distinguishable response.
   have no GC namespace and an existence oracle by hash; `captureBlockDoc`
   reads bodies with no caller; the `nix/node-b.nix:1298` comment
   contradicts the active namespace list at `:1307`. `introduced`: a new
-  host service, a GC driver, a catalog to keep consistent with packs, and
+  host service, a GC driver, a catalog with a hold table to keep
+  consistent with packs and with the holders, a write gate in corpusd, and
   interim owner key custody. `repaired`: none until built.
 
 ## Revision 2 log (2026-10-29)
@@ -746,3 +882,39 @@ order and failure direction stated, and restic carries it (§4, §6). This is
 the third review round on the GC deletion mechanism; per the operating
 contract no fourth round is added. The build's own tier-2 code review is the
 next check on this surface.
+
+## Revision 5 log (2026-10-30)
+
+Round-4 reviews: `.agentic-consensus/object-storage-r4/out/devin.out` (D,
+accept_with_notes) and `omp-deepseek-v41-flash.out` (S, send_back). Three
+rounds had patched one mechanism, an object-level `released` flag whose
+meaning was reconstructed from provider streams; NBF-1 and D notes 1-3 are
+symptoms of it. Per the operating contract this revision changes the
+substrate instead of adding a fourth patch: holder-scoped holds in the
+catalog, reconciled by an audit (§4). "Stream presence voids a release"
+(revision 4) and the release journal are gone. The hold model is a new
+mechanism and gets its own tier-2 review. Code claims checked:
+`captures.go:201` calls `sourcegraph.WriteCaptures`, which calls `PutBody`
+three times before creating the object (`sourcegraph/captures.go:194-207`);
+the computer DEK is generated in the guest and exported only for escrow
+(`computerevent/privacy.go:84-108`).
+
+| Finding | Ruling | Addressed in |
+|---|---|---|
+| S NBF-1 one holder's release covers another holder's un-released absence | accepted; fixed by the substrate, not by a sighted-holder set: a release is per (ref, holder), so B's hold stays unreleased and its absence pages | §2 interface; §4 Catalog, Holds not counts, protocol, Guards |
+| S NBF-2 a 503 does not drain in-flight `WriteCaptures` | accepted, verified | §7 preamble (write gate, in-flight count to zero or corpusd stopped, then scan, compare, switch) |
+| S NBF-3 compaction could drop released records | accepted | §5 Compaction (dead = purged only; copy every non-purged record; GC lock plus re-read at switch) |
+| S note 1 range reads need per-frame digests; media type unbound | accepted | §2 Object format (catalog stores per-frame digests; media type in AAD and catalog); §3 Zero trust |
+| S note 2 hold timing from `last_seen` only | accepted | §4 step 4 (`max(latest released_at, last_seen)`) |
+| S note 3 release-journal last-event-wins | moot: no journal; hold changes are catalog WAL commits, the nightly snapshot is the off-host copy, rebuild fails toward retention or a page | §4 Catalog; §6 |
+| S note 4 mixed encodings; conditional rollback; old directory vs Q6 | accepted | §7 step 2, Rollback, preamble |
+| S note 5 platform key delivery to Autopaper computers | accepted: all platform reads are host-mediated; those computers never get the platform key | §1 tiers; §3 Who encrypts, Least-privilege read; §9 Q7 |
+| D note 1 (a) stale scopes and released purge, (b) un-condemn on sighting, (c) no last-seen field | accepted: (a) suspended scopes block both judgment and purge; (b) subsumed, there is no condemned state, a sighting refreshes `last_seen`; (c) `last_seen` on objects and holds | §4 providers, Catalog, step 4 |
+| D note 2 false pages after releases | accepted: Release comes before the drop, and a sighting older than `released_at` is ignored (the snapshot-time narrowing D proposed); a sighting newer than it restores the hold quietly | §4 step 3 |
+| D note 3 Put-orphaned keep-set objects page forever | accepted: provisional holds and holdless puts expire as abandoned uploads after the upload grace; not a keep-set loss; a per-run cap pages on a burst | §4 Catalog, step 4, Guards |
+| D note 4 content-key rotation needs guest redelivery | accepted | §3 Keys |
+| D note 5 crypto-erase and guest-delivered wraps | accepted: deliveries are per boot and never persisted; erase stops the owner's running computers | §3 Who encrypts, Crypto-erase |
+
+Predictions: R0g-10 names the replaced condemn phase; corrected by R0g-14,
+and R0g-15 is new (round 0i, appended to the ledger). No committed record
+is edited.

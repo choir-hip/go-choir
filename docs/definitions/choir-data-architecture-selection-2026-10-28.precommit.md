@@ -579,3 +579,24 @@ og tables, reads zero platform, private or internal bytes, and over 1,000
 probes each of absent, present-forbidden and malformed refs gets the same
 status and body, with median latencies within 1 ms of each other: p = 0.85.
 Falsifier: any byte read or any distinguishable response.
+
+## Records (round 0i, after the hold model; drafted by the design seat in docs/design/object-storage-2026-10-30.md section 8, revision 5, after the round-4 review in .agentic-consensus/object-storage-r4/; to be committed by FP0 before any of it is built; the commit is the witness)
+
+No round 0g or 0h record is edited. Revision 5 replaces condemn with an
+audit of holder-scoped holds, so R0g-10's "mark, condemn and purge-time
+re-mark" no longer names the mechanism. R0g-10 stays and is scored as
+committed.
+
+**R0g-14** (corrects R0g-10: the GC driver now merge-joins (ref, holder)
+streams against the `holds` table, with no condemn phase). Peak RSS of the
+GC driver for one full audit and one purge-time re-audit over 1 M objects,
+their holds and the six providers: est 60 MiB [25, 150]. Falsifier: over
+256 MiB, which would mean the merge is not streaming.
+
+**R0g-15** (new). Hold rows after steps 2-3, written by the import from the
+provider streams inside the drain: est 220 K [175 K, 320 K] (about three
+blob fields per capture row over ~65.7 K capture rows, less shared
+fields, plus one per og row). And the first audit after the import repairs
+zero holds and pages zero: p = 0.85. Falsifier: hold rows under 150 K or
+over 400 K, or any repair or page on that first audit. Artifact: the
+catalog's `holds` count and the audit report.
