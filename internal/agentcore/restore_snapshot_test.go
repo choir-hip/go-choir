@@ -273,7 +273,14 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 	fake.payloads[ref.ArtifactDigest] = capture.envelope
 	fake.record = ref.Record
 	// The same record sealed for another computer: a foreign snapshot.
-	foreignCipher := rt.privateArtifactCipher
+	foreignKey := make([]byte, 32)
+	if _, err := rand.Read(foreignKey); err != nil {
+		t.Fatal(err)
+	}
+	foreignCipher, err := computerevent.NewPrivateArtifactCipher("computer-foreign-base", foreignKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	foreign, _, err := foreignCipher.Encrypt(ctx, "computer-foreign-base", ref.EventID, snapshot.RecordMediaType, "private", mustJSON(t, ref.Record))
 	if err != nil {
 		t.Fatal(err)

@@ -420,9 +420,9 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 }
 
 // openProbeReplayStore builds the disposable replay projection for the probe.
-// A live chain replays from its verified base (tail-only) when a base is
-// advertised; absent one, the probe replays the full tape from genesis —
-// the tape is the truth, a base is only a cost bound, and the refusal
+// A live chain replays from the newest snapshot the tape names (tail-only);
+// absent one, the probe replays the full tape from genesis —
+// the tape is the truth, a snapshot is only a cost bound, and the refusal
 // posture for unbounded replay is preserved by MaxRecoveryTailEvents. An
 // empty store probes the explicit bootstrap path without one. The caller
 // closes the store and removes the temp root.

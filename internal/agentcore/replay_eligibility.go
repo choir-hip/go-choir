@@ -47,7 +47,10 @@ type ReplayAirworthinessManifest struct {
 }
 
 var replayAirworthinessEntries = map[string]ReplayObservationClass{
-	"computer_event_index":            ReplayEventProjection,
+	"computer_event_index": ReplayEventProjection,
+	// store_meta holds the store schema version row, written identically by a
+	// live open and a replay open.
+	"store_meta":                      ReplayEventProjection,
 	"computer_event_projection_heads": ReplayEventProjection,
 	"computer_effective_state":        ReplayRetiredAbsent,
 	"agents":                          ReplayRetiredAbsent,

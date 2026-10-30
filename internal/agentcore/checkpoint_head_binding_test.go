@@ -113,7 +113,7 @@ func (f *checkpointPlatformFake) serveList(w http.ResponseWriter, r *http.Reques
 		list.Checkpoints = append(list.Checkpoints, selfdevprotocol.CheckpointSummary{
 			CheckpointDigest: f.published[i].Checkpoint.Digest, AcceptedHead: request.AcceptedEventHead,
 			AcceptedSequence: f.sequences[f.published[i].Checkpoint.Digest],
-			ReleaseDigest: request.ReleaseDigest, EvidenceClass: selfdevprotocol.CheckpointClassOwnerRecovery,
+			ReleaseDigest:    request.ReleaseDigest, EvidenceClass: selfdevprotocol.CheckpointClassOwnerRecovery,
 			CreatedAt: f.published[i].Receipt.IssuedAt.Format(time.RFC3339Nano),
 			Verdict:   selfdevprotocol.CheckpointVerdict{Status: selfdevprotocol.CheckpointVerdictPending},
 		})

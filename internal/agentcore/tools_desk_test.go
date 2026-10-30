@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -50,7 +51,7 @@ var (
 // holds a ~170 MB autoputer, and without cleanup every agentcore test run
 // left one in the temp dir (283 of them, ~48 GB, on 2026-10-14).
 func TestMain(m *testing.M) {
-	code := m.Run()
+	code := dbxtest.Main(m)
 	if deskTestWorkerBinDir != "" {
 		_ = os.RemoveAll(deskTestWorkerBinDir)
 	}

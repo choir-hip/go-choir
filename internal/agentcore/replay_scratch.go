@@ -15,13 +15,13 @@ import (
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
-// The replay probe's scratch: a whole installed base plus the tail replay's
-// Dolt journal. It lives beside the live store on the persistent volume
+// The replay probe's scratch: a whole installed snapshot plus the tail
+// replay's writes. It lives beside the live store on the persistent volume
 // (rematerialize stages there too), never in /tmp, which in a guest is a RAM
 // tmpfs of half the guest's memory. A probe that cannot fit refuses by name
-// before it starts; one that runs short while it replays stops by name. Dolt
-// answers a full volume with a Fatalf that kills the runtime, so the probe
-// must never be the writer that fills it
+// before it starts; one that runs short while it replays stops by name. A full
+// volume fails the live store's writes, so the probe must never be the writer
+// that fills it
 // (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
 
 // ErrReplayScratchInsufficient means the persistent volume cannot hold the
