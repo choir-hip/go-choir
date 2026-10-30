@@ -737,15 +737,20 @@ in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
 
   Done the same evening (ec2887f84, b957ef538): the payload prefetch took
   d@e from 206 to 298 events a second. The rest is apply, about 2.7 ms an
-  event; the likely cause is two WAL syncs per replayed event (a hypothesis
-  until the per-step split is read), which a replay now skips (synchronous
-  NORMAL, then FULL and a checkpoint on every exit). The bound is 720,000
+  event. The per-step split (b6a093721) confirmed the cause: prepare and
+  finalize, two synchronous WAL commits an event, are 10.1 of 11.3 s of
+  apply; a replay now skips the sync (synchronous NORMAL, then FULL and a
+  checkpoint on every exit). The bound is 720,000
   events, about 40 minutes at 298 a second, and the producer snapshots
   when the tail reaches three quarters of it. Reading vmctl for this found
   a second refusal: its empty-store admission planned against the replay
   watermark rows of the projection-base era, which nothing writes since
-  the cutover; the watermark is now the newest snapshot root. A
-  lost-disk drill on d@e is the proof still owed.
+  the cutover; the watermark is now the newest snapshot root. The
+  lost-disk drill on d@e then recovered the event state but none of the
+  files saved in the hour before: the guest synced files on a 15-minute
+  ticker that an idle computer, hibernated ten minutes after boot, never
+  reached. The guest now syncs at a two-minute scan that finds the tree
+  changed (d900a7a46).
 - **The first-snapshot lookup is a full scan.** `NewestEventOfKind` walks
   `computer_event_index` by `(computer_id, status, sequence)` and tests the
   kind row by row. On a computer with no snapshot that is every event: about
