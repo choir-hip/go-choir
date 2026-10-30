@@ -36,7 +36,7 @@ func TestSearchPublishedPiecesOnlyPublishedStoriesAndOpinion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = JSON_SET(CAST(metadata AS JSON), '$.state', 'withdrawn') WHERE canonical_id = ?`, ident.CanonicalID); err != nil {
+	if _, err := f.store.corpus().Exec(`UPDATE og_objects SET metadata = jsonb_set(metadata::jsonb, '{state}', '"withdrawn"')::text WHERE canonical_id = ?`, ident.CanonicalID); err != nil {
 		t.Fatalf("withdraw: %v", err)
 	}
 	res, err := f.svc.SearchPublishedPieces(ctx, "harbor", 10)

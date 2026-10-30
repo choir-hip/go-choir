@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -176,7 +177,7 @@ func TestLookupKeyNeverFailsAWriteAndNeverMisses(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// Upsert twice: the Dolt 2.1.9 virtual-column bug broke exactly this.
+	// Upsert twice: the key row follows the changed value.
 	route := putTestObject(t, og, "choir.public_route", "owner-a", "", "r1", now, map[string]any{"route_path": "/pub/a"})
 	putTestObject(t, og, "choir.public_route", "owner-a", "", "r1", now.Add(time.Second), map[string]any{"route_path": "/pub/a2"})
 	if _, err := og.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", "/pub/a"); err != objectgraph.ErrNotFound {
@@ -265,10 +266,25 @@ func TestLookupKeyBackfillsObjectsWrittenBeforeTheMigration(t *testing.T) {
 	}
 }
 
-// explainPlan returns the EXPLAIN PLAN text of query with args.
+// explainPlan returns the EXPLAIN text of query with args, planned with
+// sequential scans disabled: the tables are small, so only an index that
+// can serve the query shape yields an index plan.
 func explainPlan(t *testing.T, db *sql.DB, query string, args ...any) string {
 	t.Helper()
-	rows, err := db.Query("EXPLAIN PLAN "+query, args...)
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("explain conn: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "ANALYZE"); err != nil {
+		t.Fatalf("explain analyze: %v", err)
+	}
+	if _, err := conn.ExecContext(ctx, "SET enable_seqscan = off"); err != nil {
+		t.Fatalf("explain set: %v", err)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, "RESET enable_seqscan") }()
+	rows, err := conn.QueryContext(ctx, "EXPLAIN "+query, args...)
 	if err != nil {
 		t.Fatalf("explain %q: %v", query, err)
 	}
@@ -284,19 +300,36 @@ func explainPlan(t *testing.T, db *sql.DB, query string, args ...any) string {
 	return strings.Join(lines, "\n")
 }
 
-// assertPlan fails unless the plan reads table through index (by its
-// columns, as Dolt prints them) and never reads a table in full.
+// assertPlan fails unless the plan reads table through some index and never
+// scans a table in full. columns name the indexed columns for the reader;
+// assertPlanIndex pins a specific index.
 func assertPlan(t *testing.T, name, plan, table string, columns ...string) {
 	t.Helper()
-	want := "index: [" + table + "." + strings.Join(columns, ","+table+".") + "]"
-	if !strings.Contains(plan, want) {
-		t.Fatalf("%s: plan does not use %s:\n%s", name, want, plan)
+	re := regexp.MustCompile(`Index (Only )?Scan( Backward)? using \S+ on ` + regexp.QuoteMeta(table) + `\b|Bitmap Heap Scan on ` + regexp.QuoteMeta(table) + `\b`)
+	if !re.MatchString(plan) {
+		t.Fatalf("%s: plan does not read %s through an index (%v):\n%s", name, table, columns, plan)
 	}
-	for _, line := range strings.Split(plan, "\n") {
-		trimmed := strings.TrimLeft(line, " │├└─")
-		if strings.HasPrefix(trimmed, "Table") || strings.Contains(line, "HashJoin") {
-			t.Fatalf("%s: full table read or hash join:\n%s", name, plan)
+	if strings.Contains(plan, "Seq Scan") {
+		t.Fatalf("%s: full table read:\n%s", name, plan)
+	}
+}
+
+// assertPlanIndex fails unless the plan reads through one of the named
+// indexes and never scans a table in full.
+func assertPlanIndex(t *testing.T, name, plan string, indexes ...string) {
+	t.Helper()
+	used := false
+	for _, index := range indexes {
+		re := regexp.MustCompile(`(Index Scan|Index Only Scan)( Backward)? using ` + regexp.QuoteMeta(index) + `\b|Bitmap Index Scan on ` + regexp.QuoteMeta(index) + `\b`)
+		if re.MatchString(plan) {
+			used = true
 		}
+	}
+	if !used {
+		t.Fatalf("%s: plan does not use any of %v:\n%s", name, indexes, plan)
+	}
+	if strings.Contains(plan, "Seq Scan") {
+		t.Fatalf("%s: full table read:\n%s", name, plan)
 	}
 }
 
@@ -323,38 +356,32 @@ func TestRetrievalQueryPlans(t *testing.T) {
 	older := newestWindow{lo: now.Add(-7 * 24 * time.Hour), hi: now.Add(-24 * time.Hour)}
 
 	q, a := listObjectsWindowSQL(objectgraph.ListFilter{Kind: "choir.web_capture", OwnerID: "owner-a", ComputerID: "computer-1"}, w, 1000)
-	assertPlan(t, "corpus window, first rung", explainPlan(t, db, q, a...), "og_objects", "object_kind", "owner_id", "computer_id", "updated_at")
+	assertPlanIndex(t, "corpus window, first rung", explainPlan(t, db, q, a...), idxObjectsKindOwnerComputerUpdated)
 	q, a = listObjectsWindowSQL(objectgraph.ListFilter{Kind: "choir.web_capture", OwnerID: "owner-a", ComputerID: "computer-1"}, older, 1000)
-	assertPlan(t, "corpus window, later rung", explainPlan(t, db, q, a...), "og_objects", "object_kind", "owner_id", "computer_id", "updated_at")
+	assertPlanIndex(t, "corpus window, later rung", explainPlan(t, db, q, a...), idxObjectsKindOwnerComputerUpdated)
 	q, a = listObjectsWindowSQL(objectgraph.ListFilter{Kind: "choir.web_capture", OwnerID: "owner-a"}, w, 50)
-	assertPlan(t, "owner window", explainPlan(t, db, q, a...), "og_objects", "object_kind", "owner_id", "computer_id", "updated_at")
+	assertPlanIndex(t, "owner window", explainPlan(t, db, q, a...), idxObjectsKindOwnerComputerUpdated)
 
 	q, a = frontPublicationWindowSQL(nil, w, 21)
 	plan := explainPlan(t, db, q, a...)
-	if !strings.Contains(plan, "IndexedTableAccess(og_objects)") {
-		t.Fatalf("front window: no index access:\n%s", plan)
-	}
+	assertPlanIndex(t, "front window", plan, "idx_og_objects_updated", "idx_og_objects_kind_owner", idxObjectsKindOwnerComputerUpdated)
 	q, a = frontPublicationWindowSQL(&frontCursor{UpdatedAt: now.Unix(), CanonicalID: "obj:x"}, older, 21)
 	plan = explainPlan(t, db, q, a...)
-	if !strings.Contains(plan, "IndexedTableAccess(og_objects)") {
-		t.Fatalf("front window after a cursor: no index access:\n%s", plan)
-	}
+	assertPlanIndex(t, "front window after a cursor", plan, "idx_og_objects_updated", "idx_og_objects_kind_owner", idxObjectsKindOwnerComputerUpdated)
 
-	assertPlan(t, "lookup key seek", explainPlan(t, db, lookupKeySeekSQL, "choir.public_route", "/pub/3", ogLookupKeyMaxIDs), "og_lookup_keys", "object_kind", "lookup_key", "canonical_id")
+	assertPlanIndex(t, "lookup key seek", explainPlan(t, db, lookupKeySeekSQL, "choir.public_route", "/pub/3", ogLookupKeyMaxIDs), "og_lookup_keys_pkey")
 	where, args, shape, none, err := og.metadataPredicate(ctx, "choir.public_route", "$.route_path", "/pub/3")
 	if err != nil || none || shape != "lookup_key" {
 		t.Fatalf("metadataPredicate: %q %v %v", shape, none, err)
 	}
-	assertPlan(t, "objects named by the key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE `+where+` ORDER BY updated_at DESC LIMIT 1`, args...), "og_objects", "canonical_id")
+	assertPlanIndex(t, "objects named by the key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE `+where+` ORDER BY updated_at DESC LIMIT 1`, args...), "og_objects_pkey")
 
-	assertPlan(t, "provenance edges", explainPlan(t, db, provenanceEdgesSQL, "to-1"), "og_edges", "to_id", "kind")
-	assertPlan(t, "edges to an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? AND kind = ? ORDER BY created_at LIMIT ?`, "to-1", "reviews", 50), "og_edges", "to_id", "kind")
+	assertPlanIndex(t, "provenance edges", explainPlan(t, db, provenanceEdgesSQL, "to-1"), idxEdgesToKind, "idx_og_edges_to")
+	assertPlanIndex(t, "edges to an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? AND kind = ? ORDER BY created_at LIMIT ?`, "to-1", "reviews", 50), idxEdgesToKind, "idx_og_edges_to")
 	// Unchanged reads beside the new indexes keep their plans (§4 G3).
-	assertPlan(t, "edges from an id", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, "from-1"), "og_edges", "from_id")
-	assertPlan(t, "edges from an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`, "from-1", "reviews"), "og_edges", "from_id")
+	assertPlanIndex(t, "edges from an id", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND tombstone = FALSE ORDER BY created_at`, "from-1"), "idx_og_edges_from")
+	assertPlanIndex(t, "edges from an id with a kind", explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE from_id = ? AND kind = ? AND tombstone = FALSE ORDER BY created_at`, "from-1", "reviews"), "idx_og_edges_from")
 	toPlan := explainPlan(t, db, `SELECT edge_id FROM og_edges WHERE 1=1 AND to_id = ? ORDER BY created_at LIMIT ?`, "to-1", 50)
-	if !strings.Contains(toPlan, "index: [og_edges.to_id") {
-		t.Fatalf("edges to an id: no to_id index:\n%s", toPlan)
-	}
-	assertPlan(t, "object by primary key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE canonical_id = ?`, "obj:x"), "og_objects", "canonical_id")
+	assertPlanIndex(t, "edges to an id", toPlan, idxEdgesToKind, "idx_og_edges_to")
+	assertPlanIndex(t, "object by primary key", explainPlan(t, db, `SELECT canonical_id FROM og_objects WHERE canonical_id = ?`, "obj:x"), "og_objects_pkey")
 }
