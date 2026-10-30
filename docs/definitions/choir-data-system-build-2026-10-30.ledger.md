@@ -72,3 +72,18 @@ Append-only. One terse entry per pass. Never edit earlier entries.
     - databases control and graph.
   - d@e's guest store was copied from a reflink of its data.img (ro, noload) to /var/lib/go-choir-rehearsal/de-guest: 600 MB of Dolt at state.texture/texture.
   - The guest layout: the store path is the empty file `state`, so StateDBPath puts the new store at state.db. state-actor.db is already SQLite.
+- 2026-10-30 07:16 UTC (FP0). Merged into cutover/data-system so far:
+  - WP-B, the guest object graph on SQLite (33cf3eebb). objectgraph tests pass, including -race.
+  - WP-D and WP-E, Store A to PostgreSQL control and Store B to PostgreSQL graph (89eced3be). The full ./internal/platform suite passes on PostgreSQL.
+  - WP-A, the guest store on SQLite (075b91a7a). ./internal/store passes.
+  - FP0 commits: ad91b2cd5 ports three e2e tests off embedded Dolt; 46bfd9403 makes the projection sealer refuse a nil cipher.
+  - go build ./... is red only in internal/projectionbase, which WP-C is deleting. WP-C and WP-F are running.
+  - Recorded decisions:
+    - Decision 10: the append receipts keep the signed receipt JSON; columns duplicated inside it are dropped.
+    - The key-escrow transparency append takes pg_advisory_xact_lock, so concurrent appenders cannot fork the chain.
+    - og object times are whole seconds, which the front cursor compares.
+    - JSON stays byte-exact TEXT on PostgreSQL.
+    - state.texture stays as the guest's sidecar directory (store-schema.json, floor, lease marker) and must not be deleted at C5.
+  - Runtime checks owed on staging:
+    - Event-body lookups that miss the guest's 1,024-entry cache now fetch from the host tape: watch latency on the paper's hot paths.
+    - A 40001 serialization failure in routeledger is not yet mapped to a stale-transition result.
