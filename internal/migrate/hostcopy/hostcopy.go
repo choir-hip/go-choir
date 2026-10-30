@@ -24,8 +24,17 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/dbcred"
 	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/migrate/doltsrc"
 	"github.com/yusefmosiah/go-choir/internal/migrate/rowcopy"
 )
+
+// DoltDirPrefix marks a source DSN that opens a stopped Dolt store's files
+// through embedded Dolt instead of a sql-server: dolt-dir:<dir>#<database>,
+// e.g. dolt-dir:/var/lib/go-choir/platform-dolt#platform. At C5 one ORDER BY
+// scan of Store A's 6M receipts through the sql-server stalled, and keyset
+// pages slowed to about 140 rows a second; the embedded engine streamed the
+// paper's 11.5M rows (2026-10-30).
+const DoltDirPrefix = "dolt-dir:"
 
 // Config names the four databases. Source DSNs are MySQL-protocol DSNs
 // (user@tcp(host:port)/database); credentials come from dbcred
@@ -117,19 +126,37 @@ func copyOne(ctx context.Context, cfg Config, name, srcDSN, dstDSN string) (*row
 	if strings.TrimSpace(srcDSN) == "" || strings.TrimSpace(dstDSN) == "" {
 		return nil, errors.New("both a source and a target DSN are required")
 	}
-	srcDSN, err := dbcred.ApplyDSN(srcDSN)
+	dstDSN, err := dbcred.ApplyPGDSN(dstDSN)
 	if err != nil {
 		return nil, err
 	}
-	dstDSN, err = dbcred.ApplyPGDSN(dstDSN)
-	if err != nil {
-		return nil, err
+	var src *sql.DB
+	pageRows := 0
+	if dir, ok := strings.CutPrefix(srcDSN, DoltDirPrefix); ok {
+		ws, database, found := strings.Cut(dir, "#")
+		if !found || ws == "" || database == "" {
+			return nil, fmt.Errorf("source %s: want %s<dir>#<database>", name, DoltDirPrefix)
+		}
+		h, err := doltsrc.Open(ctx, ws, database)
+		if err != nil {
+			return nil, fmt.Errorf("open source: %w", err)
+		}
+		defer h.Close()
+		src = h.DB
+	} else {
+		srcDSN, err := dbcred.ApplyDSN(srcDSN)
+		if err != nil {
+			return nil, err
+		}
+		src, err = sql.Open("mysql", srcDSN)
+		if err != nil {
+			return nil, fmt.Errorf("open source: %w", redact(err))
+		}
+		defer src.Close()
+		// Short keyset pages: one long scan through the Dolt sql-server
+		// stalled (rowcopy.Options.PageRows).
+		pageRows = 50000
 	}
-	src, err := sql.Open("mysql", srcDSN)
-	if err != nil {
-		return nil, fmt.Errorf("open source: %w", redact(err))
-	}
-	defer src.Close()
 	// One connection per table in flight, plus introspection.
 	src.SetMaxOpenConns(cfg.Parallel + 1)
 	src.SetMaxIdleConns(cfg.Parallel + 1)
@@ -147,9 +174,7 @@ func copyOne(ctx context.Context, cfg Config, name, srcDSN, dstDSN string) (*row
 		Tables:   cfg.Tables,
 		DryRun:   cfg.DryRun,
 		Parallel: cfg.Parallel,
-		// Short keyset pages: one long scan through the Dolt sql-server
-		// stalled (rowcopy.Options.PageRows).
-		PageRows: 50000,
+		PageRows: pageRows,
 		Logf:     logf,
 		// A --tables filter spans both databases; Run checks the union.
 		LenientFilter: len(cfg.Tables) > 0,
