@@ -36,7 +36,7 @@ Update 2026-10-13 (Cut 2 unit 2b): the Source Service daemon (sourcecycled,
 source ingestion is now the source schedule on a computer
 (`internal/agentcore/source_schedule.go`, registry in `internal/sources`)
 and research's `choir.Read`, both writing shared block-document captures to
-Store B behind `corpusd` (`internal/sourcegraph`, `/internal/platform/captures`).
+the graph database behind `corpusd` (`internal/sourcegraph`, `/internal/platform/captures`).
 Captures keep raw bytes, block JSON and the block projection by sha256;
 any bound computer reads them by capture id.
 
@@ -191,12 +191,12 @@ record with source/fetch identity, hashes, and policy outcome. Deduplication may
 then create a reversible `duplicate_of`, cluster, or suppression-for-synthesis
 decision that records model, threshold, nearest object, score, and time.
 
-**Current conformance gap:** `internal/agentcore/qdrant_dedup.go` uses
-Qdrant/Ollama similarity before object-graph projection and drops matching
-items from that projection; only logs/counts preserve the decision. This is
-code-present experimental behavior, not canonical evidence semantics. Until it
-records the capture and dedup decision durably, do not treat a dropped item as
-never fetched, use Qdrant as source authority, or calibrate the threshold as an
+**Former conformance gap (Status 2026-10-30: Qdrant and Ollama embeddings were
+deleted and `internal/agentcore/qdrant_dedup.go` no longer exists, so no
+similarity drop happens before projection).** The old path dropped matching
+items from the projection and kept only logs/counts of the decision. The rule
+stands for any successor: record the capture and dedup decision durably, and do
+not treat a dropped item as never fetched or calibrate a threshold as an
 irreversible publication rule.
 
 ## Texture Source Entities

@@ -53,7 +53,7 @@ plane. They are not Texture, Desktop, apps, or Settings.
 ## Why This Is Not Optional
 
 Choir's object is a persistent computer that may diverge from the platform
-baseline: apps, agents, files, builds, Dolt state, prompts, runtime services,
+baseline: apps, agents, files, builds, SQLite state, prompts, runtime services,
 and preferences already named in the computer ontology. The UI is how a person
 uses that object. If the UI cannot diverge, the computer cannot change what
 the user actually operates.
@@ -204,7 +204,7 @@ computer the user uses. Bind:
 - required: frontend identity derivable from the release or an explicit
   frontend digest joined to it
 - required later with the VM-local witness: content that the Definition
-  already names for Dolt rows
+  already names for guest-store (SQLite) rows
 
 Refuse creation when the served SPA is underivable. `ReconstructionDigest`
 must change when the served UI changes. `ComputerVersion =

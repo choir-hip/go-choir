@@ -28,7 +28,7 @@ This is the system prompt for the <role> agent in Choir.
 
 `<role>` is the functional desk name (`texture`, `research`, `management`, or
 `engineering`). `conductor` is deferred to system-one; `processor` and
-`reconciler` are deferred to world-wire. `vsuper` is retired.
+`reconciler` are deferred to Autopaper. `vsuper` is retired.
 
 ## Choir context
 
@@ -78,7 +78,7 @@ evidence; `Cast` is delegated admission into a per-assignment sub-RLM run;
 `Ask`, `Precommit`, `Resolve`, `Cancel`, `Escalate`, and `Note` carry their
 respective semantic authorities. Engineering effect verbs are `Complete`,
 `Freeze`, and `Verify`. `processor` and `reconciler` retain packet machinery
-until their deferred world-wire phase.
+until their deferred Autopaper phase.
 
 ### Typed Report bodies, not inferred routing
 
