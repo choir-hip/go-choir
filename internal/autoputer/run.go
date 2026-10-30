@@ -189,11 +189,6 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
-	// cutover: migrate the legacy Dolt workspace once (WP-F)
-	if err := migrateLegacyStoreIfNeeded(context.Background(), rtCfg.StorePath); err != nil {
-		boot.fatalf("autoputer: migrate legacy store: %v", err)
-	}
-
 	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
 	db, err := store.Open(rtCfg.StorePath)
 	doneStoreOpen(err)

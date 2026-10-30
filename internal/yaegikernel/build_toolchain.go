@@ -76,8 +76,7 @@ func capsuleGoBounds(lookup func(string) (string, bool), procsName, memName stri
 }
 
 // BuildToolchainKeys are the cgo variables that point a capsule build at the
-// guest's ICU headers and libraries (cmd/autoputer links
-// dolthub/go-icu-regex). Values are store paths, never credentials.
+// guest's cgo headers and libraries. Values are store paths, never credentials.
 var BuildToolchainKeys = []string{"CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS", "PKG_CONFIG_PATH"}
 
 // CapsuleGoBoundsCarry returns the capsule's Go bounds, when well formed,

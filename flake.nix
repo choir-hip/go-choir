@@ -100,34 +100,6 @@
       choirGo = mkChoirGo pkgs;
       buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
 
-      # Dolt lane (docs/archive/reports/dolt-upgrade-compat-2026-10-15.md). The sql-server
-      # for Store A and Store B, the host `dolt` CLI and the dev shell all use
-      # pkgs.dolt; the locked nixpkgs ships 2.1.9. Same pattern as choirGo: the
-      # base's own recipe with a newer version, source hash and vendor hash
-      # (taken from nixpkgs' pkgs/by-name/do/dolt/package.nix at 2.4.2), applied
-      # only while the given nixpkgs is older, so the weekly base bump retires
-      # it. The embedded Go module in go.mod is a separate form of Dolt and is
-      # pinned there.
-      choirDoltRelease = {
-        version = "2.4.2";
-        hash = "sha256-4/VvjwV7N99lraNnc2vJpW17lIe5+1yShudGsZ2r39w=";
-        vendorHash = "sha256-wJqA2gWhwEfHQim3a4HJpDsSj1Igeiyrg6xn8pPLrA4=";
-      };
-      mkChoirDolt = p:
-        if p.lib.versionAtLeast p.dolt.version choirDoltRelease.version then p.dolt
-        else p.dolt.overrideAttrs (_: {
-          inherit (choirDoltRelease) version vendorHash;
-          src = p.fetchFromGitHub {
-            owner = "dolthub";
-            repo = "dolt";
-            tag = "v${choirDoltRelease.version}";
-            inherit (choirDoltRelease) hash;
-          };
-        });
-      choirDoltModule = { ... }: {
-        nixpkgs.overlays = [ (final: prev: { dolt = mkChoirDolt prev; }) ];
-      };
-
       # Firecracker lane. The host's VMM and its jailer are both
       # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN),
       # and the jailed VMM is its static build, pkgs.pkgsStatic.firecracker
@@ -142,7 +114,7 @@
       # affected: every version since 1.15.1 puts its region at 512 GiB,
       # past the E-2236's 39-bit limit, docs/problems/memory-hotplug-cannot-
       # work-on-node-b-39-bit-cpu-2026-10-22.md.) Same pattern as
-      # choirDolt: the base's recipe with a newer version, source hash and
+      # the Go lane: the base's recipe with a newer version, source hash and
       # vendor hash, applied only while the given nixpkgs is older.
       #
       # The hashes are the ones the per-computer next build used (NET-08's
@@ -221,7 +193,7 @@
       ];
       forDevSystems = nixpkgs.lib.genAttrs devSystems;
       # nixpkgs tracks nixos-unstable; the locked revision ships Go >= 1.26.2,
-      # which the Dolt v2 graph (driver/v2 v2.2.0 go.mod directive) requires.
+      # which go.mod requires.
       importPkgs = system:
         import nixpkgs { inherit system; };
       mkDevShell = devSystem:
@@ -233,20 +205,9 @@
             devPkgs.git
             (mkChoirGo devPkgs)
             devPkgs.pkg-config
-            devPkgs.icu
             # PostgreSQL for dbxtest.Postgres (initdb, pg_ctl) and local dev.
             devPkgs.postgresql_17
-            # The dolt CLI: only internal/migrate/hostcopy's test starts a
-            # `dolt sql-server`. Remove with the migrators after C5.
-            (mkChoirDolt devPkgs)
           ];
-          shellHook = ''
-            export PKG_CONFIG_PATH="${devPkgs.icu.dev}/lib/pkgconfig:${devPkgs.icu}/lib/pkgconfig''${PKG_CONFIG_PATH:+:''${PKG_CONFIG_PATH}}"
-            export LD_LIBRARY_PATH="${devPkgs.icu}/lib''${LD_LIBRARY_PATH:+:''${LD_LIBRARY_PATH}}"
-            export CGO_CFLAGS="$(pkg-config --cflags icu-i18n icu-uc 2>/dev/null) ''${CGO_CFLAGS:-}"
-            export CGO_CXXFLAGS="$(pkg-config --cflags icu-i18n icu-uc 2>/dev/null) ''${CGO_CXXFLAGS:-}"
-            export CGO_LDFLAGS="$(pkg-config --libs icu-i18n icu-uc 2>/dev/null) ''${CGO_LDFLAGS:-}"
-          '';
         };
 
       rootPath = toString ./.;
@@ -259,9 +220,8 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-PpfZCVxnIujyvADK0oY5tKy41zBVA8tyfkwao+52aVQ=";
+        vendorHash = "sha256-MUe7lLobr0jv9Th0/+PwrWr1f9yF3kVwgh5t4A9kJj0=";
         nativeBuildInputs = [ pkgs.pkg-config ];
-        buildInputs = [ pkgs.icu ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
@@ -342,15 +302,12 @@
 
       # One Go compile for every service (docs/problems/ci-deploy-latency-per-
       # service-go-builds-2026-10-09.md). Fifteen per-service buildGoModule
-      # derivations each compiled the whole dependency graph (embedded Dolt
-      # included, ~94 s each on Node B); this derivation builds every cmd with
+      # derivations each compiled the whole dependency graph (~94 s each on Node B); this derivation builds every cmd with
       # one build cache. mkGoService copies one binary out and keeps the
       # per-service identity the deploy verifies (build.json, skills, frontend).
       goServiceSubPackages = [
         "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd"
-        # one-shot host migrator (data system cutover; deleted after C5)
-        "cmd/choir-migrate-host"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
         # capsule package mirror (station FP10)
@@ -466,12 +423,6 @@
         checkpointd = mkGoService {
           pname = "checkpointd";
           subPackage = "cmd/checkpointd";
-        };
-        # One-shot Store A/B to PostgreSQL migrator (data system cutover; on
-        # Node B at /run/current-system/sw/bin/choir-migrate-host).
-        choirMigrateHost = mkGoService {
-          pname = "choir-migrate-host";
-          subPackage = "cmd/choir-migrate-host";
         };
         updater = mkGoService {
           pname = "choir-updater";
@@ -655,8 +606,8 @@ EOF
       guest-image = mkGuestImage "go-choir-guest-image" guestVmConfig;
 
       # Desktop dev shell — for building Choir Desktop with Wails v3.
-      # Separate from the default shell so it doesn't pull in ICU/Dolt
-      # or interfere with the main Go dev environment.
+      # Separate from the default shell so it doesn't
+      # interfere with the main Go dev environment.
       mkDesktopShell = devSystem:
         let
           devPkgs = importPkgs devSystem;
@@ -758,7 +709,6 @@ EOF
           ./nix/disks.nix
           ./nix/node-b.nix
           choirKernelModule
-          choirDoltModule
           choirFirecrackerModule
         ];
       };

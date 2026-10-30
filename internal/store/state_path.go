@@ -13,8 +13,3 @@ import "path/filepath"
 func StateDBPath(storePath string) string {
 	return filepath.Join(filepath.Dir(filepath.Clean(storePath)), "state.db")
 }
-
-// LegacyDoltWorkspacePath is the embedded Dolt workspace the migrator reads.
-func LegacyDoltWorkspacePath(storePath string) string {
-	return deriveTextureWorkspacePath(storePath)
-}

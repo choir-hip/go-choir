@@ -177,7 +177,7 @@ func (s *Store) ReplaceWorkspace(quarantineDir string) (*Store, WorkspaceReplace
 // Open opens (or creates) the SQLite state file derived from dbPath
 // (StateDBPath) and applies the current schema. A legacy Dolt workspace or
 // SQLite file at the old paths is never read here; the guest migrator
-// (internal/migrate/guestdolt) copies a legacy workspace into the state file
+// copies a legacy workspace into the state file
 // before Open runs.
 func Open(dbPath string) (*Store, error) {
 	statePath := StateDBPath(dbPath)

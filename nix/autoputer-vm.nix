@@ -1016,7 +1016,6 @@ EOF
         nodejs
         gcc
         binutils
-        icu
         pkg-config
         gnutar
         systemd
@@ -1039,16 +1038,9 @@ EOF
       # the autoputer falls back to its process-local default, which can disappear
       # across guest reboot/recovery even when runtime DB state survives.
       AUTOPUTER_FILES_ROOT = "/mnt/persistent/files";
-      # Guest-local capsule verification uses the standard Go toolchain; expose
-      # the Nix ICU development closure through standard compiler variables.
-      CGO_CFLAGS = "-I${pkgs.icu.dev}/include";
-      CGO_CXXFLAGS = "-I${pkgs.icu.dev}/include";
-      CGO_LDFLAGS = "-L${pkgs.icu}/lib";
-      PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
-      # Engineering capsules build cmd/autoputer, which needs cgo (gozstd,
-      # go-icu-regex). The capsule executor appends these bin dirs to every
-      # capsule workload's PATH and hands it the four cgo variables above;
-      # the store is read-only through the capsule's lower root
+      # Engineering capsules build with the standard Go toolchain (no cgo
+      # dependencies remain). The capsule executor appends these bin dirs to
+      # every capsule workload's PATH
       # (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
       CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath (with pkgs; [ gcc binutils pkg-config ]);
       # The frontend's locked dependencies, carried to capsule workloads like
@@ -1143,7 +1135,6 @@ EOF
     gnumake
     gnugrep
     gnused
-    icu
     nodejs
     perl
     pkg-config

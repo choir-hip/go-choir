@@ -2,13 +2,11 @@
 // runtime.
 //
 // The texture store persists documents, revisions, citations, and metadata
-// using an embedded Dolt workspace, enabling history-capable persistence with
-// first-class versioning semantics, history/snapshot/diff/blame APIs, and
-// per-user in-process storage inside the autoputer.
+// using SQLite, with history/snapshot/diff/blame APIs and per-user in-process
+// storage inside the autoputer.
 //
 // Design decisions:
-//   - Embedded Dolt (`github.com/dolthub/driver/v2`) for version-native document
-//     storage without a separate server process.
+//   - Embedded SQLite for document storage without a separate server process.
 //   - Full-content revisions (not deltas) so that historical snapshots are
 //     directly accessible without reconstruction.
 //   - Citations and metadata are stored per-revision as JSON blobs so they

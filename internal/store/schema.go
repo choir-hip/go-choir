@@ -3,7 +3,7 @@ package store
 // The guest store's schema: one clean current DDL for the SQLite file at
 // StateDBPath (docs/design/data-system-build-sheet-2026-10-30.md decision 3).
 // A fresh database is built from these statements; there are no migration
-// ladders. The guest Dolt migrator (internal/migrate/guestdolt) copies rows
+// ladders. The guest Dolt migrator copies rows
 // from a legacy workspace into this schema.
 //
 // Types follow build sheet decision 5: TEXT for strings and JSON, INTEGER for

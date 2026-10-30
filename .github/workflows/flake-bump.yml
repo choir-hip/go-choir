@@ -2,7 +2,7 @@
 # slice 5; docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md, 5.1
 # "Everything else"). The base `nixpkgs` input is a frozen nixos-unstable
 # snapshot; left alone it stops patching everything that is not in its own
-# lane (systemd, OpenSSH, glibc, OpenSSL, Caddy, Dolt, SearXNG, the
+# lane (systemd, OpenSSH, glibc, OpenSSL, Caddy, SearXNG, the
 # guest's userspace). Every week this opens or refreshes ONE pull request that
 # moves only `nixpkgs` to the current nixos-unstable head, then builds the host
 # closure and the guest image from that branch and reports the result on the
@@ -149,7 +149,6 @@ jobs:
             "openssl|nixosConfigurations.go-choir-b.pkgs.openssl"
             "glibc|nixosConfigurations.go-choir-b.pkgs.glibc"
             "caddy|nixosConfigurations.go-choir-b.pkgs.caddy"
-            "dolt|nixosConfigurations.go-choir-b.pkgs.dolt"
             "searxng|nixosConfigurations.go-choir-b.pkgs.searxng"
             "python3|nixosConfigurations.go-choir-b.pkgs.python3"
             "nodejs|nixosConfigurations.go-choir-b.pkgs.nodejs"

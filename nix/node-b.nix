@@ -75,7 +75,7 @@ let
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
   # Legacy Dolt data directories. The Dolt servers are gone (data system cutover);
-  # the data stays on disk until C5 deletes it, and scripts/cutover/legacy-dolt-serve.sh
+  # the data stays on disk until C5 deletes it; the serve script is deleted
   # serves it by hand when the host migrator must be run again.
   corpusDoltDir = "/var/lib/go-choir/corpus-dolt";
   corpusDoltDBDir = "${corpusDoltDir}/corpus";
@@ -148,10 +148,8 @@ let
   pgControlEnv = [ "CHOIR_PG_CONTROL_DSN=${pgControlDsn}" ];
   pgClientCredential = [ "choir-pg-password:${pgPasswordFile}" ];
   pgClientAfter = [ "postgresql.service" "go-choir-postgresql-roles.service" ];
-  goServiceLibraryPath = lib.makeLibraryPath [ pkgs.icu ];
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
-    export LD_LIBRARY_PATH="${goServiceLibraryPath}''${LD_LIBRARY_PATH:+:}''${LD_LIBRARY_PATH:-}"
     pointer="/var/lib/go-choir/services/${name}/bin/${name}"
     if [ -x "$pointer" ]; then
       if [ "${name}" = "autoputer" ] && [ -d "/var/lib/go-choir/services/autoputer/share/go-choir/skills" ]; then
@@ -379,7 +377,7 @@ let
     # removes chown, setuid, capset, chroot, bpf, acct, ...; the old third
     # entry "@privileged" re-allowed them (systemd applies the list in
     # order; docs/problems/loopback-is-a-credential-2026-10-14.md). No host
-    # service or tool it runs (ip, iptables, mkfs.ext4, git, dolt,
+    # service or tool it runs (ip, iptables, mkfs.ext4, git,
     # ssh-keygen, firecracker without the jailer) calls one.
     SystemCallFilter = [ "@system-service" "~@privileged" "~@mount" ];
     # A filtered call fails with EPERM (logged by the caller) instead of
@@ -2903,16 +2901,12 @@ in
     gnumake
     gnugrep
     gnused
-    dolt
     htop
     jq
     nodejs
     python3
     pkg-config
-    icu
-    icu.dev
     goChoirPackages.maildctl
-    goChoirPackages.choirMigrateHost
     # PostgreSQL client tools for operators (psql, pg_dump).
     postgresql_17
     procps
