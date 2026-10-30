@@ -1383,12 +1383,26 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-data-system-build-2026-10-30
+    title: Data system build — settle the frame, cut the designs to it, build B0-B8 on the proof ring, cut over once
+    path: docs/definitions/choir-data-system-build-2026-10-30.md
+    ledger: docs/definitions/choir-data-system-build-2026-10-30.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-data-architecture-selection-2026-10-28]
+    enables: []
+    note: >-
+      Owner 2026-10-30: "I'd like you to start building this. I mean, iron
+      out the kinks first ofc." Frame:
+      docs/design/choir-data-system-frame-2026-10-30.md.
   - id: choir-data-architecture-selection-2026-10-28
     title: Data architecture selection — census, owner budgets and hard gates, tape-replay bake-off against the incumbent, differential shadow, ratify
     path: docs/definitions/choir-data-architecture-selection-2026-10-28.md
-    status: reviewed
+    status: superseded  # 2026-10-30; successor choir-data-system-build-2026-10-30 (terminal receipt in the file)
     kind: station
-    entrypoint: true
+    entrypoint: false
     depends_on: [choir-consolidate-and-scale-metamission-2026-10-26]
     enables: []
     note: >-

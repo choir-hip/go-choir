@@ -334,7 +334,8 @@ None of these blocks writing the detailed designs. A recommendation goes with ea
 
 1. **Event classes (§5).** Two choices decide 34 points of the paper's
    bytes.
-   - **(a) Is the agent record kept like acts?** The agent record is run
+   - **(a) Is the agent record kept like acts?** **Settled by the owner,
+     2026-10-30: "Yes, agent record is valuable in many senses. Keep it."** The agent record is run
      memory and tool results. Kept like acts, it stays forever for users; as
      working state, it is kept only inside the window. Recommended: keep it.
      It is the audit trail of why an agent did what it did, which PSA,

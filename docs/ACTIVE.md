@@ -8,7 +8,32 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-10-28): data architecture selection
+## Active goal (2026-10-30): the data system build
+
+**Goal:** [`definitions/choir-data-system-build-2026-10-30.md`](definitions/choir-data-system-build-2026-10-30.md)
+(`readiness: executable` on the owner's word; the file review rides frame
+round 2). Run it with
+`/goal docs/definitions/choir-data-system-build-2026-10-30.md`.
+
+Owner, 2026-10-30: "I'd like you to start building this. I mean, iron out
+the kinks first ofc."
+
+It builds the frame,
+[`design/choir-data-system-frame-2026-10-30.md`](design/choir-data-system-frame-2026-10-30.md):
+five things, six rules, the batched write path, four event classes, and one
+cutover.
+
+Stations:
+- D0, the frame settled (panel: Devin, DeepSeek and Sonnet, then Codex
+  once);
+- D1, the detailed designs cut to fit it;
+- D2, the build plan, one goal file per build station;
+- B0, the acceptance harness first;
+- B1 to B7, the mechanisms, proven on the d@e proof ring;
+- B8, the cutover, on the owner's go.
+
+## Superseded (2026-10-30): data architecture selection
+
 
 **Goal:** [`definitions/choir-data-architecture-selection-2026-10-28.md`](definitions/choir-data-architecture-selection-2026-10-28.md)
 (`readiness: reviewed`, Devin 381 accept). Owner, 2026-10-28: "the data

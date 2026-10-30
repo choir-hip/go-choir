@@ -1120,3 +1120,43 @@ platform-readable analytical store. The growth bound for a user computer's
 history is host storage, not the guest disk. The restore window limits restore
 points, not history. Durability of the single copy comes from the object
 store's durability rules and the off-host backup.
+
+## Owner ruling 2026-10-30 ~06:00 UTC: the agent record is kept
+
+Owner: "Yes, agent record is valuable in many senses. Keep it." The agent
+record (run memory and tool results: what each agent saw and said, 33.7% of
+the paper's tape bytes, `docs/evidence/paper-tape-composition-2026-10-30.md`)
+is kept like acts: for the life of a user computer; for the paper, offloaded
+to the analytical database when it exists and to off-host cold storage
+until then. Frame: `docs/design/choir-data-system-frame-2026-10-30.md` §5.
+
+## Terminal receipt 2026-10-30 ~06:10 UTC: superseded by the data system build
+
+Owner, 2026-10-30: "I'd like you to start building this. I mean, iron out
+the kinks first ofc. All these reviews and design have been very fruitful.
+So keep going and then get to development."
+
+Status: **superseded**. Successor:
+[`choir-data-system-build-2026-10-30.md`](choir-data-system-build-2026-10-30.md).
+
+The selection this goal set out to make was made by measurement and owner
+rulings rather than by the planned candidate bake-off:
+- PostgreSQL on the host and SQLite in the computers (owner leaning,
+  measured in `docs/evidence/new-engine-storage-measurement-2026-10-30.md`);
+- one cutover rather than a shadow widened by ring (owner, 2026-10-30:
+  "measure a dozen times, cut once");
+- the frame's five things and six rules.
+
+What carries forward into the successor:
+- the hard gates above become build acceptance gates: bounded peak memory,
+  kill -9 durability, crash semantics, witness, Texture, self-development
+  isolation, the differential, security, a separable data tier and
+  scale-out;
+- the differential test becomes a cutover gate: each computer's migrated
+  state must answer like its Dolt state;
+- the precommitment ledger
+  ([`choir-data-architecture-selection-2026-10-28.precommit.md`](choir-data-architecture-selection-2026-10-28.precommit.md))
+  continues;
+- the scale horizons;
+- the rule that the paper and the owner's computers are never used for
+  adversarial or proof steps.
