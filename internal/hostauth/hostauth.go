@@ -5,7 +5,7 @@
 //
 // Before it, "came from 127.0.0.1" was the credential, and every process in
 // the host network namespace held it: the Firecracker VMMs, SearXNG, the Go
-// module proxy, Qdrant, Caddy
+// module proxy, Caddy
 // (docs/problems/loopback-is-a-credential-2026-10-14.md).
 //
 // The secret is one root-only 0600 file delivered to each unit with

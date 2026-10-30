@@ -54,22 +54,12 @@ const (
 	// conversation retained after a compaction checkpoint.
 	DefaultRunMemoryKeepRecentTokens = 20000
 
-	// DefaultQdrantURL is the node-b Qdrant instance URL.
-	DefaultQdrantURL = "http://127.0.0.1:6333"
-
 	// DefaultCorpusdURL is the default corpusd/proxy URL used when
 	// neither RUNTIME_CORPUSD_URL nor PROXY_CORPUSD_URL is set. In
 	// deployed VMs this is the proxy port (8082); in local dev it's the
 	// same. The proxy routes /internal/platform/objects and
 	// /internal/platform/edges to corpusd.
 	DefaultCorpusdURL = "http://127.0.0.1:8082"
-
-	// DefaultOllamaURL is the local Ollama instance URL for embeddings.
-	DefaultOllamaURL = "http://localhost:11434"
-
-	// DefaultOllamaEmbeddingModel is the default embedding model for Qdrant
-	// semantic routing.
-	DefaultOllamaEmbeddingModel = "batiai/qwen3-embedding:0.6b"
 
 	// DefaultManagementTaskSlots is K (management delegation O7, S2b): four
 	// tasks at once, as research children and intake labels. Each task is
@@ -140,10 +130,7 @@ func LoadConfig() Config {
 			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
 			DefaultRunMemoryKeepRecentTokens,
 		),
-		QdrantURL:            envOr("QDRANT_URL", DefaultQdrantURL),
-		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
-		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
-		ManagementTaskSlots:  intOr("RUNTIME_MANAGEMENT_TASK_SLOTS", DefaultManagementTaskSlots),
+		ManagementTaskSlots: intOr("RUNTIME_MANAGEMENT_TASK_SLOTS", DefaultManagementTaskSlots),
 	})
 }
 
@@ -163,15 +150,6 @@ func NormalizeConfig(cfg Config) Config {
 	}
 	if cfg.RunMemoryKeepRecentTokens <= 0 {
 		cfg.RunMemoryKeepRecentTokens = DefaultRunMemoryKeepRecentTokens
-	}
-	if strings.TrimSpace(cfg.QdrantURL) == "" {
-		cfg.QdrantURL = DefaultQdrantURL
-	}
-	if strings.TrimSpace(cfg.OllamaURL) == "" {
-		cfg.OllamaURL = DefaultOllamaURL
-	}
-	if strings.TrimSpace(cfg.OllamaEmbeddingModel) == "" {
-		cfg.OllamaEmbeddingModel = DefaultOllamaEmbeddingModel
 	}
 	cfg.ManagementTaskSlots = NormalizeManagementTaskSlots(cfg.ManagementTaskSlots)
 	return cfg

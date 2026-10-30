@@ -692,28 +692,6 @@ in
     };
   };
 
-  # Qdrant vector search engine (host service, localhost-only).
-  # The Go qdrant client (internal/qdrant) talks to http://127.0.0.1:6333.
-  # VMs on the tap network cannot reach 127.0.0.1; see VM reachability note
-  # in the mission doc. If VMs need Qdrant access, bind to the tap IP or
-  # 0.0.0.0 (the firewall already blocks 6333 externally).
-  services.qdrant = {
-    enable = true;
-    settings = {
-      service = {
-        host = "127.0.0.1";
-        http_port = 6333;
-        grpc_port = 6334;
-      };
-      storage = {
-        storage_path = "/var/lib/qdrant/storage";
-        snapshots_path = "/var/lib/qdrant/snapshots";
-        hnsw_index.on_disk = true;
-      };
-      telemetry_disabled = true;
-    };
-  };
-
   # SearXNG self-hosted meta-search engine (localhost-only, free unlimited queries).
   # Aggregates Google, Bing, DuckDuckGo, and 70+ engines. JSON API enabled for
   # the gateway's SearXNGProvider. No API key, no credits. The limiter is
@@ -756,7 +734,7 @@ in
   # go-choir units (docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md,
   # problems 2 and 5). None runs as root and none uses D-Bus or PID 1's
   # socket: caddy proxies to loopback and reloads through its own admin
-  # API, qdrant and unbound serve loopback (unbound also the guests, through
+  # API and unbound serve loopback (unbound also the guests, through
   # the tap DNAT), searx and searx-init read their settings from /run/searx;
   # name lookups go through nscd. searx and searx-init keep their own
   # searxng.env (FP0's ruling; hiding it gains nothing, the process holds
@@ -764,7 +742,6 @@ in
   # this restarts each of them once (a unit-file change); caddy's restart
   # drops open edge connections, which clients reopen.
   systemd.services.caddy.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
-  systemd.services.qdrant.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
   systemd.services.unbound.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ ];
   systemd.services.searx.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ "searxngEnv" ];
   systemd.services.searx-init.serviceConfig.InaccessiblePaths = hiddenSecretsExcept [ "searxngEnv" ];

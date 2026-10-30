@@ -38,7 +38,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
@@ -176,9 +175,6 @@ type Runtime struct {
 	// (subRLMCallSpacer, research_children.go).
 	researchChildCalls     *callSpacer
 	researchChildCallsOnce sync.Once
-	qdrantPipelineMu       sync.Mutex
-	qdrantPipeline         *qdrant.Pipeline
-	qdrantPipelineInitErr  error
 
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,
@@ -1040,11 +1036,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// the actor-wake outbox projector is the sole post-restart delivery path.
 	rt.migrateActorWakeOutboxAsync(ctx)
 	rt.startProjector(ctx)
-	// Best-effort: ensure the production Qdrant collection exists so the
-	// semantic dedup pass on ingestion has a target. Runs asynchronously so
-	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
-	// path also ensures the collection lazily on first use.
-	go rt.ensureProductionQdrantCollectionBestEffort(ctx)
 	// The corpus search cache is derived and rebuilt here so the first
 	// research search after a boot does not read every story's head
 	// (docs/problems/research-more-slow-and-hidden-2026-10-21.md E1).
@@ -1077,21 +1068,6 @@ func (rt *Runtime) maintenanceHeld() bool {
 // than a fatal startup failure.
 func (rt *Runtime) MaintenanceHeld() bool {
 	return rt.maintenanceHeld()
-}
-
-// ensureProductionQdrantCollectionBestEffort attempts to create the production
-// Qdrant collection with a short timeout. Failures are logged but never
-// propagated: the ingestion dedup path falls back to pass-through when the
-// collection is missing.
-func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Context) {
-	if rt == nil || rt.QdrantPipeline() == nil {
-		return
-	}
-	ensureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	if err := rt.EnsureProductionQdrantCollection(ensureCtx); err != nil {
-		log.Printf("runtime: ensure production qdrant collection (best-effort): %v", err)
-	}
 }
 
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.

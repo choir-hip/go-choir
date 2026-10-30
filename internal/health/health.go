@@ -3,8 +3,8 @@
 // It defines a lightweight, dependency-free set of primitives for reporting
 // service liveness and readiness:
 //
-//   - Checker is the interface for a single dependency probe (Dolt, Qdrant,
-//     Ollama, an LLM provider, etc.).
+//   - Checker is the interface for a single dependency probe (Dolt, an LLM
+//     provider, etc.).
 //   - HTTPChecker and TCPChecker are ready-to-use Checker implementations that
 //     probe an HTTP or TCP endpoint with a short timeout.
 //   - Aggregator runs a set of named Checkers, caches the result for a

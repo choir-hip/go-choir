@@ -26,7 +26,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
-	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -657,17 +656,6 @@ func Run() {
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
 	)
 
-	// Readiness endpoint: probes Qdrant and Ollama, the two external
-	// dependencies of the semantic-dedup path. Both degrade gracefully via
-	// circuit breakers, so an unhealthy dependency reports "degraded" (200)
-	// rather than "unhealthy" (503) — the autoputer can still serve requests
-	// with content-hash dedup only. The result is cached for 5s to keep the
-	// endpoint lightweight.
-	readyAgg := health.NewAggregator("autoputer", 5*time.Second,
-		health.HTTPChecker{NameStr: "qdrant", URL: strings.TrimRight(rtCfg.QdrantURL, "/") + "/healthz", Timeout: 2 * time.Second},
-		health.HTTPChecker{NameStr: "ollama", URL: strings.TrimRight(rtCfg.OllamaURL, "/") + "/api/tags", Timeout: 2 * time.Second},
-	)
-	s.HandleFunc("/health/ready", health.ReadinessHandler("autoputer", readyAgg))
 	RegisterComputerSurface(s, NewComputerSurfaceFromEnv())
 
 	// S0a boot observer: read-only internal diagnostics for the per-boot
@@ -872,9 +860,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		MaildURL:                        rtRuntimeCfg.MaildURL,
 		CorpusdURL:                      rtRuntimeCfg.CorpusdURL,
 		ProxyURL:                        rtRuntimeCfg.ProxyURL,
-		QdrantURL:                       rtRuntimeCfg.QdrantURL,
-		OllamaURL:                       rtRuntimeCfg.OllamaURL,
-		OllamaEmbeddingModel:            rtRuntimeCfg.OllamaEmbeddingModel,
 		LLMProvider:                     rtRuntimeCfg.LLMProvider,
 		LLMModel:                        rtRuntimeCfg.LLMModel,
 		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,

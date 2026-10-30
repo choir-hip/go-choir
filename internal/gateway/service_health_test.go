@@ -26,11 +26,11 @@ func TestHandleServiceHealth_OkWhenHealthy(t *testing.T) {
 
 	h, _ := setupHandlerNoProvider(t)
 	h.SetServiceCheckers(map[string]health.Checker{
-		"qdrant": health.HTTPChecker{NameStr: "qdrant", URL: srv.URL, Timeout: time.Second},
+		"probe": health.HTTPChecker{NameStr: "probe", URL: srv.URL, Timeout: time.Second},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/health/qdrant", nil)
-	req.SetPathValue("service", "qdrant")
+	req := httptest.NewRequest(http.MethodGet, "/health/probe", nil)
+	req.SetPathValue("service", "probe")
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
@@ -44,8 +44,8 @@ func TestHandleServiceHealth_OkWhenHealthy(t *testing.T) {
 	if resp.Status != string(health.StatusOK) {
 		t.Errorf("status = %q, want %q", resp.Status, health.StatusOK)
 	}
-	if resp.Service != "qdrant" {
-		t.Errorf("service = %q, want %q", resp.Service, "qdrant")
+	if resp.Service != "probe" {
+		t.Errorf("service = %q, want %q", resp.Service, "probe")
 	}
 }
 
@@ -55,11 +55,11 @@ func TestHandleServiceHealth_OkWhenHealthy(t *testing.T) {
 func TestHandleServiceHealth_UnhealthyWhenDown(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 	h.SetServiceCheckers(map[string]health.Checker{
-		"ollama": health.HTTPChecker{NameStr: "ollama", URL: "http://127.0.0.1:1", Timeout: 100 * time.Millisecond},
+		"other": health.HTTPChecker{NameStr: "other", URL: "http://127.0.0.1:1", Timeout: 100 * time.Millisecond},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/health/ollama", nil)
-	req.SetPathValue("service", "ollama")
+	req := httptest.NewRequest(http.MethodGet, "/health/other", nil)
+	req.SetPathValue("service", "other")
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
@@ -84,7 +84,7 @@ func TestHandleServiceHealth_UnhealthyWhenDown(t *testing.T) {
 func TestHandleServiceHealth_NotConfiguredForUnknownService(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 	h.SetServiceCheckers(map[string]health.Checker{
-		"qdrant": health.HTTPChecker{NameStr: "qdrant", URL: "http://127.0.0.1:1", Timeout: 100 * time.Millisecond},
+		"probe": health.HTTPChecker{NameStr: "probe", URL: "http://127.0.0.1:1", Timeout: 100 * time.Millisecond},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/health/unknown", nil)
@@ -109,8 +109,8 @@ func TestHandleServiceHealth_NotConfiguredForUnknownService(t *testing.T) {
 func TestHandleServiceHealth_NotConfiguredWhenNoCheckers(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/health/qdrant", nil)
-	req.SetPathValue("service", "qdrant")
+	req := httptest.NewRequest(http.MethodGet, "/health/probe", nil)
+	req.SetPathValue("service", "probe")
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
@@ -132,18 +132,18 @@ func TestHandleServiceHealth_NotConfiguredWhenNoCheckers(t *testing.T) {
 func TestHandleServiceHealth_SurfacesBreakerState(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 	h.SetServiceCheckers(map[string]health.Checker{
-		"qdrant": health.CheckerFunc{NameStr: "qdrant", Fn: func(ctx context.Context) error { return nil }},
+		"probe": health.CheckerFunc{NameStr: "probe", Fn: func(ctx context.Context) error { return nil }},
 	})
 	breakers := NewBreakerRegistry()
 	b := health.NewCircuitBreaker(health.BreakerConfig{FailureThreshold: 1, OpenTimeout: time.Hour})
-	breakers.Register("qdrant", b)
+	breakers.Register("probe", b)
 	h.SetBreakers(breakers)
 
 	// Force the breaker open.
 	b.RecordFailure()
 
-	req := httptest.NewRequest(http.MethodGet, "/health/qdrant", nil)
-	req.SetPathValue("service", "qdrant")
+	req := httptest.NewRequest(http.MethodGet, "/health/probe", nil)
+	req.SetPathValue("service", "probe")
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
@@ -169,16 +169,16 @@ func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 	h, _ := setupHandlerNoProvider(t)
 	secret := "super-secret-api-key-value-1234567890"
 	h.SetServiceCheckers(map[string]health.Checker{
-		"ollama": health.CheckerFunc{
-			NameStr: "ollama",
+		"other": health.CheckerFunc{
+			NameStr: "other",
 			Fn: func(ctx context.Context) error {
 				return errors.New("dial " + secret + " failed with Authorization: Bearer sk-live-secret-token")
 			},
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/health/ollama", nil)
-	req.SetPathValue("service", "ollama")
+	req := httptest.NewRequest(http.MethodGet, "/health/other", nil)
+	req.SetPathValue("service", "other")
 	w := httptest.NewRecorder()
 	h.HandleServiceHealth(w, req)
 
@@ -202,25 +202,24 @@ func TestHandleServiceHealth_NoSecretsInError(t *testing.T) {
 
 // TestLoadServiceHealthURLs_Override verifies env var overrides are applied.
 func TestLoadServiceHealthURLs_Override(t *testing.T) {
-	t.Setenv("GATEWAY_HEALTH_QDRANT_URL", "http://override:6333/healthz")
+	old := DefaultServiceHealthURLs
+	DefaultServiceHealthURLs = map[string]string{"probe": "http://127.0.0.1:1/healthz"}
+	t.Cleanup(func() { DefaultServiceHealthURLs = old })
+	t.Setenv("GATEWAY_HEALTH_PROBE_URL", "http://override:6333/healthz")
 	urls := loadServiceHealthURLs()
-	if urls["qdrant"] != "http://override:6333/healthz" {
-		t.Errorf("qdrant url = %q, want override", urls["qdrant"])
+	if urls["probe"] != "http://override:6333/healthz" {
+		t.Errorf("probe url = %q, want override", urls["probe"])
 	}
 }
 
 // Readiness aggregates every default probe, so a default naming a service
 // that does not run on the host keeps /health/ready "degraded" forever.
-// runtime and dolt (127.0.0.1:8085) and ollama (:11434) did exactly that on
-// Node B (docs/problems/surface-broken-calls-2026-10-14.md, item 5).
+// runtime and dolt (127.0.0.1:8085), ollama (:11434) did exactly
+// that (docs/problems/surface-broken-calls-2026-10-14.md,
+// item 5).
 func TestDefaultServiceHealthURLsProbeOnlyLiveHostServices(t *testing.T) {
-	if len(DefaultServiceHealthURLs) != 1 || DefaultServiceHealthURLs["qdrant"] == "" {
-		t.Fatalf("default probes = %v, want only qdrant", DefaultServiceHealthURLs)
-	}
-	for _, retired := range []string{"runtime", "dolt", "ollama"} {
-		if _, ok := loadServiceHealthURLs()[retired]; ok {
-			t.Errorf("readiness still probes %s, which does not run on the host", retired)
-		}
+	if len(DefaultServiceHealthURLs) != 0 {
+		t.Fatalf("default probes = %v, want none", DefaultServiceHealthURLs)
 	}
 }
 

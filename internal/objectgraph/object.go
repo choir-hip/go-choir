@@ -2,7 +2,7 @@
 //
 // The package is intentionally not wired into runtime routes yet. It defines
 // stable object identity, content hash, edge, registry, memory, and SQLite
-// persistence semantics that later News, Autoradio, Qdrant, and Base work can
+// persistence semantics that later News, Autoradio, and Base work can
 // build on without inventing a parallel model.
 package objectgraph
 

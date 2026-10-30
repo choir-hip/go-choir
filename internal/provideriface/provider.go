@@ -257,17 +257,6 @@ type Config struct {
 	// alongside each run-memory compaction checkpoint.
 	RunMemoryKeepRecentTokens int
 
-	// QdrantURL is the Qdrant instance URL for semantic routing and indexing.
-	// Defaults to the node-b local instance.
-	QdrantURL string
-
-	// OllamaURL is the Ollama instance URL for embedding generation.
-	// Defaults to localhost:11434.
-	OllamaURL string
-
-	// OllamaEmbeddingModel is the model name for Ollama embeddings.
-	OllamaEmbeddingModel string
-
 	// ManagementTaskSlots is K, how many management tasks run at once on a
 	// computer; the rest queue, never refused (management delegation O7,
 	// S2b). Unset or below 1 is DefaultManagementTaskSlots; it is capped at

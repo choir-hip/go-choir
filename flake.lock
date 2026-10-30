@@ -165,28 +165,11 @@
         "type": "github"
       }
     },
-    "nixpkgs-qdrant": {
-      "locked": {
-        "lastModified": 1782950083,
-        "narHash": "sha256-xvIrCoOQo7tw1UlOm1K9EEZCC80d9yN+46s8xNZA2sw=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ec84054698e3875e23d6057a10283eb9dfa41f1b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ec84054698e3875e23d6057a10283eb9dfa41f1b",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "microvm": "microvm",
         "nixpkgs": "nixpkgs",
         "nixpkgs-kernel": "nixpkgs-kernel",
-        "nixpkgs-qdrant": "nixpkgs-qdrant",
         "sbomnix": "sbomnix"
       }
     },

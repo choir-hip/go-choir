@@ -162,7 +162,7 @@ type Handler struct {
 	hostFetch *hostFetchService
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
-	// dependency health (runtime, qdrant, dolt, ollama) from
+	// dependency health from
 	// outside the gateway without auth (M22b / C20). May be nil; in that
 	// case /health/{service} reports "not configured".
 	serviceCheckers map[string]health.Checker
@@ -228,9 +228,8 @@ func (h *Handler) SetJevTransport(transport *JevTransport) {
 }
 
 // SetServiceCheckers attaches the per-service health probes used by
-// GET /health/{service}. The map keys are service names (e.g. "qdrant",
-// "ollama"); the values are health.Checker implementations. This is
-// optional; when nil or missing a service, /health/{service} reports
+// GET /health/{service}. The map keys are service names; the values are
+// health.Checker implementations. This is optional; when nil or missing a service, /health/{service} reports
 // "not configured" for that service. The checkers must be cheap and
 // side-effect free (M22b / C20).
 func (h *Handler) SetServiceCheckers(checkers map[string]health.Checker) {
@@ -309,9 +308,8 @@ type serviceHealthResponse struct {
 }
 
 // HandleServiceHealth handles GET /health/{service} for the gateway. It probes
-// a single named backend dependency (runtime, qdrant, dolt, or
-// ollama) and reports its coarse status. The endpoint is public (no auth) and
-// exposes no secrets: the response contains only the service name, a status of
+// a single named backend dependency and reports its coarse status. The
+// endpoint is public (no auth) and exposes no secrets: the response contains only the service name, a status of
 // "ok"/"unhealthy"/"not configured", a generic error message, and — when a
 // circuit breaker is registered for the service — the breaker state.
 //
@@ -372,8 +370,8 @@ func (h *Handler) HandleServiceHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Surface the circuit breaker state for this service when one is
-	// registered (e.g. qdrant, ollama). This is a single word ("closed",
-	// "open", "half-open") and carries no secret material.
+	// registered. This is a single word ("closed", "open", "half-open") and
+	// carries no secret material.
 	if h.breakers != nil {
 		if b := h.breakers.breakerFor(service); b != nil {
 			state := b.State().String()

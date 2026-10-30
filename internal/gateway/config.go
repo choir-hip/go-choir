@@ -48,9 +48,8 @@ type Config struct {
 	// retiring its station-owned credentials and rate-limit buckets.
 	JevJudgmentsEnabled bool
 
-	// ServiceHealthURLs maps a dependency service name (today only
-	// "qdrant") to the URL the gateway should
-	// probe for GET /health/{service}. Empty entries fall back to defaults
+	// ServiceHealthURLs maps a dependency service name (none today) to the
+	// URL the gateway should probe for GET /health/{service}. Empty entries fall back to defaults
 	// (see DefaultServiceHealthURLs). These are used by the per-service
 	// health endpoint and /health/ready aggregator so operators can observe
 	// backend dependency health from outside the gateway (M22b / C20).
@@ -68,15 +67,12 @@ const (
 // DefaultServiceHealthURLs are the default probe URLs for the per-service
 // health endpoint and the /health/ready aggregator. Each must point at a
 // service that runs on the host beside the gateway, or readiness can never
-// go green. Only qdrant does (nix/node-b.nix services.qdrant). The former
-// "runtime" and "dolt" probes targeted 127.0.0.1:8085, where nothing listens
-// since computers run in VMs, and "ollama" is not deployed; with them
-// /health/ready was permanently "degraded"
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 5). Operators can
-// override an entry via GATEWAY_HEALTH_<SERVICE>_URL.
-var DefaultServiceHealthURLs = map[string]string{
-	"qdrant": "http://127.0.0.1:6333/healthz",
-}
+// go green. None does today: the former "runtime" and "dolt" probes targeted
+// 127.0.0.1:8085, where nothing listens since computers run in VMs, "ollama"
+// is not deployed, and qdrant was removed (owner, 2026-10-28)
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 5). An entry added
+// here can be overridden via GATEWAY_HEALTH_<SERVICE>_URL.
+var DefaultServiceHealthURLs = map[string]string{}
 
 // LoadConfig resolves gateway configuration from environment variables.
 func LoadConfig() Config {

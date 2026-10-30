@@ -13,7 +13,7 @@ commit (or `git add`) a change before running this.
 docs/problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md.
 
 Failure modes pinned here:
-  N1 A host unit (caddy, go-choir-goproxy, qdrant, searx, searx-init,
+  N1 A host unit (caddy, go-choir-goproxy, searx, searx-init,
      go-choir-pkgmirror, unbound, or any go-choir unit) hides less than the
      full set, beyond the keeps recorded below with their reasons.
   N2 A long-running go-choir unit, or one of the upstream host units, is
@@ -67,7 +67,7 @@ STATE = "/var/lib/go-choir"
 UNIT_ENV_DIR = STATE + "/unit-env"
 UNIT_ENV_NAMES = ("deploy.env", "corpus-dsn.env", "corpusd-retrieval.env", "sandbox-gateway-token.env")
 SOCKETS = ["-/run/systemd/private", "-/run/dbus/system_bus_socket"]
-UPSTREAM_UNITS = ["caddy", "qdrant", "searx", "searx-init", "unbound"]
+UPSTREAM_UNITS = ["caddy", "searx", "searx-init", "unbound"]
 # What a unit may keep visible, and why. Everything else in the reference
 # set (go-choir-proxy's, which keeps nothing) must be hidden.
 KEEPS = {

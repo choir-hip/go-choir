@@ -12,7 +12,7 @@ Failure modes pinned here:
     after a unit started (the deploy.env case) is the only thing that can
     show, and the directory that must hide them is never checked;
   - a unit that sees the env directory, or a file in it, passes;
-  - caddy, go-choir-goproxy, qdrant or searx (problem 2), or the
+  - caddy, go-choir-goproxy or searx (problem 2), or the
     guest-reachable go-choir-pkgmirror and unbound, are exempt from the
     socket checks or left out of the units checked;
   - a regular file left at an old env path (nothing reads it; a unit can
@@ -36,7 +36,7 @@ STATE = "/var/lib/go-choir"
 UNIT_ENV_DIR = STATE + "/unit-env"
 UNIT_ENV_NAMES = ("deploy.env", "corpus-dsn.env", "corpusd-retrieval.env", "sandbox-gateway-token.env")
 SOCKETS = ("/run/systemd/private", "/run/dbus/system_bus_socket")
-PROBLEM_2_UNITS = ("caddy", "go-choir-goproxy", "qdrant", "searx")
+PROBLEM_2_UNITS = ("caddy", "go-choir-goproxy", "searx")
 GUEST_REACHABLE_UNITS = ("go-choir-pkgmirror", "unbound")
 
 

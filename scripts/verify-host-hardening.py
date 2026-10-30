@@ -74,7 +74,7 @@ UNITS = [
     "go-choir-auth", "go-choir-proxy", "go-choir-gateway", "go-choir-corpusd",
     "go-choir-maild", "go-choir-vmctl", "postgresql",
     "go-choir-checkpointd", "go-choir-front-importance",
-    "go-choir-goproxy", "go-choir-pkgmirror", "searx", "qdrant", "caddy", "unbound",
+    "go-choir-goproxy", "go-choir-pkgmirror", "searx", "caddy", "unbound",
 ]
 # Root services expected to hold no capabilities after the hardening commit.
 NO_CAP_UNITS = {
