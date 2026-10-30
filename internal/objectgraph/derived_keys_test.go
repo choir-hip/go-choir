@@ -913,7 +913,7 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 		time.Duration(store.derived.maxPageHoldNanos.Load()).Round(time.Millisecond))
 	assertSideMatchesTruthSample(t, db)
 
-	second := time.Now()
+	second, secondLines := time.Now(), len(lines)
 	for name := range store.derived.validated {
 		store.derived.setValidated(name, false)
 	}
@@ -926,8 +926,10 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 		t.Fatalf("a page held the write connection %s", hold)
 	}
 	// The repeat pass compares and derives nothing: every "validated" line
-	// of the second pass reports 0 re-derived.
-	for _, line := range lines[len(lines)/2:] {
+	// of the second pass reports 0 re-derived. Progress lines are timed, so
+	// the passes log different numbers of lines (the race detector's slower
+	// first pass logged more and pushed its own line past the midpoint).
+	for _, line := range lines[secondLines:] {
 		if strings.Contains(line, "validated ") && !strings.Contains(line, "(0 re-derived,") {
 			t.Errorf("the repeat pass derived again: %s", line)
 		}
