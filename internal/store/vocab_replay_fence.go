@@ -53,7 +53,11 @@ type vocabReplayTrack struct {
 	opened, unfenced bool
 	// overflow: more IDs than vocabReplayTrackLimit; the sets were dropped.
 	overflow bool
-	objects  map[string]struct{}
+	// retired: a replayed object retire op may have removed rows this
+	// record names, so a named row that is gone is a retired row, not a
+	// row the narrowed check cannot find (object_retire.go).
+	retired bool
+	objects map[string]struct{}
 	edges    map[string]struct{}
 	// stamped holds the replayed object ops stamped for choir_events, by tape
 	// position: their rows are not in og_objects, and canonical_id is not
@@ -78,7 +82,7 @@ func (t *vocabReplayTrack) reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.finalized = 0
-	t.opened, t.unfenced, t.overflow = false, false, false
+	t.opened, t.unfenced, t.overflow, t.retired = false, false, false, false
 	t.objects, t.edges, t.stamped = nil, nil, nil
 }
 
@@ -122,6 +126,8 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, seq
 			} else {
 				t.objects[ids.CanonicalID] = struct{}{}
 			}
+		case computerevent.ProjectionOpObjectRetire:
+			t.retired = true
 		case computerevent.ProjectionOpObjectEdge:
 			if err := json.Unmarshal(op.Body, &ids); err != nil || ids.EdgeID == "" {
 				t.overflow = true
@@ -156,6 +162,7 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 	for id := range t.edges {
 		edges = append(edges, id)
 	}
+	retired := t.retired
 	stamped := make([]eventTablePosition, 0, len(t.stamped))
 	for pos := range t.stamped {
 		stamped = append(stamped, pos)
@@ -238,6 +245,9 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 		err := s.db.QueryRowContext(ctx, `SELECT canonical_id, object_kind, version_id, superseded_by, body, metadata FROM `+choirEventsTable+` WHERE tape_seq=? AND op_index=?`, pos.tapeSeq, pos.opIndex).
 			Scan(&id, &kind, &versionID, &supersededBy, &body, &metadata)
 		if errors.Is(err, sql.ErrNoRows) {
+			if retired {
+				continue // a replayed retire op removed it
+			}
 			return false, nil
 		}
 		if err != nil {

@@ -102,6 +102,9 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 		return projectMediaRecentDelete(ctx, tx, op.Body)
 	case computerevent.ProjectionOpUserPreference:
 		return projectUserPreference(ctx, tx, op.Body)
+	case computerevent.ProjectionOpObjectRetire:
+		_, err := projectObjectRetire(ctx, tx, op.Body, derived)
+		return err
 	default:
 		return fmt.Errorf("%w: kind %q", computerevent.ErrProjectionBatchInvalid, op.Kind)
 	}

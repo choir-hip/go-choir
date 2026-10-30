@@ -105,6 +105,10 @@ func (d *DerivedKeys) keyed(kind ObjectKind) bool {
 	return d != nil && d.tableReady.Load() && derivedFamilyForKind(kind) != nil
 }
 
+// Keyed reports whether objects of the kind have derived keys a delete of
+// the object must drop. A nil DerivedKeys (replay) keys nothing.
+func (d *DerivedKeys) Keyed(kind ObjectKind) bool { return d.keyed(kind) }
+
 func derivedFamilyForKind(kind ObjectKind) *derivedFamily {
 	for i := range derivedFamilies {
 		if derivedFamilies[i].Kind == kind {

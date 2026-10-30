@@ -185,10 +185,23 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if s.dryRunPositionHook != nil {
 		s.dryRunPositionHook(pos)
 	}
-	if err := projectBatch(ctx, tx, *batch, pos, nil); err != nil {
+	// A retire op's body is validated here and applied only at finalize:
+	// applying it to roll it back would pay the delete twice, under the lock
+	// a retirement is bounded to keep short (object_retire.go).
+	if err := batch.Validate(); err != nil {
 		return err
 	}
-	return nil
+	dry := *batch
+	dry.Ops = make([]computerevent.ProjectionOp, 0, len(batch.Ops))
+	for _, op := range batch.Ops {
+		if strings.TrimSpace(op.Kind) != computerevent.ProjectionOpObjectRetire {
+			dry.Ops = append(dry.Ops, op)
+		}
+	}
+	if len(dry.Ops) == 0 {
+		return nil
+	}
+	return projectBatch(ctx, tx, dry, pos, nil)
 }
 
 func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {

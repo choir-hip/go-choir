@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
@@ -33,6 +34,10 @@ const (
 	ProjectionOpMediaRecent                = "media_recent_recorded"
 	ProjectionOpMediaRecentDelete          = "media_recent_delete_recorded"
 	ProjectionOpUserPreference             = "user_preference_recorded"
+	// ProjectionOpObjectRetire removes aged rows of named event kinds from the
+	// working store; the rows stay on the sealed tape where they were recorded
+	// (docs/design/object-graph-redesign-2026-10-30.md section 11.3).
+	ProjectionOpObjectRetire = "object_retire_recorded"
 	ProjectionBatchMediaType               = "application/vnd.choir.projection-batch+json"
 )
 
@@ -57,12 +62,13 @@ var projectionOpKinds = map[string]struct{}{
 	ProjectionOpMediaRecent:                {},
 	ProjectionOpMediaRecentDelete:          {},
 	ProjectionOpUserPreference:             {},
+	ProjectionOpObjectRetire:               {},
 }
 
 func isProjectionV2OnlyKind(kind string) bool {
 	switch kind {
 	case ProjectionOpRunMemoryEntry, ProjectionOpSelfDevelopmentStartIntent, ProjectionOpSelfDevelopmentOperation, ProjectionOpTextureAgentMutation, ProjectionOpTextureDocumentAlias, ProjectionOpTextureDocumentAliasDelete,
-		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpMediaRecentDelete, ProjectionOpUserPreference:
+		ProjectionOpMediaProgress, ProjectionOpMediaRecent, ProjectionOpMediaRecentDelete, ProjectionOpUserPreference, ProjectionOpObjectRetire:
 		return true
 	default:
 		return false
@@ -179,6 +185,93 @@ type ProjectionBatch struct {
 	Ops              []ProjectionOp `json:"ops"`
 }
 
+// ObjectRetireKindEvent is the only object kind a retirement may name for
+// now: a retirement of any other class needs its own design (it can drop
+// state a reader needs, where an aged event line is a trace).
+const ObjectRetireKindEvent = "choir.event"
+
+// Phase filters of an ObjectRetireProjection, on the event payload's phase
+// (the store keeps the phase in the payload, not in EventRecord.Phase).
+const (
+	// ObjectRetirePhaseAny retires a matching event whatever its phase.
+	ObjectRetirePhaseAny = ""
+	// ObjectRetirePhaseNone retires only an event with no phase.
+	ObjectRetirePhaseNone = "none"
+	// ObjectRetirePhaseSome retires only an event with a phase.
+	ObjectRetirePhaseSome = "some"
+)
+
+// ObjectRetireProjection is the body of a ProjectionOpObjectRetire op: remove
+// every row of ObjectKind, from the working store, whose event kind is in
+// EventKinds, whose updated_at is before UpdatedBefore, and whose payload
+// phase matches Phase. The cutoff is in the body, never the wall clock at
+// apply, so live apply and replay remove the same rows at the same tape
+// position.
+type ObjectRetireProjection struct {
+	ObjectKind    string   `json:"object_kind"`
+	EventKinds    []string `json:"event_kinds"`
+	UpdatedBefore string   `json:"updated_before"`
+	Phase         string   `json:"phase,omitempty"`
+	// MaxRows, when positive, bounds the rows one op removes: the oldest
+	// first by (updated_at, canonical_id), a total order, so a bounded op is
+	// as deterministic as an unbounded one. It keeps the apply (which holds
+	// the event lock) short; the emitter repeats until nothing matches.
+	MaxRows int    `json:"max_rows,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// DecodeObjectRetire parses and validates a retire body.
+func DecodeObjectRetire(body json.RawMessage) (ObjectRetireProjection, error) {
+	var p ObjectRetireProjection
+	if err := json.Unmarshal(body, &p); err != nil {
+		return ObjectRetireProjection{}, fmt.Errorf("decode object retire: %w", err)
+	}
+	if err := p.Validate(); err != nil {
+		return ObjectRetireProjection{}, err
+	}
+	return p, nil
+}
+
+// Validate refuses an empty kind list, a zero or unparseable cutoff, a
+// negative bound, an unknown phase filter and any object kind but choir.event.
+func (p ObjectRetireProjection) Validate() error {
+	if p.ObjectKind != ObjectRetireKindEvent {
+		return fmt.Errorf("object retire: object_kind %q is not %q", p.ObjectKind, ObjectRetireKindEvent)
+	}
+	if len(p.EventKinds) == 0 {
+		return fmt.Errorf("object retire: event_kinds is empty")
+	}
+	for _, k := range p.EventKinds {
+		if strings.TrimSpace(k) == "" || k != strings.TrimSpace(k) {
+			return fmt.Errorf("object retire: event kind %q is blank or padded", k)
+		}
+	}
+	if _, err := p.Cutoff(); err != nil {
+		return err
+	}
+	if p.MaxRows < 0 {
+		return fmt.Errorf("object retire: max_rows is negative")
+	}
+	switch p.Phase {
+	case ObjectRetirePhaseAny, ObjectRetirePhaseNone, ObjectRetirePhaseSome:
+	default:
+		return fmt.Errorf("object retire: unknown phase filter %q", p.Phase)
+	}
+	return nil
+}
+
+// Cutoff is UpdatedBefore as a UTC time; it is never zero.
+func (p ObjectRetireProjection) Cutoff() (time.Time, error) {
+	t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(p.UpdatedBefore))
+	if err != nil {
+		return time.Time{}, fmt.Errorf("object retire: updated_before: %w", err)
+	}
+	if t.IsZero() || t.Year() < 2000 {
+		return time.Time{}, fmt.Errorf("object retire: updated_before is the zero time")
+	}
+	return t.UTC(), nil
+}
+
 func (b ProjectionBatch) Validate() error {
 	validVersion := (b.Version == ProjectionBatchV1 && b.ProjectorVersion == ProjectorVersionV1) ||
 		(b.Version == ProjectionBatchV2 && b.ProjectorVersion == ProjectorVersionV2)
@@ -211,6 +304,11 @@ func (b ProjectionBatch) Validate() error {
 		}
 		if err := rejectProjectionPresence(op.Body); err != nil {
 			return err
+		}
+		if kind == ProjectionOpObjectRetire {
+			if _, err := DecodeObjectRetire(op.Body); err != nil {
+				return fmt.Errorf("%w: op %d: %v", ErrProjectionBatchInvalid, i, err)
+			}
 		}
 	}
 	return nil
