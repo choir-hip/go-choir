@@ -491,3 +491,12 @@ Local verification at 70c82a1eb:
   nixpkgs bump still reach the host with no review, because the bound
   stops only 1.18. Each one changes the banner and costs every computer one
   cold boot, as patch releases did on 1.16.x.
+
+
+## Merged from docs/problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md (2026-10-22)
+
+**Firecracker 1.16.1 restores virtio-mem snapshots wrong (2026-10-22).**
+Status: problem record, before code. Mutation class of the fix: **red** (VM lifecycle, the host's VMM binary and jailer). Related: `guest-data-image-never-trims-2026-10-20.md` (the 1.17 plan), `firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md`, `host-kernel-216-days-unpatched-2026-10-15.md`.
+- Status: problem record, before code. Mutation class of the fix: **red**
+
+(Full text in git history at the path above.)

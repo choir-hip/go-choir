@@ -702,3 +702,12 @@ Linux:
 
 Local models:
 - https://docs.ollama.com/api/openai-compatibility
+
+
+## Merged from docs/reports/self-hosting-and-desktop-2026-10-14.md (2026-10-14)
+
+**Self-Hosting Choir, and the Desktop App as a Server-less Deployment.**
+Date: 2026-10-14. Research and design survey, read at `main` f54f05c42. Mutation class of this note: **green** (docs only). Most of the work it proposes is orange or red (§6). Nothing here was run against Node B or staging. One public, read-only probe was made: `GET https://choir.news/api/platform/publications/front` returned 200.
+- Verdict.** A determined Linux and Nix operator with an Intel bare-metal
+
+(Full text in git history at the path above.)

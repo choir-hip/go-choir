@@ -1883,3 +1883,13 @@ corrected `Complete("completed")` and, separately, a `Complete("blocked")`
 then record terminal fates), and the race (the tree changes after the
 pre-check; the assignment ends cancelled with the refusal as its cause,
 not stranded).
+
+
+## Merged from docs/problems/engineering-result-strands-on-the-completed-casting-turn-2026-10-10.md (2026-10-10)
+
+**An engineering result never wakes management: it is delivered to the casting turn, which has already completed (2026-10-10).**
+Status: documented, not fixed. Mutation class of the fix: `red` (persistent management wake and lifecycle packet delivery).
+- Status: documented, not fixed. Mutation class of the fix: `red` (persistent
+- result.
+
+(Full text in git history at the path above.)

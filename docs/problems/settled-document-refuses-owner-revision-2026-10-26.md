@@ -213,3 +213,11 @@ later: the requested sentence appended, nothing else changed, metadata
 document (observed only; whether the 05:48 boot carried a planned-restart
 marker was not checked). The owner revision's own label (review 277 LOW) is
 fixed on lane/f1-label (review 280), not yet deployed.
+
+
+## Merged from docs/problems/texture-settled-work-refuses-owner-revise-2026-10-09.md (2026-10-09)
+
+**After Texture settles its work, the owner cannot revise the document (2026-10-09).**
+Found by the Texture acceptance suite, third run on staging (build 7bc8f374; receipt `evidence/texture-acceptance-2026-10-09T18-59-43-320Z.json`), fresh disposable account `1d20b772…` (`computer-7799ad0b…`, VM `vm-549ec1d9…`), document `1ae32977…`. Mutation class of the eventual fix: red (lifecycle work items, owner revision intake). Problem first; no fix in this commit.
+
+(Full text in git history at the path above.)

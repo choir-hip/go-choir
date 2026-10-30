@@ -70,3 +70,11 @@ Heresy delta: discovered: the 10-26 fix froze one animation source and left two 
 ## Fixed by (lane/idle-pause)
 
 `frontend/src/lib/idle.ts` is now the one owner of idle (120 s, `localStorage choir.idleMs` as the test hook): it sets `data-idle` on the root, ChoirField subscribes instead of keeping its own timer, input and visibility return clear it, and one `app.css` rule pauses every animation under `:root[data-idle]`. Mocked 3-window desktop (Texture, Files, Settings), default theme, 140 s idle, 10 s window, GPU process percent of one core: **97.9 before, 7.66 after** (renderer 1.37 to 0.4; the 4 infinite animations report paused; machine load was high, so the after-figure is an upper bound). Regression spec: `frontend/tests/idle-pause.spec.js`. Still owed: the deployed check on a signed-in desktop (under 5% past 150 s).
+
+
+## Merged from docs/problems/idle-tab-full-core-ambient-field-canvas-2026-10-26.md (2026-10-26)
+
+**An idle choir.news tab holds a full core: the ambient field canvas never stops (2026-10-26).**
+Recorded by FP0, 2026-10-26 02:4x, from a Sonnet investigation; documented before any fix. The owner, 01:5x: CPU pegged; the Comet helper at about 100 percent turned out to be the choir.news tab, with WindowServer at 63 percent. Mutation class of a fix: orange (desktop frontend). Diffs prototyped by the investigation: fixA (one rAF chain, 24 fps cap, pure render, time-based pulse), fixB (ambient canvas at dpr 1), fix
+
+(Full text in git history at the path above.)

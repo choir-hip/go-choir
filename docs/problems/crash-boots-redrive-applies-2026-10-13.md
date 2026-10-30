@@ -98,3 +98,13 @@ heresy for L1c, where planned-ness moves to the host.
 Code reading on main fdc70329 (file:line references above); no live
 incident. The L1a-2 attempt budget (c08ead07) already bounds self-marked
 replays at three per apply.
+
+
+## Merged from docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md (2026-10-12)
+
+**A crash restart leaves work open and can resume engineering work.**
+Found 2026-10-12 during read-only design research (studies B and G). Status: documented, not fixed. Both halves contradict the standing rule in CLAUDE.md, "Restarts End Work (Crash) Or Resume It (Planned Update)": at a markerless boot every open obligation (run, wake, control, directive, assignment, work item) is closed with the visible fate "interrupted by a restart", never re-dispatched.
+- Status: documented, not fixed. Both halves contradict the standing rule in
+- decision, and **re-casts the assignment at the next attempt**, up to
+
+(Full text in git history at the path above.)

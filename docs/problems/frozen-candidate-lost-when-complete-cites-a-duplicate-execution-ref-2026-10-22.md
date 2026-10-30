@@ -145,3 +145,15 @@ Tests b79cab192 (failed on main 6c60685cc), fix 4e6f96833.
   repeated ref), fails closed, and now names the counts. Deduplicating on
   resume is not trivial: dropping commands changes the proposition digest,
   which then no longer matches the staged freeze intent.
+
+
+## Merged from docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md (2026-10-22)
+
+**FP4 round 4: a landed report answered "digest conflict", the guard keeps a stale refusal, and a dead letter has no cause (2026-10-22).**
+Found in the FP4 round 3 drill and its re-run on the test computer `computer-71afbf1461dffabcce8eeebe558d03bd` (deploys J and Q), reported by FP0. Companion to docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md (P1 of round 4). Problem documentation only; there is no fix in this commit. Causes are read from code at 6c60685cc; where the trace does not confirm them they are 
+- Evidence:
+- Evidence (FP0): a management `assigned_engineering_fate_deadline` wake for
+- result, so text the model prints cannot set it. Round 3b's residual in
+- evidence (executor receipts, candidate, mutations, attestation count)
+
+(Full text in git history at the path above.)

@@ -89,3 +89,12 @@ Open pull requests: #94 (event table deploy 2 r3, head f1b76e0fa, approved in bu
 Test computers: T is computer-71afbf14; the jailer test computers are fp8-jailer-1023 (computer-476cd794) and fp8-jailer-1023b (computer-51443441). The paper is computer-1355b83b.
 
 The outage: vmctl down 23:57:58 to 00:16:20 UTC on October 24; failed deploy run 40041867841; recovery and cause in the vmctl restart record above.
+
+
+## Merged from docs/reports/launch-first-pass-day-one-2026-10-22.md (2026-10-22)
+
+**The launch first pass, from Wednesday evening to Thursday afternoon.**
+Written Thursday, October twenty-second, a little after four in the afternoon UTC, which is just after noon your time. It covers about twenty-two hours of the launch first pass, from Wednesday evening at six UTC until now, and it is my own account as the orchestrator, FP0.
+- Status page: https://claude.ai/artifact/WArejUzHzD42RnT7SMpP2F
+
+(Full text in git history at the path above.)

@@ -173,3 +173,12 @@ than 30 minutes, with its last refusal.
   caller's report id, so a report recorded with an empty digest and
   another id builds it. The test pins existing behaviour: it passes
   with the entry-point close and fails without it.
+
+
+## Merged from docs/problems/selfdev-op-outlives-its-failed-assignment-2026-10-22.md (2026-10-22)
+
+**A failed engineering assignment leaves its self-development operation "executing"; three times in one day on the delegate's computer (2026-10-22).**
+Found 04:20 UTC by the self-development track monitor (read-only). This record adds trace evidence and a cause to docs/problems/selfdev-freeze-failure-leaves-operation-executing-2026-10-22.md. It does not replace it. Mutation class of this record: green. The fix is red (the self-development operation lifecycle).
+- result after that boot is in the first record.
+
+(Full text in git history at the path above.)

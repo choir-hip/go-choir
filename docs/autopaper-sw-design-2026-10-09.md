@@ -397,3 +397,11 @@ Notes for whoever does it:
 - **Docs:** rename current documents and roadmap gate names. Dated
   receipts and `docs/archive/` keep their text, with a glossary line in the
   doctrine mapping the former names to Autopaper.
+
+
+## Merged from docs/autopaper-app-design-2026-10-11.md (2026-10-11)
+
+**Autopaper app design: the news UI on the protocol.**
+> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Publishing changes from one permalink per document to one immutable permalink per version, with chevrons and a "new version available" control; captures share Texture's block model.
+
+(Full text in git history at the path above.)

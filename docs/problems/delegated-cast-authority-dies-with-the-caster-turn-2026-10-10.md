@@ -112,3 +112,11 @@ path that had never reached a bound engineering run on staging, so each fix
 exposes the next layer rather than a regression. The fix builds the run's
 parent fields from the binding, which is also correct for document casts
 (empty parent run, `engineering:` parent agent).
+
+
+## Merged from docs/problems/delegated-cast-reaped-before-spawn-2026-10-10.md (2026-10-10)
+
+**Texture → management → engineering can never reach a capsule: the restart reconciler reaps every delegated assignment in the second it opens (2026-10-10).**
+All-agents traces of both demo reruns (18:05–18:40Z; test computers computer-abd38983… "make a Minesweeper game" and computer-4332a5b0… the arXiv replication). Both computers: Texture's V1 opened management; management staged `choir.Cast("engineering", …)`; the cast committed. No engineering run ever started on either computer.
+
+(Full text in git history at the path above.)

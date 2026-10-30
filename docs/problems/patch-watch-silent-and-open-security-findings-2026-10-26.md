@@ -52,3 +52,12 @@ fixed. Remaining: the watch's CVE lookup should read the CVE.org record API; iss
 #72, #73 and #79 can be closed with this evidence (owner's repository; left for
 the owner); 6.18.58 is optional hygiene for a maintenance window
 (`nix/kernel-security-floor`, then `nix flake update nixpkgs-kernel`).
+
+
+## Merged from docs/problems/patch-watch-govulncheck-reachable-findings-2026-10-19.md (2026-10-19)
+
+**Patch Watch: govulncheck reachable findings, 2026-10-19.**
+Mutation class: green for this document; the fix that follows is orange (dependency versions change runtime behavior of HTTP/2, gRPC, and OTel code).
+- Result: `govulncheck@v1.9.0 ./...` reports "Your code is affected by 0
+
+(Full text in git history at the path above.)

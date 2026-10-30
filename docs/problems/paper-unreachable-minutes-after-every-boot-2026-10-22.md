@@ -521,3 +521,12 @@ it passes (bunch 18 review, DeepSeek, High).
   costs what the timeout did. A sleep, not a deadline: a deadline would
   also stretch the non-stall fast failures (refused connection, other
   503s) from about 2 min to 12 min.
+
+
+## Merged from docs/problems/paper-post-refresh-health-windows-2026-10-22.md (2026-10-22)
+
+**The paper's health has two failing windows after a planned refresh (2026-10-22).**
+Date: 2026-10-22, 18:50 UTC. Found by: FP0, after deploy V's planned refresh of the paper. Status: open, problem record before any fix. Mutation class of a fix: red (guest boot path and the paper's availability).
+- receipt yet):
+
+(Full text in git history at the path above.)

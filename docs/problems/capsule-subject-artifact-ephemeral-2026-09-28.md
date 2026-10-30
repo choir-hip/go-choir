@@ -132,3 +132,12 @@ The stranded `selfdev-ffbd...` operation is unsalvageable (its candidate
 bytes never reached durable storage; no CAS upload path exists). It will be
 terminalized by the boot reconcile under fix 2/4, then the M11 episode
 re-runs end-to-end as deployed acceptance.
+
+
+## Merged from docs/problems/capsule-artifacts-realization-only-2026-10-08.md (2026-10-08)
+
+**Capsule subject artifacts and receipts live only on the realization disk.**
+Date: 2026-10-08. Found by the [state homes inventory](../state-homes-inventory-2026-10-08.md) (operational invariant O21). Mutation class of any fix: red (self-development evidence, capsule artifacts).
+- evidence, capsule artifacts).
+
+(Full text in git history at the path above.)

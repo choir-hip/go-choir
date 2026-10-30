@@ -282,3 +282,42 @@ Only items with a dated or stated hook in the slices:
 ---
 
 **Summary:** Haiku 5.5, GPT-6 in ChatGPT, Mistral Large 4, the Super Intelligence Force and Cantwell's framework, Google's nuclear PPA, and Wikimedia's OpenAI-agent complaint dominated a thin-coverage week, with the OpenAI math batch and the Sonnet price cut as the other items to verify.
+
+## Merged from docs/evidence/ai-news-haiku-baseline-2026-10-10/slice-business.md (2026-10-10)
+
+**Business, Chips and Compute: AI news, 2026-10-03 to 2026-10-10.**
+Slice: funding and valuations, M&A, IPOs, earnings and market moves, chips, datacenter and energy deals, cloud capacity, AI-attributed layoffs.
+
+(Full text in git history at the path above.)
+
+
+## Merged from docs/evidence/ai-news-haiku-baseline-2026-10-10/slice-models.md (2026-10-10)
+
+**Frontier Models and AI Labs: 3-10 October 2026.**
+Slice: model releases, benchmarks, lab announcements, leadership changes, open-weight releases. Window: 2026-10-03 through 2026-10-10. Prepared 2026-10-10.
+
+(Full text in git history at the path above.)
+
+
+## Merged from docs/evidence/ai-news-haiku-baseline-2026-10-10/slice-policy.md (2026-10-10)
+
+**Policy, Regulation, Law and Government: AI news, 2026-10-03 to 2026-10-10.**
+**Coverage note.** The WebSearch budget ran out after about 37 searches and about 12 fetches. The search index for October 3 to 10 is thin, so this slice has fewer in-window items than the 12 to 25 target. Only items with a source dated inside the window are listed in the main section. Items dated just before the window (Sept 22 to Oct 2) are in a separate context section and are not counted.
+
+(Full text in git history at the path above.)
+
+
+## Merged from docs/evidence/ai-news-haiku-baseline-2026-10-10/slice-products.md (2026-10-10)
+
+**Products and Applications: AI news, 2026-10-03 to 2026-10-10.**
+Slice: consumer and enterprise AI product launches, agents and coding tools, devices, AI in search/browsers/phones, robotics and AVs, and industry adoption. Compiled Saturday 2026-10-10. Most items come from secondary coverage (aggregators and trade press). Where a primary or official source was found, it is cited first.
+
+(Full text in git history at the path above.)
+
+
+## Merged from docs/evidence/ai-news-haiku-baseline-2026-10-10/slice-research.md (2026-10-10)
+
+**Research, Safety and Society: AI news, 2026-10-03 to 2026-10-10.**
+Slice: research papers and science results, safety/alignment/security, misuse and deepfakes, labor and social impact, surveys and polls, notable commentary.
+
+(Full text in git history at the path above.)

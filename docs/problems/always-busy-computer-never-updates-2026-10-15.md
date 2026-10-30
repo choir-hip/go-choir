@@ -223,3 +223,11 @@ count.)
   still says "Deploys never restart a busy computer"; the owner's ruling
   amends it for platform computers, and that sentence is the owner's to
   change.
+
+
+## Merged from docs/problems/deploy-restarts-busy-computers-2026-10-09.md (2026-10-09)
+
+**Deploys restart busy computers (2026-10-09).**
+Mutation class of the fix: red (deployment routing, VM lifecycle).
+
+(Full text in git history at the path above.)

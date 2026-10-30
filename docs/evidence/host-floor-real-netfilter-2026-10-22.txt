@@ -145,3 +145,17 @@
         -A CHOIR-GUEST-EGRESS -m comment --comment go-choir-guest-egress -j DROP
 --- PASS: TestHostFloorOnRealNetfilter (5.83s)
 PASS
+
+
+## Merged from docs/evidence/host-floor-real-netfilter-2026-10-21.txt (2026-10-21)
+
+# scripts/vmmanager-netfilter-test.sh at lane/host-b4-b5 (SEC-03 group 2), 2026-10-21T23:26:25Z
+# Linux 6.18.37, iptables v1.8.13 (nf_tables); unprivileged user+net+mount namespace
+=== RUN   TestGuestEgressPolicyOnRealNetfilter
+2026/10/21 23:25:57 vmmanager: installed guest egress policy CHOIR-GUEST-EGRESS
+    guest_egress_linux_test.go:191: installed:
+        -N CHOIR-GUEST-EGRESS
+        -A CHOIR-GUEST-EGRESS -m conntrack --ctstate RELATED,ESTABLISHED -m comment --comment go-choir-guest-egress -j RETURN
+        -A CHOIR-GUEST-EGRESS -p tcp -m addrtype --dst-type LOCAL --limit-iface-in -m multiport --dports 8082,8083,8084,8086,8087,8088 -m comment --comment go-choir-guest-egress -j RETURN
+
+(Full text in git history at the path above.)

@@ -281,3 +281,13 @@ Firecracker-specific features (virtio-mem, discard) as spec fields, with
 no lifecycle change. Refuted if M2's equivalence test or the
 hibernate-across-deploy check fails, or if the CH cage needs lifecycle
 changes beyond the receipt check.
+
+
+## Merged from docs/reports/vm-backend-interface-2026-10-14.md (2026-10-14)
+
+**VM Backend Interface: Firecracker and Cloud Hypervisor Behind One Seam.**
+Date: 2026-10-14, about 21:00 UTC. Base: `origin/main` at `980ffaf4e`.
+- Evidence goes to `docs/evidence/vm-backend-ch-staging-<date>/`: timelines,
+- evidence so far: Firecracker's config is reproduced byte for byte from a
+
+(Full text in git history at the path above.)

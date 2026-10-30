@@ -107,3 +107,13 @@ You can answer these in one message, by number.
 - The seventh five-app attempt: trajectory 408ec51d-9cff-52b5-832e-5fd8a253337c, Texture doc a922c601-20e9-5adf-b330-b403f563b982, op selfdev-37b1b5a5 (frozen 15:20, rejected 15:23), patch /Users/wiz/Dev/lanes/_runs/apprewrite/v7/patch.diff (sha256 a70b862f…, applies to 0cbc52edc). Record: docs/problems/self-development-candidates-build-from-the-creation-commit-2026-10-24.md (7f5615e61); the seed is vmmanager sourceSeedStagingRoot.
 - Held, not landed: lane/fp0-jobpark-wired 9d9fdc884 (a source-shape test; the staging events are the wired proof).
 - Owed: D37's proof at the 04:00 compaction; a second clean platform Dolt GC. b@c's System/model-policy.toml is restored to its original (read back identical at 15:23).
+
+
+## Merged from docs/reports/overnight-groundwork-pass-2026-10-23.md (2026-10-23)
+
+**The overnight groundwork pass.**
+Written on Friday, October twenty-third, at about half past eleven UTC. It covers the overnight stretch from the restart at about five UTC to now, about six and a half hours of the launch first pass, as run by FP0.
+- Status page: https://claude.ai/artifact/WArejUzHzD42RnT7SMpP2F (version 36 and later).
+- Evidence directories, under /Users/wiz/Dev/lanes/_runs: deployD9 through deployD15, fp4-crash-half, and the bunches up to 160.
+
+(Full text in git history at the path above.)
