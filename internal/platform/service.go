@@ -38,13 +38,13 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
-	// artifactGCMu serializes artifact GC live-set capture and deletion with
-	// explicit projection-base pins only. It must never be writeMu: a sweep
+	// artifactGCMu serializes artifact GC live-set capture and deletion. It
+	// must never be writeMu: a sweep
 	// lasts minutes and would block credential issuance and VM boots.
 	artifactGCMu sync.Mutex
 	// artifactGCLogMu serializes GC-log rotation. It is deliberately not
-	// artifactGCMu: compressing a large log takes minutes and that lock also
-	// serializes projection-base pins.
+	// artifactGCMu: compressing a large log takes minutes and that lock
+	// serializes the GC sweep.
 	artifactGCLogMu sync.Mutex
 	// artifactGCPolicy is the configured GC policy; the on-demand endpoint
 	// may narrow it but never exceed it.

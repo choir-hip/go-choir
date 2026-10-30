@@ -8,66 +8,11 @@ import (
 	"time"
 )
 
-func TestCheckpointDueBoundaries(t *testing.T) {
-	now := time.Now().UTC()
-	cases := []struct {
-		head, watermark uint64
-		age             time.Duration
-		want            bool
-	}{
-		{2500, 0, 0, true}, {2499, 0, 0, false}, {6000, 5000, 24 * time.Hour, true},
-		{5999, 5000, 24 * time.Hour, false}, {6000, 5000, 23 * time.Hour, false}, {5000, 5000, 48 * time.Hour, false},
-	}
-	for _, c := range cases {
-		if got := checkpointDue(c.head, c.watermark, now.Add(-c.age), now); got != c.want {
-			t.Errorf("%+v due=%v", c, got)
-		}
-	}
-}
-
-// A duplicate request cannot replace a running job's frozen head; publication
-// pins both generations before GC can observe the new watermark.
-func TestProjectionJobCoalescingAndRetention(t *testing.T) {
+// Publication pins both generations before GC can observe the new watermark;
+// an explicit restore pin keeps a base independently of rank.
+func TestProjectionBasePinsKeepTheLatestTwoAndExplicitPins(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
 	ctx := context.Background()
-	// Empty canonical heads are not a legal job request.
-	if _, err := s.EnqueueProjectionJob(ctx, "computer-jobs", "repair", false); err == nil {
-		t.Fatal("enqueued nonexistent chain")
-	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`, "computer-jobs", 20, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	j, err := s.EnqueueProjectionJob(ctx, "computer-jobs", "repair", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	lease, err := s.ClaimProjectionJob(ctx)
-	if err != nil || lease == nil {
-		t.Fatalf("claim: %v %v", lease, err)
-	}
-	again, err := s.EnqueueProjectionJob(ctx, "computer-jobs", "duplicate", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.Generation != j.Generation || again.Status != "running" || again.TargetHead != lease.TargetHead {
-		t.Fatalf("running job replaced: %+v / %+v", lease, again)
-	}
-	// A stale worker may not finish a newer job. (Checked before any base is
-	// advertised: an advertised base supersedes a job on another seed below
-	// it, review 364.)
-	stale := *lease
-	stale.Generation++
-	if err := s.FinishProjectionJob(ctx, stale, "failed", "wrong worker", 0, ""); err == nil {
-		t.Fatal("stale job completion admitted")
-	}
-	if err := s.FinishProjectionJob(ctx, *lease, "failed", "deterministic refusal", 0, ""); err != nil {
-		t.Fatal(err)
-	}
-	reconstructed := NewStore(s.db, s.corpus())
-	got, err := reconstructed.ProjectionJob(ctx, "computer-jobs")
-	if err != nil || got.Status != "failed" || got.Error != "deterministic refusal" {
-		t.Fatalf("durable refusal lost %+v %v", got, err)
-	}
 	a, b, c := strings.Repeat("c", 64), strings.Repeat("d", 64), strings.Repeat("e", 64)
 	for i, ref := range []string{a, b, c} {
 		if err := s.RecordReplayWatermark(ctx, "computer-jobs", int64(i+1), ref); err != nil {
@@ -87,8 +32,7 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 	if _, ok := pins[a]; ok {
 		t.Fatal("unreferenced oldest generation retained")
 	}
-	// A reader/restore pin prevents collection independently of rank.
-	if err := s.PinProjectionBase(ctx, "computer-jobs", a, "restore:receipt-a"); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?)`, "computer-jobs", a, "restore:receipt-a", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	pins, err = s.projectionBasePins(ctx)
@@ -97,39 +41,6 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 	}
 	if _, ok := pins[a]; !ok {
 		t.Fatal("explicit restore pin lost")
-	}
-}
-
-// Staging 0f7c58ba: reconcile scanned COALESCE(datetime,datetime) into
-// time.Time and Dolt returned bytes, so every scheduler pass exited before
-// enqueueing. Reconcile must run against the real store and queue a due chain
-// whether or not it has a watermark row.
-func TestReconcileProjectionJobsEnqueuesDueChains(t *testing.T) {
-	s, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	insertHead := func(id string, seq uint64) {
-		t.Helper()
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`, id, seq, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	insertHead("computer-due-nowm", 3000)
-	insertHead("computer-due-wm", 9000)
-	insertHead("computer-fresh", 100)
-	if err := s.RecordReplayWatermark(ctx, "computer-due-wm", 6000, strings.Repeat("c", 64)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.ReconcileProjectionJobs(ctx); err != nil {
-		t.Fatalf("reconcile: %v", err)
-	}
-	for _, id := range []string{"computer-due-nowm", "computer-due-wm"} {
-		j, err := s.ProjectionJob(ctx, id)
-		if err != nil || j.Status != "queued" || j.Reason != "cadence" {
-			t.Fatalf("%s not queued by cadence: %+v %v", id, j, err)
-		}
-	}
-	if _, err := s.ProjectionJob(ctx, "computer-fresh"); err == nil {
-		t.Fatal("chain below cadence threshold was queued")
 	}
 }
 
@@ -182,22 +93,6 @@ func TestProjectionJobFailedRetriesAfterBackoffBlockedDoesNot(t *testing.T) {
 	blocked, err := s.EnqueueProjectionJob(ctx, "computer-blocked", "repair", false)
 	if err != nil || blocked.Status != "blocked" || blocked.Generation != 1 {
 		t.Fatalf("deterministic refusal re-admitted without changed inputs: %+v %v", blocked, err)
-	}
-}
-
-// One computer that cannot be enqueued must not stop cadence for the fleet.
-func TestReconcileProjectionJobsContinuesPastPerComputerError(t *testing.T) {
-	s, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	insertProjectionTestHead(t, s, "computer-bad/../x", 9000)
-	insertProjectionTestHead(t, s, "computer-good", 9000)
-	err := s.ReconcileProjectionJobs(ctx)
-	if err == nil || !strings.Contains(err.Error(), "computer-bad") {
-		t.Fatalf("reconcile error = %v, want the failing computer named", err)
-	}
-	j, jerr := s.ProjectionJob(ctx, "computer-good")
-	if jerr != nil || j.Status != "queued" {
-		t.Fatalf("healthy computer not queued after a sibling error: %+v %v", j, jerr)
 	}
 }
 

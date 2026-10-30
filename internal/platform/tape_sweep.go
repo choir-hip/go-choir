@@ -265,7 +265,7 @@ type TapeSweepJob struct {
 }
 
 // tapeSweepState is the sweep's run lock, policy, registry and jobs. The run
-// lock is not artifactGCMu: that lock also serializes projection-base pins,
+// lock is not artifactGCMu: that lock also serializes the artifact GC sweep,
 // and a tape classification reads every event file.
 type tapeSweepState struct {
 	mu       sync.Mutex

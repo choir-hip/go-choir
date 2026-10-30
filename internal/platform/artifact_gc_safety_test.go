@@ -118,7 +118,7 @@ func TestArtifactGCKeepsEveryProjectionBaseReference(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := f.store.PinProjectionBase(f.ctx, "computer-p", gcDigest("b1"), "checkpoint:head-1"); err != nil {
+	if _, err := f.store.db.ExecContext(f.ctx, `INSERT INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?)`, "computer-p", gcDigest("b1"), "checkpoint:head-1", now); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 5, gcDigest("wm")); err != nil {

@@ -15,9 +15,6 @@ import (
 
 type Store struct {
 	db *sql.DB
-	// blockedLogged is when reconcile last logged each blocked projection job.
-	blockedLogMu  sync.Mutex
-	blockedLogged map[string]time.Time
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate

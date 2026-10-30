@@ -179,36 +179,6 @@ func TestRunArtifactGCRetiresOldFileRootsKeepingLatestAndWindow(t *testing.T) {
 	}
 }
 
-func TestListProjectionJobsReturnsEveryRow(t *testing.T) {
-	store, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	now := time.Now().UTC()
-	for i, status := range []string{"queued", "blocked"} {
-		id := []string{"computer-a", "computer-b"}[i]
-		if _, err := store.db.Exec(`INSERT INTO computer_projection_jobs (`+projectionJobColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			id, 3+i, status, "cadence", 10, strings.Repeat("a", 64), 0, "", "", "", "", i == 1, 0, "", now, now); err != nil {
-			t.Fatal(err)
-		}
-	}
-	jobs, err := store.ListProjectionJobs(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(jobs) != 2 {
-		t.Fatalf("jobs = %+v", jobs)
-	}
-	byID := map[string]ProjectionJob{}
-	for _, j := range jobs {
-		byID[j.ComputerID] = j
-	}
-	if byID["computer-a"].Generation != 3 || byID["computer-a"].Status != "queued" || byID["computer-a"].GenesisRepair {
-		t.Fatalf("computer-a = %+v", byID["computer-a"])
-	}
-	if byID["computer-b"].Generation != 4 || !byID["computer-b"].GenesisRepair {
-		t.Fatalf("computer-b = %+v", byID["computer-b"])
-	}
-}
-
 // breakCorpusStore points the store's graph database at an empty database
 // without og_objects, so the og live-set query fails (the same device as
 // TestRunArtifactGCFailsClosedOnLiveSetError).

@@ -9,14 +9,14 @@ import (
 
 // A base advertised past a job's frozen target supersedes the job (S2,
 // docs/problems/paper-never-checkpointed-2026-10-27.md: the paper's captured
-// base lands while its cadence job replays from 34660). Ways it could fail:
-//  1. the advertisement is refused or waits while the computer's job runs;
-//  2. the stale job keeps its lease (renewal succeeds) and replays for
-//     another deadline, or is reclaimed as `retry`, on the old seed;
-//  3. the next reconcile does not re-admit the row on the new base;
-//  4. a job the new base does not cover (target past it), a checkpoint
-//     verification job, or a genesis repair is superseded.
-func TestAdvertisedBaseSupersedesAStaleRunningJob(t *testing.T) {
+// base lands while its cadence job replays from 34660). Supersession is by
+// seed and watermark, not by target (review 364). Ways it could fail:
+//  1. the advertisement is refused or waits while the computer's job stands;
+//  2. the stale job stays on the old seed;
+//  3. the next enqueue does not re-admit the row on the new base;
+//  4. a job the new base does not cover, a checkpoint verification job, or a
+//     genesis repair is superseded.
+func TestAdvertisedBaseSupersedesAStaleJob(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
 	ctx := context.Background()
 	id := "computer-supersede"
@@ -24,42 +24,32 @@ func TestAdvertisedBaseSupersedesAStaleRunningJob(t *testing.T) {
 	if err := s.RecordReplayWatermark(ctx, id, 100, strings.Repeat("c", 64)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
-		t.Fatal(err)
-	}
-	lease, err := s.ClaimProjectionJob(ctx)
-	if err != nil || lease == nil || lease.TargetSequence != 5000 {
-		t.Fatalf("claim: %+v %v", lease, err)
+	queued, err := s.EnqueueProjectionJob(ctx, id, "cadence", false)
+	if err != nil || queued.TargetSequence != 5000 {
+		t.Fatalf("enqueue: %+v %v", queued, err)
 	}
 	captured := strings.Repeat("d", 64)
 	if err := s.RecordReplayWatermark(ctx, id, 6000, captured); err != nil {
-		t.Fatalf("advertise over a running job: %v", err)
+		t.Fatalf("advertise over a standing job: %v", err)
 	}
 	if wm, ref, err := s.ReplayWatermark(ctx, id); err != nil || wm != 6000 || ref != captured {
 		t.Fatalf("watermark = %d %s %v", wm, ref, err)
 	}
-	if err := s.RenewProjectionJob(ctx, *lease); err == nil {
-		t.Fatal("the superseded job's lease still renews")
-	}
 	if got, _ := s.ProjectionJob(ctx, id); got.Status != "superseded" {
 		t.Fatalf("job status = %q, want superseded", got.Status)
-	}
-	if again, err := s.ClaimProjectionJob(ctx); err != nil || again != nil {
-		t.Fatalf("superseded job reclaimed: %+v %v", again, err)
 	}
 	if _, err := s.db.ExecContext(ctx, `UPDATE computer_event_heads SET sequence=? WHERE computer_id=?`, 9000, id); err != nil {
 		t.Fatal(err)
 	}
 	next, err := s.EnqueueProjectionJob(ctx, id, "cadence", false)
-	if err != nil || next.Status != "queued" || next.SeedBaseRef != captured || next.WatermarkSequence != 6000 || next.Generation != lease.Generation+1 {
+	if err != nil || next.Status != "queued" || next.SeedBaseRef != captured || next.WatermarkSequence != 6000 || next.Generation != queued.Generation+1 {
 		t.Fatalf("re-admitted job = %+v %v, want queued on the advertised base", next, err)
 	}
 }
 
-// Review 364 (DeepSeek, MEDIUM): supersession is by seed and watermark, not
-// by target. A job replaying from an older seed is superseded even when its
-// target is past the new base (the next one starts from the new base and
-// replays less); a job already on the advertised seed is left alone.
+// Review 364 (DeepSeek, MEDIUM): a job on an older seed is superseded even
+// when its target is past the new base (the next one starts from the new base
+// and replays less).
 func TestAdvertisedBaseSupersedesAnOlderSeedPastItsTarget(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
 	ctx := context.Background()
@@ -71,15 +61,8 @@ func TestAdvertisedBaseSupersedesAnOlderSeedPastItsTarget(t *testing.T) {
 	if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
 		t.Fatal(err)
 	}
-	lease, err := s.ClaimProjectionJob(ctx)
-	if err != nil || lease == nil || lease.TargetSequence != 7000 {
-		t.Fatalf("claim: %+v %v", lease, err)
-	}
 	if err := s.RecordReplayWatermark(ctx, id, 6000, strings.Repeat("d", 64)); err != nil {
 		t.Fatal(err)
-	}
-	if err := s.RenewProjectionJob(ctx, *lease); err == nil {
-		t.Fatal("a job on an older seed, past the new base, still renews")
 	}
 	if got, _ := s.ProjectionJob(ctx, id); got.Status != "superseded" {
 		t.Fatalf("job status = %q, want superseded", got.Status)
@@ -110,15 +93,11 @@ func TestAdvertisedBaseLeavesJobsItDoesNotCover(t *testing.T) {
 			if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET reason=?,seed_base_ref=? WHERE computer_id=?`, tc.reason, tc.seed, id); err != nil {
 				t.Fatal(err)
 			}
-			lease, err := s.ClaimProjectionJob(ctx)
-			if err != nil || lease == nil {
-				t.Fatalf("claim: %v", err)
-			}
 			if err := s.RecordReplayWatermark(ctx, id, 6000, strings.Repeat("d", 64)); err != nil {
 				t.Fatal(err)
 			}
-			if err := s.RenewProjectionJob(ctx, *lease); err != nil {
-				t.Fatalf("job superseded: %v", err)
+			if got, _ := s.ProjectionJob(ctx, id); got.Status != "queued" {
+				t.Fatalf("job superseded: status = %q", got.Status)
 			}
 		})
 	}

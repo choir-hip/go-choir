@@ -6,14 +6,8 @@ package platform
 //
 //  1. a published checkpoint has no pending verdict, so nothing ever asks the
 //     host to prove it;
-//  2. the verification job targets the platform's head at enqueue time, not
-//     the checkpoint's head: the rebuilt witness is then another state's, and
-//     every checkpoint on a working computer reads not_derivable;
-//  3. the job seeds from a base above the checkpoint's head, which the
-//     rebuilder cannot adopt (blocked), or from none when an older one exists;
-//  4. a verification job replaces a running job's frozen target;
-//  5. a checkpoint too far above every base (beyond the replay bound, no base
-//     below it) enqueues a job that can only block the computer's cadence;
+//  2-5. (the host-side verification job: its target, seed, coalescing and
+//     refusal; deleted with the host rebuild at the data system cutover);
 //  6. a verdict is overwritten after it was judged (verified becomes
 //     pending/unverified on a later pass), or a re-published checkpoint resets
 //     it;
@@ -22,8 +16,6 @@ package platform
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,20 +37,6 @@ func pendingVerdict(t *testing.T, s *Store, digest string, sequence uint64, head
 		t.Fatal(err)
 	}
 	return CheckpointVerdictRecord{ComputerID: verdictComputer, CheckpointDigest: digest, AcceptedHead: head, Verdict: selfdevprotocol.CheckpointVerdict{Status: selfdevprotocol.CheckpointVerdictPending, AcceptedSequence: sequence}}
-}
-
-func setHead(t *testing.T, s *Store, sequence uint64, head string) {
-	t.Helper()
-	if _, err := s.db.ExecContext(t.Context(), `UPDATE computer_event_heads SET sequence=?, canonical_event_head=? WHERE computer_id=?`, sequence, head, verdictComputer); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func insertBase(t *testing.T, s *Store, ref string, sequence uint64) {
-	t.Helper()
-	if _, err := s.db.ExecContext(t.Context(), `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, verdictComputer, ref, sequence, time.Now().UTC()); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // Failure mode 1, and 6 for a replay.
@@ -117,145 +95,6 @@ func TestResolveCheckpointVerdictJudgesOnlyOnce(t *testing.T) {
 	}
 }
 
-// Failure mode 2: the job names the checkpoint's head even though the
-// computer's head moved on while the checkpoint waited.
-func TestVerificationJobTargetsTheCheckpointHeadNotTheCurrentHead(t *testing.T) {
-	authority, _, _, head := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-	setHead(t, store, 4000, strings.Repeat("f", 64))
-	job, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job.Status != "queued" || job.TargetSequence != 12 || job.TargetHead != head {
-		t.Fatalf("job = status %s target %d/%s; want queued at the checkpoint's 12/%s", job.Status, job.TargetSequence, job.TargetHead, head)
-	}
-	if !strings.HasPrefix(job.Reason, "checkpoint-verify") {
-		t.Fatalf("job reason %q", job.Reason)
-	}
-}
-
-// Failure mode 3: seeds. At or above the watermark the job seeds from the
-// advertised base; below the watermark, from the newest base at or below the
-// checkpoint.
-func TestVerificationJobSeedsFromABaseAtOrBelowTheCheckpoint(t *testing.T) {
-	authority, request, _, head := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-	older, newer, advertised := strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64)
-	insertBase(t, store, older, 5)
-	insertBase(t, store, newer, 9)
-	insertBase(t, store, advertised, 20)
-	if err := store.RecordReplayWatermark(t.Context(), request.ComputerID, 20, advertised); err != nil {
-		t.Fatal(err)
-	}
-	setHead(t, store, 30, strings.Repeat("f", 64))
-	job, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job.SeedBaseRef != newer || job.WatermarkSequence != 9 {
-		t.Fatalf("watermark 20 is above the checkpoint at 12: seed %s at %d, want the newest base at or below it (%s at 9)", job.SeedBaseRef, job.WatermarkSequence, newer)
-	}
-
-	// A watermark below the checkpoint is the seed.
-	store2 := openVerdictStore(t)
-	rec2 := pendingVerdict(t, store2, strings.Repeat("2", 64), 25, head)
-	insertBase(t, store2, older, 5)
-	if err := store2.RecordReplayWatermark(t.Context(), request.ComputerID, 5, older); err != nil {
-		t.Fatal(err)
-	}
-	setHead(t, store2, 30, strings.Repeat("f", 64))
-	job2, err := store2.EnqueueCheckpointVerificationJob(t.Context(), rec2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job2.SeedBaseRef != older || job2.WatermarkSequence != 5 || job2.TargetSequence != 25 {
-		t.Fatalf("job = seed %s at %d target %d, want the advertised base %s at 5, target 25", job2.SeedBaseRef, job2.WatermarkSequence, job2.TargetSequence, older)
-	}
-}
-
-// openVerdictStore is a second fixture store with the same computer head row.
-func openVerdictStore(t *testing.T) *Store {
-	t.Helper()
-	authority, _, _, _ := ownerRecoveryPlatformFixture(t)
-	return authority.cas.store
-}
-
-// Failure mode 5.
-func TestVerificationJobRefusesByNameWhenNoBaseIsInReach(t *testing.T) {
-	authority, _, _, _ := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	head := strings.Repeat("e", 64)
-	setHead(t, store, 10_500, head)
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 10_050, head)
-	if _, err := store.EnqueueCheckpointVerificationJob(t.Context(), record); !errors.Is(err, ErrNoVerificationBase) {
-		t.Fatalf("a checkpoint beyond the replay bound with no base below it enqueued: %v", err)
-	}
-	if _, err := store.ProjectionJob(t.Context(), verdictComputer); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("a refused verification left a job row: %v", err)
-	}
-}
-
-// Failure mode 4.
-func TestVerificationJobDoesNotReplaceARunningJob(t *testing.T) {
-	authority, _, _, head := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	cadence, err := store.EnqueueProjectionJob(t.Context(), verdictComputer, "cadence", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if leased, err := store.ClaimProjectionJob(t.Context()); err != nil || leased == nil {
-		t.Fatalf("claim: %v %v", leased, err)
-	}
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-	got, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Generation != cadence.Generation || got.Status != "running" {
-		t.Fatalf("a running job was replaced: %+v", got)
-	}
-}
-
-// A job that already succeeded at a higher target does not satisfy a lower
-// checkpoint: the verification enqueues again.
-func TestVerificationJobIsAdmittedAfterASucceededJobAtAHigherTarget(t *testing.T) {
-	authority, _, _, head := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	if _, err := store.EnqueueProjectionJob(t.Context(), verdictComputer, "cadence", false); err != nil {
-		t.Fatal(err)
-	}
-	leased, err := store.ClaimProjectionJob(t.Context())
-	if err != nil || leased == nil {
-		t.Fatal(err)
-	}
-	if err := store.FinishProjectionJob(t.Context(), *leased, "succeeded", "", 12, strings.Repeat("a", 64)); err != nil {
-		t.Fatal(err)
-	}
-	setHead(t, store, 20, strings.Repeat("f", 64))
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-	job, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-	if err != nil || job.Status != "queued" || job.Generation != leased.Generation+1 {
-		t.Fatalf("verification after a succeeded job: %+v %v", job, err)
-	}
-}
-
-func TestProjectionBaseAtSequence(t *testing.T) {
-	authority, _, _, _ := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	ref := strings.Repeat("a", 64)
-	insertBase(t, store, ref, 12)
-	got, ok, err := store.ProjectionBaseAtSequence(t.Context(), verdictComputer, 12)
-	if err != nil || !ok || got != ref {
-		t.Fatalf("base at 12 = %q %v %v", got, ok, err)
-	}
-	if _, ok, err := store.ProjectionBaseAtSequence(t.Context(), verdictComputer, 13); err != nil || ok {
-		t.Fatalf("base at 13 = %v %v", ok, err)
-	}
-}
-
 func TestStoredCheckpointReturnsThePublishedCheckpoint(t *testing.T) {
 	authority, request, _, _ := ownerRecoveryPlatformFixture(t)
 	response, err := authority.Publish(t.Context(), request)
@@ -311,53 +150,3 @@ func TestCheckpointVerdictRoute(t *testing.T) {
 }
 
 var _ = context.Background
-
-// Review 329 (DeepSeek 4): a deterministic refusal or a failure backoff of the
-// computer's cadence job at another target must not starve a checkpoint's
-// verification, which asks for a different head and would not hit the same
-// refusal. The refusal still stands for a request at its own target.
-func TestVerificationJobIsAdmittedPastARefusalAtAnotherTarget(t *testing.T) {
-	for _, status := range []string{"blocked", "failed"} {
-		authority, _, _, head := ownerRecoveryPlatformFixture(t)
-		store := authority.cas.store
-		setHead(t, store, 3000, strings.Repeat("f", 64))
-		if _, err := store.EnqueueProjectionJob(t.Context(), verdictComputer, "cadence", false); err != nil {
-			t.Fatal(err)
-		}
-		leased, err := store.ClaimProjectionJob(t.Context())
-		if err != nil || leased == nil {
-			t.Fatal(err)
-		}
-		if err := store.FinishProjectionJob(t.Context(), *leased, status, "refused at 3000", 0, ""); err != nil {
-			t.Fatal(err)
-		}
-		record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-		job, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if job.Status != "queued" || job.TargetSequence != 12 || job.TargetHead != head {
-			t.Fatalf("%s at another target starved the verification: %+v", status, job)
-		}
-	}
-}
-
-func TestVerificationJobStaysRefusedAtItsOwnTarget(t *testing.T) {
-	authority, _, _, head := ownerRecoveryPlatformFixture(t)
-	store := authority.cas.store
-	record := pendingVerdict(t, store, strings.Repeat("1", 64), 12, head)
-	if _, err := store.EnqueueCheckpointVerificationJob(t.Context(), record); err != nil {
-		t.Fatal(err)
-	}
-	leased, err := store.ClaimProjectionJob(t.Context())
-	if err != nil || leased == nil {
-		t.Fatal(err)
-	}
-	if err := store.FinishProjectionJob(t.Context(), *leased, "blocked", "projection base refused", 0, ""); err != nil {
-		t.Fatal(err)
-	}
-	again, err := store.EnqueueCheckpointVerificationJob(t.Context(), record)
-	if err != nil || again.Status != "blocked" || again.Generation != leased.Generation {
-		t.Fatalf("a refusal at the checkpoint's own target was re-admitted: %+v %v", again, err)
-	}
-}

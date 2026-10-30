@@ -955,3 +955,23 @@ func (s *Service) baseDirScanned() bool {
 	info, err := os.Stat(filepath.Join(filepath.Clean(s.artifactsRoot), "sha256", basemanifest.BaseNamespace))
 	return err == nil && info.IsDir()
 }
+
+// projectionBasePins is the projection-base live set the GC keeps beyond the
+// advertised watermarks: explicit pins (restore points), each computer's
+// latest two bases, and in-flight job seeds.
+func (s *Store) projectionBasePins(ctx context.Context) (map[string]struct{}, error) {
+	live := map[string]struct{}{}
+	rows, err := s.db.QueryContext(ctx, `SELECT base_ref FROM computer_projection_base_pins UNION SELECT p.base_ref FROM computer_projection_bases p WHERE (SELECT COUNT(*) FROM computer_projection_bases newer WHERE newer.computer_id=p.computer_id AND (newer.sequence>p.sequence OR (newer.sequence=p.sequence AND newer.created_at>p.created_at)))<2 UNION SELECT seed_base_ref FROM computer_projection_jobs WHERE status IN ('queued','running','retry') AND seed_base_ref<>''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			return nil, err
+		}
+		live[ref] = struct{}{}
+	}
+	return live, rows.Err()
+}

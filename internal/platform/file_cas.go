@@ -88,8 +88,7 @@ func (s *Store) RecordReplayWatermarkWithRoot(ctx context.Context, computerID st
 		return err
 	}
 	defer tx.Rollback()
-	// The job row is locked before the watermark row, the order
-	// PublishCheckpointResult takes (review 364).
+	// The job row is locked before the watermark row (review 364).
 	var jobGeneration uint64
 	if err := tx.QueryRowContext(ctx, `SELECT generation FROM computer_projection_jobs WHERE computer_id=? FOR UPDATE`, computerID).Scan(&jobGeneration); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -121,13 +120,11 @@ func (s *Store) RecordReplayWatermarkWithRoot(ctx context.Context, computerID st
 			return fmt.Errorf("file cas: record epoch root: %w", err)
 		}
 	}
-	// A cadence job replaying from another seed below the new base would
-	// only rebuild from further back: supersede it, so its worker's next
-	// lease renewal stops it, it is never reclaimed, and the next reconcile
-	// re-admits the row on the new base (S2,
-	// docs/problems/paper-never-checkpointed-2026-10-27.md; by seed and
-	// watermark, not target, review 364). Checkpoint verification jobs and
-	// genesis repairs are their own targets.
+	// A cadence job on another seed below the new base would only rebuild
+	// from further back: supersede it, so the next enqueue re-admits the row
+	// on the new base (S2, docs/problems/paper-never-checkpointed-2026-10-27.md;
+	// by seed and watermark, not target, review 364). Checkpoint verification
+	// jobs and genesis repairs are their own targets.
 	if _, err := tx.ExecContext(ctx, `UPDATE computer_projection_jobs SET status='superseded',error_text=?,lease_token='',updated_at=? WHERE computer_id=? AND status IN ('queued','running','retry','failed','blocked') AND seed_base_ref<>? AND watermark_sequence<? AND genesis_repair=FALSE AND reason NOT LIKE ?`,
 		fmt.Sprintf("superseded by base %s at %d", baseRef, seq), now, computerID, baseRef, seq, checkpointVerifyReason+"%"); err != nil {
 		return fmt.Errorf("file cas: supersede covered projection job: %w", err)

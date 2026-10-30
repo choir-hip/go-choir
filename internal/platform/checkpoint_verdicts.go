@@ -10,18 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
-
-// ErrNoVerificationBase: no base at or below a checkpoint's head exists to
-// start the host's rebuild from, and genesis is beyond the replay bound.
-var ErrNoVerificationBase = errors.New("no base at or below the checkpoint head to rebuild from")
-
-// checkpointVerifyReason is the reason prefix of a verification job.
-const checkpointVerifyReason = "checkpoint-verify:"
 
 // CheckpointVerdictRecord is the host's judgment of one published checkpoint
 // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, slice 2). The
@@ -130,91 +121,6 @@ func (s *Store) StoredCheckpoint(ctx context.Context, computerID, checkpointDige
 		return selfdevprotocol.Checkpoint{}, fmt.Errorf("stored checkpoint does not match its key")
 	}
 	return checkpoint, nil
-}
-
-// ProjectionBaseAtSequence returns a base the platform holds for the computer
-// at exactly the given sequence: a retained or superseded base, or the
-// advertised one.
-func (s *Store) ProjectionBaseAtSequence(ctx context.Context, computerID string, sequence uint64) (string, bool, error) {
-	var ref string
-	err := s.db.QueryRowContext(ctx, `SELECT base_ref FROM computer_projection_bases WHERE computer_id=? AND sequence=? ORDER BY created_at DESC LIMIT 1`, computerID, sequence).Scan(&ref)
-	if err == nil {
-		return ref, true, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", false, err
-	}
-	err = s.db.QueryRowContext(ctx, `SELECT base_ref FROM computer_replay_watermarks WHERE computer_id=? AND watermark_sequence=?`, computerID, sequence).Scan(&ref)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, err
-	}
-	return ref, ref != "", nil
-}
-
-// EnqueueCheckpointVerificationJob asks the host to rebuild the projection at
-// a checkpoint's own head, the head the checkpoint's witness was taken at, not
-// the computer's head now. The job seeds from the advertised base when that is
-// at or below the checkpoint, else from the newest base that is; with none and
-// the checkpoint beyond the replay bound it refuses by name rather than queue
-// a job that can only block the computer's cadence. A job in flight, or a
-// refusal that still stands, is returned unchanged like any other request.
-func (s *Store) EnqueueCheckpointVerificationJob(ctx context.Context, record CheckpointVerdictRecord) (ProjectionJob, error) {
-	if !computerevent.IsSHA256(record.AcceptedHead) || record.Verdict.AcceptedSequence == 0 || !computerevent.IsSHA256(record.CheckpointDigest) {
-		return ProjectionJob{}, fmt.Errorf("invalid checkpoint verification request")
-	}
-	target := &projectionTarget{sequence: record.Verdict.AcceptedSequence, head: record.AcceptedHead}
-	return s.enqueueProjectionJob(ctx, record.ComputerID, checkpointVerifyReason+record.CheckpointDigest, false, target)
-}
-
-// checkpointBaseSeed picks the base a verification job at sequence seeds
-// from: the advertised watermark when it is at or below the target, else the
-// newest recorded base that is.
-func checkpointBaseSeed(ctx context.Context, tx *sql.Tx, computerID string, sequence, watermark uint64, advertised string, floor uint64) (string, uint64, error) {
-	// The advertised base is the seed when it is at or below the target and
-	// at or above the epoch root (floor; review 365).
-	if watermark <= sequence && watermark >= floor {
-		quarantined := false
-		if advertised != "" {
-			var err error
-			if quarantined, err = baseQuarantined(ctx, tx, computerID, advertised); err != nil {
-				return "", 0, err
-			}
-		}
-		if !quarantined {
-			return advertised, watermarkOrZero(advertised, watermark), nil
-		}
-	}
-	var ref string
-	var seq uint64
-	// Bases refused twice are skipped (paper-never-checkpointed S1), and so
-	// is every base below the computer's epoch root (floor; 0 for none).
-	err := tx.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_bases WHERE computer_id=? AND sequence<=? AND sequence>=? AND base_ref NOT IN (SELECT base_ref FROM computer_projection_base_refusals WHERE computer_id=? AND build_commit=? AND refusals>=2) ORDER BY sequence DESC, created_at DESC LIMIT 1`, computerID, sequence, floor, computerID, buildinfo.Commit).Scan(&ref, &seq)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", 0, nil
-	}
-	if err != nil {
-		return "", 0, err
-	}
-	return ref, seq, nil
-}
-
-func watermarkOrZero(ref string, watermark uint64) uint64 {
-	if ref == "" {
-		return 0
-	}
-	return watermark
-}
-
-// refuseUnreachableBase reports ErrNoVerificationBase when a job at sequence
-// would have no seed and genesis is beyond the replay bound.
-func refuseUnreachableBase(seed string, sequence uint64) error {
-	if seed == "" && sequence > recoveryplan.MaxRecoveryTailEvents {
-		return fmt.Errorf("%w (checkpoint at %d, replay bound %d)", ErrNoVerificationBase, sequence, recoveryplan.MaxRecoveryTailEvents)
-	}
-	return nil
 }
 
 // HandleCheckpointVerdict serves the host's verdict on one checkpoint:
