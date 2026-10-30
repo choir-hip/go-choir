@@ -287,6 +287,11 @@ func Open(dbPath string) (*Store, error) {
 	}
 	doneEpoch(nil)
 
+	// The event index window's catch-up (event_index_trim.go): a store that
+	// predates it, or an older snapshot restored under this binary, is
+	// brought to the state a replay would leave. Bounded, logged, not fatal.
+	s.runProjectionBatchCatchUp()
+
 	s.initLeaseObs()
 	s.openTraceLogIfPresent()
 

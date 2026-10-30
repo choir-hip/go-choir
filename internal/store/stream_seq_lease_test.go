@@ -328,8 +328,8 @@ func TestLeaseReceiptTwoWritesTheMarkerAndForcesTheExactSeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := receiptVersion(t, s); got != 3 {
-		t.Fatalf("Open left receipt %d, want 3", got)
+	if got := receiptVersion(t, s); got != storeschema.Version {
+		t.Fatalf("Open left receipt %d, want %d", got, storeschema.Version)
 	}
 	if !markerPresent(t, workspace) {
 		t.Fatal("Open read receipt 2 and wrote receipt 3 without the untrust marker")
@@ -388,8 +388,8 @@ func TestFreshStoreWritesNoMarker(t *testing.T) {
 	if markerPresent(t, deriveTextureWorkspacePath(path)) {
 		t.Fatal("a fresh store carries an untrust marker")
 	}
-	if got := receiptVersion(t, s); got != 3 {
-		t.Fatalf("receipt = %d, want 3", got)
+	if got := receiptVersion(t, s); got != storeschema.Version {
+		t.Fatalf("receipt = %d, want %d", got, storeschema.Version)
 	}
 }
 
@@ -471,8 +471,8 @@ func TestOpenReadsTheReceiptBeforeItWritesIt(t *testing.T) {
 		if got := markerPresent(t, workspace); got != tc.marker {
 			t.Errorf("prior receipt %d: marker present = %v, want %v", tc.prior, got, tc.marker)
 		}
-		if got := receiptVersion(t, s); got != 3 {
-			t.Errorf("prior receipt %d: Open left %d, want 3", tc.prior, got)
+		if got := receiptVersion(t, s); got != storeschema.Version {
+			t.Errorf("prior receipt %d: Open left %d, want %d", tc.prior, got, storeschema.Version)
 		}
 		_ = s.Close()
 	}
@@ -509,7 +509,7 @@ func TestMarkerWriteFailureAbortsOpenAndLeavesTheReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	if !markerPresent(t, workspace) || receiptVersion(t, s) != 3 {
+	if !markerPresent(t, workspace) || receiptVersion(t, s) != storeschema.Version {
 		t.Fatal("after the repair Open did not write both the marker and the receipt")
 	}
 }

@@ -22,8 +22,8 @@ import (
 //     entry the same way the store writes it.
 
 func TestVersionIsEpochThreeForTheLease(t *testing.T) {
-	if Version != 3 {
-		t.Fatalf("storeschema.Version = %d, want 3 (the stream_seq lease)", Version)
+	if Version < 3 {
+		t.Fatalf("storeschema.Version = %d, want at least 3 (the stream_seq lease)", Version)
 	}
 }
 

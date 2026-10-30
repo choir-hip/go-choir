@@ -25,8 +25,8 @@ func TestApplyRefusesAnEpochTwoReleaseOnAnEpochThreeStore(t *testing.T) {
 	if err != nil {
 		t.Skipf("closure fixture absent: %v", err)
 	}
-	if storeschema.Version != 3 {
-		t.Fatalf("storeschema.Version = %d, want 3", storeschema.Version)
+	if storeschema.Version < 3 {
+		t.Fatalf("storeschema.Version = %d, want at least 3", storeschema.Version)
 	}
 	root := filepath.Join(t.TempDir(), "updater")
 	t.Cleanup(func() { makeTreeWritable(root) })

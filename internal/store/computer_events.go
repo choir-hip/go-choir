@@ -324,6 +324,9 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			return projectErr
 		}
 	}
+	if err := s.trimProjectionBatchIndexTx(ctx, tx, computerID, sequence); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}

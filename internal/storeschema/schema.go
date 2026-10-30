@@ -52,7 +52,16 @@ import (
 //     release that declares one: Apply refuses an epoch-2 release on an
 //     epoch-3 store. The epoch-3 release keeps min_store_schema_version at 2
 //     or below.
-const Version uint64 = 3
+//   - 4: the event index is windowed (internal/store/event_index_trim.go).
+//     A finalized projection_batch_recorded row older than the trim boundary
+//     is deleted from computer_event_index, deterministically from the head
+//     sequence, so the content witness of a live store and of a replay agree.
+//     An older binary keeps every such row, so its witness over a trimmed
+//     index differs and its replay-completeness probe fails: the store floor
+//     is raised to 4 before the first delete and an older binary refuses to
+//     open the store. An older snapshot restored under this binary is
+//     re-derived at Open (the catch-up trim), logged, not refused.
+const Version uint64 = 4
 
 // File is the receipt filename inside the store's sidecar directory
 // (deriveTextureWorkspacePath(StorePath)).
