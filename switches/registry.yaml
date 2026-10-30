@@ -551,34 +551,6 @@
    "off_ok": "off is the normal state: primary computers idle-hibernate (D3); on is the rollback"
   },
   {
-   "id": "vmctl_store_compact_pressure",
-   "kind": "host_env",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "nix": [
-    "VMCTL_STORE_COMPACT_PRESSURE"
-   ],
-   "ladder": [
-    "observe",
-    "active"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "all",
-   "nix_value": "observe",
-   "promote": [
-    {
-     "metric": "compact_dry_runs_clean",
-     "bound": "== all"
-    }
-   ],
-   "retire": "delete the observe mode once active",
-   "blocked_by": "a rehearsed pressure trigger on a test image"
-  },
-  {
    "id": "vmctl_retention",
    "kind": "host_env",
    "life": "ops",
@@ -1044,32 +1016,6 @@
    "promote": [
     {
      "metric": "session_renewals_ok",
-     "bound": "true"
-    }
-   ],
-   "retire": "keep: a permission setting; review_by only"
-  },
-  {
-   "id": "checkpoint_maintenance_authorized",
-   "kind": "host_env",
-   "life": "permission",
-   "owner": "selfdev",
-   "class": "red",
-   "surface": "checkpoint",
-   "introduced": "2026-10-28",
-   "nix": [
-    "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "review_by": "2027-01-20",
-   "ring": "all",
-   "nix_value": "true",
-   "promote": [
-    {
-     "metric": "checkpoint_maintenance_runs_ok",
      "bound": "true"
     }
    ],
@@ -2393,45 +2339,6 @@
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
    "blocked_by": "owner of dispatch.wide_slots to state its proof (not in the 10-26 audit)",
    "note": "Added after the 10-26 audit; no walk data."
-  },
-  {
-   "id": "checkpointd_base_parts",
-   "kind": "host_selector",
-   "life": "experiment",
-   "owner": "density",
-   "class": "red",
-   "surface": "snapshot",
-   "introduced": "2026-10-28",
-   "nix": [
-    "CHECKPOINTD_BASE_PARTS_ONLY"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "R0",
-   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72",
-   "promote": [
-    {
-     "metric": "base_publish_bytes_written",
-     "bound": "<= 10% of the store size per publish after the first"
-    },
-    {
-     "metric": "base_refusals_integrity",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete CHECKPOINTD_BASE_PARTS_ONLY; the parts form is the code default",
-   "probe": "docs/problems/paper-never-checkpointed-2026-10-27.md (S4)",
-   "revert": {
-    "mode": "ring_state",
-    "effect": "next_launch"
-   },
-   "gate": {
-    "act": "R1+: the guest image on each computer must read the parts form (>= S4); a pre-S4 guest refuses a parts watermark by design (review 370)"
-   },
-   "note": "R0 d@e on. class:test is not listed: checkpointd has no class source, so the token selected nothing. Registered life: experiment because the release cap baseline (64) is full and a retirement was not this lane's to choose; re-class to release (retiring one) or retire this on promotion."
   }
  ]
 }
