@@ -34,7 +34,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   Mission 2 proves vocabulary only; the five overlay JSON tools and four
   legacy capsule operations plus replay-returns-original-receipts belong to
   the Engineering-proof successor mission: overlay JSON tools record_assignment_result, update_coagent, commit_transaction, inspect_self_development_bundle, record_self_development_verification; legacy capsule operations capsule_exec, capsule_list_dir, capsule_read_file, capsule_write_file; eval primitive capsule_go_eval in neither retirement list (counts verifiable via TestAssignedCoSuperBuilderIsExactClosedSet).
-  Closed by `docs/archive/choir-sub-rlm-document-channel-2026-09-22.md`
+  Closed by `docs/archive/choir-sub-rlm-document-channel-2026-09-22.md (deleted 2026-10-30, in git history)`
   (M2, the carrier scope inherited from the superseded
   `choir-rlm-engineering-carrier-2026-09-11`): the four capsule ops and
   assign_co_super are deleted; the assigned-CoSuper registry is exactly
@@ -52,7 +52,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   ratified the active provider set as opencode-go (with opencode-zen per carrier phase-1 setup)
   and chatgpt; the deepseek and xiaomi provider accounts are not configured and must not be
   silently substituted for. Closed by
-  `docs/archive/choir-sub-rlm-document-channel-2026-09-22.md` (M2): the
+  `docs/archive/choir-sub-rlm-document-channel-2026-09-22.md (deleted 2026-10-30, in git history)` (M2): the
   direct deepseek/xiaomi provider registrations, AnthropicCompatProvider,
   ProviderConfig fields, and env-credential paths are deleted from
   `internal/provider`; the ChatGPT terminal fallback
@@ -91,7 +91,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   CAS-hydrating search path) is world-wire product work, not storage
   normalization. Agentic-consensus panel 2026-09-19 (9/9 verdict A):
   `.agentic-consensus/agentic-consensus-20260919-010500/`. Source:
-  `docs/archive/goal-platform-dolt-normalization-2026-09-18.md` receipt
+  `docs/archive/goal-platform-dolt-normalization-2026-09-18.md (deleted 2026-10-30, in git history)` receipt
   `move3-cas-externalization` + amended acceptance. Revisit: when world-wire
   search is designed; the residual is bounded by a Store B growth SLO
   (monitor `items` table bytes + oldgen; reopen if growth threatens Store B

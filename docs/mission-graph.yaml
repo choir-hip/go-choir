@@ -387,7 +387,7 @@ nodes:
       Three ordered cuts: trajectory-scoped or version-memoized lifecycle
       snapshot, TTL-cached vmctl route resolution in the proxy, and —
       gated on the timing matrix — decoupling the objectgraph read mutex
-      from writes. Evidence: docs/problems/texture-latency-layered-evidence-2026-10-01.md.
+      from writes. Evidence: docs/problems/texture-latency-layered-evidence-2026-10-01.md (deleted 2026-10-30, in git history).
     sources:
       - docs/archive/definitions/choir-texture-latency-cutover-2026-10-01.md
   - id: choir-jev-supervision-metamission-2026-09-29

@@ -890,7 +890,7 @@ judgments remain as history (doc: [claims, events and entities](../reports/claim
 On 14 October at 16:46 UTC a 60-second Go CPU profile was taken of the
 paper computer's main `autoputer` process, with a host sample over the same
 window (doc: [CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §1b;
-evidence file `docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt`).
+evidence file `docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt (deleted 2026-10-30, in git history)`).
 The numbers:
 
 | measure | value |

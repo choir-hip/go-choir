@@ -129,7 +129,7 @@ internet egress: per-tap `FORWARD ACCEPT` plus `MASQUERADE`
 and spoofed sources are dropped (`manager.go` `ensureTapIsolationRules`).
 Guest-to-host service ports 8082/8083/8084/8086/8087/8787 are explicitly
 accepted (`manager.go:3366`). Earlier records:
-`docs/problems/s0-tap-egress-unfiltered-2026-10-01.md` (it names "proxy-only
+`docs/problems/s0-tap-egress-unfiltered-2026-10-01.md (deleted 2026-10-30, in git history)` (it names "proxy-only
 egress via a recorded capsule proxy" as the intended S1 direction) and
 `docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
 

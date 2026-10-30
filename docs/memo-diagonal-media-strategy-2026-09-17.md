@@ -238,5 +238,5 @@ layer (box score) are the business, with the platform as the endgame.
   record schema the box score consumes.
 - `docs/archive/rlms-ontology-brief-2026-09-10.md` — forecast/adjudication/
   assessment objects the box score is built from.
-- `docs/archive/reports/choir-status-rlm-picl-worldwire-2026-09-17.md` — current
+- `docs/archive/reports/choir-status-rlm-picl-worldwire-2026-09-17.md (deleted 2026-10-30, in git history)` — current
   build state.
