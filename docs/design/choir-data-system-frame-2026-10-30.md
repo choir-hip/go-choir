@@ -32,17 +32,37 @@ Sources: [tape-window-sizing](../evidence/tape-window-sizing-2026-10-30.md),
 [new-engine-storage-measurement](../evidence/new-engine-storage-measurement-2026-10-30.md)
 (state C at 4 KiB: objects 5.3 GB, key index 0.35 GB, events 22.2 GB).
 
-What a heavy computer costs at the target: about 0.4 GB per day of sealed,
-compressed segments (5.4x zstd measured on today's segments), before the event
-classes in §5 cut it further. A 30-day window is about 12 GB per heavy
-computer. Node B has 476 GB, so the blob backend must be able to leave Node B
-before about 25 heavy computers keep 30-day windows. That is why the tape and
-snapshots go through the blob interface (§2) and nothing assumes a local disk.
+What the paper's tape holds, from
+[paper-tape-composition](../evidence/paper-tape-composition-2026-10-30.md)
+(2026-10-29, replicated on 10-27 within 2.3 points):
 
-The composition measurement (which tables and kinds make the paper's 300 K
-events, how much is the same keys rewritten, what 250 ms and 1 s coalescing
-would do) is running and lands as
-`docs/evidence/paper-tape-composition-2026-10-30.md`. §5 depends on it.
+- **Volume.** 339 K events carry 1.535 GB of row operations. 92% of events
+  hold a single operation.
+- **Today's overhead.** Each event costs about 10.4 KB of fixed overhead,
+  counting its segment record, its host receipt row and its guest row,
+  against the 4.5 KB of operations it carries.
+- **Little churn.** Only 15.8% of operations overwrite a key written the
+  same day, so "keep the latest value per key" alone still keeps 82% of the
+  bytes.
+- **Coalescing.** Merging the writes of each 1 s window into one event would
+  cut events and receipts by 82%. That gain is the fixed cost per event; the
+  frame's slim envelope and batch receipt (§4) remove most of the same cost
+  without merging events.
+- **The telemetry batcher is off.** It already exists
+  (`internal/store/telemetry_sealer.go`), but none of two days' 684 K events
+  went through it.
+
+What a heavy computer costs at the target, with telemetry off the tape (§5):
+
+| | Raw per day | Compressed (5.4x, measured on today's segments) |
+|---|---|---|
+| Inside the window | about 1.4 GB | about 0.26 GB, so a 30-day window is about 8 GB |
+| After the window, acts only | | about 60 MB, or 22 GB a year |
+| After the window, acts plus the agent record | | about 155 MB, or 56 GB a year |
+
+Node B has 476 GB, so the blob backend must be able to leave Node B before
+about 40 heavy computers keep 30-day windows. That is why the tape and
+snapshots go through the blob interface (§2) and nothing assumes a local disk.
 
 ## 2. Five things
 
@@ -114,10 +134,11 @@ are not a sixth home.
    self-development accept, anything involving money or credentials) waits for
    the receipt of the batch that records it. A crash loses at most the
    unshipped tail, and that tail never had an effect outside the computer.
-3. **Restore is a forward event, and it never rewinds acts.** Restoring to
-   time P appends a new event; history is not cut. Working state and files go
-   back to P. Acts (§5) stay: a precommitment, a sent email or a publication
-   made after P is still a fact after the restore.
+3. **Restore is a forward event, and it never rewinds acts or the agent
+   record.** Restoring to time P appends a new event; history is not cut.
+   Working state and files go back to P. Acts and the agent record (§5) stay:
+   a precommitment, a sent email or a publication made after P is still a
+   fact after the restore, and so is what the agents saw and said.
 4. **Deletion is an act by whoever holds the reference, never a guess by the
    host.** The computer knows what its state references, so a delete names
    the blobs it releases. Window expiry is an act too. The host never infers
@@ -130,7 +151,8 @@ are not a sixth home.
    it is published.
 6. **One home per kind, and the kind declares its retention class.** Doctrine
    `I27`: every kind has one writer and one home. Each kind's package schema
-   also declares whether it is an act, working state or telemetry (§5), so the
+   also declares its class (act, agent record, working state or telemetry,
+   §5) and, for a log kind, when its rows retire from the state, so the
    substrate applies retention without knowing the kind.
 
 ## 4. The write path
@@ -162,25 +184,31 @@ computer: mark the outbox rows receipted, release any effects waiting on them
 
 ## 5. Event classes and retention
 
-The proposal below waits on the composition measurement and an owner
-decision (§10, question 1).
+There are four classes. The byte shares are measured on the paper's tape
+(10-29); the assignment of kinds to classes is the measurement's own, which
+§10, question 1 asks the owner to settle.
 
-| Class | Examples | In the restore window | After the window (users, default) | After the window (the paper) |
-|---|---|---|---|---|
-| **Acts** | owner acts, precommitment records and outcomes, sent messages, publications, adoptions, self-development decisions, restores, deletions | full | kept for the life of the computer | kept; public ones also in the Autopaper object graph |
-| **Working state** | desk and app row writes, drafts, run state, memory | full fidelity: any point can be restored | compacted to the state at the window's start (the oldest snapshot) | offloaded first to the analytical database (later), then compacted |
-| **Telemetry** | progress, heartbeats, token counts, health samples | not on the tape: logs and metrics, short retention | | |
+| Class | Paper bytes | What it is | In the restore window | After the window (users, default) | After the window (the paper) |
+|---|---|---|---|---|---|
+| **Acts** | 20.5% | owner acts, Texture documents and revisions, precommitment records and outcomes, the source graph and its judgments, sent messages, publications, adoptions, self-development decisions, restores, deletions | full | kept for the life of the computer | kept; public ones also in the Autopaper object graph |
+| **Agent record** | 33.7% | what each agent saw and said: run memory (20.1%) and tool results (13.6%), which run acceptance and the Texture verifier read as evidence | full | kept (recommended, §10) | offloaded to the analytical database (later); until then, off-host cold storage |
+| **Working state** | 34.1% | mutable state: runs, schedules, heads, outboxes, leases (24.3%, the only part that churns). Bookkeeping logs: command receipts, lifecycle and run-transition events (9.8%) | full: any point can be restored | only the snapshot at the window's start | the same |
+| **Telemetry** | 11.7% | trace lines (progress, retries, cell and egress traces), UI-state copies, heartbeats | not on the tape: logs and metrics with short retention | | |
 
-- Restore windows: 7, 14 or 30 days by plan (owner, 2026-10-30).
-- "Users never offload their event records" (owner, 2026-10-30) holds for
-  acts, which are the records. The proposal reads it as not covering every
-  intermediate row write a working agent makes. At paper rates, keeping those
-  forever costs about 146 GB per heavy computer per year, compressed.
+- Restore windows are 7, 14 or 30 days by plan (owner, 2026-10-30).
+- "Users never offload their event records" (owner, 2026-10-30) is read as
+  covering acts and the agent record. Working state is the computer's
+  scratch: its history inside the window is what a restore needs, and
+  nothing reads it afterwards.
 - The paper's precommitment records are acts. Today they are about 10.8 K per
   day at 3.2 KB, or 35 MB per day kept forever [V].
-- Until the analytical database exists, the paper's working-state segments
-  leaving its window go off-host to cold storage (about 0.5 GB per day
-  compressed today), not onto Node B.
+- State and logs need retirement rules in the state itself, not only on the
+  tape. A log kind (run memory, command receipts) declares when its rows
+  leave the computer's SQLite, for example when the run closes. Its
+  record then lives only on the tape.
+
+  The 5.7 GB paper store in §1 already assumes run memory leaves the store
+  (measurement state C).
 
 **Snapshots.** A snapshot is the SQLite file plus the file-tree root, stored
 through the computer's existing file content store (encrypted chunks under
@@ -200,14 +228,15 @@ the current release with a new epoch. That computer:
 
 1. loads the newest snapshot at or before P and replays working-state events
    up to P;
-2. replays every act after P on top;
+2. replays every act and agent-record event after P on top;
 3. sets the file root to its value at P;
 4. seals a snapshot;
 5. appends one restore event naming that snapshot.
 
 Replay treats a restore event as a load point, so later replays never need
 the tape before it. The host's part is an audit entry for the key unwrap.
-Acts survive. Anything outside the window is refused with the reason.
+Acts and the agent record survive. Anything outside the window is refused
+with the reason.
 
 **Broken computer.** This is the rewind with P set to the head. The image is
 discarded, and a fresh computer is built from the current release, the
@@ -303,13 +332,23 @@ exact bytes.
 
 None of these blocks writing the detailed designs. A recommendation goes with each.
 
-1. **Event classes.** Should "never offload" cover acts only, with working
-   state kept in full only inside the restore window? Recommended: yes. The
-   measurement in §1 will show how much of the tape is working state.
+1. **Event classes (§5).** Two choices decide 34 points of the paper's
+   bytes.
+   - **(a) Is the agent record kept like acts?** The agent record is run
+     memory and tool results. Kept like acts, it stays forever for users; as
+     working state, it is kept only inside the window. Recommended: keep it.
+     It is the audit trail of why an agent did what it did, which PSA,
+     self-development review and compliance all read. It costs about 34 GB a
+     year per heavy computer on top of acts, which an off-host backend
+     absorbs.
+   - **(b) Does working state leave after the window?** Recommended: yes.
+   - **Also:** the classification of the source graph's judgments as acts
+     (10.5% of bytes) should be confirmed.
 2. **The paper's window and its offload.** Recommended:
    - a 7-day window;
-   - working-state segments go off-host to cold storage until the
-     analytical database exists;
+   - the agent record goes off-host to cold storage until the analytical
+     database exists, about 95 MB per day compressed;
+   - working state leaves after the window, as for users;
    - acts are kept forever.
 3. **History before the cutover.** Recommended:
    - keep the old segments and pins as one sealed, compressed archive;
@@ -364,4 +403,6 @@ reviews the frame:
 - the paper's SQLite holding state only between 3 and 8 GB;
 - restore to any point in a 30-day window within 5 minutes for a heavy
   computer;
-- the barrier adding at most 50 ms at p99 to an effect.
+- the barrier adding at most 50 ms at p99 to an effect;
+- a heavy computer's 30-day window under 10 GB compressed, with telemetry
+  off the tape.
