@@ -32,3 +32,18 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - verification is by B0's drills, the hard gates, the differential and
     deployed acceptance;
   - the CLAUDE.md review tiers are superseded for this mission.
+- 2026-10-30 ~06:45 UTC (FP0). Owner: "Skip tonight's backup. Accelerate the
+  migration cutover. Yes, do the fleet cutover, and delete old data.
+  Downtime is acceptable ... Better to rapidly get it 85% there, and iterate
+  for the last mile."
+  - The backup is skipped: the timer was stopped and a runtime drop-in
+    added (skip-during-cutover.conf).
+  - The goal is restructured:
+    - Phase 1 runs D0 (fold round 1, once), D1 (the build sheet), C0 (the
+      drills), C1 to C3 in parallel (guest SQLite, PostgreSQL, tape v2),
+      C4 (the migration, on d@e first) and C5 (the fleet cutover and
+      deletion of the old data).
+    - Phase 2, I1 to I7, iterates the rest.
+  - Owner gates are removed.
+  - The last off-host copy of the old data is the restic snapshot of
+    10-29 03:28 UTC.

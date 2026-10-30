@@ -2,8 +2,9 @@
 
 Run with `/goal docs/definitions/choir-data-system-build-2026-10-30.md`.
 
-This is a metamission. Stations D0 to D2 are slices of this file. Stations B0
-to B8 get their own goal files, authored in D2. The frame it builds is
+This is a metamission whose stations are slices of this file. Phase 1 (D0,
+D1, C0 to C5) gets the new system running for the whole fleet, about 85% of
+the frame. Phase 2 (I1 to I7) iterates the last mile on the new system. The frame it builds is
 [`docs/design/choir-data-system-frame-2026-10-30.md`](../design/choir-data-system-frame-2026-10-30.md).
 Read the frame first; this file does not repeat it.
 
@@ -17,6 +18,9 @@ readiness_authority: >-
   the owner's word (precedent: choir-selfdev-readiness-metamission-2026-10-24).
   Owner, 2026-10-30 ~06:30 UTC: "Remember, we are working at agentic speed. We can't let code review slow us down. We reviewed the plan a bunch of times for a reason. So we can do the migration in bulk, and let runtime checks be the verifier, not code review."
   So no file review is run on this goal.
+  Owner, 2026-10-30 ~06:40 UTC: "Skip tonight's backup. Accelerate the migration cutover. Yes, do the fleet cutover, and delete old data. Downtime is acceptable. Basically, with our current (old) data architecture, we are hopeless. So getting the new system up and running is essential. Better to rapidly get it 85% there, and iterate for the last mile, than move slowly thinking that will improve safety. Thats false. We do our best with planning then execute with pace and overwhelming force."
+  The cutover and the deletion of the old data are authorized. Downtime is
+  acceptable.
 review:
   reviewer: none yet
   frozen_ref: none
@@ -24,131 +28,134 @@ review:
   evidence_ref: none
 
 metamission:
+  phase_1_cutover: >-
+    The new system runs the fleet as soon as possible, about 85% of the
+    frame. Everything not needed to run on the new system and to delete the
+    old data moves to phase 2.
   stations:
     - id: D0
-      title: the frame settled
-      path: this file (slice)
+      title: fold review round 1 into the frame, once
       status: working
       depends_on: []
       exit: >-
-        Round 1's findings are adjudicated and folded into frame revision 2:
-        Devin, the Sonnet seat, and DeepSeek if it lands. There are no
-        further panel rounds and no Codex (owner, 2026-10-30 ~06:30 UTC).
-        The §12 numbers are filed as precommitment round 0m, and the frame
-        is frozen.
+        Frame revision 2 adopts round 1's findings: Devin, the Sonnet seat,
+        and DeepSeek if it has landed. Two calls are already decided:
+        - one PostgreSQL instance with two databases (control and the
+          object graph), split later if load demands it;
+        - the cutover rollback is fix-forward, with the old data deleted
+          once checks are green, not kept a week.
+
+        Then the frame is frozen and ledger round 0m is filed. This takes
+        one pass, with no panel.
     - id: D1
-      title: the detailed designs cut to the frame
-      path: this file (slice)
+      title: the build sheet
       status: pending
       depends_on: [D0]
       exit: >-
-        object-storage revision 14 and history-restore-audit revision 2
-        fit the frame:
-        - rule 4 replaces object storage §4;
-        - tape segments and snapshots are blob classes;
-        - the restore, broken-computer and key flows are as in frame §6
-          and §7;
-        - one cutover plan, with rehearsal, drain, switch and rollback.
+        One short document, docs/design/data-system-build-sheet-2026-10-30.md,
+        giving each builder only the decisions it needs:
+        - the SQLite schema per guest table;
+        - the PostgreSQL schemas;
+        - the tape v2 segment, envelope and batch-receipt formats;
+        - the writer-epoch rule;
+        - the migration mapping for each store;
+        - the keep-set checks;
+        - the package boundaries, so builders run in parallel without
+          conflicts.
 
-        No panel review. The build's runtime checks verify the design.
-    - id: D2
-      title: the build plan
-      path: this file (slice)
+        The two detailed designs are reference, not rewritten.
+    - id: C0
+      title: the cutover drills
       status: pending
       depends_on: [D1]
-      exit: >-
-        The build plan, as a section of this file. Each of B0 to B8 is a
-        slice with its proof-ring acceptance (which B0 drills it must pass)
-        and its rollback. A separate goal file is written only for a slice
-        a parallel agent runs alone. No review.
-    - id: B0
-      title: the acceptance harness first
-      path: authored in D2
-      status: pending
-      depends_on: [D2]
       note: >-
-        E2E drills before any mechanism (repo testing rule):
-        - kill -9 at random points with no acknowledged write lost;
-        - restore to an arbitrary point, with acts and the agent record
-          surviving;
-        - a broken computer rebuilt from snapshot plus tape;
-        - the barrier: no effect before its receipt;
-        - the PSA timing proof (receipt plus anchor);
-        - per-tenant export with inclusion proofs;
-        - the differential: migrated state answers like the Dolt state;
-        - the bounded-peak-memory gate.
+        Built first and run against every landing:
+        - kill -9 at random points loses no acknowledged write;
+        - the differential: per computer, the migrated SQLite state answers
+          like its Dolt state, and PostgreSQL answers like Store A and
+          Store B;
+        - keep-set counts and hashes before and after;
+        - a computer boots, wakes and serves;
+        - the paper publishes;
+        - an owner computer opens Texture;
+        - mail arrives;
+        - bounded peak memory on migration and boot;
+        - a stale-epoch append is refused.
+    - id: C1
+      title: guest store on SQLite, state only
+      status: pending
+      depends_on: [D1]
+      note: >-
+        Dolt to SQLite inside the computers. No event log is kept in the
+        guest. Dolt-only calls are replaced: commits, AS OF, DOLT_HASHOF_TABLE
+        in witness v2, and the Texture history checkpoint.
+    - id: C2
+      title: PostgreSQL for control and the object graph
+      status: pending
+      depends_on: [D1]
+      note: >-
+        The Store A and Store B code paths move to PostgreSQL, with the
+        MySQL dialect ported. Per-event receipt rows go away; a segment
+        index replaces them.
+    - id: C3
+      title: tape v2
+      status: pending
+      depends_on: [D1]
+      note: >-
+        - batched appends with one receipt per batch, kept in the segment;
+        - writer epochs carried in the capability and checked inside the
+          append;
+        - slim envelopes for projection batches; semantic and gate-bearing
+          kinds stay synchronous;
+        - payloads sealed by the guest under the computer key from the
+          first new event;
+        - the outbox with backpressure.
+    - id: C4
+      title: the migration
+      status: pending
+      depends_on: [C0, C1, C2, C3]
+      note: >-
+        A migration release in which each computer converts its own Dolt
+        state into SQLite at boot. The host migrates Store A and Store B
+        into PostgreSQL. Each computer then:
+        - seals a first snapshot (the SQLite file and the file root) into
+          the blob store;
+        - archives the pre-cutover tape, sealed and compressed;
+        - appends the first new-tape event, naming the old head.
 
-        Each drill produces a repeatable artifact.
-    - id: B1
-      title: the guest store on SQLite, state only
-      path: authored in D2
+        It runs on d@e first and is drilled there.
+    - id: C5
+      title: the fleet cutover and deletion of the old data
       status: pending
-      depends_on: [B0]
+      depends_on: [C4]
       note: >-
-        Dolt to SQLite in the computers. The guest keeps no event log, and
-        log kinds retire from the state (frame §5).
-    - id: B2
-      title: the write path
-      path: authored in D2
-      status: pending
-      depends_on: [B1]
-      note: >-
-        - the outbox and batched group commit;
-        - one receipt per batch;
-        - writer epochs;
-        - the commit barrier;
-        - the slim envelope;
-        - the segment index;
-        - each kind declares its class;
-        - telemetry off the tape.
-    - id: B3
-      title: sealing and keys
-      path: authored in D2
-      status: pending
-      depends_on: [B2]
-      note: >-
-        Payloads and snapshots are sealed by the guest under the computer
-        key. The key is delivered at boot from host escrow before release,
-        and every unwrap is audited. Closes
-        docs/problems/host-holds-user-state-in-plaintext-2026-10-30.md.
-    - id: B4
-      title: snapshots, restore and the broken computer
-      path: authored in D2
-      status: pending
-      depends_on: [B1, B3, B5]
-    - id: B5
-      title: one blob store
-      path: authored in D2
-      status: pending
-      depends_on: [B0]
-      note: >-
-        Tiers, packs, deletion by act, rule-based expiry for derived tiers,
-        verified backups.
-    - id: B6
-      title: PostgreSQL for control and for the Autopaper object graph
-      path: authored in D2
-      status: pending
-      depends_on: [B0]
-    - id: B7
-      title: the audit log, anchors, export and legal hold
-      path: authored in D2
-      status: pending
-      depends_on: [B6]
-    - id: B8
-      title: the cutover
-      path: authored in D2
-      status: pending
-      depends_on: [B1, B2, B3, B4, B5, B6, B7]
-      note: >-
-        - a migration release;
-        - a rehearsal on reflink copies of the paper and the owner's
-          computers;
-        - the owner's go;
-        - drain, migrate, switch;
-        - the differential gate;
-        - rollback for a week (the old directories read-only);
-        - then the old system deleted on the owner's word.
+        Authorized by the owner, 2026-10-30 ~06:40 UTC:
+        1. drain;
+        2. migrate the fleet;
+        3. switch;
+        4. run C0's drills on the fleet;
+        5. once the differential and keep-set checks are green, delete the
+           old data.
 
+        The old data is Store A and Store B (Dolt), the guest Dolt
+        directories, projection bases, legacy pins, checkpoint JSON and the
+        backup's Store A copy. The sealed pre-cutover tape archive is
+        history, not old data, and stays. Downtime is acceptable.
+  phase_2_iterate:
+    - id: I1
+      title: restore to any point, rewind and broken-computer rebuild (frame §6), with which release a rewind boots
+    - id: I2
+      title: the effect barrier at the host mediators (round 1's closed effect set)
+    - id: I3
+      title: one blob store with tiers, packs, deletion by act, pending uploads, refcount and quarantine
+    - id: I4
+      title: telemetry off the tape and log-kind retirement in the state
+    - id: I5
+      title: the audit log, anchors, per-tenant export and legal hold
+    - id: I6
+      title: the DEK off the guest disk, key delivery at every boot, per-object keys with key commitment
+    - id: I7
+      title: the off-host backup rebuilt for PostgreSQL WAL archiving and blob packs, then the backup timer re-enabled
 start:
   captured_at: 2026-10-30T05:57Z
   source:
@@ -205,13 +212,13 @@ finish:
     point in its window and rebuilt when broken. Precommitments carry
     provable timing. Dolt and the old stores are gone.
   artifact: >-
-    The landed code for B0 to B8, deployed. The fleet cut over once.
+    The landed code for phase 1, deployed. The fleet cut over once and the old data deleted.
     docs/evidence/data-system-cutover-<date>.md records the drills, the
     differential, the before-and-after resource numbers and the rollback
     window.
   acceptance:
-    - action: B0's drills on the proof ring (the d@e test computer) and in
-        the rehearsal on copies of the paper and the owner's computers
+    - action: C0's drills on the proof ring (the d@e test computer) after
+        its migration
       proves: >-
         The hard gates below hold on the real system under real load
         shapes before the fleet moves.
@@ -245,9 +252,12 @@ finish:
     - restore never rewinds acts or the agent record;
     - every unwrap is audited.
   rollback: >-
-    Before the cutover, each station's rollback is its own revert, and the
-    fleet stays on the old system. After it, the rollback is the previous
-    release, with the old data directories kept read-only for a week.
+    Before C5, each change rolls back by revert, and the fleet stays on the
+    old system. At C5, the pre-cutover state stays on disk until the
+    differential and keep-set checks are green. After the deletion, failures
+    are fixed forward. The last copy of the old data off the host is the
+    off-host restic snapshot of 2026-10-29 03:28 UTC; tonight's backup is
+    skipped by owner direction.
   landing:
     required: true
     environment: staging (choir.news)
@@ -256,8 +266,7 @@ finish:
 value:
   better_means: >-
     Minimize the gap between the running data system and the frame. The
-    measure is hard gates passed on the proof ring, then in the rehearsal,
-    then on the fleet. Every keep-set item and the restart rules must be
+    measure is hard gates passed on the proof ring, then on the fleet. Every keep-set item and the restart rules must be
     preserved, and the system must get simpler (fewer homes, copies and
     mechanisms), not larger.
   goodharting_would_be: >-
@@ -275,14 +284,14 @@ homotopy:
     Where the new system runs, from least to most real:
     1. the E2E harness locally and in CI;
     2. the d@e test computer on staging, end to end;
-    3. the rehearsal on reflink copies of the paper and the owner's
-       computers at their real sizes (never the live ones);
+    3. the fleet migration (C5), checked by the differential against each
+       computer's pre-cutover state before that state is deleted;
     4. the fleet after the one cutover.
 
 boundaries:
   mutation_class: >-
     D0 to D2 are green documents designing red surfaces, so they are
-    reviewed as red. B0 is yellow. B1 to B8 are red: tape, keys, Texture
+    reviewed as red. C0 is yellow. C1 to C5 and I1 to I7 are red: tape, keys, Texture
     canonical writes, the boot path, store schema, deletion and key
     delivery. Deleting the old data after the rollback week is black.
   authority_sources:
@@ -311,25 +320,21 @@ boundaries:
     - history before the cutover becomes one sealed archive chained into
       the new tape's first event.
   proof_ring_and_cutover: >-
-    The proof ring and the single cutover are reconciled this way.
-    "On, never off everywhere; widen by ring" (owner 2026-10-28) is
-    satisfied by running the new system whole on the d@e test computer
-    and in the rehearsal. "Never two data systems" (owner 2026-10-30) is
-    satisfied because no mechanism widens to the fleet piecemeal: the
-    fleet moves once, in B8. The host-side PostgreSQL and blob store that
-    the proof ring needs run beside the old stores only until B8.
+    d@e runs the migration first and is drilled. Then the fleet moves in
+    one cutover (C5). Nothing widens piecemeal.
   owner_gates: >-
-    These are the only blocking asks, under No Blocking Asks:
-    - executing the fleet cutover in B8;
-    - deleting the old data directories after the rollback week;
-    - any write to the paper's or the owner's live computers beyond what
-      a normal deploy does.
-
-    Everything else proceeds on continuous authority.
+    None. The owner authorized the fleet cutover and the deletion of the
+    old data (2026-10-30 ~06:40 UTC). Downtime is acceptable.
+  backup: >-
+    The nightly off-host backup is skipped by owner direction. The timer
+    was stopped at 06:10 UTC on 10-30, and a runtime drop-in,
+    /run/systemd/system/go-choir-offhost-backup.service.d/skip-during-cutover.conf,
+    makes the service skip even if a deploy restarts the timer. I7
+    rebuilds the backup for the new stores and re-enables it.
   must_preserve:
     - the keep set (newspaper content, the Autopaper object graph, the owner's emails, Textures, precommitment records, the agent record)
     - crash restarts close work, planned restarts with a marker resume; no new boot-time resumer
-    - the paper and the owner's computers are never used for adversarial or proof steps
+    - the paper and the owner's computers are never used for adversarial drills (d@e takes those); their migration in C5 is authorized
     - Texture is the sole agent writer of documents; one home and one writer per kind
     - the tape is never rewritten in place; restore is a forward event
     - "production measurements are read-only: reflink copies, MemoryMax/nice/ionice, load under ~6, paper health watched, metadata only for user data"
@@ -343,7 +348,7 @@ boundaries:
   verification: >-
     Runtime checks are the verifier; there is no code-review gate. In order
     of strength:
-    - B0's drills on the proof ring and in the rehearsal;
+    - C0's drills on d@e and then on the fleet;
     - the hard gates;
     - the differential (migrated state answers like the Dolt state);
     - the keep-set counts and hashes;
@@ -355,14 +360,15 @@ boundaries:
 
     A drill that has not run on the proof ring proves nothing. The
     irreversible steps are covered by runtime evidence, not review: the
-    cutover needs the rehearsal's differential green, and the old data is
-    deleted only on the owner's word after the rollback week.
+    old data is deleted only after the differential and the keep-set
+    checks are green on the migrated fleet (owner authorized the deletion,
+    2026-10-30 ~06:40 UTC).
   build_in_bulk: >-
-    B1 to B7 are built together, in parallel where they do not touch the
+    C1 to C3 are built together, in parallel where they do not touch the
     same packages. Parallel builders are Sonnet subagents in their own
-    worktrees, working against B0's harness. Code lands on main as it
+    worktrees, working against C0's harness. Code lands on main as it
     builds, enabled only for the proof ring (the d@e test computer), and is
-    drilled there as one system. Nothing widens to the fleet before B8.
+    drilled there as one system. Nothing widens to the fleet before C5.
   agents: >-
     Opus for design and adjudication. Sonnet subagents for following a
     plan, optimizing a metric and investigations (owner 2026-10-22).
@@ -371,7 +377,8 @@ boundaries:
 now:
   status: working
   slice: >-
-    D0, frame review round 1. Devin returned accept_with_notes (F1 to F5)
+    D0, folding round 1. Phase 1 aims for the fleet on the new system as
+    fast as possible (owner, 06:40 UTC). Round 1 status: Devin returned accept_with_notes (F1 to F5)
     and the Sonnet seat returned send_back (B1 to B7); both outputs are in
     .agentic-consensus/frame-r1/out/ (devin.out, sonnet.out). DeepSeek was
     still running at authoring (omp-deepseek-v41-flash.out). The two
@@ -406,11 +413,11 @@ now:
 
       That advances PSA, self-development and enterprise auditability.
     test: >-
-      The hard gates and B0's drills: on the proof ring, in the rehearsal
-      at real sizes, then on the fleet. The before-and-after resource
+      The hard gates and C0's drills: on the proof ring, then on the
+      fleet. The before-and-after resource
       numbers are set against the §12 precommitments.
-    edge: missing_oracle (no drill harness exists yet; B0 builds it)
-    delta_o: B0
+    edge: missing_oracle (no drill harness exists yet; C0 builds it)
+    delta_o: C0
     scope_if_supported: Node B at today's fleet and the paper's rate; the interfaces are argued for multi-host, not proved
     status: active
     evidence_refs: [docs/evidence/paper-tape-composition-2026-10-30.md, docs/evidence/tape-window-sizing-2026-10-30.md, docs/evidence/new-engine-storage-measurement-2026-10-30.md]
@@ -428,32 +435,37 @@ now:
       The frame is coherent and matches the code on single writer. Its
       class shares rest on one measured day (replicated on a second).
     main_uncertainty: >-
-      The size of the guest-store port from Dolt to SQLite (B1). The
+      The size of the guest-store port from Dolt to SQLite (C1). The
       question is whether guest code depends on Dolt-only behavior:
       commits, AS OF, DOLT_HASHOF_TABLE in witness v2, the dirty-gated
       checkpoint in Texture history. This is the biggest schedule risk
-      and decides whether B1 is days or weeks.
+      and decides whether C1 is days or weeks.
     next_observation: >-
       The frame round-1 verdicts. Then a Sonnet census of the Dolt-specific
       calls in internal/store, internal/computerversion and
       internal/textureowner, which can run during D1.
   blocker_or_risk: >-
-    - Node B disk: 99 GB free. The 10-31 ~03:00 UTC backup rewrites a
-      52 GB copy, so check `df` before heavy steps, and do not run the
-      rehearsal until there is room for reflink copies plus PostgreSQL.
+    - Node B disk: 99 GB free. Tonight's backup is skipped, so the 52 GB
+      Store A copy is not rewritten. Check `df` before the migration: old
+      and new state coexist until C5's checks are green. The paper's
+      data.img is 57 GB; the migration writes SQLite next to its Dolt
+      state inside the guest volume, so check the guest volume's free
+      space too.
     - The paper's health flickers.
     - Load was 11.4 at capture.
   next_action: >-
-    1. Collect round 1: .agentic-consensus/frame-r1/out/{devin.out,
-       omp-deepseek-v41-flash.out} (manifest.tsv shows the status) and
-       the Sonnet seat's result.
-    2. Adjudicate each finding by the owner's criteria order.
-    3. Revise the frame (commit as green; append a revision log to the
-       frame).
-    4. Freeze the frame and file ledger round 0m, with no further rounds.
-    5. D1: cut the two detailed designs to the frame.
-    6. D2: write the build plan section.
-    7. Start B0 (the drills), then B1 to B7 in bulk.
+    1. D0: read round 1 in .agentic-consensus/frame-r1/out/ (devin.out,
+       sonnet.out, and omp-deepseek-v41-flash.out if it has landed). Fold
+       the findings into frame revision 2 in one pass, freeze it, and
+       file ledger round 0m.
+    2. D1: the build sheet. Start the Dolt-call census at the same time:
+       a Sonnet subagent counts the Dolt-specific calls in internal/store,
+       internal/computerevent, internal/computerversion,
+       internal/textureowner and platform/corpusd.
+    3. Fan out C0 to C3 as parallel Sonnet builders in worktrees, split by
+       package boundary.
+    4. C4 on d@e.
+    5. C5 for the fleet.
 
 receipts:
   - id: selection-superseded
@@ -481,7 +493,7 @@ Owner, 2026-10-30 ~06:30 UTC: "Remember, we are working at agentic speed. We can
   once (D0). After that, nothing waits on a reviewer.
 - Every claim a station makes is settled by a run: a drill, a hard gate,
   the differential, or deployed acceptance. Round 1 found classes of
-  defect that only a run settles, and B0 must drill each:
+  defect that only a run settles. C0 drills the ones the cutover needs, and phase 2 drills the rest:
   - fencing, so a stale computer cannot keep writing;
   - effects held until their receipt (the barrier);
   - restore composition: acts and the agent record survive a rewind;
