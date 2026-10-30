@@ -27,7 +27,7 @@ import (
 //  S1. the head recorded is not the head of the pages (a write commits while
 //      the stream runs): restore replays from the wrong sequence;
 //  S2. the witness recorded in the stream's transaction differs from the one
-//      restore recomputes from the reassembled file (verifySnapshotFile is the
+//      restore recomputes from the reassembled file (VerifySnapshotFile is the
 //      check restore itself uses, so a mismatch is a refused restore);
 //  S3. the stream queues the store's writes: with a writer committing
 //      continuously, the commit count during the snapshot must keep growing;
@@ -218,7 +218,7 @@ func restoreStream(t *testing.T, tape *streamTape, cipher *computerevent.Private
 	dest := filepath.Join(t.TempDir(), "state.db")
 	record, err := snapshot.Restore(context.Background(), snapshot.RestoreConfig{
 		ComputerID: streamComputer, DestPath: dest, Source: tape, Chunks: tape, Cipher: cipher,
-		Verify: verifySnapshotFile,
+		Verify: VerifySnapshotFile,
 	})
 	if err != nil {
 		t.Fatalf("restore with the witness check: %v", err)

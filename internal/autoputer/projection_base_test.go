@@ -251,3 +251,56 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 		t.Fatalf("restored witness root %s, the snapshot recorded %s", got.ContentRoot, ref.Record.WitnessRoot)
 	}
 }
+
+// A snapshot whose recorded witness disagrees with its own pages is refused
+// at boot, though its chunks open under the computer key: the seal proves
+// who wrote it, not that the producer recorded the right witness.
+func TestMaterializeRefusesASnapshotWhosePagesDisagreeWithItsWitness(t *testing.T) {
+	ctx := context.Background()
+	const computerID = "computer-restore-bad-witness"
+	keyPath := writePrivacyKey(t, computerID)
+	t.Setenv("CHOIR_PRIVACY_KEY_FILE", keyPath)
+	cipher, err := computerevent.LoadGuestPrivateArtifactCipher(keyPath, computerID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := dbxtest.SQLite(t)
+	if _, err := source.Write.Exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'kept')`); err != nil {
+		t.Fatal(err)
+	}
+	platform := newBootServer(&computerevent.Head{ComputerID: computerID, Sequence: 12, CanonicalEventHead: strings.Repeat("c", 64)})
+	server := httptest.NewServer(platform)
+	defer server.Close()
+	if _, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
+		ComputerID: computerID, DB: source.Read,
+		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
+			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
+		},
+		// A producer bug: the witness of other content under the same schema.
+		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
+			if err != nil {
+				return selfdevprotocol.VMLocalContentWitness{}, err
+			}
+			digests.Tables["notes"] = strings.Repeat("d", 64)
+			return selfdevprotocol.WitnessFromDigests(digests)
+		},
+		Cipher:   cipher,
+		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
+		Appender: &snapshotTape{platform: platform},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	_, materialized, err := materializeProjectionBaseIfNeeded(ctx, storePath, computerID, server.URL, testCapability, nil)
+	if err == nil || materialized {
+		t.Fatalf("a snapshot with a wrong witness installed: materialized=%t err=%v", materialized, err)
+	}
+	if !strings.Contains(err.Error(), "verify") {
+		t.Fatalf("refusal does not name the witness check: %v", err)
+	}
+	if _, statErr := os.Stat(choirstore.StateDBPath(storePath)); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("a refused snapshot left a state file: %v", statErr)
+	}
+}

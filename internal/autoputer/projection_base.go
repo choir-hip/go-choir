@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
@@ -198,6 +199,10 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	record, err := snapshot.Install(ctx, snapshot.RestoreConfig{
 		ComputerID: computerID, DestPath: statePath, Source: events, Chunks: chunks, Cipher: cipher,
 		MaxSequence: targetSeq,
+		// The chunks are authenticated by their seal; this checks that the
+		// pages agree with the witness the producer recorded. A snapshot that
+		// fails falls back to the next older one.
+		Verify: agentcore.VerifySnapshotFile,
 	}, candidates)
 	if err != nil {
 		if live != nil {

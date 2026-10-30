@@ -133,7 +133,7 @@ func (rt *Runtime) openStagedStore(ctx context.Context, tape restoreTape, stagin
 		Chunks:      tape,
 		Cipher:      rt.privateArtifactCipher,
 		MaxSequence: plan.sequence,
-		Verify:      verifySnapshotFile,
+		Verify:      VerifySnapshotFile,
 	}, plan.candidates)
 	if err != nil {
 		return nil, snapshot.Record{}, fmt.Errorf("%w: install snapshot: %v", recoveryplan.ErrBaseRefused, err)
@@ -145,9 +145,11 @@ func (rt *Runtime) openStagedStore(ctx context.Context, tape restoreTape, stagin
 	return staged, record, nil
 }
 
-// verifySnapshotFile checks the unsealed file against the witness the
-// snapshot recorded, before it is installed.
-func verifySnapshotFile(ctx context.Context, record snapshot.Record, path string) error {
+// VerifySnapshotFile checks the unsealed file against the witness the
+// snapshot recorded, before it is installed. Both install paths use it: the
+// staged restore here and the boot install after a lost disk
+// (autoputer/projection_base.go).
+func VerifySnapshotFile(ctx context.Context, record snapshot.Record, path string) error {
 	db, err := dbx.OpenSQLite(path, dbx.SQLiteOptions{ReadConns: 1})
 	if err != nil {
 		return fmt.Errorf("open unsealed snapshot: %w", err)
