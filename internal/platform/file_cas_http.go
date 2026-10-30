@@ -105,6 +105,10 @@ func (h *Handler) HandleFileCASChunk(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "chunk digest mismatch"})
 			return
 		}
+		if why := h.service.fileCASSpaceRefusal(); why != "" {
+			writeJSON(w, http.StatusInsufficientStorage, apiError{Error: why})
+			return
+		}
 		if err := h.service.PinFileChunk(r.Context(), computerID, digest, data); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return

@@ -17,12 +17,18 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
+	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
 func TestMain(m *testing.M) {
 	// pgx scans timestamptz as time.Local; hosts run in UTC, so tests do too.
 	time.Local = time.UTC
+	// Chunk writes check the host volume's free space; a test runner's disk
+	// is not the host's, so tests see a roomy volume unless they say otherwise.
+	fileCASVolumeUsage = func(string) (persistentdisk.Usage, error) {
+		return persistentdisk.Usage{TotalBytes: 1 << 40, UsedBytes: 1 << 39, AvailBytes: 1 << 39}, nil
+	}
 	os.Exit(dbxtest.Main(m))
 }
 
