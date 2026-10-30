@@ -147,6 +147,9 @@ func copyOne(ctx context.Context, cfg Config, name, srcDSN, dstDSN string) (*row
 		Tables:   cfg.Tables,
 		DryRun:   cfg.DryRun,
 		Parallel: cfg.Parallel,
+		// Short keyset pages: one long scan through the Dolt sql-server
+		// stalled (rowcopy.Options.PageRows).
+		PageRows: 50000,
 		Logf:     logf,
 		// A --tables filter spans both databases; Run checks the union.
 		LenientFilter: len(cfg.Tables) > 0,

@@ -31,12 +31,14 @@ type Options struct {
 	// transaction (defaults 500 rows, 8 MiB).
 	BatchRows  int
 	BatchBytes int
-	// PageRows bounds the rows one source query returns (default 50000): a
+	// PageRows, when set, bounds the rows one source query returns: a
 	// table with a primary key is read in key order, page by page, each page
 	// resuming after the previous page's last key, inside the same source
-	// transaction. One long scan of Store A's receipts (about 6M rows)
-	// stopped returning rows after 2.75M and 5.5M at C5 while Dolt spun a
-	// core (2026-10-30).
+	// transaction. The host copy sets it: one long scan of Store A's receipts
+	// (about 6M rows) through the Dolt sql-server stopped returning rows
+	// after 2.75M and 5.5M at C5 while Dolt spun a core (2026-10-30). Unset,
+	// each table is one stream, which the embedded Dolt of the guest
+	// migration reads about 5x faster (the paper's 11.5M rows streamed).
 	PageRows int
 	// Parallel is how many tables a PostgreSQL target copies at once
 	// (default 1; ignored when the tables have foreign keys among them, and
@@ -123,9 +125,6 @@ func Run(ctx context.Context, src, dst *sql.DB, kind dbx.Kind, opts Options) (*R
 	}
 	if opts.BatchBytes <= 0 {
 		opts.BatchBytes = 8 << 20
-	}
-	if opts.PageRows <= 0 {
-		opts.PageRows = 50000
 	}
 	if opts.Logf == nil {
 		opts.Logf = func(string, ...any) {}
