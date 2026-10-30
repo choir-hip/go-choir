@@ -1,7 +1,6 @@
 package selfdevprotocol
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -25,25 +24,20 @@ var restoreOutOfScopeDatabases = map[string]struct{}{
 }
 
 // VMLocalContentWitness is the verification commitment for the event-derived
-// VM-local Dolt projection. DoltHead is an audit receipt, never the restore address.
+// VM-local SQLite projection (witness v3, witness_v3.go). ContentRoot commits
+// to SchemaHash and every table digest; it is the restore address of the
+// projection's content.
 type VMLocalContentWitness struct {
-	Database           string            `json:"database"`
-	ContentRoot        string            `json:"content_root"`
-	Schema             map[string]string `json:"schema"`
+	Database    string `json:"database"`
+	ContentRoot string `json:"content_root"`
+	// SchemaHash is the SHA-256 over sqlite_master (sql text, sorted by name).
+	SchemaHash string `json:"schema_hash"`
+	// Tables is the per-table SHA-256 over the rows in primary-key order.
 	Tables             map[string]string `json:"tables"`
-	DoltHead           string            `json:"dolt_head"`
 	DerivabilityDigest string            `json:"derivability_digest"`
-	// WitnessVersion is 0 (or 1) for the row witness above and 2 for the
-	// hash-only witness (witness_v2.go). A reader refuses a version it does
-	// not know.
-	WitnessVersion int `json:"witness_version,omitempty"`
-	// DoltTables is the per-table Dolt content hash (DOLT_HASHOF_TABLE) of
-	// every table but the operational ones: a v2 witness's whole content, and
-	// recorded alongside the row hashes on a host base so it can judge v2.
-	DoltTables map[string]string `json:"dolt_tables,omitempty"`
-	// OperationalTables are left out of DoltTables by construction: their
-	// wall-clock columns differ between a live store and a replay.
-	OperationalTables []string `json:"operational_tables,omitempty"`
+	// WitnessVersion is 3. A reader refuses every other version
+	// (RefuseWitnessVersion): 1 and 2 were Dolt witnesses.
+	WitnessVersion int `json:"witness_version"`
 }
 
 // FrontendIdentity names the served computer-surface SPA. A checkpoint without
@@ -63,47 +57,10 @@ type RestoreRequest struct {
 }
 
 func (w VMLocalContentWitness) Validate() error {
-	switch w.version() {
-	case WitnessVersionRows:
-	case WitnessVersionDoltHashes:
-		return w.validateV2()
-	default:
-		return fmt.Errorf("self-development checkpoint: unknown VM-local content witness version %d", w.WitnessVersion)
+	if err := RefuseWitnessVersion(w.version()); err != nil {
+		return err
 	}
-	if len(w.DoltTables) > 0 {
-		if err := validateDoltTables(w.DoltTables); err != nil {
-			return err
-		}
-	}
-	database := strings.TrimSpace(w.Database)
-	if database == "" {
-		return fmt.Errorf("self-development checkpoint: VM-local content witness is required")
-	}
-	if _, banned := restoreOutOfScopeDatabases[database]; banned {
-		return fmt.Errorf("self-development checkpoint: %s store is out of restore scope", database)
-	}
-	if strings.TrimSpace(w.DoltHead) == "" || !computerevent.IsSHA256(w.ContentRoot) || !computerevent.IsSHA256(w.DerivabilityDigest) {
-		return fmt.Errorf("self-development checkpoint: VM-local content witness digests are required")
-	}
-	if len(w.Schema) == 0 || len(w.Tables) == 0 || len(w.Schema) != len(w.Tables) {
-		return fmt.Errorf("self-development checkpoint: VM-local schema and table hashes are required")
-	}
-	for table, schemaHash := range w.Schema {
-		table = strings.TrimSpace(table)
-		if table == "" || !computerevent.IsSHA256(schemaHash) {
-			return fmt.Errorf("self-development checkpoint: VM-local schema hash is incomplete")
-		}
-		tableHash, ok := w.Tables[table]
-		if !ok || !computerevent.IsSHA256(tableHash) {
-			return fmt.Errorf("self-development checkpoint: VM-local table hash is incomplete")
-		}
-	}
-	for table := range w.Tables {
-		if _, ok := w.Schema[table]; !ok {
-			return fmt.Errorf("self-development checkpoint: VM-local table hash is incomplete")
-		}
-	}
-	return nil
+	return w.validateV3()
 }
 
 func (f FrontendIdentity) Validate(releaseDigest string) error {
@@ -162,9 +119,13 @@ func RestoreFromRequest(request RestoreRequest, checkpoint Checkpoint) error {
 	return nil
 }
 
+// WitnessFromObservationSets seals the v3 witness of a live store that a
+// replay reproduced exactly: it refuses unless the two sets are equivalent and
+// carry the same root.
 func WitnessFromObservationSets(live, replay computerversion.ObservationSet, result computerversion.EquivalenceResult) (VMLocalContentWitness, error) {
+	notDerivable := fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
 	if !result.Equivalent() {
-		return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
+		return VMLocalContentWitness{}, notDerivable
 	}
 	liveWitness, err := witnessFromObservations(live)
 	if err != nil {
@@ -174,42 +135,39 @@ func WitnessFromObservationSets(live, replay computerversion.ObservationSet, res
 	if err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	if liveWitness.Database != replayWitness.Database || liveWitness.ContentRoot != replayWitness.ContentRoot {
-		return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
+	if liveWitness.Database != replayWitness.Database || liveWitness.ContentRoot != replayWitness.ContentRoot || liveWitness.SchemaHash != replayWitness.SchemaHash || len(liveWitness.Tables) != len(replayWitness.Tables) {
+		return VMLocalContentWitness{}, notDerivable
 	}
-	if len(liveWitness.Schema) != len(replayWitness.Schema) || len(liveWitness.Tables) != len(replayWitness.Tables) {
-		return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
-	}
-	for table, schemaHash := range liveWitness.Schema {
-		if replayWitness.Schema[table] != schemaHash || replayWitness.Tables[table] != liveWitness.Tables[table] {
-			return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: behavior-bearing VM-local rows are not event- or receipt-derivable")
+	for table, digest := range liveWitness.Tables {
+		if replayWitness.Tables[table] != digest {
+			return VMLocalContentWitness{}, notDerivable
 		}
 	}
-	digest, err := witnessDerivabilityDigest(liveWitness)
+	sealed, err := SealWitness(liveWitness)
 	if err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	liveWitness.DerivabilityDigest = digest
-	if err := liveWitness.Validate(); err != nil {
+	if err := sealed.Validate(); err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	return liveWitness, nil
+	return sealed, nil
 }
 
+// WitnessFromObservationSet seals a v3 witness from one extraction's
+// observations (computerversion.SQLiteStateExtractor.Extract).
 func WitnessFromObservationSet(set computerversion.ObservationSet) (VMLocalContentWitness, error) {
 	witness, err := witnessFromObservations(set)
 	if err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	digest, err := witnessDerivabilityDigest(witness)
+	sealed, err := SealWitness(witness)
 	if err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	witness.DerivabilityDigest = digest
-	if err := witness.Validate(); err != nil {
+	if err := sealed.Validate(); err != nil {
 		return VMLocalContentWitness{}, err
 	}
-	return witness, nil
+	return sealed, nil
 }
 
 type ReleaseFile struct {
@@ -247,9 +205,9 @@ func FrontendIdentityFromReleaseFiles(releaseDigest string, files []ReleaseFile)
 }
 
 func witnessFromObservations(set computerversion.ObservationSet) (VMLocalContentWitness, error) {
-	witness := VMLocalContentWitness{Schema: map[string]string{}, Tables: map[string]string{}}
+	witness := VMLocalContentWitness{WitnessVersion: WitnessVersionSQLite, Tables: map[string]string{}}
 	for _, observation := range set.Observations {
-		database, kind, table, ok := parseDoltObservationKey(observation.Key)
+		database, kind, table, ok := parseStateObservationKey(observation.Key)
 		if !ok {
 			continue
 		}
@@ -262,12 +220,10 @@ func witnessFromObservations(set computerversion.ObservationSet) (VMLocalContent
 			return VMLocalContentWitness{}, fmt.Errorf("self-development checkpoint: VM-local content witness spans multiple databases")
 		}
 		switch kind {
-		case "head":
-			witness.DoltHead = doltHeadAuditReceipt(observation.Value)
 		case "content_root":
 			witness.ContentRoot = observationDigest(observation.Value)
 		case "schema":
-			witness.Schema[table] = observationDigest(observation.Value)
+			witness.SchemaHash = observationDigest(observation.Value)
 		case "table":
 			witness.Tables[table] = observationDigest(observation.Value)
 		}
@@ -278,8 +234,11 @@ func witnessFromObservations(set computerversion.ObservationSet) (VMLocalContent
 	return witness, nil
 }
 
-func parseDoltObservationKey(key string) (database, kind, table string, ok bool) {
-	const prefix = "dolt:"
+// parseStateObservationKey reads the keys SQLiteStateExtractor writes:
+// sqlite:D:schema, sqlite:D:content_root, sqlite:D:table:T. The per-table
+// schema keys (sqlite:D:schema:T) are diagnostics and are skipped.
+func parseStateObservationKey(key string) (database, kind, table string, ok bool) {
+	const prefix = "sqlite:"
 	if !strings.HasPrefix(key, prefix) {
 		return "", "", "", false
 	}
@@ -289,14 +248,8 @@ func parseDoltObservationKey(key string) (database, kind, table string, ok bool)
 		return "", "", "", false
 	}
 	switch {
-	case rest == "head" || rest == "content_root":
+	case rest == "schema" || rest == "content_root":
 		return database, rest, "", true
-	case strings.HasPrefix(rest, "schema:"):
-		table = strings.TrimPrefix(rest, "schema:")
-		if table == "" {
-			return "", "", "", false
-		}
-		return database, "schema", table, true
 	case strings.HasPrefix(rest, "table:"):
 		table = strings.TrimPrefix(rest, "table:")
 		if table == "" {
@@ -311,19 +264,6 @@ func parseDoltObservationKey(key string) (database, kind, table string, ok bool)
 func stripDigestPrefix(value string) string {
 	value = strings.TrimSpace(value)
 	return strings.TrimPrefix(value, "sha256:")
-}
-
-func doltHeadAuditReceipt(value string) string {
-	var payload struct {
-		CommitHash string `json:"commit_hash"`
-	}
-	if json.Unmarshal([]byte(strings.TrimSpace(value)), &payload) == nil && strings.TrimSpace(payload.CommitHash) != "" {
-		return strings.TrimSpace(payload.CommitHash)
-	}
-	if receipt := strings.TrimSpace(value); receipt != "" {
-		return receipt
-	}
-	return stripDigestPrefix(value)
 }
 
 func observationDigest(value string) string {

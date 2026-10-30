@@ -81,7 +81,7 @@ func TestWitnessFromObservationSetsRefusesLiveOnlyRowsAndOutOfScopeStores(t *tes
 	}
 
 	mismatched := computerversion.EquivalenceResult{Status: computerversion.EquivalenceNotEquivalent, Differences: []computerversion.Difference{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:choir:table:agents", Left: "live-only", Right: "", Reason: "live-only row",
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:choir:table:agents", Left: "live-only", Right: "", Reason: "live-only row",
 	}}}
 	if _, err := WitnessFromObservationSets(live, observationSet("choir", "agents", "a", "c"), mismatched); err == nil {
 		t.Fatal("witness accepted live-only behavior-bearing rows")
@@ -145,26 +145,23 @@ func testCheckpointRequest(t *testing.T) CheckpointRequest {
 		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('1'), EffectiveStateCommitment: digest('2'), EventHeadReceiptID: "receipt-test",
 		ReleaseDigest: request.ReleaseDigest, ReconstructionDigest: digest('3'), MaterializationReceiptDigest: digest('4'),
 		VerifierCertificateDigest: computerevent.DigestBytes(certificateJSON), VerifierCertificate: response, ReducerVersion: 1,
-		VMLocalContentWitness: VMLocalContentWitness{
-			Database: "choir", ContentRoot: digest('7'), DoltHead: digest('8'), DerivabilityDigest: digest('9'),
-			Schema: map[string]string{"agents": digest('a')},
-			Tables: map[string]string{"agents": digest('b')},
-		},
+		VMLocalContentWitness: testWitnessV3("choir"),
 		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
 	}
 }
 
 func observationSet(database, table, schemaSeed, tableSeed string) computerversion.ObservationSet {
 	digest := func(seed string) string { return strings.Repeat(seed[:1], 64) }
+	root := computerversion.WitnessV3ContentRoot(digest(schemaSeed), map[string]string{table: digest(tableSeed)})
 	return computerversion.ObservationSet{
-		Name:     "test-dolt",
+		Name:     "test-sqlite",
 		Version:  computerversion.ComputerVersion{CodeRef: "code:test", ArtifactProgramRef: "artifact:test"},
 		Required: []computerversion.ObservationKind{computerversion.ObservationDoltHead},
 		Observations: []computerversion.Observation{
-			{Kind: computerversion.ObservationDoltHead, Key: "dolt:" + database + ":head", Value: "sha256:" + digest("e")},
-			{Kind: computerversion.ObservationDoltHead, Key: "dolt:" + database + ":content_root", Value: "sha256:" + digest("d")},
-			{Kind: computerversion.ObservationDoltHead, Key: "dolt:" + database + ":schema:" + table, Value: "sha256:" + digest(schemaSeed)},
-			{Kind: computerversion.ObservationDoltHead, Key: "dolt:" + database + ":table:" + table, Value: "sha256:" + digest(tableSeed)},
+			{Kind: computerversion.ObservationDoltHead, Key: "sqlite:" + database + ":content_root", Value: "sha256:" + root},
+			{Kind: computerversion.ObservationDoltHead, Key: "sqlite:" + database + ":schema", Value: "sha256:" + digest(schemaSeed)},
+			{Kind: computerversion.ObservationDoltHead, Key: "sqlite:" + database + ":schema:" + table, Value: "sha256:" + digest(schemaSeed)},
+			{Kind: computerversion.ObservationDoltHead, Key: "sqlite:" + database + ":table:" + table, Value: "sha256:" + digest(tableSeed)},
 		},
 	}
 }

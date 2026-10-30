@@ -40,11 +40,7 @@ func TestVerifierCertificateBindsIndependentDecisionAndCheckpoint(t *testing.T) 
 		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('1'), EffectiveStateCommitment: digest('2'), EventHeadReceiptID: "receipt-test",
 		ReleaseDigest: request.ReleaseDigest, ReconstructionDigest: digest('3'), MaterializationReceiptDigest: digest('4'),
 		VerifierCertificateDigest: computerevent.DigestBytes(certificateJSON), VerifierCertificate: response, ReducerVersion: 1,
-		VMLocalContentWitness: VMLocalContentWitness{
-			Database: "choir", ContentRoot: digest('7'), DoltHead: digest('8'), DerivabilityDigest: digest('9'),
-			Schema: map[string]string{"agents": digest('a')},
-			Tables: map[string]string{"agents": digest('b')},
-		},
+		VMLocalContentWitness: testWitnessV3("choir"),
 		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
 	}
 	if _, _, err := CheckpointFromRequest(checkpoint); err != nil {
@@ -68,11 +64,7 @@ func ownerRecoveryTestRequest() CheckpointRequest {
 		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('2'), EffectiveStateCommitment: digest('2'),
 		EventHeadReceiptID: "receipt-test", ReleaseDigest: digest('f'), ReconstructionDigest: digest('3'),
 		ReducerVersion: 1, OwnerRecovery: true,
-		VMLocalContentWitness: VMLocalContentWitness{
-			Database: "texture", ContentRoot: digest('7'), DoltHead: digest('8'), DerivabilityDigest: digest('9'),
-			Schema: map[string]string{"agents": digest('a')},
-			Tables: map[string]string{"agents": digest('b')},
-		},
+		VMLocalContentWitness: testWitnessV3("texture"),
 		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationRelease, ReleaseDigest: digest('f')},
 	}
 }

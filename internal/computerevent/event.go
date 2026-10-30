@@ -59,6 +59,10 @@ const (
 	EventRestoreRequested        EventKind = "restore_requested"
 	EventProjectionBatchRecorded EventKind = "projection_batch_recorded"
 	EventFileRootCommitted       EventKind = "file_root_committed"
+	// EventSnapshotRecorded names a sealed SQLite snapshot of the guest store
+	// (internal/snapshot): the boot path restores the newest one when the
+	// computer's disk is missing, then replays the events after its sequence.
+	EventSnapshotRecorded EventKind = "snapshot_recorded"
 )
 
 var validEventKinds = map[EventKind]struct{}{
@@ -70,7 +74,7 @@ var validEventKinds = map[EventKind]struct{}{
 	EventRollbackApplied: {}, EventResearchUpdate: {}, EventCheckpointPublished: {},
 	EventRouteProjectionUpdated: {}, EventLifecycleObserved: {}, EventKeyRotated: {},
 	EventKeyRevoked: {}, EventRecoveryRecorded: {}, EventRestoreRequested: {},
-	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {},
+	EventProjectionBatchRecorded: {}, EventFileRootCommitted: {}, EventSnapshotRecorded: {},
 }
 
 // Event is the complete V1 semantic event envelope. Event bodies contain no
