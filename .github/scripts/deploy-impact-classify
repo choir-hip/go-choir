@@ -151,7 +151,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation (a host unit script read into the system closure)"
       continue
       ;;
-    scripts/check-*.sh|scripts/test-platform-dolt-squash.sh|scripts/test-dolt-history-audit.sh|scripts/off-host-backup-*-test.sh|scripts/off-host-restore-drill.sh|scripts/test-node-b-*.sh|scripts/m3_*|scripts/mail-*|scripts/*.mjs|scripts/*.py|scripts/ograph-bench/*|scripts/density/*)
+    scripts/check-*.sh|scripts/off-host-backup-*-test.sh|scripts/off-host-restore-drill.sh|scripts/test-node-b-*.sh|scripts/m3_*|scripts/mail-*|scripts/*.mjs|scripts/*.py|scripts/ograph-bench/*|scripts/density/*)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
@@ -244,16 +244,6 @@ for path in "${changed[@]}"; do
     cmd/checkpointd/*)
       add_host_service "checkpointd"
       add_explanation "$path -> isolated projection checkpoint worker"
-      ;;
-    internal/projectionbase/*)
-      add_host_service "checkpointd"
-      add_host_service "corpusd"
-      add_host_service "gateway"
-      add_host_service "proxy"
-      add_host_service "autoputer"
-      add_host_service "vmctl"
-      mark_guest_boot_contract
-      add_explanation "$path -> projection recovery consumers + isolated checkpoint worker"
       ;;
     cmd/corpusd/*)
       add_host_service "corpusd"

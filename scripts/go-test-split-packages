@@ -8,5 +8,4 @@
 ./internal/store
 ./internal/platform
 ./internal/objectgraph
-./internal/projectionbase
 ./internal/actorruntime
