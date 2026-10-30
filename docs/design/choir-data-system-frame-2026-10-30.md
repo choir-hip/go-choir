@@ -14,6 +14,209 @@ The two detailed designs, object storage
 970 lines), kept growing because nothing above them said what the system is.
 This is that frame. They get cut down to fit it, not the other way round.
 
+## Revision 2 (2026-10-30): review round 1 folded in
+
+This section is binding. Where text further down conflicts with it, this
+section wins. Review round 1 ran at 3f4dafb7e:
+
+- Devin: accept_with_notes, F1 to F5.
+- Sonnet: send_back, B1 to B7.
+- DeepSeek v4.1 flash: send_back, B1 to B7.
+
+All three outputs are in `.agentic-consensus/frame-r1/out/`. The three
+seats converged, and every finding below is adopted unless it is marked
+*phase 2*. Phase 1 gets the fleet onto the new system (goal stations C0 to
+C5); phase 2 is the I-stations in the goal. The owner directed that no
+further review rounds run.
+
+### The rules, amended
+
+1. **Single writer, fenced.**
+   - The writer epoch is the realization epoch, held in one lease row per
+     computer in the control database.
+   - The epoch travels in the append capability and is checked inside
+     the append transaction. Renewing a capability never crosses an
+     epoch.
+   - The order is always: fence (bump the epoch), then stop the old VM,
+     then read the head, then boot.
+   - The computer ships a batch only after its local commit is fsynced
+     (SQLite `synchronous=FULL` for the outbox).
+   - The host mints capabilities after the credential-envelope exchange
+     (`credential_envelope.go:216-241`); that closes the earlier "[I] who
+     mints".
+   - Today's refusal path is at `appender.go:733-743`. The
+     prepare-then-recover path already closes the old crash window.
+   - Single writer is policy plus code, not cryptography. *Phase 2*: each
+     batch is signed by a computer key registered at genesis, so an
+     export can tell computer-written events from host-written ones.
+2. **The barrier, made closed.**
+   - Gate-bearing semantic kinds stay synchronous: append, then apply.
+     These are `effect_*`, `materialization_*`, `rollback_*`, `key_*`,
+     lifecycle, restore and checkpoint. Only projection batches use the
+     outbox.
+   - Effects take the egressgrant classes (`internal/egressgrant`: read,
+     idempotent-write, visible-write, money, irreversible).
+   - *Phase 2* (I2): every egress passes a host mediator that checks the
+     epoch and `receipted_head >= cause_seq`. The mediators are the
+     gateway, maild, publish, vmctl apply and the owner websocket.
+     Information-flow effects (model, tool, search and fetch calls) carry
+     a request manifest in the agent record, and that manifest is
+     receipted first.
+   - The outbox holds events only. A waiting effect is an in-memory
+     continuation, and a crash closes it as "interrupted".
+   - The outbox applies backpressure: an agent step blocks when the
+     unreceipted depth or age passes a bound.
+   - Files are covered by file-sync events until phase 2 events every
+     file write, so the loss bound for files is the sync interval.
+   - `desk.egress` moves to the agent record.
+3. **Restore by table composition, never rewinding acts or the agent
+   record.**
+   - Events are class-pure: the flusher splits a transaction's operations
+     by class into separate events in the same batch.
+   - Restoring to P takes the working-state tables from the snapshot at
+     or before P, plus replay up to P across all classes. Act and
+     agent-record tables are carried forward unchanged from the head. No
+     events after P are replayed.
+   - Act and agent-record kinds reference only acts, records or blobs.
+     Pointer kinds are working state; a document head is one, so a rewind
+     moves a document's head back to its revision at P, and the later
+     revisions stay as history. Readers tolerate absent subjects.
+   - Idempotency receipts are classed with the act they guard.
+   - A rewind boots the release that was in force at P, or the owner's
+     pick.
+   - Restore is refused while a self-development apply is pending or a
+     capsule is live.
+   - A restore is a crash-class boot: it closes open work and never
+     resumes.
+   - The restore runs as an idempotent vmctl job.
+   - All of this is *phase 2* (I1), except the migration snapshot, which
+     is phase 1.
+4. **Deletion by ownership.** Each blob class has one owner:
+   - private blobs: the computer, which deletes by act;
+   - public bodies: the Autopaper object graph, by a graph takedown act;
+     a tenant never deletes them;
+   - seed and release blobs: the platform, by release rule.
+
+   How deletion works:
+   - Uploads land as pending with a time limit. A receipted event that
+     references them promotes them. That handles crash orphans such as
+     chunks uploaded before a root commit.
+   - At window expiry the computer computes the release set from a
+     reference-count table: references of the expiring snapshots minus
+     those of the surviving snapshots and live state.
+   - Expiry of a non-act class is authorized by the class declaration, so
+     it needs no act from the computer and an off computer cannot leak
+     forever.
+   - A physical purge waits at least 7 days in quarantine and respects
+     legal holds. A lost delete act is recomputed, and a wrong one can be
+     recovered inside the quarantine.
+   - A destroyed computer is crypto-erased, then released by one platform
+     act.
+   - The rest of this is *phase 2* (I3). Phase 1 keeps today's CAS layout
+     and deletes only what C5 names.
+5. **Sealed at rest, honestly scoped.**
+   - "Sealed" means at rest on disks, backups and blob stores. It does
+     not protect against live root on the host.
+   - The host reads in plaintext, and only these:
+     - envelopes;
+     - control kinds (verification decisions, lifecycle receipts);
+     - gateway traffic and inbound mail in transit, with no bodies
+       persisted;
+     - the public and platform tiers;
+     - the object graph;
+     - sizes for quotas.
+   - Before release, audit is detective for sanctioned unwrap paths only.
+     An operator with root can unwrap offline. The computer key is also a
+     file on the guest data image (`autoputer/run.go:335-359`).
+   - Phase 1 seals new tape payloads under the computer key from the
+     first new event.
+   - *Phase 2* (I6):
+     - rotate each computer key, take the key off the image and deliver
+       it into guest memory at every boot;
+     - put the escrow private key under an off-host KEK;
+     - per-object keys with a key commitment (XChaCha20-Poly1305 does not
+       commit to its key);
+     - per-tenant wrapping keys, so a deletion beats old backups;
+     - reads of envelopes by internal callers are audited.
+6. **Class fixed by the registry.**
+   - A kind's class is set by the registry per release, not by the writer
+     at run time.
+   - The host enforces a floor for kept kinds: commitment records,
+     Texture revisions, owner acts, sent messages, publications,
+     restores, deletions and source-graph judgments. A batch that labels
+     one of these lower is refused. That closes the "hide it by
+     retention" attack.
+   - The source graph's judgments are acts. Devin, Sonnet and DeepSeek
+     all said so.
+
+### The PSA proof, stated honestly
+
+- A receipt plus its covering anchor proves that a record existed no later
+  than that anchor.
+- Backdating is bounded by the anchor cadence. Tape and audit heads are
+  anchored hourly, and *phase 2* (I5) adds a record-only Merkle root every
+  5 minutes.
+- Against the host itself before release, integrity rests on the audit
+  trail. It becomes enforceable when computer-signed batches land and the
+  owner's keys leave escrow.
+- An outcome act carries the receipt reference of its precommitment, so
+  "predates" is a property of the chain and not a claim about clocks.
+- *Phase 2*: a precommitment whose outcome is time-sensitive waits for
+  anchor coverage before the outcome effect, and record-witness bundles
+  are kept off-host.
+
+### The five things, adjusted
+
+- **PostgreSQL** is one instance with two databases, control and the
+  object graph. It splits into two instances only if measured load
+  demands it.
+- **Telemetry** goes to the host journal with short retention. That is an
+  operational log, not a data home.
+- **Batch receipts** live inside the tape segments. The control database
+  holds only the segment index, one row per segment.
+- **The audit log** absorbs the escrow transparency log
+  (`platform/key_escrow.go:295-335`). An export carries the audit root, the
+  log size and a consistency proof against the previous export.
+- **Per-class tape streams.** Each class gets its own segment stream under
+  one global sequence, and one batch receipt binds all stream heads. Expiry
+  deletes whole segments and never rewrites one. *Phase 2* (I4); phase 1
+  writes one stream with class tags on each event.
+
+### Scale, corrected
+
+- Each heavy computer costs about 8 GB of tape for a 30-day window, plus a
+  5.7 GB snapshot base, plus deltas that are not yet measured.
+- Node B had 99 GB free at 05:57 UTC on 10-30. After the cutover deletes
+  the old data, the free space should be about 300 GB [I].
+- The point at which an off-host blob backend becomes necessary is
+  therefore about 15 to 20 heavy computers, not 40.
+- A disk alarm and a shed policy come with the backend: shed snapshots
+  first, then non-act tape, before PostgreSQL's write-ahead log fills.
+- The §12 window stake below covers the tape only.
+
+### The cutover, adjusted to the owner's 06:40 UTC direction
+
+- Rollback is fix-forward. The old data is deleted once the differential
+  and keep-set checks are green, so there is no read-only week. That also
+  removes the plaintext residual DeepSeek noted.
+- Before it migrates, each computer checks that its local head equals the
+  host head.
+- The first new-tape event commits to the archive digest and the old head.
+- The pre-cutover precommitment records are migrated as acts in the
+  state, so their content survives. Their timing evidence stays in the
+  sealed archive.
+- The off-host restic snapshot of 2026-10-29 03:28 UTC is the last copy of
+  the old system.
+
+### §12, restated
+
+- Per-event overhead on projection batches is at most 200 B. Semantic
+  kinds keep their full envelope.
+- Restore cost is the snapshot load plus replay of at most one snapshot
+  interval. Snapshots are taken every 10,000 events or every hour,
+  whichever comes first.
+- The other stakes in §12 stand.
+
 ## 1. The scale we design for
 
 Owner, 2026-10-30: "user computers will look closer to the paper in a few
@@ -85,7 +288,7 @@ Everything Choir stores is one of these. Each has one home.
 3. **The control database** (PostgreSQL, instance 1). Accounts, sessions,
    computers, leases and writer epochs, routes, releases, quotas, wrapped keys,
    the blob catalog, the tape segment index, input queues.
-4. **The Autopaper object graph** (PostgreSQL, instance 2). Published objects
+4. **The Autopaper object graph** (PostgreSQL, a second database on the same instance; revision 2). Published objects
    and their edges, capture metadata, adoption. Bodies are public-tier blobs.
    A second instance keeps the paper's load and a control failure apart.
 5. **The platform audit log.** Append-only record of what the host and its
