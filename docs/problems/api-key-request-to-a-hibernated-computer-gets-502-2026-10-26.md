@@ -147,3 +147,8 @@ Residuals, recorded and not fixed here:
 Decided 2026-10-26; implemented on lane/bearer-wake (red: proxy to vmctl
 lifecycle). Successor: the density station D (this is D3's client-side
 consequence).
+
+Superseded in part 2026-10-30: `degraded` and `failed` are woken by a request
+too, under vmctl's crash-loop bound
+(docs/problems/crashed-computer-stays-down-until-owner-start-2026-10-30.md).
+`booting` and `stopping` still are not.
