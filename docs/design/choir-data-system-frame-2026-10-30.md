@@ -92,8 +92,22 @@ are not a sixth home.
    lost, which is the broken-computer flow (§6). Today the computer appends to
    the host first and projects second, so a crash between them leaves the
    host ahead and the append path refuses with `ErrNeedsProjectionRepair`
-   (`internal/computerevent/appender.go:224-243`). Whether any host service
-   writes a computer's tape today is not yet checked; the review checks it.
+   (`internal/computerevent/appender.go:224-243`).
+
+   Checked 2026-10-30: single writer is already how the code behaves; the
+   frame makes it a rule.
+   - An append needs a per-computer `event:append` capability. Internal
+     host callers are allowed to read only
+     (`internal/platform/event_handlers.go:324-348`).
+   - Every appender call site outside `internal/computerevent` is in a
+     guest package.
+   - The one exception is the host projection-base rebuilder. It replays
+     into a scratch store in replay mode (`internal/projectionbase/rebuilder.go:385-396`)
+     and goes away with the bases.
+   - [I] Who can mint the capability is not traced.
+   - The host does delete tape files: the tape sweep removes orphan pins and
+     destroyed computers' files (`internal/platform/tape_sweep.go:29-41`).
+     Under rule 4 those become acts.
 2. **Nothing leaves a computer before its cause is receipted.** Appends are
    batched (§4). An effect that leaves the computer (an email sent, a
    publication, a precommitment that must predate its outcome, a
@@ -305,8 +319,9 @@ None of these blocks writing the detailed designs. A recommendation goes with ea
      is the base.
 
    Pre-launch, so the lost replay depth is acceptable.
-4. **Single writer.** No owner decision is needed unless the review finds a
-   host-written computer event that cannot move to the input queue.
+4. **Single writer.** No owner decision is needed: the code already behaves
+   this way (rule 1). The review confirms who can mint the append
+   capability.
 
 ## 11. What happens to the two detailed designs
 
