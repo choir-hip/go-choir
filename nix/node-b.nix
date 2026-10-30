@@ -1457,7 +1457,12 @@ in
         "VM_INTERACTIVE_MEM_MIB=8192"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
-        "VM_BOOT_READY_TIMEOUT=30m"
+        # 90m for the data system cutover: the first boot on the SQLite
+        # release migrates the guest's Dolt store in place (migrate_hook.go),
+        # and a failed-ready boot deletes the partial and starts over. The
+        # paper is migrated offline from the host instead (31 GB of Dolt);
+        # back to 30m once every computer has booted the new release.
+        "VM_BOOT_READY_TIMEOUT=90m"
         # A deploy refresh answers only after the computer boots; a replaying
         # boot of the paper takes about 4 min. The server default (120s)
         # emptied the reply of a refresh that succeeded and failed the deploy
