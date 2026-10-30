@@ -65,7 +65,7 @@ class Layout(unittest.TestCase):
         self.assertIn("go-choir-pkgmirror", vhh.NO_CAP_UNITS)
 
     def test_only_systemctl_runners_keep_the_sockets(self):
-        self.assertEqual(vhh.SYSTEMD_SOCKET_UNITS, {"go-choir-vmctl", "go-choir-dolt-liveness-probe"})
+        self.assertEqual(vhh.SYSTEMD_SOCKET_UNITS, {"go-choir-vmctl"})
 
 
 class Containment(unittest.TestCase):

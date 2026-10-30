@@ -103,7 +103,7 @@ class NixPolicy(unittest.TestCase):
         self.assertIn("../scripts/node-b-nix-retention", src)
         self.assertIn("node-b-nix-retention", pre)
         self.assertIn("nixRetention", block(src, "systemd.services.go-choir-nix-gc ="))
-        sweep = src[src.index("diskRetentionSweep = "):src.index("platformDoltHistoryAudit = ")]
+        sweep = src[src.index("diskRetentionSweep = "):src.index("# Off-host backup stopgap")]
         self.assertIn("nixRetention", sweep)
 
     def test_n5_host_disk_alarm(self):

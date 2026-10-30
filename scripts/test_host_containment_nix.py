@@ -78,7 +78,6 @@ KEEPS = {
     "go-choir-checkpointd": (["-/var/lib/go-choir/platform-artifacts/signing-key",
                               "-/var/lib/go-choir/platform-artifacts/key-escrow-key"], "platform receipts and escrow"),
     "go-choir-vmctl": (SOCKETS, "it runs systemctl (store compaction)"),
-    "go-choir-dolt-liveness-probe": (SOCKETS, "it runs systemctl (restarts a wedged Dolt)"),
     # Its JWT key entry is replaced by the whole auth-signing directory,
     # which covers it (round 2b, DS7).
     "go-choir-gateway": (["-/var/lib/go-choir/codex-auth.json", "-/var/lib/go-choir/gateway-identities.json"],
@@ -175,18 +174,17 @@ class HostUnits(unittest.TestCase):
         # start a unit that reads an env file from the directory.
         readers = sorted(n for n, u in self.units.items()
                          if any(ef.lstrip("-").startswith(UNIT_ENV_DIR + "/") for ef in u["envFiles"]))
-        self.assertEqual(readers, ["go-choir-checkpointd", "go-choir-corpusd", "go-choir-proxy"])
+        self.assertEqual(readers, ["go-choir-corpusd", "go-choir-proxy"])
         for name in readers:
             self.assertIn(UNIT_ENV_DIR + "/.imported", self.units[name]["asserts"], name)
 
-    def test_DS8_corpus_readers_assert_the_dsn_file(self):
-        # The marker says the import ran, not that a file is there: a
-        # missing corpus-dsn.env would start them on Store A (F2's harm).
+    def test_DS8_no_unit_requires_the_retired_dsn_file(self):
+        # The Dolt DSN file is retired with the Dolt servers (the PostgreSQL
+        # DSNs are in the units' Environment): nothing may refuse to start
+        # for a missing corpus-dsn.env.
         dsn = UNIT_ENV_DIR + "/corpus-dsn.env"
-        for name in ("go-choir-corpusd", "go-choir-checkpointd"):
-            self.assertIn(dsn, self.units[name]["asserts"], name)
-        # The proxy reads no required file; it must not go down for one.
-        self.assertNotIn(dsn, self.units["go-choir-proxy"]["asserts"])
+        for name, u in self.units.items():
+            self.assertNotIn(dsn, u["asserts"], name)
 
     def test_N1_every_unit_hides_the_reference_set_but_its_keeps(self):
         problems = []
@@ -230,8 +228,6 @@ class HostUnits(unittest.TestCase):
                 self.assertFalse(path.lstrip("-").startswith(UNIT_ENV_DIR + "/"),
                                  f"{name} hides {path} one by one; the directory hides it")
         self.assertIn(f"-{UNIT_ENV_DIR}/deploy.env", self.units["go-choir-proxy"]["envFiles"])
-        for unit in ("go-choir-corpusd", "go-choir-checkpointd"):
-            self.assertIn(f"-{UNIT_ENV_DIR}/corpus-dsn.env", self.units[unit]["envFiles"], unit)
         self.assertIn(f"-{UNIT_ENV_DIR}/corpusd-retrieval.env", self.units["go-choir-corpusd"]["envFiles"])
 
     def test_N4_tmpfiles_create_the_directory(self):

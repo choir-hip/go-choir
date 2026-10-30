@@ -246,6 +246,9 @@ jobs:
         with:
           lane: non-runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}-${{ matrix.shard < 6 && 'split' || matrix.shard }}
 
+      - name: Put PostgreSQL on PATH (dbxtest)
+        uses: ./.github/actions/install-postgres
+
       - name: Go test non-runtime shard
         shell: bash
         env:
@@ -281,6 +284,9 @@ jobs:
         uses: ./.github/actions/setup-go-build-cache
         with:
           lane: runtime-${{ needs.plan.outputs.race_selected == 'true' && 'race' || 'standard' }}
+
+      - name: Put PostgreSQL on PATH (dbxtest)
+        uses: ./.github/actions/install-postgres
 
       - name: Go test agentcore/textureowner shard
         env:
@@ -325,6 +331,9 @@ jobs:
         uses: ./.github/actions/setup-go-build-cache
         with:
           lane: scale-standard
+
+      - name: Put PostgreSQL on PATH (dbxtest)
+        uses: ./.github/actions/install-postgres
 
       - name: Go test quarantined scale tests with one retry
         shell: bash

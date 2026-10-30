@@ -61,39 +61,37 @@ VMCTL_PID=$!
 [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$VMCTL_PID"
 wait_for_url "http://127.0.0.1:${VMCTL_PORT}/health" vmctl || exit 1
 
-PLATFORM_DOLT_PID=""
+PLATFORM_PG_DIR=""
 CORPUSD_PID=""
 if [ "${CHOIR_ENABLE_CORPUSD:-1}" = "1" ]; then
-  DOLT_BIN="${DOLT_BIN:-$(command -v dolt || true)}"
-  if [ -z "$DOLT_BIN" ] && command -v nix >/dev/null 2>&1; then
-    DOLT_OUT="$(nix build --no-link --print-out-paths nixpkgs#dolt 2>/dev/null | head -n 1 || true)"
-    if [ -n "$DOLT_OUT" ] && [ -x "$DOLT_OUT/bin/dolt" ]; then
-      DOLT_BIN="$DOLT_OUT/bin/dolt"
-    fi
-  fi
-  if [ -z "$DOLT_BIN" ]; then
-    echo "corpusd startup requires dolt; enter nix develop or set DOLT_BIN=/path/to/dolt"
+  # Local PostgreSQL for corpusd (the host data system: databases control and
+  # graph; the repo dev shell provides postgresql_17). Trust auth on loopback
+  # only, a throwaway cluster under /tmp: dev data, never staging.
+  INITDB_BIN="${INITDB_BIN:-$(command -v initdb || true)}"
+  PG_CTL_BIN="${PG_CTL_BIN:-$(command -v pg_ctl || true)}"
+  if [ -z "$INITDB_BIN" ] || [ -z "$PG_CTL_BIN" ]; then
+    echo "corpusd startup requires PostgreSQL (initdb, pg_ctl); enter nix develop or set INITDB_BIN and PG_CTL_BIN"
     exit 1
   fi
   export CORPUSD_PORT="${CORPUSD_PORT:-8086}"
-  export PLATFORM_DOLT_PORT="${PLATFORM_DOLT_PORT:-13306}"
-  export PLATFORM_DOLT_DIR="${PLATFORM_DOLT_DIR:-/tmp/go-choir-m2/platform-dolt}"
-  export PLATFORM_DOLT_DB_DIR="${PLATFORM_DOLT_DB_DIR:-${PLATFORM_DOLT_DIR}/platform}"
+  export PLATFORM_PG_PORT="${PLATFORM_PG_PORT:-15432}"
+  PLATFORM_PG_DIR="${PLATFORM_PG_DIR:-/tmp/go-choir-m2/postgres}"
   export CORPUSD_ARTIFACTS_ROOT="${CORPUSD_ARTIFACTS_ROOT:-/tmp/go-choir-m2/platform-artifacts}"
-  export CORPUSD_DOLT_DSN="${CORPUSD_DOLT_DSN:-root@tcp(127.0.0.1:${PLATFORM_DOLT_PORT})/platform?parseTime=true&multiStatements=true&clientFoundRows=true}"
-  mkdir -p "$PLATFORM_DOLT_DB_DIR" "$CORPUSD_ARTIFACTS_ROOT"
-  (
-    export HOME="$PLATFORM_DOLT_DIR"
-    cd "$PLATFORM_DOLT_DB_DIR"
-    "$DOLT_BIN" config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
-    "$DOLT_BIN" config --global --add user.email "platform@choir.local" >/dev/null 2>&1 || true
-    if [ ! -d .dolt ]; then
-      "$DOLT_BIN" init >/dev/null
+  export CHOIR_PG_CONTROL_DSN="${CHOIR_PG_CONTROL_DSN:-postgres://choir@127.0.0.1:${PLATFORM_PG_PORT}/control?sslmode=disable}"
+  export CHOIR_PG_GRAPH_DSN="${CHOIR_PG_GRAPH_DSN:-postgres://choir@127.0.0.1:${PLATFORM_PG_PORT}/graph?sslmode=disable}"
+  mkdir -p "$PLATFORM_PG_DIR" "$CORPUSD_ARTIFACTS_ROOT"
+  if [ ! -f "$PLATFORM_PG_DIR/data/PG_VERSION" ]; then
+    "$INITDB_BIN" -D "$PLATFORM_PG_DIR/data" -U choir -A trust -E UTF8 --locale=C >/dev/null || exit 1
+  fi
+  if ! "$PG_CTL_BIN" -D "$PLATFORM_PG_DIR/data" status >/dev/null 2>&1; then
+    "$PG_CTL_BIN" -D "$PLATFORM_PG_DIR/data" -l "$PLATFORM_PG_DIR/postgres.log" -w \
+      -o "-p $PLATFORM_PG_PORT -c listen_addresses=127.0.0.1 -k $PLATFORM_PG_DIR" start >/dev/null || exit 1
+  fi
+  for db in control graph; do
+    if ! psql -h 127.0.0.1 -p "$PLATFORM_PG_PORT" -U choir -d postgres -Atc "select 1 from pg_database where datname='$db'" | grep -q 1; then
+      psql -h 127.0.0.1 -p "$PLATFORM_PG_PORT" -U choir -d postgres -qc "create database $db" || exit 1
     fi
-    exec "$DOLT_BIN" sql-server --host 127.0.0.1 --port "$PLATFORM_DOLT_PORT"
-  ) > platform-dolt.log 2>&1 &
-  PLATFORM_DOLT_PID=$!
-  [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$PLATFORM_DOLT_PID"
+  done
 
   nohup go run ./cmd/corpusd > corpusd.log 2>&1 &
   CORPUSD_PID=$!
@@ -136,7 +134,10 @@ wait_for_url http://localhost:4173 frontend || exit 1
 echo "Services started successfully"
 if [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ]; then
   cleanup_services() {
-    kill "$FRONTEND_PID" "$PROXY_PID" "$AUTOPUTER_PID" "$CORPUSD_PID" "$PLATFORM_DOLT_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
+    kill "$FRONTEND_PID" "$PROXY_PID" "$AUTOPUTER_PID" "$CORPUSD_PID" "$VMCTL_PID" "$GATEWAY_PID" "$AUTH_PID" 2>/dev/null || true
+    if [ -n "$PLATFORM_PG_DIR" ]; then
+      "$PG_CTL_BIN" -D "$PLATFORM_PG_DIR/data" -m fast stop >/dev/null 2>&1 || true
+    fi
   }
   trap cleanup_services INT TERM EXIT
   wait

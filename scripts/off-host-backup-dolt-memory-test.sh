@@ -19,6 +19,8 @@
 #
 # Run: bash scripts/off-host-backup-dolt-memory-test.sh
 set -u
+export OFFHOST_DOLT=on # these tests cover the Dolt sections, off by default since the cutover
+export OFFHOST_DOLT=on  # these tests cover the Dolt sections, off by default since the cutover
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/off-host-backup.sh"

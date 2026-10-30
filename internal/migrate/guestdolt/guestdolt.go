@@ -5,29 +5,25 @@
 // finished file into place. The Dolt workspace is only read and is kept; C5
 // deletes it once the differential and keep-set checks are green.
 //
-// The new schema is not defined here. The caller supplies OpenNew, which
-// opens the new store's SQLite file at the path it is given (creating the
-// schema); the migrator copies rows into that open database.
+// The new schema is not defined here. By default the migrator makes it by
+// opening the real store (store.Open) in a scratch directory beside the target
+// and closing it, then copies rows into the resulting state.db. A caller may
+// instead pass an OpenNew, which opens the new store's SQLite file at the path
+// it is given (creating the schema); its handle's Close must release every
+// connection to the file, because the migrator closes it before renaming and
+// no WAL sidecar may remain.
 //
-// Caller contract (WP-A's migrateLegacyStoreIfNeeded in autoputer):
+// Caller contract (autoputer's migrateLegacyStoreIfNeeded):
 //
 //	if _, err := os.Stat(store.StateDBPath(storePath)); os.IsNotExist(err) {
-//	    rep, err := guestdolt.MigrateStore(ctx, storePath, openNew)
+//	    rep, err := guestdolt.Migrate(ctx, store.LegacyDoltWorkspacePath(storePath), store.StateDBPath(storePath))
 //	    ...
 //	}
-//
-// where openNew creates the schema and returns the handle:
-//
-//	openNew := func(path string) (*dbx.SQLiteDB, error) { /* store.Open at path, return its SQLiteDB */ }
-//
-// The handle's Close must release every connection to the file; the
-// migrator closes it before renaming, so no WAL sidecar remains.
 package guestdolt
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,15 +61,15 @@ func TempPath(sqlitePath string) string { return sqlitePath + ".migrating" }
 
 // MigrateStore migrates the legacy workspace and state file derived from
 // storePath (store.LegacyDoltWorkspacePath, store.StateDBPath).
-func MigrateStore(ctx context.Context, storePath string, openNew OpenNew) (Report, error) {
-	return Migrate(ctx, store.LegacyDoltWorkspacePath(storePath), store.StateDBPath(storePath), openNew)
+func MigrateStore(ctx context.Context, storePath string, openNew ...OpenNew) (Report, error) {
+	return Migrate(ctx, store.LegacyDoltWorkspacePath(storePath), store.StateDBPath(storePath), openNew...)
 }
 
 // Migrate copies doltWorkspace into a new SQLite file at sqlitePath. It does
 // nothing, with Skipped set, when the workspace is absent or sqlitePath
 // already exists. On failure the partial file is deleted and the Dolt
 // workspace is untouched.
-func Migrate(ctx context.Context, doltWorkspace, sqlitePath string, openNew OpenNew) (rep Report, err error) {
+func Migrate(ctx context.Context, doltWorkspace, sqlitePath string, openNewOpt ...OpenNew) (rep Report, err error) {
 	rep = Report{DoltWorkspace: doltWorkspace, SQLitePath: sqlitePath, StartedAt: time.Now().UTC()}
 	defer func() {
 		rep.FinishedAt = time.Now().UTC()
@@ -92,12 +88,29 @@ func Migrate(ctx context.Context, doltWorkspace, sqlitePath string, openNew Open
 		rep.Skipped, rep.SkipReason = true, "no legacy Dolt workspace"
 		return rep, nil
 	}
-	if openNew == nil {
-		return rep, errors.New("guestdolt: openNew is required")
+	var openNew OpenNew
+	if len(openNewOpt) > 0 {
+		openNew = openNewOpt[0]
 	}
 	tmp := TempPath(sqlitePath)
 	removeSQLite(tmp)
+	scratch := ""
+	if openNew == nil {
+		// Default: the real store makes the schema in a scratch directory.
+		scratch = tmp + ".d"
+		_ = os.RemoveAll(scratch)
+		var serr error
+		tmp, serr = createStoreSchema(scratch)
+		if serr != nil {
+			_ = os.RemoveAll(scratch)
+			return rep, fmt.Errorf("guestdolt: create new store: %w", serr)
+		}
+		openNew = func(path string) (*dbx.SQLiteDB, error) { return dbx.OpenSQLite(path, dbx.SQLiteOptions{}) }
+	}
 	defer func() {
+		if scratch != "" {
+			_ = os.RemoveAll(scratch)
+		}
 		if err != nil {
 			removeSQLite(tmp)
 		}
