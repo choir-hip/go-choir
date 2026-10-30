@@ -2,8 +2,6 @@ package platform
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -92,21 +90,6 @@ func TestHandleComputerEventReplayValidatesPageLimit(t *testing.T) {
 func insertReplayTestChain(t *testing.T, platformStore *Store, service *Service, computerID string, sequences []uint64, headSequence uint64) {
 	t.Helper()
 	now := time.Date(2026, 10, 9, 2, 0, 0, 0, time.UTC)
-	_, receiptKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	receipt, err := computerevent.NewSignedReceipt("event_head", "corpusd", map[string]any{}, []computerevent.SigningKey{{
-		SignerRef: computerevent.SignerRef{SignerDomain: "platform", KeyID: "replay-test"}, PrivateKey: receiptKey,
-	}}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	receiptJSON, err := receipt.CanonicalBytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	receiptDigest := computerevent.DigestBytes(receiptJSON)
 	for _, sequence := range sequences {
 		eventID, err := computerevent.NewEventID()
 		if err != nil {
@@ -130,10 +113,7 @@ func insertReplayTestChain(t *testing.T, platformStore *Store, service *Service,
 		if err := service.writeBlob(filepath.Join("sha256", "computer-event", eventDigest), rawEvent); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := platformStore.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			computerID, event.IdempotencyKey, platformTestDigest('c'), sequence, event.PreviousHead, string(event.EventKind), eventDigest, eventDigest, platformTestDigest('d'), "[]", fmt.Sprintf("receipt-%d", sequence), string(receiptJSON), receiptDigest, eventDigest, event.PreviousHead, platformTestDigest('f'), platformTestDigest('f'), nil, now); err != nil {
-			t.Fatal(err)
-		}
+		insertTestAppendReceipt(t, platformStore.db, computerID, event.IdempotencyKey, platformTestDigest('c'), sequence, string(event.EventKind), eventDigest, platformTestDigest('d'), nil, now)
 	}
 	if _, err := platformStore.db.Exec(`INSERT INTO computer_event_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, reducer_version, credential_revocation_epoch, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		computerID, headSequence, platformTestDigest('1'), platformTestDigest('1'), platformTestDigest('1'), platformTestDigest('f'), platformTestDigest('f'), nil, computerevent.ReducerVersionV1, 0, now, now); err != nil {

@@ -125,10 +125,7 @@ func (f *tapeFixture) appendSeq(c *tapeChain, payload []byte, age time.Duration)
 	s.event = f.put(tapeNSEvent, []byte(fmt.Sprintf(`{"computer_id":%q,"sequence":%d,"output_artifact_refs":["artifact:sha256:%s"],"payload_commitment":%q}`, c.id, seq, s.payload, s.payload)), age)
 	s.eventPin = f.put(tapeNSReceipt, []byte(fmt.Sprintf(`{"receipt_kind":"PinReceipt","computer_id":%q,"artifact_digest":%q,"pin_namespace":"computer-event"}`, c.id, s.event)), age)
 	when := time.Now().Add(-age).UTC()
-	if _, err := f.store.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		c.id, fmt.Sprintf("k-%d", seq), platformTestDigest('c'), seq, platformTestDigest('b'), "verification_recorded", s.event, s.event, s.eventPin, `["`+s.payloadPin+`"]`, fmt.Sprintf("r-%d", seq), `{}`, platformTestDigest('e'), s.event, s.event, platformTestDigest('f'), platformTestDigest('f'), nil, when); err != nil {
-		f.t.Fatal(err)
-	}
+	insertTestAppendReceipt(f.t, f.store.db, c.id, fmt.Sprintf("k-%d", seq), platformTestDigest('c'), seq, "verification_recorded", s.event, s.eventPin, []string{s.payloadPin}, when)
 	if _, err := f.store.db.Exec(`INSERT INTO computer_event_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, reducer_version, credential_revocation_epoch, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE sequence=VALUES(sequence), canonical_event_head=VALUES(canonical_event_head), updated_at=VALUES(updated_at)`,
 		c.id, seq, s.event, s.event, s.event, platformTestDigest('f'), platformTestDigest('f'), nil, computerevent.ReducerVersionV1, 0, when, when); err != nil {
@@ -780,10 +777,7 @@ func TestTapeSweepOrphanReceiptCheckIsHeadBounded(t *testing.T) {
 	insertBareReceipt := func(f *tapeFixture, id string, seq uint64) {
 		t.Helper()
 		d := platformTestDigest('a')
-		if _, err := f.store.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			id, fmt.Sprintf("bare-%d", seq), d, seq, d, "verification_recorded", d, d, d, `[]`, fmt.Sprintf("rb-%d", seq), `{}`, d, d, d, d, d, nil, time.Now().UTC()); err != nil {
-			t.Fatal(err)
-		}
+		insertTestAppendReceipt(t, f.store.db, id, fmt.Sprintf("bare-%d", seq), d, seq, "verification_recorded", d, d, nil, time.Now().UTC())
 	}
 	t.Run("live append during the walk does not refuse", func(t *testing.T) {
 		f := newTapeFixture(t)

@@ -8,13 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 )
 
 const (
@@ -187,7 +188,7 @@ func transitionSQLWithEvidenceForTest(ledger *SQLLedger, ctx context.Context, co
 }
 
 func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
-	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	productStore, err := openTestDB(t, dbxtest.PostgresDSN(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,10 +242,10 @@ func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
 }
 
 func TestSQLLedgerPersistsSlotAndReceiptAcrossRestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "runtime.db")
-	productStore, err := store.Open(path)
+	path := dbxtest.PostgresDSN(t)
+	productStore, err := openTestDB(t, path)
 	if err != nil {
-		t.Fatalf("open embedded Dolt: %v", err)
+		t.Fatalf("open test database: %v", err)
 	}
 	ledger, catalog := newSQLRouteLedger(t, productStore.DB())
 	slotID := mustSlotID(t, "owner-sql", "primary")
@@ -276,9 +277,9 @@ func TestSQLLedgerPersistsSlotAndReceiptAcrossRestart(t *testing.T) {
 		t.Fatalf("close first store: %v", err)
 	}
 
-	restartedStore, err := store.Open(path)
+	restartedStore, err := openTestDB(t, path)
 	if err != nil {
-		t.Fatalf("reopen embedded Dolt: %v", err)
+		t.Fatalf("reopen test database: %v", err)
 	}
 	defer func() { _ = restartedStore.Close() }()
 	restarted := NewSQLLedger(restartedStore.DB())
@@ -305,7 +306,7 @@ func version(code, program string) computerversion.ComputerVersion {
 }
 
 func TestSQLLedgerRefusesUnresolvableInputsAndProtectsRoutedCatalogRows(t *testing.T) {
-	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	productStore, err := openTestDB(t, dbxtest.PostgresDSN(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +399,7 @@ type acceptingContentVerifier struct{}
 func (acceptingContentVerifier) VerifyArtifact(context.Context, string, string) error { return nil }
 
 func TestSQLLedgerAtomicEvidenceRollsBackOnStaleTransition(t *testing.T) {
-	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	productStore, err := openTestDB(t, dbxtest.PostgresDSN(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +431,7 @@ func TestSQLLedgerAtomicEvidenceRollsBackOnStaleTransition(t *testing.T) {
 }
 
 func TestSQLLedgerSelfDevelopmentProtectionCommitsAtomically(t *testing.T) {
-	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	productStore, err := openTestDB(t, dbxtest.PostgresDSN(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,8 +579,8 @@ func TestMemoryLedgerBootstrapRollbackRemovesOnlyGenerationOneRoute(t *testing.T
 }
 
 func TestSQLLedgerBootstrapRollbackPersistsReceiptAndRouteAbsence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "runtime.db")
-	productStore, err := store.Open(path)
+	path := dbxtest.PostgresDSN(t)
+	productStore, err := openTestDB(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -626,7 +627,7 @@ func TestSQLLedgerBootstrapRollbackPersistsReceiptAndRouteAbsence(t *testing.T) 
 	if err := productStore.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restartedStore, err := store.Open(path)
+	restartedStore, err := openTestDB(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,4 +640,24 @@ func TestSQLLedgerBootstrapRollbackPersistsReceiptAndRouteAbsence(t *testing.T) 
 	if err != nil || replayedSlot != (Slot{}) || replayed.ID != receipt.ID {
 		t.Fatalf("restarted SQL rollback replay = slot %+v receipt %+v err %v", replayedSlot, replayed, err)
 	}
+}
+
+func TestMain(m *testing.M) {
+	os.Exit(dbxtest.Main(m))
+}
+
+// testDB is one open PostgreSQL pool (a "process" of the control database).
+type testDB struct{ db *sql.DB }
+
+func (d *testDB) DB() *sql.DB  { return d.db }
+func (d *testDB) Close() error { return d.db.Close() }
+
+// openTestDB opens dsn; reopening the same dsn is a restart.
+func openTestDB(t *testing.T, dsn string) (*testDB, error) {
+	t.Helper()
+	db, err := dbx.OpenPostgres(dsn, dbx.PGOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &testDB{db: db}, nil
 }

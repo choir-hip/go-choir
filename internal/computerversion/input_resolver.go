@@ -439,7 +439,7 @@ func (c *SQLInputCatalog) PinCode(ctx context.Context, closure CodeClosure) (Cod
 		return CodeClosure{}, fmt.Errorf("computer input resolver: encode code closure: %w", err)
 	}
 	if _, err := c.db.ExecContext(ctx, `INSERT INTO computer_version_code_closures (code_ref, source_commit, closure_json, created_at)
-		VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE code_ref = code_ref`, closure.Ref, closure.SourceCommit, encoded, closure.CreatedAt); err != nil {
+		VALUES (?, ?, ?, ?) ON CONFLICT (code_ref) DO NOTHING`, closure.Ref, closure.SourceCommit, encoded, closure.CreatedAt); err != nil {
 		return CodeClosure{}, fmt.Errorf("computer input resolver: pin code closure: %w", err)
 	}
 	resolved, err := c.ResolveCode(ctx, closure.Ref)
@@ -473,7 +473,7 @@ func (c *SQLInputCatalog) PinArtifactProgram(ctx context.Context, program Artifa
 		return ArtifactProgram{}, fmt.Errorf("computer input resolver: encode artifact program: %w", err)
 	}
 	if _, err := c.db.ExecContext(ctx, `INSERT INTO computer_version_artifact_programs (artifact_program_ref, program_json, created_at)
-		VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE artifact_program_ref = artifact_program_ref`, program.Ref, encoded, program.CreatedAt); err != nil {
+		VALUES (?, ?, ?) ON CONFLICT (artifact_program_ref) DO NOTHING`, program.Ref, encoded, program.CreatedAt); err != nil {
 		return ArtifactProgram{}, fmt.Errorf("computer input resolver: pin artifact program: %w", err)
 	}
 	resolved, err := c.ResolveArtifactProgram(ctx, program.Ref)

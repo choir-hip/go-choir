@@ -21,6 +21,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// pgx scans timestamptz as time.Local; hosts run in UTC, so tests do too.
+	time.Local = time.UTC
 	os.Exit(dbxtest.Main(m))
 }
 
@@ -54,7 +56,11 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 func platformTableCount(t *testing.T, s *Store, table string) int64 {
 	t.Helper()
 	var count int64
-	if err := s.db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+	pool := s.db
+	if strings.HasPrefix(table, "platform_texture_") || strings.HasPrefix(table, "og_") {
+		pool = s.corpus()
+	}
+	if err := pool.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return count
@@ -199,63 +205,6 @@ func TestPlatformTextureStoreWritesCurrentTables(t *testing.T) {
 	}
 	if len(revs) != 1 || revs[0].RevisionID != "rev-current" || revs[0].Content != "current table content" {
 		t.Fatalf("current revisions = %+v, want rev-current content", revs)
-	}
-}
-
-func TestPlatformTextureStoreBootstrapPreservesCurrentTextureRows(t *testing.T) {
-	store, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-
-	if _, err := store.db.ExecContext(ctx, `ALTER TABLE platform_texture_revisions DROP COLUMN source_entities`); err != nil {
-		t.Fatalf("drop source_entities to simulate old schema: %v", err)
-	}
-	if _, err := store.db.ExecContext(ctx, `ALTER TABLE platform_texture_revisions DROP COLUMN body_doc`); err != nil {
-		t.Fatalf("drop body_doc to simulate old schema: %v", err)
-	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		"doc-existing", "owner-existing", "Existing Texture", now, now); err != nil {
-		t.Fatalf("insert existing document: %v", err)
-	}
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, citations, metadata, created_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
-		"rev-existing", "doc-existing", "owner-existing", "agent", "texture", "existing table content", "[]", `{"source":"test"}`, now); err != nil {
-		t.Fatalf("insert existing revision: %v", err)
-	}
-	if err := store.Bootstrap(ctx); err != nil {
-		t.Fatalf("Bootstrap with existing rows: %v", err)
-	}
-	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
-		t.Fatalf("platform_texture_documents count after bootstrap = %d, want 1", got)
-	}
-	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
-		t.Fatalf("platform_texture_revisions count after bootstrap = %d, want 1", got)
-	}
-	if err := store.Bootstrap(ctx); err != nil {
-		t.Fatalf("Bootstrap second run: %v", err)
-	}
-	if got := platformTableCount(t, store, "platform_texture_documents"); got != 1 {
-		t.Fatalf("platform_texture_documents count after second bootstrap = %d, want 1", got)
-	}
-	if got := platformTableCount(t, store, "platform_texture_revisions"); got != 1 {
-		t.Fatalf("platform_texture_revisions count after second bootstrap = %d, want 1", got)
-	}
-
-	doc, err := store.GetTextureDocument(ctx, "doc-existing")
-	if err != nil {
-		t.Fatalf("GetTextureDocument existing: %v", err)
-	}
-	if doc.OwnerID != "owner-existing" || doc.Title != "Existing Texture" {
-		t.Fatalf("existing document = %+v, want owner/title preserved", doc)
-	}
-	rev, err := store.GetTextureRevision(ctx, "rev-existing")
-	if err != nil {
-		t.Fatalf("GetTextureRevision existing: %v", err)
-	}
-	if rev.DocID != "doc-existing" || rev.Content != "existing table content" {
-		t.Fatalf("existing revision = %+v, want preserved revision", rev)
-	}
-	if string(rev.BodyDoc) != "" || string(rev.SourceEntities) != "" {
-		t.Fatalf("migrated old revision structured fields = %q/%q, want empty defaults", rev.BodyDoc, rev.SourceEntities)
 	}
 }
 

@@ -41,7 +41,7 @@ func (s *Store) RecordFileRoot(ctx context.Context, computerID, root, manifestRe
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) || !validFileCASDigest(root) || strings.TrimSpace(manifestRef) == "" || headSequence < 0 {
 		return fmt.Errorf("file cas: invalid file root")
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO computer_file_roots (computer_id,root,manifest_ref,head_sequence,created_at) VALUES (?,?,?,?,?)`, computerID, root, manifestRef, headSequence, time.Now().UTC()); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_file_roots (computer_id,root,manifest_ref,head_sequence,created_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`, computerID, root, manifestRef, headSequence, time.Now().UTC()); err != nil {
 		return fmt.Errorf("file cas: record root: %w", err)
 	}
 	return nil
@@ -106,18 +106,18 @@ func (s *Store) RecordReplayWatermarkWithRoot(ctx context.Context, computerID st
 	now := time.Now().UTC()
 	// Protect the predecessor in the same transaction that advances W.
 	if priorRef != "" {
-		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, computerID, priorRef, priorSeq, now.Add(-time.Microsecond)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, computerID, priorRef, priorSeq, now.Add(-time.Microsecond)); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, computerID, baseRef, seq, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, computerID, baseRef, seq, now); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, computerID, seq, baseRef, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET watermark_sequence=excluded.watermark_sequence,base_ref=excluded.base_ref,updated_at=excluded.updated_at`, computerID, seq, baseRef, now); err != nil {
 		return fmt.Errorf("file cas: record replay watermark: %w", err)
 	}
 	if epochRoot {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_epoch_roots (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE base_ref=VALUES(base_ref),sequence=VALUES(sequence),created_at=VALUES(created_at)`, computerID, baseRef, seq, now); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_epoch_roots (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET base_ref=excluded.base_ref,sequence=excluded.sequence,created_at=excluded.created_at`, computerID, baseRef, seq, now); err != nil {
 			return fmt.Errorf("file cas: record epoch root: %w", err)
 		}
 	}

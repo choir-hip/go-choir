@@ -299,10 +299,16 @@ func (s *Store) AppendKeyEscrowTransparency(ctx context.Context, payloadJSON []b
 		return 0, "", fmt.Errorf("key escrow: begin transparency append: %w", err)
 	}
 	defer tx.Rollback()
+	// The chain head is the newest row; a row lock on it would not stop a
+	// concurrent appender from reading the same head, so serialize appenders
+	// with a transaction-scoped advisory lock.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7340211)`); err != nil {
+		return 0, "", fmt.Errorf("key escrow: lock transparency chain: %w", err)
+	}
 	prevHash := ""
 	var priorSeq int64
 	var priorHash string
-	err = tx.QueryRowContext(ctx, `SELECT seq, entry_hash FROM computer_key_escrow_transparency ORDER BY seq DESC LIMIT 1 FOR UPDATE`).Scan(&priorSeq, &priorHash)
+	err = tx.QueryRowContext(ctx, `SELECT seq, entry_hash FROM computer_key_escrow_transparency ORDER BY seq DESC LIMIT 1`).Scan(&priorSeq, &priorHash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, "", fmt.Errorf("key escrow: transparency head: %w", err)
 	}
@@ -314,13 +320,8 @@ func (s *Store) AppendKeyEscrowTransparency(ctx context.Context, payloadJSON []b
 	preimage = append(preimage, payloadJSON...)
 	digest := sha256.Sum256(preimage)
 	entryHash = hex.EncodeToString(digest[:])
-	result, err := tx.ExecContext(ctx, `INSERT INTO computer_key_escrow_transparency (prev_hash, entry_hash, payload_json, created_at) VALUES (?, ?, ?, ?)`, prevHash, entryHash, string(payloadJSON), time.Now().UTC().Truncate(time.Microsecond))
-	if err != nil {
+	if err := tx.QueryRowContext(ctx, `INSERT INTO computer_key_escrow_transparency (prev_hash, entry_hash, payload_json, created_at) VALUES (?, ?, ?, ?) RETURNING seq`, prevHash, entryHash, string(payloadJSON), time.Now().UTC().Truncate(time.Microsecond)).Scan(&seq); err != nil {
 		return 0, "", fmt.Errorf("key escrow: insert transparency: %w", err)
-	}
-	seq, err = result.LastInsertId()
-	if err != nil {
-		return 0, "", fmt.Errorf("key escrow: transparency sequence: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, "", fmt.Errorf("key escrow: commit transparency: %w", err)

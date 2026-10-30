@@ -259,7 +259,7 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {
 	now := time.Now().UTC()
 	_, err := s.corpus().ExecContext(ctx,
-		`INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE title=VALUES(title), updated_at=VALUES(updated_at)`,
+		`INSERT INTO platform_texture_documents (doc_id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (doc_id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at`,
 		docID, ownerID, title, now, now)
 	return err
 }
@@ -276,7 +276,7 @@ func (s *Store) UpsertTextureRevision(ctx context.Context, rev PlatformTextureRe
 		rev.Metadata = json.RawMessage("{}")
 	}
 	_, err := s.corpus().ExecContext(ctx,
-		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE content=VALUES(content), body_doc=VALUES(body_doc), source_entities=VALUES(source_entities), citations=VALUES(citations), metadata=VALUES(metadata)`,
+		`INSERT INTO platform_texture_revisions (revision_id, doc_id, owner_id, parent_revision_id, author_kind, author_label, content, body_doc, source_entities, citations, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (revision_id) DO UPDATE SET content=excluded.content, body_doc=excluded.body_doc, source_entities=excluded.source_entities, citations=excluded.citations, metadata=excluded.metadata`,
 		rev.RevisionID, rev.DocID, rev.OwnerID, rev.ParentRevisionID, rev.AuthorKind, rev.AuthorLabel, rev.Content, string(rev.BodyDoc), string(rev.SourceEntities), string(rev.Citations), string(rev.Metadata), rev.CreatedAt)
 	return err
 }

@@ -2,13 +2,15 @@ package computerversion
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 )
 
 func TestImmutableInputsPinAndResolve(t *testing.T) {
@@ -63,7 +65,7 @@ func TestImmutableInputsPinAndResolve(t *testing.T) {
 }
 
 func TestImmutableInputsSurviveStoreRestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "runtime.db")
+	path := dbxtest.PostgresDSN(t)
 	now := time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC)
 	closure, err := NewCodeClosure(hash64('f'), []CodeArtifact{{Name: "autoputer", SHA256: hash64('1'), URI: contentAddressedURI("nix-store+sha256", hash64('1'), "nix/store/autoputer")}}, now)
 	if err != nil {
@@ -73,7 +75,7 @@ func TestImmutableInputsSurviveStoreRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.Open(path)
+	first, err := openTestDB(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +93,7 @@ func TestImmutableInputsSurviveStoreRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	second, err := store.Open(path)
+	second, err := openTestDB(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +152,9 @@ func TestImmutableInputResolverFailsClosed(t *testing.T) {
 
 func openTestInputCatalog(t *testing.T) (*SQLInputCatalog, func()) {
 	t.Helper()
-	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	productStore, err := openTestDB(t, dbxtest.PostgresDSN(t))
 	if err != nil {
-		t.Fatalf("open embedded Dolt: %v", err)
+		t.Fatalf("open test database: %v", err)
 	}
 	catalog := NewSQLInputCatalog(productStore.DB(), declarationOnlyTestVerifier{})
 	if err := catalog.EnsureSchema(context.Background()); err != nil {
@@ -198,4 +200,24 @@ func TestLocalArtifactContentVerifierRefusesMissingAndMismatchedContent(t *testi
 	if err := verifier.VerifyArtifact(context.Background(), contentAddressedURI("artifact+sha256", digest, "missing.bin"), digest); err == nil {
 		t.Fatal("missing artifact content verified")
 	}
+}
+
+func TestMain(m *testing.M) {
+	os.Exit(dbxtest.Main(m))
+}
+
+// testDB is one open PostgreSQL pool (a "process" of the control database).
+type testDB struct{ db *sql.DB }
+
+func (d *testDB) DB() *sql.DB  { return d.db }
+func (d *testDB) Close() error { return d.db.Close() }
+
+// openTestDB opens dsn; reopening the same dsn is a restart.
+func openTestDB(t *testing.T, dsn string) (*testDB, error) {
+	t.Helper()
+	db, err := dbx.OpenPostgres(dsn, dbx.PGOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &testDB{db: db}, nil
 }

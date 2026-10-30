@@ -228,7 +228,7 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: bootstrap slot: %w", err)
 	}
 	if protectSelfDevelopment {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_version_route_authority_modes (route_slot_id,authority_mode,certificate_ref,protected_at) VALUES (?,'self_development_certificate',?,?) ON DUPLICATE KEY UPDATE authority_mode=VALUES(authority_mode),certificate_ref=VALUES(certificate_ref),protected_at=VALUES(protected_at)`, command.RouteSlotID, command.PromotionCertificateRef, receipt.CommittedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_version_route_authority_modes (route_slot_id,authority_mode,certificate_ref,protected_at) VALUES (?,'self_development_certificate',?,?) ON CONFLICT (route_slot_id) DO UPDATE SET authority_mode=excluded.authority_mode,certificate_ref=excluded.certificate_ref,protected_at=excluded.protected_at`, command.RouteSlotID, command.PromotionCertificateRef, receipt.CommittedAt); err != nil {
 			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: protect self-development route: %w", err)
 		}
 	}
@@ -345,7 +345,7 @@ func pinAuthorizationEvidenceSQL(ctx context.Context, executor evidenceSQLExecut
 	}
 	if _, err := executor.ExecContext(ctx, `INSERT INTO computer_version_route_authorization_evidence
 		(evidence_ref, evidence_kind, route_slot_id, code_ref, artifact_program_ref, evidence_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE evidence_ref = evidence_ref`,
+		VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (evidence_ref) DO NOTHING`,
 		evidence.Ref, evidence.Kind, evidence.RouteSlotID, evidence.ComputerVersion.CodeRef,
 		evidence.ComputerVersion.ArtifactProgramRef, encoded, evidence.CreatedAt); err != nil {
 		return AuthorizationEvidence{}, fmt.Errorf("route ledger: pin authorization evidence: %w", err)
