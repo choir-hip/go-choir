@@ -41,7 +41,7 @@ func TestVerifierCertificateBindsIndependentDecisionAndCheckpoint(t *testing.T) 
 		ReleaseDigest: request.ReleaseDigest, ReconstructionDigest: digest('3'), MaterializationReceiptDigest: digest('4'),
 		VerifierCertificateDigest: computerevent.DigestBytes(certificateJSON), VerifierCertificate: response, ReducerVersion: 1,
 		VMLocalContentWitness: testWitnessV3("choir"),
-		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
+		FrontendIdentity:      FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
 	}
 	if _, _, err := CheckpointFromRequest(checkpoint); err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func ownerRecoveryTestRequest() CheckpointRequest {
 		EventHeadReceiptID: "receipt-test", ReleaseDigest: digest('f'), ReconstructionDigest: digest('3'),
 		ReducerVersion: 1, OwnerRecovery: true,
 		VMLocalContentWitness: testWitnessV3("texture"),
-		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationRelease, ReleaseDigest: digest('f')},
+		FrontendIdentity:      FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationRelease, ReleaseDigest: digest('f')},
 	}
 }
 

@@ -50,7 +50,7 @@ const (
 
 	authorityRef = "authority:guest-snapshot"
 	// scanPageSize is the replay page size Restore scans the tape with.
-	scanPageSize = computerevent.EventReplayMaxPageSize
+	scanPageSize = computerevent.EventReplayPageSize
 )
 
 // ErrNoSnapshot means the tape holds no usable snapshot_recorded event.
@@ -321,11 +321,11 @@ type RestoreConfig struct {
 	Verify func(ctx context.Context, record Record, path string) error
 }
 
-// found is a snapshot_recorded event seen on the tape.
-type found struct {
-	eventID string
-	digest  string
-	seq     uint64
+// Candidate is a snapshot_recorded event seen on the tape.
+type Candidate struct {
+	EventID  string
+	Digest   string
+	Sequence uint64
 }
 
 // Restore installs the newest usable snapshot at cfg.DestPath and returns its
@@ -333,15 +333,21 @@ type found struct {
 // store and lets the tape replay apply the events after
 // Record.StoreHeadSequence.
 func Restore(ctx context.Context, cfg RestoreConfig) (Record, error) {
+	candidates, err := Scan(ctx, cfg.Source, cfg.ComputerID, nil)
+	if err != nil {
+		return Record{}, err
+	}
+	return Install(ctx, cfg, candidates)
+}
+
+// Install installs the newest usable of candidates (oldest first, as Scan
+// returns them).
+func Install(ctx context.Context, cfg RestoreConfig, candidates []Candidate) (Record, error) {
 	if strings.TrimSpace(cfg.ComputerID) == "" || strings.TrimSpace(cfg.DestPath) == "" || cfg.Source == nil || cfg.Chunks == nil || cfg.Cipher == nil {
 		return Record{}, errors.New("snapshot: computer id, destination, source, chunk store and cipher are required")
 	}
 	if _, err := os.Lstat(cfg.DestPath); err == nil {
 		return Record{}, fmt.Errorf("snapshot: refusing to replace existing state file %s", cfg.DestPath)
-	}
-	candidates, err := scan(ctx, cfg)
-	if err != nil {
-		return Record{}, err
 	}
 	if len(candidates) == 0 {
 		return Record{}, ErrNoSnapshot
@@ -355,7 +361,7 @@ func Restore(ctx context.Context, cfg RestoreConfig) (Record, error) {
 		if ctx.Err() != nil {
 			return Record{}, ctx.Err()
 		}
-		failures = append(failures, fmt.Errorf("snapshot event %s (sequence %d): %w", candidates[i].eventID, candidates[i].seq, err))
+		failures = append(failures, fmt.Errorf("snapshot event %s (sequence %d): %w", candidates[i].EventID, candidates[i].Sequence, err))
 	}
 	return Record{}, fmt.Errorf("snapshot: no usable snapshot: %w", errors.Join(failures...))
 }
@@ -364,11 +370,17 @@ func Restore(ctx context.Context, cfg RestoreConfig) (Record, error) {
 // reached if the newer ones are unusable.
 const maxCandidates = 4
 
-func scan(ctx context.Context, cfg RestoreConfig) ([]found, error) {
-	var candidates []found
+// Scan reads the tape from its start and returns the newest snapshot_recorded
+// events (oldest first). visit, when set, sees every event in order and stops
+// the scan by returning true; the stopping event itself is still considered.
+func Scan(ctx context.Context, src Source, computerID string, visit func(computerevent.DurableEvent) (stop bool)) ([]Candidate, error) {
+	if src == nil || strings.TrimSpace(computerID) == "" {
+		return nil, errors.New("snapshot: source and computer id are required")
+	}
+	var candidates []Candidate
 	after := uint64(0)
 	for {
-		page, err := cfg.Source.EventsPage(ctx, cfg.ComputerID, after, scanPageSize)
+		page, err := src.EventsPage(ctx, computerID, after, scanPageSize)
 		if err != nil {
 			return nil, fmt.Errorf("snapshot: scan tape after %d: %w", after, err)
 		}
@@ -378,23 +390,25 @@ func scan(ctx context.Context, cfg RestoreConfig) ([]found, error) {
 		for _, durable := range page {
 			event := durable.Request.Event
 			after = event.Sequence
-			if event.EventKind != computerevent.EventSnapshotRecorded || !computerevent.IsSHA256(event.PayloadCommitment) {
-				continue
+			if event.EventKind == computerevent.EventSnapshotRecorded && computerevent.IsSHA256(event.PayloadCommitment) {
+				candidates = append(candidates, Candidate{EventID: event.EventID, Digest: event.PayloadCommitment, Sequence: event.Sequence})
+				if len(candidates) > maxCandidates {
+					candidates = candidates[1:]
+				}
 			}
-			candidates = append(candidates, found{eventID: event.EventID, digest: event.PayloadCommitment, seq: event.Sequence})
-			if len(candidates) > maxCandidates {
-				candidates = candidates[1:]
+			if visit != nil && visit(durable) {
+				return candidates, nil
 			}
 		}
 	}
 }
 
-func restoreOne(ctx context.Context, cfg RestoreConfig, f found) (Record, error) {
-	envelope, err := cfg.Source.FetchPayload(ctx, cfg.ComputerID, f.digest)
+func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, error) {
+	envelope, err := cfg.Source.FetchPayload(ctx, cfg.ComputerID, f.Digest)
 	if err != nil {
 		return Record{}, fmt.Errorf("fetch record: %w", err)
 	}
-	plaintext, _, err := cfg.Cipher.Decrypt(ctx, envelope, cfg.ComputerID, f.eventID)
+	plaintext, _, err := cfg.Cipher.Decrypt(ctx, envelope, cfg.ComputerID, f.EventID)
 	if err != nil {
 		return Record{}, fmt.Errorf("unseal record: %w", err)
 	}

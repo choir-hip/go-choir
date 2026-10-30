@@ -146,7 +146,7 @@ func testCheckpointRequest(t *testing.T) CheckpointRequest {
 		ReleaseDigest: request.ReleaseDigest, ReconstructionDigest: digest('3'), MaterializationReceiptDigest: digest('4'),
 		VerifierCertificateDigest: computerevent.DigestBytes(certificateJSON), VerifierCertificate: response, ReducerVersion: 1,
 		VMLocalContentWitness: testWitnessV3("choir"),
-		FrontendIdentity: FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
+		FrontendIdentity:      FrontendIdentity{Digest: digest('c'), Derivation: FrontendDerivationExplicit},
 	}
 }
 

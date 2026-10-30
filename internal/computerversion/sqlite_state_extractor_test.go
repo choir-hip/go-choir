@@ -157,3 +157,13 @@ func TestSQLiteExtractorRejectsBadInput(t *testing.T) {
 		t.Fatal("expected an error for a missing database name")
 	}
 }
+
+func TestSQLiteExtractorEmptyTableDigest(t *testing.T) {
+	db := sqliteFixture(t, `CREATE TABLE keyed (id INTEGER PRIMARY KEY, v TEXT); CREATE TABLE keyless (v TEXT)`)
+	set := extractSet(t, SQLiteStateExtractor{DB: db, Database: "d"})
+	for _, table := range []string{"keyed", "keyless"} {
+		if got, want := obsValue(set, "sqlite:d:table:"+table), EmptyTableDigest(table); got != want {
+			t.Fatalf("%s: empty table digest = %s, want %s", table, got, want)
+		}
+	}
+}

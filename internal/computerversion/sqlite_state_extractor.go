@@ -98,6 +98,14 @@ func WitnessV3ContentRoot(schemaHash string, tables map[string]string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// EmptyTableDigest is the observation value ("sha256:" and the digest) of a
+// table with no rows, whether or not it has a primary key.
+func EmptyTableDigest(table string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(witnessV3Domain + "\ntable " + table + "\n"))
+	return "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+}
+
 // Digests computes the v3 digests of the store in one read transaction.
 func (e SQLiteStateExtractor) Digests(ctx context.Context) (StateDigests, error) {
 	if err := ctx.Err(); err != nil {
@@ -309,6 +317,7 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 		ptrs[i] = &values[i]
 	}
 	var row []byte
+	count := 0
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -327,6 +336,7 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 				return "", fmt.Errorf("encode %s.%s: %w", table, c.name, encErr)
 			}
 		}
+		count++
 		if sorter != nil {
 			if err := sorter.Add(hex.EncodeToString(row)); err != nil {
 				return "", fmt.Errorf("digest row from %s: %w", table, err)
@@ -341,7 +351,7 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("iterate rows from %s: %w", table, err)
 	}
-	if sorter != nil {
+	if sorter != nil && count > 0 {
 		sum, err := sorter.Sum()
 		if err != nil {
 			return "", err

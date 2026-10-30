@@ -2,15 +2,11 @@ package agentcore
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
@@ -44,9 +40,9 @@ type checkpointPublishFunc func(ctx context.Context, binding checkpointBinding) 
 
 // bindCheckpointAtHead binds a checkpoint's head and witness to one state and
 // publishes it. Holding appends, it reads the head H, extracts the live
-// witness at H, pins the advertised projection base under H and publishes, so
-// the platform's current head is H and the witness is H's. It installs no
-// base, replays no tape and writes no scratch or Dolt row: whether the
+// witness at H and publishes, so the platform's current head is H and the
+// witness is H's. It installs no snapshot, replays no tape and writes no
+// scratch or store row: whether the
 // witnessed state is derivable from the tape is proven where a checkpoint is
 // used, by restore, which reconstructs to H and refuses a witness mismatch
 // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1). The
@@ -55,18 +51,14 @@ type checkpointPublishFunc func(ctx context.Context, binding checkpointBinding) 
 // is not the head after it on a computer that is working. publish nil
 // returns the binding without publishing.
 func (rt *Runtime) bindCheckpointAtHead(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
-	return rt.bindCheckpoint(ctx, computerID, releaseDigest, files, publish, true)
+	return rt.bindCheckpoint(ctx, computerID, releaseDigest, files, publish)
 }
 
-// bindCheckpoint is bindCheckpointAtHead with the pin chosen by the caller.
-// An apply or a platform update pins the advertised base under its checkpoint,
-// so a restore to it, or a rollback of it, keeps a start point after the
-// advertised base moves on. The cadence's owner-recovery checkpoints pin none:
-// there is one every few minutes, a pin has no release path until the
-// retention slice, and the bases of recent checkpoints are kept by the newest-
-// two rule while they are new (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
-// Build findings).
-func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc, pinBase bool) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
+// bindCheckpoint binds the head and the witness of one state and publishes.
+// A restore to a checkpoint starts from the newest snapshot at or below its
+// head (internal/snapshot) and replays the tape after it; the checkpoint pins
+// nothing, because the snapshot is named on the tape.
+func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest string, files []updater.ManifestFile, publish checkpointPublishFunc) (checkpointBinding, *selfdevprotocol.CheckpointResponse, error) {
 	if rt == nil || rt.store == nil || rt.eventAppender == nil {
 		return checkpointBinding{}, nil, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
 	}
@@ -104,11 +96,6 @@ func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest
 				return fmt.Errorf("self-development checkpoint: %w", err)
 			}
 			binding = checkpointBinding{Head: head, Witness: witness, Frontend: frontend, DepositMode: depositMode, WitnessDuration: witnessDuration}
-			if pinBase {
-				if err := rt.pinAdvertisedBase(ctx, computerID, head); err != nil {
-					return fmt.Errorf("self-development checkpoint: pin advertised base: %w", err)
-				}
-			}
 			if publish == nil {
 				return nil
 			}
@@ -132,9 +119,8 @@ func (rt *Runtime) bindCheckpoint(ctx context.Context, computerID, releaseDigest
 
 // liveCheckpointWitness is the VM-local content witness of the live store at
 // head. The caller holds appends, so the live store is head's state. It is the
-// v2 hash-only witness: Dolt's per-table hashes, read through the live store's
-// own pool in one transaction, in milliseconds and without reading a row
-// (docs/problems/paper-never-checkpointed-2026-10-27.md, S3).
+// v3 witness: a SHA-256 per table over its rows in primary-key order and a
+// schema hash, streamed through one read transaction (LiveStoreWitness).
 func (rt *Runtime) liveCheckpointWitness(ctx context.Context, head *computerevent.Head) (selfdevprotocol.VMLocalContentWitness, error) {
 	var empty selfdevprotocol.VMLocalContentWitness
 	if head == nil || !computerevent.IsSHA256(head.CanonicalEventHead) {
@@ -144,57 +130,11 @@ func (rt *Runtime) liveCheckpointWitness(ctx context.Context, head *computereven
 	if db == nil {
 		return empty, fmt.Errorf("self-development checkpoint: live store is not open")
 	}
-	witness, err := doltHashWitness(ctx, db, replayDoltStateExtractor(rt.store.TexturePath()))
+	witness, err := LiveStoreWitness(ctx, db)
 	if err != nil {
-		return empty, fmt.Errorf("self-development checkpoint: read live Dolt table hashes at sequence %d: %w", head.Sequence, err)
+		return empty, fmt.Errorf("self-development checkpoint: read live store witness at sequence %d: %w", head.Sequence, err)
 	}
 	return witness, nil
-}
-
-// doltHashWitness reads a v2 witness through db in one transaction, so every
-// table hash is of one root.
-func doltHashWitness(ctx context.Context, db *sql.DB, extractor computerversion.DoltStateExtractor) (selfdevprotocol.VMLocalContentWitness, error) {
-	var empty selfdevprotocol.VMLocalContentWitness
-	if db == nil {
-		return empty, fmt.Errorf("self-development checkpoint: store is not open")
-	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return empty, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	doltHead, tables, err := extractor.TableHashes(ctx, tx)
-	if err != nil {
-		return empty, err
-	}
-	return selfdevprotocol.WitnessV2FromDoltHashes(extractor.Database, doltHead, tables, extractor.OperationalTables())
-}
-
-// pinAdvertisedBase retains the platform's advertised projection base under
-// the checkpoint's head, so a restore to the checkpoint starts from a snapshot
-// at or below it even after the advertised base moves past it. A computer the
-// platform never published a base for has nothing to pin (restore replays its
-// bounded chain from genesis); a source that cannot answer is not that case
-// and refuses, so no checkpoint is published without the pin it needs.
-func (rt *Runtime) pinAdvertisedBase(ctx context.Context, computerID string, head *computerevent.Head) error {
-	if head == nil || head.Sequence == 0 {
-		return nil
-	}
-	src, err := rt.resolveRestoreBaseSource()
-	if err != nil {
-		return err
-	}
-	sequence, baseRef, err := src.Watermark(ctx, computerID)
-	if err != nil {
-		if errors.Is(err, projectionbase.ErrBaseRefused) {
-			return nil
-		}
-		return err
-	}
-	if sequence == 0 || strings.TrimSpace(baseRef) == "" {
-		return nil
-	}
-	return rt.pinCheckpointBase(ctx, computerID, baseRef, head.CanonicalEventHead)
 }
 
 func checkpointFrontendIdentity(releaseDigest string, files []updater.ManifestFile) (selfdevprotocol.FrontendIdentity, error) {
