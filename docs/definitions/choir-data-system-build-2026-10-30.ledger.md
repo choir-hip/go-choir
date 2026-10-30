@@ -58,3 +58,4 @@ Append-only. One terse entry per pass. Never edit earlier entries.
     - an audit-export consistency proof.
   - Frame revision 2 is 85eb4a55b; ledger round 0m is 5294d3ec6.
   - D1 started, with the Dolt-coupling census running.
+- 2026-10-30 ~07:35 UTC (FP0). D1 complete: docs/design/data-system-build-sheet-2026-10-30.md. The integration branch cutover/data-system replaces landing on main; main gets the branch at C5. Next: WP0, the dbx seam, built by FP0.

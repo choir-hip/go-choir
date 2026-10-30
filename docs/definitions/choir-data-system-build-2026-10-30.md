@@ -49,7 +49,7 @@ metamission:
         one pass, with no panel.
     - id: D1
       title: the build sheet
-      status: working
+      status: complete
       depends_on: [D0]
       exit: >-
         One short document, docs/design/data-system-build-sheet-2026-10-30.md,
@@ -364,11 +364,14 @@ boundaries:
     checks are green on the migrated fleet (owner authorized the deletion,
     2026-10-30 ~06:40 UTC).
   build_in_bulk: >-
-    C1 to C3 are built together, in parallel where they do not touch the
-    same packages. Parallel builders are Sonnet subagents in their own
-    worktrees, working against C0's harness. Code lands on main as it
-    builds, enabled only for the proof ring (the d@e test computer), and is
-    drilled there as one system. Nothing widens to the fleet before C5.
+    C1 to C3 are built together. Parallel builders are Sonnet subagents,
+    each in its own worktree off the integration branch
+    `cutover/data-system`, working against C0's harness. Because new host
+    code is PostgreSQL only, there is no dual path, and `main` receives the
+    branch as the cutover itself (C5). CI runs on the branch's pull
+    request. The rehearsal (C4) runs the migrators on reflink copies on
+    Node B. See docs/design/data-system-build-sheet-2026-10-30.md,
+    decisions 1 and 2.
   tempo: >-
     This mission runs under AGENTS.md "Operating Tempo". In practice:
     - Fold, freeze, build. D0 and D1 are one pass each and take hours,
@@ -376,8 +379,8 @@ boundaries:
     - Fan out C0 to C3 at once: as many parallel Sonnet builders as there
       are disjoint package sets, each in its own worktree. Opus
       integrates.
-    - Land on main continuously. While CI and the deploy run, the next
-      piece is being built.
+    - Merge into the integration branch continuously. While CI runs, the
+      next piece is being built.
     - When something fails, fix forward. A failing drill is the next
       task, not a reason to stop.
     - Take the most direct route the frame allows, and record any choice
