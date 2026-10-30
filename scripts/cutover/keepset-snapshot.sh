@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Keep-set snapshot for the data system cutover (C0; build sheet work order 3).
 #
-#   keepset-snapshot.sh old OUTDIR   # before: Store B on the corpus Dolt server
-#   keepset-snapshot.sh new OUTDIR   # after: the PostgreSQL graph database
+#   keepset-snapshot.sh new OUTDIR   # the PostgreSQL graph database
 #   keepset-snapshot.sh diff OLDDIR NEWDIR
+#
+# The "old" mode read Store B on the corpus Dolt server; the cutover deleted
+# that store (C7, 2026-10-30), so only snapshots of the new store remain to
+# compare.
 #
 # Runs on Node B as root. Read-only: metadata, counts and id digests only;
 # no document, capture or mail content is read or printed. Each snapshot
@@ -29,30 +32,22 @@ set -euo pipefail
 ROOT="${CHOIR_ROOT:-/var/lib/go-choir}"
 ART="$ROOT/platform-artifacts"
 MAIL="$ROOT/mail"
-DOLT_PORT="${KEEPSET_DOLT_PORT:-13307}"
-DOLT_DB="${KEEPSET_DOLT_DB:-corpus}"
-DOLT_PW_FILE="${KEEPSET_DOLT_PW_FILE:-$ROOT/secrets/dolt-root-password}"
-PG_DSN="${CHOIR_PG_GRAPH_DSN:-host=/run/postgresql dbname=graph user=choir sslmode=disable}"
+# TCP to 127.0.0.1, where the choir role authenticates by password (scram).
+# The Unix socket is peer-authenticated, and this script runs as root, so a
+# socket DSN fails (review of the cutover, 2026-10-30, F10).
+PG_DSN="${CHOIR_PG_GRAPH_DSN:-host=127.0.0.1 port=5432 dbname=graph user=choir sslmode=disable}"
 PG_PW_FILE="${KEEPSET_PG_PW_FILE:-$ROOT/secrets/pg-app-password}"
 LIMIT=(nice -n 19 ionice -c3)
 
-usage() { sed -n 4,6p "$0" >&2; exit 2; }
+usage() { sed -n 4,5p "$0" >&2; exit 2; }
 
 # q SQL -> rows on stdout, comma-separated, no header.
-q_old() {
-  local home; home="$(mktemp -d)"
-  HOME="$home" DOLT_CLI_PASSWORD="$(cat "$DOLT_PW_FILE")" \
-    "${LIMIT[@]}" dolt --host 127.0.0.1 --port "$DOLT_PORT" --no-tls --user root \
-    --use-db "$DOLT_DB" sql -r csv -q "$1" | tail -n +2
-  rm -rf "$home"
-}
 q_new() {
   PGPASSWORD="$( [ -r "$PG_PW_FILE" ] && cat "$PG_PW_FILE" || true)" \
     "${LIMIT[@]}" psql "$PG_DSN" -v ON_ERROR_STOP=1 -X -A -t -F, -c "$1"
 }
 
-# JSON field of the capture metadata, per engine (metadata is TEXT on both).
-json_old() { printf "JSON_UNQUOTE(JSON_EXTRACT(metadata, '\$.%s'))" "$1"; }
+# JSON field of the capture metadata (metadata is TEXT).
 json_new() { printf "(metadata::jsonb->>'%s')" "$1"; }
 
 # Boolean-ish column printed by either engine -> 0/1.
@@ -121,7 +116,7 @@ compare() {
 }
 
 case "${1:-}" in
-  old|new) [ $# -eq 2 ] || usage; snapshot "$1" "$2" ;;
+  new) [ $# -eq 2 ] || usage; snapshot "$1" "$2" ;;
   diff) [ $# -eq 3 ] || usage; compare "$2" "$3" ;;
   *) usage ;;
 esac
