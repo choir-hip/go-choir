@@ -9,48 +9,27 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 )
 
-func openTestDoltDB(t *testing.T) *sql.DB {
+// openTestDB opens a fresh SQLite database and returns its write handle,
+// the one connection a write store runs on.
+func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	root := t.TempDir()
-	rootDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
-	rootCfg, err := embedded.ParseDSN(rootDSN)
-	if err != nil {
-		t.Fatalf("parse root dsn: %v", err)
-	}
-	rootConnector, err := embedded.NewConnector(rootCfg)
-	if err != nil {
-		t.Fatalf("new root connector: %v", err)
-	}
-	rootDB := sql.OpenDB(rootConnector)
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS testdb"); err != nil {
-		t.Fatalf("create database: %v", err)
-	}
-	_ = rootDB.Close()
-	_ = rootConnector.Close()
-
-	dbDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=testdb&multistatements=true&clientfoundrows=true", root)
-	dbCfg, err := embedded.ParseDSN(dbDSN)
-	if err != nil {
-		t.Fatalf("parse db dsn: %v", err)
-	}
-	dbConnector, err := embedded.NewConnector(dbCfg)
-	if err != nil {
-		t.Fatalf("new db connector: %v", err)
-	}
-	db := sql.OpenDB(dbConnector)
-	t.Cleanup(func() {
-		_ = db.Close()
-		_ = dbConnector.Close()
-	})
-	return db
+	return dbxtest.SQLite(t).Write
 }
 
-func TestDoltStoreEnsureSchema(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+// openTestDBs opens a fresh SQLite database and returns both handles: the
+// write connection and the read pool.
+func openTestDBs(t *testing.T) (write, read *sql.DB) {
+	t.Helper()
+	db := dbxtest.SQLite(t)
+	return db.Write, db.Read
+}
+
+func TestSQLStoreEnsureSchema(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -87,9 +66,9 @@ func TestDoltStoreEnsureSchema(t *testing.T) {
 	}
 }
 
-func TestDoltStoreListObjects(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreListObjects(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -143,9 +122,9 @@ func TestDoltStoreListObjects(t *testing.T) {
 	}
 }
 
-func TestDoltStoreListObjectsByMetadataPage(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreListObjectsByMetadataPage(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -253,28 +232,28 @@ func TestDoltStoreListObjectsByMetadataPage(t *testing.T) {
 	}
 }
 
-func TestDoltStoreListObjectsByMetadataPageErrors(t *testing.T) {
+func TestSQLStoreListObjectsByMetadataPageErrors(t *testing.T) {
 	ctx := context.Background()
 
-	var nilStore *DoltStore
+	var nilStore *SQLStore
 	_, err := nilStore.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 2)
 	if err == nil {
 		t.Fatal("nil receiver: expected error")
 	}
-	if got, want := err.Error(), "objectgraph dolt: nil store"; got != want {
+	if got, want := err.Error(), "objectgraph sql: nil store"; got != want {
 		t.Fatalf("nil receiver error: got %q, want %q", got, want)
 	}
 
-	_, err = NewDoltStore(nil).ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 2)
+	_, err = NewSQLStore(nil).ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 2)
 	if err == nil {
 		t.Fatal("nil database: expected error")
 	}
-	if got, want := err.Error(), "objectgraph dolt: nil store"; got != want {
+	if got, want := err.Error(), "objectgraph sql: nil store"; got != want {
 		t.Fatalf("nil database error: got %q, want %q", got, want)
 	}
 
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
 	}
@@ -283,9 +262,9 @@ func TestDoltStoreListObjectsByMetadataPageErrors(t *testing.T) {
 	}
 }
 
-func TestDoltStorePutAndListEdges(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStorePutAndListEdges(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -352,9 +331,9 @@ func TestDoltStorePutAndListEdges(t *testing.T) {
 	}
 }
 
-func TestDoltStorePutBatch(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStorePutBatch(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -412,9 +391,9 @@ func TestDoltStorePutBatch(t *testing.T) {
 	}
 }
 
-func TestDoltStorePutBatchConditionalIsAtomic(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStorePutBatchConditionalIsAtomic(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
@@ -482,9 +461,9 @@ func TestDoltStorePutBatchConditionalIsAtomic(t *testing.T) {
 	}
 }
 
-func TestDoltStoreGetObjectNotFound(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreGetObjectNotFound(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -497,9 +476,9 @@ func TestDoltStoreGetObjectNotFound(t *testing.T) {
 	}
 }
 
-func TestDoltStoreListEdgesByKind(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreListEdgesByKind(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -567,9 +546,9 @@ func TestDoltStoreListEdgesByKind(t *testing.T) {
 	}
 }
 
-func TestDoltStoreWithService(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreWithService(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 
 	if err := store.EnsureSchema(ctx); err != nil {
@@ -607,9 +586,9 @@ func TestDoltStoreWithService(t *testing.T) {
 	}
 }
 
-func TestDoltStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+func TestSQLStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("ensure schema: %v", err)
@@ -703,8 +682,8 @@ func TestDoltStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
 // computer); batching must not drop, duplicate or reorder objects across a
 // batch boundary, and the keep filter must still apply.
 func TestReadObjectSnapshotFilteredBatchesAcrossBoundaries(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)

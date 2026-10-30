@@ -347,7 +347,7 @@ var writeRegistry = DefaultRegistry()
 // CheckWrite is the object graph's write gate (H-OG1): it refuses a batch
 // that carries a live object or edge of a kind DefaultRegistry does not
 // register. Both durable stores call it first in every mutation method
-// (DoltStore before its validator and its projection interceptor, so a
+// (SQLStore before its validator and its projection interceptor, so a
 // refused write never reaches the event tape; platform.ObjectGraphStore
 // before SQL), so every write path passes it: Service, direct PutBatch,
 // and the corpusd HTTP routes.

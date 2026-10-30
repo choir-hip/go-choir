@@ -144,14 +144,14 @@ func TestLeaseCapabilityCannotBeForgedWithAStringKey(t *testing.T) {
 	}
 }
 
-// The Dolt store runs the fence before its interceptor and its validator, so
+// The SQL store runs the fence before its interceptor and its validator, so
 // a refused lease write reaches no tape.
-func TestDoltStoreRefusesAForgedLeaseBeforeTheInterceptor(t *testing.T) {
+func TestSQLStoreRefusesAForgedLeaseBeforeTheInterceptor(t *testing.T) {
 	for _, mode := range []WriterGateMode{WriterGateOff, WriterGateObserve, WriterGateEnforce} {
 		func() {
 			writerMode(t, mode)
 			ctx := context.Background()
-			store := NewDoltStore(openTestDoltDB(t))
+			store := NewSQLStore(openTestDB(t))
 			if err := store.EnsureSchema(ctx); err != nil {
 				t.Fatal(err)
 			}

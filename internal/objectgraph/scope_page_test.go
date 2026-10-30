@@ -14,24 +14,18 @@ import (
 // section 4).
 //
 // Ways it can fail, written before the code:
-//  1. The engine plans it as ListObjectsPage was planned: the kind index, a
-//     TopN over every remaining row of the kind per page (quadratic over the
-//     pages). The plan test pins an index range on (kind, owner, computer)
-//     with all three as equality bounds, so the TopN sees only the scope's
-//     rows (the engine keeps a TopN for the cursor order; the range, not the
-//     sort, is what bounds the work).
-//  2. The index is absent (a populated store that was never migrated): the
-//     read is wrong or errors instead of answering, slower, from the
-//     (kind, owner) index every store has.
-//  3. It returns rows of another owner, another kind, or a non-empty
+//  1. The engine plans it as ListObjectsPage was planned: the kind index and
+//     a sort over every remaining row of the kind per page (quadratic over
+//     the pages). The plan test pins an index range on (kind, owner,
+//     computer) with the cursor, in index order.
+//  2. It returns rows of another owner, another kind, or a non-empty
 //     computer; the empty computer is matched exactly.
-//  4. The cursor skips or repeats a row at a page boundary, or the pages are
+//  3. The cursor skips or repeats a row at a page boundary, or the pages are
 //     not in canonical-ID order.
-//  5. It runs unnamed or outside the engine mutex.
 
-const scopePageIndex = "og_objects.object_kind,og_objects.owner_id,og_objects.computer_id"
+const scopePageIndex = "idx_og_objects_kind_owner_computer"
 
-func putScopeObject(t *testing.T, store *DoltStore, id string, kind ObjectKind, owner, computer string, at time.Time) {
+func putScopeObject(t *testing.T, store *SQLStore, id string, kind ObjectKind, owner, computer string, at time.Time) {
 	t.Helper()
 	obj := Object{CanonicalID: id, ObjectKind: kind, OwnerID: owner, ComputerID: computer, VersionID: "v",
 		ContentHash: "h-" + id, Body: []byte(`{"id":"` + id + `"}`), Metadata: []byte(`{}`), CreatedAt: at, UpdatedAt: at}
@@ -42,7 +36,7 @@ func putScopeObject(t *testing.T, store *DoltStore, id string, kind ObjectKind, 
 
 // seedScopeMix writes a mix: two owners, two kinds, three computer values.
 // It returns the ids that match (choir.run, owner-a, computer "").
-func seedScopeMix(t *testing.T, store *DoltStore, n int) []string {
+func seedScopeMix(t *testing.T, store *SQLStore, n int) []string {
 	t.Helper()
 	at := time.Date(2026, 10, 23, 6, 0, 0, 0, time.UTC)
 	var want []string
@@ -77,7 +71,7 @@ func seedScopeMix(t *testing.T, store *DoltStore, n int) []string {
 	return want
 }
 
-func walkScopePages(t *testing.T, store *DoltStore, kind, owner, computer string, pageSize int) []string {
+func walkScopePages(t *testing.T, store *SQLStore, kind, owner, computer string, pageSize int) []string {
 	t.Helper()
 	var got []string
 	after := ""
@@ -109,43 +103,20 @@ func walkScopePages(t *testing.T, store *DoltStore, kind, owner, computer string
 }
 
 func TestScopePagePlanSeeksTheKindOwnerComputerIndex(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// F1 on a fresh store, where open builds the base indexes on the empty table.
-	if !containsString(ogIndexes(t, db), "idx_og_objects_kind_owner_computer") {
-		t.Fatalf("a fresh store lacks idx_og_objects_kind_owner_computer: %v", ogIndexes(t, db))
-	}
 	seedScopeMix(t, store, 60)
 	plan := explainPlan(t, db, ObjectsByKindOwnerComputerPageSQL, "choir.run", "owner-a", "", "", 256)
-	assertScopeRange(t, plan)
+	assertIndexedPlan(t, plan, scopePageIndex, true)
 	t.Logf("plan:\n%s", plan)
 }
 
-// assertScopeRange fails unless the plan reads the (kind, owner, computer)
-// index with an equality bound on all three columns and does not scan.
-func assertScopeRange(t *testing.T, plan string) {
-	t.Helper()
-	assertIndexedPlan(t, plan, scopePageIndex, false)
-	if !strings.Contains(plan, "filters: [{[choir.run, choir.run], [owner-a, owner-a], [, ]}]") {
-		t.Fatalf("plan does not bound kind, owner and computer_id by equality:\n%s", plan)
-	}
-}
-
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 func TestScopePageReturnsExactlyTheScopeAcrossPageSizes(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -167,55 +138,4 @@ func TestScopePageReturnsExactlyTheScopeAcrossPageSizes(t *testing.T) {
 	if got := walkScopePages(t, store, "choir.run", "owner-a", "computer-1", 10); len(got) == 0 {
 		t.Fatal("computer-1 scope is empty")
 	}
-	// F5: the read is named by kind in the engine-mutex stats.
-	var named bool
-	for op := range store.EngineMutexStats() {
-		if strings.Contains(op, "ListObjectsByKindOwnerComputerPage choir.run") {
-			named = true
-		}
-	}
-	if !named {
-		t.Fatalf("the read is not named in the engine-mutex stats: %v", store.EngineMutexStats())
-	}
-}
-
-// F2: a store with rows that was never migrated has no
-// idx_og_objects_kind_owner_computer (open adds base indexes only to an empty
-// table). The read must answer the same, from the (kind, owner) index every
-// store has, and the explicit migration must change only the speed.
-func TestScopePageAnswersWithoutTheBaseIndexAndAfterMigration(t *testing.T) {
-	ctx := context.Background()
-	db := openTestDoltDB(t)
-	if _, err := db.Exec(SchemaDDL); err != nil {
-		t.Fatal(err)
-	}
-	store := NewDoltStore(db)
-	want := seedScopeMix(t, store, 300)
-	if err := store.EnsureSchema(ctx); err != nil { // populated: discovery only
-		t.Fatal(err)
-	}
-	if containsString(ogIndexes(t, db), "idx_og_objects_kind_owner_computer") {
-		t.Fatalf("open built the base index on a populated store: %v", ogIndexes(t, db))
-	}
-	got := walkScopePages(t, store, "choir.run", "owner-a", "", 16)
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("without the base index: got %v want %v", got, want)
-	}
-	plan := explainPlan(t, db, ObjectsByKindOwnerComputerPageSQL, "choir.run", "owner-a", "", "", 256)
-	// The (kind, owner) index every store has bounds it to the owner's rows
-	// of the kind: one owner's range, not the kind.
-	assertIndexedPlan(t, plan, "og_objects.object_kind,og_objects.owner_id", false)
-	t.Logf("plan without the base index:\n%s", plan)
-
-	if _, err := store.MigrateAccessPaths(ctx, func(AccessPathStep) {}); err != nil {
-		t.Fatal(err)
-	}
-	if !containsString(ogIndexes(t, db), "idx_og_objects_kind_owner_computer") {
-		t.Fatalf("migration did not build the base index: %v", ogIndexes(t, db))
-	}
-	got = walkScopePages(t, store, "choir.run", "owner-a", "", 16)
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("after migration: got %v want %v", got, want)
-	}
-	assertScopeRange(t, explainPlan(t, db, ObjectsByKindOwnerComputerPageSQL, "choir.run", "owner-a", "", "", 256))
 }

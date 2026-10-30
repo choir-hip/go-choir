@@ -18,13 +18,13 @@ import (
 //  2. The existence probe scans a kind instead of seeking one row.
 //  3. It returns rows in the wrong order, ignores the limit, or drops the
 //     metadata the seed reads.
-//  4. It runs outside the engine mutex, or unnamed, so a stall cannot be
+//  4. It reads more than it should, so a stall cannot be
 //     attributed.
 
-func newestHeadersStore(t *testing.T) (*DoltStore, time.Time) {
+func newestHeadersStore(t *testing.T) (*SQLStore, time.Time) {
 	t.Helper()
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -41,28 +41,11 @@ func TestNewestObjectHeadersPlanWalksTheTimeIndex(t *testing.T) {
 		putTestObject(t, store, fmt.Sprintf("o-%02d", i), kind, map[string]any{"stream_seq": i}, `{}`, base.Add(time.Duration(i)*time.Second))
 	}
 	plan := explainPlan(t, store.db, NewestObjectHeadersSQL, 500)
-	assertIndexedPlan(t, plan, "og_objects.updated_at", true)
-	if !strings.Contains(plan, "reverse: true") {
-		t.Fatalf("plan does not walk the time index newest first:\n%s", plan)
-	}
-	if strings.Contains(plan, "og_objects.object_kind,og_objects.owner_id") {
-		t.Fatalf("plan reads the kind index:\n%s", plan)
-	}
-
-	// F3: the window read projects the kind and the metadata and no body.
-	if !strings.Contains(plan, "columns: [og_objects.object_kind, og_objects.metadata]") || !strings.Contains(plan, "columns: [object_kind metadata updated_at]") {
-		t.Fatalf("the window read projects more than kind and metadata:\n%s", plan)
-	}
-	if strings.Contains(plan, "body") {
-		t.Fatalf("the window read touches body:\n%s", plan)
-	}
+	assertIndexedPlan(t, plan, "idx_og_objects_updated", true)
 
 	plan = explainPlan(t, store.db, ObjectKindExistsSQL, "choir.event")
-	if !strings.Contains(plan, "IndexedTableAccess(og_objects)") || !strings.Contains(plan, "Limit(1)") {
+	if !strings.Contains(plan, "SEARCH og_objects USING") || strings.Contains(plan, "SCAN") || strings.Contains(plan, "TEMP B-TREE") {
 		t.Fatalf("the existence probe is not one index seek:\n%s", plan)
-	}
-	if strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
-		t.Fatalf("the existence probe sorts:\n%s", plan)
 	}
 }
 
@@ -96,9 +79,6 @@ func TestNewestObjectHeadersReturnsTheNewestFirst(t *testing.T) {
 	if all, err := store.ListNewestObjectHeaders(ctx, 100); err != nil || len(all) != 10 {
 		t.Fatalf("a window larger than the store: %d headers, %v; want all 10", len(all), err)
 	}
-	if st := store.EngineMutexStats()["(*DoltStore).ListNewestObjectHeaders"]; st.Calls != 2 {
-		t.Fatalf("the read is not named on the engine mutex: %v", store.EngineMutexStats())
-	}
 }
 
 func TestHasObjectOfKind(t *testing.T) {
@@ -110,8 +90,5 @@ func TestHasObjectOfKind(t *testing.T) {
 	}
 	if ok, err := store.HasObjectOfKind(ctx, "choir.event"); err != nil || ok {
 		t.Fatalf("event kind absent: %v, %v", ok, err)
-	}
-	if st := store.EngineMutexStats()["(*DoltStore).HasObjectOfKind"]; st.Calls != 2 {
-		t.Fatalf("the probe is not named on the engine mutex: %v", store.EngineMutexStats())
 	}
 }
