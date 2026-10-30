@@ -169,15 +169,6 @@ type runtimeHealthResponse struct {
 	// the updater probe fails closed and hosts see the trip, not a healthy
 	// report from a binary that is not the applied release.
 	LayeringBootguard string `json:"layering_bootguard,omitempty"`
-	// EngineMutex exposes cumulative per-call-path wait/hold counters for the
-	// embedded-Dolt engine lock (write + read pools share it). The latency
-	// mission's drain probe uses wait-vs-hold attribution to decide between
-	// read-pool separation and committed-state projection work.
-	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
-	// DoltGC is the guest store's last Dolt GC decision record
-	// (store.ReadDoltGCDisposition): outcome, journal and free space, and
-	// compaction_needed when GC alone cannot keep the disk free.
-	DoltGC json.RawMessage `json:"dolt_gc,omitempty"`
 	// EffectiveRelease is the release, tree, event head and CodeRef this
 	// computer runs (P6, docs/reports/p6-p8-release-adopt-2026-10-15.md).
 	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
@@ -683,9 +674,8 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 			RunningRuns:   h.rt.RunningCount(),
 			Build:         buildinfo.Snapshot("autoputer"),
 			StoreStalled: healthStoreStalled{
-				Unanswered:      reads.unanswered,
-				BudgetMS:        healthStoreBudget.Milliseconds(),
-				EngineMutexLive: h.rt.store.EngineMutexLive(),
+				Unanswered: reads.unanswered,
+				BudgetMS:   healthStoreBudget.Milliseconds(),
 			},
 		}
 		if guard != "" {
@@ -729,8 +719,6 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status
 	}
-	resp.DoltGC = store.ReadDoltGCDisposition(filepath.Dir(h.rt.cfg.StorePath))
-	resp.EngineMutex = h.rt.store.EngineMutexStats()
 	resp.EffectiveRelease = &reads.identity
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -752,13 +740,12 @@ type runtimeHealthStalledResponse struct {
 	StoreStalled      healthStoreStalled       `json:"store_stalled"`
 }
 
-// healthStoreStalled names the reads that missed and the engine lock's live
-// holder. The write connection can also be held outside the engine lock (the
-// online GC, a raw query); then the holder is empty or a waiter on it.
+// healthStoreStalled names the reads that missed. The write connection can be
+// held by a long transaction or a raw query; the pool counters in the
+// observability endpoint (store_pools) show it.
 type healthStoreStalled struct {
-	Unanswered      []string                     `json:"unanswered"`
-	BudgetMS        int64                        `json:"budget_ms"`
-	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live,omitempty"`
+	Unanswered []string `json:"unanswered"`
+	BudgetMS   int64    `json:"budget_ms"`
 }
 
 type healthStoreReads struct {
@@ -851,13 +838,6 @@ type guestObservabilityResponse struct {
 	// ManagementTasks is the slot starter's state for the caller's
 	// management (S2b): K, the slots in use and the queue.
 	ManagementTasks *managementTaskObservability `json:"management_tasks,omitempty"`
-	// EngineMutex is the engine lock's cumulative wait and hold per call
-	// path since boot (H3: lock waits at K = 4).
-	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
-	// EngineMutexLive is who holds the engine lock now and who waits for it,
-	// with ages: a store call that never returns shows here, where the
-	// cumulative stats above record a wait only after it ends.
-	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live,omitempty"`
 	// StorePools is the store's write and read pools' sql.DBStats (one
 	// connection each): how often and how long callers waited for the
 	// connection since boot, the load behind /health's store_stalled 503s.
@@ -883,10 +863,6 @@ type guestObservabilityResponse struct {
 	// bytes, the retention floor, dropped, fallbacks and poisoned (trace-log
 	// design S2). Read-only.
 	TraceLog *store.TraceLogStats `json:"trace_log,omitempty"`
-	// GuestCheckpoint is the guest's Dolt history-commit cadence: the mode,
-	// inline commits (time writers waited) and background commits, and
-	// what is not yet committed (ARCH-13). Read-only.
-	GuestCheckpoint *store.CheckpointStats `json:"guest_checkpoint,omitempty"`
 	// EventTable is store.event_table as applied (event_table.go): the host
 	// grant, the owner's setting, and whether the writer stamps. Absent on a
 	// computer with neither, so the response is unchanged there.
@@ -995,10 +971,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.Goroutines = goroutineDump()
 	}
 	if r.URL.Query().Get("memory") == "detail" {
-		// StorePath is a 0-byte marker file; the Dolt workspace directory
-		// beside it holds the data.
+		// The SQLite state file (state.db and its WAL) is the store.
 		resp.MemoryDetail = guestmem.Read(r.Context(), []guestmem.Tree{
-			{Label: "store", Root: store.TextureWorkspacePath(h.rt.cfg.StorePath)},
+			{Label: "store", Root: store.StateDBPath(h.rt.cfg.StorePath)},
 			{Label: "nix_store", Root: "/nix/store"},
 		}, guestmem.DefaultLimits)
 	}
@@ -1007,8 +982,6 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	}
 	unanswered := func(name string) { resp.Unanswered = append(resp.Unanswered, name) }
 	if h.rt.store != nil {
-		resp.EngineMutex = h.rt.store.EngineMutexStats()
-		resp.EngineMutexLive = h.rt.store.EngineMutexLive()
 		resp.StorePools = h.rt.store.PoolStats()
 		telemetry := h.rt.store.TelemetryStats()
 		resp.TelemetryBatching = &telemetry
@@ -1016,8 +989,6 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		traceLog := h.rt.store.TraceLogStats()
 		resp.TraceLog = &traceLog
-		checkpoint := h.rt.store.CheckpointStats()
-		resp.GuestCheckpoint = &checkpoint
 		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
 			resp.EventTable = &st
 		}

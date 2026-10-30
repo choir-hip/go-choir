@@ -117,37 +117,6 @@ func sameIDs(a, b []string) bool {
 	return true
 }
 
-func TestOpenWakeListLeavesTheJSONScan(t *testing.T) {
-	s := openTestStore(t)
-	want := seedWakeOutbox(t, s, 600, 4)
-
-	// Before the pass: today's JSON read, and its answer.
-	if got := openWakeIDs(t, s); !sameIDs(got, want) {
-		t.Fatalf("before validation: %v, want %v", got, want)
-	}
-	if j, k := outboxListOps(s); j == 0 || k != 0 {
-		t.Fatalf("before validation: %d JSON reads, %d side-table reads; want JSON only", j, k)
-	}
-
-	if err := s.ValidateDerivedKeys(context.Background(), objectgraph.DerivedKeyValidation{PageSize: 100}); err != nil {
-		t.Fatal(err)
-	}
-	d := s.derivedKeys()
-	for _, name := range []string{objectgraph.KeyRunAgentID, objectgraph.KeyCommitmentAddressee, objectgraph.KeySourceRefDocID, outboxProjectedFamily} {
-		if !d.Validated(name) {
-			t.Fatalf("family %s is not validated after one pass", name)
-		}
-	}
-	jsonBefore, keyBefore := outboxListOps(s)
-	if got := openWakeIDs(t, s); !sameIDs(got, want) {
-		t.Fatalf("after validation: %v, want %v", got, want)
-	}
-	jsonAfter, keyAfter := outboxListOps(s)
-	if jsonAfter != jsonBefore || keyAfter == keyBefore {
-		t.Fatalf("after validation the list made %d JSON reads and %d side-table reads of the outbox; want 0 and at least 1", jsonAfter-jsonBefore, keyAfter-keyBefore)
-	}
-}
-
 func TestOpenWakeListAgreesWithTheRowsAcrossMarks(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

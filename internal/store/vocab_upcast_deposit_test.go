@@ -396,14 +396,14 @@ func vocabUpcastOGSnapshot(t *testing.T, s *Store) map[string][]string {
 	return out
 }
 
-// vocabUpcastTapeRowSnapshot captures the raw tape rows (event bytes, receipt
-// bytes, receipt digest, status) so cross-path runs can be compared without
-// re-deriving them.
+// vocabUpcastTapeRowSnapshot captures the raw tape index rows (digest, receipt
+// digest, status; the guest keeps no event or receipt bodies) so cross-path
+// runs can be compared without re-deriving them.
 func vocabUpcastTapeRowSnapshot(t *testing.T, s *Store) []string {
 	t.Helper()
 	ctx := context.Background()
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT sequence, event_digest, event_json, event_head_receipt_json, event_head_receipt_digest, status FROM computer_event_index WHERE computer_id=? ORDER BY sequence`,
+		`SELECT sequence, event_digest, event_head_receipt_digest, status FROM computer_event_index WHERE computer_id=? ORDER BY sequence`,
 		vocabUpcastComputerID)
 	if err != nil {
 		t.Fatalf("tape row snapshot: %v", err)
@@ -412,11 +412,11 @@ func vocabUpcastTapeRowSnapshot(t *testing.T, s *Store) []string {
 	var out []string
 	for rows.Next() {
 		var sequence uint64
-		var digest, eventJSON, receiptJSON, receiptDigest, status string
-		if err := rows.Scan(&sequence, &digest, &eventJSON, &receiptJSON, &receiptDigest, &status); err != nil {
+		var digest, receiptDigest, status string
+		if err := rows.Scan(&sequence, &digest, &receiptDigest, &status); err != nil {
 			t.Fatalf("tape row snapshot scan: %v", err)
 		}
-		out = append(out, fmt.Sprintf("%d|%s|%s|%s|%s|%s", sequence, digest, eventJSON, receiptJSON, receiptDigest, status))
+		out = append(out, fmt.Sprintf("%d|%s|%s|%s", sequence, digest, receiptDigest, status))
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("tape row snapshot: %v", err)
@@ -446,16 +446,12 @@ func vocabUpcastReadLedger(t *testing.T, s *Store) *depositUpcastLedger {
 	return ledger
 }
 
-// vocabUpcastAssertRawTapeUntouched proves the raw tape rows are byte-identical
-// to the recorded tape: event bytes, receipt bytes and receipt digests.
+// vocabUpcastAssertRawTapeUntouched proves the raw tape index rows match the
+// recorded tape: event digest, receipt digest and finalized status.
 func vocabUpcastAssertRawTapeUntouched(t *testing.T, s *Store, tape []vocabUpcastTapeEvent) {
 	t.Helper()
 	ctx := context.Background()
 	for _, tapeEvent := range tape {
-		eventJSON, err := tapeEvent.Event.CanonicalBytes()
-		if err != nil {
-			t.Fatal(err)
-		}
 		receiptJSON, err := tapeEvent.Receipt.CanonicalBytes()
 		if err != nil {
 			t.Fatal(err)
@@ -464,20 +460,14 @@ func vocabUpcastAssertRawTapeUntouched(t *testing.T, s *Store, tape []vocabUpcas
 		if err != nil {
 			t.Fatal(err)
 		}
-		var storedEvent, storedReceipt, storedReceiptDigest, status string
+		var storedReceiptDigest, status string
 		if err := s.db.QueryRowContext(ctx,
-			`SELECT event_json, event_head_receipt_json, event_head_receipt_digest, status FROM computer_event_index WHERE computer_id=? AND event_digest=?`,
-			vocabUpcastComputerID, digest).Scan(&storedEvent, &storedReceipt, &storedReceiptDigest, &status); err != nil {
+			`SELECT event_head_receipt_digest, status FROM computer_event_index WHERE computer_id=? AND event_digest=?`,
+			vocabUpcastComputerID, digest).Scan(&storedReceiptDigest, &status); err != nil {
 			t.Fatalf("read raw tape row: %v", err)
 		}
 		if status != "finalized" {
 			t.Fatalf("event row status = %q, want finalized", status)
-		}
-		if storedEvent != string(eventJSON) {
-			t.Fatalf("raw event bytes were rewritten:\n got: %s\nwant: %s", storedEvent, eventJSON)
-		}
-		if storedReceipt != string(receiptJSON) {
-			t.Fatalf("original receipt bytes were rewritten:\n got: %s\nwant: %s", storedReceipt, receiptJSON)
 		}
 		if want := computerevent.DigestBytes(receiptJSON); storedReceiptDigest != want {
 			t.Fatalf("receipt digest = %s, want %s", storedReceiptDigest, want)
@@ -671,12 +661,12 @@ func TestVocabDepositUpcastGenesisMatchesBaseTailReplay(t *testing.T) {
 	// The base is published (marker + workspace, sidecar reports included) and
 	// the tail is replayed onto the staged copy — the rebuild-with-base path.
 	tailPath := vocabUpcastStorePath(t, "base-tail")
-	marker, err := os.ReadFile(basePath)
+	stateBytes, err := os.ReadFile(StateDBPath(basePath))
 	if err != nil {
-		t.Fatalf("read base marker: %v", err)
+		t.Fatalf("read base state file: %v", err)
 	}
-	if err := os.WriteFile(tailPath, marker, 0o644); err != nil {
-		t.Fatalf("write tail marker: %v", err)
+	if err := os.WriteFile(StateDBPath(tailPath), stateBytes, 0o644); err != nil {
+		t.Fatalf("write tail state file: %v", err)
 	}
 	vocabUpcastCopyTree(t, deriveTextureWorkspacePath(basePath), deriveTextureWorkspacePath(tailPath))
 	tail, err := Open(tailPath)

@@ -176,11 +176,10 @@ func TestExactSeedTablePlanSeeksPerOwner(t *testing.T) {
 	maxSQL, maxArgs := eventTableOwnerMaxStreamSQL("alpha")
 	maxPlan := strings.ToLower(explainEventTablePlan(t, h.store, maxSQL, maxArgs...))
 	for name, plan := range map[string]string{"next owner": nextPlan, "owner max": maxPlan} {
-		if strings.Contains(plan, "sort") {
+		if strings.Contains(plan, "temp b-tree") {
 			t.Errorf("%s plan sorts:\n%s", name, plan)
 		}
-		// Dolt names the index by its columns in the plan.
-		if !strings.Contains(plan, "indexedtableaccess(choir_events)") || !strings.Contains(plan, "choir_events.owner_id,choir_events.stream_seq") {
+		if !strings.Contains(plan, "idx_choir_events_owner_stream") {
 			t.Errorf("%s plan is not an index access on (owner_id, stream_seq):\n%s", name, plan)
 		}
 	}
@@ -194,11 +193,11 @@ func TestExactSeedPagePlanIsAPrimaryKeyRangeWithNoSort(t *testing.T) {
 	putStoredEvent(t, s, "e-1", "run", 1, time.Now().UTC())
 	lo, hi := objectgraph.KindIDRange(ogKindEvent)
 	plan := strings.ToLower(explainEventTablePlan(t, s, objectgraph.KindIDRangePageSQL, lo, hi, 100))
-	if strings.Contains(plan, "sort") || strings.Contains(plan, "topn") {
+	if strings.Contains(plan, "temp b-tree") {
 		t.Errorf("the range page sorts:\n%s", plan)
 	}
-	if !strings.Contains(plan, "primary") && !strings.Contains(plan, "indexedtableaccess") {
-		t.Errorf("the range page is not an index or primary-key access:\n%s", plan)
+	if !strings.Contains(plan, "canonical_id>") {
+		t.Errorf("the range page is not a primary-key range:\n%s", plan)
 	}
 	if strings.Contains(strings.ToLower(objectgraph.KindIDRangePageSQL), "body") || strings.Contains(strings.ToLower(objectgraph.KindMetadataPageSQL), "body") {
 		t.Error("a page query reads the body")
@@ -225,9 +224,6 @@ func TestExactSeedFindsAnEventOutsideTheKindIDRange(t *testing.T) {
 	n := appendNext(t, s, "after")
 	if want := int64(4321) + streamSeqExactGap + 1; n != want {
 		t.Fatalf("stream_seq = %d, want %d: an event outside the id range was missed", n, want)
-	}
-	if keysetPageCalls(s) == 0 || rangePageCalls(s) != 0 {
-		t.Fatalf("an event outside the id range must take the kind-predicate fallback (keyset %d, range %d)", keysetPageCalls(s), rangePageCalls(s))
 	}
 }
 
@@ -259,13 +255,10 @@ func TestKindOutsideRangeProbePlanIsAKindIndexRead(t *testing.T) {
 	putStoredEvent(t, s, "e-1", "run", 1, time.Now().UTC())
 	lo, hi := objectgraph.KindIDRange(ogKindEvent)
 	plan := strings.ToLower(explainEventTablePlan(t, s, objectgraph.KindOutsideRangeSQL, "choir.event", lo, hi))
-	if !strings.Contains(plan, "limit(1)") {
-		t.Errorf("the probe has no LIMIT 1:\n%s", plan)
-	}
-	if !strings.Contains(plan, "indexedtableaccess") || !strings.Contains(plan, "object_kind") {
+	if !strings.Contains(plan, "using") || !strings.Contains(plan, "object_kind") {
 		t.Errorf("the probe is not an access on the kind index:\n%s", plan)
 	}
-	if strings.Contains(plan, "sort") || strings.Contains(plan, "topn") {
+	if strings.Contains(plan, "temp b-tree") {
 		t.Errorf("the probe sorts:\n%s", plan)
 	}
 	t.Logf("outside-range probe plan:\n%s", plan)

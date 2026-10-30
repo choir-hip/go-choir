@@ -170,7 +170,6 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 	}
 	// Revert writes run outside the event paths; the next checkpoint must be
 	// able to commit them (a no-op commit is tolerated by commitDoltCheckpoint).
-	s.markDoltHistoryDirty()
 	s.vocabCutover.Store(false)
 	return nil
 }

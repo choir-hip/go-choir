@@ -71,11 +71,9 @@ func TestOpenLogsEveryStoreStepWithItsDuration(t *testing.T) {
 	}
 	for _, want := range []string{
 		"prepare-path", "workspace-open",
-		"runtime-schema", "runtime-schema/apply-ddl", "runtime-schema/ensure-columns", "runtime-schema/events-indexes",
-		"runtime-schema/desktop-primary-keys", "runtime-schema/backfill-events-stream-seq",
+		"runtime-schema", "runtime-schema/apply-ddl",
 		"objectgraph-schema", "objectgraph-schema/schema-ddl",
-		"objectgraph-schema/derived-keys-table", "objectgraph-schema/discover-access-paths",
-		"texture-schema", "texture-schema/apply-ddl", "texture-schema/backfill-revision-version-numbers",
+		"objectgraph-schema/derived-keys-table",
 		"store-schema-epoch",
 	} {
 		found := false
@@ -117,7 +115,7 @@ func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
 			if i > start {
 				sb.WriteString(",")
 			}
-			sb.WriteString("(?,?,?,?,?,?,?,?,NOW(),NOW(),0,'')")
+			sb.WriteString("(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,'')")
 			kind := []string{"choir.run", "choir.commitment_record", "choir.source_ref", "choir.agent"}[i%4]
 			args = append(args, fmt.Sprintf("obj:%s:o1:key-%06d", kind, i), kind, "o1", "c1", "v", fmt.Sprintf("h-%d", i),
 				fmt.Sprintf(`{"addressee":"a%d"}`, i%50), fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90))
@@ -130,11 +128,7 @@ func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	hashOf := func(st *Store) string {
-		var h string
-		if err := st.db.QueryRow(`SELECT DOLT_HASHOF_TABLE('og_objects')`).Scan(&h); err != nil {
-			t.Fatalf("hash of og_objects: %v", err)
-		}
-		return h
+		return sqliteTableDigest(t, st, "og_objects")
 	}
 	before := hashOf(s)
 	if err := s.Close(); err != nil {

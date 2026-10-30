@@ -29,167 +29,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/cenkalti/backoff/v4"
-	embedded "github.com/dolthub/driver/v2"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// textureSchemaDDL creates the texture tables if they do not already exist.
-//
-// No index here declares DESC. Dolt before 2.3.3 accepted DESC and stored an
-// ascending index; from 2.3.3 a DESC column is a real descending index, and a
-// table that has one cannot be read by an older Dolt at all ("table has
-// unknown fields"). That would make every store created on a newer embedded
-// module a one-way door for the guest image. ASC reproduces exactly what the
-// older engine stored, and the planner scans it backwards for ORDER BY ... DESC
-// (docs/reports/dolt-upgrade-compat-2026-10-15.md, section 3). Do not add DESC
-// here until older embedded modules are out of rollback range.
-const textureSchemaDDL = `
-CREATE TABLE IF NOT EXISTS texture_revisions (
-	revision_id         VARCHAR(255) PRIMARY KEY,
-	doc_id              VARCHAR(255) NOT NULL,
-	owner_id            VARCHAR(255) NOT NULL,
-	author_kind         VARCHAR(64) NOT NULL,
-	author_label        VARCHAR(255) NOT NULL DEFAULT '',
-	version_number      BIGINT NOT NULL DEFAULT 0,
-	content             LONGTEXT NOT NULL,
-	body_doc_json       LONGTEXT NOT NULL DEFAULT '',
-	source_entities_json LONGTEXT NOT NULL DEFAULT '[]',
-	citations_json      LONGTEXT NOT NULL,
-	metadata_json       LONGTEXT NOT NULL,
-	provenance_json     LONGTEXT NOT NULL DEFAULT '{}',
-	revision_hash       VARCHAR(255) NOT NULL DEFAULT '',
-	parent_revision_id  VARCHAR(255) NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS texture_source_entities (
-	canonical_id           VARCHAR(255) NOT NULL,
-	version_id             VARCHAR(255) NOT NULL,
-	owner_id               VARCHAR(255) NOT NULL,
-	computer_id            VARCHAR(255) NOT NULL DEFAULT '',
-	content_hash           VARCHAR(255) NOT NULL,
-	body                   LONGTEXT NOT NULL DEFAULT '',
-	metadata_json          LONGTEXT NOT NULL DEFAULT '{}',
-	legacy_source_entity_id VARCHAR(255) NOT NULL DEFAULT '',
-	created_at             DATETIME NOT NULL,
-	PRIMARY KEY (canonical_id, version_id)
-);
-
-CREATE TABLE IF NOT EXISTS texture_source_refs (
-	canonical_id                 VARCHAR(255) NOT NULL,
-	version_id                   VARCHAR(255) NOT NULL,
-	owner_id                     VARCHAR(255) NOT NULL,
-	computer_id                  VARCHAR(255) NOT NULL DEFAULT '',
-	content_hash                 VARCHAR(255) NOT NULL,
-	doc_id                       VARCHAR(255) NOT NULL,
-	texture_revision_id          VARCHAR(255) NOT NULL,
-	body_node_id                 VARCHAR(255) NOT NULL DEFAULT '',
-	body_node_path_hash          VARCHAR(255) NOT NULL DEFAULT '',
-	legacy_source_entity_id      VARCHAR(255) NOT NULL DEFAULT '',
-	source_entity_canonical_id   VARCHAR(255) NOT NULL,
-	source_entity_version_id     VARCHAR(255) NOT NULL,
-	display_mode                 VARCHAR(64) NOT NULL,
-	citation_state               VARCHAR(64) NOT NULL,
-	metadata_json                LONGTEXT NOT NULL DEFAULT '{}',
-	created_at                   DATETIME NOT NULL,
-	PRIMARY KEY (canonical_id, version_id)
-);
-
-CREATE TABLE IF NOT EXISTS texture_document_aliases (
-	owner_id            VARCHAR(255) NOT NULL,
-	computer_id         VARCHAR(255) NOT NULL DEFAULT '',
-	source_path         VARCHAR(2048) NOT NULL,
-	doc_id              VARCHAR(255) NOT NULL,
-	created_at          DATETIME NOT NULL,
-	updated_at          DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, computer_id, source_path)
-);
-
-CREATE INDEX IF NOT EXISTS idx_texture_revs_doc ON texture_revisions(doc_id);
-CREATE INDEX IF NOT EXISTS idx_texture_revs_owner ON texture_revisions(owner_id);
-CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_texture_source_entities_owner ON texture_source_entities(owner_id);
-CREATE INDEX IF NOT EXISTS idx_texture_source_refs_revision ON texture_source_refs(owner_id, doc_id, texture_revision_id);
-CREATE INDEX IF NOT EXISTS idx_texture_source_refs_source ON texture_source_refs(source_entity_canonical_id, source_entity_version_id);
-
-CREATE TABLE IF NOT EXISTS texture_agent_mutations (
-	doc_id              VARCHAR(255) NOT NULL,
-	loop_id             VARCHAR(255) NOT NULL,
-	owner_id            VARCHAR(255) NOT NULL,
-	computer_id         VARCHAR(255) NOT NULL DEFAULT '',
-	state               VARCHAR(64) NOT NULL DEFAULT 'pending',
-	scheduled_message_seq BIGINT NOT NULL DEFAULT 0,
-	revision_id         VARCHAR(255) NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL,
-	completed_at        DATETIME,
-	PRIMARY KEY (owner_id, computer_id, doc_id, loop_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_texture_mutations_doc ON texture_agent_mutations(doc_id);
-CREATE INDEX IF NOT EXISTS idx_texture_mutations_run ON texture_agent_mutations(loop_id);
-
-
-CREATE TABLE IF NOT EXISTS agent_evidence (
-	evidence_id    VARCHAR(255) PRIMARY KEY,
-	owner_id       VARCHAR(255) NOT NULL,
-	agent_id       VARCHAR(255) NOT NULL,
-	kind           VARCHAR(128) NOT NULL,
-	source_uri     LONGTEXT NOT NULL DEFAULT '',
-	title          LONGTEXT NOT NULL DEFAULT '',
-	content        LONGTEXT NOT NULL,
-	metadata_json  LONGTEXT NOT NULL DEFAULT '{}',
-	created_at     DATETIME NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_agent ON agent_evidence(owner_id, agent_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_created ON agent_evidence(owner_id, created_at);
-
-`
-
 const (
 	textureWorkspaceSuffix     = ".texture"
 	defaultTextureWorkspaceDir = "go-choir-texture"
-	textureDatabaseName        = "texture"
 )
 
-// OpenTextureWorkspace opens (or creates) an embedded Dolt workspace for texture
-// document storage only. It is mainly used by store-level tests and local
-// workflows that need the document store without the rest of the runtime tables.
-func OpenTextureWorkspace(path string) (*Store, error) {
-	db, workspacePath, connector, err := openTextureWorkspaceDB(path)
-	if err != nil {
-		return nil, err
-	}
-	s := &Store{path: path, textureDB: db, texturePath: workspacePath, doltConnector: connector}
-	if err := s.bootstrapTexture(); err != nil {
-		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap: %w", err))
-	}
-	// Initialize the object graph service on the texture workspace.
-	ogDoltStore := objectgraph.NewSQLStore(db)
-	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
-		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap object graph: %w", err))
-	}
-	s.ogStore = ogDoltStore
-	ogDoltStore.SetWriteValidator(s.vocabWriteGuard)
-	s.armVocabFenceFromReport()
-	s.og = objectgraph.NewService(objectgraph.Config{
-		Durable: ogDoltStore,
-	})
-	return s, nil
-}
-
-// TextureWorkspacePath is the Dolt workspace derived from a runtime marker.
-// Recovery swaps this directory together with the marker; it must not invent
-// a second store.
+// TextureWorkspacePath is the sidecar directory derived from a runtime marker
+// (the legacy Dolt workspace path; the store keeps its schema receipt there).
 func TextureWorkspacePath(path string) string {
 	return deriveTextureWorkspacePath(path)
 }
@@ -209,305 +64,8 @@ func deriveSuffixedWorkspacePath(path, suffix string) string {
 	return trimmed + suffix
 }
 
-func resolveTextureWorkspacePath(path string) string {
-	return deriveTextureWorkspacePath(path)
-}
-
-func openTextureWorkspaceDB(path string) (*sql.DB, string, doltConnector, error) {
-	workspacePath := resolveTextureWorkspacePath(path)
-	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
-		return nil, "", nil, fmt.Errorf("texture workspace: create directory: %w", err)
-	}
-
-	rootDB, connector, err := openDoltRootDB(workspacePath)
-	if err != nil {
-		return nil, "", nil, err
-	}
-	databaseName, err := resolveTextureWorkspaceDatabaseName(rootDB, true)
-	if err := rootDB.Close(); err != nil {
-		_ = connector.Close()
-		return nil, "", nil, fmt.Errorf("texture workspace: close bootstrap connection: %w", err)
-	}
-	if err := connector.Close(); err != nil {
-		return nil, "", nil, fmt.Errorf("texture workspace: close bootstrap connector: %w", err)
-	}
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	dbDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&database=%s&multistatements=true&clientfoundrows=true",
-		workspacePath,
-		databaseName,
-	)
-
-	var lastErr error
-	for attempt := range 8 {
-		dbCfg, err := embedded.ParseDSN(dbDSN)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("texture workspace: parse database dsn: %w", err)
-		}
-		dbCfg.BackOff = newDoltOpenBackOff()
-		dbConnector, err := embedded.NewConnector(dbCfg)
-		if err != nil {
-			lastErr = fmt.Errorf("texture workspace: new database connector: %w", err)
-		} else {
-			var engine doltConnector = dbConnector
-			if wrap := testHookWrapConnector; wrap != nil {
-				engine = wrap(engine)
-			}
-			db := sql.OpenDB(poolConnector{engine})
-			configureEmbeddedDoltDB(db)
-			if pingErr := db.Ping(); pingErr == nil {
-				return db, workspacePath, engine, nil
-			} else {
-				lastErr = fmt.Errorf("texture workspace: ping database: %w", pingErr)
-			}
-			_ = db.Close()
-			_ = engine.Close()
-		}
-
-		if !strings.Contains(strings.ToLower(lastErr.Error()), "non 0 lock") {
-			break
-		}
-		time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
-	}
-
-	return nil, "", nil, lastErr
-}
-
-func openDoltRootDB(workspacePath string) (*sql.DB, doltConnector, error) {
-	rootDSN := fmt.Sprintf(
-		"file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true",
-		workspacePath,
-	)
-	cfg, err := embedded.ParseDSN(rootDSN)
-	if err != nil {
-		return nil, nil, fmt.Errorf("texture workspace: parse dsn: %w", err)
-	}
-	cfg.BackOff = newDoltOpenBackOff()
-	connector, err := embedded.NewConnector(cfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("texture workspace: new connector: %w", err)
-	}
-	rootDB := sql.OpenDB(connector)
-	configureEmbeddedDoltDB(rootDB)
-	return rootDB, connector, nil
-}
-
-func resolveTextureWorkspaceDatabaseName(rootDB *sql.DB, createIfMissing bool) (string, error) {
-	if exists, err := doltDatabaseExists(rootDB, textureDatabaseName); err != nil {
-		return "", err
-	} else if exists {
-		return textureDatabaseName, nil
-	}
-	if !createIfMissing {
-		return "", nil
-	}
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS " + textureDatabaseName); err != nil {
-		return "", fmt.Errorf("texture workspace: create texture database: %w", err)
-	}
-	return textureDatabaseName, nil
-}
-
-func doltDatabaseExists(rootDB *sql.DB, name string) (bool, error) {
-	rows, err := rootDB.Query("SHOW DATABASES")
-	if err != nil {
-		return false, fmt.Errorf("texture workspace: show databases: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var databaseName string
-		if err := rows.Scan(&databaseName); err != nil {
-			return false, fmt.Errorf("texture workspace: scan database name: %w", err)
-		}
-		if databaseName == name {
-			return true, nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("texture workspace: iterate databases: %w", err)
-	}
-	return false, nil
-}
-
-func newDoltOpenBackOff() backoff.BackOff {
-	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = 25 * time.Millisecond
-	b.RandomizationFactor = 0.2
-	b.Multiplier = 1.6
-	b.MaxInterval = 250 * time.Millisecond
-	b.MaxElapsedTime = 2 * time.Second
-	b.Reset()
-	return backoff.WithMaxRetries(b, 8)
-}
-
 func (s *Store) textureHandle() *sql.DB {
-	if s.textureDB != nil {
-		return s.textureDB
-	}
 	return s.db
-}
-
-func configureEmbeddedDoltDB(db *sql.DB) {
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-}
-
-// bootstrapTexture applies the texture schema DDL to the embedded workspace.
-func (s *Store) bootstrapTexture() error {
-	if err := bootSubstep("texture-schema", "apply-ddl", func() error {
-		_, err := s.textureHandle().Exec(textureSchemaDDL)
-		return err
-	}); err != nil {
-		return fmt.Errorf("apply texture schema: %w", err)
-	}
-	// texture_decisions is retired: decisions live on the canonical event
-	// tape and the object graph, not in SQL. Drop any table a pre-retirement
-	// computer still carries so replay eligibility sees the declared
-	// retired_absent contract.
-	if _, err := s.textureHandle().Exec(`DROP TABLE IF EXISTS texture_decisions`); err != nil {
-		return fmt.Errorf("drop retired texture_decisions: %w", err)
-	}
-	// The legacy relational document, controller-checkpoint, content and
-	// podcast tables are retired with no production reader or writer. Drop
-	// any table a pre-retirement computer still carries (declared
-	// retired_absent in the replay airworthiness manifest).
-	for _, table := range retiredTextureTables {
-		if _, err := s.textureHandle().Exec("DROP TABLE IF EXISTS " + table); err != nil {
-			return fmt.Errorf("drop retired %s: %w", table, err)
-		}
-	}
-	if err := s.ensureTextureColumn("texture_agent_mutations", "scheduled_message_seq", "BIGINT NOT NULL DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_agent_mutations", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := bootSubstep("texture-schema", "agent-mutation-primary-key", s.ensureTextureAgentMutationPrimaryKey); err != nil {
-		return err
-	}
-	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_mutations_scope ON texture_agent_mutations(owner_id, computer_id, doc_id, state)`); err != nil {
-		return fmt.Errorf("create texture mutation scope index: %w", err)
-	}
-	if err := s.ensureTextureColumn("texture_revisions", "version_number", "BIGINT NOT NULL DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_revisions", "body_doc_json", "LONGTEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_revisions", "source_entities_json", "LONGTEXT NOT NULL DEFAULT '[]'"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_revisions", "provenance_json", "LONGTEXT NOT NULL DEFAULT '{}'"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_revisions", "revision_hash", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureTextureColumn("texture_document_aliases", "computer_id", "VARCHAR(255) NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := bootSubstep("texture-schema", "document-aliases-primary-key", s.ensureTextureDocumentAliasesPrimaryKey); err != nil {
-		return err
-	}
-	if err := bootSubstep("texture-schema", "document-alias-doc-index", s.ensureTextureDocumentAliasDocIndex); err != nil {
-		return err
-	}
-	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number)`); err != nil {
-		return fmt.Errorf("create texture revision version index: %w", err)
-	}
-	if err := bootSubstep("texture-schema", "backfill-revision-version-numbers", s.backfillTextureRevisionVersionNumbers); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Store) ensureTextureColumn(table, name, ddl string) error {
-	var count int
-	if err := s.textureHandle().QueryRow(`
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name = ?
-  AND column_name = ?`,
-		table,
-		name,
-	).Scan(&count); err != nil {
-		return fmt.Errorf("information_schema.columns(%s.%s): %w", table, name, err)
-	}
-	if count > 0 {
-		return nil
-	}
-	done := objectgraph.BootPhase("store: open", "texture-schema/add-column "+table+"."+name)
-	_, err := s.textureHandle().Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, name, ddl))
-	done(err)
-	if err != nil {
-		return fmt.Errorf("alter %s add %s: %w", table, name, err)
-	}
-	return nil
-}
-
-func (s *Store) ensureTextureAgentMutationPrimaryKey() error {
-	rows, err := s.textureHandle().Query(`
-SELECT column_name
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name = 'texture_agent_mutations'
-  AND index_name = 'PRIMARY'
-ORDER BY seq_in_index`)
-	if err != nil {
-		return fmt.Errorf("inspect texture agent mutation primary key: %w", err)
-	}
-	defer rows.Close()
-	var columns []string
-	for rows.Next() {
-		var column string
-		if err := rows.Scan(&column); err != nil {
-			return fmt.Errorf("scan texture agent mutation primary key: %w", err)
-		}
-		columns = append(columns, column)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate texture agent mutation primary key: %w", err)
-	}
-	want := []string{"owner_id", "computer_id", "doc_id", "loop_id"}
-	if slices.Equal(columns, want) {
-		return nil
-	}
-	if _, err := s.textureHandle().Exec(`
-ALTER TABLE texture_agent_mutations
-DROP PRIMARY KEY,
-ADD PRIMARY KEY (owner_id, computer_id, doc_id, loop_id)`); err != nil {
-		return fmt.Errorf("scope texture agent mutation primary key: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) backfillTextureRevisionVersionNumbers() error {
-	_, err := s.textureHandle().Exec(`
-UPDATE texture_revisions AS rev
-JOIN (
-	SELECT
-		revision_id,
-		ROW_NUMBER() OVER (
-			PARTITION BY doc_id, owner_id
-			ORDER BY created_at ASC, revision_id ASC
-		) - 1 AS computed_version_number
-	FROM texture_revisions
-) AS numbered ON numbered.revision_id = rev.revision_id
-SET rev.version_number = numbered.computed_version_number
-WHERE rev.version_number = 0
-  AND numbered.computed_version_number <> 0`)
-	if err != nil {
-		return fmt.Errorf("backfill texture revision version numbers: %w", err)
-	}
-	return nil
-}
-
-// EnsureTextureSchema applies the texture schema to the embedded workspace.
-func (s *Store) EnsureTextureSchema() error {
-	return s.bootstrapTexture()
 }
 
 // ----- Document CRUD -----
@@ -517,7 +75,6 @@ func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
 	if err := s.CreateTextureDocumentOG(ctx, doc); err != nil {
 		return err
 	}
-	s.markDoltHistoryDirty()
 	return nil
 }
 
@@ -799,15 +356,15 @@ func (s *Store) UpsertDocumentAlias(ctx context.Context, ownerID, sourcePath, do
 	_, err := s.textureHandle().ExecContext(ctx,
 		`INSERT INTO texture_document_aliases (owner_id, computer_id, source_path, doc_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   doc_id = VALUES(doc_id),
-		   updated_at = VALUES(updated_at)`,
+		 ON CONFLICT (owner_id, computer_id, source_path) DO UPDATE SET
+		   doc_id = excluded.doc_id,
+		   updated_at = excluded.updated_at`,
 		ownerID,
 		computerID,
 		sourcePath,
 		docID,
-		updatedAt.UTC().Format(time.RFC3339Nano),
-		updatedAt.UTC().Format(time.RFC3339Nano),
+		updatedAt.UTC(),
+		updatedAt.UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert texture document alias: %w", err)
@@ -1052,7 +609,6 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		}
 		return fmt.Errorf("commit texture head: %w", err)
 	}
-	s.markDoltHistoryDirty()
 	return nil
 }
 
@@ -1100,7 +656,6 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	if err := s.CreateTextureRevisionOG(ctx, rev); err != nil {
 		return err
 	}
-	s.markDoltHistoryDirty()
 	return nil
 }
 
@@ -1256,10 +811,6 @@ func (s *Store) getHistory(ctx context.Context, docID, ownerID, computerID strin
 	if doc.CurrentRevisionID == "" {
 		return []types.HistoryEntry{}, nil
 	}
-	if err := s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint before texture history read for %s", docID)); err != nil {
-		return nil, err
-	}
-
 	currentID := doc.CurrentRevisionID
 	entries := make([]types.HistoryEntry, 0, limit)
 	visited := make(map[string]bool, limit)
@@ -1288,19 +839,6 @@ func (s *Store) getHistory(ctx context.Context, docID, ownerID, computerID strin
 		currentID = rev.ParentRevisionID
 	}
 	return entries, nil
-}
-
-func validateDoltCommitHash(hash string) error {
-	if hash == "" {
-		return fmt.Errorf("empty Dolt commit hash")
-	}
-	for _, r := range hash {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			continue
-		}
-		return fmt.Errorf("unsafe Dolt commit hash %q", hash)
-	}
-	return nil
 }
 
 // ----- Diff -----
@@ -1862,11 +1400,12 @@ func (s *Store) CreateAgentMutation(ctx context.Context, m AgentMutation) error 
 	}
 	var completedAt any
 	if m.CompletedAt != nil {
-		completedAt = m.CompletedAt.UTC().Format(time.RFC3339Nano)
+		completedAt = m.CompletedAt.UTC()
 	}
 	_, err := s.textureHandle().ExecContext(ctx,
-		`INSERT IGNORE INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO texture_agent_mutations (doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT DO NOTHING`,
 		strings.TrimSpace(m.DocID),
 		strings.TrimSpace(m.RunID),
 		strings.TrimSpace(m.OwnerID),
@@ -1874,7 +1413,7 @@ func (s *Store) CreateAgentMutation(ctx context.Context, m AgentMutation) error 
 		m.State,
 		m.ScheduledMessageSeq,
 		m.RevisionID,
-		m.CreatedAt.UTC().Format(time.RFC3339Nano),
+		m.CreatedAt.UTC(),
 		completedAt,
 	)
 	if err != nil {
@@ -1989,7 +1528,7 @@ func (s *Store) CompleteAgentMutation(ctx context.Context, ownerID, computerID, 
 		        completed_at = ?
 		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
 		revisionID,
-		now.Format(time.RFC3339Nano),
+		now,
 		strings.TrimSpace(ownerID),
 		strings.TrimSpace(computerID),
 		strings.TrimSpace(runID),
@@ -2028,7 +1567,7 @@ func (s *Store) FailAgentMutation(ctx context.Context, ownerID, computerID, runI
 		    SET state = 'failed',
 		        completed_at = ?
 		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
-		now.Format(time.RFC3339Nano),
+		now,
 		strings.TrimSpace(ownerID),
 		strings.TrimSpace(computerID),
 		strings.TrimSpace(runID),
@@ -2063,7 +1602,7 @@ func (s *Store) MarkAgentMutationStale(ctx context.Context, ownerID, computerID,
 		    SET state = 'stale_activation',
 		        completed_at = ?
 		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`,
-		now.Format(time.RFC3339Nano),
+		now,
 		strings.TrimSpace(ownerID),
 		strings.TrimSpace(computerID),
 		strings.TrimSpace(runID),
@@ -2102,7 +1641,7 @@ func (s *Store) SleepAgentMutation(ctx context.Context, ownerID, computerID, run
 		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ?
 		    AND state = 'pending'
 		    AND revision_id <> ''`,
-		now.Format(time.RFC3339Nano),
+		now,
 		strings.TrimSpace(ownerID),
 		strings.TrimSpace(computerID),
 		strings.TrimSpace(runID),
@@ -2169,7 +1708,7 @@ func (s *Store) SleepAgentMutationAfterTextureTurn(ctx context.Context, ownerID,
 		}
 		return nil
 	}
-	result, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_agent_mutations SET state = 'sleeping', completed_at = ? WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`, now.Format(time.RFC3339Nano), strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID))
+	result, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_agent_mutations SET state = 'sleeping', completed_at = ? WHERE owner_id = ? AND computer_id = ? AND loop_id = ? AND state = 'pending'`, now, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(runID))
 	if err != nil {
 		return fmt.Errorf("sleep Texture mutation after turn: %w", err)
 	}
@@ -2214,7 +1753,7 @@ func (s *Store) ReactivateAgentMutation(ctx context.Context, ownerID, computerID
 		  WHERE owner_id = ? AND computer_id = ? AND loop_id = ?
 		    AND state IN ('stale_activation', 'sleeping')`,
 		scheduledMessageSeq,
-		now.Format(time.RFC3339Nano),
+		now,
 		strings.TrimSpace(ownerID),
 		strings.TrimSpace(computerID),
 		strings.TrimSpace(runID),
@@ -2276,7 +1815,7 @@ func (s *Store) createEvidenceTable(ctx context.Context, rec types.EvidenceRecor
 		rec.Title,
 		rec.Content,
 		metadata,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		rec.CreatedAt.UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("insert agent evidence: %w", err)
@@ -2411,80 +1950,4 @@ func (s *Store) aliasComputerID() string {
 		return ""
 	}
 	return strings.TrimSpace(s.projectionTape.computerID)
-}
-
-func (s *Store) ensureTextureDocumentAliasesPrimaryKey() error {
-	rows, err := s.textureHandle().Query(`
-SELECT column_name
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name = 'texture_document_aliases'
-  AND index_name = 'PRIMARY'
-ORDER BY seq_in_index`)
-	if err != nil {
-		return fmt.Errorf("inspect texture document aliases primary key: %w", err)
-	}
-	defer rows.Close()
-	var columns []string
-	for rows.Next() {
-		var column string
-		if err := rows.Scan(&column); err != nil {
-			return fmt.Errorf("scan texture document aliases primary key: %w", err)
-		}
-		columns = append(columns, column)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate texture document aliases primary key: %w", err)
-	}
-	want := []string{"owner_id", "computer_id", "source_path"}
-	if slices.Equal(columns, want) {
-		return nil
-	}
-	if len(columns) > 0 {
-		if _, err := s.textureHandle().Exec(`
-ALTER TABLE texture_document_aliases
-DROP PRIMARY KEY,
-ADD PRIMARY KEY (owner_id, computer_id, source_path)`); err != nil {
-			return fmt.Errorf("scope texture document aliases primary key: %w", err)
-		}
-	}
-	return nil
-}
-
-func (s *Store) ensureTextureDocumentAliasDocIndex() error {
-	rows, err := s.textureHandle().Query(`
-SELECT column_name
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name = 'texture_document_aliases'
-  AND index_name = 'idx_texture_aliases_doc'
-ORDER BY seq_in_index`)
-	if err != nil {
-		return fmt.Errorf("inspect texture alias document index: %w", err)
-	}
-	defer rows.Close()
-	var columns []string
-	for rows.Next() {
-		var column string
-		if err := rows.Scan(&column); err != nil {
-			return fmt.Errorf("scan texture alias document index: %w", err)
-		}
-		columns = append(columns, column)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate texture alias document index: %w", err)
-	}
-	want := []string{"owner_id", "computer_id", "doc_id"}
-	if slices.Equal(columns, want) {
-		return nil
-	}
-	if len(columns) > 0 {
-		if _, err := s.textureHandle().Exec(`DROP INDEX idx_texture_aliases_doc ON texture_document_aliases`); err != nil {
-			return fmt.Errorf("drop leftover texture alias document index: %w", err)
-		}
-	}
-	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id)`); err != nil {
-		return fmt.Errorf("create texture alias document index: %w", err)
-	}
-	return nil
 }

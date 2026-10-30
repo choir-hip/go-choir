@@ -468,12 +468,12 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 		return operation, nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Operation{}, err
 	}
 	defer tx.Rollback()
-	operation, err := scanOperation(tx.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND operation_id=? FOR UPDATE`, computerID, operationID))
+	operation, err := scanOperation(tx.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND operation_id=?`, computerID, operationID))
 	if err != nil {
 		return Operation{}, err
 	}
@@ -550,7 +550,7 @@ func (s *Store) RecordIntentError(ctx context.Context, computerID, operationID, 
 		operation.UpdatedAt = now.Format(time.RFC3339Nano)
 		return s.appendOperationProjection(ctx, operation, expectedState)
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE self_development_operations SET last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=?`, reason, now.Format(time.RFC3339Nano), computerID, operationID)
+	result, err := s.db.ExecContext(ctx, `UPDATE self_development_operations SET last_intent_error=?, updated_at=? WHERE computer_id=? AND operation_id=?`, reason, now, computerID, operationID)
 	if err != nil {
 		return err
 	}

@@ -28,7 +28,7 @@ import (
 // leaseSwapPoints are the functions that move a workspace into a live store or
 // workspace path (or open a fresh one for it). Each must write the marker.
 var leaseSwapPoints = map[string]string{
-	"store.go:ReplaceWorkspace":              "internal/store: the fresh workspace OpenFresh created",
+	"open.go:ReplaceWorkspace":               "internal/store: the fresh workspace OpenFresh created",
 	"install.go:installDescriptor":           "internal/projectionbase: the staged workspace; covers InstallVerifiedBase and InstallPinnedBase",
 	"rebase.go:RebaseRetainedStore":          "internal/projectionbase: the staged workspace, before the flip",
 	"rematerialize.go:RematerializeFromTape": "internal/agentcore: the staged workspace after Close, before the flip",
@@ -225,7 +225,7 @@ func TestOnlyTheLeaseWriterMintsTheCapability(t *testing.T) {
 // Test 8 (ordering). In Open, the receipt is read before it is written, and
 // the untrust marker is written before the receipt.
 func TestOpenReadsTheReceiptThenWritesTheMarkerThenTheReceipt(t *testing.T) {
-	file := storeSourceFiles(t, func(name string) bool { return name == "store.go" })["store.go"]
+	file := storeSourceFiles(t, func(name string) bool { return name == "open.go" })["open.go"]
 	var open *ast.FuncDecl
 	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "Open" {

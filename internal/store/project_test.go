@@ -737,37 +737,3 @@ func testBatchCheckpointBatch(t *testing.T, computerID, eventID, eventDigest str
 		Ops: []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpDesktopState, Body: body}},
 	}
 }
-
-// TestFinalizeBatchesDoltCheckpoints bounds commit growth: with checkpoint
-// every 3, genesis + 5 finalized events must yield exactly 2 Dolt commits
-// (not 6), while every event row stays projected.
-func TestFinalizeBatchesDoltCheckpoints(t *testing.T) {
-	ctx := context.Background()
-	s := openProjectStore(t)
-	s.doltCheckpointEvery = 3
-	const computerID = "computer-batched"
-	_, _ = prepareGenesis(t, s, computerID, "genesis-batched")
-	for i := 2; i <= 6; i++ {
-		head, err := s.Head(ctx, computerID)
-		if err != nil || head == nil {
-			t.Fatalf("head before event %d: %v", i, err)
-		}
-		eventID, err := computerevent.NewEventID()
-		if err != nil {
-			t.Fatal(err)
-		}
-		event, digest := prepareProjectionEvent(t, s, *head, eventID, "batched-"+eventID)
-		batch := testBatchCheckpointBatch(t, computerID, event.EventID, digest)
-		if err := s.FinalizeBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
-			t.Fatalf("finalize event %d: %v", i, err)
-		}
-	}
-	var commits int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT commit_hash) FROM dolt_history_computer_event_index WHERE computer_id = ?`, computerID).Scan(&commits); err != nil {
-		t.Fatalf("count history commits: %v", err)
-	}
-	if commits != 2 {
-		t.Fatalf("history commits = %d, want 2 (one checkpoint per 3 finalizes)", commits)
-	}
-	assertCount(t, s, `SELECT COUNT(*) FROM computer_event_index WHERE computer_id = 'computer-batched' AND status = 'finalized'`, 6)
-}

@@ -36,45 +36,12 @@ import (
 // choirEventsTable is the stamp value and the table's name.
 const choirEventsTable = "choir_events"
 
-// choirEventsDDL creates the table empty at boot, with its indexes inline.
-// Nothing at boot reads or fills it, and nothing scales with og_objects
-// (the og_key_index precedent). The DDL is frozen at deploy 1: CREATE TABLE
-// IF NOT EXISTS never alters a table that exists, and any later column or
-// index changes the table's SHOW COLUMNS, and so every witness taken with it
-// (section 2.3). Every column is a pure function of the op and its tape
-// position: the projector stamps no time, so no column is ignored by the
-// content witness.
-//
-// The primary key is the tape position: (sequence of the
-// projection_batch_recorded event, the op's index in its batch). It is
-// unique by construction; stream_seq is not (section 2.4).
-const choirEventsDDL = `
-CREATE TABLE IF NOT EXISTS choir_events (
-	tape_seq      BIGINT UNSIGNED NOT NULL,
-	op_index      INT UNSIGNED    NOT NULL,
-	canonical_id  VARCHAR(255)    NOT NULL,
-	object_kind   VARCHAR(128)    NOT NULL,
-	owner_id      VARCHAR(255)    NOT NULL,
-	computer_id   VARCHAR(255)    NOT NULL DEFAULT '',
-	version_id    VARCHAR(255)    NOT NULL DEFAULT '',
-	content_hash  VARCHAR(128)    NOT NULL,
-	body          LONGBLOB        NOT NULL,
-	metadata      LONGTEXT        NOT NULL,
-	created_at    DATETIME        NOT NULL,
-	updated_at    DATETIME        NOT NULL,
-	tombstone     BOOLEAN         NOT NULL DEFAULT FALSE,
-	superseded_by VARCHAR(255)    NOT NULL DEFAULT '',
-	run_id        VARCHAR(255)    NOT NULL DEFAULT '',
-	seq           BIGINT          NOT NULL DEFAULT 0,
-	stream_seq    BIGINT          NOT NULL DEFAULT 0,
-	trajectory_id VARCHAR(255)    NOT NULL DEFAULT '',
-	event_kind    VARCHAR(128)    NOT NULL DEFAULT '',
-	PRIMARY KEY (tape_seq, op_index),
-	INDEX idx_choir_events_run_seq (run_id, seq),
-	INDEX idx_choir_events_owner_stream (owner_id, stream_seq),
-	INDEX idx_choir_events_trajectory_stream (trajectory_id, stream_seq)
-);
-`
+// The choir_events table is created with the rest of the schema (schema.go).
+// It is empty at boot; nothing at boot reads or fills it, and every column is
+// a pure function of the op and its tape position, so no column is ignored by
+// the content witness. The primary key is the tape position: (sequence of the
+// projection_batch_recorded event, the op's index in its batch); stream_seq is
+// not unique (event-table design section 2.4).
 
 // projectChoirEvent writes one stamped object op into choir_events at tape
 // position (pos, opIndex). It refuses only shapes the table cannot hold, and
@@ -151,22 +118,22 @@ func projectChoirEvent(ctx context.Context, tx *sql.Tx, body json.RawMessage, po
 		(tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata,
 		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, '', ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			canonical_id = VALUES(canonical_id),
-			object_kind = VALUES(object_kind),
-			owner_id = VALUES(owner_id),
-			computer_id = VALUES(computer_id),
-			version_id = VALUES(version_id),
-			content_hash = VALUES(content_hash),
-			body = VALUES(body),
-			metadata = VALUES(metadata),
-			created_at = VALUES(created_at),
-			updated_at = VALUES(updated_at),
-			run_id = VALUES(run_id),
-			seq = VALUES(seq),
-			stream_seq = VALUES(stream_seq),
-			trajectory_id = VALUES(trajectory_id),
-			event_kind = VALUES(event_kind)`,
+		ON CONFLICT (tape_seq, op_index) DO UPDATE SET
+			canonical_id = excluded.canonical_id,
+			object_kind = excluded.object_kind,
+			owner_id = excluded.owner_id,
+			computer_id = excluded.computer_id,
+			version_id = excluded.version_id,
+			content_hash = excluded.content_hash,
+			body = excluded.body,
+			metadata = excluded.metadata,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at,
+			run_id = excluded.run_id,
+			seq = excluded.seq,
+			stream_seq = excluded.stream_seq,
+			trajectory_id = excluded.trajectory_id,
+			event_kind = excluded.event_kind`,
 		pos, opIndex, obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID, obj.VersionID, obj.ContentHash,
 		[]byte(obj.Body), metadata, obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(),
 		meta.RunID, meta.Seq, meta.StreamSeq, meta.TrajectoryID, meta.Kind); err != nil {
@@ -266,17 +233,19 @@ type eventTableEntry struct {
 	rec         types.EventRecord
 }
 
-// eventTableDB runs fn on the read pool under the shared engine mutex
-// (section 4.4, Q8).
+// eventTableDB runs fn on the read pool (op names the call path in errors).
 func (s *Store) eventTableDB(op string, fn func(db *sql.DB) error) error {
-	store := s.ogReadStore
-	if store == nil {
-		store = s.ogStore
+	db := s.readDB
+	if db == nil {
+		db = s.db
 	}
-	if store == nil {
-		return fmt.Errorf("store: object graph not initialized")
+	if db == nil {
+		return fmt.Errorf("store: database not initialized")
 	}
-	return store.WithEngine(op, fn)
+	if err := fn(db); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }
 
 // readEventTable runs one choir_events half. It scans the rows' bytes

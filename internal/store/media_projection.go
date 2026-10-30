@@ -39,13 +39,13 @@ func execMediaProgress(ctx context.Context, ex sqlExecer, row computerevent.Medi
 			owner_id, media_kind, media_identity_hash, media_identity,
 			position_seconds, duration_seconds, playback_rate, updated_by_device, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			media_identity = VALUES(media_identity),
-			position_seconds = VALUES(position_seconds),
-			duration_seconds = VALUES(duration_seconds),
-			playback_rate = VALUES(playback_rate),
-			updated_by_device = VALUES(updated_by_device),
-			updated_at = VALUES(updated_at)`,
+		ON CONFLICT (owner_id, media_kind, media_identity_hash) DO UPDATE SET
+			media_identity = excluded.media_identity,
+			position_seconds = excluded.position_seconds,
+			duration_seconds = excluded.duration_seconds,
+			playback_rate = excluded.playback_rate,
+			updated_by_device = excluded.updated_by_device,
+			updated_at = excluded.updated_at`,
 		row.OwnerID, row.MediaKind, row.MediaIdentityHash, row.MediaIdentity,
 		row.PositionSeconds, row.DurationSeconds, row.PlaybackRate, row.UpdatedByDevice, row.UpdatedAt,
 	)
@@ -58,15 +58,15 @@ func execMediaRecent(ctx context.Context, ex sqlExecer, row computerevent.MediaR
 			owner_id, media_kind, media_identity_hash, media_identity,
 			title, file_name, file_path, source_url, media_type, content_id, opened_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			media_identity = VALUES(media_identity),
-			title = VALUES(title),
-			file_name = VALUES(file_name),
-			file_path = VALUES(file_path),
-			source_url = VALUES(source_url),
-			media_type = VALUES(media_type),
-			content_id = VALUES(content_id),
-			opened_at = VALUES(opened_at)`,
+		ON CONFLICT (owner_id, media_kind, media_identity_hash) DO UPDATE SET
+			media_identity = excluded.media_identity,
+			title = excluded.title,
+			file_name = excluded.file_name,
+			file_path = excluded.file_path,
+			source_url = excluded.source_url,
+			media_type = excluded.media_type,
+			content_id = excluded.content_id,
+			opened_at = excluded.opened_at`,
 		row.OwnerID, row.MediaKind, row.MediaIdentityHash, row.MediaIdentity,
 		row.Title, row.FileName, row.FilePath, row.SourceURL, row.MediaType, row.ContentID, row.OpenedAt,
 	)
@@ -77,9 +77,9 @@ func execUserPreference(ctx context.Context, ex sqlExecer, row computerevent.Use
 	_, err := ex.ExecContext(ctx,
 		`INSERT INTO user_preferences (owner_id, preference_key, value_json, updated_at)
 		 VALUES (?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   value_json = VALUES(value_json),
-		   updated_at = VALUES(updated_at)`,
+		 ON CONFLICT (owner_id, preference_key) DO UPDATE SET
+		   value_json = excluded.value_json,
+		   updated_at = excluded.updated_at`,
 		row.OwnerID, row.PreferenceKey, row.ValueJSON, row.UpdatedAt,
 	)
 	return err
