@@ -674,8 +674,8 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 			RunningRuns:   h.rt.RunningCount(),
 			Build:         buildinfo.Snapshot("autoputer"),
 			StoreStalled: healthStoreStalled{
-				Unanswered:      reads.unanswered,
-				BudgetMS:        healthStoreBudget.Milliseconds(),
+				Unanswered: reads.unanswered,
+				BudgetMS:   healthStoreBudget.Milliseconds(),
 			},
 		}
 		if guard != "" {

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 )
 
 // docs/problems/paper-post-refresh-health-windows-2026-10-22.md, "Findings:
@@ -223,7 +222,6 @@ github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 		t.Fatalf("long line not bounded: %d bytes", len(lines[0]))
 	}
 }
-
 
 // The header of a real stall carries the field, between stack_truncated and the
 // pools, and /health's answer is still 503 store_stalled with its usual body.

@@ -258,6 +258,3 @@ func TestObservabilityReportsTelemetryBatching(t *testing.T) {
 		t.Fatalf("tape_events_by_authority = %v", b.TapeEventsByAuthority)
 	}
 }
-
-
-
