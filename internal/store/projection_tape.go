@@ -66,6 +66,9 @@ func (s *Store) SetProjectionSealer(cipher *computerevent.PrivateArtifactCipher)
 	if s == nil || s.projectionTape == nil {
 		return fmt.Errorf("store: projection tape is not bound")
 	}
+	if cipher == nil {
+		return fmt.Errorf("store: projection sealer is required (refusing to pin projection batches in plaintext)")
+	}
 	s.projectionTape.sealer.Store(cipher)
 	return nil
 }
