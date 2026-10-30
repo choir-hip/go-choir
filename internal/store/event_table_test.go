@@ -72,7 +72,7 @@ func projectAt(t *testing.T, s *Store, pos uint64, ops ...computerevent.Projecti
 	defer tx.Rollback()
 	batch := computerevent.ProjectionBatch{Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
 		ComputerID: "computer-event-table", EventID: fmt.Sprintf("event-%d", pos), Ops: ops}
-	if err := projectBatch(ctx, tx, batch, pos, nil); err != nil {
+	if err := projectBatch(ctx, tx, batch, pos, nil, nil); err != nil {
 		t.Fatalf("project at %d: %v", pos, err)
 	}
 	if err := tx.Commit(); err != nil {

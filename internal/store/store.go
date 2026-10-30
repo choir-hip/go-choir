@@ -135,6 +135,9 @@ type Store struct {
 	// replayRelaxed is set while a replay runs the write connection at
 	// synchronous=NORMAL (replay_durability.go).
 	replayRelaxed atomic.Bool
+	// projectStmts are prepared on first use (project_stmts.go).
+	projectStmtsMu sync.Mutex
+	projectStmts   *projectStmts
 	// mediaStateMu serialises the tape-bound writes of media_progress,
 	// media_recents and user_preferences; mediaStateSeededTape is the tape
 	// whose seed of those tables has been appended (media_projection.go).

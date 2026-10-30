@@ -173,6 +173,9 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if err := s.upcastProjectionDeposit(batch, false, false, false); err != nil {
 		return err
 	}
+	// Prepared before the transaction: the write pool's one connection is the
+	// transaction's once it begins, so a first prepare inside it would wait forever.
+	stmts := s.projectionStmts(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
@@ -201,7 +204,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if len(dry.Ops) == 0 {
 		return nil
 	}
-	return projectBatch(ctx, tx, dry, pos, nil)
+	return projectBatch(ctx, tx, dry, pos, nil, stmts)
 }
 
 func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {
@@ -219,6 +222,9 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	receiptDigest := computerevent.DigestBytes(receiptJSON)
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
+	// Prepared before the transaction: the write pool's one connection is the
+	// transaction's once it begins, so a first prepare inside it would wait forever.
+	stmts := s.projectionStmts(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -307,12 +313,12 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			// families (a replayed row would otherwise read as missing) and
 			// let the online pass fill it.
 			s.derivedKeys().InvalidateAll("replay projection")
-			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence)
+			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence, stmts)
 			// Again before the commit, so a pass that published while the
 			// batch was written cannot leave a family readable.
 			s.derivedKeys().InvalidateAll("replay projection")
 		} else {
-			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys())
+			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys(), stmts)
 		}
 		if projectErr != nil {
 			return projectErr

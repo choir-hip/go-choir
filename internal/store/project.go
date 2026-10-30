@@ -41,15 +41,15 @@ type projectedSessionIdentity struct {
 // The replay path passes nil: a replayed workspace is checked and filled
 // online after boot (objectgraph.ValidateDerivedKeys), off the boot path, and
 // the caller withdraws the families.
-func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived)
+func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived, stmts)
 }
 
-func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil)
+func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, stmts *projectStmts) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil, stmts)
 }
 
-func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys) error {
+func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
 	if tx == nil {
 		return fmt.Errorf("computer event projection: missing transaction")
 	}
@@ -61,14 +61,14 @@ func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 		computerID = replayComputerID
 	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, pos, i, allowReplayTextureBootstrap, replayComputerID, computerID, derived); err != nil {
+		if err := projectOp(ctx, tx, op, pos, i, allowReplayTextureBootstrap, replayComputerID, computerID, derived, stmts); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, pos uint64, opIndex int, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, pos uint64, opIndex int, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
 		return projectDesktopState(ctx, tx, op.Body, computerID)
@@ -79,7 +79,7 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 		if strings.TrimSpace(op.Table) == choirEventsTable {
 			return projectChoirEvent(ctx, tx, op.Body, pos, opIndex)
 		}
-		return projectObject(ctx, tx, op.Body, derived)
+		return projectObject(ctx, tx, op.Body, derived, stmts)
 	case computerevent.ProjectionOpObjectEdge:
 		return projectObjectEdge(ctx, tx, op.Body)
 	case computerevent.ProjectionOpRunMemoryEntry:
@@ -231,7 +231,25 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	return nil
 }
 
-func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derived *objectgraph.DerivedKeys) error {
+// ogObjectUpsertSQL writes one object op. Parsing and compiling it (its
+// conflict clause and every og_objects index) was most of a replayed
+// event's finalize, so the store prepares it once (projectStmts).
+const ogObjectUpsertSQL = `INSERT INTO og_objects
+		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (canonical_id) DO UPDATE SET
+			object_kind = excluded.object_kind,
+			owner_id = excluded.owner_id,
+			computer_id = excluded.computer_id,
+			version_id = excluded.version_id,
+			content_hash = excluded.content_hash,
+			body = excluded.body,
+			metadata = excluded.metadata,
+			updated_at = excluded.updated_at,
+			tombstone = excluded.tombstone,
+			superseded_by = excluded.superseded_by`
+
+func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
 	var obj objectgraph.Object
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return fmt.Errorf("decode object: %w", err)
@@ -251,23 +269,16 @@ func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derive
 	if updated.IsZero() {
 		updated = created
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (canonical_id) DO UPDATE SET
-			object_kind = excluded.object_kind,
-			owner_id = excluded.owner_id,
-			computer_id = excluded.computer_id,
-			version_id = excluded.version_id,
-			content_hash = excluded.content_hash,
-			body = excluded.body,
-			metadata = excluded.metadata,
-			updated_at = excluded.updated_at,
-			tombstone = excluded.tombstone,
-			superseded_by = excluded.superseded_by`,
-		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+	args := []any{obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 		obj.VersionID, obj.ContentHash, obj.Body, metadata,
-		created, updated, obj.Tombstone, obj.SupersededBy); err != nil {
+		created, updated, obj.Tombstone, obj.SupersededBy}
+	var err error
+	if upsert := stmts.objectUpsertStmt(); upsert != nil {
+		_, err = tx.StmtContext(ctx, upsert).ExecContext(ctx, args...)
+	} else {
+		_, err = tx.ExecContext(ctx, ogObjectUpsertSQL, args...)
+	}
+	if err != nil {
 		return fmt.Errorf("project object: %w", err)
 	}
 	derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)

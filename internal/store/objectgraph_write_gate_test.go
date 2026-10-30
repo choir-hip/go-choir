@@ -37,7 +37,7 @@ func TestObjectGraphWriteGateRefusesNewWritesButReplayProjectsHistory(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := projectObject(ctx, tx, body, nil); err != nil {
+	if err := projectObject(ctx, tx, body, nil, nil); err != nil {
 		_ = tx.Rollback()
 		t.Fatalf("replay projection of a historic unregistered kind: %v", err)
 	}

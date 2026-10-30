@@ -38,10 +38,16 @@ var ogWriterStatement = regexp.MustCompile(`(?i)\b(INSERT(\s+IGNORE)?\s+INTO|REP
 // shared upsert from a function that does. A new writer fails this test until
 // it is added here with its maintenance.
 var maintainedOGWriters = map[string][]string{
-	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"}, // <package>: upsertObjectSQL, used by PutObject and putBatchTx
-	"store/project.go":          {"projectObject"},
+	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"},  // <package>: upsertObjectSQL, used by PutObject and putBatchTx
+	"store/project.go":          {"<package>", "projectObject"}, // <package>: ogObjectUpsertSQL, executed only by projectObject
 	"store/object_retire.go":    {"projectObjectRetire"},
 	"store/vocab_migrate_og.go": {"applyOGMigration", "revertOGMigration"},
+}
+
+// ogStatementPreparers prepare a maintained writer's statement and never run
+// it; the writer that runs it calls Maintain.
+var ogStatementPreparers = map[string][]string{
+	"store/project_stmts.go": {"projectionStmts"}, // prepares ogObjectUpsertSQL for projectObject
 }
 
 func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
@@ -88,7 +94,7 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 					if v.Name == "Maintain" || v.Name == "Drop" {
 						maintains = true
 					}
-					if v.Name == "upsertObjectSQL" {
+					if v.Name == "upsertObjectSQL" || v.Name == "ogObjectUpsertSQL" {
 						usesUpsert = true
 					}
 				case *ast.SelectorExpr:
@@ -120,6 +126,15 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 	}
 	var problems []string
 	for _, s := range found {
+		preparer := false
+		for _, fn := range ogStatementPreparers[s.file] {
+			if fn == s.fn {
+				preparer = true
+			}
+		}
+		if preparer {
+			continue
+		}
 		allowed := usesUpsertFn[s] && s.file == "objectgraph/sql_store.go" // PutObject, putBatchTx
 		for _, fn := range maintainedOGWriters[s.file] {
 			if fn == s.fn {

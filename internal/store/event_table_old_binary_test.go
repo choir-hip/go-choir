@@ -42,7 +42,7 @@ func TestOldBinaryProjectsStampedOpIntoObjectGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if err := projectObject(ctx, tx, batch.Ops[0].Body, nil); err != nil {
+	if err := projectObject(ctx, tx, batch.Ops[0].Body, nil, nil); err != nil {
 		t.Fatalf("the old projector refuses a stamped op: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
