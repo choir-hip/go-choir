@@ -2,7 +2,8 @@
 
 Status: proposal. The doc is green; the work it designs is red (store schema,
 tape, Texture canonical writes, auth). It is reviewed like the change it
-designs before a build follows it.
+designs before a build follows it. Amended the same evening (§11): the
+phase-1 panel, the owner's direction, and what phase 0 measured.
 
 Scope: the per-computer object graphs, the Autopaper object graph on the
 host, and the bridge between them. It builds on the data system frame
@@ -690,3 +691,164 @@ signatures.
 - **Keep the generic table and only add retention.** That fixes size, but
   not authority, kinds as code, the synchronous tape, or the bridge. It is
   phase 0 plus phase 4 without phases 1 to 3.
+
+## 11. Amendment (2026-10-30 evening): the panel, the owner, and what ran
+
+This section supersedes the earlier sections where they conflict. Sources:
+the phase-1 panel (Devin, DeepSeek v4.1 flash, Claude Sonnet; scratchpad
+`panel-phase1/run1`, prompt on snapshots and phase 1), the owner's direction
+of the afternoon (ledger, 2026-10-30 ~16:40 and after), and the runtime record
+in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
+
+### 11.1 Phase 0, as it stands
+
+- **Snapshots are streamed by the guest** (choice (b), all three seats). One
+  read transaction on the read pool reads the head first, streams the
+  database pages through `sqlite_dbpage` in 4 MiB page ranges, computes the
+  witness in the same transaction, seals each range under the computer key,
+  and skips ranges the host already holds (a HEAD probe per chunk).
+  `filecas.SealChunk` uses a synthetic nonce, so an unchanged page range
+  seals to the same digest and is not sent again. There is no temporary copy
+  and no size cap. The format is the version 1 record plus page geometry.
+- **The recovery-path fix landed with it**: the missing-disk test reads
+  whether the legacy workspace holds a Dolt database, not whether the
+  directory exists.
+- **The boot validator is not persisted; it reads on the read pool.** The
+  pass compares inside a read transaction and repairs only differing ids on
+  the write connection. It went from 47 to 81 rows a second on the paper.
+  The rest of the cost is row layout (§11.4).
+- **Snapshot cadence is a correctness item, not phase 4** (Devin). The boot
+  recovery bound is 10,000 events (`recoveryplan.MaxRecoveryTailEvents`, a
+  constant). The paper writes about 660,000 events a day. With a 24-hour
+  cadence, a snapshot covers a lost disk only for the first 15 to 20 minutes
+  after it is taken; after that the boot refuses the tail and only a code
+  change admits it. Snapshotting every 15 minutes would read 31 GB four times
+  an hour. The fix is the bound, not the cadence alone:
+  1. measure the in-guest replay rate (the forecast R0k-07 is 1,200 events a
+     second for a user computer, 600 for the paper; nothing has measured it);
+  2. state the bound as replay time (for example 15 minutes at the measured
+     rate), not as an event count;
+  3. make the cadence fire on the tail as well as on time, so the tail stays
+     inside that bound;
+  4. until then, the bound needs an operator override for a recovery, so a
+     lost disk is not a code change at the moment of loss.
+- **The first-snapshot lookup is a full scan.** `NewestEventOfKind` walks
+  `computer_event_index` by `(computer_id, status, sequence)` and tests the
+  kind row by row. On a computer with no snapshot that is every event: about
+  12 minutes on the paper's 5.2 million. It ends once one snapshot exists.
+  The index it needs is DDL, so it waits for the logical witness; until then
+  the producer can remember its own last snapshot in a guest file and fall
+  back to a bounded window of the index.
+- **Install-time witness check on the boot path** (Devin). The staged
+  restore checks the unsealed file against the recorded witness; the boot
+  install does not. The chunks are already authenticated (AEAD under the
+  computer key, digest-checked, manifest root verified), so the host cannot
+  forge one. The check would catch a producer that recorded a witness its
+  pages disagree with. It costs one full witness pass at boot, after a lost
+  disk only. Wire it in, unconditionally.
+- **The file surface fsyncs before it acknowledges** (C0 drill: 313 saves
+  read back empty after a SIGKILL; fixed 72640d15c).
+
+### 11.2 Phase 1, split and reordered (all three seats)
+
+Phase 1 becomes two phases.
+
+**Phase 1a (no storage change):**
+
+1. The logical witness (v4) on today's tables. Witness v3 hashes every
+   `sqlite_master` entry, so every DDL change, an index included, breaks the
+   witness match against every earlier checkpoint. Nothing that adds an
+   index or a table lands before v4.
+2. The manifest and the install act, on the existing `choir.app-package/v1`
+   seam (`internal/apppackage`, JSON Schema already in the tree). Do not
+   invent a schema language.
+3. The enforced writer and schema on every write. Before the gate flips to
+   enforce, run the observe gate's violation log as a census on d@e and the
+   paper (Devin's risk 4: an unregistered write path refused under load is a
+   self-inflicted outage).
+
+**Phase 1b (storage by class):** the class tables and the migration, after
+1a has run on the fleet.
+
+### 11.3 Additions the panel found
+
+- **Immutable records.** Precommitment records and other acts can be
+  overwritten at the store level today; the overwrite shows on the tape, but
+  mint-once is a caller convention. The record class carries an
+  `immutable: true` flag; the write path refuses update and delete for it.
+  This is a flag on the record class, not a seventh class.
+- **The witness choice: LtHash in the transaction** (Devin, Sonnet), not
+  recompute at snapshot with per-class Merkle roots (DeepSeek). The
+  decisive property is that the witness is a pure function of the tape's
+  logical operations, so **the host recomputes the expected witness from the
+  receipted batches** and compares it to the guest's at each checkpoint.
+  That turns the witness from guest-attested into host-verified. Spike the
+  parameters first (LtHash variants against MuHash3072, which deletes more
+  simply). Sonnet's per-stream hash chain for logs is not adopted: the tape
+  already orders them.
+- **Retirement is a tape operation.** A class expiry or a telemetry trim is
+  an event on the tape, so replay and the witness agree on what was dropped.
+- **Mandatory quotas per package**: rows, bytes, index count, index path
+  depth and full-text fields, declared in the manifest and enforced at write.
+  Generated index names stop SQL injection, but an accepted manifest can
+  still declare a quadratic index set.
+- **The hash domain (Devin, the top migration risk).**
+  `ContentHash(kind, body, metadata)` covers metadata, and content-hash
+  identity, the default, derives the `canonical_id` from it. Folding
+  metadata into the body would give every migrated object a new hash and a
+  new id, and every edge, reference and publication hash would dangle. The
+  migration keeps each existing row's `canonical_id` and `content_hash`
+  verbatim, marks the domain with a `hash_v` column, and applies the new
+  domain only to writes after the migration.
+- **Edges keep `metadata`** unless a census proves it empty for every kind.
+  The §5.2 edge shape drops it; today it is NOT NULL and read and written.
+- **Device state stays on the tape per kind.** §5.2 put device state off the
+  tape. Media progress and user preferences are tape-projected today, and a
+  restore keeps them. Only rebuildable caches and per-device UI choices
+  leave the tape (I27), and each kind is named.
+- **Unspecified until written:** replay-positional validation (a row is
+  checked against the schema version installed at its position, not the
+  newest), uninstall (refuse while the kind holds rows, or tombstone
+  operations on the tape), and a chunked, resumable migration act for a
+  breaking schema change (millions of rows on the paper).
+- **Computer signing moves to late phase 1**: the witness's security value
+  needs signed batches. Phase 2 keeps the protocol.
+
+### 11.4 Layout rule
+
+Put small, often-read columns before large ones. In `og_objects`,
+`updated_at` follows `body` and `metadata`, so reading it reads the whole
+body and its overflow pages; the read-pool validator spends most of its time
+there. The class tables put keys, kind, timestamps and the `hash_v` marker
+first, and the body last.
+
+### 11.5 The owner's direction (2026-10-30 afternoon)
+
+- **`choir.event`**: the default stands (owner question 1). Trace and
+  progress kinds leave the working store and stay on the sealed tape; the
+  trim is a tape event (§11.3), so replay agrees.
+- **What the tape is for**: recovery from bad self-development (undo to a
+  checkpoint, then rebuild), the audit log (enterprise), the long-term value
+  of ordered data (precommitment records, PSA, analysis), and the users'
+  agent traces. Those traces are the users' data, not Choir's. They stay
+  sealed under the computer's key and preserved.
+- **A checkpoint is a snapshot whose fingerprint is published.** Undo is a
+  rebuild aimed at an earlier checkpoint: install the nearest snapshot at or
+  before it and replay the tape to it.
+- **The tape is tamper-evident.** Batches are signed by the computer (late
+  phase 1, §11.3), and the heads are anchored outside the host (a named
+  phase-2 item; PSA's backdating bound depends on it). Escrow of the
+  computer key is the owner's choice.
+- **The tape protocol is a replication protocol.** A computer will run on
+  the host, on the owner's Mac (a local app; Windows and Linux later), and
+  on an enterprise's own host syncing to employees' workstations. Phase 2
+  designs the protocol as one writer per epoch with an explicit handoff
+  between hosts, not as a host-only append path. Snapshots stay
+  hypervisor-neutral (a SQLite file and a sealed manifest, never a disk
+  image), because the hypervisor bake-off comes next.
+- **Keys travel with the computer**: on a Mac, in the Keychain. A host that
+  serves a computer holds its key only while it serves it.
+- **Backups**: there is one machine, so nothing is off the host. Sealed
+  data (tape payloads, snapshot chunks, the PostgreSQL dumps) copied to a
+  second location is the next durability step. The paper runs without a
+  backup tonight, by the owner's decision.
