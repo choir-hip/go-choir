@@ -152,6 +152,9 @@ type ComputerEventAppender struct {
 	replaySeq                uint64
 	replayCommittedSeq       uint64
 	replayAppliedRows        uint64 // rows applied during this Reconstruct call
+	// replayPayloadNanos is time spent fetching projection-batch payloads
+	// from the host during a replay: one request per event.
+	replayPayloadNanos atomic.Int64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
@@ -882,6 +885,11 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	// One line per replay that applied anything: the replay rate is what the
 	// recovery bound should be stated in (design object-graph §11.1), and it
 	// was unmeasured.
+	// Where the time goes: fetching pages from the host, applying events
+	// (reduce, receipt verify, projection writes), and periodic commits.
+	var replayFetch, replayApply, replayCommit time.Duration
+	replayPages := 0
+	a.replayPayloadNanos.Store(0)
 	replayStarted := time.Now()
 	defer func() {
 		snap := a.ReplaySnapshot()
@@ -889,7 +897,8 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return
 		}
 		elapsed := time.Since(replayStarted)
-		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3))
+		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, apply %s of which payload fetch %s, commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
+			replayFetch.Round(time.Millisecond), replayPages, replayApply.Round(time.Millisecond), time.Duration(a.replayPayloadNanos.Load()).Round(time.Millisecond), replayCommit.Round(time.Millisecond))
 	}()
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
@@ -934,6 +943,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		if observer := a.replayObserver; observer != nil {
 			observer.RecordApplied(record.Request.Event.Sequence)
 		}
+		replayApply += time.Since(applyStarted)
 		if elapsed := time.Since(applyStarted); elapsed > 2*time.Second {
 			log.Printf("computer event appender: replay apply slow seq=%d elapsed=%s", record.Request.Event.Sequence, elapsed)
 		}
@@ -959,6 +969,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			if err := a.commitReplay(ctx); err != nil {
 				return fmt.Errorf("computer event appender: replay periodic checkpoint: %w", err)
 			}
+			replayCommit += time.Since(commitStarted)
 			if elapsed := time.Since(commitStarted); elapsed > 2*time.Second {
 				log.Printf("computer event appender: replay checkpoint seq=%d commit elapsed=%s", seq, elapsed)
 			}
@@ -977,6 +988,8 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			if err != nil {
 				return fmt.Errorf("computer event appender: fetch durable chain: %w", err)
 			}
+			replayFetch += time.Since(pageStarted)
+			replayPages++
 			if observer := a.replayObserver; observer != nil {
 				observer.PageFetched(after, len(page))
 			}
@@ -1136,7 +1149,9 @@ func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, even
 			Role:           "projection_batch",
 			SchemaVersion:  1,
 		}}
+		fetchStarted := time.Now()
 		resolved, err := ResolvePayloads(ctx, a.reader, a.cipher, event.ComputerID, event.EventID, refs)
+		a.replayPayloadNanos.Add(int64(time.Since(fetchStarted)))
 		if err != nil {
 			return nil, err
 		}
