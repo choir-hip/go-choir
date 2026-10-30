@@ -286,7 +286,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-/T5EJyV6/v7OEG10pQM064LQdblre+oCniLYJk7TKR0=";
+        vendorHash = "sha256-PpfZCVxnIujyvADK0oY5tKy41zBVA8tyfkwao+52aVQ=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
