@@ -891,6 +891,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	// Where the time goes: fetching pages from the host, applying events
 	// (reduce, receipt verify, projection writes), and periodic commits.
 	var replayFetch, replayPrefetch, replayApply, replayCommit time.Duration
+	var replayReduce, replayVerify, replayPrepare, replayFinalize time.Duration
 	replayPages := 0
 	a.replayPayloadNanos.Store(0)
 	defer func() { a.replayPrefetched = nil }()
@@ -901,8 +902,10 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return
 		}
 		elapsed := time.Since(replayStarted)
-		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, payload prefetch %s, apply %s of which payload fetch %s, commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
-			replayFetch.Round(time.Millisecond), replayPages, replayPrefetch.Round(time.Millisecond), replayApply.Round(time.Millisecond), time.Duration(a.replayPayloadNanos.Load()).Round(time.Millisecond), replayCommit.Round(time.Millisecond))
+		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, payload prefetch %s, apply %s: reduce %s, verify %s, prepare %s, finalize %s of which payload fetch %s; commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
+			replayFetch.Round(time.Millisecond), replayPages, replayPrefetch.Round(time.Millisecond), replayApply.Round(time.Millisecond),
+			replayReduce.Round(time.Millisecond), replayVerify.Round(time.Millisecond), replayPrepare.Round(time.Millisecond), replayFinalize.Round(time.Millisecond),
+			time.Duration(a.replayPayloadNanos.Load()).Round(time.Millisecond), replayCommit.Round(time.Millisecond))
 	}()
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
@@ -931,15 +934,22 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		if !sameHead(&next, &record.Request.Next) {
 			return fmt.Errorf("computer event appender: replay projection mismatch at sequence %d", record.Request.Event.Sequence)
 		}
+		verifyStarted := time.Now()
 		if err := a.verifier.VerifyEventHeadReceipt(ctx, record.Receipt, record.Request); err != nil {
 			return fmt.Errorf("computer event appender: replay receipt sequence %d: %w", record.Request.Event.Sequence, err)
 		}
+		prepareStarted := time.Now()
+		replayReduce += verifyStarted.Sub(applyStarted)
+		replayVerify += prepareStarted.Sub(verifyStarted)
 		if err := a.projection.Prepare(ctx, record.Request); err != nil {
 			return fmt.Errorf("computer event appender: replay prepare sequence %d: %w", record.Request.Event.Sequence, err)
 		}
+		finalizeStarted := time.Now()
+		replayPrepare += finalizeStarted.Sub(prepareStarted)
 		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil {
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
+		replayFinalize += time.Since(finalizeStarted)
 		a.setReplayProgress(record.Request.Event.Sequence, a.committedReplaySeq())
 		a.mu.Lock()
 		a.replayAppliedRows++
