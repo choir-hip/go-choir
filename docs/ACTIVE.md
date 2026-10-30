@@ -8,29 +8,26 @@ Sequencing lives here and in
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-10-30): the data system build
+## Active goal (2026-10-30): the lean system
 
-**Goal:** [`definitions/choir-data-system-build-2026-10-30.md`](definitions/choir-data-system-build-2026-10-30.md)
-(`readiness: executable` on the owner's word; the file review rides frame
-round 2). Run it with
-`/goal docs/definitions/choir-data-system-build-2026-10-30.md`.
+**Goal:** [`definitions/choir-lean-system-2026-10-30.md`](definitions/choir-lean-system-2026-10-30.md)
+(`readiness: executable` on the owner's word). Run it with
+`/goal docs/definitions/choir-lean-system-2026-10-30.md`.
 
-Owner, 2026-10-30: "I'd like you to start building this. I mean, iron out
-the kinks first ofc."
+Owner, 2026-10-30: "let's have another aggressive night." Stations: L0 free
+the disks on Node A and Node B; L1 the paper an order of magnitude smaller;
+L2 a crashed computer comes back, a crash loop does not; L3 the docs
+describe the running system; L4 the data system's phase 2 (I1 to I6); L5
+the off-host backup, streamlined (I7); L6 loose ends and the handoff.
 
-It builds the frame,
-[`design/choir-data-system-frame-2026-10-30.md`](design/choir-data-system-frame-2026-10-30.md):
-five things, six rules, the batched write path, four event classes, and one
-cutover.
+## Superseded (2026-10-30): the data system build
 
-Stations:
-- D0, the frame settled (panel: Devin, DeepSeek and Sonnet, then Codex
-  once);
-- D1, the detailed designs cut to fit it;
-- D2, the build plan, one goal file per build station;
-- B0, the acceptance harness first;
-- B1 to B7, the mechanisms, proven on the d@e proof ring;
-- B8, the cutover, on the owner's go.
+**Goal:** [`definitions/choir-data-system-build-2026-10-30.md`](definitions/choir-data-system-build-2026-10-30.md).
+Phase 1 landed on 2026-10-30: the fleet runs on PostgreSQL on the host and
+SQLite in the computers; Store A, Store B and the guest Dolt workspaces are
+deleted. Its phase 2 carries over to the lean system as L4 and L5. The frame,
+[`design/choir-data-system-frame-2026-10-30.md`](design/choir-data-system-frame-2026-10-30.md),
+stays the design source.
 
 ## Superseded (2026-10-30): data architecture selection
 

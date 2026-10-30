@@ -397,7 +397,7 @@ boundaries:
     Codex is used sparingly; the owner has few Codex tokens.
 
 now:
-  status: working
+  status: superseded  # 2026-10-30 ~23:15 UTC; phase 1 landed; successor docs/definitions/choir-lean-system-2026-10-30.md carries phase 2 as L4 and L5
   slice: >-
     Phase 1 is landed: the fleet runs on PostgreSQL on the host and SQLite
     in the computers (C5, 08:36-13:30 UTC), C6 ran on the deployed

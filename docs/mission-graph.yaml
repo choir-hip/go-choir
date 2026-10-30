@@ -1383,13 +1383,27 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-lean-system-2026-10-30
+    title: Lean system — shrink the paper, free the nodes, crash restart with a loop bound, docs made true, data system phase 2, streamlined backup
+    path: docs/definitions/choir-lean-system-2026-10-30.md
+    ledger: docs/definitions/choir-lean-system-2026-10-30.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-data-system-build-2026-10-30]
+    enables: []
+    note: >-
+      Owner 2026-10-30 ~22:55: "let's have another aggressive night";
+      owner chose a new superseding mission over extending the build.
+      Carries the build's phase 2 (I1 to I7) as L4 and L5.
   - id: choir-data-system-build-2026-10-30
     title: Data system build — settle the frame, cut the designs to it, build B0-B8 on the proof ring, cut over once
     path: docs/definitions/choir-data-system-build-2026-10-30.md
     ledger: docs/definitions/choir-data-system-build-2026-10-30.ledger.md
-    status: working
+    status: superseded  # 2026-10-30; phase 1 landed; successor choir-lean-system-2026-10-30
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-data-architecture-selection-2026-10-28]
     enables: []
