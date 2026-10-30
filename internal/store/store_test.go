@@ -42,8 +42,7 @@ func storeTestDir() string {
 // leaves one beside every test path; it goes first.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	_ = os.RemoveAll(filepath.Join(storeTestDir(), traceLogDirName))
-	_ = os.Remove(storeTestDir())
+	_ = os.RemoveAll(storeTestDir())
 	os.Exit(code)
 }
 
@@ -59,7 +58,12 @@ func testStorePath(t *testing.T) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
-	return filepath.Join(dir, t.Name()+".db")
+	// One directory per test: the SQLite state file is state.db beside the
+	// path, so two tests must not share a directory.
+	if err := os.MkdirAll(filepath.Join(dir, t.Name()), 0o755); err != nil {
+		t.Fatalf("create test store dir: %v", err)
+	}
+	return filepath.Join(dir, t.Name(), "runtime.db")
 }
 
 // openTestStore creates a fresh store for testing.
@@ -81,8 +85,7 @@ func openTestStore(t *testing.T) *Store {
 }
 
 func cleanupTestStorePath(path string) {
-	_ = os.Remove(path)
-	_ = os.RemoveAll(deriveTextureWorkspacePath(path))
+	_ = os.RemoveAll(filepath.Dir(path))
 }
 
 func TestOpenUsesTextureWorkspacePathForNewStores(t *testing.T) {
@@ -99,20 +102,22 @@ func TestOpenUsesTextureWorkspacePathForNewStores(t *testing.T) {
 	if got, want := s.TexturePath(), deriveTextureWorkspacePath(path); got != want {
 		t.Fatalf("workspace path = %q, want %q", got, want)
 	}
+	if got, want := s.StatePath(), StateDBPath(path); got != want {
+		t.Fatalf("state path = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(StateDBPath(path)); err != nil {
+		t.Fatalf("stat state file: %v", err)
+	}
 	if _, err := os.Stat(deriveTextureWorkspacePath(path)); err != nil {
-		t.Fatalf("stat texture workspace: %v", err)
+		t.Fatalf("stat sidecar directory: %v", err)
 	}
 }
 
 func testDoltTableExists(t *testing.T, s *Store, table string) bool {
 	t.Helper()
 	var count int
-	if err := s.db.QueryRow(`
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = DATABASE()
-  AND table_name = ?`, table).Scan(&count); err != nil {
-		t.Fatalf("query information_schema.tables: %v", err)
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
 	}
 	return count > 0
 }
@@ -165,116 +170,7 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 	}
 }
 
-func TestOpenDropsRetiredWorkerUpdatesTable(t *testing.T) {
-	path := testStorePath(t)
-	cleanupTestStorePath(path)
-	t.Cleanup(func() { cleanupTestStorePath(path) })
 
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatalf("write store marker: %v", err)
-	}
-	db, _, connector, err := openTextureWorkspaceDB(path)
-	if err != nil {
-		t.Fatalf("open legacy dolt workspace: %v", err)
-	}
-	if _, err := db.Exec(`
-CREATE TABLE worker_updates (
-	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
-	update_id         VARCHAR(255) NOT NULL DEFAULT '',
-	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
-	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
-	message_seq       BIGINT NOT NULL DEFAULT 0,
-	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
-	role              VARCHAR(64) NOT NULL DEFAULT '',
-	findings_json     LONGTEXT NOT NULL DEFAULT '[]',
-	evidence_ids_json LONGTEXT NOT NULL DEFAULT '[]',
-	artifacts_json    LONGTEXT NOT NULL DEFAULT '[]',
-	refs_json         LONGTEXT NOT NULL DEFAULT '[]',
-	tests_json        LONGTEXT NOT NULL DEFAULT '[]',
-	questions_json    LONGTEXT NOT NULL DEFAULT '[]',
-	proposals_json    LONGTEXT NOT NULL DEFAULT '[]',
-	notes_json        LONGTEXT NOT NULL DEFAULT '[]',
-	content           LONGTEXT NOT NULL DEFAULT '',
-	created_at        DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, update_id)
-)`); err != nil {
-		_ = db.Close()
-		_ = connector.Close()
-		t.Fatalf("create legacy worker_updates: %v", err)
-	}
-	if err := db.Close(); err != nil {
-		_ = connector.Close()
-		t.Fatalf("close legacy dolt db: %v", err)
-	}
-	if err := connector.Close(); err != nil {
-		t.Fatalf("close legacy dolt connector: %v", err)
-	}
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("open store carrying retired worker_updates: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	if testDoltTableExists(t, s, "worker_updates") {
-		t.Fatal("retired worker_updates table survived bootstrap")
-	}
-}
-
-func TestOpenDropsRetiredRunsTable(t *testing.T) {
-	path := testStorePath(t)
-	cleanupTestStorePath(path)
-	t.Cleanup(func() { cleanupTestStorePath(path) })
-
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatalf("write store marker: %v", err)
-	}
-	db, _, connector, err := openTextureWorkspaceDB(path)
-	if err != nil {
-		t.Fatalf("open legacy dolt workspace: %v", err)
-	}
-	if _, err := db.Exec(`
-CREATE TABLE runs (
-	loop_id     VARCHAR(255) PRIMARY KEY,
-	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
-	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
-	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
-	agent_role VARCHAR(255) NOT NULL DEFAULT '',
-	owner_id    VARCHAR(255) NOT NULL DEFAULT '',
-	computer_id  VARCHAR(255) NOT NULL DEFAULT '',
-	state       VARCHAR(64) NOT NULL DEFAULT '',
-	prompt      LONGTEXT NOT NULL DEFAULT '',
-	result      LONGTEXT NOT NULL DEFAULT '',
-	error       LONGTEXT NOT NULL DEFAULT '',
-	created_at  DATETIME NOT NULL,
-	updated_at  DATETIME NOT NULL,
-	finished_at DATETIME NULL,
-	metadata_json LONGTEXT NOT NULL DEFAULT '{}'
-)`); err != nil {
-		_ = db.Close()
-		_ = connector.Close()
-		t.Fatalf("create legacy runs: %v", err)
-	}
-	if err := db.Close(); err != nil {
-		_ = connector.Close()
-		t.Fatalf("close legacy dolt db: %v", err)
-	}
-	if err := connector.Close(); err != nil {
-		t.Fatalf("close legacy dolt connector: %v", err)
-	}
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("open store carrying retired runs: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	if testDoltTableExists(t, s, "runs") {
-		t.Fatal("retired runs table survived bootstrap")
-	}
-}
 
 func testDoltColumnExists(t *testing.T, s *Store, table, column string) bool {
 	t.Helper()

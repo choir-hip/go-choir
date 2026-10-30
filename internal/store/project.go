@@ -130,7 +130,7 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	if err != nil {
 		return fmt.Errorf("marshal desktop windows: %w", err)
 	}
-	stamp := now.Format(time.RFC3339Nano)
+	stamp := now.UTC()
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM desktop_workspaces WHERE owner_id = ? AND computer_id = '' AND desktop_id = ?`,
 		ownerID, desktopID,
@@ -140,10 +140,10 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   windows_json = VALUES(windows_json),
-		   active_window = VALUES(active_window),
-		   updated_at = VALUES(updated_at)`,
+		 ON CONFLICT (owner_id, computer_id, desktop_id) DO UPDATE SET
+		   windows_json = excluded.windows_json,
+		   active_window = excluded.active_window,
+		   updated_at = excluded.updated_at`,
 		ownerID, computerID, desktopID, string(windowsJSON), state.ActiveWindowID, stamp,
 	); err != nil {
 		return fmt.Errorf("project desktop workspace: %w", err)
@@ -251,17 +251,17 @@ func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derive
 	if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			object_kind = VALUES(object_kind),
-			owner_id = VALUES(owner_id),
-			computer_id = VALUES(computer_id),
-			version_id = VALUES(version_id),
-			content_hash = VALUES(content_hash),
-			body = VALUES(body),
-			metadata = VALUES(metadata),
-			updated_at = VALUES(updated_at),
-			tombstone = VALUES(tombstone),
-			superseded_by = VALUES(superseded_by)`,
+		ON CONFLICT (canonical_id) DO UPDATE SET
+			object_kind = excluded.object_kind,
+			owner_id = excluded.owner_id,
+			computer_id = excluded.computer_id,
+			version_id = excluded.version_id,
+			content_hash = excluded.content_hash,
+			body = excluded.body,
+			metadata = excluded.metadata,
+			updated_at = excluded.updated_at,
+			tombstone = excluded.tombstone,
+			superseded_by = excluded.superseded_by`,
 		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 		obj.VersionID, obj.ContentHash, obj.Body, metadata,
 		created, updated, obj.Tombstone, obj.SupersededBy); err != nil {
@@ -290,12 +290,12 @@ func projectObjectEdge(ctx context.Context, tx *sql.Tx, body json.RawMessage) er
 	if _, err := tx.ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			from_id = VALUES(from_id),
-			to_id = VALUES(to_id),
-			kind = VALUES(kind),
-			metadata = VALUES(metadata),
-			tombstone = VALUES(tombstone)`,
+		ON CONFLICT (edge_id) DO UPDATE SET
+			from_id = excluded.from_id,
+			to_id = excluded.to_id,
+			kind = excluded.kind,
+			metadata = excluded.metadata,
+			tombstone = excluded.tombstone`,
 		edge.EdgeID, edge.FromID, edge.ToID, string(edge.Kind), metadata, created, edge.Tombstone); err != nil {
 		return fmt.Errorf("project object edge: %w", err)
 	}
@@ -318,7 +318,7 @@ func projectRunMemoryEntry(ctx context.Context, tx *sql.Tx, body json.RawMessage
 		entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq, kind,
 		role, message_json, summary, first_kept_entry_id, tokens_before,
 		reason, model, details_json, created_at
-		FROM run_memory_entries WHERE entry_id=? FOR UPDATE`, entry.EntryID).Scan(
+		FROM run_memory_entries WHERE entry_id=?`, entry.EntryID).Scan(
 		&existing.EntryID, &existing.RunID, &existing.OwnerID, &existing.AgentID, &existing.ParentEntryID,
 		&existing.Seq, &existing.Kind, &existing.Role, &existing.MessageJSON, &existing.Summary,
 		&existing.FirstKeptEntryID, &existing.TokensBefore, &existing.Reason, &existing.Model,
@@ -358,7 +358,7 @@ func projectSelfDevelopmentStartIntent(ctx context.Context, tx *sql.Tx, body jso
 		return fmt.Errorf("self-development start intent identity is required")
 	}
 	var storedCommitment, storedCreatedAt string
-	err := tx.QueryRowContext(ctx, `SELECT request_commitment, created_at FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=? FOR UPDATE`, intent.ComputerID, intent.IdempotencyKey).Scan(&storedCommitment, &storedCreatedAt)
+	err := tx.QueryRowContext(ctx, `SELECT request_commitment, created_at FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=?`, intent.ComputerID, intent.IdempotencyKey).Scan(&storedCommitment, &storedCreatedAt)
 	if err == nil {
 		if storedCommitment != intent.RequestCommitment || storedCreatedAt != intent.CreatedAt {
 			return fmt.Errorf("%w: start intent %s changed", computerevent.ErrProjectionMismatch, intent.IdempotencyKey)
@@ -395,7 +395,7 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head,
 		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
 		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at
-		FROM self_development_operations WHERE operation_id=? FOR UPDATE`, operation.OperationID).Scan(
+		FROM self_development_operations WHERE operation_id=?`, operation.OperationID).Scan(
 		&existing.OperationID, &existing.IdempotencyKey, &existing.RequestCommitment, &existing.ComputerID,
 		&existing.TrajectoryID, &existing.CapsuleID, &existing.BaseHead, &existing.PromptArtifactRef,
 		&existing.BundleDigest, &existing.ReleaseDigest, &existing.CodeRef, &existing.ArtifactProgramRef,
@@ -430,7 +430,7 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		return fmt.Errorf("%w: operation %s disappeared", computerevent.ErrProjectionMismatch, operation.OperationID)
 	}
 	var idempotentOperationID, idempotentCommitment string
-	idempotencyErr := tx.QueryRowContext(ctx, `SELECT operation_id, request_commitment FROM self_development_operations WHERE computer_id=? AND idempotency_key=? FOR UPDATE`, operation.ComputerID, operation.IdempotencyKey).Scan(&idempotentOperationID, &idempotentCommitment)
+	idempotencyErr := tx.QueryRowContext(ctx, `SELECT operation_id, request_commitment FROM self_development_operations WHERE computer_id=? AND idempotency_key=?`, operation.ComputerID, operation.IdempotencyKey).Scan(&idempotentOperationID, &idempotentCommitment)
 	if idempotencyErr == nil && (idempotentOperationID != operation.OperationID || idempotentCommitment != operation.RequestCommitment) {
 		return fmt.Errorf("%w: operation idempotency binding changed", computerevent.ErrProjectionMismatch)
 	}
@@ -444,17 +444,17 @@ func projectSelfDevelopmentOperation(ctx context.Context, tx *sql.Tx, body json.
 		materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt,
 		mode_receipt, lifecycle_receipt, state, terminal_error, last_intent_error, created_at, updated_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON DUPLICATE KEY UPDATE
-		computer_id=VALUES(computer_id), idempotency_key=VALUES(idempotency_key), request_commitment=VALUES(request_commitment),
-		trajectory_id=VALUES(trajectory_id), capsule_id=VALUES(capsule_id), base_head=VALUES(base_head),
-		prompt_artifact_ref=VALUES(prompt_artifact_ref), bundle_digest=VALUES(bundle_digest), release_digest=VALUES(release_digest),
-		code_ref=VALUES(code_ref), artifact_program_ref=VALUES(artifact_program_ref), verifier_refs_json=VALUES(verifier_refs_json),
-		decision_actor=VALUES(decision_actor), decision_event=VALUES(decision_event), decision_receipt=VALUES(decision_receipt),
-		desired_head=VALUES(desired_head), effective_head=VALUES(effective_head), materialization_receipt=VALUES(materialization_receipt),
-		checkpoint_ref=VALUES(checkpoint_ref), route_certificate=VALUES(route_certificate), route_generation=VALUES(route_generation),
-		route_receipt=VALUES(route_receipt), mode_receipt=VALUES(mode_receipt), lifecycle_receipt=VALUES(lifecycle_receipt),
-		state=VALUES(state), terminal_error=VALUES(terminal_error), last_intent_error=VALUES(last_intent_error),
-		created_at=VALUES(created_at), updated_at=VALUES(updated_at)`,
+	ON CONFLICT (operation_id) DO UPDATE SET
+		computer_id=excluded.computer_id, idempotency_key=excluded.idempotency_key, request_commitment=excluded.request_commitment,
+		trajectory_id=excluded.trajectory_id, capsule_id=excluded.capsule_id, base_head=excluded.base_head,
+		prompt_artifact_ref=excluded.prompt_artifact_ref, bundle_digest=excluded.bundle_digest, release_digest=excluded.release_digest,
+		code_ref=excluded.code_ref, artifact_program_ref=excluded.artifact_program_ref, verifier_refs_json=excluded.verifier_refs_json,
+		decision_actor=excluded.decision_actor, decision_event=excluded.decision_event, decision_receipt=excluded.decision_receipt,
+		desired_head=excluded.desired_head, effective_head=excluded.effective_head, materialization_receipt=excluded.materialization_receipt,
+		checkpoint_ref=excluded.checkpoint_ref, route_certificate=excluded.route_certificate, route_generation=excluded.route_generation,
+		route_receipt=excluded.route_receipt, mode_receipt=excluded.mode_receipt, lifecycle_receipt=excluded.lifecycle_receipt,
+		state=excluded.state, terminal_error=excluded.terminal_error, last_intent_error=excluded.last_intent_error,
+		created_at=excluded.created_at, updated_at=excluded.updated_at`,
 		operation.OperationID, operation.ComputerID, operation.IdempotencyKey, operation.RequestCommitment,
 		operation.TrajectoryID, operation.CapsuleID, operation.BaseHead, operation.PromptArtifactRef,
 		operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef,
@@ -493,7 +493,7 @@ func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawM
 	var existing computerevent.TextureAgentMutationProjection
 	var completedAt sql.NullString
 	err := tx.QueryRowContext(ctx, `SELECT doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
-		FROM texture_agent_mutations WHERE owner_id=? AND computer_id=? AND doc_id=? AND loop_id=? FOR UPDATE`,
+		FROM texture_agent_mutations WHERE owner_id=? AND computer_id=? AND doc_id=? AND loop_id=?`,
 		mutation.OwnerID, mutation.ComputerID, mutation.DocID, mutation.RunID).Scan(
 		&existing.DocID, &existing.RunID, &existing.OwnerID, &existing.ComputerID, &existing.State,
 		&existing.ScheduledMessageSeq, &existing.RevisionID, &existing.CreatedAt, &completedAt)
@@ -540,9 +540,9 @@ func projectTextureAgentMutation(ctx context.Context, tx *sql.Tx, body json.RawM
 	_, err = tx.ExecContext(ctx, `INSERT INTO texture_agent_mutations (
 		doc_id, loop_id, owner_id, computer_id, state, scheduled_message_seq, revision_id, created_at, completed_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON DUPLICATE KEY UPDATE
-		state=VALUES(state), scheduled_message_seq=VALUES(scheduled_message_seq), revision_id=VALUES(revision_id),
-		created_at=VALUES(created_at), completed_at=VALUES(completed_at)`,
+	ON CONFLICT (owner_id, computer_id, doc_id, loop_id) DO UPDATE SET
+		state=excluded.state, scheduled_message_seq=excluded.scheduled_message_seq, revision_id=excluded.revision_id,
+		created_at=excluded.created_at, completed_at=excluded.completed_at`,
 		mutation.DocID, mutation.RunID, mutation.OwnerID, mutation.ComputerID, mutation.State,
 		mutation.ScheduledMessageSeq, mutation.RevisionID, mutation.CreatedAt, mutation.CompletedAt)
 	if err != nil {
@@ -632,9 +632,9 @@ func projectTextureDocumentAlias(ctx context.Context, tx *sql.Tx, body json.RawM
 		INSERT INTO texture_document_aliases (
 			owner_id, computer_id, source_path, doc_id, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			doc_id=VALUES(doc_id),
-			updated_at=VALUES(updated_at)`,
+		ON CONFLICT (owner_id, computer_id, source_path) DO UPDATE SET
+			doc_id=excluded.doc_id,
+			updated_at=excluded.updated_at`,
 		ownerID, targetComputerID, sourcePath, docID, createdAt, updatedAt)
 	if err != nil {
 		return fmt.Errorf("project Texture document alias: %w", err)

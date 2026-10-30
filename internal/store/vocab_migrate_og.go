@@ -803,7 +803,6 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		// The working set changed outside the event paths, so the next
 		// checkpoint must commit it (a migration-only store otherwise leaves
 		// its cutover in the uncommitted working set of a published base).
-		s.markDoltHistoryDirty()
 	}
 	return nil
 }
@@ -1063,7 +1062,6 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 		return fmt.Errorf("og revert commit: %w", err)
 	}
 	if len(rep.OGObjects) > 0 || len(rep.OGEdges) > 0 {
-		s.markDoltHistoryDirty()
 	}
 	return nil
 }

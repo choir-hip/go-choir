@@ -67,7 +67,7 @@ func TestIndexedInboxAndClaimReadsMatchUnindexed(t *testing.T) {
 	live := s.ogReadStore
 	unmigrated := objectgraph.NewDoltStore(s.readDB)
 	unmigrated.ShareEngineMutex(live)
-	read := func(graph *objectgraph.DoltStore, fn func() (any, error)) string {
+	read := func(graph *objectgraph.SQLStore, fn func() (any, error)) string {
 		s.ogReadStore = graph
 		defer func() { s.ogReadStore = live }()
 		v, err := fn()

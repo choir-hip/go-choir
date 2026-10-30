@@ -3,16 +3,13 @@ package store
 import "database/sql"
 
 // PoolStats is the store's two connection pools as database/sql counts
-// them. Both pools hold one connection (configureEmbeddedDoltDB), so
+// them. The write pool holds one connection, so
 // WaitCount and WaitDurationMS are how often and how long callers waited for
 // it: their growth between store_stalled 503s shows how loaded the one write
 // connection is (docs/problems/paper-post-refresh-health-windows-2026-10-22.md).
 type PoolStats struct {
 	Write PoolStat `json:"write"`
 	Read  PoolStat `json:"read"`
-	// OnlineGC is the online Dolt GC pass flag: a pass holds the write pool's
-	// one connection, so it is the first thing to read beside a stall.
-	OnlineGC OnlineGCStatus `json:"online_gc"`
 }
 
 // PoolStat is one pool's sql.DBStats, durations in milliseconds.
@@ -46,5 +43,5 @@ func (s *Store) PoolStats() *PoolStats {
 	if s == nil {
 		return nil
 	}
-	return &PoolStats{Write: poolStat(s.db), Read: poolStat(s.readDB), OnlineGC: s.OnlineGCStatus()}
+	return &PoolStats{Write: poolStat(s.db), Read: poolStat(s.readDB)}
 }

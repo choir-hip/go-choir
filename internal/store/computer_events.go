@@ -61,11 +61,11 @@ func (s *Store) Prepare(ctx context.Context, request computerevent.CASRequest) e
 		return fmt.Errorf("computer event projection: check idempotency: %w", err)
 	}
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, event_json, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, target_state_commitment, restored_prior_effective, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.EventDigest, event.ComputerID, event.Sequence, event.PreviousHead, event.EventKind, string(eventJSON), request.EventArtifactDigest, request.EventPinReceiptDigest, string(pinsJSON), event.RequestCommitment, event.IdempotencyKey, request.Next.DesiredEventHead, request.Next.EffectiveEventHead, nullableEventString(request.Next.PendingTransitionRef), request.Next.DesiredStateCommitment, request.Next.EffectiveStateCommitment, request.Next.ReducerVersion, request.Next.CredentialRevocationEpoch, nullableEventString(request.Input.TargetStateCommitment), request.Input.RestoredPriorEffective, now)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, prepared_event_json, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, target_state_commitment, restored_prior_effective, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.EventDigest, event.ComputerID, event.Sequence, event.PreviousHead, event.EventKind, string(eventJSON), request.EventArtifactDigest, request.EventPinReceiptDigest, string(pinsJSON), event.RequestCommitment, event.IdempotencyKey, request.Next.DesiredEventHead, request.Next.EffectiveEventHead, nullableEventString(request.Next.PendingTransitionRef), request.Next.DesiredStateCommitment, request.Next.EffectiveStateCommitment, request.Next.ReducerVersion, request.Next.CredentialRevocationEpoch, nullableEventString(request.Input.TargetStateCommitment), request.Input.RestoredPriorEffective, now)
 	if err != nil {
 		return fmt.Errorf("computer event projection: prepare: %w", err)
 	}
-	s.markDoltHistoryDirty()
+	s.eventBodies.putEvent(event.ComputerID, request.EventDigest, event)
 	return nil
 }
 
@@ -106,7 +106,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if err := s.upcastProjectionDeposit(batch, false, false, false); err != nil {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("computer event projection: dry-run begin: %w", err)
 	}
@@ -139,9 +139,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	receiptDigest := computerevent.DigestBytes(receiptJSON)
 	s.eventMu.Lock()
 	defer s.eventMu.Unlock()
-	connWait := s.checkpoint.startFinalizeConnWait()
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	s.checkpoint.noteFinalizeConnWait(connWait)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -150,7 +148,8 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	var previousHead, status, desiredHead, effectiveHead, desiredCommitment, effectiveCommitment string
 	var pending sql.NullString
 	var eventKind string
-	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, event_kind, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch FROM computer_event_index WHERE computer_id=? AND event_digest=? FOR UPDATE`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &eventKind, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment, &nextReducerVersion, &nextCredentialRevocationEpoch)
+	var preparedEvent sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, event_kind, prepared_event_json, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch FROM computer_event_index WHERE computer_id=? AND event_digest=?`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &eventKind, &preparedEvent, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment, &nextReducerVersion, &nextCredentialRevocationEpoch)
 	if err != nil {
 		return fmt.Errorf("computer event projection: load prepared event: %w", err)
 	}
@@ -177,7 +176,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	}
 	var currentSequence uint64
 	var currentHead string
-	headErr := tx.QueryRowContext(ctx, `SELECT sequence, canonical_event_head FROM computer_event_projection_heads WHERE computer_id=? FOR UPDATE`, computerID).Scan(&currentSequence, &currentHead)
+	headErr := tx.QueryRowContext(ctx, `SELECT sequence, canonical_event_head FROM computer_event_projection_heads WHERE computer_id=?`, computerID).Scan(&currentSequence, &currentHead)
 	// A missing projection head means this computer has never been projected
 	// in this store: a from-scratch reconstruction, which is when the
 	// versioned replayed-deposit upcast activates (vocab_upcast_deposit.go).
@@ -197,7 +196,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if err != nil {
 		return fmt.Errorf("computer event projection: update head: %w", err)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE computer_event_index SET status='finalized', event_head_receipt_json=?, event_head_receipt_digest=?, finalized_at=? WHERE computer_id=? AND event_digest=? AND status='prepared'`, string(receiptJSON), receiptDigest, time.Now().UTC(), computerID, eventDigest)
+	result, err := tx.ExecContext(ctx, `UPDATE computer_event_index SET status='finalized', prepared_event_json=NULL, event_head_receipt_digest=?, finalized_at=? WHERE computer_id=? AND event_digest=? AND status='prepared'`, receiptDigest, time.Now().UTC(), computerID, eventDigest)
 	if err != nil {
 		return fmt.Errorf("computer event projection: finalize event: %w", err)
 	}
@@ -242,43 +241,24 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.markDoltHistoryDirty()
-	if allowLegacyTextureBootstrap {
-		return nil
+	// The guest keeps no event bodies once an event is final (build sheet
+	// decision 8): remember this one for the lookups that follow, and let the
+	// tape serve it after that.
+	if preparedEvent.Valid && preparedEvent.String != "" {
+		if event, decodeErr := computerevent.DecodeHistoricEvent([]byte(preparedEvent.String)); decodeErr == nil {
+			s.eventBodies.putEvent(computerID, eventDigest, event)
+		}
 	}
-	ops := 0
-	if batch != nil {
-		ops = len(batch.Ops)
-	}
-	s.noteCheckpointFinalize(ops)
-	if s.checkpointDebounced() {
-		// The background committer owns the cadence; this writer and every
-		// writer behind it do not wait on a history commit.
-		return nil
-	}
-	every := s.doltCheckpointEvery
-	if every == 0 {
-		every = defaultFinalizeCheckpointEvery
-	}
-	s.finalizeSinceCheckpoint++
-	if s.finalizeSinceCheckpoint < every {
-		return nil
-	}
-	s.finalizeSinceCheckpoint = 0
-	return s.commitDoltCheckpointAt(ctx, "finalize computer event "+eventDigest, checkpointSiteInline)
+	s.eventBodies.putReceipt(computerID, eventDigest, receipt)
+	return nil
 }
 
-// CommitReplay makes the complete replay working set addressable by Dolt
-// history once, instead of committing once per replayed event. The deposit
-// upcast alias ledger is synced first, on the same boundary, so a
-// crash-resumed replay can still resolve references recorded against legacy
-// IDs: an alias is written before the deposit it renames commits, and it is
-// flushed no later than the checkpoint that makes that deposit durable.
+// CommitReplay is the boundary a complete replay ends on. The deposit upcast
+// alias ledger is synced first, so a crash-resumed replay can still resolve
+// references recorded against legacy IDs. SQL COMMIT already made each
+// replayed event durable; there is no history commit.
 func (s *Store) CommitReplay(ctx context.Context) error {
-	if err := s.syncDepositUpcastLedger(); err != nil {
-		return err
-	}
-	return s.commitDoltCheckpoint(ctx, "finalize computer event replay")
+	return s.syncDepositUpcastLedger()
 }
 
 func (s *Store) DiscardPrepared(ctx context.Context, computerID, eventDigest string) error {
@@ -291,12 +271,11 @@ func (s *Store) DiscardPrepared(ctx context.Context, computerID, eventDigest str
 	if err != nil {
 		return fmt.Errorf("computer event projection: discard prepared: %w", err)
 	}
-	s.markDoltHistoryDirty()
-	return s.commitDoltCheckpoint(ctx, "discard prepared computer event "+eventDigest)
+	return nil
 }
 
 func (s *Store) Prepared(ctx context.Context, computerID string) ([]computerevent.CASRequest, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT event_json, event_digest, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, next_desired_event_head, next_effective_event_head, COALESCE(next_pending_transition_ref, ''), next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, COALESCE(target_state_commitment, ''), restored_prior_effective FROM computer_event_index WHERE computer_id=? AND status='prepared' ORDER BY sequence`, computerID)
+	rows, err := s.db.QueryContext(ctx, `SELECT prepared_event_json, event_digest, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, next_desired_event_head, next_effective_event_head, COALESCE(next_pending_transition_ref, ''), next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, COALESCE(target_state_commitment, ''), restored_prior_effective FROM computer_event_index WHERE computer_id=? AND status='prepared' ORDER BY sequence`, computerID)
 	if err != nil {
 		return nil, err
 	}
@@ -304,11 +283,15 @@ func (s *Store) Prepared(ctx context.Context, computerID string) ([]computereven
 	var requests []computerevent.CASRequest
 	for rows.Next() {
 		var request computerevent.CASRequest
-		var rawEvent, rawPins string
+		var rawEvent sql.NullString
+		var rawPins string
 		if err := rows.Scan(&rawEvent, &request.EventDigest, &request.EventArtifactDigest, &request.EventPinReceiptDigest, &rawPins, &request.Next.DesiredEventHead, &request.Next.EffectiveEventHead, &request.Next.PendingTransitionRef, &request.Next.DesiredStateCommitment, &request.Next.EffectiveStateCommitment, &request.Next.ReducerVersion, &request.Next.CredentialRevocationEpoch, &request.Input.TargetStateCommitment, &request.Input.RestoredPriorEffective); err != nil {
 			return nil, err
 		}
-		event, err := computerevent.DecodeHistoricEvent([]byte(rawEvent))
+		if !rawEvent.Valid || rawEvent.String == "" {
+			return nil, fmt.Errorf("computer event projection: prepared event body is missing")
+		}
+		event, err := computerevent.DecodeHistoricEvent([]byte(rawEvent.String))
 		if err != nil {
 			return nil, err
 		}

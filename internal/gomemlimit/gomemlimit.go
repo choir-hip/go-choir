@@ -1,6 +1,5 @@
 // Package gomemlimit sets a soft Go memory limit for the guest daemon and its
-// desk-session workers, derived from guest RAM, and fixes the embedded Dolt
-// engine's cache budget before that limit can change it.
+// desk-session workers, derived from guest RAM.
 //
 // Why (docs/reports/lr-guest-memory-return-2026-10-14.md): nothing bounds
 // memory inside a guest. Without a limit the Go GC lets a heap grow to twice
@@ -58,10 +57,6 @@ const (
 	// the runtime and makes the GC run without pause.
 	workerOverrideMin = 64 * mib
 
-	// DoltNodeCacheEnv gives Dolt's shared node cache its own budget in MiB
-	// (16-256, Dolt's own bounds). Unset: Dolt's defaults, as before.
-	DoltNodeCacheEnv = "CHOIR_DOLT_CACHE_NODE_MIB"
-
 	meminfoPath = "/proc/meminfo"
 )
 
@@ -72,10 +67,6 @@ type Decision struct {
 	LimitBytes       int64 // the soft limit applied; 0 when none was applied
 	WorkerLimitBytes int64 // daemon only: the limit each desk worker computes
 	Skipped          string
-
-	// Daemon only: the Dolt cache budget in effect.
-	DoltBudget         string
-	DoltNodeCacheBytes uint64
 }
 
 func (d Decision) String() string {
@@ -89,26 +80,17 @@ func (d Decision) String() string {
 	if d.WorkerLimitBytes > 0 {
 		fmt.Fprintf(&b, " desk_worker_limit_mib=%d", d.WorkerLimitBytes/mib)
 	}
-	if d.DoltBudget != "" {
-		fmt.Fprintf(&b, " dolt_budget=%s dolt_node_cache_mib=%d", d.DoltBudget, d.DoltNodeCacheBytes/uint64(mib))
-	}
 	return b.String()
 }
 
-// ApplyDaemon fixes Dolt's cache budget, then sets the daemon's soft limit.
-// It must run before anything opens Dolt: Dolt reads the Go memory limit
-// once, at first use, to size its caches.
-//
-// The caller passes Dolt's memlimit.Init and NodeCacheSize: this package
-// stays free of the Dolt engine (and its cgo ICU dependency) so the desk
-// worker binary, which links it, stays small.
-func ApplyDaemon(doltInit func(), doltNodeCache func() uint64) Decision {
-	return apply(RoleDaemon, os.Getenv, os.ReadFile, setMemoryLimit, doltInit, doltNodeCache)
+// ApplyDaemon sets the daemon's soft limit.
+func ApplyDaemon() Decision {
+	return apply(RoleDaemon, os.Getenv, os.ReadFile, setMemoryLimit)
 }
 
 // ApplyDeskWorker sets a desk-session worker's soft limit.
 func ApplyDeskWorker() Decision {
-	return apply(RoleDeskWorker, os.Getenv, os.ReadFile, setMemoryLimit, nil, nil)
+	return apply(RoleDeskWorker, os.Getenv, os.ReadFile, setMemoryLimit)
 }
 
 // WorkerEnv returns the environment to add to a desk worker so an operator
@@ -167,7 +149,7 @@ func ValidGOMEMLIMIT(v string) bool {
 
 var setMemoryLimit = debug.SetMemoryLimit
 
-func apply(role Role, getenv func(string) string, readFile func(string) ([]byte, error), setLimit func(int64) int64, doltInit func(), doltNodeCache func() uint64) Decision {
+func apply(role Role, getenv func(string) string, readFile func(string) ([]byte, error), setLimit func(int64) int64) Decision {
 	d := Decision{Role: role}
 	if data, err := readFile(meminfoPath); err != nil {
 		d.Skipped = "meminfo unavailable"
@@ -187,46 +169,10 @@ func apply(role Role, getenv func(string) string, readFile func(string) ([]byte,
 		d.WorkerLimitBytes = LimitFor(RoleDeskWorker, d.MemTotalBytes)
 	}
 
-	if role == RoleDaemon && doltInit != nil {
-		// Fix Dolt's budget before the soft limit below, so the limit never
-		// resizes Dolt's caches: with the knob unset Dolt sees exactly what it
-		// saw before this package existed.
-		if n, ok := doltNodeCacheMiB(getenv(DoltNodeCacheEnv)); ok {
-			prev := setLimit(doltTransientLimit(n))
-			doltInit()
-			setLimit(prev)
-			d.DoltBudget = fmt.Sprintf("%s=%d", DoltNodeCacheEnv, n)
-		} else {
-			doltInit()
-			d.DoltBudget = "default"
-		}
-		if doltNodeCache != nil {
-			d.DoltNodeCacheBytes = doltNodeCache()
-		}
-	}
-
 	if d.LimitBytes > 0 {
 		setLimit(d.LimitBytes)
 	}
 	return d
-}
-
-// doltNodeCacheMiB parses the Dolt knob, clamped to Dolt's own node-cache
-// bounds (16-256 MiB). Unset or invalid: not set.
-func doltNodeCacheMiB(v string) (int, bool) {
-	n, err := strconv.Atoi(strings.TrimSpace(v))
-	if err != nil || n <= 0 {
-		return 0, false
-	}
-	return min(max(n, 16), 256), true
-}
-
-// doltTransientLimit is the Go memory limit at which Dolt's partition
-// (libraries/doltcore/memlimit: 50% of the limit, 47% of that to the node
-// cache, 47% to the memtable, 6% to decoded chunks) gives the node cache
-// nodeMiB. A few KiB of margin keeps float rounding from landing below it.
-func doltTransientLimit(nodeMiB int) int64 {
-	return int64(math.Ceil(float64(int64(nodeMiB)*mib)/(0.50*0.47))) + 4096
 }
 
 func parseMemTotal(data []byte) (int64, error) {

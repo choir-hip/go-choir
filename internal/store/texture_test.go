@@ -20,7 +20,7 @@ func textureTestStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "texture-test.db")
-	s, err := OpenTextureWorkspace(dbPath)
+	s, err := Open(dbPath)
 	if err != nil {
 		t.Fatalf("open texture test store: %v", err)
 	}
@@ -58,17 +58,6 @@ func testTextureRevisionWithBodyDoc(t *testing.T, rev types.Revision) types.Revi
 	return rev
 }
 
-func TestOpenTextureWorkspaceUsesTextureDatabaseForFreshWorkspace(t *testing.T) {
-	s := textureTestStore(t)
-
-	var databaseName string
-	if err := s.textureHandle().QueryRow("SELECT DATABASE()").Scan(&databaseName); err != nil {
-		t.Fatalf("SELECT DATABASE(): %v", err)
-	}
-	if databaseName != textureDatabaseName {
-		t.Fatalf("database = %q, want %q", databaseName, textureDatabaseName)
-	}
-}
 
 func TestTextureGetDocumentOwnerScope(t *testing.T) {
 	s := textureTestStore(t)
@@ -419,48 +408,6 @@ func TestTextureCreateRevisionRejectsLegacySourceMetadataEvenWithStructuredSourc
 	}
 }
 
-func TestTextureBootstrapMigratesStructuredRevisionColumns(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "old-texture.db")
-	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
-	if err != nil {
-		t.Fatalf("open old texture workspace: %v", err)
-	}
-	s := &Store{path: dbPath, textureDB: db, texturePath: workspacePath, doltConnector: connector}
-	t.Cleanup(func() { _ = s.Close() })
-
-	_, err = s.textureHandle().Exec(`
-CREATE TABLE texture_documents (
-	doc_id              VARCHAR(255) PRIMARY KEY,
-	owner_id            VARCHAR(255) NOT NULL,
-	title               VARCHAR(1024) NOT NULL DEFAULT '',
-	current_revision_id VARCHAR(255) NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL,
-	updated_at          DATETIME NOT NULL
-);
-CREATE TABLE texture_revisions (
-	revision_id         VARCHAR(255) PRIMARY KEY,
-	doc_id              VARCHAR(255) NOT NULL,
-	owner_id            VARCHAR(255) NOT NULL,
-	author_kind         VARCHAR(64) NOT NULL,
-	author_label        VARCHAR(255) NOT NULL DEFAULT '',
-	version_number      BIGINT NOT NULL DEFAULT 0,
-	content             LONGTEXT NOT NULL,
-	citations_json      LONGTEXT NOT NULL,
-	metadata_json       LONGTEXT NOT NULL,
-	provenance_json     LONGTEXT NOT NULL DEFAULT '{}',
-	revision_hash       VARCHAR(255) NOT NULL DEFAULT '',
-	parent_revision_id  VARCHAR(255) NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL
-);`)
-	if err != nil {
-		t.Fatalf("create old texture schema: %v", err)
-	}
-	if err := s.bootstrapTexture(); err != nil {
-		t.Fatalf("bootstrapTexture: %v", err)
-	}
-	assertTextureColumnExists(t, s, "body_doc_json")
-	assertTextureColumnExists(t, s, "source_entities_json")
-}
 
 func structuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMessage) {
 	t.Helper()
@@ -906,59 +853,6 @@ func TestTextureRevisionVersionNumbersAdvancePastFifty(t *testing.T) {
 	}
 }
 
-func TestTextureBackfillsLegacyRevisionVersionNumbers(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-legacy",
-		OwnerID: "user-1",
-		Title:   "Legacy versions",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	parentID := ""
-	for i := 0; i < 4; i++ {
-		revID := fmt.Sprintf("rev-legacy-%d", i)
-		rev := types.Revision{
-			RevisionID:       revID,
-			DocID:            doc.DocID,
-			OwnerID:          doc.OwnerID,
-			AuthorKind:       types.AuthorUser,
-			AuthorLabel:      "alice",
-			Content:          fmt.Sprintf("Content v%d", i),
-			ParentRevisionID: parentID,
-			CreatedAt:        time.Date(2026, 6, 5, 12, i, 0, 0, time.UTC),
-		}
-		if err := s.CreateRevision(ctx, rev); err != nil {
-			t.Fatalf("CreateRevision %d: %v", i, err)
-		}
-		parentID = revID
-	}
-
-	if _, err := s.textureHandle().ExecContext(ctx, `UPDATE texture_revisions SET version_number = 0 WHERE doc_id = ? AND owner_id = ?`, doc.DocID, doc.OwnerID); err != nil {
-		t.Fatalf("zero legacy version numbers: %v", err)
-	}
-	if err := s.EnsureTextureSchema(); err != nil {
-		t.Fatalf("EnsureTextureSchema: %v", err)
-	}
-
-	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
-	if err != nil {
-		t.Fatalf("ListRevisionsByDoc: %v", err)
-	}
-	if len(revs) != 4 {
-		t.Fatalf("len(revs) = %d, want 4", len(revs))
-	}
-	for i, rev := range revs {
-		wantVersion := 3 - i
-		if rev.VersionNumber != wantVersion {
-			t.Fatalf("revs[%d].VersionNumber = %d, want %d", i, rev.VersionNumber, wantVersion)
-		}
-	}
-}
 
 func TestTextureListRevisionsByDocOwnerScope(t *testing.T) {
 	s := textureTestStore(t)
@@ -1070,16 +964,6 @@ func TestTextureHistoryHasNativeDoltAuditCommits(t *testing.T) {
 	t.Logf("native Dolt history latest-10 latency across %d revisions: %s", revisionCount, latency)
 }
 
-func TestValidateDoltCommitHashRejectsSQLSyntax(t *testing.T) {
-	if err := validateDoltCommitHash("0123456789abcdefghijklmnopqrstuv"); err != nil {
-		t.Fatalf("valid Dolt hash rejected: %v", err)
-	}
-	for _, hash := range []string{"", "HEAD~1", "abc' OR 1=1 --"} {
-		if err := validateDoltCommitHash(hash); err == nil {
-			t.Fatalf("unsafe Dolt hash %q accepted", hash)
-		}
-	}
-}
 
 // ----- Diff -----
 
@@ -1577,140 +1461,4 @@ func TestTextureAgentMutationIsComputerScoped(t *testing.T) {
 	}
 }
 
-func TestTextureDocumentAliasSchemaMigratesComputerScope(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "legacy-texture-alias.db")
-	legacy, err := OpenTextureWorkspace(dbPath)
-	if err != nil {
-		t.Fatalf("open legacy fixture: %v", err)
-	}
-	for _, statement := range []string{
-		"DROP INDEX idx_texture_aliases_doc ON texture_document_aliases",
-		"ALTER TABLE texture_document_aliases DROP PRIMARY KEY, ADD PRIMARY KEY (owner_id, source_path)",
-		"ALTER TABLE texture_document_aliases DROP COLUMN computer_id",
-	} {
-		if _, err := legacy.textureHandle().Exec(statement); err != nil {
-			_ = legacy.Close()
-			t.Fatalf("prepare legacy alias schema %q: %v", statement, err)
-		}
-	}
-	if err := legacy.Close(); err != nil {
-		t.Fatalf("close legacy fixture: %v", err)
-	}
 
-	migrated, err := OpenTextureWorkspace(dbPath)
-	if err != nil {
-		t.Fatalf("reopen migrated fixture: %v", err)
-	}
-	t.Cleanup(func() { _ = migrated.Close() })
-
-	var columnCount int
-	if err := migrated.textureHandle().QueryRow(`
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name = 'texture_document_aliases'
-  AND column_name = 'computer_id'`).Scan(&columnCount); err != nil {
-		t.Fatalf("query migrated alias computer_id: %v", err)
-	}
-	if columnCount != 1 {
-		t.Fatalf("migrated alias computer_id count = %d, want 1", columnCount)
-	}
-
-	var pk []string
-	rows, err := migrated.textureHandle().Query(`
-SELECT column_name
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name = 'texture_document_aliases'
-  AND index_name = 'PRIMARY'
-ORDER BY seq_in_index`)
-	if err != nil {
-		t.Fatalf("query migrated alias primary key: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var col string
-		if err := rows.Scan(&col); err != nil {
-			t.Fatalf("scan migrated alias primary key: %v", err)
-		}
-		pk = append(pk, col)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate migrated alias primary key: %v", err)
-	}
-	wantPK := []string{"owner_id", "computer_id", "source_path"}
-	if len(pk) != len(wantPK) {
-		t.Fatalf("migrated alias primary key = %v, want %v", pk, wantPK)
-	}
-	for i := range wantPK {
-		if pk[i] != wantPK[i] {
-			t.Fatalf("migrated alias primary key = %v, want %v", pk, wantPK)
-		}
-	}
-
-	now := time.Now().UTC()
-	if _, err := migrated.textureHandle().Exec(`
-INSERT INTO texture_document_aliases (owner_id, computer_id, source_path, doc_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)`,
-		"owner-a", "computer-a", "/docs/note.texture", "doc-a", now, now,
-		"owner-a", "computer-b", "/docs/note.texture", "doc-b", now, now); err != nil {
-		t.Fatalf("insert migrated aliases: %v", err)
-	}
-	var docA, docB string
-	if err := migrated.textureHandle().QueryRow(`
-SELECT doc_id FROM texture_document_aliases WHERE owner_id=? AND computer_id=? AND source_path=?`,
-		"owner-a", "computer-a", "/docs/note.texture").Scan(&docA); err != nil {
-		t.Fatalf("select computer-a alias: %v", err)
-	}
-	if err := migrated.textureHandle().QueryRow(`
-SELECT doc_id FROM texture_document_aliases WHERE owner_id=? AND computer_id=? AND source_path=?`,
-		"owner-a", "computer-b", "/docs/note.texture").Scan(&docB); err != nil {
-		t.Fatalf("select computer-b alias: %v", err)
-	}
-	if docA != "doc-a" || docB != "doc-b" {
-		t.Fatalf("migrated aliases docA=%q docB=%q", docA, docB)
-	}
-}
-
-func TestTextureAgentMutationSchemaMigratesComputerScope(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "legacy-texture-mutation.db")
-	legacy, err := OpenTextureWorkspace(dbPath)
-	if err != nil {
-		t.Fatalf("open legacy fixture: %v", err)
-	}
-	for _, statement := range []string{
-		"DROP INDEX idx_texture_mutations_scope ON texture_agent_mutations",
-		"ALTER TABLE texture_agent_mutations DROP PRIMARY KEY, ADD PRIMARY KEY (doc_id, loop_id)",
-		"ALTER TABLE texture_agent_mutations DROP COLUMN computer_id",
-	} {
-		if _, err := legacy.textureHandle().Exec(statement); err != nil {
-			_ = legacy.Close()
-			t.Fatalf("prepare legacy mutation schema %q: %v", statement, err)
-		}
-	}
-	if err := legacy.Close(); err != nil {
-		t.Fatalf("close legacy fixture: %v", err)
-	}
-
-	migrated, err := OpenTextureWorkspace(dbPath)
-	if err != nil {
-		t.Fatalf("reopen migrated fixture: %v", err)
-	}
-	t.Cleanup(func() { _ = migrated.Close() })
-	ctx := context.Background()
-	now := time.Now().UTC()
-	for _, computerID := range []string{"computer-a", "computer-b"} {
-		if err := migrated.CreateAgentMutation(ctx, AgentMutation{
-			DocID: "shared-doc", RunID: "shared-run", OwnerID: "shared-owner",
-			ComputerID: computerID, State: "pending", CreatedAt: now,
-		}); err != nil {
-			t.Fatalf("create migrated mutation for %s: %v", computerID, err)
-		}
-	}
-	for _, computerID := range []string{"computer-a", "computer-b"} {
-		mutation, err := migrated.GetAgentMutationByRun(ctx, "shared-owner", computerID, "shared-run")
-		if err != nil || mutation == nil || mutation.ComputerID != computerID {
-			t.Fatalf("migrated mutation for %s = %+v, %v", computerID, mutation, err)
-		}
-	}
-}
