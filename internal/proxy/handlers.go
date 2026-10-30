@@ -108,11 +108,10 @@ type errorResponse struct {
 	Error          string `json:"error"`
 	Reason         string `json:"reason,omitempty"`
 	UpstreamStatus int    `json:"upstream_status,omitempty"`
-	// Recovery refusal fields: durable condition kind, retry hint and repair
-	// job status. Omitted for ordinary errors.
-	Kind              string                     `json:"kind,omitempty"`
-	RetryAfterSeconds int                        `json:"retry_after_seconds,omitempty"`
-	Repair            *vmctl.CheckpointJobStatus `json:"repair,omitempty"`
+	// Recovery refusal fields: durable condition kind and retry hint.
+	// Omitted for ordinary errors.
+	Kind              string `json:"kind,omitempty"`
+	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
 }
 
 // proxyHealthResponse is the JSON structure returned by the proxy /health
@@ -908,9 +907,6 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerBootstrapChainPath(path):
 		h.HandleComputerBootstrapChain(w, r)
 		return
-	case isComputerRecoveryJobPath(path):
-		h.HandleComputerRecoveryJob(w, r)
-		return
 	case isSelfDevelopmentModePath(path):
 		h.HandleSelfDevelopmentMode(w, r)
 		return
@@ -1413,7 +1409,7 @@ func recoveryRefusalFromError(err error) *vmctl.RecoveryRefusalError {
 }
 
 // writeRecoveryRefusalResponse renders the durable recovery condition as the
-// product-visible structured 503: reason, kind, repair job status, and
+// product-visible structured 503: reason, kind, and
 // Retry-After. It is deterministic; callers must not retry it as transient.
 func writeRecoveryRefusalResponse(w http.ResponseWriter, refusal *vmctl.RecoveryRefusalError) {
 	if refusal == nil {
@@ -1429,7 +1425,6 @@ func writeRecoveryRefusalResponse(w http.ResponseWriter, refusal *vmctl.Recovery
 		Reason:            refusal.Reason,
 		Kind:              refusal.Kind,
 		RetryAfterSeconds: retryAfter,
-		Repair:            refusal.Repair,
 	})
 }
 

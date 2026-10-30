@@ -8,10 +8,10 @@ package platform
 //   - computer_projection_base_refusals: no writer, no reader;
 //   - computer_projection_base_pins: no writer; read only by the artifact GC
 //     live set (projectionBasePins);
-//   - computer_projection_jobs: written by the enqueue route and the
-//     watermark advertisement's supersede; no worker drains it;
-//   - projection_worker_status: written by checkpointd's heartbeat and read
-//     by the jobs route.
+//   - computer_projection_jobs: the enqueue route is gone; only the
+//     watermark advertisement's supersede and the artifact GC live set
+//     (projectionBasePins) still touch the rows an earlier build wrote;
+//   - projection_worker_status: written by checkpointd's heartbeat; no reader.
 //
 // computer_projection_bases and computer_projection_epoch_roots are still
 // written by the watermark advertisement (file_cas.go);

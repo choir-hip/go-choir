@@ -74,6 +74,12 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 	return s.RecordReplayWatermarkWithRoot(ctx, computerID, seq, baseRef, false)
 }
 
+// checkpointVerifyReason is the reason prefix of a checkpoint verification
+// job row; the watermark advertisement never supersedes one. No code enqueues
+// jobs any more (the host-side projection-jobs route is gone); the prefix
+// protects rows an earlier build wrote.
+const checkpointVerifyReason = "checkpoint-verify:"
+
 // RecordReplayWatermarkWithRoot advances the watermark; epochRoot records the
 // base as the computer's epoch root in the same transaction (its sidecar is
 // marked live_captured): from then on no job the platform admits for the

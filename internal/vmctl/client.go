@@ -33,13 +33,12 @@ var ErrComputerLookupIdentityMismatch = errors.New("vmctl computer lookup identi
 // RecoveryRefusalError is the typed view of a structured 503 recovery refusal
 // (durable recovery condition). It is deterministic for its inputs: callers
 // must not retry it inside a transient retry window. It clears only when the
-// recovery inputs change or the repair job advances the advertised base.
+// recovery inputs change.
 type RecoveryRefusalError struct {
 	Reason            string
 	Kind              string
 	RetryAfterSeconds int
 	Witness           *RecoveryInputWitness
-	Repair            *CheckpointJobStatus
 }
 
 func (e *RecoveryRefusalError) Error() string {
@@ -65,7 +64,6 @@ func decodeRecoveryRefusal(status int, body []byte, retryAfterHeader string) *Re
 		Kind              string                `json:"kind"`
 		RetryAfterSeconds int                   `json:"retry_after_seconds"`
 		Witness           *RecoveryInputWitness `json:"witness"`
-		Repair            *CheckpointJobStatus  `json:"repair"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil
@@ -88,7 +86,6 @@ func decodeRecoveryRefusal(status int, body []byte, retryAfterHeader string) *Re
 		Kind:              kind,
 		RetryAfterSeconds: retryAfter,
 		Witness:           envelope.Witness,
-		Repair:            envelope.Repair,
 	}
 }
 

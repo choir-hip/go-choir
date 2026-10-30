@@ -13,8 +13,7 @@ import (
 // seed and watermark, not by target (review 364). Ways it could fail:
 //  1. the advertisement is refused or waits while the computer's job stands;
 //  2. the stale job stays on the old seed;
-//  3. the next enqueue does not re-admit the row on the new base;
-//  4. a job the new base does not cover, a checkpoint verification job, or a
+//  3. a job the new base does not cover, a checkpoint verification job, or a
 //     genesis repair is superseded.
 func TestAdvertisedBaseSupersedesAStaleJob(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
@@ -24,10 +23,7 @@ func TestAdvertisedBaseSupersedesAStaleJob(t *testing.T) {
 	if err := s.RecordReplayWatermark(ctx, id, 100, strings.Repeat("c", 64)); err != nil {
 		t.Fatal(err)
 	}
-	queued, err := s.EnqueueProjectionJob(ctx, id, "cadence", false)
-	if err != nil || queued.TargetSequence != 5000 {
-		t.Fatalf("enqueue: %+v %v", queued, err)
-	}
+	insertTestJob(t, s, id, "cadence", false, 5000, 100, strings.Repeat("c", 64))
 	captured := strings.Repeat("d", 64)
 	if err := s.RecordReplayWatermark(ctx, id, 6000, captured); err != nil {
 		t.Fatalf("advertise over a standing job: %v", err)
@@ -35,15 +31,8 @@ func TestAdvertisedBaseSupersedesAStaleJob(t *testing.T) {
 	if wm, ref, err := s.ReplayWatermark(ctx, id); err != nil || wm != 6000 || ref != captured {
 		t.Fatalf("watermark = %d %s %v", wm, ref, err)
 	}
-	if got, _ := s.ProjectionJob(ctx, id); got.Status != "superseded" {
-		t.Fatalf("job status = %q, want superseded", got.Status)
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE computer_event_heads SET sequence=? WHERE computer_id=?`, 9000, id); err != nil {
-		t.Fatal(err)
-	}
-	next, err := s.EnqueueProjectionJob(ctx, id, "cadence", false)
-	if err != nil || next.Status != "queued" || next.SeedBaseRef != captured || next.WatermarkSequence != 6000 || next.Generation != queued.Generation+1 {
-		t.Fatalf("re-admitted job = %+v %v, want queued on the advertised base", next, err)
+	if got := testJobStatus(t, s, id); got != "superseded" {
+		t.Fatalf("job status = %q, want superseded", got)
 	}
 }
 
@@ -58,14 +47,12 @@ func TestAdvertisedBaseSupersedesAnOlderSeedPastItsTarget(t *testing.T) {
 	if err := s.RecordReplayWatermark(ctx, id, 100, strings.Repeat("c", 64)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
-		t.Fatal(err)
-	}
+	insertTestJob(t, s, id, "cadence", false, 7000, 100, strings.Repeat("c", 64))
 	if err := s.RecordReplayWatermark(ctx, id, 6000, strings.Repeat("d", 64)); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.ProjectionJob(ctx, id); got.Status != "superseded" {
-		t.Fatalf("job status = %q, want superseded", got.Status)
+	if got := testJobStatus(t, s, id); got != "superseded" {
+		t.Fatalf("job status = %q, want superseded", got)
 	}
 }
 
@@ -87,20 +74,35 @@ func TestAdvertisedBaseLeavesJobsItDoesNotCover(t *testing.T) {
 			s, _ := openTestPlatformStore(t)
 			id := "computer-keep"
 			insertTestHead(t, s, id, tc.target)
-			if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", tc.genesis); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET reason=?,seed_base_ref=? WHERE computer_id=?`, tc.reason, tc.seed, id); err != nil {
-				t.Fatal(err)
-			}
+			insertTestJob(t, s, id, tc.reason, tc.genesis, tc.target, 100, tc.seed)
 			if err := s.RecordReplayWatermark(ctx, id, 6000, strings.Repeat("d", 64)); err != nil {
 				t.Fatal(err)
 			}
-			if got, _ := s.ProjectionJob(ctx, id); got.Status != "queued" {
-				t.Fatalf("job superseded: status = %q", got.Status)
+			if got := testJobStatus(t, s, id); got != "queued" {
+				t.Fatalf("job superseded: status = %q", got)
 			}
 		})
 	}
+}
+
+// insertTestJob writes a legacy queued job row directly: nothing enqueues
+// jobs any more, but rows an earlier build wrote still pin bases until the
+// advertisement supersedes them.
+func insertTestJob(t *testing.T, s *Store, id, reason string, genesis bool, target, watermark uint64, seed string) {
+	t.Helper()
+	now := time.Now().UTC()
+	if _, err := s.db.ExecContext(context.Background(), `INSERT INTO computer_projection_jobs (`+projectionJobColumns+`) VALUES (?,1,'queued',?,?,'h',?,?,'k','','',?,0,'',?,?)`, id, reason, target, watermark, seed, genesis, now, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testJobStatus(t *testing.T, s *Store, id string) string {
+	t.Helper()
+	var status string
+	if err := s.db.QueryRowContext(context.Background(), `SELECT status FROM computer_projection_jobs WHERE computer_id=?`, id).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
 }
 
 func insertTestHead(t *testing.T, s *Store, id string, seq uint64) {

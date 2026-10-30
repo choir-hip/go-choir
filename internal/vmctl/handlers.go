@@ -24,13 +24,12 @@ import (
 type vmctlErrorResponse struct {
 	Error string `json:"error"`
 	// Recovery refusal fields: reason, condition kind, retry hint, the frozen
-	// input witness and the repair job status. They are omitted for ordinary
-	// errors so existing clients decode `error` unchanged.
+	// input witness. They are omitted for ordinary errors so existing clients
+	// decode `error` unchanged.
 	Reason            string                `json:"reason,omitempty"`
 	Kind              string                `json:"kind,omitempty"`
 	RetryAfterSeconds int                   `json:"retry_after_seconds,omitempty"`
 	Witness           *RecoveryInputWitness `json:"witness,omitempty"`
-	Repair            *CheckpointJobStatus  `json:"repair,omitempty"`
 }
 
 // writeVMCTLRecoveryRefusal renders a durable recovery refusal as a structured
@@ -50,7 +49,6 @@ func writeVMCTLRecoveryRefusal(w http.ResponseWriter, refusal *RecoveryRefusal) 
 		Kind:              string(refusal.Kind),
 		RetryAfterSeconds: retryAfter,
 		Witness:           &refusal.Witness,
-		Repair:            refusal.Job,
 	})
 }
 
@@ -464,7 +462,6 @@ func (h *Handler) recordedRecoveryRefusal(userID, desktopID string) *RecoveryRef
 		Kind:              condition.Kind,
 		Reason:            condition.Reason,
 		Witness:           condition.Witness,
-		Job:               condition.Job,
 		RetryAfterSeconds: recoveryRetryAfterSeconds,
 	}
 }

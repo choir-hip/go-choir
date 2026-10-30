@@ -568,3 +568,5 @@ func TestArtifactGCFileChunksWaitTheUploadGraceNotTheWeek(t *testing.T) {
 		}
 	}
 }
+
+const projectionJobColumns = `computer_id,generation,status,reason,target_sequence,target_head,watermark_sequence,seed_base_ref,key_digest,base_ref,error_text,genesis_repair,failures,lease_token,lease_until,updated_at`

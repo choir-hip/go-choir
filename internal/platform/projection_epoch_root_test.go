@@ -9,13 +9,11 @@ import (
 
 // An epoch root (owner, 2026-10-27: "maybe we lose some event log data and
 // restart it from here"): a captured base advertised as the watermark becomes
-// the computer's root, and no job the platform admits for the computer asks
-// for the tape below it. Ways it could fail:
-//  1. the root is not recorded durably, so nothing below knows the floor;
-//  2. a genesis repair replays from genesis instead of from the root;
-//  3. a later, ordinary advertisement drops the root;
-//  4. the advertisement path cannot tell a root from a replayed base.
-func TestEpochRootFloorsEveryAdmittedJob(t *testing.T) {
+// the computer's root. Ways it could fail:
+//  1. the root is not recorded durably;
+//  2. a later, ordinary advertisement drops the root;
+//  3. the advertisement path cannot tell a root from a replayed base.
+func TestEpochRootIsRecordedAndKept(t *testing.T) {
 	s, _ := openTestPlatformStore(t)
 	ctx := context.Background()
 	id := "computer-epoch"
@@ -27,34 +25,28 @@ func TestEpochRootFloorsEveryAdmittedJob(t *testing.T) {
 	if err := s.RecordReplayWatermarkWithRoot(ctx, id, 6000, root, true); err != nil {
 		t.Fatal(err)
 	}
+	read := func() (string, uint64) {
+		var ref string
+		var seq uint64
+		if err := s.db.QueryRowContext(ctx, `SELECT base_ref,sequence FROM computer_projection_epoch_roots WHERE computer_id=?`, id).Scan(&ref, &seq); err != nil {
+			t.Fatal(err)
+		}
+		return ref, seq
+	}
 	// 1
-	if ref, seq, err := epochRoot(ctx, s.db, id); err != nil || ref != root || seq != 6000 {
-		t.Fatalf("epoch root = %s %d %v, want %s 6000", ref, seq, err, root)
+	if ref, seq := read(); ref != root || seq != 6000 {
+		t.Fatalf("epoch root = %s %d, want %s 6000", ref, seq, root)
 	}
 	// 2
-	repair, err := s.EnqueueProjectionJob(ctx, id, "repair", true)
-	if err != nil || repair.SeedBaseRef != root || repair.WatermarkSequence != 6000 {
-		t.Fatalf("genesis repair = %+v %v, want it seeded from the root", repair, err)
-	}
-	// 3
 	if err := s.RecordReplayWatermark(ctx, id, 8000, strings.Repeat("f", 64)); err != nil {
 		t.Fatal(err)
 	}
-	if ref, seq, err := epochRoot(ctx, s.db, id); err != nil || ref != root || seq != 6000 {
-		t.Fatalf("epoch root after a derived base = %s %d %v, want it kept", ref, seq, err)
+	if ref, seq := read(); ref != root || seq != 6000 {
+		t.Fatalf("epoch root after a derived base = %s %d, want it kept", ref, seq)
 	}
 }
 
-// Without a root nothing changes: a computer with none has no floor.
-func TestNoEpochRootIsNoFloor(t *testing.T) {
-	s, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	if ref, seq, err := epochRoot(ctx, s.db, "computer-rootless"); err != nil || ref != "" || seq != 0 {
-		t.Fatalf("epoch root of a rootless computer = %q %d %v", ref, seq, err)
-	}
-}
-
-// 4: the advertisement reads the root's mark from the host-written sidecar,
+// 3: the advertisement reads the root's mark from the host-written sidecar,
 // not from the caller.
 func TestAdvertisementBindingNamesAnEpochRoot(t *testing.T) {
 	for raw, want := range map[string]bool{

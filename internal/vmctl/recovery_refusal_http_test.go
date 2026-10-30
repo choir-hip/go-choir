@@ -36,7 +36,7 @@ func TestHandleResolveReturnsStructured503ForDurableRefusal(t *testing.T) {
 		ObservedAt: time.Now().UTC().Add(-time.Hour),
 	})
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, "")
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	seedRecoveryOwnership(reg, "user-blocked", "computer-blocked", VMStateStopped)
@@ -64,7 +64,6 @@ func TestHandleResolveReturnsStructured503ForDurableRefusal(t *testing.T) {
 		Kind              string                `json:"kind"`
 		RetryAfterSeconds int                   `json:"retry_after_seconds"`
 		Witness           *RecoveryInputWitness `json:"witness"`
-		Repair            *CheckpointJobStatus  `json:"repair"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode refusal body: %v body=%s", err, recorder.Body.String())

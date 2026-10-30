@@ -30,13 +30,6 @@ const (
 	// an admission decision; a known blocked computer must answer well inside
 	// a second on loopback.
 	recoveryAdmissionTimeout = 5 * time.Second
-	// recoveryJobRequestTimeout bounds one platform job POST/GET.
-	recoveryJobRequestTimeout = 30 * time.Second
-	// recoveryJobReenqueueBackoff throttles enqueue retries after a transport
-	// failure so a flapping platform endpoint does not storm.
-	recoveryJobReenqueueBackoff = 30 * time.Second
-	// recoveryJobRefreshInterval bounds background job-status refreshes.
-	recoveryJobRefreshInterval = 20 * time.Second
 )
 
 // RecoveryRefusalKind classifies a durable recovery refusal. Tail excess and a
@@ -79,40 +72,17 @@ type RecoveryInputWitness struct {
 	FreshRealization bool `json:"fresh_realization,omitempty"`
 }
 
-// CheckpointJobStatus mirrors the platform checkpoint job document at
-// /internal/computers/projection-base/jobs. Status values: queued, running,
-// retry, blocked, failed, succeeded.
-type CheckpointJobStatus struct {
-	ComputerID        string `json:"computer_id,omitempty"`
-	Generation        uint64 `json:"generation,omitempty"`
-	Status            string `json:"status,omitempty"`
-	Reason            string `json:"reason,omitempty"`
-	TargetSequence    uint64 `json:"target_sequence,omitempty"`
-	WatermarkSequence uint64 `json:"watermark_sequence,omitempty"`
-	SeedBaseRef       string `json:"seed_base_ref,omitempty"`
-	BaseRef           string `json:"base_ref,omitempty"`
-	Error             string `json:"error,omitempty"`
-	Failures          int    `json:"failures,omitempty"`
-	Alert             string `json:"alert,omitempty"`
-	ColdTail          uint64 `json:"cold_tail,omitempty"`
-}
-
 // RecoveryCondition is the durable typed recovery state for one computer. It
 // is persisted separately from process lifecycle: a vmctl restart reloads it
 // and resumes refusing deterministic over-cap starts without a boot attempt.
 type RecoveryCondition struct {
-	ComputerID       string               `json:"computer_id"`
-	OwnerID          string               `json:"owner_id,omitempty"`
-	Kind             RecoveryRefusalKind  `json:"kind"`
-	Reason           string               `json:"reason"`
-	Witness          RecoveryInputWitness `json:"witness"`
-	ObservedAt       time.Time            `json:"observed_at"`
-	LastEvaluatedAt  time.Time            `json:"last_evaluated_at,omitempty"`
-	Job              *CheckpointJobStatus `json:"job,omitempty"`
-	JobRequestedAt   time.Time            `json:"job_requested_at,omitempty"`
-	JobSeedWatermark uint64               `json:"job_seed_watermark,omitempty"`
-	JobSeedBaseRef   string               `json:"job_seed_base_ref,omitempty"`
-	JobError         string               `json:"job_error,omitempty"`
+	ComputerID      string               `json:"computer_id"`
+	OwnerID         string               `json:"owner_id,omitempty"`
+	Kind            RecoveryRefusalKind  `json:"kind"`
+	Reason          string               `json:"reason"`
+	Witness         RecoveryInputWitness `json:"witness"`
+	ObservedAt      time.Time            `json:"observed_at"`
+	LastEvaluatedAt time.Time            `json:"last_evaluated_at,omitempty"`
 }
 
 // recoveryConditionsFile is the persisted document.
@@ -123,13 +93,12 @@ type recoveryConditionsFile struct {
 
 // RecoveryRefusal is the typed refusal returned by the admission gate. It is
 // an error so every start path fails fast; handlers render it as a structured
-// HTTP 503 with Retry-After and the repair job status.
+// HTTP 503 with Retry-After.
 type RecoveryRefusal struct {
 	ComputerID        string
 	Kind              RecoveryRefusalKind
 	Reason            string
 	Witness           RecoveryInputWitness
-	Job               *CheckpointJobStatus
 	RetryAfterSeconds int
 }
 
@@ -172,9 +141,6 @@ type RecoveryAdmissionConfig struct {
 	StatePath string
 	// CorpusdURL serves the canonical head and advertised watermark reads.
 	CorpusdURL string
-	// JobsURL serves the deduplicated checkpoint job endpoint; empty disables
-	// enqueueing (the durable condition still blocks).
-	JobsURL string
 }
 
 // recoveryEvidence is one canonical recovery-input observation.
@@ -194,28 +160,16 @@ type recoveryEvidenceReader interface {
 	Evidence(ctx context.Context, computerID, ownerID string) (recoveryEvidence, error)
 }
 
-// checkpointJobClient enqueues/reads the platform checkpoint job.
-type checkpointJobClient interface {
-	Enqueue(ctx context.Context, computerID, ownerID, reason string) (*CheckpointJobStatus, error)
-	Status(ctx context.Context, computerID, ownerID string) (*CheckpointJobStatus, error)
-}
-
 // RecoveryAdmission is the durable retained-aware recovery breaker: it decides
-// whether a realization may start, persists typed conditions, and enqueues the
-// deduplicated asynchronous checkpoint/repair job. It never performs replay.
+// whether a realization may start and persists typed conditions. It never
+// performs replay.
 type RecoveryAdmission struct {
 	mu         sync.Mutex
 	path       string
 	reader     recoveryEvidenceReader
-	jobs       checkpointJobClient
 	conditions map[string]*RecoveryCondition
 
-	enqueueInFlight map[string]bool
-	lastJobRefresh  map[string]time.Time
-	now             func() time.Time
-	// background tracks job enqueue/refresh goroutines that persist the
-	// conditions file, so shutdown can drain them before the state goes away.
-	background sync.WaitGroup
+	now func() time.Time
 }
 
 // NewRecoveryAdmission loads the durable conditions file and returns the gate.
@@ -229,15 +183,10 @@ func NewRecoveryAdmission(cfg RecoveryAdmissionConfig) (*RecoveryAdmission, erro
 		return nil, fmt.Errorf("recovery admission: corpusd URL is required")
 	}
 	a := &RecoveryAdmission{
-		path:            path,
-		reader:          httpRecoveryEvidence{baseURL: baseURL, client: &http.Client{Timeout: recoveryAdmissionTimeout}},
-		conditions:      map[string]*RecoveryCondition{},
-		enqueueInFlight: map[string]bool{},
-		lastJobRefresh:  map[string]time.Time{},
-		now:             func() time.Time { return time.Now().UTC() },
-	}
-	if jobsURL := strings.TrimRight(strings.TrimSpace(cfg.JobsURL), "/"); jobsURL != "" {
-		a.jobs = httpCheckpointJobs{baseURL: jobsURL, client: &http.Client{Timeout: recoveryJobRequestTimeout}}
+		path:       path,
+		reader:     httpRecoveryEvidence{baseURL: baseURL, client: &http.Client{Timeout: recoveryAdmissionTimeout}},
+		conditions: map[string]*RecoveryCondition{},
+		now:        func() time.Time { return time.Now().UTC() },
 	}
 	if err := a.load(); err != nil {
 		return nil, err
@@ -329,7 +278,6 @@ func (a *RecoveryAdmission) Clear(computerID string) {
 		return
 	}
 	delete(a.conditions, computerID)
-	delete(a.lastJobRefresh, computerID)
 	a.saveLocked()
 }
 
@@ -345,8 +293,8 @@ func (a *RecoveryAdmission) storeCondition(condition *RecoveryCondition) {
 
 // mergeReevaluation applies a re-evaluation to the live stored condition and
 // returns the merged clone. Only Kind, Reason, Witness and LastEvaluatedAt come
-// from the re-evaluation; Job, JobRequestedAt, JobSeed* and JobError stay as
-// the background job request left them. It returns nil, storing nothing, when
+// from the re-evaluation; the stored fields it does not name stay as they are.
+// It returns nil, storing nothing, when
 // the condition was cleared while the evidence was being read.
 func (a *RecoveryAdmission) mergeReevaluation(updated *RecoveryCondition) *RecoveryCondition {
 	if a == nil || updated == nil {
@@ -418,18 +366,16 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 				Kind:              RecoveryRefusalMetadataUnavailable,
 				Reason:            fmt.Sprintf("recovery evidence unavailable (%v); last known condition: %s", err, condition.Reason),
 				Witness:           condition.Witness,
-				Job:               condition.Job,
 				RetryAfterSeconds: recoveryRetryAfterSeconds,
 			}
 		}
 		allowed, updated := reevaluateRecoveryCondition(a.now(), condition, observed)
 		if !allowed {
-			// The snapshot predates the evidence read; a background job
-			// request may have finished since. Merge the re-evaluated fields
-			// onto the live condition rather than storing the snapshot over it.
+			// The snapshot predates the evidence read. Merge the re-evaluated
+			// fields onto the live condition rather than storing the snapshot
+			// over it.
 			if merged := a.mergeReevaluation(updated); merged != nil {
 				updated = merged
-				a.considerJob(updated)
 			}
 			return refusalFromCondition(updated)
 		}
@@ -481,7 +427,6 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 		LastEvaluatedAt: a.now(),
 	}
 	a.storeCondition(condition)
-	a.considerJob(condition)
 	return refusalFromCondition(condition)
 }
 
@@ -536,7 +481,6 @@ func (a *RecoveryAdmission) RecordGuestRefusal(input GuestBootRefusalInput) *Rec
 		LastEvaluatedAt: a.now(),
 	}
 	a.storeCondition(condition)
-	a.considerJob(condition)
 	if stored, ok := a.Condition(computerID); ok {
 		return refusalFromCondition(stored)
 	}
@@ -660,7 +604,6 @@ func refusalFromCondition(condition *RecoveryCondition) *RecoveryRefusal {
 		Kind:              condition.Kind,
 		Reason:            condition.Reason,
 		Witness:           condition.Witness,
-		Job:               condition.Job,
 		RetryAfterSeconds: retryAfterForKind(condition.Kind),
 	}
 }
@@ -671,146 +614,6 @@ func cloneRecoveryCondition(condition *RecoveryCondition) *RecoveryCondition {
 	}
 	snapshot := *condition
 	return &snapshot
-}
-
-// considerJob enqueues the deduplicated asynchronous checkpoint/repair job.
-// A non-terminal job is left alone (status refreshed in the background); a
-// terminal one is re-enqueued only when the seed dependency changed. Head
-// growth alone never re-enqueues.
-func (a *RecoveryAdmission) considerJob(condition *RecoveryCondition) {
-	if a == nil || condition == nil {
-		return
-	}
-	if a.jobs == nil || condition.Kind == RecoveryRefusalPrivacyKeyUnavailable {
-		// A checkpoint job cannot supply a key.
-		return
-	}
-	if condition.Job != nil && !checkpointJobTerminal(condition.Job.Status) {
-		a.refreshJobAsync(condition.ComputerID, condition.OwnerID)
-		return
-	}
-	if condition.Job != nil {
-		// Prefer the platform job's own seed base when it reports one; the
-		// local seed record covers enqueues that predate that field.
-		seedBase := strings.TrimSpace(condition.JobSeedBaseRef)
-		if reported := strings.TrimSpace(condition.Job.SeedBaseRef); reported != "" {
-			seedBase = reported
-		}
-		seedChanged := condition.JobSeedWatermark != condition.Witness.WatermarkSequence ||
-			seedBase != strings.TrimSpace(condition.Witness.BaseRef)
-		if !seedChanged {
-			return
-		}
-	}
-	if !condition.JobRequestedAt.IsZero() && a.now().Sub(condition.JobRequestedAt) < recoveryJobReenqueueBackoff {
-		return
-	}
-	a.mu.Lock()
-	if a.enqueueInFlight == nil {
-		a.enqueueInFlight = map[string]bool{}
-	}
-	if a.enqueueInFlight[condition.ComputerID] {
-		a.mu.Unlock()
-		return
-	}
-	a.enqueueInFlight[condition.ComputerID] = true
-	a.mu.Unlock()
-
-	snapshot := cloneRecoveryCondition(condition)
-	a.background.Add(1)
-	go func() {
-		defer a.background.Done()
-		a.enqueueJob(snapshot)
-	}()
-}
-
-// Wait blocks until in-flight background job requests have persisted.
-func (a *RecoveryAdmission) Wait() {
-	if a == nil {
-		return
-	}
-	a.background.Wait()
-}
-
-func (a *RecoveryAdmission) enqueueJob(condition *RecoveryCondition) {
-	ctx, cancel := context.WithTimeout(context.Background(), recoveryJobRequestTimeout)
-	defer cancel()
-	job, err := a.jobs.Enqueue(ctx, condition.ComputerID, condition.OwnerID, condition.Reason)
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	delete(a.enqueueInFlight, condition.ComputerID)
-	current := a.conditions[condition.ComputerID]
-	if current == nil {
-		// Condition cleared while the enqueue was in flight; the job (if it
-		// landed) is harmless and the platform deduplicates by computer.
-		return
-	}
-	current.JobRequestedAt = a.now()
-	if err != nil {
-		current.JobError = err.Error()
-	} else {
-		current.JobError = ""
-		if job == nil {
-			job = &CheckpointJobStatus{ComputerID: condition.ComputerID, Status: "queued"}
-		}
-		if strings.TrimSpace(job.ComputerID) == "" {
-			job.ComputerID = condition.ComputerID
-		}
-		current.Job = job
-		current.JobSeedWatermark = condition.Witness.WatermarkSequence
-		current.JobSeedBaseRef = condition.Witness.BaseRef
-	}
-	a.saveLocked()
-}
-
-func (a *RecoveryAdmission) refreshJobAsync(computerID, ownerID string) {
-	if a == nil || a.jobs == nil {
-		return
-	}
-	a.mu.Lock()
-	if a.lastJobRefresh == nil {
-		a.lastJobRefresh = map[string]time.Time{}
-	}
-	last := a.lastJobRefresh[computerID]
-	now := a.now()
-	if !last.IsZero() && now.Sub(last) < recoveryJobRefreshInterval {
-		a.mu.Unlock()
-		return
-	}
-	a.lastJobRefresh[computerID] = now
-	a.mu.Unlock()
-
-	a.background.Add(1)
-	go func() {
-		defer a.background.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), recoveryJobRequestTimeout)
-		defer cancel()
-		job, err := a.jobs.Status(ctx, computerID, ownerID)
-		if err != nil || job == nil {
-			return
-		}
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		current := a.conditions[computerID]
-		if current == nil {
-			return
-		}
-		current.Job = job
-		a.saveLocked()
-	}()
-}
-
-// checkpointJobTerminal reports whether the platform job has stopped moving.
-// queued/running/retry keep the worker's own retry; succeeded/failed/blocked
-// are held until the seed dependency changes.
-func checkpointJobTerminal(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "succeeded", "failed", "blocked":
-		return true
-	default:
-		return false
-	}
 }
 
 // httpRecoveryEvidence reads the canonical head and advertised watermark from
@@ -933,99 +736,6 @@ func (h httpRecoveryEvidence) get(ctx context.Context, client *http.Client, endp
 		return nil, 0, err
 	}
 	return body, response.StatusCode, nil
-}
-
-// httpCheckpointJobs calls the platform's deduplicated checkpoint job
-// endpoint as the trusted host service with the owner attestation.
-type httpCheckpointJobs struct {
-	baseURL string
-	client  *http.Client
-}
-
-func (h httpCheckpointJobs) Enqueue(ctx context.Context, computerID, ownerID, reason string) (*CheckpointJobStatus, error) {
-	base := strings.TrimRight(strings.TrimSpace(h.baseURL), "/")
-	computerID = strings.TrimSpace(computerID)
-	if base == "" || computerID == "" {
-		return nil, fmt.Errorf("checkpoint jobs: invalid binding")
-	}
-	payload, err := json.Marshal(map[string]any{
-		"computer_id":    computerID,
-		"reason":         strings.TrimSpace(reason),
-		"genesis_repair": false,
-	})
-	if err != nil {
-		return nil, err
-	}
-	client := h.client
-	if client == nil {
-		client = &http.Client{Timeout: recoveryJobRequestTimeout}
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/internal/computers/projection-base/jobs", strings.NewReader(string(payload)))
-	if err != nil {
-		return nil, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	hostauth.MarkInternal(request)
-	if strings.TrimSpace(ownerID) != "" {
-		request.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("checkpoint jobs: enqueue status %d", response.StatusCode)
-	}
-	var job CheckpointJobStatus
-	if err := json.Unmarshal(body, &job); err != nil {
-		return nil, fmt.Errorf("checkpoint jobs: decode enqueue response: %w", err)
-	}
-	return &job, nil
-}
-
-func (h httpCheckpointJobs) Status(ctx context.Context, computerID, ownerID string) (*CheckpointJobStatus, error) {
-	base := strings.TrimRight(strings.TrimSpace(h.baseURL), "/")
-	computerID = strings.TrimSpace(computerID)
-	if base == "" || computerID == "" {
-		return nil, fmt.Errorf("checkpoint jobs: invalid binding")
-	}
-	client := h.client
-	if client == nil {
-		client = &http.Client{Timeout: recoveryJobRequestTimeout}
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/internal/computers/projection-base/jobs?"+url.Values{"computer_id": {computerID}}.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	hostauth.MarkInternal(request)
-	if strings.TrimSpace(ownerID) != "" {
-		request.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("checkpoint jobs: status %d", response.StatusCode)
-	}
-	var job CheckpointJobStatus
-	if err := json.Unmarshal(body, &job); err != nil {
-		return nil, fmt.Errorf("checkpoint jobs: decode status response: %w", err)
-	}
-	return &job, nil
 }
 
 // guestBootRefusal is implemented by VM-manager boot errors that carry the

@@ -111,69 +111,6 @@ func (f *recoveryEvidenceFake) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// recoveryJobsFake serves the platform checkpoint job endpoint.
-type recoveryJobsFake struct {
-	mu                sync.Mutex
-	status            string
-	watermarkSequence uint64
-	baseRef           string
-	posts             []map[string]any
-	postDelay         time.Duration
-}
-
-func (f *recoveryJobsFake) postCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.posts)
-}
-
-func (f *recoveryJobsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/internal/computers/projection-base/jobs" {
-		http.NotFound(w, r)
-		return
-	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		http.Error(w, "internal caller required", http.StatusForbidden)
-		return
-	}
-	switch r.Method {
-	case http.MethodPost:
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		f.mu.Lock()
-		f.posts = append(f.posts, body)
-		status, sequence, baseRef, postDelay := f.status, f.watermarkSequence, f.baseRef, f.postDelay
-		f.mu.Unlock()
-		// The POST is recorded before the response, so a delay here leaves
-		// the enqueue unfinished after the test sees one POST.
-		if postDelay > 0 {
-			time.Sleep(postDelay)
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id":        body["computer_id"],
-			"status":             status,
-			"reason":             body["reason"],
-			"watermark_sequence": sequence,
-			"base_ref":           baseRef,
-		})
-	case http.MethodGet:
-		f.mu.Lock()
-		status := f.status
-		f.mu.Unlock()
-		if status == "" {
-			http.NotFound(w, r)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id": r.URL.Query().Get("computer_id"),
-			"status":      status,
-		})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
 // testGuestBootRefusalError mirrors vmmanager.GuestBootRefusedError's
 // structural surface (GuestBootRefusal) without importing vmmanager.
 type testGuestBootRefusalError struct {
@@ -206,17 +143,15 @@ func writeRecoveryConditions(t *testing.T, path string, conditions ...*RecoveryC
 	}
 }
 
-func newRecoveryAdmissionRegistry(t *testing.T, statePath, corpusdURL, jobsURL string) *OwnershipRegistry {
+func newRecoveryAdmissionRegistry(t *testing.T, statePath, corpusdURL string) *OwnershipRegistry {
 	t.Helper()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	if err := reg.ConfigureRecoveryAdmission(RecoveryAdmissionConfig{
 		StatePath:  statePath,
 		CorpusdURL: corpusdURL,
-		JobsURL:    jobsURL,
 	}); err != nil {
 		t.Fatalf("configure recovery admission: %v", err)
 	}
-	t.Cleanup(reg.recoveryAdmissionHandle().Wait)
 	return reg
 }
 
@@ -247,28 +182,13 @@ func requireRecoveryRefusal(t *testing.T, err error) *RecoveryRefusal {
 	return refusal
 }
 
-func waitForRecoveryTest(t *testing.T, probe func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if probe() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("condition not observed before deadline")
-}
-
 func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{bootError: &testGuestBootRefusalError{
 		kind:      "tail_excess",
 		reason:    "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
@@ -292,10 +212,6 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	if len(mgr.boots) != 1 {
 		t.Fatalf("first resolve must attempt exactly one guest boot, got %d", len(mgr.boots))
 	}
-	waitForRecoveryTest(t, func() bool { return jobs.postCount() == 1 })
-	if posted, _ := jobs.posts[0]["computer_id"].(string); posted != "computer-blocked" {
-		t.Fatalf("job POST computer_id = %q, want computer-blocked", posted)
-	}
 
 	// Second resolve must refuse from the durable condition without any boot.
 	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-blocked", PrimaryDesktopID)
@@ -306,13 +222,9 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	if len(mgr.boots) != 1 {
 		t.Fatalf("blind warmness retry booted a durably refused computer, boots=%d", len(mgr.boots))
 	}
-	time.Sleep(50 * time.Millisecond)
-	if jobs.postCount() != 1 {
-		t.Fatalf("duplicate job POSTs while job is non-terminal: %d", jobs.postCount())
-	}
 
 	// A vmctl restart reloads the condition durably and still never boots.
-	restarted := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	restarted := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	restartedMgr := &mockVMManager{}
 	restarted.SetVMManager(restartedMgr)
 	seedRecoveryOwnership(restarted, "user-blocked", "computer-blocked", VMStateStopped)
@@ -326,65 +238,10 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	}
 }
 
-// An Admit re-evaluation reads evidence over HTTP between its snapshot and its
-// store. A job request that finishes inside that window must keep its Job and
-// JobRequestedAt on the stored condition, and the re-evaluation must not post a
-// second job because it saw the older snapshot.
-func TestRecoveryAdmissionReevaluationKeepsJobRecordedDuringEvidenceRead(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
-	corpusdServer := httptest.NewServer(corpusd)
-	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running", postDelay: 60 * time.Millisecond}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
-	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
-
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
-	reg.SetVMManager(&mockVMManager{bootError: &testGuestBootRefusalError{
-		kind:      "tail_excess",
-		reason:    "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
-		local:     0,
-		watermark: 148431,
-		target:    572151,
-		empty:     true,
-		chain:     true,
-	}})
-	seedRecoveryOwnership(reg, "user-blocked", "computer-blocked", VMStateStopped)
-
-	_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-blocked", PrimaryDesktopID)
-	requireRecoveryRefusal(t, err)
-	waitForRecoveryTest(t, func() bool { return jobs.postCount() == 1 })
-
-	// The second resolve snapshots the condition while the first enqueue is
-	// still waiting for its response, then holds the evidence read open past
-	// the moment that response lands.
-	corpusd.setDelay(200 * time.Millisecond)
-	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-blocked", PrimaryDesktopID)
-	requireRecoveryRefusal(t, err)
-	reg.recoveryAdmissionHandle().Wait()
-
-	if jobs.postCount() != 1 {
-		t.Fatalf("re-evaluation posted a duplicate job from a stale snapshot: %d POSTs", jobs.postCount())
-	}
-	condition, ok := reg.RecoveryConditionFor("computer-blocked")
-	if !ok {
-		t.Fatal("recovery condition missing after re-evaluation")
-	}
-	if condition.Job == nil {
-		t.Fatal("re-evaluation erased the job recorded while its evidence read was in flight")
-	}
-	if condition.JobRequestedAt.IsZero() {
-		t.Fatal("re-evaluation erased JobRequestedAt, so the re-enqueue backoff no longer applies")
-	}
-}
-
 func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 571000, baseRef: "base-fresh"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 	writeRecoveryConditions(t, statePath, &RecoveryCondition{
 		ComputerID: "computer-blocked",
@@ -403,7 +260,7 @@ func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
 		ObservedAt: time.Now().UTC().Add(-time.Hour),
 	})
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	seedRecoveryOwnership(reg, "user-blocked", "computer-blocked", VMStateStopped)
@@ -422,7 +279,7 @@ func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
 		t.Fatal("condition must clear when fresh recovery inputs allow the plan")
 	}
 
-	reloaded := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reloaded := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	if _, ok := reloaded.RecoveryConditionFor("computer-blocked"); ok {
 		t.Fatal("cleared condition must stay cleared across restart")
 	}
@@ -432,8 +289,6 @@ func TestRecoveryAdmissionRetainedResumeWithStaleWatermarkStaysAllowed(t *testin
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "running"})
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 	writeRecoveryConditions(t, statePath, &RecoveryCondition{
 		ComputerID: "computer-retained",
@@ -452,7 +307,7 @@ func TestRecoveryAdmissionRetainedResumeWithStaleWatermarkStaysAllowed(t *testin
 		ObservedAt: time.Now().UTC().Add(-time.Hour),
 	})
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	seedRecoveryOwnership(reg, "user-retained", "computer-retained", VMStateStopped)
@@ -473,11 +328,8 @@ func TestRecoveryAdmissionUnknownLocalRetainedStartIsNotRefused(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
 
-	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	seedRecoveryOwnership(reg, "user-unknown", "computer-unknown", VMStateStopped)
@@ -489,20 +341,14 @@ func TestRecoveryAdmissionUnknownLocalRetainedStartIsNotRefused(t *testing.T) {
 	if own == nil || len(mgr.boots) != 1 {
 		t.Fatalf("unknown local state must boot (guest planner decides), boots=%d own=%+v", len(mgr.boots), own)
 	}
-	if jobs.postCount() != 0 {
-		t.Fatalf("no refusal means no repair job, posts=%d", jobs.postCount())
-	}
 }
 
 func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
 
-	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
@@ -517,18 +363,13 @@ func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
 	if len(mgr.reservedEpochs) != 0 {
 		t.Fatalf("refused start must not reserve a boot epoch, reserved=%v", mgr.reservedEpochs)
 	}
-	waitForRecoveryTest(t, func() bool { return jobs.postCount() == 1 })
 
-	// Head growth alone must neither boot nor re-enqueue the blocked job.
+	// Head growth alone must not boot.
 	corpusd.setHead(572999)
 	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-fresh", PrimaryDesktopID)
 	requireRecoveryRefusal(t, err)
 	if len(mgr.boots) != 0 {
 		t.Fatalf("blocked fresh install must not boot, boots=%d", len(mgr.boots))
-	}
-	time.Sleep(50 * time.Millisecond)
-	if jobs.postCount() != 1 {
-		t.Fatalf("head growth alone must not requeue the repair job, posts=%d", jobs.postCount())
 	}
 
 	// A published fresher base clears the recovery refusal, but a fresh
@@ -556,12 +397,9 @@ func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKe
 	corpusd := &recoveryEvidenceFake{headSequence: 2, watermarkSequence: 2, baseRef: "base-current"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "succeeded"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
@@ -587,9 +425,6 @@ func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKe
 	// A checkpoint job cannot supply a key, and recovery-input changes must
 	// not reopen the refusal.
 	time.Sleep(50 * time.Millisecond)
-	if jobs.postCount() != 0 {
-		t.Fatalf("key refusal must not enqueue a checkpoint job, posts=%d", jobs.postCount())
-	}
 	computerID := stableComputerID("user-keyless", PrimaryDesktopID, "")
 	if condition, ok := reg.RecoveryConditionFor(computerID); !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable {
 		t.Fatalf("key refusal must persist a durable condition: %+v (%t)", condition, ok)
@@ -602,7 +437,7 @@ func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKe
 	}
 
 	// Durable across a vmctl restart.
-	restarted := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	restarted := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	if condition, ok := restarted.RecoveryConditionFor(computerID); !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable {
 		t.Fatalf("key refusal must survive a vmctl restart: %+v (%t)", condition, ok)
 	}
@@ -616,14 +451,12 @@ func TestRecoveryAdmissionGenesisStartIsNotRefusedForMissingKey(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "running"})
-	t.Cleanup(jobsServer.Close)
 
 	for _, head := range []int{http.StatusNotFound, 0} {
 		corpusd.mu.Lock()
 		corpusd.headStatus = head
 		corpusd.mu.Unlock()
-		reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+		reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 		mgr := &mockVMManager{}
 		reg.SetVMManager(mgr)
 		if _, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-genesis", PrimaryDesktopID); err != nil {
@@ -638,10 +471,7 @@ func TestRecoveryAdmissionGenesisStartIsNotRefusedForMissingKey(t *testing.T) {
 func TestRecoveryAdmissionGuestStartupFailuresArePrompt(t *testing.T) {
 	corpusdServer := httptest.NewServer(&recoveryEvidenceFake{headSequence: 9, watermarkSequence: 9, baseRef: "base"})
 	t.Cleanup(corpusdServer.Close)
-	jobs := &recoveryJobsFake{status: "running"}
-	jobsServer := httptest.NewServer(jobs)
-	t.Cleanup(jobsServer.Close)
-	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	own := seedRecoveryOwnership(reg, "user-startup", "computer-startup", VMStateStopped)
 
 	for kind, want := range map[string]RecoveryRefusalKind{
@@ -672,17 +502,12 @@ func TestRecoveryAdmissionGuestStartupFailuresArePrompt(t *testing.T) {
 		t.Fatalf("guest key refusal must be durable: %+v (%t)", condition, ok)
 	}
 	time.Sleep(50 * time.Millisecond)
-	if jobs.postCount() != 0 {
-		t.Fatalf("startup and key failures must not enqueue checkpoint jobs, posts=%d", jobs.postCount())
-	}
 }
 
 func TestRecoveryAdmissionMetadataUnavailableIsDistinctFromTailExcess(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headStatus: http.StatusInternalServerError}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "running"})
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 	writeRecoveryConditions(t, statePath, &RecoveryCondition{
 		ComputerID: "computer-blocked",
@@ -701,7 +526,7 @@ func TestRecoveryAdmissionMetadataUnavailableIsDistinctFromTailExcess(t *testing
 		ObservedAt: time.Now().UTC().Add(-time.Hour),
 	})
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	seedRecoveryOwnership(reg, "user-blocked", "computer-blocked", VMStateStopped)
@@ -721,7 +546,7 @@ func TestRecoveryAdmissionMetadataUnavailableIsDistinctFromTailExcess(t *testing
 
 	// Without a durable condition, unverifiable metadata must not refuse an
 	// unknown local state: the guest planner decides.
-	freshReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	freshReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	freshMgr := &mockVMManager{}
 	freshReg.SetVMManager(freshMgr)
 	if _, err := freshReg.ResolveOrAssignDesktopContext(context.Background(), "user-open", PrimaryDesktopID); err != nil {
@@ -736,8 +561,6 @@ func TestRecoveryAdmissionMaintenanceRecoveryBypassesBreaker(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "running"})
-	t.Cleanup(jobsServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
 	writeRecoveryConditions(t, statePath, &RecoveryCondition{
 		ComputerID: "computer-held01",
@@ -756,7 +579,7 @@ func TestRecoveryAdmissionMaintenanceRecoveryBypassesBreaker(t *testing.T) {
 		ObservedAt: time.Now().UTC().Add(-time.Hour),
 	})
 
-	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 	own := seedRecoveryOwnership(reg, "user-held", "computer-held01", VMStateStopped)
@@ -781,9 +604,7 @@ func TestRecoveryAdmissionEscrowIsAKeySource(t *testing.T) {
 	corpusd := &recoveryEvidenceFake{headSequence: 2, watermarkSequence: 2, baseRef: "base-current"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
-	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "succeeded"})
-	t.Cleanup(jobsServer.Close)
-	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
@@ -802,7 +623,7 @@ func TestRecoveryAdmissionEscrowIsAKeySource(t *testing.T) {
 		t.Fatalf("admitted start must clear the condition: %+v", condition)
 	}
 
-	escrowedReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	escrowedReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL)
 	escrowedMgr := &mockVMManager{}
 	escrowedReg.SetVMManager(escrowedMgr)
 	if _, err := escrowedReg.ResolveOrAssignDesktopContext(context.Background(), "user-escrowed-fresh", PrimaryDesktopID); err != nil {
