@@ -972,3 +972,39 @@ about 81 GiB because the host-side `fstrim` on the loop mount freed nothing
 has `discard: true`, so the guest's hourly fstrim should return the space.
 
 Update 23:06 UTC: the guest fstrim returned the space; the paper image is 31 GiB on the host; root fs 360 GB used, 107 GB free (78%).
+
+## Owner direction 2026-10-30: precommitment records and PSA lead; the tape stays, windowed
+
+Owner: "We need to think about the data architecture focusing on
+precommitment records and psa. We are just beginning with that, but they will
+be the essential value prop of choir over any other news aggregator. I think
+we do need the tape. We will just only keep a window, and offload the history
+to an analytical database (to be built later) I think."
+
+This supersedes the 2026-10-29 reading "the Autopaper does not need the tape"
+for planning: every computer, the paper included, keeps a tape; only the
+retained window differs. Consequences carried into the design (FP0, not yet
+reviewed):
+
+1. **Three tiers of event data, not one.** (a) A hot window on the computer
+   (operations, crash-close, traces, idempotency). (b) Precommitment records,
+   their resolutions and scores as first-class keep-set objects, kept for as
+   long as the track record is (no window). (c) Offloaded history as sealed,
+   hash-chained tape segments in object storage (the `tape-segment` class),
+   loaded into the analytical database when it exists. Nothing leaves the
+   window before its segment is sealed and stored, so the interim before the
+   analytical database loses nothing.
+2. **The witness must survive offload.** A record's trusted time is the first
+   event-head receipt that carried it (`docs/precommitment-records.md` §6,
+   plan step 1). The host receipt chain (`computer_event_append_receipts`) and
+   the segment chain must stay verifiable after the window moves: each
+   window starts from a head that commits to the sealed history, and receipts
+   behind any record that may go public are retained with it, not windowed.
+   The guest's duplicate receipt copy can still go (one authority: the host).
+3. **Window length** is set by operations (crash-close, traces, the 7-day
+   GC hold), not by the track record, because records are tier (b).
+   To measure per computer before choosing: events per day and bytes per
+   event under the new schema.
+4. **Anchoring** (precommitment-records §6 plan step 2) becomes a property
+   of the segment chain: an anchored head bounds backdating of everything
+   offloaded under it.
