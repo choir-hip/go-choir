@@ -10,9 +10,16 @@ var ErrBaseRefused = errors.New("projection base refused")
 
 // MaxRecoveryTailEvents is the largest (start, H] a recovery path may apply.
 // A retained computer whose remaining work exceeds this bound refuses rather
-// than lifetime-replaying the prefix. Publication must keep W close enough to
-// H that the tail stays inside this budget.
-const MaxRecoveryTailEvents uint64 = 10000
+// than lifetime-replaying the prefix. The guest's snapshot producer fires at
+// three quarters of it, so the tail since the newest snapshot stays inside.
+//
+// The bound is replay time: about 40 minutes at the 298 events a second
+// measured on d@e (2026-10-30 18:34, with the payload prefetch), inside the
+// 90-minute boot deadline with the snapshot install beside it. It was 10,000
+// events, set when replay ran through Dolt; the paper writes about 660,000 a
+// day, so a daily snapshot covered its lost disk for the first 20 minutes
+// only. Restate it when the paper's own rate is measured.
+const MaxRecoveryTailEvents uint64 = 720000
 
 // RecoveryAction is the boot/refresh/rematerialize decision for one retained
 // store, advertised watermark, and frozen target head.

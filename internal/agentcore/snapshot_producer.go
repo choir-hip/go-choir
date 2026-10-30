@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
@@ -56,6 +57,11 @@ const (
 	envSnapshotDisable     = "CHOIR_SNAPSHOT_DISABLE"
 
 	snapshotDefaultInterval = 24 * time.Hour
+	// Three quarters of the recovery bound: a tail reaches the bound only if
+	// the snapshot due here fails for a third as long again (it retries every
+	// tick). Not half: each of the paper's snapshots writes about 25 GB of new
+	// chunks to the host, and at half it would take two a day.
+	snapshotDefaultTailEvents = recoveryplan.MaxRecoveryTailEvents / 4 * 3
 	// The read transaction of the stream pins the WAL; past this the stream
 	// aborts with a logged reason and the next tick tries again.
 	snapshotDefaultMaxDuration = 30 * time.Minute
@@ -88,10 +94,14 @@ type snapshotSettings struct {
 	Interval    time.Duration
 	MaxDuration time.Duration
 	Disabled    bool
+	// TailEvents fires a snapshot before the interval once the tail since the
+	// newest one reaches it, so a busy computer's tail stays inside the
+	// recovery bound between snapshots. Zero: the interval alone.
+	TailEvents uint64
 }
 
 func snapshotSettingsFromEnv(getenv func(string) string) snapshotSettings {
-	s := snapshotSettings{Interval: snapshotDefaultInterval, MaxDuration: snapshotDefaultMaxDuration}
+	s := snapshotSettings{Interval: snapshotDefaultInterval, MaxDuration: snapshotDefaultMaxDuration, TailEvents: snapshotDefaultTailEvents}
 	if raw := strings.TrimSpace(getenv(envSnapshotInterval)); raw != "" {
 		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
 			s.Interval = d
@@ -197,10 +207,14 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 		if head <= lastSeq+1 {
 			return snapshotNotDue, "no event since the newest snapshot"
 		}
-		if now.Sub(lastAt) < set.Interval {
+		switch {
+		case set.TailEvents > 0 && head-lastSeq >= set.TailEvents:
+			reason = fmt.Sprintf("tail of %d events", head-lastSeq)
+		case now.Sub(lastAt) < set.Interval:
 			return snapshotNotDue, ""
+		default:
+			reason = "interval"
 		}
-		reason = "interval"
 	}
 
 	// Correctness refusals: logged by the caller, retried at the next tick.

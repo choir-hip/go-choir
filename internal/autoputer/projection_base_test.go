@@ -126,7 +126,7 @@ func TestMaterializeReplaysAShortChainFromGenesisWhenNoSnapshotExists(t *testing
 }
 
 func TestMaterializeRefusesALongChainWithNoSnapshot(t *testing.T) {
-	platform := newBootServer(&computerevent.Head{ComputerID: "computer-long", Sequence: 148333, CanonicalEventHead: strings.Repeat("a", 64)})
+	platform := newBootServer(&computerevent.Head{ComputerID: "computer-long", Sequence: 1148333, CanonicalEventHead: strings.Repeat("a", 64)})
 	server := httptest.NewServer(platform)
 	defer server.Close()
 	t.Setenv("CHOIR_PRIVACY_KEY_FILE", writePrivacyKey(t, "computer-long"))
@@ -137,7 +137,7 @@ func TestMaterializeRefusesALongChainWithNoSnapshot(t *testing.T) {
 		t.Fatalf("a long chain with no snapshot must refuse, got %v", err)
 	}
 	var refusal *ProjectionBaseRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != BootRefusalKindBaseMissing || refusal.TargetSequence != 148333 {
+	if !errors.As(err, &refusal) || refusal.Kind != BootRefusalKindBaseMissing || refusal.TargetSequence != 1148333 {
 		t.Fatalf("refusal = %+v", refusal)
 	}
 	if entries, _ := os.ReadDir(storeDir); len(entries) != 0 {

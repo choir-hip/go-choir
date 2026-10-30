@@ -70,16 +70,23 @@ func (s *Store) LatestFileRoots(ctx context.Context, computerID string, limit in
 	return out, rows.Err()
 }
 
-func (s *Store) ReplayWatermark(ctx context.Context, computerID string) (seq int64, baseRef string, err error) {
+// RecoveryBase is the base a lost disk recovers from: the computer's newest
+// snapshot root (its head sequence and manifest root). The rows of
+// computer_replay_watermarks named projection bases, which the artifact GC
+// now collects, and nothing has written them since the data system cutover;
+// vmctl's empty-store admission read them and refused a lost-disk boot on a
+// base days old (2026-10-30: the paper's row named 4,526,210, its snapshot
+// 5,231,495).
+func (s *Store) RecoveryBase(ctx context.Context, computerID string) (seq int64, root string, err error) {
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) {
 		return 0, "", fmt.Errorf("file cas: computer ID is required")
 	}
-	err = s.db.QueryRowContext(ctx, `SELECT watermark_sequence,base_ref FROM computer_replay_watermarks WHERE computer_id=?`, computerID).Scan(&seq, &baseRef)
+	err = s.db.QueryRowContext(ctx, `SELECT head_sequence,root FROM computer_snapshot_roots WHERE computer_id=? ORDER BY head_sequence DESC, created_at DESC LIMIT 1`, computerID).Scan(&seq, &root)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, "", ErrNoWatermark
 	}
 	if err != nil {
-		return 0, "", fmt.Errorf("file cas: get replay watermark: %w", err)
+		return 0, "", fmt.Errorf("file cas: get recovery base: %w", err)
 	}
-	return seq, baseRef, nil
+	return seq, root, nil
 }

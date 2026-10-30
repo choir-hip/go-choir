@@ -56,18 +56,34 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 	if getRootResult.Code != http.StatusOK || !bytes.Equal(bytes.TrimSpace(getRootResult.Body.Bytes()), manifestJSON) {
 		t.Fatalf("get root = %d: %s", getRootResult.Code, getRootResult.Body.String())
 	}
-	// The watermark is read-only: vmctl reads it as admission evidence and
-	// nothing advertises a new one.
-	seedReplayWatermark(t, store, "computer-filecas", 10, "base-10")
-	seq, baseRef, err := store.ReplayWatermark(context.Background(), "computer-filecas")
-	if err != nil || seq != 10 || baseRef != "base-10" {
-		t.Fatalf("watermark = %d, %q, %v", seq, baseRef, err)
+	// The watermark is the newest snapshot root, read-only: vmctl reads it
+	// as admission evidence. A replay watermark row an earlier build wrote
+	// names a projection base the GC collects; it is not evidence.
+	watermarkGET := func() *httptest.ResponseRecorder {
+		get := httptest.NewRequest(http.MethodGet, "/internal/computers/files/watermark?computer_id=computer-filecas", nil)
+		get.Header.Set("X-Internal-Caller", "true")
+		got := httptest.NewRecorder()
+		handler.HandleFileCASWatermark(got, get)
+		return got
 	}
-	get := httptest.NewRequest(http.MethodGet, "/internal/computers/files/watermark?computer_id=computer-filecas", nil)
-	get.Header.Set("X-Internal-Caller", "true")
-	got := httptest.NewRecorder()
-	handler.HandleFileCASWatermark(got, get)
-	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"base_ref":"base-10"`) {
+	seedReplayWatermark(t, store, "computer-filecas", 10, "base-10")
+	if got := watermarkGET(); got.Code != http.StatusNotFound {
+		t.Fatalf("watermark GET with only a replay watermark row = %d, want 404: %s", got.Code, got.Body.String())
+	}
+	older, newer := strings.Repeat("b", 64), strings.Repeat("c", 64)
+	for _, r := range []struct {
+		root string
+		head int64
+	}{{newer, 12}, {older, 11}} {
+		if err := store.RecordSnapshotRoot(context.Background(), "computer-filecas", r.root, r.head, []string{strings.Repeat("d", 64)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seq, baseRef, err := store.RecoveryBase(context.Background(), "computer-filecas")
+	if err != nil || seq != 12 || baseRef != newer {
+		t.Fatalf("recovery base = %d, %q, %v; want the newest snapshot root (12)", seq, baseRef, err)
+	}
+	if got := watermarkGET(); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"base_ref":"`+newer+`"`) || !strings.Contains(got.Body.String(), `"watermark_sequence":12`) {
 		t.Fatalf("watermark GET = %d: %s", got.Code, got.Body.String())
 	}
 	post := httptest.NewRequest(http.MethodPost, "/internal/computers/files/watermark", strings.NewReader(`{"computer_id":"computer-filecas","watermark_sequence":11,"base_ref":"`+strings.Repeat("a", 64)+`"}`))
@@ -77,7 +93,7 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 	if refused.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("watermark POST = %d, want 405: %s", refused.Code, refused.Body.String())
 	}
-	if seq, _, _ := store.ReplayWatermark(context.Background(), "computer-filecas"); seq != 10 {
+	if seq, _, _ := store.RecoveryBase(context.Background(), "computer-filecas"); seq != 12 {
 		t.Fatalf("refused POST changed the watermark to %d", seq)
 	}
 }
@@ -171,7 +187,9 @@ func TestProjectionBaseRoutesAreNotRegistered(t *testing.T) {
 			t.Fatalf("GET %s = %d, want 404 (route not registered)", path, code)
 		}
 	}
-	seedReplayWatermark(t, store, "c", 3, digest)
+	if err := store.RecordSnapshotRoot(context.Background(), "c", digest, 3, []string{digest}); err != nil {
+		t.Fatal(err)
+	}
 	if code := call(http.MethodGet, "/internal/computers/files/watermark?computer_id=c"); code != http.StatusOK {
 		t.Fatalf("watermark GET = %d, want 200: the removal must leave the read vmctl uses", code)
 	}

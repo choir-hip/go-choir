@@ -15,7 +15,7 @@ import (
 // with a structured 503, Retry-After: 60, the reason, the input witness and
 // the repair job status — and never launches a VM.
 func TestHandleResolveReturnsStructured503ForDurableRefusal(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
@@ -23,11 +23,11 @@ func TestHandleResolveReturnsStructured503ForDurableRefusal(t *testing.T) {
 		ComputerID: "computer-blocked",
 		OwnerID:    "user-blocked",
 		Kind:       RecoveryRefusalTailExcess,
-		Reason:     "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
+		Reason:     "recovery tail 1423720 events exceeds 720000; publish a fresher base (local=0 W=148431 H=1572151)",
 		Witness: RecoveryInputWitness{
 			LocalSequence:     0,
 			WatermarkSequence: 148431,
-			TargetSequence:    572151,
+			TargetSequence:    1572151,
 			BaseRef:           "base-stale",
 			EmptyStore:        true,
 			ChainExists:       true,
@@ -77,10 +77,10 @@ func TestHandleResolveReturnsStructured503ForDurableRefusal(t *testing.T) {
 	if body.RetryAfterSeconds != recoveryRetryAfterSeconds {
 		t.Fatalf("retry_after_seconds = %d, want %d", body.RetryAfterSeconds, recoveryRetryAfterSeconds)
 	}
-	if body.Witness == nil || body.Witness.WatermarkSequence != 148431 || body.Witness.TargetSequence != 572151 {
+	if body.Witness == nil || body.Witness.WatermarkSequence != 148431 || body.Witness.TargetSequence != 1572151 {
 		t.Fatalf("witness = %+v", body.Witness)
 	}
-	if !strings.Contains(body.Reason, "recovery tail 423720 events exceeds 10000") {
+	if !strings.Contains(body.Reason, "recovery tail 1423720 events exceeds 720000") {
 		t.Fatalf("reason = %q", body.Reason)
 	}
 	if len(mgr.boots) != 0 || len(mgr.recovers) != 0 {

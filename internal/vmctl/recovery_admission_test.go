@@ -183,7 +183,7 @@ func requireRecoveryRefusal(t *testing.T, err error) *RecoveryRefusal {
 }
 
 func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
@@ -191,10 +191,10 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL)
 	mgr := &mockVMManager{bootError: &testGuestBootRefusalError{
 		kind:      "tail_excess",
-		reason:    "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
+		reason:    "recovery tail 1423720 events exceeds 720000; publish a fresher base (local=0 W=148431 H=1572151)",
 		local:     0,
 		watermark: 148431,
-		target:    572151,
+		target:    1572151,
 		empty:     true,
 		chain:     true,
 	}}
@@ -239,7 +239,7 @@ func TestRecoveryAdmissionGuestRefusalStopsRetriesAcrossRestart(t *testing.T) {
 }
 
 func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 571000, baseRef: "base-fresh"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 1571000, baseRef: "base-fresh"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
@@ -247,11 +247,11 @@ func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
 		ComputerID: "computer-blocked",
 		OwnerID:    "user-blocked",
 		Kind:       RecoveryRefusalTailExcess,
-		Reason:     "recovery tail 423720 events exceeds 10000",
+		Reason:     "recovery tail 1423720 events exceeds 720000",
 		Witness: RecoveryInputWitness{
 			LocalSequence:     0,
 			WatermarkSequence: 148431,
-			TargetSequence:    572151,
+			TargetSequence:    1572151,
 			BaseRef:           "base-stale",
 			EmptyStore:        true,
 			ChainExists:       true,
@@ -286,7 +286,7 @@ func TestRecoveryAdmissionChangedWatermarkClearsBlockedStart(t *testing.T) {
 }
 
 func TestRecoveryAdmissionRetainedResumeWithStaleWatermarkStaysAllowed(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
@@ -296,9 +296,9 @@ func TestRecoveryAdmissionRetainedResumeWithStaleWatermarkStaysAllowed(t *testin
 		Kind:       RecoveryRefusalTailExcess,
 		Reason:     "stale refusal recorded before the retained store advanced",
 		Witness: RecoveryInputWitness{
-			LocalSequence:     571000,
+			LocalSequence:     1571000,
 			WatermarkSequence: 148431,
-			TargetSequence:    572151,
+			TargetSequence:    1572151,
 			BaseRef:           "base-stale",
 			EmptyStore:        false,
 			ChainExists:       true,
@@ -325,7 +325,7 @@ func TestRecoveryAdmissionRetainedResumeWithStaleWatermarkStaysAllowed(t *testin
 }
 
 func TestRecoveryAdmissionUnknownLocalRetainedStartIsNotRefused(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 
@@ -344,7 +344,7 @@ func TestRecoveryAdmissionUnknownLocalRetainedStartIsNotRefused(t *testing.T) {
 }
 
 func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 
@@ -376,7 +376,7 @@ func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
 	// realization of an existing chain still has no privacy key source: the
 	// start is refused before boot instead of crash-looping on the missing key
 	// (docs/problems/fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
-	corpusd.setWatermark(571000, "base-fresh")
+	corpusd.setWatermark(1571000, "base-fresh")
 	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-fresh", PrimaryDesktopID)
 	refusal = requireRecoveryRefusal(t, err)
 	if refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
@@ -513,11 +513,11 @@ func TestRecoveryAdmissionMetadataUnavailableIsDistinctFromTailExcess(t *testing
 		ComputerID: "computer-blocked",
 		OwnerID:    "user-blocked",
 		Kind:       RecoveryRefusalTailExcess,
-		Reason:     "recovery tail 423720 events exceeds 10000",
+		Reason:     "recovery tail 1423720 events exceeds 720000",
 		Witness: RecoveryInputWitness{
 			LocalSequence:     0,
 			WatermarkSequence: 148431,
-			TargetSequence:    572151,
+			TargetSequence:    1572151,
 			BaseRef:           "base-stale",
 			EmptyStore:        true,
 			ChainExists:       true,
@@ -558,7 +558,7 @@ func TestRecoveryAdmissionMetadataUnavailableIsDistinctFromTailExcess(t *testing
 }
 
 func TestRecoveryAdmissionMaintenanceRecoveryBypassesBreaker(t *testing.T) {
-	corpusd := &recoveryEvidenceFake{headSequence: 572151, watermarkSequence: 148431, baseRef: "base-stale"}
+	corpusd := &recoveryEvidenceFake{headSequence: 1572151, watermarkSequence: 148431, baseRef: "base-stale"}
 	corpusdServer := httptest.NewServer(corpusd)
 	t.Cleanup(corpusdServer.Close)
 	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
@@ -566,11 +566,11 @@ func TestRecoveryAdmissionMaintenanceRecoveryBypassesBreaker(t *testing.T) {
 		ComputerID: "computer-held01",
 		OwnerID:    "user-held",
 		Kind:       RecoveryRefusalTailExcess,
-		Reason:     "recovery tail 423720 events exceeds 10000",
+		Reason:     "recovery tail 1423720 events exceeds 720000",
 		Witness: RecoveryInputWitness{
 			LocalSequence:     0,
 			WatermarkSequence: 148431,
-			TargetSequence:    572151,
+			TargetSequence:    1572151,
 			BaseRef:           "base-stale",
 			EmptyStore:        true,
 			ChainExists:       true,

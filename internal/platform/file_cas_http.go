@@ -171,10 +171,10 @@ func (h *Handler) HandleFileCASRoot(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// HandleFileCASWatermark reports the computer's last advertised replay
-// watermark. It is read-only: vmctl's recovery admission reads it as evidence.
-// Nothing advertises a new one any more (the projection bases that
-// advertisements named are gone).
+// HandleFileCASWatermark reports the base a lost disk recovers from: the
+// computer's newest snapshot root, as watermark_sequence (its head) and
+// base_ref (its manifest root). It is read-only: vmctl's empty-store
+// admission reads it as evidence.
 func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil || h.service.store == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "file storage unavailable"})
@@ -189,7 +189,7 @@ func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
 		return
 	}
-	seq, baseRef, err := h.service.store.ReplayWatermark(r.Context(), computerID)
+	seq, baseRef, err := h.service.store.RecoveryBase(r.Context(), computerID)
 	if errors.Is(err, ErrNoWatermark) {
 		http.NotFound(w, r)
 		return

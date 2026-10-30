@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
@@ -106,6 +107,28 @@ func TestProducerDoesNotRetakeWhenOneExistsAndTheIntervalHasNotPassed(t *testing
 	// And not again at the next tick.
 	if outcome, _ := h.run(&p, now.Add(25*time.Hour+10*time.Minute)); outcome != snapshotNotDue || h.takes != 1 {
 		t.Fatalf("outcome=%s takes=%d: one snapshot per interval", outcome, h.takes)
+	}
+}
+
+// Failure mode: a busy computer's tail outgrows the recovery bound between
+// two interval snapshots (the paper writes about 660,000 events a day), and a
+// lost disk in that window is refused at boot.
+func TestProducerSnapshotsWhenTheTailPassesItsShareOfTheRecoveryBound(t *testing.T) {
+	h := newProducerHarness(t)
+	now := time.Now()
+	h.set.TailEvents = 100
+	h.newestFound, h.newestAt, h.newestSeq = true, now.Add(-time.Hour), 40
+	h.head = 139
+	var p snapshotProducer
+	if outcome, _ := h.run(&p, now); outcome != snapshotNotDue || h.takes != 0 {
+		t.Fatalf("outcome=%s takes=%d: a tail of 99 is under the trigger", outcome, h.takes)
+	}
+	h.head = 140
+	if outcome, detail := h.run(&p, now); outcome != snapshotTaken || h.takes != 1 || !strings.Contains(detail, "tail") {
+		t.Fatalf("outcome=%s takes=%d detail=%q: a tail of 100 must snapshot before the interval", outcome, h.takes, detail)
+	}
+	if s := snapshotSettingsFromEnv(func(string) string { return "" }); s.TailEvents == 0 || s.TailEvents >= recoveryplan.MaxRecoveryTailEvents {
+		t.Fatalf("default tail trigger %d: on, and under the recovery bound %d", s.TailEvents, recoveryplan.MaxRecoveryTailEvents)
 	}
 }
 

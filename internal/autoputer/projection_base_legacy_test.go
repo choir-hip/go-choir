@@ -22,7 +22,7 @@ import (
 // longer recognised and its data is skipped.
 
 func TestSidecarOnlyTextureDirectoryDoesNotTakeTheLegacyResumeBranch(t *testing.T) {
-	platform := newBootServer(&computerevent.Head{ComputerID: "computer-sidecar", Sequence: 148333, CanonicalEventHead: strings.Repeat("a", 64)})
+	platform := newBootServer(&computerevent.Head{ComputerID: "computer-sidecar", Sequence: 1148333, CanonicalEventHead: strings.Repeat("a", 64)})
 	server := httptest.NewServer(platform)
 	defer server.Close()
 	t.Setenv("CHOIR_PRIVACY_KEY_FILE", writePrivacyKey(t, "computer-sidecar"))
@@ -48,7 +48,7 @@ func TestSidecarOnlyTextureDirectoryDoesNotTakeTheLegacyResumeBranch(t *testing.
 }
 
 func TestLegacyDoltWorkspaceStillTakesTheMigratorBranch(t *testing.T) {
-	platform := newBootServer(&computerevent.Head{ComputerID: "computer-legacy", Sequence: 148333, CanonicalEventHead: strings.Repeat("a", 64)})
+	platform := newBootServer(&computerevent.Head{ComputerID: "computer-legacy", Sequence: 1148333, CanonicalEventHead: strings.Repeat("a", 64)})
 	server := httptest.NewServer(platform)
 	defer server.Close()
 	t.Setenv("CHOIR_PRIVACY_KEY_FILE", writePrivacyKey(t, "computer-legacy"))

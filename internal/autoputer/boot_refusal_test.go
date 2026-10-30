@@ -22,7 +22,7 @@ import (
 // persist a durable recovery condition without parsing guest logs, and it must
 // still satisfy errors.Is(err, recoveryplan.ErrBaseRefused).
 func TestMaterializeRefusalCarriesTypedWitness(t *testing.T) {
-	platform := newBootServer(&computerevent.Head{ComputerID: "computer-stale", Sequence: 148333, CanonicalEventHead: strings.Repeat("a", 64)})
+	platform := newBootServer(&computerevent.Head{ComputerID: "computer-stale", Sequence: 1148333, CanonicalEventHead: strings.Repeat("a", 64)})
 	server := httptest.NewServer(platform)
 	defer server.Close()
 	t.Setenv("CHOIR_PRIVACY_KEY_FILE", writePrivacyKey(t, "computer-stale"))
@@ -38,7 +38,7 @@ func TestMaterializeRefusalCarriesTypedWitness(t *testing.T) {
 	if refusal.Kind != BootRefusalKindBaseMissing {
 		t.Fatalf("kind = %q, want %q", refusal.Kind, BootRefusalKindBaseMissing)
 	}
-	if refusal.ComputerID != "computer-stale" || refusal.LocalSequence != 0 || refusal.WatermarkSequence != 0 || refusal.TargetSequence != 148333 {
+	if refusal.ComputerID != "computer-stale" || refusal.LocalSequence != 0 || refusal.WatermarkSequence != 0 || refusal.TargetSequence != 1148333 {
 		t.Fatalf("refusal witness = %+v", refusal)
 	}
 	if !refusal.EmptyStore || !refusal.ChainExists {
@@ -56,7 +56,7 @@ func TestWriteBootRefusalHealthServesTypedStatus(t *testing.T) {
 	writeBootRefusalHealth(recorder, &ProjectionBaseRefusal{
 		ComputerID:        "computer-blocked",
 		Kind:              BootRefusalKindTailExcess,
-		Reason:            "recovery tail 423720 events exceeds 10000; publish a fresher base (local=0 W=148431 H=572151)",
+		Reason:            "recovery tail 1423720 events exceeds 720000; publish a fresher base (local=0 W=148431 H=1572151)",
 		LocalSequence:     0,
 		WatermarkSequence: 148431,
 		TargetSequence:    572151,
