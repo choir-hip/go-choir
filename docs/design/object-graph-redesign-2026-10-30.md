@@ -725,7 +725,9 @@ in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
   change admits it. Snapshotting every 15 minutes would read 31 GB four times
   an hour. The fix is the bound, not the cadence alone:
   1. measure the in-guest replay rate (the forecast R0k-07 is 1,200 events a
-     second for a user computer, 600 for the paper; nothing has measured it);
+     second for a user computer, 600 for the paper; the first measurement,
+     d@e at 18:07, is 206 events a second, so a day of the paper's tail is
+     about 53 minutes, and why replay is this slow is its own question);
   2. state the bound as replay time (for example 15 minutes at the measured
      rate), not as an event count;
   3. make the cadence fire on the tail as well as on time, so the tail stays
