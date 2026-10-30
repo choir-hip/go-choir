@@ -66,7 +66,7 @@ metamission:
         The two detailed designs are reference, not rewritten.
     - id: C0
       title: the cutover drills
-      status: pending
+      status: complete
       depends_on: [D1]
       note: >-
         Built first and run against every landing:
@@ -83,7 +83,7 @@ metamission:
         - a stale-epoch append is refused.
     - id: C1
       title: guest store on SQLite, state only
-      status: pending
+      status: complete
       depends_on: [D1]
       note: >-
         Dolt to SQLite inside the computers. No event log is kept in the
@@ -91,7 +91,7 @@ metamission:
         in witness v2, and the Texture history checkpoint.
     - id: C2
       title: PostgreSQL for control and the object graph
-      status: pending
+      status: complete
       depends_on: [D1]
       note: >-
         The Store A and Store B code paths move to PostgreSQL, with the
@@ -99,7 +99,7 @@ metamission:
         index replaces them.
     - id: C3
       title: tape v2
-      status: pending
+      status: complete
       depends_on: [D1]
       note: >-
         - batched appends with one receipt per batch, kept in the segment;
@@ -112,7 +112,7 @@ metamission:
         - the outbox with backpressure.
     - id: C4
       title: the migration
-      status: pending
+      status: complete
       depends_on: [C0, C1, C2, C3]
       note: >-
         A migration release in which each computer converts its own Dolt
@@ -126,7 +126,7 @@ metamission:
         It runs on d@e first and is drilled there.
     - id: C5
       title: the fleet cutover and deletion of the old data
-      status: pending
+      status: complete
       depends_on: [C4]
       note: >-
         Authorized by the owner, 2026-10-30 ~06:40 UTC:
@@ -399,89 +399,49 @@ boundaries:
 now:
   status: working
   slice: >-
-    C1 to C3 build. D0 and D1 are closed. WP0 (the dbx seam) and the two
-    seam contracts are on cutover/data-system at 48048f0e6. Six Sonnet
-    builders run in parallel worktrees, branches cutover/wp-a to wp-f:
-    A guest store, B guest object graph, C witness v3 and snapshot v1,
-    D host control on PostgreSQL, E host graph on PostgreSQL, F
-    migrators, nix and CI. FP0 merges them into cutover/data-system, then
-    writes the C0 drills.
-  source_ref: cutover/data-system 48048f0e6
-  deploy_identity: d346c6a84
-  candidate:
-    id: frame-r1
-    state: frozen
-    ref: docs/design/choir-data-system-frame-2026-10-30.md
-    base: 3f4dafb7e
-    digest: git blob at 3f4dafb7e
-    scope: [docs/design/choir-data-system-frame-2026-10-30.md]
-  conjecture:
-    id: DS-bridge
-    claim: >-
-      If the data system is rebuilt to the frame and cut over once, Choir
-      gets a production-grade substrate:
-      - bounded memory and disk per heavy computer (a 30-day window under
-        10 GB);
-      - any point restorable within the window;
-      - user state sealed from the host;
-      - precommitment timing provable;
-      - fewer mechanisms than today.
-
-      That advances PSA, self-development and enterprise auditability.
-    test: >-
-      The hard gates and C0's drills: on the proof ring, then on the
-      fleet. The before-and-after resource
-      numbers are set against the §12 precommitments.
-    edge: missing_oracle (no drill harness exists yet; C0 builds it)
-    delta_o: C0
-    scope_if_supported: Node B at today's fleet and the paper's rate; the interfaces are argued for multi-host, not proved
-    status: active
-    evidence_refs: [docs/evidence/paper-tape-composition-2026-10-30.md, docs/evidence/tape-window-sizing-2026-10-30.md, docs/evidence/new-engine-storage-measurement-2026-10-30.md]
-  decision:
-    what: >-
-      Build to the frame, in bulk. Runtime checks verify; there is no
-      code-review gate and no further design panels (owner, 2026-10-30
-      ~06:30 UTC).
-    kind: architecture
-    status: settled
-    evidence_ref: owner 2026-10-30 messages quoted above
-    owner_ratification_ref: readiness_authority
+    Phase 1 is landed: the fleet runs on PostgreSQL on the host and SQLite
+    in the computers (C5, 08:36-13:30 UTC), C6 ran on the deployed
+    release, and C7 deleted Store A, Store B and the guest Dolt
+    workspaces. The mission now works phase 2 and the open residuals.
+    This evening: lost-disk recovery fixed and drilled (snapshot-root
+    watermark, a 720,000-event bound, files synced at a two-minute change
+    scan; drills G and H read back 1,007 and 1,047 of 1,047 files), boot
+    replay at 434 events/s (payload prefetch, synchronous NORMAL, the
+    prepared og_objects upsert), telemetry retirement as a tape op in hour
+    slices (I4's state half; on for d@e), and Qdrant removed.
+  source_ref: main ded88ad79
+  deploy_identity: d0c46d89b (deployed 2026-10-30 22:02:54)
   belief:
     believed_state: >-
-      The frame is coherent and matches the code on single writer. Its
-      class shares rest on one measured day (replicated on a second).
+      Every computer's state is recoverable from the host alone: sealed
+      snapshot, tape tail, file root, escrowed key. The paper's tail after
+      a daily snapshot replays in under 30 minutes at the drilled rate.
     main_uncertainty: >-
-      The size of the guest-store port from Dolt to SQLite (C1). The
-      question is whether guest code depends on Dolt-only behavior:
-      commits, AS OF, DOLT_HASHOF_TABLE in witness v2, the dirty-gated
-      checkpoint in Texture history. This is the biggest schedule risk
-      and decides whether C1 is days or weeks.
+      The paper's own replay rate (only d@e is drilled: 8,338 events) and
+      the cost of retirement's first run on the paper (2.55M choir.event
+      rows; the per-slice plan is measured, the paper's run is not).
     next_observation: >-
-      The frame round-1 verdicts. Then a Sonnet census of the Dolt-specific
-      calls in internal/store, internal/computerversion and
-      internal/textureowner, which can run during D1.
+      The paper's second snapshot (about 17:35 UTC on 10-31, R0n-09) and
+      its first retirement run once the owner turns it on.
+  owner_steps:
+    - turn store.telemetry_retire on for the paper (POST /api/computer-settings; this session's keys do not own the paper)
+    - delete Qdrant's leftover state on Node B, /var/lib/private/qdrant (456 KiB), or keep it
+    - the privacy policy names Qdrant five times (frontend/public/legal/privacy-policy.md)
+    - today's 12:00 Autopaper digest was skipped during the cutover; re-send or not
   blocker_or_risk: >-
-    - Node B disk: 99 GB free. Tonight's backup is skipped, so the 52 GB
-      Store A copy is not rewritten. Check `df` before the migration: old
-      and new state coexist until C5's checks are green. The paper's
-      data.img is 57 GB; the migration writes SQLite next to its Dolt
-      state inside the guest volume, so check the guest volume's free
-      space too.
-    - The paper's health flickers.
-    - Load was 11.4 at capture.
+    - No off-host copy of the new data yet: the nightly backup is skipped
+      by owner direction and I7 rebuilds it; the pg_dump of 15:17 sits on
+      Node B.
+    - Node B free space about 83 GB; the paper's snapshots settle near
+      75 GB of their own.
   next_action: >-
-    1. D0: read round 1 in .agentic-consensus/frame-r1/out/ (devin.out,
-       sonnet.out, and omp-deepseek-v41-flash.out if it has landed). Fold
-       the findings into frame revision 2 in one pass, freeze it, and
-       file ledger round 0m.
-    2. D1: the build sheet. Start the Dolt-call census at the same time:
-       a Sonnet subagent counts the Dolt-specific calls in internal/store,
-       internal/computerevent, internal/computerversion,
-       internal/textureowner and platform/corpusd.
-    3. Fan out C0 to C3 as parallel Sonnet builders in worktrees, split by
-       package boundary.
-    4. C4 on d@e.
-    5. C5 for the fleet.
+    1. Phase 2 in the order the owner set: I7 (off-host backup for
+       PostgreSQL WAL and the blob store, then the timer), I1 (restore to
+       any point; checkpoint as a snapshot reference), I2, I3, I5, I6.
+    2. Settle R0n-09 and R0k-06 with the paper's snapshot on 10-31.
+    3. VACUUM after the paper's first retirement, as a planned act.
+    4. At mission close: the closing report, docs/ACTIVE.md, the mission
+       graph and the next station's goal file.
 
 receipts:
   - id: selection-superseded
