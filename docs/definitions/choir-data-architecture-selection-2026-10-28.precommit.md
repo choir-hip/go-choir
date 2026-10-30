@@ -832,3 +832,39 @@ and R0g-16's intervals, and a few packs, inside R0g-09's. With no idle or
 age seal the import writes no more files than before, so R0g-09 stands.
 Snapshot and record-witness puts happen after the cut, outside the import
 records' scopes.
+
+## Records (round 0m, the data system frame; drafted from docs/design/choir-data-system-frame-2026-10-30.md §12 and revision 2; written 2026-10-30 ~07:00 UTC before any of it is built; the commit is the witness)
+
+**R0m-01** (envelope cost). After the cutover, the mean bytes per
+projection-batch event on the tape, minus its sealed payload, are at most
+200 B over the paper's first full day: p = 0.75. Falsifier: a measured
+mean above 200 B. Artifact: a segment scan on that day.
+
+**R0m-02** (control database without receipts). The PostgreSQL control
+database is under 1 GB on disk, indexes included, 7 days after the
+cutover: p = 0.7. Falsifier: `pg_database_size` over 1 GB. Artifact: the
+size query and its date.
+
+**R0m-03** (state only). The paper's SQLite file, holding state only, is
+between 3 and 8 GB at the first snapshot after the cutover: p = 0.7.
+Falsifier: outside [3, 8] GB. Artifact: the file size from the snapshot
+manifest.
+
+**R0m-04** (tape window). A heavy computer's sealed tape for 30 days,
+with telemetry off the tape, is under 10 GB: p = 0.65. It is measured on
+the paper by extrapolating its first 7 days after the cutover. Falsifier:
+an extrapolation over 10 GB. Artifact: the segment bytes per day.
+
+**R0m-05** (no acknowledged loss). Every kill -9 drill run on d@e in phase
+1 loses no receipted event and no committed SQLite row: p = 0.8.
+Falsifier: any loss. Artifact: the C0 drill records.
+
+**R0m-06** (differential). Every migrated computer's SQLite state answers
+C0's differential queries the same as its Dolt state, and the keep-set
+counts match exactly: p = 0.75 on the first fleet run. Falsifier: any
+computer with a mismatch that is not traced to the harness. Artifact: the
+C5 differential report.
+
+**R0m-07** (fixed per-event cost goes). Host append round trips per paper
+day fall by at least 50% against today's 339 K: p = 0.8. Falsifier: under
+a 50% cut. Artifact: the receipt count per day.
