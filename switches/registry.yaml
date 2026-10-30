@@ -1265,32 +1265,6 @@
    "hold_question": "observe by owner ruling 2026-10-24 17:5x; when does enforce start?"
   },
   {
-   "id": "dolt_auth_stage",
-   "kind": "let_binding",
-   "life": "ops",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "nix": [
-    "doltAuthStage"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "review_by": "2027-01-20",
-   "ring": "all",
-   "nix_value": "locked",
-   "promote": [
-    {
-     "metric": "dolt_auth_failures",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "keep; review_by only"
-  },
-  {
    "id": "gateway_bearer_binding",
    "kind": "let_binding",
    "life": "release",
@@ -1376,37 +1350,6 @@
    "probe": "proof 9 (40 concurrent calls from one test computer)",
    "grandfathered_off_until": "2026-11-04",
    "note": "Built (ec25d61ff, 72caf899d); proof 9 never run. Flip as its own deploy."
-  },
-  {
-   "id": "platform_dolt_squash_timer",
-   "kind": "let_binding",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "nix": [
-    "platformDoltSquashTimerEnabled"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "nix_value": "false",
-   "promote": [
-    {
-     "metric": "squash_backup_verified",
-     "bound": "true"
-    }
-   ],
-   "retire": "delete the let-binding; the timer is unconditional",
-   "gate": {
-    "act": "supervised first squash in a window (owner: one squash, then weekly)"
-   },
-   "grandfathered_off_until": "2026-11-11",
-   "note": "24 GB resource win."
   },
   {
    "id": "choir_document_tool_sandbox",
