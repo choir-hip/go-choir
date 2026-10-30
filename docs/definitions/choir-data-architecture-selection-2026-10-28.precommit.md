@@ -530,3 +530,52 @@ every hash in the capture and og tables, reads zero private or internal
 bytes and gets identical responses for absent and present private refs:
 p = 0.90. Falsifier: any byte read or any distinguishable response.
 
+
+## Records (round 0h, corrections to round 0g; drafted by the design seat in docs/design/object-storage-2026-10-30.md section 8, revision 2, after the tier-2 review in .agentic-consensus/object-storage-r1/; written 2026-10-29 about 23:59 UTC, committed by FP0 on 2026-10-29/30 before any of it is built; the commit is the witness)
+
+No round 0g record is edited. Each record below names the record it
+corrects and why; the corrected record stays and is scored as committed.
+
+**R0g-08** (corrects R0g-01: its model double-counted the private copies,
+since the 9.85 GB of referenced bodies already includes the other owners'
+~3.8 K bodies, and the paper's captures are now platform-tier and
+encrypted). Stored bytes of steps 2-4 in the local pack store (headers,
+frames, pack indexes, encryption overhead included): est 9.95 GB [9.85,
+10.3]. Assumes 9.845 GB referenced (9.369 capture, 0.475 og, 0.001 mail)
+plus ≤ 1% overhead; the 604 shared bodies cost ~0.04 GB more if the owner
+declines the Q5 default, inside the interval. Falsifier: over 10.6 GB.
+Artifact: `du` of the store plus the catalog's byte sum.
+
+**R0g-09** (corrects R0g-02: per-scope packs plus one index per pack cannot
+fit [150, 260]). Files in the store after steps 2-3, packs plus pack
+indexes plus catalog files: est 360 [300, 460], against 176,511 files
+today. Assumes ~135 platform capture packs, ~8 og packs, ~30 private
+per-owner packs, one index each. Falsifier: over 1,000.
+
+**R0g-10** (corrects R0g-05: the provider set is now six providers, closed
+in the design's section 4, and the sweep runs in a separate driver
+process). Peak RSS of the GC driver for one full mark, condemn and
+purge-time re-mark over 1 M catalog entries and the six providers: est
+60 MiB [25, 150]. Falsifier: over 256 MiB.
+
+**R0g-11** (corrects R0g-06: it named no class scope although step 6 adds
+internal extents, and "95% public captures" encodes the revision-1 tier,
+now platform). Growth of the keep-set classes (capture, og, mail) in the
+store, 30-day mean after cutover at the then-current Autopaper rate: est
+0.6 GB/day [0.35, 1.1], over 90% of it platform-tier captures. Falsifier:
+over 1.5 GB/day. Artifact: daily catalog byte sums per class.
+
+**R0g-12** (new scope split out of R0g-06). Growth of the whole store, all
+classes, 30-day mean after step 6, with the paper off the tape: est 1.2
+GB/day [0.6, 3.0]. Falsifier: over 5 GB/day. Hard to measure: base
+rebuild bursts dominate single days; mitigation: report the 30-day mean
+and the max day separately. If the paper's tape is still written into the
+store, this record is void as stated and a new one is filed before cutover.
+
+**R0g-13** (corrects R0g-07: platform-tier hashes are the realistic oracle,
+and "identical responses" needs a measurable definition). A red-team pass
+with a second owner's bound computer, given every hash in the capture and
+og tables, reads zero platform, private or internal bytes, and over 1,000
+probes each of absent, present-forbidden and malformed refs gets the same
+status and body, with median latencies within 1 ms of each other: p = 0.85.
+Falsifier: any byte read or any distinguishable response.
