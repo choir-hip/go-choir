@@ -866,3 +866,36 @@ first, and the body last.
   data (tape payloads, snapshot chunks, the PostgreSQL dumps) copied to a
   second location is the next durability step. The paper runs without a
   backup tonight, by the owner's decision.
+
+### 11.6 `choir.event`, measured before building the split (2026-10-30 evening)
+
+The paper's `choir.event` rows (a private reflink copy at 18:27, sizes and
+counts only) total about 4.93 GB. By kind, all time and the last 24 hours:
+
+| kind | all time | last 24 h | reader |
+| --- | --- | --- | --- |
+| `tool.result` | 1.84 GB | 96 MB | run acceptance, the Texture verifier |
+| `loop.progress` | 1.43 GB | 41 MB | `/api/costs` reads the `tool_loop` and `jev_judgment` lines (37 MB of the 24 h) |
+| `desk.cell` | 588 MB | 32 MB | the trace tooling (`choir trace`, `/api/runs/{id}/events`) |
+| `tool.invoked` | 307 MB | 0 | none: live-only since 2026-10-22 |
+| `desk.egress` | 271 MB | 1.9 MB | the trace tooling |
+| `texture.agent_revision.progress` | 151 MB | 0 | none: live-only since 2026-10-22 |
+| run lifecycle, Texture revisions, judgments, channel | about 0.35 GB | 25 MB | product reads |
+
+The write-side split the owner's default asks for is mostly in place
+already: the journal cuts of 2026-10-22 (`types.LiveOnly`) stopped
+appending the model-call line, `tool.invoked` and the Texture progress copy.
+What is written today, about 198 MB a day, is record (the tool results and
+the cost lines) or the trace the repo contract says to read before
+attributing behavior (`desk.cell`, `desk.egress`). A new write filter would
+save at most about 37 MB a day, and it would take the trace from the only
+tool that reads it. It is not built.
+
+The weight is the backlog: about 2.0 GB of rows no reader takes (the
+phaseless `loop.progress` lines, `tool.invoked`, the Texture progress copy,
+from before the cuts) plus the trace kinds as they age. Removing them is the
+retirement op (§11.3), a tape event so replay agrees, with a window: the
+trace kinds kept 14 days (the owner's default), `tool.result` kept while a
+run's acceptance can still read it. Growth without retention is about
+200 MB a day on the paper, about 70 GB a year, so the retirement op is
+phase 1's first storage item.
