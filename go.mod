@@ -7,7 +7,6 @@ toolchain go1.26.10
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/containerd/cgroups/v3 v3.1.3
-	github.com/creack/pty/v2 v2.0.1
 	github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665
 	github.com/dolthub/driver/v2 v2.2.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
@@ -16,6 +15,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/jackc/pgx/v5 v5.7.5
 	github.com/klauspost/compress v1.18.7
 	github.com/landlock-lsm/go-landlock v0.9.0
 	github.com/moby/sys/capability v0.4.0
@@ -122,6 +122,9 @@ require (
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/juju/gnuflag v1.0.0 // indirect
 	github.com/kch42/buzhash v0.0.0-20160816060738-9bdec3dec7c6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
