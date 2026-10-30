@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 )
 
 const routeLedgerSchema = `
@@ -111,7 +112,22 @@ func (l *SQLLedger) ApplySelfDevelopmentTransition(ctx context.Context, command 
 	return l.transitionValidated(ctx, command, evidence, true)
 }
 
+// transitionValidated runs the transition, retrying a PostgreSQL
+// serialization failure or deadlock. Under SERIALIZABLE the loser of a
+// concurrent compare-and-swap can be told to retry instead of finding the
+// winner's generation; the retry reads the winner's commit and answers
+// ErrStaleTransition, the same answer a lock-serialized loser gets.
 func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence, protectSelfDevelopment bool) (Slot, TransitionReceipt, error) {
+	const attempts = 5
+	for attempt := 1; ; attempt++ {
+		slot, receipt, err := l.transitionValidatedOnce(ctx, command, evidence, protectSelfDevelopment)
+		if err == nil || attempt >= attempts || !dbx.IsRetryable(err) || ctx.Err() != nil {
+			return slot, receipt, err
+		}
+	}
+}
+
+func (l *SQLLedger) transitionValidatedOnce(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence, protectSelfDevelopment bool) (Slot, TransitionReceipt, error) {
 	if l == nil || l.db == nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: SQL database is required")
 	}

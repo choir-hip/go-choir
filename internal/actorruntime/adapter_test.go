@@ -619,34 +619,39 @@ func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart(t *te
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// The released control (B freed when the carrier completed unconsumed) may
-	// mint exactly one rebind carrier — the S0m release->rebind chain working
-	// end-to-end. Before the DeliveredAt repair the freed packet stayed
-	// invisible to the pending scan and the count was always 1; now either 1
-	// (rebind not yet reconciled when counted) or 2 (rebind carrier minted) is
-	// correct. The invariant that matters is no unbounded re-mint: the same
-	// logical join must never spawn a third carrier. Poll briefly for the
-	// rebind to settle so the count is stable.
-	lifecycleRuns := 0
-	settle := time.Now().Add(3 * time.Second)
-	var runs []types.RunRecord
-	for {
-		runs, err = s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
+	// The released control (B freed when the carrier completed unconsumed) mints
+	// rebind carriers — the S0m release->rebind chain working end-to-end. The
+	// stub provider consumes nothing, so the chain runs until the failed-attempt
+	// key bounds it; how many carriers exist when the chain ends depends on how
+	// fast the store is, so the test samples no early count. The invariant is
+	// that the chain ENDS: the count is the seeded run plus at most two rebind
+	// carriers, and it holds still for a full second.
+	countLifecycleRuns := func() (int, []types.RunRecord) {
+		runs, err := s.ListLifecycleRunsByTrajectory(ctx, fixture.ownerID, fixture.computerID, fixture.trajectoryID, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		lifecycleRuns = 0
+		n := 0
 		for _, run := range runs {
 			if run.AgentID == fixture.agentID && metadataString(run.Metadata, "request_source") == "lifecycle_texture_control" {
-				lifecycleRuns++
+				n++
 			}
 		}
-		if lifecycleRuns >= 2 || time.Now().After(settle) {
-			break
+		return n, runs
+	}
+	lifecycleRuns, runs := countLifecycleRuns()
+	stableSince := time.Now()
+	settle := time.Now().Add(15 * time.Second)
+	for time.Since(stableSince) < time.Second {
+		if time.Now().After(settle) {
+			t.Fatalf("lifecycle-control runs never stopped being minted (re-mint storm): %d %+v", lifecycleRuns, runs)
 		}
 		time.Sleep(50 * time.Millisecond)
+		if n, r := countLifecycleRuns(); n != lifecycleRuns {
+			lifecycleRuns, runs, stableSince = n, r, time.Now()
+		}
 	}
-	if lifecycleRuns > 2 {
+	if lifecycleRuns > 3 {
 		t.Fatalf("restart created %d lifecycle-control runs (re-mint storm): %+v", lifecycleRuns, runs)
 	}
 }
@@ -912,11 +917,9 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	// and the actor update must remain unacknowledged/retryable.
 	if _, err := s.DB().ExecContext(ctx, `
 		CREATE TRIGGER fail_parked_actor_control_append
-		BEFORE INSERT ON og_objects FOR EACH ROW
+		BEFORE INSERT ON og_objects FOR EACH ROW WHEN NEW.object_kind = 'choir.worker_update'
 		BEGIN
-			IF NEW.object_kind = 'choir.worker_update' THEN
-				SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected parked actor append failure';
-			END IF;
+			SELECT RAISE(ABORT, 'injected parked actor append failure');
 		END`); err != nil {
 		t.Fatalf("install append failure trigger: %v", err)
 	}
@@ -2363,11 +2366,9 @@ func seedAdapterLifecycleResearchControl(t *testing.T, s *store.Store, rt *agent
 	if failBind {
 		if _, err := s.DB().ExecContext(ctx, `
 			CREATE TRIGGER fail_adapter_prebind_control_delivery
-			BEFORE INSERT ON og_objects FOR EACH ROW
+			BEFORE INSERT ON og_objects FOR EACH ROW WHEN NEW.object_kind = 'choir.worker_update'
 			BEGIN
-				IF NEW.object_kind = 'choir.worker_update' THEN
-					SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected pre-bind control delivery failure';
-				END IF;
+				SELECT RAISE(ABORT, 'injected pre-bind control delivery failure');
 			END`); err != nil {
 			t.Fatalf("install pre-bind failure: %v", err)
 		}
