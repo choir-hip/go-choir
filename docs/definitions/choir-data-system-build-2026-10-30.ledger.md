@@ -105,3 +105,12 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - Rule from here:
     - Never copy the receipts table from the live source. It is copied at C5, when the paper is stopped.
     - Rehearse the graph only with --parallel 1, under a watchdog that kills the copy when the paper's /health is slow or not 200.
+- 2026-10-30 07:55 UTC (FP0). C4 host rehearsal, with --parallel 1 and a paper-health watchdog, into the scratch PostgreSQL:
+  - Graph: 7 tables and 1,176,822 rows, counts and digests equal (og_objects, og_edges and the rest).
+    - The source-only tables are either empty leftovers (counted live: 0 rows each) or derived retrieval tables (og_lookup_keys, proj_capture_*), which corpusd rebuilds from og_objects at start.
+  - Control: 32 tables and 38,287 rows equal, every table except computer_event_append_receipts, which waits for C5.
+  - Problem found and fixed: the migrator's bootstrap did not create vmctl's route ledger and input catalog tables (computer_version_*). The copy would have dropped route slots, transition receipts and authorization evidence.
+    - Fix: on cutover/data-system ("bootstrap also creates vmctl's route ledger"), with a test.
+    - Dropped on purpose: verifier_attestations and computer_version_route_authority_config, which nothing reads in the old or the new code.
+  - The deploy of 07d74c278 did a planned refresh of the paper: killed at 07:34:26, booted at 07:35:02, ready at 07:38. Production PostgreSQL is active, with databases control and graph and the role and password set.
+  - Devin reviewed the cutover's .github diff for the security-epoch gate: VERDICT no-security-effect. The epoch was raised from 3 to 4 on the branch (4b80413f9).
