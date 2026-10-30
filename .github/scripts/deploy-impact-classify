@@ -212,17 +212,9 @@ for path in "${changed[@]}"; do
       mark_host_os_only
       add_explanation "$path -> maildctl host package in Node B system environment"
       ;;
-    cmd/projection-compact/*)
+    scripts/off-host-backup.sh)
       mark_host_os_only
-      add_explanation "$path -> projection-compact host package in Node B system environment"
-      ;;
-    scripts/dolt-history-audit.sh|scripts/off-host-backup.sh)
-      mark_host_os_only
-      add_explanation "$path -> host oneshot script read into nix/node-b.nix (Dolt history audit, off-host backup)"
-      ;;
-    cmd/platform-dolt-squash/*|scripts/platform-dolt-squash.sh)
-      mark_host_os_only
-      add_explanation "$path -> Store A weekly squash command and oneshot script (nix/node-b.nix; timer disabled)"
+      add_explanation "$path -> host oneshot script read into nix/node-b.nix (off-host backup)"
       ;;
     internal/frontimportance/*)
       add_host_service "corpusd"
