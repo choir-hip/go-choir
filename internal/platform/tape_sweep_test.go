@@ -127,7 +127,7 @@ func (f *tapeFixture) appendSeq(c *tapeChain, payload []byte, age time.Duration)
 	when := time.Now().Add(-age).UTC()
 	insertTestAppendReceipt(f.t, f.store.db, c.id, fmt.Sprintf("k-%d", seq), platformTestDigest('c'), seq, "verification_recorded", s.event, s.eventPin, []string{s.payloadPin}, when)
 	if _, err := f.store.db.Exec(`INSERT INTO computer_event_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, reducer_version, credential_revocation_epoch, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-		ON DUPLICATE KEY UPDATE sequence=VALUES(sequence), canonical_event_head=VALUES(canonical_event_head), updated_at=VALUES(updated_at)`,
+		ON CONFLICT (computer_id) DO UPDATE SET sequence=excluded.sequence, canonical_event_head=excluded.canonical_event_head, updated_at=excluded.updated_at`,
 		c.id, seq, s.event, s.event, s.event, platformTestDigest('f'), platformTestDigest('f'), nil, computerevent.ReducerVersionV1, 0, when, when); err != nil {
 		f.t.Fatal(err)
 	}

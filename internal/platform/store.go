@@ -220,11 +220,6 @@ func (s *Store) corpus() *sql.DB {
 	return s.db
 }
 
-// markCorpusDirty is a no-op kept until WP-E deletes its call sites in the
-// graph files (objectgraph_store.go, retrieval_schema.go, capture_index.go);
-// PostgreSQL COMMIT is the durability, there is no snapshot committer.
-func (s *Store) markCorpusDirty(string) {}
-
 func (s *Store) Bootstrap(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("platform store: nil database")

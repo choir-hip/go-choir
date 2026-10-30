@@ -280,8 +280,8 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 	}
 
 	var publicationTitle, publicationSlug string
-	if err := store.db.QueryRowContext(context.Background(),
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.title')), JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.slug')) FROM og_objects WHERE object_kind = 'choir.publication' AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.publication_id')) = ?`,
+	if err := store.corpus().QueryRowContext(context.Background(),
+		`SELECT (metadata::jsonb->>'title'), (metadata::jsonb->>'slug') FROM og_objects WHERE object_kind = 'choir.publication' AND (metadata::jsonb->>'publication_id') = ?`,
 		resp.PublicationID).Scan(&publicationTitle, &publicationSlug); err != nil {
 		t.Fatalf("query publication defaults: %v", err)
 	}
@@ -316,8 +316,8 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 		t.Fatalf("SubmitPublicationProposal: %v", err)
 	}
 	var proposalTitle string
-	if err := store.db.QueryRowContext(context.Background(),
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.title')) FROM og_objects WHERE object_kind = 'choir.publication_proposal' AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.proposal_id')) = ?`,
+	if err := store.corpus().QueryRowContext(context.Background(),
+		`SELECT (metadata::jsonb->>'title') FROM og_objects WHERE object_kind = 'choir.publication_proposal' AND (metadata::jsonb->>'proposal_id') = ?`,
 		proposal.ProposalID).Scan(&proposalTitle); err != nil {
 		t.Fatalf("query proposal defaults: %v", err)
 	}
@@ -1284,7 +1284,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	var privateEntityKind, privateEntityURI, activityKind, predicateType string
 	// Query the object graph for the is_version_of citation edge.
 	var citationEdgeCount int
-	if err := svc.store.db.QueryRowContext(context.Background(),
+	if err := svc.store.corpus().QueryRowContext(context.Background(),
 		`SELECT COUNT(*) FROM og_edges WHERE kind = 'is_version_of' AND to_id = ?`, "rev-1").Scan(&citationEdgeCount); err != nil {
 		t.Fatalf("query citation edge: %v", err)
 	}
@@ -1292,8 +1292,8 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("is_version_of citation edge to rev-1 not found in graph")
 	}
 	// Query the object graph for the private provenance entity.
-	if err := svc.store.db.QueryRowContext(context.Background(),
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.entity_kind')), JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.canonical_uri')) FROM og_objects WHERE object_kind = 'choir.provenance_entity' AND content_hash = ?`,
+	if err := svc.store.corpus().QueryRowContext(context.Background(),
+		`SELECT (metadata::jsonb->>'entity_kind'), (metadata::jsonb->>'canonical_uri') FROM og_objects WHERE object_kind = 'choir.provenance_entity' AND content_hash = ?`,
 		resp.SourceRevisionHash).Scan(&privateEntityKind, &privateEntityURI); err != nil {
 		t.Fatalf("query private provenance entity: %v", err)
 	}
@@ -1301,8 +1301,8 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("private provenance entity = (%q, %q), want Texture revision ref", privateEntityKind, privateEntityURI)
 	}
 	// Query the object graph for the provenance activity.
-	if err := svc.store.db.QueryRowContext(context.Background(),
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.activity_kind')) FROM og_objects WHERE object_kind = 'choir.provenance_activity' AND CAST(metadata AS JSON) LIKE ?`,
+	if err := svc.store.corpus().QueryRowContext(context.Background(),
+		`SELECT (metadata::jsonb->>'activity_kind') FROM og_objects WHERE object_kind = 'choir.provenance_activity' AND metadata LIKE ?`,
 		"%"+resp.RoutePath+"%").Scan(&activityKind); err != nil {
 		t.Fatalf("query provenance activity: %v", err)
 	}
@@ -1310,8 +1310,8 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("activity kind = %q, want publish_texture_revision", activityKind)
 	}
 	// Query the object graph for the verifier attestation.
-	if err := svc.store.db.QueryRowContext(context.Background(),
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.predicate_type')) FROM og_objects WHERE object_kind = 'choir.verifier_attestation' AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.target_id')) = ?`,
+	if err := svc.store.corpus().QueryRowContext(context.Background(),
+		`SELECT (metadata::jsonb->>'predicate_type') FROM og_objects WHERE object_kind = 'choir.verifier_attestation' AND (metadata::jsonb->>'target_id') = ?`,
 		resp.PublicationVersionID).Scan(&predicateType); err != nil {
 		t.Fatalf("query verifier attestation: %v", err)
 	}
@@ -1485,7 +1485,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		t.Fatalf("delivery state response: %#v", delivery)
 	}
 	var persistedDeliveryState string
-	if err := store.db.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.delivery_state')) FROM og_objects WHERE object_kind = 'choir.publication_proposal' AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.delivery_id')) = ?`, proposal.DeliveryID).Scan(&persistedDeliveryState); err != nil {
+	if err := store.corpus().QueryRow(`SELECT (metadata::jsonb->>'delivery_state') FROM og_objects WHERE object_kind = 'choir.publication_proposal' AND (metadata::jsonb->>'delivery_id') = ?`, proposal.DeliveryID).Scan(&persistedDeliveryState); err != nil {
 		t.Fatalf("query delivery state: %v", err)
 	}
 	if persistedDeliveryState != "delivered" {
@@ -1493,7 +1493,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 
 	var storageRef string
-	if err := store.db.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.storage_ref')) FROM og_objects WHERE object_kind = 'choir.artifact_blob' AND content_hash = ?`, resp.ContentHash).Scan(&storageRef); err != nil {
+	if err := store.corpus().QueryRow(`SELECT (metadata::jsonb->>'storage_ref') FROM og_objects WHERE object_kind = 'choir.artifact_blob' AND content_hash = ?`, resp.ContentHash).Scan(&storageRef); err != nil {
 		t.Fatalf("artifact blob query: %v", err)
 	}
 	if filepath.IsAbs(storageRef) || !strings.HasPrefix(storageRef, "sha256/") {
@@ -1527,7 +1527,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		"choir.subject":                     2, // owner + submitter
 	} {
 		var got int
-		if err := store.db.QueryRow(`SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, kind).Scan(&got); err != nil {
+		if err := store.corpus().QueryRow(`SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, kind).Scan(&got); err != nil {
 			t.Fatalf("count %s: %v", kind, err)
 		}
 		if got != want {
@@ -1536,7 +1536,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	// Count provenance edges (was_derived_from).
 	var provEdgeCount int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM og_edges WHERE kind = 'was_derived_from'`).Scan(&provEdgeCount); err != nil {
+	if err := store.corpus().QueryRow(`SELECT COUNT(*) FROM og_edges WHERE kind = 'was_derived_from'`).Scan(&provEdgeCount); err != nil {
 		t.Fatalf("count was_derived_from edges: %v", err)
 	}
 	if provEdgeCount != 2 {
@@ -1544,7 +1544,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 	// Count citation edges (is_version_of + references).
 	var citationsCount int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM og_edges WHERE kind = 'is_version_of' OR kind = 'references'`).Scan(&citationsCount); err != nil {
+	if err := store.corpus().QueryRow(`SELECT COUNT(*) FROM og_edges WHERE kind = 'is_version_of' OR kind = 'references'`).Scan(&citationsCount); err != nil {
 		t.Fatalf("count citation edges: %v", err)
 	}
 	if citationsCount < 2 {
