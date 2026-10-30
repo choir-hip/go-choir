@@ -615,3 +615,146 @@ pack indexes, encryption overhead included): est 9.99 GB [9.89, 10.35].
 Assumes 9.845 GB referenced plus ~0.04 GB of private copies of the 604
 formerly shared bodies, plus ≤ 1% overhead. Falsifier: over 10.6 GB.
 Artifact: `du` of the store plus the catalog's byte sum.
+
+## Records (round 0k, history, restore and audit; drafted by the design seat in docs/design/computer-history-restore-audit-2026-10-30.md section 11, revision 1; written 2026-10-30 04:21 UTC, to be committed by FP0 before any of it is built; the commit is the witness)
+
+No earlier record is edited. R0g-11 and R0g-12 assume object storage step 6
+writes only user computers' tape ("the paper leaves the tape"); the
+2026-10-30 direction keeps a 7-day paper tape, so they need correcting
+records in the object-storage design's next round. They stay and are scored
+as committed. Every byte figure below is on Node B, in the store's own
+accounting (catalog sums or `du`), unless stated.
+
+**R0k-01** (gap G1, before any fix). Hypothesis: today's restore leaves the
+embedded head at the target T while the canonical head is the
+`restore_requested` event, so the next append fails and the next boot
+replays past T. Assumes d@e on staging, cadence on, at least one checkpoint
+behind the head. Probe: restore to an earlier checkpoint, make one owner
+edit, restart, read the projection and canonical heads. Estimate: the edit
+fails with `ErrNeedsProjectionRepair` and after the restart the projection
+head equals the canonical head (the restore undone): p = 0.8. Falsifier: the
+edit commits and the restored state survives the restart. Artifact: the
+API responses, the guest log lines and the two heads, in a problem record.
+Hard to measure: a restart may be deferred by a busy computer; mitigate by
+probing while idle.
+
+**R0k-02** (sealing). After the cut, a sample of 1,000 post-cutover payload
+records across 20 user computers' tape segments contains no record that
+parses as plaintext outside the two control kinds (lifecycle receipts and
+verification decisions): p = 0.95. Falsifier: any non-control payload that
+is not an envelope v2. Artifact: the sampling script's report, which prints
+kinds and media types only, never content. Hard to measure: a rare kind may
+miss the sample; mitigate with a full scan by media type over one day.
+
+**R0k-03** (user tape cost). Segment bytes per event for user computers,
+days 8-30 after the cut (sealed payloads, envelopes, pin receipts, segment
+framing; PostgreSQL receipt rows excluded): est 2.0 KB [1.3, 3.2]. Assumes
+the payload mix of tape window sizing (mean 4,657 B, about 5x zstd before
+sealing). Falsifier: over 4 KB, which would mean sealing defeated
+compression. Artifact: segment byte sums over event counts per computer.
+Hard to measure: a few bursty computers dominate; report the median and the
+fleet total.
+
+**R0k-04** (user snapshots). Snapshot bytes held per active user computer
+(active in the window) 30 days after the cut, with the section 4 cadence and
+thinning: median est 45 MB [15, 150]; total across non-paper computers est
+9 GB [4, 30]. Falsifier: median over 250 MB or total over 50 GB. Artifact:
+the catalog's byte sum by class `snapshot-chunk` and scope. Hard to measure:
+the engine's layout may change; record its version with the figure.
+
+**R0k-05** (paper snapshots). Snapshot bytes held for the paper's 7-day
+window at daily cadence, 14 days after the cut: est 20 GB [8, 60]. Assumes
+a store of 11.9-20.8 GB that compresses about 3x. Falsifier: over 80 GB,
+which would argue for a different chunking or a longer interval. Artifact:
+catalog sum by scope. Hard to measure: chunk reuse is unknown (R0k-06).
+
+**R0k-06** (chunk reuse). Fraction of a snapshot's chunk bytes already held
+from the previous snapshot: median user computer est 0.6 [0.25, 0.9]; the
+paper's daily snapshot est 0.5 [0.15, 0.85]. Falsifier: under 0.1 for
+either, which would mean page churn defeats fixed-offset chunks. Artifact:
+the producer's `IfAbsent` hit bytes over total bytes. Hard to measure: the
+first snapshot after the cut has no predecessor; start from the second.
+
+**R0k-07** (replay rate). In-guest replay through the appender into
+SQLite: median user computer est 1,200 events/s [400, 4,000]; the paper est
+600 events/s [150, 2,500]. Baseline: about 50 events/s for today's host Dolt
+rebuild (2,500 events in 43 to 56 s). Falsifier: under 200 events/s for
+users or under 100 for the paper. Artifact: drill logs (events replayed,
+wall time). Hard to measure: the guest's load varies; take the drill
+median.
+
+**R0k-08** (restore time, request to serving). Owner rewind of a user
+computer to an arbitrary head inside the window: median est 12 s [4, 45].
+Broken-VM restore onto a new realization: est 100 s [45, 300]. Paper restore
+to an arbitrary head inside its window: est 12 min [4, 40]. Falsifier: user
+median over 2 min, broken VM over 10 min, paper over 60 min. Artifact: the
+audit entries' request and `restore_applied` times, and the drill reports.
+Hard to measure: few real restores; drills supply the sample.
+
+**R0k-09** (drills). Fraction of weekly in-guest snapshot-chain drills that
+pass in the first 4 weeks after the cut: est 0.98 [0.92, 1.0], and every
+failure has a named cause within 48 h: p = 0.8. Falsifier: pass fraction
+under 0.9, or a failure with no cause found in a week. Artifact: drill
+records and their resolutions. Hard to measure: drills skipped for free
+space are not passes; report them separately.
+
+**R0k-10** (audit volume). Audit entries per day over days 1-30 after the
+cut: est 300 [80, 1,500]; bytes est 0.5 MB/day [0.1, 3]. Falsifier: over
+5,000/day, which would mean an act is logged per object instead of per run.
+Artifact: the audit table's count and size by day. Hard to measure: the
+cut itself writes many entries; exclude day 0.
+
+**R0k-11** (anchors). Fraction of hours in days 1-30 with a complete anchor
+(both RFC 3161 tokens and the git commit) within 15 min of the hour: est
+0.97 [0.90, 0.995]; no gap over 6 h: p = 0.9. Falsifier: under 0.85, or any
+gap over 24 h. Artifact: the anchor entries and the public repository's
+log. Hard to measure: an authority's outage is outside our control; count
+it, do not exclude it.
+
+**R0k-12** (control database). Growth of the control database over days
+8-30 after the cut, with paper receipts windowed: est 0.1 GB/day
+[0.04, 0.3], against about 1.07 GB/day today. Falsifier: over 0.5 GB/day.
+Artifact: `pg_database_size` daily. Hard to measure: other tables grow too;
+report the receipt and audit tables separately.
+
+**R0k-13** (paper archive). Growth of the paper's archived sealed segments
+over days 8-30 after the cut: est 0.45 GB/day [0.25, 0.8]. Assumes today's
+volume (about 310-330 K events/day) and compression close to today's 5.4x on
+payloads. Falsifier: over 1.2 GB/day. Artifact: catalog sum of the paper's
+archive class. Hard to measure: volume follows the news; report events/day
+with it.
+
+**R0k-14** (key delivery at every boot). Added boot latency from delivery,
+p50: est 0.3 s [0.05, 2]. Boots that fail because of delivery in days 1-30,
+excluding intended refusals (sovereign absent, missing escrow): est 1
+[0, 8]. Falsifier: p50 over 5 s, or more than 15 such failures. Artifact:
+the boot timeline and `key_delivery` audit entries. Hard to measure: a host
+restart produces a burst; report it separately.
+
+**R0k-15** (carried records). In the first d@e restore drill with records
+committed after the restore point, every such record is present after the
+restore with its original `commit_hash` and first receipt: p = 0.85 (given
+the owner accepts open question 3). Falsifier: any record missing or with a
+changed hash. Artifact: the record list before and after, with hashes.
+
+**R0k-16** (paper record witnesses before the cut). Pre-cutover batches
+that carry a commitment record, resolution or score: est 120 K
+[60 K, 200 K] (127,901 records, tape window sizing, some sharing a batch,
+plus resolutions and scores); bytes after re-sealing: est 0.15 GB
+[0.06, 0.4]. Falsifier: over 260 K batches or over 0.8 GB.
+Artifact: the extraction report (counts, bytes, digests verified). Hard to
+measure: records committed in shared batches; count batches, not records.
+
+**R0k-17** (export). `choir verify-export` on the first export of the
+owner's computer after the cut passes every check (chain links, receipt
+signatures, anchors, key commitments, a sample of decryptions) on its first
+run: p = 0.8; wall time est 20 s [5, 120] for at most 20 K events.
+Falsifier: a failed check traced to the exporter or verifier, not to the
+data. Artifact: the verifier's report.
+
+**R0k-18** (owner-act enforcement). Observe-mode owner-act receipts over
+the 7 days before the cut contain no would-refuse verdict on an act the
+owner intended: p = 0.6. Falsifier: one or more such verdicts, which must be
+fixed before `enforce`. Artifact: the receipts query and the owner's
+confirmation of each act it lists. Hard to measure: intent; ask the owner
+per listed act.
