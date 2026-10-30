@@ -131,8 +131,9 @@ func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error)
 // StartTelemetryRetirement runs RetireTelemetry about ten minutes after
 // start, then every 24 hours, until ctx ends. Call it once the replay is done
 // and the runtime is up. ready, when set, gates each run: a computer whose
-// file-tree hydration is pending, or that is otherwise not settled, skips the
-// run and tries at the next tick. It never fails the process.
+// file-tree hydration is pending, or whose store.telemetry_retire setting is
+// off, skips the run and looks again ten minutes later. It never fails the
+// process.
 func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool) {
 	if s == nil {
 		return
@@ -145,11 +146,13 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 				return
 			case <-time.After(wait):
 			}
-			wait = telemetryRetireInterval
 			if ready != nil && !ready() {
-				log.Printf("store: telemetry retirement: not settled; skipping this run")
+				// Not settled, or the setting is off: look again soon, so
+				// turning it on takes effect without a restart.
+				wait = telemetryRetireFirstDelay
 				continue
 			}
+			wait = telemetryRetireInterval
 			start := time.Now()
 			ops, err := s.RetireTelemetry(ctx, time.Now().UTC())
 			if err != nil {
@@ -159,4 +162,10 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 			log.Printf("store: telemetry retirement: %d ops in %s", ops, time.Since(start).Round(time.Millisecond))
 		}
 	}()
+}
+
+// TelemetryRetireOn reports whether the store.telemetry_retire setting is on
+// for this computer. It is read at each run; off on any read failure.
+func (s *Store) TelemetryRetireOn(ctx context.Context, ownerID string) bool {
+	return s.graphHomeOn(ctx, ownerID, SettingTelemetryRetire)
 }

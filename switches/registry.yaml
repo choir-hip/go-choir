@@ -2156,6 +2156,36 @@
    }
   },
   {
+   "id": "store_telemetry_retire",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-30",
+   "settings": [
+    "store.telemetry_retire"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-27",
+   "ring": "ids:1",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and its reader; the daily job is the default",
+   "note": "ON for d@e first; the paper next, once d@e's run cost is measured (the paper's first run removes about 2 GB of rows)."
+  },
+  {
    "id": "store_trace_log",
    "kind": "setting",
    "life": "release",

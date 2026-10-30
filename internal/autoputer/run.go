@@ -722,7 +722,9 @@ func Run() {
 			// The side table's online check starts after the runtime: never on
 			// the boot path (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 			db.StartDerivedKeyValidation(ctx)
-			db.StartTelemetryRetirement(ctx, func() bool { return fileSyncService == nil || fileSyncService.HydrationSettled() })
+			db.StartTelemetryRetirement(ctx, func() bool {
+				return (fileSyncService == nil || fileSyncService.HydrationSettled()) && db.TelemetryRetireOn(ctx, os.Getenv("CHOIR_OWNER_ID"))
+			})
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 			StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 			return nil
@@ -749,7 +751,9 @@ func Run() {
 		}
 		runtimeServing.Store(true)
 		db.StartDerivedKeyValidation(ctx)
-		db.StartTelemetryRetirement(ctx, func() bool { return fileSyncService == nil || fileSyncService.HydrationSettled() })
+		db.StartTelemetryRetirement(ctx, func() bool {
+			return (fileSyncService == nil || fileSyncService.HydrationSettled()) && db.TelemetryRetireOn(ctx, os.Getenv("CHOIR_OWNER_ID"))
+		})
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 		StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 	}

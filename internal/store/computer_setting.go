@@ -202,6 +202,13 @@ const SettingPackagesShare = "packages.share"
 // rollback: running activations finish and new ones wait for one of 8.
 const SettingDispatchWideSlots = "dispatch.wide_slots"
 
+// SettingTelemetryRetire runs the daily telemetry retirement job
+// (telemetry_retire.go): aged choir.event rows of the unread and trace kinds
+// leave the working store by a tape op; they stay on the sealed tape. On for
+// the proof ring first: the paper's first run removes about 2 GB of rows.
+// Off is the rollback: no further retire ops are appended.
+const SettingTelemetryRetire = "store.telemetry_retire"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -229,6 +236,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingPackagesPublish:              false,
 	SettingPackagesShare:                false,
 	SettingDispatchWideSlots:            false,
+	SettingTelemetryRetire:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.
