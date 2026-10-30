@@ -60,3 +60,15 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - D1 started, with the Dolt-coupling census running.
 - 2026-10-30 ~07:35 UTC (FP0). D1 complete: docs/design/data-system-build-sheet-2026-10-30.md. The integration branch cutover/data-system replaces landing on main; main gets the branch at C5. Next: WP0, the dbx seam, built by FP0.
 - 2026-10-30 ~08:20 UTC (FP0). WP0 landed on cutover/data-system: dbx (70a850d31), objectgraph.NewSQLStore (a525e75e5), store.StateDBPath and LegacyDoltWorkspacePath (48048f0e6). Six Sonnet builders launched from 48048f0e6, one worktree and branch each (cutover/wp-a to wp-f), split by package boundary per the build sheet work order.
+- 2026-10-30 ~06:50 UTC, Node B clock (FP0). The earlier entries' "~07:xx/~08:20" times were estimates; Node B's clock is the reference from here on.
+  - The C0 keep-set snapshot (scripts/cutover/keepset-snapshot.sh, 4d3daebda on cutover/data-system) ran a dry baseline against live Store B in under a minute:
+    - 3,473 publications and 11,989 versions;
+    - 156,882 capture blobs, 0 missing;
+    - 22,069 og body_refs, 0 missing;
+    - the owner's mailbox has 255 messages.
+  - The rehearsal plan changed. Node B has 9 GB of memory available, too little for a second pair of Dolt servers on reflink copies. So the host migrator reads the live Store A and B servers read-only, with one snapshot-isolated transaction per table, into a scratch PostgreSQL 17:
+    - unit choir-rehearsal-pg, user nobody, MemoryMax=3G;
+    - socket in /var/lib/go-choir-rehearsal/sock;
+    - databases control and graph.
+  - d@e's guest store was copied from a reflink of its data.img (ro, noload) to /var/lib/go-choir-rehearsal/de-guest: 600 MB of Dolt at state.texture/texture.
+  - The guest layout: the store path is the empty file `state`, so StateDBPath puts the new store at state.db. state-actor.db is already SQLite.
