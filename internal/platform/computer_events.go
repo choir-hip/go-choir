@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 )
 
 const computerEventSchemaDDL = `
@@ -213,7 +214,17 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if receipt, found, err := existingComputerEventReceipt(ctx, c.store.db, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment); err != nil || found {
 		return receipt, err
 	}
+	// The per-computer lock serializes this computer's appends, but
+	// SERIALIZABLE can still fail one against another computer's transaction
+	// (predicate locks are per page). The retry re-reads the head.
+	return dbx.Retry(ctx, 5, func() (computerevent.Receipt, error) {
+		return c.compareAndSwapTx(ctx, request)
+	})
+}
 
+// compareAndSwapTx is one serializable attempt at the append; the caller
+// holds the computer's lock and the tombstone gate.
+func (c *ComputerEventCAS) compareAndSwapTx(ctx context.Context, request computerevent.CASRequest) (computerevent.Receipt, error) {
 	tx, err := c.store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: begin: %w", err)

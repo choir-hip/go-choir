@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
@@ -253,17 +254,29 @@ func (h *Handler) HandleComputerEventAppend(w http.ResponseWriter, r *http.Reque
 	}
 	receipt, err := h.eventCAS.CompareAndSwap(r.Context(), request)
 	if err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, ErrComputerEventCASConflict) {
-			status = http.StatusConflict
+		status, message := computerEventAppendError(err)
+		if status == http.StatusServiceUnavailable {
+			w.Header().Set("Retry-After", "1")
 		}
-		if errors.Is(err, ErrEffectAdmissionRefused) {
-			status = http.StatusForbidden
-		}
-		writeJSON(w, status, apiError{Error: err.Error()})
+		writeJSON(w, status, apiError{Error: message})
 		return
 	}
 	writeJSON(w, http.StatusCreated, receipt)
+}
+
+// computerEventAppendError maps an append failure to its status. A conflict
+// the host's retries did not clear is a retryable 503 with no database text;
+// a refusal stays a 400.
+func computerEventAppendError(err error) (int, string) {
+	switch {
+	case errors.Is(err, ErrComputerEventCASConflict):
+		return http.StatusConflict, err.Error()
+	case errors.Is(err, ErrEffectAdmissionRefused):
+		return http.StatusForbidden, err.Error()
+	case dbx.IsRetryable(err):
+		return http.StatusServiceUnavailable, "computer event append conflicted with a concurrent write; retry"
+	}
+	return http.StatusBadRequest, err.Error()
 }
 
 func (h *Handler) HandleComputerEventPayload(w http.ResponseWriter, r *http.Request) {
