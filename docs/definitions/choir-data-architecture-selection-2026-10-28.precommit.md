@@ -758,3 +758,77 @@ owner intended: p = 0.6. Falsifier: one or more such verdicts, which must be
 fixed before `enforce`. Artifact: the receipts query and the owner's
 confirmation of each act it lists. Hard to measure: intent; ask the owner
 per listed act.
+
+## Records (round 0l, object storage revision 13; drafted by the design seat in docs/design/object-storage-2026-10-30.md section 8, revision 13, after the round-12 reviews in .agentic-consensus/object-storage-r12/ and the restore design; written 2026-10-30 04:49 UTC, to be committed by FP0 before any of it is built; the commit is the witness)
+
+No earlier record is edited. R0g-11 and R0g-12 were written when step 6
+carried only user computers' tape ("the paper leaves the tape"); every
+computer now keeps a tape, the paper's included
+(docs/design/computer-history-restore-audit-2026-10-30.md §4, the restore
+design below). R0g-11 stays and is scored as
+committed. R0g-12's own void clause is met (the paper's tape is written
+into the store), so it is void as stated; R0g-18 is the new record that
+clause requires.
+
+**R0g-17** (corrects R0g-11: its premise that step 6 adds only user
+computers' tape is false, and revision 13 adds classes, snapshots and
+record witnesses, that "keep-set classes" could be read to include; the
+scope is now named class by class, and the estimate does not move).
+Growth of the capture, og and mail classes in the store, by class name
+(tape, snapshot chunks and manifests, record witnesses and audit objects
+excluded), mean over days 1-30 after the cut at the then-current
+Autopaper rate: est 0.6 GB/day [0.35, 1.1], over 90% of it platform-tier
+captures. Assumes publication text adds under 0.01 GB/day. Falsifier:
+over 1.5 GB/day. Artifact: daily catalog byte sums per class. Hard to
+measure: capture volume follows the news; report captures per day with
+it.
+
+**R0g-18** (replaces R0g-12, by its void clause). Growth of the whole
+store, every class plus the tape extents, mean over days 1-30 after the
+cut: est 2.2 GB/day [1.2, 4.5]. Assumes capture, og and mail 0.6
+(R0g-17); the paper's tape 0.47 (0.45 to 0.49 GB/day compressed, hot plus
+archive, nothing removed; R0k-13); paper record witnesses 0.05; paper
+snapshots filling to about 20 GB (R0k-05) plus one day of released chunks
+in their 24 h hold, 0.7 averaged over 30 days; user snapshots filling to
+about 9 GB (R0k-04), 0.3; user tape 0.02; the file CAS re-upload after
+the cut about 2 GB once, 0.07; images, capsule evidence and platform
+updates under 0.03. Falsifier: over 7 GB/day. Artifact: daily catalog byte
+sums per class plus the byte sum of the tape extents. Hard to measure:
+snapshot fill dominates days 1-8 and the file CAS re-upload day 1;
+mitigation: report the 30-day mean, the per-class sums and the days 15-30
+rate separately.
+
+**R0g-19** (new: closures from manifest headers). On every GC audit in
+days 1-14 after the cut, the snapshots provider runs for every computer
+that has a retained snapshot (no scope suspended for a missing or
+unparseable manifest header or a row and header head mismatch), and the
+first audit after each computer's S0 repairs zero holds of the snapshots
+and guest-closures providers: p = 0.8. Falsifier: any such suspension or
+repair. Artifact: the audit reports. Hard to measure: a computer that
+does not boot after the cut has no S0; list it separately, not as a
+pass.
+
+**R0g-20** (new: the guest closure check). In the first 4 weeks after the
+cut, every weekly drill that reconstructs a store at a snapshot's head
+finds the restored ref table equal to that manifest's closure refs: p =
+0.85. Falsifier: any mismatch not traced to the drill harness. Artifact:
+the drill records. Hard to measure: drills skipped for free space are not
+passes (as R0k-09); report them separately.
+
+**R0g-21** (new: backup with open-extent prefixes). Each of the first 14
+nightly backup runs after the cut verifies every extent manifest entry,
+open-pack and open-segment prefixes included, and no run fails for a
+missing or changed extent: p = 0.85. Falsifier: any run that fails
+verification for a cause in the store or the run (not the remote
+repository's availability). Artifact: the run reports and their manifests.
+Hard to measure: a failed upload for network reasons; count it, and say
+which cause it was.
+
+Revision 13 note, no other new record. R0g-14 stands with seven providers:
+the merge's memory is one cursor per provider plus one batch. The import
+of publication and proposal text adds at most one hold per
+`choir.artifact_blob` row (about 12.5 K) and about 25 MB, inside R0g-15's
+and R0g-16's intervals, and a few packs, inside R0g-09's. With no idle or
+age seal the import writes no more files than before, so R0g-09 stands.
+Snapshot and record-witness puts happen after the cut, outside the import
+records' scopes.
