@@ -174,6 +174,20 @@ func (s *Store) ClaimDigestRun(ctx context.Context, ownerID, runDate, kind strin
 	return id, true, tx.Commit()
 }
 
+// ScheduledDigestRunState returns how the owner's scheduled run for a UTC
+// date last ended (exists=false when there is no row yet).
+func (s *Store) ScheduledDigestRunState(ctx context.Context, ownerID, runDate string) (status, reason string, exists bool, err error) {
+	err = s.routingDB.QueryRowContext(ctx, `SELECT status, reason FROM digest_runs WHERE owner_id = ? AND run_date = ? AND kind = 'scheduled'`,
+		strings.TrimSpace(ownerID), runDate).Scan(&status, &reason)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return "", "", false, nil
+	case err != nil:
+		return "", "", false, fmt.Errorf("read scheduled digest run: %w", err)
+	}
+	return status, reason, true, nil
+}
+
 func newDigestRunID(ownerID, kind string, now time.Time) string {
 	return fmt.Sprintf("dig_%s_%d_%s", kind, now.UTC().UnixNano(), authMailAddressHash(ownerID))
 }

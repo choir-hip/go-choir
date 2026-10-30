@@ -1974,7 +1974,19 @@ in
     description = "Daily Autopaper digest at 12:00 UTC";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "*-*-* 12:00:00 UTC";
+      # Retries inside the slot hour: a run that ended transiently (the paper
+      # or the provider down) is reopened by the next fire; a sent slot is
+      # final (maild's run row), so six fires send at most once. maild
+      # refuses to reopen after 12:59 UTC. A missed fire is never replayed
+      # at boot.
+      OnCalendar = [
+        "*-*-* 12:00:00 UTC"
+        "*-*-* 12:10:00 UTC"
+        "*-*-* 12:20:00 UTC"
+        "*-*-* 12:30:00 UTC"
+        "*-*-* 12:40:00 UTC"
+        "*-*-* 12:50:00 UTC"
+      ];
       Persistent = false;
     };
   };

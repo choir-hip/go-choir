@@ -502,7 +502,7 @@ func TestDigestSecondDayDoesNotRepeatYesterdaysStories(t *testing.T) {
 	extra[1].PublicationID, extra[1].Route.Bare = "n1", "/pub/texture/slug-n1"
 	extra[2].PublicationID, extra[2].Route.Bare = "n2", "/pub/texture/slug-n2"
 	d.front.set([]FrontRow{rows[0], extra[1], extra[2]})
-	d.setNow(day2.Add(time.Hour))
+	d.setNow(day2.Add(30 * time.Minute))
 	d.run() // same date: the skipped row is retriable
 	if d.resend.calls() != 2 {
 		t.Fatalf("calls = %d, want the new and revised stories sent", d.resend.calls())

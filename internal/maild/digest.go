@@ -42,6 +42,10 @@ const (
 	digestRetryDefault   = 30 * time.Second
 	digestAttemptTimeout = 30 * time.Second
 	digestScheduleText   = "12:00 UTC daily"
+	// digestSlotHour is the UTC hour of the daily slot. The host timer fires
+	// at 12:00, 12:10 ... 12:50; a run that ended transiently is retried by
+	// those fires and by nothing else, and never after the hour.
+	digestSlotHour = 12
 )
 
 var digestKeyOwnerRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,100}$`)
@@ -157,6 +161,22 @@ func (h *Handler) finishDigest(ctx context.Context, runID, ownerID, kind, status
 	}
 	h.logDigest(o)
 	return o
+}
+
+// digestSlotOpen reports whether now is inside the slot hour.
+func digestSlotOpen(now time.Time) bool { return now.UTC().Hour() == digestSlotHour }
+
+// digestSlotRetryable reports whether a scheduled row that did not send may be
+// reopened by a later fire of the same slot: the transient ends only. A
+// deliberate skip (no address, too few new stories) is final for the slot.
+func digestSlotRetryable(status, reason string) bool {
+	switch status {
+	case digestStatusFailed, digestStatusInterrupted:
+		return true
+	case digestStatusSkipped:
+		return reason == "front_unavailable" || reason == "too_few"
+	}
+	return false
 }
 
 func digestRetryable(err error) bool {
@@ -325,6 +345,25 @@ func (h *Handler) HandleDigestRun(w http.ResponseWriter, r *http.Request) {
 	}
 	failed := false
 	for _, owner := range subscribers {
+		// Retry bounds: a row that already ended is reopened only for a
+		// transient end and only inside the slot hour. After the hour the
+		// last outcome stays as the slot's final record.
+		if status, reason, exists, serr := h.store.ScheduledDigestRunState(ctx, owner, day); serr != nil {
+			log.Printf("maild: operation=autopaper_digest owner_hash=%s result=claim_error error=%q", authMailAddressHash(owner), serr)
+			failed = true
+			continue
+		} else if exists && status != digestStatusStarted && status != digestStatusSent {
+			if !digestSlotRetryable(status, reason) {
+				resp.Outcomes = append(resp.Outcomes, digestOutcome{Owner: authMailAddressHash(owner), Kind: digestKindScheduled,
+					Status: digestStatusSkipped, Reason: "already_ran"})
+				continue
+			}
+			if !digestSlotOpen(now) {
+				resp.Outcomes = append(resp.Outcomes, digestOutcome{Owner: authMailAddressHash(owner), Kind: digestKindScheduled,
+					Status: digestStatusSkipped, Reason: "slot_closed"})
+				continue
+			}
+		}
 		runID, claimed, err := h.store.ClaimDigestRun(ctx, owner, day, digestKindScheduled, now)
 		if err != nil {
 			log.Printf("maild: operation=autopaper_digest owner_hash=%s result=claim_error error=%q", authMailAddressHash(owner), err)

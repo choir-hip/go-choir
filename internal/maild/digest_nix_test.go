@@ -53,8 +53,8 @@ func TestDigestHostUnitDeclaration(t *testing.T) {
 	if !regexp.MustCompile(`Persistent\s*=\s*false;`).MatchString(timer) {
 		t.Errorf("N1: digest timer must declare Persistent = false:\n%s", timer)
 	}
-	if !regexp.MustCompile(`OnCalendar\s*=\s*"\*-\*-\* 12:00:00 UTC";`).MatchString(timer) {
-		t.Errorf("N4: digest timer must run at 12:00 UTC daily:\n%s", timer)
+	if !strings.Contains(timer, `"*-*-* 12:00:00 UTC"`) {
+		t.Errorf("N4: digest timer must start at 12:00 UTC daily (retries: digest_retry_test.go):\n%s", timer)
 	}
 
 	service := digestNixBlock(t, src, "systemd.services.go-choir-digest =")
