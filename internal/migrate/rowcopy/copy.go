@@ -31,6 +31,13 @@ type Options struct {
 	// transaction (defaults 500 rows, 8 MiB).
 	BatchRows  int
 	BatchBytes int
+	// PageRows bounds the rows one source query returns (default 50000): a
+	// table with a primary key is read in key order, page by page, each page
+	// resuming after the previous page's last key, inside the same source
+	// transaction. One long scan of Store A's receipts (about 6M rows)
+	// stopped returning rows after 2.75M and 5.5M at C5 while Dolt spun a
+	// core (2026-10-30).
+	PageRows int
 	// Parallel is how many tables a PostgreSQL target copies at once
 	// (default 1; ignored when the tables have foreign keys among them, and
 	// for SQLite, which has one writer). The source needs that many
@@ -66,9 +73,9 @@ type TableReport struct {
 	BadText        map[string]int64 `json:"bad_text,omitempty"`
 	BadTextRows    int64            `json:"bad_text_rows,omitempty"`
 	BadTextSamples []string         `json:"bad_text_samples,omitempty"`
-	DurationMS        int64            `json:"duration_ms"`
-	OK                bool             `json:"ok"`
-	Error             string           `json:"error,omitempty"`
+	DurationMS     int64            `json:"duration_ms"`
+	OK             bool             `json:"ok"`
+	Error          string           `json:"error,omitempty"`
 }
 
 // Report is the outcome of a Run.
@@ -116,6 +123,9 @@ func Run(ctx context.Context, src, dst *sql.DB, kind dbx.Kind, opts Options) (*R
 	}
 	if opts.BatchBytes <= 0 {
 		opts.BatchBytes = 8 << 20
+	}
+	if opts.PageRows <= 0 {
+		opts.PageRows = 50000
 	}
 	if opts.Logf == nil {
 		opts.Logf = func(string, ...any) {}
@@ -304,20 +314,25 @@ func (r *runner) countSource(ctx context.Context, q srcQueryer, name string) (in
 }
 
 // sourceQuery selects the intersected columns in source primary-key order.
-func sourceQuery(p pair) string {
+func sourceQuery(p pair) string { return sourceSelect(p) + sourceOrder(p) }
+
+func sourceSelect(p pair) string {
 	cols := make([]string, len(p.SrcCols))
 	for i, c := range p.SrcCols {
 		cols[i] = quoteMySQL(c.Name)
 	}
-	q := "SELECT " + strings.Join(cols, ", ") + " FROM " + quoteMySQL(p.Name)
-	if len(p.PK) > 0 {
-		pk := make([]string, len(p.PK))
-		for i, c := range p.PK {
-			pk[i] = quoteMySQL(c)
-		}
-		q += " ORDER BY " + strings.Join(pk, ", ")
+	return "SELECT " + strings.Join(cols, ", ") + " FROM " + quoteMySQL(p.Name)
+}
+
+func sourceOrder(p pair) string {
+	if len(p.PK) == 0 {
+		return ""
 	}
-	return q
+	pk := make([]string, len(p.PK))
+	for i, c := range p.PK {
+		pk[i] = quoteMySQL(c)
+	}
+	return " ORDER BY " + strings.Join(pk, ", ")
 }
 
 func targetQuery(p pair) string {
@@ -345,6 +360,13 @@ type rowIter struct {
 	// pkIdx indexes the source primary-key columns within the selected
 	// columns, for error messages.
 	pkIdx []int
+	// Paged reads (page > 0): the queryer, the page size, the rows read
+	// in the current page, and the last row's primary key.
+	ctx    context.Context
+	q      srcQueryer
+	page   int
+	inPage int
+	last   []any
 	// tolerant (dry run) counts text PostgreSQL cannot store instead of
 	// failing on the first.
 	tolerant   bool
@@ -354,11 +376,7 @@ type rowIter struct {
 }
 
 func (r *runner) openIter(ctx context.Context, q srcQueryer, p pair) (*rowIter, error) {
-	rows, err := q.QueryContext(ctx, sourceQuery(p))
-	if err != nil {
-		return nil, fmt.Errorf("rowcopy: read source %s: %w", p.Name, err)
-	}
-	it := &rowIter{rows: rows, p: p, pg: r.kind == dbx.Postgres,
+	it := &rowIter{p: p, pg: r.kind == dbx.Postgres,
 		raw: make([]any, len(p.SrcCols)), ptrs: make([]any, len(p.SrcCols)),
 		coerced: map[string]int64{}, zero: map[string]int64{}, logf: r.opts.Logf, start: time.Now()}
 	for i := range it.raw {
@@ -372,7 +390,46 @@ func (r *runner) openIter(ctx context.Context, q srcQueryer, p pair) (*rowIter, 
 			}
 		}
 	}
+	if len(p.PK) > 0 && len(it.pkIdx) == len(p.PK) {
+		it.ctx, it.q, it.page = ctx, q, r.opts.PageRows
+	}
+	if err := it.query(ctx, q); err != nil {
+		return nil, err
+	}
 	return it, nil
+}
+
+// query opens the next source query: the whole table, or (paged) the next
+// page of up to it.page rows after it.last in primary-key order.
+func (it *rowIter) query(ctx context.Context, q srcQueryer) error {
+	sq, args := sourceQuery(it.p), []any(nil)
+	if it.page > 0 {
+		where := ""
+		if it.last != nil {
+			// (k1 > ?) OR (k1 = ? AND k2 > ?) OR ...: a form Dolt plans as
+			// index ranges, unlike a row-value comparison.
+			var ors []string
+			for i := range it.p.PK {
+				var ands []string
+				for j := 0; j < i; j++ {
+					ands = append(ands, quoteMySQL(it.p.PK[j])+" = ?")
+					args = append(args, it.last[j])
+				}
+				ands = append(ands, quoteMySQL(it.p.PK[i])+" > ?")
+				args = append(args, it.last[i])
+				ors = append(ors, "("+strings.Join(ands, " AND ")+")")
+			}
+			where = " WHERE " + strings.Join(ors, " OR ")
+		}
+		sq = sourceSelect(it.p) + where + sourceOrder(it.p) + fmt.Sprintf(" LIMIT %d", it.page)
+		it.inPage = 0
+	}
+	rows, err := q.QueryContext(ctx, sq, args...)
+	if err != nil {
+		return fmt.Errorf("rowcopy: read source %s: %w", it.p.Name, err)
+	}
+	it.rows = rows
+	return nil
 }
 
 // next returns the next converted row, or nil at the end or on error (see err).
@@ -400,15 +457,40 @@ func (it *rowIter) pkLabel() string {
 }
 
 func (it *rowIter) nextRow() (out []any, skipped bool) {
-	if it.err != nil || !it.rows.Next() {
-		if it.err == nil {
-			it.err = it.rows.Err()
-		}
+	if it.err != nil {
 		return nil, false
+	}
+	if !it.rows.Next() {
+		if it.err = it.rows.Err(); it.err != nil || it.page == 0 || it.inPage < it.page {
+			return nil, false
+		}
+		// A full page: read the next one.
+		_ = it.rows.Close()
+		if it.err = it.query(it.ctx, it.q); it.err != nil || !it.rows.Next() {
+			if it.err == nil {
+				it.err = it.rows.Err()
+			}
+			return nil, false
+		}
 	}
 	if err := it.rows.Scan(it.ptrs...); err != nil {
 		it.err = fmt.Errorf("rowcopy: scan source %s row %d: %w", it.p.Name, it.n+1, err)
 		return nil, false
+	}
+	if it.page > 0 {
+		it.inPage++
+		if it.last == nil {
+			it.last = make([]any, len(it.pkIdx))
+		}
+		for i, ix := range it.pkIdx {
+			// Bind text keys as strings so the comparison uses the
+			// column's collation, the one ORDER BY used.
+			if b, ok := it.raw[ix].([]byte); ok {
+				it.last[i] = string(b)
+			} else {
+				it.last[i] = it.raw[ix]
+			}
+		}
 	}
 	out = make([]any, len(it.raw))
 	it.dig.beginRow()

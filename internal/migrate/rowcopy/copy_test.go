@@ -28,6 +28,9 @@ package rowcopy
 //  8. Digest mismatch: if the target holds something other than what was
 //     sent (changed value, deleted row), Run fails and names the table.
 //     (TestMismatchIsDetected)
+//  9. Paged source reads: a page boundary skips or repeats a row (a text
+//     key compared in a different collation than ORDER BY used, or a
+//     composite key resumed on the wrong column). (TestPagedReadCopiesEveryRow)
 //  9. Schema drift: columns only in one side are dropped from the copy and
 //     reported, never an error. (TestCopyDoltToSQLite)
 // 10. Unsigned values past int64 are refused for integer columns.
@@ -585,5 +588,25 @@ func TestCanonicalJSONAndTimeAreEngineIndependent(t *testing.T) {
 	_ = canon(&b, classTime, "2026-01-02 02:04:05.123456")
 	if !bytes.Equal(a.Bytes(), b.Bytes()) {
 		t.Error("time canonical form differs between time.Time and text")
+	}
+}
+
+func TestPagedReadCopiesEveryRow(t *testing.T) {
+	src := fixture(t)
+	for _, page := range []int{1, 2, 3} {
+		dst := dbxtest.SQLite(t)
+		execAll(t, dst.Write, sqliteDDL)
+		rep, err := Run(context.Background(), src.DB, dst.Write, dbx.SQLite, Options{PageRows: page})
+		if err != nil {
+			t.Fatalf("page %d: Run: %v\n%+v", page, err, rep)
+		}
+		checkReport(t, rep)
+		pg := dbxtest.Postgres(t)
+		execAll(t, pg, pgDDL)
+		rep, err = Run(context.Background(), src.DB, pg, dbx.Postgres, Options{PageRows: page})
+		if err != nil {
+			t.Fatalf("page %d: Run postgres: %v\n%+v", page, err, rep)
+		}
+		checkReport(t, rep)
 	}
 }
