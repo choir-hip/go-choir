@@ -87,3 +87,12 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - Runtime checks owed on staging:
     - Event-body lookups that miss the guest's 1,024-entry cache now fetch from the host tape: watch latency on the paper's hot paths.
     - A 40001 serialization failure in routeledger is not yet mapped to a stale-transition result.
+- 2026-10-30 07:30 UTC (FP0). All six WPs are merged into cutover/data-system (WP-F at 23d9b89a9, WP-C at 5da33247c, the hook untagged at 2b947216f), and `go build ./...` is green. Two Sonnet fixers are running: cutover/fix-tests covers the full suites and repo gates; cutover/fix-host covers snapshot chunks as file-CAS GC roots, the vmctl compaction leftovers and checkpointd.
+  - nix/postgresql.nix landed on main as 07d74c278 (additive; CI and deploy running), so the production PostgreSQL exists before C5.
+  - C4, guest rehearsal: d@e's store was copied from a reflink of its data image and migrated with scripts/cutover/guest-migrate-dryrun.sh. 26 tables and 26,275 rows; every count and digest equal; about 50 s.
+    - 600 MB of Dolt became a 63 MB state.db.
+    - Dropped columns are only computer_event_index event_json and event_head_receipt_json (decision 8) and the 8 og generated columns, which are now VIRTUAL.
+  - C4, host rehearsal: the live Store A and B are going into the scratch PostgreSQL. Receipts copy at about 25K rows a second.
+    - Problem: during the copy, the Store A Dolt server ran at 330% CPU and the paper's /health took 24 s (it was 200 before the copy), with a deploy nix build also running.
+    - The copy is bounded to minutes, so it continues under watch. At C5 the paper is stopped, so this contention does not recur.
+    - The dry-run mode does not bootstrap the target schema, so it reports every source table as dropped. Use the real copy into a scratch database instead.
