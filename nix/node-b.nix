@@ -437,8 +437,8 @@ let
     unitEnv = unitEnvDir;
     # PID 1's private socket and the system bus: a root unit that can reach
     # either can ask systemd to run a command outside its own sandbox. Only
-    # units that run systemctl keep them (vmctl's store compaction, the Dolt
-    # liveness probe); the guest units already hide both.
+    # units that run systemctl keep them (vmctl's host-stop state read); the
+    # guest units already hide both.
     systemdPrivate = "-/run/systemd/private";
     dbusSystemSocket = "-/run/dbus/system_bus_socket";
   };
@@ -1104,60 +1104,39 @@ in
     };
   };
 
-  # Owner-authorized maintenance key use is isolated from corpusd requests.
-  # One oneshot process per host; the timer does not overlap an active replay.
+  # checkpointd settles each published checkpoint's pending verdict as
+  # unverified (the host keeps no projection bases and rebuilds nothing; restore
+  # proves a checkpoint where it is used). It holds no key and writes only the
+  # control database; the self-development path lists verdicts but does not wait
+  # on them, so this is bookkeeping. One oneshot process per host.
   systemd.services.go-choir-checkpointd = {
-    description = "Choir verified projection checkpoint maintenance";
+    description = "Choir checkpoint verdict settling";
     after = [ "go-choir-corpusd.service" ] ++ pgClientAfter;
     requires = [ "postgresql.service" ];
     serviceConfig = commonServiceHardening // {
       Type = "oneshot";
       ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
-      # A timer-started oneshot must not be able to hold a nixos switch: with
-      # 8h, a checkpointd stuck on a deadlocked Dolt blocked the P4 deploy for
-      # 30 minutes (docs/problems/platform-dolt-deadlock-hangs-checkpointd-
-      # and-crashloops-vmctl-2026-10-15.md). Rebuilds take 43-56 s (maximum
-      # over 65 publishes, 2026-10-01..15), so 10 minutes is about 10x slack.
-      # Rollback: restore "8h".
+      # A timer-started oneshot must not be able to hold a nixos switch
+      # (docs/problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-
+      # vmctl-2026-10-15.md). A pass is a few SQL statements.
       TimeoutStartSec = "10min";
-      MemoryHigh = "4G";
-      MemoryMax = "6G";
+      MemoryHigh = "1G";
+      MemoryMax = "2G";
       MemorySwapMax = "0";
-      # Under host memory pressure the kernel must kill the checkpoint worker
-      # (a retryable job) before any guest VM. The 16G ceiling exceeded the
-      # host budget (docs/problems/node-b-memory-overcommitted-swap-
-      # 2026-10-09.md); compact projection bases are ~1.7 GB.
+      # Under host memory pressure the kernel kills this before any guest VM.
       OOMScoreAdjust = 1000;
       CPUQuota = "100%";
       Nice = 10;
       UMask = "0077";
-      # The projection rebuilder opens a scratch embedded Dolt workspace,
-      # which needs a writable $HOME/.dolt. ProtectHome=tmpfs leaves /root
-      # read-only, so without this the unit panicked once a minute after
-      # claiming a job (docs/problems/dolt-clustering-assessment-2026-10-15.md
-      # section 7.1). cmd/checkpointd refuses to start without a writable
-      # home. Rollback: revert this block.
-      StateDirectory = "go-choir/checkpointd";
-      StateDirectoryMode = "0700";
-      ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/checkpointd" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
+      InaccessiblePaths = hiddenSecretsExcept [ ];
       LoadCredential = pgClientCredential;
       Environment = pgClientEnv ++ [
-        "HOME=/var/lib/go-choir/checkpointd"
-        "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
-        # S4 (docs/problems/paper-never-checkpointed-2026-10-27.md): bases
-        # of these computers are published as a manifest plus
-        # content-addressed parts, so a publish writes only changed files.
-        # Progressive rollout (owner, 2026-10-28): d@e first. class:test is
-        # not listed: checkpointd has no class source, so it selected nothing.
-        # Readers accept both forms everywhere. Rollback: drop the entry.
-        "CHECKPOINTD_BASE_PARTS_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
       ];
     };
   };
   systemd.timers.go-choir-checkpointd = {
-    description = "Reconcile verified projection checkpoints every minute";
+    description = "Settle checkpoint verdicts every minute";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "1min";
@@ -1355,9 +1334,8 @@ in
       # provider credentials, escrow key and operator tokens out of reach of
       # a VMM escape (F1 partial; VMMs started before the restart keep the
       # old view until their next boot).
-      # Store compaction runs systemctl and systemd-run, so vmctl keeps PID 1's
-      # sockets: vmctl stays root-equivalent through them (named residual;
-      # the fix is a dedicated compaction unit vmctl starts by name).
+      # vmctl's host-stop path asks systemctl for the system state, so it
+      # keeps PID 1's sockets (named residual: root-equivalent through them).
       InaccessiblePaths = hiddenSecretsExcept [ "systemdPrivate" "dbusSystemSocket" ];
       # vmctl reads but never writes the deployed service binaries and the
       # guest images (the shared images attach read-only; data.img lives in
@@ -1706,26 +1684,6 @@ in
         # Rollback: SIGNAL=instant and ADMISSION_MODE=guest-size restore the
         # single-sample reclaim and the floor + 8 GiB admission.
         "VMCTL_PRESSURE_RECLAIM_SIGNAL=sustained"
-        # Store compaction on host disk pressure (docs/problems/node-b-disk-
-        # fills-from-the-paper-data-image-2026-10-22.md): observe only logs
-        # "would compact <vm> ... reason=..." for a platform computer whose
-        # image holds at least 32 GiB and 60% of its cap, or when host free
-        # is under 64 GiB. Every compaction (timer, by hand, pressure) keeps
-        # a 6 h gap per computer (a by-hand "force" passes it; the timer
-        # retries a failed attempt); after one that gave back under 8 GiB the
-        # loop alone waits for 8 GiB of regrowth. Every compaction refuses
-        # under the floor: 24 GiB, or the last compacted store plus 10 GiB if
-        # larger (14.45 GB on 10-22). A compaction ends at 45 min and the
-        # computer boots its untouched image. A timer run refused at the
-        # floor (507) or with a failed compaction (500) fails its unit. Full
-        # rollback: PRESSURE=off and MIN_HOST_FREE_GIB=0.
-        "VMCTL_STORE_COMPACT_PRESSURE=observe"
-        "VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB=64"
-        "VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION=0.6"
-        "VMCTL_STORE_COMPACT_PRESSURE_MIN_IMAGE_GIB=32"
-        "VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP=6h"
-        "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=24"
-        "VMCTL_STORE_COMPACT_TIMEOUT=45m"
         "VMCTL_ADMISSION_MODE=measured"
         # Density D1: a start that does not fit hibernates idle eligible
         # computers (never working, held, protected or of a higher class),
@@ -1970,48 +1928,6 @@ in
     timerConfig = {
       OnCalendar = "*:0/15";
       # A missed reading is not resumed; the next one is current.
-      Persistent = false;
-    };
-  };
-
-  # Guest store compaction (docs/problems/guest-store-compaction-scheduled-
-  # 2026-10-20.md; owner notes §26). vmctl compacts, one at a time, every
-  # active unheld platform computer (critical_protected, public_platform)
-  # whose data image holds at least 32 GiB on the host, as a planned restart
-  # with offline maintenance; a busy refusal waits for the next day. The
-  # paper grows about 6 GB a day, so it is compacted every few days. An
-  # account's computer is never compacted by the timer. A run refused at
-  # vmctl's host free-space floor answers 507 and a failed compaction 500,
-  # so curl fails the unit and the journal carries the reason; a computer
-  # inside its 6 h gap (after a pressure compaction) is skipped without
-  # failing.
-  systemd.services.go-choir-store-compaction = {
-    description = "go-choir guest store compaction sweep";
-    after = [ "go-choir-vmctl.service" ];
-    requires = [ "go-choir-vmctl.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      TimeoutStartSec = "3h";
-      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
-      ExecStart = pkgs.writeShellScript "go-choir-store-compaction" ''
-        set -euo pipefail
-        ${pkgs.curl}/bin/curl -sS --fail-with-body --max-time 10800 \
-          --unix-socket /run/go-choir/vmctl.sock \
-          -X POST http://vmctl/internal/vmctl/compact-sweep \
-          -H "@''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" \
-          -H 'Content-Type: application/json' \
-          -H 'X-Choir-Lifecycle-Caller: go-choir-store-compaction-timer' \
-          -d '{"min_file_bytes":34359738368}'
-        echo
-      '';
-    };
-  };
-
-  systemd.timers.go-choir-store-compaction = {
-    description = "Daily go-choir guest store compaction sweep";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*-*-* 04:00:00 UTC";
       Persistent = false;
     };
   };
