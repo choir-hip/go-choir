@@ -21,13 +21,21 @@ import (
 // cutover; removeMigratedLegacyStore).
 func migrateLegacyStoreIfNeeded(ctx context.Context, storePath string) error {
 	statePath := store.StateDBPath(storePath)
-	if _, err := os.Stat(statePath); err == nil {
+	legacy := store.LegacyDoltWorkspacePath(storePath)
+	if info, err := os.Stat(statePath); err == nil && info.Size() > 0 {
 		removeMigratedLegacyStore(storePath)
 		return nil
-	} else if !os.IsNotExist(err) {
+	} else if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("stat state file: %w", err)
+	} else if err == nil && legacyDoltWorkspaceHoldsDatabase(legacy) {
+		// store.Open takes a zero-byte file as a fresh store, so a zero-byte
+		// file beside a Dolt database is an interrupted start, not a
+		// migration: remove it and migrate.
+		log.Printf("autoputer: zero-byte state file %s beside a legacy Dolt database; migrating", statePath)
+		if err := os.Remove(statePath); err != nil {
+			return fmt.Errorf("remove zero-byte state file: %w", err)
+		}
 	}
-	legacy := store.LegacyDoltWorkspacePath(storePath)
 	if !legacyDoltWorkspaceHoldsDatabase(legacy) {
 		return nil
 	}
@@ -71,7 +79,7 @@ func legacyDoltWorkspaceHoldsDatabase(workspace string) bool {
 // boot: a deletion error is logged and the next boot tries again.
 func removeMigratedLegacyStore(storePath string) {
 	statePath := store.StateDBPath(storePath)
-	if _, err := os.Stat(statePath); err != nil {
+	if info, err := os.Stat(statePath); err != nil || info.Size() == 0 {
 		return
 	}
 	legacy := store.LegacyDoltWorkspacePath(storePath)
