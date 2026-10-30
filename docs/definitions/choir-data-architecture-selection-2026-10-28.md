@@ -1068,3 +1068,31 @@ Requirements carried into the restore and audit design:
   encrypted snapshots; everything else derived), one byte store, one control
   database, SQLite in each VM.
 - First known gap: `docs/problems/host-holds-user-state-in-plaintext-2026-10-30.md`.
+
+## Owner direction 2026-10-30 (later): owner keys move to passkeys on a mobile app; host custody is fine pre-release
+
+Owner: "once we have all this working and we get self-development working
+better, then we're going to build a mobile app and the user's keys will be
+stored on the mobile app in their trusted execution environment. But I mean
+generally as passkeys, or derived from passkeys ... We don't need to really
+worry about the exact encryption details right now. We can have the host
+having some permissions during this migration and the pre-release period, of
+course."
+
+Consequences for the restore, audit and object-storage designs:
+
+- **Host custody is accepted through the migration and pre-release.** The
+  host may hold escrow and unwrap keys; every unwrap is still an audited
+  event, because enterprise auditability needs that regardless of who holds
+  the root.
+- **Design for the root to move, not for the final crypto.** The key
+  hierarchy must let the owner's root protector change from host escrow to a
+  passkey-derived key held on the owner's device (TEE) by rewrapping the
+  owner and computer keys, never by re-encrypting data. The protector slot
+  already exists in code (`ProtectorPasskeyPRF`,
+  `internal/keyescrow/keyescrow.go:35-41`, Track K 1b).
+- **Do not build sovereign-owner mechanisms now.** No owner-only key path, no
+  device enrollment, no recovery ceremony in this cutover; keep the slot and
+  the rule that nothing below the root assumes the host holds it.
+- Sequence: this data cutover, then better self-development, then the mobile
+  app with passkey-held keys.
