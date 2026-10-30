@@ -879,6 +879,18 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	a.mu.Lock()
 	a.replayAppliedRows = 0
 	a.mu.Unlock()
+	// One line per replay that applied anything: the replay rate is what the
+	// recovery bound should be stated in (design object-graph §11.1), and it
+	// was unmeasured.
+	replayStarted := time.Now()
+	defer func() {
+		snap := a.ReplaySnapshot()
+		if snap.AppliedRows == 0 {
+			return
+		}
+		elapsed := time.Since(replayStarted)
+		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3))
+	}()
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
 	}
