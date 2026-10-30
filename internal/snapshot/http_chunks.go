@@ -3,6 +3,7 @@ package snapshot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,6 +57,41 @@ func (h HTTPChunks) PutChunk(ctx context.Context, digest string, sealed []byte) 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := h.client().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// RegisterSnapshotRoot declares the snapshot's chunk digests to the platform
+// in plaintext (digests are not content), so the file-CAS chunk sweep keeps
+// them live; the manifest itself is sealed in the snapshot_recorded event.
+func (h HTTPChunks) RegisterSnapshotRoot(ctx context.Context, root string, headSequence uint64, chunks []string) error {
+	body, err := json.Marshal(map[string]any{"computer_id": h.ComputerID, "root": root, "head_sequence": headSequence, "chunks": chunks})
+	if err != nil {
+		return err
+	}
+	endpoint := strings.TrimRight(h.BaseURL, "/") + "/internal/computers/files/snapshot-root"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if h.Capability != nil {
+		token, err := h.Capability(ctx)
+		if err != nil {
+			return fmt.Errorf("capability: %w", err)
+		}
+		if strings.TrimSpace(token) != "" {
+			req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
+		}
+	}
 	resp, err := h.client().Do(req)
 	if err != nil {
 		return err

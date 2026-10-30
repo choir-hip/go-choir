@@ -67,6 +67,8 @@ func (b *bootServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"payload_base64": base64.RawStdEncoding.EncodeToString(data)})
+	case r.URL.Path == "/internal/computers/files/snapshot-root":
+		w.WriteHeader(http.StatusCreated)
 	case strings.HasPrefix(r.URL.Path, "/internal/computers/files/chunks/"):
 		digest := strings.TrimPrefix(r.URL.Path, "/internal/computers/files/chunks/")
 		if r.Method == http.MethodPut {
