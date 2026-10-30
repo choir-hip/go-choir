@@ -116,6 +116,48 @@ func TestSnapshotRootRetentionCoversEveryRestoreCandidate(t *testing.T) {
 	if snapshotRootRetention < snapshot.MaxCandidates {
 		t.Fatalf("snapshotRootRetention %d keeps fewer roots than the %d snapshots a restore may fall back to", snapshotRootRetention, snapshot.MaxCandidates)
 	}
+	// A large store trades fallback depth for host space, but always keeps
+	// one snapshot to fall back to.
+	if largeSnapshotRetention < 2 {
+		t.Fatalf("largeSnapshotRetention %d leaves a large store no fallback", largeSnapshotRetention)
+	}
+}
+
+// A large store keeps two roots, a small one four; a small root declared
+// after large ones goes back to four.
+func TestSnapshotRootsOfALargeStoreKeepTwo(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	ctx := t.Context()
+	chunks := func(n int, salt string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = gcDigest(salt + "/" + string(rune('a'+i%26)) + string(rune('a'+i/26%26)) + string(rune('a'+i/676)))
+		}
+		return out
+	}
+	live := func() int {
+		roots, err := store.LiveSnapshotRoots(ctx, "computer-large")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(roots)
+	}
+	for seq := int64(1); seq <= 4; seq++ {
+		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("large root"+string(rune('0'+seq))), seq, chunks(largeSnapshotChunks+1, string(rune('0'+seq)))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := live(); got != largeSnapshotRetention {
+		t.Fatalf("a large store keeps %d roots, want %d", got, largeSnapshotRetention)
+	}
+	for seq := int64(5); seq <= 8; seq++ {
+		if err := store.RecordSnapshotRoot(ctx, "computer-large", gcDigest("small root"+string(rune('0'+seq))), seq, chunks(3, string(rune('0'+seq)))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := live(); got != snapshotRootRetention {
+		t.Fatalf("after small snapshots the store keeps %d roots, want %d", got, snapshotRootRetention)
+	}
 }
 
 func TestSnapshotRootsAloneProveALiveSetWithoutAFileRoot(t *testing.T) {

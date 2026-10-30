@@ -31,6 +31,13 @@ const (
 	// snapshotRootRetention is how many snapshot roots per computer stay live;
 	// older ones become collectable.
 	snapshotRootRetention = 4
+	// A store over largeSnapshotChunks chunks (8 GiB) keeps
+	// largeSnapshotRetention roots: the paper's 31 GB store changes most of its
+	// page ranges between snapshots, so each root holds about 25 GB of its
+	// own, and four of them do not fit beside the tape on one host
+	// (2026-10-30). The guest's restore tries the newest first.
+	largeSnapshotChunks    = 2048
+	largeSnapshotRetention = 2
 	// maxSnapshotRootChunks bounds one declaration (65536 x 4 MiB = 256 GiB).
 	maxSnapshotRootChunks = 65536
 	maxSnapshotRootBody   = 8 << 20
@@ -54,7 +61,8 @@ type snapshotRootRequest struct {
 }
 
 // RecordSnapshotRoot declares a snapshot's chunks and keeps only the newest
-// snapshotRootRetention rows (by head sequence, then time) for the computer.
+// snapshotRootRetention rows (by head sequence, then time) for the computer,
+// or largeSnapshotRetention when the declared snapshot is large.
 // It is idempotent per (computer, root).
 func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string, headSequence int64, chunks []string) error {
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) || !validFileCASDigest(root) || headSequence < 0 || len(chunks) == 0 || len(chunks) > maxSnapshotRootChunks {
@@ -78,8 +86,12 @@ func (s *Store) RecordSnapshotRoot(ctx context.Context, computerID, root string,
 		computerID, root, headSequence, string(encoded), time.Now().UTC()); err != nil {
 		return fmt.Errorf("snapshot root: record: %w", err)
 	}
+	retention := snapshotRootRetention
+	if len(chunks) > largeSnapshotChunks {
+		retention = largeSnapshotRetention
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM computer_snapshot_roots WHERE computer_id=? AND root NOT IN (SELECT root FROM computer_snapshot_roots WHERE computer_id=? ORDER BY head_sequence DESC, created_at DESC, root DESC LIMIT ?)`,
-		computerID, computerID, snapshotRootRetention); err != nil {
+		computerID, computerID, retention); err != nil {
 		return fmt.Errorf("snapshot root: prune: %w", err)
 	}
 	return tx.Commit()
