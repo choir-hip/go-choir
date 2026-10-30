@@ -59,7 +59,12 @@ func (h *Handler) HandleFileCASChunk(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		scope = "event:append"
 	}
-	if r.Method != http.MethodPut && r.Method != http.MethodGet {
+	if r.Method == http.MethodHead {
+		// HEAD claims a chunk (it refreshes the chunk's mtime, which the
+		// artifact GC's grace window honours), so it needs the append scope.
+		scope = "event:append"
+	}
+	if r.Method != http.MethodPut && r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
@@ -72,6 +77,22 @@ func (h *Handler) HandleFileCASChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.Method {
+	case http.MethodHead:
+		// The guest's snapshot stream asks whether this computer's namespace
+		// already holds a chunk before it uploads 4 MiB again. 200 means the
+		// chunk is stored and claimed (mtime refreshed, so the GC grace window
+		// protects it until the snapshot root that names it is registered);
+		// 404 means upload it.
+		found, err := h.service.ClaimFileChunk(r.Context(), computerID, digest)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to check chunk"})
+			return
+		}
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	case http.MethodPut:
 		r.Body = http.MaxBytesReader(w, r.Body, maxFileCASChunkBytes)
 		data, err := io.ReadAll(r.Body)

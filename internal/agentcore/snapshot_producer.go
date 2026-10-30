@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
-	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // The snapshot producer (docs/design/choir-data-system-frame-2026-10-30.md
@@ -27,42 +25,51 @@ import (
 //
 // Ways it could fail, written before the code:
 //
-//  1. VACUUM INTO runs on the write connection or inside an append hold and
-//     blocks every write on a 30 GB store for minutes (it runs on the read
-//     pool and holds nothing);
+//  1. the capture runs on the write connection or inside an append hold and
+//     blocks every write on a 30 GB store for minutes (it streams the pages of
+//     one read transaction on the read pool and holds nothing);
 //  2. the first snapshot is judged by scanning the tape from genesis over HTTP
 //     (the local computer_event_index answers it);
 //  3. two snapshots run at once, or one runs during a boot, a maintenance
 //     hold, a self-development apply or while an engineering capsule is live;
-//  4. the copy fills the data volume and the guest with it (the producer
-//     refuses unless the volume holds 1.25x the store), or the copy lands in
-//     tmpfs;
-//  5. a store too large for the host's disk is uploaded anyway (the size cap);
+//  4. the stream writes a temporary copy of the store (it writes nothing: the
+//     pages go from the read snapshot to sealed chunks), or a leftover copy
+//     from the VACUUM INTO era is never removed (it is, at the start of an
+//     attempt);
+//  5. a long read transaction pins the WAL and the volume fills with WAL while
+//     it runs (the producer refuses under a free-space floor and the stream
+//     has a time budget, CHOIR_SNAPSHOT_MAX_DURATION, after which it aborts
+//     and says why);
 //  6. a snapshot that crashes the computer is retried at every boot (a crash
 //     loop: the attempt guard closes it after snapshotAttemptLimit starts);
 //  7. a refusal is read as success, or the producer waits forever on one
 //     (every refusal is logged with its reason and retried at the next tick).
 //
-// The producer ships ON for every computer. A free-space, size or busy
-// refusal is a correctness refusal, not an off switch; CHOIR_SNAPSHOT_DISABLE=1
-// is the emergency override only.
+// There is no size cap: the stream needs no local room and the host stores
+// only the chunks it does not already hold. The producer ships ON for every
+// computer. A free-space or busy refusal is a correctness refusal, not an off
+// switch; CHOIR_SNAPSHOT_DISABLE=1 is the emergency override only.
 const (
-	envSnapshotInterval = "CHOIR_SNAPSHOT_INTERVAL"
-	envSnapshotMaxBytes = "CHOIR_SNAPSHOT_MAX_BYTES"
-	envSnapshotDisable  = "CHOIR_SNAPSHOT_DISABLE"
+	envSnapshotInterval    = "CHOIR_SNAPSHOT_INTERVAL"
+	envSnapshotMaxDuration = "CHOIR_SNAPSHOT_MAX_DURATION"
+	envSnapshotDisable     = "CHOIR_SNAPSHOT_DISABLE"
 
 	snapshotDefaultInterval = 24 * time.Hour
-	// 8 GiB: the host disk cannot yet hold a 30 GB snapshot of the paper.
-	snapshotDefaultMaxBytes = int64(8) << 30
-	// The copy needs room beside the store: 1.25x the store, as 5/4.
-	snapshotFreeNumerator, snapshotFreeDenominator = 5, 4
+	// The read transaction of the stream pins the WAL; past this the stream
+	// aborts with a logged reason and the next tick tries again.
+	snapshotDefaultMaxDuration = 30 * time.Minute
+	// The stream writes no copy, but the WAL grows while it reads. Below this
+	// much free space on the data volume the producer waits.
+	snapshotFreeFloor = uint64(2) << 30
 
 	snapshotInitialDelay = 3 * time.Minute
 	snapshotTickEvery    = 10 * time.Minute
 
 	snapshotAttemptKey   = "snapshot_producer"
 	snapshotAttemptLimit = 3
-	snapshotTempDirName  = "snapshot-tmp"
+	// snapshotLegacyTempDirName held the VACUUM INTO copy before the page
+	// stream; an attempt removes what a crashed copy left there.
+	snapshotLegacyTempDirName = "snapshot-tmp"
 )
 
 type snapshotOutcome string
@@ -77,13 +84,13 @@ const (
 
 // snapshotSettings are the producer's tunables, read from the environment.
 type snapshotSettings struct {
-	Interval time.Duration
-	MaxBytes int64
-	Disabled bool
+	Interval    time.Duration
+	MaxDuration time.Duration
+	Disabled    bool
 }
 
 func snapshotSettingsFromEnv(getenv func(string) string) snapshotSettings {
-	s := snapshotSettings{Interval: snapshotDefaultInterval, MaxBytes: snapshotDefaultMaxBytes}
+	s := snapshotSettings{Interval: snapshotDefaultInterval, MaxDuration: snapshotDefaultMaxDuration}
 	if raw := strings.TrimSpace(getenv(envSnapshotInterval)); raw != "" {
 		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
 			s.Interval = d
@@ -91,11 +98,11 @@ func snapshotSettingsFromEnv(getenv func(string) string) snapshotSettings {
 			log.Printf("runtime: %s=%q is not a positive duration; using %s", envSnapshotInterval, raw, snapshotDefaultInterval)
 		}
 	}
-	if raw := strings.TrimSpace(getenv(envSnapshotMaxBytes)); raw != "" {
-		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
-			s.MaxBytes = n
+	if raw := strings.TrimSpace(getenv(envSnapshotMaxDuration)); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			s.MaxDuration = d
 		} else {
-			log.Printf("runtime: %s=%q is not a positive byte count; using %d", envSnapshotMaxBytes, raw, snapshotDefaultMaxBytes)
+			log.Printf("runtime: %s=%q is not a positive duration; using %s", envSnapshotMaxDuration, raw, snapshotDefaultMaxDuration)
 		}
 	}
 	switch strings.ToLower(strings.TrimSpace(getenv(envSnapshotDisable))) {
@@ -110,10 +117,8 @@ func snapshotSettingsFromEnv(getenv func(string) string) snapshotSettings {
 type snapshotDeps struct {
 	ComputerID string
 	StorePath  string
-	// TempDir is on the data volume beside the store.
-	TempDir string
-	// ReadDB is the store's read pool.
-	ReadDB func() *sql.DB
+	// DataDir is the data volume directory beside the store.
+	DataDir string
 	// Newest is the newest snapshot_recorded on the LOCAL event index.
 	Newest func(ctx context.Context) (sequence uint64, at time.Time, found bool, err error)
 	// HeadSequence is the store's event head sequence (false for an empty
@@ -121,12 +126,13 @@ type snapshotDeps struct {
 	HeadSequence func(ctx context.Context) (uint64, bool, error)
 	// Busy returns a reason when work a snapshot must not run beside is live.
 	Busy func(ctx context.Context) (string, error)
-	// FreeBytes is the free space on the volume holding dir.
+	// FreeBytes is the free space on the volume holding dir (the WAL grows
+	// there while the stream's read transaction is open).
 	FreeBytes func(dir string) (uint64, error)
 	// Ready reports whether boot has settled and the runtime is not held.
 	Ready func() bool
 	// Take takes the snapshot.
-	Take func(ctx context.Context, tempDir string, maxBytes int64) (snapshot.Ref, error)
+	Take func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error)
 }
 
 type snapshotProducer struct {
@@ -196,26 +202,15 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 	} else if why != "" {
 		return snapshotRefused, why
 	}
-	db := d.ReadDB()
-	if db == nil {
-		return snapshotRefused, "the store has no read pool"
+	if err := os.MkdirAll(d.DataDir, 0o700); err != nil {
+		return snapshotFailed, "create the data dir: " + err.Error()
 	}
-	size, err := sqliteLogicalSize(ctx, db)
-	if err != nil {
-		return snapshotFailed, "measure the store: " + err.Error()
-	}
-	if size > set.MaxBytes {
-		return snapshotRefused, fmt.Sprintf("the store is %d bytes, over the %d-byte snapshot cap (%s); the host disk cannot hold it yet", size, set.MaxBytes, envSnapshotMaxBytes)
-	}
-	if err := os.MkdirAll(d.TempDir, 0o700); err != nil {
-		return snapshotFailed, "create the snapshot temp dir: " + err.Error()
-	}
-	free, err := d.FreeBytes(d.TempDir)
+	free, err := d.FreeBytes(d.DataDir)
 	if err != nil {
 		return snapshotRefused, "cannot measure free space (fails closed): " + err.Error()
 	}
-	if need := uint64(size) / snapshotFreeDenominator * snapshotFreeNumerator; free < need {
-		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under 1.25x the store (%d bytes needed)", free, need)
+	if free < snapshotFreeFloor {
+		return snapshotRefused, fmt.Sprintf("free space %d bytes on the data volume is under the %d-byte floor the WAL needs while the stream reads", free, snapshotFreeFloor)
 	}
 
 	// A snapshot that crashes the computer is not retried forever.
@@ -224,40 +219,34 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 			return snapshotRefused, "closed after crashing the computer: " + err.Error()
 		}
 	}
-	// A crashed attempt's scratch would count against the free space above.
-	if entries, err := os.ReadDir(d.TempDir); err == nil {
-		for _, e := range entries {
-			_ = os.RemoveAll(filepath.Join(d.TempDir, e.Name()))
-		}
-	}
+	// The VACUUM INTO copy of an earlier version, if a crash left one.
+	_ = os.RemoveAll(filepath.Join(d.DataDir, snapshotLegacyTempDirName))
 	started := time.Now()
-	ref, err := d.Take(ctx, d.TempDir, set.MaxBytes)
+	ref, err := d.Take(ctx, set.MaxDuration)
 	if d.StorePath != "" {
 		_ = clearGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID)
 	}
 	if err != nil {
-		if errors.Is(err, snapshot.ErrTooLarge) {
-			return snapshotRefused, err.Error()
+		if errors.Is(err, snapshot.ErrTimeBudget) {
+			return snapshotFailed, fmt.Sprintf("aborted at the %s time budget (%s) with nothing recorded: %s", set.MaxDuration, envSnapshotMaxDuration, err.Error())
 		}
 		return snapshotFailed, err.Error()
 	}
 	p.mu.Lock()
 	p.lastAt, p.lastSeq = now, ref.Record.StoreHeadSequence
 	p.mu.Unlock()
-	return snapshotTaken, fmt.Sprintf("%s snapshot at head %d: %d bytes in %s, event %s", reason, ref.Record.StoreHeadSequence, ref.Record.PlaintextSize, time.Since(started).Round(time.Millisecond), ref.EventID)
+	st := ref.Stats
+	return snapshotTaken, fmt.Sprintf("%s snapshot at head %d: %d bytes (%d pages of %d) in %s, event %s; %d chunks, %d uploaded (%d bytes sealed), %d already held, %d repeated, %d probe errors; stream %s (%.0f pages/s), witness %s, read transaction %s",
+		reason, ref.Record.StoreHeadSequence, ref.Record.PlaintextSize, st.Pages, st.PageSize, time.Since(started).Round(time.Millisecond), ref.EventID,
+		st.Chunks, st.ChunksUploaded, st.BytesUploaded, st.ChunksHeld, st.ChunksRepeated, st.ProbeErrors,
+		st.StreamTime.Round(time.Millisecond), pagesPerSecond(st), st.WitnessTime.Round(time.Millisecond), st.ReadTxTime.Round(time.Millisecond))
 }
 
-// sqliteLogicalSize is the size VACUUM INTO will write at most: every page of
-// the database, WAL contents included.
-func sqliteLogicalSize(ctx context.Context, db *sql.DB) (int64, error) {
-	var pages, pageSize int64
-	if err := db.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&pages); err != nil {
-		return 0, err
+func pagesPerSecond(st snapshot.Stats) float64 {
+	if st.StreamTime <= 0 {
+		return 0
 	}
-	if err := db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&pageSize); err != nil {
-		return 0, err
-	}
-	return pages * pageSize, nil
+	return float64(st.Pages) / st.StreamTime.Seconds()
 }
 
 // snapshotDepsForRuntime binds the producer to this runtime. It returns false
@@ -277,8 +266,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 	return snapshotDeps{
 		ComputerID: computerID,
 		StorePath:  rt.cfg.StorePath,
-		TempDir:    filepath.Join(filepath.Dir(store.StatePath()), snapshotTempDirName),
-		ReadDB:     store.ReadDB,
+		DataDir:    filepath.Dir(store.StatePath()),
 		Newest: func(ctx context.Context) (uint64, time.Time, bool, error) {
 			return store.NewestEventOfKind(ctx, computerID, computerevent.EventSnapshotRecorded)
 		},
@@ -306,21 +294,23 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 		Ready: func() bool {
 			return !rt.bootInProgress.Load() && !rt.maintenanceHeld()
 		},
-		Take: func(ctx context.Context, tempDir string, maxBytes int64) (snapshot.Ref, error) {
+		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
 			return snapshot.TakeSnapshot(ctx, snapshot.Config{
 				ComputerID: computerID,
 				DB:         store.ReadDB(),
-				TempDir:    tempDir,
-				Head: func(ctx context.Context, snapshotDB *sql.DB) (*computerevent.Head, error) {
-					return choirstore.ReadProjectionHead(ctx, snapshotDB, computerID)
+				// Both run inside the stream's one read transaction: the head
+				// is its first statement, so head, pages and witness are one
+				// state.
+				Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
+					return store.HeadTx(ctx, tx, computerID)
 				},
-				Witness: func(ctx context.Context, snapshotDB *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-					return LiveStoreWitness(ctx, snapshotDB)
+				Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+					return LiveStoreWitnessTx(ctx, tx)
 				},
-				Cipher:            rt.privateArtifactCipher,
-				Chunks:            chunks,
-				Appender:          rt.eventAppender,
-				MaxPlaintextBytes: maxBytes,
+				Cipher:      rt.privateArtifactCipher,
+				Chunks:      chunks,
+				Appender:    rt.eventAppender,
+				MaxDuration: maxDuration,
 			})
 		},
 	}, true

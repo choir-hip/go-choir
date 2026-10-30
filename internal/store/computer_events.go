@@ -57,17 +57,6 @@ func (s *Store) HeadTx(ctx context.Context, tx *sql.Tx, computerID string) (*com
 	return scanProjectionHead(tx.QueryRowContext(ctx, projectionHeadSQL, computerID))
 }
 
-// ReadProjectionHead reads the event head from any handle on a store file:
-// the live pool, or a VACUUM INTO copy of it (snapshot v1 records the head
-// inside its copy, not the head the live store held before or after the
-// copy). A store with no head row returns nil.
-func ReadProjectionHead(ctx context.Context, db *sql.DB, computerID string) (*computerevent.Head, error) {
-	if db == nil {
-		return nil, fmt.Errorf("computer event projection: nil database")
-	}
-	return scanProjectionHead(db.QueryRowContext(ctx, projectionHeadSQL, computerID))
-}
-
 const projectionHeadSQL = `SELECT computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch FROM computer_event_projection_heads WHERE computer_id=?`
 
 func scanProjectionHead(row *sql.Row) (*computerevent.Head, error) {

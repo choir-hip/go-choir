@@ -211,11 +211,17 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 		return selfdevprotocol.WitnessFromDigests(digests)
 	}
 	ref, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
-		ComputerID: computerID, DB: source.Read, TempDir: t.TempDir(),
-		Head: func(context.Context, *sql.DB) (*computerevent.Head, error) {
+		ComputerID: computerID, DB: source.Read,
+		Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
-		Witness:  witnessOf,
+		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+			digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
+			if err != nil {
+				return selfdevprotocol.VMLocalContentWitness{}, err
+			}
+			return selfdevprotocol.WitnessFromDigests(digests)
+		},
 		Cipher:   cipher,
 		Chunks:   snapshot.HTTPChunks{BaseURL: server.URL, ComputerID: computerID, Capability: testCapability},
 		Appender: &snapshotTape{platform: platform},

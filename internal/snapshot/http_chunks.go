@@ -69,6 +69,30 @@ func (h HTTPChunks) PutChunk(ctx context.Context, digest string, sealed []byte) 
 	return nil
 }
 
+// HasChunk asks the host whether the computer's own namespace holds the chunk
+// (HEAD on the chunk route; the host also claims it against the sweep's grace
+// window). 200 is held, 404 is not; anything else, including an older host
+// that does not know HEAD, is an error and the caller uploads.
+func (h HTTPChunks) HasChunk(ctx context.Context, digest string) (bool, error) {
+	req, err := h.request(ctx, http.MethodHead, digest, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := h.client().Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+	return false, fmt.Errorf("status %d", resp.StatusCode)
+}
+
 // RegisterSnapshotRoot declares the snapshot's chunk digests to the platform
 // in plaintext (digests are not content), so the file-CAS chunk sweep keeps
 // them live; the manifest itself is sealed in the snapshot_recorded event.

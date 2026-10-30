@@ -190,6 +190,22 @@ func LiveStoreWitness(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalC
 	return storeWitness(ctx, db, replayStateExtractor(db))
 }
 
+// LiveStoreWitnessTx is LiveStoreWitness inside a read transaction the caller
+// owns: the snapshot stream computes it in the transaction whose pages it
+// streams, so the recorded witness is exactly what a restore of those pages
+// recomputes with LiveStoreWitness.
+func LiveStoreWitnessTx(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+	var empty selfdevprotocol.VMLocalContentWitness
+	if tx == nil {
+		return empty, errors.New("snapshot witness: transaction is required")
+	}
+	digests, err := replayStateExtractor(nil).DigestsTx(ctx, tx)
+	if err != nil {
+		return empty, err
+	}
+	return selfdevprotocol.WitnessFromDigests(digests)
+}
+
 // storeWitness reads a v3 witness through the extractor's store in one read
 // transaction, so every table digest is of one committed state.
 func storeWitness(ctx context.Context, db *sql.DB, extractor computerversion.SQLiteStateExtractor) (selfdevprotocol.VMLocalContentWitness, error) {

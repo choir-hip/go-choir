@@ -253,13 +253,12 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 	capture := &snapshotCapture{}
 	ref, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
 		ComputerID: computerID,
-		DB:         scratch.DB(),
-		TempDir:    t.TempDir(),
-		Head: func(ctx context.Context, db *sql.DB) (*computerevent.Head, error) {
-			return choirstore.ReadProjectionHead(ctx, db, computerID)
+		DB:         scratch.ReadDB(),
+		Head: func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error) {
+			return scratch.HeadTx(ctx, tx, computerID)
 		},
-		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
-			return LiveStoreWitness(ctx, db)
+		Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+			return LiveStoreWitnessTx(ctx, tx)
 		},
 		Cipher:   rt.privateArtifactCipher,
 		Chunks:   fake,

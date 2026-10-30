@@ -54,6 +54,48 @@ func (s *Service) GetFileChunk(ctx context.Context, computerID, digest string) (
 	return s.readBlob(ref)
 }
 
+// ClaimFileChunk reports whether the computer's namespace holds a non-empty
+// chunk for digest and, when it does, refreshes its mtime so the artifact GC's
+// grace window protects it until a root that names it commits. The namespace
+// is the computer's own: another computer's chunk is never found. The chunk's
+// bytes are not read (they were verified against their address when stored
+// and are written by rename, never torn).
+func (s *Service) ClaimFileChunk(ctx context.Context, computerID, digest string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	ref, err := fileCASChunkRef(computerID, digest)
+	if err != nil {
+		return false, err
+	}
+	path, err := s.artifactPath(ref)
+	if err != nil {
+		return false, err
+	}
+	if s.store != nil {
+		s.store.casReuseMu.RLock()
+		defer s.store.casReuseMu.RUnlock()
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("file cas: stat chunk: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return false, nil
+	}
+	now := time.Now()
+	if err := os.Chtimes(path, now, now); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("file cas: claim chunk: %w", err)
+	}
+	return true, nil
+}
+
 func (s *Service) pinFileManifest(computerID, root string, data []byte) (string, error) {
 	ref, err := fileCASManifestRef(computerID, root)
 	if err != nil {

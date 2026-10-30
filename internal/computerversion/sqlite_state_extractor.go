@@ -135,6 +135,24 @@ func (e SQLiteStateExtractor) Digests(ctx context.Context) (StateDigests, error)
 			return StateDigests{}, err
 		}
 	}
+	return e.DigestsTx(ctx, tx)
+}
+
+// DigestsTx computes the v3 digests inside a read transaction the caller
+// opened and owns (e.DB is not used, SnapshotHook is not run). The snapshot
+// producer streams the database's pages and computes the witness in one
+// transaction, so head, pages and witness are one committed state.
+func (e SQLiteStateExtractor) DigestsTx(ctx context.Context, tx *sql.Tx) (StateDigests, error) {
+	if err := ctx.Err(); err != nil {
+		return StateDigests{}, err
+	}
+	if tx == nil {
+		return StateDigests{}, fmt.Errorf("sqlite state extraction: transaction is required")
+	}
+	database := strings.TrimSpace(e.Database)
+	if database == "" {
+		return StateDigests{}, fmt.Errorf("sqlite state extraction: database is required")
+	}
 
 	entries, err := e.schemaEntries(ctx, tx)
 	if err != nil {

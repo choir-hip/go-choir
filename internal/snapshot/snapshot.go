@@ -1,17 +1,33 @@
-// Package snapshot is snapshot version 1: the guest SQLite store written with
-// VACUUM INTO, sealed under the computer's key, stored chunk by chunk in the
-// platform's file content store, and named on the tape by a synchronous
-// snapshot_recorded event (docs/design/data-system-build-sheet-2026-10-30.md,
-// decision 7). It replaces the projection bases.
+// Package snapshot is snapshot version 1: the guest SQLite store streamed page
+// by page from one read snapshot, sealed under the computer's key, stored
+// chunk by chunk in the platform's file content store, and named on the tape
+// by a synchronous snapshot_recorded event
+// (docs/design/data-system-build-sheet-2026-10-30.md, decision 7). It replaces
+// the projection bases.
 //
-// Storage reuses the file CAS: the file is cut into 4 MiB chunks, each sealed
-// with filecas.SealChunk (deterministic per key and plaintext, so successive
-// snapshots share unchanged chunks) and PUT under the computer's chunk
-// namespace. The manifest of chunk digests, with the store head sequence, the
-// file-tree root and the witness v3 root, is the private payload of the
-// snapshot_recorded event (computerevent.PrivateArtifactCipher), so the sealed
-// artifact digest on the tape names the snapshot and nothing readable leaves
-// the computer.
+// Capture opens one read-only transaction on the store's read pool and reads
+// the event head as its first statement, so the head belongs to the
+// transaction's WAL snapshot. It then reads every database page of that
+// snapshot through SQLite's sqlite_dbpage virtual table (pages as the snapshot
+// sees them, WAL included) and computes the witness v3 in the same
+// transaction: head, pages and witness are one state. There is no temporary
+// copy of the store and no size cap; memory is a handful of 4 MiB buffers.
+// Writers and appends never wait for the stream, but the open transaction pins
+// the WAL until it ends, so the stream has a time budget.
+//
+// Storage reuses the file CAS: the page stream is cut into chunks of a fixed
+// number of pages (ChunkSize / page size, so 1024 pages of 4 KiB: chunk i is
+// pages [i*N, (i+1)*N)), each sealed with filecas.SealChunk (deterministic per
+// key and plaintext, so a range of pages that did not change yields the same
+// sealed bytes and the same digest) and PUT under the computer's chunk
+// namespace unless the host already holds that digest. The chunks concatenated
+// are exactly the SQLite file, byte for byte as a size-ChunkSize cut of it, so
+// a record needs no new format: page size, page count and pages per chunk are
+// extra fields an old reader ignores. The manifest of chunk digests, with the
+// store head sequence, the file-tree root and the witness v3 root, is the
+// private payload of the snapshot_recorded event
+// (computerevent.PrivateArtifactCipher), so the sealed artifact digest on the
+// tape names the snapshot and nothing readable leaves the computer.
 //
 // Boot reads the computer's own disk. A missing disk is rebuilt by Restore:
 // the newest snapshot_recorded on the tape is fetched and unsealed, installed
@@ -25,15 +41,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
@@ -45,16 +61,22 @@ const (
 	RecordMediaType = "application/vnd.choir.snapshot-record+json"
 	// StateFileName is the manifest path of the SQLite file.
 	StateFileName = "state.db"
-	// ChunkSize is the plaintext size of one snapshot chunk.
+	// ChunkSize is the plaintext size of one snapshot chunk (a whole number
+	// of pages of any SQLite page size).
 	ChunkSize = 4 << 20
 
 	authorityRef = "authority:guest-snapshot"
 	// scanPageSize is the replay page size Restore scans the tape with.
 	scanPageSize = computerevent.EventReplayPageSize
+	// uploadWorkers seal, probe and upload chunks while the reader keeps
+	// reading pages.
+	uploadWorkers = 4
 )
 
-// ErrTooLarge means the copy exceeds Config.MaxPlaintextBytes.
-var ErrTooLarge = errors.New("snapshot: store copy exceeds the size cap")
+// ErrTimeBudget means the page stream and the witness did not finish within
+// Config.MaxDuration. The read transaction is rolled back, nothing is
+// registered and no event is appended.
+var ErrTimeBudget = errors.New("snapshot: exceeded the time budget")
 
 // ErrNoSnapshot means the tape holds no usable snapshot_recorded event.
 var ErrNoSnapshot = errors.New("snapshot: no snapshot on the tape")
@@ -70,6 +92,14 @@ type Record struct {
 	StoreHead         string `json:"store_head"`
 	// PlaintextSize is the size of the SQLite file in bytes.
 	PlaintextSize int64 `json:"plaintext_size"`
+	// PageSize, PageCount and PagesPerChunk describe the page-range cut of a
+	// streamed snapshot: PlaintextSize = PageSize * PageCount, and chunk i
+	// holds pages [i*PagesPerChunk, (i+1)*PagesPerChunk). Snapshots recorded
+	// from a VACUUM INTO copy (before the page stream) do not carry them; they
+	// are cut at ChunkSize bytes, which is the same cut.
+	PageSize      int   `json:"page_size,omitempty"`
+	PageCount     int64 `json:"page_count,omitempty"`
+	PagesPerChunk int   `json:"pages_per_chunk,omitempty"`
 	// FileTreeRoot is the file CAS root of the Files tree at the snapshot,
 	// when the computer has one.
 	FileTreeRoot string `json:"file_tree_root,omitempty"`
@@ -82,6 +112,29 @@ type Record struct {
 	Manifest filecas.Manifest `json:"manifest"`
 }
 
+// Stats is what one capture did, for the producer's log.
+type Stats struct {
+	Pages    int64
+	PageSize int
+	// Chunks is the number of chunks in the manifest. ChunksUploaded were
+	// PUT, ChunksHeld were already on the host (skipped), ChunksRepeated
+	// repeat an earlier chunk of this snapshot.
+	Chunks         int
+	ChunksUploaded int
+	ChunksHeld     int
+	ChunksRepeated int
+	// ProbeErrors counts existence checks that failed; the chunk was
+	// uploaded instead.
+	ProbeErrors   int
+	BytesUploaded int64
+	// StreamTime is the time to read every page, WitnessTime the time to
+	// compute the witness, ReadTxTime how long the read transaction (and so
+	// the WAL pin) lasted.
+	StreamTime  time.Duration
+	WitnessTime time.Duration
+	ReadTxTime  time.Duration
+}
+
 // Ref names a recorded snapshot.
 type Ref struct {
 	// ArtifactDigest is the sealed record's digest: the snapshot_recorded
@@ -90,12 +143,21 @@ type Ref struct {
 	// EventID is the snapshot_recorded event.
 	EventID string
 	Record  Record
+	Stats   Stats
 }
 
 // ChunkStore moves sealed chunks to and from the platform's file CAS.
 type ChunkStore interface {
 	PutChunk(ctx context.Context, digest string, sealed []byte) error
 	GetChunk(ctx context.Context, digest string) ([]byte, error)
+}
+
+// ChunkProber is implemented by a ChunkStore that can say whether it already
+// holds a chunk in the computer's own namespace (HTTPChunks: HEAD). A chunk it
+// holds is not uploaded again, which makes a repeat snapshot incremental. A
+// probe error means unknown: the chunk is uploaded.
+type ChunkProber interface {
+	HasChunk(ctx context.Context, digest string) (bool, error)
 }
 
 // RootRegistrar is implemented by a ChunkStore whose host sweeps unreferenced
@@ -116,32 +178,34 @@ type Appender interface {
 type Config struct {
 	ComputerID string
 	// DB is the live store's READ pool (dbx SQLiteDB.Read, mode=ro), never the
-	// single write connection: VACUUM INTO reads one committed snapshot
-	// through it while writers keep committing, so a 30 GB store blocks no
-	// write and no append for the minutes the copy takes.
+	// single write connection: the capture holds one read transaction on it
+	// for the whole stream while writers keep committing, so a 30 GB store
+	// blocks no write and no append.
 	DB *sql.DB
-	// TempDir holds the VACUUM INTO file until it is uploaded. It must have
-	// room for the store: the data volume beside the store, not tmpfs.
-	TempDir string
-	// Head reads the event head from a handle on the COPY (nil for an empty
-	// store). The copy carries the store's own head and projection tables,
-	// committed in the same transactions as the state, so the head read there
-	// is exactly the head the file captures; a head read from the live store
-	// would race the writers.
-	Head func(ctx context.Context, snapshotDB *sql.DB) (*computerevent.Head, error)
-	// Witness computes the witness v3 of a read handle on the snapshot copy,
-	// with the same extractor configuration as the live witness.
-	Witness func(ctx context.Context, snapshotDB *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
+	// Head reads the event head inside tx. It is the FIRST statement of the
+	// read transaction, which fixes the transaction's WAL snapshot at the
+	// state the head names (the projection head commits with the rows it
+	// summarizes). It returns nil for an empty store.
+	Head func(ctx context.Context, tx *sql.Tx) (*computerevent.Head, error)
+	// Witness computes the witness v3 inside the same transaction, with the
+	// same extractor configuration the restore check uses on the reassembled
+	// file.
+	Witness func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error)
 	// FileTreeRoot optionally names the Files tree root to record.
 	FileTreeRoot func(ctx context.Context) (string, error)
 	Cipher       *computerevent.PrivateArtifactCipher
 	Chunks       ChunkStore
 	Appender     Appender
-	// MaxPlaintextBytes, when positive, refuses a copy larger than it before
-	// anything is uploaded (ErrTooLarge).
-	MaxPlaintextBytes int64
+	// MaxDuration, when positive, bounds the read transaction and the chunk
+	// uploads (a long read pins the WAL). The stream aborts with
+	// ErrTimeBudget, which leaves no root and no event.
+	MaxDuration time.Duration
 	// Now overrides the clock in tests.
 	Now func() time.Time
+
+	// pageHook, when set, runs in the reader before each page is taken (tests
+	// commit writes in the middle of the stream).
+	pageHook func(pgno int64)
 }
 
 func (c Config) validate() error {
@@ -158,12 +222,12 @@ func (c Config) validate() error {
 	return nil
 }
 
-// TakeSnapshot writes the store with VACUUM INTO on the read pool, seals and
-// stores it, and appends the snapshot_recorded event. Nothing is held: writers
-// and appends continue while the copy is made. VACUUM INTO reads one
-// consistent committed state, the head and the witness are both read from the
-// copy, and the events committed after the copy are the tape tail Restore
-// replays.
+// TakeSnapshot streams the store's pages from one read snapshot on the read
+// pool, seals and stores the chunks the host does not already hold, and
+// appends the snapshot_recorded event. Nothing is held: writers and appends
+// continue while the pages are read. The head, the pages and the witness are
+// all of the one transaction's snapshot, and the events committed after it are
+// the tape tail Restore replays.
 func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if err := cfg.validate(); err != nil {
 		return Ref{}, err
@@ -172,73 +236,36 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if now == nil {
 		now = time.Now
 	}
-	tempDir := cfg.TempDir
-	if tempDir == "" {
-		tempDir = os.TempDir()
-	}
-	if err := os.MkdirAll(tempDir, 0o700); err != nil {
-		return Ref{}, fmt.Errorf("snapshot: temp dir: %w", err)
-	}
-	// VACUUM INTO refuses an existing file, so reserve a name and remove it.
-	reserve, err := os.CreateTemp(tempDir, "snapshot-*.db")
+	dek, err := cfg.Cipher.ExportKeyForEscrow(ctx, cfg.ComputerID)
 	if err != nil {
-		return Ref{}, fmt.Errorf("snapshot: temp file: %w", err)
+		return Ref{}, fmt.Errorf("snapshot: export key: %w", err)
 	}
-	copyPath := reserve.Name()
-	_ = reserve.Close()
-	_ = os.Remove(copyPath)
-	defer func() {
-		_ = os.Remove(copyPath)
-		_ = os.Remove(copyPath + "-wal")
-		_ = os.Remove(copyPath + "-shm")
-	}()
+	defer clear(dek)
 
-	if _, err := cfg.DB.ExecContext(ctx, "VACUUM INTO ?", copyPath); err != nil {
-		return Ref{}, fmt.Errorf("snapshot: vacuum into: %w", err)
-	}
-	if cfg.MaxPlaintextBytes > 0 {
-		if info, err := os.Stat(copyPath); err == nil && info.Size() > cfg.MaxPlaintextBytes {
-			return Ref{}, fmt.Errorf("%w: %d bytes, cap %d", ErrTooLarge, info.Size(), cfg.MaxPlaintextBytes)
-		}
-	}
-
-	// The copy is a rollback-journal file; the dbx opener switches it to WAL,
-	// which a read-only open cannot do. Closing it checkpoints and removes the
-	// WAL, leaving a complete file.
-	snapDB, err := dbx.OpenSQLite(copyPath, dbx.SQLiteOptions{ReadConns: 1})
-	if err != nil {
-		return Ref{}, fmt.Errorf("snapshot: open copy: %w", err)
-	}
-	head, herr := cfg.Head(ctx, snapDB.Read)
-	var witness selfdevprotocol.VMLocalContentWitness
-	var werr error
-	if herr == nil {
-		witness, werr = cfg.Witness(ctx, snapDB.Read)
-	}
-	_ = snapDB.Close()
-	if herr != nil {
-		return Ref{}, fmt.Errorf("snapshot: read head of the copy: %w", herr)
-	}
-	if werr != nil {
-		return Ref{}, fmt.Errorf("snapshot: witness of the copy: %w", werr)
-	}
-
-	manifest, size, err := uploadFile(ctx, cfg, copyPath, now())
+	got, err := capture(ctx, cfg, dek)
 	if err != nil {
 		return Ref{}, err
+	}
+	entry := got.entry
+	manifest, err := filecas.BuildManifest(cfg.ComputerID, []filecas.FileEntry{entry}, now())
+	if err != nil {
+		return Ref{}, fmt.Errorf("snapshot: build manifest: %w", err)
 	}
 	record := Record{
 		Version:       Version,
 		ComputerID:    cfg.ComputerID,
 		CreatedAt:     now().UTC().Format(time.RFC3339Nano),
-		PlaintextSize: size,
-		WitnessRoot:   witness.ContentRoot,
-		SchemaHash:    witness.SchemaHash,
+		PlaintextSize: entry.Size,
+		PageSize:      got.pageSize,
+		PageCount:     got.pageCount,
+		PagesPerChunk: got.pagesPerChunk,
+		WitnessRoot:   got.witness.ContentRoot,
+		SchemaHash:    got.witness.SchemaHash,
 		Manifest:      *manifest,
 	}
-	if head != nil {
-		record.StoreHeadSequence = head.Sequence
-		record.StoreHead = head.CanonicalEventHead
+	if got.head != nil {
+		record.StoreHeadSequence = got.head.Sequence
+		record.StoreHead = got.head.CanonicalEventHead
 	}
 	if cfg.FileTreeRoot != nil {
 		root, err := cfg.FileTreeRoot(ctx)
@@ -276,52 +303,270 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if err != nil {
 		return Ref{}, fmt.Errorf("snapshot: append snapshot_recorded: %w", err)
 	}
-	return Ref{ArtifactDigest: artifactDigest, EventID: eventID, Record: record}, nil
+	return Ref{ArtifactDigest: artifactDigest, EventID: eventID, Record: record, Stats: got.stats}, nil
 }
 
-// uploadFile seals and uploads path in ChunkSize chunks and returns the
-// manifest of the one-file tree.
-func uploadFile(ctx context.Context, cfg Config, path string, now time.Time) (*filecas.Manifest, int64, error) {
-	dek, err := cfg.Cipher.ExportKeyForEscrow(ctx, cfg.ComputerID)
-	if err != nil {
-		return nil, 0, fmt.Errorf("snapshot: export key: %w", err)
+// captured is what the read transaction yields.
+type captured struct {
+	head          *computerevent.Head
+	witness       selfdevprotocol.VMLocalContentWitness
+	entry         filecas.FileEntry
+	pageSize      int
+	pageCount     int64
+	pagesPerChunk int
+	stats         Stats
+}
+
+// chunkJob is one page range handed from the reader to an upload worker.
+type chunkJob struct {
+	index int
+	data  []byte
+}
+
+// chunkUploader seals, probes and uploads chunks on its workers.
+type chunkUploader struct {
+	cfg     Config
+	dek     []byte
+	prober  ChunkProber
+	jobs    chan chunkJob
+	free    chan []byte
+	digests []string
+	seen    sync.Map
+	wg      sync.WaitGroup
+	cancel  context.CancelCauseFunc
+
+	uploaded, held, repeated, probeErrs atomic.Int64
+	bytesUploaded                       atomic.Int64
+
+	closeOnce sync.Once
+}
+
+func newChunkUploader(cfg Config, dek []byte, chunkBytes, chunkCount int, cancel context.CancelCauseFunc) *chunkUploader {
+	u := &chunkUploader{
+		cfg:     cfg,
+		dek:     dek,
+		jobs:    make(chan chunkJob, uploadWorkers),
+		free:    make(chan []byte, 2*uploadWorkers+1),
+		digests: make([]string, chunkCount),
+		cancel:  cancel,
 	}
-	defer clear(dek)
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, 0, fmt.Errorf("snapshot: open copy: %w", err)
+	u.prober, _ = cfg.Chunks.(ChunkProber)
+	for i := 0; i < cap(u.free); i++ {
+		u.free <- make([]byte, 0, chunkBytes)
 	}
-	defer file.Close()
-	entry := filecas.FileEntry{Path: StateFileName, Mode: 0o600}
-	buf := make([]byte, ChunkSize)
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, 0, err
-		}
-		n, err := io.ReadFull(file, buf)
-		if n > 0 {
-			sealed, digest, sealErr := filecas.SealChunk(dek, cfg.ComputerID, buf[:n])
-			if sealErr != nil {
-				return nil, 0, fmt.Errorf("snapshot: seal chunk: %w", sealErr)
+	return u
+}
+
+func (u *chunkUploader) start(ctx context.Context) {
+	for i := 0; i < uploadWorkers; i++ {
+		u.wg.Add(1)
+		go func() {
+			defer u.wg.Done()
+			for job := range u.jobs {
+				if ctx.Err() == nil {
+					if err := u.handle(ctx, job); err != nil {
+						u.cancel(err)
+					}
+				}
+				u.free <- job.data[:0]
 			}
-			if putErr := cfg.Chunks.PutChunk(ctx, digest, sealed); putErr != nil {
-				return nil, 0, fmt.Errorf("snapshot: store chunk %s: %w", digest, putErr)
-			}
-			entry.Chunks = append(entry.Chunks, digest)
-			entry.Size += int64(n)
-		}
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			break
-		}
-		if err != nil {
-			return nil, 0, fmt.Errorf("snapshot: read copy: %w", err)
-		}
+		}()
 	}
-	manifest, err := filecas.BuildManifest(cfg.ComputerID, []filecas.FileEntry{entry}, now)
+}
+
+func (u *chunkUploader) handle(ctx context.Context, job chunkJob) error {
+	sealed, digest, err := filecas.SealChunk(u.dek, u.cfg.ComputerID, job.data)
 	if err != nil {
-		return nil, 0, fmt.Errorf("snapshot: build manifest: %w", err)
+		return fmt.Errorf("snapshot: seal chunk %d: %w", job.index, err)
 	}
-	return manifest, entry.Size, nil
+	u.digests[job.index] = digest
+	if _, repeat := u.seen.LoadOrStore(digest, struct{}{}); repeat {
+		u.repeated.Add(1)
+		return nil
+	}
+	if u.prober != nil {
+		has, perr := u.prober.HasChunk(ctx, digest)
+		switch {
+		case perr != nil:
+			if ctx.Err() != nil {
+				return nil
+			}
+			u.probeErrs.Add(1)
+		case has:
+			u.held.Add(1)
+			return nil
+		}
+	}
+	if err := u.cfg.Chunks.PutChunk(ctx, digest, sealed); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("snapshot: store chunk %s: %w", digest, err)
+	}
+	u.uploaded.Add(1)
+	u.bytesUploaded.Add(int64(len(sealed)))
+	return nil
+}
+
+// finish ends the job stream and waits for the workers.
+func (u *chunkUploader) finish() {
+	u.closeOnce.Do(func() { close(u.jobs) })
+	u.wg.Wait()
+}
+
+// capture opens the one read transaction and does everything that must see one
+// state: the head (first statement), the page stream, the witness.
+func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr error) {
+	budgetCtx := ctx
+	if cfg.MaxDuration > 0 {
+		var stop context.CancelFunc
+		budgetCtx, stop = context.WithTimeoutCause(ctx, cfg.MaxDuration, ErrTimeBudget)
+		defer stop()
+	}
+	runCtx, cancel := context.WithCancelCause(budgetCtx)
+	defer cancel(nil)
+	// cause is why the run ended: the budget, a worker's failure, or the
+	// caller's cancellation.
+	cause := func(err error) error {
+		if c := context.Cause(runCtx); c != nil {
+			return c
+		}
+		return err
+	}
+
+	started := time.Now()
+	tx, err := cfg.DB.BeginTx(runCtx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return out, fmt.Errorf("snapshot: begin read transaction: %w", cause(err))
+	}
+	txOpen := true
+	rollback := func() {
+		if txOpen {
+			txOpen = false
+			_ = tx.Rollback()
+			out.stats.ReadTxTime = time.Since(started)
+		}
+	}
+	defer rollback()
+
+	// The head is the transaction's first statement: it fixes the WAL
+	// snapshot, so the head names the state the pages are read from.
+	if out.head, err = cfg.Head(runCtx, tx); err != nil {
+		return out, fmt.Errorf("snapshot: read head: %w", cause(err))
+	}
+	var pageSize int
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&pageSize); err != nil {
+		return out, fmt.Errorf("snapshot: page size: %w", cause(err))
+	}
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_count`).Scan(&out.pageCount); err != nil {
+		return out, fmt.Errorf("snapshot: page count: %w", cause(err))
+	}
+	if pageSize <= 0 || pageSize > ChunkSize || ChunkSize%pageSize != 0 || out.pageCount <= 0 {
+		return out, fmt.Errorf("snapshot: unusable store geometry: %d pages of %d bytes", out.pageCount, pageSize)
+	}
+	out.pageSize = pageSize
+	out.pagesPerChunk = ChunkSize / pageSize
+	chunkCount := int((out.pageCount + int64(out.pagesPerChunk) - 1) / int64(out.pagesPerChunk))
+
+	up := newChunkUploader(cfg, dek, ChunkSize, chunkCount, cancel)
+	up.start(runCtx)
+	defer func() {
+		// A failed capture stops the workers before it waits for them.
+		if retErr != nil {
+			cancel(retErr)
+		}
+		up.finish()
+	}()
+
+	streamStart := time.Now()
+	var pages int64
+	progress := func(err error) error {
+		return fmt.Errorf("%w (%d of %d pages read, %s into the stream)", cause(err), pages, out.pageCount, time.Since(streamStart).Round(time.Second))
+	}
+	rows, err := tx.QueryContext(runCtx, `SELECT pgno, data FROM sqlite_dbpage`)
+	if err != nil {
+		return out, fmt.Errorf("snapshot: read pages: %w", progress(err))
+	}
+	buf := <-up.free
+	chunkIndex := 0
+	flush := func() error {
+		select {
+		case up.jobs <- chunkJob{index: chunkIndex, data: buf}:
+		case <-runCtx.Done():
+			return runCtx.Err()
+		}
+		chunkIndex++
+		select {
+		case buf = <-up.free:
+		case <-runCtx.Done():
+			return runCtx.Err()
+		}
+		return nil
+	}
+	for rows.Next() {
+		var pgno int64
+		var data sql.RawBytes
+		if err := rows.Scan(&pgno, &data); err != nil {
+			_ = rows.Close()
+			return out, fmt.Errorf("snapshot: scan page: %w", progress(err))
+		}
+		if pgno != pages+1 || len(data) != pageSize {
+			_ = rows.Close()
+			return out, fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize)
+		}
+		if cfg.pageHook != nil {
+			cfg.pageHook(pgno)
+		}
+		buf = append(buf, data...)
+		pages++
+		if len(buf) == out.pagesPerChunk*pageSize {
+			if err := flush(); err != nil {
+				_ = rows.Close()
+				return out, fmt.Errorf("snapshot: %w", progress(err))
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return out, fmt.Errorf("snapshot: read pages: %w", progress(err))
+	}
+	_ = rows.Close()
+	if pages != out.pageCount {
+		return out, fmt.Errorf("snapshot: the page stream held %d pages, the snapshot has %d", pages, out.pageCount)
+	}
+	if len(buf) > 0 {
+		if err := flush(); err != nil {
+			return out, fmt.Errorf("snapshot: %w", progress(err))
+		}
+	}
+	out.stats.StreamTime = time.Since(streamStart)
+
+	// The witness is computed in the same transaction while the workers drain
+	// the last chunks.
+	witnessStart := time.Now()
+	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
+		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
+	}
+	out.stats.WitnessTime = time.Since(witnessStart)
+	rollback()
+
+	up.finish()
+	if err := runCtx.Err(); err != nil {
+		return out, fmt.Errorf("snapshot: %w", progress(err))
+	}
+	if chunkIndex != chunkCount {
+		return out, fmt.Errorf("snapshot: cut %d chunks, expected %d", chunkIndex, chunkCount)
+	}
+	out.entry = filecas.FileEntry{Path: StateFileName, Mode: 0o600, Size: int64(pageSize) * out.pageCount, Chunks: up.digests}
+	out.stats.Pages = pages
+	out.stats.PageSize = pageSize
+	out.stats.Chunks = chunkCount
+	out.stats.ChunksUploaded = int(up.uploaded.Load())
+	out.stats.ChunksHeld = int(up.held.Load())
+	out.stats.ChunksRepeated = int(up.repeated.Load())
+	out.stats.ProbeErrors = int(up.probeErrs.Load())
+	out.stats.BytesUploaded = up.bytesUploaded.Load()
+	return out, nil
 }
 
 // Source is the tape access Restore needs; *computerevent.HTTPClient
@@ -464,6 +709,20 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 	if entry.Size != record.PlaintextSize {
 		return Record{}, errors.New("manifest size does not match the record")
 	}
+	// A page-cut record states its geometry: the chunks are page ranges of
+	// pagesPerChunk pages and the file is pageCount pages. A record from the
+	// VACUUM INTO era states none; its chunks are ChunkSize byte cuts, the
+	// same cut, and are checked by the manifest size alone.
+	chunkBytes := int64(ChunkSize)
+	if record.PageSize != 0 || record.PageCount != 0 || record.PagesPerChunk != 0 {
+		if record.PageSize <= 0 || record.PageCount <= 0 || record.PagesPerChunk <= 0 ||
+			int64(record.PageSize)*record.PageCount != record.PlaintextSize ||
+			int64(record.PageSize)*int64(record.PagesPerChunk) > 2*ChunkSize ||
+			int64(len(entry.Chunks)) != (record.PageCount+int64(record.PagesPerChunk)-1)/int64(record.PagesPerChunk) {
+			return Record{}, errors.New("record page geometry does not describe its manifest")
+		}
+		chunkBytes = int64(record.PageSize) * int64(record.PagesPerChunk)
+	}
 
 	dek, err := cfg.Cipher.ExportKeyForEscrow(ctx, cfg.ComputerID)
 	if err != nil {
@@ -488,7 +747,7 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 		}
 	}()
 	var written int64
-	for _, digest := range entry.Chunks {
+	for i, digest := range entry.Chunks {
 		if err := ctx.Err(); err != nil {
 			return Record{}, err
 		}
@@ -499,6 +758,14 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 		plain, err := filecas.OpenChunk(dek, cfg.ComputerID, digest, sealed)
 		if err != nil {
 			return Record{}, fmt.Errorf("open chunk %s: %w", digest, err)
+		}
+		// Every chunk but the last is a whole range; the last is the rest.
+		last := i == len(entry.Chunks)-1
+		if int64(len(plain)) > chunkBytes || (!last && int64(len(plain)) != chunkBytes) {
+			return Record{}, fmt.Errorf("chunk %d has %d bytes, the cut is %d", i, len(plain), chunkBytes)
+		}
+		if record.PageSize != 0 && len(plain)%record.PageSize != 0 {
+			return Record{}, fmt.Errorf("chunk %d has %d bytes, not a whole number of %d-byte pages", i, len(plain), record.PageSize)
 		}
 		n, err := temp.Write(plain)
 		written += int64(n)

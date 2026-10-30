@@ -37,6 +37,12 @@ import (
 type memChunks struct {
 	mu     sync.Mutex
 	chunks map[string][]byte
+	// puts counts PutChunk calls since the last reset; probes counts HasChunk
+	// calls. roots are the declared snapshot roots. noProbe makes the store a
+	// plain ChunkStore (no existence check), as an old host would be.
+	puts   []string
+	probes int
+	roots  [][]string
 }
 
 func newMemChunks() *memChunks { return &memChunks{chunks: map[string][]byte{}} }
@@ -45,7 +51,30 @@ func (m *memChunks) PutChunk(_ context.Context, digest string, sealed []byte) er
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.chunks[digest] = append([]byte(nil), sealed...)
+	m.puts = append(m.puts, digest)
 	return nil
+}
+
+// HasChunk reports what the store actually holds.
+func (m *memChunks) HasChunk(_ context.Context, digest string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.probes++
+	_, ok := m.chunks[digest]
+	return ok, nil
+}
+
+func (m *memChunks) RegisterSnapshotRoot(_ context.Context, _ string, _ uint64, chunks []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.roots = append(m.roots, append([]string(nil), chunks...))
+	return nil
+}
+
+func (m *memChunks) resetPuts() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.puts, m.probes = nil, 0
 }
 
 func (m *memChunks) GetChunk(_ context.Context, digest string) ([]byte, error) {
@@ -165,11 +194,16 @@ func newFixture(t *testing.T, bytesApprox int) *fixture {
 		cfg: Config{
 			ComputerID: testComputer,
 			DB:         db.Read,
-			TempDir:    t.TempDir(),
-			Head: func(context.Context, *sql.DB) (*computerevent.Head, error) {
+			Head: func(context.Context, *sql.Tx) (*computerevent.Head, error) {
 				return &computerevent.Head{ComputerID: testComputer, Sequence: 41, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 			},
-			Witness:  witnessOf,
+			Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
+				digests, err := computerversion.SQLiteStateExtractor{Database: "texture"}.DigestsTx(ctx, tx)
+				if err != nil {
+					return selfdevprotocol.VMLocalContentWitness{}, err
+				}
+				return selfdevprotocol.WitnessFromDigests(digests)
+			},
 			Cipher:   cipher,
 			Chunks:   chunks,
 			Appender: tape,
@@ -221,10 +255,6 @@ func TestSnapshotRoundTripAcrossChunks(t *testing.T) {
 	other := testCipher(t, testComputer)
 	if _, _, err := other.Decrypt(ctx, f.tape.payloads[ref.ArtifactDigest], testComputer, ref.EventID); err == nil {
 		t.Fatal("a different key opened the sealed record")
-	}
-	// No scratch left behind.
-	if entries, _ := os.ReadDir(f.cfg.TempDir); len(entries) != 0 {
-		t.Fatalf("temp dir not cleaned: %d entries", len(entries))
 	}
 
 	// Restore installs a file with the live witness.

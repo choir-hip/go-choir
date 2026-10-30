@@ -2,14 +2,14 @@ package agentcore
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
@@ -19,17 +19,23 @@ import (
 //  a. no snapshot exists and none is taken, so no tape ever holds one;
 //  b. a snapshot exists and another is taken at every tick;
 //  c. a due snapshot is not retaken after the interval;
-//  d. it runs beside a live capsule or a self-development apply, in too little
-//     free space, or over the size cap, and does not say why;
+//  d. it runs beside a live capsule or a self-development apply, or with the
+//     volume under the WAL floor, and does not say why;
 //  e. two ticks run two snapshots at once;
 //  f. a snapshot that keeps crashing the computer is retried forever;
-//  g. the kill switch is ignored, or an unset environment is read as off.
+//  g. the kill switch is ignored, or an unset environment is read as off;
+//  h. a store of any size is refused (there is no size cap and no 1.25x
+//     free-space rule: the stream writes no copy);
+//  i. the time budget is dropped on the way to the capture, or its abort is
+//     read as success or logged without the reason;
+//  j. a copy left by the VACUUM INTO era stays on the volume.
 
 type producerHarness struct {
-	t     *testing.T
-	deps  snapshotDeps
-	set   snapshotSettings
-	takes int
+	t          *testing.T
+	deps       snapshotDeps
+	set        snapshotSettings
+	takes      int
+	tookWithin time.Duration
 
 	newestFound bool
 	newestAt    time.Time
@@ -44,21 +50,11 @@ type producerHarness struct {
 
 func newProducerHarness(t *testing.T) *producerHarness {
 	t.Helper()
-	db := dbxtest.SQLite(t)
-	if _, err := db.Write.Exec(`CREATE TABLE filler (id INTEGER PRIMARY KEY, body BLOB)`); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 64; i++ {
-		if _, err := db.Write.Exec(`INSERT INTO filler (id, body) VALUES (?, zeroblob(8192))`, i+1); err != nil {
-			t.Fatal(err)
-		}
-	}
 	h := &producerHarness{t: t, head: 50, free: 1 << 40}
-	h.set = snapshotSettings{Interval: 24 * time.Hour, MaxBytes: 8 << 30}
+	h.set = snapshotSettings{Interval: 24 * time.Hour, MaxDuration: 30 * time.Minute}
 	h.deps = snapshotDeps{
 		ComputerID: "computer-producer",
-		TempDir:    filepath.Join(t.TempDir(), snapshotTempDirName),
-		ReadDB:     func() *sql.DB { return db.Read },
+		DataDir:    t.TempDir(),
 		Newest: func(context.Context) (uint64, time.Time, bool, error) {
 			return h.newestSeq, h.newestAt, h.newestFound, nil
 		},
@@ -66,8 +62,9 @@ func newProducerHarness(t *testing.T) *producerHarness {
 		Busy:         func(context.Context) (string, error) { return h.busy, nil },
 		FreeBytes:    func(string) (uint64, error) { return h.free, nil },
 		Ready:        func() bool { return true },
-		Take: func(ctx context.Context, tempDir string, maxBytes int64) (snapshot.Ref, error) {
+		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
 			h.takes++
+			h.tookWithin = maxDuration
 			if h.entered != nil {
 				h.entered <- struct{}{}
 				<-h.block
@@ -131,7 +128,6 @@ func TestProducerRefusesWithAReasonAndRetries(t *testing.T) {
 	}{
 		{"a self-development apply or live capsule", func(h *producerHarness) { h.busy = "1 engineering capsule(s) live" }, "capsule"},
 		{"too little free space", func(h *producerHarness) { h.free = 1 << 10 }, "free space"},
-		{"over the size cap", func(h *producerHarness) { h.set.MaxBytes = 1 << 10 }, "cap"},
 		{"free space unmeasurable", func(h *producerHarness) {
 			h.deps.FreeBytes = func(string) (uint64, error) { return 0, errors.New("statfs failed") }
 		}, "free space"},
@@ -157,21 +153,69 @@ func TestProducerRefusesWithAReasonAndRetries(t *testing.T) {
 	}
 }
 
-func TestProducerFreeSpaceBoundaryIsOnePointTwoFiveTimesTheStore(t *testing.T) {
+func TestProducerFreeSpaceBoundaryIsTheWALFloorNotTheStoreSize(t *testing.T) {
 	h := newProducerHarness(t)
-	size, err := sqliteLogicalSize(context.Background(), h.deps.ReadDB())
-	if err != nil {
+	var p snapshotProducer
+	h.free = snapshotFreeFloor - 1
+	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotRefused {
+		t.Fatalf("one byte under the floor must refuse, got %s", outcome)
+	}
+	h.free = snapshotFreeFloor
+	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
+		t.Fatalf("exactly the floor must take, got %s", outcome)
+	}
+}
+
+// h: there is no cap: nothing in the producer reads the store's size, so a
+// store of any size is taken as long as the floor holds.
+func TestProducerHasNoSizeCap(t *testing.T) {
+	h := newProducerHarness(t)
+	h.free = 1 << 50
+	var p snapshotProducer
+	if outcome, detail := h.run(&p, time.Now()); outcome != snapshotTaken {
+		t.Fatalf("outcome=%s detail=%q", outcome, detail)
+	}
+}
+
+// i: the budget reaches the capture, and its abort is a logged failure that
+// names the budget and the knob.
+func TestProducerPassesTheBudgetAndReportsItsAbort(t *testing.T) {
+	h := newProducerHarness(t)
+	h.set.MaxDuration = 7 * time.Minute
+	var p snapshotProducer
+	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken || h.tookWithin != 7*time.Minute {
+		t.Fatalf("the capture ran with budget %s", h.tookWithin)
+	}
+	h2 := newProducerHarness(t)
+	h2.takeErr = fmt.Errorf("snapshot: read pages: %w (100 of 9000 pages read)", snapshot.ErrTimeBudget)
+	var p2 snapshotProducer
+	outcome, detail := h2.run(&p2, time.Now())
+	if outcome != snapshotFailed || !strings.Contains(detail, envSnapshotMaxDuration) || !strings.Contains(detail, "pages read") || !strings.Contains(detail, "nothing recorded") {
+		t.Fatalf("outcome=%s detail=%q", outcome, detail)
+	}
+	// An abort is retried at the next tick, not closed.
+	h2.takeErr = nil
+	if outcome, _ := h2.run(&p2, time.Now()); outcome != snapshotTaken {
+		t.Fatalf("after an abort: %s", outcome)
+	}
+}
+
+// j: a crashed VACUUM INTO copy is removed at the start of an attempt.
+func TestProducerRemovesTheLegacyCopyDirectory(t *testing.T) {
+	h := newProducerHarness(t)
+	legacy := filepath.Join(h.deps.DataDir, snapshotLegacyTempDirName)
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	need := uint64(size) / 4 * 5
-	var p snapshotProducer
-	h.free = need - 1
-	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotRefused {
-		t.Fatalf("one byte short must refuse, got %s", outcome)
+	if err := os.WriteFile(filepath.Join(legacy, "snapshot-123.db"), []byte("copy"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	h.free = need
+	var p snapshotProducer
 	if outcome, _ := h.run(&p, time.Now()); outcome != snapshotTaken {
-		t.Fatalf("exactly 1.25x must take, got %s", outcome)
+		t.Fatalf("outcome=%s", outcome)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("the legacy copy directory is still there: %v", err)
 	}
 }
 
@@ -245,15 +289,15 @@ func TestProducerClearsItsAttemptWhenTheSnapshotReturns(t *testing.T) {
 func TestSnapshotSettingsFromEnv(t *testing.T) {
 	env := map[string]string{}
 	get := func(k string) string { return env[k] }
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxBytes != 8<<30 {
-		t.Fatalf("defaults (on, 24h, 8 GiB): %+v", s)
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxDuration != 30*time.Minute {
+		t.Fatalf("defaults (on, 24h, 30m): %+v", s)
 	}
-	env[envSnapshotInterval], env[envSnapshotMaxBytes], env[envSnapshotDisable] = "6h", "1000", "1"
-	if s := snapshotSettingsFromEnv(get); !s.Disabled || s.Interval != 6*time.Hour || s.MaxBytes != 1000 {
+	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "6h", "2h", "1"
+	if s := snapshotSettingsFromEnv(get); !s.Disabled || s.Interval != 6*time.Hour || s.MaxDuration != 2*time.Hour {
 		t.Fatalf("overrides: %+v", s)
 	}
-	env[envSnapshotInterval], env[envSnapshotMaxBytes], env[envSnapshotDisable] = "soon", "-5", "0"
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxBytes != 8<<30 {
+	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "soon", "-5s", "0"
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxDuration != 30*time.Minute {
 		t.Fatalf("garbage falls back to the defaults, never to off: %+v", s)
 	}
 }
