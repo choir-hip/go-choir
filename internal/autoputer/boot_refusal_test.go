@@ -13,41 +13,38 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 )
 
 // TestMaterializeRefusalCarriesTypedWitness locks the guest-side typed refusal
 // surface: the planner refusal must carry (kind, local, W, H) so the host can
 // persist a durable recovery condition without parsing guest logs, and it must
-// still satisfy errors.Is(err, projectionbase.ErrBaseRefused).
+// still satisfy errors.Is(err, recoveryplan.ErrBaseRefused).
 func TestMaterializeRefusalCarriesTypedWitness(t *testing.T) {
-	var calls int
-	server := bootTestServer(t, http.StatusOK,
-		map[string]any{"computer_id": "computer-stale", "sequence": 148333, "canonical_event_head": strings.Repeat("a", 64)},
-		http.StatusOK,
-		map[string]any{"watermark_sequence": 13, "base_ref": strings.Repeat("b", 64)},
-		&calls)
+	platform := newBootServer(&computerevent.Head{ComputerID: "computer-stale", Sequence: 148333, CanonicalEventHead: strings.Repeat("a", 64)})
+	server := httptest.NewServer(platform)
 	defer server.Close()
-	capability := func(ctx context.Context) (string, error) { return "test-cap", nil }
+	t.Setenv("CHOIR_PRIVACY_KEY_FILE", writePrivacyKey(t, "computer-stale"))
 
-	_, _, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-stale", server.URL, capability, nil)
-	if !errors.Is(err, projectionbase.ErrBaseRefused) {
+	_, _, err := materializeProjectionBaseIfNeeded(context.Background(), filepath.Join(t.TempDir(), "runtime.db"), "computer-stale", server.URL, testCapability, nil)
+	if !errors.Is(err, recoveryplan.ErrBaseRefused) {
 		t.Fatalf("typed refusal must wrap ErrBaseRefused, got %v", err)
 	}
 	var refusal *ProjectionBaseRefusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("err = %v, want *ProjectionBaseRefusal", err)
 	}
-	if refusal.Kind != BootRefusalKindTailExcess {
-		t.Fatalf("kind = %q, want %q", refusal.Kind, BootRefusalKindTailExcess)
+	if refusal.Kind != BootRefusalKindBaseMissing {
+		t.Fatalf("kind = %q, want %q", refusal.Kind, BootRefusalKindBaseMissing)
 	}
-	if refusal.ComputerID != "computer-stale" || refusal.LocalSequence != 0 || refusal.WatermarkSequence != 13 || refusal.TargetSequence != 148333 {
+	if refusal.ComputerID != "computer-stale" || refusal.LocalSequence != 0 || refusal.WatermarkSequence != 0 || refusal.TargetSequence != 148333 {
 		t.Fatalf("refusal witness = %+v", refusal)
 	}
 	if !refusal.EmptyStore || !refusal.ChainExists {
 		t.Fatalf("refusal store shape = empty=%t chain=%t", refusal.EmptyStore, refusal.ChainExists)
 	}
-	if !strings.Contains(refusal.Error(), "recovery tail") {
+	if !strings.Contains(refusal.Error(), "genesis replay bound") {
 		t.Fatalf("refusal error = %q", refusal.Error())
 	}
 }

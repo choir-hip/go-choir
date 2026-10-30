@@ -14,7 +14,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
+	"github.com/yusefmosiah/go-choir/internal/snapshot"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -37,7 +38,10 @@ const (
 // ProjectionBaseRefusal is the guest planner's typed refusal. It carries the
 // exact (empty, local, W, H) inputs PlanRecovery decided on so the host can
 // persist a durable recovery condition and serve a structured 503 instead of
-// boot-looping. Error wraps ErrBaseRefused so errors.Is keeps working.
+// boot-looping. W is the head sequence of the snapshot the plan would start
+// from (0 when the tape has none). Error wraps ErrBaseRefused so errors.Is
+// keeps working. (The name predates the snapshots that replaced projection
+// bases; the health schema the host parses keeps it.)
 type ProjectionBaseRefusal struct {
 	ComputerID        string
 	Kind              string
@@ -51,18 +55,18 @@ type ProjectionBaseRefusal struct {
 
 func (e *ProjectionBaseRefusal) Error() string {
 	if e == nil {
-		return "required projection base refused"
+		return "required snapshot refused"
 	}
-	return fmt.Sprintf("required projection base refused (%s) for %s: %s (local=%d W=%d H=%d)",
+	return fmt.Sprintf("required snapshot refused (%s) for %s: %s (local=%d W=%d H=%d)",
 		e.Kind, e.ComputerID, e.Reason, e.LocalSequence, e.WatermarkSequence, e.TargetSequence)
 }
 
 // Unwrap reports ErrBaseRefused so existing refusal checks stay valid.
-func (e *ProjectionBaseRefusal) Unwrap() error { return projectionbase.ErrBaseRefused }
+func (e *ProjectionBaseRefusal) Unwrap() error { return recoveryplan.ErrBaseRefused }
 
 // projectionBaseRefusalKind classifies a PlanRecovery refusal for the host.
-// A missing or ahead-of-target advertised watermark is a base dependency
-// problem; anything else with a live chain is the tail bound.
+// A missing or ahead-of-target snapshot is a dependency problem; anything
+// else with a live chain is the tail bound.
 func projectionBaseRefusalKind(watermarkSeq, targetSeq uint64) string {
 	if watermarkSeq == 0 || watermarkSeq > targetSeq {
 		return BootRefusalKindBaseMissing
@@ -70,138 +74,143 @@ func projectionBaseRefusalKind(watermarkSeq, targetSeq uint64) string {
 	return BootRefusalKindTailExcess
 }
 
-// materializeProjectionBaseIfNeeded installs or rebases onto a verified
-// ProjectionBase before reconstruct. The contract:
+// materializeProjectionBaseIfNeeded restores the store from the newest
+// snapshot when the computer's disk is missing, before reconstruct replays the
+// tape after it. The contract:
 //
+//   - the store holds events (the usual boot): resume from its own head; the
+//     remaining tail (local, H] must be at most MaxRecoveryTailEvents
 //   - empty store + no canonical chain: explicit new-computer genesis
-//   - chain exists: a verified base is REQUIRED and the remaining tail
-//     (start, H] must be ≤ MaxRecoveryTailEvents
-//   - local < W: staged rebase (sibling install + quarantine/swap)
-//   - local ≥ W and tail in bound: resume from the retained head
+//   - empty store + chain: the newest snapshot_recorded on the tape is
+//     fetched, unsealed and installed as the state file, then (W, H] replays;
+//     with no snapshot, a chain of at most MaxRecoveryTailEvents replays from
+//     genesis, a longer one refuses
+//   - a legacy Dolt workspace beside an empty store belongs to the guest
+//     migrator, not to this function
 //
-// A non-empty store is never skipped; silent genesis fallback is deleted.
 // Returns the recovery plan and whether the store was materialized; the
-// caller mints the genesis event when the plan is RecoveryGenesis.
-func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (projectionbase.RecoveryPlan, bool, error) {
+// caller mints the genesis event when the plan is RecoveryGenesis. The name is
+// historical: there are no projection bases.
+func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerID, platformURL string, capability func(context.Context) (string, error), live *choirstore.Store) (recoveryplan.RecoveryPlan, bool, error) {
 	storePath = filepath.Clean(storePath)
-	markerName := filepath.Base(storePath)
 	storeDir := filepath.Dir(storePath)
 	computerID = strings.TrimSpace(computerID)
 	platformURL = strings.TrimRight(strings.TrimSpace(platformURL), "/")
-	if storeDir == "" || storeDir == "." || markerName == "" || markerName == "." || markerName == "/" || computerID == "" || platformURL == "" || capability == nil {
-		return projectionbase.RecoveryPlan{}, false, nil
+	if storeDir == "" || storeDir == "." || filepath.Base(storePath) == "." || filepath.Base(storePath) == "/" || computerID == "" || platformURL == "" || capability == nil {
+		return recoveryplan.RecoveryPlan{}, false, nil
 	}
 	sweepStagingArtifacts(storeDir)
+	statePath := choirstore.StateDBPath(storePath)
 
-	empty := isStoreEmpty(storeDir)
 	var localSeq uint64
-	if !empty {
-		if live != nil {
-			head, err := live.Head(ctx, computerID)
-			if err != nil {
-				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("%w: retained store head: %v", projectionbase.ErrBaseRefused, err)
-			}
-			if head != nil {
-				localSeq = head.Sequence
-			}
-		} else {
-			seq, err := projectionbase.PeekLocalSequence(ctx, storePath, computerID)
-			if err != nil {
-				return projectionbase.RecoveryPlan{}, false, err
-			}
-			localSeq = seq
+	if live != nil {
+		head, err := live.Head(ctx, computerID)
+		if err != nil {
+			return recoveryplan.RecoveryPlan{}, false, fmt.Errorf("%w: retained store head: %v", recoveryplan.ErrBaseRefused, err)
+		}
+		if head != nil {
+			localSeq = head.Sequence
 		}
 	}
+	empty := localSeq == 0
 
 	head, err := queryCanonicalHead(ctx, platformURL, computerID, capability)
 	if err != nil {
-		return projectionbase.RecoveryPlan{}, false, err
+		return recoveryplan.RecoveryPlan{}, false, err
 	}
 	chainExists := head != nil && head.Sequence > 0
-	var targetHead string
 	var targetSeq uint64
 	if chainExists {
-		targetHead = head.CanonicalEventHead
 		targetSeq = head.Sequence
 	}
-
-	source := projectionbase.NewHTTPSource(platformURL, projectionbase.CapabilityFunc(capability))
-	var watermarkSeq uint64
-	if chainExists {
-		seq, _, wmErr := source.Watermark(ctx, computerID)
-		if wmErr != nil && !errors.Is(wmErr, projectionbase.ErrBaseRefused) {
-			return projectionbase.RecoveryPlan{}, false, wmErr
-		}
-		if wmErr == nil {
-			watermarkSeq = seq
-		}
-	}
-
-	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
-	if err != nil {
-		return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
+	refuse := func(kind, reason string, watermark uint64) error {
+		return &ProjectionBaseRefusal{
 			ComputerID:        computerID,
-			Kind:              projectionBaseRefusalKind(watermarkSeq, targetSeq),
-			Reason:            plan.Reason,
+			Kind:              kind,
+			Reason:            reason,
 			LocalSequence:     localSeq,
-			WatermarkSequence: watermarkSeq,
+			WatermarkSequence: watermark,
 			TargetSequence:    targetSeq,
 			EmptyStore:        empty,
 			ChainExists:       chainExists,
 		}
 	}
-	switch plan.Action {
-	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
-		log.Printf("autoputer: projection recovery %s for %s (local=%d W=%d H=%d tail=%d)", plan.Action, computerID, localSeq, watermarkSeq, targetSeq, plan.TailEvents)
+
+	if !chainExists || !empty {
+		// W is only a start point for an empty store; a store that holds events
+		// resumes from its own head.
+		plan, err := recoveryplan.PlanRecovery(empty, localSeq, chainExists, 0, targetSeq)
+		if err != nil {
+			return recoveryplan.RecoveryPlan{}, false, refuse(projectionBaseRefusalKind(0, targetSeq), plan.Reason, 0)
+		}
+		log.Printf("autoputer: recovery %s for %s (local=%d H=%d tail=%d)", plan.Action, computerID, localSeq, targetSeq, plan.TailEvents)
 		return plan, false, nil
-	case projectionbase.RecoveryInstall:
-		descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, targetHead, targetSeq)
-		if err != nil {
-			return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
-				ComputerID:        computerID,
-				Kind:              BootRefusalKindBaseUnavailable,
-				Reason:            err.Error(),
-				LocalSequence:     localSeq,
-				WatermarkSequence: watermarkSeq,
-				TargetSequence:    targetSeq,
-				EmptyStore:        empty,
-				ChainExists:       chainExists,
-			}
-		}
-		log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
-		return plan, true, nil
-	case projectionbase.RecoveryRebase:
-		if live != nil {
-			if err := live.Close(); err != nil {
-				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: close retained store before rebase: %w", err)
-			}
-		}
-		descriptor, err := projectionbase.RebaseRetainedStore(ctx, source, storePath, computerID, targetHead, targetSeq)
-		if err != nil {
-			if live != nil {
-				_ = live.Reopen(storePath)
-			}
-			return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
-				ComputerID:        computerID,
-				Kind:              BootRefusalKindBaseUnavailable,
-				Reason:            err.Error(),
-				LocalSequence:     localSeq,
-				WatermarkSequence: watermarkSeq,
-				TargetSequence:    targetSeq,
-				EmptyStore:        empty,
-				ChainExists:       chainExists,
-			}
-		}
-		if live != nil {
-			if err := live.Reopen(storePath); err != nil {
-				return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: reopen rebased store: %w", err)
-			}
-		}
-		log.Printf("autoputer: ProjectionBase rebased retained store from %d onto W=%d (base %s) for target %d", localSeq, descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
-		return plan, true, nil
-	default:
-		return projectionbase.RecoveryPlan{}, false, fmt.Errorf("%w: unknown recovery action %s", projectionbase.ErrBaseRefused, plan.Action)
 	}
+
+	// An empty store with a chain: this computer's disk is missing.
+	if _, err := os.Stat(choirstore.LegacyDoltWorkspacePath(storePath)); err == nil {
+		log.Printf("autoputer: legacy Dolt workspace present beside an empty store for %s; the guest migrator owns this boot", computerID)
+		return recoveryplan.RecoveryPlan{Action: recoveryplan.RecoveryResume, TargetSequence: targetSeq, Reason: "legacy Dolt workspace awaits migration"}, false, nil
+	}
+	privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
+	if privacyKeyPath == "" {
+		return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseUnavailable, "privacy key file is not configured", 0)
+	}
+	cipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, false)
+	if err != nil {
+		return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseUnavailable, "privacy key unavailable: "+err.Error(), 0)
+	}
+	events, err := computerevent.NewGuestHTTPClient(platformURL, capability)
+	if err != nil {
+		return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseUnavailable, err.Error(), 0)
+	}
+	chunks := snapshot.HTTPChunks{BaseURL: platformURL, ComputerID: computerID, Capability: capability}
+	candidates, err := snapshot.Scan(ctx, events, computerID, nil)
+	if err != nil {
+		return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseUnavailable, err.Error(), 0)
+	}
+	if len(candidates) == 0 {
+		if targetSeq > recoveryplan.MaxRecoveryTailEvents {
+			return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseMissing, fmt.Sprintf("no snapshot on the tape and the chain of %d events exceeds the %d-event genesis replay bound", targetSeq, recoveryplan.MaxRecoveryTailEvents), 0)
+		}
+		// A short chain with no snapshot replays from genesis: exact, bounded.
+		log.Printf("autoputer: no snapshot for %s; replaying %d events from genesis", computerID, targetSeq)
+		return recoveryplan.RecoveryPlan{Action: recoveryplan.RecoveryResume, TargetSequence: targetSeq, TailEvents: targetSeq, Reason: "no snapshot; bounded genesis replay"}, false, nil
+	}
+
+	// Install the snapshot as the state file. The empty store opened by the
+	// caller is closed and its (empty) files removed first.
+	if live != nil {
+		if err := live.Close(); err != nil {
+			return recoveryplan.RecoveryPlan{}, false, fmt.Errorf("autoputer: close empty store before snapshot restore: %w", err)
+		}
+	}
+	for _, name := range []string{statePath, statePath + "-wal", statePath + "-shm"} {
+		if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return recoveryplan.RecoveryPlan{}, false, fmt.Errorf("autoputer: clear empty state before snapshot restore: %w", err)
+		}
+	}
+	record, err := snapshot.Install(ctx, snapshot.RestoreConfig{
+		ComputerID: computerID, DestPath: statePath, Source: events, Chunks: chunks, Cipher: cipher,
+		MaxSequence: targetSeq,
+	}, candidates)
+	if err != nil {
+		if live != nil {
+			_ = live.Reopen(storePath)
+		}
+		return recoveryplan.RecoveryPlan{}, false, refuse(BootRefusalKindBaseUnavailable, err.Error(), 0)
+	}
+	if live != nil {
+		if err := live.Reopen(storePath); err != nil {
+			return recoveryplan.RecoveryPlan{}, false, fmt.Errorf("autoputer: reopen restored store: %w", err)
+		}
+	}
+	plan, err := recoveryplan.PlanRecovery(true, 0, true, record.StoreHeadSequence, targetSeq)
+	if err != nil {
+		return recoveryplan.RecoveryPlan{}, false, refuse(projectionBaseRefusalKind(record.StoreHeadSequence, targetSeq), plan.Reason, record.StoreHeadSequence)
+	}
+	log.Printf("autoputer: snapshot installed at sequence %d (root %s) for target %d", record.StoreHeadSequence, record.Manifest.Root, targetSeq)
+	return plan, true, nil
 }
 
 // queryCanonicalHead reads the platform canonical head. A missing head is the
@@ -237,29 +246,6 @@ func queryCanonicalHead(ctx context.Context, platformURL, computerID string, cap
 	return &head, nil
 }
 
-func isStoreEmpty(dir string) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil || len(entries) == 0 {
-		return true
-	}
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasPrefix(name, ".") && name != ".dolt" {
-			continue
-		}
-		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, "restore-quarantine-") {
-			continue
-		}
-		if name == ".dolt" || strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".sqlite") {
-			return false
-		}
-		if !e.IsDir() {
-			return false
-		}
-	}
-	return true
-}
-
 func sweepStagingArtifacts(dir string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -267,7 +253,7 @@ func sweepStagingArtifacts(dir string) {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, ".base-download-") || strings.HasPrefix(name, ".base-staging") {
+		if strings.HasPrefix(name, "restore-staging-") || strings.HasPrefix(name, ".snapshot-restore-") {
 			_ = os.RemoveAll(filepath.Join(dir, name))
 		}
 	}
