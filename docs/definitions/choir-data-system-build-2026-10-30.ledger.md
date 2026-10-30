@@ -114,3 +114,19 @@ Append-only. One terse entry per pass. Never edit earlier entries.
     - Dropped on purpose: verifier_attestations and computer_version_route_authority_config, which nothing reads in the old or the new code.
   - The deploy of 07d74c278 did a planned refresh of the paper: killed at 07:34:26, booted at 07:35:02, ready at 07:38. Production PostgreSQL is active, with databases control and graph and the role and password set.
   - Devin reviewed the cutover's .github diff for the security-epoch gate: VERDICT no-security-effect. The epoch was raised from 3 to 4 on the branch (4b80413f9).
+- 2026-10-30 08:20 UTC (FP0). Problem: the paper's guest store does not fit an in-boot migration.
+  - Evidence: a rehearsal on a reflink of the paper's data image (34 GB, of which 31 GB is the Dolt workspace) ran choir-migrate-guest on the host, capped at CPUQuota=200% and MemoryMax=8G.
+    - About 1,050 MB of SQLite was written in 4.5 min, roughly 230 MB a minute. Anonymous memory was about 2 GB.
+    - The live paper's /health rose to 35–38 s and host IO pressure reached 12% full. The idle IO class did not protect it, so FP0 stopped the rehearsal at 08:02:51, partway through computer_event_index.
+    - The extrapolated total is 25 min or more, against vmctl's 30-minute boot-ready wait. A failed wait deletes the partial file and boots again, so the migration would loop.
+  - Decision:
+    - At C5 the paper's VM is stopped through vmctl before the writers. Its image is migrated offline from the host, with full resources, while nothing else runs (runbook step 4b). Its boot hook then finds state.db and skips.
+    - VM_BOOT_READY_TIMEOUT is raised to 90m for the cutover on cutover/data-system (9cf2bc493), so other computers, such as the owner's 5.2 GB image and the 146 hibernated ones as they wake, migrate at first boot without looping. It goes back to 30m in phase 2.
+  - Guest Dolt deletion (C7) is on branch cutover/guest-dolt-delete (159b0f999). A boot deletes the legacy Dolt databases only when that computer's own migration report says ok, and it keeps the sidecars. The hourly fstrim gives the space back to the host. It lands after staging acceptance.
+  - cutover/fix-tests is merged into cutover/data-system (8933d1ba9), and PR #108 CI is re-running. The fixes cover:
+    - store guards;
+    - per-test temp directories for the SQLite helpers, the cause of the bulk agentcore failures;
+    - the routeledger retry on 40001, which closes the earlier owed check;
+    - the decode-roots and switch-registry gates;
+    - the CI lane lists.
+  - The rehearsal copy and loop devices are removed.
