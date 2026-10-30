@@ -1097,7 +1097,7 @@ work: twelve Yaegi workers, model calls, JSON. A 60-second guest CPU
 profile
 ([guest-cpu-is-unindexed-store-scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md),
 doc, with the raw profile in
-`docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt`) showed
+`docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt (deleted 2026-10-30, in git history)`) showed
 the main daemon at 1.17 cores (98% of guest time) and every other guest
 process, the Yaegi workers included, at 0.03. 73% of the daemon's CPU was
 under `database/sql.(*Rows).Next` in the embedded Dolt engine, and 52%

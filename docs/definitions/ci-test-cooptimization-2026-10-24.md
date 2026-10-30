@@ -135,7 +135,7 @@ now:
       the caches hold the export-data objects; push-to-deploy should be about
       11 min, prebuild-bound; the cache prune (workflow patch) is unmeasured
     main_uncertainty: what the 7 min Node B closure build spends (no per-derivation timing exists), and whether the cache prune keeps the Actions cache under 10 GB
-    next_observation: FP0 applies docs/evidence/ci0-workflow-ci-yml.patch to the PR branch, reads the prune lines and gh cache list, then lands; the median of the first five main pushes
+    next_observation: FP0 applies docs/evidence/ci0-workflow-ci-yml.patch (deleted 2026-10-30, in git history) to the PR branch, reads the prune lines and gh cache list, then lands; the median of the first five main pushes
   next_action: FP0 lands the lane (all non-workflow commits are pushable), applies the workflow patch, runs the prebuild timing change in docs/design/ci-node-b-build-2026-10-24.md (P0)
 
 receipts: []

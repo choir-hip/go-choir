@@ -232,7 +232,7 @@ now:
     then a budget draft for the owner to edit.
   census_procedure: >-
     Host-locality inventory first pass done
-    (docs/evidence/host-locality-inventory-2026-10-28.md). The size census
+    (docs/evidence/host-locality-inventory-2026-10-28.md (deleted 2026-10-30, in git history)). The size census
     of the paper runs as a planned job, not ad hoc: unpack base 5a241cb0
     (26.5 GB) into a scratch directory on the root disk (needs about 27 GB
     free; 83G free at 12:45 UTC); run the per-table and per-kind queries

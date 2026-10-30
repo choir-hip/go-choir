@@ -248,7 +248,7 @@ news sentences are attributions, not predictions"
   `entity`, `thread`, `article`) and seven edges (asserts, about,
   corroborates, contradicts, supersedes). It was superseded before it was
   built
-  (`docs/archive/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md`). Two of
+  (`docs/archive/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md (deleted 2026-10-30, in git history)`). Two of
   its rules carry forward: a cap on claims per item, and nothing is ever
   deleted, only superseded.
 

@@ -121,7 +121,7 @@ The carrier program is mid-flight and blocked. This phase completes it.
   out-of-band path plus `cmd/choir/roster.go` deleted — owner input becomes a
   document edit event. Proves: delivery and continuation are *derivable* —
   the wake family's structural death. Scope: deletes the wrong-path cluster
-  enumerated in `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md`
+  enumerated in `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md (deleted 2026-10-30, in git history)`
   (~44 instances across out-of-band input, process-local continuations, dual
   paths, sweep recovery, non-event mutations). Owner-corrected 2026-09-22:
   `tell` is a hallucination (a revision is just a diff — no payload to
@@ -164,7 +164,7 @@ Owner direction 2026-09-22: self-development is the priority because it
 compounds — the more Choir drives its own development, the faster everything
 else lands, and it cuts the CI pipeline out of the UX-improvement loop.
 Current state: email works, Texture is broken (the `tell`/roster input path —
-see `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md`). Three
+see `docs/problems/root-cause-wrong-path-cluster-2026-09-22.md (deleted 2026-10-30, in git history)`). Three
 capability phases, then the proof:
 
 - **3a — Capability phase 1: `choir` CLI from a harness.** An external harness
