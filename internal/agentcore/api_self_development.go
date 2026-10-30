@@ -19,7 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/platform"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -154,7 +154,7 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		report, err := h.rt.ReplayCompleteness(r.Context(), computerID)
 		if err != nil {
 			status := http.StatusInternalServerError
-			if errors.Is(err, projectionbase.ErrBaseRefused) {
+			if errors.Is(err, recoveryplan.ErrBaseRefused) {
 				status = http.StatusConflict
 			} else if errors.Is(err, ErrReplayCompletenessUnavailable) {
 				status = http.StatusServiceUnavailable

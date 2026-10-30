@@ -2,16 +2,15 @@ package platform
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 )
 
 // Failure modes, written before the code
@@ -210,26 +209,17 @@ func TestListProjectionJobsReturnsEveryRow(t *testing.T) {
 	}
 }
 
-// breakCorpusStore points the store's corpus at a Dolt without og_objects, so
-// the og live-set query fails (the same device as
+// breakCorpusStore points the store's graph database at an empty database
+// without og_objects, so the og live-set query fails (the same device as
 // TestRunArtifactGCFailsClosedOnLiveSetError).
 func breakCorpusStore(t *testing.T, store *Store, root string) {
 	t.Helper()
-	corpusRoot := filepath.Join(root, "corpus-dolt")
-	if err := os.MkdirAll(corpusRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := embedded.ParseDSN(fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=corpus&multistatements=true", corpusRoot))
+	db, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	connector, err := embedded.NewConnector(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	db := sql.OpenDB(connector)
 	store.corpusDB = db
-	t.Cleanup(func() { _ = db.Close(); _ = connector.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 }
 
 func readGCLogOps(t *testing.T, artifactsRoot string) []string {

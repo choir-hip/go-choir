@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,7 +14,9 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
+
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -44,25 +45,19 @@ func testOwnerActSigner(t *testing.T) *owneract.Signer {
 func openTestCorpusdModes(t *testing.T, authority *platform.OwnerActAuthority) *httptest.Server {
 	t.Helper()
 	root := t.TempDir()
-	rootConnector, err := embedded.NewConnector(mustParseDoltDSN(t, fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)))
+	control, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootDB := sql.OpenDB(rootConnector)
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS platform"); err != nil {
-		t.Fatal(err)
-	}
-	_ = rootDB.Close()
-	_ = rootConnector.Close()
-	connector, err := embedded.NewConnector(mustParseDoltDSN(t, fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=platform&multistatements=true&clientfoundrows=true", root)))
+	graph, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := platform.NewStore(sql.OpenDB(connector))
+	store := platform.NewStore(control, graph)
 	if err := store.Bootstrap(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = store.Close(); _ = connector.Close() })
+	t.Cleanup(func() { _ = store.Close() })
 	service := platform.NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
 	modes, err := service.SelfDevelopmentModeRuntime()
 	if err != nil {
@@ -76,15 +71,6 @@ func openTestCorpusdModes(t *testing.T, authority *platform.OwnerActAuthority) *
 	server := httptest.NewServer(http.HandlerFunc(handler.HandleSelfDevelopmentMode))
 	t.Cleanup(server.Close)
 	return server
-}
-
-func mustParseDoltDSN(t *testing.T, dsn string) embedded.Config {
-	t.Helper()
-	cfg, err := embedded.ParseDSN(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cfg
 }
 
 func armBody(t *testing.T, generation uint64, key string) (string, platform.SetSelfDevelopmentModeRequest) {

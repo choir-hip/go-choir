@@ -13,8 +13,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // docs/problems/paper-post-refresh-health-windows-2026-10-22.md, "Findings:
@@ -55,11 +53,11 @@ func (b *lockedBuffer) lines(substr string) []string {
 }
 
 // holdWriteConnInEngine holds the write pool's one connection inside the
-// engine (a SLEEP statement) until ctx ends: a raw s.db caller that never
-// takes the engine lock, the shape of the unattributed bursts.
+// SQLite driver (a long recursive query, interrupted when ctx ends): a raw
+// s.db caller, the shape of the unattributed bursts.
 func holdWriteConnInEngine(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, "SELECT SLEEP(8)")
-	return err
+	var n int64
+	return db.QueryRowContext(ctx, "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 2000000000) SELECT count(*) FROM c").Scan(&n)
 }
 
 func TestHealthStoreStallLogsTheEngineHolderOncePerMinute(t *testing.T) {
@@ -81,7 +79,7 @@ func TestHealthStoreStallLogsTheEngineHolderOncePerMinute(t *testing.T) {
 		select {
 		case <-held:
 		case <-time.After(10 * time.Second):
-			t.Errorf("the SLEEP holder did not end after its context was cancelled")
+			t.Errorf("the query holder did not end after its context was cancelled")
 		}
 	})
 	waitFor(t, "the write connection in use", func() bool { return productStore.DB().Stats().InUse == 1 })
@@ -103,7 +101,7 @@ func TestHealthStoreStallLogsTheEngineHolderOncePerMinute(t *testing.T) {
 	if !strings.Contains(all, "choir=internal/agentcore.holdWriteConnInEngine") {
 		t.Fatalf("no holder line names the choir caller holdWriteConnInEngine:\n%s", all)
 	}
-	if !strings.Contains(all, "engine=go-mysql-server/") && !strings.Contains(all, "engine=dolt/") && !strings.Contains(all, "engine=driver/") {
+	if !strings.Contains(all, "engine=") {
 		t.Fatalf("holder lines carry no engine frame:\n%s", all)
 	}
 	for _, line := range holders {
@@ -161,8 +159,13 @@ func TestObservabilityReportsStorePoolStats(t *testing.T) {
 				t.Fatalf("store_pools.%s lacks %q: %s", pool, key, raw)
 			}
 		}
-		if got := fmt.Sprint(pools[pool]["max_open"]); got != "1" {
-			t.Fatalf("store_pools.%s.max_open=%s want 1", pool, got)
+		// One writer connection; the WAL read pool is wider.
+		want := "1"
+		if pool == "read" {
+			want = "4"
+		}
+		if got := fmt.Sprint(pools[pool]["max_open"]); got != want {
+			t.Fatalf("store_pools.%s.max_open=%s want %s", pool, got, want)
 		}
 	}
 }
@@ -174,12 +177,12 @@ func TestObservabilityReportsStorePoolStats(t *testing.T) {
 // counted but not listed; at most storeStallHolderMax lines.
 func TestStoreStallHolderLinesFilterAndBound(t *testing.T) {
 	engine := `goroutine 7 [select]:
-github.com/dolthub/go-mysql-server/sql/expression/function.(*Sleep).Eval(0xc000, {0x1, 0x2})
-	/m/gms/sql/expression/function/sleep.go:80 +0x1
-github.com/dolthub/go-mysql-server/sql/rowexec.(*projectIter).Next(0xc000)
-	/m/gms/sql/rowexec/proj.go:10 +0x1
-github.com/dolthub/driver/v2.(*Conn).ExecContext(0xc000)
-	/m/driver/conn.go:10 +0x1
+modernc.org/sqlite/lib.Xsqlite3_step(0xc000, {0x1, 0x2})
+	/m/sqlite/lib/sqlite_linux_amd64.go:80 +0x1
+modernc.org/sqlite.(*stmt).exec(0xc000)
+	/m/sqlite/sqlite.go:10 +0x1
+modernc.org/sqlite.(*conn).ExecContext(0xc000)
+	/m/sqlite/sqlite.go:20 +0x1
 database/sql.(*DB).execDC(0xc000)
 	/go/src/database/sql/sql.go:1700 +0x1
 github.com/yusefmosiah/go-choir/internal/store.(*Store).finalizeBatch(0xc000)
@@ -189,15 +192,15 @@ created by github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).Start i
 	parked := `goroutine 8 [select]:
 database/sql.(*DB).conn(0xc000)
 	/go/src/database/sql/sql.go:1300 +0x1
-github.com/dolthub/driver/v2.(*Conn).QueryContext(0xc000)
-	/m/driver/conn.go:10 +0x1
+modernc.org/sqlite.(*conn).QueryContext(0xc000)
+	/m/sqlite/sqlite.go:10 +0x1
 github.com/yusefmosiah/go-choir/internal/store.(*Store).CountPendingAgentMutations(0xc000)
 	/r/internal/store/store.go:10 +0x1`
 	background := `goroutine 9 [chan receive, 3 minutes]:
-github.com/dolthub/dolt/go/store/nbs.(*journalWriter).flushLoop(0xc000)
-	/m/dolt/nbs/journal.go:10 +0x1
-created by github.com/dolthub/dolt/go/store/nbs.newJournal in goroutine 1
-	/m/dolt/nbs/journal.go:5 +0x1`
+modernc.org/sqlite.(*conn).watchInterrupt(0xc000)
+	/m/sqlite/sqlite.go:10 +0x1
+created by modernc.org/sqlite.newConn in goroutine 1
+	/m/sqlite/sqlite.go:5 +0x1`
 	plain := `goroutine 10 [running]:
 github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	/r/internal/agentcore/runtime.go:10 +0x1`
@@ -205,7 +208,7 @@ github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	if matched != 2 || len(lines) != 1 {
 		t.Fatalf("matched=%d lines=%q, want two engine goroutines matched and the choir one shown", matched, lines)
 	}
-	want := "store_stalled holder g=7 [select] choir=internal/store.(*Store).finalizeBatch engine=go-mysql-server/sql/expression/function.(*Sleep).Eval < go-mysql-server/sql/rowexec.(*projectIter).Next"
+	want := "store_stalled holder g=7 [select] choir=internal/store.(*Store).finalizeBatch engine=lib.Xsqlite3_step < (*stmt).exec"
 	if lines[0] != want {
 		t.Fatalf("first line\n got %q\nwant %q", lines[0], want)
 	}
@@ -222,77 +225,5 @@ github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	lines, _ = storeStallHolderLines(long)
 	if len(lines) != 1 || len(lines[0]) > storeStallHolderLineMax {
 		t.Fatalf("long line not bounded: %d bytes", len(lines[0]))
-	}
-}
-
-// The stall header names a running online Dolt GC pass, and says idle
-// otherwise, so a snapshot read after the fact is never ambiguous
-// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md section 1:
-// the 12:51:04 snapshot named a bystander 134 ms after a 19 s pass ended).
-func TestFormatOnlineGCNamesAPass(t *testing.T) {
-	if got := formatOnlineGC(store.OnlineGCStatus{}); got != "online_gc=idle" {
-		t.Fatalf("idle = %q", got)
-	}
-	got := formatOnlineGC(store.OnlineGCStatus{Active: true, Since: "2026-10-23T12:50:45Z"})
-	if got != "online_gc=active since=2026-10-23T12:50:45Z" {
-		t.Fatalf("active = %q", got)
-	}
-}
-
-// The header of a real stall carries the field, between stack_truncated and the
-// pools, and /health's answer is still 503 store_stalled with its usual body.
-func TestStoreStallHeaderCarriesOnlineGCField(t *testing.T) {
-	handler, productStore := newBoundedHealthFixture(t)
-	handler.rt.cfg.ComputerID = "computer-stall-gc-field"
-	sink := &lockedBuffer{}
-	previous := log.Writer()
-	log.SetOutput(sink)
-	t.Cleanup(func() { log.SetOutput(previous) })
-	ctx, cancel := context.WithCancel(context.Background())
-	held := make(chan struct{})
-	go func() {
-		defer close(held)
-		_ = holdWriteConnInEngine(ctx, productStore.DB())
-	}()
-	t.Cleanup(func() {
-		cancel()
-		<-held
-	})
-	waitFor(t, "the write connection in use", func() bool { return productStore.DB().Stats().InUse == 1 })
-	rec, _ := serveHealth(t, handler)
-	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "store_stalled") {
-		t.Fatalf("/health = %d %s", rec.Code, rec.Body.String())
-	}
-	header := "store_stalled holders: computer=computer-stall-gc-field"
-	waitFor(t, "the stall header line", func() bool { return len(sink.lines(header)) == 1 })
-	head := sink.lines(header)[0]
-	if !strings.Contains(head, "stack_truncated=false online_gc=idle write_pool{") {
-		t.Fatalf("header lacks the online_gc field in place: %s", head)
-	}
-}
-
-// The observability store block reports the flag next to the pools.
-func TestObservabilityReportsOnlineGC(t *testing.T) {
-	rt := telemetryRuntime(t, "computer-online-gc")
-	req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
-	req.Header.Set("X-Authenticated-User", "owner-telemetry")
-	rec := httptest.NewRecorder()
-	(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
-	var obs struct {
-		StorePools struct {
-			OnlineGC struct {
-				Active *bool   `json:"active"`
-				Since  *string `json:"since"`
-			} `json:"online_gc"`
-		} `json:"store_pools"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || rec.Code != http.StatusOK {
-		t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
-	}
-	if obs.StorePools.OnlineGC.Active == nil || *obs.StorePools.OnlineGC.Active {
-		t.Fatalf("store_pools.online_gc.active missing or true on an idle store: %s", rec.Body.String())
-	}
-	if obs.StorePools.OnlineGC.Since != nil {
-		t.Fatalf("idle store reports since: %s", rec.Body.String())
 	}
 }

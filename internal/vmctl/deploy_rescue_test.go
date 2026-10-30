@@ -508,11 +508,11 @@ func TestDeployGrantRemembersEveryConsumedTargetNotOnlyTheLast(t *testing.T) {
 	}
 }
 
-func TestStoreCompactionNeverGrantsOrRescues(t *testing.T) {
+func TestOfflineMaintenanceNeverGrantsOrRescues(t *testing.T) {
 	f := newRescueFixture(t, true)
 	f.failStop(stoppedByWedged)
 	noop := func(string) error { return nil }
-	req := deployRefreshRequest{UserID: rescueUser, DesktopID: PrimaryDesktopID, Target: storeCompactTarget}
+	req := deployRefreshRequest{UserID: rescueUser, DesktopID: PrimaryDesktopID, Target: "offline-maintenance"}
 
 	// A maintenance refresh of a stopped protected computer is skipped: no
 	// grant, no boot.

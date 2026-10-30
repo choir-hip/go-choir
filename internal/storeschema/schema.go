@@ -1,6 +1,7 @@
 // Package storeschema is the single authority for the guest persistent
-// store's schema epoch. internal/store writes the receipt inside the Dolt
-// workspace on Open; the updater reads it pre-mutation for the S2-d
+// store's schema epoch. internal/store writes the receipt in the sidecar
+// directory beside the SQLite state file ("<base>.texture", kept from the
+// Dolt era so the updater's path and the floor survive the migration) on Open; the updater reads it pre-mutation for the S2-d
 // state-compat gate; the builder stamps it on release receipts. It is a
 // leaf package so the updater daemon and host builder binaries need not
 // link the embedded-Dolt engine.
@@ -53,7 +54,7 @@ import (
 //     or below.
 const Version uint64 = 3
 
-// File is the receipt filename inside the unified Dolt workspace
+// File is the receipt filename inside the store's sidecar directory
 // (deriveTextureWorkspacePath(StorePath)).
 const File = "store-schema.json"
 

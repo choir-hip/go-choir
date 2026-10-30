@@ -1,7 +1,5 @@
 package selfdevprotocol
 
-import "sort"
-
 // The host's verdict on a published checkpoint
 // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 "The proof"
 // and residual R1). The guest binds a checkpoint from its live store without
@@ -86,8 +84,11 @@ const maxVerdictTables = 32
 // restore's own reconstruction, which replays in the live store's mode. The
 // Dolt HEAD is an audit receipt and never decides.
 func JudgeCheckpointWitness(depositMode string, checkpoint, rebuilt VMLocalContentWitness) CheckpointVerdict {
-	if checkpoint.IsDoltHashWitness() {
-		return judgeCheckpointWitnessV2(depositMode, checkpoint, rebuilt)
+	if err := RefuseWitnessVersion(checkpoint.version()); err != nil {
+		return CheckpointVerdict{Status: CheckpointVerdictUnverified, Reason: VerdictReasonWitnessVersion, Detail: "checkpoint witness: " + err.Error()}
+	}
+	if err := RefuseWitnessVersion(rebuilt.version()); err != nil {
+		return CheckpointVerdict{Status: CheckpointVerdictUnverified, Reason: VerdictReasonWitnessVersion, Detail: "rebuilt witness: " + err.Error()}
 	}
 	if err := checkpoint.Validate(); err != nil {
 		return CheckpointVerdict{Status: CheckpointVerdictUnverified, Reason: VerdictReasonInvalidWitness, Detail: "checkpoint witness: " + err.Error()}
@@ -95,41 +96,17 @@ func JudgeCheckpointWitness(depositMode string, checkpoint, rebuilt VMLocalConte
 	if err := rebuilt.Validate(); err != nil {
 		return CheckpointVerdict{Status: CheckpointVerdictUnverified, Reason: VerdictReasonInvalidWitness, Detail: "rebuilt witness: " + err.Error()}
 	}
-	if err := WitnessContentMatches(rebuilt, checkpoint); err == nil {
+	err := WitnessContentMatches(rebuilt, checkpoint)
+	if err == nil {
 		return CheckpointVerdict{Status: CheckpointVerdictVerified}
+	}
+	verdict := CheckpointVerdict{DifferingTables: differingTables(checkpoint, rebuilt), Detail: err.Error()}
+	if depositMode == DepositModeUpcast {
+		verdict.Status, verdict.Reason = CheckpointVerdictNotDerivable, VerdictReasonWitnessMismatch
 	} else {
-		tables := differingTables(checkpoint, rebuilt)
-		verdict := CheckpointVerdict{DifferingTables: tables, Detail: err.Error()}
-		if depositMode == DepositModeUpcast {
-			verdict.Status, verdict.Reason = CheckpointVerdictNotDerivable, VerdictReasonWitnessMismatch
-		} else {
-			verdict.Status, verdict.Reason = CheckpointVerdictUnverified, VerdictReasonBaseUpcast
-		}
-		return verdict
+		verdict.Status, verdict.Reason = CheckpointVerdictUnverified, VerdictReasonBaseUpcast
 	}
-}
-
-// differingTables names the tables whose schema or content hash differs
-// between two witnesses, or that only one of them has, sorted and bounded.
-func differingTables(a, b VMLocalContentWitness) []string {
-	seen := map[string]struct{}{}
-	for table := range a.Tables {
-		seen[table] = struct{}{}
-	}
-	for table := range b.Tables {
-		seen[table] = struct{}{}
-	}
-	var out []string
-	for table := range seen {
-		if a.Tables[table] != b.Tables[table] || a.Schema[table] != b.Schema[table] {
-			out = append(out, table)
-		}
-	}
-	sort.Strings(out)
-	if len(out) > maxVerdictTables {
-		out = out[:maxVerdictTables]
-	}
-	return out
+	return verdict
 }
 
 // SealWitness returns w with its derivability digest computed from its

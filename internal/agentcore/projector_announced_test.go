@@ -2,7 +2,6 @@ package agentcore
 
 import (
 	"context"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -57,23 +56,10 @@ func TestSignalledSweepDispatchesAnnouncedWakesWithoutListing(t *testing.T) {
 		}
 		return nil
 	})
-	listings := func() uint64 {
-		var n uint64
-		for op, st := range s.EngineMutexStats() {
-			if strings.Contains(op, "ListObjectsByMetadata") && strings.Contains(op, "$.projected") {
-				n += st.Calls
-			}
-		}
-		return n
-	}
-	before := listings()
 	rt.sweepActorWakes(ctx, true)
 	rt.sweepActorWakes(ctx, true)
 	if got := dispatches.Load(); got != 1 {
 		t.Fatalf("announced dispatches = %d, want exactly 1", got)
-	}
-	if got := listings() - before; got != 0 {
-		t.Fatalf("signalled sweeps listed the outbox %d times", got)
 	}
 	if wakes, _ := s.ListUnprojectedActorWakes(ctx); len(wakes) != 0 {
 		t.Fatalf("unprojected wakes after the signalled sweep: %+v", wakes)

@@ -109,15 +109,15 @@ func TestFrozenFamiliesCoverSourceVocabulary(t *testing.T) {
 	// manifest must be exactly the ones the schema still carries.
 	for _, ident := range FrozenSQLIdentifiers {
 		found := false
-		for lit := range sourceLiterals(t, "internal/store/store.go") {
+		for lit := range sourceLiterals(t, "internal/store/schema.go") {
 			if lit == ident {
 				found = true
 			}
 		}
 		if !found {
-			src, _ := os.ReadFile(filepath.Join("..", "store", "store.go"))
+			src, _ := os.ReadFile(filepath.Join("..", "store", "schema.go"))
 			if !regexp.MustCompile(regexp.QuoteMeta(ident)).Match(src) {
-				t.Errorf("frozen SQL identifier %q not found in store.go", ident)
+				t.Errorf("frozen SQL identifier %q not found in schema.go", ident)
 			}
 		}
 	}

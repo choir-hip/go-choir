@@ -1,0 +1,24 @@
+name: Put PostgreSQL server binaries on PATH
+description: dbxtest.Postgres starts a throwaway cluster with initdb and pg_ctl from PATH (docs/design/data-system-build-sheet-2026-10-30.md, decision 13)
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        # GitHub's ubuntu images ship PostgreSQL binaries (service disabled);
+        # install the distribution package only if they are missing.
+        bindir=""
+        for d in /usr/lib/postgresql/*/bin; do
+          if [[ -x "$d/initdb" && -x "$d/pg_ctl" ]]; then bindir="$d"; fi
+        done
+        if [[ -z "$bindir" ]]; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql
+          for d in /usr/lib/postgresql/*/bin; do
+            if [[ -x "$d/initdb" && -x "$d/pg_ctl" ]]; then bindir="$d"; fi
+          done
+        fi
+        [[ -n "$bindir" ]] || { echo "no PostgreSQL server binaries found" >&2; exit 1; }
+        echo "$bindir" >> "$GITHUB_PATH"
+        "$bindir/pg_ctl" --version

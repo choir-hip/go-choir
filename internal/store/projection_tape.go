@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -17,6 +18,14 @@ type projectionTape struct {
 	appender   *computerevent.ComputerEventAppender
 	// stats counts the tape events this binding accepts (telemetry_stats.go).
 	stats *telemetryCounters
+	// sealer encrypts each projection batch under the computer key before it
+	// is pinned (build sheet decision 9). A tape bound without a sealer is
+	// the test seam; production wiring (autoputer) always sets one.
+	sealer atomic.Pointer[computerevent.PrivateArtifactCipher]
+	// dryRun validates a batch against committed state before the private
+	// path pins it: AppendNewPrivatePayload, unlike AppendNewPayload, does not
+	// run the appender's dry run.
+	dryRun func(ctx context.Context, batch *computerevent.ProjectionBatch) error
 }
 
 // BindProjectionTape routes live desktop and OG mutations through append+project.
@@ -31,6 +40,12 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 		return fmt.Errorf("store: projection tape requires computer_id")
 	}
 	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats}
+	tape.dryRun = func(ctx context.Context, batch *computerevent.ProjectionBatch) error {
+		return s.DryRunProjectionBatch(ctx, computerID, batch)
+	}
+	if prior := s.projectionTape; prior != nil {
+		tape.sealer.Store(prior.sealer.Load()) // a rebind keeps the sealer
+	}
 	s.projectionTape = tape
 	if sl := s.telemetry.Load(); sl != nil {
 		appender.SetAppendBarrier(sl.appendBarrier) // a rebind keeps the barrier
@@ -38,6 +53,23 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	if s.ogStore != nil {
 		s.ogStore.SetMutationInterceptor(tape.interceptOG)
 	}
+	return nil
+}
+
+// SetProjectionSealer makes the bound projection tape seal every projection
+// batch payload under the computer key (data system build sheet decision 9:
+// projection_batch_recorded payloads take the private path, so the host holds
+// ciphertext). The replay path reads them back through the payload resolver
+// with the same cipher (ComputerEventAppender.SetPayloadResolver). Production
+// must call it with the guest cipher before the first append.
+func (s *Store) SetProjectionSealer(cipher *computerevent.PrivateArtifactCipher) error {
+	if s == nil || s.projectionTape == nil {
+		return fmt.Errorf("store: projection tape is not bound")
+	}
+	if cipher == nil {
+		return fmt.Errorf("store: projection sealer is required (refusing to pin projection batches in plaintext)")
+	}
+	s.projectionTape.sealer.Store(cipher)
 	return nil
 }
 
@@ -144,7 +176,24 @@ func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.Pr
 		PrivacyClass:   "owner",
 		ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	_, _, err = t.appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, computerevent.ProjectionBatchMediaType, "owner")
+	if cipher := t.sealer.Load(); cipher != nil {
+		// Sealed: the event names a private envelope. The appender resolves it
+		// at finalize and at replay with the payload resolver's cipher, which
+		// reads the event's PrivacyClass to decide to decrypt.
+		event.PrivacyClass = "private"
+		var batch computerevent.ProjectionBatch
+		if err := json.Unmarshal(payload, &batch); err != nil {
+			return fmt.Errorf("store: decode projection batch for dry run: %w", err)
+		}
+		if t.dryRun != nil {
+			if err := t.dryRun(ctx, &batch); err != nil {
+				return fmt.Errorf("store: append projection batch: %w: %v", computerevent.ErrBatchRefused, err)
+			}
+		}
+		_, _, err = t.appender.AppendNewPrivatePayload(ctx, event, computerevent.TransitionInput{}, payload, computerevent.ProjectionBatchMediaType, cipher)
+	} else {
+		_, _, err = t.appender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, computerevent.ProjectionBatchMediaType, "owner")
+	}
 	if err != nil {
 		return fmt.Errorf("store: append projection batch: %w", err)
 	}

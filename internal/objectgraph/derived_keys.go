@@ -51,33 +51,33 @@ const (
 const ActorWakeOutboxKind = ObjectKind("choir.actor_wake_outbox")
 
 const (
-	derivedKeysPageOpName    = "(*DoltStore).ValidateDerivedKeys page"
 	derivedKeyValueMaxChars  = 255
 	derivedKeyDefaultPageLen = 200
 	// derivedKeyFetchBatch bounds each primary-key IN list; see
-	// snapshotFetchBatch for why the engine wants short lists.
+	// snapshotFetchBatch.
 	derivedKeyProgressEvery = 5 * time.Second
 )
 
 const derivedKeysDDL = `CREATE TABLE IF NOT EXISTS ` + DerivedKeysTable + ` (
-	canonical_id VARCHAR(255) NOT NULL,
-	key_name     VARCHAR(64)  NOT NULL,
-	key_value    VARCHAR(255) NULL,
-	owner_id     VARCHAR(255) NOT NULL,
-	updated_at   DATETIME     NOT NULL,
-	content_hash VARCHAR(128) NOT NULL,
-	derive_ok    BOOLEAN      NOT NULL DEFAULT TRUE,
-	PRIMARY KEY (canonical_id, key_name),
-	INDEX idx_og_key_index_lookup (key_name, key_value, canonical_id),
-	INDEX idx_og_key_index_recent (key_name, key_value, owner_id, updated_at, canonical_id)
-)`
+	canonical_id TEXT     NOT NULL,
+	key_name     TEXT     NOT NULL,
+	key_value    TEXT     NULL,
+	owner_id     TEXT     NOT NULL,
+	updated_at   DATETIME NOT NULL,
+	content_hash TEXT     NOT NULL,
+	derive_ok    INTEGER  NOT NULL DEFAULT 1,
+	PRIMARY KEY (canonical_id, key_name)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_og_key_index_lookup ON ` + DerivedKeysTable + `(key_name, key_value, canonical_id);
+CREATE INDEX IF NOT EXISTS idx_og_key_index_recent ON ` + DerivedKeysTable + `(key_name, key_value, owner_id, updated_at, canonical_id);
+`
 
 // derivedFamily is one family of keys: the kind it covers and the SQL
 // expression over an og_objects row that the JSON read evaluated.
 type derivedFamily struct {
 	Name string
 	Kind ObjectKind
-	// expr yields the untruncated value; the table holds LEFT(expr, 255).
+	// expr yields the untruncated value; the table holds substr(expr, 1, 255).
 	expr string
 }
 
@@ -85,10 +85,10 @@ type derivedFamily struct {
 // and the outbox is read by a loop every minute, while the others wait on a
 // larger kind.
 var derivedFamilies = []derivedFamily{
-	{Name: KeyActorWakeOutboxProjected, Kind: ActorWakeOutboxKind, expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.projected'))`},
-	{Name: KeyRunAgentID, Kind: "choir.run", expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.agent_id'))`},
-	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.addressee'))`},
-	{Name: KeySourceRefDocID, Kind: "choir.source_ref", expr: `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id'))`},
+	{Name: KeyActorWakeOutboxProjected, Kind: ActorWakeOutboxKind, expr: jsonTextSQL(`metadata`, `'$.projected'`)},
+	{Name: KeyRunAgentID, Kind: "choir.run", expr: jsonTextSQL(`metadata`, `'$.agent_id'`)},
+	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: jsonTextSQL(bodyTextSQL, `'$.addressee'`)},
+	{Name: KeySourceRefDocID, Kind: "choir.source_ref", expr: jsonTextSQL(`metadata`, `'$.doc_id'`)},
 }
 
 func derivedFamilyByName(name string) *derivedFamily {
@@ -133,7 +133,7 @@ type DerivedKeyExecer interface {
 }
 
 // DerivedKeys is the process-wide state of the side table, shared by the
-// write and read stores of one engine. Its maps are built once and never
+// write and read stores of one database. Its maps are built once and never
 // changed; the values are atomics.
 //
 // Withdrawal and publication are ordered by pubMu: Invalidate, a write that
@@ -158,6 +158,11 @@ type DerivedKeys struct {
 	pubMu      sync.Mutex
 	passMu     sync.Mutex
 	wake       chan struct{}
+	// sideReads counts reads answered from the side table; passPages and
+	// maxPageHoldNanos count the validator's pages and its longest one.
+	sideReads        atomic.Uint64
+	passPages        atomic.Uint64
+	maxPageHoldNanos atomic.Int64
 	// Test seams, nil in production: beforeRead runs as a side-table read
 	// starts, beforePublish as a pass is about to check and publish. The interleaving tests put a writer at each.
 	beforeRead, beforePublish func(name string)
@@ -187,17 +192,16 @@ func newDerivedKeys() *DerivedKeys {
 }
 
 // DerivedKeys returns the store's side-table state.
-func (s *DoltStore) DerivedKeys() *DerivedKeys {
+func (s *SQLStore) DerivedKeys() *DerivedKeys {
 	if s == nil {
 		return nil
 	}
 	return s.derived
 }
 
-// ShareDerivedKeys points this store at another store's side-table state, as
-// ShareEngineMutex does for the engine: the read store must see what the
-// write store validated.
-func (s *DoltStore) ShareDerivedKeys(other *DoltStore) {
+// ShareDerivedKeys points this store at another store's side-table state:
+// the read store must see what the write store validated.
+func (s *SQLStore) ShareDerivedKeys(other *SQLStore) {
 	if other != nil && other.derived != nil {
 		s.derived = other.derived
 	}
@@ -271,7 +275,7 @@ func (d *DerivedKeys) Invalidate(name, reason string) {
 	was := v.Swap(false)
 	d.pubMu.Unlock()
 	if was {
-		log.Printf("objectgraph dolt: derived keys %s withdrawn: %s", name, reason)
+		log.Printf("objectgraph sql: derived keys %s withdrawn: %s", name, reason)
 	}
 	d.signal()
 }
@@ -287,18 +291,24 @@ func (d *DerivedKeys) InvalidateAll(reason string) {
 }
 
 // deriveSQL derives one object's row for a family from the stored og_objects
-// row, with the engine's own expression, exactly as the JSON read evaluates
+// row, with the same expression the JSON read evaluates,
 // it. ok selects the success form; the failure form stores no key and
 // derive_ok = false, for a row whose expression errors (a body that is not
 // JSON).
 func deriveSQL(fam *derivedFamily, where string, ok bool) string {
-	value, flag := `LEFT(`+fam.expr+`, 255)`, `TRUE`
+	value, flag := `substr(`+fam.expr+`, 1, 255)`, `1`
 	if !ok {
-		value, flag = `NULL`, `FALSE`
+		value, flag = `NULL`, `0`
 	}
-	return `REPLACE INTO ` + DerivedKeysTable + ` (canonical_id, key_name, key_value, owner_id, updated_at, content_hash, derive_ok)
+	return `INSERT INTO ` + DerivedKeysTable + ` (canonical_id, key_name, key_value, owner_id, updated_at, content_hash, derive_ok)
 		SELECT canonical_id, ?, ` + value + `, owner_id, updated_at, content_hash, ` + flag + `
-		FROM og_objects WHERE object_kind = ? AND ` + where
+		FROM og_objects WHERE object_kind = ? AND ` + where + `
+		ON CONFLICT (canonical_id, key_name) DO UPDATE SET
+			key_value = excluded.key_value,
+			owner_id = excluded.owner_id,
+			updated_at = excluded.updated_at,
+			content_hash = excluded.content_hash,
+			derive_ok = excluded.derive_ok`
 }
 
 // Maintain brings the derived keys of one object up to date with its
@@ -334,7 +344,7 @@ func (d *DerivedKeys) deriveOne(ctx context.Context, x DerivedKeyExecer, fam *de
 	marked := d.bad[fam.Name].CompareAndSwap(false, true)
 	d.pubMu.Unlock()
 	if marked {
-		log.Printf("objectgraph dolt: derived keys %s: %s has a body or metadata the expression cannot read; the family keeps the JSON path", fam.Name, canonicalID)
+		log.Printf("objectgraph sql: derived keys %s: %s has a body or metadata the expression cannot read; the family keeps the JSON path", fam.Name, canonicalID)
 	}
 }
 
@@ -360,13 +370,13 @@ func (d *DerivedKeys) Drop(ctx context.Context, x DerivedKeyExecer, canonicalID 
 // is cheap on any store: nothing scales with og_objects. A failure leaves the
 // table unready, which keeps every read on the JSON path and every writer's
 // maintenance off; it does not stop the boot.
-func (s *DoltStore) ensureDerivedKeysTable(ctx context.Context) {
+func (s *SQLStore) ensureDerivedKeysTable(ctx context.Context) {
 	done := BootPhase("store: open", "objectgraph-schema/derived-keys-table")
 	_, err := s.db.ExecContext(ctx, derivedKeysDDL)
 	done(err)
 	if err != nil {
 		s.derived.tableReady.Store(false)
-		log.Printf("objectgraph dolt: %s unavailable, reads keep the JSON path: %v", DerivedKeysTable, err)
+		log.Printf("objectgraph sql: %s unavailable, reads keep the JSON path: %v", DerivedKeysTable, err)
 		return
 	}
 	s.derived.tableReady.Store(true)
@@ -377,8 +387,8 @@ func (s *DoltStore) ensureDerivedKeysTable(ctx context.Context) {
 // derivedMetadataRead reports the family a metadata page read can use, or
 // nil when it must keep the JSON path: another kind or field, a family not
 // validated, or a value of 255 characters or more (below that length
-// LEFT(x, 255) = v exactly when x = v).
-func (s *DoltStore) derivedMetadataRead(kind, jsonPath, value string) *derivedFamily {
+// substr(x, 1, 255) = v exactly when x = v).
+func (s *SQLStore) derivedMetadataRead(kind, jsonPath, value string) *derivedFamily {
 	fam := derivedFamilyForMetadataRead(kind, jsonPath)
 	if fam == nil || !s.derived.readable(fam.Name) || utf8.RuneCountInString(value) >= derivedKeyValueMaxChars {
 		return nil
@@ -388,7 +398,7 @@ func (s *DoltStore) derivedMetadataRead(kind, jsonPath, value string) *derivedFa
 
 // derivedAddresseeRead reports the family a body lookup can use: the
 // addressee of a commitment record, one plain equality, a value that fits.
-func (s *DoltStore) derivedAddresseeRead(kind string, matches []JSONFieldMatch) *derivedFamily {
+func (s *SQLStore) derivedAddresseeRead(kind string, matches []JSONFieldMatch) *derivedFamily {
 	if kind != string(commitmentRecordKind) || len(matches) != 1 {
 		return nil
 	}
@@ -434,36 +444,36 @@ type derivedIDRow struct {
 // checked against the row the table promised (kind, owner, updated_at,
 // content_hash); a difference, or a promised row that is gone, is a stale
 // table: the family is withdrawn and ok is false, and the caller answers
-// from the JSON path. The caller holds the engine mutex, which does not order
-// it with the projector, so the family's readability is checked again once
-// the transaction's snapshot is taken: a writer withdraws before it commits,
+// from the JSON path. The family's readability is checked again once the
+// transaction's snapshot is taken: a writer withdraws before it commits,
 // so any row in the snapshot that withdrew the family is seen here, and the
 // caller's earlier check is only a shortcut.
-func (s *DoltStore) readDerived(ctx context.Context, fam *derivedFamily, query string, args []any) (objs []Object, ok bool, err error) {
+func (s *SQLStore) readDerived(ctx context.Context, fam *derivedFamily, query string, args []any) (objs []Object, ok bool, err error) {
+	s.derived.sideReads.Add(1)
 	if hook := s.derived.beforeRead; hook != nil {
 		hook(fam.Name)
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})
 	if err != nil {
-		return nil, false, fmt.Errorf("objectgraph dolt: begin key index tx: %w", err)
+		return nil, false, fmt.Errorf("objectgraph sql: begin key index tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, false, fmt.Errorf("objectgraph dolt: read key index: %w", err)
+		return nil, false, fmt.Errorf("objectgraph sql: read key index: %w", err)
 	}
 	var promised []derivedIDRow
 	for rows.Next() {
 		var r derivedIDRow
 		if err := rows.Scan(&r.id, &r.owner, &r.updatedAt, &r.hash); err != nil {
 			rows.Close()
-			return nil, false, fmt.Errorf("objectgraph dolt: scan key index: %w", err)
+			return nil, false, fmt.Errorf("objectgraph sql: scan key index: %w", err)
 		}
 		promised = append(promised, r)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, false, fmt.Errorf("objectgraph dolt: iterate key index: %w", err)
+		return nil, false, fmt.Errorf("objectgraph sql: iterate key index: %w", err)
 	}
 	rows.Close()
 	if !s.derived.readable(fam.Name) {
@@ -498,14 +508,14 @@ func (s *DoltStore) readDerived(ctx context.Context, fam *derivedFamily, query s
 }
 
 // listByDerivedKeyPage is ListObjectsByMetadataPage on the side table.
-func (s *DoltStore) listByDerivedKeyPage(ctx context.Context, fam *derivedFamily, value, after string, limit int) ([]Object, bool, error) {
+func (s *SQLStore) listByDerivedKeyPage(ctx context.Context, fam *derivedFamily, value, after string, limit int) ([]Object, bool, error) {
 	query, args := derivedPageIDsSQL(fam.Name, value, after, limit)
 	return s.readDerived(ctx, fam, query, args)
 }
 
 // listByDerivedKeyNewest is ListObjectsByOwnerAndBody's addressee read on the
 // side table: the owner's newest limit rows of the key.
-func (s *DoltStore) listByDerivedKeyNewest(ctx context.Context, fam *derivedFamily, value, owner string, limit int) ([]Object, bool, error) {
+func (s *SQLStore) listByDerivedKeyNewest(ctx context.Context, fam *derivedFamily, value, owner string, limit int) ([]Object, bool, error) {
 	query, args := derivedIDsByKeySQL(fam.Name, value, owner, "", limit)
 	return s.readDerived(ctx, fam, query, args)
 }
@@ -515,9 +525,9 @@ func (s *DoltStore) listByDerivedKeyNewest(ctx context.Context, fam *derivedFami
 // DerivedKeyValidation tunes ValidateDerivedKeys.
 type DerivedKeyValidation struct {
 	// PageSize is the number of og_objects rows compared per transaction;
-	// the engine is held for one page at a time. Zero means 200.
+	// the write connection is held for one page at a time. Zero means 200.
 	PageSize int
-	// DutyCycle is the share of time the pass may hold the engine, in
+	// DutyCycle is the share of time the pass may hold the write connection, in
 	// (0, 1]: after a page that held it h, the pass sleeps h*(1-d)/d. Zero
 	// means no pause (tests).
 	DutyCycle float64
@@ -557,18 +567,18 @@ type derivedSideRow struct {
 // ValidateDerivedKeys compares every family's rows with og_objects page by
 // page, re-derives what differs (a missing row, a changed content_hash,
 // owner or updated_at), drops orphans, and then marks the family validated.
-// It holds the engine for one page at a time and logs its progress. It is
+// It holds the write connection for one page at a time and logs its progress. It is
 // safe to call again, and safe against concurrent writers: a page is one
 // transaction on the store's one connection, so no writer's transaction is
 // split by it, and a writer that maintains the table behind the cursor or
 // ahead of it leaves a row the pass finds right or repairs.
-func (s *DoltStore) ValidateDerivedKeys(ctx context.Context, opt DerivedKeyValidation) error {
+func (s *SQLStore) ValidateDerivedKeys(ctx context.Context, opt DerivedKeyValidation) error {
 	if s == nil || s.db == nil || s.derived == nil {
-		return fmt.Errorf("objectgraph dolt: nil store")
+		return fmt.Errorf("objectgraph sql: nil store")
 	}
 	d := s.derived
 	if !d.tableReady.Load() {
-		return fmt.Errorf("objectgraph dolt: %s is not available", DerivedKeysTable)
+		return fmt.Errorf("objectgraph sql: %s is not available", DerivedKeysTable)
 	}
 	d.passMu.Lock()
 	defer d.passMu.Unlock()
@@ -582,6 +592,7 @@ func (s *DoltStore) ValidateDerivedKeys(ctx context.Context, opt DerivedKeyValid
 
 // passState carries one family's pass.
 type passState struct {
+	d                          *DerivedKeys
 	fam                        *derivedFamily
 	opt                        DerivedKeyValidation
 	pageSize                   int
@@ -592,19 +603,20 @@ type passState struct {
 	started, lastLog           time.Time
 }
 
-// page runs one engine-held unit of work, then paces and reports.
-func (p *passState) page(ctx context.Context, s *DoltStore, work func() (n, fixed, dropped int, bad bool, err error)) error {
+// page runs one unit of work, then paces and reports.
+func (p *passState) page(ctx context.Context, work func() (n, fixed, dropped int, bad bool, err error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	start := time.Now()
-	s.engineMu.LockAs(derivedKeysPageOpName)
 	n, fixed, dropped, bad, err := work()
-	s.engineMu.UnlockAs(derivedKeysPageOpName)
 	if err != nil {
-		return fmt.Errorf("objectgraph dolt: validate %s: %w", p.fam.Name, err)
+		return fmt.Errorf("objectgraph sql: validate %s: %w", p.fam.Name, err)
 	}
 	hold := time.Since(start)
+	p.d.passPages.Add(1)
+	for old := p.d.maxPageHoldNanos.Load(); int64(hold) > old && !p.d.maxPageHoldNanos.CompareAndSwap(old, int64(hold)); old = p.d.maxPageHoldNanos.Load() {
+	}
 	p.checked += int64(n)
 	p.rederived += int64(fixed)
 	p.orphan += int64(dropped)
@@ -625,11 +637,11 @@ func (p *passState) page(ctx context.Context, s *DoltStore, work func() (n, fixe
 	return nil
 }
 
-func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt DerivedKeyValidation) error {
+func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt DerivedKeyValidation) error {
 	d := s.derived
-	p := &passState{fam: fam, opt: opt, pageSize: opt.PageSize, logf: opt.Logf}
+	p := &passState{d: d, fam: fam, opt: opt, pageSize: opt.PageSize, logf: opt.Logf}
 	if p.logf == nil {
-		p.logf = func(format string, args ...any) { log.Printf("objectgraph dolt: "+format, args...) }
+		p.logf = func(format string, args ...any) { log.Printf("objectgraph sql: "+format, args...) }
 	}
 	if p.pageSize <= 0 {
 		p.pageSize = derivedKeyDefaultPageLen
@@ -638,11 +650,9 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	startBadWrites := d.badWrites[fam.Name].Load()
 	startWrites := d.writes[fam.Name].Load()
 
-	s.engineMu.LockAs(derivedKeysPageOpName)
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, string(fam.Kind)).Scan(&p.total)
-	s.engineMu.UnlockAs(derivedKeysPageOpName)
 	if err != nil {
-		return fmt.Errorf("objectgraph dolt: count %s rows: %w", fam.Kind, err)
+		return fmt.Errorf("objectgraph sql: count %s rows: %w", fam.Kind, err)
 	}
 	p.logf("derived keys %s: validation pass starts over %d rows (page %d)", fam.Name, p.total, p.pageSize)
 	p.started, p.lastLog = time.Now(), time.Now()
@@ -652,7 +662,7 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	cursor := lo
 	for done := false; !done; {
 		var last string
-		if err := p.page(ctx, s, func() (n, fixed, dropped int, bad bool, err error) {
+		if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
 			n, last, done, fixed, dropped, bad, err = s.validatePage(ctx, fam, cursor, hi, p.pageSize)
 			return
 		}); err != nil {
@@ -663,7 +673,7 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 
 	// Rows and side rows whose ids are outside the range.
 	var strays []string
-	if err := p.page(ctx, s, func() (n, fixed, dropped int, bad bool, err error) {
+	if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
 		strays, err = s.derivedStrayIDs(ctx, fam, lo, hi)
 		return 0, 0, 0, false, err
 	}); err != nil {
@@ -674,7 +684,7 @@ func (s *DoltStore) validateFamily(ctx context.Context, fam *derivedFamily, opt 
 	}
 	for start := 0; start < len(strays); start += p.pageSize {
 		chunk := strays[start:min(start+p.pageSize, len(strays))]
-		if err := p.page(ctx, s, func() (n, fixed, dropped int, bad bool, err error) {
+		if err := p.page(ctx, func() (n, fixed, dropped int, bad bool, err error) {
 			return s.validateIDs(ctx, fam, chunk)
 		}); err != nil {
 			return err
@@ -737,8 +747,8 @@ const sideRowColumns = `canonical_id, owner_id, updated_at, content_hash, derive
 // validatePage compares one page of the kind's primary-key range (cursor,
 // before). last is the page's last canonical_id; done is true when it was the
 // range's last page (it then also dropped every key row past the cursor
-// inside the range). The caller holds the engine mutex.
-func (s *DoltStore) validatePage(ctx context.Context, fam *derivedFamily, cursor, before string, pageSize int) (n int, last string, done bool, fixed, dropped int, bad bool, err error) {
+// inside the range)..
+func (s *SQLStore) validatePage(ctx context.Context, fam *derivedFamily, cursor, before string, pageSize int) (n int, last string, done bool, fixed, dropped int, bad bool, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, cursor, false, 0, 0, false, err
@@ -793,8 +803,8 @@ func (s *DoltStore) validatePage(ctx context.Context, fam *derivedFamily, cursor
 
 // reconcile makes the key rows of a set of ids match og_objects: heads are the
 // og_objects rows, side the key rows (in sideOrder) over the same ids. The
-// caller holds the engine mutex and the transaction.
-func (s *DoltStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (fixed, dropped int, bad bool, err error) {
+// caller holds the transaction.
+func (s *SQLStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (fixed, dropped int, bad bool, err error) {
 	var redo []string
 	present := make(map[string]bool, len(heads))
 	for _, h := range heads {
@@ -828,8 +838,8 @@ func (s *DoltStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamil
 }
 
 // derivedStrayIDs lists the ids outside the kind's primary-key range: rows of
-// the kind, and key rows of the family. The caller holds the engine mutex.
-func (s *DoltStore) derivedStrayIDs(ctx context.Context, fam *derivedFamily, lo, hi string) ([]string, error) {
+// the kind, and key rows of the family..
+func (s *SQLStore) derivedStrayIDs(ctx context.Context, fam *derivedFamily, lo, hi string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, q := range []struct {
 		query string
@@ -865,8 +875,8 @@ func (s *DoltStore) derivedStrayIDs(ctx context.Context, fam *derivedFamily, lo,
 }
 
 // validateIDs reconciles a chunk of ids by key, in one transaction that
-// re-reads both sides. The caller holds the engine mutex.
-func (s *DoltStore) validateIDs(ctx context.Context, fam *derivedFamily, ids []string) (n, fixed, dropped int, bad bool, err error) {
+// re-reads both sides..
+func (s *SQLStore) validateIDs(ctx context.Context, fam *derivedFamily, ids []string) (n, fixed, dropped int, bad bool, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, 0, false, err
@@ -908,7 +918,7 @@ func (s *DoltStore) validateIDs(ctx context.Context, fam *derivedFamily, ids []s
 // rederive derives the given rows in one statement per batch, falling back to
 // one statement per row when the batch holds a row whose expression errors.
 // It reports whether any row could not be derived.
-func (s *DoltStore) rederive(ctx context.Context, tx *sql.Tx, fam *derivedFamily, ids []string) (bad bool, err error) {
+func (s *SQLStore) rederive(ctx context.Context, tx *sql.Tx, fam *derivedFamily, ids []string) (bad bool, err error) {
 	for start := 0; start < len(ids); start += snapshotFetchBatch {
 		batch := ids[start:min(start+snapshotFetchBatch, len(ids))]
 		marks := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")

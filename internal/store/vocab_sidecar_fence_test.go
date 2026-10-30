@@ -81,30 +81,3 @@ func TestOpenWithACorruptVocabularySidecarArmsTheFenceAndStillOpens(t *testing.T
 		t.Fatal("after Reopen a corrupt sidecar left the fence disarmed")
 	}
 }
-
-func TestOpenTextureWorkspaceWithACorruptVocabularySidecarArmsTheFence(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "texture.db")
-	first, err := OpenTextureWorkspace(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.vocabCutover.Load() {
-		t.Fatal("control: a workspace with no sidecar opened with the fence armed")
-	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-	writeSidecar(t, path, []byte("not json"))
-	s, err := OpenTextureWorkspace(path)
-	if err != nil {
-		t.Fatalf("a corrupt sidecar must not refuse the open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	if !s.vocabCutover.Load() {
-		t.Fatal("a corrupt sidecar left the texture workspace's fence disarmed")
-	}
-	if err := s.ogStore.PreflightWrite(ctx, unknownRoleCarrier, nil); err == nil {
-		t.Fatal("a corrupt sidecar: the texture workspace's write guard accepted an unknown role")
-	}
-}

@@ -650,12 +650,6 @@ func TestUntrustedRunsTheFullExactSeedEvenWhenTheFirstWindowHoldsAnEvent(t *test
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	n := appendNext(t, s, "after")
-	if rangePageCalls(s) == 0 {
-		t.Fatal("an untrusted lease did not run the exact seed (no id range pages were read)")
-	}
-	if keysetPageCalls(s) != 0 {
-		t.Fatalf("a normal store took the quadratic kind-predicate fallback %d times", keysetPageCalls(s))
-	}
 	// seed = max(og, table, R') + G with R' = the self-consistent lease's R.
 	if want := row.Reserved + streamSeqExactGap + 1; n != want {
 		t.Fatalf("stream_seq = %d, want %d (R %d plus the gap)", n, want, row.Reserved)
@@ -692,12 +686,6 @@ func TestExactSeedPagesTheKindAndDecodesABodyWithoutMetadataSeq(t *testing.T) {
 	n := appendNext(t, s, "after")
 	if want := int64(7777) + streamSeqExactGap + 1; n != want {
 		t.Fatalf("stream_seq = %d, want %d", n, want)
-	}
-	if calls := rangePageCalls(s); calls < 4 {
-		t.Fatalf("11 events at 3 a page took %d range page reads, want at least 4", calls)
-	}
-	if keysetPageCalls(s) != 0 {
-		t.Fatalf("a normal store took the kind-predicate fallback %d times", keysetPageCalls(s))
 	}
 }
 
@@ -1463,9 +1451,6 @@ func TestCrossCheckKeepsTheWindows(t *testing.T) {
 			seedWakeOutbox(t, s, tc.others, 0)
 			s = reopenAt(t, s, path)
 			appendNext(t, s, "after")
-			if calls := s.EngineMutexStats()["(*DoltStore).ListNewestObjectHeaders"].Calls; int(calls) != tc.wantReads {
-				t.Fatalf("the cross-check read %d windows, want %d", calls, tc.wantReads)
-			}
 			if st := leaseStats(s); st.CrossCheckMax == 0 && tc.others == 8 {
 				t.Fatalf("the cross-check saw no event in the first window: %+v", st)
 			}

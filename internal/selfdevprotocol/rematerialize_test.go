@@ -41,17 +41,15 @@ func TestRematerializeFromRequestRefusesOriginalWorkspaceAccess(t *testing.T) {
 	}
 }
 
-func TestWitnessContentMatchesIgnoresDoltHead(t *testing.T) {
+func TestWitnessContentMatchesComparesRootAndTables(t *testing.T) {
 	want := testCheckpointRequest(t).VMLocalContentWitness
-	digest, err := witnessDerivabilityDigest(want)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want.DerivabilityDigest = digest
 	got := want
-	got.DoltHead = strings.Repeat("f", 64)
 	if err := WitnessContentMatches(got, want); err != nil {
-		t.Fatalf("Dolt HEAD audit receipt was treated as a match gate: %v", err)
+		t.Fatalf("equal witnesses did not match: %v", err)
+	}
+	other := testWitnessV3Tables("choir", map[string]string{"agents": strings.Repeat("c", 64)})
+	if err := WitnessContentMatches(other, want); err == nil || !strings.Contains(err.Error(), "agents") {
+		t.Fatalf("a table digest mismatch was accepted or not named: %v", err)
 	}
 	got.ContentRoot = strings.Repeat("0", 64)
 	if err := WitnessContentMatches(got, want); err == nil {

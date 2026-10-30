@@ -103,7 +103,7 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 		PublicKey: base64.RawStdEncoding.EncodeToString(privateKey.Public().(ed25519.PublicKey)),
 	}
 	verifierJSON, _ := computerevent.CanonicalJSON(verifierCertificate)
-	checkpointRequest := selfdevprotocol.CheckpointRequest{ComputerID: "computer-active", IdempotencyKey: "checkpoint", ComputerVersion: newVersion, AcceptedEventHead: repeatedHex('c'), EffectiveEventHead: repeatedHex('c'), EffectiveStateCommitment: repeatedHex('d'), EventHeadReceiptID: "receipt-event", ReleaseDigest: repeatedHex('e'), ReconstructionDigest: repeatedHex('f'), MaterializationReceiptDigest: repeatedHex('1'), VerifierCertificateDigest: computerevent.DigestBytes(verifierJSON), VerifierCertificate: verifierResponse, ReducerVersion: 1, VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{Database: "choir", ContentRoot: repeatedHex('7'), DoltHead: repeatedHex('8'), DerivabilityDigest: repeatedHex('9'), Schema: map[string]string{"agents": repeatedHex('a')}, Tables: map[string]string{"agents": repeatedHex('b')}}, FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: repeatedHex('c'), Derivation: selfdevprotocol.FrontendDerivationExplicit}}
+	checkpointRequest := selfdevprotocol.CheckpointRequest{ComputerID: "computer-active", IdempotencyKey: "checkpoint", ComputerVersion: newVersion, AcceptedEventHead: repeatedHex('c'), EffectiveEventHead: repeatedHex('c'), EffectiveStateCommitment: repeatedHex('d'), EventHeadReceiptID: "receipt-event", ReleaseDigest: repeatedHex('e'), ReconstructionDigest: repeatedHex('f'), MaterializationReceiptDigest: repeatedHex('1'), VerifierCertificateDigest: computerevent.DigestBytes(verifierJSON), VerifierCertificate: verifierResponse, ReducerVersion: 1, VMLocalContentWitness: mustWitnessV3(t, "choir", repeatedHex('a'), map[string]string{"agents": repeatedHex('b')}), FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: repeatedHex('c'), Derivation: selfdevprotocol.FrontendDerivationExplicit}}
 	checkpoint, _, err := selfdevprotocol.CheckpointFromRequest(checkpointRequest)
 	if err != nil {
 		t.Fatal(err)
@@ -513,4 +513,15 @@ func TestPostComputerVersionControlRejectsUnknownAndTrailingContent(t *testing.T
 			}
 		})
 	}
+}
+
+// mustWitnessV3 is a valid v3 witness for tests that only need a checkpoint to
+// pass validation.
+func mustWitnessV3(t *testing.T, database, schemaHash string, tables map[string]string) selfdevprotocol.VMLocalContentWitness {
+	t.Helper()
+	w, err := selfdevprotocol.NewWitnessV3(database, schemaHash, tables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
 }

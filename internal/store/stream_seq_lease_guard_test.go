@@ -28,9 +28,7 @@ import (
 // leaseSwapPoints are the functions that move a workspace into a live store or
 // workspace path (or open a fresh one for it). Each must write the marker.
 var leaseSwapPoints = map[string]string{
-	"store.go:ReplaceWorkspace":              "internal/store: the fresh workspace OpenFresh created",
-	"install.go:installDescriptor":           "internal/projectionbase: the staged workspace; covers InstallVerifiedBase and InstallPinnedBase",
-	"rebase.go:RebaseRetainedStore":          "internal/projectionbase: the staged workspace, before the flip",
+	"open.go:ReplaceWorkspace":               "internal/store: the fresh workspace OpenFresh created",
 	"rematerialize.go:RematerializeFromTape": "internal/agentcore: the staged workspace after Close, before the flip",
 }
 
@@ -39,9 +37,8 @@ var leaseSwapPoints = map[string]string{
 // computer's live store, or delegate to a swap point that marks. Each carries
 // its reason.
 var leaseSwapExempt = map[string]string{
-	"seed.go:installSeedCandidate":                "projectionbase: unpacks a base into the rebuilder's scratch dir; the publisher marks every blob it packs",
-	"capture.go:PublishCapturedBase":              "projectionbase: moves a captured store into staging inside the disposable capture clone, never a live path; the publisher marks every blob it packs",
 	"replay_completeness.go:openProbeReplayStore": "agentcore: a disposable replay-probe store in a temp dir",
+	"restore_snapshot.go:openStagedStore":         "agentcore: opens or installs the staged store in the rebuild's staging dir; RematerializeFromTape marks the staged workspace before the flip",
 	"workspace_replace.go:ReplaceWorkspace":       "agentcore: delegates to Store.ReplaceWorkspace, which marks the fresh workspace",
 }
 
@@ -89,14 +86,13 @@ func selectorCalls(node ast.Node) map[string]bool {
 	return calls
 }
 
-// Test 7. Every function in internal/store, internal/projectionbase or
-// internal/agentcore that renames into a store or workspace path, or opens a
+// Test 7. Every function in internal/store or internal/agentcore that renames into a store or workspace path, or opens a
 // fresh workspace for one, writes the lease untrust marker, or is a named
 // exemption.
 func TestEverySwapPointWritesTheLeaseUntrustMarker(t *testing.T) {
 	var bad []string
 	seenSwap := map[string]bool{}
-	for _, dir := range []string{".", "../projectionbase", "../agentcore"} {
+	for _, dir := range []string{".", "../agentcore"} {
 		for path, file := range sourceFilesIn(t, dir) {
 			for _, decl := range file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
@@ -136,31 +132,6 @@ func TestEverySwapPointWritesTheLeaseUntrustMarker(t *testing.T) {
 	sort.Strings(bad)
 	if len(bad) > 0 {
 		t.Fatalf("lease untrust marker guard:\n%s", strings.Join(bad, "\n"))
-	}
-}
-
-// The publisher marks every blob it packs: a base is untrusted by
-// construction.
-func TestPublisherMarksEveryBlob(t *testing.T) {
-	var found bool
-	for path, file := range sourceFilesIn(t, "../projectionbase") {
-		if filepath.Base(path) != "publisher.go" {
-			continue
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "PublishDir" || fn.Body == nil {
-				continue
-			}
-			found = true
-			calls := selectorCalls(fn.Body)
-			if !calls["storeschema.LeaseUntrustedBody"] && !calls["storeschema.WriteLeaseUntrusted"] {
-				t.Fatalf("PublishDir packs a workspace and does not carry the lease untrust marker")
-			}
-		}
-	}
-	if !found {
-		t.Fatal("PublishDir not found")
 	}
 }
 
@@ -225,7 +196,7 @@ func TestOnlyTheLeaseWriterMintsTheCapability(t *testing.T) {
 // Test 8 (ordering). In Open, the receipt is read before it is written, and
 // the untrust marker is written before the receipt.
 func TestOpenReadsTheReceiptThenWritesTheMarkerThenTheReceipt(t *testing.T) {
-	file := storeSourceFiles(t, func(name string) bool { return name == "store.go" })["store.go"]
+	file := storeSourceFiles(t, func(name string) bool { return name == "open.go" })["open.go"]
 	var open *ast.FuncDecl
 	for _, decl := range file.Decls {
 		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "Open" {

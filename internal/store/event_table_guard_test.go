@@ -179,14 +179,14 @@ func TestEventTableBootPathAddsOnlyTheDDL(t *testing.T) {
 	if n := strings.Count(schemaDDL, "CREATE TABLE IF NOT EXISTS choir_events"); n != 1 {
 		t.Fatalf("schemaDDL creates choir_events %d times", n)
 	}
-	files := storeSourceFiles(t, func(name string) bool { return name == "store.go" })
-	for _, decl := range files["store.go"].Decls {
+	files := storeSourceFiles(t, func(name string) bool { return name == "open.go" })
+	for _, decl := range files["open.go"].Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
 			continue
 		}
 		switch funcName(fn) {
-		case "Open", "OpenFresh", "bootstrap", "ensureColumns", "backfillDerivedRuntimeState":
+		case "Open", "OpenFresh", "bootstrap":
 		default:
 			continue
 		}
@@ -204,12 +204,7 @@ func TestEventTableBootPathAddsOnlyTheDDL(t *testing.T) {
 	if eventTableAnyRowSQL != `SELECT 1 FROM choir_events LIMIT 1` {
 		t.Fatalf("Open's floor probe is %q; it must read one row", eventTableAnyRowSQL)
 	}
-	if !mentionsIdent(files["store.go"], "ensureEventTableFloor") {
+	if !mentionsIdent(files["open.go"], "ensureEventTableFloor") {
 		t.Fatal("Open no longer floors a workspace whose choir_events has rows")
-	}
-	for _, m := range runtimeColumnMigrations {
-		if m.table == choirEventsTable {
-			t.Fatal("deploy 1 adds no column migration to choir_events: its DDL is frozen (section 2.3)")
-		}
 	}
 }

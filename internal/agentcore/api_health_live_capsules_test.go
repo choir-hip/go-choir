@@ -195,15 +195,21 @@ func TestHealthAndPlannedRestartShareOneLiveCapsuleCount(t *testing.T) {
 }
 
 // The count cannot be read: /health fails closed (503 store_stalled naming
-// it), never an idle-looking 0. The stalled-store tests hold the connection;
-// this one pins that live_capsules is among the reads that can be unanswered.
+// it), never an idle-looking 0. A held write connection no longer stalls the
+// count (it reads on the WAL read pool), so this test makes the read itself
+// fail: the object table is out from under it.
 func TestHealthLiveCapsulesIsAFailClosedStoreRead(t *testing.T) {
 	handler, productStore := newBoundedHealthFixture(t)
-	release := holdStore(t, productStore)
-	defer release()
+	ctx := context.Background()
+	if _, err := productStore.DB().ExecContext(ctx, `ALTER TABLE og_objects RENAME TO og_objects_unreadable`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = productStore.DB().ExecContext(ctx, `ALTER TABLE og_objects_unreadable RENAME TO og_objects`)
+	}()
 	rec, _ := serveHealth(t, handler)
 	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("held store: status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("unreadable count: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"live_capsules"`) {
 		t.Fatalf("503 does not name live_capsules among the unanswered reads: %s", rec.Body.String())

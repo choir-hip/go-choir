@@ -12,7 +12,7 @@ package selfdevprotocol
 //     The host rebuild always upcasts, so that mismatch can be the deposit
 //     mode of a store restore rebuilds correctly; calling it not_derivable
 //     would make restore refuse a good restore point;
-//  4. the Dolt HEAD (an audit receipt) decides the verdict;
+//  4. a witness of another version is judged (it must be refused with a reason);
 //  5. an unknown deposit mode is accepted into a checkpoint.
 
 import (
@@ -22,19 +22,11 @@ import (
 )
 
 func verdictWitness(tables map[string]string) VMLocalContentWitness {
-	schema := map[string]string{}
-	for table := range tables {
-		schema[table] = strings.Repeat("5", 64)
-	}
-	w := VMLocalContentWitness{
-		Database: "texture", ContentRoot: strings.Repeat("7", 64), DoltHead: "head-a",
-		Schema: schema, Tables: tables,
-	}
-	sealed, err := SealWitness(w)
+	w, err := NewWitnessV3("texture", strings.Repeat("5", 64), tables)
 	if err != nil {
 		panic(err)
 	}
-	return sealed
+	return w
 }
 
 func withTable(w VMLocalContentWitness, table, hash string) VMLocalContentWitness {
@@ -43,13 +35,7 @@ func withTable(w VMLocalContentWitness, table, hash string) VMLocalContentWitnes
 		tables[k] = v
 	}
 	tables[table] = hash
-	out := verdictWitness(tables)
-	out.ContentRoot = strings.Repeat("8", 64)
-	sealed, err := SealWitness(out)
-	if err != nil {
-		panic(err)
-	}
-	return sealed
+	return verdictWitness(tables)
 }
 
 func TestJudgeVerifiesEqualWitnessesInEveryDepositMode(t *testing.T) {
@@ -57,7 +43,6 @@ func TestJudgeVerifiesEqualWitnessesInEveryDepositMode(t *testing.T) {
 	for _, mode := range []string{DepositModeUpcast, DepositModeRetained, ""} {
 		checkpoint := verdictWitness(base)
 		rebuilt := verdictWitness(base)
-		rebuilt.DoltHead = "a-different-dolt-head" // an audit receipt, never the address
 		got := JudgeCheckpointWitness(mode, checkpoint, rebuilt)
 		if got.Status != CheckpointVerdictVerified || got.Reason != "" || len(got.DifferingTables) != 0 {
 			t.Fatalf("mode %q: equal witnesses judged %+v, want verified", mode, got)

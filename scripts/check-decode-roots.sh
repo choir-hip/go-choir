@@ -27,14 +27,10 @@ ROOTED=(
   internal/platform/event_handlers.go
   internal/computerevent/http_client.go
   internal/store/computer_events.go
-  internal/store/computer_event_recovery.go
-  internal/projectionbase/source.go
-  internal/projectionbase/source_http.go
 )
 # Vocabulary-neutral centralized decoders (anchor appears on the decode line).
 NEUTRAL=(
   "internal/computerevent/projection_batch.go:DecodeProjectionBatch:format discriminator, vocabulary-neutral:&batch"
-  "internal/projectionbase/publisher.go:ParseDescriptor:descriptor seam:Decode(&d)"
 )
 # Out-of-charter-scope decodes: file:presence-anchor:reason:line-pattern.
 # The line pattern must match the decode line itself; the presence anchor
@@ -49,7 +45,6 @@ EXEMPT=(
   "internal/platform/event_artifacts.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/platform/checkpoints.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/store/computer_events.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
-  "internal/store/computer_event_recovery.go:record.Receipt:receipt namespace, vocabulary-free:&record.Receipt"
   "internal/proxy/execution_identity.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/receiptsigner/receiptsigner.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/computerevent/http_client.go:failure struct:anonymous error struct, not a charter type:&failure"

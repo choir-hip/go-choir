@@ -288,11 +288,7 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 		ReleaseDigest: platformTestDigest('e'), ReconstructionDigest: platformTestDigest('f'),
 		MaterializationReceiptDigest: platformTestDigest('1'), VerifierCertificateDigest: computerevent.DigestBytes(verifierJSON),
 		VerifierCertificate: verifierResponse, VerifierTrustBootstrap: true, ReducerVersion: head.ReducerVersion,
-		VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{
-			Database: "choir", ContentRoot: platformTestDigest('7'), DoltHead: platformTestDigest('8'), DerivabilityDigest: platformTestDigest('9'),
-			Schema: map[string]string{"agents": platformTestDigest('a')},
-			Tables: map[string]string{"agents": platformTestDigest('b')},
-		},
+		VMLocalContentWitness: platformTestWitness("choir"),
 		FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: platformTestDigest('c'), Derivation: selfdevprotocol.FrontendDerivationExplicit},
 	}
 	checkpointBody, err := computerevent.CanonicalJSON(checkpointRequest)
@@ -757,10 +753,7 @@ func TestCheckpointVerifierEvidenceRequiresPinnedEngineeringPass(t *testing.T) {
 	if err := service.writeBlob(filepath.Join("sha256", "computer-event-payload", payloadDigest), rawPayload); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := platformStore.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		event.ComputerID, event.IdempotencyKey, platformTestDigest('c'), event.Sequence, event.PreviousHead, string(event.EventKind), eventDigest, "artifact://sha256/"+eventDigest, platformTestDigest('d'), "[]", "receipt-verifier", "{}", platformTestDigest('e'), eventDigest, event.PreviousHead, platformTestDigest('f'), platformTestDigest('f'), nil, now); err != nil {
-		t.Fatal(err)
-	}
+	insertTestAppendReceipt(t, platformStore.db, event.ComputerID, event.IdempotencyKey, platformTestDigest('c'), event.Sequence, string(event.EventKind), eventDigest, platformTestDigest('d'), nil, now)
 	request := selfdevprotocol.CheckpointRequest{ComputerID: event.ComputerID, VerifierCertificate: selfdevprotocol.VerifierCertificateResponse{Request: selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: event.ComputerID, OperationID: "operation-verify", BundleDigest: platformTestDigest('a'),
 		VerificationEventDigest: eventDigest, VerifierEvidenceRefs: []string{"evidence:independent"}, DecisionEventHead: platformTestDigest('1'),
@@ -773,4 +766,13 @@ func TestCheckpointVerifierEvidenceRequiresPinnedEngineeringPass(t *testing.T) {
 	if err := authority.verifyVerifierEvidence(t.Context(), request); err == nil {
 		t.Fatal("verifier evidence accepted a substituted bundle")
 	}
+}
+
+// platformTestWitness is a valid v3 witness for checkpoint fixtures.
+func platformTestWitness(database string) selfdevprotocol.VMLocalContentWitness {
+	w, err := selfdevprotocol.NewWitnessV3(database, platformTestDigest('a'), map[string]string{"agents": platformTestDigest('b')})
+	if err != nil {
+		panic(err)
+	}
+	return w
 }

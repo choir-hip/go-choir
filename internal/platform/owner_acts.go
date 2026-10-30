@@ -65,27 +65,27 @@ CREATE TABLE IF NOT EXISTS owner_act_receipts (
   auth_method VARCHAR(32) NOT NULL,
   credential_ref VARCHAR(255) NOT NULL,
   receipt_digest CHAR(64) NOT NULL,
-  receipt_json JSON NOT NULL,
+  receipt_json TEXT NOT NULL,
   mode_receipt_digest CHAR(64) NOT NULL,
-  created_at DATETIME(6) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (receipt_id),
-  UNIQUE KEY owner_act_receipts_nonce_uq (nonce),
-  UNIQUE KEY owner_act_receipts_digest_uq (receipt_digest)
+  CONSTRAINT owner_act_receipts_nonce_uq UNIQUE (nonce),
+  CONSTRAINT owner_act_receipts_digest_uq UNIQUE (receipt_digest)
 );
 CREATE TABLE IF NOT EXISTS self_development_mode_receipts (
   receipt_digest CHAR(64) NOT NULL,
   computer_id VARCHAR(128) NOT NULL,
-  generation BIGINT UNSIGNED NOT NULL,
-  old_generation BIGINT UNSIGNED NOT NULL,
+  generation BIGINT NOT NULL,
+  old_generation BIGINT NOT NULL,
   old_mode VARCHAR(32) NOT NULL,
   new_mode VARCHAR(32) NOT NULL,
   mode_writer VARCHAR(32) NOT NULL,
   owner_act_receipt_digest CHAR(64) NULL,
-  receipt_json JSON NOT NULL,
+  receipt_json TEXT NOT NULL,
   admitted_event_digest CHAR(64) NULL,
-  created_at DATETIME(6) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (receipt_digest),
-  UNIQUE KEY self_development_mode_receipts_generation_uq (computer_id, generation)
+  CONSTRAINT self_development_mode_receipts_generation_uq UNIQUE (computer_id, generation)
 );
 CREATE TABLE IF NOT EXISTS platform_update_offers (
   offer_digest CHAR(64) NOT NULL,
@@ -93,12 +93,12 @@ CREATE TABLE IF NOT EXISTS platform_update_offers (
   update_id VARCHAR(255) NOT NULL,
   base_event_head CHAR(64) NOT NULL,
   content_digest CHAR(64) NOT NULL,
-  expires_at DATETIME(6) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
   admitted_event_digest CHAR(64) NULL,
-  created_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (offer_digest),
-  KEY platform_update_offers_computer_idx (computer_id, created_at)
-);`
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (offer_digest)
+);
+CREATE INDEX IF NOT EXISTS platform_update_offers_computer_idx ON platform_update_offers (computer_id, created_at);`
 
 // platformUpdateOfferAdmissionGrace tolerates the seconds between the
 // guest's own expiry check and its append.

@@ -1929,7 +1929,7 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 		OwnerID:     ownerID,
 		DocID:       docID,
 		StorePath:   h.Store.Path(),
-		TexturePath: h.Store.TexturePath(),
+		TexturePath: h.Store.StatePath(),
 	}
 	if docID != "" {
 		if doc, err := h.getTextureDocument(r.Context(), ownerID, docID); err == nil {

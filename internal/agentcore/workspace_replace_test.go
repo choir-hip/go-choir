@@ -23,10 +23,10 @@ func TestReplaceWorkspaceDropsResidueAndClosesStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := live.DB().ExecContext(ctx, `CREATE TABLE app_adoptions (adoption_id VARCHAR(255) PRIMARY KEY)`); err != nil {
+	if _, err := live.DB().ExecContext(ctx, `CREATE TABLE app_adoptions (adoption_id TEXT PRIMARY KEY)`); err != nil {
 		t.Fatalf("create retired table: %v", err)
 	}
-	if _, err := live.DB().ExecContext(ctx, `ALTER TABLE computer_event_index ADD COLUMN supervision_transaction_json LONGTEXT NOT NULL DEFAULT ''`); err != nil {
+	if _, err := live.DB().ExecContext(ctx, `ALTER TABLE computer_event_index ADD COLUMN supervision_transaction_json TEXT NOT NULL DEFAULT ''`); err != nil {
 		t.Fatalf("add retired column: %v", err)
 	}
 	if _, err := live.SaveUserPreference(ctx, types.UserPreference{
@@ -61,14 +61,14 @@ func TestReplaceWorkspaceDropsResidueAndClosesStore(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reopened.Close() })
 	var retired int
-	if err := reopened.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'app_adoptions'`).Scan(&retired); err != nil {
+	if err := reopened.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'app_adoptions'`).Scan(&retired); err != nil {
 		t.Fatalf("query retired table: %v", err)
 	}
 	if retired != 0 {
 		t.Fatalf("retired table survived replacement: count=%d", retired)
 	}
 	var extraColumn int
-	if err := reopened.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'computer_event_index' AND column_name = 'supervision_transaction_json'`).Scan(&extraColumn); err != nil {
+	if err := reopened.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('computer_event_index') WHERE name = 'supervision_transaction_json'`).Scan(&extraColumn); err != nil {
 		t.Fatalf("query extra column: %v", err)
 	}
 	if extraColumn != 0 {

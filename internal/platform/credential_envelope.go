@@ -455,6 +455,5 @@ func (s *Service) insertCredentialLifecycleReceipt(ctx context.Context, computer
 	if err != nil {
 		return fmt.Errorf("credential envelope: persist lifecycle receipt: %w", err)
 	}
-	s.store.markDirty(action + " for " + computerID)
 	return nil
 }

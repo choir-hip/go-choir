@@ -188,13 +188,6 @@ type Handler struct {
 	guestMarker guestPlannedRestartMarker
 	// deployRefreshMu guards the lazily built deploy refresh tracker (the
 	// pending set the retry sweep works through, and the in-flight guard).
-	// storeCompact runs guest store compactions (store_compaction.go); built
-	// on first use unless a test sets it.
-	storeCompactOnce sync.Once
-	storeCompact     *storeCompactState
-	// storeCompactPressure configures the disk-pressure compaction loop
-	// (store_compaction_pressure.go); set before StartStoreCompactPressure.
-	storeCompactPressure StoreCompactPressureConfig
 	// dataImageStatsFor reads a VM's host data image stats (nil: the
 	// registry's); tests substitute it.
 	dataImageStatsFor    func(vmID string) (DataImageStats, bool)
@@ -1424,8 +1417,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
 	s.HandleFunc("/internal/vmctl/deploy-refresh", attributedLifecycle(h.HandleDeployRefresh))
-	s.HandleFunc("/internal/vmctl/compact-store", attributedLifecycle(h.HandleCompactStore))
-	s.HandleFunc("/internal/vmctl/compact-sweep", attributedLifecycle(h.HandleCompactSweep))
 	s.HandleFunc("/internal/vmctl/capture-data-image", attributedLifecycle(h.HandleCaptureDataImage))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))

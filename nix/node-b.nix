@@ -74,42 +74,12 @@ let
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
-  # Store A weekly history squash (owner notes 2026-10-14 sections 23 and 27
-  # item 7; docs/problems/store-a-weekly-squash-2026-10-20.md). The service is
-  # always defined so the first run is supervised by hand
-  # (`systemctl start go-choir-platform-dolt-squash.service`); the weekly timer
-  # starts only when this is true. Enable it after the first run has been
-  # watched end to end.
-  platformDoltSquashTimerEnabled = false;
-  # Store A snapshot switch (PLATFORM_DOLT_SNAPSHOTS=commit|off), read by
-  # corpusd and checkpointd; see the corpusd unit.
-  platformDoltSnapshotsEnv = "/var/lib/go-choir/platform-dolt-snapshots.env";
-  platformDoltSquashBackupRoot = "/var/lib/go-choir/platform-dolt-squash-backups";
+  # Legacy Dolt data directories. The Dolt servers are gone (data system cutover);
+  # the data stays on disk until C5 deletes it, and scripts/cutover/legacy-dolt-serve.sh
+  # serves it by hand when the host migrator must be run again.
   corpusDoltDir = "/var/lib/go-choir/corpus-dolt";
   corpusDoltDBDir = "${corpusDoltDir}/corpus";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
-  platformDoltInit = pkgs.writeShellScript "platform-dolt-init" ''
-    set -euo pipefail
-    export HOME="${platformDoltDir}"
-    install -d -m 0750 "${platformDoltDir}" "${platformDoltDBDir}"
-    cd "${platformDoltDBDir}"
-    ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
-    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir.news" >/dev/null 2>&1 || true
-    if [ ! -d .dolt ]; then
-      ${pkgs.dolt}/bin/dolt init
-    fi
-  '';
-  corpusDoltInit = pkgs.writeShellScript "corpus-dolt-init" ''
-    set -euo pipefail
-    export HOME="${corpusDoltDir}"
-    install -d -m 0750 "${corpusDoltDir}" "${corpusDoltDBDir}"
-    cd "${corpusDoltDBDir}"
-    ${pkgs.dolt}/bin/dolt config --global --add user.name "Choir Platform" >/dev/null 2>&1 || true
-    ${pkgs.dolt}/bin/dolt config --global --add user.email "platform@choir.news" >/dev/null 2>&1 || true
-    if [ ! -d .dolt ]; then
-      ${pkgs.dolt}/bin/dolt init
-    fi
-  '';
   # Host-internal service credential (internal/hostauth;
   # docs/problems/loopback-is-a-credential-2026-10-14.md). vmctl's internal
   # routes, the gateway's credential and operator routes, corpusd's and
@@ -162,104 +132,22 @@ let
   ownerActMode = "observe";
   ownerActKeyFile = "/var/lib/go-choir/secrets/owner-act-signing-key";
   ownerActPublicKeyFile = "${ownerActKeyFile}.pub";
-  # Dolt SQL authentication (internal/dbcred;
-  # docs/problems/loopback-is-a-credential-2026-10-14.md). Both Dolt servers
-  # accepted root with an empty password from any local process. Staged so
-  # no deploy changes the server and its clients at the same moment:
-  #   "users"   each Dolt server gets an application user `choir` with a
-  #             password and ALL on its one database (platform / corpus),
-  #             no global privileges; clients still connect as root.
-  #   "clients" corpusd, checkpointd and vmctl connect as `choir`
-  #             (CHOIR_DOLT_USER + LoadCredential choir-dolt-password).
-  #   "locked"  root@localhost gets its own password; passwordless root is
-  #             refused. Local `dolt sql` in the data directory (history
-  #             audit, runbooks) still works through Dolt's local-user file.
-  # Advance one stage per deploy, after scripts/verify-host-hardening.py
-  # shows the previous stage healthy. Rollback: the previous stage; "locked"
-  # is undone by hand: ALTER USER 'root'@'localhost' IDENTIFIED BY ''
-  # (connect with the root password from the file below).
-  # Stage 2 "clients" (SEC-12, FP3 group 3, 2026-10-21): after "users"
-  # verified healthy (verify-host-hardening --expect-dolt users). Stage 3
-  # "locked": its own deploy, after "clients" verified healthy.
-  doltAuthStage = "locked";
-  doltAppUser = "choir";
-  doltAppPasswordFile = "/var/lib/go-choir/secrets/dolt-app-password";
-  doltRootPasswordFile = "/var/lib/go-choir/secrets/dolt-root-password";
-  doltClientsUseAppUser = doltAuthStage != "users";
-  doltClientEnv = lib.optional doltClientsUseAppUser "CHOIR_DOLT_USER=${doltAppUser}";
-  doltClientCredential = lib.optional doltClientsUseAppUser "choir-dolt-password:${doltAppPasswordFile}";
-  doltClientAfter = lib.optionals doltClientsUseAppUser [ "go-choir-platform-dolt-users.service" "go-choir-corpus-dolt-users.service" ];
-  # Idempotent: create/refresh the app user, grant it its database, and in
-  # the "locked" stage set root's password. Secrets come from
-  # $CREDENTIALS_DIRECTORY and reach dolt through stdin or DOLT_CLI_PASSWORD,
-  # never a command line; nothing secret is echoed.
-  doltEnsureUsers = pkgs.writeShellScript "go-choir-dolt-ensure-users" ''
-    set -euo pipefail
-    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt ]}:$PATH"
-    port="$1"; db="$2"; lock_root="$3"
-    HOME="$(mktemp -d)"; export HOME
-    cd "$HOME"
-    app_pw="$(cat "$CREDENTIALS_DIRECTORY/dolt-app-password")"
-    root_pw="$(cat "$CREDENTIALS_DIRECTORY/dolt-root-password")"
-    for v in "$app_pw" "$root_pw"; do
-      case "$v" in ""|*[!A-Za-z0-9]*) echo "dolt users ($db): a password file is empty or not alphanumeric" >&2; exit 1 ;; esac
-    done
-    as_root() { # $1 = root password ("" for none); SQL on stdin
-      if [ -z "$1" ]; then
-        dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" sql
-      else
-        DOLT_CLI_PASSWORD="$1" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql
-      fi
-    }
-    for _ in $(seq 1 300); do
-      (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break
-      sleep 2
-    done
-    if printf 'select 1;\n' | as_root "$root_pw" >/dev/null 2>&1; then
-      current_root="$root_pw"; root_state=locked
-    elif printf 'select 1;\n' | as_root "" >/dev/null 2>&1; then
-      current_root=""; root_state=passwordless
-    else
-      echo "dolt users ($db, :$port): root accepts neither its password nor an empty one" >&2
-      exit 1
-    fi
-    printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\nALTER USER '%s'@'%%' IDENTIFIED BY '%s';\nGRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
-      "${doltAppUser}" "$app_pw" "${doltAppUser}" "$app_pw" "$db" "${doltAppUser}" | as_root "$current_root" >/dev/null
-    printf 'select 1;\n' | DOLT_CLI_PASSWORD="$app_pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user ${doltAppUser} --use-db "$db" sql >/dev/null
-    echo "dolt users ($db, :$port): app user ${doltAppUser} ensured with ALL on $db; root $root_state"
-    if [ "$lock_root" = 1 ] && [ "$root_state" = passwordless ]; then
-      printf "ALTER USER 'root'@'localhost' IDENTIFIED BY '%s';\n" "$root_pw" | as_root "" >/dev/null
-      if printf 'select 1;\n' | as_root "" >/dev/null 2>&1; then
-        echo "dolt users ($db, :$port): root still accepts an empty password after locking" >&2
-        exit 1
-      fi
-      echo "dolt users ($db, :$port): root locked (passwordless login refused)"
-    fi
-    rm -rf "$HOME"
-  '';
-  # Query-level liveness probe for both Dolt servers
-  # (scripts/dolt-liveness-probe.sh; tests: scripts/test-dolt-liveness-probe.sh;
-  # docs/problems/dolt-clustering-assessment-2026-10-15.md sections 4 and 7).
-  doltLivenessProbe = pkgs.writeShellScript "go-choir-dolt-liveness-probe"
-    (builtins.readFile ../scripts/dolt-liveness-probe.sh);
-  platformDoltSquashScript = pkgs.writeShellScript "go-choir-platform-dolt-squash"
-    (builtins.readFile ../scripts/platform-dolt-squash.sh);
-  doltUsersUnit = doltUnit: port: db: {
-    description = "go-choir Dolt users and grants for ${doltUnit} (${db})";
-    wantedBy = [ "multi-user.target" "${doltUnit}.service" ];
-    after = [ "${doltUnit}.service" ];
-    partOf = [ "${doltUnit}.service" ];
-    serviceConfig = commonServiceHardening // {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      TimeoutStartSec = "15min";
-      ExecStart = "${doltEnsureUsers} ${toString port} ${db} ${if doltAuthStage == "locked" then "1" else "0"}";
-      LoadCredential = [
-        "dolt-app-password:${doltAppPasswordFile}"
-        "dolt-root-password:${doltRootPasswordFile}"
-      ];
-    };
-  };
+  # PostgreSQL clients (nix/postgresql.nix; internal/dbcred.ApplyPGDSN). The
+  # DSNs carry no password: it reaches each service through LoadCredential as
+  # choir-pg-password. Services order after the role/password unit and the
+  # database, and need the database up.
+  pgControlDsn = "postgres://choir@127.0.0.1:5432/control?sslmode=disable";
+  pgGraphDsn = "postgres://choir@127.0.0.1:5432/graph?sslmode=disable";
+  pgPasswordFile = "/var/lib/go-choir/secrets/pg-app-password";
+  pgClientEnv = [
+    "CHOIR_PG_CONTROL_DSN=${pgControlDsn}"
+    "CHOIR_PG_GRAPH_DSN=${pgGraphDsn}"
+  ];
+  # vmctl is the route authority and needs only the control database
+  # (CHOIR_PG_CONTROL_DSN unset = route authority unavailable).
+  pgControlEnv = [ "CHOIR_PG_CONTROL_DSN=${pgControlDsn}" ];
+  pgClientCredential = [ "choir-pg-password:${pgPasswordFile}" ];
+  pgClientAfter = [ "postgresql.service" "go-choir-postgresql-roles.service" ];
   goServiceLibraryPath = lib.makeLibraryPath [ pkgs.icu ];
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
@@ -322,16 +210,6 @@ let
 
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
   '';
-  # The daily history audit (scripts/dolt-history-audit.sh: commits, oldgen,
-  # newgen and journal lines for both stores; a nonzero exit fails the unit).
-  # Audit both stores: platform (Store A) and corpus (Store B); a missing repo
-  # is skipped.
-  platformDoltHistoryAuditScript = pkgs.writeShellScript "dolt-history-audit"
-    (builtins.readFile ../scripts/dolt-history-audit.sh);
-  platformDoltHistoryAudit = pkgs.writeShellScript "go-choir-platform-dolt-history-audit" ''
-    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt pkgs.systemd pkgs.gnugrep ]}:$PATH"
-    exec ${platformDoltHistoryAuditScript} "platform:${platformDoltDBDir}:${platformDoltDir}" "corpus:${corpusDoltDBDir}:${corpusDoltDir}"
-  '';
 
   # Off-host backup stopgap (owner ruling 2026-10-14, owner-notes section 27
   # item 17; design and residual risks: docs/problems/no-off-host-backup-
@@ -362,7 +240,11 @@ let
     # On 2026-10-20 after two supervised runs and a passing restore drill
     # (docs/reports/off-host-restore-drill-2026-10-20.md); owner approved
     # node-a as the target the same day.
-    enable = true;
+    # Off during the data system cutover (owner, 2026-10-30): the script's
+    # Dolt sections are retired and the PostgreSQL backup is phase 2 item I7.
+    # The units below disappear while this is false. Rollback: true (backs up
+    # the images and the tape files, skips Dolt).
+    enable = false;
     host = "51.81.93.94"; # node-a (docs/node-a-shared-host.md)
     sshPort = 22;
     sshUser = "choir-backup";
@@ -455,7 +337,7 @@ let
       ProtectKernelModules = true;
       ProtectKernelTunables = true;
       ProtectControlGroups = true;
-      ReadWritePaths = [ "-${offHostBackup.stateDir}" "-${platformDoltDir}" "-${corpusDoltDir}" ];
+      ReadWritePaths = [ "-${offHostBackup.stateDir}" ];
     } // extra;
   };
 
@@ -527,10 +409,6 @@ let
   # the import ran, not that any file is there: a file a unit requires has
   # its own assert (unitEnvDsn, round 2c).
   unitEnvImported = "${unitEnvDir}/.imported";
-  # corpusd and checkpointd refuse to start without it: absent, they would
-  # put corpus tables on Store A. Store A on purpose (the authority-split
-  # runbook's rollback) is a file without CORPUSD_CORPUS_DOLT_DSN.
-  unitEnvDsn = "${unitEnvDir}/corpus-dsn.env";
   # Host secrets a unit does not read stay out of its mount view
   # (InaccessiblePaths; "-" tolerates an absent file). Each unit removes
   # what it needs. EnvironmentFile= and LoadCredential= are read by systemd
@@ -559,8 +437,8 @@ let
     unitEnv = unitEnvDir;
     # PID 1's private socket and the system bus: a root unit that can reach
     # either can ask systemd to run a command outside its own sandbox. Only
-    # units that run systemctl keep them (vmctl's store compaction, the Dolt
-    # liveness probe); the guest units already hide both.
+    # units that run systemctl keep them (vmctl's host-stop state read); the
+    # guest units already hide both.
     systemdPrivate = "-/run/systemd/private";
     dbusSystemSocket = "-/run/dbus/system_bus_socket";
   };
@@ -1103,102 +981,6 @@ in
     };
   };
 
-  systemd.services.go-choir-platform-dolt = {
-    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
-    startLimitIntervalSec = 600;
-    startLimitBurst = 10;
-    description = "go-choir Platform Dolt SQL Server";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = commonServiceHardening // {
-      ExecStartPre = platformDoltInit;
-      ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13306";
-      WorkingDirectory = platformDoltDBDir;
-      # Host memory budget (docs/problems/node-b-memory-overcommitted-swap-
-      # 2026-10-09.md): the canonical log is throttled, never swapped and
-      # never hard-killed. ~1.1 GB RSS measured 2026-10-09. By 2026-10-24 it
-      # sat pinned at the old 3G (anon 3.12 GB, nothing reclaimable) and an
-      # auto-GC throttled there stalled the store until the liveness probe
-      # aborted it (docs/problems/platform-dolt-gc-throttled-at-memory-high-
-      # 2026-10-24.md). GOMEMLIMIT (Environment, below) makes the Go collector
-      # hold the heap near 3 GiB before the kernel throttles; the 1 GiB above
-      # it is for cgo (gozstd) and stacks. The off-host backup raises this to
-      # 8G for its run and restores the value it read.
-      MemoryHigh = "4G";
-      MemorySwapMax = "0";
-      OOMScoreAdjust = -500;
-      Restart = "on-failure";
-      RestartSec = 3;
-      StateDirectory = "go-choir/platform-dolt";
-      StateDirectoryMode = "0750";
-      ReadWritePaths = [ platformDoltDir ];
-      InaccessiblePaths = hiddenSecretsExcept [ ];
-      # The default 90 s stop timeout made the 2026-10-15 recovery wait for
-      # SIGKILL; the liveness probe also relies on a bounded stop.
-      TimeoutStopSec = "20s";
-      # No core dump of a multi-GB process when the probe sends SIGABRT:
-      # GOTRACEBACK=all prints every goroutine to the journal and exits 2.
-      LimitCORE = 0;
-      Environment = [
-        "HOME=${platformDoltDir}"
-        "GOTRACEBACK=all"
-        "GOMEMLIMIT=3GiB"
-      ];
-    };
-  };
-
-  # Store B: world-wire/corpus Dolt sql-server. Separate process from the
-  # canonical event/control store (Store A, port 13306) so a corpus GC-OOM or
-  # bulk scan cannot take the canonical log down — the blast-radius isolation
-  # is the point of the split (docs/designs/
-  # platform-dolt-storage-normalization-2026-09-18.md).
-  systemd.services.go-choir-corpus-dolt = {
-    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
-    startLimitIntervalSec = 600;
-    startLimitBurst = 10;
-    description = "go-choir Corpus Dolt SQL Server (Store B)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    serviceConfig = commonServiceHardening // {
-      ExecStartPre = corpusDoltInit;
-      ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13307";
-      # Host memory budget: replaces the untracked 18G/20G set-property
-      # drop-ins in /etc/systemd/system.control. ~4.0 GB RSS measured
-      # 2026-10-09. Store B is the blast-radius-isolated store: it is the one
-      # that may be killed and restarted, never the guests.
-      MemoryHigh = "5G";
-      MemoryMax = "7G";
-      MemorySwapMax = "0";
-      # WorkingDirectory is the parent dir (StateDirectory-created): systemd
-      # chdirs before ExecStartPre runs, so pointing at corpusDoltDBDir would
-      # fail on first boot before the init script creates it. dolt sql-server
-      # serves the `corpus` repo under cwd either way.
-      WorkingDirectory = corpusDoltDir;
-      Restart = "on-failure";
-      RestartSec = 3;
-      StateDirectory = "go-choir/corpus-dolt";
-      StateDirectoryMode = "0750";
-      ReadWritePaths = [ corpusDoltDir ];
-      InaccessiblePaths = hiddenSecretsExcept [ ];
-      # The default 90 s stop timeout made the 2026-10-15 recovery wait for
-      # SIGKILL; the liveness probe also relies on a bounded stop.
-      TimeoutStopSec = "20s";
-      # No core dump of a multi-GB process when the probe sends SIGABRT:
-      # GOTRACEBACK=all prints every goroutine to the journal and exits 2.
-      LimitCORE = 0;
-      Environment = [
-        "HOME=${corpusDoltDir}"
-        "GOTRACEBACK=all"
-      ];
-    };
-  };
-
-  # Dolt SQL users and grants (doltAuthStage above).
-  systemd.services.go-choir-platform-dolt-users = doltUsersUnit "go-choir-platform-dolt" 13306 "platform";
-  systemd.services.go-choir-corpus-dolt-users = doltUsersUnit "go-choir-corpus-dolt" 13307 "corpus";
-
   systemd.services.go-choir-corpusd = {
     # The deploy restarts this unit once, after the service pointer holds the
     # new binary; a switch-time restart ran the old pointer and held the site
@@ -1210,9 +992,9 @@ in
     startLimitBurst = 10;
     description = "go-choir Platform Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
-    wants = [ "network-online.target" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
-    requires = [ "go-choir-platform-dolt.service" ];
+    after = [ "network-online.target" ] ++ pgClientAfter;
+    wants = [ "network-online.target" ];
+    requires = [ "postgresql.service" ];
     # P5 host build service (docs/reports/p5-host-build-layered-apply-2026-10-15.md):
     # corpusd evaluates `.#autoputer` from the deployed checkout's object
     # store at a computer's base commit plus its frozen patch; the build
@@ -1230,20 +1012,13 @@ in
       StateDirectoryMode = "0750";
       ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/host-build" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ doltClientCredential ++ [ "choir-owner-act-public-key:${ownerActPublicKeyFile}" ];
+      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential ++ [ "choir-owner-act-public-key:${ownerActPublicKeyFile}" ];
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
       # closed (503) while the file or entries are absent.
       EnvironmentFile = [
         "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env"
-        # Store B DSN flip: written by the authority-split cutover runbook
-        # (docs/runbooks/platform-dolt-authority-split-2026-09-18.md). The
-        # unit asserts the file (unitEnvDsn): a file without
-        # CORPUSD_CORPUS_DOLT_DSN (the runbook's rollback) shares the Store A
-        # pool for corpus tables; no file, no start. The "-" stays so the
-        # assert, not the env loader, is what refuses.
-        (unitEnvFile "corpus-dsn.env")
         # Retrieval rollback switch, flippable without a deploy
         # (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
         # write CORPUSD_CAPTURE_SEARCH=off to
@@ -1252,13 +1027,6 @@ in
         # back to the window of its newest captures. Absent: the routes
         # answer.
         (unitEnvFile "corpusd-retrieval.env")
-        # Store A snapshot switch, flippable without a deploy
-        # (docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md):
-        # PLATFORM_DOLT_SNAPSHOTS=off here stops Store A's DOLT_COMMIT
-        # snapshots, which nothing reads and which keep every changed row in
-        # oldgen. Restart corpusd after writing it; checkpointd reads the same
-        # file at its next run. Absent: snapshots as before.
-        "-${platformDoltSnapshotsEnv}"
       ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
@@ -1270,9 +1038,8 @@ in
         # /var/lib/go-choir/unit-env/corpusd-retrieval.env and restart corpusd
         # (an EnvironmentFile overrides Environment).
         "CORPUSD_RELATED_STORY=on"
-        "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
-      ] ++ doltClientEnv ++ [
+      ] ++ pgClientEnv ++ [
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
         "CHOIR_OWNER_ACT_MODE=${ownerActMode}"
         # The public Autopaper front list shows only the designated paper
@@ -1337,63 +1104,39 @@ in
     };
   };
 
-  # Owner-authorized maintenance key use is isolated from corpusd requests.
-  # One oneshot process per host; the timer does not overlap an active replay.
+  # checkpointd settles each published checkpoint's pending verdict as
+  # unverified (the host keeps no projection bases and rebuilds nothing; restore
+  # proves a checkpoint where it is used). It holds no key and writes only the
+  # control database; the self-development path lists verdicts but does not wait
+  # on them, so this is bookkeeping. One oneshot process per host.
   systemd.services.go-choir-checkpointd = {
-    description = "Choir verified projection checkpoint maintenance";
-    after = [ "go-choir-corpusd.service" "go-choir-platform-dolt.service" ] ++ doltClientAfter;
-    requires = [ "go-choir-platform-dolt.service" ];
-    path = [ pkgs.dolt ];
+    description = "Choir checkpoint verdict settling";
+    after = [ "go-choir-corpusd.service" ] ++ pgClientAfter;
+    requires = [ "postgresql.service" ];
     serviceConfig = commonServiceHardening // {
       Type = "oneshot";
       ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
-      # A timer-started oneshot must not be able to hold a nixos switch: with
-      # 8h, a checkpointd stuck on a deadlocked Dolt blocked the P4 deploy for
-      # 30 minutes (docs/problems/platform-dolt-deadlock-hangs-checkpointd-
-      # and-crashloops-vmctl-2026-10-15.md). Rebuilds take 43-56 s (maximum
-      # over 65 publishes, 2026-10-01..15), so 10 minutes is about 10x slack.
-      # Rollback: restore "8h".
+      # A timer-started oneshot must not be able to hold a nixos switch
+      # (docs/problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-
+      # vmctl-2026-10-15.md). A pass is a few SQL statements.
       TimeoutStartSec = "10min";
-      MemoryHigh = "4G";
-      MemoryMax = "6G";
+      MemoryHigh = "1G";
+      MemoryMax = "2G";
       MemorySwapMax = "0";
-      # Under host memory pressure the kernel must kill the checkpoint worker
-      # (a retryable job) before any guest VM. The 16G ceiling exceeded the
-      # host budget (docs/problems/node-b-memory-overcommitted-swap-
-      # 2026-10-09.md); compact projection bases are ~1.7 GB.
+      # Under host memory pressure the kernel kills this before any guest VM.
       OOMScoreAdjust = 1000;
       CPUQuota = "100%";
       Nice = 10;
       UMask = "0077";
-      # The projection rebuilder opens a scratch embedded Dolt workspace,
-      # which needs a writable $HOME/.dolt. ProtectHome=tmpfs leaves /root
-      # read-only, so without this the unit panicked once a minute after
-      # claiming a job (docs/problems/dolt-clustering-assessment-2026-10-15.md
-      # section 7.1). cmd/checkpointd refuses to start without a writable
-      # home. Rollback: revert this block.
-      StateDirectory = "go-choir/checkpointd";
-      StateDirectoryMode = "0700";
-      ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/checkpointd" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      EnvironmentFile = [ (unitEnvFile "corpus-dsn.env") "-${platformDoltSnapshotsEnv}" ];
-      LoadCredential = doltClientCredential;
-      Environment = doltClientEnv ++ [
-        "HOME=/var/lib/go-choir/checkpointd"
-        "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
-        "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+      InaccessiblePaths = hiddenSecretsExcept [ ];
+      LoadCredential = pgClientCredential;
+      Environment = pgClientEnv ++ [
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
-        # S4 (docs/problems/paper-never-checkpointed-2026-10-27.md): bases
-        # of these computers are published as a manifest plus
-        # content-addressed parts, so a publish writes only changed files.
-        # Progressive rollout (owner, 2026-10-28): d@e first. class:test is
-        # not listed: checkpointd has no class source, so it selected nothing.
-        # Readers accept both forms everywhere. Rollback: drop the entry.
-        "CHECKPOINTD_BASE_PARTS_ONLY=computer-59c902c5d46caecc0a180a8557164e72"
       ];
     };
   };
   systemd.timers.go-choir-checkpointd = {
-    description = "Reconcile verified projection checkpoints every minute";
+    description = "Settle checkpoint verdicts every minute";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnBootSec = "1min";
@@ -1507,8 +1250,9 @@ in
     # Phase 0 step 6).
     restartIfChanged = false;
     # The VM slice: wants, not requires, so neither stopping the other.
-    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" "system-choirvms.slice" ] ++ doltClientAfter;
-    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" "system-choirvms.slice" ] ++ doltClientAfter;
+    after = [ "network-online.target" "go-choir-corpusd.service" "system-choirvms.slice" ] ++ pgClientAfter;
+    wants = [ "network-online.target" "go-choir-corpusd.service" "system-choirvms.slice" ];
+    requires = [ "postgresql.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${vmctlExec}";
       Restart = "on-failure";
@@ -1590,9 +1334,8 @@ in
       # provider credentials, escrow key and operator tokens out of reach of
       # a VMM escape (F1 partial; VMMs started before the restart keep the
       # old view until their next boot).
-      # Store compaction runs systemctl and systemd-run, so vmctl keeps PID 1's
-      # sockets: vmctl stays root-equivalent through them (named residual;
-      # the fix is a dedicated compaction unit vmctl starts by name).
+      # vmctl's host-stop path asks systemctl for the system state, so it
+      # keeps PID 1's sockets (named residual: root-equivalent through them).
       InaccessiblePaths = hiddenSecretsExcept [ "systemdPrivate" "dbusSystemSocket" ];
       # vmctl reads but never writes the deployed service binaries and the
       # guest images (the shared images attach read-only; data.img lives in
@@ -1600,7 +1343,7 @@ in
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" ];
-      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ doltClientCredential;
+      LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
       # embedded in vmctl and changed by a reviewed commit (owner ruling
@@ -1620,9 +1363,8 @@ in
         # owner delegated switching on to FP0). The paper and public_platform
         # still last.
         "VMCTL_GUEST_DNS_ONLY=class:test,class:primary"
-        # D-ROUTE and immutable ComputerVersion inputs are tables on the same
-        # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
-        "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+        # D-ROUTE and immutable ComputerVersion inputs are tables in the control
+        # database (CHOIR_PG_CONTROL_DSN below). vmctl is the sole route CAS writer.
         "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "VMCTL_BASE_BLOB_ROOT=${platformArtifactsDir}/computer-inputs/blobs"
         "VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY=oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
@@ -1715,7 +1457,12 @@ in
         "VM_INTERACTIVE_MEM_MIB=8192"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
-        "VM_BOOT_READY_TIMEOUT=30m"
+        # 90m for the data system cutover: the first boot on the SQLite
+        # release migrates the guest's Dolt store in place (migrate_hook.go),
+        # and a failed-ready boot deletes the partial and starts over. The
+        # paper is migrated offline from the host instead (31 GB of Dolt);
+        # back to 30m once every computer has booted the new release.
+        "VM_BOOT_READY_TIMEOUT=90m"
         # A deploy refresh answers only after the computer boots; a replaying
         # boot of the paper takes about 4 min. The server default (120s)
         # emptied the reply of a refresh that succeeded and failed the deploy
@@ -1942,26 +1689,6 @@ in
         # Rollback: SIGNAL=instant and ADMISSION_MODE=guest-size restore the
         # single-sample reclaim and the floor + 8 GiB admission.
         "VMCTL_PRESSURE_RECLAIM_SIGNAL=sustained"
-        # Store compaction on host disk pressure (docs/problems/node-b-disk-
-        # fills-from-the-paper-data-image-2026-10-22.md): observe only logs
-        # "would compact <vm> ... reason=..." for a platform computer whose
-        # image holds at least 32 GiB and 60% of its cap, or when host free
-        # is under 64 GiB. Every compaction (timer, by hand, pressure) keeps
-        # a 6 h gap per computer (a by-hand "force" passes it; the timer
-        # retries a failed attempt); after one that gave back under 8 GiB the
-        # loop alone waits for 8 GiB of regrowth. Every compaction refuses
-        # under the floor: 24 GiB, or the last compacted store plus 10 GiB if
-        # larger (14.45 GB on 10-22). A compaction ends at 45 min and the
-        # computer boots its untouched image. A timer run refused at the
-        # floor (507) or with a failed compaction (500) fails its unit. Full
-        # rollback: PRESSURE=off and MIN_HOST_FREE_GIB=0.
-        "VMCTL_STORE_COMPACT_PRESSURE=observe"
-        "VMCTL_STORE_COMPACT_PRESSURE_HOST_FREE_GIB=64"
-        "VMCTL_STORE_COMPACT_PRESSURE_FILL_FRACTION=0.6"
-        "VMCTL_STORE_COMPACT_PRESSURE_MIN_IMAGE_GIB=32"
-        "VMCTL_STORE_COMPACT_PRESSURE_MIN_GAP=6h"
-        "VMCTL_STORE_COMPACT_MIN_HOST_FREE_GIB=24"
-        "VMCTL_STORE_COMPACT_TIMEOUT=45m"
         "VMCTL_ADMISSION_MODE=measured"
         # Density D1: a start that does not fit hibernates idle eligible
         # computers (never working, held, protected or of a higher class),
@@ -2034,7 +1761,7 @@ in
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
         "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
         internalAuthEnv
-      ] ++ doltClientEnv ++ [
+      ] ++ pgControlEnv ++ [
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
@@ -2210,48 +1937,6 @@ in
     };
   };
 
-  # Guest store compaction (docs/problems/guest-store-compaction-scheduled-
-  # 2026-10-20.md; owner notes §26). vmctl compacts, one at a time, every
-  # active unheld platform computer (critical_protected, public_platform)
-  # whose data image holds at least 32 GiB on the host, as a planned restart
-  # with offline maintenance; a busy refusal waits for the next day. The
-  # paper grows about 6 GB a day, so it is compacted every few days. An
-  # account's computer is never compacted by the timer. A run refused at
-  # vmctl's host free-space floor answers 507 and a failed compaction 500,
-  # so curl fails the unit and the journal carries the reason; a computer
-  # inside its 6 h gap (after a pressure compaction) is skipped without
-  # failing.
-  systemd.services.go-choir-store-compaction = {
-    description = "go-choir guest store compaction sweep";
-    after = [ "go-choir-vmctl.service" ];
-    requires = [ "go-choir-vmctl.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      TimeoutStartSec = "3h";
-      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
-      ExecStart = pkgs.writeShellScript "go-choir-store-compaction" ''
-        set -euo pipefail
-        ${pkgs.curl}/bin/curl -sS --fail-with-body --max-time 10800 \
-          --unix-socket /run/go-choir/vmctl.sock \
-          -X POST http://vmctl/internal/vmctl/compact-sweep \
-          -H "@''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" \
-          -H 'Content-Type: application/json' \
-          -H 'X-Choir-Lifecycle-Caller: go-choir-store-compaction-timer' \
-          -d '{"min_file_bytes":34359738368}'
-        echo
-      '';
-    };
-  };
-
-  systemd.timers.go-choir-store-compaction = {
-    description = "Daily go-choir guest store compaction sweep";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*-*-* 04:00:00 UTC";
-      Persistent = false;
-    };
-  };
-
   # Autopaper daily digest (docs/reports/autopaper-daily-digest-design-2026-10-20.md,
   # docs/problems/autopaper-daily-digest-phase1-2026-10-20.md). A deterministic
   # host job: this oneshot makes one call to maild's host-internal run route,
@@ -2303,86 +1988,6 @@ in
     };
   };
 
-  # Store A weekly history squash, offline (docs/problems/store-a-weekly-squash-
-  # 2026-10-20.md). The script stops the Dolt unit's timers and Requires=
-  # dependents and the unit, takes a reflink backup of the data directory, runs
-  # platform-dolt-squash (squash to one commit, bounded full GC, refuse unless
-  # the root hash is identical), restores the backup on any failure, starts
-  # everything again, runs a query check and keeps only the newest backup.
-  # This unit deliberately has no After/Requires/Wants/PartOf on the Dolt unit:
-  # it stops that unit and must not be stopped with it. ExecStopPost runs
-  # `--finish`, so an OOM kill of the run cannot leave Store A down or a torn
-  # squash in place. It never touches vmctl.
-  # Memory: MemoryMax without MemoryHigh and no swap, as the paper's proven run
-  # (MemoryHigh made it thrash on 2026-10-19); the command also sets a Go
-  # memory limit of 5 GiB.
-  # First run by hand: docs/problems/store-a-weekly-squash-2026-10-20.md.
-  systemd.services.go-choir-platform-dolt-squash = {
-    description = "go-choir Store A (platform Dolt) weekly history squash";
-    path = [ pkgs.coreutils pkgs.gawk pkgs.gnugrep pkgs.gnused pkgs.systemd pkgs.dolt ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = platformDoltSquashScript;
-      ExecStopPost = "${platformDoltSquashScript} --finish";
-      TimeoutStartSec = "2h";
-      MemoryMax = "10G";
-      MemorySwapMax = "0";
-      Nice = 10;
-      CPUWeight = 20;
-      IOWeight = 20;
-      RuntimeDirectory = "go-choir-platform-dolt-squash";
-      RuntimeDirectoryMode = "0700";
-      # The query check reuses the liveness probe's --sql mode, which reads the
-      # app user's password from the credential directory and never prints it.
-      LoadCredential = [ "dolt-app-password:${doltAppPasswordFile}" ];
-      Environment = [
-        "HOME=${platformDoltDir}"
-        "LD_LIBRARY_PATH=${goServiceLibraryPath}"
-        "SQUASH_BIN=${goChoirPackages.platformDoltSquash}/bin/platform-dolt-squash"
-        "DOLT_UNIT=go-choir-platform-dolt.service"
-        "DATA_DIR=${platformDoltDir}"
-        "DATABASE=platform"
-        "BACKUP_ROOT=${platformDoltSquashBackupRoot}"
-        # Quoted: systemd splits an unquoted Environment= value on spaces
-        # and drops the probe's arguments (2026-10-28 first run).
-        "\"SQL_CHECK_CMD=${doltLivenessProbe} --sql 13306 platform\""
-        "SQUASH_NOTE=weekly"
-      ];
-    };
-  };
-
-  # DISABLED until the first supervised run: no wantedBy while
-  # platformDoltSquashTimerEnabled is false. Persistent=false so a missed
-  # window is skipped, never replayed at boot.
-  systemd.timers.go-choir-platform-dolt-squash = {
-    description = "Weekly Store A history squash";
-    wantedBy = lib.optional platformDoltSquashTimerEnabled "timers.target";
-    timerConfig = {
-      OnCalendar = "Sun *-*-* 06:00:00 UTC";
-      Persistent = false;
-    };
-  };
-
-  systemd.services.go-choir-platform-dolt-history-audit = {
-    description = "go-choir platform dolt commit-history growth audit";
-    after = [ "go-choir-platform-dolt.service" ];
-    requires = [ "go-choir-platform-dolt.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = platformDoltHistoryAudit;
-    };
-  };
-
-  systemd.timers.go-choir-platform-dolt-history-audit = {
-    description = "Daily platform dolt commit-history growth audit";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "daily";
-      RandomizedDelaySec = "30m";
-      Persistent = true;
-    };
-  };
-
   # Off-host backup to node-a (see offHostBackup in the let block). Every
   # attribute below is behind offHostBackup.enable. The daily job is append-only on the remote and
   # cannot delete backups; pruning is a supervised monthly act (design,
@@ -2394,9 +1999,9 @@ in
       # only with nix-daemon builds, checkpointd and front-importance, and
       # outscores them by size.
       OOMScoreAdjust = 1000;
-      LoadCredential = offHostBackupCredentials ++ [ "dolt-root-password:${doltRootPasswordFile}" ];
+      LoadCredential = offHostBackupCredentials;
     } // {
-      after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
+      after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
     });
 
@@ -2446,46 +2051,6 @@ in
       OnBootSec = "2h";
       OnUnitActiveSec = "6h";
       Persistent = false;
-    };
-  };
-
-  # Platform (13306) and corpus (13307) Dolt liveness: SELECT 1 with a 5 s
-  # deadline every 30 s. Three consecutive timeouts or refusals on a unit that
-  # has been active for 2+ minutes journal /proc state, send SIGABRT (Go dumps
-  # all goroutines) and let Restart=on-failure bring Dolt back; a 10 minute
-  # cooldown bounds signals per unit. The app user's password arrives via
-  # LoadCredential (the file the dolt-users units use) and is never printed.
-  # Dry run by hand (sends nothing): systemd-run --wait -p Type=oneshot
-  #   -p LoadCredential=dolt-app-password:<file> -E PROBE_DRY_RUN=1 <ExecStart>
-  # Rollback: remove this service and timer; the Dolt unit changes
-  # (TimeoutStopSec, LimitCORE, GOTRACEBACK) are independent.
-  systemd.services.go-choir-dolt-liveness-probe = {
-    description = "go-choir Dolt liveness probe (platform :13306, corpus :13307)";
-    path = [ pkgs.coreutils pkgs.dolt pkgs.systemd pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.util-linux ];
-    serviceConfig = commonServiceHardening // {
-      Type = "oneshot";
-      ExecStart = doltLivenessProbe;
-      TimeoutStartSec = "2min";
-      RuntimeDirectory = "go-choir-dolt-liveness";
-      RuntimeDirectoryMode = "0700";
-      RuntimeDirectoryPreserve = "yes";
-      LoadCredential = [ "dolt-app-password:${doltAppPasswordFile}" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "systemdPrivate" "dbusSystemSocket" ];  # it runs systemctl kill, show and restart
-      # Reading /proc/<dolt pid>/{stack,io,wchan} for the evidence record can
-      # need ptrace access to another process under Yama.
-      CapabilityBoundingSet = [ "CAP_SYS_PTRACE" ];
-    };
-  };
-
-  systemd.timers.go-choir-dolt-liveness-probe = {
-    description = "Probe platform and corpus Dolt with SELECT 1 every 30 seconds";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      # Dolt and its users unit need a moment after boot; the script also
-      # skips any unit that has been active for under 2 minutes.
-      OnBootSec = "2min";
-      OnUnitActiveSec = "30s";
-      AccuracySec = "1s";
     };
   };
 
@@ -2725,20 +2290,6 @@ in
     chmod 0600 ${ownerActKeyFile} ${ownerActPublicKeyFile} 2>/dev/null || true
   '';
 
-  # Dolt passwords (doltAuthStage). Hex, generated once, 0600, never printed.
-  system.activationScripts.go-choir-dolt-passwords = ''
-    install -d -m 0700 -o root -g root /var/lib/go-choir/secrets
-    for f in ${doltAppPasswordFile} ${doltRootPasswordFile}; do
-      if [ ! -s "$f" ]; then
-        ( umask 077
-          ${pkgs.openssl}/bin/openssl rand -hex 32 > "$f.next"
-          mv -f "$f.next" "$f" )
-        echo "go-choir Dolt password generated: $f"
-      fi
-      chmod 0600 "$f"
-    done
-  '';
-
   # The env directory (unitEnvDir). Activation runs at boot before units
   # start and in a switch before units restart, so each unit's new
   # namespace is made with the directory present. Per name, by what sits at
@@ -2887,8 +2438,8 @@ in
   # (unitEnvDsn). The proxy reads only the optional deploy.env, so it does
   # not wait on a corpus DSN.
   systemd.services.go-choir-proxy.unitConfig.AssertPathExists = unitEnvImported;
-  systemd.services.go-choir-corpusd.unitConfig.AssertPathExists = [ unitEnvImported unitEnvDsn ];
-  systemd.services.go-choir-checkpointd.unitConfig.AssertPathExists = [ unitEnvImported unitEnvDsn ];
+  systemd.services.go-choir-corpusd.unitConfig.AssertPathExists = unitEnvImported;
+  systemd.services.go-choir-checkpointd.unitConfig.AssertPathExists = unitEnvImported;
 
   # Go module proxy for engineering capsules
   # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md). Capsules
@@ -3356,7 +2907,9 @@ in
     icu
     icu.dev
     goChoirPackages.maildctl
-    goChoirPackages.projectionCompact
+    goChoirPackages.choirMigrateHost
+    # PostgreSQL client tools for operators (psql, pg_dump).
+    postgresql_17
     procps
     lsof
     strace

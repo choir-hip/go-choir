@@ -9,7 +9,7 @@ import (
 
 func TestOpenFreshRefusesExistingWorkspaceMarker(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "runtime.db")
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
+	if err := os.WriteFile(StateDBPath(path), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := OpenFresh(path); !errors.Is(err, ErrFreshWorkspaceRequiresEmpty) {

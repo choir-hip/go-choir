@@ -112,7 +112,7 @@ func (s *Store) ResolveCheckpointVerdict(ctx context.Context, computerID, checkp
 	if n != 1 {
 		return false, nil
 	}
-	return true, s.commitBoundary(ctx, "judge checkpoint "+checkpointDigest+" "+verdict.Status)
+	return true, nil
 }
 
 // StoredCheckpoint returns a published checkpoint by digest, scoped to its

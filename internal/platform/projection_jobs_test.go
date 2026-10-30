@@ -63,7 +63,7 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 	if err := s.FinishProjectionJob(ctx, *lease, "failed", "deterministic refusal", 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	reconstructed := NewStore(s.db)
+	reconstructed := NewStore(s.db, s.corpus())
 	got, err := reconstructed.ProjectionJob(ctx, "computer-jobs")
 	if err != nil || got.Status != "failed" || got.Error != "deterministic refusal" {
 		t.Fatalf("durable refusal lost %+v %v", got, err)

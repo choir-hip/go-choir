@@ -151,7 +151,7 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		entry.Reason,
 		entry.Model,
 		sanitizeStoreText(string(detailsJSON)),
-		entry.CreatedAt.UTC().Format(time.RFC3339Nano),
+		entry.CreatedAt.UTC(),
 	)
 	if err != nil {
 		return types.RunMemoryEntry{}, fmt.Errorf("insert run memory entry: %w", err)

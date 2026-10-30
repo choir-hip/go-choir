@@ -30,52 +30,46 @@ type ObjectHeader struct {
 // ListNewestObjectHeaders returns the headers of the `limit` objects most
 // recently updated, of any kind, newest first. A shorter answer means the
 // store holds no more. limit must be positive.
-func (s *DoltStore) ListNewestObjectHeaders(ctx context.Context, limit int) ([]ObjectHeader, error) {
+func (s *SQLStore) ListNewestObjectHeaders(ctx context.Context, limit int) ([]ObjectHeader, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("objectgraph dolt: nil store")
+		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
 	if limit <= 0 {
-		return nil, fmt.Errorf("objectgraph dolt: newest headers: limit must be positive")
+		return nil, fmt.Errorf("objectgraph sql: newest headers: limit must be positive")
 	}
-	const op = "(*DoltStore).ListNewestObjectHeaders"
-	s.engineMu.LockAs(op)
-	defer s.engineMu.UnlockAs(op)
 	rows, err := s.db.QueryContext(ctx, NewestObjectHeadersSQL, limit)
 	if err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: newest headers: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: newest headers: %w", err)
 	}
 	defer rows.Close()
 	out := make([]ObjectHeader, 0, min(limit, 4096))
 	for rows.Next() {
 		var kind, metadata string
 		if err := rows.Scan(&kind, &metadata); err != nil {
-			return nil, fmt.Errorf("objectgraph dolt: newest headers: %w", err)
+			return nil, fmt.Errorf("objectgraph sql: newest headers: %w", err)
 		}
 		out = append(out, ObjectHeader{Kind: ObjectKind(kind), Metadata: json.RawMessage(metadata)})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: newest headers: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: newest headers: %w", err)
 	}
 	return out, nil
 }
 
 // HasObjectOfKind reports whether any object of the kind exists, by one seek
 // of the kind index.
-func (s *DoltStore) HasObjectOfKind(ctx context.Context, kind ObjectKind) (bool, error) {
+func (s *SQLStore) HasObjectOfKind(ctx context.Context, kind ObjectKind) (bool, error) {
 	if s == nil || s.db == nil {
-		return false, fmt.Errorf("objectgraph dolt: nil store")
+		return false, fmt.Errorf("objectgraph sql: nil store")
 	}
-	const op = "(*DoltStore).HasObjectOfKind"
-	s.engineMu.LockAs(op)
-	defer s.engineMu.UnlockAs(op)
 	rows, err := s.db.QueryContext(ctx, ObjectKindExistsSQL, string(kind))
 	if err != nil {
-		return false, fmt.Errorf("objectgraph dolt: kind exists: %w", err)
+		return false, fmt.Errorf("objectgraph sql: kind exists: %w", err)
 	}
 	defer rows.Close()
 	found := rows.Next()
 	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("objectgraph dolt: kind exists: %w", err)
+		return false, fmt.Errorf("objectgraph sql: kind exists: %w", err)
 	}
 	return found, nil
 }
@@ -116,30 +110,27 @@ type KindMetadataRow struct {
 // page read, including any whose kind is not the one asked for (kept out of
 // rows); scanned < limit means the range holds no more. It holds the engine
 // mutex for this page only.
-func (s *DoltStore) ListKindIDRangePage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) (rows []KindMetadataRow, next string, scanned int, err error) {
+func (s *SQLStore) ListKindIDRangePage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) (rows []KindMetadataRow, next string, scanned int, err error) {
 	if s == nil || s.db == nil {
-		return nil, "", 0, fmt.Errorf("objectgraph dolt: nil store")
+		return nil, "", 0, fmt.Errorf("objectgraph sql: nil store")
 	}
 	if limit <= 0 {
-		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: limit must be positive")
+		return nil, "", 0, fmt.Errorf("objectgraph sql: kind id range page: limit must be positive")
 	}
 	lo, hi := KindIDRange(kind)
 	if afterCanonicalID > lo {
 		lo = afterCanonicalID
 	}
-	op := "(*DoltStore).ListKindIDRangePage " + kindOpLabel(string(kind))
-	s.engineMu.LockAs(op)
-	defer s.engineMu.UnlockAs(op)
 	result, err := s.db.QueryContext(ctx, KindIDRangePageSQL, lo, hi, limit)
 	if err != nil {
-		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+		return nil, "", 0, fmt.Errorf("objectgraph sql: kind id range page: %w", err)
 	}
 	defer result.Close()
 	rows = make([]KindMetadataRow, 0, min(limit, 4096))
 	for result.Next() {
 		var id, rowKind, metadata string
 		if err := result.Scan(&id, &rowKind, &metadata); err != nil {
-			return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+			return nil, "", 0, fmt.Errorf("objectgraph sql: kind id range page: %w", err)
 		}
 		scanned++
 		next = id
@@ -148,29 +139,26 @@ func (s *DoltStore) ListKindIDRangePage(ctx context.Context, kind ObjectKind, af
 		}
 	}
 	if err := result.Err(); err != nil {
-		return nil, "", 0, fmt.Errorf("objectgraph dolt: kind id range page: %w", err)
+		return nil, "", 0, fmt.Errorf("objectgraph sql: kind id range page: %w", err)
 	}
 	return rows, next, scanned, nil
 }
 
 // KindHasRowsOutsideIDRange reports whether any row of kind has a canonical id
 // outside the kind's id range: one read of the kind index.
-func (s *DoltStore) KindHasRowsOutsideIDRange(ctx context.Context, kind ObjectKind) (bool, error) {
+func (s *SQLStore) KindHasRowsOutsideIDRange(ctx context.Context, kind ObjectKind) (bool, error) {
 	if s == nil || s.db == nil {
-		return false, fmt.Errorf("objectgraph dolt: nil store")
+		return false, fmt.Errorf("objectgraph sql: nil store")
 	}
 	lo, hi := KindIDRange(kind)
-	op := "(*DoltStore).KindHasRowsOutsideIDRange " + kindOpLabel(string(kind))
-	s.engineMu.LockAs(op)
-	defer s.engineMu.UnlockAs(op)
 	result, err := s.db.QueryContext(ctx, KindOutsideRangeSQL, string(kind), lo, hi)
 	if err != nil {
-		return false, fmt.Errorf("objectgraph dolt: kind outside id range: %w", err)
+		return false, fmt.Errorf("objectgraph sql: kind outside id range: %w", err)
 	}
 	defer result.Close()
 	found := result.Next()
 	if err := result.Err(); err != nil {
-		return false, fmt.Errorf("objectgraph dolt: kind outside id range: %w", err)
+		return false, fmt.Errorf("objectgraph sql: kind outside id range: %w", err)
 	}
 	return found, nil
 }
@@ -180,31 +168,28 @@ func (s *DoltStore) KindHasRowsOutsideIDRange(ctx context.Context, kind ObjectKi
 // predicate. Exact for any id; costs the kind once per page (see
 // KindMetadataPageSQL). A shorter answer than limit means the kind holds no
 // more.
-func (s *DoltStore) ListKindMetadataPage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) ([]KindMetadataRow, error) {
+func (s *SQLStore) ListKindMetadataPage(ctx context.Context, kind ObjectKind, afterCanonicalID string, limit int) ([]KindMetadataRow, error) {
 	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("objectgraph dolt: nil store")
+		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
 	if limit <= 0 {
-		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: limit must be positive")
+		return nil, fmt.Errorf("objectgraph sql: kind metadata page: limit must be positive")
 	}
-	op := "(*DoltStore).ListKindMetadataPage " + kindOpLabel(string(kind))
-	s.engineMu.LockAs(op)
-	defer s.engineMu.UnlockAs(op)
 	rows, err := s.db.QueryContext(ctx, KindMetadataPageSQL, string(kind), afterCanonicalID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: kind metadata page: %w", err)
 	}
 	defer rows.Close()
 	out := make([]KindMetadataRow, 0, min(limit, 4096))
 	for rows.Next() {
 		var id, metadata string
 		if err := rows.Scan(&id, &metadata); err != nil {
-			return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+			return nil, fmt.Errorf("objectgraph sql: kind metadata page: %w", err)
 		}
 		out = append(out, KindMetadataRow{CanonicalID: id, Metadata: json.RawMessage(metadata)})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: kind metadata page: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: kind metadata page: %w", err)
 	}
 	return out, nil
 }

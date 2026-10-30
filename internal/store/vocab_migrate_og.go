@@ -776,7 +776,7 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			o.newID, o.newHash, o.body, o.metadata, o.versionID, o.supersededBy, o.canonicalID); err != nil {
+			o.newID, o.newHash, o.body, string(o.metadata), o.versionID, o.supersededBy, o.canonicalID); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og migrate write %s: %w", o.canonicalID, err)
 		}
@@ -803,7 +803,6 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		// The working set changed outside the event paths, so the next
 		// checkpoint must commit it (a migration-only store otherwise leaves
 		// its cutover in the uncommitted working set of a published base).
-		s.markDoltHistoryDirty()
 	}
 	return nil
 }
@@ -1044,7 +1043,7 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			entry.OldCanonicalID, hash, newBody, newMeta, versionID, supersededBy, entry.NewCanonicalID); err != nil {
+			entry.OldCanonicalID, hash, newBody, string(newMeta), versionID, supersededBy, entry.NewCanonicalID); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og revert write %s: %w", entry.NewCanonicalID, err)
 		}
@@ -1063,7 +1062,6 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 		return fmt.Errorf("og revert commit: %w", err)
 	}
 	if len(rep.OGObjects) > 0 || len(rep.OGEdges) > 0 {
-		s.markDoltHistoryDirty()
 	}
 	return nil
 }

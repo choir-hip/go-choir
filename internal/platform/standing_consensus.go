@@ -79,21 +79,21 @@ CREATE TABLE IF NOT EXISTS consensus_decisions (
   effective_state_commitment CHAR(64) NOT NULL,
   policy_digest CHAR(64) NOT NULL,
   standing_mode_receipt_digest CHAR(64) NOT NULL,
-  standing_generation BIGINT UNSIGNED NOT NULL,
+  standing_generation BIGINT NOT NULL,
   host_build_job_id CHAR(64) NOT NULL,
   host_build_result_digest CHAR(64) NOT NULL,
-  not_after DATETIME(6) NOT NULL,
-  decision_json JSON NOT NULL,
+  not_after TIMESTAMPTZ NOT NULL,
+  decision_json TEXT NOT NULL,
   admitted_event_digest CHAR(64) NULL,
-  created_at DATETIME(6) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (decision_digest),
-  UNIQUE KEY consensus_decisions_subject_uq (computer_id, subject_digest, standing_generation)
+  CONSTRAINT consensus_decisions_subject_uq UNIQUE (computer_id, subject_digest, standing_generation)
 );
 CREATE TABLE IF NOT EXISTS consensus_guest_core_keys (
   computer_id VARCHAR(128) NOT NULL,
   key_id VARCHAR(255) NOT NULL,
   public_key VARCHAR(128) NOT NULL,
-  pinned_at DATETIME(6) NOT NULL,
+  pinned_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id)
 );`
 
@@ -438,7 +438,6 @@ func (a *ConsensusActuator) Decide(ctx context.Context, computerID string, reque
 	if err != nil {
 		return ConsensusResponse{}, fmt.Errorf("consensus actuator: record decision: %w", err)
 	}
-	a.store.markDirty("consensus decision " + digest)
 	log.Printf("consensus: computer=%s operation=%s bundle=%s decision=%s host_build=%s host=%s reviewer=%s", computerID, request.OperationID, subject.BundleDigest, digest, hostVote.job.JobID, host.Digest, reviewer.Digest)
 	return ConsensusResponse{Decision: &decision, DecisionDigest: digest, BallotDigests: ballotDigests, HostBuildJobID: hostVote.job.JobID}, nil
 }

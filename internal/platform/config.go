@@ -7,8 +7,16 @@ import (
 )
 
 const (
-	DefaultPort          = "8086"
-	DefaultDoltDSN       = "root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+	DefaultPort = "8086"
+	// DefaultPGControlDSN and DefaultPGGraphDSN are the host PostgreSQL
+	// databases (build sheet decision 11): control is Store A (events,
+	// checkpoints, routes), graph is Store B (object graph, publication).
+	// The password comes from dbcred.ApplyPGDSN, never from the DSN.
+	DefaultPGControlDSN = "host=/run/postgresql dbname=control user=choir sslmode=disable"
+	DefaultPGGraphDSN   = "host=/run/postgresql dbname=graph user=choir sslmode=disable"
+	// EnvPGControlDSN and EnvPGGraphDSN name the DSN variables.
+	EnvPGControlDSN      = "CHOIR_PG_CONTROL_DSN"
+	EnvPGGraphDSN        = "CHOIR_PG_GRAPH_DSN"
 	DefaultArtifactsRoot = "/var/lib/go-choir/platform-artifacts"
 	// DefaultFrontImportancePath is where the host front-importance timer
 	// writes its scores (cmd/front-importance).
@@ -17,8 +25,8 @@ const (
 
 type Config struct {
 	Port                  string
-	DoltDSN               string
-	CorpusDoltDSN         string
+	ControlDSN            string
+	GraphDSN              string
 	ArtifactsRoot         string
 	SigningKeyPath        string
 	KeyEscrowKeyPath      string
@@ -69,8 +77,8 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:                  envOr("CORPUSD_PORT", DefaultPort),
-		DoltDSN:               envOr("CORPUSD_DOLT_DSN", DefaultDoltDSN),
-		CorpusDoltDSN:         os.Getenv("CORPUSD_CORPUS_DOLT_DSN"),
+		ControlDSN:            envOr(EnvPGControlDSN, DefaultPGControlDSN),
+		GraphDSN:              envOr(EnvPGGraphDSN, DefaultPGGraphDSN),
 		ArtifactsRoot:         envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot),
 		SigningKeyPath:        envOr("PLATFORM_SIGNING_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "signing-key")),
 		KeyEscrowKeyPath:      envOr("CHOIR_KEY_ESCROW_KEY_PATH", filepath.Join(envOr("CORPUSD_ARTIFACTS_ROOT", DefaultArtifactsRoot), "key-escrow-key")),
@@ -102,8 +110,8 @@ func (c *Config) validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("platform config: CORPUSD_PORT must not be empty")
 	}
-	if c.DoltDSN == "" {
-		return fmt.Errorf("platform config: CORPUSD_DOLT_DSN must not be empty")
+	if c.ControlDSN == "" || c.GraphDSN == "" {
+		return fmt.Errorf("platform config: %s and %s must not be empty", EnvPGControlDSN, EnvPGGraphDSN)
 	}
 	if c.ArtifactsRoot == "" {
 		return fmt.Errorf("platform config: CORPUSD_ARTIFACTS_ROOT must not be empty")

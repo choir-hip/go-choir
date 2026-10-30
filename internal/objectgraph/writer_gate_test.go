@@ -225,12 +225,12 @@ func TestRegisterKindCheckedRefusesASecondWriter(t *testing.T) {
 	}
 }
 
-// The Dolt store gates a declared writer before the event tape: a refused
+// The SQL store gates a declared writer before the event tape: a refused
 // write reaches no interceptor.
-func TestDoltStoreEnforcesTheDeclaredWriterBeforeTheInterceptor(t *testing.T) {
+func TestSQLStoreEnforcesTheDeclaredWriterBeforeTheInterceptor(t *testing.T) {
 	writerMode(t, WriterGateEnforce)
 	ctx := context.Background()
-	store := NewDoltStore(openTestDoltDB(t))
+	store := NewSQLStore(openTestDB(t))
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}

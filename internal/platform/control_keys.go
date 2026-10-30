@@ -81,7 +81,6 @@ func (s *Store) insertControlKey(ctx context.Context, key ControlKey) error {
 	if err != nil {
 		return fmt.Errorf("control key history: insert: %w", err)
 	}
-	s.markDirty("insert control key " + key.SignerDomain + "/" + key.KeyID)
 	return nil
 }
 
@@ -96,7 +95,6 @@ func (s *Store) activateControlKey(ctx context.Context, domain, computerID, keyI
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("control key history: activation CAS failed")
 	}
-	s.markDirty("activate control key " + domain + "/" + keyID)
 	return nil
 }
 
@@ -111,7 +109,6 @@ func (s *Store) revokeControlKey(ctx context.Context, domain, computerID, keyID,
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("control key history: revocation CAS failed")
 	}
-	s.markDirty("revoke control key " + domain + "/" + keyID)
 	return nil
 }
 

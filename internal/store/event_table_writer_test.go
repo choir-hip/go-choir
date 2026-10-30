@@ -514,7 +514,7 @@ func TestEventTableWriterLeavesTheLifecycleFoldAlone(t *testing.T) {
 	if n := tableCount(t, h.store, "choir_events", ""); n != 0 {
 		t.Fatalf("the lifecycle fold wrote %d choir_events rows with the setting on", n)
 	}
-	if n := tableCount(t, h.store, "og_objects", "object_kind = 'choir.event' AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.event_id')) = 'ev-fold-on'"); n != 1 {
+	if n := tableCount(t, h.store, "og_objects", "object_kind = 'choir.event' AND json_extract(metadata, '$.event_id') = 'ev-fold-on'"); n != 1 {
 		t.Fatalf("the folded event is not in og_objects (%d rows)", n)
 	}
 	for _, op := range h.tapeOps() {

@@ -2362,7 +2362,7 @@ var lifecycleTrajectoryKinds = []objectgraph.ObjectKind{
 // metadata of every lifecycle object, document and revision of the computer:
 // 416 ms per call on the paper
 // (docs/problems/research-more-slow-and-hidden-2026-10-21.md, E6).
-func (s *Store) readLifecycleTrajectoryObjects(ctx context.Context, graph *objectgraph.DoltStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, bool, error) {
+func (s *Store) readLifecycleTrajectoryObjects(ctx context.Context, graph *objectgraph.SQLStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, bool, error) {
 	if boundDocID == "" {
 		return nil, false, nil
 	}
@@ -2403,7 +2403,7 @@ func (s *Store) readLifecycleTrajectoryObjects(ctx context.Context, graph *objec
 
 // scanLifecycleSnapshotObjects reads a snapshot's objects by scanning the
 // metadata of every object of the snapshot's kinds.
-func (s *Store) scanLifecycleSnapshotObjects(ctx context.Context, graph *objectgraph.DoltStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, error) {
+func (s *Store) scanLifecycleSnapshotObjects(ctx context.Context, graph *objectgraph.SQLStore, ownerID, computerID, trajectoryID, boundDocID string) ([]objectgraph.Object, error) {
 	snapshotKinds := []objectgraph.ObjectKind{
 		ogKindTrajectory, ogKindTexDoc, ogKindTexRev, ogKindWorkItem,
 		ogKindRun, ogKindAgent, ogKindWorkerUpdate, ogKindEngineeringAssignment,

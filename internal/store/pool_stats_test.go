@@ -20,7 +20,7 @@ func TestStorePoolStatsCountsAWaitOnTheWriteConnection(t *testing.T) {
 	}
 	defer conn.Close()
 	before := s.PoolStats()
-	if before == nil || before.Write.MaxOpen != 1 || before.Read.MaxOpen != 1 || before.Write.InUse != 1 {
+	if before == nil || before.Write.MaxOpen != 1 || before.Read.MaxOpen != 4 || before.Write.InUse != 1 {
 		t.Fatalf("pool stats with the write connection held = %+v", before)
 	}
 

@@ -70,10 +70,9 @@ func (p *streamingProvider) ProviderName() string { return p.name }
 func testStreamingRuntime(t *testing.T, provider provideriface.Provider) (*Runtime, *store.Store) {
 	t.Helper()
 
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-streaming-test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
+	// One directory per test: the SQLite state file is <dir>/state.db, so a
+	// directory shared between tests would share their state.
+	dir := t.TempDir()
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 

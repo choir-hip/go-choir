@@ -3,7 +3,7 @@
 
 docs/problems/loopback-is-a-credential-2026-10-14.md. Run on Node B as root:
 
-    ssh node-b python3 - --expect-internal observe --expect-dolt users \
+    ssh node-b python3 - --expect-internal observe \
         < scripts/verify-host-hardening.py
 
 It never changes anything and never prints a secret:
@@ -16,9 +16,8 @@ It never changes anything and never prints a secret:
     or secret is read) and /proc/<MainPID>/status (Uid, CapEff, CapBnd,
     NoNewPrivs, Seccomp); whether the JWT private key is reachable inside
     the proxy's and vmctl's mount namespaces (stat via nsenter: mode only).
-  * Dolt: a MySQL handshake as root with an EMPTY password on :13306 and
-    :13307 (accepted = the old hole); with --with-credential, the app user
-    login.
+  * PostgreSQL: the unit is active and the application role is refused
+    without a password on both databases (a StartupMessage; no login).
   * modes of the secret files and of formerly world-readable state.
   * boot: whether the host runs what it last activated (kernel, kernel
     modules, kernel command line, declared KVM module parameters), and
@@ -36,7 +35,6 @@ script with --root against fixture trees.
 Exit status: 0 when every check matches the expected rollout stage, 1
 otherwise. Expectations:
   --expect-internal off|observe|enforce   (default observe)
-  --expect-dolt users|clients|locked      (default users)
 """
 
 import argparse
@@ -56,7 +54,7 @@ import urllib.request
 
 SECRETS = "/var/lib/go-choir/secrets"
 TOKEN_FILE = SECRETS + "/internal-service-token"
-DOLT_APP_PASSWORD_FILE = SECRETS + "/dolt-app-password"
+PG_APP_PASSWORD_FILE = SECRETS + "/pg-app-password"
 JWT_KEY = "/var/lib/go-choir/auth-signing/ed25519-key"
 HEADER = "X-Choir-Internal-Token"
 
@@ -74,14 +72,14 @@ INTERNAL_PROBES = [
 
 UNITS = [
     "go-choir-auth", "go-choir-proxy", "go-choir-gateway", "go-choir-corpusd",
-    "go-choir-maild", "go-choir-vmctl", "go-choir-platform-dolt",
-    "go-choir-corpus-dolt", "go-choir-checkpointd", "go-choir-front-importance",
+    "go-choir-maild", "go-choir-vmctl", "postgresql",
+    "go-choir-checkpointd", "go-choir-front-importance",
     "go-choir-goproxy", "go-choir-pkgmirror", "searx", "qdrant", "caddy", "unbound",
 ]
 # Root services expected to hold no capabilities after the hardening commit.
 NO_CAP_UNITS = {
     "go-choir-auth", "go-choir-proxy", "go-choir-gateway", "go-choir-corpusd",
-    "go-choir-maild", "go-choir-platform-dolt", "go-choir-corpus-dolt",
+    "go-choir-maild",
     "go-choir-checkpointd", "go-choir-front-importance", "go-choir-goproxy",
     "go-choir-pkgmirror",
 }
@@ -253,7 +251,7 @@ def check_units():
 # Quick containment (blast-radius design, wave 1): PID 1's sockets, the env
 # files read only through EnvironmentFile=, and vmctl's read-only view.
 SYSTEMD_SOCKETS = ["/run/systemd/private", "/run/dbus/system_bus_socket"]
-SYSTEMD_SOCKET_UNITS = {"go-choir-vmctl", "go-choir-dolt-liveness-probe"}  # they run systemctl
+SYSTEMD_SOCKET_UNITS = {"go-choir-vmctl"}  # it runs systemctl
 # The env files live in one directory the host units hide as a directory
 # (nix/node-b.nix unitEnvDir): a file hidden on its own reappears in a
 # running unit when it is replaced by rename or created after the unit
@@ -346,24 +344,46 @@ def check_issuer_credential():
            would[-1][:200] if would else "none")
 
 
-def check_dolt_probe():
-    """The query-level Dolt liveness probe (scripts/dolt-liveness-probe.sh)
-    must be scheduled and healthy: docs/problems/
-    dolt-clustering-assessment-2026-10-15.md section 7. Read-only."""
-    timer = systemctl_show("go-choir-dolt-liveness-probe.timer", ["ActiveState"])
-    record("dolt-probe", "dolt liveness probe timer is active", timer.get("ActiveState") == "active",
-           f"ActiveState={timer.get('ActiveState')}")
-    svc = systemctl_show("go-choir-dolt-liveness-probe.service", ["Result"])
-    # A probe-error run (credential or client fault) ends the oneshot non-zero.
-    record("dolt-probe", "dolt liveness probe last run succeeded", svc.get("Result") in ("success", ""),
-           f"Result={svc.get('Result')}")
-    errors = journal_lines("go-choir-dolt-liveness-probe.service", "probe-error", since="-15min")
-    record("dolt-probe", "dolt liveness probe reports no probe-error in the last 15 minutes", not errors,
-           errors[-1][-200:] if errors else "none")
-    for unit in ("go-choir-platform-dolt", "go-choir-corpus-dolt"):
-        info = systemctl_show(unit + ".service", ["TimeoutStopUSec"])
-        got = info.get("TimeoutStopUSec")
-        record("dolt-probe", f"{unit} stop timeout is 20s", got == "20s", f"TimeoutStopUSec={got}")
+def pg_startup_reply(port, user, database):
+    """Send a PostgreSQL StartupMessage and return the first authentication
+    reply: "password-required", "accepted-without-password", "refused" or
+    "error: ...". Sends no password and never completes a login."""
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=5)
+    except OSError as err:
+        return f"error: {err.__class__.__name__}"
+    try:
+        params = f"user\x00{user}\x00database\x00{database}\x00\x00".encode()
+        body = struct.pack(">i", 196608) + params
+        sock.sendall(struct.pack(">i", len(body) + 4) + body)
+        head = sock.recv(9)
+        if len(head) < 1:
+            return "error: no reply"
+        if head[:1] == b"E":
+            return "refused"
+        if head[:1] == b"R" and len(head) >= 9:
+            code = struct.unpack(">i", head[5:9])[0]
+            if code == 0:
+                return "accepted-without-password"
+            if code in (3, 5, 10):
+                return "password-required"
+        return "error: unexpected reply"
+    except (OSError, struct.error) as err:
+        return f"error: {err.__class__.__name__}"
+    finally:
+        sock.close()
+
+
+def check_postgres():
+    """PostgreSQL (nix/postgresql.nix): the unit is active, and the
+    application role cannot log in to either database without a password
+    (data system cutover; replaces the Dolt checks). Read-only."""
+    info = systemctl_show("postgresql.service", ["ActiveState"])
+    record("postgres", "postgresql.service is active", info.get("ActiveState") == "active",
+           f"ActiveState={info.get('ActiveState')}")
+    for db in ("control", "graph"):
+        outcome = pg_startup_reply(5432, "choir", db)
+        record("postgres", f":5432 choir on {db} requires a password", outcome in ("password-required", "refused"), outcome)
 
 
 def check_paper_probe():
@@ -381,113 +401,16 @@ def check_paper_probe():
            alerts[-1][-200:] if alerts else "none")
 
 
-def mysql_read_packet(sock):
-    header = b""
-    while len(header) < 4:
-        chunk = sock.recv(4 - len(header))
-        if not chunk:
-            raise ConnectionError("closed")
-        header += chunk
-    length = header[0] | (header[1] << 8) | (header[2] << 16)
-    seq = header[3]
-    body = b""
-    while len(body) < length:
-        chunk = sock.recv(length - len(body))
-        if not chunk:
-            raise ConnectionError("closed")
-        body += chunk
-    return seq, body
-
-
-def mysql_send(sock, seq, payload):
-    sock.sendall(struct.pack("<I", len(payload))[:3] + bytes([seq & 0xFF]) + payload)
-
-
-def native_scramble(password, salt):
-    if not password:
-        return b""
-    p1 = hashlib.sha1(password.encode()).digest()
-    p2 = hashlib.sha1(p1).digest()
-    p3 = hashlib.sha1(salt + p2).digest()
-    return bytes(a ^ b for a, b in zip(p1, p3))
-
-
-def mysql_login(port, user, password, database=None):
-    """Returns 'accepted', 'refused' or 'error: ...'. Never prints the password."""
-    try:
-        sock = socket.create_connection(("127.0.0.1", port), timeout=10)
-    except OSError as err:
-        return f"error: {err.__class__.__name__}"
-    try:
-        seq, greet = mysql_read_packet(sock)
-        if not greet or greet[0] == 0xFF:
-            return "error: server refused the connection"
-        pos = greet.index(b"\x00", 1) + 1  # server version
-        pos += 4  # thread id
-        salt = greet[pos:pos + 8]
-        pos += 8 + 1  # salt part 1 + filler
-        pos += 2 + 1 + 2 + 2  # cap low, charset, status, cap high
-        auth_len = greet[pos] if pos < len(greet) else 0
-        pos += 1 + 10
-        salt += greet[pos:pos + max(13, auth_len - 8) - 1]
-        salt = salt[:20]
-        caps = 0x00000200 | 0x00008000 | 0x00080000  # PROTOCOL_41 | SECURE_CONNECTION | PLUGIN_AUTH
-        if database:
-            caps |= 0x00000008  # CONNECT_WITH_DB
-        auth = native_scramble(password, salt)
-        payload = struct.pack("<IIB", caps, 1 << 24, 33) + b"\x00" * 23
-        payload += user.encode() + b"\x00" + bytes([len(auth)]) + auth
-        if database:
-            payload += database.encode() + b"\x00"
-        payload += b"mysql_native_password\x00"
-        mysql_send(sock, seq + 1, payload)
-        seq, reply = mysql_read_packet(sock)
-        if reply and reply[0] == 0xFE:  # auth switch
-            rest = reply[1:]
-            plugin, _, data = rest.partition(b"\x00")
-            new_salt = data.rstrip(b"\x00")[:20]
-            if plugin != b"mysql_native_password":
-                return f"error: auth plugin {plugin.decode(errors='replace')} not supported by this probe"
-            mysql_send(sock, seq + 1, native_scramble(password, new_salt))
-            seq, reply = mysql_read_packet(sock)
-        if reply and reply[0] == 0x00:
-            return "accepted"
-        if reply and reply[0] == 0xFF:
-            return "refused"
-        return "error: unexpected reply"
-    except (OSError, ValueError, ConnectionError) as err:
-        return f"error: {err.__class__.__name__}"
-    finally:
-        sock.close()
-
-
-def check_dolt(expect, with_credential):
-    for port, db in ((13306, "platform"), (13307, "corpus")):
-        outcome = mysql_login(port, "root", "")
-        if expect == "locked":
-            ok, want = outcome == "refused", "refused"
-        else:
-            ok, want = outcome in ("accepted", "refused"), "any (root locked only at stage locked)"
-        record("dolt", f":{port} root with empty password", ok, f"{outcome}; want {want}")
-        if with_credential:
-            app_pw = read_secret(DOLT_APP_PASSWORD_FILE)
-            outcome = mysql_login(port, "choir", app_pw, db) if app_pw else "error: password file missing"
-            record("dolt", f":{port} app user choir on {db}", outcome == "accepted", outcome)
-
-
 # (path, mode at most, must exist).
 MODE_EXPECT = [
     ("/var/lib/go-choir", 0o750, True),
     (SECRETS, 0o700, True),
     (TOKEN_FILE, 0o600, True),
     (TOKEN_FILE + ".header", 0o600, True),
-    (DOLT_APP_PASSWORD_FILE, 0o600, True),
-    (SECRETS + "/dolt-root-password", 0o600, True),
+    (PG_APP_PASSWORD_FILE, 0o600, True),
     ("/var/lib/go-choir/auth", 0o750, True),
     ("/var/lib/go-choir/auth/auth.db", 0o600, True),
     ("/var/lib/go-choir/vm-state", 0o750, True),
-    ("/var/lib/go-choir/platform-dolt", 0o750, True),
-    ("/var/lib/go-choir/corpus-dolt", 0o750, True),
     ("/var/lib/go-choir/platform-artifacts", 0o750, True),
     (UNIT_ENV_DIR, 0o700, True),
     # The first import has completed; the env readers assert it.
@@ -815,7 +738,8 @@ def check_boot(allow_pending, root="/"):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--expect-internal", choices=["off", "observe", "enforce"], default="observe")
-    ap.add_argument("--expect-dolt", choices=["users", "clients", "locked"], default="users")
+    ap.add_argument("--expect-dolt", choices=["users", "clients", "locked"], default="users",
+                    help=argparse.SUPPRESS)  # retired with the Dolt servers; accepted and ignored
     ap.add_argument("--with-credential", action="store_true",
                     help="also run positive controls using the root-only credential files (never printed)")
     ap.add_argument("--json", action="store_true")
@@ -841,8 +765,7 @@ def main():
     check_legacy_env_paths()
     check_unit_env_strays()
     check_issuer_credential()
-    check_dolt(args.expect_dolt, args.with_credential)
-    check_dolt_probe()
+    check_postgres()
     check_paper_probe()
     check_modes()
     check_boot(args.allow_reboot_pending)
@@ -856,7 +779,7 @@ def main():
             print(f"{'PASS' if r['ok'] else 'FAIL'}  [{r['section']}] {r['check']}: {detail}")
     failed = [r for r in results if not r["ok"]]
     print(f"\n{len(results) - len(failed)} passed, {len(failed)} failed "
-          f"(expect internal={args.expect_internal}, dolt={args.expect_dolt})", file=sys.stderr)
+          f"(expect internal={args.expect_internal})", file=sys.stderr)
     return 1 if failed else 0
 
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -30,7 +29,7 @@ import (
 //     after rollback-then-forward (TestRollbackThenForwardRepairsTheTable,
 //     TestReadTripwireCatchesAStaleRow).
 //  5. A validation pass and writers interleave wrongly (TestValidatorWithWriterStorm).
-//  6. The validator starves the engine (TestValidatorHoldsTheEngineOnlyPerPage).
+//  6. The validator starves the engine (TestValidatorHoldsTheWriteConnectionOnlyPerPage).
 //  7. A malformed body fails a write, or reads differently from the JSON
 //     path (TestMalformedBodyNeverFailsAWriteAndKeepsTheJSONPath).
 //  8. The stray STORED columns of the reverted release break something
@@ -42,7 +41,7 @@ import (
 //     (TestPassPublicationKeepsAConcurrentWithdrawal,
 //     TestPassPublicationKeepsAConcurrentMalformedWrite).
 // 12. A read admitted to the side table before a writer withdraws the family
-//     reads it anyway; the production projector takes no engine mutex, so
+//     reads it anyway; the production projector holds no lock across the append, so
 //     holding the mutex does not order them
 //     (TestReadSeesAMalformedWriteCommittedAfterItsAdmission,
 //     TestReadSeesAWithdrawalCommittedAfterItsAdmission).
@@ -78,31 +77,21 @@ func (k keyedObj) object(t *testing.T) Object {
 		CreatedAt: k.at, UpdatedAt: k.at, Tombstone: k.tombstone}
 }
 
-func openDerivedStore(t *testing.T) (*sql.DB, *DoltStore) {
+func openDerivedStore(t *testing.T) (*sql.DB, *SQLStore) {
 	t.Helper()
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	return db, store
 }
 
-// rawOldBinaryPut writes og_objects exactly as the binary before this change
-// did: the upsert, and nothing else.
+// rawOldBinaryPut writes og_objects with the upsert and nothing else: no
+// derived-key maintenance, as a writer that predates the side table would.
 func rawOldBinaryPut(t *testing.T, db *sql.DB, obj Object) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			object_kind = VALUES(object_kind), owner_id = VALUES(owner_id), computer_id = VALUES(computer_id),
-			version_id = VALUES(version_id), content_hash = VALUES(content_hash), body = VALUES(body),
-			metadata = VALUES(metadata), updated_at = VALUES(updated_at), tombstone = VALUES(tombstone),
-			superseded_by = VALUES(superseded_by)`,
-		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID, obj.VersionID, obj.ContentHash,
-		obj.Body, string(obj.Metadata), obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone, obj.SupersededBy)
-	if err != nil {
+	if _, err := db.Exec(upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
 		t.Fatalf("raw put %s: %v", obj.CanonicalID, err)
 	}
 }
@@ -159,7 +148,7 @@ func truthSideRows(t *testing.T, db *sql.DB) map[string]sideRow {
 		for _, h := range heads {
 			var v sql.NullString
 			ok := true
-			if err := db.QueryRow(`SELECT LEFT(`+fam.expr+`, 255) FROM og_objects WHERE canonical_id = ?`, h.id).Scan(&v); err != nil {
+			if err := db.QueryRow(`SELECT substr(`+fam.expr+`, 1, 255) FROM og_objects WHERE canonical_id = ?`, h.id).Scan(&v); err != nil {
 				v, ok = sql.NullString{}, false
 			}
 			out[h.id+"|"+fam.Name] = sideRow{Key: fam.Name, Owner: h.owner, Hash: h.hash, Value: v, UpdatedAt: h.at, OK: ok}
@@ -197,7 +186,7 @@ func assertSideMatchesTruth(t *testing.T, db *sql.DB) {
 
 // pageIDs reads every page of ListObjectsByMetadataPage the way
 // store.ogListAllByMetadata does.
-func pageIDs(t *testing.T, s *DoltStore, kind ObjectKind, field, value string, pageSize int) ([]string, error) {
+func pageIDs(t *testing.T, s *SQLStore, kind ObjectKind, field, value string, pageSize int) ([]string, error) {
 	t.Helper()
 	var ids []string
 	after := ""
@@ -216,7 +205,7 @@ func pageIDs(t *testing.T, s *DoltStore, kind ObjectKind, field, value string, p
 	}
 }
 
-func bodyIDs(t *testing.T, s *DoltStore, owner, addressee string, limit int) ([]string, error) {
+func bodyIDs(t *testing.T, s *SQLStore, owner, addressee string, limit int) ([]string, error) {
 	t.Helper()
 	objs, err := s.ListObjectsByOwnerAndBody(context.Background(), string(commitmentRecordKind), owner,
 		[]JSONFieldMatch{{JSONPath: "$.addressee", Value: addressee}}, limit)
@@ -228,7 +217,7 @@ func bodyIDs(t *testing.T, s *DoltStore, owner, addressee string, limit int) ([]
 }
 
 // jsonOnly runs fn with every family on the JSON path, then restores.
-func jsonOnly(s *DoltStore, fn func()) {
+func jsonOnly(s *SQLStore, fn func()) {
 	d := s.derived
 	saved := map[string]bool{}
 	for name := range d.validated {
@@ -243,15 +232,8 @@ func jsonOnly(s *DoltStore, fn func()) {
 	fn()
 }
 
-func opCalls(s *DoltStore, substr string) uint64 {
-	var n uint64
-	for op, st := range s.EngineMutexStats() {
-		if strings.Contains(op, substr) {
-			n += st.Calls
-		}
-	}
-	return n
-}
+// sideCalls counts the reads the store answered from the side table.
+func sideCalls(s *SQLStore) uint64 { return s.derived.sideReads.Load() }
 
 func edgeValues() []any {
 	return []any{
@@ -309,18 +291,18 @@ func TestDerivedKeyReadsMatchJSONReads(t *testing.T) {
 				kind  ObjectKind
 				field string
 			}{{testRunKind, "agent_id"}, {testSourceRefKind, "doc_id"}} {
-				before := opCalls(store, "keyindex")
+				before := sideCalls(store)
 				got, err := pageIDs(t, store, c.kind, c.field, v, pageSize)
 				if err != nil {
 					t.Fatalf("side %s %q: %v", c.field, v, err)
 				}
-				if utf8Len(v) < derivedKeyValueMaxChars && opCalls(store, "keyindex") == before {
+				if utf8Len(v) < derivedKeyValueMaxChars && sideCalls(store) == before {
 					t.Fatalf("%s %q (%d chars) did not use the side table", c.field, v, utf8Len(v))
 				}
-				if utf8Len(v) >= derivedKeyValueMaxChars && opCalls(store, "keyindex") != before {
+				if utf8Len(v) >= derivedKeyValueMaxChars && sideCalls(store) != before {
 					t.Fatalf("%s %q (%d chars) used the side table; values of 255 characters or more keep the JSON path", c.field, v, utf8Len(v))
 				}
-				sidePathCalls += opCalls(store, "keyindex") - before
+				sidePathCalls += sideCalls(store) - before
 				var want []string
 				jsonOnly(store, func() { want, err = pageIDs(t, store, c.kind, c.field, v, pageSize) })
 				if err != nil {
@@ -333,12 +315,12 @@ func TestDerivedKeyReadsMatchJSONReads(t *testing.T) {
 		}
 		for _, owner := range []string{"o1", "o2", "nobody"} {
 			for _, limit := range []int{1, 3, 1000} {
-				before := opCalls(store, "keyindex")
+				before := sideCalls(store)
 				got, err := bodyIDs(t, store, owner, v, limit)
 				if err != nil {
 					t.Fatalf("side addressee %q: %v", v, err)
 				}
-				if utf8Len(v) < derivedKeyValueMaxChars && opCalls(store, "keyindex") == before {
+				if utf8Len(v) < derivedKeyValueMaxChars && sideCalls(store) == before {
 					t.Fatalf("addressee %q did not use the side table", v)
 				}
 				var want []string
@@ -377,11 +359,8 @@ func TestReadsUseTheJSONPathUntilValidated(t *testing.T) {
 	if ids, err := pageIDs(t, store, testRunKind, "agent_id", "a", 10); err != nil || len(ids) != 1 {
 		t.Fatalf("read before validation = %v, %v", ids, err)
 	}
-	if n := opCalls(store, "keyindex"); n != 0 {
+	if n := sideCalls(store); n != 0 {
 		t.Fatalf("%d side-table reads before the family was validated", n)
-	}
-	if n := opCalls(store, "ListObjectsByMetadataPage choir.run $.agent_id json"); n == 0 {
-		t.Fatalf("the JSON path is not labelled json: %v", store.EngineMutexStats())
 	}
 }
 
@@ -416,15 +395,17 @@ func TestOpenDoesNotTouchOgObjects(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	tableHash := func() string {
-		var h string
-		if err := db.QueryRow(`SELECT DOLT_HASHOF_TABLE('og_objects')`).Scan(&h); err != nil {
-			t.Fatalf("hash of og_objects: %v", err)
+	// total_changes counts every row the connection has inserted, updated or
+	// deleted: an open that rewrote og_objects would move it.
+	tableHash := func() int64 {
+		var n int64
+		if err := db.QueryRow(`SELECT total_changes()`).Scan(&n); err != nil {
+			t.Fatalf("total_changes: %v", err)
 		}
-		return h
+		return n
 	}
 	columns := func() string {
-		rows, err := db.Query(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' ORDER BY ORDINAL_POSITION`)
+		rows, err := db.Query(`SELECT name FROM pragma_table_xinfo('og_objects') ORDER BY cid`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -437,17 +418,17 @@ func TestOpenDoesNotTouchOgObjects(t *testing.T) {
 		}
 		return strings.Join(cols, ",")
 	}
-	beforeHash, beforeCols := tableHash(), columns()
+	beforeChanges, beforeCols := tableHash(), columns()
 
 	// The next boot: a fresh store over the same database.
-	reopened := NewDoltStore(db)
+	reopened := NewSQLStore(db)
 	start := time.Now()
 	if err := reopened.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
 	elapsed := time.Since(start)
-	if got := tableHash(); got != beforeHash {
-		t.Fatalf("opening the store rewrote og_objects (table hash changed)")
+	if got := tableHash(); got != beforeChanges {
+		t.Fatalf("opening the store changed rows (total_changes %d -> %d)", beforeChanges, got)
 	}
 	if got := columns(); got != beforeCols {
 		t.Fatalf("opening the store changed og_objects' columns: %s -> %s", beforeCols, got)
@@ -570,7 +551,7 @@ func TestRollbackThenForwardRepairsTheTable(t *testing.T) {
 	}
 
 	// Forward again: a new process, a new store over the same database.
-	forward := NewDoltStore(db)
+	forward := NewSQLStore(db)
 	if err := forward.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -584,7 +565,7 @@ func TestRollbackThenForwardRepairsTheTable(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, []string{"run-00"}) {
 		t.Fatalf("read of the older binary's update before validation = %v, %v", got, err)
 	}
-	if n := opCalls(forward, "keyindex"); n != 0 {
+	if n := sideCalls(forward); n != 0 {
 		t.Fatalf("%d side-table reads before validation", n)
 	}
 	// The online pass repairs the table and validates.
@@ -593,8 +574,8 @@ func TestRollbackThenForwardRepairsTheTable(t *testing.T) {
 	}
 	assertSideMatchesTruth(t, db)
 	got, err = pageIDs(t, forward, testRunKind, "agent_id", "moved", 8)
-	if err != nil || !reflect.DeepEqual(got, []string{"run-00"}) || opCalls(forward, "keyindex") == 0 {
-		t.Fatalf("read after the pass = %v, %v (side-table reads %d)", got, err, opCalls(forward, "keyindex"))
+	if err != nil || !reflect.DeepEqual(got, []string{"run-00"}) || sideCalls(forward) == 0 {
+		t.Fatalf("read after the pass = %v, %v (side-table reads %d)", got, err, sideCalls(forward))
 	}
 	ids, err := bodyIDs(t, forward, "o1", "moved", 10)
 	if err != nil || !reflect.DeepEqual(ids, []string{"rec-00"}) {
@@ -696,7 +677,7 @@ func TestValidatorWithWriterStorm(t *testing.T) {
 	assertSideMatchesTruth(t, db) // no second pass: the writers kept it right
 }
 
-func TestValidatorHoldsTheEngineOnlyPerPage(t *testing.T) {
+func TestValidatorHoldsTheWriteConnectionOnlyPerPage(t *testing.T) {
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
@@ -736,12 +717,11 @@ func TestValidatorHoldsTheEngineOnlyPerPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-done
-	page := store.EngineMutexStats()[derivedKeysPageOpName]
-	if page.Calls < 1200/50 {
-		t.Fatalf("validator took the engine %d times for 1200 rows at 50 a page", page.Calls)
+	if pages := store.derived.passPages.Load(); pages < 1200/50 {
+		t.Fatalf("validator took %d pages for 1200 rows at 50 a page", pages)
 	}
-	if hold := time.Duration(page.MaxHoldNanos); hold > 3*time.Second {
-		t.Fatalf("one page held the engine %s", hold)
+	if hold := time.Duration(store.derived.maxPageHoldNanos.Load()); hold > 3*time.Second {
+		t.Fatalf("one page held the write connection %s", hold)
 	}
 	if reads < 3 || maxWait > 4*time.Second {
 		t.Fatalf("a concurrent reader made %d reads, longest %s", reads, maxWait)
@@ -780,7 +760,7 @@ func TestMalformedBodyNeverFailsAWriteAndKeepsTheJSONPath(t *testing.T) {
 		t.Fatal("test premise: the JSON read should fail on a malformed body")
 	}
 	_, err := bodyIDs(t, store, "o1", "a", 10)
-	if err == nil || !strings.Contains(err.Error(), "Invalid JSON text") {
+	if err == nil || !strings.Contains(err.Error(), "malformed JSON") {
 		t.Fatalf("read with a malformed row present = %v, want the JSON read's error", err)
 	}
 	// The other families are not affected.
@@ -800,103 +780,8 @@ func TestMalformedBodyNeverFailsAWriteAndKeepsTheJSONPath(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(ids, []string{"rec-bad"}) {
 		t.Fatalf("after the body was fixed: %v, %v", ids, err)
 	}
-	if opCalls(store, "ListObjectsByOwnerAndBody choir.commitment_record $.addressee keyindex") == 0 {
+	if sideCalls(store) == 0 {
 		t.Fatal("the fixed family does not use the side table")
-	}
-}
-
-func TestDerivedKeysIgnoreStrayStoredColumns(t *testing.T) {
-	ctx := context.Background()
-	db, store := openDerivedStore(t)
-	// What the reverted release (51667a3ce) may have left on the paper.
-	for _, stmt := range []string{
-		`ALTER TABLE og_objects ADD COLUMN og_meta_agent_id VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN object_kind = 'choir.run' THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.agent_id')), 255) END) STORED`,
-		`ALTER TABLE og_objects ADD COLUMN og_meta_capture_id VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN object_kind = 'choir.capture_label' THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.capture_id')), 255) END) STORED`,
-		`ALTER TABLE og_objects ADD COLUMN og_meta_doc_id VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN object_kind = 'choir.source_ref' THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')), 255) END) STORED`,
-		`ALTER TABLE og_objects ADD COLUMN og_rec_addressee VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN object_kind = 'choir.commitment_record' AND (body IS NULL OR JSON_VALID(CAST(body AS CHAR))) THEN LEFT(JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.addressee')), 255) END) STORED`,
-	} {
-		if _, err := db.Exec(stmt); err != nil {
-			t.Fatalf("%v\n%s", err, stmt)
-		}
-	}
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	for i := 0; i < 30; i++ {
-		store.PutObject(ctx, keyedObj{id: fmt.Sprintf("run-%02d", i), kind: testRunKind, meta: map[string]any{"agent_id": fmt.Sprintf("a%d", i%3)}, body: `{}`, at: at.Add(time.Duration(i) * time.Second)}.object(t))
-		store.PutObject(ctx, keyedObj{id: fmt.Sprintf("rec-%02d", i), kind: commitmentRecordKind, meta: map[string]any{}, body: mustJSON(map[string]any{"addressee": fmt.Sprintf("a%d", i%3)}), at: at.Add(time.Duration(i) * time.Second)}.object(t))
-		store.PutObject(ctx, keyedObj{id: fmt.Sprintf("ref-%02d", i), kind: testSourceRefKind, meta: map[string]any{"doc_id": fmt.Sprintf("a%d", i%3)}, body: `{}`, at: at.Add(time.Duration(i) * time.Second)}.object(t))
-	}
-	reopened := NewDoltStore(db)
-	if err := reopened.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := reopened.ValidateDerivedKeys(ctx, DerivedKeyValidation{PageSize: 8}); err != nil {
-		t.Fatal(err)
-	}
-	assertSideMatchesTruth(t, db)
-	for _, v := range []string{"a0", "a1", "absent"} {
-		side, err := pageIDs(t, reopened, testRunKind, "agent_id", v, 7)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var scan []string
-		jsonOnly(reopened, func() { scan, err = pageIDs(t, reopened, testRunKind, "agent_id", v, 7) })
-		if err != nil || !reflect.DeepEqual(side, scan) {
-			t.Fatalf("with the stray columns present, run agent %s: side %v, JSON %v (%v)", v, side, scan, err)
-		}
-		recSide, err := bodyIDs(t, reopened, "o1", v, 100)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var recScan []string
-		jsonOnly(reopened, func() { recScan, err = bodyIDs(t, reopened, "o1", v, 100) })
-		if err != nil || !reflect.DeepEqual(recSide, recScan) {
-			t.Fatalf("with the stray columns present, addressee %s: side %v, JSON %v (%v)", v, recSide, recScan, err)
-		}
-	}
-	// The table's hash is untouched by the side table's existence.
-	if _, err := db.Exec(`ALTER TABLE og_objects DROP COLUMN og_rec_addressee`); err != nil {
-		t.Fatalf("dropping a stray column (what an operator may do) breaks: %v", err)
-	}
-	if ids, err := bodyIDs(t, reopened, "o1", "a0", 100); err != nil || len(ids) != 10 {
-		t.Fatalf("after one stray column was dropped: %v, %v", ids, err)
-	}
-}
-
-func TestEngineOpsNameTheirKind(t *testing.T) {
-	ctx := context.Background()
-	_, store := openDerivedStore(t)
-	at := time.Now().UTC()
-	runID, err := BuildCanonicalID(testRunKind, "o1", "suffix1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.PutObject(ctx, keyedObj{id: runID, kind: testRunKind, meta: map[string]any{}, body: `{}`, at: at}.object(t)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.GetObject(ctx, runID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.ListObjectsPage(ctx, string(testRunKind), "", 10); err != nil {
-		t.Fatal(err)
-	}
-	// Unparseable and unregistered kinds share one label: the label set is
-	// bounded by code, never by what a caller asks for.
-	_, _ = store.GetObject(ctx, "garbage")
-	_, _ = store.GetObject(ctx, "obj:choir.not_registered:o1:x")
-	_, _ = store.GetObject(ctx, "obj:choir.also_not_registered:o1:x")
-	stats := store.EngineMutexStats()
-	for _, want := range []string{"(*DoltStore).GetObject choir.run", "(*DoltStore).ListObjectsPage choir.run", "(*DoltStore).GetObject unknown"} {
-		if stats[want].Calls == 0 {
-			var ops []string
-			for op := range stats {
-				ops = append(ops, op)
-			}
-			sort.Strings(ops)
-			t.Fatalf("no engine op %q; have %v", want, ops)
-		}
-	}
-	if stats["(*DoltStore).GetObject unknown"].Calls != 3 {
-		t.Fatalf("unknown kinds should share one label, got %d calls", stats["(*DoltStore).GetObject unknown"].Calls)
 	}
 }
 
@@ -909,15 +794,15 @@ func TestDerivedKeyPlansUseTheirIndexes(t *testing.T) {
 	}
 	idsQuery, idsArgs := derivedIDsByKeySQL(KeyCommitmentAddressee, "a", "o1", "", 50)
 	plan := explainPlan(t, db, idsQuery, idsArgs...)
-	if !strings.Contains(plan, "IndexedTableAccess("+DerivedKeysTable+")") || strings.Contains(plan, "Table("+DerivedKeysTable+")") && !strings.Contains(plan, "IndexedTable") {
-		t.Fatalf("the newest-first id query does not read an index:\n%s", plan)
+	if !strings.Contains(plan, "USING INDEX idx_og_key_index_recent") {
+		t.Fatalf("the newest-first id query does not read its index:\n%s", plan)
 	}
-	if strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
+	if strings.Contains(plan, "TEMP B-TREE") {
 		t.Fatalf("the newest-first id query sorts instead of walking the index:\n%s", plan)
 	}
 	pageQuery, pageArgs := derivedPageIDsSQL(KeyRunAgentID, "a", "", 256)
 	plan = explainPlan(t, db, pageQuery, pageArgs...)
-	if !strings.Contains(plan, "IndexedTableAccess("+DerivedKeysTable+")") || strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
+	if !strings.Contains(plan, "USING INDEX idx_og_key_index_lookup") || strings.Contains(plan, "TEMP B-TREE") {
 		t.Fatalf("the keyset id query does not walk its index in order:\n%s", plan)
 	}
 	// The validator's page of og_objects headers is a primary-key range, not
@@ -925,21 +810,10 @@ func TestDerivedKeyPlansUseTheirIndexes(t *testing.T) {
 	lo, hi := derivedKeyRange(commitmentRecordKind)
 	headQuery, headArgs := ogHeadPageSQL(lo, hi, 200)
 	plan = explainPlan(t, db, headQuery, headArgs...)
-	if strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
-		t.Fatalf("the validator's head page sorts the kind on every page:\n%s", plan)
+	if strings.Contains(plan, "TEMP B-TREE") || strings.Contains(plan, "SCAN og_objects") && !strings.Contains(plan, "USING") {
+		t.Fatalf("the validator's head page sorts or scans the kind on every page:\n%s", plan)
 	}
 }
-
-func TestDerivedKeysAreNotInTheMetadataIndexSet(t *testing.T) {
-	// The side table is unrelated to the legacy generated columns: both sets
-	// of access paths are live side by side.
-	_, store := openDerivedStore(t)
-	if !store.live("og_meta_run_id") {
-		t.Fatalf("legacy generated columns lost: %v", store.liveNames())
-	}
-}
-
-var _ = errors.New
 
 func TestValidatorPagesAKindsPrimaryKeyRangeAndFindsStrays(t *testing.T) {
 	ctx := context.Background()
@@ -957,15 +831,15 @@ func TestValidatorPagesAKindsPrimaryKeyRangeAndFindsStrays(t *testing.T) {
 	for _, id := range []string{"aaa-stray", "zzz-stray"} {
 		rawOldBinaryPut(t, db, keyedObj{id: id, kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a1"}`, at: at}.object(t))
 	}
-	if _, err := db.Exec(`INSERT INTO `+DerivedKeysTable+` (canonical_id, key_name, key_value, owner_id, updated_at, content_hash, derive_ok) VALUES ('obj:choir.commitment_record:x:gone', ?, 'a1', 'o1', ?, 'h', TRUE), ('stray-orphan', ?, 'a1', 'o1', ?, 'h', TRUE)`, KeyCommitmentAddressee, at, KeyCommitmentAddressee, at); err != nil {
+	if _, err := db.Exec(`INSERT INTO `+DerivedKeysTable+` (canonical_id, key_name, key_value, owner_id, updated_at, content_hash, derive_ok) VALUES ('obj:choir.commitment_record:x:gone', ?, 'a1', 'o1', ?, 'h', 1), ('stray-orphan', ?, 'a1', 'o1', ?, 'h', 1)`, KeyCommitmentAddressee, at, KeyCommitmentAddressee, at); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{PageSize: 50}); err != nil {
 		t.Fatal(err)
 	}
 	assertSideMatchesTruth(t, db)
-	if pages := store.EngineMutexStats()[derivedKeysPageOpName].Calls; pages < 420/50 {
-		t.Fatalf("a kind of 420 rows took %d engine holds at 50 a page", pages)
+	if pages := store.derived.passPages.Load(); pages < 420/50 {
+		t.Fatalf("a kind of 420 rows took %d pages at 50 a page", pages)
 	}
 	ids, err := bodyIDs(t, store, "o1", "a1", 1000)
 	if err != nil || !contains(ids, "zzz-stray") {
@@ -1034,10 +908,9 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstTook := time.Since(first)
-	page := store.EngineMutexStats()[derivedKeysPageOpName]
-	t.Logf("first pass over %d rows: %s (%.0f rows/s), %d engine holds, longest hold %s, mean hold %s",
-		3*perKind, firstTook.Round(time.Millisecond), float64(3*perKind)/firstTook.Seconds(), page.Calls,
-		time.Duration(page.MaxHoldNanos).Round(time.Millisecond), time.Duration(page.HoldNanos/page.Calls).Round(time.Millisecond))
+	t.Logf("first pass over %d rows: %s (%.0f rows/s), %d pages, longest hold %s",
+		3*perKind, firstTook.Round(time.Millisecond), float64(3*perKind)/firstTook.Seconds(), store.derived.passPages.Load(),
+		time.Duration(store.derived.maxPageHoldNanos.Load()).Round(time.Millisecond))
 	assertSideMatchesTruthSample(t, db)
 
 	second := time.Now()
@@ -1049,11 +922,15 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 	}
 	secondTook := time.Since(second)
 	t.Logf("repeat pass over the same rows: %s (%.0f rows/s)", secondTook.Round(time.Millisecond), float64(3*perKind)/secondTook.Seconds())
-	if hold := time.Duration(store.EngineMutexStats()[derivedKeysPageOpName].MaxHoldNanos); hold > 5*time.Second {
-		t.Fatalf("a page held the engine %s", hold)
+	if hold := time.Duration(store.derived.maxPageHoldNanos.Load()); hold > 5*time.Second {
+		t.Fatalf("a page held the write connection %s", hold)
 	}
-	if secondTook*2 > firstTook {
-		t.Errorf("the repeat pass (%s) is not much cheaper than the first (%s): the comparison is deriving again", secondTook, firstTook)
+	// The repeat pass compares and derives nothing: every "validated" line
+	// of the second pass reports 0 re-derived.
+	for _, line := range lines[len(lines)/2:] {
+		if strings.Contains(line, "validated ") && !strings.Contains(line, "(0 re-derived,") {
+			t.Errorf("the repeat pass derived again: %s", line)
+		}
 	}
 }
 
@@ -1070,7 +947,7 @@ func assertSideMatchesTruthSample(t *testing.T, db *sql.DB) {
 		t.Fatalf("%d key rows for %d keyed objects", len(got), n)
 	}
 	for _, fam := range derivedFamilies {
-		rows, err := db.Query(`SELECT canonical_id, LEFT(`+fam.expr+`, 255) FROM og_objects WHERE object_kind = ? ORDER BY canonical_id LIMIT 300`, string(fam.Kind))
+		rows, err := db.Query(`SELECT canonical_id, substr(`+fam.expr+`, 1, 255) FROM og_objects WHERE object_kind = ? ORDER BY canonical_id LIMIT 300`, string(fam.Kind))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1089,7 +966,7 @@ func assertSideMatchesTruthSample(t *testing.T, db *sql.DB) {
 }
 
 // projectorPut writes og_objects the way the production projector does: in
-// its own transaction, without the engine mutex, maintaining the side table
+// its own transaction, without any lock beyond the write connection, maintaining the side table
 // inside it. failMaintain stands for a maintenance statement that failed:
 // the row is written and the family withdrawn, with no key row.
 func projectorPut(t *testing.T, db *sql.DB, d *DerivedKeys, obj Object, failMaintain bool) {
@@ -1180,7 +1057,7 @@ func TestPassPublicationKeepsAConcurrentMalformedWrite(t *testing.T) {
 	if store.derived.readable(KeyCommitmentAddressee) {
 		t.Fatal("the pass published the family readable over a malformed write that landed while it published")
 	}
-	if _, err := bodyIDs(t, store, "o1", "a", 10); err == nil || !strings.Contains(err.Error(), "Invalid JSON text") {
+	if _, err := bodyIDs(t, store, "o1", "a", 10); err == nil || !strings.Contains(err.Error(), "malformed JSON") {
 		t.Fatalf("read with a malformed row present = %v, want the JSON read's error", err)
 	}
 }
@@ -1198,7 +1075,7 @@ func TestReadSeesAMalformedWriteCommittedAfterItsAdmission(t *testing.T) {
 	if !store.derived.readable(KeyCommitmentAddressee) {
 		t.Fatal("test premise: the family is readable")
 	}
-	// The read has chosen the side table and holds the engine mutex; the
+	// The read has chosen the side table; the
 	// projector, which does not take it, commits a malformed record.
 	bad := keyedObj{id: "rec-bad", kind: commitmentRecordKind, meta: map[string]any{}, body: `not json`, at: at.Add(time.Second)}
 	fired := false
@@ -1211,7 +1088,7 @@ func TestReadSeesAMalformedWriteCommittedAfterItsAdmission(t *testing.T) {
 	if !fired {
 		t.Fatal("test premise: the seam did not run")
 	}
-	if err == nil || !strings.Contains(err.Error(), "Invalid JSON text") {
+	if err == nil || !strings.Contains(err.Error(), "malformed JSON") {
 		t.Fatalf("read admitted before a malformed commit = %v, want the JSON read's error", err)
 	}
 }
@@ -1222,7 +1099,7 @@ func TestReadSeesAWithdrawalCommittedAfterItsAdmission(t *testing.T) {
 		name        string
 		family      string
 		first, late keyedObj
-		read        func(t *testing.T, s *DoltStore) ([]string, error)
+		read        func(t *testing.T, s *SQLStore) ([]string, error)
 	}{
 		{
 			name: "run by agent_id", family: KeyRunAgentID,
@@ -1230,7 +1107,7 @@ func TestReadSeesAWithdrawalCommittedAfterItsAdmission(t *testing.T) {
 			late:  keyedObj{id: "run-2", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at.Add(time.Second)},
 			// One page: a caller that pages on would find the row on its
 			// next page, from the JSON path, and hide the missed one.
-			read: func(t *testing.T, s *DoltStore) ([]string, error) {
+			read: func(t *testing.T, s *SQLStore) ([]string, error) {
 				objs, err := s.ListObjectsByMetadataPage(context.Background(), string(testRunKind), "$.agent_id", "a", "", 10)
 				ids := make([]string, 0, len(objs))
 				for _, o := range objs {
@@ -1243,7 +1120,7 @@ func TestReadSeesAWithdrawalCommittedAfterItsAdmission(t *testing.T) {
 			name: "records by addressee", family: KeyCommitmentAddressee,
 			first: keyedObj{id: "rec-1", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at},
 			late:  keyedObj{id: "rec-2", kind: commitmentRecordKind, meta: map[string]any{}, body: `{"addressee":"a"}`, at: at.Add(time.Second)},
-			read: func(t *testing.T, s *DoltStore) ([]string, error) {
+			read: func(t *testing.T, s *SQLStore) ([]string, error) {
 				ids, err := bodyIDs(t, s, "o1", "a", 10)
 				sort.Strings(ids)
 				return ids, err

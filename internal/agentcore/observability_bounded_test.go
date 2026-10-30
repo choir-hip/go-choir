@@ -97,10 +97,10 @@ func TestObservabilityMemoryDetailIsOptInAndSplitsTheStore(t *testing.T) {
 			storeBytes, _ = m["bytes"].(float64)
 		}
 	}
-	// StorePath is a 0-byte marker file; the Dolt workspace directory is the store.
-	workspace := store.TextureWorkspacePath(rt.cfg.StorePath)
+	// StorePath names the store's directory; the SQLite state file is the store.
+	workspace := store.StateDBPath(rt.cfg.StorePath)
 	if labels["store"] != workspace {
-		t.Fatalf("store entry root=%q, want the workspace %q", labels["store"], workspace)
+		t.Fatalf("store entry root=%q, want the state file %q", labels["store"], workspace)
 	}
 	// Bytes are counted only where the residency probe runs (Linux).
 	if runtime.GOOS == "linux" && storeBytes <= 0 {

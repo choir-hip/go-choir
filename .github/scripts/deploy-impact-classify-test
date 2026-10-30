@@ -254,28 +254,16 @@ checkpoint_worker_output="$(run_classifier "cmd/checkpointd/main.go")"
 assert_contains "$checkpoint_worker_output" "deploy_needed=true"
 assert_contains "$checkpoint_worker_output" "host_services=checkpointd"
 
-checkpoint_dependency_output="$(run_classifier "internal/projectionbase/rebuilder.go")"
-assert_contains "$checkpoint_dependency_output" "deploy_needed=true"
-assert_contains "$checkpoint_dependency_output" "host_services=checkpointd"
-
-store_a_squash_output="$(run_classifier "cmd/platform-dolt-squash/main.go" "scripts/platform-dolt-squash.sh")"
-assert_contains "$store_a_squash_output" "deploy_needed=true"
-assert_contains "$store_a_squash_output" "deploy_host_os=true"
-assert_not_contains "$store_a_squash_output" "unknown deployed path"
-
-store_a_squash_test_output="$(run_classifier "scripts/test-platform-dolt-squash.sh")"
-assert_contains "$store_a_squash_test_output" "deploy_needed=false"
-
 # Host OS scripts read into nix/node-b.nix: a host activation, never the
 # conservative guest-image path (platform-dolt oldgen review round 1).
-dolt_ops_output="$(run_classifier "scripts/dolt-history-audit.sh" "scripts/off-host-backup.sh")"
+dolt_ops_output="$(run_classifier "scripts/off-host-backup.sh")"
 assert_contains "$dolt_ops_output" "deploy_needed=true"
 assert_contains "$dolt_ops_output" "deploy_host_os=true"
 assert_contains "$dolt_ops_output" "deploy_active_vm_refresh=false"
 assert_not_contains "$dolt_ops_output" "unknown deployed path"
 
 # Operator drill and script tests: not deployed.
-dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/test-dolt-history-audit.sh" "scripts/off-host-backup-dolt-snapshot-test.sh")"
+dolt_ops_tooling_output="$(run_classifier "scripts/off-host-restore-drill.sh" "scripts/off-host-backup-dolt-snapshot-test.sh")"
 assert_contains "$dolt_ops_tooling_output" "deploy_needed=false"
 
 # D2 guest release metadata: the policy file and the floor list are inputs of

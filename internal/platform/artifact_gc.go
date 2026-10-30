@@ -708,17 +708,30 @@ func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, r
 }
 
 // fileCASReachableChunks returns the chunk digests named by the computer's
-// latest root and every root recorded after cutoff. A nil set with a reason
+// latest root and every root recorded after cutoff, plus the chunks of its
+// newest snapshot roots (a computer with only snapshot roots is proven by
+// them). A nil set with a reason
 // means liveness could not be proven and nothing may be collected.
 func (s *Service) fileCASReachableChunks(ctx context.Context, computerID string, cutoff time.Time) (map[string]struct{}, string, error) {
 	roots, err := s.fileCASRootsForGC(ctx, computerID, cutoff)
 	if err != nil {
 		return nil, "", err
 	}
-	if len(roots) == 0 {
+	// Snapshot roots (guest snapshots, internal/snapshot): the newest few
+	// stay live. The guest declares them because their manifest is sealed.
+	snapshots, err := s.store.LiveSnapshotRoots(ctx, computerID)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(roots) == 0 && len(snapshots) == 0 {
 		return nil, "no recorded root", nil
 	}
 	reachable := make(map[string]struct{})
+	for _, snapshot := range snapshots {
+		for _, digest := range snapshot.Chunks {
+			reachable[digest] = struct{}{}
+		}
+	}
 	for _, root := range roots {
 		manifestData, err := s.readBlob(root.ManifestRef)
 		if err != nil {

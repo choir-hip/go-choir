@@ -19,12 +19,12 @@ import (
 const projectionJobSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_projection_jobs (
  computer_id VARCHAR(128) PRIMARY KEY,
- generation BIGINT UNSIGNED NOT NULL,
+ generation BIGINT NOT NULL,
  status VARCHAR(32) NOT NULL,
  reason VARCHAR(255) NOT NULL,
- target_sequence BIGINT UNSIGNED NOT NULL,
+ target_sequence BIGINT NOT NULL,
  target_head CHAR(64) NOT NULL,
- watermark_sequence BIGINT UNSIGNED NOT NULL,
+ watermark_sequence BIGINT NOT NULL,
  seed_base_ref VARCHAR(255) NOT NULL,
  key_digest VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS computer_projection_jobs (
  genesis_repair BOOLEAN NOT NULL,
  failures INT NOT NULL,
  lease_token VARCHAR(64) NOT NULL,
- lease_until DATETIME(6) NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ lease_until TIMESTAMPTZ NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
@@ -41,47 +41,47 @@ CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
  base_ref VARCHAR(255) NOT NULL,
  refusals INT NOT NULL,
  last_error TEXT NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL DEFAULT '',
  PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_bases (
  computer_id VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
- sequence BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(6) NOT NULL,
+ sequence BIGINT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_epoch_roots (
  computer_id VARCHAR(128) PRIMARY KEY,
  base_ref VARCHAR(255) NOT NULL,
- sequence BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(6) NOT NULL
+ sequence BIGINT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL
 );
 CREATE TABLE IF NOT EXISTS computer_projection_base_pins (
  computer_id VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
  reference_id VARCHAR(255) NOT NULL,
- created_at DATETIME(6) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,base_ref,reference_id)
 );
 CREATE TABLE IF NOT EXISTS computer_checkpoint_verdicts (
  computer_id VARCHAR(128) NOT NULL,
  checkpoint_digest CHAR(64) NOT NULL,
- accepted_sequence BIGINT UNSIGNED NOT NULL,
+ accepted_sequence BIGINT NOT NULL,
  accepted_head CHAR(64) NOT NULL,
  status VARCHAR(32) NOT NULL,
  reason VARCHAR(64) NOT NULL,
  detail TEXT NOT NULL,
  differing_tables TEXT NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
- created_at DATETIME(6) NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,checkpoint_digest)
 );
 CREATE TABLE IF NOT EXISTS projection_worker_status (
  worker_id VARCHAR(64) PRIMARY KEY,
- heartbeat DATETIME(6) NOT NULL,
+ heartbeat TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL,
  error_text TEXT NOT NULL
 );
@@ -221,14 +221,14 @@ func (s *Store) RecordBaseRefusal(ctx context.Context, computerID, baseRef, erro
 	if !safeFileCASComponent(computerID) || baseRef == "" || len(baseRef) > 255 {
 		return false, fmt.Errorf("invalid base refusal")
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_refusals (computer_id,base_ref,refusals,last_error,updated_at,build_commit) VALUES (?,?,1,?,?,?) ON DUPLICATE KEY UPDATE refusals=IF(build_commit=VALUES(build_commit),refusals+1,1),last_error=VALUES(last_error),updated_at=VALUES(updated_at),build_commit=VALUES(build_commit)`, computerID, baseRef, errorText, time.Now().UTC(), buildinfo.Commit); err != nil {
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_refusals (computer_id,base_ref,refusals,last_error,updated_at,build_commit) VALUES (?,?,1,?,?,?) ON CONFLICT (computer_id, base_ref) DO UPDATE SET refusals=CASE WHEN computer_projection_base_refusals.build_commit=excluded.build_commit THEN computer_projection_base_refusals.refusals+1 ELSE 1 END,last_error=excluded.last_error,updated_at=excluded.updated_at,build_commit=excluded.build_commit`, computerID, baseRef, errorText, time.Now().UTC(), buildinfo.Commit); err != nil {
 		return false, err
 	}
 	quarantined, err := baseQuarantined(ctx, s.db, computerID, baseRef)
 	if err != nil {
 		return false, err
 	}
-	return quarantined, s.commitBoundary(ctx, "record projection base refusal "+computerID)
+	return quarantined, nil
 }
 
 type singleRowQuerier interface {
@@ -415,14 +415,14 @@ func (s *Store) enqueueProjectionJobAtBuild(ctx context.Context, computerID, rea
 		}
 	}
 	j := ProjectionJob{ComputerID: computerID, Generation: old.Generation + 1, Status: "queued", Reason: reason, TargetSequence: head, TargetHead: target, WatermarkSequence: wm, SeedBaseRef: seed, KeyDigest: keyDigest, GenesisRepair: genesisRepair, Failures: failures, LeaseUntil: now, UpdatedAt: now}
-	_, err = tx.ExecContext(ctx, `INSERT INTO computer_projection_jobs (`+projectionJobColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE generation=VALUES(generation),status=VALUES(status),reason=VALUES(reason),target_sequence=VALUES(target_sequence),target_head=VALUES(target_head),watermark_sequence=VALUES(watermark_sequence),seed_base_ref=VALUES(seed_base_ref),key_digest=VALUES(key_digest),base_ref='',error_text='',genesis_repair=VALUES(genesis_repair),failures=VALUES(failures),lease_token='',lease_until=VALUES(lease_until),updated_at=VALUES(updated_at)`, j.ComputerID, j.Generation, j.Status, j.Reason, j.TargetSequence, j.TargetHead, j.WatermarkSequence, j.SeedBaseRef, j.KeyDigest, "", "", j.GenesisRepair, j.Failures, "", now, now)
+	_, err = tx.ExecContext(ctx, `INSERT INTO computer_projection_jobs (`+projectionJobColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET generation=excluded.generation,status=excluded.status,reason=excluded.reason,target_sequence=excluded.target_sequence,target_head=excluded.target_head,watermark_sequence=excluded.watermark_sequence,seed_base_ref=excluded.seed_base_ref,key_digest=excluded.key_digest,base_ref='',error_text='',genesis_repair=excluded.genesis_repair,failures=excluded.failures,lease_token='',lease_until=excluded.lease_until,updated_at=excluded.updated_at`, j.ComputerID, j.Generation, j.Status, j.Reason, j.TargetSequence, j.TargetHead, j.WatermarkSequence, j.SeedBaseRef, j.KeyDigest, "", "", j.GenesisRepair, j.Failures, "", now, now)
 	if err != nil {
 		return j, err
 	}
 	if err = tx.Commit(); err != nil {
 		return j, err
 	}
-	return j, s.commitBoundary(ctx, "enqueue projection checkpoint "+computerID)
+	return j, nil
 }
 
 func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
@@ -517,7 +517,7 @@ func (s *Store) ClaimProjectionJob(ctx context.Context) (*ProjectionJob, error) 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &j, s.commitBoundary(ctx, "lease projection checkpoint "+j.ComputerID)
+	return &j, nil
 }
 
 func (s *Store) RenewProjectionJob(ctx context.Context, j ProjectionJob) error {
@@ -551,18 +551,18 @@ func (s *Store) FinishProjectionJob(ctx context.Context, j ProjectionJob, status
 	if n != 1 {
 		return fmt.Errorf("checkpoint lease lost")
 	}
-	return s.commitBoundary(ctx, "finish projection checkpoint "+j.ComputerID+" "+status)
+	return nil
 }
 
 func (s *Store) PinProjectionBase(ctx context.Context, computerID, baseRef, reference string) error {
 	if !safeFileCASComponent(computerID) || !validFileCASDigest(baseRef) || reference == "" || len(reference) > 255 {
 		return fmt.Errorf("invalid checkpoint pin")
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?)`, computerID, baseRef, reference, time.Now().UTC())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, computerID, baseRef, reference, time.Now().UTC())
 	if err != nil {
 		return err
 	}
-	return s.commitBoundary(ctx, "pin projection base "+computerID)
+	return nil
 }
 
 func (s *Store) projectionBasePins(ctx context.Context) (map[string]struct{}, error) {
@@ -583,7 +583,7 @@ func (s *Store) projectionBasePins(ctx context.Context) (map[string]struct{}, er
 }
 
 func (s *Store) CheckpointHeartbeat(ctx context.Context, problem string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO projection_worker_status (worker_id,heartbeat,build_commit,error_text) VALUES ('checkpoint',?,?,?) ON DUPLICATE KEY UPDATE heartbeat=VALUES(heartbeat),build_commit=VALUES(build_commit),error_text=VALUES(error_text)`, time.Now().UTC(), buildinfo.Commit, problem)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO projection_worker_status (worker_id,heartbeat,build_commit,error_text) VALUES ('checkpoint',?,?,?) ON CONFLICT (worker_id) DO UPDATE SET heartbeat=excluded.heartbeat,build_commit=excluded.build_commit,error_text=excluded.error_text`, time.Now().UTC(), buildinfo.Commit, problem)
 	return err
 }
 
@@ -595,7 +595,7 @@ func (s *Store) AuditCheckpointKeyUse(ctx context.Context, j ProjectionJob, keyD
 	if _, _, err := s.AppendKeyEscrowTransparency(ctx, raw); err != nil {
 		return err
 	}
-	return s.commitBoundary(ctx, "checkpoint maintenance key use "+j.ComputerID)
+	return nil
 }
 
 func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, sequence uint64, blobSHA256, seedBaseRef string) error {
@@ -624,13 +624,13 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 		// A base below the advertised one: a checkpoint's verification rebuild.
 		// It is not advertised, but the platform records it so it can be found
 		// by sequence (the checkpoint pins it against collection).
-		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, j.ComputerID, blobSHA256, sequence, time.Now().UTC()); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, j.ComputerID, blobSHA256, sequence, time.Now().UTC()); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		return s.store.commitBoundary(ctx, "record verification base "+j.ComputerID)
+		return nil
 	}
 	if priorRef != seedBaseRef && priorRef != blobSHA256 {
 		// A quarantined advertised base is replaced by a fallback seed on
@@ -647,14 +647,14 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 	}
 	now := time.Now().UTC()
 	if priorRef != "" {
-		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, j.ComputerID, priorRef, priorSeq, now.Add(-time.Microsecond)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, j.ComputerID, priorRef, priorSeq, now.Add(-time.Microsecond)); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, j.ComputerID, blobSHA256, sequence, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, j.ComputerID, blobSHA256, sequence, now); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, j.ComputerID, sequence, blobSHA256, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET watermark_sequence=excluded.watermark_sequence,base_ref=excluded.base_ref,updated_at=excluded.updated_at`, j.ComputerID, sequence, blobSHA256, now); err != nil {
 		return err
 	}
 	// A verified publish ends the computer's refusal history: whatever was
@@ -665,5 +665,5 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.store.commitBoundary(ctx, "publish verified checkpoint "+j.ComputerID)
+	return nil
 }

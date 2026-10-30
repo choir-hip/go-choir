@@ -301,8 +301,8 @@ func TestEventTableNothingStampsInDeploy1(t *testing.T) {
 	const module = "github.com/yusefmosiah/go-choir/"
 	for _, required := range []string{
 		"internal/computerevent", "internal/store", "internal/agentcore", "internal/autoputer",
-		"internal/textureowner", "internal/selfdev", "internal/platform", "internal/projectionbase",
-		"internal/updater", "scripts/ograph-bench",
+		"internal/textureowner", "internal/selfdev", "internal/platform",
+		"internal/updater",
 	} {
 		if !checked[module+required] {
 			t.Errorf("%s was not type-checked; the guard does not cover it", required)

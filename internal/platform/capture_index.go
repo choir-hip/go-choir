@@ -20,17 +20,15 @@ import (
 // The typed capture projection and its term table (rungs 2-3 of
 // docs/reports/object-graph-retrieval-research-2026-10-14.md). og_objects
 // stays the authority: both tables are rebuilt from it, are written after
-// each capture (a failed projection write never fails the capture), and are
-// in dolt_ignore, so they never enter Store B's history or change its
-// commit cadence. Corpus search and URL citation lookup read them over all
+// each capture (a failed projection write never fails the capture). Corpus search and URL citation lookup read them over all
 // history instead of the newest 1,000 captures.
 
 const (
 	captureIndexTable = "proj_capture_index"
 	captureTermsTable = "proj_capture_terms"
 	// captureScopeChars bounds owner and computer ids in the projection's
-	// keys (Dolt's key length limit); a longer id is not projected and
-	// is searched by the window path only.
+	// keys; a longer id is not projected and is searched by the window
+	// path only.
 	captureScopeChars = 128
 	// captureIDPrefix and captureIDEnd bound every capture's canonical id
 	// ("obj:choir.web_capture:<owner>:<suffix>"): the backfill pages
@@ -57,56 +55,43 @@ func (s *Store) kickReconcile() {
 
 const captureIndexDDL = `
 CREATE TABLE IF NOT EXISTS proj_capture_index (
-	capture_id    VARCHAR(255) NOT NULL PRIMARY KEY,
-	owner_id      VARCHAR(128) NOT NULL,
-	computer_id   VARCHAR(128) NOT NULL DEFAULT '',
-	url_key       CHAR(64) NOT NULL,
-	canonical_key CHAR(64) NOT NULL,
+	capture_id    TEXT NOT NULL PRIMARY KEY,
+	owner_id      TEXT NOT NULL,
+	computer_id   TEXT NOT NULL DEFAULT '',
+	url_key       TEXT NOT NULL,
+	canonical_key TEXT NOT NULL,
 	url           TEXT NOT NULL,
 	canonical_url TEXT NOT NULL,
-	host          VARCHAR(255) NOT NULL DEFAULT '',
-	source_id     VARCHAR(255) NOT NULL DEFAULT '',
-	item_id       VARCHAR(255) NOT NULL DEFAULT '',
-	language      VARCHAR(64) NOT NULL DEFAULT '',
+	host          TEXT NOT NULL DEFAULT '',
+	source_id     TEXT NOT NULL DEFAULT '',
+	item_id       TEXT NOT NULL DEFAULT '',
+	language      TEXT NOT NULL DEFAULT '',
 	title         TEXT NOT NULL,
 	has_blocks    BOOLEAN NOT NULL DEFAULT FALSE,
-	fetched_at    DATETIME(6) NULL,
-	published_at  DATETIME(6) NULL,
-	updated_at    DATETIME NOT NULL,
-	INDEX idx_pci_url (owner_id, computer_id, url_key, fetched_at),
-	INDEX idx_pci_canonical (owner_id, computer_id, canonical_key, fetched_at),
-	INDEX idx_pci_fetched (owner_id, computer_id, fetched_at),
-	INDEX idx_pci_host (owner_id, computer_id, host, fetched_at),
-	INDEX idx_pci_source (owner_id, computer_id, source_id, fetched_at)
+	fetched_at    TIMESTAMPTZ NULL,
+	published_at  TIMESTAMPTZ NULL,
+	updated_at    TIMESTAMPTZ NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_pci_url ON proj_capture_index(owner_id, computer_id, url_key, fetched_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pci_canonical ON proj_capture_index(owner_id, computer_id, canonical_key, fetched_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pci_fetched ON proj_capture_index(owner_id, computer_id, fetched_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pci_host ON proj_capture_index(owner_id, computer_id, host, fetched_at DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_pci_source ON proj_capture_index(owner_id, computer_id, source_id, fetched_at DESC NULLS LAST);
 
 CREATE TABLE IF NOT EXISTS proj_capture_terms (
-	owner_id    VARCHAR(128) NOT NULL,
-	computer_id VARCHAR(128) NOT NULL,
-	term        VARCHAR(64) COLLATE utf8mb4_0900_bin NOT NULL,
-	capture_id  VARCHAR(255) NOT NULL,
-	fetched_at  DATETIME(6) NULL,
-	PRIMARY KEY (owner_id, computer_id, term, capture_id),
-	INDEX idx_pct_capture (capture_id)
+	owner_id    TEXT NOT NULL,
+	computer_id TEXT NOT NULL,
+	term        TEXT COLLATE "C" NOT NULL,
+	capture_id  TEXT NOT NULL,
+	fetched_at  TIMESTAMPTZ NULL,
+	PRIMARY KEY (owner_id, computer_id, term, capture_id)
 );
+CREATE INDEX IF NOT EXISTS idx_pct_capture ON proj_capture_terms(capture_id);
 `
 
-// ensureCaptureIndexTables puts both projection tables in dolt_ignore and
-// then creates them. The ignore rows come first: a table committed once is
-// tracked for good.
+// ensureCaptureIndexTables creates both projection tables (idempotent) and
+// turns on projection writes.
 func (s *Store) ensureCaptureIndexTables(ctx context.Context) error {
-	for _, table := range []string{captureIndexTable, captureTermsTable} {
-		var ignored int
-		if err := s.corpus().QueryRowContext(ctx, `SELECT COUNT(*) FROM dolt_ignore WHERE pattern = ?`, table).Scan(&ignored); err != nil {
-			return fmt.Errorf("read dolt_ignore: %w", err)
-		}
-		if ignored == 0 {
-			if _, err := s.corpus().ExecContext(ctx, `INSERT IGNORE INTO dolt_ignore (pattern, ignored) VALUES (?, true)`, table); err != nil {
-				return fmt.Errorf("ignore %s: %w", table, err)
-			}
-			s.markCorpusDirty("retrieval ignore " + table)
-		}
-	}
 	if _, err := s.corpus().ExecContext(ctx, captureIndexDDL); err != nil {
 		return fmt.Errorf("create capture projection: %w", err)
 	}
@@ -230,19 +215,26 @@ const (
 
 // writeCaptureProjections replaces the projection rows of captures in one
 // transaction with multi-row statements: a capture that is not projectable
-// has its rows removed. On a Dolt sql-server every statement costs a round
-// trip and every transaction a commit, so a backfill page is a handful of
-// statements, not three per capture.
+// has its rows removed. Every statement costs a round trip, so a backfill
+// page is a handful of statements, not three per capture.
 func (s *Store) writeCaptureProjections(ctx context.Context, fresh bool, objs []objectgraph.Object) error {
 	if len(objs) == 0 {
 		return nil
 	}
 	var rows []captureProjection
 	var clear []any
+	rowAt := map[string]int{}
 	for _, obj := range objs {
 		p, ok := projectCapture(obj)
 		if ok {
-			rows = append(rows, p)
+			// One row per capture id: an upsert statement may not touch
+			// a row twice.
+			if at, dup := rowAt[p.id]; dup {
+				rows[at] = p
+			} else {
+				rowAt[p.id] = len(rows)
+				rows = append(rows, p)
+			}
 		}
 		if !fresh || !ok {
 			clear = append(clear, obj.CanonicalID)
@@ -270,9 +262,14 @@ func (s *Store) writeCaptureProjections(ctx context.Context, fresh bool, objs []
 				p.language, p.title, p.hasBlocks, p.fetched, p.published, p.updated)
 		}
 		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), ", len(chunk)), ", ")
-		if _, err := tx.ExecContext(ctx, `REPLACE INTO proj_capture_index
+		if _, err := tx.ExecContext(ctx, `INSERT INTO proj_capture_index
 			(capture_id, owner_id, computer_id, url_key, canonical_key, url, canonical_url, host, source_id, item_id, language, title, has_blocks, fetched_at, published_at, updated_at)
-			VALUES `+values, args...); err != nil {
+			VALUES `+values+` ON CONFLICT (capture_id) DO UPDATE SET
+			owner_id = excluded.owner_id, computer_id = excluded.computer_id, url_key = excluded.url_key,
+			canonical_key = excluded.canonical_key, url = excluded.url, canonical_url = excluded.canonical_url,
+			host = excluded.host, source_id = excluded.source_id, item_id = excluded.item_id,
+			language = excluded.language, title = excluded.title, has_blocks = excluded.has_blocks,
+			fetched_at = excluded.fetched_at, published_at = excluded.published_at, updated_at = excluded.updated_at`, args...); err != nil {
 			return fmt.Errorf("write capture index: %w", err)
 		}
 	}
@@ -283,7 +280,7 @@ func (s *Store) writeCaptureProjections(ctx context.Context, fresh bool, objs []
 			return nil
 		}
 		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?, ?, ?), ", n), ", ")
-		_, err := tx.ExecContext(ctx, `INSERT IGNORE INTO proj_capture_terms (owner_id, computer_id, term, capture_id, fetched_at) VALUES `+values, termArgs...)
+		_, err := tx.ExecContext(ctx, `INSERT INTO proj_capture_terms (owner_id, computer_id, term, capture_id, fetched_at) VALUES `+values+` ON CONFLICT DO NOTHING`, termArgs...)
 		termArgs, n = termArgs[:0], 0
 		if err != nil {
 			return fmt.Errorf("write capture terms: %w", err)
@@ -760,7 +757,7 @@ func (s *Store) CaptureByURL(ctx context.Context, owner, computer, rawURL string
 	var hits []hit
 	for _, column := range []string{"url_key", "canonical_key"} {
 		rows, err := s.corpus().QueryContext(ctx, `SELECT capture_id, fetched_at, updated_at FROM proj_capture_index
-			WHERE owner_id = ? AND computer_id = ? AND `+column+` = ?`+blocks+` ORDER BY fetched_at DESC LIMIT 20`,
+			WHERE owner_id = ? AND computer_id = ? AND `+column+` = ?`+blocks+` ORDER BY fetched_at DESC NULLS LAST LIMIT 20`,
 			strings.TrimSpace(owner), strings.TrimSpace(computer), key)
 		if err != nil {
 			return res, fmt.Errorf("capture by url: %w", err)

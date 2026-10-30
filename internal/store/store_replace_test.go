@@ -61,14 +61,14 @@ func TestReplaceWorkspaceDropsRetiredResidueAndUnsupportedRows(t *testing.T) {
 	}
 
 	var retired int
-	if err := fresh.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'app_adoptions'`).Scan(&retired); err != nil {
+	if err := fresh.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'app_adoptions'`).Scan(&retired); err != nil {
 		t.Fatalf("query retired table: %v", err)
 	}
 	if retired != 0 {
 		t.Fatalf("retired table survived replacement: count=%d", retired)
 	}
 	var extraColumn int
-	if err := fresh.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'computer_event_index' AND column_name = 'supervision_transaction_json'`).Scan(&extraColumn); err != nil {
+	if err := fresh.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('computer_event_index') WHERE name = 'supervision_transaction_json'`).Scan(&extraColumn); err != nil {
 		t.Fatalf("query extra column: %v", err)
 	}
 	if extraColumn != 0 {

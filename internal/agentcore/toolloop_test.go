@@ -227,10 +227,9 @@ func TestRuntimeWithToolRegistryEmitsToolEvents(t *testing.T) {
 func testRuntimeWithProviderAndRegistry(t *testing.T, provider provideriface.Provider, registry *toolregistry.ToolRegistry) (*Runtime, *store.Store) {
 	t.Helper()
 
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-toolloop-test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
+	// One directory per test: the SQLite state file is <dir>/state.db, so a
+	// directory shared between tests would share their state.
+	dir := t.TempDir()
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 

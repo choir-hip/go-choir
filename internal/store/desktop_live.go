@@ -95,16 +95,16 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE
-		   windows_json = VALUES(windows_json),
-		   active_window = VALUES(active_window),
-		   updated_at = VALUES(updated_at)`,
+		 ON CONFLICT (owner_id, computer_id, desktop_id) DO UPDATE SET
+		   windows_json = excluded.windows_json,
+		   active_window = excluded.active_window,
+		   updated_at = excluded.updated_at`,
 		state.OwnerID,
 		computerID,
 		desktopID,
 		string(windowsJSON),
 		state.ActiveWindowID,
-		now.UTC().Format(time.RFC3339Nano),
+		now.UTC(),
 	); err != nil {
 		return fmt.Errorf("save legacy desktop workspace mirror: %w", err)
 	}
@@ -159,10 +159,10 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 			string(appContextJSON),
 			lifecycle,
 			stackRank,
-			now.UTC().Format(time.RFC3339Nano),
+			now.UTC(),
 			sessionID,
-			now.UTC().Format(time.RFC3339Nano),
-			now.UTC().Format(time.RFC3339Nano),
+			now.UTC(),
+			now.UTC(),
 		); err != nil {
 			return fmt.Errorf("insert desktop app instance: %w", err)
 		}
@@ -194,7 +194,7 @@ func (s *Store) SaveDesktopStateForSession(ctx context.Context, state types.Desk
 			stackRank,
 			win.WindowID == state.ActiveWindowID,
 			restoredGeometryJSON,
-			now.UTC().Format(time.RFC3339Nano),
+			now.UTC(),
 		); err != nil {
 			return fmt.Errorf("insert desktop window placement: %w", err)
 		}

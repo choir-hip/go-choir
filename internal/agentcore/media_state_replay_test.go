@@ -307,7 +307,7 @@ func TestMediaStateTablesAreEventProjections(t *testing.T) {
 	// "behavior-bearing direct-write tables are non-empty without reducers").
 	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
 	live := computerversion.ObservationSet{Observations: []computerversion.Observation{{
-		Kind: computerversion.ObservationDoltHead, Key: "dolt:texture:table:co_super_slots", Value: "non-empty",
+		Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:co_super_slots", Value: "non-empty",
 	}}}
 	eligibility := replayEligibility(head, head, live, live, computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent})
 	if err := eligibility.Error(); err == nil || !strings.Contains(err.Error(), "co_super_slots") {
