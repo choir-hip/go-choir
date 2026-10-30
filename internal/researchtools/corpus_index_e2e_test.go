@@ -2,10 +2,8 @@ package researchtools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,7 +11,9 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
+
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -49,30 +49,15 @@ func (g guestBinding) LookupGuestContext(context.Context, string) (*vmctl.GuestO
 
 func openEmbeddedPlatformStore(t *testing.T) *platform.Store {
 	t.Helper()
-	root := t.TempDir()
-	rootCfg, err := embedded.ParseDSN(fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root))
+	control, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootConn, err := embedded.NewConnector(rootCfg)
+	graph, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rootDB := sql.OpenDB(rootConn)
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS platform"); err != nil {
-		t.Fatal(err)
-	}
-	_ = rootDB.Close()
-	_ = rootConn.Close()
-	cfg, err := embedded.ParseDSN(fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=platform&multistatements=true&clientfoundrows=true", root))
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, err := embedded.NewConnector(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := platform.NewStore(sql.OpenDB(conn))
+	s := platform.NewStore(control, graph)
 	if err := s.Bootstrap(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +66,6 @@ func openEmbeddedPlatformStore(t *testing.T) *platform.Store {
 	}
 	t.Cleanup(func() {
 		_ = s.Close()
-		_ = conn.Close()
 	})
 	return s
 }
