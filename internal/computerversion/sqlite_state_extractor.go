@@ -68,6 +68,13 @@ type SQLiteStateExtractor struct {
 	// schema and rows: derived indexes that are rebuilt from other tables
 	// and so are not state.
 	IgnoredTables map[string]struct{}
+
+	// SnapshotHook, when set, runs once inside the read transaction before any
+	// table is read. A hook that reads first (a head, under a lock that holds
+	// writers) fixes the transaction's WAL snapshot at a state it names, then
+	// may release the lock: the scan that follows still reads that state.
+	// A hook error fails the extraction.
+	SnapshotHook func(ctx context.Context, tx *sql.Tx) error
 }
 
 var _ Extractor = SQLiteStateExtractor{}
@@ -123,6 +130,11 @@ func (e SQLiteStateExtractor) Digests(ctx context.Context) (StateDigests, error)
 		return StateDigests{}, fmt.Errorf("sqlite state extraction: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if e.SnapshotHook != nil {
+		if err := e.SnapshotHook(ctx, tx); err != nil {
+			return StateDigests{}, err
+		}
+	}
 
 	entries, err := e.schemaEntries(ctx, tx)
 	if err != nil {
@@ -164,6 +176,16 @@ func (e SQLiteStateExtractor) Extract(ctx context.Context, request ExtractReques
 	digests, err := e.Digests(ctx)
 	if err != nil {
 		return ObservationSet{}, err
+	}
+	return ObservationSetFromDigests(digests, request)
+}
+
+// ObservationSetFromDigests builds the observation set for request from
+// digests already computed (Digests), for a caller whose version depends on
+// something the extraction read (the head its SnapshotHook named).
+func ObservationSetFromDigests(digests StateDigests, request ExtractRequest) (ObservationSet, error) {
+	if !request.Version.Valid() {
+		return ObservationSet{}, fmt.Errorf("sqlite state extraction: invalid computer version")
 	}
 	prefix := "sqlite:" + digests.Database + ":"
 	observations := make([]Observation, 0, 2+2*len(digests.Tables))

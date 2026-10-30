@@ -17,8 +17,51 @@ func (s *Store) Head(ctx context.Context, computerID string) (*computerevent.Hea
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("computer event projection: nil store")
 	}
+	return scanProjectionHead(s.db.QueryRowContext(ctx, projectionHeadSQL, computerID))
+}
+
+// ReadDB returns the store's read pool: WAL readers that never take the write
+// connection, so a long read (a full-store witness) does not queue writers.
+// Each read transaction sees one committed snapshot. It falls back to the
+// write handle for a store with no separate read pool. The caller must not
+// close it, and must call ReadDB again after a Reopen rather than keep it.
+func (s *Store) ReadDB() *sql.DB {
+	if s == nil {
+		return nil
+	}
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
+}
+
+// ReadSnapshotTx begins a read-only transaction on the read pool. In WAL mode
+// the snapshot is fixed by the transaction's first read, so a caller that
+// reads the projection head first (HeadTx) while the event appender is held
+// gets rows and head of one state, then may release the hold and keep
+// reading. The caller rolls the transaction back.
+func (s *Store) ReadSnapshotTx(ctx context.Context) (*sql.Tx, error) {
+	db := s.ReadDB()
+	if db == nil {
+		return nil, fmt.Errorf("computer event projection: nil store")
+	}
+	return db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+}
+
+// HeadTx reads the projection head inside tx. It is the first read of a
+// ReadSnapshotTx transaction when the head must belong to the snapshot.
+func (s *Store) HeadTx(ctx context.Context, tx *sql.Tx, computerID string) (*computerevent.Head, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("computer event projection: transaction is required")
+	}
+	return scanProjectionHead(tx.QueryRowContext(ctx, projectionHeadSQL, computerID))
+}
+
+const projectionHeadSQL = `SELECT computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch FROM computer_event_projection_heads WHERE computer_id=?`
+
+func scanProjectionHead(row *sql.Row) (*computerevent.Head, error) {
 	var head computerevent.Head
-	err := s.db.QueryRowContext(ctx, `SELECT computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch FROM computer_event_projection_heads WHERE computer_id=?`, computerID).Scan(&head.ComputerID, &head.Sequence, &head.CanonicalEventHead, &head.DesiredEventHead, &head.EffectiveEventHead, &head.PendingTransitionRef, &head.DesiredStateCommitment, &head.EffectiveStateCommitment, &head.ReducerVersion, &head.CredentialRevocationEpoch)
+	err := row.Scan(&head.ComputerID, &head.Sequence, &head.CanonicalEventHead, &head.DesiredEventHead, &head.EffectiveEventHead, &head.PendingTransitionRef, &head.DesiredStateCommitment, &head.EffectiveStateCommitment, &head.ReducerVersion, &head.CredentialRevocationEpoch)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

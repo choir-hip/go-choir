@@ -244,6 +244,10 @@ type Runtime struct {
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
+	// checkpointScanHook is a test seam: it runs in a checkpoint bind's read
+	// transaction after the head is read and the append hold released (or, when
+	// pinned, still inside the hold), before the witness scan reads any table.
+	checkpointScanHook func(pinned bool)
 	// replayScratchUsage reads free space on the probe's scratch volume
 	// (persistentdisk.Statfs when nil); replayScratchPoll is the in-flight
 	// check interval (replayScratchPollInterval when zero). Test seams

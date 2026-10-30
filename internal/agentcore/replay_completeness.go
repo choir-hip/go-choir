@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -290,9 +291,12 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 		return nil, fmt.Errorf("replay completeness: %w", err)
 	}
 
-	// Capture the head and the live state together: appends wait while the
-	// live store is read, so the state belongs to exactly this head. The
-	// replay below stops at it, and desks keep working meanwhile
+	// Capture the head and the live state together, from one read snapshot:
+	// appends wait only while the snapshot's first read (the head) runs, so
+	// the state belongs to exactly this head; the scan and the run-memory
+	// fingerprints then read that snapshot on the read pool while appends and
+	// writes proceed. The replay below stops at the head, and desks keep
+	// working meanwhile
 	// (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md).
 	var (
 		liveHead      *computerevent.Head
@@ -300,22 +304,30 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 		liveRunMemory []choirstore.RunMemoryEntryFingerprint
 		version       computerversion.ComputerVersion
 	)
-	extractor := replayStateExtractor(rt.store.DB())
-	if err := rt.eventAppender.HoldAppends(func() error {
-		var err error
-		if liveHead, err = rt.store.Head(ctx, computerID); err != nil {
-			return fmt.Errorf("replay completeness: read live event head: %w", err)
+	extractor := replayStateExtractor(rt.store.ReadDB())
+	extractor.SnapshotHook = func(ctx context.Context, tx *sql.Tx) error {
+		if err := rt.eventAppender.HoldAppends(func() error {
+			var err error
+			if liveHead, err = rt.store.HeadTx(ctx, tx, computerID); err != nil {
+				return fmt.Errorf("replay completeness: read live event head: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 		version = replayCompletenessVersion(rt, liveHead)
-		if live, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-sqlite", Version: version}); err != nil {
-			return fmt.Errorf("replay completeness: extract live store state: %w", err)
-		}
-		if liveRunMemory, err = rt.store.ListRunMemoryEntryFingerprints(ctx); err != nil {
+		var err error
+		if liveRunMemory, err = rt.store.ListRunMemoryEntryFingerprintsTx(ctx, tx); err != nil {
 			return fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
 		}
 		return nil
-	}); err != nil {
-		return nil, err
+	}
+	liveDigests, err := extractor.Digests(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("replay completeness: extract live store state: %w", err)
+	}
+	if live, err = computerversion.ObservationSetFromDigests(liveDigests, computerversion.ExtractRequest{Name: "live-sqlite", Version: version}); err != nil {
+		return nil, fmt.Errorf("replay completeness: extract live store state: %w", err)
 	}
 	if rt.replayProbeAfterCapture != nil {
 		rt.replayProbeAfterCapture()
@@ -367,7 +379,7 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: read replay event head: %w", err)
 	}
-	replayExtractor := replayStateExtractor(replayStore.DB())
+	replayExtractor := replayStateExtractor(replayStore.ReadDB())
 	replay, err := replayExtractor.Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: extract replay store state: %w", err)

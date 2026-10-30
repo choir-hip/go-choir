@@ -383,7 +383,24 @@ type RunMemoryEntryFingerprint struct {
 // for every run-memory row. It is used only by owner-authorized replay
 // diagnostics to distinguish omitted rows from projection normalization.
 func (s *Store) ListRunMemoryEntryFingerprints(ctx context.Context) ([]RunMemoryEntryFingerprint, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return listRunMemoryEntryFingerprints(ctx, s.db)
+}
+
+// ListRunMemoryEntryFingerprintsTx is ListRunMemoryEntryFingerprints inside a
+// caller's transaction (a read snapshot from ReadSnapshotTx), so the
+// fingerprints are of the same committed state as the transaction's other
+// reads.
+func (s *Store) ListRunMemoryEntryFingerprintsTx(ctx context.Context, tx *sql.Tx) ([]RunMemoryEntryFingerprint, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("run memory fingerprints: transaction is required")
+	}
+	return listRunMemoryEntryFingerprints(ctx, tx)
+}
+
+func listRunMemoryEntryFingerprints(ctx context.Context, q interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}) ([]RunMemoryEntryFingerprint, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
 		       kind, role, message_json, summary, first_kept_entry_id,
 		       tokens_before, reason, model, details_json, created_at

@@ -174,7 +174,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	report.TailEventsApplied = applied
 	report.TailPagesFetched = observer.pages
-	got, err := storeWitness(ctx, staged.DB(), replayStateExtractor(staged.DB()))
+	got, err := storeWitness(ctx, staged.ReadDB(), replayStateExtractor(staged.ReadDB()))
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
