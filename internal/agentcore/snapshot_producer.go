@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -137,6 +138,12 @@ type snapshotDeps struct {
 
 type snapshotProducer struct {
 	tick sync.Mutex // one snapshot at a time
+	// inFlight is true while a snapshot streams. A restart would cut it and
+	// the next attempt would repeat the whole read, so a planned restart
+	// waits for it (plannedRestartWork.SnapshotInFlight); its time budget
+	// bounds the wait. A restart asked for in the instant before a stream
+	// starts still cuts it: that costs one attempt, never state.
+	inFlight atomic.Bool
 
 	mu       sync.Mutex
 	stop     chan struct{}
@@ -222,7 +229,11 @@ func (p *snapshotProducer) run(ctx context.Context, d snapshotDeps, set snapshot
 	// The VACUUM INTO copy of an earlier version, if a crash left one.
 	_ = os.RemoveAll(filepath.Join(d.DataDir, snapshotLegacyTempDirName))
 	started := time.Now()
-	ref, err := d.Take(ctx, set.MaxDuration)
+	p.inFlight.Store(true)
+	ref, err := func() (snapshot.Ref, error) {
+		defer p.inFlight.Store(false)
+		return d.Take(ctx, set.MaxDuration)
+	}()
 	if d.StorePath != "" {
 		_ = clearGuestAttempt(d.StorePath, snapshotAttemptKey, d.ComputerID)
 	}

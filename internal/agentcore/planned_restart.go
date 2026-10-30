@@ -463,17 +463,23 @@ type plannedRestartWork struct {
 	Running       int
 	SelfdevActive int
 	LiveCapsules  int
+	// SnapshotInFlight is a snapshot streaming: a restart would discard it
+	// and the next attempt would read the whole store again, so on a busy
+	// computer that restarts at every deploy no snapshot would finish.
+	SnapshotInFlight bool
 }
 
 // unsafe reports work no restart may cut, whatever the host asks.
-func (w plannedRestartWork) unsafe() bool { return w.SelfdevActive > 0 || w.LiveCapsules > 0 }
+func (w plannedRestartWork) unsafe() bool {
+	return w.SelfdevActive > 0 || w.LiveCapsules > 0 || w.SnapshotInFlight
+}
 
 // plannedRestartBusy counts the work a restart would cut; countCapsules adds
 // the live capsules (a restart loses them; a memory snapshot does not). It
 // fails closed: an unreadable operation or assignment list is an error, not
 // idle.
 func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (plannedRestartWork, error) {
-	work := plannedRestartWork{Running: rt.RunningCount()}
+	work := plannedRestartWork{Running: rt.RunningCount(), SnapshotInFlight: rt.snapshots.inFlight.Load()}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if computerID == "" {
 		return work, nil
@@ -558,6 +564,7 @@ type plannedRestartBusyResponse struct {
 	RunningRuns      int    `json:"running_runs"`
 	SelfdevActiveOps int    `json:"selfdev_active_operations"`
 	LiveCapsules     int    `json:"live_capsules"`
+	SnapshotInFlight bool   `json:"snapshot_in_flight,omitempty"`
 }
 
 type plannedRestartWrittenResponse struct {
@@ -657,13 +664,14 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
 		why := "guest is busy; restart deferred to its next idle moment"
 		if work.unsafe() {
-			why = "a self-development operation or a live capsule would not survive a restart; restart deferred until it settles"
+			why = "a self-development operation, a live capsule or a streaming snapshot would not survive a restart; restart deferred until it settles"
 		}
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
 			Error:       why,
 			Outcome:     "busy",
 			AllowBusy:   allowBusy,
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
+			SnapshotInFlight: work.SnapshotInFlight,
 		})
 		return
 	}

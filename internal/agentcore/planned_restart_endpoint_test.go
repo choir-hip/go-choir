@@ -371,3 +371,37 @@ func postPlannedRestartURL(t *testing.T, handler *APIHandler, target, body strin
 	handler.HandleInternalPlannedRestart(rec, req)
 	return rec.Code, rec.Body.String()
 }
+
+// A deploy restarts an always-busy computer at every release; a restart in
+// the middle of a snapshot discards it and the next attempt reads the whole
+// store again (the paper, 2026-10-30 17:18: a 31 GB snapshot cut in its
+// witness pass). The restart waits for the stream, then goes ahead.
+func TestPlannedRestartEndpointAllowBusyWaitsForAStreamingSnapshot(t *testing.T) {
+	rt, _ := testRuntime(t)
+	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
+	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	h := newProducerHarness(t)
+	h.block, h.entered = make(chan struct{}), make(chan struct{})
+	done := make(chan snapshotOutcome, 1)
+	go func() {
+		outcome, _ := h.run(&rt.snapshots, time.Now())
+		done <- outcome
+	}()
+	<-h.entered
+
+	code, body := postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+	if code != http.StatusConflict || !strings.Contains(body, `"snapshot_in_flight":true`) {
+		t.Fatalf("restart during a snapshot: status=%d body=%s, want 409 naming snapshot_in_flight", code, body)
+	}
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+		t.Fatalf("refusal wrote a marker: %v", err)
+	}
+
+	close(h.block)
+	if outcome := <-done; outcome != snapshotTaken {
+		t.Fatalf("snapshot: %s", outcome)
+	}
+	if code, body := postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`); code != http.StatusOK {
+		t.Fatalf("restart after the snapshot: status=%d body=%s, want 200", code, body)
+	}
+}
