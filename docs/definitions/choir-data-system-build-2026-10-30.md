@@ -435,7 +435,7 @@ now:
     - Node B free space about 83 GB; the paper's snapshots settle near
       75 GB of their own.
   next_action: >-
-    1. Phase 2 in the order the owner set: I7 (off-host backup for
+    1. Phase 2, in the order FP0 proposes (durability first): I7 (off-host backup for
        PostgreSQL WAL and the blob store, then the timer), I1 (restore to
        any point; checkpoint as a snapshot reference), I2, I3, I5, I6.
     2. Settle R0n-09 and R0k-06 with the paper's snapshot on 10-31.
