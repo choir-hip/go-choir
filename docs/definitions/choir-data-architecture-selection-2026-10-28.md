@@ -1035,3 +1035,36 @@ Refines the windowed-tape direction above:
 - Growth bound for user computers is then the guest disk, not a window; the
   guest-storage design must say what happens when a computer's disk fills
   (owner-visible warning and an owner act, never silent truncation).
+
+## Owner direction 2026-10-30 (later): arbitrary restore for users; production and enterprise grade
+
+Owner: "We need to be able to restore arbitrarily (within something like a 7,
+14, or 30 day window for users) so anything bad that happens to a user vm can
+rewind. I think this requires host side encrypted tape and/or
+snapshots/checkpoints ... where are we and where do we need to get to to make
+it secure, stable, scalable, and simple? In the context of self-development
+with psa, and in light of enterprise nonfunctional requirements for a fully
+auditable system for compliance." Then: "we've been prototyping, and we're
+moving into production and enterprise grade shape."
+
+Requirements carried into the restore and audit design:
+
+- **Rewind any user computer to any event head inside a retention window**
+  (7, 14 or 30 days, per tenant), even when the VM itself is broken. The host
+  keeps an encrypted copy of the window's tape and encrypted snapshots; it
+  stores ciphertext it cannot read without an audited key unwrap. This is an
+  encrypted backup, not the "offload" the owner declined: it never enters a
+  platform analytical store. The computer still keeps its whole tape.
+- **A restore is a forward event**, never a history deletion (the operating
+  contract's "product restore is a separate forward transaction").
+- **Self-development and PSA**: capsule runs, precommitment records,
+  resolutions and accept/reject are events with host receipts; records and
+  their witnessing receipts are kept beyond any window.
+- **Enterprise auditability**: tamper-evident append-only history, external
+  anchoring of chain heads, every operator act (key unwrap, restore, deletion,
+  override) an audited event, per-tenant retention, legal hold over GC,
+  export, crypto-erase, access logs.
+- **Secure, stable, scalable, simple**: one model (an encrypted event log plus
+  encrypted snapshots; everything else derived), one byte store, one control
+  database, SQLite in each VM.
+- First known gap: `docs/problems/host-holds-user-state-in-plaintext-2026-10-30.md`.
