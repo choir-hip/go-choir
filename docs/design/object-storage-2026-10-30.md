@@ -126,6 +126,7 @@ type Store interface {
     Get(ctx, Caller, Ref, Range) (io.ReadCloser, Info, error)        // verifies before or while returning bytes
     Stat(ctx, Caller, Ref) (Info, error)
     Touch(ctx, Caller, []Ref) ([]TouchResult, error)  // at every ref commit; un-condemns
+    Release(ctx, Caller, []Ref) ([]Ref, error)        // holder's delete of its last ref; starts the hold
     Condemn(ctx, GCRun, []Ref) ([]Ref, error)         // GC phase 1
     Purge(ctx, GCRun, []Ref) ([]Ref, error)           // GC phase 2: rechecks, then marks pack space dead
 }
@@ -213,7 +214,9 @@ ID key is stable: it is never rotated with the content key, because
 rotating it would rename every private object (an explicit, separate
 migration if ever needed). Content-key rotation rewraps DEKs. The move to
 the vault's owner KEK rewraps the owner's content and ID keys once; object
-headers and packs do not change, so sealed packs stay immutable. The
+headers and packs do not change, so sealed packs stay immutable. Content-key
+rotation is different: it rewrites each wrapped-DEK header, so it rewrites
+the owner's packs and is a compaction-class operation, not a free one. The
 platform tier has the same structure under a platform KEK held by the
 vault's deployment path. Internal objects use the computer DEK.
 
@@ -221,10 +224,13 @@ vault's deployment path. Internal objects use the computer DEK.
 
 - guests for guest-originated private bytes (images, screenshots, files,
   capsule artifacts, tape payloads). A guest receives its owner's content
-  key and ID key at boot, wrapped under its computer DEK, the same channel
-  that delivers the computer DEK for file CAS today. File CAS uses the
-  computer DEK only (`filecas.go:143-160`), so this delivery is new work,
-  not an existing path;
+  key and ID key at boot, wrapped under its computer DEK. No such channel
+  exists: the computer DEK is generated inside the guest
+  (`computerevent/privacy.go:100-108`) and only exported upward for escrow
+  (`:84-96`). Delivery is new work: the host unwraps the escrowed DEK to
+  wrap the owner keys for that guest, or the guest pulls them over an
+  authenticated call. File CAS uses the computer DEK only
+  (`filecas.go:143-160`);
 - host replay workers for projection bases (built host-side), under a
   computer-DEK lease;
 - corpusd for the platform tier (the paper's captures) and for other
@@ -299,12 +305,23 @@ sorted by ref and declares an expected count per (class, scope).
 A provider that fails, returns an unparseable ref, or is stale aborts the
 sweep for the scopes it covers. A computer whose newest closure is older
 than half the grace counts as stale, so its owner's private and internal
-scopes are not condemned that run.
+scopes are not condemned that run. The sweep report lists every skipped
+scope and how long it has been skipped, so the exemption is visible.
 
 **Catalog.** blobd keeps a SQLite (WAL, `synchronous=FULL`) catalog: ref,
 cipher digest, frame root, size, class, pack ID (a ULID, no file extension)
-and offset, `last_touch`, state (`live`, `condemned`), `condemned_at`. It is
-rebuildable from packs, which are self-describing; a rebuild sets
+and offset, `last_touch`, state (`live`, `released`, `condemned`),
+`released_at`, `condemned_at`. `Release` is the only way a keep-set object
+leaves: the holder (maild deleting a message, objectgraph replacing a
+`body_ref`, a capture tombstone) calls it in the same transaction that drops
+its last ref, which moves the object to `released`. A released object whose
+ref no longer appears in any provider stream is purged after the 7-day hold;
+a `Touch` or a fresh ref before then returns it to `live`. A keep-set ref
+that is absent from the streams without a prior `Release` stays an
+abort-and-page condition. It is
+rebuildable from packs, which are self-describing (each record header
+carries tier, scope, object ID, class and plaintext length; `released`
+state is replayed from the release journal, which restic carries); a rebuild sets
 `last_touch = now`, which only delays GC. When a second host shares one
 store, the catalog moves behind the same interface to the corpus
 PostgreSQL instance.
@@ -353,7 +370,7 @@ root provider once mass-deleted live og bodies (2026-10-05,
 - Keep-set classes (capture, og, mail, and platform-tier objects): **zero
   tolerance**. Any condemnation of a keep-set object aborts the sweep and
   pages; a keep-set object leaves the store only through the holder's own
-  delete followed by the 7-day hold.
+  delete (`Release`, §4 Catalog) followed by the 7-day hold.
 - Other canonical classes (file chunks, tape segments, held images, cited
   capsule evidence): per (class, scope), a condemn set above the larger of
   1% and 100 objects aborts the sweep.
@@ -454,7 +471,10 @@ read-only, until the comparison and a week of reads pass.
    into the platform tier under unchanged `sha256:` IDs (no row rewrite).
    The other owners' ~3.8 K into the private tier under their interim keys;
    under the Q5 default, a body whose sha256 exactly matches a platform
-   object is referenced, not copied (the 604 shared bodies). Their 1,840
+   object is referenced, not copied (the 604 shared bodies): the row's
+   blob field carries the platform `sha256:` ref, the read is host-mediated
+   under the platform tier's policy, and no private ref aliases a platform
+   extent. Their 1,840
    capture rows are rewritten through the normal objectgraph write path:
    new `hmac:` blob fields and a recomputed `content_hash`
    (`objectgraph/object.go:97`, which covers metadata), so derived keys see
@@ -692,3 +712,14 @@ open packs host-local and single-writer (§2); GC driver outside blobd (§4);
 NTFS is not POSIX (§5); bases keep two until the new restore path proves
 (§1); restic forces a seal and carries the catalog and keys (§6). Not taken:
 none outright; the multi-host catalog and S3 operations stay later work.
+
+## Revision 3 log (2026-10-30)
+
+Re-review: `.agentic-consensus/object-storage-r2/out/devin.out`, send_back,
+all sixteen round-1 findings closed. NB-1 (no legal exit for keep-set
+objects): accepted; `Release`, the `released` state and the release journal
+added (§2, §4 Catalog and Guards). Notes taken: key-delivery channel stated
+as new work with the real direction (§3); Q5 shared bodies are row-level
+references with host-mediated reads (§7 step 2); record headers carry
+tier, scope and ID (§4 Catalog); content-key rotation rewrites packs (§3);
+skipped scopes surface in the sweep report (§4).
