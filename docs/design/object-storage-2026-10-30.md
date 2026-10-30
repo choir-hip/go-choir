@@ -142,8 +142,8 @@ plaintext to a local spool, then asks the catalog; dedup is decided before
 the upload at the cost of one spool write for large objects.
 
 **Conditional put is a catalog operation**: `IfAbsent` on a live ref
-returns it and touches it; on a condemned ref it un-condemns the existing
-record in the same catalog transaction and discards the upload; on an absent
+returns it and touches it; on a condemned or released ref it returns it to `live` in
+the same catalog transaction and discards the upload; on an absent
 or purged ref it writes a new record. Extent names are unique (a ULID per
 pack) and the catalog decides identity, so the backend never needs
 `If-None-Match`. Enumerating a holder's refs is the GC driver's job against
@@ -315,8 +315,17 @@ and offset, `last_touch`, state (`live`, `released`, `condemned`),
 leaves: the holder (maild deleting a message, objectgraph replacing a
 `body_ref`, a capture tombstone) calls it in the same transaction that drops
 its last ref, which moves the object to `released`. A released object whose
-ref no longer appears in any provider stream is purged after the 7-day hold;
-a `Touch` or a fresh ref before then returns it to `live`. A keep-set ref
+ref no longer appears in any provider stream is purged 7 days after it was
+last seen in a stream (not 7 days after `released_at`). A `Touch`, a fresh
+ref, or the ref's appearance in any provider stream during a mark returns it
+to `live` and voids the release, so a release never outlives the next mark
+that still sees the ref. A shared object released by one holder therefore
+stays live while another holder's ref is streamed, and if that ref later
+vanishes without its own `Release`, the guard aborts and pages. The release
+journal records (ref, `released_at`) and each revival, is fsynced before the
+catalog commit, and fails toward retention: a journal entry with no catalog
+state is ignored, a catalog `released` with no journal entry is treated as
+live. A keep-set ref
 that is absent from the streams without a prior `Release` stays an
 abort-and-page condition. It is
 rebuildable from packs, which are self-describing (each record header
@@ -357,7 +366,8 @@ transaction across PostgreSQL, guest SQLite, maild and blobd. Protocol:
    wait their 14-day retention before condemn). Before purging, the driver
    runs a fresh mark; `Purge` then re-reads each ref's state and
    `last_touch` under the catalog write lock and purges only refs still
-   condemned, untouched since condemn and absent from the fresh mark. This
+   condemned (or released and past the hold), untouched since condemn or
+   release, and absent from the fresh mark. This
    is today's `unlinkIfStillUnreachable` recheck (`artifact_gc.go:808,831-850`)
    carried over. Each purge is logged to the deletion-intent JSONL
    (`artifact_gc.go:760-834`) before it happens; pack space becomes dead
@@ -448,7 +458,7 @@ we do not write. What it does not buy: encryption, identity, refs, tenancy,
 verification and GC, which stay in the Choir layer.
 
 **Off-host copies before SeaweedFS (Q4, accepted):** a nightly restic run
-uploads newly sealed packs, a catalog snapshot, and the wrapped key
+uploads newly sealed packs, a catalog snapshot, the release journal, and the wrapped key
 material (interim owner KEKs and escrow rows, platform KEK wrap) so the
 private and platform tiers are recoverable from the copy. The run forces a
 seal of idle open packs first; what is still open is the stated loss window
@@ -723,3 +733,16 @@ as new work with the real direction (§3); Q5 shared bodies are row-level
 references with host-mediated reads (§7 step 2); record headers carry
 tier, scope and ID (§4 Catalog); content-key rotation rewrites packs (§3);
 skipped scopes surface in the sweep report (§4).
+
+## Revision 4 log (2026-10-30)
+
+Round-3 re-review (`.agentic-consensus/object-storage-r3/out/devin.out`):
+NB-1 closed. NB-2 (one holder's `Release` of a shared keep-set object
+disarmed the zero-tolerance abort for every other holder): accepted; stream
+presence during a mark now voids a release, and the hold runs from the
+last stream sighting (§4 Catalog). Notes taken: `IfAbsent` and the purge
+recheck name `released` (§2, §4 step 4); release journal contents, fsync
+order and failure direction stated, and restic carries it (§4, §6). This is
+the third review round on the GC deletion mechanism; per the operating
+contract no fourth round is added. The build's own tier-2 code review is the
+next check on this surface.
