@@ -32,6 +32,11 @@ ROOT="${OFFHOST_DATA_ROOT:-/var/lib/go-choir}"
 STATE="${OFFHOST_STATE_DIR:-$ROOT/offhost-backup}"
 SECRETS_DIR="${OFFHOST_SECRETS_DIR:-$ROOT/secrets/offhost-backup}"
 DOLT_ROOT_PW_FILE="${OFFHOST_DOLT_ROOT_PASSWORD_FILE:-$ROOT/secrets/dolt-root-password}"
+# The Dolt servers are retired (data system cutover, 2026-10-30): hosts run
+# PostgreSQL, and its backup is phase 2 item I7. The Dolt sections below run
+# only with OFFHOST_DOLT=on (a host that still serves Dolt); otherwise they
+# are skipped, not failed.
+OFFHOST_DOLT="${OFFHOST_DOLT:-off}"
 ART="$ROOT/platform-artifacts"
 VM_STATE="$ROOT/vm-state"
 # Computers whose guest data.img is cloned into the run, comma or space
@@ -230,8 +235,10 @@ resolve_paths() {
   done < <(kek_sources)
   add_path "$ART" required
   # A snapshotted store travels in $STAGING; its old sync copy is not read.
-  is_subvolume "$PLATFORM_DOLT_DATA" || add_path "$ROOT/platform-dolt/.choir-backup/platform" required
-  is_subvolume "$CORPUS_DOLT_DATA" || add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
+  if [ "$OFFHOST_DOLT" = on ]; then
+    is_subvolume "$PLATFORM_DOLT_DATA" || add_path "$ROOT/platform-dolt/.choir-backup/platform" required
+    is_subvolume "$CORPUS_DOLT_DATA" || add_path "$ROOT/corpus-dolt/.choir-backup/corpus" optional
+  fi
   add_path "$ROOT/secrets" required
   add_path "$ROOT/auth-signing" optional
   # gateway-provider.env and codex-auth.json are excluded by name (PR-13).
@@ -430,18 +437,22 @@ stage() {
   install -d -m 0700 "$STAGING/sqlite" "$STAGING/vm-images" "$STATE/run"
   DOLT_HEADS=()
   DOLT_ROWS=()
-  if is_subvolume "$PLATFORM_DOLT_DATA"; then
-    snapshot_store platform 13306 platform "$PLATFORM_DOLT_DATA" || ok=1
-  elif raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
-    dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
-    restore_dolt_memory
+  if [ "$OFFHOST_DOLT" != on ]; then
+    log "dolt backup skipped (OFFHOST_DOLT=$OFFHOST_DOLT): the Dolt servers are retired"
   else
-    err "could not raise $PLATFORM_DOLT_UNIT MemoryHigh; platform Dolt sync skipped (at the unit's own line the sync stalled Store A)"; ok=1
-  fi
-  if is_subvolume "$CORPUS_DOLT_DATA"; then
-    snapshot_store corpus 13307 corpus "$CORPUS_DOLT_DATA" || ok=1
-  elif [ -d "$ROOT/corpus-dolt" ]; then
-    dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1
+    if is_subvolume "$PLATFORM_DOLT_DATA"; then
+      snapshot_store platform 13306 platform "$PLATFORM_DOLT_DATA" || ok=1
+    elif raise_dolt_memory "$PLATFORM_DOLT_UNIT"; then
+      dolt_sync 13306 platform "$ROOT/platform-dolt/.choir-backup/platform" || ok=1
+      restore_dolt_memory
+    else
+      err "could not raise $PLATFORM_DOLT_UNIT MemoryHigh; platform Dolt sync skipped (at the unit's own line the sync stalled Store A)"; ok=1
+    fi
+    if is_subvolume "$CORPUS_DOLT_DATA"; then
+      snapshot_store corpus 13307 corpus "$CORPUS_DOLT_DATA" || ok=1
+    elif [ -d "$ROOT/corpus-dolt" ]; then
+      dolt_sync 13307 corpus "$ROOT/corpus-dolt/.choir-backup/corpus" || ok=1
+    fi
   fi
   for src in "$ROOT/auth/auth.db" "$ROOT/mail/mail.db"; do
     [ -f "$src" ] || continue
@@ -501,7 +512,8 @@ cmd_plan() {
 
 cmd_backup() {
   local result=ok rc ex sid started added
-  need ssh restic jq sqlite3 dolt systemctl || return
+  need ssh restic jq sqlite3 systemctl || return
+  if [ "$OFFHOST_DOLT" = on ]; then need dolt || return; fi
   started="$(now)"
   trap 'restore_dolt_memory; cleanup_clones; tunnel_down; attempt_interrupted' EXIT
   attempt_start attempt "\"last_attempt_epoch\":$started"

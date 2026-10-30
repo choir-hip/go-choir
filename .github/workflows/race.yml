@@ -32,6 +32,9 @@ jobs:
         with:
           lane: runtime-race
 
+      - name: Put PostgreSQL on PATH (dbxtest)
+        uses: ./.github/actions/install-postgres
+
       - name: Go test agentcore/textureowner shard with -race
         shell: bash
         env:
@@ -54,6 +57,9 @@ jobs:
         uses: ./.github/actions/setup-go-build-cache
         with:
           lane: non-runtime-race-${{ matrix.shard < 2 && 'split' || (matrix.shard == 2 && '6' || '7') }}
+
+      - name: Put PostgreSQL on PATH (dbxtest)
+        uses: ./.github/actions/install-postgres
 
       - name: Go test non-runtime shard with -race
         shell: bash

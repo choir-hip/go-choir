@@ -261,6 +261,10 @@
             (mkChoirGo devPkgs)
             devPkgs.pkg-config
             devPkgs.icu
+            # PostgreSQL for dbxtest.Postgres (initdb, pg_ctl) and local dev.
+            devPkgs.postgresql_17
+            # The dolt CLI: only internal/migrate/hostcopy's test starts a
+            # `dolt sql-server`. Remove with the migrators after C5.
             (mkChoirDolt devPkgs)
           ];
           shellHook = ''
@@ -282,7 +286,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-VcX33AW1t9TO6vPVPKqmZqYmpPgy0bEGc/YI+VAhVrk=";
+        vendorHash = "sha256-/T5EJyV6/v7OEG10pQM064LQdblre+oCniLYJk7TKR0=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
@@ -371,8 +375,9 @@
       # per-service identity the deploy verifies (build.json, skills, frontend).
       goServiceSubPackages = [
         "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
-        "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
-        "cmd/platform-dolt-squash"
+        "cmd/gateway" "cmd/corpusd" "cmd/checkpointd"
+        # one-shot host migrator (data system cutover; deleted after C5)
+        "cmd/choir-migrate-host"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
         # capsule package mirror (station FP10)
@@ -489,14 +494,11 @@
           pname = "checkpointd";
           subPackage = "cmd/checkpointd";
         };
-        projectionCompact = mkGoService {
-          pname = "projection-compact";
-          subPackage = "cmd/projection-compact";
-        };
-        # Store A weekly history squash (nix/node-b.nix, scripts/platform-dolt-squash.sh).
-        platformDoltSquash = mkGoService {
-          pname = "platform-dolt-squash";
-          subPackage = "cmd/platform-dolt-squash";
+        # One-shot Store A/B to PostgreSQL migrator (data system cutover; on
+        # Node B at /run/current-system/sw/bin/choir-migrate-host).
+        choirMigrateHost = mkGoService {
+          pname = "choir-migrate-host";
+          subPackage = "cmd/choir-migrate-host";
         };
         updater = mkGoService {
           pname = "choir-updater";
