@@ -121,6 +121,21 @@ func WithLifecycleCaller(ctx context.Context, caller string) context.Context {
 	return context.WithValue(ctx, lifecycleCallerKey{}, caller)
 }
 
+type ownerStartKey struct{}
+
+// WithOwnerStart marks a resolve as the owner's explicit start (`computer
+// start`, restart, recover): vmctl clears the computer's crash history and a
+// crash-loop hold before it starts the computer (crash_loop.go). Only a caller
+// that has authorized the owner may set it.
+func WithOwnerStart(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ownerStartKey{}, true)
+}
+
+func ownerStartFromContext(ctx context.Context) bool {
+	owner, _ := ctx.Value(ownerStartKey{}).(bool)
+	return owner
+}
+
 func setLifecycleCaller(req *http.Request) {
 	if caller, ok := req.Context().Value(lifecycleCallerKey{}).(string); ok && strings.TrimSpace(caller) != "" {
 		req.Header.Set(LifecycleCallerHeader, caller)
@@ -142,7 +157,7 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
+	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID), OwnerStart: ownerStartFromContext(ctx)}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: marshal resolve request: %w", err)

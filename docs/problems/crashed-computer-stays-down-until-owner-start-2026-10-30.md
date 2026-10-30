@@ -56,12 +56,14 @@ The bound lives in vmctl, which owns the lifecycle, on the ownership row (so it
 is durable): `crashes`, each with a time, realization epoch, kind and cause.
 Crashes are recorded where vmctl learns of an unplanned exit: the lookup latch
 (active to degraded), a resolve that finds an active computer's guest process
-exited, a wedge stop, and a restart whose boot failed. A planned restart
-(refresh, rescue, recover, hibernate, owner stop, vmctl restart) holds a
-lifecycle claim or changes the state first, and is never recorded. A
-realization is one crash however often it is seen unhealthy. Refusals that
-spawned nothing (memory pressure, another start in flight) and durable recovery
-refusals are not crashes.
+exited, a wedge stop, and a restart whose guest did not come up (a crash during
+boot). A planned restart (refresh, rescue, recover, hibernate, owner stop, vmctl
+restart) holds a lifecycle claim or changes the state first, and is never
+recorded. A realization is one crash however often it is seen unhealthy.
+Refusals that spawned nothing (memory pressure, another start in flight),
+durable recovery refusals, and host or control-plane failures (no credential, no
+epoch) are not crashes: an outage of one must not hold every computer restarted
+during it.
 
 `crashLoopMaxCrashes = 3` inside `crashLoopWindow = 30m` (internal/vmctl/
 crash_loop.go) set the existing durable maintenance hold with

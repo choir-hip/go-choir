@@ -186,7 +186,13 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 	r.mu.Lock()
 	if own, ok := r.ownerships[key]; ok && own.IsHeld() {
 		log.Printf("vmctl: platform computer vm=%s refused: held", own.VMID)
+		held := cloneOwnership(own)
 		r.mu.Unlock()
+		if crashLoopHeld(held) {
+			// The crash-loop bound answers with its cause; only an owner
+			// start clears it (crash_loop.go).
+			return nil, crashLoopRefusal(held)
+		}
 		return own, nil
 	}
 	if own, ok := r.ownerships[key]; ok {
@@ -386,6 +392,10 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 			r.mu.Unlock()
 			info, err := r.startExistingVM(&snapshot, mgr)
 			if err != nil {
+				if snapshot.State == VMStateDegraded || snapshot.State == VMStateFailed {
+					// A crash during boot counts toward the bound.
+					r.noteCrashRestartFailure(key, snapshot.VMID, err)
+				}
 				r.mu.Lock()
 				waiters := r.pendingWaiters[key]
 				delete(r.pendingWaiters, key)

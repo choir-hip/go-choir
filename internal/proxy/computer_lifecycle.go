@@ -47,6 +47,12 @@ type resolvedComputerTarget struct {
 	ComputerURL string
 	State       string
 	Epoch       int64
+	// Held, HoldReason and HeldBy carry vmctl's hold on the computer. A
+	// crash-loop hold (HeldBy vmctl.CrashLoopHeldBy) is cleared by the
+	// owner's start and by nothing else.
+	Held       bool
+	HoldReason string
+	HeldBy     string
 }
 
 type coldRecoveryRequest struct {
@@ -64,6 +70,7 @@ func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *Aut
 	return &resolvedComputerTarget{
 		ComputerID: scoped.ComputerID, UserID: scoped.UserID, DesktopID: scoped.DesktopID, VMID: scoped.VMID,
 		ComputerURL: scoped.ComputerURL, State: scoped.State, Epoch: scoped.Epoch,
+		Held: scoped.Held, HoldReason: scoped.HoldReason, HeldBy: scoped.HeldBy,
 	}, nil
 }
 
@@ -112,10 +119,17 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if action == "status" {
-		writeJSON(w, http.StatusOK, map[string]any{
+		status := map[string]any{
 			"computer_id": ownership.ComputerID, "desktop_id": ownership.DesktopID,
 			"state": ownership.State, "realization_epoch": ownership.Epoch,
-		})
+		}
+		if ownership.Held {
+			// A held computer says why (a crash loop reads "crash loop: 3
+			// crashes in 30m"); `computer start` clears a crash-loop hold.
+			status["held"] = true
+			status["hold_reason"] = ownership.HoldReason
+		}
+		writeJSON(w, http.StatusOK, status)
 		return
 	}
 	commitmentBytes, _ := computerevent.CanonicalJSON(map[string]string{"computer_id": computerID, "action": action, "idempotency_key": strings.TrimSpace(request.IdempotencyKey)})
@@ -137,12 +151,21 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 	opCtx, cancelOp := h.vmctlOpContext(vmctl.WithLifecycleCaller(r.Context(), "proxy.lifecycle."+action))
 	defer cancelOp()
 	switch action {
+	case "start", "restart", "recover":
+		// The owner's start: vmctl forgets the crash history and clears a
+		// crash-loop hold before it starts the computer. A request wake
+		// never carries this.
+		opCtx = vmctl.WithOwnerStart(opCtx)
+	}
+	switch action {
 	case "stop":
 		if ownership.State != "stopped" {
 			err = h.vmctlClient.StopDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "start":
-		if ownership.State != "active" {
+		// A running computer held by the crash-loop bound (it healed after
+		// its third crash) is cleared by the owner's start too.
+		if ownership.State != "active" || ownership.HeldBy == vmctl.CrashLoopHeldBy {
 			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "restart":

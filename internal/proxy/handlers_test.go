@@ -2236,44 +2236,64 @@ func TestComputeRecoveryWakeReportsUnhealthyComputerWithoutRefresh(t *testing.T)
 	}
 }
 
-func TestRunComputeRecoveryLeavesFailedComputerRunning(t *testing.T) {
-	oldAutoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	}))
-	t.Cleanup(oldAutoputer.Close)
+// A failed or degraded computer is a crashed one, and a crashed computer comes
+// back by itself (CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned
+// Update)"): the wake is vmctl's resolve, the same act a page reload makes,
+// where the crash-loop bound and the mid-apply refusal live. It never
+// escalates to a refresh, which kills whatever the resolve left running.
+func TestRunComputeRecoveryRestartsACrashedComputerByResolveOnly(t *testing.T) {
+	for _, crashed := range []vmctl.VMState{vmctl.VMStateFailed, vmctl.VMStateDegraded} {
+		t.Run(string(crashed), func(t *testing.T) {
+			autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			}))
+			t.Cleanup(autoputer.Close)
 
-	vmctlMux := http.NewServeMux()
-	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
-			"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
-			"computer_url": oldAutoputer.URL, "state": string(vmctl.VMStateFailed), "epoch": 8,
+			vmctlMux := http.NewServeMux()
+			vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
+					"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
+					"computer_url": autoputer.URL, "state": string(crashed), "epoch": 8,
+				})
+			})
+			var resolveCalled, refreshCalled atomic.Bool
+			vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, _ *http.Request) {
+				resolveCalled.Store(true)
+				writeJSON(w, http.StatusOK, map[string]any{
+					"vm_id": "vm-unready", "computer_id": "computer-unready", "user_id": "owner-unready",
+					"desktop_id": vmctl.PrimaryDesktopID, "kind": string(vmctl.VMKindInteractive),
+					"warmness_class": "primary", "computer_url": autoputer.URL, "state": string(vmctl.VMStateActive),
+				})
+			})
+			vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, _ *http.Request) {
+				refreshCalled.Store(true)
+				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "refresh must not be called"})
+			})
+			vmctlServer := httptest.NewServer(vmctlMux)
+			t.Cleanup(vmctlServer.Close)
+
+			handler, err := NewHandler(&Config{
+				AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: autoputer.URL,
+				AuthPublicKeyPath: "/unused/in/test", VmctlURL: vmctlServer.URL,
+			}, nil)
+			if err != nil {
+				t.Fatalf("NewHandler: %v", err)
+			}
+			current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID, "")
+			if recoveryErr != nil {
+				t.Fatalf("recovery error = %v, want the crashed computer woken", recoveryErr)
+			}
+			if !resolveCalled.Load() {
+				t.Fatal("wake of a crashed computer did not resolve it")
+			}
+			if refreshCalled.Load() {
+				t.Fatal("wake refreshed a crashed computer")
+			}
+			if current.State != string(vmctl.VMStateActive) || runtimeStatus == nil || !runtimeStatus.Reachable {
+				t.Fatalf("recovery observation = current=%+v runtime=%+v, want the woken, reachable computer", current, runtimeStatus)
+			}
 		})
-	})
-	var refreshCalled atomic.Bool
-	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, _ *http.Request) {
-		refreshCalled.Store(true)
-		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "refresh must not be called"})
-	})
-	vmctlServer := httptest.NewServer(vmctlMux)
-	t.Cleanup(vmctlServer.Close)
-
-	handler, err := NewHandler(&Config{
-		AllowDirectAutoputerForTests: true, Port: "0", ComputerURL: oldAutoputer.URL,
-		AuthPublicKeyPath: "/unused/in/test", VmctlURL: vmctlServer.URL,
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-	current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID, "")
-	if !errors.Is(recoveryErr, errWakeDoesNotRestart) {
-		t.Fatalf("recovery error = %v, want errWakeDoesNotRestart", recoveryErr)
-	}
-	if refreshCalled.Load() {
-		t.Fatal("wake refreshed a failed running computer")
-	}
-	if current.State != string(vmctl.VMStateFailed) || current.Epoch != 8 {
-		t.Fatalf("recovery observation = current=%+v runtime=%+v, want the failed computer as observed", current, runtimeStatus)
 	}
 }
 

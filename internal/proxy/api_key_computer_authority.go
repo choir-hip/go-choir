@@ -114,6 +114,7 @@ func (h *Handler) requireAPIKeyComputerTarget(
 			ComputerURL: strings.TrimSpace(ownership.ComputerURL),
 			State:       strings.TrimSpace(ownership.State),
 			Epoch:       ownership.Epoch,
+			Held:        ownership.Held, HoldReason: ownership.HoldReason, HeldBy: ownership.HeldBy,
 		}), true
 	}
 	if named := strings.TrimSpace(pathComputerID); named != "" && named != boundComputerID {
@@ -161,6 +162,7 @@ func (h *Handler) requireAPIKeyComputerTarget(
 		ComputerURL: strings.TrimSpace(ownership.ComputerURL),
 		State:       strings.TrimSpace(ownership.State),
 		Epoch:       ownership.Epoch,
+		Held:        ownership.Held, HoldReason: ownership.HoldReason, HeldBy: ownership.HeldBy,
 	}), true
 }
 
@@ -317,10 +319,20 @@ func writeComputerWakeFailure(w http.ResponseWriter, err error) bool {
 }
 
 // wakeableAPIKeyState reports whether a bearer request may start a computer
-// in this state. booting, stopping, degraded, failed and unknown states are
-// not woken by a request.
+// in this state. A degraded or failed computer is a crashed one, and a crashed
+// computer comes back by itself (CLAUDE.md "Restarts End Work (Crash) Or
+// Resume It (Planned Update)"): the wake is the same vmctl resolve, which
+// cold-boots it with no planned-restart marker, so boot closes its work, and
+// which refuses it with a crash_loop answer (the cause is in the 503) once it
+// has crashed vmctl's crash-loop bound times inside its window. booting,
+// stopping and unknown states are not woken by a request.
 func wakeableAPIKeyState(state string) bool {
-	return state == string(vmctl.VMStateHibernated) || state == string(vmctl.VMStateStopped)
+	switch state {
+	case string(vmctl.VMStateHibernated), string(vmctl.VMStateStopped),
+		string(vmctl.VMStateDegraded), string(vmctl.VMStateFailed):
+		return true
+	}
+	return false
 }
 
 // wakeAPIKeyComputer wakes the exact joined computer. Concurrent requests for
@@ -431,6 +443,9 @@ func (h *Handler) rejoinAPIKeyComputer(ctx context.Context, prior resolvedComput
 // wakeCause classifies a vmctl resolve failure into text safe to show a client.
 func wakeCause(err error) string {
 	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		if refusal.Kind == string(vmctl.RecoveryRefusalCrashLoop) {
+			return "the computer is held after a crash loop (" + strings.TrimSpace(refusal.Reason) + "); `choir computer start` clears it"
+		}
 		if strings.TrimSpace(refusal.Reason) != "" {
 			return "vmctl refused the wake: " + refusal.Reason
 		}

@@ -310,18 +310,101 @@ func TestBearerWakeTimeoutIsAnHonest503(t *testing.T) {
 }
 
 func TestBearerStateThatCannotBeWokenNamesTheState(t *testing.T) {
+	// booting and stopping are in flight, not crashed: a request waits them out.
+	for _, state := range []string{"booting", "stopping"} {
+		f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+			"computer-a": {state: state, desktopID: "primary"},
+		})
+		rec := f.get("/api/shell/bootstrap", nil)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%s: status=%d body=%s", state, rec.Code, rec.Body.String())
+		}
+		if body := decodeWakeBody(t, rec); body["error"] != "computer_waking_failed" || body["state"] != state {
+			t.Fatalf("%s: body=%v", state, body)
+		}
+		if f.resolves.Load() != 0 {
+			t.Fatalf("a %s computer was woken by a request", state)
+		}
+	}
+}
+
+// A crashed computer comes back by itself: a degraded or failed computer is
+// woken by the bearer request that finds it, through the same vmctl resolve
+// (CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned Update)"). The
+// request is not an owner start, so vmctl's crash-loop bound still applies.
+func TestBearerRequestRestartsACrashedComputer(t *testing.T) {
+	for _, state := range []string{"degraded", "failed"} {
+		t.Run(state, func(t *testing.T) {
+			f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+				"computer-a": {state: state, desktopID: "primary"},
+			})
+			rec := f.get("/api/shell/bootstrap", nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if f.resolves.Load() != 1 || f.exact.Load() != 1 {
+				t.Fatalf("resolves=%d guest=%d want 1/1", f.resolves.Load(), f.exact.Load())
+			}
+			if _, owner := f.resolveBodies[0]["owner_start"]; owner {
+				t.Fatalf("a request wake carried owner_start: %v", f.resolveBodies[0])
+			}
+		})
+	}
+}
+
+// Many bearer requests that find one crashed computer share one restart.
+func TestConcurrentBearerRequestsShareOneRestartOfACrashedComputer(t *testing.T) {
 	f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
-		"computer-a": {state: "failed", desktopID: "primary"},
+		"computer-a": {state: "degraded", desktopID: "primary"},
 	})
+	f.resolveDelay = 200 * time.Millisecond
+	const n = 8
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes <- f.get("/api/shell/bootstrap", nil).Code
+		}()
+	}
+	wg.Wait()
+	close(codes)
+	for code := range codes {
+		if code != http.StatusOK {
+			t.Fatalf("a concurrent request got %d", code)
+		}
+	}
+	if f.resolves.Load() != 1 {
+		t.Fatalf("resolves=%d want exactly one restart for %d concurrent requests", f.resolves.Load(), n)
+	}
+}
+
+// vmctl's crash-loop bound refuses the wake; the 503 carries the cause and the
+// kind, and the proxy does not retry it.
+func TestBearerRequestToACrashLoopingComputerGetsTheCause(t *testing.T) {
+	f := newWakeFixture(t, "computer-a", nil, map[string]*wakeComputer{
+		"computer-a": {state: "stopped", desktopID: "primary"},
+	})
+	f.resolveStatus = http.StatusServiceUnavailable
+	f.resolveBody = `{"error":"computer recovery blocked","reason":"crash loop: 3 crashes in 30m","kind":"crash_loop","retry_after_seconds":300}`
 	rec := f.get("/api/shell/bootstrap", nil)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if body := decodeWakeBody(t, rec); body["error"] != "computer_waking_failed" || body["state"] != "failed" {
+	body := decodeWakeBody(t, rec)
+	if body["error"] != "computer_waking_failed" || body["kind"] != "crash_loop" || body["reason"] != "crash loop: 3 crashes in 30m" {
 		t.Fatalf("body=%v", body)
 	}
-	if f.resolves.Load() != 0 {
-		t.Fatal("a failed computer was woken by a request")
+	cause, _ := body["cause"].(string)
+	if !strings.Contains(cause, "crash loop: 3 crashes in 30m") || !strings.Contains(cause, "choir computer start") {
+		t.Fatalf("cause=%q does not name the crash loop and the owner's remedy", cause)
+	}
+	if rec.Header().Get("Retry-After") != "300" {
+		t.Fatalf("Retry-After=%q want 300", rec.Header().Get("Retry-After"))
+	}
+	if f.resolves.Load() != 1 {
+		t.Fatalf("resolves=%d want one refused wake, not a retry storm", f.resolves.Load())
 	}
 }
 

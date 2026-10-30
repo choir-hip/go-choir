@@ -570,10 +570,14 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 		if resolved.ComputerURL != "" {
 			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 		}
-	} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
+	} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) ||
+		own.State == string(vmctl.VMStateDegraded) || own.State == string(vmctl.VMStateFailed) {
 		// Wake is resolve only. A failed wake reports the failure; it never
 		// escalates to a refresh, which kills whatever the resolve left
 		// running (docs/vmctl-360-review-2026-10-10.md, Phase 0 step 2).
+		// A degraded or failed computer is a crashed one: resolve cold-boots
+		// it, and vmctl's crash-loop bound refuses it once it has crashed
+		// too often (crash_loop.go), as for every other wake.
 		resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
 		if resolveErr != nil {
 			log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, resolveErr)
@@ -596,9 +600,9 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 		}
 	} else {
-		// A running computer that is booting, degraded, failed or not
-		// answering is reported, not restarted: uncertainty never supplies a
-		// reason to destroy. Restart stays an explicit owner lifecycle action.
+		// A running computer that is booting or not answering is reported,
+		// not restarted: uncertainty never supplies a reason to destroy.
+		// Restart stays an explicit owner lifecycle action.
 		current = computeComputerFromFields(
 			own.ComputerID,
 			own.DesktopID,

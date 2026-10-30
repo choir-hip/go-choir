@@ -163,6 +163,10 @@ type VMOwnership struct {
 	// retention) while held, and the deploy active-VM refresh skips it.
 	// It is set and cleared only by an authorized owner/recovery operation.
 	HoldStatus *MaintenanceHold `json:"hold_status,omitempty"`
+	// Crashes is the computer's recent crash history, durable with the row
+	// (crash_loop.go). crashLoopMaxCrashes of them inside crashLoopWindow set
+	// a HoldStatus with HeldBy CrashLoopHeldBy; an owner start clears both.
+	Crashes []CrashRecord `json:"crashes,omitempty"`
 
 	// DivergenceStatus classifies the computer's divergence from platform baseline:
 	// "tracking" (clean baseline, can auto-fast-forward non-breaking platform updates)
@@ -304,6 +308,11 @@ func (r *OwnershipRegistry) ClearHold(computerID string) error {
 	own := r.byComputerIDLocked(computerID)
 	if own == nil {
 		return fmt.Errorf("vmctl: no ownership for computer %s", computerID)
+	}
+	if crashLoopHeld(own) {
+		// Unholding the crash-loop hold forgets the crashes that set it, or
+		// the next crash would trip the bound again at once.
+		own.Crashes = nil
 	}
 	own.HoldStatus = nil
 	return r.writePersistenceLocked()
@@ -1544,6 +1553,11 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 		// failed: the process crashed or boot's readiness timeout already
 		// killed it, so starting it again destroys nothing alive.
 		log.Printf("vmctl: active ownership for VM %s found manager state=%s; recovering before routing", own.VMID, state)
+		// This is the crash a browser request finds without a lookup before
+		// it: record it, and past the crash-loop bound do not restart.
+		if refusal := r.noteExitedActiveVM(own, state); refusal != nil {
+			return nil, refusal
+		}
 		return r.recoverOrRestartActiveVM(own, mgr)
 	}
 }
@@ -2224,6 +2238,11 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				info, err := r.ensureActiveVMReady(&snapshot, mgr)
 				if err != nil {
 					log.Printf("vmctl: active VM %s readiness check failed: %v", snapshot.VMID, err)
+					if ctx.Err() == nil {
+						// The restart of a computer found dead failed: a crash
+						// during boot counts toward the bound.
+						r.noteCrashRestartFailure(key, snapshot.VMID, err)
+					}
 					r.mu.Lock()
 					waiters := r.pendingWaiters[key]
 					delete(r.pendingWaiters, key)
@@ -2302,13 +2321,28 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 					own.State = VMStateStopped
 					r.discardStoppedSnapshotLocked(own, "held_stopped")
 				}
-				r.pendingWaiters[key] = nil
+				// Delete, not "= nil": a nil entry is a start in flight, and
+				// the next resolve of a held computer would wait on it.
+				delete(r.pendingWaiters, key)
 				r.saveLocked()
 				result := cloneOwnership(own)
 				r.mu.Unlock()
+				if crashLoopHeld(result) {
+					// The crash-loop bound: answer with the cause, not with
+					// an old URL. Only an owner start clears it.
+					return nil, crashLoopRefusal(result)
+				}
 				return result, nil
 			}
 			recovering := pending.State == VMStateDegraded || pending.State == VMStateFailed || pending.State == VMStateBooting
+			// A crashed computer is restarted by the request that finds it
+			// (the cold boot has no planned-restart marker, so it closes its
+			// work), unless its guest answers and is mid-apply or holds a
+			// live capsule (crash_loop.go). Only a degraded computer has a
+			// guest worth asking: a failed one's old address may belong to
+			// another computer by now.
+			crashed := pending.State == VMStateDegraded || pending.State == VMStateFailed
+			askGuest := pending.State == VMStateDegraded
 			r.pendingWaiters[key] = nil
 			r.lifecycle[key] = lifecycleVisit
 			r.mu.Unlock()
@@ -2316,9 +2350,20 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			var info *VMInstanceInfo
 			var err error
 			if mgr != nil {
-				info, err = r.startExistingVMCtx(ctx, pending, mgr)
+				if askGuest {
+					if refusal := r.crashRestartRefusal(pending); refusal != nil {
+						err = refusal
+					}
+				}
+				if err == nil {
+					info, err = r.startExistingVMCtx(ctx, pending, mgr)
+				}
 				if err != nil {
 					log.Printf("vmctl: start existing VM %s failed: %v", pending.VMID, err)
+					if crashed && ctx.Err() == nil {
+						// A crash during boot counts toward the bound.
+						r.noteCrashRestartFailure(key, pending.VMID, err)
+					}
 					r.mu.Lock()
 					waiters := r.pendingWaiters[key]
 					delete(r.pendingWaiters, key)
@@ -2797,6 +2842,17 @@ func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwners
 		return result
 	}
 	current.State = VMStateDegraded
+	// The guest was running and is not: an unplanned exit. A planned restart
+	// holds a lifecycle claim and read as booting above, never here. The
+	// latch happens once per realization, so this records one crash.
+	crashCause := "health check returned unhealthy"
+	if healthErr != nil {
+		crashCause = "health check failed: " + healthErr.Error()
+	}
+	if info := mgr.GetVM(current.VMID); info != nil {
+		crashCause += " (manager state " + info.State + ")"
+	}
+	r.recordCrashLocked(current, crashKindUnhealthy, crashCause)
 	r.saveLocked()
 	result := cloneOwnership(current)
 	r.mu.Unlock()
@@ -4216,7 +4272,7 @@ func transientStartRefusal(err error) bool {
 		return false
 	}
 	switch refusal.Kind {
-	case RecoveryRefusalHostMemoryPressure, RecoveryRefusalGuestReattachPending:
+	case RecoveryRefusalHostMemoryPressure, RecoveryRefusalGuestReattachPending, RecoveryRefusalGuestWorking:
 		return true
 	}
 	return false

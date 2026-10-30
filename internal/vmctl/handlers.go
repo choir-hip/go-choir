@@ -90,6 +90,11 @@ type resolveRequest struct {
 	DesktopID string `json:"desktop_id,omitempty"`
 	// Force bypasses divergence protection on refresh.
 	Force bool `json:"force,omitempty"`
+	// OwnerStart marks the resolve as the owner's explicit `computer start`
+	// (restart, recover): it clears the crash history and a crash-loop hold
+	// before the start (crash_loop.go). The proxy sets it only after it has
+	// authorized the owner.
+	OwnerStart bool `json:"owner_start,omitempty"`
 }
 
 // resolveResponse is the JSON response for POST /internal/vmctl/resolve.
@@ -115,6 +120,8 @@ type ownershipResponse struct {
 	ComputerURL               string                           `json:"computer_url"`
 	State                     string                           `json:"state"`
 	Held                      bool                             `json:"held,omitempty"`
+	HoldReason                string                           `json:"hold_reason,omitempty"` // why it is held: a crash loop reads "crash loop: 3 crashes in 30m"
+	HeldBy                    string                           `json:"held_by,omitempty"`
 	CreatedAt                 string                           `json:"created_at"`
 	LastActiveAt              string                           `json:"last_active_at"`
 	Epoch                     int64                            `json:"epoch"`
@@ -161,6 +168,20 @@ func bootClaimResponseFor(claim *BootClaim) *bootClaimResponse {
 		return nil
 	}
 	return &bootClaimResponse{Kind: claim.Kind, Epoch: claim.Epoch, ClaimedAt: claim.ClaimedAt}
+}
+
+func holdReasonOf(own *VMOwnership) string {
+	if own == nil || own.HoldStatus == nil {
+		return ""
+	}
+	return own.HoldStatus.Reason
+}
+
+func heldByOf(own *VMOwnership) string {
+	if own == nil || own.HoldStatus == nil {
+		return ""
+	}
+	return own.HoldStatus.HeldBy
 }
 
 type reclaimResponse struct {
@@ -344,6 +365,12 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
+	if req.OwnerStart {
+		// The owner's explicit start forgets the crash history and clears a
+		// crash-loop hold; the resolve below then starts the computer
+		// (crash_loop.go). An operator's maintenance hold is left alone.
+		h.registry.ClearCrashLoopForDesktop(req.UserID, req.DesktopID)
+	}
 	expectedVMID := ""
 	if routeKnown && !route.RouteAbsent {
 		existing := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
@@ -523,6 +550,9 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		WarmnessClass:         string(h.registry.WarmnessClassForOwnership(own)),
 		ComputerURL:           own.ComputerURL,
 		State:                 string(own.State),
+		Held:                  own.IsHeld(),
+		HoldReason:            holdReasonOf(own),
+		HeldBy:                heldByOf(own),
 		CreatedAt:             own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		LastActiveAt:          own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
 		Epoch:                 own.Epoch,
@@ -1064,6 +1094,8 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			ComputerURL:               own.ComputerURL,
 			State:                     string(own.State),
 			Held:                      own.IsHeld(),
+			HoldReason:                holdReasonOf(own),
+			HeldBy:                    heldByOf(own),
 			CreatedAt:                 own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 			LastActiveAt:              own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
 			Epoch:                     own.Epoch,
