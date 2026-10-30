@@ -22,3 +22,13 @@ Append-only. One terse entry per pass. Never edit earlier entries.
 
   Output is in .agentic-consensus/frame-r1/out/. The overlap is high, and
   the next move is adjudication plus frame revision 2.
+- 2026-10-30 ~06:30 UTC (FP0). Owner: "Remember, we are working at agentic
+  speed. We can't let code review slow us down. We reviewed the plan a bunch
+  of times for a reason. So we can do the migration in bulk, and let runtime
+  checks be the verifier, not code review." Recorded in the goal:
+  - D0 folds round 1 once; there is no round 2 and no Codex;
+  - D1 and D2 run without panels;
+  - B1 to B7 are built in bulk, enabled for the proof ring only;
+  - verification is by B0's drills, the hard gates, the differential and
+    deployed acceptance;
+  - the CLAUDE.md review tiers are superseded for this mission.

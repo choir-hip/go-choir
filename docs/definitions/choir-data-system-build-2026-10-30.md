@@ -15,8 +15,8 @@ readiness_authority: >-
   mean, iron out the kinks first ofc. All these reviews and design have been
   very fruitful. So keep going and then get to development." Executable on
   the owner's word (precedent: choir-selfdev-readiness-metamission-2026-10-24).
-  The file review is pending: one Devin seat reviews this file together with
-  frame round 2 (D0).
+  Owner, 2026-10-30 ~06:30 UTC: "Remember, we are working at agentic speed. We can't let code review slow us down. We reviewed the plan a bunch of times for a reason. So we can do the migration in bulk, and let runtime checks be the verifier, not code review."
+  So no file review is run on this goal.
 review:
   reviewer: none yet
   frozen_ref: none
@@ -31,10 +31,11 @@ metamission:
       status: working
       depends_on: []
       exit: >-
-        Devin, DeepSeek and the Sonnet seat all accept the frame (accept or
-        accept_with_notes); then Codex reviews it once; its findings are
-        adjudicated; the §12 numbers are filed as precommitment round 0m;
-        the frame is frozen.
+        Round 1's findings are adjudicated and folded into frame revision 2:
+        Devin, the Sonnet seat, and DeepSeek if it lands. There are no
+        further panel rounds and no Codex (owner, 2026-10-30 ~06:30 UTC).
+        The §12 numbers are filed as precommitment round 0m, and the frame
+        is frozen.
     - id: D1
       title: the detailed designs cut to the frame
       path: this file (slice)
@@ -49,16 +50,17 @@ metamission:
           and §7;
         - one cutover plan, with rehearsal, drain, switch and rollback.
 
-        Panel loop as D0 until all three accept, then Codex once.
+        No panel review. The build's runtime checks verify the design.
     - id: D2
       title: the build plan
       path: this file (slice)
       status: pending
       depends_on: [D1]
       exit: >-
-        A throughline goal file for each of B0 to B8. Each names its tier,
-        its proof-ring acceptance and its rollback, and has passed one
-        Devin seat. This file's metamission block points at them.
+        The build plan, as a section of this file. Each of B0 to B8 is a
+        slice with its proof-ring acceptance (which B0 drills it must pass)
+        and its rollback. A separate goal file is written only for a slice
+        a parallel agent runs alone. No review.
     - id: B0
       title: the acceptance harness first
       path: authored in D2
@@ -297,7 +299,7 @@ boundaries:
     - the agent record is kept like acts (owner 2026-10-30 ~06:00 UTC)
     - user computers may run at paper scale (owner 2026-10-30)
     - Qdrant removed; vectors later through pgvector (owner 2026-10-28)
-    - "the review order is Devin, DeepSeek and a Sonnet subagent; Codex (gpt-6.1-sol high) only once all three accept (owner 2026-10-30)"
+    - "runtime checks are the verifier, not code review; the migration is built and landed in bulk (owner 2026-10-30 ~06:30 UTC). This supersedes, for this mission, the CLAUDE.md review tiers and the earlier design-panel order"
     - "review criteria in priority order: security, stability, simplicity, scalability, in the context of PSA and self-development (owner 2026-10-30)"
   defaults_in_force: >-
     These are the recommendations in frame §10. The owner has not objected
@@ -338,6 +340,29 @@ boundaries:
     - passkeys and the mobile app (later)
     - multi-host distribution (interfaces must allow it; not built)
     - cross-owner dedup of private content
+  verification: >-
+    Runtime checks are the verifier; there is no code-review gate. In order
+    of strength:
+    - B0's drills on the proof ring and in the rehearsal;
+    - the hard gates;
+    - the differential (migrated state answers like the Dolt state);
+    - the keep-set counts and hashes;
+    - deployed acceptance on staging after each landing;
+    - CI;
+    - the repo's static gates (check-v1-writer-purity, check-decode-roots,
+      check-test-hang-guards, selftest-guest-token, check-switch-registry,
+      and a nix eval when nix changed).
+
+    A drill that has not run on the proof ring proves nothing. The
+    irreversible steps are covered by runtime evidence, not review: the
+    cutover needs the rehearsal's differential green, and the old data is
+    deleted only on the owner's word after the rollback week.
+  build_in_bulk: >-
+    B1 to B7 are built together, in parallel where they do not touch the
+    same packages. Parallel builders are Sonnet subagents in their own
+    worktrees, working against B0's harness. Code lands on main as it
+    builds, enabled only for the proof ring (the d@e test computer), and is
+    drilled there as one system. Nothing widens to the fleet before B8.
   agents: >-
     Opus for design and adjudication. Sonnet subagents for following a
     plan, optimizing a metric and investigations (owner 2026-10-22).
@@ -391,9 +416,9 @@ now:
     evidence_refs: [docs/evidence/paper-tape-composition-2026-10-30.md, docs/evidence/tape-window-sizing-2026-10-30.md, docs/evidence/new-engine-storage-measurement-2026-10-30.md]
   decision:
     what: >-
-      Build to the frame. The design panel is Devin, DeepSeek and Sonnet,
-      then Codex once. Build review follows the CLAUDE.md tiers (red
-      stations at tier 2).
+      Build to the frame, in bulk. Runtime checks verify; there is no
+      code-review gate and no further design panels (owner, 2026-10-30
+      ~06:30 UTC).
     kind: architecture
     status: settled
     evidence_ref: owner 2026-10-30 messages quoted above
@@ -425,11 +450,10 @@ now:
     2. Adjudicate each finding by the owner's criteria order.
     3. Revise the frame (commit as green; append a revision log to the
        frame).
-    4. Run round 2 with the same three seats, plus one Devin seat on this
-       goal file.
-    5. On three accepts, run Codex once:
-       `--include codex --codex-model gpt-6.1-sol --cwd /Users/wiz/Dev/go-choir`.
-    6. Freeze the frame, file ledger round 0m, and move to D1.
+    4. Freeze the frame and file ledger round 0m, with no further rounds.
+    5. D1: cut the two detailed designs to the frame.
+    6. D2: write the build plan section.
+    7. Start B0 (the drills), then B1 to B7 in bulk.
 
 receipts:
   - id: selection-superseded
@@ -448,21 +472,23 @@ weak_measures:
     cannot_prove: that the design is right
 ```
 
-## How to run the review loops (D0, D1)
+## Verification, not review
 
-- **Devin and DeepSeek.** Run
-  `~/.claude/skills/agentic-consensus/agentic-consensus-runner.sh --include devin,omp-deepseek-v41-flash --keep-going --timeout-seconds 2400 --prompt-file <prompt> --out-dir <dir>/out --cwd "$(mktemp -d)"`.
-  Reuse `.agentic-consensus/frame-r1/prompt.md` as the template, and put
-  each round in its own directory (`frame-r2`, `design-r1`, ...).
-- **Sonnet.** Use the Agent tool with model `sonnet`: read the prompt file,
-  stay read-only, return the review.
-- **Stopping.** After three rounds on one mechanism without convergence,
-  look at the substrate (CLAUDE.md, "Escalate on dead ends"). Do not add a
-  fourth round.
-- **Adjudication.** Each finding is adopted, deferred to a named station,
-  or rejected with a reason. Rank by security, stability, simplicity,
-  scalability, judged against PSA and self-development. Prefer removing
-  machinery to adding it.
+Owner, 2026-10-30 ~06:30 UTC: "Remember, we are working at agentic speed. We can't let code review slow us down. We reviewed the plan a bunch of times for a reason. So we can do the migration in bulk, and let runtime checks be the verifier, not code review."
+
+- The design was reviewed through 13 object-storage revisions, a restore
+  design round and the frame's round 1. Round 1's findings are folded in
+  once (D0). After that, nothing waits on a reviewer.
+- Every claim a station makes is settled by a run: a drill, a hard gate,
+  the differential, or deployed acceptance. Round 1 found classes of
+  defect that only a run settles, and B0 must drill each:
+  - fencing, so a stale computer cannot keep writing;
+  - effects held until their receipt (the barrier);
+  - restore composition: acts and the agent record survive a rewind;
+  - deletion safety, against chunks still used by a retained snapshot;
+  - which release a rewind boots.
+- If a drill fails, fix the cause and rerun the drill. If the same
+  mechanism fails three times, look at the substrate (CLAUDE.md).
 
 ## Ledger
 
