@@ -141,9 +141,6 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		case store.SettingDispatchWideSlots:
 			rt.applyDispatchSlotsSetting(value)
 		}
-		if key == store.SettingDebouncedCheckpoint {
-			rt.applyGuestCheckpointSetting(value)
-		}
 		if key == store.SettingSourceProjection {
 			rt.applySourceProjectionSetting(value)
 		}

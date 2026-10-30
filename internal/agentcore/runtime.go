@@ -968,7 +968,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// Telemetry batching is decided before the first event of this process, so
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)
-	rt.configureGuestCheckpoint(ctx)
 	// So is the event-table writer (store.event_table): the host grant and
 	// the owner's setting, read once here.
 	rt.configureEventTable(ctx)

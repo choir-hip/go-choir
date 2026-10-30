@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	doltmemlimit "github.com/dolthub/dolt/go/libraries/doltcore/memlimit"
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -162,9 +161,9 @@ func (g *replayHealthGate) tick() {
 // Run starts the autoputer service.
 func Run() {
 	bootMark("process_main_entry")
-	// First, before anything opens Dolt: Dolt sizes its caches from the Go
-	// memory limit once, at first use (docs/reports/lr-guest-memory-return-2026-10-14.md).
-	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon(doltmemlimit.Init, doltmemlimit.NodeCacheSize))
+	// The daemon's soft Go memory limit, derived from guest RAM
+	// (docs/reports/lr-guest-memory-return-2026-10-14.md).
+	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())
 	ensureDeskCgroups()
 	ensureDocToolCgroups()
 	cfg := LoadConfig()
@@ -191,11 +190,9 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
-	doneMaintenance := objectgraph.BootPhase("autoputer: startup", "dolt-maintenance")
-	gcErr := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath)
-	doneMaintenance(gcErr)
-	if gcErr != nil {
-		log.Printf("autoputer: dolt gc maintenance: %v", gcErr)
+	// cutover: migrate the legacy Dolt workspace once (WP-F)
+	if err := migrateLegacyStoreIfNeeded(context.Background(), rtCfg.StorePath); err != nil {
+		boot.fatalf("autoputer: migrate legacy store: %v", err)
 	}
 
 	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
@@ -436,6 +433,14 @@ func Run() {
 			err = db.BindProjectionTape(computerID, appender)
 		}
 		if err == nil {
+			// Projection batches are sealed under the computer key before
+			// they are pinned (build sheet decision 9), and finalized event
+			// bodies the guest no longer keeps come from the tape
+			// (decision 8).
+			err = db.SetProjectionSealer(privateCipher)
+			db.SetEventSource(eventClient)
+		}
+		if err == nil {
 			// Provisioned genesis (SA slice 0): a computer whose recovery plan
 			// was RecoveryGenesis (empty store + no platform chain — provably
 			// fresh; a wiped store leaves a chain and installs or refuses)
@@ -538,8 +543,8 @@ func Run() {
 	// runs. A replay-only recovery drive exits before the runtime starts, so
 	// it leaves the marker for the boot that does.
 	if strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) != "1" {
-		// The marker's age is judged at process start, not here: boot Dolt GC,
-		// store open and credential exchange run first and take minutes on a
+		// The marker's age is judged at process start, not here: store open
+		// and credential exchange run first and take minutes on a
 		// large store, and must not expire a planned refresh
 		// (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
 		bootTimelineClock.Lock()
@@ -713,7 +718,6 @@ func Run() {
 					log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 				}
 			}
-			startPeriodicDoltGC(ctx, db, rtCfg.StorePath)
 			if err := rt.Start(ctx); err != nil {
 				return err
 			}
@@ -742,16 +746,6 @@ func Run() {
 		if vocabErr != nil {
 			boot.fatalf("autoputer: vocabulary migration refused: %v", vocabErr)
 		}
-		// Discovery only: a missing derived column or index is reported and
-		// its reads stay on JSON; adding it is the explicit
-		// /internal/store/derived-columns operation, never a boot step.
-		doneDiscover := objectgraph.BootPhase("autoputer: startup", "object-graph-access-path-discovery")
-		_, discoverErr := db.DiscoverObjectGraphAccessPaths(ctx)
-		doneDiscover(discoverErr)
-		if discoverErr != nil {
-			log.Printf("autoputer: object graph access paths unknown, JSON paths kept: %v", discoverErr)
-		}
-		startPeriodicDoltGC(ctx, db, rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
 			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
@@ -762,16 +756,6 @@ func Run() {
 	}
 
 	s.Start()
-}
-
-// startPeriodicDoltGC starts the online, journal-bounded Dolt garbage
-// collector on the open store. It is deferred until AFTER the tape replay
-// completes so GC churn never looks like a replay stall and never races the
-// recovery working set (B11). ctx must live as long as the store: the loop
-// stops when it is cancelled (a ctx cancelled on return stopped it before its
-// first tick until 2026-10-15).
-func startPeriodicDoltGC(ctx context.Context, db *store.Store, storePath string) {
-	store.StartPeriodicDoltGC(ctx, db, filepath.Dir(storePath), 5*time.Minute)
 }
 
 // runReplayPhase replays the computer event tape (30m resume quanta per B7),

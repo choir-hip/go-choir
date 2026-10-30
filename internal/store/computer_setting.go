@@ -57,12 +57,9 @@ const SettingResearchSystem1 = "research.system1"
 // rollback: the verb refuses and nothing is recorded or exported.
 const SettingResearchRelatedStory = "research.related_story"
 
-// SettingDebouncedCheckpoint moves the guest's Dolt history commit off the
-// write path: a background committer commits on a time debounce and an ops
-// bound instead of finalize committing inline every hundred events
-// (docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md). Off by
-// default; off is the rollback. The env flag CHOIR_GUEST_CHECKPOINT=debounced
-// turns it on regardless.
+// SettingDebouncedCheckpoint is retired: the guest store has no history
+// commit since the move to SQLite. The key stays known so a stored value
+// still reads; nothing acts on it.
 const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 
 // SettingEventTable moves the ten batched telemetry kinds to their own table,
