@@ -1008,3 +1008,30 @@ reviewed):
 4. **Anchoring** (precommitment-records §6 plan step 2) becomes a property
    of the segment chain: an anchored head bounds backdating of everything
    offloaded under it.
+
+## Owner direction 2026-10-30 (later): user computers keep their whole tape by default
+
+Owner: "I imagine users may prefer their computers never offload their event
+records. We should default to that I think. Autopaper is special case since
+it's so high volume."
+
+Refines the windowed-tape direction above:
+
+- **User computers (default): no window, no offload.** The full tape stays on
+  the computer. Measured cost is small: about 280 events/day on the owner's
+  always-on computer, under 0.4 GB per 30 days for every non-paper computer
+  (`docs/evidence/tape-window-sizing-2026-10-30.md`); at the slimmed layout
+  about 1.2 KB/event, roughly 0.1 GB/year at today's rate. Their history never
+  enters a platform analytical database. Offload is a later owner opt-in, not
+  a default.
+- **The Autopaper: windowed and offloaded** (7 days, 14 once the slimmed
+  layout lands), because it produces 96% of fleet events (~310-330 K/day).
+- **What the host still holds for a user computer** (to state exactly in the
+  design, not to widen): the event-head receipts that witness commit times
+  (precommitment records depend on them), and backup and restore material
+  encrypted under the owner's keys. Whether today's host-side tape segments
+  for user computers (`tape-seg`) remain as encrypted backup material or are
+  dropped is an open item for the guest-storage design.
+- Growth bound for user computers is then the guest disk, not a window; the
+  guest-storage design must say what happens when a computer's disk fills
+  (owner-visible warning and an owner act, never silent truncation).
