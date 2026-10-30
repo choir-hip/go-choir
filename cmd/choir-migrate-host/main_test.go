@@ -31,6 +31,22 @@ func TestBootstrapCreatesBothSchemas(t *testing.T) {
 		if err != nil || len(tables) == 0 {
 			t.Errorf("%s has no tables after bootstrap: %v %v", name, tables, err)
 		}
+		if name != "control" {
+			continue
+		}
+		// vmctl's route ledger and input catalog live in control but are
+		// created by vmctl, not the platform bootstrap; without them the copy
+		// drops route slots, transition receipts and authorization evidence
+		// (C4 rehearsal, 2026-10-30).
+		have := map[string]bool{}
+		for _, table := range tables {
+			have[table] = true
+		}
+		for _, want := range []string{"computer_version_route_slots", "computer_version_route_transition_receipts", "computer_version_route_authorization_evidence", "computer_version_code_closures", "computer_version_artifact_programs"} {
+			if !have[want] {
+				t.Errorf("control lacks %s after bootstrap", want)
+			}
+		}
 	}
 }
 
