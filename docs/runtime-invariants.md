@@ -184,41 +184,46 @@ receipts, and event-derived rollback.
 
 ## State Placement
 
-Dolt is the canonical direction for product state. SQLite may remain for
-narrow hot runtime, cache, local compatibility, or transitional implementation
-roles only when explicitly justified. Do not introduce new durable product truth
-into SQLite by default. The current Dolt boundary is maintained here and in
-[computer-ontology.md](computer-ontology.md).
+(Facts updated 2026-10-30 after the data system cutover: Dolt, Store A,
+Store B, projection bases and the guest Dolt workspaces are deleted. Design
+source: [design/choir-data-system-frame-2026-10-30.md](design/choir-data-system-frame-2026-10-30.md).)
 
-Per-user embedded Dolt holds private product state: app graph, appagent state,
-`texture` document/version content, prompts, local trajectories, findings, evidence
-metadata, and publication staging metadata.
+The host runs PostgreSQL with two databases. The **control** database holds
+accounts, computers, sessions, key escrow, mail, and the host side of the tape
+receipts. The **graph** database owns the Autopaper object graph and shared
+publications served through `corpusd`: public artifacts/manifests,
+source/retrieval/citation/provenance records, and public-object
+consent/review/verifier state. The graph database does **not** own accounts,
+auth/session state, VM lifecycle/capacity, candidate identity, personal
+promotion rollback, or general compute accounting; those stay in the control
+database or the computer's own ledgers until an explicit contract assigns them
+elsewhere. It is a ledger, not the network or semantic author of
+Autopaper/Texture artifacts.
+
+Each user computer (a guest VM) keeps its working state in SQLite (`state.db`)
+on its own disk: app graph, appagent state, `texture` document/version content,
+prompts, local trajectories, findings, evidence metadata, and publication
+staging metadata. It is a projection of the computer's tape, rebuilt by replay;
+the host keeps no projection bases, and a guest recovers from its own sealed
+snapshots plus the tape tail. Do not introduce new durable product truth
+outside the tape and these stores.
 
 The per-user snapshot filesystem holds files, working trees, uploads, large
-media, build artifacts, generated outputs, and filesystem aliases or materialized
-shortcuts for Dolt-backed `texture` documents.
-
-The **world-wire Dolt store** (historically called Platform Dolt) owns
-public/source object-graph and publication records served through `corpusd`:
-public artifacts/manifests, source/retrieval/citation/provenance records, and
-public-object consent/review/verifier state. It does **not** own accounts,
-auth/session state, VM lifecycle/capacity, candidate identity, personal
-promotion rollback, or general compute accounting. Those remain in their
-respective host/control or VM-local ledgers until an explicit contract assigns
-them elsewhere. The world-wire store is a ledger, not the network or semantic
-author of Wire/Texture artifacts.
+media, build artifacts, generated outputs, and filesystem aliases or
+materialized shortcuts for `texture` documents. Files sync to the host's file
+CAS every two minutes when changed.
 
 Two narrow SQLite substrates are explicitly transitional/permitted:
 
 - `internal/actorruntime` uses a durable actor update/snapshot log for recovery
-  and replay; embedded Dolt remains canonical for semantic app/trajectory state.
+  and replay; the guest store remains canonical for semantic app/trajectory state.
 - Choir Base uses an append-only journal and derived tree/blob substrate for
   File Provider/materialization work; it is tested but not deployed as a
   competing canonical computer store.
 
 Source/build state belongs in git-like source ledgers or typed app/package
 bundles. Uploaded/generated files belong in content-addressed blob storage with
-Dolt/artifact metadata. Runtime caches and temp files are machine state unless
+guest-store/artifact metadata. Runtime caches and temp files are machine state unless
 they are deliberately converted into typed artifacts.
 
 ## Acceptance And Platform Promotion
@@ -247,7 +252,7 @@ promotion artifacts.
 
 Live actors should receive hot-path payloads over in-memory mailboxes (Go
 channels), direct transport, or relays. They should not normally wake and then
-query Dolt before acting.
+query the store before acting.
 
 Durable handoff/control records exist for recovery, replay, audit, provenance,
 and important handoff durability.
@@ -259,7 +264,7 @@ append durable handoff -> deliver hot-path payload -> process turn -> commit eff
 Do not mark an important handoff consumed before the actor has committed a result
 or explicit failure.
 
-Cross-VM routing should use direct transport or a relay, not platform-Dolt
+Cross-VM routing should use direct transport or a relay, not host-database
 polling.
 
 The current actor adapter implements the durable-actor rule: the database

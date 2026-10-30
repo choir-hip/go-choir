@@ -34,7 +34,7 @@ Read in this order, about an hour in total:
 
 ## Default reading packet (agents)
 
-Read these ten documents or views before broad architecture or product work.
+Read these nine documents or views before broad architecture or product work.
 They are the whole default packet; everything else is on demand.
 
 1. [`README.md`](../README.md) — human and developer entry point.
@@ -43,15 +43,14 @@ They are the whole default packet; everything else is on demand.
 3. [`choir-doctrine.md`](choir-doctrine.md) — apex doctrine.
 4. [`semantic-registry.md`](semantic-registry.md) — compact, non-overriding
    map of the doctrine's stable semantics.
-5. [`NOW.md`](NOW.md) — retired 2026-09-08; routes to live owners.
-6. [`ACTIVE.md`](ACTIVE.md) — confirmed active work and work-state caveats.
-7. [`computer-ontology.md`](computer-ontology.md) — persistent computer,
+5. [`ACTIVE.md`](ACTIVE.md) — confirmed active work and work-state caveats.
+6. [`computer-ontology.md`](computer-ontology.md) — persistent computer,
    candidate, promotion, and rollback contract.
-8. [`runtime-invariants.md`](runtime-invariants.md) — runtime authority and
+7. [`runtime-invariants.md`](runtime-invariants.md) — runtime authority and
    causality contract.
-9. [`texture-agentic-invariants-2026-06-13.md`](texture-agentic-invariants-2026-06-13.md)
+8. [`texture-agentic-invariants-2026-06-13.md`](texture-agentic-invariants-2026-06-13.md)
    — canonical artifact contract.
-10. [`source-external-data-publication.md`](source-external-data-publication.md)
+9. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
 
 Views point to source authority; none can override doctrine or a domain contract.
@@ -80,7 +79,8 @@ Read the relevant contract before touching its protected surface.
   [`texture-acceptance-suite.md`](archive/texture-acceptance-suite.md).
 - **Autopaper (the automatic newspaper)**: [`autopaper-sw-design-2026-10-09.md`](autopaper-sw-design-2026-10-09.md),
   [`autopaper-app-design-2026-10-11.md`](autopaper-sw-design-2026-10-09.md),
-  the Store A/B split in [`runbooks/platform-dolt-authority-split-2026-09-18.md`](archive/runbooks/platform-dolt-authority-split-2026-09-18.md).
+  the data system (host PostgreSQL control and graph databases, guest SQLite, the tape) in
+  [`design/choir-data-system-frame-2026-10-30.md`](design/choir-data-system-frame-2026-10-30.md).
 - **Security and the VM boundary**: [`vmctl-360-review-2026-10-10.md`](vmctl-360-review-2026-10-10.md),
   [`reports/computer-isolation-security-review-2026-10-14.md`](archive/reports/computer-isolation-security-review-2026-10-14.md).
 - **Why and lineage**: [`signal-is-sparse-not-the-learner-2026-08-01.md`](signal-is-sparse-not-the-learner-2026-08-01.md)
