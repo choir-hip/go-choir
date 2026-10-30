@@ -855,7 +855,7 @@ func (r *runner) copyPostgresTable(ctx context.Context, p pair, tr *TableReport)
 func (r *runner) scanText(ctx context.Context, p pair, tr *TableReport) error {
 	has := false
 	for _, c := range p.DstCols {
-		if c.Class == classText || c.Class == classJSON {
+		if c.Class == classText || c.Class == classChar || c.Class == classJSON {
 			has = true
 		}
 	}

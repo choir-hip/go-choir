@@ -430,6 +430,30 @@ func TestInterruptedCopyReturnsError(t *testing.T) {
 	checkReport(t, rep)
 }
 
+// PostgreSQL CHAR(n) pads on read; the digest must not call that a difference
+// (the control schema has 54 such columns).
+func TestFixedWidthCharColumnsVerify(t *testing.T) {
+	ctx := context.Background()
+	h, err := doltsrc.Create(ctx, filepath.Join(t.TempDir(), "ws"), "texture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	for _, s := range []string{
+		`CREATE TABLE heads (id VARCHAR(20) PRIMARY KEY, head CHAR(10) NOT NULL)`,
+		`INSERT INTO heads VALUES ('a', 'abc'), ('b', 'abcdefghij'), ('c', '')`,
+	} {
+		if _, err := h.DB.ExecContext(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dst := dbxtest.Postgres(t)
+	execAll(t, dst, `CREATE TABLE heads (id TEXT PRIMARY KEY, head CHAR(10) NOT NULL)`)
+	if _, err := Run(ctx, h.DB, dst, dbx.Postgres, Options{}); err != nil {
+		t.Fatalf("CHAR(n) table did not verify: %v", err)
+	}
+}
+
 func TestBadTextFailsLoudlyNamingThePrimaryKey(t *testing.T) {
 	ctx := context.Background()
 	h, err := doltsrc.Create(ctx, filepath.Join(t.TempDir(), "ws"), "texture")

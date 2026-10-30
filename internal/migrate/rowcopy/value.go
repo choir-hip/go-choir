@@ -46,10 +46,13 @@ const (
 	classBytes
 	classJSON
 	classTime
+	// classChar is PostgreSQL CHAR(n): the server pads values with spaces, so
+	// the digest ignores trailing spaces. Converted like text.
+	classChar
 )
 
 func (c class) String() string {
-	return [...]string{"text", "int", "real", "numeric", "bool", "bytes", "json", "time"}[c]
+	return [...]string{"text", "int", "real", "numeric", "bool", "bytes", "json", "time", "char"}[c]
 }
 
 // canonical-encoding tags.
@@ -123,6 +126,8 @@ func pgClass(dataType string) class {
 		return classBytes
 	case "timestamp with time zone", "timestamp without time zone", "date":
 		return classTime
+	case "character":
+		return classChar
 	}
 	return classText
 }
@@ -518,6 +523,9 @@ func canon(b *bytes.Buffer, c class, v any) error {
 		s, err := toText(v)
 		if err != nil {
 			return err
+		}
+		if c == classChar {
+			s = strings.TrimRight(s, " ")
 		}
 		b.WriteByte(tagText)
 		putLen(b, len(s))
