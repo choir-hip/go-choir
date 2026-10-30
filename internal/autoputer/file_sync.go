@@ -26,6 +26,7 @@ import (
 const (
 	fileSyncChunkSize         = 4 << 20
 	defaultFileSyncInterval   = 15 * time.Minute
+	fileSyncScanInterval      = 2 * time.Minute
 	fileRootManifestMediaType = "application/vnd.choir.file-root-manifest+json"
 )
 
@@ -60,9 +61,12 @@ type fileSync struct {
 	appender    *computerevent.ComputerEventAppender
 	httpClient  *http.Client
 
-	mu              sync.Mutex
-	fileCache       map[string]cachedSyncedFile
-	chunkCache      map[string]map[string]bool
+	mu         sync.Mutex
+	fileCache  map[string]cachedSyncedFile
+	chunkCache map[string]map[string]bool
+	// cacheIsTree: fileCache is the whole tree a root recorded or hydration
+	// restored this boot, so a scan can compare against it.
+	cacheIsTree     bool
 	pendingCitation *pendingFileRootCitation
 
 	lastHydratedRoot string
@@ -159,6 +163,56 @@ func newFileSync(filesRoot, platformURL string, capability func(context.Context)
 		chunkCache:  make(map[string]map[string]bool),
 		freshVolume: strings.TrimSpace(filesRoot) != "" && freshVolumeMarked(filesRoot),
 	}
+}
+
+// changedSinceSync says the files tree differs from what the last recorded
+// root synced: a file added, removed, or with a new size or mtime. It only
+// stats, so the loop can ask often. Before the first sync of a boot every
+// tree counts as changed.
+func (s *fileSync) changedSinceSync() bool {
+	if s == nil || strings.TrimSpace(s.filesRoot) == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.cacheIsTree {
+		return true
+	}
+	seen := 0
+	changed := false
+	err := filepath.WalkDir(s.filesRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == s.filesRoot {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(s.filesRoot, path)
+		if err != nil {
+			return err
+		}
+		cached, ok := s.fileCache[filepath.ToSlash(rel)]
+		if !ok || cached.size != info.Size() || !cached.modTime.Equal(info.ModTime()) {
+			changed = true
+			return filepath.SkipAll
+		}
+		seen++
+		return nil
+	})
+	return err != nil || changed || seen != len(s.fileCache)
 }
 
 // SyncOnce commits the current files root and returns its content root.
@@ -282,6 +336,7 @@ func (s *fileSync) hydrateIfNeeded(ctx context.Context) (int, error) {
 	}
 	s.lastHydratedRoot = root
 	s.freshVolume = false
+	s.cacheIsTree = true
 	return restored, nil
 }
 
@@ -528,6 +583,7 @@ func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {
 			s.fileCache = make(map[string]cachedSyncedFile)
 			s.chunkCache = make(map[string]map[string]bool)
 		}
+		s.cacheIsTree = rootRecorded
 	}()
 
 	s.retryPendingCitation(ctx)
@@ -748,28 +804,45 @@ func StartPeriodicFileSync(ctx context.Context, service *fileSync, interval time
 	if service == nil || interval <= 0 {
 		return
 	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if _, err := service.SyncOnce(ctx); errors.Is(err, errFileSyncHydrationPending) {
-					// Boot hydration of a fresh volume failed: retry it
-					// instead of publishing the image seed.
-					if restored, hydrateErr := service.HydrateIfNeeded(ctx); hydrateErr != nil {
-						log.Printf("autoputer: fresh-volume file hydration still pending: %v", hydrateErr)
-					} else {
-						log.Printf("autoputer: fresh-volume file tree hydrated %d files", restored)
-					}
-				} else if err != nil {
-					log.Printf("autoputer: periodic file sync failed: %v", err)
-				}
+	// An idle computer is hibernated about ten minutes after it boots and
+	// wakes cold, which restarts this loop, so the interval tick alone may
+	// never come and a save never reaches the host: also sync whenever a
+	// scan finds the tree changed (the lost-disk drill on d@e, 2026-10-30,
+	// in docs/definitions/choir-data-system-build-2026-10-30.ledger.md).
+	go runFileSyncLoop(ctx, interval, min(fileSyncScanInterval, interval), service.changedSinceSync, func() {
+		if _, err := service.SyncOnce(ctx); errors.Is(err, errFileSyncHydrationPending) {
+			// Boot hydration of a fresh volume failed: retry it
+			// instead of publishing the image seed.
+			if restored, hydrateErr := service.HydrateIfNeeded(ctx); hydrateErr != nil {
+				log.Printf("autoputer: fresh-volume file hydration still pending: %v", hydrateErr)
+			} else {
+				log.Printf("autoputer: fresh-volume file tree hydrated %d files", restored)
 			}
+		} else if err != nil {
+			log.Printf("autoputer: periodic file sync failed: %v", err)
 		}
-	}()
+	})
+}
+
+// runFileSyncLoop runs run every interval, and at each scan when changed
+// reports the tree differs from the last sync.
+func runFileSyncLoop(ctx context.Context, interval, scan time.Duration, changed func() bool, run func()) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	scanner := time.NewTicker(scan)
+	defer scanner.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-scanner.C:
+			if changed() {
+				run()
+			}
+		case <-ticker.C:
+			run()
+		}
+	}
 }
 
 func fileSyncIntervalFromEnv() time.Duration {
