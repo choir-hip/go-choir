@@ -579,8 +579,25 @@ Each phase's gate is runtime, not review.
 - Escrow unwrap: one transaction for status plus the audit append, and the
   key unsealed after the commit.
 - Lifecycle stream: read by trajectory, not the whole graph.
-- `og_key_index` becomes four generated columns. Delete the validator; the
-  paper's hour-long boot pass and its stalls go with it.
+- **The snapshot producer and the recovery-path fix, landed together.**
+  - All three reviewers found that nothing in production takes a snapshot.
+  - Devin found that the missing-disk check at
+    `autoputer/projection_base.go:151` is always true, because
+    `store.Open` makes the `.texture` sidecar. So a lost disk falls to an
+    unbounded replay from genesis.
+  - Fixing the check alone would turn that slow replay into a refusal for
+    any chain over 10,000 events, because no snapshot exists. They ship
+    together.
+  - The paper's image cannot hold a second 30 GB copy until C7, so a
+    snapshot must stream into chunks rather than `VACUUM INTO` a temporary
+    file.
+  - C7's deletion of the old data waits for one snapshot per computer.
+- The paper's boot validator: persist the validated state, so a boot does
+  not repeat the full pass. Replacing `og_key_index` with generated columns
+  waits for phase 1. Witness v3 hashes every `sqlite_master` entry,
+  indexes included, so any DDL change makes restores to earlier
+  checkpoints fail their witness match. The logical witness (§5.3) has to
+  come first.
 - Host: JSONB plus expression and GIN indexes, then drop the side tables.
   Cache the front and resolve by head.
 - Telemetry: stop writing `choir.event` to the graph. After owner question
