@@ -72,6 +72,17 @@ type BatchDryRunner interface {
 	DryRunProjectionBatch(ctx context.Context, computerID string, batch *ProjectionBatch) error
 }
 
+// ReplayDurability relaxes per-commit durability for a bounded replay. Each
+// replayed event commits at least twice, and at synchronous=FULL each commit
+// syncs the WAL: about 2.7 ms an event on d@e (2026-10-30). The replayed
+// state is re-derivable from the tape, so a commit a crash loses is replayed
+// again from the store's durable head. RelaxReplayDurability returns the
+// restore, which the appender runs on every exit of the replay; the restore
+// and CommitReplay make every earlier commit durable.
+type ReplayDurability interface {
+	RelaxReplayDurability(ctx context.Context) (restore func(context.Context) error, err error)
+}
+
 // ReplayCommitter flushes deferred VM-local history after a complete replay.
 // Implementations must not expose this boundary to live append paths.
 type ReplayCommitter interface {
@@ -872,13 +883,27 @@ func (a *ComputerEventAppender) ReconstructThrough(ctx context.Context, source E
 	return a.reconstruct(ctx, source, targetHead)
 }
 
-func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSource, targetHead string) error {
+func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSource, targetHead string) (err error) {
 	if source == nil {
 		return fmt.Errorf("computer event appender: event source is required")
 	}
 	if a.replayProjection {
 		a.setReplayActive(true)
 		defer a.setReplayActive(false)
+		if relaxer, ok := a.projection.(ReplayDurability); ok {
+			restore, err := relaxer.RelaxReplayDurability(ctx)
+			if err != nil {
+				return fmt.Errorf("computer event appender: relax replay durability: %w", err)
+			}
+			defer func() {
+				if rerr := restore(context.WithoutCancel(ctx)); rerr != nil {
+					log.Printf("computer event appender: restore replay durability: %v", rerr)
+					if err == nil {
+						err = fmt.Errorf("computer event appender: restore replay durability: %w", rerr)
+					}
+				}
+			}()
+		}
 	}
 	// Zero the per-boot applied counter so the snapshot's applied_rows names
 	// this reconstruct's delta, not the running process's cumulative history.

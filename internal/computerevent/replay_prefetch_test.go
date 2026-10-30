@@ -157,3 +157,53 @@ func TestReplayRefusesAPrefetchedPayloadWhoseDigestDisagrees(t *testing.T) {
 		t.Fatalf("replay with a corrupt payload returned %v, want a digest mismatch", err)
 	}
 }
+
+// relaxingProjection records the replay durability calls.
+type relaxingProjection struct {
+	orderedBatchProjection
+	relaxed, restored int
+}
+
+func (p *relaxingProjection) RelaxReplayDurability(context.Context) (func(context.Context) error, error) {
+	p.relaxed++
+	return func(context.Context) error { p.restored++; return nil }, nil
+}
+
+// Failure modes: a replay that fails part way leaves the store relaxed; a
+// live (non-replay) reconstruction relaxes durability.
+func TestReplayRestoresDurabilityOnEveryExit(t *testing.T) {
+	cas, pinner, verifier, payloads, _ := appendTestBatches(t, 6)
+	projection := &relaxingProjection{}
+	replayer, err := NewComputerEventAppender(testComputerID, pinner, projection, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayer.SetReplayMode(true)
+	replayer.SetPayloadResolver(&slowPayloadReader{payloads: map[string][]byte{}}, nil) // every payload missing: the replay fails
+	if err := replayer.Reconstruct(context.Background(), pagedMemoryCAS{cas}); err == nil {
+		t.Fatal("a replay with no payloads succeeded")
+	}
+	if projection.relaxed != 1 || projection.restored != 1 {
+		t.Fatalf("failed replay relaxed %d times and restored %d, want 1 and 1", projection.relaxed, projection.restored)
+	}
+	replayer.SetPayloadResolver(&slowPayloadReader{payloads: payloads}, nil)
+	if err := replayer.Reconstruct(context.Background(), pagedMemoryCAS{cas}); err != nil {
+		t.Fatal(err)
+	}
+	if projection.relaxed != 2 || projection.restored != 2 {
+		t.Fatalf("replay relaxed %d times and restored %d, want 2 and 2", projection.relaxed, projection.restored)
+	}
+
+	live := &relaxingProjection{}
+	appender, err := NewComputerEventAppender(testComputerID, pinner, live, cas, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appender.SetPayloadResolver(&slowPayloadReader{payloads: payloads}, nil)
+	if err := appender.Reconstruct(context.Background(), pagedMemoryCAS{cas}); err != nil {
+		t.Fatal(err)
+	}
+	if live.relaxed != 0 {
+		t.Fatalf("a reconstruction outside replay mode relaxed durability %d times", live.relaxed)
+	}
+}

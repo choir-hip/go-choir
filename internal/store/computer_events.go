@@ -325,7 +325,10 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 // references recorded against legacy IDs. SQL COMMIT already made each
 // replayed event durable; there is no history commit.
 func (s *Store) CommitReplay(ctx context.Context) error {
-	return s.syncDepositUpcastLedger()
+	if err := s.syncDepositUpcastLedger(); err != nil {
+		return err
+	}
+	return s.syncRelaxedReplay(ctx)
 }
 
 func (s *Store) DiscardPrepared(ctx context.Context, computerID, eventDigest string) error {
