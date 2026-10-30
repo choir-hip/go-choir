@@ -304,24 +304,6 @@ func main() {
 	// The booted-vs-activated kernel lag goes to the journal at start and
 	// daily (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md).
 	vmctl.StartHostBootStateLog(context.Background(), vmctl.HostBootStateLogInterval, log.Printf)
-	// Store compaction on host disk pressure (docs/problems/node-b-disk-
-	// fills-from-the-paper-data-image-2026-10-22.md): off unless
-	// VMCTL_STORE_COMPACT_PRESSURE is observe or on. The attempts record
-	// lives beside the ownership state so a vmctl restart keeps the gap.
-	{
-		stateDir := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
-		if ownershipPath := strings.TrimSpace(os.Getenv("VMCTL_OWNERSHIP_PATH")); ownershipPath != "" {
-			stateDir = filepath.Dir(ownershipPath)
-		}
-		cfg := vmctl.StoreCompactPressureConfigFromEnv(os.Getenv)
-		attemptsPath := vmctl.StoreCompactAttemptsPath(stateDir)
-		if err := handler.SetStoreCompactPressure(cfg, attemptsPath); err != nil {
-			log.Printf("vmctl: store compaction pressure refuses every pressure compaction until the next timer or by-hand compaction rewrites the record: %v", err)
-		}
-		handler.StartStoreCompactPressure(context.Background())
-		log.Printf("vmctl: store compaction pressure mode=%s interval=%s host_free_below=%d fill_fraction=%.2f min_image=%d min_gap=%s attempts=%q",
-			cfg.Mode, cfg.Interval, cfg.HostFreeBelow, cfg.FillFraction, cfg.MinImageBytes, cfg.MinGap, attemptsPath)
-	}
 	// The pressure monitor samples host pressure and VM memory; under the
 	// sustained signal it also runs the gated reclaim. Off with reclaim off.
 	registry.StartPressureMonitor(context.Background(), handler.AuthorizeComputerVersionRoute)

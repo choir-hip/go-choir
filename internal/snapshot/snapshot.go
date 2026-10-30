@@ -95,6 +95,14 @@ type ChunkStore interface {
 	GetChunk(ctx context.Context, digest string) ([]byte, error)
 }
 
+// RootRegistrar is implemented by a ChunkStore whose host sweeps unreferenced
+// chunks (HTTPChunks): TakeSnapshot declares the snapshot's chunk digests
+// through it, before the snapshot_recorded event is appended, because the host
+// cannot read the sealed manifest and would otherwise collect the chunks.
+type RootRegistrar interface {
+	RegisterSnapshotRoot(ctx context.Context, root string, headSequence uint64, chunks []string) error
+}
+
 // Appender is the slice of computerevent.ComputerEventAppender TakeSnapshot
 // needs.
 type Appender interface {
@@ -224,6 +232,11 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 			return Ref{}, fmt.Errorf("snapshot: file tree root: %w", err)
 		}
 		record.FileTreeRoot = root
+	}
+	if registrar, ok := cfg.Chunks.(RootRegistrar); ok {
+		if err := registrar.RegisterSnapshotRoot(ctx, manifest.Root, record.StoreHeadSequence, manifest.Files[0].Chunks); err != nil {
+			return Ref{}, fmt.Errorf("snapshot: register snapshot root: %w", err)
+		}
 	}
 	plaintext, err := json.Marshal(record)
 	if err != nil {

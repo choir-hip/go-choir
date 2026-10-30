@@ -629,6 +629,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/keys/transparency-head", h.HandleKeyEscrowTransparencyHead)
 	s.HandleFunc("/internal/computers/files/chunks/", h.HandleFileCASChunk)
 	s.HandleFunc("/internal/computers/files/root", h.HandleFileCASRoot)
+	s.HandleFunc("/internal/computers/files/snapshot-root", h.HandleSnapshotRoot)
 	s.HandleFunc("/internal/computers/files/watermark", h.HandleFileCASWatermark)
 	s.HandleFunc("/internal/computers/projection-base/jobs", h.HandleProjectionJobs)
 	s.HandleFunc("/internal/computers/projection-base/pins", h.HandleProjectionBasePins)
