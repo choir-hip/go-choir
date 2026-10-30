@@ -228,7 +228,7 @@ func registerPackageKindOn(r *Registry, tbl *packageKindTable, builtin *Registry
 		return refuse("kind %q is marked reserved", k.Kind)
 	}
 	if k.Store != "" && k.Store != StoreTypeDolt {
-		return refuse("kind %q names store %q; package kinds are durable (dolt)", k.Kind, k.Store)
+		return refuse("kind %q names store %q; package kinds are durable (sql)", k.Kind, k.Store)
 	}
 	if k.Owner != "" && k.Owner != "package:"+pkg {
 		return refuse("kind %q claims owner %q", k.Kind, k.Owner)

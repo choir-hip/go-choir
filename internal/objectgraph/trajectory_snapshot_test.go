@@ -20,11 +20,11 @@ import (
 //     follow round repeats forever;
 //  4. the order differs from the scan's (canonical id), which callers rely
 //     on for ties;
-//  5. with the column not live, the read pretends to succeed.
+//  5. with no trajectory id, the read pretends to succeed.
 
 func TestTrajectorySnapshotSeeksTheTrajectoryIndex(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -32,16 +32,13 @@ func TestTrajectorySnapshotSeeksTheTrajectoryIndex(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		putTestObject(t, store, fmt.Sprintf("ev-%02d", i), "choir.lifecycle_event", map[string]any{"trajectory_id": fmt.Sprintf("t-%d", i%4)}, `{}`, at)
 	}
-	if !store.live("og_meta_trajectory_id") {
-		t.Fatalf("trajectory column not live: %v", store.liveNames())
-	}
-	query, args := store.trajectoryRefsSQL("choir.lifecycle_event", "t-1")
-	assertIndexedPlan(t, explainPlan(t, db, query, args...), "og_objects.object_kind,og_objects.og_meta_trajectory_id,og_objects.updated_at", false)
+	query, args := trajectoryRefsSQL("choir.lifecycle_event", "t-1")
+	assertIndexedPlan(t, explainPlan(t, db, query, args...), "idx_og_objects_og_meta_trajectory_id(_recent)?", false)
 }
 
 func TestTrajectorySnapshotKeepsOneTrajectoryAndFollows(t *testing.T) {
-	db := openTestDoltDB(t)
-	store := NewDoltStore(db)
+	db := openTestDB(t)
+	store := NewSQLStore(db)
 	ctx := context.Background()
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
@@ -102,8 +99,7 @@ func TestTrajectorySnapshotKeepsOneTrajectoryAndFollows(t *testing.T) {
 		t.Fatalf("follow ran %d rounds", rounds)
 	}
 
-	store.liveColumns.Store(&map[string]bool{})
-	if _, ok, err := store.ReadTrajectorySnapshot(ctx, "owner", "computer", "t1", []ObjectKind{"choir.run"}, keep, follow); ok || err != nil {
-		t.Fatalf("not live: ok=%v err=%v; want ok=false so the caller scans", ok, err)
+	if _, ok, err := store.ReadTrajectorySnapshot(ctx, "owner", "computer", "", []ObjectKind{"choir.run"}, keep, follow); ok || err != nil {
+		t.Fatalf("empty trajectory: ok=%v err=%v; want ok=false so the caller scans", ok, err)
 	}
 }

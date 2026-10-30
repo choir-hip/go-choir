@@ -66,9 +66,9 @@ func TestCitationRelationEdgeKindsAreRegistered(t *testing.T) {
 	}
 }
 
-func TestDoltStoreGatesEveryWriteBeforeTheInterceptor(t *testing.T) {
+func TestSQLStoreGatesEveryWriteBeforeTheInterceptor(t *testing.T) {
 	ctx := context.Background()
-	store := NewDoltStore(openTestDoltDB(t))
+	store := NewSQLStore(openTestDB(t))
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -114,9 +114,9 @@ func TestDoltStoreGatesEveryWriteBeforeTheInterceptor(t *testing.T) {
 	}
 }
 
-func TestDoltStoreDirectSQLWriteRefusedLeavesNoRow(t *testing.T) {
+func TestSQLStoreDirectSQLWriteRefusedLeavesNoRow(t *testing.T) {
 	ctx := context.Background()
-	store := NewDoltStore(openTestDoltDB(t))
+	store := NewSQLStore(openTestDB(t))
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
