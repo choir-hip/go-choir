@@ -868,3 +868,50 @@ C5 differential report.
 **R0m-07** (fixed per-event cost goes). Host append round trips per paper
 day fall by at least 50% against today's 339 K: p = 0.8. Falsifier: under
 a 50% cut. Artifact: the receipt count per day.
+
+## Settlements and interim readings (2026-10-30 ~17:05 UTC, after the cutover; FP0 writes, the settler is the rule named in each record)
+
+Measured on Node B at 16:55-17:05 UTC with `pg_database_size`, `pg_total_relation_size`, the paper's store size from its producer log, and receipt counts by `created_at`. FP0 self-scores beside each; self-scores never gate (rule 3).
+
+**R0f-02, settled confirmed by the rule.** Control on PostgreSQL is 17.58 GB (17.50 GB of it `computer_event_append_receipts`), inside [3, 20]. Log ratio ln(17.58/9) = +0.67: the estimate was low by about 2x, and the interval only just held. Assumption that failed: 1-1.5 KB per receipt row; the rows average about 2.8 KB with their indexes.
+
+**R0f-03, settled confirmed by the rule.** The graph database is 2.44 GB, inside [2, 15]. Log ratio ln(2.44/6) = -0.90: Store B's history inflated the expectation, and the live keep set was smaller.
+
+**R0f-04, paper half settled contradicted; d@e half settled confirmed.** The paper's SQLite is 31.1 GB, outside [1, 10]; log ratio ln(31.1/3) = +2.34. Assumption that failed: that `event_json` leaving the index and the content-hash kinds moving to the object store would happen before or with the cutover. Neither was built, and no retention of any kind exists: no object of any kind in the paper's store is tombstoned or superseded (docs/design/object-graph-redesign-2026-10-30.md §2). The d@e store migrated to about 63 MB, inside [30, 800] MiB; log ratio ln(63/157) = -0.91.
+
+**R0m-06, settled confirmed by the rule.** Three migrations (the paper offline, the owner's computer and d@e at first boot) matched per table on count and content digest, and the keep set matched on all 96 lines after the empty-value artifact was traced to the harness (the old client prints an empty value as two quote marks). p = 0.75; Brier 0.0625.
+
+**R0m-02, interim (resolves 2026-11-06).** Control is 17.58 GB today against a 1 GB bar. The receipts leave only with phase 2 of the redesign (one receipt row per batch), which will not land by 11-06. FP0 self-forecast: contradicted, p(confirmed) now about 0.02.
+
+**R0m-03, interim (resolves at the paper's first snapshot).** The paper's file is 31.1 GB against [3, 8]. The first snapshot is streaming now (commit 0668c545a). FP0 self-forecast: contradicted. Same failed assumption as R0f-04.
+
+**R0m-07, interim.** The paper made 82,705 host appends in the 3 hours to 17:03 UTC, about 660 K a day, against the 339 K baseline. The batched tape is phase 2. FP0 self-forecast: contradicted when it resolves. The rate is inflated today by the post-cutover backlog; the settler reads a full quiet day.
+
+**R0m-01, R0m-04, R0m-05, R0f-07: unresolved.** R0m-05 waits for the d@e drill record (running). R0f-07 waits for the object store's byte count.
+
+Calibration so far, settled records only: two 80% intervals of three halves held (R0f-02, R0f-03, R0f-04 d@e) and one missed (R0f-04 paper), so 3 of 4 interval halves covered. The miss is large and has one cause.
+
+### Learning entries
+
+- **R0f-04 and R0m-03 (contradicted, one cause).** FP0 predicted the size of a store after mechanisms that were in the plan but not in the build. Assumption failed: "planned retention ships with the cutover". Change: a size prediction names the mechanisms it assumes and is conditioned on them shipping; when one slips, the prediction is re-issued, not left standing. Checked by: round 0n below, whose size records name their mechanisms.
+- **R0f-02 (confirmed but low by 2x).** Per-row overhead on PostgreSQL was underestimated. Change: estimate row bytes from a loaded sample, not from column widths. Checked by: R0n-02 below.
+
+## Records (round 0n, the object graph redesign; from docs/design/object-graph-redesign-2026-10-30.md §8, committed 2026-10-30 ~17:05 UTC before any of it is built; the commit is the witness)
+
+Each size record names the mechanisms it assumes (learning entry above). If one of them does not ship in the named phase, the record is re-issued, not scored as written.
+
+**R0n-01.** The paper's `state.db` after phase 0's telemetry trim (trace and progress kinds of `choir.event` leave the working store; owner ruling 2026-10-30) plus phase 1 class retention: est 6 GB [3, 12]. Assumes: both mechanisms shipped, and trims recorded on the tape. Falsifier: outside the interval. Artifact: the file size in the paper's snapshot manifest after phase 1.
+
+**R0n-02.** Host control receipts 7 days after phase 2 (one receipt row per batch plus the segment index): est 0.5 GB [0.1, 2], from 17.5 GB. Assumes: phase 2 shipped and old per-event receipts retired. Falsifier: outside the interval. Artifact: `pg_total_relation_size` of the receipt tables.
+
+**R0n-03.** Guest record put latency p50, outside a barrier, after phase 2: est 3 ms [1, 15]. The baseline is measured on d@e before phase 2 lands. Falsifier: outside the interval. Artifact: the guest's latency histogram.
+
+**R0n-04.** A capsule-built app with two kinds and one index installs on d@e with zero platform code change and no deploy, by the end of phase 1: p = 0.8. Falsifier: any platform commit or deploy needed for the install. Artifact: the install act on d@e's tape and the git log.
+
+**R0n-05.** Front page database queries after phase 3: at most 5 per page view, from about 500: p = 0.75. Falsifier: over 5. Artifact: a query count per request from PostgreSQL statistics.
+
+**R0n-06.** The paper's boot to healthy stays under 30 s, with no boot-time full-store pass, after phase 1 deletes the derived-key validator: p = 0.9. Falsifier: any boot over 30 s or any full-store pass at boot. Artifact: the boot phase log.
+
+**R0n-07.** Net non-test lines deleted across phases 0 to 4: est 15 K [8 K, 25 K]. Falsifier: outside the interval. Artifact: `git diff --stat` excluding `_test.go`, summed over the phases' commits. (Phase 0 so far: about 1.2 K from the projection-jobs deletion.)
+
+**R0n-08.** The paper's first streamed snapshot (commit 0668c545a) completes inside its 30-minute budget on its first attempt: p = 0.55. Committed before its outcome is known; the stream started after 16:56 UTC. Falsifier: a refusal or abort for the budget. Artifact: the producer's log line.
