@@ -352,3 +352,10 @@ with an epoch-3 memory snapshot). Owner: "no textures on either account are
 essential. cool if we can copy them for continuity, but idc if we lose
 them." So the owner computers' Textures are **nice-to-keep, not keep-set**:
 copy them if the migration makes it cheap; losing them does not fail it.
+
+## Correction 2026-10-30
+
+The 12,534 `sha256/*.txt` files are not unreferenced: they hold published
+and proposed document content, named by `choir.artifact_blob.storage_ref`
+and read by the public publication readers. They belong to the keep set.
+See `docs/problems/keep-set-missed-published-content-blobs-2026-10-30.md`.
