@@ -43,10 +43,13 @@ import (
 
 var (
 	// compactFreelistFraction is the freelist share of the file that triggers
-	// a compaction.
-	compactFreelistFraction = 0.25
-	// compactMaxLiveBytes is the largest live size boot will rewrite.
-	compactMaxLiveBytes int64 = 20 << 30
+	// a compaction; compactFreelistBytes triggers it on a large file whose
+	// share is smaller (the paper's event index trim frees about 7 GB of 32).
+	compactFreelistFraction = 0.10
+	compactFreelistBytes int64 = 2 << 30
+	// compactMaxLiveBytes is the largest live size boot will rewrite. The
+	// guest's boot-ready timeout is 90 minutes (VM_BOOT_READY_TIMEOUT).
+	compactMaxLiveBytes int64 = 40 << 30
 	// compactSpaceFactor is the free space, as a multiple of the live size,
 	// the copy needs.
 	compactSpaceFactor = 1.2
@@ -97,7 +100,7 @@ func compactStateFile(statePath string) (compacted bool, err error) {
 			return false, fmt.Errorf("%s: %w", q, err)
 		}
 	}
-	if pageCount == 0 || float64(freelist) <= compactFreelistFraction*float64(pageCount) {
+	if pageCount == 0 || (float64(freelist) <= compactFreelistFraction*float64(pageCount) && freelist*pageSize < compactFreelistBytes) {
 		return false, nil
 	}
 	live := (pageCount - freelist) * pageSize
