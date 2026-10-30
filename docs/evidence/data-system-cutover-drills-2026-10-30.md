@@ -208,3 +208,18 @@ the snapshot and the 24 h interval is not due.
 - A kill during a planned-restart marker window, and a kill during the derived-key pass at boot (the pass was short on d@e).
 - Controlled bounded-memory runs for migration, derived-key validation and the snapshot producer.
 - The differential, the keep-set and the paper-publishes/mail drills (outside this task).
+
+## Run E (17:26, after the D1 fix): `/api/files` survives kill -9
+
+d@e on 72640d15c (health `build.commit`, deployed 17:18:30). Same harness and failure
+rule F1 as run A: 4 `choir files put` writers, SIGKILL of d@e's Firecracker at
+17:26:22.802 (8 s after the start), the owner act `computer recover` at 17:26:32.87
+(receipt resulting state `active`, completed 17:26:42.44), writers kept running 40 s
+after the kill, then every ACK read back with `choir files get` and compared by sha256.
+
+| Run | Write | SIGKILL (Node B clock) | Recover act done | Acked before kill | Lost | Post-recovery acks | Failed requests |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| E | files put | 17:26:22.802-.812 | 17:26:42.48 | 155 | 0 | 302 | 43 (refused or in flight around the outage; not acknowledged) |
+
+Verdict: F1 holds for the files surface. D1 is repaired (72640d15c). The post-kill hang of
+runs C and D did not recur in run E: writers acknowledged again after the recover act.
