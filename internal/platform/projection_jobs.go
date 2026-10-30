@@ -19,12 +19,12 @@ import (
 const projectionJobSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_projection_jobs (
  computer_id VARCHAR(128) PRIMARY KEY,
- generation BIGINT UNSIGNED NOT NULL,
+ generation BIGINT NOT NULL,
  status VARCHAR(32) NOT NULL,
  reason VARCHAR(255) NOT NULL,
- target_sequence BIGINT UNSIGNED NOT NULL,
+ target_sequence BIGINT NOT NULL,
  target_head CHAR(64) NOT NULL,
- watermark_sequence BIGINT UNSIGNED NOT NULL,
+ watermark_sequence BIGINT NOT NULL,
  seed_base_ref VARCHAR(255) NOT NULL,
  key_digest VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS computer_projection_jobs (
  genesis_repair BOOLEAN NOT NULL,
  failures INT NOT NULL,
  lease_token VARCHAR(64) NOT NULL,
- lease_until DATETIME(6) NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ lease_until TIMESTAMPTZ NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
@@ -41,47 +41,47 @@ CREATE TABLE IF NOT EXISTS computer_projection_base_refusals (
  base_ref VARCHAR(255) NOT NULL,
  refusals INT NOT NULL,
  last_error TEXT NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL DEFAULT '',
  PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_bases (
  computer_id VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
- sequence BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(6) NOT NULL,
+ sequence BIGINT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,base_ref)
 );
 CREATE TABLE IF NOT EXISTS computer_projection_epoch_roots (
  computer_id VARCHAR(128) PRIMARY KEY,
  base_ref VARCHAR(255) NOT NULL,
- sequence BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(6) NOT NULL
+ sequence BIGINT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL
 );
 CREATE TABLE IF NOT EXISTS computer_projection_base_pins (
  computer_id VARCHAR(128) NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
  reference_id VARCHAR(255) NOT NULL,
- created_at DATETIME(6) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,base_ref,reference_id)
 );
 CREATE TABLE IF NOT EXISTS computer_checkpoint_verdicts (
  computer_id VARCHAR(128) NOT NULL,
  checkpoint_digest CHAR(64) NOT NULL,
- accepted_sequence BIGINT UNSIGNED NOT NULL,
+ accepted_sequence BIGINT NOT NULL,
  accepted_head CHAR(64) NOT NULL,
  status VARCHAR(32) NOT NULL,
  reason VARCHAR(64) NOT NULL,
  detail TEXT NOT NULL,
  differing_tables TEXT NOT NULL,
  base_ref VARCHAR(255) NOT NULL,
- created_at DATETIME(6) NOT NULL,
- updated_at DATETIME(6) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL,
+ updated_at TIMESTAMPTZ NOT NULL,
  PRIMARY KEY(computer_id,checkpoint_digest)
 );
 CREATE TABLE IF NOT EXISTS projection_worker_status (
  worker_id VARCHAR(64) PRIMARY KEY,
- heartbeat DATETIME(6) NOT NULL,
+ heartbeat TIMESTAMPTZ NOT NULL,
  build_commit VARCHAR(128) NOT NULL,
  error_text TEXT NOT NULL
 );
@@ -228,7 +228,7 @@ func (s *Store) RecordBaseRefusal(ctx context.Context, computerID, baseRef, erro
 	if err != nil {
 		return false, err
 	}
-	return quarantined, s.commitBoundary(ctx, "record projection base refusal "+computerID)
+	return quarantined, nil
 }
 
 type singleRowQuerier interface {
@@ -422,7 +422,7 @@ func (s *Store) enqueueProjectionJobAtBuild(ctx context.Context, computerID, rea
 	if err = tx.Commit(); err != nil {
 		return j, err
 	}
-	return j, s.commitBoundary(ctx, "enqueue projection checkpoint "+computerID)
+	return j, nil
 }
 
 func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
@@ -517,7 +517,7 @@ func (s *Store) ClaimProjectionJob(ctx context.Context) (*ProjectionJob, error) 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &j, s.commitBoundary(ctx, "lease projection checkpoint "+j.ComputerID)
+	return &j, nil
 }
 
 func (s *Store) RenewProjectionJob(ctx context.Context, j ProjectionJob) error {
@@ -551,7 +551,7 @@ func (s *Store) FinishProjectionJob(ctx context.Context, j ProjectionJob, status
 	if n != 1 {
 		return fmt.Errorf("checkpoint lease lost")
 	}
-	return s.commitBoundary(ctx, "finish projection checkpoint "+j.ComputerID+" "+status)
+	return nil
 }
 
 func (s *Store) PinProjectionBase(ctx context.Context, computerID, baseRef, reference string) error {
@@ -562,7 +562,7 @@ func (s *Store) PinProjectionBase(ctx context.Context, computerID, baseRef, refe
 	if err != nil {
 		return err
 	}
-	return s.commitBoundary(ctx, "pin projection base "+computerID)
+	return nil
 }
 
 func (s *Store) projectionBasePins(ctx context.Context) (map[string]struct{}, error) {
@@ -595,7 +595,7 @@ func (s *Store) AuditCheckpointKeyUse(ctx context.Context, j ProjectionJob, keyD
 	if _, _, err := s.AppendKeyEscrowTransparency(ctx, raw); err != nil {
 		return err
 	}
-	return s.commitBoundary(ctx, "checkpoint maintenance key use "+j.ComputerID)
+	return nil
 }
 
 func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, sequence uint64, blobSHA256, seedBaseRef string) error {
@@ -630,7 +630,7 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		return s.store.commitBoundary(ctx, "record verification base "+j.ComputerID)
+		return nil
 	}
 	if priorRef != seedBaseRef && priorRef != blobSHA256 {
 		// A quarantined advertised base is replaced by a fallback seed on
@@ -665,5 +665,5 @@ func (s *Service) PublishCheckpointResult(ctx context.Context, j ProjectionJob, 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.store.commitBoundary(ctx, "publish verified checkpoint "+j.ComputerID)
+	return nil
 }

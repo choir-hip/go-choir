@@ -17,17 +17,17 @@ import (
 const computerEventSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_event_heads (
   computer_id VARCHAR(128) NOT NULL,
-  sequence BIGINT UNSIGNED NOT NULL,
+  sequence BIGINT NOT NULL,
   canonical_event_head CHAR(64) NOT NULL,
   desired_event_head CHAR(64) NOT NULL,
   effective_event_head CHAR(64) NOT NULL,
   desired_state_commitment CHAR(64) NOT NULL,
   effective_state_commitment CHAR(64) NOT NULL,
   pending_transition_ref CHAR(64) NULL,
-  reducer_version BIGINT UNSIGNED NOT NULL,
-  credential_revocation_epoch BIGINT UNSIGNED NOT NULL,
-  created_at DATETIME(6) NOT NULL,
-  updated_at DATETIME(6) NOT NULL,
+  reducer_version BIGINT NOT NULL,
+  credential_revocation_epoch BIGINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id),
   CHECK (sequence > 0),
   CHECK (CHAR_LENGTH(canonical_event_head) = 64),
@@ -40,49 +40,41 @@ CREATE TABLE IF NOT EXISTS computer_event_append_receipts (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,
   request_commitment CHAR(64) NOT NULL,
-  sequence BIGINT UNSIGNED NOT NULL,
-  previous_head CHAR(64) NOT NULL,
+  sequence BIGINT NOT NULL,
   event_kind VARCHAR(64) NOT NULL,
   event_digest CHAR(64) NOT NULL,
-  event_artifact_ref TEXT NOT NULL,
   event_pin_receipt_digest CHAR(64) NOT NULL,
-  pin_receipt_digests_json JSON NOT NULL,
   event_head_receipt_id VARCHAR(255) NOT NULL,
-  event_head_receipt_json JSON NOT NULL,
-  event_head_receipt_digest CHAR(64) NOT NULL,
-  desired_event_head CHAR(64) NOT NULL,
-  effective_event_head CHAR(64) NOT NULL,
-  desired_state_commitment CHAR(64) NOT NULL,
-  effective_state_commitment CHAR(64) NOT NULL,
-  pending_transition_ref CHAR(64) NULL,
-  created_at DATETIME(6) NOT NULL,
+  event_head_receipt_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id, idempotency_key),
-  UNIQUE KEY computer_event_append_sequence_uq (computer_id, sequence),
-  UNIQUE KEY computer_event_append_digest_uq (computer_id, event_digest),
-  KEY computer_event_append_kind_seq_idx (computer_id, event_kind, sequence)
+  CONSTRAINT computer_event_append_sequence_uq UNIQUE (computer_id, sequence),
+  CONSTRAINT computer_event_append_digest_uq UNIQUE (computer_id, event_digest)
 );
+CREATE INDEX IF NOT EXISTS computer_event_append_receipt_id_idx ON computer_event_append_receipts (computer_id, event_head_receipt_id);
+CREATE INDEX IF NOT EXISTS computer_event_append_kind_seq_idx ON computer_event_append_receipts (computer_id, event_kind, sequence);
 CREATE TABLE IF NOT EXISTS control_key_history (
   signer_domain VARCHAR(64) NOT NULL,
   computer_id VARCHAR(128) NOT NULL DEFAULT '',
   key_id VARCHAR(255) NOT NULL,
-  public_key BINARY(32) NOT NULL,
+  public_key BYTEA NOT NULL,
   status VARCHAR(32) NOT NULL,
-  activation_sequence BIGINT UNSIGNED NULL,
-  activation_time DATETIME(6) NULL,
-  first_invalid_sequence BIGINT UNSIGNED NULL,
-  first_invalid_time DATETIME(6) NULL,
+  activation_sequence BIGINT NULL,
+  activation_time TIMESTAMPTZ NULL,
+  first_invalid_sequence BIGINT NULL,
+  first_invalid_time TIMESTAMPTZ NULL,
   replacement_key_id VARCHAR(255) NULL,
-  authorizing_receipt_json JSON NOT NULL,
+  authorizing_receipt_json TEXT NOT NULL,
   authorizing_receipt_digest CHAR(64) NOT NULL,
-  inserted_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (signer_domain, computer_id, key_id),
-  KEY control_key_history_status_idx (signer_domain, computer_id, status, activation_sequence),
-  KEY control_key_history_receipt_idx (authorizing_receipt_digest)
+  inserted_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (signer_domain, computer_id, key_id)
 );
+CREATE INDEX IF NOT EXISTS control_key_history_status_idx ON control_key_history (signer_domain, computer_id, status, activation_sequence);
+CREATE INDEX IF NOT EXISTS control_key_history_receipt_idx ON control_key_history (authorizing_receipt_digest);
 CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   computer_id VARCHAR(128) NOT NULL,
   mode VARCHAR(32) NOT NULL,
-  generation BIGINT UNSIGNED NOT NULL,
+  generation BIGINT NOT NULL,
   operation_id VARCHAR(255) NULL,
   bundle_digest CHAR(64) NULL,
   expected_desired_event_head CHAR(64) NULL,
@@ -90,25 +82,25 @@ CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   expected_pending_transition_ref VARCHAR(255) NULL,
   expected_desired_state_commitment CHAR(64) NULL,
   expected_effective_state_commitment CHAR(64) NULL,
-  expires_at DATETIME(6) NULL,
+  expires_at TIMESTAMPTZ NULL,
   last_idempotency_key VARCHAR(255) NOT NULL,
   last_request_commitment CHAR(64) NOT NULL,
-  mode_receipt_json JSON NOT NULL,
+  mode_receipt_json TEXT NOT NULL,
   mode_receipt_digest CHAR(64) NOT NULL,
-  updated_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (computer_id),
-  KEY computer_self_development_modes_expiry_idx (mode, expires_at)
+  updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (computer_id)
 );
+CREATE INDEX IF NOT EXISTS computer_self_development_modes_expiry_idx ON computer_self_development_modes (mode, expires_at);
 CREATE TABLE IF NOT EXISTS computer_lifecycle_operations (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,
   request_commitment CHAR(64) NOT NULL,
   action VARCHAR(32) NOT NULL,
   prior_lifecycle_state VARCHAR(32) NOT NULL,
-  prior_realization_epoch BIGINT UNSIGNED NOT NULL,
+  prior_realization_epoch BIGINT NOT NULL,
   status VARCHAR(32) NOT NULL,
-  created_at DATETIME(6) NOT NULL,
-  completed_at DATETIME(6) NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ NULL,
   PRIMARY KEY (computer_id, idempotency_key)
 );
 CREATE TABLE IF NOT EXISTS computer_lifecycle_receipts (
@@ -119,40 +111,40 @@ CREATE TABLE IF NOT EXISTS computer_lifecycle_receipts (
   action VARCHAR(32) NOT NULL,
   prior_lifecycle_state VARCHAR(32) NOT NULL,
   resulting_lifecycle_state VARCHAR(32) NOT NULL,
-  generation BIGINT UNSIGNED NOT NULL,
-  receipt_json JSON NOT NULL,
+  generation BIGINT NOT NULL,
+  receipt_json TEXT NOT NULL,
   receipt_digest CHAR(64) NOT NULL,
-  completed_at DATETIME(6) NOT NULL,
+  completed_at TIMESTAMPTZ NOT NULL,
   joined_event_digest CHAR(64) NULL,
   PRIMARY KEY (computer_id, idempotency_key),
-  UNIQUE KEY computer_lifecycle_receipt_id_uq (receipt_id),
-  KEY computer_lifecycle_generation_idx (computer_id, generation)
+  CONSTRAINT computer_lifecycle_receipt_id_uq UNIQUE (receipt_id)
 );
+CREATE INDEX IF NOT EXISTS computer_lifecycle_generation_idx ON computer_lifecycle_receipts (computer_id, generation);
 CREATE TABLE IF NOT EXISTS computer_checkpoints (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,
   request_commitment CHAR(64) NOT NULL,
   checkpoint_digest CHAR(64) NOT NULL,
   checkpoint_artifact_ref TEXT NOT NULL,
-  checkpoint_json JSON NOT NULL,
-  receipt_json JSON NOT NULL,
+  checkpoint_json TEXT NOT NULL,
+  receipt_json TEXT NOT NULL,
   receipt_digest CHAR(64) NOT NULL,
-  created_at DATETIME(6) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id, idempotency_key),
-  UNIQUE KEY computer_checkpoint_digest_uq (checkpoint_digest)
+  CONSTRAINT computer_checkpoint_digest_uq UNIQUE (checkpoint_digest)
 );
 CREATE TABLE IF NOT EXISTS computer_route_projection_certificates (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,
   request_commitment CHAR(64) NOT NULL,
   certificate_digest CHAR(64) NOT NULL,
-  certificate_json JSON NOT NULL,
-  receipt_json JSON NOT NULL,
+  certificate_json TEXT NOT NULL,
+  receipt_json TEXT NOT NULL,
   receipt_digest CHAR(64) NOT NULL,
-  expires_at DATETIME(6) NOT NULL,
-  created_at DATETIME(6) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (computer_id, idempotency_key),
-  UNIQUE KEY computer_route_projection_certificate_digest_uq (certificate_digest)
+  CONSTRAINT computer_route_projection_certificate_digest_uq UNIQUE (certificate_digest)
 );`
 
 var ErrComputerEventCASConflict = errors.New("computer event head CAS conflict")
@@ -261,7 +253,6 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if err != nil {
 		return computerevent.Receipt{}, err
 	}
-	receiptDigest := computerevent.DigestBytes(receiptJSON)
 	pending := nullableString(next.PendingTransitionRef)
 	if current == nil {
 		_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, reducer_version, credential_revocation_epoch, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, next.ComputerID, next.Sequence, next.CanonicalEventHead, next.DesiredEventHead, next.EffectiveEventHead, next.DesiredStateCommitment, next.EffectiveStateCommitment, pending, next.ReducerVersion, next.CredentialRevocationEpoch, now, now)
@@ -277,11 +268,9 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: update head: %w", err)
 	}
-	pinsJSON, err := json.Marshal(request.PayloadPinReceiptDigests)
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, previous_head, event_kind, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_id, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment, request.Event.Sequence, request.Event.PreviousHead, request.Event.EventKind, request.EventDigest, request.EventArtifactDigest, request.EventPinReceiptDigest, string(pinsJSON), receipt.ReceiptID, string(receiptJSON), receiptDigest, next.DesiredEventHead, next.EffectiveEventHead, next.DesiredStateCommitment, next.EffectiveStateCommitment, pending, now)
+	// The receipt JSON is stored once: previous head, the next heads and
+	// commitments and the pin digests are all fields of the signed receipt.
+	_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest, event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment, request.Event.Sequence, request.Event.EventKind, request.EventDigest, request.EventPinReceiptDigest, receipt.ReceiptID, string(receiptJSON), now)
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: insert receipt: %w", err)
 	}
@@ -301,7 +290,6 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if err := tx.Commit(); err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: commit: %w", err)
 	}
-	c.store.markDirty("append computer event " + request.EventDigest)
 	return receipt, nil
 }
 

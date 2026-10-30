@@ -5,16 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/yusefmosiah/go-choir/internal/dbcred"
-	"github.com/yusefmosiah/go-choir/internal/doltbatch"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 )
 
 type Store struct {
@@ -22,13 +18,11 @@ type Store struct {
 	// blockedLogged is when reconcile last logged each blocked projection job.
 	blockedLogMu  sync.Mutex
 	blockedLogged map[string]time.Time
-	committer     *doltbatch.Committer
 	// corpusDB serves Store B (world-wire/corpus) tables: og_*, platform
 	// texture mirrors, and the publication/provenance/artifact domain. It is
 	// the same pool as db until the authority split deploys a separate
 	// corpus DSN; corpus() returns whichever is configured.
-	corpusDB        *sql.DB
-	corpusCommitter *doltbatch.Committer
+	corpusDB *sql.DB
 	// artifactsRoot is the filesystem CAS root for externalized og_objects
 	// bodies (Move 3). Empty disables externalization — bodies stay inline.
 	artifactsRoot string
@@ -64,10 +58,10 @@ CREATE TABLE IF NOT EXISTS computer_key_escrows (
 	computer_id VARCHAR(255) NOT NULL,
 	protector VARCHAR(64) NOT NULL,
 	wrap_version INT NOT NULL,
-	wrapped_key_json LONGTEXT NOT NULL,
+	wrapped_key_json TEXT NOT NULL,
 	key_digest VARCHAR(128) NOT NULL,
-	escrowed_at DATETIME NOT NULL,
-	updated_at DATETIME NOT NULL,
+	escrowed_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL,
 	PRIMARY KEY(computer_id, protector)
 );
 
@@ -78,91 +72,76 @@ CREATE TABLE IF NOT EXISTS computer_key_unwrap_requests (
 	reason TEXT NOT NULL,
 	status VARCHAR(32) NOT NULL,
 	idempotency_key VARCHAR(128) NOT NULL UNIQUE,
-	created_at DATETIME NOT NULL,
-	revealed_at DATETIME NULL
+	created_at TIMESTAMPTZ NOT NULL,
+	revealed_at TIMESTAMPTZ NULL
 );
 
 CREATE TABLE IF NOT EXISTS computer_key_unwrap_approvals (
 	request_id VARCHAR(255) NOT NULL,
 	approver VARCHAR(255) NOT NULL,
-	approved_at DATETIME NOT NULL,
+	approved_at TIMESTAMPTZ NOT NULL,
 	PRIMARY KEY(request_id, approver)
 );
 
 CREATE TABLE IF NOT EXISTS computer_key_escrow_transparency (
-	seq BIGINT AUTO_INCREMENT PRIMARY KEY,
+	seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 	prev_hash VARCHAR(128) NOT NULL,
 	entry_hash VARCHAR(128) NOT NULL,
-	payload_json LONGTEXT NOT NULL,
-	created_at DATETIME NOT NULL
+	payload_json TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL
 );
 
 `
 
-// OpenStore opens the platform store. dsn is the canonical event/control
-// database (Store A); corpusDSN is the world-wire/corpus database (Store B).
-// An empty corpusDSN shares the Store A pool — the pre-split topology.
+// OpenStore opens the platform store on PostgreSQL. controlDSN is the
+// `control` database (Store A: events, checkpoints, routes, escrows);
+// graphDSN is the `graph` database (Store B: object graph, publication,
+// provenance). Both are libpq DSNs; the password comes from dbcred and is
+// never logged.
 //
 // ctx bounds the whole open: every ping and every schema statement. A caller
-// that waits on a Dolt that accepts connections but never answers (the
-// 2026-10-15 deadlock) gets an error when ctx expires instead of hanging.
-// ctx only bounds the open; the returned Store does not keep it.
-func OpenStore(ctx context.Context, dsn, corpusDSN string) (*Store, error) {
-	return openStore(ctx, dsn, corpusDSN, true)
+// that waits on a server that accepts connections but never answers gets an
+// error when ctx expires instead of hanging. ctx only bounds the open; the
+// returned Store does not keep it.
+func OpenStore(ctx context.Context, controlDSN, graphDSN string) (*Store, error) {
+	return openStore(ctx, controlDSN, graphDSN, true)
 }
 
 // OpenStoreWithoutBootstrap is OpenStore for a reader/maintainer that does not
 // own the schema: it connects and pings both pools but applies no DDL. The
-// owning service (corpusd) bootstraps; a maintainer that also ran the DDL on
-// every timer tick generated ~1,440 DDL batches a day against Store A and hung
-// on a deadlocked server
-// (docs/problems/dolt-clustering-assessment-2026-10-15.md section 7).
-func OpenStoreWithoutBootstrap(ctx context.Context, dsn, corpusDSN string) (*Store, error) {
-	return openStore(ctx, dsn, corpusDSN, false)
+// owning service (corpusd) bootstraps.
+func OpenStoreWithoutBootstrap(ctx context.Context, controlDSN, graphDSN string) (*Store, error) {
+	return openStore(ctx, controlDSN, graphDSN, false)
 }
 
-func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Store, error) {
-	sharedPool := strings.TrimSpace(corpusDSN) == "" || strings.TrimSpace(corpusDSN) == strings.TrimSpace(dsn)
-	// The host's Dolt user and password (dbcred; never logged). Unset, the
-	// DSNs are used as configured.
-	dsn, err := dbcred.ApplyDSN(dsn)
+func openStore(ctx context.Context, controlDSN, graphDSN string, bootstrap bool) (*Store, error) {
+	controlDSN, err := dbcred.ApplyPGDSN(controlDSN)
 	if err != nil {
 		return nil, fmt.Errorf("platform store: %w", err)
 	}
-	if !sharedPool {
-		if corpusDSN, err = dbcred.ApplyDSN(corpusDSN); err != nil {
-			return nil, fmt.Errorf("platform store: corpus: %w", err)
-		}
-	}
-	db, err := sql.Open("mysql", dsn)
+	graphDSN, err = dbcred.ApplyPGDSN(graphDSN)
 	if err != nil {
-		return nil, fmt.Errorf("platform store: open mysql: %w", err)
+		return nil, fmt.Errorf("platform store: graph: %w", err)
 	}
-	configureDB(db)
+	db, err := openPG(ctx, controlDSN)
+	if err != nil {
+		return nil, fmt.Errorf("platform store: open control: %w", err)
+	}
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("platform store: ping mysql: %w", err)
+		return nil, fmt.Errorf("platform store: ping control: %w", err)
 	}
-	var corpusDB *sql.DB
-	if !sharedPool {
-		corpusDB, err = sql.Open("mysql", corpusDSN)
-		if err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("platform store: open corpus mysql: %w", err)
-		}
-		configureDB(corpusDB)
-		if err := corpusDB.PingContext(ctx); err != nil {
-			_ = corpusDB.Close()
-			_ = db.Close()
-			return nil, fmt.Errorf("platform store: ping corpus mysql: %w", err)
-		}
+	graphDB, err := openPG(ctx, graphDSN)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("platform store: open graph: %w", err)
 	}
-	s := NewStore(db)
-	if corpusDB != nil {
-		s.corpusDB = corpusDB
-		s.corpusCommitter = doltbatch.New(corpusDB, "platform-corpus", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
+	if err := graphDB.PingContext(ctx); err != nil {
+		_ = graphDB.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("platform store: ping graph: %w", err)
 	}
-	s.applyStoreASnapshotEnv(os.Getenv)
+	s := NewStore(db, graphDB)
 	if bootstrap {
 		if err := s.Bootstrap(ctx); err != nil {
 			_ = s.Close()
@@ -172,70 +151,51 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 	return s, nil
 }
 
-// StoreASnapshotModeEnv switches Store A's DOLT_COMMIT snapshots: "commit"
-// (the default) or "off". Nothing reads Store A's commit history, and every
-// snapshot keeps the rows it changed in oldgen for good (docs/problems/
-// platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md). Store B's
-// committer is not affected.
-const StoreASnapshotModeEnv = "PLATFORM_DOLT_SNAPSHOTS"
-
-// applyStoreASnapshotEnv reads StoreASnapshotModeEnv through getenv and
-// applies it to the Store A committer. An unknown value keeps snapshots on and
-// is logged. It returns the mode applied.
-func (s *Store) applyStoreASnapshotEnv(getenv func(string) string) doltbatch.Mode {
-	mode, err := doltbatch.ParseMode(getenv(StoreASnapshotModeEnv))
-	if err != nil {
-		log.Printf("platform store: %s: %v", StoreASnapshotModeEnv, err)
+// openPG opens a PostgreSQL pool bounded by ctx: dbx.OpenPostgres pings
+// without a context, and a server that accepts connections but never answers
+// (the 2026-10-15 deadlock shape) must not hang the caller past ctx.
+func openPG(ctx context.Context, dsn string) (*sql.DB, error) {
+	type result struct {
+		db  *sql.DB
+		err error
 	}
-	s.useStoreASnapshotMode(mode)
-	if mode == doltbatch.ModeOff {
-		log.Printf("platform store: Store A snapshot commits off (%s=off); SQL COMMIT is the durability", StoreASnapshotModeEnv)
+	ch := make(chan result, 1)
+	go func() {
+		db, err := dbx.OpenPostgres(dsn, dbx.PGOptions{MaxOpenConns: 16, MaxIdleConns: 4})
+		ch <- result{db, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.db, r.err
+	case <-ctx.Done():
+		go func() {
+			if r := <-ch; r.db != nil {
+				_ = r.db.Close()
+			}
+		}()
+		return nil, ctx.Err()
 	}
-	return mode
 }
 
-// useStoreASnapshotMode replaces the Store A committer with one in mode.
-// With a shared pool (no corpus DSN) both stores are the one database, so the
-// corpus committer follows; a separate Store B committer is left as it is.
-func (s *Store) useStoreASnapshotMode(mode doltbatch.Mode) {
-	if s == nil || s.committer == nil || s.committer.Mode() == mode {
-		return
+// NewStore wraps an open control pool and graph pool. A nil graph pool
+// serves the graph tables from the control pool (unit tests that exercise
+// only control behavior).
+func NewStore(db, graph *sql.DB) *Store {
+	if graph == nil {
+		graph = db
 	}
-	old := s.committer
-	s.committer = doltbatch.NewWithMode(s.db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"), mode)
-	if s.corpusCommitter == old {
-		s.corpusCommitter = s.committer
-	}
-	_ = old.Close(context.Background())
-}
-
-func NewStore(db *sql.DB) *Store {
-	configureDB(db)
-	committer := doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
-	return &Store{db: db, committer: committer, corpusDB: db, corpusCommitter: committer,
+	return &Store{db: db, corpusDB: graph,
 		retrieval:      &RetrievalMetrics{since: time.Now().UTC()},
 		retrievalState: retrievalSchemaState{reconcileKick: make(chan struct{}, 1)}}
-}
-
-func configureDB(db *sql.DB) {
-	if db == nil {
-		return
-	}
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(30 * time.Minute)
 }
 
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	// Flush pending snapshot state before closing the pools.
 	if s.corpusDB != nil && s.corpusDB != s.db {
-		_ = s.corpusCommitter.Close(context.Background())
 		_ = s.corpusDB.Close()
 	}
-	_ = s.committer.Close(context.Background())
 	return s.db.Close()
 }
 
@@ -252,8 +212,7 @@ func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
 
-// corpus returns the pool serving Store B tables. It equals s.db until a
-// separate corpus DSN is configured.
+// corpus returns the pool serving the graph database (Store B tables).
 func (s *Store) corpus() *sql.DB {
 	if s.corpusDB != nil {
 		return s.corpusDB
@@ -261,13 +220,10 @@ func (s *Store) corpus() *sql.DB {
 	return s.db
 }
 
-// markCorpusDirty records a Store B mutation for its snapshot committer.
-func (s *Store) markCorpusDirty(message string) {
-	if s == nil || s.corpusCommitter == nil {
-		return
-	}
-	s.corpusCommitter.Mark(message)
-}
+// markCorpusDirty is a no-op kept until WP-E deletes its call sites in the
+// graph files (objectgraph_store.go, retrieval_schema.go, capture_index.go);
+// PostgreSQL COMMIT is the durability, there is no snapshot committer.
+func (s *Store) markCorpusDirty(string) {}
 
 func (s *Store) Bootstrap(ctx context.Context) error {
 	if s == nil || s.db == nil {
@@ -291,92 +247,13 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, projectionJobSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap projection jobs: %w", err)
 	}
-	if err := s.ensureColumn(ctx, "computer_projection_jobs", "build_commit", "ALTER TABLE computer_projection_jobs ADD COLUMN build_commit VARCHAR(128) NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("platform store: projection job build column: %w", err)
-	}
 	if err := s.ensureTapeTombstoneSchema(ctx); err != nil {
 		return err
 	}
 	if _, err := s.corpus().ExecContext(ctx, corpusSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap corpus schema: %w", err)
 	}
-	if err := s.ensurePlatformTextureRevisionColumn(ctx, "body_doc", "ALTER TABLE platform_texture_revisions ADD COLUMN body_doc LONGTEXT NOT NULL DEFAULT '' AFTER content"); err != nil {
-		return fmt.Errorf("platform store: bootstrap body_doc migration: %w", err)
-	}
-	if err := s.ensurePlatformTextureRevisionColumn(ctx, "source_entities", "ALTER TABLE platform_texture_revisions ADD COLUMN source_entities LONGTEXT NOT NULL DEFAULT '' AFTER body_doc"); err != nil {
-		return fmt.Errorf("platform store: bootstrap source_entities migration: %w", err)
-	}
-	if err := s.ensureCorpusColumn(ctx, "og_objects", "body_ref", "ALTER TABLE og_objects ADD COLUMN body_ref VARCHAR(512) NOT NULL DEFAULT '' AFTER body"); err != nil {
-		return fmt.Errorf("platform store: bootstrap og body_ref migration: %w", err)
-	}
-	if err := s.ensureCorpusColumn(ctx, "og_objects", "body_size", "ALTER TABLE og_objects ADD COLUMN body_size BIGINT NOT NULL DEFAULT 0 AFTER body_ref"); err != nil {
-		return fmt.Errorf("platform store: bootstrap og body_size migration: %w", err)
-	}
-	if err := s.ensureColumn(ctx, "computer_self_development_modes", "expected_pending_transition_ref", "ALTER TABLE computer_self_development_modes ADD COLUMN expected_pending_transition_ref VARCHAR(255) NULL AFTER expected_effective_event_head"); err != nil {
-		return fmt.Errorf("platform store: bootstrap self-development pending transition migration: %w", err)
-	}
 	return nil
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, name, ddl string) error {
-	for _, value := range []string{table, name} {
-		if value == "" || strings.IndexFunc(value, func(r rune) bool {
-			return r != '_' && (r < 'a' || r > 'z')
-		}) >= 0 {
-			return fmt.Errorf("unsupported schema identifier %q", value)
-		}
-	}
-	rows, err := s.db.QueryContext(ctx, "SHOW COLUMNS FROM "+table+" LIKE '"+name+"'")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	if rows.Next() {
-		return rows.Err()
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, ddl)
-	return err
-}
-
-func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, ddl string) error {
-	if name != "body_doc" && name != "source_entities" {
-		return fmt.Errorf("unsupported platform texture revision column %q", name)
-	}
-	rows, err := s.corpus().QueryContext(ctx, "SHOW COLUMNS FROM platform_texture_revisions LIKE '"+name+"'")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	if rows.Next() {
-		return rows.Err()
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	_, err = s.corpus().ExecContext(ctx, ddl)
-	return err
-}
-
-// ensureCorpusColumn applies an idempotent column migration on the corpus
-// (Store B) pool. Same identifier rules as ensureColumn.
-func (s *Store) markDirty(message string) {
-	if s == nil || s.committer == nil {
-		return
-	}
-	s.committer.Mark(message)
-}
-
-// commitBoundary synchronously snapshots the working set at a recovery
-// boundary (checkpoint publish, replay watermark record). Errors propagate
-// to the caller as before.
-func (s *Store) commitBoundary(ctx context.Context, message string) error {
-	if s == nil || s.committer == nil {
-		return fmt.Errorf("platform store: nil database")
-	}
-	return s.committer.CommitNow(ctx, message)
 }
 
 func (s *Store) UpsertTextureDocument(ctx context.Context, docID, ownerID, title string) error {

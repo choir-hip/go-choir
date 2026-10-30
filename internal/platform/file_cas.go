@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS computer_file_roots (
 	root VARCHAR(128) NOT NULL,
 	manifest_ref VARCHAR(255) NOT NULL,
 	head_sequence BIGINT NOT NULL,
-	created_at DATETIME NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL,
 	PRIMARY KEY(computer_id, root)
 );
 CREATE INDEX IF NOT EXISTS idx_computer_file_roots_computer_created ON computer_file_roots(computer_id, created_at);
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS computer_replay_watermarks (
 	computer_id VARCHAR(255) PRIMARY KEY,
 	watermark_sequence BIGINT NOT NULL,
 	base_ref VARCHAR(255) NOT NULL,
-	updated_at DATETIME NOT NULL
+	updated_at TIMESTAMPTZ NOT NULL
 );
 `
 
@@ -44,7 +44,7 @@ func (s *Store) RecordFileRoot(ctx context.Context, computerID, root, manifestRe
 	if _, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO computer_file_roots (computer_id,root,manifest_ref,head_sequence,created_at) VALUES (?,?,?,?,?)`, computerID, root, manifestRef, headSequence, time.Now().UTC()); err != nil {
 		return fmt.Errorf("file cas: record root: %w", err)
 	}
-	return s.commitBoundary(ctx, "record file root "+computerID+"/"+root)
+	return nil
 }
 
 func (s *Store) LatestFileRoots(ctx context.Context, computerID string, limit int) ([]FileRootRecord, error) {
@@ -135,7 +135,7 @@ func (s *Store) RecordReplayWatermarkWithRoot(ctx context.Context, computerID st
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	return s.commitBoundary(ctx, "record replay watermark "+computerID)
+	return nil
 }
 
 func (s *Store) ReplayWatermark(ctx context.Context, computerID string) (seq int64, baseRef string, err error) {

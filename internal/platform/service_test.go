@@ -15,40 +15,30 @@ import (
 	"testing"
 	"time"
 
-	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
+func TestMain(m *testing.M) {
+	os.Exit(dbxtest.Main(m))
+}
+
+// openTestPlatformStore opens a Store on two fresh PostgreSQL databases
+// (control and graph). The returned string is a scratch directory.
 func openTestPlatformStore(t *testing.T) (*Store, string) {
 	t.Helper()
 	root := t.TempDir()
-	rootDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&multistatements=true", root)
-	rootCfg, err := embedded.ParseDSN(rootDSN)
+	control, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
-		t.Fatalf("parse root dsn: %v", err)
+		t.Fatalf("open control: %v", err)
 	}
-	rootConnector, err := embedded.NewConnector(rootCfg)
+	graph, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
 	if err != nil {
-		t.Fatalf("new root connector: %v", err)
+		_ = control.Close()
+		t.Fatalf("open graph: %v", err)
 	}
-	rootDB := sql.OpenDB(rootConnector)
-	if _, err := rootDB.Exec("CREATE DATABASE IF NOT EXISTS platform"); err != nil {
-		t.Fatalf("create database: %v", err)
-	}
-	_ = rootDB.Close()
-	_ = rootConnector.Close()
-
-	dbDSN := fmt.Sprintf("file://%s?commitname=Choir&commitemail=system@choir.local&database=platform&multistatements=true&clientfoundrows=true", root)
-	dbCfg, err := embedded.ParseDSN(dbDSN)
-	if err != nil {
-		t.Fatalf("parse db dsn: %v", err)
-	}
-	dbConnector, err := embedded.NewConnector(dbCfg)
-	if err != nil {
-		t.Fatalf("new db connector: %v", err)
-	}
-	db := sql.OpenDB(dbConnector)
-	s := NewStore(db)
+	s := NewStore(control, graph)
 	if err := s.Bootstrap(context.Background()); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -57,10 +47,7 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 	if err := s.MigrateRetrieval(context.Background()); err != nil {
 		t.Fatalf("migrate retrieval: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = s.Close()
-		_ = dbConnector.Close()
-	})
+	t.Cleanup(func() { _ = s.Close() })
 	return s, root
 }
 

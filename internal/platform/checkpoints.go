@@ -212,9 +212,6 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err := tx.Commit(); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
-	if err := a.cas.store.commitBoundary(ctx, "publish computer checkpoint "+checkpoint.Digest); err != nil {
-		return selfdevprotocol.CheckpointResponse{}, err
-	}
 	return response, nil
 }
 
@@ -373,9 +370,6 @@ func (a *CheckpointAuthority) PublishRouteProjection(ctx context.Context, reques
 	expiresAt, _ := time.Parse(time.RFC3339Nano, request.ExpiresAt)
 	_, err = a.cas.store.db.ExecContext(ctx, `INSERT INTO computer_route_projection_certificates (computer_id,idempotency_key,request_commitment,certificate_digest,certificate_json,receipt_json,receipt_digest,expires_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)`, request.ComputerID, request.IdempotencyKey, requestCommitment, certificateDigest, certificateJSON, receiptJSON, receiptDigest, expiresAt, receipt.IssuedAt)
 	if err != nil {
-		return selfdevprotocol.RouteProjectionResponse{}, err
-	}
-	if err := a.cas.store.commitBoundary(ctx, "publish route projection certificate "+certificateDigest); err != nil {
 		return selfdevprotocol.RouteProjectionResponse{}, err
 	}
 	return selfdevprotocol.RouteProjectionResponse{Certificate: certificate, Receipt: receipt}, nil

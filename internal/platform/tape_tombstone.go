@@ -27,7 +27,7 @@ const tapeTombstoneSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_tape_tombstones (
   computer_id VARCHAR(128) NOT NULL PRIMARY KEY,
   status VARCHAR(32) NOT NULL,
-  head_sequence BIGINT UNSIGNED NOT NULL,
+  head_sequence BIGINT NOT NULL,
   canonical_event_head CHAR(64) NOT NULL,
   manifest_run VARCHAR(64) NOT NULL,
   manifest_sha256 CHAR(64) NOT NULL,
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS computer_tape_tombstones (
   files_deleted BIGINT NOT NULL DEFAULT 0,
   bytes_deleted BIGINT NOT NULL DEFAULT 0,
   proof_json TEXT NOT NULL,
-  created_at DATETIME(6) NOT NULL,
-  updated_at DATETIME(6) NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
 );`
 
 // TapeTombstone is one computer's tape-deletion record. The computer's head
@@ -147,24 +147,13 @@ func (s *Store) refuseTombstonedTape(ctx context.Context, computerID string) err
 	return fmt.Errorf("%w: computer %s (status %s, archive %s)", ErrComputerTapeDeleted, t.ComputerID, t.Status, archive)
 }
 
-// putTapeTombstone upserts a tombstone and commits a Dolt boundary, so the
-// refusal is durable before any file of the computer is touched.
+// putTapeTombstone upserts a tombstone; the SQL commit makes the refusal
+// durable before any file of the computer is touched.
 func (s *Store) putTapeTombstone(ctx context.Context, t TapeTombstone) error {
-	if err := s.writeTapeTombstone(ctx, t); err != nil {
-		return err
-	}
-	return s.commitTapeTombstone(ctx, t.ComputerID+" "+t.Status)
+	return s.writeTapeTombstone(ctx, t)
 }
 
-func (s *Store) commitTapeTombstone(ctx context.Context, what string) error {
-	if s.committer != nil {
-		return s.commitBoundary(ctx, "tape tombstone "+what)
-	}
-	return nil
-}
-
-// writeTapeTombstone upserts the row and the cache without a Dolt boundary;
-// the caller commits one (the sweep does so after releasing the CAS gate).
+// writeTapeTombstone upserts the row and the cache.
 func (s *Store) writeTapeTombstone(ctx context.Context, t TapeTombstone) error {
 	if err := s.loadTapeTombstones(ctx); err != nil {
 		return err
@@ -206,8 +195,5 @@ func (s *Store) removeTapeTombstone(ctx context.Context, computerID string) erro
 	s.tombstones.mu.Lock()
 	delete(s.tombstones.byID, computerID)
 	s.tombstones.mu.Unlock()
-	if s.committer != nil {
-		return s.commitBoundary(ctx, "remove tape tombstone "+computerID)
-	}
 	return nil
 }

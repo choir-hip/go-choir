@@ -119,9 +119,6 @@ func (h *Handler) HandleProjectionBasePins(w http.ResponseWriter, r *http.Reques
 		err = h.service.store.PinProjectionBase(r.Context(), input.ComputerID, input.BaseRef, input.Reference)
 	} else {
 		_, err = h.service.store.db.ExecContext(r.Context(), `DELETE FROM computer_projection_base_pins WHERE computer_id=? AND base_ref=? AND reference_id=?`, input.ComputerID, input.BaseRef, input.Reference)
-		if err == nil {
-			err = h.service.store.commitBoundary(r.Context(), "release projection base pin "+input.ComputerID)
-		}
 	}
 	if err != nil {
 		writeJSON(w, 503, apiError{Error: "checkpoint pin unavailable"})

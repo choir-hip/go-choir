@@ -82,7 +82,6 @@ func (s *Store) UpsertKeyEscrow(ctx context.Context, computerID, protector strin
 	if err != nil {
 		return fmt.Errorf("key escrow: insert: %w", err)
 	}
-	s.markDirty("upsert key escrow " + computerID + "/" + protector)
 	return nil
 }
 
@@ -125,7 +124,6 @@ func (s *Store) replacePreGenesisKeyEscrow(ctx context.Context, computerID, prot
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("key escrow: commit replacement: %w", err)
 	}
-	s.markDirty("replace pre-genesis key escrow " + computerID + "/" + protector)
 	return existing, nil
 }
 
@@ -188,7 +186,6 @@ func (s *Store) CreateKeyUnwrapRequest(ctx context.Context, computerID, requeste
 		}
 		return KeyUnwrapRequest{}, fmt.Errorf("key escrow: create unwrap request: %w", err)
 	}
-	s.markDirty("create key unwrap request " + request.RequestID)
 	return request, nil
 }
 
@@ -235,7 +232,6 @@ func (s *Store) ApproveKeyUnwrapRequest(ctx context.Context, requestID, approver
 	if err := tx.Commit(); err != nil {
 		return KeyUnwrapRequest{}, fmt.Errorf("key escrow: commit approval: %w", err)
 	}
-	s.markDirty("approve key unwrap request " + requestID)
 	return request, nil
 }
 
@@ -288,7 +284,6 @@ func (s *Store) MarkKeyUnwrapRevealed(ctx context.Context, requestID string) err
 		}
 		return ErrKeyUnwrapNotApproved
 	}
-	s.markDirty("reveal key unwrap request " + requestID)
 	return nil
 }
 
@@ -330,7 +325,6 @@ func (s *Store) AppendKeyEscrowTransparency(ctx context.Context, payloadJSON []b
 	if err := tx.Commit(); err != nil {
 		return 0, "", fmt.Errorf("key escrow: commit transparency: %w", err)
 	}
-	s.markDirty(fmt.Sprintf("append key escrow transparency %d", seq))
 	return seq, entryHash, nil
 }
 

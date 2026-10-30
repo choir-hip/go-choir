@@ -259,13 +259,13 @@ const immutableInputSchema = `
 CREATE TABLE IF NOT EXISTS computer_version_code_closures (
   code_ref VARCHAR(96) NOT NULL PRIMARY KEY,
   source_commit VARCHAR(128) NOT NULL,
-  closure_json LONGTEXT NOT NULL,
-  created_at DATETIME(6) NOT NULL
+  closure_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
 );
 CREATE TABLE IF NOT EXISTS computer_version_artifact_programs (
   artifact_program_ref VARCHAR(128) NOT NULL PRIMARY KEY,
-  program_json LONGTEXT NOT NULL,
-  created_at DATETIME(6) NOT NULL
+  program_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
 );`
 
 type ArtifactContentVerifier interface {
