@@ -40,6 +40,7 @@ var ogWriterStatement = regexp.MustCompile(`(?i)\b(INSERT(\s+IGNORE)?\s+INTO|REP
 var maintainedOGWriters = map[string][]string{
 	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"}, // <package>: upsertObjectSQL, used by PutObject and putBatchTx
 	"store/project.go":          {"projectObject"},
+	"store/object_retire.go":    {"projectObjectRetire"},
 	"store/vocab_migrate_og.go": {"applyOGMigration", "revertOGMigration"},
 }
 
