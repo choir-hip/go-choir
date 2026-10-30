@@ -114,6 +114,13 @@ type JSONFieldMatch struct {
 
 // NewDoltStore returns a DoltStore backed by the given *sql.DB. The
 // caller must call EnsureSchema before using the store.
+// SQLStore is the engine-neutral name the data system cutover uses (build
+// sheet, WP0); WP-B renames DoltStore to it and removes this alias.
+type SQLStore = DoltStore
+
+// NewSQLStore opens the object graph over db (SQLite in guests).
+func NewSQLStore(db *sql.DB) *SQLStore { return NewDoltStore(db) }
+
 func NewDoltStore(db *sql.DB) *DoltStore {
 	return &DoltStore{db: db, engineMu: newEngineMutex(), derived: newDerivedKeys()}
 }

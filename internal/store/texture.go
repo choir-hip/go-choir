@@ -174,7 +174,7 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap: %w", err))
 	}
 	// Initialize the object graph service on the texture workspace.
-	ogDoltStore := objectgraph.NewDoltStore(db)
+	ogDoltStore := objectgraph.NewSQLStore(db)
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
 		return nil, s.closeFailedOpen(fmt.Errorf("texture workspace: bootstrap object graph: %w", err))
 	}

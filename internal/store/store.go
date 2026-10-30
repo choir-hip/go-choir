@@ -964,7 +964,7 @@ func Open(dbPath string) (*Store, error) {
 	doneRuntimeSchema(nil)
 
 	// Initialize object-graph persistence on the same private Dolt workspace.
-	ogDoltStore := objectgraph.NewDoltStore(db)
+	ogDoltStore := objectgraph.NewSQLStore(db)
 	doneOGSchema := objectgraph.BootPhase("store: open", "objectgraph-schema")
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
 		doneOGSchema(err)
@@ -981,7 +981,7 @@ func Open(dbPath string) (*Store, error) {
 	// Both stores share one embedded engine, which is not safe for concurrent
 	// queries - serialize them on a single mutex.
 	if readDB != nil {
-		s.ogReadStore = objectgraph.NewDoltStore(readDB)
+		s.ogReadStore = objectgraph.NewSQLStore(readDB)
 		s.ogReadStore.ShareEngineMutex(ogDoltStore)
 		// Mirror the write store's live generated-column set so the read
 		// pool's metadata queries use the index path too. Without this the
