@@ -377,10 +377,7 @@ func TestSegmentReadsCheckpointVerifierEvidence(t *testing.T) {
 	if err := service.writeBlob(filepath.Join("sha256", "computer-event-payload", payloadDigest), rawPayload); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := platformStore.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		event.ComputerID, event.IdempotencyKey, platformTestDigest('c'), event.Sequence, event.PreviousHead, string(event.EventKind), eventDigest, "artifact://sha256/"+eventDigest, platformTestDigest('d'), "[]", "receipt-verifier", "{}", platformTestDigest('e'), eventDigest, event.PreviousHead, platformTestDigest('f'), platformTestDigest('f'), nil, now); err != nil {
-		t.Fatal(err)
-	}
+	insertTestAppendReceipt(t, platformStore.db, event.ComputerID, event.IdempotencyKey, platformTestDigest('c'), event.Sequence, string(event.EventKind), eventDigest, platformTestDigest('d'), nil, now)
 	request := selfdevprotocol.CheckpointRequest{ComputerID: id, VerifierCertificate: selfdevprotocol.VerifierCertificateResponse{Request: selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: id, OperationID: "operation-verify", BundleDigest: platformTestDigest('a'),
 		VerificationEventDigest: eventDigest, VerifierEvidenceRefs: []string{"evidence:independent"}, DecisionEventHead: platformTestDigest('1'),
@@ -457,10 +454,7 @@ func TestSegmentReadsCheckpointGenesisEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if _, err := platformStore.db.Exec(`INSERT INTO computer_event_append_receipts (computer_id,idempotency_key,request_commitment,sequence,previous_head,event_kind,event_digest,event_artifact_ref,event_pin_receipt_digest,pin_receipt_digests_json,event_head_receipt_id,event_head_receipt_json,event_head_receipt_digest,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		id, event.IdempotencyKey, platformTestDigest('c'), 1, event.PreviousHead, string(event.EventKind), eventDigest, eventDigest, platformTestDigest('d'), "[]", "receipt-genesis", "{}", platformTestDigest('e'), eventDigest, event.PreviousHead, platformTestDigest('f'), platformTestDigest('f'), nil, now); err != nil {
-		t.Fatal(err)
-	}
+	insertTestAppendReceipt(t, platformStore.db, id, event.IdempotencyKey, platformTestDigest('c'), 1, string(event.EventKind), eventDigest, platformTestDigest('d'), nil, now)
 	var response selfdevprotocol.VerifierCertificateResponse
 	response.Request = selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: id, VerificationEventDigest: eventDigest, DecisionEventHead: eventDigest,

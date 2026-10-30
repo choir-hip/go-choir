@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/dbcred"
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -202,13 +201,13 @@ func main() {
 		log.Printf("vmctl: recover_current corpusd head and guest replay authorities configured")
 	}
 	handler.RequireRouteAuthority()
-	if dsn := strings.TrimSpace(os.Getenv("VMCTL_ROUTE_DSN")); dsn != "" {
-		// The host's Dolt user and password (dbcred; never logged).
-		dsn, err := dbcred.ApplyDSN(dsn)
+	if dsn := strings.TrimSpace(os.Getenv("CHOIR_PG_CONTROL_DSN")); dsn != "" {
+		// The host's PostgreSQL password (dbcred; never logged).
+		dsn, err := dbcred.ApplyPGDSN(dsn)
 		if err != nil {
 			log.Fatalf("vmctl: ComputerVersion route database credential: %v", err)
 		}
-		routeDB, err := sql.Open("mysql", dsn)
+		routeDB, err := dbx.OpenPostgres(dsn, dbx.PGOptions{MaxOpenConns: 8, MaxIdleConns: 2})
 		if err != nil {
 			log.Fatalf("vmctl: open ComputerVersion route database: %v", err)
 		}
@@ -250,9 +249,9 @@ func main() {
 			log.Fatalf("vmctl: initialize ComputerVersion route authority: %v", err)
 		}
 		handler.SetRouteAuthority(authority)
-		log.Printf("vmctl: ComputerVersion route authority configured on the corpusd world-wire SQL server")
+		log.Printf("vmctl: ComputerVersion route authority configured on the control PostgreSQL database")
 	} else {
-		log.Printf("vmctl: ComputerVersion route authority unavailable (VMCTL_ROUTE_DSN is not configured)")
+		log.Printf("vmctl: ComputerVersion route authority unavailable (CHOIR_PG_CONTROL_DSN is not configured)")
 	}
 	// S3: drop memory snapshots of computers that are not hibernated (a
 	// stopped computer cold boots) and interrupted captures, before any

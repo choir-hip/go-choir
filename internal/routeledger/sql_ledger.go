@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS computer_version_route_authorization_evidence (
   route_slot_id VARCHAR(512) NOT NULL,
   code_ref VARCHAR(96) NOT NULL,
   artifact_program_ref VARCHAR(128) NOT NULL,
-  evidence_json LONGTEXT NOT NULL,
-  created_at DATETIME(6) NOT NULL,
+  evidence_json TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   CONSTRAINT route_evidence_code_ref_fk FOREIGN KEY (code_ref) REFERENCES computer_version_code_closures(code_ref),
   CONSTRAINT route_evidence_artifact_program_ref_fk FOREIGN KEY (artifact_program_ref) REFERENCES computer_version_artifact_programs(artifact_program_ref)
 );
@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS computer_version_route_slots (
   route_slot_id VARCHAR(512) NOT NULL PRIMARY KEY,
   current_code_ref VARCHAR(96) NOT NULL,
   current_artifact_program_ref VARCHAR(128) NOT NULL,
-  generation BIGINT UNSIGNED NOT NULL,
+  generation BIGINT NOT NULL,
   latest_receipt_id VARCHAR(64) NOT NULL,
-  updated_at DATETIME(6) NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
   CONSTRAINT route_slot_code_ref_fk FOREIGN KEY (current_code_ref) REFERENCES computer_version_code_closures(code_ref),
   CONSTRAINT route_slot_artifact_program_ref_fk FOREIGN KEY (current_artifact_program_ref) REFERENCES computer_version_artifact_programs(artifact_program_ref)
 );
@@ -42,25 +42,25 @@ CREATE TABLE IF NOT EXISTS computer_version_route_transition_receipts (
   old_artifact_program_ref TEXT NOT NULL,
   new_code_ref VARCHAR(96) NOT NULL,
   new_artifact_program_ref VARCHAR(128) NOT NULL,
-  expected_generation BIGINT UNSIGNED NOT NULL,
-  committed_generation BIGINT UNSIGNED NOT NULL,
+  expected_generation BIGINT NOT NULL,
+  committed_generation BIGINT NOT NULL,
   approval_ref VARCHAR(96) NOT NULL,
   promotion_certificate_ref VARCHAR(96) NOT NULL,
   rollback_target_receipt_id TEXT NOT NULL,
   idempotency_key VARCHAR(512) NOT NULL,
-  committed_at DATETIME(6) NOT NULL,
-  UNIQUE KEY route_receipt_idempotency (idempotency_key),
-  KEY route_receipt_slot_generation (route_slot_id, committed_generation),
+  committed_at TIMESTAMPTZ NOT NULL,
+  CONSTRAINT route_receipt_idempotency UNIQUE (idempotency_key),
   CONSTRAINT route_receipt_code_ref_fk FOREIGN KEY (new_code_ref) REFERENCES computer_version_code_closures(code_ref),
   CONSTRAINT route_receipt_artifact_program_ref_fk FOREIGN KEY (new_artifact_program_ref) REFERENCES computer_version_artifact_programs(artifact_program_ref),
   CONSTRAINT route_receipt_approval_ref_fk FOREIGN KEY (approval_ref) REFERENCES computer_version_route_authorization_evidence(evidence_ref),
   CONSTRAINT route_receipt_certificate_ref_fk FOREIGN KEY (promotion_certificate_ref) REFERENCES computer_version_route_authorization_evidence(evidence_ref)
 );
+CREATE INDEX IF NOT EXISTS route_receipt_slot_generation ON computer_version_route_transition_receipts (route_slot_id, committed_generation);
 CREATE TABLE IF NOT EXISTS computer_version_route_authority_modes (
   route_slot_id VARCHAR(512) NOT NULL PRIMARY KEY,
   authority_mode VARCHAR(32) NOT NULL,
   certificate_ref VARCHAR(96) NOT NULL,
-  protected_at DATETIME(6) NOT NULL
+  protected_at TIMESTAMPTZ NOT NULL
 );`
 
 type SQLLedger struct {
@@ -228,7 +228,7 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: bootstrap slot: %w", err)
 	}
 	if protectSelfDevelopment {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_version_route_authority_modes (route_slot_id,authority_mode,certificate_ref,protected_at) VALUES (?,'self_development_certificate',?,?) ON DUPLICATE KEY UPDATE authority_mode=VALUES(authority_mode),certificate_ref=VALUES(certificate_ref),protected_at=VALUES(protected_at)`, command.RouteSlotID, command.PromotionCertificateRef, receipt.CommittedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_version_route_authority_modes (route_slot_id,authority_mode,certificate_ref,protected_at) VALUES (?,'self_development_certificate',?,?) ON CONFLICT (route_slot_id) DO UPDATE SET authority_mode=excluded.authority_mode,certificate_ref=excluded.certificate_ref,protected_at=excluded.protected_at`, command.RouteSlotID, command.PromotionCertificateRef, receipt.CommittedAt); err != nil {
 			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: protect self-development route: %w", err)
 		}
 	}
@@ -345,7 +345,7 @@ func pinAuthorizationEvidenceSQL(ctx context.Context, executor evidenceSQLExecut
 	}
 	if _, err := executor.ExecContext(ctx, `INSERT INTO computer_version_route_authorization_evidence
 		(evidence_ref, evidence_kind, route_slot_id, code_ref, artifact_program_ref, evidence_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE evidence_ref = evidence_ref`,
+		VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (evidence_ref) DO NOTHING`,
 		evidence.Ref, evidence.Kind, evidence.RouteSlotID, evidence.ComputerVersion.CodeRef,
 		evidence.ComputerVersion.ArtifactProgramRef, encoded, evidence.CreatedAt); err != nil {
 		return AuthorizationEvidence{}, fmt.Errorf("route ledger: pin authorization evidence: %w", err)

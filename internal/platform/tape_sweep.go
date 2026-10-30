@@ -726,7 +726,7 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 			args = append(args, seq)
 		}
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(args)-1), ",")
-		rows, err := s.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_pin_receipt_digest, pin_receipt_digests_json FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
+		rows, err := s.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_pin_receipt_digest, event_head_receipt_json FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
 		if err != nil {
 			return fmt.Errorf("tape sweep: chain %s: %w", computerID, err)
 		}
@@ -734,8 +734,8 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 		var batch []tapeChainRow
 		for rows.Next() {
 			var row tapeChainRow
-			var pins string
-			if err := rows.Scan(&row.Sequence, &row.EventDigest, &row.EventPin, &pins); err != nil {
+			var rawReceipt string
+			if err := rows.Scan(&row.Sequence, &row.EventDigest, &row.EventPin, &rawReceipt); err != nil {
 				rows.Close()
 				return fmt.Errorf("tape sweep: chain %s: %w", computerID, err)
 			}
@@ -744,7 +744,14 @@ func (s *Service) walkTapeChain(ctx context.Context, computerID string, from, to
 				return fmt.Errorf("tape sweep: chain %s: gap at sequence %d", computerID, expected)
 			}
 			expected++
-			row.PayloadPins = hex64RE.FindAllString(pins, -1)
+			var receipt computerevent.Receipt
+			if err := json.Unmarshal([]byte(rawReceipt), &receipt); err != nil {
+				rows.Close()
+				return fmt.Errorf("tape sweep: chain %s sequence %d: decode receipt: %w", computerID, row.Sequence, err)
+			}
+			if pins, ok := receiptPinDigests(receipt.KindFields); ok && len(pins) > 1 {
+				row.PayloadPins = hex64RE.FindAllString(strings.Join(pins[1:], " "), -1)
+			}
 			batch = append(batch, row)
 		}
 		if err := rows.Err(); err != nil {

@@ -27,7 +27,7 @@ const tapeTombstoneSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_tape_tombstones (
   computer_id VARCHAR(128) NOT NULL PRIMARY KEY,
   status VARCHAR(32) NOT NULL,
-  head_sequence BIGINT UNSIGNED NOT NULL,
+  head_sequence BIGINT NOT NULL,
   canonical_event_head CHAR(64) NOT NULL,
   manifest_run VARCHAR(64) NOT NULL,
   manifest_sha256 CHAR(64) NOT NULL,
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS computer_tape_tombstones (
   files_deleted BIGINT NOT NULL DEFAULT 0,
   bytes_deleted BIGINT NOT NULL DEFAULT 0,
   proof_json TEXT NOT NULL,
-  created_at DATETIME(6) NOT NULL,
-  updated_at DATETIME(6) NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
 );`
 
 // TapeTombstone is one computer's tape-deletion record. The computer's head
@@ -147,24 +147,13 @@ func (s *Store) refuseTombstonedTape(ctx context.Context, computerID string) err
 	return fmt.Errorf("%w: computer %s (status %s, archive %s)", ErrComputerTapeDeleted, t.ComputerID, t.Status, archive)
 }
 
-// putTapeTombstone upserts a tombstone and commits a Dolt boundary, so the
-// refusal is durable before any file of the computer is touched.
+// putTapeTombstone upserts a tombstone; the SQL commit makes the refusal
+// durable before any file of the computer is touched.
 func (s *Store) putTapeTombstone(ctx context.Context, t TapeTombstone) error {
-	if err := s.writeTapeTombstone(ctx, t); err != nil {
-		return err
-	}
-	return s.commitTapeTombstone(ctx, t.ComputerID+" "+t.Status)
+	return s.writeTapeTombstone(ctx, t)
 }
 
-func (s *Store) commitTapeTombstone(ctx context.Context, what string) error {
-	if s.committer != nil {
-		return s.commitBoundary(ctx, "tape tombstone "+what)
-	}
-	return nil
-}
-
-// writeTapeTombstone upserts the row and the cache without a Dolt boundary;
-// the caller commits one (the sweep does so after releasing the CAS gate).
+// writeTapeTombstone upserts the row and the cache.
 func (s *Store) writeTapeTombstone(ctx context.Context, t TapeTombstone) error {
 	if err := s.loadTapeTombstones(ctx); err != nil {
 		return err
@@ -174,8 +163,7 @@ func (s *Store) writeTapeTombstone(ctx context.Context, t TapeTombstone) error {
 		t.CreatedAt = now
 	}
 	t.UpdatedAt = now
-	_, err := s.db.ExecContext(ctx, `INSERT INTO computer_tape_tombstones (computer_id,status,head_sequence,canonical_event_head,manifest_run,manifest_sha256,archive_path,archive_sha256,archive_manifest_sha256,files_deleted,bytes_deleted,proof_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON DUPLICATE KEY UPDATE status=VALUES(status),head_sequence=VALUES(head_sequence),canonical_event_head=VALUES(canonical_event_head),manifest_run=VALUES(manifest_run),manifest_sha256=VALUES(manifest_sha256),archive_path=VALUES(archive_path),archive_sha256=VALUES(archive_sha256),archive_manifest_sha256=VALUES(archive_manifest_sha256),files_deleted=VALUES(files_deleted),bytes_deleted=VALUES(bytes_deleted),proof_json=VALUES(proof_json),updated_at=VALUES(updated_at)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO computer_tape_tombstones (computer_id,status,head_sequence,canonical_event_head,manifest_run,manifest_sha256,archive_path,archive_sha256,archive_manifest_sha256,files_deleted,bytes_deleted,proof_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET status=excluded.status,head_sequence=excluded.head_sequence,canonical_event_head=excluded.canonical_event_head,manifest_run=excluded.manifest_run,manifest_sha256=excluded.manifest_sha256,archive_path=excluded.archive_path,archive_sha256=excluded.archive_sha256,archive_manifest_sha256=excluded.archive_manifest_sha256,files_deleted=excluded.files_deleted,bytes_deleted=excluded.bytes_deleted,proof_json=excluded.proof_json,updated_at=excluded.updated_at`,
 		t.ComputerID, t.Status, t.HeadSequence, t.CanonicalEventHead, t.ManifestRun, t.ManifestSHA256, t.ArchivePath, t.ArchiveSHA256, t.ArchiveManifestSHA256, t.FilesDeleted, t.BytesDeleted, t.ProofJSON, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("tape tombstones: write %s: %w", t.ComputerID, err)
@@ -206,8 +194,5 @@ func (s *Store) removeTapeTombstone(ctx context.Context, computerID string) erro
 	s.tombstones.mu.Lock()
 	delete(s.tombstones.byID, computerID)
 	s.tombstones.mu.Unlock()
-	if s.committer != nil {
-		return s.commitBoundary(ctx, "remove tape tombstone "+computerID)
-	}
 	return nil
 }

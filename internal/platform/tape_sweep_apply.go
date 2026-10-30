@@ -455,9 +455,6 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 		s.tapeSweepSkipComputer(run, proof, items, "head changed at tombstone")
 		return nil
 	}
-	if err := s.store.commitTapeTombstone(ctx, id+" "+tomb.Status); err != nil {
-		return err
-	}
 	if !hasTomb {
 		run.counts.ComputersTombstoned++
 	}

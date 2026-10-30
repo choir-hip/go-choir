@@ -37,10 +37,10 @@ func main() {
 	var store *platform.Store
 	var storeErr error
 	for attempt := 1; attempt <= 20; attempt++ {
-		// Each attempt is bounded: a Dolt that accepts connections but never
+		// Each attempt is bounded: a database that accepts connections but never
 		// answers must not hold this process (and a deploy switch) forever.
 		openCtx, cancelOpen := context.WithTimeout(context.Background(), storeOpenTimeout)
-		store, storeErr = platform.OpenStore(openCtx, cfg.DoltDSN, cfg.CorpusDoltDSN)
+		store, storeErr = platform.OpenStore(openCtx, cfg.ControlDSN, cfg.GraphDSN)
 		cancelOpen()
 		if storeErr == nil {
 			break
@@ -189,7 +189,7 @@ func main() {
 	platform.RegisterRoutes(s, handler)
 
 	// Object graph API: allows VMs to project and query
-	// object graph data stored in the platform Dolt SQL server (corpusd).
+	// object graph data stored in the platform PostgreSQL databases (corpusd).
 	ogStore := platform.NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{
 		Durable: ogStore,

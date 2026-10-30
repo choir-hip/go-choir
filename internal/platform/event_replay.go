@@ -46,7 +46,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		args = append(args, sequence)
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(args)-1), ",")
-	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
+	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_pin_receipt_digest, event_head_receipt_json FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("event replay: query chain: %w", err)
 	}
@@ -56,18 +56,15 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	for rows.Next() {
 		var record computerevent.DurableEvent
 		var sequence uint64
-		var eventArtifactRef, rawPins, rawReceipt, receiptDigest string
-		if err := rows.Scan(&sequence, &record.Request.EventDigest, &eventArtifactRef, &record.Request.EventPinReceiptDigest, &rawPins, &rawReceipt, &receiptDigest, &record.Request.Next.DesiredEventHead, &record.Request.Next.EffectiveEventHead, &record.Request.Next.PendingTransitionRef, &record.Request.Next.DesiredStateCommitment, &record.Request.Next.EffectiveStateCommitment); err != nil {
+		var rawReceipt string
+		if err := rows.Scan(&sequence, &record.Request.EventDigest, &record.Request.EventPinReceiptDigest, &rawReceipt); err != nil {
 			return nil, err
 		}
 		if sequence != expected {
 			return nil, fmt.Errorf("event replay: chain gap at sequence %d below head %d", expected, head.Sequence)
 		}
 		expected++
-		if eventArtifactRef != record.Request.EventDigest {
-			return nil, fmt.Errorf("event replay: artifact reference mismatch at sequence %d", sequence)
-		}
-		eventJSON, _, err := s.platform.tapeReader().Read(computerID, tapestore.NSEvent, eventArtifactRef)
+		eventJSON, _, err := s.platform.tapeReader().Read(computerID, tapestore.NSEvent, record.Request.EventDigest)
 		if err != nil {
 			return nil, fmt.Errorf("event replay: read event sequence %d: %w", sequence, err)
 		}
@@ -82,17 +79,24 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		if record.Request.Event.Sequence != sequence || record.Request.Event.ComputerID != computerID {
 			return nil, fmt.Errorf("event replay: event index mismatch at sequence %d", sequence)
 		}
-		if err := json.Unmarshal([]byte(rawPins), &record.Request.PayloadPinReceiptDigests); err != nil {
-			return nil, fmt.Errorf("event replay: decode pins sequence %d: %w", sequence, err)
-		}
 		if err := json.Unmarshal([]byte(rawReceipt), &record.Receipt); err != nil {
 			return nil, fmt.Errorf("event replay: decode receipt sequence %d: %w", sequence, err)
 		}
-		canonicalReceipt, err := record.Receipt.CanonicalBytes()
-		if err != nil || computerevent.DigestBytes(canonicalReceipt) != receiptDigest {
-			return nil, fmt.Errorf("event replay: receipt digest mismatch at sequence %d", sequence)
+		fields := record.Receipt.KindFields
+		str := func(name string) string { v, _ := fields[name].(string); return v }
+		record.Request.Next.DesiredEventHead = str("desired_event_head")
+		record.Request.Next.EffectiveEventHead = str("effective_event_head")
+		record.Request.Next.PendingTransitionRef = str("pending_transition_ref")
+		record.Request.Next.DesiredStateCommitment = str("desired_state_commitment")
+		record.Request.Next.EffectiveStateCommitment = str("effective_state_commitment")
+		pins, ok := receiptPinDigests(fields)
+		if !ok || len(pins) == 0 || pins[0] != record.Request.EventPinReceiptDigest {
+			return nil, fmt.Errorf("event replay: receipt pin digests mismatch at sequence %d", sequence)
 		}
-		record.Request.EventArtifactDigest = eventArtifactRef
+		if len(pins) > 1 {
+			record.Request.PayloadPinReceiptDigests = pins[1:]
+		}
+		record.Request.EventArtifactDigest = record.Request.EventDigest
 		record.Request.Next.ComputerID = computerID
 		record.Request.Next.Sequence = sequence
 		record.Request.Next.CanonicalEventHead = record.Request.EventDigest
@@ -126,4 +130,24 @@ func replayTransitionInput(kind computerevent.EventKind, next computerevent.Head
 	default:
 		return computerevent.TransitionInput{}
 	}
+}
+
+// receiptPinDigests reads the pin_receipt_digests field of an event head
+// receipt: the event's own pin digest first, then its payload pins.
+func receiptPinDigests(fields map[string]any) ([]string, bool) {
+	switch raw := fields["pin_receipt_digests"].(type) {
+	case []string:
+		return append([]string(nil), raw...), true
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			v, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, v)
+		}
+		return out, true
+	}
+	return nil, false
 }

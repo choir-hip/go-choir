@@ -543,7 +543,7 @@ func (s *Store) capturesSharingKey(ctx context.Context, owner, computer, column,
 		return nil, fmt.Errorf("related: unknown key column %q", column)
 	}
 	rows, err := s.corpus().QueryContext(ctx,
-		`SELECT capture_id FROM `+captureIndexTable+` WHERE owner_id = ? AND computer_id = ? AND `+column+` = ? ORDER BY fetched_at DESC LIMIT ?`,
+		`SELECT capture_id FROM `+captureIndexTable+` WHERE owner_id = ? AND computer_id = ? AND `+column+` = ? ORDER BY fetched_at DESC NULLS LAST LIMIT ?`,
 		owner, computer, key, limit)
 	if err != nil {
 		return nil, err

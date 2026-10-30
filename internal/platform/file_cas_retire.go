@@ -181,9 +181,6 @@ func (s *Service) retireFileCASRoots(ctx context.Context, started time.Time, gra
 	if err := logFile.sync(); err != nil && logErr == nil {
 		logErr = err
 	}
-	if err := s.store.commitBoundary(ctx, fmt.Sprintf("retire %d old file roots", len(done))); err != nil {
-		return len(done), fmt.Errorf("rows deleted, dolt commit failed: %w", err)
-	}
 	if logErr != nil {
 		return len(done), fmt.Errorf("rows deleted, log write failed: %w", logErr)
 	}

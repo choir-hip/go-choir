@@ -118,25 +118,6 @@ func TestSelfDevelopmentModeCASPersistsGenerationAndIdempotentReceipt(t *testing
 	}
 }
 
-func TestBootstrapMigratesExistingSelfDevelopmentModeTable(t *testing.T) {
-	store, _ := openTestPlatformStore(t)
-	defer store.Close()
-	if _, err := store.db.ExecContext(context.Background(), `ALTER TABLE computer_self_development_modes DROP COLUMN expected_pending_transition_ref`); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Bootstrap(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := store.db.QueryContext(context.Background(), `SHOW COLUMNS FROM computer_self_development_modes LIKE 'expected_pending_transition_ref'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		t.Fatal("expected_pending_transition_ref migration was not applied")
-	}
-}
-
 func TestValidateSelfDevelopmentModeTransitionRequiresQualifiedConsensusBindings(t *testing.T) {
 	now := time.Date(2026, 8, 16, 0, 50, 0, 0, time.UTC)
 	current := SelfDevelopmentMode{ComputerID: "computer-test", Mode: SelfDevelopmentModeProposeOnly, Generation: 4}

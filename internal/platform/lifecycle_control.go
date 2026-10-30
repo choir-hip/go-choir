@@ -93,7 +93,6 @@ func (s *Service) PrepareLifecycleControl(ctx context.Context, request Lifecycle
 		request.ComputerID, request.IdempotencyKey, request.RequestCommitment, request.Action, request.PriorState, request.PriorEpoch, "pending", now); err != nil {
 		return LifecycleControlResult{}, err
 	}
-	s.store.markDirty("prepare lifecycle " + request.Action + " for " + request.ComputerID)
 	return LifecycleControlResult{Status: "pending", Action: request.Action, PriorState: request.PriorState, PriorEpoch: request.PriorEpoch}, nil
 }
 
@@ -145,7 +144,6 @@ func (s *Service) RecordLifecycleControl(ctx context.Context, request LifecycleC
 	if _, err := s.store.db.ExecContext(ctx, `UPDATE computer_lifecycle_operations SET status='completed', completed_at=? WHERE computer_id=? AND idempotency_key=? AND status='pending'`, now, request.ComputerID, request.IdempotencyKey); err != nil {
 		return computerevent.Receipt{}, err
 	}
-	s.store.markDirty("complete lifecycle " + request.Action + " for " + request.ComputerID)
 	return receipt, nil
 }
 

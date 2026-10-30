@@ -17,16 +17,15 @@ import (
 )
 
 // ObjectGraphStore adapts the platform Store to the objectgraph.Store
-// interface. It uses the same og_objects and og_edges tables that were
-// added to the platform schema DDL, but executes against the platform
-// Dolt SQL server connection rather than an embedded Dolt workspace.
+// interface. It uses the og_objects and og_edges tables of the corpus
+// database (PostgreSQL `graph`).
 type ObjectGraphStore struct {
 	store *Store
 }
 
-// NewObjectGraphStore returns an objectgraph.Store backed by the platform
-// Dolt SQL server. The platform store must already be bootstrapped (the
-// og_objects and og_edges tables are created by Bootstrap).
+// NewObjectGraphStore returns an objectgraph.Store backed by the corpus
+// database. The platform store must already be bootstrapped (the og_objects
+// and og_edges tables are created by Bootstrap).
 func NewObjectGraphStore(s *Store) *ObjectGraphStore {
 	return &ObjectGraphStore{store: s}
 }
@@ -116,37 +115,36 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 		_, err := x.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			object_kind = VALUES(object_kind),
-			owner_id = VALUES(owner_id),
-			computer_id = VALUES(computer_id),
-			version_id = VALUES(version_id),
-			content_hash = VALUES(content_hash),
-			body = VALUES(body),
-			body_ref = VALUES(body_ref),
-			body_size = VALUES(body_size),
-			metadata = VALUES(metadata),
-			updated_at = VALUES(updated_at),
-			tombstone = VALUES(tombstone),
-			superseded_by = VALUES(superseded_by)`,
+		ON CONFLICT (canonical_id) DO UPDATE SET
+			object_kind = excluded.object_kind,
+			owner_id = excluded.owner_id,
+			computer_id = excluded.computer_id,
+			version_id = excluded.version_id,
+			content_hash = excluded.content_hash,
+			body = excluded.body,
+			body_ref = excluded.body_ref,
+			body_size = excluded.body_size,
+			metadata = excluded.metadata,
+			updated_at = excluded.updated_at,
+			tombstone = excluded.tombstone,
+			superseded_by = excluded.superseded_by`,
 			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
-			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			objectTime(obj.CreatedAt), objectTime(obj.UpdatedAt), obj.Tombstone,
 			obj.SupersededBy)
 		return err == nil, err
 	})
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
-	o.store.markCorpusDirty("objectgraph put object " + obj.CanonicalID)
 	o.store.indexCaptures(ctx, false, obj)
 	return nil
 }
 
 // InsertObjectIfAbsent writes the object only if no row has its canonical
-// id. INSERT IGNORE leaves an existing row untouched, so two writers racing
-// on one id cannot replace each other's object; a concurrent insert of the
-// same key fails at commit instead of overwriting.
+// id. ON CONFLICT DO NOTHING leaves an existing row untouched, so two
+// writers racing on one id cannot replace each other's object: the second
+// waits for the first to commit and then inserts nothing.
 func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectgraph.Object) (bool, error) {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return false, fmt.Errorf("platform objectgraph: nil store")
@@ -163,12 +161,13 @@ func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectg
 		inlineBody = nil
 	}
 	inserted, err := o.execObjectWrite(ctx, obj, func(x sqlExecer) (bool, error) {
-		res, err := x.ExecContext(ctx, `INSERT IGNORE INTO og_objects
+		res, err := x.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT DO NOTHING`,
 			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
-			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			objectTime(obj.CreatedAt), objectTime(obj.UpdatedAt), obj.Tombstone,
 			obj.SupersededBy)
 		if err != nil {
 			return false, err
@@ -182,7 +181,6 @@ func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectg
 	if !inserted {
 		return false, nil
 	}
-	o.store.markCorpusDirty("objectgraph insert object " + obj.CanonicalID)
 	o.store.indexCaptures(ctx, true, obj)
 	return true, nil
 }
@@ -364,18 +362,17 @@ func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) e
 	_, err := o.store.corpus().ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			from_id = VALUES(from_id),
-			to_id = VALUES(to_id),
-			kind = VALUES(kind),
-			metadata = VALUES(metadata),
-			tombstone = VALUES(tombstone)`,
+		ON CONFLICT (edge_id) DO UPDATE SET
+			from_id = excluded.from_id,
+			to_id = excluded.to_id,
+			kind = excluded.kind,
+			metadata = excluded.metadata,
+			tombstone = excluded.tombstone`,
 		edge.EdgeID, edge.FromID, edge.ToID, string(edge.Kind), string(edge.Metadata),
 		edge.CreatedAt.UTC(), edge.Tombstone)
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put edge: %w", err)
 	}
-	o.store.markCorpusDirty("objectgraph put edge " + edge.EdgeID)
 	return nil
 }
 
@@ -435,8 +432,34 @@ const ogLookupKeyMaxIDs = 1000
 // explain this text.
 const lookupKeySeekSQL = `SELECT canonical_id FROM og_lookup_keys WHERE object_kind = ? AND lookup_key = ? LIMIT ?`
 
-// metadataJSONEq is the metadata comparison every lookup by value applies.
-const metadataJSONEq = `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?`
+// jsonPathArg is a "$.a.b" JSON path as the text[] literal {"a","b"} that
+// metadataJSONEq's #>> operator takes. Every segment is quoted, so a field
+// name with a comma, brace or space reads as one key.
+func jsonPathArg(jsonPath string) string {
+	path := strings.TrimPrefix(strings.TrimSpace(jsonPath), "$")
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, seg := range strings.Split(strings.TrimPrefix(path, "."), ".") {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte('"')
+		b.WriteString(strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(seg))
+		b.WriteByte('"')
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
+// objectTime is an object timestamp at the second precision the front
+// page's cursors and windows compare (they carry whole seconds).
+func objectTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
+}
+
+// metadataJSONEq is the metadata comparison every lookup by value applies:
+// the text at the path (a string's text, any other value's JSON text).
+const metadataJSONEq = `((metadata::jsonb) #>> ?::text[]) = ?`
 
 // metadataPredicate is the WHERE clause of a lookup by metadata value. A
 // registered (kind, path) seeks og_lookup_keys once it is live and reads
@@ -447,7 +470,7 @@ const metadataJSONEq = `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = 
 func (o *ObjectGraphStore) metadataPredicate(ctx context.Context, kind, jsonPath, value string) (where string, args []any, shape string, none bool, err error) {
 	const jsonEq = metadataJSONEq
 	if !o.store.retrievalState.lookupKeyLive.Load() || !lookupKeyFor(kind, jsonPath) {
-		return `object_kind = ? AND ` + jsonEq, []any{kind, jsonPath, value}, "json_scan", false, nil
+		return `object_kind = ? AND ` + jsonEq, []any{kind, jsonPathArg(jsonPath), value}, "json_scan", false, nil
 	}
 	rows, err := o.store.corpus().QueryContext(ctx,
 		lookupKeySeekSQL,
@@ -471,12 +494,12 @@ func (o *ObjectGraphStore) metadataPredicate(ctx context.Context, kind, jsonPath
 		return "", nil, "lookup_key", true, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
-	args = append(ids, kind, jsonPath, value)
+	args = append(ids, kind, jsonPathArg(jsonPath), value)
 	return `canonical_id IN (` + placeholders + `) AND object_kind = ? AND ` + jsonEq, args, "lookup_key", false, nil
 }
 
 // GetObjectByMetadata finds a single object by kind + a metadata JSON path
-// equality check. Uses JSON_EXTRACT (supported by Dolt/MySQL).
+// equality check. Reads the path with the jsonb #>> operator over the byte-exact text.
 // Example: GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", "/pub/texture/foo")
 func (o *ObjectGraphStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, value string) (_ objectgraph.Object, err error) {
 	if o == nil || o.store == nil || o.store.db == nil {
@@ -618,7 +641,7 @@ func metadataPageSQL(kind, jsonPath, value, ownerID, afterCanonicalID string, li
 	args := []any{kind}
 	if jsonPath != "" {
 		where += ` AND ` + metadataJSONEq
-		args = append(args, jsonPath, value)
+		args = append(args, jsonPathArg(jsonPath), value)
 	}
 	if ownerID != "" {
 		where += ` AND owner_id = ?`
@@ -691,7 +714,7 @@ func (o *ObjectGraphStore) ListKeyedObjectsPage(ctx context.Context, kind, jsonP
 		 FROM og_objects
 		 WHERE canonical_id IN (`+placeholders+`) AND object_kind = ? AND `+metadataJSONEq+`
 		 ORDER BY canonical_id ASC`,
-		append(ids, kind, jsonPath, value)...)
+		append(ids, kind, jsonPathArg(jsonPath), value)...)
 	if err != nil {
 		return nil, "", fmt.Errorf("platform objectgraph: keyed objects: %w", err)
 	}
@@ -772,7 +795,7 @@ func (o *ObjectGraphStore) ListEdgesByKind(ctx context.Context, fromID string, k
 }
 
 // PutBatch writes a batch of objects and edges atomically in a single
-// transaction with one Dolt commit at the end.
+// transaction.
 func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
@@ -798,22 +821,22 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 		if _, err := tx.ExecContext(ctx, `INSERT INTO og_objects
 			(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE
-				object_kind = VALUES(object_kind),
-				owner_id = VALUES(owner_id),
-				computer_id = VALUES(computer_id),
-				version_id = VALUES(version_id),
-				content_hash = VALUES(content_hash),
-				body = VALUES(body),
-				body_ref = VALUES(body_ref),
-				body_size = VALUES(body_size),
-				metadata = VALUES(metadata),
-				updated_at = VALUES(updated_at),
-				tombstone = VALUES(tombstone),
-				superseded_by = VALUES(superseded_by)`,
+			ON CONFLICT (canonical_id) DO UPDATE SET
+				object_kind = excluded.object_kind,
+				owner_id = excluded.owner_id,
+				computer_id = excluded.computer_id,
+				version_id = excluded.version_id,
+				content_hash = excluded.content_hash,
+				body = excluded.body,
+				body_ref = excluded.body_ref,
+				body_size = excluded.body_size,
+				metadata = excluded.metadata,
+				updated_at = excluded.updated_at,
+				tombstone = excluded.tombstone,
+				superseded_by = excluded.superseded_by`,
 			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
 			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
-			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			objectTime(obj.CreatedAt), objectTime(obj.UpdatedAt), obj.Tombstone,
 			obj.SupersededBy); err != nil {
 			return fmt.Errorf("platform objectgraph: batch put object %s: %w", obj.CanonicalID, err)
 		}
@@ -826,12 +849,12 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 		if _, err := tx.ExecContext(ctx, `INSERT INTO og_edges
 			(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-			ON DUPLICATE KEY UPDATE
-				from_id = VALUES(from_id),
-				to_id = VALUES(to_id),
-				kind = VALUES(kind),
-				metadata = VALUES(metadata),
-				tombstone = VALUES(tombstone)`,
+			ON CONFLICT (edge_id) DO UPDATE SET
+				from_id = excluded.from_id,
+				to_id = excluded.to_id,
+				kind = excluded.kind,
+				metadata = excluded.metadata,
+				tombstone = excluded.tombstone`,
 			edge.EdgeID, edge.FromID, edge.ToID, string(edge.Kind), string(edge.Metadata),
 			edge.CreatedAt.UTC(), edge.Tombstone); err != nil {
 			return fmt.Errorf("platform objectgraph: batch put edge %s: %w", edge.EdgeID, err)
@@ -841,7 +864,6 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("platform objectgraph: batch commit: %w", err)
 	}
-	o.store.markCorpusDirty(fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges)))
 	o.store.indexCaptures(ctx, false, batch.Objects...)
 	return nil
 }

@@ -42,14 +42,12 @@ func ownerRecoveryPlatformFixture(t *testing.T) (*CheckpointAuthority, selfdevpr
 		t.Fatal(err)
 	}
 	if _, err := store.db.ExecContext(t.Context(), `INSERT INTO computer_event_append_receipts (
-		computer_id, idempotency_key, request_commitment, sequence, previous_head, event_kind, event_digest,
-		event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_id,
-		event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head,
-		desired_state_commitment, effective_state_commitment, pending_transition_ref, created_at
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		"computer-owner-recovery", "head-12", platformTestDigest('c'), 12, platformTestDigest('p'), "key_revoked", canonicalHead,
-		"artifact://sha256/"+canonicalHead, platformTestDigest('d'), "[]", "receipt-head-12",
-		`{"receipt_version":1,"receipt_kind":"EventHead","receipt_id":"receipt-head-12","issuer":"corpusd","issued_at":"2026-08-14T00:00:00Z","required_signers":[],"canonical_payload_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_set":[]}`, platformTestDigest('e'), effectiveHead, effectiveHead, stateCommitment, stateCommitment, nil, now,
+		computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest,
+		event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at
+	) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		"computer-owner-recovery", "head-12", platformTestDigest('c'), 12, "key_revoked", canonicalHead,
+		platformTestDigest('d'), "receipt-head-12",
+		`{"receipt_version":1,"receipt_kind":"EventHead","receipt_id":"receipt-head-12","issuer":"corpusd","issued_at":"2026-08-14T00:00:00Z","required_signers":[],"canonical_payload_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","signature_set":[]}`, now,
 	); err != nil {
 		t.Fatal(err)
 	}

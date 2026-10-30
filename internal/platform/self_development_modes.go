@@ -365,7 +365,6 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 	if err := tx.Commit(); err != nil {
 		return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: commit: %w", err)
 	}
-	c.store.markDirty("set self-development mode for " + computerID)
 	return next, nil
 }
 
