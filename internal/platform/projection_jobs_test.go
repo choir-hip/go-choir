@@ -3,46 +3,9 @@ package platform
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
-
-// Publication pins both generations before GC can observe the new watermark;
-// an explicit restore pin keeps a base independently of rank.
-func TestProjectionBasePinsKeepTheLatestTwoAndExplicitPins(t *testing.T) {
-	s, _ := openTestPlatformStore(t)
-	ctx := context.Background()
-	a, b, c := strings.Repeat("c", 64), strings.Repeat("d", 64), strings.Repeat("e", 64)
-	for i, ref := range []string{a, b, c} {
-		if err := s.RecordReplayWatermark(ctx, "computer-jobs", int64(i+1), ref); err != nil {
-			t.Fatal(err)
-		}
-	}
-	pins, err := s.projectionBasePins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := pins[b]; !ok {
-		t.Fatal("previous generation not pinned")
-	}
-	if _, ok := pins[c]; !ok {
-		t.Fatal("current not pinned")
-	}
-	if _, ok := pins[a]; ok {
-		t.Fatal("unreferenced oldest generation retained")
-	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?)`, "computer-jobs", a, "restore:receipt-a", time.Now().UTC()); err != nil {
-		t.Fatal(err)
-	}
-	pins, err = s.projectionBasePins(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := pins[a]; !ok {
-		t.Fatal("explicit restore pin lost")
-	}
-}
 
 // Staging 2026-10-08 (docs/problems/gc-sweep-holds-service-write-lock):
 // an artifact GC sweep held the service-wide writeMu, so credential issuance

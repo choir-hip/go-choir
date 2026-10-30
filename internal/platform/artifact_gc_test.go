@@ -15,6 +15,13 @@ import (
 
 // The artifact GC must only remove entries that are both unreachable and past
 // grace. A live ref, an in-grace file, and a dry-run all must leave the file.
+//
+// Projection bases left the live set (the host keeps none): ways this could
+// fail are
+//  1. a base named by a watermark row, which used to be live, survives;
+//  2. a base's descriptor sidecar survives its blob;
+//  3. a dry run deletes a base;
+//  4. a base's removal changes what another namespace keeps (file-cas-roots).
 func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	ensureGCRouteTables(t, store)
@@ -52,14 +59,13 @@ func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 	liveRootPath := write("file-cas-roots/computer-a", liveRoot+".json")
 	deadRootPath := write("file-cas-roots/computer-a", deadRoot+".json")
 
-	// projection-base: live = computer_replay_watermarks.base_ref (+ sidecar).
+	// projection-base: nothing is live, not even the base a watermark row
+	// still names (the host keeps no bases; vmctl only compares the ref).
 	liveBase := digestOf("live-base")
 	deadBase := digestOf("dead-base")
-	if err := store.RecordReplayWatermark(ctx, "computer-b", 5, liveBase); err != nil {
-		t.Fatal(err)
-	}
-	liveBlobPath := write("projection-base", liveBase)
-	liveSidecarPath := write("projection-base", liveBase+".descriptor.json")
+	seedReplayWatermark(t, store, "computer-b", 5, liveBase)
+	namedBlobPath := write("projection-base", liveBase)
+	namedSidecarPath := write("projection-base", liveBase+".descriptor.json")
 	deadBlobPath := write("projection-base", deadBase)
 	deadSidecarPath := write("projection-base", deadBase+".descriptor.json")
 
@@ -71,7 +77,7 @@ func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 	if dry.Namespaces["file-cas-roots"].Deleted == 0 || dry.Namespaces["projection-base"].Deleted == 0 {
 		t.Fatalf("dry-run reported no candidates: %+v", dry.Namespaces)
 	}
-	for _, p := range []string{liveRootPath, deadRootPath, liveBlobPath, liveSidecarPath, deadBlobPath, deadSidecarPath} {
+	for _, p := range []string{liveRootPath, deadRootPath, namedBlobPath, namedSidecarPath, deadBlobPath, deadSidecarPath} {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("dry-run deleted %s: %v", p, err)
 		}
@@ -82,12 +88,10 @@ func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{liveRootPath, liveBlobPath, liveSidecarPath} {
-		if _, err := os.Stat(p); err != nil {
-			t.Fatalf("live artifact removed %s: %v", p, err)
-		}
+	if _, err := os.Stat(liveRootPath); err != nil {
+		t.Fatalf("live artifact removed %s: %v", liveRootPath, err)
 	}
-	for _, p := range []string{deadRootPath, deadBlobPath, deadSidecarPath} {
+	for _, p := range []string{deadRootPath, deadBlobPath, deadSidecarPath, namedBlobPath, namedSidecarPath} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Fatalf("dead artifact kept %s: %v", p, err)
 		}

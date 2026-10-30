@@ -298,8 +298,7 @@ func (h *Handler) platformUpdateBlobPath(digest string) (string, error) {
 //	     sha256/platform-update/<sha256> only when the digest matches.
 //	GET  /internal/computers/platform-updates/blob/<sha256> — guest fetch:
 //	     streams the staged blob; the guest verifies the digest after
-//	     download, never trusting the wire (same posture as
-//	     HandleProjectionBaseBlob).
+//	     download, never trusting the wire.
 //
 // The signed offer's Ref field names the blob; the mint refuses a ref whose
 // blob was not uploaded first.

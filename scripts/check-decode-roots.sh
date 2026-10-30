@@ -37,7 +37,6 @@ NEUTRAL=(
 # must remain in the file. Charter scope is Event/CASRequest/DurableEvent.
 EXEMPT=(
   "internal/computerevent/decode.go:DecodeHistoricEvent:the roots own internal decodes:decoder.Decode(&"
-  "internal/platform/file_cas_http.go:BlobSHA256:local ComputerID/BlobSHA256 binding struct:&descriptor"
   "internal/platform/computer_events.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/platform/credential_envelope.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"
   "internal/platform/lifecycle_control.go:computerevent.Receipt:receipt namespace, vocabulary-free:&receipt"

@@ -8,31 +8,11 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/basemanifest"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
 )
-
-// projectionBaseBlobPath resolves the published blob for a digest.
-func (h *Handler) projectionBaseBlobPath(baseRef string) (string, error) {
-	if h == nil || h.service == nil {
-		return "", errors.New("file storage unavailable")
-	}
-	return h.service.artifactPath(filepath.Join("sha256", "projection-base", baseRef))
-}
-
-// projectionBaseSidecar reads the descriptor sidecar bound to a blob digest.
-func (h *Handler) projectionBaseSidecar(baseRef string) ([]byte, error) {
-	path, err := h.projectionBaseBlobPath(baseRef + ".descriptor.json")
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path)
-}
 
 const maxFileCASChunkBytes = 8 << 20
 
@@ -40,12 +20,6 @@ type fileCASRootRequest struct {
 	ComputerID   string `json:"computer_id"`
 	Manifest     string `json:"manifest"`
 	HeadSequence int64  `json:"head_sequence"`
-}
-
-type fileCASWatermarkRequest struct {
-	ComputerID        string `json:"computer_id"`
-	WatermarkSequence int64  `json:"watermark_sequence"`
-	BaseRef           string `json:"base_ref"`
 }
 
 func (h *Handler) HandleFileCASChunk(w http.ResponseWriter, r *http.Request) {
@@ -197,49 +171,13 @@ func (h *Handler) HandleFileCASRoot(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// HandleFileCASWatermark reports the computer's last advertised replay
+// watermark. It is read-only: vmctl's recovery admission reads it as evidence.
+// Nothing advertises a new one any more (the projection bases that
+// advertisements named are gone).
 func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil || h.service.store == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "file storage unavailable"})
-		return
-	}
-	if r.Method == http.MethodPost {
-		var input fileCASWatermarkRequest
-		if !decodeFileCASJSON(r, &input) {
-			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-			return
-		}
-		if !h.authorizeFileCAS(r, input.ComputerID, "event:append") {
-			writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
-			return
-		}
-		if input.WatermarkSequence <= 0 || !validFileCASDigest(input.BaseRef) {
-			writeJSON(w, http.StatusBadRequest, apiError{Error: "positive sequence and base digest required"})
-			return
-		}
-		h.service.writeMu.Lock()
-		defer h.service.writeMu.Unlock()
-		current, _, readErr := h.service.store.ReplayWatermark(r.Context(), input.ComputerID)
-		if readErr != nil && !errors.Is(readErr, ErrNoWatermark) {
-			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark unavailable"})
-			return
-		}
-		if errors.Is(readErr, ErrNoWatermark) || input.WatermarkSequence > current {
-			binding, err := h.validateProjectionAdvertisement(r.Context(), input)
-			if err != nil {
-				writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-				return
-			}
-			if err := h.service.store.RecordReplayWatermarkWithRoot(r.Context(), input.ComputerID, input.WatermarkSequence, input.BaseRef, binding.epochRoot()); err != nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark publication failed"})
-				return
-			}
-		}
-		sequence, baseRef, err := h.service.store.ReplayWatermark(r.Context(), input.ComputerID)
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark readback failed"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"watermark_sequence": sequence, "base_ref": baseRef})
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -261,178 +199,6 @@ func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"watermark_sequence": seq, "base_ref": baseRef})
-}
-
-// HandleProjectionBaseDescriptor serves the descriptor sidecar bound to a
-// published base blob digest. The binding is re-verified by content on every
-// read: blob digest match, computer match, and descriptor validity. A missing
-// sidecar is a missing base, never a legacy format.
-func (h *Handler) HandleProjectionBaseDescriptor(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
-	baseRef := strings.TrimSpace(r.URL.Query().Get("base_ref"))
-	if !h.authorizeFileCAS(r, computerID, "event:read") {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
-		return
-	}
-	if !validFileCASDigest(baseRef) {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "base digest is required"})
-		return
-	}
-	raw, err := h.projectionBaseSidecar(baseRef)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base descriptor unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base descriptor unreadable"})
-		return
-	}
-	var descriptor struct {
-		ComputerID string `json:"computer_id"`
-		BlobSHA256 string `json:"blob_sha256"`
-	}
-	if err := json.Unmarshal(raw, &descriptor); err != nil || descriptor.BlobSHA256 != baseRef || descriptor.ComputerID != computerID {
-		writeJSON(w, http.StatusConflict, apiError{Error: "projection base descriptor binding refused"})
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(raw)
-}
-
-// HandleProjectionBaseBlob streams a published base blob. Bases can exceed
-// JSON payload limits, so the blob streams as bytes while the digest is
-// verified by the installer after download, never trusted from the wire.
-func (h *Handler) HandleProjectionBaseBlob(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
-	baseRef := strings.TrimSpace(r.URL.Query().Get("base_ref"))
-	if !h.authorizeFileCAS(r, computerID, "event:read") {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
-		return
-	}
-	if !validFileCASDigest(baseRef) {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "base digest is required"})
-		return
-	}
-	path, err := h.projectionBaseBlobPath(baseRef)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base unavailable"})
-		return
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base blob unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base unreadable"})
-		return
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base unreadable"})
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeContent(w, r, baseRef, info.ModTime(), file)
-}
-
-// HandleProjectionBasePart streams one part of a parts-form base (S4). A
-// digest alone is not a read grant: the part must be named by the manifest
-// of base_ref, and base_ref's descriptor must name computer_id. The
-// installer verifies the part's bytes against its digest.
-func (h *Handler) HandleProjectionBasePart(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
-	baseRef := strings.TrimSpace(r.URL.Query().Get("base_ref"))
-	part := strings.TrimSpace(r.URL.Query().Get("part"))
-	if !h.authorizeFileCAS(r, computerID, "event:read") {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
-		return
-	}
-	if !validFileCASDigest(baseRef) || !validFileCASDigest(part) {
-		writeJSON(w, http.StatusBadRequest, apiError{Error: "base and part digests are required"})
-		return
-	}
-	raw, err := h.projectionBaseSidecar(baseRef)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base descriptor unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base descriptor unreadable"})
-		return
-	}
-	var descriptor struct {
-		ComputerID string `json:"computer_id"`
-		BlobSHA256 string `json:"blob_sha256"`
-	}
-	if err := json.Unmarshal(raw, &descriptor); err != nil || descriptor.BlobSHA256 != baseRef || descriptor.ComputerID != computerID {
-		writeJSON(w, http.StatusConflict, apiError{Error: "projection base descriptor binding refused"})
-		return
-	}
-	blobPath, err := h.projectionBaseBlobPath(baseRef)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base unavailable"})
-		return
-	}
-	manifestRaw, ok, err := basemanifest.ReadFile(blobPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base manifest unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base manifest unreadable"})
-		return
-	}
-	if !ok {
-		writeJSON(w, http.StatusConflict, apiError{Error: "projection base is not in the parts form"})
-		return
-	}
-	sum := sha256.Sum256(manifestRaw)
-	manifest, err := basemanifest.Parse(manifestRaw)
-	if err != nil || hex.EncodeToString(sum[:]) != baseRef {
-		writeJSON(w, http.StatusConflict, apiError{Error: "projection base manifest refused"})
-		return
-	}
-	if !manifest.Contains(part) {
-		writeJSON(w, http.StatusNotFound, apiError{Error: "part is not in this base"})
-		return
-	}
-	partPath, err := h.service.artifactPath(filepath.Join("sha256", basemanifest.PartsNamespace, part))
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unavailable"})
-		return
-	}
-	file, err := os.Open(partPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			writeJSON(w, http.StatusNotFound, apiError{Error: "projection base part unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unreadable"})
-		return
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, apiError{Error: "projection base part unreadable"})
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeContent(w, r, part, info.ModTime(), file)
 }
 
 func (h *Handler) HandleFileCASRoots(w http.ResponseWriter, r *http.Request) {

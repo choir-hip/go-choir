@@ -2,19 +2,16 @@ package platform
 
 // Operational projection tables live in Store A, never in the semantic tape.
 //
-// The data system cutover (2026-10-30) deleted the projection bases and the
-// host replay workers. This DDL is unchanged until a later change drops the
-// tables nothing reads any more:
-//   - computer_projection_base_refusals: no writer, no reader;
-//   - computer_projection_base_pins: no writer; read only by the artifact GC
-//     live set (projectionBasePins);
-//   - computer_projection_jobs: the enqueue route is gone; only the
-//     watermark advertisement's supersede and the artifact GC live set
-//     (projectionBasePins) still touch the rows an earlier build wrote;
-//   - projection_worker_status: written by checkpointd's heartbeat; no reader.
+// The data system cutover (2026-10-30) deleted the projection bases, the host
+// replay workers, the jobs route and the base routes. This DDL is unchanged
+// until a later change drops the tables:
+//   - computer_projection_jobs, computer_projection_base_refusals,
+//     computer_projection_bases, computer_projection_epoch_roots and
+//     computer_projection_base_pins: no writer, no reader;
+//   - projection_worker_status: written by checkpointd's heartbeat; no reader;
+//   - computer_replay_watermarks (created elsewhere): read by the watermark
+//     GET that vmctl's recovery admission uses as evidence.
 //
-// computer_projection_bases and computer_projection_epoch_roots are still
-// written by the watermark advertisement (file_cas.go);
 // computer_checkpoint_verdicts is live.
 const projectionJobSchemaDDL = `
 CREATE TABLE IF NOT EXISTS computer_projection_jobs (

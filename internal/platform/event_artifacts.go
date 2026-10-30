@@ -313,7 +313,7 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 	// may be a verified object in the next one. With no match anywhere, the
 	// first such error is returned rather than "not found".
 	var firstErr error
-	for _, namespace := range []string{"computer-event-payload", "computer-event", "projection-base"} {
+	for _, namespace := range []string{"computer-event-payload", "computer-event"} {
 		var raw []byte
 		var err error
 		switch namespace {
@@ -321,14 +321,6 @@ func (s *EventArtifactService) FetchPayload(computerID, artifactDigest string) (
 			raw, _, err = tape.Read(computerID, tapestore.NSPayload, artifactDigest)
 		case "computer-event":
 			raw, _, err = tape.Read(computerID, tapestore.NSEvent, artifactDigest)
-		default: // projection bases are never segmented
-			var path string
-			if path, err = s.platform.artifactPath(filepath.Join("sha256", namespace, artifactDigest)); err != nil {
-				return nil, err
-			}
-			if raw, err = os.ReadFile(path); errors.Is(err, os.ErrNotExist) {
-				err = tapestore.ErrNotFound
-			}
 		}
 		if err != nil {
 			if errors.Is(err, tapestore.ErrNotFound) {

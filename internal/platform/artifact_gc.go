@@ -279,11 +279,13 @@ func (s *Service) runArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 		// An empty live set beside old unreachable files is the wrong-store
 		// signature (2026-10-05). Report it; never sweep on it. file-cas-chunks
 		// liveness is per computer and guarded there.
-		// projection-base-parts is also exempt once its live set is proven:
+		// projection-base has no live set by design (see artifactGCLiveSets),
+		// so it is exempt. projection-base-parts is also exempt once its live
+		// set is proven:
 		// it is read off the disk, so a clean scan of an existing base
 		// directory that names no part is authoritative (the S4 rollback
 		// leaves exactly this).
-		if ns != "file-cas-chunks" && !(ns == basemanifest.PartsNamespace && s.baseDirScanned()) && len(live[ns]) == 0 && rep.Eligible > 0 {
+		if ns != "file-cas-chunks" && ns != basemanifest.BaseNamespace && !(ns == basemanifest.PartsNamespace && s.baseDirScanned()) && len(live[ns]) == 0 && rep.Eligible > 0 {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: live set is empty but %d old entries exist (namespace not swept)", ns, rep.Eligible))
 			participates = false
 		}
@@ -415,24 +417,11 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 		return nil, append(warnings, "file-cas-roots live set: "+err.Error())
 	}
 
-	// projection-base: the advertised watermark base_ref, explicit pins
-	// (restore points), each computer's latest two bases, and in-flight job
-	// seeds. A live blob keeps its .descriptor.json sidecar.
-	addBase := func(ref string) {
-		digest := filepath.Base(ref)
-		live["projection-base"][digest] = struct{}{}
-		live["projection-base"][digest+".descriptor.json"] = struct{}{}
-	}
-	if err := scanStrings(ctx, s.store.db, `SELECT base_ref FROM computer_replay_watermarks`, addBase); err != nil {
-		return nil, append(warnings, "projection-base live set: "+err.Error())
-	}
-	pins, err := s.store.projectionBasePins(ctx)
-	if err != nil {
-		return nil, append(warnings, "projection-base pins: "+err.Error())
-	}
-	for ref := range pins {
-		addBase(ref)
-	}
+	// projection-base: no live set. The host keeps no projection bases (data
+	// system cutover, 2026-10-30): the guest recovers from its own sealed
+	// snapshots, and nothing reads a base, so every base is unreachable and
+	// collected after the grace. The set stays empty on purpose, and the
+	// empty-live-set guard below exempts the namespace.
 
 	// projection-base-parts (S4): every part named by any manifest blob
 	// still on disk, live base or not. A part outlives the last manifest
@@ -983,24 +972,4 @@ func (r *GCRunner) Start(ctx context.Context) {
 func (s *Service) baseDirScanned() bool {
 	info, err := os.Stat(filepath.Join(filepath.Clean(s.artifactsRoot), "sha256", basemanifest.BaseNamespace))
 	return err == nil && info.IsDir()
-}
-
-// projectionBasePins is the projection-base live set the GC keeps beyond the
-// advertised watermarks: explicit pins (restore points), each computer's
-// latest two bases, and in-flight job seeds.
-func (s *Store) projectionBasePins(ctx context.Context) (map[string]struct{}, error) {
-	live := map[string]struct{}{}
-	rows, err := s.db.QueryContext(ctx, `SELECT base_ref FROM computer_projection_base_pins UNION SELECT p.base_ref FROM computer_projection_bases p WHERE (SELECT COUNT(*) FROM computer_projection_bases newer WHERE newer.computer_id=p.computer_id AND (newer.sequence>p.sequence OR (newer.sequence=p.sequence AND newer.created_at>p.created_at)))<2 UNION SELECT seed_base_ref FROM computer_projection_jobs WHERE status IN ('queued','running','retry') AND seed_base_ref<>''`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var ref string
-		if err := rows.Scan(&ref); err != nil {
-			return nil, err
-		}
-		live[ref] = struct{}{}
-	}
-	return live, rows.Err()
 }

@@ -192,15 +192,13 @@ func TestSegmentReadsFetchPayload(t *testing.T) {
 	legacyOnly := []byte("payload only in legacy")
 	evInSeg := []byte(`{"an":"event fetched as a payload"}`)
 	dSeg, dBoth, dLegacy, dEv := put(tapeNSPayload, segOnly), put(tapeNSPayload, both), put(tapeNSPayload, legacyOnly), put(tapeNSEvent, evInSeg)
-	base := []byte("a projection base stays legacy")
-	dBase := put("projection-base", base)
 	segmentize(t, service.artifactsRoot, id, 1, true, false, segItem{tapestore.NSPayload, dSeg}, segItem{tapestore.NSEvent, dEv})
 	segmentize(t, service.artifactsRoot, id, 2, true, true, segItem{tapestore.NSPayload, dBoth})
 
 	for name, c := range map[string]struct {
 		digest string
 		want   []byte
-	}{"segment only": {dSeg, segOnly}, "both": {dBoth, both}, "legacy only": {dLegacy, legacyOnly}, "event namespace in a segment": {dEv, evInSeg}, "projection base": {dBase, base}} {
+	}{"segment only": {dSeg, segOnly}, "both": {dBoth, both}, "legacy only": {dLegacy, legacyOnly}, "event namespace in a segment": {dEv, evInSeg}} {
 		got, err := artifacts.FetchPayload(id, c.digest)
 		if err != nil || string(got) != string(c.want) {
 			t.Fatalf("%s: %q, %v", name, got, err)

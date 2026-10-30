@@ -10,10 +10,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/filecas"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
@@ -53,31 +56,29 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 	if getRootResult.Code != http.StatusOK || !bytes.Equal(bytes.TrimSpace(getRootResult.Body.Bytes()), manifestJSON) {
 		t.Fatalf("get root = %d: %s", getRootResult.Code, getRootResult.Body.String())
 	}
-	for _, input := range []fileCASWatermarkRequest{{ComputerID: "computer-filecas", WatermarkSequence: 10, BaseRef: "base-10"}, {ComputerID: "computer-filecas", WatermarkSequence: 9, BaseRef: "base-9"}} {
-		if err := store.RecordReplayWatermark(context.Background(), input.ComputerID, input.WatermarkSequence, input.BaseRef); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// The watermark is read-only: vmctl reads it as admission evidence and
+	// nothing advertises a new one.
+	seedReplayWatermark(t, store, "computer-filecas", 10, "base-10")
 	seq, baseRef, err := store.ReplayWatermark(context.Background(), "computer-filecas")
 	if err != nil || seq != 10 || baseRef != "base-10" {
 		t.Fatalf("watermark = %d, %q, %v", seq, baseRef, err)
 	}
-}
-
-func TestWatermarkHTTPRefusesUnpublishedBase(t *testing.T) {
-	store, root := openTestPlatformStore(t)
-	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts"), ""))
-	digest := hex.EncodeToString(make([]byte, 32))
-	body, _ := json.Marshal(fileCASWatermarkRequest{ComputerID: "computer-missing-base", WatermarkSequence: 10, BaseRef: digest})
-	req := httptest.NewRequest(http.MethodPost, "/internal/computers/files/watermark", bytes.NewReader(body))
-	req.Header.Set("X-Internal-Caller", "true")
-	result := httptest.NewRecorder()
-	handler.HandleFileCASWatermark(result, req)
-	if result.Code != http.StatusConflict {
-		t.Fatalf("unpublished base was admitted: %d %s", result.Code, result.Body.String())
+	get := httptest.NewRequest(http.MethodGet, "/internal/computers/files/watermark?computer_id=computer-filecas", nil)
+	get.Header.Set("X-Internal-Caller", "true")
+	got := httptest.NewRecorder()
+	handler.HandleFileCASWatermark(got, get)
+	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"base_ref":"base-10"`) {
+		t.Fatalf("watermark GET = %d: %s", got.Code, got.Body.String())
 	}
-	if _, _, err := store.ReplayWatermark(context.Background(), "computer-missing-base"); err != ErrNoWatermark {
-		t.Fatalf("refused request changed watermark: %v", err)
+	post := httptest.NewRequest(http.MethodPost, "/internal/computers/files/watermark", strings.NewReader(`{"computer_id":"computer-filecas","watermark_sequence":11,"base_ref":"`+strings.Repeat("a", 64)+`"}`))
+	post.Header.Set("X-Internal-Caller", "true")
+	refused := httptest.NewRecorder()
+	handler.HandleFileCASWatermark(refused, post)
+	if refused.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("watermark POST = %d, want 405: %s", refused.Code, refused.Body.String())
+	}
+	if seq, _, _ := store.ReplayWatermark(context.Background(), "computer-filecas"); seq != 10 {
+		t.Fatalf("refused POST changed the watermark to %d", seq)
 	}
 }
 
@@ -139,60 +140,49 @@ func TestGCFileChunksPreservesReachableAndNamespaces(t *testing.T) {
 	}
 }
 
-func TestProjectionBaseDescriptorAndBlobServing(t *testing.T) {
+// The projection-base routes are gone: the host keeps no bases and the guest
+// recovers from its own sealed snapshots. Ways this could fail: a route is
+// still registered (a base would be served until the GC collects it), or the
+// removal took a neighbouring route (the watermark read vmctl uses) with it.
+func TestProjectionBaseRoutesAreNotRegistered(t *testing.T) {
 	store, root := openTestPlatformStore(t)
-	artifactsRoot := filepath.Join(root, "artifacts")
-	service := NewService(store, artifactsRoot, "")
-	handler := NewHandler(service)
-	blob := []byte("projection base tar bytes")
-	sum := sha256.Sum256(blob)
-	digest := hex.EncodeToString(sum[:])
-	baseDir := filepath.Join(artifactsRoot, "sha256", "projection-base")
-	if err := os.MkdirAll(baseDir, 0o755); err != nil {
-		t.Fatal(err)
+	const token = "projection-base-routes-token-0123456789abcdef01234567"
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+	defer restore()
+	srv := server.NewServer("corpusd-test", "0")
+	RegisterRoutes(srv, NewHandler(NewService(store, filepath.Join(root, "artifacts"), "")))
+	call := func(method, path string) int {
+		req := httptest.NewRequest(method, path, nil)
+		req.RemoteAddr = "127.0.0.1:5555"
+		internalMarker(req)
+		req.Header.Set(hostauth.Header, token)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec.Code
 	}
-	if err := os.WriteFile(filepath.Join(baseDir, digest), blob, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	sidecar := `{"computer_id":"computer-base","sequence":7,"canonical_head":"` + digest + `","blob_sha256":"` + digest + `","blob_size_bytes":24,"reducer_version":1,"schema_version":1,"vocabulary_version":"v1","vm_local_content_witness":{"database":"texture","content_root":"` + digest + `","schema":{"t":"` + digest + `"},"tables":{"t":"` + digest + `"},"dolt_head":"` + digest + `","derivability_digest":"` + digest + `"}}`
-	if err := os.WriteFile(filepath.Join(baseDir, digest+".descriptor.json"), []byte(sidecar), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	get := func(handle func(http.ResponseWriter, *http.Request), path string, internal bool) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
-		if internal {
-			req.Header.Set("X-Internal-Caller", "true")
+	digest := strings.Repeat("a", 64)
+	for _, path := range []string{
+		"/internal/computers/files/projection-base/descriptor?computer_id=c&base_ref=" + digest,
+		"/internal/computers/files/projection-base/blob?computer_id=c&base_ref=" + digest,
+		"/internal/computers/files/projection-base/part?computer_id=c&base_ref=" + digest + "&part=" + digest,
+		"/internal/computers/projection-base/jobs?computer_id=c",
+	} {
+		if code := call(http.MethodGet, path); code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404 (route not registered)", path, code)
 		}
-		result := httptest.NewRecorder()
-		handle(result, req)
-		return result
 	}
-	desc, blobH := handler.HandleProjectionBaseDescriptor, handler.HandleProjectionBaseBlob
-	if got := get(desc, "/internal/computers/files/projection-base/descriptor?computer_id=computer-base&base_ref="+digest, true); got.Code != http.StatusOK || string(bytes.TrimSpace(got.Body.Bytes())) != sidecar {
-		t.Fatalf("get descriptor = %d: %s", got.Code, got.Body.String())
+	seedReplayWatermark(t, store, "c", 3, digest)
+	if code := call(http.MethodGet, "/internal/computers/files/watermark?computer_id=c"); code != http.StatusOK {
+		t.Fatalf("watermark GET = %d, want 200: the removal must leave the read vmctl uses", code)
 	}
-	if got := get(desc, "/internal/computers/files/projection-base/descriptor?computer_id=computer-base&base_ref="+digest, false); got.Code != http.StatusForbidden {
-		t.Fatalf("unauthenticated descriptor = %d, want 403", got.Code)
-	}
-	if got := get(desc, "/internal/computers/files/projection-base/descriptor?computer_id=computer-other&base_ref="+digest, true); got.Code != http.StatusConflict {
-		t.Fatalf("foreign descriptor = %d, want 409", got.Code)
-	}
-	missing := sha256.Sum256([]byte("missing"))
-	if got := get(desc, "/internal/computers/files/projection-base/descriptor?computer_id=computer-base&base_ref="+hex.EncodeToString(missing[:]), true); got.Code != http.StatusNotFound {
-		t.Fatalf("missing descriptor = %d, want 404", got.Code)
-	}
-	if got := get(blobH, "/internal/computers/files/projection-base/blob?computer_id=computer-base&base_ref="+digest, true); got.Code != http.StatusOK || !bytes.Equal(got.Body.Bytes(), blob) {
-		t.Fatalf("get blob = %d len=%d", got.Code, got.Body.Len())
-	}
-	if got := get(blobH, "/internal/computers/files/projection-base/blob?computer_id=computer-base&base_ref="+hex.EncodeToString(missing[:]), true); got.Code != http.StatusNotFound {
-		t.Fatalf("missing blob = %d, want 404", got.Code)
-	}
-	post := httptest.NewRequest(http.MethodPost, "/internal/computers/files/projection-base/blob?computer_id=computer-base&base_ref="+digest, nil)
-	post.Header.Set("X-Internal-Caller", "true")
-	postResult := httptest.NewRecorder()
-	handler.HandleProjectionBaseBlob(postResult, post)
-	if postResult.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("post blob = %d, want 405", postResult.Code)
-	}
+}
 
+// seedReplayWatermark writes a replay watermark row directly: nothing
+// advertises one any more, but vmctl still reads the rows an earlier build
+// wrote.
+func seedReplayWatermark(t *testing.T, s *Store, computerID string, seq int64, baseRef string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(context.Background(), `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON CONFLICT (computer_id) DO UPDATE SET watermark_sequence=excluded.watermark_sequence,base_ref=excluded.base_ref,updated_at=excluded.updated_at`, computerID, seq, baseRef, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
 }

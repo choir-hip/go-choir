@@ -2,8 +2,9 @@ package platform
 
 // Failure modes the active artifact GC must hold (written before the code;
 // docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md):
-//  1. deleting a referenced object (watermark, pinned, latest-two, job-seed
-//     base; a root's chunks; a route-receipt payload);
+//  1. deleting a referenced object (a root's chunks; a route-receipt
+//     payload; a platform-update payload; projection bases are no longer
+//     referenced by anything and are collected);
 //  2. a live set that fails or loads partially treated as empty (route
 //     tables, an unreadable manifest, an empty namespace live set);
 //  3. a race with a writer that reuses an old object;
@@ -102,15 +103,28 @@ func activeWindow() ArtifactGCConfig {
 	return ArtifactGCConfig{Mode: ArtifactGCModeActive, Grace: gcTestWindow}
 }
 
-// Failure mode 1: every reference kind keeps its base and sidecar; only the
-// unpinned, non-latest-two, non-watermark, non-seed base goes.
-func TestArtifactGCKeepsEveryProjectionBaseReference(t *testing.T) {
+// Projection bases are no longer in the GC's live set (the host keeps none;
+// the guest recovers from its own sealed snapshots). Ways this could fail,
+// written before the code:
+//  1. a base still named by a row the GC used to honour (an explicit pin, a
+//     computer's latest two, an active job's seed, an advertised watermark)
+//     is kept, so the 60 GB is never released;
+//  2. a base is collected inside the grace window, or its descriptor sidecar
+//     outlives its blob;
+//  3. the empty-live-set guard trips on the now-empty set and the namespace is
+//     reported but never swept;
+//  4. removing the live-set source makes the loader error, so the whole sweep
+//     aborts and no namespace is collected;
+//  5. another namespace loses its pins or keeps what it should drop: the
+//     file-cas-roots live set and the platform-update live set must be exactly
+//     what they were.
+func TestArtifactGCCollectsProjectionBasesNoLiveSetNamesAny(t *testing.T) {
 	f := newGCFixture(t)
 	old := 9 * 24 * time.Hour
-	base := func(name string) (string, string) {
+	base := func(name string, age time.Duration) (string, string) {
 		d := gcDigest(name)
-		return f.writeAged("sha256/projection-base/"+d, []byte(name), old),
-			f.writeAged("sha256/projection-base/"+d+".descriptor.json", []byte("{}"), old)
+		return f.writeAged("sha256/projection-base/"+d, []byte(name), age),
+			f.writeAged("sha256/projection-base/"+d+".descriptor.json", []byte("{}"), age)
 	}
 	now := time.Now().UTC()
 	for i, name := range []string{"b1", "b2", "b3", "b4"} {
@@ -121,29 +135,48 @@ func TestArtifactGCKeepsEveryProjectionBaseReference(t *testing.T) {
 	if _, err := f.store.db.ExecContext(f.ctx, `INSERT INTO computer_projection_base_pins (computer_id,base_ref,reference_id,created_at) VALUES (?,?,?,?)`, "computer-p", gcDigest("b1"), "checkpoint:head-1", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 5, gcDigest("wm")); err != nil {
-		t.Fatal(err)
-	}
+	seedReplayWatermark(t, f.store, "computer-w", 5, gcDigest("wm"))
 	if _, err := f.store.db.ExecContext(f.ctx, `INSERT INTO computer_projection_jobs (`+projectionJobColumns+`) VALUES (?,1,'queued','cadence',10,'h',5,?,'k','','',false,0,'',?,?)`, "computer-j", gcDigest("seed"), now, now); err != nil {
 		t.Fatal(err)
 	}
 	paths := map[string][2]string{}
 	for _, name := range []string{"b1", "b2", "b3", "b4", "wm", "seed"} {
-		blob, sidecar := base(name)
+		blob, sidecar := base(name, old)
 		paths[name] = [2]string{blob, sidecar}
 	}
+	young := [2]string{}
+	young[0], young[1] = base("young", time.Hour)
+
+	// Another namespace: a live file root and a dead one, to show its live set
+	// is unchanged by the bases leaving theirs.
+	liveRoot, deadRoot := gcDigest("live-root"), gcDigest("dead-root")
+	if err := f.store.RecordFileRoot(f.ctx, "computer-r", liveRoot, "sha256/file-cas-roots/computer-r/"+liveRoot+".json", 1); err != nil {
+		t.Fatal(err)
+	}
+	liveRootPath := f.writeAged("sha256/file-cas-roots/computer-r/"+liveRoot+".json", []byte("live"), old)
+	deadRootPath := f.writeAged("sha256/file-cas-roots/computer-r/"+deadRoot+".json", []byte("dead"), old)
+
 	report := f.run(activeWindow())
-	for _, name := range []string{"b1", "b3", "b4", "wm", "seed"} {
-		for _, p := range paths[name] {
-			if !exists(p) {
-				t.Fatalf("referenced base %s removed: %s (report %+v)", name, p, report.Namespaces["projection-base"])
+	if len(report.Warnings) != 0 {
+		t.Fatalf("sweep warned (a loader error or a guard tripped): %v", report.Warnings)
+	}
+	for name, ps := range paths {
+		for _, p := range ps {
+			if exists(p) {
+				t.Fatalf("base %s kept though no live set names it: %s (report %+v)", name, p, report.Namespaces["projection-base"])
 			}
 		}
 	}
-	for _, p := range paths["b2"] {
-		if exists(p) {
-			t.Fatalf("unreferenced base kept: %s", p)
+	for _, p := range young {
+		if !exists(p) {
+			t.Fatalf("a base inside the grace window was collected: %s", p)
 		}
+	}
+	if !exists(liveRootPath) || exists(deadRootPath) {
+		t.Fatalf("file-cas-roots live set changed: live kept=%v dead kept=%v", exists(liveRootPath), exists(deadRootPath))
+	}
+	if ns := report.Namespaces["projection-base"]; ns.Deleted != 12 || ns.InGrace != 2 || ns.Live != 0 {
+		t.Fatalf("projection-base report = %+v, want 12 deleted, 2 in grace, 0 live", ns)
 	}
 }
 
@@ -225,15 +258,19 @@ func TestArtifactGCFailsClosedOnRouteLedgerError(t *testing.T) {
 
 // Failure mode 2: a namespace whose live set is empty while old files exist
 // is the wrong-store signature (2026-10-05); it is reported, not swept.
+//
+// projection-base is exempt: its live set is empty by design (the host keeps
+// no bases), so the guard is exercised on platform-update, whose live set is
+// read from the route ledger.
 func TestArtifactGCRefusesNamespaceWithEmptyLiveSet(t *testing.T) {
 	f := newGCFixture(t)
-	orphan := f.writeAged("sha256/projection-base/"+gcDigest("orphan"), []byte("x"), 30*24*time.Hour)
+	orphan := f.writeAged("sha256/platform-update/"+gcDigest("orphan"), []byte("x"), 30*24*time.Hour)
 	report := f.run(activeWindow())
 	if !exists(orphan) {
 		t.Fatal("namespace with an empty live set was swept")
 	}
-	ns := report.Namespaces["projection-base"]
-	if ns.Eligible != 1 || ns.Deleted != 0 || !strings.Contains(strings.Join(report.Warnings, "\n"), "projection-base") {
+	ns := report.Namespaces["platform-update"]
+	if ns.Eligible != 1 || ns.Deleted != 0 || !strings.Contains(strings.Join(report.Warnings, "\n"), "platform-update") {
 		t.Fatalf("empty live set not reported: %+v %v", ns, report.Warnings)
 	}
 }
@@ -325,9 +362,6 @@ func readGCLog(t *testing.T, root string) []map[string]any {
 // that dies mid-batch leaves the rest for the next run, which completes.
 func TestArtifactGCLogsIntentBeforeUnlinkAndResumesAfterCrash(t *testing.T) {
 	f := newGCFixture(t)
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 1, gcDigest("anchor")); err != nil {
-		t.Fatal(err)
-	}
 	var dead []string
 	for _, name := range []string{"d1", "d2", "d3"} {
 		dead = append(dead, f.writeAged("sha256/projection-base/"+gcDigest(name), []byte(name), 9*24*time.Hour))
@@ -377,9 +411,6 @@ func TestArtifactGCLogsIntentBeforeUnlinkAndResumesAfterCrash(t *testing.T) {
 // Failure mode 4: no log, no deletion.
 func TestArtifactGCRefusesToDeleteWithoutLog(t *testing.T) {
 	f := newGCFixture(t)
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 1, gcDigest("anchor")); err != nil {
-		t.Fatal(err)
-	}
 	dead := f.writeAged("sha256/projection-base/"+gcDigest("dead"), []byte("dead"), 9*24*time.Hour)
 	if err := os.WriteFile(filepath.Join(f.root, artifactGCLogDir), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
@@ -420,9 +451,6 @@ func TestPinFileChunkReplacesTornChunk(t *testing.T) {
 // eligible set while deleting nothing.
 func TestArtifactGCCapsAndUncappedDryRunReport(t *testing.T) {
 	f := newGCFixture(t)
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 1, gcDigest("anchor")); err != nil {
-		t.Fatal(err)
-	}
 	small1 := f.writeAged("sha256/projection-base/"+gcDigest("s1"), bytes.Repeat([]byte("a"), 10), 9*24*time.Hour)
 	small2 := f.writeAged("sha256/projection-base/"+gcDigest("s2"), bytes.Repeat([]byte("b"), 10), 9*24*time.Hour)
 	large := f.writeAged("sha256/projection-base/"+gcDigest("l"), bytes.Repeat([]byte("c"), 100), 9*24*time.Hour)
@@ -464,9 +492,6 @@ func TestArtifactGCCapsAndUncappedDryRunReport(t *testing.T) {
 // Failure mode 6: namespaces outside the active list are report-only.
 func TestArtifactGCActiveNamespacesLimitDeletion(t *testing.T) {
 	f := newGCFixture(t)
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 1, gcDigest("anchor")); err != nil {
-		t.Fatal(err)
-	}
 	dead := f.writeAged("sha256/projection-base/"+gcDigest("dead"), []byte("dead"), 9*24*time.Hour)
 	cfg := activeWindow()
 	cfg.ActiveNamespaces = []string{"file-cas-chunks"}
@@ -484,9 +509,6 @@ func TestArtifactGCActiveNamespacesLimitDeletion(t *testing.T) {
 // grace below the configured window.
 func TestHandleArtifactGCClampsToConfiguredPolicy(t *testing.T) {
 	f := newGCFixture(t)
-	if err := f.store.RecordReplayWatermark(f.ctx, "computer-w", 1, gcDigest("anchor")); err != nil {
-		t.Fatal(err)
-	}
 	twoHours := f.writeAged("sha256/projection-base/"+gcDigest("recent"), []byte("recent"), 2*time.Hour)
 	post := func(body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/internal/platform/artifact-gc", strings.NewReader(body))
