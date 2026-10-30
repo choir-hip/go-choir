@@ -346,7 +346,7 @@ regression passed unit tests and an 8-model frozen-candidate review.
    alarm and its staging proof — those become the missions.
 
 
-## Merged from docs/operational-invariants-register-2026-10-08.md (2026-10-08)
+## Merged from docs/state-homes-inventory-2026-10-08.md (2026-10-08)
 
 **State Homes Inventory.**
 Date: 2026-10-08. Status: **draft inventory** (read-only survey, green). Enforces the proposed operational invariant **O21 — a realization holds no unique state** in the [operational invariants register](operational-invariants-register-2026-10-08.md). Restates, operationally, what [computer-ontology.md](computer-ontology.md) already says: "a realization may be replaced without changing ComputerID" and "realization is

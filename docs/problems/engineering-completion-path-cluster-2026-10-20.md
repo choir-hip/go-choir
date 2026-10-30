@@ -1885,7 +1885,7 @@ pre-check; the assignment ends cancelled with the refusal as its cause,
 not stranded).
 
 
-## Merged from docs/problems/engineering-completion-path-cluster-2026-10-20.md (2026-10-10)
+## Merged from docs/problems/engineering-result-strands-on-the-completed-casting-turn-2026-10-10.md (2026-10-10)
 
 **An engineering result never wakes management: it is delivered to the casting turn, which has already completed (2026-10-10).**
 Status: documented, not fixed. Mutation class of the fix: `red` (persistent management wake and lifecycle packet delivery).

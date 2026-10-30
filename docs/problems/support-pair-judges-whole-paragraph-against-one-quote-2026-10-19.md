@@ -197,7 +197,7 @@ citation is outside the support judge's job, but this does narrow what
 it sees.
 
 
-## Merged from docs/problems/support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md (2026-10-18)
+## Merged from docs/problems/support-failure-rewakes-texture-per-revision-2026-10-18.md (2026-10-18)
 
 **A support failure re-wakes Texture once per revision, so an unsupportable story takes 7 to 9 turns (2026-10-18).**
 Status: documented, not fixed. The cycle ends on its own. **Correction (2026-10-19):** I first wrote that this is "a cost problem, not a correctness one" because "the gate holds every such story". Story c0fb708e ran the cycle while published (v4 to v10 in three minutes). The likely main cause is that a support pair judges a whole paragraph against one quote: [support-pair-judges-whole-paragraph-against-one-quote-2026

@@ -91,7 +91,7 @@ Test computers: T is computer-71afbf14; the jailer test computers are fp8-jailer
 The outage: vmctl down 23:57:58 to 00:16:20 UTC on October 24; failed deploy run 40041867841; recovery and cause in the vmctl restart record above.
 
 
-## Merged from docs/reports/launch-first-pass-catch-up-2026-10-24.md (2026-10-22)
+## Merged from docs/reports/launch-first-pass-day-one-2026-10-22.md (2026-10-22)
 
 **The launch first pass, from Wednesday evening to Thursday afternoon.**
 Written Thursday, October twenty-second, a little after four in the afternoon UTC, which is just after noon your time. It covers about twenty-two hours of the launch first pass, from Wednesday evening at six UTC until now, and it is my own account as the orchestrator, FP0.

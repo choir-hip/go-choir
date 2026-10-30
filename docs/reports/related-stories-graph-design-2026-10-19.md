@@ -980,7 +980,7 @@ Open, recorded and not blocking:
   on shared captures.
 
 
-## Merged from docs/reports/related-stories-graph-design-2026-10-19.md (2026-10-20)
+## Merged from docs/reports/related-stories-phase3-research-review-2026-10-20.md (2026-10-20)
 
 **Related stories, phase 3: the research desk reviews the graph, Jev classifies.**
 Design, 2026-10-20. Extends [related stories, computed from the graph](related-stories-graph-design-2026-10-19.md) (phase 1 shared captures, live; phase 2 events, waiting on the one-incident blind rerun). Owner asks, owner notes §28: "more connections between articles … review all the existing articles and make sure that they are correctly connected in the object graph when they touch on similar topics, events, and e

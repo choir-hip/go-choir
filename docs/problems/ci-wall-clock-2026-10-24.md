@@ -218,7 +218,7 @@ deadline-sensitive actorruntime tests are looked at; the test step is no longer
 the deploy path's maximum (the Node B prebuild ends at about 9.3 min).
 
 
-## Merged from docs/problems/ci-wall-clock-2026-10-24.md (2026-10-22)
+## Merged from docs/problems/ci-critical-path-race-shards-2026-10-22.md (2026-10-22)
 
 **CI critical path: two heavy race shards, a 20-runner queue, and the Node B build floor (2026-10-22).**
 Date: 2026-10-22. Status: fix committed on `lane/fp0-ci-shard-balance` (`c442f3221`), not yet on main; the CI timing proof comes with the first runs after it lands. Mutation class of the fix: orange (CI workflow and the test shard planner; no product behavior). Rollback: revert the fix commit.

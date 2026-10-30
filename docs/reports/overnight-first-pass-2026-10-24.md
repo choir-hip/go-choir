@@ -109,7 +109,7 @@ You can answer these in one message, by number.
 - Owed: D37's proof at the 04:00 compaction; a second clean platform Dolt GC. b@c's System/model-policy.toml is restored to its original (read back identical at 15:23).
 
 
-## Merged from docs/reports/overnight-first-pass-2026-10-24.md (2026-10-23)
+## Merged from docs/reports/overnight-groundwork-pass-2026-10-23.md (2026-10-23)
 
 **The overnight groundwork pass.**
 Written on Friday, October twenty-third, at about half past eleven UTC. It covers the overnight stretch from the restart at about five UTC to now, about six and a half hours of the launch first pass, as run by FP0.
