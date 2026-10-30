@@ -430,6 +430,41 @@ func TestInterruptedCopyReturnsError(t *testing.T) {
 	checkReport(t, rep)
 }
 
+func TestBadTextFailsLoudlyNamingThePrimaryKey(t *testing.T) {
+	ctx := context.Background()
+	h, err := doltsrc.Create(ctx, filepath.Join(t.TempDir(), "ws"), "texture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if _, err := h.DB.ExecContext(ctx, `CREATE TABLE notes (id VARCHAR(20) PRIMARY KEY, body LONGTEXT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range [][2]string{{"ok1", "fine"}, {"nul1", "a\x00b"}, {"nul2", "\x00"}, {"ok2", "é"}} {
+		if _, err := h.DB.ExecContext(ctx, `INSERT INTO notes VALUES (?, ?)`, row[0], row[1]); err != nil {
+			t.Skipf("this Dolt refuses NUL in text, so the case cannot arise: %v", err)
+		}
+	}
+	dst := dbxtest.Postgres(t)
+	execAll(t, dst, `CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)`)
+
+	rep, err := Run(ctx, h.DB, dst, dbx.Postgres, Options{DryRun: true})
+	if err == nil {
+		t.Fatal("dry run must fail when rows hold NUL")
+	}
+	tr := rep.Tables[0]
+	if tr.BadTextRows != 2 || tr.BadText["body: NUL byte"] != 2 || len(tr.BadTextSamples) != 2 || !strings.Contains(tr.BadTextSamples[0], "pk=(nul1)") {
+		t.Errorf("dry-run report = %+v", tr)
+	}
+	_, err = Run(ctx, h.DB, dst, dbx.Postgres, Options{})
+	if err == nil || !strings.Contains(err.Error(), "pk=(nul1)") || !strings.Contains(err.Error(), "NUL byte") {
+		t.Errorf("real run error = %v, want table, column and pk named", err)
+	}
+	if _, _, err := convert("a\xffb", classText, true, true); err == nil || !strings.Contains(err.Error(), "invalid UTF-8") {
+		t.Errorf("invalid UTF-8 must be refused: %v", err)
+	}
+}
+
 func TestNullIntoNotNullIsCoercedAndCounted(t *testing.T) {
 	v, res, err := convert(nil, classText, true, false)
 	if err != nil || v != "" || !res.coerced {

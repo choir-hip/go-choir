@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // class is the logical type of a column, decided from the target's declared
@@ -240,9 +241,20 @@ func convert(v any, tc class, notNull bool, kindPG bool) (any, convResult, error
 // operator can act on (the COPY error would not name the row).
 func checkPGText(s string) error {
 	if strings.IndexByte(s, 0) >= 0 {
-		return fmt.Errorf("text contains a NUL byte, which PostgreSQL cannot store")
+		return &badTextError{reason: "NUL byte"}
+	}
+	if !utf8.ValidString(s) {
+		return &badTextError{reason: "invalid UTF-8"}
 	}
 	return nil
+}
+
+// badTextError is text PostgreSQL cannot store. Never stripped silently: a
+// real run fails naming the table, column and primary key; a dry run counts.
+type badTextError struct{ reason string }
+
+func (e *badTextError) Error() string {
+	return "text contains " + e.reason + ", which PostgreSQL cannot store"
 }
 
 func toText(v any) (string, error) {

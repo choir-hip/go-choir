@@ -125,6 +125,9 @@ func summarize(w io.Writer, name string, r *rowcopy.Report) {
 		if len(t.SourceOnlyColumns) > 0 {
 			fmt.Fprintf(w, "  %s dropped columns: %s\n", t.Name, strings.Join(t.SourceOnlyColumns, ", "))
 		}
+		if t.BadTextRows > 0 {
+			fmt.Fprintf(w, "  %s: %d rows hold text PostgreSQL cannot store: %v; samples: %s\n", t.Name, t.BadTextRows, t.BadText, strings.Join(t.BadTextSamples, "; "))
+		}
 		if len(t.NullCoerced) > 0 {
 			fmt.Fprintf(w, "  %s NULL coerced to zero value: %v\n", t.Name, t.NullCoerced)
 		}

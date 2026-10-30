@@ -60,6 +60,12 @@ type TableReport struct {
 	TargetDigest      string           `json:"target_digest,omitempty"`
 	NullCoerced       map[string]int64 `json:"null_coerced,omitempty"`
 	ZeroDates         map[string]int64 `json:"zero_dates,omitempty"`
+	// BadText (dry run, PostgreSQL target): per column and reason, the rows
+	// whose text PostgreSQL cannot store (NUL byte, invalid UTF-8), with up
+	// to five sample primary keys. A real run fails on the first such row.
+	BadText        map[string]int64 `json:"bad_text,omitempty"`
+	BadTextRows    int64            `json:"bad_text_rows,omitempty"`
+	BadTextSamples []string         `json:"bad_text_samples,omitempty"`
 	DurationMS        int64            `json:"duration_ms"`
 	OK                bool             `json:"ok"`
 	Error             string           `json:"error,omitempty"`
@@ -202,6 +208,7 @@ func (r *runner) run(ctx context.Context, rep *Report) error {
 	}
 
 	if r.opts.DryRun {
+		var badErr error
 		for _, p := range pairs {
 			tr := TableReport{Name: p.Name, SourceOnlyColumns: p.SrcOnly, TargetOnlyColumns: p.DstOnly}
 			for _, c := range p.DstCols {
@@ -214,9 +221,21 @@ func (r *runner) run(ctx context.Context, rep *Report) error {
 				return err
 			}
 			tr.SourceRows, tr.OK = n, true
+			if r.kind == dbx.Postgres {
+				if err := r.scanText(ctx, p, &tr); err != nil {
+					tr.OK, tr.Error = false, err.Error()
+					rep.Tables = append(rep.Tables, tr)
+					return err
+				}
+				if tr.BadTextRows > 0 {
+					tr.OK = false
+					tr.Error = fmt.Sprintf("%d rows hold text PostgreSQL cannot store (%v)", tr.BadTextRows, tr.BadText)
+					badErr = errors.Join(badErr, fmt.Errorf("table %s: %s", p.Name, tr.Error))
+				}
+			}
 			rep.Tables = append(rep.Tables, tr)
 		}
-		return nil
+		return badErr
 	}
 
 	names := make([]string, len(pairs))
@@ -323,6 +342,15 @@ type rowIter struct {
 	err     error
 	logf    func(string, ...any)
 	start   time.Time
+	// pkIdx indexes the source primary-key columns within the selected
+	// columns, for error messages.
+	pkIdx []int
+	// tolerant (dry run) counts text PostgreSQL cannot store instead of
+	// failing on the first.
+	tolerant   bool
+	bad        map[string]int64
+	badRows    int64
+	badSamples []string
 }
 
 func (r *runner) openIter(ctx context.Context, q srcQueryer, p pair) (*rowIter, error) {
@@ -336,29 +364,71 @@ func (r *runner) openIter(ctx context.Context, q srcQueryer, p pair) (*rowIter, 
 	for i := range it.raw {
 		it.ptrs[i] = &it.raw[i]
 	}
+	it.bad = map[string]int64{}
+	for _, k := range p.PK {
+		for i, c := range p.SrcCols {
+			if strings.EqualFold(c.Name, k) {
+				it.pkIdx = append(it.pkIdx, i)
+			}
+		}
+	}
 	return it, nil
 }
 
 // next returns the next converted row, or nil at the end or on error (see err).
 func (it *rowIter) next() []any {
+	for {
+		out, skipped := it.nextRow()
+		if skipped {
+			continue
+		}
+		return out
+	}
+}
+
+// pkLabel names the current row's primary key for error messages.
+func (it *rowIter) pkLabel() string {
+	if len(it.pkIdx) == 0 {
+		return fmt.Sprintf("row %d", it.n+1)
+	}
+	parts := make([]string, len(it.pkIdx))
+	for i, ix := range it.pkIdx {
+		s, _ := toText(it.raw[ix])
+		parts[i] = clip(s)
+	}
+	return "pk=(" + strings.Join(parts, ", ") + ")"
+}
+
+func (it *rowIter) nextRow() (out []any, skipped bool) {
 	if it.err != nil || !it.rows.Next() {
 		if it.err == nil {
 			it.err = it.rows.Err()
 		}
-		return nil
+		return nil, false
 	}
 	if err := it.rows.Scan(it.ptrs...); err != nil {
 		it.err = fmt.Errorf("rowcopy: scan source %s row %d: %w", it.p.Name, it.n+1, err)
-		return nil
+		return nil, false
 	}
-	out := make([]any, len(it.raw))
+	out = make([]any, len(it.raw))
 	it.dig.beginRow()
 	for i, v := range it.raw {
 		dc := it.p.DstCols[i]
 		cv, res, err := convert(v, dc.Class, dc.NotNull, it.pg)
 		if err != nil {
-			it.err = fmt.Errorf("rowcopy: %s.%s row %d: %w", it.p.Name, dc.Name, it.n+1, err)
-			return nil
+			var bt *badTextError
+			if it.tolerant && errors.As(err, &bt) {
+				// Dry run: count it and move on to the next row.
+				it.bad[dc.Name+": "+bt.reason]++
+				it.badRows++
+				if len(it.badSamples) < 5 {
+					it.badSamples = append(it.badSamples, dc.Name+" "+bt.reason+" at "+it.pkLabel())
+				}
+				it.n++
+				return nil, true
+			}
+			it.err = fmt.Errorf("rowcopy: %s.%s %s: %w", it.p.Name, dc.Name, it.pkLabel(), err)
+			return nil, false
 		}
 		if res.coerced {
 			it.coerced[dc.Name]++
@@ -367,8 +437,8 @@ func (it *rowIter) next() []any {
 			it.zero[dc.Name]++
 		}
 		if err := it.dig.col(dc.Class, cv); err != nil {
-			it.err = fmt.Errorf("rowcopy: %s.%s row %d: %w", it.p.Name, dc.Name, it.n+1, err)
-			return nil
+			it.err = fmt.Errorf("rowcopy: %s.%s %s: %w", it.p.Name, dc.Name, it.pkLabel(), err)
+			return nil, false
 		}
 		out[i] = cv
 	}
@@ -377,7 +447,7 @@ func (it *rowIter) next() []any {
 	if it.n%250000 == 0 {
 		it.logf("rowcopy: %s: %d rows so far (%s)", it.p.Name, it.n, time.Since(it.start).Round(time.Second))
 	}
-	return out
+	return out, false
 }
 
 func (it *rowIter) close() { _ = it.rows.Close() }
@@ -771,6 +841,45 @@ func (r *runner) copyPostgresTable(ctx context.Context, p pair, tr *TableReport)
 	finishTable(tr, srcCount, &it.dig, back, it)
 	if !tr.OK {
 		return errors.New(tr.Error)
+	}
+	// Fresh statistics for the planner; the load is the table's first.
+	if _, err := r.dst.ExecContext(ctx, "ANALYZE "+quoteANSI(p.Name)); err != nil {
+		r.opts.Logf("rowcopy: %s: ANALYZE failed (not fatal): %v", p.Name, err)
+	}
+	return nil
+}
+
+// scanText streams the table through the conversion without writing, and
+// counts rows PostgreSQL could not store (dry run). Tables with no text or
+// JSON column are skipped.
+func (r *runner) scanText(ctx context.Context, p pair, tr *TableReport) error {
+	has := false
+	for _, c := range p.DstCols {
+		if c.Class == classText || c.Class == classJSON {
+			has = true
+		}
+	}
+	if !has {
+		return nil
+	}
+	stx, err := r.beginSource(ctx)
+	if err != nil {
+		return err
+	}
+	defer stx.Rollback()
+	it, err := r.openIter(ctx, stx, p)
+	if err != nil {
+		return err
+	}
+	defer it.close()
+	it.tolerant = true
+	for it.next() != nil {
+	}
+	if it.err != nil {
+		return it.err
+	}
+	if it.badRows > 0 {
+		tr.BadText, tr.BadTextRows, tr.BadTextSamples = it.bad, it.badRows, it.badSamples
 	}
 	return nil
 }
