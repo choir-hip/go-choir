@@ -54,6 +54,13 @@ file, it wins for that work.
    worktree, split by package boundary. Opus orchestrates, integrates and
    adjudicates. Never wait idle on CI or a deploy; build the next piece
    while it runs.
+
+   The agents VM is extra capacity: `ssh choir-agents` (user `agent`,
+   reached through node-a over vsock), with 8 cores, 9 GB of RAM and 27 GB
+   free on /home at 2026-10-30. It runs about five agents, with `claude`
+   and `go` installed, but not all of them compiling at once. Use it for
+   builds, test shards, the CI mirror (`~/ci-mirror.sh`) and parallel
+   builders. Stagger the compiles, and keep heavy measurement off Node B.
 4. **Downtime is acceptable.** Stop, drain, migrate, switch. Build no
    zero-downtime machinery, no dual writes, and no compatibility shims
    beyond what running d@e first needs. Old code paths are deleted at the

@@ -384,6 +384,10 @@ boundaries:
       in the ledger in one line.
     - The goal stops only for the keep set, or a defect that would lose
       owner data.
+    - Capacity: run builders and builds on this machine and on the agents
+      VM, `ssh choir-agents` (8 cores, 9 GB of RAM, 27 GB free; about five
+      agents, with compiles staggered). Its CI mirror is ~/ci-mirror.sh.
+      Node B carries only deploys, the drills and the migration.
   agents: >-
     Opus for design and adjudication. Sonnet subagents for following a
     plan, optimizing a metric and investigations (owner 2026-10-22).
