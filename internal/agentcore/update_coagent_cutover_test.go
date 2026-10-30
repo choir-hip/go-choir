@@ -120,10 +120,9 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 }
 
 func TestCrashStartClosesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
-	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create temp dir: %v", err)
-	}
+	// One directory per test: the SQLite state file is <dir>/state.db, so a
+	// directory shared between tests would share their state.
+	dir := t.TempDir()
 	dbPath := filepath.Join(dir, t.Name()+".db")
 	_ = os.Remove(dbPath)
 
