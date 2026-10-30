@@ -776,7 +776,7 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			o.newID, o.newHash, o.body, o.metadata, o.versionID, o.supersededBy, o.canonicalID); err != nil {
+			o.newID, o.newHash, o.body, string(o.metadata), o.versionID, o.supersededBy, o.canonicalID); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og migrate write %s: %w", o.canonicalID, err)
 		}
@@ -1043,7 +1043,7 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			entry.OldCanonicalID, hash, newBody, newMeta, versionID, supersededBy, entry.NewCanonicalID); err != nil {
+			entry.OldCanonicalID, hash, newBody, string(newMeta), versionID, supersededBy, entry.NewCanonicalID); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og revert write %s: %w", entry.NewCanonicalID, err)
 		}

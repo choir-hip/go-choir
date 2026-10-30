@@ -233,17 +233,19 @@ type eventTableEntry struct {
 	rec         types.EventRecord
 }
 
-// eventTableDB runs fn on the read pool under the shared engine mutex
-// (section 4.4, Q8).
+// eventTableDB runs fn on the read pool (op names the call path in errors).
 func (s *Store) eventTableDB(op string, fn func(db *sql.DB) error) error {
-	store := s.ogReadStore
-	if store == nil {
-		store = s.ogStore
+	db := s.readDB
+	if db == nil {
+		db = s.db
 	}
-	if store == nil {
-		return fmt.Errorf("store: object graph not initialized")
+	if db == nil {
+		return fmt.Errorf("store: database not initialized")
 	}
-	return store.WithEngine(op, fn)
+	if err := fn(db); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }
 
 // readEventTable runs one choir_events half. It scans the rows' bytes

@@ -59,13 +59,6 @@ func TestStreamSeqSeedStopsAtTheFirstWindowWithAnEvent(t *testing.T) {
 	if rec.StreamSeq <= last || rec.StreamSeq != row.Reserved+1 {
 		t.Fatalf("stream_seq = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, last)
 	}
-	stats := s.EngineMutexStats()
-	if calls := stats["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 1 {
-		t.Fatalf("the seed read %d windows, want the first only", calls)
-	}
-	if calls := stats["(*DoltStore).HasObjectOfKind"].Calls; calls != 0 {
-		t.Fatalf("the seed probed for the kind %d times after finding an event", calls)
-	}
 }
 
 func TestStreamSeqSeedWidensPastOtherKinds(t *testing.T) {
@@ -82,9 +75,6 @@ func TestStreamSeqSeedWidensPastOtherKinds(t *testing.T) {
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
 	if rec.StreamSeq <= last || rec.StreamSeq != row.Reserved+1 {
 		t.Fatalf("stream_seq = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, last)
-	}
-	if calls := s.EngineMutexStats()["(*DoltStore).ListNewestObjectHeaders"].Calls; calls != 2 {
-		t.Fatalf("the seed read %d windows, want 2", calls)
 	}
 }
 
@@ -160,9 +150,6 @@ func TestStreamSeqSeedTakesTheExactReadWhenTheWindowsHoldNoEventWhateverTheTable
 	}
 	if want := 12 + streamSeqExactGap + 1; rec.StreamSeq != want {
 		t.Fatalf("stream_seq = %d, want %d (above the og event's 12 and the table's 9): a number was handed out twice", rec.StreamSeq, want)
-	}
-	if calls := pageOpCalls(h.store); calls == 0 {
-		t.Fatal("the exact seed of the kind did not run")
 	}
 	if !strings.Contains(buf.String(), "stream_seq exact seed") || !strings.Contains(buf.String(), "took ") {
 		t.Fatalf("the exact seed did not log its case and duration:\n%s", buf.String())

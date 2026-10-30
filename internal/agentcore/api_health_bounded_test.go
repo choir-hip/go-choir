@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -67,9 +66,8 @@ func serveHealth(t *testing.T, handler *APIHandler) (*httptest.ResponseRecorder,
 	}
 }
 
-// holdStore takes the write pool's only connection, then starts an object
-// graph read that takes the engine mutex and waits behind it: the shape of
-// the 2026-10-22 trace (GetObject holding the engine for minutes). The
+// holdStore takes the write pool's only connection, then starts a read on
+// the same pool that waits behind it. The
 // returned release frees both and waits, bounded, for the read to end.
 func holdStore(t *testing.T, productStore *choirstore.Store) (release func()) {
 	t.Helper()
@@ -81,11 +79,11 @@ func holdStore(t *testing.T, productStore *choirstore.Store) (release func()) {
 	readEnded := make(chan struct{})
 	go func() {
 		defer close(readEnded)
-		_, _ = productStore.CommitmentRecordExists(ctx, "owner-health", "computer-health", "held-record")
+		var one int
+		_ = productStore.DB().QueryRowContext(ctx, `SELECT 1`).Scan(&one)
 	}()
-	waitFor(t, "an engine-mutex holder", func() bool {
-		live := productStore.EngineMutexLive()
-		return live != nil && live.HolderOp != ""
+	waitFor(t, "a waiter on the write connection", func() bool {
+		return productStore.PoolStats().Write.InUse > 0 && productStore.DB().Stats().WaitCount > 0
 	})
 	var released bool
 	release = func() {
@@ -183,10 +181,6 @@ func TestHandleHealthAnswers503NamingHolderWhenStoreStalled(t *testing.T) {
 	if body.StoreStalled == nil || len(body.StoreStalled.Unanswered) == 0 || body.StoreStalled.BudgetMS <= 0 {
 		t.Fatalf("503 body store_stalled=%+v", body.StoreStalled)
 	}
-	live := body.StoreStalled.EngineMutexLive
-	if live == nil || !strings.Contains(live.HolderOp, "GetObject") || live.HeldMS <= 0 {
-		t.Fatalf("503 body does not name the engine holder and its age: %+v", live)
-	}
 	// Counts that were not read are absent, never a 0 that reads as idle.
 	var keys map[string]json.RawMessage
 	if err := json.Unmarshal(rec.Body.Bytes(), &keys); err != nil {
@@ -200,9 +194,8 @@ func TestHandleHealthAnswers503NamingHolderWhenStoreStalled(t *testing.T) {
 }
 
 type healthStoreStalledForTest struct {
-	Unanswered      []string                     `json:"unanswered"`
-	BudgetMS        int64                        `json:"budget_ms"`
-	EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live"`
+	Unanswered []string `json:"unanswered"`
+	BudgetMS   int64    `json:"budget_ms"`
 }
 
 // The 200 body is today's: the same keys, in runtimeHealthResponse's order.

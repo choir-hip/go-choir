@@ -3,7 +3,6 @@ package agentcore
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -56,14 +55,7 @@ func TestCrashRoundClosureReadsHeadsNotRecords(t *testing.T) {
 		t.Fatalf("seed: fold has %d open conversations (%v), want 2", countOpen(fold), err)
 	}
 
-	before := s.EngineMutexStats()
 	rt.closeOpenRoundsAfterCrash(ctx)
-	after := s.EngineMutexStats()
-	for op, st := range after {
-		if st.Calls != before[op].Calls && strings.Contains(op, "choir.commitment_record") && strings.HasSuffix(op, " json") {
-			t.Errorf("the crash round closure read commitment records by a JSON path: %q ran %d times", op, st.Calls-before[op].Calls)
-		}
-	}
 
 	fold, err := s.RebuildInboxHeads(ctx, owner, computer)
 	if err != nil {

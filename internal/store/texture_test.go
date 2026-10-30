@@ -58,7 +58,6 @@ func testTextureRevisionWithBodyDoc(t *testing.T, rev types.Revision) types.Revi
 	return rev
 }
 
-
 func TestTextureGetDocumentOwnerScope(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
@@ -407,7 +406,6 @@ func TestTextureCreateRevisionRejectsLegacySourceMetadataEvenWithStructuredSourc
 		t.Fatalf("CreateRevision error = %v, want ErrInvalidTextureRevision", err)
 	}
 }
-
 
 func structuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMessage) {
 	t.Helper()
@@ -853,7 +851,6 @@ func TestTextureRevisionVersionNumbersAdvancePastFifty(t *testing.T) {
 	}
 }
 
-
 func TestTextureListRevisionsByDocOwnerScope(t *testing.T) {
 	s := textureTestStore(t)
 	ctx := context.Background()
@@ -889,81 +886,6 @@ func TestTextureListRevisionsByDocOwnerScope(t *testing.T) {
 		t.Errorf("len(revs) = %d, want 0 for wrong owner", len(revs))
 	}
 }
-
-func TestTextureHistoryHasNativeDoltAuditCommits(t *testing.T) {
-	s := textureTestStore(t)
-	ctx := context.Background()
-
-	doc := types.Document{
-		DocID:   "doc-native-history",
-		OwnerID: "user-native-history",
-		Title:   "Native history",
-	}
-	if err := s.CreateDocument(ctx, doc); err != nil {
-		t.Fatalf("CreateDocument: %v", err)
-	}
-
-	parentID := ""
-	const revisionCount = 25
-	for i := 1; i <= revisionCount; i++ {
-		rev := testTextureRevisionWithBodyDoc(t, types.Revision{
-			RevisionID:       fmt.Sprintf("rev-native-history-%d", i),
-			DocID:            doc.DocID,
-			OwnerID:          doc.OwnerID,
-			AuthorKind:       types.AuthorUser,
-			AuthorLabel:      "alice",
-			Content:          fmt.Sprintf("revision %d", i),
-			ParentRevisionID: parentID,
-			CreatedAt:        time.Date(2026, 7, 10, 12, i, 0, 0, time.UTC),
-		})
-		if err := s.CreateRevision(ctx, rev); err != nil {
-			t.Fatalf("CreateRevision %d: %v", i, err)
-		}
-		parentID = rev.RevisionID
-	}
-
-	started := time.Now()
-	history, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10)
-	latency := time.Since(started)
-	if err != nil {
-		t.Fatalf("GetHistory: %v", err)
-	}
-	if len(history) != 10 || history[0].RevisionID != "rev-native-history-25" {
-		t.Fatalf("native history page = %#v, want latest 10 revisions", history)
-	}
-
-	var commits int
-	if err := s.textureHandle().QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT commit_hash)
-		FROM dolt_history_og_objects
-		WHERE object_kind = ?
-		  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?`,
-		string(ogKindTexRev), doc.DocID,
-	).Scan(&commits); err != nil {
-		t.Fatalf("query native Dolt history: %v", err)
-	}
-	if commits != 1 {
-		t.Fatalf("native Dolt audit commits = %d, want one batched history checkpoint", commits)
-	}
-	if _, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10); err != nil {
-		t.Fatalf("repeat GetHistory: %v", err)
-	}
-	var commitsAfterRepeat int
-	if err := s.textureHandle().QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT commit_hash)
-		FROM dolt_history_og_objects
-		WHERE object_kind = ?
-		  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?`,
-		string(ogKindTexRev), doc.DocID,
-	).Scan(&commitsAfterRepeat); err != nil {
-		t.Fatalf("query repeated native Dolt history: %v", err)
-	}
-	if commitsAfterRepeat != commits {
-		t.Fatalf("repeat history read created commit: before=%d after=%d", commits, commitsAfterRepeat)
-	}
-	t.Logf("native Dolt history latest-10 latency across %d revisions: %s", revisionCount, latency)
-}
-
 
 // ----- Diff -----
 
@@ -1460,5 +1382,3 @@ func TestTextureAgentMutationIsComputerScoped(t *testing.T) {
 		t.Fatalf("computer B mutation = %+v, %v", computerB, err)
 	}
 }
-
-

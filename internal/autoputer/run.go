@@ -679,9 +679,6 @@ func Run() {
 	// docs/problems/guest-proof-steps-have-no-route-2026-10-23.md).
 	s.HandleFunc("/internal/diag/dns", handleDiagDNS)
 	s.HandleFunc("/internal/diag/gateway-body-cap", handleDiagGatewayBodyCap)
-	// The explicit og_objects derived-column migration (host peer only);
-	// boot itself is discovery only.
-	s.HandleFunc("/internal/store/derived-columns", derivedColumnsHandler(db))
 	// runtimeServing flips once rt.Start has returned; the heal route answers
 	// 503 until then.
 	var runtimeServing atomic.Bool
@@ -823,17 +820,6 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 		snap := appender.ReplaySnapshot()
 		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
 		os.Exit(0)
-	}
-	// Derived access paths (record indexes and the rest): discovery only.
-	// Adding a missing one rewrites og_objects, so it is never a boot step
-	// (docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md);
-	// its reads stay on JSON until the explicit
-	// /internal/store/derived-columns operation adds it.
-	doneDiscover := objectgraph.BootPhase("autoputer: startup", "object-graph-access-path-discovery")
-	_, discoverErr := db.DiscoverObjectGraphAccessPaths(bootstrapCtx)
-	doneDiscover(discoverErr)
-	if discoverErr != nil {
-		log.Printf("autoputer: object graph access paths unknown, JSON paths kept: %v", discoverErr)
 	}
 	bootMark("record_indexes")
 	replaySnap := appender.ReplaySnapshot()

@@ -252,9 +252,8 @@ func Open(dbPath string) (*Store, error) {
 	s.armVocabFenceFromReport()
 	if s.readDB != nil {
 		s.ogReadStore = objectgraph.NewSQLStore(s.readDB)
-		// Mirror the write store's live metadata column set and validated
-		// derived-key families so the read pool uses the same index paths.
-		s.ogReadStore.InheritMetadataColumns(ogWriteStore)
+		// Share the write store's validated derived-key families so the read
+		// pool uses the same index paths.
 		s.ogReadStore.ShareDerivedKeys(ogWriteStore)
 	}
 	s.og = objectgraph.NewService(objectgraph.Config{

@@ -94,9 +94,6 @@ func TestStreamSeqSeedDoesNotListTheEventKind(t *testing.T) {
 	if rec.StreamSeq <= lastStored || rec.StreamSeq != row.Reserved+1 {
 		t.Fatalf("stream_seq after the restart = %d, want the lease's R + 1 = %d (above the stored %d)", rec.StreamSeq, row.Reserved+1, lastStored)
 	}
-	if calls := s.EngineMutexStats()[eventListOp].Calls; calls != 0 {
-		t.Fatalf("the first append listed the event kind %d time(s) (%s): the seed reads every event of the kind", calls, eventListOp)
-	}
 }
 
 // Failure 2. Other kinds written after the last event push it out of the

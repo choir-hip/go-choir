@@ -20,7 +20,7 @@ import (
 func TestEventTableFullFenceReadsTheTable(t *testing.T) {
 	s, _ := vocabUpcastOpenStore(t, "full-fence")
 	if _, err := s.db.Exec(`INSERT INTO choir_events (tape_seq, op_index, canonical_id, object_kind, owner_id, content_hash, body, metadata, created_at, updated_at)
-		VALUES (9, 0, 'obj:choir.event:owner:v1', 'choir.event', 'owner', 'h', '{"actor_profile":"super"}', '{"actor_profile":"super"}', NOW(), NOW())`); err != nil {
+		VALUES (9, 0, 'obj:choir.event:owner:v1', 'choir.event', 'owner', 'h', '{"actor_profile":"super"}', '{"actor_profile":"super"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatal(err)
 	}
 	_, err := s.MigrateAndFenceServingVocabulary(context.Background(), true, nil)
@@ -30,7 +30,7 @@ func TestEventTableFullFenceReadsTheTable(t *testing.T) {
 
 	clean, _ := vocabUpcastOpenStore(t, "full-fence-clean")
 	if _, err := clean.db.Exec(`INSERT INTO choir_events (tape_seq, op_index, canonical_id, object_kind, owner_id, content_hash, body, metadata, created_at, updated_at)
-		VALUES (9, 0, 'obj:choir.event:owner:v2', 'choir.event', 'owner', 'h', '{"actor_profile":"management"}', '{"actor_profile":"management"}', NOW(), NOW())`); err != nil {
+		VALUES (9, 0, 'obj:choir.event:owner:v2', 'choir.event', 'owner', 'h', '{"actor_profile":"management"}', '{"actor_profile":"management"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := clean.MigrateAndFenceServingVocabulary(context.Background(), true, nil); err != nil {

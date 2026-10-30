@@ -10,8 +10,8 @@ func TestListObjectGraphFingerprintsReadsRows(t *testing.T) {
 	ctx := context.Background()
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES ('obj:b', 'run', 'o', 'c', 'v1', 'h-b', 'body-b', '{}', NOW(), NOW(), FALSE, ''),
-		       ('obj:a', 'work_item', 'o', 'c', '', 'h-a', NULL, '{"k":1}', NOW(), NOW(), TRUE, 'obj:z')`); err != nil {
+		VALUES ('obj:b', 'run', 'o', 'c', 'v1', 'h-b', 'body-b', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE, ''),
+		       ('obj:a', 'work_item', 'o', 'c', '', 'h-a', NULL, '{"k":1}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, 'obj:z')`); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ListObjectGraphFingerprints(ctx)

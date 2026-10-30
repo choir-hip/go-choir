@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/steptrace"
 )
 
@@ -14,23 +13,22 @@ import (
 // a Complete that never returns must be locatable from the product API. A
 // step that is running shows on /api/runtime/observability with its scope,
 // name and start time while it runs, and moves to the recent list when it
-// ends; the engine lock's live holder/waiter view rides the same response.
+// ends.
 func TestObservabilityShowsTheStepAHungCompleteIsIn(t *testing.T) {
 	rt := telemetryRuntime(t, "computer-step-trace-obs")
-	read := func() (steps steptrace.Snapshot, live *objectgraph.EngineMutexLive) {
+	read := func() (steps steptrace.Snapshot) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, "/api/runtime/observability", nil)
 		req.Header.Set("X-Authenticated-User", "owner-telemetry")
 		rec := httptest.NewRecorder()
 		(&APIHandler{rt: rt}).HandleGuestObservability(rec, req)
 		var obs struct {
-			Steps           *steptrace.Snapshot          `json:"steps"`
-			EngineMutexLive *objectgraph.EngineMutexLive `json:"engine_mutex_live"`
+			Steps *steptrace.Snapshot `json:"steps"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &obs); err != nil || obs.Steps == nil {
 			t.Fatalf("observability = %d %s", rec.Code, rec.Body.String())
 		}
-		return *obs.Steps, obs.EngineMutexLive
+		return *obs.Steps
 	}
 
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -45,18 +43,15 @@ func TestObservabilityShowsTheStepAHungCompleteIsIn(t *testing.T) {
 	}()
 	<-entered
 
-	steps, live := read()
+	steps := read()
 	if len(steps.InFlight) != 1 || steps.InFlight[0].Scope != "run:assignment-hung" || steps.InFlight[0].Step != "complete.freeze_capsule" ||
 		steps.InFlight[0].StartedAt == "" {
 		t.Fatalf("in-flight steps while the step runs = %+v", steps)
 	}
-	if live == nil || live.ObservedAtUTC == "" {
-		t.Fatalf("engine_mutex_live missing from observability: %+v", live)
-	}
 
 	close(release)
 	<-done
-	steps, _ = read()
+	steps = read()
 	if len(steps.InFlight) != 0 || len(steps.Recent) != 1 || steps.Recent[0].Step != "complete.freeze_capsule" || steps.Recent[0].Error != "" {
 		t.Fatalf("steps after the step ends = %+v", steps)
 	}

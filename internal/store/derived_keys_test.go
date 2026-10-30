@@ -17,7 +17,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The Store's side of the og_key_index side table
@@ -39,7 +38,7 @@ var ogWriterStatement = regexp.MustCompile(`(?i)\b(INSERT(\s+IGNORE)?\s+INTO|REP
 // shared upsert from a function that does. A new writer fails this test until
 // it is added here with its maintenance.
 var maintainedOGWriters = map[string][]string{
-	"objectgraph/dolt_store.go": {"<package>", "DeleteObject"}, // <package>: upsertObjectSQL, used by PutObject and putBatchTx
+	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"}, // <package>: upsertObjectSQL, used by PutObject and putBatchTx
 	"store/project.go":          {"projectObject"},
 	"store/vocab_migrate_og.go": {"applyOGMigration", "revertOGMigration"},
 }
@@ -120,7 +119,7 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 	}
 	var problems []string
 	for _, s := range found {
-		allowed := usesUpsertFn[s] && s.file == "objectgraph/dolt_store.go" // PutObject, putBatchTx
+		allowed := usesUpsertFn[s] && s.file == "objectgraph/sql_store.go" // PutObject, putBatchTx
 		for _, fn := range maintainedOGWriters[s.file] {
 			if fn == s.fn {
 				allowed = true
@@ -140,7 +139,7 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 	for _, s := range found {
 		have[s.file+"|"+s.fn] = true
 	}
-	for _, want := range []string{"objectgraph/dolt_store.go|<package>", "objectgraph/dolt_store.go|PutObject", "objectgraph/dolt_store.go|putBatchTx", "objectgraph/dolt_store.go|DeleteObject", "store/project.go|projectObject", "store/vocab_migrate_og.go|applyOGMigration", "store/vocab_migrate_og.go|revertOGMigration"} {
+	for _, want := range []string{"objectgraph/sql_store.go|<package>", "objectgraph/sql_store.go|PutObject", "objectgraph/sql_store.go|putBatchTx", "objectgraph/sql_store.go|DeleteObject", "store/project.go|projectObject", "store/vocab_migrate_og.go|applyOGMigration", "store/vocab_migrate_og.go|revertOGMigration"} {
 		if !have[want] {
 			t.Errorf("the guard did not find the known writer %s (found %d sites)", want, len(found))
 		}
@@ -161,102 +160,6 @@ func opCallsContaining(s *Store, substrs ...string) uint64 {
 		}
 	}
 	return n
-}
-
-func TestHotReadsLeaveTheJSONScansOnceValidated(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Second)
-
-	// Runs: the non-lifecycle mints GetLatestActiveRunByAgent still reads.
-	for i := 0; i < 12; i++ {
-		rec := types.RunRecord{RunID: fmt.Sprintf("run-%02d", i), OwnerID: storyOwner, ComputerID: storyComputer,
-			AgentID: fmt.Sprintf("texture:doc-%d", i%4), State: types.RunRunning, CreatedAt: now.Add(time.Duration(i) * time.Second), UpdatedAt: now.Add(time.Duration(i) * time.Second)}
-		if err := s.CreateRun(ctx, rec); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Records addressed to desks.
-	for i := 0; i < 9; i++ {
-		rec := types.CommitmentRecord{RecordID: fmt.Sprintf("rec-%02d", i), SchemaID: "test", Addressee: fmt.Sprintf("texture:doc-%d", i%3),
-			Provenance: types.CommitmentProvenance{AgentID: "management:" + storyOwner}}
-		if _, err := s.AppendCommitmentRecord(ctx, storyOwner, storyComputer, rec); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Source refs by document.
-	for i := 0; i < 6; i++ {
-		id, err := objectgraph.BuildCanonicalID(TextureSourceRefObjectKind, storyOwner, fmt.Sprintf("ref-%d", i))
-		if err != nil {
-			t.Fatal(err)
-		}
-		meta, _ := json.Marshal(map[string]any{"doc_id": fmt.Sprintf("doc-%d", i%2)})
-		body := []byte(`{}`)
-		if err := s.ogStore.PutObject(ctx, objectgraph.Object{CanonicalID: id, ObjectKind: TextureSourceRefObjectKind, OwnerID: storyOwner, ComputerID: storyComputer,
-			ContentHash: objectgraph.ContentHash(TextureSourceRefObjectKind, body, meta), Body: body, Metadata: meta, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	reads := func() (run string, records []string, refs int) {
-		rec, err := s.GetLatestActiveRunByAgent(ctx, storyOwner, "texture:doc-1")
-		if err != nil {
-			t.Fatalf("GetLatestActiveRunByAgent: %v", err)
-		}
-		list, err := s.ListCommitmentRecords(ctx, storyOwner, storyComputer, "texture:doc-1", 50)
-		if err != nil {
-			t.Fatalf("ListCommitmentRecords: %v", err)
-		}
-		for _, r := range list {
-			records = append(records, r.RecordID)
-		}
-		sort.Strings(records) // equal updated_at (a second): the order among ties is not part of the contract
-		objs, err := s.ogListAllByMetadata(ctx, TextureSourceRefObjectKind, "doc_id", "doc-1")
-		if err != nil {
-			t.Fatalf("source refs by doc: %v", err)
-		}
-		return rec.RunID, records, len(objs)
-	}
-
-	// Before the pass: the JSON path, and its answers.
-	wantRun, wantRecords, wantRefs := reads()
-	if wantRun != "run-09" || len(wantRecords) != 3 || wantRefs != 3 {
-		t.Fatalf("test premise: reads = %s %v %d", wantRun, wantRecords, wantRefs)
-	}
-	if n := opCallsContaining(s, "keyindex"); n != 0 {
-		t.Fatalf("%d side-table reads before the pass", n)
-	}
-	jsonBefore := opCallsContaining(s, "ListObjectsByMetadataPage", "json") + opCallsContaining(s, "ListObjectsByOwnerAndBody") - opCallsContaining(s, "keyindex")
-	if jsonBefore == 0 {
-		t.Fatalf("the JSON path is not counted: %v", s.EngineMutexStats())
-	}
-
-	if err := s.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{PageSize: 5}); err != nil {
-		t.Fatal(err)
-	}
-	statsBefore := map[string]uint64{}
-	for op, st := range s.EngineMutexStats() {
-		statsBefore[op] = st.Calls
-	}
-	gotRun, gotRecords, gotRefs := reads()
-	if gotRun != wantRun || strings.Join(gotRecords, ",") != strings.Join(wantRecords, ",") || gotRefs != wantRefs {
-		t.Fatalf("after the pass: %s %v %d, before: %s %v %d", gotRun, gotRecords, gotRefs, wantRun, wantRecords, wantRefs)
-	}
-	var scans, keyed uint64
-	for op, st := range s.EngineMutexStats() {
-		delta := st.Calls - statsBefore[op]
-		switch {
-		case delta == 0:
-		case strings.Contains(op, "keyindex"):
-			keyed += delta
-		case strings.Contains(op, "ListObjectsByMetadataPage") || strings.Contains(op, "ListObjectsByOwnerAndBody"):
-			scans += delta
-			t.Logf("scan after validation: %s x%d", op, delta)
-		}
-	}
-	if scans != 0 || keyed < 3 {
-		t.Fatalf("after validation: %d JSON scans, %d side-table reads; want 0 and at least 3", scans, keyed)
-	}
 }
 
 func TestProjectorKeepsDerivedKeysInItsTransaction(t *testing.T) {
@@ -367,65 +270,4 @@ func TestReplayProjectionWithdrawsTheFamilies(t *testing.T) {
 	if err != nil || len(objs) != 1 || !d.Validated(objectgraph.KeyRunAgentID) {
 		t.Fatalf("after the pass: %d objects, %v, validated %t", len(objs), err, d.Validated(objectgraph.KeyRunAgentID))
 	}
-	if opCallsContaining(productStore, "keyindex") == 0 {
-		t.Fatal("the validated family does not read the side table")
-	}
-}
-
-func TestRepairedMalformedRowRestoresTheSideRead(t *testing.T) {
-	s := openTestStore(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	kind := objectgraph.ObjectKind("choir.commitment_record")
-	now := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	put := func(name, body string, at time.Time) {
-		t.Helper()
-		id, err := objectgraph.BuildCanonicalID(kind, storyOwner, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		meta := []byte(`{}`)
-		if err := s.ogStore.PutObject(ctx, objectgraph.Object{CanonicalID: id, ObjectKind: kind, OwnerID: storyOwner, ComputerID: storyComputer, VersionID: "v",
-			ContentHash: objectgraph.ContentHash(kind, []byte(body), meta), Body: []byte(body), Metadata: meta, CreatedAt: at, UpdatedAt: at}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	read := func() error {
-		_, err := s.ogStore.ListObjectsByOwnerAndBody(ctx, string(kind), storyOwner,
-			[]objectgraph.JSONFieldMatch{{JSONPath: "$.addressee", Value: "a"}}, 10)
-		return err
-	}
-	put("good", `{"addressee":"a"}`, now)
-	put("bad", `not json`, now.Add(time.Second))
-
-	saved := derivedKeyRepairRecheckEvery
-	derivedKeyRepairRecheckEvery = 300 * time.Millisecond
-	t.Cleanup(func() { derivedKeyRepairRecheckEvery = saved })
-	d := s.derivedKeys()
-	s.StartDerivedKeyValidation(ctx)
-	waitFor := func(what string, cond func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(10 * time.Second) // well under the 30 s recheck
-		for !cond() {
-			if time.Now().After(deadline) {
-				t.Fatalf("not within 10 s: %s", what)
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
-	waitFor("the first pass validates the family", func() bool { return d.Validated(objectgraph.KeyCommitmentAddressee) })
-	if err := read(); err == nil {
-		t.Fatal("test premise: with a malformed record the read errors, as the JSON read does")
-	}
-	keyedBefore := opCallsContaining(s, "keyindex")
-
-	// The owner repairs the record. The family should return to the side
-	// table without waiting for an unrelated withdrawal or a restart.
-	put("bad", `{"addressee":"b"}`, now.Add(time.Minute))
-	waitFor("a repaired family reads the side table again", func() bool {
-		if err := read(); err != nil {
-			t.Fatalf("read after the repair: %v", err)
-		}
-		return opCallsContaining(s, "keyindex") > keyedBefore
-	})
 }

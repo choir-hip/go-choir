@@ -37,7 +37,12 @@ import (
 // (computer_events_test.go covers Prepare and Finalize).
 func insertEventIndexRow(t *testing.T, s *Store, computerID string, sequence uint64, key, status string) string {
 	t.Helper()
-	return insertEventIndexRowWith(t, s.db, computerID, sequence, key, status)
+	digest := insertEventIndexRowWith(t, s.db, computerID, sequence, key, status)
+	// The guest keeps no finalized event bodies: serve these from the
+	// recent-event cache, as a store that appended them would.
+	s.eventBodies.putEvent(computerID, digest, computerevent.Event{ComputerID: computerID, Sequence: sequence, IdempotencyKey: key, EventKind: computerevent.EventGenesisImported})
+	s.eventBodies.putReceipt(computerID, digest, computerevent.Receipt{})
+	return digest
 }
 
 func insertEventIndexRowWith(t *testing.T, db interface {
@@ -51,7 +56,7 @@ func insertEventIndexRowWith(t *testing.T, db interface {
 		t.Fatal(err)
 	}
 	zero := computerevent.ZeroHead
-	_, err = db.Exec(`INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, event_json, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)`,
+	_, err = db.Exec(`INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, prepared_event_json, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, prepared_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)`,
 		digest, computerID, sequence, zero, string(computerevent.EventGenesisImported), string(raw), digest, digest, zero, key, status, zero, zero, zero, zero, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("insert event index row %d: %v", sequence, err)
@@ -161,32 +166,19 @@ func TestLatestEventByPrefixPlanRangesTheIdempotencyKey(t *testing.T) {
 		insertEventIndexRow(t, s, "computer-test", i, fmt.Sprintf("run-telemetry-%06d", i), "finalized")
 	}
 	query, args := idempotencyFamilySQL("computer-test", "platform-update-applied-")
-	rows, err := s.db.Query("EXPLAIN PLAN "+query, args...)
-	if err != nil {
-		t.Fatalf("explain: %v\n%s", err, query)
-	}
-	defer rows.Close()
-	var b strings.Builder
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			t.Fatal(err)
-		}
-		b.WriteString(line + "\n")
-	}
-	plan := b.String()
-	if !strings.Contains(plan, "IndexedTableAccess(computer_event_index)") ||
-		!strings.Contains(plan, "index: [computer_event_index.computer_id,computer_event_index.idempotency_key]") {
+	plan := explainEventTablePlan(t, s, query, args...)
+	if !strings.Contains(plan, "computer_event_index") || !strings.Contains(plan, "USING INDEX") ||
+		!strings.Contains(plan, "computer_id=?") || !strings.Contains(plan, "idempotency_key>") {
 		t.Fatalf("family read does not range the (computer_id, idempotency_key) key:\n%s", plan)
 	}
-	if !strings.Contains(plan, "platform-update-applied.)") {
+	if !strings.Contains(plan, "idempotency_key<") {
 		t.Fatalf("family read has no upper bound, so it reads every key from the prefix on:\n%s", plan)
 	}
-	if strings.Contains(plan, "TopN") || strings.Contains(plan, "Sort(") {
+	if strings.Contains(plan, "TEMP B-TREE") {
 		t.Fatalf("family read sorts:\n%s", plan)
 	}
 	if strings.Contains(strings.ToLower(query), "event_json") {
-		t.Fatalf("family read's SQL names event_json:\n%s", query)
+		t.Fatalf("family read's SQL names an event body column:\n%s", query)
 	}
 }
 

@@ -83,7 +83,9 @@ func (c *eventBodyCache) get(computerID, digest string) (eventBodyEntry, bool) {
 }
 
 // eventSourceHolder lets the tape source be swapped atomically.
-type eventSourceHolder struct{ source computerevent.PagedEventSource }
+type eventSourceHolder struct {
+	source computerevent.PagedEventSource
+}
 
 // SetEventSource wires the tape source finalized-event lookups fall back to
 // (the guest's computerevent.HTTPClient). Call it once at boot, before the

@@ -127,6 +127,9 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
 
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	legacy, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatalf("open legacy sqlite: %v", err)
@@ -169,8 +172,6 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 		t.Fatalf("legacy SQLite evidence was not retained: info=%+v err=%v", info, err)
 	}
 }
-
-
 
 func testDoltColumnExists(t *testing.T, s *Store, table, column string) bool {
 	t.Helper()

@@ -737,4 +737,3 @@ func testBatchCheckpointBatch(t *testing.T, computerID, eventID, eventDigest str
 		Ops: []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpDesktopState, Body: body}},
 	}
 }
-

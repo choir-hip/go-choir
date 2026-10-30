@@ -311,14 +311,17 @@ func (s *Store) Prepared(ctx context.Context, computerID string) ([]computereven
 	return requests, rows.Err()
 }
 
-// EventByIdempotency returns the durable embedded event projection for recovery
-// of a controller action that was interrupted after the canonical append.
+// EventByIdempotency returns the finalized event recorded under an
+// idempotency key, for recovery of a controller action that was interrupted
+// after the canonical append. The guest keeps no event bodies: the body comes
+// from the recent-event cache or from the tape (event_bodies.go).
 func (s *Store) EventByIdempotency(ctx context.Context, computerID, idempotencyKey string) (computerevent.Event, bool, error) {
 	if s == nil || s.db == nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: nil store")
 	}
-	var raw, status string
-	err := s.db.QueryRowContext(ctx, `SELECT event_json, status FROM computer_event_index WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&raw, &status)
+	var digest, status string
+	var sequence uint64
+	err := s.db.QueryRowContext(ctx, `SELECT event_digest, sequence, status FROM computer_event_index WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&digest, &sequence, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return computerevent.Event{}, false, nil
 	}
@@ -328,27 +331,28 @@ func (s *Store) EventByIdempotency(ctx context.Context, computerID, idempotencyK
 	if status != "finalized" {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: event is %s", status)
 	}
-	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
+	record, err := s.finalizedEventBody(ctx, computerID, digest, sequence)
 	if err != nil {
 		return computerevent.Event{}, false, fmt.Errorf("computer event projection: decode event: %w", err)
 	}
-	return event, true, nil
+	return record.Request.Event, true, nil
 }
 
 func (s *Store) EventByDigest(ctx context.Context, computerID, eventDigest string) (computerevent.Event, bool, error) {
-	var raw string
-	err := s.db.QueryRowContext(ctx, `SELECT event_json FROM computer_event_index WHERE computer_id=? AND event_digest=? AND status='finalized'`, strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)).Scan(&raw)
+	computerID, eventDigest = strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)
+	var sequence uint64
+	err := s.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_index WHERE computer_id=? AND event_digest=? AND status='finalized'`, computerID, eventDigest).Scan(&sequence)
 	if errors.Is(err, sql.ErrNoRows) {
 		return computerevent.Event{}, false, nil
 	}
 	if err != nil {
 		return computerevent.Event{}, false, err
 	}
-	event, err := computerevent.DecodeHistoricEvent([]byte(raw))
+	record, err := s.finalizedEventBody(ctx, computerID, eventDigest, sequence)
 	if err != nil {
 		return computerevent.Event{}, false, err
 	}
-	return event, true, nil
+	return record.Request.Event, true, nil
 }
 
 // LatestComputerEventByIdempotencyPrefix returns the most recent finalized
@@ -450,19 +454,20 @@ func (s *Store) EventReceiptByIdempotency(ctx context.Context, computerID, idemp
 	if s == nil || s.db == nil {
 		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: nil store")
 	}
-	var raw, status string
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(event_head_receipt_json, ''), status FROM computer_event_index WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&raw, &status)
+	var digest, status string
+	var sequence uint64
+	err := s.db.QueryRowContext(ctx, `SELECT event_digest, sequence, status FROM computer_event_index WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&digest, &sequence, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return computerevent.Receipt{}, false, nil
 	}
-	if err != nil || status != "finalized" || raw == "" {
+	if err != nil || status != "finalized" {
 		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: finalized receipt unavailable")
 	}
-	var receipt computerevent.Receipt
-	if err := json.Unmarshal([]byte(raw), &receipt); err != nil {
-		return computerevent.Receipt{}, false, err
+	record, err := s.finalizedEventBody(ctx, computerID, digest, sequence)
+	if err != nil {
+		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: finalized receipt unavailable: %w", err)
 	}
-	return receipt, true, nil
+	return record.Receipt, true, nil
 }
 
 // EventReceiptByDigest returns the finalized append receipt for the event
@@ -472,19 +477,21 @@ func (s *Store) EventReceiptByDigest(ctx context.Context, computerID, eventDiges
 	if s == nil || s.db == nil {
 		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: nil store")
 	}
-	var raw, status string
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(event_head_receipt_json, ''), status FROM computer_event_index WHERE computer_id=? AND event_digest=?`, strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)).Scan(&raw, &status)
+	computerID, eventDigest = strings.TrimSpace(computerID), strings.TrimSpace(eventDigest)
+	var status string
+	var sequence uint64
+	err := s.db.QueryRowContext(ctx, `SELECT sequence, status FROM computer_event_index WHERE computer_id=? AND event_digest=?`, computerID, eventDigest).Scan(&sequence, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return computerevent.Receipt{}, false, nil
 	}
-	if err != nil || status != "finalized" || raw == "" {
+	if err != nil || status != "finalized" {
 		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: finalized receipt for digest unavailable")
 	}
-	var receipt computerevent.Receipt
-	if err := json.Unmarshal([]byte(raw), &receipt); err != nil {
-		return computerevent.Receipt{}, false, err
+	record, err := s.finalizedEventBody(ctx, computerID, eventDigest, sequence)
+	if err != nil {
+		return computerevent.Receipt{}, false, fmt.Errorf("computer event projection: finalized receipt for digest unavailable: %w", err)
 	}
-	return receipt, true, nil
+	return record.Receipt, true, nil
 }
 
 func nullableEventString(value string) any {

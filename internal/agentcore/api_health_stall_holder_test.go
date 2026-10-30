@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // docs/problems/paper-post-refresh-health-windows-2026-10-22.md, "Findings:
@@ -225,19 +224,6 @@ github.com/yusefmosiah/go-choir/internal/agentcore.(*Runtime).loop(0xc000)
 	}
 }
 
-// The stall header names a running online Dolt GC pass, and says idle
-// otherwise, so a snapshot read after the fact is never ambiguous
-// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md section 1:
-// the 12:51:04 snapshot named a bystander 134 ms after a 19 s pass ended).
-func TestFormatOnlineGCNamesAPass(t *testing.T) {
-	if got := formatOnlineGC(store.OnlineGCStatus{}); got != "online_gc=idle" {
-		t.Fatalf("idle = %q", got)
-	}
-	got := formatOnlineGC(store.OnlineGCStatus{Active: true, Since: "2026-10-23T12:50:45Z"})
-	if got != "online_gc=active since=2026-10-23T12:50:45Z" {
-		t.Fatalf("active = %q", got)
-	}
-}
 
 // The header of a real stall carries the field, between stack_truncated and the
 // pools, and /health's answer is still 503 store_stalled with its usual body.
