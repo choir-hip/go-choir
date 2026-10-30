@@ -1,5 +1,7 @@
 # Two decisions for today
 
+Status 2026-10-30: the two owner decisions here are from 2026-10-26 and are probably answered since (not confirmed in this pass); see [ACTIVE](../ACTIVE.md).
+
 I wrote this on Monday morning, October twenty-sixth, after the overnight letter. It walks through the two open decisions that are yours to make, with the options and what each one leads to. The overnight letter named four decisions. You settled two of them this morning: d@e's engineer now runs on DeepSeek, and related stories is switched on.
 
 Both open decisions have a safe default, and I recommend one option for each, but each one changes how the product behaves for real users.

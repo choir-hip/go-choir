@@ -1,5 +1,7 @@
 # CI test pruning manifest (CI0, slice C5), 2026-10-24
 
+Status 2026-10-30: the three-stores test row predates the Store A/B deletion and is obsolete; the ledger stays live. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Every deleted or merged test gets a row here: what it covered, the category
 (duplicate of a named test, tests deleted code, superseded by a named test,
 asserts nothing), and why that coverage stays. Tests of red surfaces (tape and

@@ -1,5 +1,7 @@
 # corpusd Admits `effect_accepted` Without Checking Its Authority
 
+Status 2026-10-30: still an open authority gap; where this record says corpusd over Dolt, read corpusd over the PostgreSQL control database. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-15. Source: S1 of
 [principal-identity-and-signed-acts-2026-10-15.md](../archive/reports/principal-identity-and-signed-acts-2026-10-15.md)
 (§0 "`effect_accepted` is not authorized at append", §5, §6 S1), and the

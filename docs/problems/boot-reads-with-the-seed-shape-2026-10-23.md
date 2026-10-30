@@ -1,5 +1,7 @@
 # Which reads with the stream_seq seed's shape will hold the engine next (2026-10-23)
 
+Status 2026-10-30: the census below was taken on the Dolt engine and is historical. Re-run it against guest SQLite before acting on its numbers. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-23, 08:30 UTC. Found by: FP0 worker, lane `fp0-boot-read-census`
 (investigation only; nothing is fixed here). Status: open, problem record
 before any fix. Mutation class of this record: green (docs) plus one yellow

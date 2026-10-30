@@ -1,5 +1,7 @@
 # The paper is unreachable for 4 to 6 minutes after every boot (2026-10-22)
 
+Status 2026-10-30: boot unreachability is a live concern, but the Dolt store-open and `gc` causes (about 30 references below) are historical; the guest store is SQLite now. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Found 02:56 UTC, reading the paper (vm-1669020a) after deploy B
 (3c46d5196). The trace is host-side only: vmctl's journal and the guest's
 console log on Node B. No guest shell.

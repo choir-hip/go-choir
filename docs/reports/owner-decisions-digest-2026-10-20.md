@@ -1,5 +1,7 @@
 # Decisions waiting on you
 
+Status 2026-10-30: this decision list is from 2026-10-20 and part of it has since been answered; do not read it as the open-decision list. Current work state is in [ACTIVE](../ACTIVE.md).
+
 I wrote this early on October twentieth, while you are sick, from a sweep of every document written since October thirteenth. It replaces the open-question lists in older letters and status files. Several of those still list things you already decided.
 
 There are about twenty decisions still waiting on you, and most of them take one word. Answer by number, for example "one yes, two yes, nine later". Anything you skip stays as it is. Nothing here is urgent tonight. The paper keeps publishing whatever you decide.

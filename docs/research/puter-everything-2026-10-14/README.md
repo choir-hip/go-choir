@@ -1,5 +1,7 @@
 # HeyPuter/everything, Reviewed for Choir App Agents
 
+Status 2026-10-30: the Dolt-versioned object graph language below is stale: the object graph is PostgreSQL (shared graph database) and SQLite (guest). Design source for the new data system: [the data system frame](../../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Owner request: review https://github.com/HeyPuter/everything
 (MIT, 50 apps, "the world's software, rebuilt") with many sub-agents, not
 to act yet, but for the app rebuilds and the long-term vision of **app

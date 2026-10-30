@@ -1,5 +1,7 @@
 # Off-host backup restore drill, first run (2026-10-20)
 
+Status 2026-10-30: the Dolt restore rows are obsolete after the cutover; the tape and image drill results remain the record. A lost disk was rebuilt from the host alone on 2026-10-30. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Scope: the restore drill of docs/problems/no-off-host-backup-2026-10-20.md
 section 9, run on Node B against snapshot `17cdae99` (run 2, 21:42 UTC) in the
 `daily` repository on node-a. Script: `scripts/off-host-restore-drill.sh`.

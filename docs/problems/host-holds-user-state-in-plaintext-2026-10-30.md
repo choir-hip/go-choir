@@ -1,5 +1,7 @@
 # The host holds every user computer's state changes and snapshots in plaintext (2026-10-30)
 
+Status 2026-10-30: projection bases are deleted (the host keeps none). The remaining host-side surfaces are the tape (pinned, compare-and-swapped, finalized after the receipt verifies), sealed tape segments in platform artifacts, the file CAS, and the PostgreSQL control and graph databases. Read the Dolt-era surfaces named below as historical. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Class: green (problem record). Surfaces: tape (red), projection bases,
 key custody. Found by FP0 while scoping the restore design.
 

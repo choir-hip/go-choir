@@ -1,5 +1,7 @@
 # The Computer Lifecycle: vmctl, Firecracker, Snapshots, Admission and Updates
 
+Status 2026-10-30: the Dolt and Store A references describe the lifecycle store as of 2026-10-14; lifecycle and route state now live in the PostgreSQL control database and the guest keeps SQLite. "Universal Wire" (line 325) is the retired name for Autopaper. A full rewrite is pending. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **A teaching document for Choir's owner, in the Choir learning series.**
 14 October 2026. Repository: `origin/main` at 980ffaf4e. This document reads
 code and existing Choir documents only. It had no live access to Node B or

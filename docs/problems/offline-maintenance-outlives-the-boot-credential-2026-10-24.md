@@ -1,5 +1,7 @@
 # A long offline maintenance outlives the boot credential, and the paper stays down an hour (2026-10-24)
 
+Status 2026-10-30: the credential-lifetime issue is live. The Dolt-store offline compaction framing and exposure section are historical (the Dolt stores are deleted). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-24, 05:1x UTC. Found by: FP0. Class of this record: green. Class of
 the fix: red (the boot path and the credential envelope). Status: recorded; not
 fixed. There is no recurrence risk at the next 04:00 timer (see "Exposure").

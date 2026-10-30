@@ -1,5 +1,7 @@
 # EmbeddingGemma 2 on older x86 CPUs: fit, throughput, API backfill, GPU option
 
+Status 2026-10-30: Qdrant and Ollama embeddings were deleted on 2026-10-30; the Qdrant sizing (lines 47, 258-265) is historical.
+
 Date: 2026-10-14. Mutation class: green (research note; no code or service
 touched). Asked by the owner (2026-10-14 ~15:00 UTC): can Choir run Google's
 new embedding model on CPU, how much of Node B would it take, could an API do

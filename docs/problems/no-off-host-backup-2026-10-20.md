@@ -1,5 +1,7 @@
 # Nothing durable on Node B exists anywhere else (2026-10-20)
 
+Status 2026-10-30: the body below describes Dolt syncs, snapshots and drills that no longer exist. The current backup subject is the PostgreSQL control and graph databases, the sealed tape segments, the file CAS and the escrowed keys. A lost disk was rebuilt from the host alone on 2026-10-30, but there is still no off-host copy of the host itself (goal station L5 of the lean system). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Mutation class: green for this record. The work it leads to is red for
 `nix/node-b.nix` (a backup client that reads protected surfaces: the event
 tape, Store A, signing and escrow keys, auth state) and orange for the host

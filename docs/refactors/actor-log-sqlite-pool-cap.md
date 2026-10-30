@@ -1,5 +1,7 @@
 # Refactor: Single Actor-Log SQLite Opener With Capped Connection Pool
 
+Status 2026-10-30: still unimplemented. The Dolt pool convention it contrasts with is gone, and the SQLite pool cap still applies; the guest store is now SQLite too. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Date:** 2026-08-21
 **Mutation class:** yellow — test/CI reliability change; no product behavior change.
 **Status:** documented, not implemented. Do soon.

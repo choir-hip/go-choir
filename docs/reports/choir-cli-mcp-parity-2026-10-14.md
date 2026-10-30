@@ -1,5 +1,7 @@
 # Choir CLI and MCP: One Registry, Two Surfaces, and the Hosted MCP
 
+Status 2026-10-30: the "not pushed, not deployed" status is stale; whether CLI/MCP parity landed was not re-verified in this pass.
+
 Date: 2026-10-14. Branch `cli-mcp-parity` (from `calibration-level2`,
 rebased on `origin/main`). Not pushed, not deployed.
 

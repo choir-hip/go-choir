@@ -1,5 +1,7 @@
 # Keep-set accounting (2026-10-29)
 
+Status 2026-10-30: the Dolt and Store B (port 13307) references describe stores that were deleted on 2026-10-30; the accounting is the pre-cutover record of what the keep set held. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: read-only investigation, mutation class green (docs). Nothing on Node B
 was written, deleted, restarted or reconfigured. Input to the object-storage
 design and the engine design ([selection](../definitions/choir-data-architecture-selection-2026-10-28.md)

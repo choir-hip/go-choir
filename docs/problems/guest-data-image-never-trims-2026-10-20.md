@@ -1,5 +1,7 @@
 # Guest data image never trims: host allocation tracks every block ever written (2026-10-20)
 
+Status 2026-10-30: the Dolt-specific numbers and fix are historical. The trim question carries over to the guest `data.img` holding SQLite `state.db`. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: problem record, before code. Mutation class of the fix: **red**
 (VM lifecycle, guest disk). Related: `guest-store-compaction-scheduled-
 2026-10-20.md`, `hostauth-enforce-flip-2026-10-20.md` ("Side observation").

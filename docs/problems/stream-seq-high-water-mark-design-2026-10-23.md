@@ -1,5 +1,7 @@
 # stream_seq high-water mark: a lease on the tape (design, 2026-10-23)
 
+Status 2026-10-30: the design stands as a ready-to-build item, but its Dolt GroupBy plans and `dolt_state_extractor` citations describe a store that is deleted; the query now runs on guest SQLite. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-23. Author: an FP0 design worker. Status: **design, round 3,
 not built; ready to build** (bunch 164, Devin: "READY TO BUILD", no
 silent-reuse or fail-open path). It answers the gate in

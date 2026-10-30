@@ -1,5 +1,7 @@
 # Key-escrow tables are created on the wrong store (2026-10-29)
 
+Status 2026-10-30: Store A and Store B are deleted; the equivalent DDL question is now which PostgreSQL database (control or graph) holds the key-escrow tables. Key escrow lives in the control database. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: open; documented, not fixed. Class of a fix: red (key escrow,
 store schema). Found by the Store A pre-split liveness investigation
 (docs/archive/evidence/store-a-pre-split-tables-2026-10-29.md).

@@ -1,5 +1,7 @@
 # Start here, October twentieth
 
+Status 2026-10-30: this orientation letter is from 2026-10-20 and points at stale state. Start from [ACTIVE](../ACTIVE.md) and [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 I wrote this early on Tuesday, October twentieth, before you woke. It covers the night's work, from about ten in the evening your time until morning. It replaces the handoff file you asked me to drop. It says what changed, what needs you, and which documents to read, in order.
 
 Overnight, the paper gained related stories and an honest AI label. The host shed the tapes of one hundred and sixty-five dead computers. Every change you approved last night is now live, built and switched off, or written up as a design waiting on your answers.

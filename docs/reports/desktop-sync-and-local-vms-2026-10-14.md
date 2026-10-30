@@ -1,5 +1,7 @@
 # The Desktop App: Revival, a Synced Folder, Local VMs, and Other Platforms
 
+Status 2026-10-30: the Dolt and Store references below are stale; guests keep SQLite and the host keeps PostgreSQL. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Base: `origin/main` 6415505e3. Branch
 `desktop-revive-and-sync-plan`.
 

@@ -1,5 +1,7 @@
 # The Ledger and the Store: Tape, Dolt, the Object Graph, and Why Reads Got Slow
 
+Status 2026-10-30: this chapter teaches the storage layer as it stood on 2026-10-14, Dolt-centric. Read its Dolt, Store A and Store B material as history: the host now runs PostgreSQL and each guest keeps SQLite rebuilt from the tape. The chapter's primers (append-only log, snapshot, replay) still apply. A full rewrite is pending. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Learning series, document 1 of 6.** 14 October 2026. Repository:
 `origin/main` at 980ffaf4e. Written for Choir's owner, to teach the
 storage layer from first principles and then show exactly how Choir builds

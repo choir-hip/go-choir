@@ -6,6 +6,15 @@ Station: `SW-world-wire-interface` in the
 Gate 3 (Autopaper) ships as an MVP in October, after Gate 1 (today) and
 Gate 2 (tomorrow).
 
+Status 2026-10-30: Autopaper is live (since 2026-10-13). Storage in this design
+has changed under it: Dolt, Store B and the guest Dolt workspaces were deleted
+in the data system cutover. The global store is now the graph database on the
+host's PostgreSQL (the Autopaper object graph), each computer keeps its working
+state in SQLite (`state.db`), and capture and publication bodies remain
+hash-addressed in host content storage. Where the text below says Store B,
+corpus Dolt or embedded Dolt, read those. The rename away from the retired
+names (World Wire, Universal Wire, sourcecycled) is still the §9 TODO.
+
 Inputs:
 - *Choir — Canonical Project Context* (2026-10-08);
 - [Prospective Self-Alignment](precommitment-records.md);
@@ -185,14 +194,14 @@ docs/computer-ontology.md; the earlier text here put captures on the
 paper's computer
 (problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md).
 
-- **The global store** (Store B: the corpus Dolt behind corpusd) holds the
+- **The global store** (the graph database behind corpusd; formerly Store B, the corpus Dolt) holds the
   shared resource: every capture as a `choir.web_capture` object, and
   published Textures and their revisions. It serves every logged-out read
   and every computer's read of shared content. Capture bodies live in host
-  content storage, addressed by hash, never in Dolt rows. High-volume
-  tables stay out of Dolt history or are committed on a bounded cadence.
+  content storage, addressed by hash, never in database rows. High-volume
+  tables are kept bounded.
   Its history has a declared bound.
-- **Each computer** (embedded Dolt) holds its own working state: desk
+- **Each computer** (guest SQLite) holds its own working state: desk
   state, private documents, and overlays that filter, customize and
   combine private data with shared objects, referring to them by id and
   version. Textures and records are versioned.

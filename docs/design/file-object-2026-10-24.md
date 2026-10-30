@@ -1,5 +1,7 @@
 # The file object, first slice (2026-10-24)
 
+Status 2026-10-30: the kinds declared `Store: dolt` below now live in the guest SQLite object graph (see the object-graph redesign); Dolt is deleted. Design source for the new data system: [the data system frame](choir-data-system-frame-2026-10-30.md).
+
 Status: design for slice 1 of migration step 1 in
 `docs/problems/data-has-more-than-one-home-2026-10-24.md` ("the file object").
 Doctrine: `I27` (a file is a blob in the computer's content-addressed store,

@@ -1,5 +1,7 @@
 # The platform artifact store keeps one file per tape object; metadata pressure is structural (2026-10-19)
 
+Status 2026-10-30: the tape object-per-file analysis still holds; the Dolt and old-store references are historical. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-19, measured 20:56 to 21:05 UTC on Node B. Docs only: no code
 changed. Follows
 [`node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16`](node-b-btrfs-metadata-exhausted-small-artifact-files-2026-10-16.md)

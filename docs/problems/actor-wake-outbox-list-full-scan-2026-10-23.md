@@ -1,5 +1,7 @@
 # The actor wake outbox list reads every outbox row ever written (2026-10-23)
 
+Status 2026-10-30: the measurements below are of the retired Dolt `ListObjects` path and no longer apply. The scan question carries over to the SQLite guest store and the PostgreSQL host databases and has not been re-measured. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-23. Station: FP4 follow-up (lane `lane/fp4-outbox-scan`), from
 FP0's reading of the paper on D4 build `ef450642b`. Mutation class of this
 record: green. No runtime code changed here, nothing run against Node B, a

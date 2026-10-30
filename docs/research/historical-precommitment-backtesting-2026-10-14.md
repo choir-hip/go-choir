@@ -1,5 +1,7 @@
 # Historical Precommitment Back-Testing: Scoring What Was Said at T From T′
 
+Status 2026-10-30: section 1.8 (Dolt AS OF model) and the Store B lines are stale: Dolt and Store B are deleted; shared claims and scores live in the PostgreSQL graph database. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Mutation class: **green** (research doc only; no code).
 Status: research for the roadmap. The stations named in §6 are proposals
 until a throughline goal file authors them. Not legal advice (§5).

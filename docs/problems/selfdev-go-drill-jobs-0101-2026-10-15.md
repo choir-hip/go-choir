@@ -1,5 +1,7 @@
 # Self-Development Go Drill selfdev-jobs-0101: Applied, Restore Refused, Jobs Misread (2026-10-15)
 
+Status 2026-10-30: the restore-refusal analysis names the VM-local Dolt projection witness; that witness is now the guest SQLite store rebuilt from the tape. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-15 (drill run 01:01-01:37 UTC). Drill:
 `node scripts/reeng_tracer.mjs --label selfdev-jobs-0101 --scenario engineering --change go --expect-sha e83735f2a… --timeout-min 45`
 on staging build `e83735f2a` (exit 6: the scenario's claim failed). The build

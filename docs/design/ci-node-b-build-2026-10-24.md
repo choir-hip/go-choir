@@ -1,5 +1,7 @@
 # CI0 C4: what the Node B build spends, and an incremental proposal (2026-10-24)
 
+Status 2026-10-30: the embedded Dolt compile named as a build cost below no longer applies: Dolt was deleted from the runtime on 2026-10-30 (go.mod may still list Dolt modules). Design source for the new data system: [the data system frame](choir-data-system-frame-2026-10-30.md).
+
 Station: CI0, slice C4 (docs/definitions/ci-test-cooptimization-2026-10-24.md).
 Mutation class of this note: green. The build itself is red (prebuild-staging,
 deploy-staging, flake.nix); this is findings and a proposal for FP0 to build or

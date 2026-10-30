@@ -1,5 +1,7 @@
 # VM Density: How Many Computers Fit on a Host, and What Raises It
 
+Status 2026-10-30: lever status is current to 2026-10-21; the Dolt-cache lever and the store numbers are stale (guests run SQLite). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14, about 15:00 UTC. Owner question (about 15:00 UTC):
 "you're saying 90 VMs on 128 gigabytes of RAM. I think we can do better
 than that. Wasn't one of the ideas to sparsify snapshots ...? When we get

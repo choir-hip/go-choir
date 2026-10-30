@@ -1,5 +1,7 @@
 # Daemon memory on the paper: what holds it, and why it is not what fills the guest (RES-18, 2026-10-22)
 
+Status 2026-10-30: the Dolt store sections below are historical (the Dolt servers and embedded workspaces are deleted); only the non-Dolt daemon measurements still describe the running system. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-22. Checklist item: RES-18 in
 [security-density-architecture-checklist-2026-10-21.md](../security-density-architecture-checklist-2026-10-21.md).
 Status: **measured; no fix in this record**. Mutation class of this record:
