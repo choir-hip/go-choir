@@ -11,9 +11,6 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
-	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -133,44 +130,12 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		}
 		return nil
 	}
-	if strings.HasSuffix(r.URL.Path, "/objects") {
-		var object objectgraph.Object
-		if err := json.Unmarshal(body, &object); err != nil ||
-			strings.TrimSpace(object.OwnerID) != strings.TrimSpace(ownership.UserID) ||
-			strings.TrimSpace(object.ComputerID) != strings.TrimSpace(ownership.ComputerID) {
-			return fmt.Errorf("guest caller is not bound to object owner and computer")
-		}
-		// corpusd sees this write as the proxy's, so the proxy keeps guests
-		// off the generic route for captures: they go through the capture
-		// route, which owns their identity and keeps bodies out of rows. A
-		// PUT names the kind as object_kind, a POST create as kind.
-		var kinds struct {
-			ObjectKind string `json:"object_kind"`
-			Kind       string `json:"kind"`
-		}
-		_ = json.Unmarshal(body, &kinds)
-		if kinds.ObjectKind == string(objectgraph.WebCaptureObjectKind) || kinds.Kind == string(objectgraph.WebCaptureObjectKind) {
-			return fmt.Errorf("captures are written through /internal/platform/captures")
-		}
-		// A release is published by the owner's act, never filed by a guest
-		// (Library S1 review 262, F20); so are a package release and its
-		// listing (S2, L6).
-		for _, kind := range []string{release.ObjectKind, pkgrelease.ObjectKind, pkgrelease.ListingKind} {
-			if kinds.ObjectKind == kind || kinds.Kind == kind {
-				return fmt.Errorf("releases and their listings are published through the owner's act, not written as objects")
-			}
-		}
-		return nil
-	}
-	var edge objectgraph.Edge
-	if err := json.Unmarshal(body, &edge); err != nil {
-		return fmt.Errorf("invalid object graph edge request")
-	}
-	for _, id := range []string{edge.FromID, edge.ToID} {
-		_, ownerID, _, err := objectgraph.ParseCanonicalID(id)
-		if err != nil || strings.TrimSpace(ownerID) != strings.TrimSpace(ownership.UserID) {
-			return fmt.Errorf("guest caller is not bound to edge owner")
-		}
-	}
-	return nil
+	// No guest writes the shared graph through the generic object or edge
+	// routes: captures, verdicts, relations and entities have the typed
+	// routes above, a publication goes through the publish path, and a
+	// release through the owner's act. corpusd sees a relayed write as the
+	// proxy's and stamps itself as the writer, so a generic guest write could
+	// file a public route or a publication that skips the publish path
+	// (docs/problems/guest-can-write-public-routes-2026-10-30.md).
+	return fmt.Errorf("guests do not write the shared graph through the generic object and edge routes")
 }

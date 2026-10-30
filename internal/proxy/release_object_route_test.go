@@ -63,9 +63,10 @@ func TestGuestCannotFileReleaseObjectsThroughTheProxy(t *testing.T) {
 	if _, err := svc.GetObject(t.Context(), id); err == nil {
 		t.Fatal("a release object was written through the generic route")
 	}
-	// Other kinds still pass the relay (the guard is the kind, not the route).
+	// Every other kind is refused too: no guest writes the shared graph
+	// through the generic route (guest_generic_write_test.go).
 	other := map[string]any{"kind": "choir.source_entity", "owner_id": "owner-a", "computer_id": "computer-a1", "identity_key": "k2", "metadata": map[string]any{}}
-	if rec := send(http.MethodPost, other); rec.Code == http.StatusForbidden {
-		t.Fatalf("another kind was refused by the release guard: %d %s", rec.Code, rec.Body)
+	if rec := send(http.MethodPost, other); rec.Code != http.StatusForbidden {
+		t.Fatalf("a guest wrote another kind through the generic route: %d %s", rec.Code, rec.Body)
 	}
 }

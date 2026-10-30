@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -72,10 +71,15 @@ func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		h.listObjects(w, r)
-	case http.MethodPost:
-		h.createObject(w, r)
-	case http.MethodPut:
-		h.putObject(w, r)
+	case http.MethodPost, http.MethodPut:
+		if !h.requireHostGraphWrite(w, r) {
+			return
+		}
+		if r.Method == http.MethodPost {
+			h.createObject(w, r)
+		} else {
+			h.putObject(w, r)
+		}
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
@@ -123,13 +127,32 @@ func (h *ObjectGraphHandler) HandleEdges(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		h.listEdges(w, r)
-	case http.MethodPost:
-		h.createEdge(w, r)
-	case http.MethodPut:
-		h.putEdge(w, r)
+	case http.MethodPost, http.MethodPut:
+		if !h.requireHostGraphWrite(w, r) {
+			return
+		}
+		if r.Method == http.MethodPost {
+			h.createEdge(w, r)
+		} else {
+			h.putEdge(w, r)
+		}
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
+}
+
+// requireHostGraphWrite keeps the generic object and edge writes to host
+// callers. A guest reaches corpusd directly at its platform URL, and the
+// store stamps every write as corpusd's, so a guest write here could file a
+// public route or a publication that skips the publish path
+// (docs/problems/guest-can-write-public-routes-2026-10-30.md). Guests write
+// through the typed routes: captures, verdicts, relations and entities.
+func (h *ObjectGraphHandler) requireHostGraphWrite(w http.ResponseWriter, r *http.Request) bool {
+	if trustedInternalCaller(r) {
+		return true
+	}
+	writeJSON(w, http.StatusForbidden, apiError{Error: "guests do not write the shared graph through the generic object and edge routes"})
+	return false
 }
 
 type createObjectRequest struct {
@@ -160,23 +183,6 @@ func genericCaptureWriteRefusal(r *http.Request, kind objectgraph.ObjectKind, bo
 	return 0, ""
 }
 
-// genericReleaseWriteRefusal keeps choir.software_release, and the
-// Library's choir.package_release and choir.release_listing (S2), off the
-// generic object routes for guests. These objects are written only by the
-// host's publish handlers, after the owner's act and the host checks; the
-// reads trust the objects of these kinds, so a guest filing one under its
-// own owner would forge a publication or a track head.
-func genericReleaseWriteRefusal(r *http.Request, kind objectgraph.ObjectKind) (int, string) {
-	if trustedInternalCaller(r) {
-		return 0, ""
-	}
-	switch kind {
-	case objectgraph.ObjectKind(release.ObjectKind), PackageReleaseKind, ReleaseListingKind:
-		return http.StatusForbidden, "releases and their listings are published through the owner's act, not written as objects"
-	}
-	return 0, ""
-}
-
 func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph unavailable"})
@@ -189,14 +195,6 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 	}
 	if status, msg := genericCaptureWriteRefusal(r, objectgraph.ObjectKind(req.Kind), req.Body); status != 0 {
 		writeJSON(w, status, apiError{Error: msg})
-		return
-	}
-	if status, msg := genericReleaseWriteRefusal(r, objectgraph.ObjectKind(req.Kind)); status != 0 {
-		writeJSON(w, status, apiError{Error: msg})
-		return
-	}
-	if err := h.requireInternalOrBoundGuest(r, req.OwnerID, req.ComputerID, false); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	now := time.Now().UTC()
@@ -239,22 +237,12 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	// The release kinds are refused before the object is validated: a guest
-	// learns nothing about what a well-formed forgery would need.
-	if status, msg := genericReleaseWriteRefusal(r, obj.ObjectKind); status != 0 {
-		writeJSON(w, status, apiError{Error: msg})
-		return
-	}
 	if err := validateObject(obj); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
 	if status, msg := genericCaptureWriteRefusal(r, obj.ObjectKind, obj.Body); status != 0 {
 		writeJSON(w, status, apiError{Error: msg})
-		return
-	}
-	if err := h.requireInternalOrBoundGuest(r, obj.OwnerID, obj.ComputerID, false); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.store.PutObject(r.Context(), obj); err != nil {
@@ -307,10 +295,6 @@ func (h *ObjectGraphHandler) createEdge(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	if err := h.requireInternalOrBoundGuestEdge(r, req.FromID, req.ToID); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
-		return
-	}
 	edge, err := h.service.PutEdge(r.Context(), req.FromID, req.ToID, objectgraph.EdgeKind(req.Kind), req.Metadata)
 	if err != nil {
 		log.Printf("corpusd: create edge: %v", err)
@@ -337,10 +321,6 @@ func (h *ObjectGraphHandler) putEdge(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateEdge(edge); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
-		return
-	}
-	if err := h.requireInternalOrBoundGuestEdge(r, edge.FromID, edge.ToID); err != nil {
-		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.store.PutEdge(r.Context(), edge); err != nil {
@@ -385,24 +365,6 @@ func (h *ObjectGraphHandler) requireInternalOrBoundGuest(r *http.Request, ownerI
 	}
 	if _, err := bindTapCaller(r.Context(), h.guestLookup, r); err != nil {
 		return errInternalCallerRequired
-	}
-	return nil
-}
-
-func (h *ObjectGraphHandler) requireInternalOrBoundGuestEdge(r *http.Request, fromID, toID string) error {
-	if trustedInternalCaller(r) {
-		return nil
-	}
-	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
-	if err != nil || h.service == nil {
-		return errInternalCallerRequired
-	}
-	for _, id := range []string{fromID, toID} {
-		object, err := h.service.GetObject(r.Context(), id)
-		if err != nil || strings.TrimSpace(object.OwnerID) != strings.TrimSpace(ownership.UserID) ||
-			strings.TrimSpace(object.ComputerID) != strings.TrimSpace(ownership.ComputerID) {
-			return errInternalCallerRequired
-		}
 	}
 	return nil
 }
