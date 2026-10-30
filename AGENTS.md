@@ -127,7 +127,7 @@ kept for reference only under `docs/archive/skills/` (mirrored in the
 `choir-hip/skills` repo under `archived/`) — do not author new `/goal` files
 with them; existing goal files remain valid. The
 mission roadmap from here to World Wire live is
-[docs/world-wire-mission-stack-2026-09-22.md](docs/world-wire-mission-stack-2026-09-22.md);
+[docs/ACTIVE.md](docs/ACTIVE.md);
 the product mechanism is precommitment records
 (`docs/precommitment-records.md`). For multi-agent review
 panels used at definition or phase gates (code review is risk-tiered; see
@@ -195,22 +195,17 @@ transition. Do not claim local proof for vmctl, live user computers,
 gateway credentials, model/search calls, auth/session renewal, checkpoint/route
 projection, rollback, or Choir-in-Choir behavior.
 
-The repo dev shell (Nix flake with ICU for Dolt cgo) loads automatically via
-direnv + nix-direnv. `CGO_CFLAGS`, `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and
-the Nix `PATH` entries are exported by `~/.zshenv` (for zsh-based agents:
-codex, cursor, opencode, pi) and `~/.bashenv` via `BASH_ENV` (for bash-based
-agents: devin, claude code). No `nix develop -c` wrapper is needed — run
+The repo dev shell (Nix flake, loaded automatically via direnv +
+nix-direnv) provides Go, pkg-config and PostgreSQL 17 (for
+`dbxtest.Postgres`). No cgo dependencies remain: the store uses pure-Go
+SQLite (`modernc.org/sqlite`), and Dolt and its ICU dependency were removed
+on 2026-10-30, so no `CGO_*FLAGS` or `LD_LIBRARY_PATH` setup is needed. Run
 `go test ...` directly.
 `internal/agentcore` and `internal/textureowner` are broad and CI shards them; for
 local coverage prefer `scripts/go-test-runtime-shards` or a focused
 `go test ./internal/agentcore -run TestName` / `go test ./internal/textureowner -run TestName`.
-Do not hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
-— the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
-
-If those variables are empty, run `direnv status` first. In a fresh or changed
-worktree, run `direnv allow`, re-enter the directory, and verify
-`CGO_CFLAGS`/`PKG_CONFIG_PATH` before treating an ICU/Dolt build failure as a
-code failure.
+If a build complains about missing tools in a fresh or changed worktree, run
+`direnv status` and `direnv allow`, then re-enter the directory.
 
 Per-developer secrets (API keys, provider tokens) live in a gitignored
 `.envrc.local` file that is sourced by `.envrc` if it exists. Create it with
