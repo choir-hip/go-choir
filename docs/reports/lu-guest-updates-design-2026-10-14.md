@@ -1,5 +1,7 @@
 # LU: Guest Updates (design note, round 5: per-slice status)
 
+Status 2026-10-30: the slice status and the Dolt/Store references below are stale; guests keep SQLite. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Station: LU of the ledger metamission
 ([station file](../archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md)).
 Owner, in session, 2026-10-14: "we do have to just improve the updating

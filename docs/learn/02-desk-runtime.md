@@ -1,5 +1,7 @@
 # The Desk Runtime: RLM Desks, Cells, Records and Restarts
 
+Status 2026-10-30: the Dolt and Store A references describe the desk runtime store as of 2026-10-14; the desk runtime store is now guest SQLite plus the tape. A full rewrite is pending. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Part 2 of the Choir learning series, written to teach as well as to
 describe.** 14 October 2026. Repository: `origin/main` at 980ffaf4e.
 Evidence is read from code and documents only; nothing in this series

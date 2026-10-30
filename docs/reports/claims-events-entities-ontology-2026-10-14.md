@@ -1,5 +1,7 @@
 # Claims, Events and Entities: The Ledger Between Sources and Stories
 
+Status 2026-10-30: the ontology is still cited; its Dolt and store references (about 38) are historical. Read them as the guest SQLite store and the PostgreSQL graph database. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Status: **design only.** Revised after a convergent
 panel (§15): three members accepted with repairs and one sent it back
 but approved E0 after revision; the repairs are folded in. No code

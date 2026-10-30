@@ -1,5 +1,7 @@
 # Research on hypervisors, sync and storage
 
+Status 2026-10-30: the hypervisor findings stand; the Dolt/DoltLite hash sections are obsolete (the cutover chose host PostgreSQL and guest SQLite). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 I wrote this on Wednesday, October twenty-eighth, in the early afternoon UTC. It covers about fifteen minutes of research by Devin and DeepSeek, which ran in parallel after you asked for more research. It follows this morning's report on the state of the data architecture and does not replace it.
 
 The research supports the plan, and it adds three concrete things: a way to hash SQLite tables cheaply, a relay quorum for durable writes, and a tape that can branch later.

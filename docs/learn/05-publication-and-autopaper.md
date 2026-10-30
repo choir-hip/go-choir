@@ -1,5 +1,7 @@
 # Publication and Autopaper: From a Feed Item to the Front Page
 
+Status 2026-10-30: World Wire, sourcecycled, Store B and Dolt are retired. Autopaper publishes from source schedules on the paper computer into the PostgreSQL graph database behind corpusd. A full rewrite is pending. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Doc 5 of the Choir teaching series, written to teach as well as to
 describe.** 14 October 2026. Repository: `origin/main` at 980ffaf4e.
 Evidence is read from code at that commit and from Choir's own documents;

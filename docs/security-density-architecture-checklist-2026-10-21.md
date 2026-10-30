@@ -1,5 +1,7 @@
 # Security, Density and Architecture Checklist
 
+Status 2026-10-30: the Dolt-era items (line 175, SEC-12, RES-18) are retargeted by the cutover: read them against host PostgreSQL and guest SQLite. Design source for the new data system: [the data system frame](design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-21. Status: **living checklist**; tick items as they land.
 Mutation class of this document: green (docs only). Each item names its own
 class. Base: `origin/main` at 8f71f9c64, every origin branch compared with

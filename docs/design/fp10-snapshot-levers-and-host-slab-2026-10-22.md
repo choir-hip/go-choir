@@ -1,5 +1,7 @@
 # FP10 design: snapshot levers (RES-13) and host slab and btrfs metadata (RES-22)
 
+Status 2026-10-30: the L20 section is superseded by the density D2 design ([density-d2-snapshots-survive-deploys-2026-10-26.md](density-d2-snapshots-survive-deploys-2026-10-26.md)); read D2 for that lever.
+
 Date: 2026-10-22. Station:
 [choir-launch-fp10-res-13-22-2026-10-21.md](../definitions/choir-launch-fp10-res-13-22-2026-10-21.md).
 Problems:

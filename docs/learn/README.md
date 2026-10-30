@@ -4,6 +4,16 @@
 building.** 14 October 2026. Repository: `origin/main` at 980ffaf4e.
 Mutation class: **green** (docs only).
 
+Status 2026-10-30: the series was written against `origin/main` at 980ffaf4e on
+2026-10-14, when the storage layer was Dolt. That layer is gone. Dolt, Store A,
+Store B, the guest Dolt workspaces and projection bases were deleted in the
+data system cutover; the host runs PostgreSQL (control and graph databases),
+each guest keeps SQLite (`state.db`) rebuilt from the tape, and files sync to
+the host's file CAS every two minutes when changed. Wherever the chapters or
+the diagram below say Store A, Store B or embedded Dolt, read them as history.
+Each chapter carries its own status line; full rewrites are pending. Design
+source: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 The owner, today: working at the limit and wanting to learn faster in
 software architecture, platform engineering and security. This series is
 built for that. Each document takes one part of Choir and walks the same

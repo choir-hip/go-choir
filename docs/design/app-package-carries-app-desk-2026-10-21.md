@@ -1,5 +1,7 @@
 # An app package carries its app desk (2026-10-21)
 
+Status 2026-10-30: the desk manifest (`internal/deskmanifest`) and app packages have both landed; the "unbuilt" and "paused branch" statements below are stale.
+
 Status: **design, green.** No code. SDC item ARCH-03
 ([security-density-architecture-checklist-2026-10-21.md](../security-density-architecture-checklist-2026-10-21.md)),
 station [choir-launch-fp4-selfdev-architecture-2026-10-21.md](../definitions/choir-launch-fp4-selfdev-architecture-2026-10-21.md).

@@ -1,5 +1,7 @@
 # A computer's data has more than one home, and the files tree is the largest second one (2026-10-24)
 
+Status 2026-10-30: the inventory's Dolt, Store A and Store B homes no longer exist. After the cutover the homes are the host control database, the host graph database, the guest SQLite store, the tape, and the file CAS (files sync every two minutes when changed). The one-home target and the files-tree finding still stand; the per-kind table needs a rewrite against the new frame.
+
 Date: 2026-10-24. Written by an FP0 read-only investigator. Status: documented; evidence and directions only. Mutation class of this record: green (docs only). No code changed, no computer or staging host touched, no credential file read.
 
 Evidence labels: **[V]** read in code or a doc at file:line on this tree (origin/main at `204b66ff5`, plus the ledger commit `6fc61a6f0`). **[C]** read in the app-rewrite conductor's artifacts under `/Users/wiz/Dev/lanes/_runs/apprewrite/` (the v7 candidate patch and `log.md`); that candidate is **not on main**, it is frozen at awaiting_approval on one computer. **[H]** hypothesis, with what would settle it.

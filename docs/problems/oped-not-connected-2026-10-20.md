@@ -1,5 +1,7 @@
 # Op-eds are not connected: research cannot find published pieces, the paper cannot list them
 
+Status 2026-10-30: Store B publication references predate the PostgreSQL graph database; read Store B as the graph database. The design contract's status was not re-verified in this pass. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Status:** documented before any code. Design and failure modes below are the
 contract the tests are written against.
 **Date:** 2026-10-20

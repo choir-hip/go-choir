@@ -1,5 +1,7 @@
 # Choir, the last three days
 
+Status 2026-10-30: this is a dated status letter for 2026-10-14 to 10-17; the Autopaper and paper-run status in it is superseded by [ACTIVE](../ACTIVE.md).
+
 I wrote this on Saturday afternoon, October seventeenth. It covers about two and a half days of work on Choir, from Wednesday night, October fourteenth, to Saturday afternoon. All times are in UTC.
 
 The paper published around the clock for three days, on one model. Most of what broke along the way is now fixed and measured, and the large decisions that are left are yours.

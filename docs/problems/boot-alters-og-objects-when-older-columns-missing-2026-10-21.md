@@ -1,5 +1,7 @@
 # Boot alters og_objects when an older generated column is missing
 
+Status 2026-10-30: still open as a boot-migration concern, but `EnsureRecordIndexes` on Dolt is gone. The object graph is now in the PostgreSQL graph database and guest SQLite; re-point the finding to those stores' migrations. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-21. Status: **open**; not introduced by FP1, not fixed by it.
 Found by: the GPT-6.1-sol panel review of the FP1 candidate 8cadecc7e
 (finding A1), adjudicated by FP0 as pre-existing on main.

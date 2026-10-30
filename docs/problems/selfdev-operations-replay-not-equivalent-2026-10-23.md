@@ -1,5 +1,7 @@
 # A test computer's replay is not equivalent in self_development_operations (2026-10-23)
 
+Status 2026-10-30: still open, but the `dolt_head` witnesses and `dolt_store.go` paths in the evidence are gone. Restate the replay-equivalence question against SQLite replay from the tape.
+
 Date: 2026-10-23, 07:15 UTC. Found by: FP0, running D10's proof (F-c deploy
 1, `a49ae398a`) step 1 and step 5 on test computer computer-71afbf14…
 (batching-e2e-1022, class test). Status: open, problem record before any

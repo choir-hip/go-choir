@@ -1,5 +1,7 @@
 # The event layer at ingestion: captures accumulate on events, production waits for corroboration
 
+Status 2026-10-30: Store B and the Dolt-era capture wording below are stale; captures are objects in the PostgreSQL graph database behind corpusd. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Draft 2026-10-16, about 00:15 UTC, for panel review (Devin and Gemini,
 plus the orchestrator, per owner §24).
 - Problem: [capture and production are coupled](../problems/capture-and-production-are-coupled-2026-10-16.md), F2–F4.

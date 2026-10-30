@@ -1,5 +1,7 @@
 # retrieval-eval-v1: definition (frozen 2026-10-14)
 
+Status 2026-10-30: the frozen eval was defined over the Dolt object graph and a Dolt tag, both deleted. The object graph is now the PostgreSQL graph database; the eval needs redefining before it is run again. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 The yardstick for retrieval over the Dolt object graph (rung 0 of
 [object-graph-retrieval-research-2026-10-14](../archive/reports/object-graph-retrieval-research-2026-10-14.md)
 §5-6; problem record

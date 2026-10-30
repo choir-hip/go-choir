@@ -1,5 +1,7 @@
 # An apply's checkpoint replays the whole tape into the guest's /tmp, fills it, and kills the runtime (2026-10-26)
 
+Status 2026-10-30: still open as a disk-fill concern, but the Dolt replay-into-tmp wording is stale: guests now run SQLite and recover from their own sealed snapshots plus the tape tail. Re-check against that path. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: documented; no fix chosen. Mutation class of a fix: red (self-development
 apply, checkpoint/witness, boot path). Found by FP0 reading vmctl's log and the
 guest console after b@c stopped answering.

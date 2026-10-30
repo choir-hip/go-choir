@@ -1,5 +1,7 @@
 # Trace lines leave the tape and the store (R7): design (2026-10-22)
 
+Status 2026-10-30: the trace log (`tracelog`) exists. The text placing it beside the Dolt workspace and Dolt rows is stale: the guest store is SQLite, and aged trace/unread `choir.event` kinds leave the working store by a tape op (telemetry retirement, on by default). Design source for the new data system: [the data system frame](choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-22. Station: FP1, step R7 of
 [`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](../archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md),
 section "Root cause, second investigation". Lane

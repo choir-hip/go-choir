@@ -1,5 +1,7 @@
 # Guest network inventory (SDC NET-01), 2026-10-21
 
+Status 2026-10-30: the Dolt, Store and Qdrant references below describe services that were deleted on 2026-10-30; remove them from the egress inventory when it is next re-run. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: inventory, read from the code. Mutation class of this document:
 green (docs only). It is the table that [SDC NET-01](../security-density-architecture-checklist-2026-10-21.md)
 ("host fetch service; no general guest internet") and NET-04 ("remove the

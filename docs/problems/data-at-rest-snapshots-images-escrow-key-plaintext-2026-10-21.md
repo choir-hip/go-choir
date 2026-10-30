@@ -1,5 +1,7 @@
 # Guest memory, data images and the escrow key rest in plaintext on the host disks (SDC NET-06, review F12)
 
+Status 2026-10-30: SEC-06 stays an open red item; references to the guest Dolt data image are stale (guest state is now SQLite `state.db` on the guest disk, and the escrowed key lives in the control database). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-21. Station FP9 of the launch first pass
 (`docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`). Mutation
 class of the fixes: red (snapshot custody, the escrow key, the VMM's file

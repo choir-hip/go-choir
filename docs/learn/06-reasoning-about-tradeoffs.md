@@ -1,5 +1,7 @@
 # Reasoning About Distributed-Systems and Security Trade-offs in Choir: A Field Guide
 
+Status 2026-10-30: the Dolt-based trade-off examples are historical; the choice made on 2026-10-30 was host PostgreSQL plus guest SQLite plus the tape. They remain valid as worked examples of reasoning. A full rewrite is pending. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Part 6 of the Choir learning series, written to teach rather than to
 decide.** 14 October 2026. Repository: `origin/main` at 980ffaf4e. This
 guide reads code and the problem records in `docs/problems/`; it had no

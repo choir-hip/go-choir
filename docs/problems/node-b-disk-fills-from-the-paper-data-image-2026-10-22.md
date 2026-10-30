@@ -1,5 +1,7 @@
 # Node B's root disk fills from the paper's data image; deploys are blocked by the disk floor
 
+Status 2026-10-30: the Dolt, Store A/B and projection-base sections below are historical. The paper's disk growth now concerns its SQLite `state.db`, its tape and the file CAS (goal station L1 of the lean system). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-22, 14:40 UTC. Found by: FP0, when deploy R (main 0bf8a097d, CI 39794075862) failed at "Deploy to Staging (Node B)". Status: open. Mutation class of the fixes: red (deploy routing; the paper's store and data image; host disk).
 
 ## Evidence (read-only, from Node B)

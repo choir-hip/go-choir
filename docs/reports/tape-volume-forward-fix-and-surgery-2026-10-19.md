@@ -1,5 +1,7 @@
 # Tape volume: the forward fix, and what "tape surgery" can safely mean (2026-10-19)
 
+Status 2026-10-30: the tape-authority advice stands; the guest Dolt store references are stale (the guest store is SQLite rebuilt from the tape). Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-19. Analysis and design only. No runtime code changed, nothing
 pushed to main, nothing run on Node B or any computer, no tape or artifact
 touched. Mutation class of this doc: green. Every change it proposes is red

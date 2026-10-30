@@ -1,5 +1,7 @@
 # Node B's platform artifact store is 122 GB; five stores outside the tape have no working retention (2026-10-22)
 
+Status 2026-10-30: the retention plan cites Store A, Store B and Dolt, all deleted. The retention subject is now sealed tape segments and the file CAS in the host's platform artifacts. The "built but not deployed" status was not re-verified. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-22. Written for FP0, the launch first-pass orchestrator. Status: documented, evidence and plan only. Docs only: no code changed, nothing deleted, no host read by the author. Mutation class of this doc: green.
 
 Out of scope: the three legacy tape namespaces (`computer-event`, `computer-event-payload`, `pin-receipts`; 45 GiB, 9.8M files) and `tape-seg`. Another lane is building their repack.

@@ -1,5 +1,7 @@
 # Isolation Runtimes for Choir: Firecracker, Cloud Hypervisor, gVisor, libkrun and Others
 
+Status 2026-10-30: line 243 lists Dolt in the guest image; guests run SQLite now. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14, about 16:00 UTC. Owner (about 15:45 UTC): "Also been
 meaning to consider Cloud Hypervisor for Node B... pros/cons? Really I want
 to do both (and gVisor? And more? libkrun?) for our agentic red-teaming

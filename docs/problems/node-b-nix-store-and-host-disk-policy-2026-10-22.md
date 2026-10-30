@@ -1,5 +1,7 @@
 # Node B: the Nix store and host disk policy (2026-10-22)
 
+Status 2026-10-30: the Dolt backup and paper data-image references below are outdated; the Dolt stores are deleted. Whether the policy landed was not re-verified in this pass. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: policy built on `lane/fp0-nix-store-policy`, revised after review
 round 2 (bunch 74); not landed. Deploy 1 is the commit group ending at the
 "deploy 1 head" named in the now card below; deploy 2 is the one commit

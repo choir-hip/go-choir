@@ -1,5 +1,7 @@
 # Node B's Artifact Store Grows About 12.6 GB a Day; Garbage Collection Never Runs
 
+Status 2026-10-30: the projection-base and platform-Dolt figures below are historical (both deleted). Whether the artifact-store GC fix landed was not re-verified in this pass. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14, about 12:00 UTC. Found while sizing the performance
 report. Status: diagnosed; fix on branch `fix/artifact-store-gc`, not
 deployed (see "Fix and owner steps" at the end). Owner: "That much storage growth?

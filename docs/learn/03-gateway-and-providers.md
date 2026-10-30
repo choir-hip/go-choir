@@ -1,5 +1,7 @@
 # The Gateway and Providers: Custody, Routing, Failure and Cost
 
+Status 2026-10-30: the Store A reference (line 183) is stale: Store A is deleted and the control database is PostgreSQL. Gateway model facts need a refresh alongside the model-pools design. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 **Learning series, document 3 of 6.** 14 October 2026. Repository:
 `origin/main` at 980ffaf4e. Written for Choir's owner, to teach the
 general ideas of a platform gateway and to show exactly how Choir's gateway

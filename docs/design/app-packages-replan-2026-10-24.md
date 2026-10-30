@@ -1,5 +1,7 @@
 # App packages, replanned under I27 (2026-10-24)
 
+Status 2026-10-30: app packages have landed. The `objectgraph` `dolt_store.go` and platform Dolt GC citations describe code and a store that are deleted. Design source for the new data system: [the data system frame](choir-data-system-frame-2026-10-30.md).
+
 Status: **design, green.** No code. Written by an FP0 design worker on lane
 `lane/fp0-s7-replan` from `origin/main` at `d7437aabc`. Goal file:
 [choir-appdev-s7-app-packages-2026-10-01.md](../archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md).

@@ -1,5 +1,7 @@
 # The paper is never checkpointed (2026-10-27)
 
+Status 2026-10-30: the Dolt and projection-base evidence and the fix plan below are historical. Projection bases are deleted; a guest now recovers from its own sealed snapshots plus the tape tail, and a lost disk was rebuilt from the host alone on 2026-10-30. Whether automatic checkpointing is on for the paper was not re-verified. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Status: open; documented before any fix. Station D8 of
 docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md.
 Owner, 2026-10-27: "We need to have auto checkpointing on. We need to

@@ -1,5 +1,7 @@
 # Loopback Is a Credential on Node B
 
+Status 2026-10-30: still a live credential record. The Dolt auth stage and Dolt residuals below are historical (Dolt is deleted); the remaining exposure is the host loopback services and the PostgreSQL listener. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
+
 Date: 2026-10-14. Source: the computer isolation security review
 (docs/archive/reports/computer-isolation-security-review-2026-10-14.md, findings
 F2 and F3, section 3.5), re-checked read-only on Node B at about 19:30 UTC
