@@ -14,7 +14,9 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -26,15 +28,14 @@ var (
 	telemetryRetireFirstDelay = 10 * time.Minute
 	// telemetryRetireInterval is the gap between runs.
 	telemetryRetireInterval = 24 * time.Hour
-	// telemetryRetireChunkRows bounds the rows one retire op removes: the
-	// apply holds the event lock, so the backlog goes in short transactions.
-	telemetryRetireChunkRows = 20000
 	// telemetryRetireChunkPause lets the desks' appends through between
 	// chunks.
 	telemetryRetireChunkPause = 250 * time.Millisecond
-	// telemetryRetireMaxChunks bounds the ops one group appends in one run
-	// (20000 rows each: 10 million rows); the next run continues.
-	telemetryRetireMaxChunks = 500
+	// telemetryRetireMaxSlices bounds the ops one group appends in one run
+	// (one per hour slice that has a row); the next run continues.
+	telemetryRetireMaxSlices = 2000
+	// telemetryRetireSlice is the slice one op covers.
+	telemetryRetireSlice = time.Hour
 	// telemetryRetireTraceWindow is how long the trace kinds stay (the
 	// owner's default, section 11.6).
 	telemetryRetireTraceWindow = 14 * 24 * time.Hour
@@ -73,7 +74,7 @@ var telemetryRetireGroups = []telemetryRetireGroup{
 	{name: "phased loop.progress", kinds: []types.EventKind{types.EventRunProgress}, phase: computerevent.ObjectRetirePhaseSome, window: retireTrace},
 }
 
-func (g telemetryRetireGroup) projection(now time.Time) computerevent.ObjectRetireProjection {
+func (g telemetryRetireGroup) projection(from, before time.Time) computerevent.ObjectRetireProjection {
 	kinds := make([]string, len(g.kinds))
 	for i, k := range g.kinds {
 		kinds[i] = string(k)
@@ -81,51 +82,87 @@ func (g telemetryRetireGroup) projection(now time.Time) computerevent.ObjectReti
 	return computerevent.ObjectRetireProjection{
 		ObjectKind:    computerevent.ObjectRetireKindEvent,
 		EventKinds:    kinds,
-		UpdatedBefore: now.Add(-g.window()).UTC().Format(time.RFC3339Nano),
+		UpdatedFrom:   from.UTC().Format(time.RFC3339Nano),
+		UpdatedBefore: before.UTC().Format(time.RFC3339Nano),
 		Phase:         g.phase,
-		MaxRows:       telemetryRetireChunkRows,
 		Reason:        "telemetry retirement: " + g.name,
 	}
 }
 
-// RetireTelemetry runs the retirement once: for each group, while a row
-// matches, it appends one bounded retire op. It returns the ops appended. A
-// store with no bound projection tape retires nothing (the test seam keeps no
-// tape, and a delete outside the tape would break replay).
+// retireCleared is, per group, the time below which this process has retired
+// every matching line: a later run starts an hour before it, not at the
+// oldest row, which a kept kind (tool.result) holds back forever. A restart
+// forgets it and the first run starts from the oldest row again.
+var retireCleared sync.Map // group name -> time.Time
+
+// RetireTelemetry runs the retirement once. For each group it finds the
+// oldest candidate row (read pool, outside any write transaction), then
+// appends one retire op per hour slice from that hour up to the group's
+// cutoff, skipping a slice with no matching row. It returns the ops
+// appended. A store with no bound projection tape retires nothing (the test
+// seam keeps no tape, and a delete outside the tape would break replay).
 func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error) {
 	if s == nil || s.projectionTape == nil {
 		return 0, nil
 	}
 	appended := 0
 	for _, g := range telemetryRetireGroups {
-		p := g.projection(now)
-		for chunk := 0; chunk < telemetryRetireMaxChunks; chunk++ {
+		cutoff := now.Add(-g.window()).UTC()
+		var start time.Time
+		if v, ok := retireCleared.Load(s.retireClearedKey(g)); ok {
+			start = v.(time.Time).Add(-time.Hour)
+		} else {
+			oldest, err := s.retireOldest(ctx, cutoff)
+			if err != nil {
+				return appended, err
+			}
+			start = oldest
+		}
+		if start.IsZero() || !start.Before(cutoff) {
+			continue
+		}
+		t := start.Truncate(telemetryRetireSlice)
+		ops := 0
+		for t.Before(cutoff) && ops < telemetryRetireMaxSlices {
 			if err := ctx.Err(); err != nil {
 				return appended, err
 			}
+			end := t.Add(telemetryRetireSlice)
+			if end.After(cutoff) {
+				end = cutoff
+			}
+			p := g.projection(t, end)
 			found, err := s.retireMatchExists(ctx, p)
 			if err != nil {
 				return appended, err
 			}
-			if !found {
-				break
+			if found {
+				body, err := json.Marshal(p)
+				if err != nil {
+					return appended, err
+				}
+				if err := s.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObjectRetire, Body: body}}); err != nil {
+					return appended, err
+				}
+				appended++
+				ops++
+				select {
+				case <-ctx.Done():
+					return appended, ctx.Err()
+				case <-time.After(telemetryRetireChunkPause):
+				}
 			}
-			body, err := json.Marshal(p)
-			if err != nil {
-				return appended, err
-			}
-			if err := s.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObjectRetire, Body: body}}); err != nil {
-				return appended, err
-			}
-			appended++
-			select {
-			case <-ctx.Done():
-				return appended, ctx.Err()
-			case <-time.After(telemetryRetireChunkPause):
-			}
+			t = end
 		}
+		// Everything before t is retired for this group.
+		retireCleared.Store(s.retireClearedKey(g), t)
 	}
 	return appended, nil
+}
+
+// retireClearedKey scopes the watermark to this store and group.
+func (s *Store) retireClearedKey(g telemetryRetireGroup) string {
+	return fmt.Sprintf("%p/%s", s, g.name)
 }
 
 // StartTelemetryRetirement runs RetireTelemetry about ten minutes after

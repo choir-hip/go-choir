@@ -58,7 +58,7 @@ type vocabReplayTrack struct {
 	// row the narrowed check cannot find (object_retire.go).
 	retired bool
 	objects map[string]struct{}
-	edges    map[string]struct{}
+	edges   map[string]struct{}
 	// stamped holds the replayed object ops stamped for choir_events, by tape
 	// position: their rows are not in og_objects, and canonical_id is not
 	// indexed there (event-table design 3.6).

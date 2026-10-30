@@ -38,7 +38,7 @@ const (
 	// working store; the rows stay on the sealed tape where they were recorded
 	// (docs/design/object-graph-redesign-2026-10-30.md section 11.3).
 	ProjectionOpObjectRetire = "object_retire_recorded"
-	ProjectionBatchMediaType               = "application/vnd.choir.projection-batch+json"
+	ProjectionBatchMediaType = "application/vnd.choir.projection-batch+json"
 )
 
 var (
@@ -201,23 +201,24 @@ const (
 	ObjectRetirePhaseSome = "some"
 )
 
+// ObjectRetireMaxSlice is the longest time slice one retire op may name. The
+// slice bounds the rows an op reads and removes (the apply holds the event
+// lock), and the op is as deterministic as the slice is exact.
+const ObjectRetireMaxSlice = 24 * time.Hour
+
 // ObjectRetireProjection is the body of a ProjectionOpObjectRetire op: remove
 // every row of ObjectKind, from the working store, whose event kind is in
-// EventKinds, whose updated_at is before UpdatedBefore, and whose payload
-// phase matches Phase. The cutoff is in the body, never the wall clock at
-// apply, so live apply and replay remove the same rows at the same tape
-// position.
+// EventKinds, whose updated_at is in the half-open slice
+// [UpdatedFrom, UpdatedBefore), and whose payload phase matches Phase. The
+// slice is in the body, never the wall clock at apply, so live apply and
+// replay remove the same rows at the same tape position.
 type ObjectRetireProjection struct {
 	ObjectKind    string   `json:"object_kind"`
 	EventKinds    []string `json:"event_kinds"`
+	UpdatedFrom   string   `json:"updated_from"`
 	UpdatedBefore string   `json:"updated_before"`
 	Phase         string   `json:"phase,omitempty"`
-	// MaxRows, when positive, bounds the rows one op removes: the oldest
-	// first by (updated_at, canonical_id), a total order, so a bounded op is
-	// as deterministic as an unbounded one. It keeps the apply (which holds
-	// the event lock) short; the emitter repeats until nothing matches.
-	MaxRows int    `json:"max_rows,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
 }
 
 // DecodeObjectRetire parses and validates a retire body.
@@ -232,8 +233,9 @@ func DecodeObjectRetire(body json.RawMessage) (ObjectRetireProjection, error) {
 	return p, nil
 }
 
-// Validate refuses an empty kind list, a zero or unparseable cutoff, a
-// negative bound, an unknown phase filter and any object kind but choir.event.
+// Validate refuses an empty kind list, a missing, zero or unparseable bound,
+// a slice that is empty, reversed or longer than ObjectRetireMaxSlice, an
+// unknown phase filter and any object kind but choir.event.
 func (p ObjectRetireProjection) Validate() error {
 	if p.ObjectKind != ObjectRetireKindEvent {
 		return fmt.Errorf("object retire: object_kind %q is not %q", p.ObjectKind, ObjectRetireKindEvent)
@@ -246,11 +248,8 @@ func (p ObjectRetireProjection) Validate() error {
 			return fmt.Errorf("object retire: event kind %q is blank or padded", k)
 		}
 	}
-	if _, err := p.Cutoff(); err != nil {
+	if _, _, err := p.Slice(); err != nil {
 		return err
-	}
-	if p.MaxRows < 0 {
-		return fmt.Errorf("object retire: max_rows is negative")
 	}
 	switch p.Phase {
 	case ObjectRetirePhaseAny, ObjectRetirePhaseNone, ObjectRetirePhaseSome:
@@ -260,16 +259,32 @@ func (p ObjectRetireProjection) Validate() error {
 	return nil
 }
 
-// Cutoff is UpdatedBefore as a UTC time; it is never zero.
-func (p ObjectRetireProjection) Cutoff() (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(p.UpdatedBefore))
-	if err != nil {
-		return time.Time{}, fmt.Errorf("object retire: updated_before: %w", err)
+// Slice is the half-open [from, before) slice as UTC times; neither is zero,
+// from is before before, and the slice is at most ObjectRetireMaxSlice.
+func (p ObjectRetireProjection) Slice() (from, before time.Time, err error) {
+	parse := func(name, raw string) (time.Time, error) {
+		t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+		if err != nil {
+			return time.Time{}, fmt.Errorf("object retire: %s: %w", name, err)
+		}
+		if t.IsZero() || t.Year() < 2000 {
+			return time.Time{}, fmt.Errorf("object retire: %s is the zero time", name)
+		}
+		return t.UTC(), nil
 	}
-	if t.IsZero() || t.Year() < 2000 {
-		return time.Time{}, fmt.Errorf("object retire: updated_before is the zero time")
+	if from, err = parse("updated_from", p.UpdatedFrom); err != nil {
+		return time.Time{}, time.Time{}, err
 	}
-	return t.UTC(), nil
+	if before, err = parse("updated_before", p.UpdatedBefore); err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if !from.Before(before) {
+		return time.Time{}, time.Time{}, fmt.Errorf("object retire: updated_from is not before updated_before")
+	}
+	if before.Sub(from) > ObjectRetireMaxSlice {
+		return time.Time{}, time.Time{}, fmt.Errorf("object retire: the slice is longer than %s", ObjectRetireMaxSlice)
+	}
+	return from, before, nil
 }
 
 func (b ProjectionBatch) Validate() error {

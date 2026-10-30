@@ -7,9 +7,14 @@ package store
 // event kinds from the working store (og_objects, and choir_events for the
 // stamped rows). The rows stay on the sealed tape, in the projection batch
 // that recorded each of them: only the working-store copy goes. The op names
-// its cutoff, so live apply and replay remove the same rows at the same tape
-// position; a bounded op (MaxRows) removes the oldest first by
-// (updated_at, canonical_id), which is a total order.
+// a half-open time slice [updated_from, updated_before) of at most 24 hours,
+// so live apply and replay remove the same rows at the same tape position,
+// and the apply reads only its own slice: the select uses the partial index
+// idx_og_objects_choir_event_updated (objectgraph.ChoirEventUpdatedIndex,
+// created with the schema at open), which
+// needs the literal predicate object_kind = 'choir.event' in the SQL (a bound
+// parameter cannot match a partial index predicate). Validation restricts
+// object_kind to that value, so the literal is the op's meaning.
 //
 // An event line's kind is in its metadata ("kind", written by
 // buildEventObject), and choir_events keeps it in event_kind. The phase of a
@@ -36,8 +41,17 @@ import (
 // retireDropBatch bounds the ids one derived-key drop and delete handles.
 const retireDropBatch = 500
 
+// retireOGTable is the table clause of every slice statement. Without
+// statistics SQLite estimates an equality on idx_og_objects_kind_id as a few
+// rows and prefers it to the partial index's range, which would read all 2.5
+// million events per op and sort them; INDEXED BY pins the partial index. It
+// exists whenever the store is open (objectgraph EnsureSchema creates it), and
+// every statement that names it carries the literal object_kind predicate the
+// index requires.
+const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventUpdatedIndex
+
 // retireEventPhaseSQL is the phase of the event whose body is body and whose
-// metadata is meta: the payload's phase, else the metadata's, else ''. A body
+// metadata is meta: the payload's phase, else the metadata's, else ”. A body
 // or metadata that is not JSON reads as phaseless rather than failing the
 // whole statement (a projection that errors on one row would wedge replay).
 func retireEventPhaseSQL(body, meta string) string {
@@ -67,19 +81,21 @@ func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []a
 }
 
 // retireOGWhere is the og_objects selection of a retire op, with its args.
-func retireOGWhere(p computerevent.ObjectRetireProjection, cutoff time.Time) (string, []any) {
+// The object kind is the literal 'choir.event', never a parameter, so the
+// planner can use the partial index (Validate admits no other kind).
+func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
-	where := `object_kind = ? AND updated_at < ? AND json_valid(metadata) AND json_extract(metadata, '$.kind') IN (` + marks + `)` +
+	where := `object_kind = 'choir.event' AND updated_at >= ? AND updated_at < ? AND json_valid(metadata) AND json_extract(metadata, '$.kind') IN (` + marks + `)` +
 		retirePhasePredicate(p, "body", "metadata")
-	args := append([]any{p.ObjectKind, cutoff}, kindArgs...)
+	args := append([]any{from, before}, kindArgs...)
 	return where, args
 }
 
 // retireTableWhere is the choir_events selection of a retire op.
-func retireTableWhere(p computerevent.ObjectRetireProjection, cutoff time.Time) (string, []any) {
+func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
-	where := `updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata")
-	args := append([]any{cutoff}, kindArgs...)
+	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata")
+	args := append([]any{from, before}, kindArgs...)
 	return where, args
 }
 
@@ -93,21 +109,15 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", computerevent.ErrProjectionBatchInvalid, err)
 	}
-	cutoff, err := p.Cutoff()
+	from, before, err := p.Slice()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", computerevent.ErrProjectionBatchInvalid, err)
 	}
 	var removed int64
 
-	// og_objects first, then choir_events: a bounded op spends its bound in
-	// that order, which is part of the op's meaning.
-	where, args := retireOGWhere(p, cutoff)
-	limit := ""
-	if p.MaxRows > 0 {
-		limit = fmt.Sprintf(` ORDER BY updated_at, canonical_id LIMIT %d`, p.MaxRows)
-	}
+	where, args := retireOGWhere(p, from, before)
 	if derived.Keyed(objectgraph.ObjectKind(p.ObjectKind)) {
-		ids, err := retireSelectIDs(ctx, tx, `SELECT canonical_id FROM og_objects WHERE `+where+limit, args)
+		ids, err := retireSelectIDs(ctx, tx, `SELECT canonical_id FROM `+retireOGTable+` WHERE `+where, args)
 		if err != nil {
 			return 0, fmt.Errorf("object retire: select: %w", err)
 		}
@@ -127,12 +137,7 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 			removed += n
 		}
 	} else {
-		var res sql.Result
-		if p.MaxRows > 0 {
-			res, err = tx.ExecContext(ctx, `DELETE FROM og_objects WHERE canonical_id IN (SELECT canonical_id FROM og_objects WHERE `+where+limit+`)`, args...)
-		} else {
-			res, err = tx.ExecContext(ctx, `DELETE FROM og_objects WHERE `+where, args...)
-		}
+		res, err := tx.ExecContext(ctx, `DELETE FROM `+retireOGTable+` WHERE `+where, args...)
 		if err != nil {
 			return 0, fmt.Errorf("object retire: delete: %w", err)
 		}
@@ -140,25 +145,16 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 		removed += n
 	}
 
-	room := int64(p.MaxRows) - removed
-	if p.MaxRows == 0 || room > 0 {
-		twhere, targs := retireTableWhere(p, cutoff)
-		var res sql.Result
-		if p.MaxRows > 0 {
-			res, err = tx.ExecContext(ctx, `DELETE FROM `+choirEventsTable+` WHERE rowid IN (SELECT rowid FROM `+choirEventsTable+` WHERE `+twhere+
-				fmt.Sprintf(` ORDER BY updated_at, tape_seq, op_index LIMIT %d)`, room), targs...)
-		} else {
-			res, err = tx.ExecContext(ctx, `DELETE FROM `+choirEventsTable+` WHERE `+twhere, targs...)
-		}
-		if err != nil {
-			return 0, fmt.Errorf("object retire: delete %s: %w", choirEventsTable, err)
-		}
-		n, _ := res.RowsAffected()
-		removed += n
+	twhere, targs := retireTableWhere(p, from, before)
+	res, err := tx.ExecContext(ctx, `DELETE FROM `+choirEventsTable+` WHERE `+twhere, targs...)
+	if err != nil {
+		return 0, fmt.Errorf("object retire: delete %s: %w", choirEventsTable, err)
 	}
+	n, _ := res.RowsAffected()
+	removed += n
 	if removed > 0 {
-		log.Printf("store: object retire: removed %d %s rows (kinds=%v before=%s phase=%q max_rows=%d reason=%q)",
-			removed, p.ObjectKind, p.EventKinds, p.UpdatedBefore, p.Phase, p.MaxRows, p.Reason)
+		log.Printf("store: object retire: removed %d %s rows (kinds=%v slice=[%s,%s) phase=%q reason=%q)",
+			removed, p.ObjectKind, p.EventKinds, p.UpdatedFrom, p.UpdatedBefore, p.Phase, p.Reason)
 	}
 	return removed, nil
 }
@@ -181,23 +177,24 @@ func retireSelectIDs(ctx context.Context, tx *sql.Tx, query string, args []any) 
 }
 
 // retireMatchExists reports whether any row would be removed by the op: the
-// emitter's read-only probe, so a day with nothing to retire appends nothing.
+// emitter's read-only probe on the read pool, so a slice with nothing to
+// retire appends nothing.
 func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRetireProjection) (bool, error) {
-	cutoff, err := p.Cutoff()
+	from, before, err := p.Slice()
 	if err != nil {
 		return false, err
 	}
-	where, args := retireOGWhere(p, cutoff)
+	where, args := retireOGWhere(p, from, before)
 	var one int
-	err = s.db.QueryRowContext(ctx, `SELECT 1 FROM og_objects WHERE `+where+` LIMIT 1`, args...).Scan(&one)
+	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+retireOGTable+` WHERE `+where+` LIMIT 1`, args...).Scan(&one)
 	if err == nil {
 		return true, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	twhere, targs := retireTableWhere(p, cutoff)
-	err = s.db.QueryRowContext(ctx, `SELECT 1 FROM `+choirEventsTable+` WHERE `+twhere+` LIMIT 1`, targs...).Scan(&one)
+	twhere, targs := retireTableWhere(p, from, before)
+	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+choirEventsTable+` WHERE `+twhere+` LIMIT 1`, targs...).Scan(&one)
 	if err == nil {
 		return true, nil
 	}
@@ -205,4 +202,58 @@ func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRet
 		return false, nil
 	}
 	return false, err
+}
+
+// retireOldest is the oldest updated_at of any choir.event row before cutoff
+// (the kind is not filtered: an over-approximation that keeps the query on
+// the partial index), or the zero time when there is none.
+func (s *Store) retireOldest(ctx context.Context, cutoff time.Time) (time.Time, error) {
+	var oldest time.Time
+	for _, q := range []string{
+		`SELECT MIN(updated_at) FROM ` + retireOGTable + ` WHERE object_kind = 'choir.event' AND updated_at < ?`,
+		`SELECT MIN(updated_at) FROM ` + choirEventsTable + ` WHERE updated_at < ?`,
+	} {
+		var raw any
+		if err := s.retireReader().QueryRowContext(ctx, q, cutoff).Scan(&raw); err != nil {
+			return time.Time{}, err
+		}
+		t, err := retireParseTime(raw)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if !t.IsZero() && (oldest.IsZero() || t.Before(oldest)) {
+			oldest = t
+		}
+	}
+	return oldest, nil
+}
+
+// retireReader is the read pool, or the write handle where there is none: the
+// emitter's probes run outside any write transaction.
+func (s *Store) retireReader() *sql.DB {
+	if s.readDB != nil {
+		return s.readDB
+	}
+	return s.db
+}
+
+// retireParseTime reads a MIN(updated_at) result: nil for no row, a time, or
+// the driver's text form.
+func retireParseTime(raw any) (time.Time, error) {
+	switch v := raw.(type) {
+	case nil:
+		return time.Time{}, nil
+	case time.Time:
+		return v.UTC(), nil
+	case string:
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05.999999999-07:00", "2006-01-02 15:04:05.999999999 -0700 MST", "2006-01-02 15:04:05.999999999"} {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t.UTC(), nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("store: unreadable updated_at %q", v)
+	case []byte:
+		return retireParseTime(string(v))
+	}
+	return time.Time{}, fmt.Errorf("store: unreadable updated_at of type %T", raw)
 }

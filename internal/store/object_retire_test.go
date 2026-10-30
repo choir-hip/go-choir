@@ -7,16 +7,20 @@ package store
 //   - R1: the op removes a row it should keep (a newer row, another event
 //     kind, another phase, another object kind) or keeps a row it should
 //     remove, in either table;
-//   - R2: live apply and replay disagree about what was dropped (the cutoff
-//     read from the wall clock, an unordered bound);
-//   - R3: an invalid body (no kinds, a zero cutoff, another object kind, a
-//     negative bound, an unknown phase) is accepted, or reaches the tape;
+//   - R2: live apply and replay disagree about what was dropped (the slice
+//     read from the wall clock);
+//   - R3: an invalid body (no kinds, a zero, reversed or over-a-day slice,
+//     another object kind, an unknown phase) is accepted, or reaches the tape;
 //   - R4: the dry run applies the delete (paying it twice, or deleting when
 //     the batch is later refused);
 //   - R5: the job retires a kind the policy keeps (tool.result, the cost
 //     lines, the trace inside its window), or retires nothing;
 //   - R6: an unbound store (no tape) retires, which replay would not see;
-//   - R7: the retirement removes derived keys of other objects.
+//   - R7: the retirement removes derived keys of other objects;
+//   - R8: the slice is not half-open (a row at a bound, whole or fractional
+//     seconds, goes the wrong way);
+//   - R9: the slice select scans every event and sorts (the plan leaves the
+//     partial index).
 
 import (
 	"context"
@@ -25,6 +29,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,11 +117,27 @@ func retireSeed(t *testing.T, h *tapeHarness, script []retireEvent) {
 	h.store.SetEventTableWrites(false)
 }
 
-func retireP(kinds []string, before time.Time, phase string, maxRows int) computerevent.ObjectRetireProjection {
+func retireP(kinds []string, from, before time.Time, phase string) computerevent.ObjectRetireProjection {
 	return computerevent.ObjectRetireProjection{
 		ObjectKind: computerevent.ObjectRetireKindEvent, EventKinds: kinds,
-		UpdatedBefore: before.UTC().Format(time.RFC3339Nano), Phase: phase, MaxRows: maxRows, Reason: "test",
+		UpdatedFrom:   from.UTC().Format(time.RFC3339Nano),
+		UpdatedBefore: before.UTC().Format(time.RFC3339Nano), Phase: phase, Reason: "test",
 	}
+}
+
+// retireOps tiles [from, before) in slices of at most a day, as the emitter
+// tiles it in hours, so a test can retire a long range with valid ops.
+func retireOps(t *testing.T, kinds []string, from, before time.Time, phase string) []computerevent.ProjectionOp {
+	t.Helper()
+	var ops []computerevent.ProjectionOp
+	for at := from; at.Before(before); at = at.Add(24 * time.Hour) {
+		end := at.Add(24 * time.Hour)
+		if end.After(before) {
+			end = before
+		}
+		ops = append(ops, retireOp(t, retireP(kinds, at, end, phase)))
+	}
+	return ops
 }
 
 func hasID(ids []string, id string) bool {
@@ -149,10 +170,8 @@ func TestObjectRetireRemovesExactlyTheAgedMatchingRows(t *testing.T) {
 		t.Fatal("the script stamped no event into choir_events")
 	}
 
-	cutoff := retireBase.Add(15 * 24 * time.Hour)
-	if err := h.store.AppendProjectionOps(ctx, []computerevent.ProjectionOp{
-		retireOp(t, retireP([]string{"tool.invoked", "desk.cell"}, cutoff, "", 0)),
-	}); err != nil {
+	from, cutoff := retireBase.Add(-time.Hour), retireBase.Add(15*24*time.Hour)
+	if err := h.store.AppendProjectionOps(ctx, retireOps(t, []string{"tool.invoked", "desk.cell"}, from, cutoff, "")); err != nil {
 		t.Fatal(err)
 	}
 	got := retireIDs(t, h.store)
@@ -171,9 +190,7 @@ func TestObjectRetireRemovesExactlyTheAgedMatchingRows(t *testing.T) {
 	}
 
 	// Phase filters: phaseless goes, phased stays, then phased goes.
-	if err := h.store.AppendProjectionOps(ctx, []computerevent.ProjectionOp{
-		retireOp(t, retireP([]string{"loop.progress"}, cutoff, computerevent.ObjectRetirePhaseNone, 0)),
-	}); err != nil {
+	if err := h.store.AppendProjectionOps(ctx, retireOps(t, []string{"loop.progress"}, from, cutoff, computerevent.ObjectRetirePhaseNone)); err != nil {
 		t.Fatal(err)
 	}
 	got = retireIDs(t, h.store)
@@ -183,9 +200,7 @@ func TestObjectRetireRemovesExactlyTheAgedMatchingRows(t *testing.T) {
 	if !hasID(got, "prog-cost-old") || !hasID(got, "prog-cost-old-t") || !hasID(got, "prog-cost-fresh") {
 		t.Errorf("a phased loop.progress was retired by the phaseless op: %v", got)
 	}
-	if err := h.store.AppendProjectionOps(ctx, []computerevent.ProjectionOp{
-		retireOp(t, retireP([]string{"loop.progress"}, cutoff, computerevent.ObjectRetirePhaseSome, 0)),
-	}); err != nil {
+	if err := h.store.AppendProjectionOps(ctx, retireOps(t, []string{"loop.progress"}, from, cutoff, computerevent.ObjectRetirePhaseSome)); err != nil {
 		t.Fatal(err)
 	}
 	got = retireIDs(t, h.store)
@@ -216,7 +231,7 @@ func TestObjectRetireLeavesOtherObjectKinds(t *testing.T) {
 	projectAt(t, s, 2,
 		computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: other.CanonicalID, Body: otherBody},
 		eventTableOp(t, evt.record(), false))
-	projectAt(t, s, 3, retireOp(t, retireP([]string{"tool.invoked"}, retireBase.Add(time.Hour), "", 0)))
+	projectAt(t, s, 3, retireOp(t, retireP([]string{"tool.invoked"}, retireBase.Add(-time.Hour), retireBase.Add(time.Hour), "")))
 	if n := tableCount(t, s, "og_objects", "object_kind = 'choir.note'"); n != 1 {
 		t.Fatalf("a non-event object was retired (%d rows)", n)
 	}
@@ -226,20 +241,18 @@ func TestObjectRetireLeavesOtherObjectKinds(t *testing.T) {
 }
 
 // R2: a tape holding the retire ops, replayed into a fresh store, leaves the
-// same rows as the live apply: bounded and unbounded, both tables.
+// same rows as the live apply, both tables.
 func TestObjectRetireReplayEqualsLive(t *testing.T) {
 	ctx := context.Background()
 	h := newTapeHarness(t)
 	retireSeed(t, h, retireScript())
-	cutoff := retireBase.Add(15 * 24 * time.Hour)
-	for _, p := range []computerevent.ObjectRetireProjection{
-		retireP([]string{"tool.invoked", "desk.cell"}, cutoff, "", 2), // bounded: oldest two first
-		retireP([]string{"tool.invoked", "desk.cell"}, cutoff, "", 2),
-		retireP([]string{"tool.invoked", "desk.cell"}, cutoff, "", 2),
-		retireP([]string{"loop.progress"}, cutoff, computerevent.ObjectRetirePhaseNone, 0),
-		retireP([]string{"loop.progress"}, cutoff, computerevent.ObjectRetirePhaseSome, 1),
+	from, cutoff := retireBase.Add(-time.Hour), retireBase.Add(15*24*time.Hour)
+	for _, ops := range [][]computerevent.ProjectionOp{
+		retireOps(t, []string{"tool.invoked", "desk.cell"}, from, cutoff, ""),
+		retireOps(t, []string{"loop.progress"}, from, cutoff, computerevent.ObjectRetirePhaseNone),
+		retireOps(t, []string{"loop.progress"}, from, cutoff, computerevent.ObjectRetirePhaseSome),
 	} {
-		if err := h.store.AppendProjectionOps(ctx, []computerevent.ProjectionOp{retireOp(t, p)}); err != nil {
+		if err := h.store.AppendProjectionOps(ctx, ops); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -269,19 +282,99 @@ func TestObjectRetireReplayEqualsLive(t *testing.T) {
 	}
 }
 
-// R2: a bounded op removes the oldest rows first, by (updated_at, canonical_id).
-func TestObjectRetireBoundRemovesOldestFirst(t *testing.T) {
-	s, _ := vocabUpcastOpenStore(t, "retire-bound")
+// R8: the slice is half-open. A row exactly at the lower bound goes, a row
+// exactly at the upper bound stays; whole-second and fractional-second rows
+// in the same second as a bound sort the way the bound does (updated_at is
+// text in mixed precision).
+func TestObjectRetireSliceIsHalfOpen(t *testing.T) {
+	s, _ := vocabUpcastOpenStore(t, "retire-halfopen")
+	lo := retireBase.Truncate(time.Hour)
+	hi := lo.Add(time.Hour)
+	events := []retireEvent{
+		{id: "before-from", kind: types.EventToolInvoked, at: lo.Add(-time.Nanosecond)},
+		{id: "at-from-whole", kind: types.EventToolInvoked, at: lo},
+		{id: "in-frac", kind: types.EventToolInvoked, at: lo.Add(500 * time.Millisecond)},
+		{id: "in-whole", kind: types.EventToolInvoked, at: lo.Add(30 * time.Minute)},
+		{id: "last-nanos", kind: types.EventToolInvoked, at: hi.Add(-time.Nanosecond)},
+		{id: "at-before-whole", kind: types.EventToolInvoked, at: hi},
+		{id: "after-before-frac", kind: types.EventToolInvoked, at: hi.Add(time.Millisecond)},
+		{id: "next-hour", kind: types.EventToolInvoked, at: hi.Add(30 * time.Minute)},
+	}
 	var ops []computerevent.ProjectionOp
-	for i := 0; i < 5; i++ {
-		e := retireEvent{id: fmt.Sprintf("inv-%d", i), kind: types.EventToolInvoked, at: retireBase.Add(time.Duration(i) * time.Hour)}
+	for _, e := range events {
 		ops = append(ops, eventTableOp(t, e.record(), false))
 	}
 	projectAt(t, s, 2, ops...)
-	projectAt(t, s, 3, retireOp(t, retireP([]string{"tool.invoked"}, retireBase.Add(24*time.Hour), "", 2)))
+	projectAt(t, s, 3, retireOp(t, retireP([]string{"tool.invoked"}, lo, hi, "")))
 	got := retireIDs(t, s)
-	if want := []string{"inv-2", "inv-3", "inv-4"}; !reflect.DeepEqual(got, want) {
+	want := []string{"after-before-frac", "at-before-whole", "before-from", "next-hour"}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("remaining %v, want %v", got, want)
+	}
+	// The fractional bound: a slice ending at a fractional second.
+	frac := hi.Add(time.Millisecond)
+	projectAt(t, s, 4, retireOp(t, retireP([]string{"tool.invoked"}, hi, frac, "")))
+	got = retireIDs(t, s)
+	want = []string{"after-before-frac", "before-from", "next-hour"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("after the fractional slice: remaining %v, want %v", got, want)
+	}
+}
+
+// R9: the select of a slice reads through the partial index and sorts nothing.
+func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
+	s, _ := vocabUpcastOpenStore(t, "retire-plan")
+	p := retireP([]string{"tool.invoked", "desk.cell"}, retireBase, retireBase.Add(time.Hour), computerevent.ObjectRetirePhaseNone)
+	from, before, err := p.Slice()
+	if err != nil {
+		t.Fatal(err)
+	}
+	where, args := retireOGWhere(p, from, before)
+	for _, q := range []string{
+		`SELECT canonical_id FROM ` + retireOGTable + ` WHERE ` + where,
+		`SELECT 1 FROM ` + retireOGTable + ` WHERE ` + where + ` LIMIT 1`,
+		`DELETE FROM ` + retireOGTable + ` WHERE ` + where,
+	} {
+		rows, err := s.db.Query(`EXPLAIN QUERY PLAN `+q, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		text := strings.Join(plan, " | ")
+		t.Logf("plan: %s", text)
+		if !strings.Contains(text, "idx_og_objects_choir_event_updated") {
+			t.Errorf("the plan does not use the partial index: %s", text)
+		}
+		if strings.Contains(strings.ToUpper(text), "TEMP B-TREE") {
+			t.Errorf("the plan sorts: %s", text)
+		}
+	}
+	// The emitter's oldest-row query reads the index too.
+	rows, err := s.db.Query(`EXPLAIN QUERY PLAN SELECT MIN(updated_at) FROM `+retireOGTable+` WHERE object_kind = 'choir.event' AND updated_at < ?`, retireBase)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var all []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		all = append(all, detail)
+	}
+	if text := strings.Join(all, " | "); !strings.Contains(text, "idx_og_objects_choir_event_updated") {
+		t.Errorf("the oldest-row plan does not use the partial index: %s", text)
 	}
 }
 
@@ -291,16 +384,24 @@ func TestObjectRetireRefusesAnInvalidBody(t *testing.T) {
 	h := newTapeHarness(t)
 	retireSeed(t, h, retireScript()[:3])
 	tapeBefore := len(h.tape.snapshot())
-	valid := retireP([]string{"tool.invoked"}, retireBase, "", 0)
+	valid := retireP([]string{"tool.invoked"}, retireBase.Add(-time.Hour), retireBase, "")
 	cases := map[string]func(p *computerevent.ObjectRetireProjection){
-		"no kinds":        func(p *computerevent.ObjectRetireProjection) { p.EventKinds = nil },
-		"blank kind":      func(p *computerevent.ObjectRetireProjection) { p.EventKinds = []string{" "} },
-		"zero cutoff":     func(p *computerevent.ObjectRetireProjection) { p.UpdatedBefore = time.Time{}.Format(time.RFC3339Nano) },
+		"no kinds":     func(p *computerevent.ObjectRetireProjection) { p.EventKinds = nil },
+		"blank kind":   func(p *computerevent.ObjectRetireProjection) { p.EventKinds = []string{" "} },
+		"zero cutoff":  func(p *computerevent.ObjectRetireProjection) { p.UpdatedBefore = time.Time{}.Format(time.RFC3339Nano) },
+		"zero from":    func(p *computerevent.ObjectRetireProjection) { p.UpdatedFrom = time.Time{}.Format(time.RFC3339Nano) },
+		"missing from": func(p *computerevent.ObjectRetireProjection) { p.UpdatedFrom = "" },
+		"empty slice":  func(p *computerevent.ObjectRetireProjection) { p.UpdatedFrom = p.UpdatedBefore },
+		"reversed slice": func(p *computerevent.ObjectRetireProjection) {
+			p.UpdatedFrom, p.UpdatedBefore = p.UpdatedBefore, p.UpdatedFrom
+		},
+		"slice over a day": func(p *computerevent.ObjectRetireProjection) {
+			p.UpdatedFrom = retireBase.Add(-24*time.Hour - time.Second).UTC().Format(time.RFC3339Nano)
+		},
 		"missing cutoff":  func(p *computerevent.ObjectRetireProjection) { p.UpdatedBefore = "" },
 		"garbled cutoff":  func(p *computerevent.ObjectRetireProjection) { p.UpdatedBefore = "yesterday" },
 		"other kind":      func(p *computerevent.ObjectRetireProjection) { p.ObjectKind = "choir.run" },
 		"no object kind":  func(p *computerevent.ObjectRetireProjection) { p.ObjectKind = "" },
-		"negative bound":  func(p *computerevent.ObjectRetireProjection) { p.MaxRows = -1 },
 		"unknown phase":   func(p *computerevent.ObjectRetireProjection) { p.Phase = "sometimes" },
 		"padded kind":     func(p *computerevent.ObjectRetireProjection) { p.EventKinds = []string{" tool.invoked"} },
 		"empty-but-valid": nil,
@@ -351,7 +452,7 @@ func TestObjectRetireDryRunDeletesNothing(t *testing.T) {
 	batch := &computerevent.ProjectionBatch{
 		Version: computerevent.ProjectionBatchV2, ProjectorVersion: computerevent.ProjectorVersionV2,
 		ComputerID: h.computerID, EventID: "dry",
-		Ops: []computerevent.ProjectionOp{retireOp(t, retireP([]string{"tool.invoked", "desk.cell", "loop.progress", "tool.result"}, retireBase.Add(365*24*time.Hour), "", 0))},
+		Ops: []computerevent.ProjectionOp{retireOp(t, retireP([]string{"tool.invoked", "desk.cell", "loop.progress", "tool.result"}, retireBase.Add(-time.Hour), retireBase.Add(23*time.Hour), ""))},
 	}
 	if err := h.store.DryRunProjectionBatch(ctx, h.computerID, batch); err != nil {
 		t.Fatal(err)
@@ -359,7 +460,7 @@ func TestObjectRetireDryRunDeletesNothing(t *testing.T) {
 	if after := retireIDs(t, h.store); !reflect.DeepEqual(before, after) {
 		t.Fatalf("the dry run removed rows: %v -> %v", before, after)
 	}
-	bad := retireP(nil, retireBase, "", 0)
+	bad := retireP(nil, retireBase.Add(-time.Hour), retireBase, "")
 	batch.Ops = []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObjectRetire, Body: retireBody(t, bad)}}
 	if err := h.store.DryRunProjectionBatch(ctx, h.computerID, batch); err == nil {
 		t.Fatal("the dry run accepted an invalid retire body")
@@ -368,11 +469,9 @@ func TestObjectRetireDryRunDeletesNothing(t *testing.T) {
 
 func withRetireKnobs(t *testing.T) {
 	t.Helper()
-	chunk, pause, maxChunks := telemetryRetireChunkRows, telemetryRetireChunkPause, telemetryRetireMaxChunks
-	telemetryRetireChunkRows, telemetryRetireChunkPause = 2, time.Millisecond
-	t.Cleanup(func() {
-		telemetryRetireChunkRows, telemetryRetireChunkPause, telemetryRetireMaxChunks = chunk, pause, maxChunks
-	})
+	pause := telemetryRetireChunkPause
+	telemetryRetireChunkPause = time.Millisecond
+	t.Cleanup(func() { telemetryRetireChunkPause = pause })
 }
 
 // R5: the job applies the policy of section 11.6 and leaves tool.result, the

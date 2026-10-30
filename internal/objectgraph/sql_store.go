@@ -58,6 +58,14 @@ const (
 	recordClaimIndex  = "idx_og_objects_rec_claim"
 )
 
+// ChoirEventUpdatedIndex is the partial index a telemetry retire slice reads
+// (store/object_retire.go): the slice's select must carry the literal
+// predicate object_kind = 'choir.event' for the planner to use it.
+const ChoirEventUpdatedIndex = "idx_og_objects_choir_event_updated"
+
+// ChoirEventUpdatedIndexDDL creates it; idempotent.
+const ChoirEventUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventUpdatedIndex + ` ON og_objects(updated_at) WHERE object_kind = 'choir.event'`
+
 // bodyTextSQL is the body as text. The body column is a BLOB, and SQLite
 // reads a BLOB argument of its JSON functions as JSONB, so a body is always
 // cast before it meets one.
@@ -261,6 +269,17 @@ func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 	doneDDL := BootPhase("store: open", "objectgraph-schema/schema-ddl")
 	_, err := s.db.ExecContext(ctx, SchemaDDL)
 	doneDDL(err)
+	if err != nil {
+		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
+	}
+	// The partial index a telemetry retire slice reads through. It is its own
+	// step, not in objectIndexes, so its duration shows in the boot log: on
+	// an existing store the build reads every choir.event row (updated_at
+	// follows the body in the row), about 30 s for 2.5 million rows on the
+	// paper's copy. Not inside any batch transaction.
+	doneIdx := BootPhase("store: open", "objectgraph-schema/choir-event-updated-index")
+	_, err = s.db.ExecContext(ctx, ChoirEventUpdatedIndexDDL)
+	doneIdx(err)
 	if err != nil {
 		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
 	}
