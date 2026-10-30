@@ -100,7 +100,7 @@ incident. The L1a-2 attempt budget (c08ead07) already bounds self-marked
 replays at three per apply.
 
 
-## Merged from docs/problems/crash-boots-redrive-applies-2026-10-13.md (2026-10-12)
+## Merged from docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md (2026-10-12)
 
 **A crash restart leaves work open and can resume engineering work.**
 Found 2026-10-12 during read-only design research (studies B and G). Status: documented, not fixed. Both halves contradict the standing rule in CLAUDE.md, "Restarts End Work (Crash) Or Resume It (Planned Update)": at a markerless boot every open obligation (run, wake, control, directive, assignment, work item) is closed with the visible fate "interrupted by a restart", never re-dispatched.

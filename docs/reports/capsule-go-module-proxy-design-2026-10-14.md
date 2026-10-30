@@ -405,7 +405,7 @@ changes `go.sum`, and that change becomes part of its frozen subject
   Linux, which this Mac cannot cross-compile. CI compiles it.
 
 
-## Merged from docs/reports/capsule-go-module-proxy-design-2026-10-14.md (2026-10-14)
+## Merged from docs/reports/capsule-go-modules-decision-2026-10-14.md (2026-10-14)
 
 **Decision: How Engineering Capsules Get Go Modules.**
 Date: 2026-10-14. For the owner. Found by the C1e B1 engineering drill (docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md).

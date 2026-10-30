@@ -256,7 +256,7 @@ Evidence is in the monitor's scratchpad, `mon/fr3proof/`:
 - trace-A-1402.json, trace-B-1405.json.
 
 
-## Merged from docs/evidence/fp4-admission-queue-deployed-proof-2026-10-22.md (2026-10-22)
+## Merged from docs/evidence/fp4-admission-deployed-proof-2026-10-22.md (2026-10-22)
 
 **FP4 (ARCH-10 engineering admission, ARCH-04 writer gate): deployed proof on a test computer (2026-10-22).**
 Run by the self-development monitor (lane/fp4-selfdev-monitor), with `scripts/proofs/fp4-selfdev-admission.sh` (unchanged on main since d991907e6). It ran on the test computer `computer-71afbf1461dffabcce8eeebe558d03bd` (vm-c5c801f8…, warmness `test`). The paper, the owner's computer and the delegate were not targeted.

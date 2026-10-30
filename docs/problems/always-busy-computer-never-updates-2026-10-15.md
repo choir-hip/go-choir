@@ -225,7 +225,7 @@ count.)
   change.
 
 
-## Merged from docs/problems/always-busy-computer-never-updates-2026-10-15.md (2026-10-09)
+## Merged from docs/problems/deploy-restarts-busy-computers-2026-10-09.md (2026-10-09)
 
 **Deploys restart busy computers (2026-10-09).**
 Mutation class of the fix: red (deployment routing, VM lifecycle).

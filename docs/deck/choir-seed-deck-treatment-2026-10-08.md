@@ -291,7 +291,7 @@ The attached **one-sheet financial model** holds an explicitly ambitious founder
 **Final takeaway:** *Choir helps people and organizations own intelligence, improve it from experience, and sell authorized access to what it knows. PSA supplies the training signal and reputation record that can make a marketplace for intelligence trustworthy.*
 
 
-## Merged from docs/deck/choir-seed-deck-treatment-2026-10-08.md (2026-09-27)
+## Merged from docs/deck/choir-seed-deck-2026-09-27-notes.md (2026-09-27)
 
 **Speaker Notes and Sources — Choir Seed Deck, September 27, 2026.**
 Companion to `choir-seed-deck-2026-09-27-carbon-kintsugi.html` and `...-london-salmon.html`. Every figure that appears on a slide is listed here with its as-of date and source, per the treatment's evidence rule. Figures that could not be verified do not appear on slides, except where a founder input is still open (`[price]`, `[penetration]`, `[X]/[Y]/[Z]`, `[target]`), which are marked on the slide itself.

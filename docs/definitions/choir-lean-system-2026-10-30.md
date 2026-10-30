@@ -238,7 +238,7 @@ receipts:
   - id: build-superseded
     boundary: supersede
     identity: docs/definitions/choir-data-system-build-2026-10-30.md (phase 1 landed 2026-10-30; terminal receipt in its now card)
-    proof_refs: [docs/definitions/choir-data-system-build-2026-10-30.ledger.md, docs/reports/data-system-cutover-2026-10-30.md]
+    proof_refs: [docs/definitions/choir-data-system-build-2026-10-30.ledger.md, docs/reports/lost-disk-comes-back-whole-2026-10-30.md]
     rollback_ref: git revert of this file's commit
     disposition: phase 2 (I1 to I7) carries over as L4 and L5; the frame stays the design source; the build's ledger stays closed
 

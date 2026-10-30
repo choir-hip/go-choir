@@ -283,7 +283,7 @@ hibernate-across-deploy check fails, or if the CH cage needs lifecycle
 changes beyond the receipt check.
 
 
-## Merged from docs/reports/vm-hypervisor-seam-design-2026-10-21.md (2026-10-14)
+## Merged from docs/reports/vm-backend-interface-2026-10-14.md (2026-10-14)
 
 **VM Backend Interface: Firecracker and Cloud Hypervisor Behind One Seam.**
 Date: 2026-10-14, about 21:00 UTC. Base: `origin/main` at `980ffaf4e`.
