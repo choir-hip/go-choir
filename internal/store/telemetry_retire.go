@@ -216,6 +216,13 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 				continue
 			}
 			log.Printf("store: run memory retirement: %d ops in %s", memOps, time.Since(memStart).Round(time.Millisecond))
+			// Pages the retirements freed go back to the filesystem, bounded
+			// (compact.go; only a compacted file has incremental auto_vacuum).
+			if freed, vacErr := s.reclaimFreePages(ctx); vacErr != nil {
+				log.Printf("store: incremental vacuum: after %d pages: %v", freed, vacErr)
+			} else if freed > 0 {
+				log.Printf("store: incremental vacuum: %d pages returned", freed)
+			}
 		}
 	}()
 }
