@@ -645,6 +645,9 @@ let
   '';
 in
 {
+  # PostgreSQL for the host data system (additive; wired to services at the
+  # cutover). Rollback: remove this line.
+  imports = [ ./postgresql.nix ];
 
   # Boot
   boot.loader.efi.canTouchEfiVariables = true;
