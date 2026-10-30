@@ -67,6 +67,29 @@ type deployRefreshPendingEntry struct {
 	Release string `json:"release,omitempty"`
 }
 
+// A computer still deferred after deployRefreshRetryBackoffAfter attempts
+// (about half an hour at the one-minute sweep) is refusing for a reason that
+// does not clear by itself, such as a held rollback awaiting an owner act. It
+// is asked with a gap that doubles from two minutes up to
+// deployRefreshRetryMaxGap, and never dropped: the act that clears the
+// refusal still leads to an update.
+const (
+	deployRefreshRetryBackoffAfter = 30
+	deployRefreshRetryMaxGap       = time.Hour
+)
+
+// deployRefreshRetryDue reports whether the sweep asks entry again at now.
+func deployRefreshRetryDue(e deployRefreshPendingEntry, now time.Time) bool {
+	if e.Attempts < deployRefreshRetryBackoffAfter || e.LastAttemptAt.IsZero() {
+		return true
+	}
+	gap := deployRefreshRetryMaxGap
+	if shift := e.Attempts - deployRefreshRetryBackoffAfter; shift < 6 {
+		gap = min(2*time.Minute<<shift, deployRefreshRetryMaxGap)
+	}
+	return now.Sub(e.LastAttemptAt) >= gap
+}
+
 // deployRefreshKindWokeBehind marks the "resume, then update" entry. Only this
 // kind waits for the user-idle gate.
 const deployRefreshKindWokeBehind = "woke_behind"
@@ -282,6 +305,10 @@ func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefre
 	entry.VMID, entry.ComputerID = resp.VMID, resp.ComputerID
 	entry.LastAttemptAt, entry.LastReason, entry.BusyAllowed = now, resp.Reason, resp.BusyAllowed
 	entry.Attempts++
+	if entry.Attempts == deployRefreshRetryBackoffAfter {
+		log.Printf("vmctl: deploy refresh of %s to %s still deferred after %d attempts since %s: %q; asking with a growing gap up to %s",
+			entry.VMID, entry.Target, entry.Attempts, entry.FirstDeferredAt.Format(time.RFC3339), entry.LastReason, deployRefreshRetryMaxGap)
+	}
 	t.pending[key] = entry
 	t.saveLocked()
 }
@@ -399,6 +426,9 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 		if own == nil {
 			log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s has no computer; forgotten", entry.UserID, entry.DesktopID)
 			h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+			continue
+		}
+		if !deployRefreshRetryDue(entry, time.Now().UTC()) {
 			continue
 		}
 		eligible := !own.IsHeld() && own.State == VMStateActive && own.DivergenceStatus != "divergent"
