@@ -35,7 +35,7 @@ metamission:
   stations:
     - id: D0
       title: fold review round 1 into the frame, once
-      status: working
+      status: complete
       depends_on: []
       exit: >-
         Frame revision 2 adopts round 1's findings: Devin, the Sonnet seat,
@@ -49,7 +49,7 @@ metamission:
         one pass, with no panel.
     - id: D1
       title: the build sheet
-      status: pending
+      status: working
       depends_on: [D0]
       exit: >-
         One short document, docs/design/data-system-build-sheet-2026-10-30.md,
@@ -396,19 +396,10 @@ boundaries:
 now:
   status: working
   slice: >-
-    D0, folding round 1. Phase 1 aims for the fleet on the new system as
-    fast as possible (owner, 06:40 UTC). Round 1 status: Devin returned accept_with_notes (F1 to F5)
-    and the Sonnet seat returned send_back (B1 to B7); both outputs are in
-    .agentic-consensus/frame-r1/out/ (devin.out, sonnet.out). DeepSeek was
-    still running at authoring (omp-deepseek-v41-flash.out). The two
-    reviews overlap on:
-    - the PSA proof bound;
-    - restore and replay semantics;
-    - a closed effect set and the barrier;
-    - fencing and writer epochs;
-    - deletion safety;
-    - the release a rewind boots;
-    - custody honesty.
+    D1, the build sheet. D0 closed at 85eb4a55b (frame revision 2, round 1
+    folded) and 5294d3ec6 (precommitment round 0m). A Sonnet census of the
+    Dolt coupling is running and writes
+    docs/evidence/dolt-coupling-census-2026-10-30.md.
   source_ref: main 3f4dafb7e + this file's commit
   deploy_identity: d346c6a84
   candidate:

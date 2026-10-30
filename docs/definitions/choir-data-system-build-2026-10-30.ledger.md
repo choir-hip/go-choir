@@ -47,3 +47,14 @@ Append-only. One terse entry per pass. Never edit earlier entries.
   - Owner gates are removed.
   - The last off-host copy of the old data is the restic snapshot of
     10-29 03:28 UTC.
+- 2026-10-30 ~07:05 UTC (FP0). D0 complete.
+  - DeepSeek round 1 landed with send_back, B1 to B7, converging with the
+    other two seats. Its distinct points:
+    - the key file on the data image;
+    - egressgrant as the effect taxonomy;
+    - blob ownership per class;
+    - the capacity arithmetic, which put the trigger near 15 to 20 heavy
+      computers;
+    - an audit-export consistency proof.
+  - Frame revision 2 is 85eb4a55b; ledger round 0m is 5294d3ec6.
+  - D1 started, with the Dolt-coupling census running.
