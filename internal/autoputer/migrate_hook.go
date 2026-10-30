@@ -2,6 +2,7 @@ package autoputer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,10 +16,13 @@ import (
 // internal/migrate/guestdolt) once: when the legacy embedded Dolt workspace
 // exists and the SQLite state file does not. The migrator only reads the Dolt
 // workspace and keeps it until the cutover deletes it, so a failed migration
-// leaves the old data untouched and the next boot retries.
+// leaves the old data untouched and the next boot retries. Once the state
+// file exists, a later boot deletes the legacy Dolt database (C7 of the
+// cutover; removeMigratedLegacyStore).
 func migrateLegacyStoreIfNeeded(ctx context.Context, storePath string) error {
 	statePath := store.StateDBPath(storePath)
 	if _, err := os.Stat(statePath); err == nil {
+		removeMigratedLegacyStore(storePath)
 		return nil
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stat state file: %w", err)
@@ -58,4 +62,49 @@ func legacyDoltWorkspaceHoldsDatabase(workspace string) bool {
 		}
 	}
 	return false
+}
+
+// removeMigratedLegacyStore deletes the legacy Dolt database directories of a
+// computer whose own migration report says every table verified (C7 of the
+// data system cutover: old data goes once the differential is green). The
+// sidecar files the new store keeps at the same path stay. It never fails the
+// boot: a deletion error is logged and the next boot tries again.
+func removeMigratedLegacyStore(storePath string) {
+	statePath := store.StateDBPath(storePath)
+	if _, err := os.Stat(statePath); err != nil {
+		return
+	}
+	legacy := store.LegacyDoltWorkspacePath(storePath)
+	if !legacyDoltWorkspaceHoldsDatabase(legacy) {
+		return
+	}
+	b, err := os.ReadFile(guestdolt.ReportPath(statePath))
+	if err != nil {
+		log.Printf("autoputer: legacy Dolt workspace %s kept: no migration report: %v", legacy, err)
+		return
+	}
+	var rep guestdolt.Report
+	if err := json.Unmarshal(b, &rep); err != nil || !rep.OK || rep.Skipped || rep.Copy == nil {
+		log.Printf("autoputer: legacy Dolt workspace %s kept: migration report is not a verified copy", legacy)
+		return
+	}
+	entries, err := os.ReadDir(legacy)
+	if err != nil {
+		log.Printf("autoputer: legacy Dolt workspace %s kept: %v", legacy, err)
+		return
+	}
+	for _, entry := range entries {
+		dir := filepath.Join(legacy, entry.Name())
+		if !entry.IsDir() {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(dir, ".dolt")); err != nil || !info.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			log.Printf("autoputer: remove legacy Dolt database %s: %v", dir, err)
+			continue
+		}
+		log.Printf("autoputer: removed legacy Dolt database %s (migration verified %s)", dir, rep.FinishedAt.Format("2006-01-02T15:04:05Z"))
+	}
 }
