@@ -1,6 +1,6 @@
 # Choir Terms of Service
 
-**Effective date:** 2026-06-28
+**Effective date:** 2026-10-30
 **Service:** Choir (https://choir.news)
 **Operator:** Choir
 
@@ -217,8 +217,8 @@ changes.
 
 ### 7.3 Data Backup
 
-Choir uses Dolt, a versioned database with time-travel capability, which
-provides a degree of data protection. However, we do not guarantee data
+Choir keeps each computer's history as a sealed, append-only event log from
+which its state can be rebuilt, which provides a degree of data protection. However, we do not guarantee data
 recovery in all scenarios. You are encouraged to export important content
 using the data portability features described in the Privacy Policy.
 
