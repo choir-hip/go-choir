@@ -4,16 +4,16 @@ Date: 2026-10-21. Found by re-reading `internal/vmmanager` on `main`
 (b489ed48f) for items SEC-03, SEC-09, SEC-10 and NET-07 of the
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
 Station: FP3 groups 2 and 3
-([choir-launch-fp3-groups-2-3-2026-10-21.md](../definitions/choir-launch-fp3-groups-2-3-2026-10-21.md)).
+([choir-launch-fp3-groups-2-3-2026-10-21.md](../archive/definitions/choir-launch-fp3-groups-2-3-2026-10-21.md)).
 Status: documented; the fix follows in separate commits. Mutation class of
 the fix: **red** (host firewall for guest taps, vmctl).
 
 The earlier records stay the history:
-[s0-tap-egress-unfiltered-2026-10-01.md](s0-tap-egress-unfiltered-2026-10-01.md)
+s0-tap-egress-unfiltered-2026-10-01.md
 (the first probe),
-[tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md](tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)
+[tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md](../archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)
 (guest to guest, fixed by efbd69e27), and
-[desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md)
+[desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](desk-boundary-residuals-2026-10-21.md)
 Problem 2 (the egress inventory and the mangle design, code 61f4da20f on
 `origin/land/desk-cell-confinement`, never landed).
 

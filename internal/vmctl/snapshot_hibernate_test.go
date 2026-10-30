@@ -12,7 +12,7 @@ import (
 )
 
 // S3 snapshot hibernate, vmctl side
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 //
 // Ways this could fail, written first:
 //   - vmctl never asks the manager for a snapshot resume, so a hibernated

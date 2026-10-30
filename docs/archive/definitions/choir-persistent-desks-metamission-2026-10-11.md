@@ -29,22 +29,22 @@ review:
 metamission:
   stations:
     - id: PD1
-      path: docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
+      path: docs/archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
       readiness: executable
       status: working
       depends_on: []
     - id: PD2
-      path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
+      path: docs/archive/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
       readiness: executable
       status: working
       depends_on: [PD1]
     - id: PD3
-      path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
+      path: docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md
       readiness: drafted
       status: pending
       depends_on: [PD2]
     - id: PD4
-      path: docs/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
+      path: docs/archive/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
       readiness: intent
       status: pending
       depends_on: [PD3]

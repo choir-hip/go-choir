@@ -13,7 +13,7 @@ import (
 )
 
 // FP4 round 4, P4
-// (docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md):
+// (docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md):
 // a wake dead-lettered on its last attempt logged "poison … after N
 // attempts" without the handler's error, so a dead letter had no cause.
 func TestPoisonOnTheLastAttemptLogsTheHandlerError(t *testing.T) {

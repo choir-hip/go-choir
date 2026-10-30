@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// docs/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md:
+// docs/archive/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md:
 // firecracker's console went to a pipe read by the launching vmctl; once
 // that vmctl exited, the next console write raised SIGPIPE and deadlocked a
 // vCPU. Failure modes pinned:

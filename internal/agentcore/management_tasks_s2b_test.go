@@ -19,7 +19,7 @@ import (
 )
 
 // Management delegation S2b, concurrency, through the real reduce and
-// commit paths (docs/reports/management-delegation-design-2026-10-14.md
+// commit paths (docs/archive/reports/management-delegation-design-2026-10-14.md
 // §18.1, written before the code):
 //
 //	FM23 at K > 1  a burst starts more than K task runs;

@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-// LR lever 6 (docs/reports/lr-lever6-cell-output-design-2026-10-14.md): a
+// LR lever 6 (docs/archive/reports/lr-lever6-cell-output-design-2026-10-14.md): a
 // desk cell's printed output over the bound is shown cut, and the whole text
 // stays in the session behind a handle choir.CellOut reads. Ways this can
 // fail, written before the code (numbers follow the note):

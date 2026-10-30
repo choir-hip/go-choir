@@ -12,7 +12,7 @@ Station: [choir-lp-s6-commit-gate-2026-10-20.md](../definitions/choir-lp-s6-comm
 conjecture S6-C1 ("activation today is by trust, not comparison: at least one
 of declared test exit, host-build closure against the approved patch, expected
 heads at apply is recorded but never compared"). Reviewed station definition:
-[choir-appdev-s6-commit-gate-full-release-2026-10-01.md](../definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md).
+[choir-appdev-s6-commit-gate-full-release-2026-10-01.md](../archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md).
 
 ## Summary
 

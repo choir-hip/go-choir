@@ -187,8 +187,8 @@ the sweep; none has fired, because nothing ran active):
   `corpus-dolt/rebuild-20261009/corpus.sql` (22.9 GB, the history-free
   dump of the torn-down repo, written 10-09 12:57 to 13:14) plus
   `dump.sh`. Nothing has it open, it has not changed since, and only two
-  docs name it (`docs/evidence/world-wire-store-b-inventory-2026-10-09.md`,
-  `docs/problems/node-b-disk-free-space-2026-10-09.md`, which left it as
+  docs name it (`docs/archive/evidence/world-wire-store-b-inventory-2026-10-09.md`,
+  `docs/archive/problems/node-b-disk-free-space-2026-10-09.md`, which left it as
   "compress and copy to node-a, or delete, owner's call").
 
 ### Failure modes the fix must hold (written before the tests)

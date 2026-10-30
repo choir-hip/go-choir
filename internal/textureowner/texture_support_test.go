@@ -18,7 +18,7 @@ import (
 )
 
 // Support judgement, the Texture side
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): a committed
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md): a committed
 // revision lists its new citation pairs by their check memos in the
 // commit's own transaction, and the commit path hands them to the
 // runtime's Jev job, which judges them after the commit. Ways it can fail,

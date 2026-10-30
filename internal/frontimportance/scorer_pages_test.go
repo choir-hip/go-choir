@@ -1,7 +1,7 @@
 package frontimportance
 
 // Ways reading more than one front-list page can fail (the -pages backfill
-// for docs/problems/autopaper-section-pages-empty-2026-10-15.md):
+// for docs/archive/problems/autopaper-section-pages-empty-2026-10-15.md):
 //
 //  1. The default (pages 1) follows next_cursor, changing today's behaviour.
 //  2. -pages N does not follow next_cursor, or sends it unescaped / drops the

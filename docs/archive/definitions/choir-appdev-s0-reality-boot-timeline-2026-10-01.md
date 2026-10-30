@@ -50,7 +50,7 @@ start:
     - >-
       Owner-reported cold boot is about 15-30 s and warm boot about 5 s, with
       no per-phase timeline; hibernate is stop and resume is currently a cold
-      boot plus recovery planning (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
+      boot plus recovery planning (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
 
 finish:
   deliver: >-
@@ -60,7 +60,7 @@ finish:
     changes.
   artifact: >-
     A deployed staging boot-timeline instrument plus
-    docs/evidence/s0-probe-index-2026-10-01.json, whose named entries retain
+    docs/archive/evidence/s0-probe-index-2026-10-01.json, whose named entries retain
     the per-phase receipts, the selected-or-falsified S2 builder substrate, and
     the pre/post state of each disposable-computer experiment; every confirmed
     defect has a preceding docs/problems record.
@@ -223,19 +223,19 @@ now:
       computers on the single-host Choir staging deployment.
     status: testing
     evidence_refs:
-      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
-      - docs/evidence/s0a-guest-layout-2026-10-01.json
-      - docs/evidence/s0a-runtime-closure-2026-10-01.json
-      - docs/evidence/s0a-tap-reachability-2026-10-01.json
-      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
-      - docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md
+      - docs/archive/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/archive/evidence/s0a-guest-layout-2026-10-01.json
+      - docs/archive/evidence/s0a-runtime-closure-2026-10-01.json
+      - docs/archive/evidence/s0a-tap-reachability-2026-10-01.json
+      - docs/archive/evidence/s0a-gateway-token-visibility-2026-10-01.json
+      - docs/archive/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md
       - docs/problems/s0-tap-egress-unfiltered-2026-10-01.md
       - docs/problems/s0-deploy-refresh-skips-autoputer-internals-2026-10-01.md
       - docs/problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md
       - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
-      - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
+      - docs/archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
   decision:
     what: >-
       Run S0a as instrumentation/read-only evidence first; admit S0b only as
@@ -243,8 +243,8 @@ now:
       confirmed finding before any fix.
     kind: operational
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:460-463
-    owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:460-463
+    owner_ratification_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
   belief:
     believed_state: >-
       Guest tap/egress is fully open (guest->guest :8085, guest->host vmctl
@@ -282,7 +282,7 @@ now:
     STATION COMPLETE — boundary closed 2026-10-04
     (s0b-boundary-close-2026-10-04). Named edges carried into S2:
     (1) repair the selfdev executing->frozen wedge
-    (docs/problems/s0-selfdev-executing-wedge-2026-10-04.md) before a
+    (docs/archive/problems/s0-selfdev-executing-wedge-2026-10-04.md) before a
     Go effect can be observed; (2) run the capsule-namespace probe
     before committing to the privileged-builder-capsule substrate branch;
     (3) the snapshot/UFFD surface is host-level and belongs to S3, not a
@@ -306,11 +306,11 @@ receipts:
       documented, hotfixed, verified live (owner refresh healthy at 26.6s
       post-fix vs 662.7s pre-fix).
     evidence:
-      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
       - docs/problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md
       - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
-      - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
+      - docs/archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
       - docs/archive/reports/s0a-boot-timeline-landing-2026-10-01.md
   - id: s0b-boundary-close-2026-10-04
     kind: slice_transition
@@ -329,7 +329,7 @@ receipts:
       The wedge IS the Go-effect observation: the current substrate cannot
       carry the effect to a commit.
     substrate_decision: >-
-      docs/evidence/s0b-builder-substrate-decision-2026-10-04.json —
+      docs/archive/evidence/s0b-builder-substrate-decision-2026-10-04.json —
       weakens the S2 scoped-guest-service branch (gateway maild only); leaves
       host-level service (S1a-adjacent) and privileged-builder-capsule
       branches open pending the capsule-namespace probe and wedge fix.
@@ -341,17 +341,17 @@ receipts:
     evidence:
       - docs/evidence/s0b-disposable-lifecycle-2026-10-04.json
       - docs/evidence/s0b-m9a-bundle-probe-2026-10-04.json
-      - docs/evidence/s0b-capsule-health-map-2026-10-04.json
+      - docs/archive/evidence/s0b-capsule-health-map-2026-10-04.json
       - docs/evidence/s0b-go-effect-probe-2026-10-04.json
-      - docs/evidence/s0b-builder-substrate-decision-2026-10-04.json
-      - docs/evidence/s0b-selfdev-executing-wedge-2026-10-04.json
+      - docs/archive/evidence/s0b-builder-substrate-decision-2026-10-04.json
+      - docs/archive/evidence/s0b-selfdev-executing-wedge-2026-10-04.json
       - docs/evidence/s0b-egress-lifecycle-capsule-2026-10-04.json
-      - docs/evidence/s0b-absent-runtime-dep-2026-10-04.json
+      - docs/archive/evidence/s0b-absent-runtime-dep-2026-10-04.json
       - docs/evidence/s0b-absent-snapshot-surface-2026-10-04.json
       - docs/evidence/s0b-absent-nix-db-2026-10-04.json
       - docs/evidence/s0b-absent-build-surface-2026-10-04.json
-      - docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md
-      - docs/problems/s0-selfdev-executing-wedge-2026-10-04.md
+      - docs/archive/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md
+      - docs/archive/problems/s0-selfdev-executing-wedge-2026-10-04.md
       - .agentic-consensus/s0b-boundary-panel-20261004
       - docs/archive/choir-appdev-s0-reality-boot-timeline-ledger-2026-10-01.md
 ---

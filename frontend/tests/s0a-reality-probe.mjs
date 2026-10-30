@@ -321,7 +321,7 @@ async function main() {
     // Host ps surface: is the token visible in process listings?
     const ps = nodeB(`ps -eo args -p ${fcPID} 2>/dev/null | grep -c 'choir.gateway_token=' || true`);
     vis.host.ps_shows_token = ps.trim() !== '0' && ps.trim() !== '';
-    vis.finding = 'see docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md';
+    vis.finding = 'see docs/archive/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md';
     writeReceipt('s0a-gateway-token-visibility-2026-10-01', vis);
     if (vis.guest?.cmdline_has_gateway_token || vis.host?.fc_config_boot_args_has_token || vis.host?.ps_shows_token) {
       index.findings.push('gateway token exposed on kernel cmdline (guest /proc/cmdline) and host fc-config.json / ps — confirmed live');

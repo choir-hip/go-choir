@@ -1,5 +1,5 @@
 // Package owneract is the owner-act receipt (S1 of
-// docs/reports/principal-identity-and-signed-acts-2026-10-15.md): a
+// docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md): a
 // statement, signed by the proxy's own host-owner-act key, that the proxy
 // authenticated the owner of one computer, by one method, for one act over
 // one exact subject. corpusd verifies it before it lets the owner's
@@ -72,7 +72,7 @@ const (
 	// ActSelfDevAutonomyArm is arming standing_consensus: the owner's
 	// standing grant of autonomous acceptance under one policy, on one
 	// test-tier computer, until an expiry (P4,
-	// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). Its
+	// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md). Its
 	// subject carries computer_tier, which the proxy reads from vmctl.
 	ActSelfDevAutonomyArm = "selfdev.autonomy.arm"
 	// ActPackagePublish is publishing one package release at scope owner

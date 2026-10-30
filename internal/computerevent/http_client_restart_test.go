@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// docs/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md:
+// docs/archive/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md:
 // a deploy restarted corpusd for about two seconds and every guest write in
 // flight failed "connection refused", including the one recording the run's
 // own failure. Failure modes pinned: a request sent while corpusd is down

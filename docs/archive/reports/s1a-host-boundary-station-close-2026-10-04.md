@@ -61,10 +61,10 @@ boundary will serve as their measuring stick.
 
 ## Receipts
 
-- Evidence: docs/evidence/s1a-refusal-matrix-2026-10-04.json
+- Evidence: docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json
 - Problem + repair record:
-  docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md
+  docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md
 - Deployed commits: a3f0d48e (boundary), b15f012a (oracle), d37408ee
   (matrix evidence)
 - Genesis defect named for S0b:
-  docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md
+  docs/archive/problems/s0b-registration-computer-missing-genesis-2026-10-04.md

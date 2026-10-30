@@ -1,7 +1,7 @@
 package platform
 
 // Ways the owner's read of one doc's publication can fail (the tracer blind
-// spot, docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md):
+// spot, docs/archive/problems/tracer-paper-blind-to-test-publications-2026-10-13.md):
 //
 //  1. Another owner's publication of the same doc id is returned: the read
 //     must be scoped by the owner, never by the doc id alone.

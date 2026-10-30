@@ -1,6 +1,6 @@
 package types
 
-// Calibration feedback (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+// Calibration feedback (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 // A desk's calibration digest is aggregate signal over its own settled
 // self-scores: how often the claims it gave each probability held, by
 // independent settlement after it made them. It never carries a per-item

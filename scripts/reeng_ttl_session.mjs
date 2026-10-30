@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cut 0 desk-session TTL probe (docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md,
+// Cut 0 desk-session TTL probe (docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md,
 // artifact 6: "one test-computer desk session driven past 70 minutes with cells
 // under 30 minutes apart, exported").
 //

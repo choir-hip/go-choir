@@ -98,7 +98,7 @@ func (f *recordsWakeFixture) wake(t *testing.T, handler *actorHandler, kind, con
 	return err
 }
 
-// Cut 1 breakage B4 (docs/problems/reeng-cut1-breakage-2026-10-13.md): a
+// Cut 1 breakage B4 (docs/archive/problems/reeng-cut1-breakage-2026-10-13.md): a
 // record to texture:<doc> arrives after a Texture turn that left the head
 // unchanged (a decide turn) and parked. The wake reactivates that parked
 // run, so the inbox_record occurrence must execute it, as the coagent path

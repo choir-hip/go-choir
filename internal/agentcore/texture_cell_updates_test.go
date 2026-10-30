@@ -13,7 +13,7 @@ import (
 )
 
 // A Texture cell's choir.Updates() shows exactly the reports its turn can
-// disposition. S1c (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md):
+// disposition. S1c (docs/archive/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md):
 // the frame showed a report that arrived after the activation was
 // scheduled, the cell dispositioned it, and the commit refused the turn.
 func TestTextureCellSeesOnlyUpdatesItsTurnCanDisposition(t *testing.T) {

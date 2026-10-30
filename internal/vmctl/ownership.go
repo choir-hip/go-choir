@@ -168,7 +168,7 @@ type VMOwnership struct {
 	// "tracking" (clean baseline, can auto-fast-forward non-breaking platform updates)
 	// "divergent" (has diverged ledgers/packages; updates require rebase/proposal)
 	// "canary" (derived display label for a constructed computer; it does not
-	// gate deploy refresh — docs/problems/owner-computer-pinned-as-canary-2026-10-13.md)
+	// gate deploy refresh — docs/archive/problems/owner-computer-pinned-as-canary-2026-10-13.md)
 	DivergenceStatus string `json:"divergence_status,omitempty"`
 
 	// PlatformBaseRef is the base platform release commit or version this computer
@@ -372,7 +372,7 @@ type VMManager interface {
 
 // snapshotResumer is the optional S3 capability of a manager that hibernates
 // computers into a Firecracker memory snapshot
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md). A successful
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md). A successful
 // resume returns the snapshot's own realization: same epoch, no restart.
 // issueCredential (nil when vmctl has no corpusd) mints a fresh envelope for
 // that same realization; the manager calls it only for a snapshot it will
@@ -586,7 +586,7 @@ type OwnershipRegistry struct {
 	// gatewayCredentialPeer is the guest address each VM's last successful
 	// reconciliation named. A boot onto a new address is not throttled: the
 	// gateway's Jev pin must follow the computer at once
-	// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
+	// (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
 	gatewayCredentialPeer map[string]string
 
 	// autoputerURLBase is the base URL pattern for autoputer runtimes.
@@ -623,7 +623,7 @@ type OwnershipRegistry struct {
 	// guestBusySeen is each guest's last busy answer from a live probe.
 	// vmctl health reads it instead of probing, so a guest that never
 	// answers cannot make vmctl itself look down
-	// (docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
+	// (docs/archive/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
 	guestBusySeen map[string]bool
 
 	// pressureReclaim controls pressure-aware dry-run lifecycle observation.
@@ -1755,7 +1755,7 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 // attempt gets a fresh key (a random nonce), which retries inside the attempt
 // reuse. Consuming the envelope advances the computer's credential
 // revocation epoch exactly as a boot does
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 func (r *OwnershipRegistry) resumeCredentialIssuer(own *VMOwnership) func() (string, error) {
 	if own == nil {
 		return nil
@@ -2672,7 +2672,7 @@ func guestBindTier(state VMState) int {
 // one claims it in the deciding tier (fail closed rather than guess).
 // Stale ownerships never bind: walking every ownership and taking the first
 // match bound a live guest to a stopped computer that once had its address,
-// at random (B12, docs/problems/reeng-cut2-breakage-2026-10-13.md).
+// at random (B12, docs/archive/problems/reeng-cut2-breakage-2026-10-13.md).
 func (r *OwnershipRegistry) GuestOwnershipForAddress(host string) *VMOwnership {
 	host = strings.TrimSpace(host)
 	if r == nil || host == "" {
@@ -3889,7 +3889,7 @@ func httpGuestHealth() func(*VMOwnership) guestHealthReading {
 		// cannot pin the guest busy forever. live_capsules (density D3a)
 		// covers the capsules those three miss: a parked run's, one before
 		// its first Freeze, a frozen candidate awaiting approval.
-		// Receipts: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md,
+		// Receipts: docs/archive/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md,
 		// docs/problems/capsule-subject-artifact-ephemeral-2026-09-28.md,
 		// docs/problems/idle-hibernate-blind-to-live-capsules-2026-10-26.md
 		reading := guestHealthReading{ReportsCapsules: health.LiveCapsules != nil}

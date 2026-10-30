@@ -21,7 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 )
 
-// Failure modes: docs/problems/models-configured-text-only-2026-10-15.md.
+// Failure modes: docs/archive/problems/models-configured-text-only-2026-10-15.md.
 
 func visionTestPNG(t *testing.T) []byte {
 	t.Helper()

@@ -7,11 +7,11 @@ unless stated; the delete steps in part B are black until an off-node archive
 exists.
 
 Inputs, read in full:
-[`projection-event-volume-design-2026-10-19`](projection-event-volume-design-2026-10-19.md)
+[`projection-event-volume-design-2026-10-19`](../archive/reports/projection-event-volume-design-2026-10-19.md)
 (the Sonnet design, "the design" below),
 [`platform-artifact-small-file-growth-2026-10-19`](../problems/platform-artifact-small-file-growth-2026-10-19.md)
 ("the host record"),
-[`paper-disk-full-again-history-growth-2026-10-19`](../problems/paper-disk-full-again-history-growth-2026-10-19.md)
+`paper-disk-full-again-history-growth-2026-10-19`
 ("the guest record"), [Choir Doctrine](../choir-doctrine.md),
 [standing questions](../standing-questions.md),
 [computer ontology](../computer-ontology.md), and the code cited inline.
@@ -509,7 +509,7 @@ and payload artifacts, replay, `checkpointd` and the ledger witness.
 
 The standing rule, as the owner states it: never edit the tape, never
 rewind event heads. As written in
-`docs/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md:201`:
+`docs/archive/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md:201`:
 "retain readable prior bases and the immutable tape; never rewind event
 heads". The ontology also says: "one stable ComputerID owns a complete
 privacy-safe canonical event chain" (`docs/computer-ontology.md:343`).

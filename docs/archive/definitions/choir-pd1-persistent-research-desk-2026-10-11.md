@@ -190,14 +190,14 @@ now:
     lead ledger and streaming unconfirmed leads), which the owner reserved
     for review; no further prompt tuning until then
   next_action: >-
-    owner reviews docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
+    owner reviews docs/archive/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
     and docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md; then design
     the research job as its own station
 
 receipts:
   - id: S1j
     at: 2026-10-11T21:45Z
-    kind: root-cause analysis from staging traces and code (no prompt change), docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
+    kind: root-cause analysis from staging traces and code (no prompt change), docs/archive/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
     result: >-
       The owner stopped hill-climbing until the failure is understood. Two
       deployed AI news demos (test computers demo-p2a-2026-10-11 and

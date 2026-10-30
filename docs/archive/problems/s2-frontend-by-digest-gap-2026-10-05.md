@@ -78,7 +78,7 @@ proof inside builder-produced, base-absent bytes.
 ## Update 2026-10-05 ~13:00: base-absent-dependency leg is partially redundant
 
 Reading the S0b substrate decision
-(docs/problems/s2-builder-substrate-2026-10-04.md) against the leg text:
+(docs/archive/problems/s2-builder-substrate-2026-10-04.md) against the leg text:
 the selected builder is the **host service**, whose "build environment" is
 the host nix store + network. "Disposal of the build environment" for a
 host-service builder means the release must resolve with no builder

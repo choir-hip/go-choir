@@ -83,7 +83,7 @@ Other directions from the same day that this layer serves:
   from observed track records: individuals, agents, teams, organizations,
   institutions and public figures.
 - Contributions, op-eds and suggested edits
-  (`docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`).
+  (`docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`).
 
 ## 0. Summary
 
@@ -189,12 +189,12 @@ two:
 **Stories are sets of captures.** L2a's design defines a story as "the
 set of captures fed into it" and a topic as "the set of stories joined by
 Jev's 'new, same topic as' answers"
-(`docs/reports/l2a-synthesis-intake-design-2026-10-14.md` A3). Jev's label
+(`docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md` A3). Jev's label
 points a capture at a *story* (`internal/store/capture_label.go:22-68`).
 Nothing in the graph says what the story is about.
 
 **Most routing errors confuse topic with event.** The after-window
-re-read (`docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md`,
+re-read (`docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md`,
 now on main) found:
 - 10 wrong merges, every one of them a feed by topic: the Guardian
   Europe live blog on the grid outage fed into the Zelenskyy-in-London
@@ -220,16 +220,16 @@ desk's REPL session (`yaegikernel/search_store.go`). Only pages passed to
 (`researchtools/read.go:157-159`). Corpus search is a keyword match over
 capture metadata, not over block text (`researchtools/corpus_search.go`).
 The Mauritius stub trace shows research reading two pages and reporting
-one (`docs/reports/autopaper-deepen-important-stories-2026-10-14.md`).
+one (`docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md`).
 
 **Reputation has been designed, but there is nothing to settle.** Protocol
 §10 and the scoring design say a source's record is "a view over settled
 claims with denominators"
 (`docs/precommitment-records.md` §10;
-`docs/definitions/choir-ledger-metamission-2026-10-13.md` must_preserve).
+`docs/archive/definitions/choir-ledger-metamission-2026-10-13.md` must_preserve).
 No claim object exists to settle. The app design's R5 warns that "most
 news sentences are attributions, not predictions"
-(`docs/autopaper-app-design-2026-10-11.md` §6).
+(`docs/autopaper-sw-design-2026-10-09.md` §6).
 
 **This has been tried twice:**
 
@@ -1176,7 +1176,7 @@ coverage", and deepening has a concrete target: the uncited propositions.
   should be extracting into our object graph — that's the transformative
   work, so that we're not just copying the search result and reusing
   that"). This aligns with `choir.search_result` in
-  `docs/reports/search-efficiency-and-reuse-2026-10-14.md` §2 and narrows
+  `docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md` §2 and narrows
   what it keeps.
   - **Kept verbatim, as a pointer object** (`choir.search_result`, one
     per search): query, normalized query key, run, desk, computer,
@@ -1352,7 +1352,7 @@ missing. Here it is just reading Store B plus writing local judgments.
 8. **Run extraction as research desk work.** Rejected as the default:
    - it is serial, model-turn priced, and selective about what it reads;
    - the owner moved support judgment *off* desk turns for the same
-     reason (`docs/reports/support-judgement-to-jev-design-2026-10-14.md`).
+     reason (`docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md`).
    Research still contributes claims from its Reports and owns relation
    judgments that need evidence found first.
 9. **Pairwise claim–claim edges without propositions.** This is
@@ -1511,7 +1511,7 @@ complete.
 >
 > - **E0 finding F1** (scheduled captures are 95% feed summaries; full text
 >   arrives through research's targeted reads, which §4.1 never scores;
->   [claims-e0-e6a-results-2026-10-14.md](claims-e0-e6a-results-2026-10-14.md)
+>   [claims-e0-e6a-results-2026-10-14.md](../archive/reports/claims-e0-e6a-results-2026-10-14.md)
 >   §6 and §7 name two options and say "either needs a ruling alongside
 >   D1", without a stated recommendation). Status: D1 is ratified; the
 >   option is taken as **count a research read of a scheduled item's own

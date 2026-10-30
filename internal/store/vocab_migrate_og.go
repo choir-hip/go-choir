@@ -868,7 +868,7 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 
 // objectRowTables are the tables that hold object-graph rows: og_objects and
 // choir_events, where stamped choir.event ops land
-// (docs/design/choir-event-table-f-c-2026-10-22.md section 3.6). Both fences
+// (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 3.6). Both fences
 // read every table here. A later vocabulary migration must cover every table
 // here too: its plan, its row rewrite and both fences. The V1->V2 plan reads
 // og_objects alone, the one named exception, because no choir_events row can

@@ -1,6 +1,6 @@
 # Crash boots re-drive platform updates and self-development applies
 
-Status: open; L1a-3a (steps 1-2, platform updates) in progress, L1a-3b (step 3, self-development) next (L1a-3 of docs/definitions/choir-ledger-l1-restart-2026-10-13.md)
+Status: open; L1a-3a (steps 1-2, platform updates) in progress, L1a-3b (step 3, self-development) next (L1a-3 of docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md)
 Found: 2026-10-13, code reading against restart design v3 §6 item 1 and §9
 findings 5-7. Mutation class: red (platform update, self-development
 materialization, run lifecycle).
@@ -100,7 +100,7 @@ incident. The L1a-2 attempt budget (c08ead07) already bounds self-marked
 replays at three per apply.
 
 
-## Merged from docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md (2026-10-12)
+## Merged from docs/problems/crash-boots-redrive-applies-2026-10-13.md (2026-10-12)
 
 **A crash restart leaves work open and can resume engineering work.**
 Found 2026-10-12 during read-only design research (studies B and G). Status: documented, not fixed. Both halves contradict the standing rule in CLAUDE.md, "Restarts End Work (Crash) Or Resume It (Planned Update)": at a markerless boot every open obligation (run, wake, control, directive, assignment, work item) is closed with the visible fate "interrupted by a restart", never re-dispatched.

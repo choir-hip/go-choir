@@ -17,8 +17,8 @@ import (
 )
 
 // Retrieval schema for Store B (rungs 1-3 of
-// docs/reports/object-graph-retrieval-research-2026-10-14.md; problem record
-// docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+// docs/archive/reports/object-graph-retrieval-research-2026-10-14.md; problem record
+// docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 //
 // Every step is idempotent (IF NOT EXISTS, or an index-exists check),
 // none runs inside Bootstrap: index builds over millions of rows take

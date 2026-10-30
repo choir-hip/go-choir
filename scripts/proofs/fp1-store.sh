@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FP1 (batch B2, the store) deployed proof: the three hot reads on the
 # rollback-safe side table og_key_index.
-# Steps are "Deployed proof" in docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md
+# Steps are "Deployed proof" in docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md
 # on lane/b2-store-b1fix, plus the A1 pre-check in
 # docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md.
 #

@@ -1,7 +1,7 @@
 // Package hostboot reports whether the host runs what it last activated:
 // the installed-but-not-booted detector
-// (docs/reports/patch-lanes-plan-2026-10-15.md, slice 1;
-// docs/reports/patch-pipeline-time-to-patch-2026-10-15.md, section 4.2).
+// (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 1;
+// docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md, section 4.2).
 //
 // NixOS keeps the facts as files. /run/booted-system is the system the host
 // booted; /run/current-system is the one last activated. A deploy moves the

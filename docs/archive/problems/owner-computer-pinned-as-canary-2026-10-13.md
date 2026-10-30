@@ -29,7 +29,7 @@ restart onto the current image), which closes or resumes its open work
 under the restart rule; and decide whether a constructed version should
 be pinned by default at all.
 
-## Corrections (2026-10-13 15:10 UTC, from docs/reports/owner-computer-unpin-plan-2026-10-13.md)
+## Corrections (2026-10-13 15:10 UTC, from docs/archive/reports/owner-computer-unpin-plan-2026-10-13.md)
 
 - The computer has been a constructed computer version since its route slot
   was committed on 2026-07-17, not since 2026-10-10; its 2026-10-10 boot

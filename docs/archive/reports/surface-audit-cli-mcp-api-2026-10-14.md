@@ -16,7 +16,7 @@ endpoints have no caller outside their own tests. Five places offer two or more
 routes for the same act. Owner acts are fenced off MCP but not off API keys.
 
 This audit builds on the dead-route census of two days ago
-(`docs/reports/dead-code-census-2026-10-12/routes.md`). Some of what that census
+(`docs/archive/reports/dead-code-census-2026-10-12/routes.md`). Some of what that census
 named is now gone: the Base API commands, the solitaire routes, `/api/trace`,
 the internal channel-cast and control-record routes, the gateway credential
 revoke and rotate routes, and the maild ingress, source-packet and

@@ -65,7 +65,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	}
 
 	// view=nav answers with the nav alone (the reader's poll for a newer
-	// version; docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+	// version; docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md).
 	navReq := httptest.NewRequest(http.MethodGet, "/internal/platform/publications/resolve?view=nav&route="+resp.RoutePath, nil)
 	navReq.Header.Set("X-Internal-Caller", "true")
 	navW := httptest.NewRecorder()

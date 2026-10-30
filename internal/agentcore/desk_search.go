@@ -15,7 +15,7 @@ import (
 )
 
 // Async search, host side (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // choir.SearchStart reaches startSearch through the cell's egress frame. The
 // host opens the gateway's NDJSON stream, pushes its start to the desk
 // worker, answers the cell at once, and forwards each provider's answer to

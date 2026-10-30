@@ -1,6 +1,6 @@
 // Package ledgerwitness reads where an inbox record sits on a computer's
 // event chain, from the host's event artifacts: L3's witness (a)
-// (docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
+// (docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
 //
 // It walks back from a given head along previous_head, reading each event
 // file and, for projection batches, its payload, until every asked record

@@ -22,7 +22,7 @@ build, and Freeze. Every one of those hops is a model choice.
 
 ## Evidence
 
-- adopt-1418 (docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md):
+- adopt-1418 (docs/archive/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md):
   the request was accepted (201), the apply and the checks succeeded in the
   capsule (14:31:52, 14:31:57), and the run still ended with no operation.
   An engineering assignment failed in the overlay copy step, and Texture

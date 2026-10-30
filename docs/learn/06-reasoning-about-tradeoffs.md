@@ -7,7 +7,7 @@ live host access, and it did not contact staging or Node B. Mutation class
 of this document: **green** (docs only).
 
 Evidence labels, as in the
-[isolation review](../reports/computer-isolation-security-review-2026-10-14.md):
+[isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md):
 **code** (read in the repository at the commit above, with a path),
 **doc** (an existing Choir record, usually a problem record that itself
 cites live traces), **upstream** (a published idea or paper from outside
@@ -127,7 +127,7 @@ the way a security engineer treats input from the internet.
 ### 1.2 Choir incident: alive, accepting, and frozen
 
 On 10 October the owner's computer stopped answering at 15:51 UTC
-([firecracker-sigpipe-deadlock-after-vmctl-restart](../problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md),
+([firecracker-sigpipe-deadlock-after-vmctl-restart](../archive/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md),
 doc). The Firecracker process was alive. The guest kernel accepted TCP on
 its service port. Every HTTP path hung, even a 404. The stack of vCPU 0,
 read with `eu-stack`, showed the cause: the guest wrote to its serial
@@ -146,7 +146,7 @@ Three failure modes stack in that story:
 - **Gray failure** hid it. The wedge watchdog acts only on a guest that
   refuses connections; this one accepted them.
 - **Slow spread into the platform.** A sibling record,
-  [vmctl-health-fate-shares-a-hung-guest](../problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md)
+  [vmctl-health-fate-shares-a-hung-guest](../archive/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md)
   (doc), shows the same hung guest making vmctl's own `/health` take 8
   seconds, because `HandleHealth` called `guestBusy()`, which probed every
   guest's `/health` in turn with a 4-second timeout. The proxy probes
@@ -174,7 +174,7 @@ sometimes wrote a brief. Nothing downstream checked. Section 5 returns to
 the structural cause; the point here is that a prompt rule is not
 enforcement. The same record family shows `choir.Feed` accepting a capture
 id that named no capture (a mangled id, in
-[captures-undisposed-after-failed-management-runs](../problems/captures-undisposed-after-failed-management-runs-2026-10-14.md),
+[captures-undisposed-after-failed-management-runs](../archive/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md),
 doc, "Unvalidated capture ids"). A text search of `internal/store`,
 `internal/agentcore` and `internal/yaegikernel` for a refusal of an unknown
 capture id found none (code; *inference* that this is still open).
@@ -228,7 +228,7 @@ load for shorter tails.
 In the 11 October demo, research reported that a search "timed out at the
 search gateway, so no source-bearing report was added", and Texture
 correctly rejected a report with no sources
-([guest-search-timeout-equals-gateway-provider-timeout](../problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md),
+([guest-search-timeout-equals-gateway-provider-timeout](../archive/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md),
 doc). The gateway's log for that query said it succeeded, 30 seconds and a
 few hundred milliseconds after the request. The record found three equal
 budgets: the guest's gateway search client at 30 s, each provider's HTTP
@@ -255,7 +255,7 @@ request timeout and escalation window plus a margin.
 ### 2.3 Choir incident: a cell with no bound
 
 The management serial-turn record
-([management-serial-turn-blocks-paper](../problems/management-serial-turn-blocks-paper-2026-10-14.md),
+([management-serial-turn-blocks-paper](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md),
 doc) found a management cell that ran 860,565 ms (14 minutes) and ended
 `frame: read header: EOF`: its worker died, and nothing timed it out. A
 cell had a deadline only when the model set `timeout_ms`. The fix
@@ -319,7 +319,7 @@ it to its question.
 
 On 12 October a probe ran four goroutines calling `choir.*` network verbs
 from one desk cell
-([parallel-choir-calls-cross-wire-results](../problems/parallel-choir-calls-cross-wire-results-2026-10-12.md),
+([parallel-choir-calls-cross-wire-results](../archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md),
 doc). Caller `a` got `c`'s answer, `b` got `a`'s, `c` got `b`'s, every
 run. `egressRoundTrip` wrote a request frame and then read the next frame
 on the connection; it never matched the response to the request id it had
@@ -340,7 +340,7 @@ before its result frame.
 ### 3.3 Choir incident: a plain field swapped while read
 
 CI run 38476951550 caught a data race
-([post-commit-observer-race](../problems/post-commit-observer-race-2026-10-13.md),
+([post-commit-observer-race](../archive/problems/post-commit-observer-race-2026-10-13.md),
 doc): a test swapped the appender's post-commit observer (a plain function
 field) while a background append read it. Production wrote it once at
 start, so the race was test-only, but any later runtime swap would race
@@ -429,7 +429,7 @@ the outcome under the name, and check the record first.**
 
 On 14 October, 28 captures from an 08:22 burst on the live paper were
 never disposed
-([captures-undisposed-after-failed-management-runs](../problems/captures-undisposed-after-failed-management-runs-2026-10-14.md),
+([captures-undisposed-after-failed-management-runs](../archive/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md),
 doc). The trace: run a8081845's first cell looped over `choir.Records()`
 and printed records 508 to 514. It staged no acts. The run then failed on
 an open circuit. The next run was shown only record 515. Records 508 to
@@ -555,7 +555,7 @@ Two code patterns carry single authority in Choir:
 
 ### 5.4 A related gap: dispatch outside the ledger
 
-[inter-agent-communication-bypasses-precommitment-records](../problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)
+[inter-agent-communication-bypasses-precommitment-records](../archive/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)
 (doc) counted, over 1,286 run event streams, that every dispatch Texture
 made (283 uses) travelled as a lifecycle control outside the commitment
 ledger, while only the answers came back as records: "The ledger is a
@@ -609,7 +609,7 @@ outage.
 On 10 October, nine `400 Bad Request` responses for one computer's
 engineering run opened the `opencode-go` breaker, and calls from a
 different computer failed with "circuit open (upstream unhealthy)"
-([inference-breaker-trips-on-client-errors](../problems/inference-breaker-trips-on-client-errors-2026-10-10.md),
+([inference-breaker-trips-on-client-errors](../archive/problems/inference-breaker-trips-on-client-errors-2026-10-10.md),
 doc). A 400 is the provider refusing *our* request: evidence about the
 caller, not the provider. Counting it let one computer's bad requests fail
 closed for everyone. A sibling, `search-plane-cooldown-on-caller-cancel`,
@@ -624,7 +624,7 @@ computer". A deadline overrun still counts: "the provider was slow".
 ### 6.3 Choir incident: fail-open where it should be closed
 
 The isolation work found the host firewall failing open
-([tap-deny-rule-covers-one-of-sixteen-guest-subnets](../problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md),
+([tap-deny-rule-covers-one-of-sixteen-guest-subnets](../archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md),
 doc and code). The guest address pool spans sixteen /16 networks
 (`vmSubnetSecondOctetBase = 200`, `vmSubnetSecondOctetCount = 16` in
 `internal/vmmanager/manager.go`), but `ensureTapIsolationRules` denies
@@ -658,7 +658,7 @@ The most instructive case is a fail-closed rule that was right and still
 caused harm. Phase 0 of vmctl's lifecycle work made "uncertainty never
 destroys a computer": when vmctl cannot tell whether a guest is healthy,
 it refuses to reap it
-([owner-computer-stranded-after-vmctl-restart](../problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md),
+([owner-computer-stranded-after-vmctl-restart](../archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md),
 doc). On 10 October the owner's computer was alive, unanswering (it did
 not even answer ARP), protected, and impossible to restart: every
 automatic path refused by design, and the owner's restart button only
@@ -712,7 +712,7 @@ single-connection Dolt, so "every deploy closed the publication window".
 
 On the morning of 14 October, some published stories were one-paragraph
 stubs
-([free-model-429-opens-provider-circuit-stub-stories](../problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md),
+([free-model-429-opens-provider-circuit-stub-stories](../archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md),
 doc). A free preview model, `cat-jam-free`, was returning 429 (rate
 limited). Its failures opened the breaker for the whole `opencode-go`
 provider, which also served `deepseek-v4.1-flash`, a paid model that was
@@ -749,7 +749,7 @@ The fixes (all on main, code):
 
 Every deploy on 13 to 14 October took `choir.news` down for 3 to 11
 minutes
-([deploy-takes-staging-down-during-gateway-drain](../problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md),
+([deploy-takes-staging-down-during-gateway-drain](../archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md),
 doc). NixOS's switch stops every changed unit, then starts them only after
 all the stops finish. The gateway's stop is a graceful drain of in-flight
 model calls (`TimeoutStopSec = "11min"` in `nix/node-b.nix`, code). Proxy,
@@ -764,7 +764,7 @@ at 200 (doc).
 ### 7.4 Choir incident: one host, no admission
 
 On 10 October Node B ran out of memory
-([node-b-oom-from-retained-qa-computers](../problems/node-b-oom-from-retained-qa-computers-2026-10-10.md),
+([node-b-oom-from-retained-qa-computers](../archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md),
 doc). Disposable QA computers were never stopped; each held 2.5 to 3.8
 GiB. Pressure reclaim saw the pressure ("pressure=true" 35 times) but its
 registry held only two computers; ten running VMs had dropped out of the
@@ -804,7 +804,7 @@ not enough. James Reason's "Swiss cheese model" of accidents (upstream,
 when holes line up. The engineering discipline that follows is "assume
 breach": design each layer as if the one in front of it has already
 failed, and size its authority for that. The
-[isolation review](../reports/computer-isolation-security-review-2026-10-14.md)
+[isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
 §4.1 states Choir's version as five principles (doc):
 
 1. Assume each layer is breached; size the next layer for that.
@@ -917,7 +917,7 @@ continue.
 
 ### 9.3 Choir incident: the rule held for wakes, not for what they served
 
-[crash-restart-leaves-work-open-and-recasts-engineering](../problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md)
+[crash-restart-leaves-work-open-and-recasts-engineering](../problems/crash-boots-redrive-applies-2026-10-13.md)
 (doc, from code) found two violations. First, a crash boot closed
 *actor wakes* of work kinds, but no boot path cancelled the *work items*
 behind them, and several boot paths (spawned-work replay, terminal
@@ -996,7 +996,7 @@ And one anti-tool: **retries without backoff**, which raise λ exactly when
 ### 10.2 Choir incident: one turn for everything
 
 At 03:50 UTC on 14 October the owner asked "Is autopaper down?"
-([management-serial-turn-blocks-paper](../problems/management-serial-turn-blocks-paper-2026-10-14.md),
+([management-serial-turn-blocks-paper](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md),
 doc). One management run had held management's only turn since 03:13.
 Management ran one turn at a time, and every kind of work (capture
 dispositions, Texture's requests, support judgement) went through that
@@ -1010,14 +1010,14 @@ service time is a queue whose wait is set by its worst item.
 
 The response, by owner direction ("we can't do serial"), moved support
 judgement to Jev and made management delegate bounded tasks to sub-RLMs
-([management-delegation-design](../reports/management-delegation-design-2026-10-14.md),
+([management-delegation-design](../archive/reports/management-delegation-design-2026-10-14.md),
 doc).
 
 ### 10.3 Choir incident: even one task at a time was too slow
 
 After S2a (tasks, but one at a time), the paper went from 14 to 28 source
 schedules, and the backlog grew again
-([management-intake-backlog-at-28-sources](../problems/management-intake-backlog-at-28-sources-2026-10-14.md),
+([management-intake-backlog-at-28-sources](../archive/problems/management-intake-backlog-at-28-sources-2026-10-14.md),
 doc): 154 captures in 34 minutes, 5 disposed, 149 undisposed; 8 tasks
 completed, queue wait p95 1,506 s. The record estimates intake at about
 270 captures an hour; 8 tasks in 34 minutes is about 14 tasks an hour.
@@ -1095,7 +1095,7 @@ authored in the same context that first saw the problem, so alternatives
 The paper's computer used about 1.3 cores. The natural guess was agent
 work: twelve Yaegi workers, model calls, JSON. A 60-second guest CPU
 profile
-([guest-cpu-is-unindexed-store-scans](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md),
+([guest-cpu-is-unindexed-store-scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md),
 doc, with the raw profile in
 `docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt`) showed
 the main daemon at 1.17 cores (98% of guest time) and every other guest
@@ -1113,7 +1113,7 @@ teaches the indexing.)
 
 ### 11.3 Choir incident: an error the trace never recorded
 
-[desk-verb-error-vanishes-as-final-expression](../problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md)
+[desk-verb-error-vanishes-as-final-expression](../archive/problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md)
 (doc): a research desk ended a cell with a bare
 `choir.ReportPacket(...)`. The verb returned `(string, error)`; the
 interpreter shows only the first value, so the cell result was `=> ` with
@@ -1163,20 +1163,20 @@ the incident that taught it.
 
 | # | question | principle | incident that taught it |
 |---|---|---|---|
-| 1 | If this is alive but silent, who notices, and how fast? | failure modes, gray failure | [sigpipe deadlock](../problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md); [vmctl health fate-shares a hung guest](../problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md) |
+| 1 | If this is alive but silent, who notices, and how fast? | failure modes, gray failure | [sigpipe deadlock](../archive/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md); [vmctl health fate-shares a hung guest](../archive/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md) |
 | 2 | Where does model output become state or reader text, and what validates it there? | Byzantine components | [instruction text as titles](../problems/instruction-text-published-as-story-titles-2026-10-14.md) |
-| 3 | Does every timeout exceed the whole budget of what it waits on? | deadline budgets | [search timeout equals gateway timeout](../problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md) |
-| 4 | Does every wait have a host-enforced bound, and does a bad config keep the bound? | deadline budgets | [management cell ran 14 minutes](../problems/management-serial-turn-blocks-paper-2026-10-14.md) |
-| 5 | If two of these run at once, how does each know its answer is its own? | correlation, races | [parallel calls cross-wire](../problems/parallel-choir-calls-cross-wire-results-2026-10-12.md); [observer race](../problems/post-commit-observer-race-2026-10-13.md) |
-| 6 | Delivered twice: what happens? Dies right after acknowledging: what is lost? | idempotency, ack after work | [captures undisposed after failed runs](../problems/captures-undisposed-after-failed-management-runs-2026-10-14.md) |
+| 3 | Does every timeout exceed the whole budget of what it waits on? | deadline budgets | [search timeout equals gateway timeout](../archive/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md) |
+| 4 | Does every wait have a host-enforced bound, and does a bad config keep the bound? | deadline budgets | [management cell ran 14 minutes](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md) |
+| 5 | If two of these run at once, how does each know its answer is its own? | correlation, races | [parallel calls cross-wire](../archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md); [observer race](../archive/problems/post-commit-observer-race-2026-10-13.md) |
+| 6 | Delivered twice: what happens? Dies right after acknowledging: what is lost? | idempotency, ack after work | [captures undisposed after failed runs](../archive/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md) |
 | 7 | Who is the one writer of this fact, and can any other path change it? | single state authority | [instruction text as titles](../problems/instruction-text-published-as-story-titles-2026-10-14.md); standing question 5 |
-| 8 | When this check cannot decide, does it allow or deny, was that chosen, and what bounds it? | fail closed / open | [tap deny covers 1 of 16](../problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md); [owner computer stranded](../problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md) |
-| 9 | Does this breaker or guard open only on evidence about the thing it guards? | fail closed, blast radius | [breaker trips on client errors](../problems/inference-breaker-trips-on-client-errors-2026-10-10.md); [free-model 429](../problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md) |
-| 10 | If this slows or fails, what else fails with it, and is each on purpose? | blast radius, bulkheads | [deploy drain takes site down](../problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md); [Node B OOM](../problems/node-b-oom-from-retained-qa-computers-2026-10-10.md) |
+| 8 | When this check cannot decide, does it allow or deny, was that chosen, and what bounds it? | fail closed / open | [tap deny covers 1 of 16](../archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md); [owner computer stranded](../archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md) |
+| 9 | Does this breaker or guard open only on evidence about the thing it guards? | fail closed, blast radius | [breaker trips on client errors](../archive/problems/inference-breaker-trips-on-client-errors-2026-10-10.md); [free-model 429](../archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md) |
+| 10 | If this slows or fails, what else fails with it, and is each on purpose? | blast radius, bulkheads | [deploy drain takes site down](../archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md); [Node B OOM](../archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md) |
 | 11 | If the layer in front is breached, what can the attacker reach from here? | defence in depth | [Firecracker as root without jailer](../problems/firecracker-runs-as-root-without-jailer-2026-10-14.md) |
-| 12 | If it crashes mid-way, does the next boot close it or resume it, and what stops a loop? | crash-only, restart semantics | [crash restart leaves work open](../problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md); [crash boots re-drive applies](../problems/crash-boots-redrive-applies-2026-10-13.md) |
-| 13 | Arrival rate versus service rate: what happens to the queue for an hour of overload? | backpressure | [serial turn](../problems/management-serial-turn-blocks-paper-2026-10-14.md); [backlog at 28 sources](../problems/management-intake-backlog-at-28-sources-2026-10-14.md) |
-| 14 | Is my explanation read from the trace, or inferred? Is the problem documented before the fix? | observability, documentation first | [guest CPU is store scans](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md); [verb error vanishes](../problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md) |
+| 12 | If it crashes mid-way, does the next boot close it or resume it, and what stops a loop? | crash-only, restart semantics | [crash restart leaves work open](../problems/crash-boots-redrive-applies-2026-10-13.md); [crash boots re-drive applies](../problems/crash-boots-redrive-applies-2026-10-13.md) |
+| 13 | Arrival rate versus service rate: what happens to the queue for an hour of overload? | backpressure | [serial turn](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md); [backlog at 28 sources](../archive/problems/management-intake-backlog-at-28-sources-2026-10-14.md) |
+| 14 | Is my explanation read from the trace, or inferred? Is the problem documented before the fix? | observability, documentation first | [guest CPU is store scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md); [verb error vanishes](../archive/problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md) |
 
 Two meta-questions from CLAUDE.md "Convergence Before Patching" sit above
 the card:
@@ -1189,7 +1189,7 @@ the card:
   reads under one engine mutex".
 - **Is there an existing replacement?** The embedded Dolt single
   connection
-  ([problem record](../problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md),
+  (problem record,
   doc) worked around a data race that upstream Dolt had already fixed in
   commit 6bea93f2. `go.mod` now pins
   `github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665`
@@ -1293,7 +1293,7 @@ the card:
    `providerFailureCounts` and `providerUnreachable` side by side, and the
    type comment on `CircuitBreakingProvider` for why there are two grains
    of breaker.
-3. **`docs/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md`**,
+3. **`docs/archive/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md`**,
    then `markTurnRecordsRead` in `internal/agentcore/inbox_records.go`. The
    best end-to-end example in the repository of a trace read in order, a
    mechanism confirmed in code, a fix with idempotent, CAS-guarded,

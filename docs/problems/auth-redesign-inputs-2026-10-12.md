@@ -3,7 +3,7 @@
 Owner, 2026-10-12: "we do need to, for our production readiness, do another
 redesign of the auth system. Not a priority right now until we get all the
 functional requirements for automatic newspaper operational." The dead-code
-census ([docs/reports/dead-code-census-2026-10-12.md](../reports/dead-code-census-2026-10-12.md)
+census ([docs/archive/reports/dead-code-census-2026-10-12.md](../archive/reports/dead-code-census-2026-10-12.md)
 B8; full evidence in its routes.md, A3) found the half-built auth surfaces
 below. They stay in place until that redesign. This file collects them so
 the redesign starts from what exists.

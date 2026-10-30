@@ -13,7 +13,7 @@ Mutation class of this report: green (docs) plus two read-only scripts,
 `scripts/cpu_host_sample.py` and `scripts/cpu_efficiency_probe.py`. It
 changes nothing. Each lever names its own class.
 
-It builds on [VM density limits](vm-density-limits-2026-10-14.md). That
+It builds on [VM density limits](../../reports/vm-density-limits-2026-10-14.md). That
 report found busy computers bind a host first: the paper averaged about
 1.2 cores, so an EPYC 7371 holds about 20 busy computers at about one core
 each.
@@ -118,7 +118,7 @@ work-conserving. Use `cpu.max` only as a tier ceiling.
 ### 1a. Host-side split (measured)
 
 Window: 30 minutes, 15:26:40 to 15:56:40 UTC
-(`docs/evidence/computer-cpu-host-sample-2026-10-14T1526Z.json`). It
+(`docs/archive/evidence/computer-cpu-host-sample-2026-10-14T1526Z.json`). It
 agrees with a 5-minute window at 15:21 (same directory, `T1521Z`) and a
 60-second window at 15:18. Cores are host CPU-seconds per second.
 
@@ -371,7 +371,7 @@ the Xeon E-2236 is within about ±30% per thread):
 | compute cell: scan 124 KB of text byte by byte | 8.7 ms | 0.10 ms | ~85× |
 | worker process start (`autoputer desk-session`, package init) | ~39 ms of init clock, 689 M instructions (about 0.1 to 0.2 CPU-s on a Xeon, estimated) | | |
 
-Measured cell durations on staging (`docs/reports/reeng-cut0-measurements-2026-10-12.md:83-88`):
+Measured cell durations on staging (`docs/archive/reports/reeng-cut0-measurements-2026-10-12.md:83-88`):
 - Texture cells: median 1 ms;
 - research cells: median 1 to 5 ms (their long tails are waits on
   searches, not CPU).
@@ -409,7 +409,7 @@ Options:
   JSON);
 - in the profiled minute, 34 calls, with 53% of input tokens cached.
 - Captures arrive at about 270 an hour
-  (`docs/problems/management-intake-backlog-at-28-sources-2026-10-14.md`).
+  (`docs/archive/problems/management-intake-backlog-at-28-sources-2026-10-14.md`).
 
 **Today's cost per unit** (measured, 16:46 window):
 - **2.27 CPU-seconds per model call** for the VM: 1.29 cores ÷ 0.57 calls
@@ -546,7 +546,7 @@ Correctness against the restart rules (CLAUDE.md, "Restarts End Work
   restart", and the parked reply is orphaned. The gateway must still
   record its usage (money was spent) and expire it.
 - No boot-time resumer is added. This matches S3's conservative reading
-  (`docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`, S3
+  (`docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`, S3
   section), which the owner is to confirm when S3 opens.
 
 Parked calls are worth building for **durability and batch pricing**, not

@@ -1,6 +1,6 @@
 // Package calibration computes a desk's calibration digest from its own
 // settled self-scores: the in-context feedback of the ICRL experiment
-// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 //
 // Ways it can fail, written before the code (experiment §5):
 //   - a pending item, or a held-out one, enters the digest (P4, held-out);

@@ -164,7 +164,7 @@ refresh (the step below).
   confirmed. The crash-close code reads only runs, rounds, schedules and
   operations.
 - **Coverage:** owner ruling §13.1 in
-  [`re-engineering-decisions-2026-10-12`](../re-engineering-decisions-2026-10-12.md)
+  [`re-engineering-decisions-2026-10-12`](../../re-engineering-decisions-2026-10-12.md)
   covers this outcome.
 
 ## 4. The app layer after the refresh (verified in source and console)

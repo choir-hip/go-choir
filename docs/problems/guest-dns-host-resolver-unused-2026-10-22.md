@@ -4,7 +4,7 @@ Date: 2026-10-22. Found by reading `internal/vmmanager` and `nix/` on `main`
 (a35b3586f) for item SEC-10 of the
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
 Station: FP3 group 2
-([choir-launch-fp3-groups-2-3-2026-10-21.md](../definitions/choir-launch-fp3-groups-2-3-2026-10-21.md)),
+([choir-launch-fp3-groups-2-3-2026-10-21.md](../archive/definitions/choir-launch-fp3-groups-2-3-2026-10-21.md)),
 lane `lane/fp3-sec10-guest-dns`. Status: documented; the fix follows in
 separate commits. Mutation class of the fix: **red** (VM lifecycle: the
 kernel boot arguments of a launch, and through them the snapshot
@@ -13,7 +13,7 @@ launch-config hash).
 Earlier records: item 6 of
 [host-egress-floor-fails-open-2026-10-21.md](host-egress-floor-fails-open-2026-10-21.md)
 (guest DNS goes to public resolvers) and the egress table in
-[desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md)
+[desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](desk-boundary-residuals-2026-10-21.md)
 (line 88), and row D1 of
 [guest-network-inventory-2026-10-21.md](../reports/guest-network-inventory-2026-10-21.md).
 

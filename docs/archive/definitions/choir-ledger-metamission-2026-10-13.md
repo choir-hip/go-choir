@@ -10,10 +10,10 @@ definition_version: 4
 # roadmap is going to become a meta mission ... while we're still working on
 # this, we can keep adding stuff and thinking about it". Shaped by the
 # roadmap draft and its lateral and convergent rounds
-# (docs/reports/roadmap-after-autopaper-live-DRAFT-2026-10-13.md,
-# docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md), the sourcing
-# research (docs/reports/multilingual-osint-sourcing-research-2026-10-13.md,
-# docs/reports/taiwan-sinosphere-discourse-sources-research-2026-10-13.md)
+# (docs/archive/reports/roadmap-after-autopaper-live-DRAFT-2026-10-13.md,
+# docs/archive/reports/roadmap-lateral-review-synthesis-2026-10-13.md), the sourcing
+# research (docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md,
+# docs/archive/reports/taiwan-sinosphere-discourse-sources-research-2026-10-13.md)
 # and the restart design (docs/restart-subsystem-design-2026-10-13.md).
 readiness: reviewed
 
@@ -43,7 +43,7 @@ review:
 metamission:
   stations:
     - id: L0
-      path: docs/definitions/choir-reeng-metamission-2026-10-12.md
+      path: docs/archive/definitions/choir-reeng-metamission-2026-10-12.md
       readiness: reviewed
       status: working
       depends_on: []
@@ -63,7 +63,7 @@ metamission:
         clock), app designs for L5, registry repairs (NHK, Korea Herald,
         36kr, WHO, Agriculture Dive), retiring qdrant_dedup.go.
     - id: L1
-      path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
+      path: docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md
       readiness: reviewed
       status: working
       depends_on: []
@@ -106,7 +106,7 @@ metamission:
         labelled material events reach a desk; recall by language and source
         class; the audit sample reported.
     - id: L2a
-      path: docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
+      path: docs/archive/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
       readiness: drafted
       status: working
       depends_on: []
@@ -118,7 +118,7 @@ metamission:
         story it bears on. First slice of L2; L2b keeps the digest, triage
         and burst bounds.
     - id: LR
-      path: docs/definitions/choir-ledger-lr-resource-2026-10-13.md
+      path: docs/archive/definitions/choir-ledger-lr-resource-2026-10-13.md
       readiness: drafted
       status: working
       depends_on: []
@@ -129,14 +129,14 @@ metamission:
         of the transcript) next. Owner 2026-10-14: SA and S3 are
         accelerated into this cost track; SP stays deferred for building
         and is investigated for the owner
-        (docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md).
+        (docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md).
         Order: host sampler and pricing; balloon / free-page-reporting
         probe; desk-worker memory budget, GOMEMLIMIT and Dolt cache bounds;
         automatic store compaction; engine lock; S3 snapshots; store split.
         Residual for 10-14/15: Autopaper across several computers on one
         host.
     - id: LU
-      path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
+      path: docs/archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
       readiness: reviewed
       status: working
       depends_on: []
@@ -156,15 +156,15 @@ metamission:
         binary-only swap only if measured downtime warrants it.
         Specification: docs/reports/lu-guest-updates-design-2026-10-14.md;
         panels adjudicated in
-        docs/reports/lu-guest-updates-adjudication-2026-10-14.md. Round 4
+        docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md. Round 4
         was judged per slice: LU1a, LU2, LU3a, LU3b and LU4 reviewed (LU1a
         and LU2 may start); LU1b and LU5 drafted, with LU1b's final call
         escalated for a structural decision after four rounds. Only LU3b
         depends on L1 (L1c, L1b).
         Cause: the paper is never idle and updated only by an owner act
-        (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
+        (docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
-      path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
+      path: docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
       readiness: reviewed
       status: pending
       depends_on: [L0]
@@ -220,15 +220,15 @@ metamission:
         LU is needed from S7-1, when package bytes reach other computers).
         Order: S6 (the commit gate, the file above), then S7-0 (every existing
         first-party app becomes a package; definition:
-        docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md; a
+        docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md; a
         successor stub is in the S6 file), with a frontend self-development
         drill on one rewrite candidate in parallel; rewrites of the weaker
         apps (not mail, settings, autopaper or texture) follow, one package
         at a time. Station definition of S6:
-        docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md.
+        docs/archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md.
         Autopaper work and the data model continue alongside.
     - id: LA
-      path: unauthored (docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 2)
+      path: unauthored (docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 2)
       readiness: intent
       status: pending
       depends_on: []
@@ -242,7 +242,7 @@ metamission:
         for app windows. No Google/Apple/OAuth providers for now; an
         OpenAI sign-in for users' own credits is a later idea.
     - id: SP
-      path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+      path: docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
       readiness: intent
       status: deferred
       depends_on: [LP]
@@ -252,7 +252,7 @@ metamission:
         teaming; the platform keys are copied to the owner's iMac
         (docs/evidence/platform-key-backup-2026-10-14.md).
     - id: LT
-      path: unauthored (docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 5)
+      path: unauthored (docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 5)
       readiness: intent
       status: pending
       depends_on: [LP, SP]
@@ -264,7 +264,7 @@ metamission:
         isolated forks (S9 re-keying first): capsule boundary, egress, auth,
         gateway, publication and adoption.
     - id: LF
-      path: unauthored (docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
+      path: unauthored (docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
       readiness: intent
       status: pending
       depends_on: [L2a]
@@ -278,7 +278,7 @@ metamission:
         Investigate and design first; do not change the live front page
         until the owner reviews.
     - id: LC
-      path: unauthored (docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
+      path: unauthored (docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
       readiness: intent
       status: pending
       depends_on: [LA]
@@ -460,7 +460,7 @@ now:
     (docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md), by owner
     direction (owner notes section 28); the Autopaper stations below continue
     alongside. The 2026-10-16 card follows.
-    2026-10-16 23:40 UTC. Handoff: docs/reports/handoff-2026-10-15.md §0
+    2026-10-16 23:40 UTC. Handoff: docs/archive/reports/handoff-2026-10-15.md §0
     (overnight and 2026-10-16 tables). Landed and proven on staging
     2026-10-16:
     - Event layer V1 and V2 on the paper; V3a/V3b code behind flags (off).
@@ -506,8 +506,8 @@ now:
     delta_o: scheduled structured settlements (TWSE, KEV) as an oracle independent of the desks
     scope_if_supported: Autopaper on staging, one vertical
     status: proposed
-    evidence_refs: [docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md]
-  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: "owner answered decisions 1-12 on 2026-10-14 (docs/reports/owner-roadmap-rulings-2026-10-14.md): architecture and resource efficiency before source scaling; spend tracked, never capped; schedules survive crashes (option B); general and tech news vertical zero, Taiwan first; synthesis across sources and languages, never one article per capture"}
+    evidence_refs: [docs/archive/reports/roadmap-lateral-review-synthesis-2026-10-13.md]
+  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/archive/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: "owner answered decisions 1-12 on 2026-10-14 (docs/reports/owner-roadmap-rulings-2026-10-14.md): architecture and resource efficiency before source scaling; spend tracked, never capped; schedules survive crashes (option B); general and tech news vertical zero, Taiwan first; synthesis across sources and languages, never one article per capture"}
   belief:
     believed_state: >-
       Autopaper is live on the platform-tier paper computer, which the
@@ -518,7 +518,7 @@ now:
       dominated by re-sent cell output (LR, R5).
     main_uncertainty: whether Jev labels plus an uncapped library make one story per event across languages (L2a fixture), and whether the three builds merge cleanly onto the shared runtime
     next_observation: the A5 build, then S1a labels on top of it; the fixture run on a minted test computer
-  blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
+  blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/archive/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
   next_action: >-
     2026-10-17:
     (a) a records wake ends a run stored running with no live loop

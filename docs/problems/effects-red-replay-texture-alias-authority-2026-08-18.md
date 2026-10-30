@@ -38,7 +38,7 @@ Source and gate evidence:
 - `internal/store/project.go` has no alias reducer case.
 - `internal/store/residue_import.go` has no alias snapshot/import path.
 - `internal/objectgraph/registry.go` registers a `document_alias` kind and `internal/store/graph_store.go` names `ogEdgeDocAlias`, but no production writer was found for that latent edge. Its existence is a connection opportunity, not an authority decision.
-- The deployed narrow replay receipt is `docs/evidence/effects-red-replay-run-memory-scope-repair-2026-08-18.md`.
+- The deployed narrow replay receipt is `docs/archive/evidence/effects-red-replay-run-memory-scope-repair-2026-08-18.md`.
 
 The exact live alias row count, row provenance, cross-computer intent, dangling mappings, and complete indirect writer call graph were not established by this documentation-only boundary.
 

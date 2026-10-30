@@ -409,7 +409,7 @@ func (h *APIHandler) HandleEngineeringCapsuleEvidence(w http.ResponseWriter, r *
 // full snapshot scans every document, revision and lifecycle object in the
 // computer (9-18 s on a long-lived computer); Cancel needs only the version
 // and the head, so it reads the trajectory and its bound document directly
-// (docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// (docs/archive/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
 // The head follows the snapshot's rule: the terminal artifact head for a
 // settled trajectory, otherwise the document's current revision.
 func (h *APIHandler) writeTrajectorySummary(w http.ResponseWriter, r *http.Request, ownerID, trajectoryID string) {

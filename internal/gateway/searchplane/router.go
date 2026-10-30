@@ -14,7 +14,7 @@ import (
 // Under RoutingBudget a search starts the free providers, holds the paid
 // ones in reserve and adds them one at a time, cheapest first, only while
 // the search is short of distinct results
-// (docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1). Under
+// (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §4.1). Under
 // RoutingFanout every eligible provider starts at once. Every call is
 // counted per provider per UTC day in the health store, and a provider at
 // its daily cap is skipped as capped.
@@ -118,7 +118,7 @@ const MonthlyPaceDayStart = time.Hour
 // limit next grows. For a monthly-quota provider the day's cap accrues
 // through the day (an hour's share at midnight, all of it by the end), so
 // a morning burst cannot leave the rest of the day without the provider
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md). A
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md). A
 // plain daily cap is open all day.
 func (r *Router) limitAt(provider string, now time.Time) (limit int, until time.Time) {
 	limit = r.capOf(provider, now)

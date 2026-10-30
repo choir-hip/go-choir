@@ -170,7 +170,7 @@ receipts:
       - 'CI run 36177280541 success — all Go Test shards green post-purge'
       - 'git diff: 729 test/benchmark functions removed, 13 test files deleted, ~21.7k test lines'
       - 'deploy-impact classify: deploy_needed=false (test-only, no runtime surface)'
-      - 'ledger: docs/evidence/test-signal-purge-ledger-2026-09-25.md'
+      - 'ledger: docs/archive/evidence/test-signal-purge-ledger-2026-09-25.md'
       - 'AGENTS.md: three testing rules added (Testing section)'
     rollback_ref: 'git revert 2fbecebc restores all deleted tests'
     disposition: landed — 729 test functions removed, suite green

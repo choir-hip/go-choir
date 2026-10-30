@@ -12,7 +12,7 @@ import (
 )
 
 // Process control for vmctl's host-capacity reconcile
-// (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md):
+// (docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md):
 // vmctl must see every Firecracker process on the host, power off the ones
 // it does not track, and rank VMs for the kernel OOM killer.
 

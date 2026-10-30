@@ -85,7 +85,7 @@ metamission:
       # S0b evidence (reachability is already confirmed by S0a) and closes
       # a source-traced cross-tenant authority chain on a deployment with
       # open registration. Authored as the S1 file's first slice.
-      path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
       status: complete
       depends_on: [S0m-record-native-messaging]
@@ -93,7 +93,7 @@ metamission:
       # S1a complete; the remainder (non-root runtime, gateway token off the
       # cmdline and out of child env, Yaegi kernel floor, zot PATH-shadowing,
       # S0a diag surfaces) runs in parallel with S2 and must close before S4.
-      path: docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s1-security-floor-2026-10-01.md
       readiness: reviewed
       status: working
       depends_on: [S0-reality-and-boot-timeline, S1a-host-boundary-hotfix]
@@ -109,7 +109,7 @@ metamission:
       # one substrate: the platform has no storage lifecycle and no durable
       # guest observability. Runs in parallel with S2; S3 cannot start
       # without it (memory snapshots add GiBs per hibernated computer).
-      path: docs/definitions/choir-appdev-so-ops-substrate-2026-10-05.md
+      path: docs/archive/definitions/choir-appdev-so-ops-substrate-2026-10-05.md
       readiness: reviewed
       status: working
       depends_on: []
@@ -117,7 +117,7 @@ metamission:
       # v5. Completes Jev M0a (research RLM cutover: registry -> {desk_go_eval},
       # prompt rewrite) and deletes processor/reconciler end to end. Small.
       # CLOSED 2026-10-06 (panel r7 7-0; deployed 12d3adc0).
-      path: docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
+      path: docs/archive/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
       readiness: reviewed
       status: closed
       depends_on: [S2-layering-runtime-from-release]
@@ -128,8 +128,8 @@ metamission:
       # "Get rid of all adhoc JSON tool calls everywhere; RLM-only prompts."
       # Ordered before SM/SC: SM evals and SC desk capability assume the
       # sealed-cell carrier on all desks. Problem doc:
-      # docs/problems/management-typed-json-tools-remain-2026-10-06.md
-      path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
+      # docs/archive/problems/management-typed-json-tools-remain-2026-10-06.md
+      path: docs/archive/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
       # Cutover DEPLOYED 2026-10-06 (1b1d9b7e + 4bedf999): management
       # registry = {desk_go_eval} incl. product_api_request -> choir.ProductAPI;
       # deployed schema leg PASSED. Behavioral legs blocked by the
@@ -141,7 +141,7 @@ metamission:
       # v5. "Scale agents horizontally in a 2-4 GiB VM before scaling VMs."
       # Memory budget (moved from SO) + embedded-Dolt engine bottleneck +
       # operational/versioned store split. Gates S3 and SC.
-      path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md
+      path: docs/archive/definitions/choir-appdev-sa-agent-density-2026-10-05.md
       readiness: drafted
       status: pending
       depends_on: [SR-desk-surface-cleanup, SO-ops-substrate]
@@ -149,7 +149,7 @@ metamission:
       # 2026-10-08 owner direction ("proceed with mission next"): enforce
       # operational invariant O1 (docs/operational-invariants-register-2026-10-08.md).
       # Absorbs SA slice 1 (Management storm convergence is an O1 instance).
-      path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
+      path: docs/archive/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
       readiness: drafted
       status: working
       depends_on: [SMG-management-rlm-cutover]
@@ -158,7 +158,7 @@ metamission:
       # enforce operational invariant O21 (a realization holds no unique
       # state). Escrow-to-realization privacy key delivery owner-ratified.
       # Prerequisite for the desktop app's hosted<->local move.
-      path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
+      path: docs/archive/definitions/choir-appdev-sh-state-homes-2026-10-08.md
       readiness: drafted
       status: working
       depends_on: []
@@ -178,7 +178,7 @@ metamission:
       # host as off-host durable homes, self-hosted logs/metrics/alerts over a
       # WireGuard mesh, zero-downtime deploys, failover, cold audit archive
       # (O22). Documented so the design is not lost; not executable.
-      path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+      path: docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
       readiness: intent
       status: deferred
       depends_on: [SH-state-homes]
@@ -196,47 +196,47 @@ metamission:
       status: pending
       depends_on: [SA-agent-density, SM-model-policy-and-evals, SMG-management-rlm-cutover]
     - id: S3-fast-resume
-      path: docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s3-fast-resume-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S1-security-floor, S2-layering-runtime-from-release, SO-ops-substrate, SA-agent-density]
     - id: S4-capsule-open-world
-      path: docs/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s4-capsule-open-world-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S1-security-floor]
     - id: S5-live-preview-supervision
-      path: docs/definitions/choir-appdev-s5-live-preview-supervision-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s5-live-preview-supervision-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S4-capsule-open-world, SC-desk-capability-surface]
     - id: S6-commit-gate-full-release
-      path: docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S2-layering-runtime-from-release, S5-live-preview-supervision]
     - id: S7-app-packages
-      path: docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S8-source-publication
-      path: docs/definitions/choir-appdev-s8-source-publication-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s8-source-publication-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S6-commit-gate-full-release]
     - id: S9-forks-and-fleets
-      path: docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S1-security-floor, S3-fast-resume, S8-source-publication]
     - id: S10-org-templates
-      path: docs/definitions/choir-appdev-s10-org-templates-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s10-org-templates-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S9-forks-and-fleets]
     - id: S11-mainline-and-security-push
-      path: docs/definitions/choir-appdev-s11-mainline-security-push-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s11-mainline-security-push-2026-10-01.md
       readiness: reviewed
       status: pending
       depends_on: [S8-source-publication, S9-forks-and-fleets]
@@ -316,13 +316,13 @@ start:
       correction: >-
         The baseline line "Guest VM egress is open and tap->tap forwarding
         appears permitted ... Unverified on staging" is now CONFIRMED on
-        staging by S0a (docs/evidence/s0a-tap-reachability-2026-10-01.json:
+        staging by S0a (docs/archive/evidence/s0a-tap-reachability-2026-10-01.json:
         guest->other guest :8085, guest->host vmctl :8083, guest->1.1.1.1:443
         all ok). Its consequence is larger than egress: guest traffic to
         host services is DNATed to 127.0.0.1 and MASQUERADEd to loopback, and
         host-internal authority checks accept caller-controlled headers, so
         any guest inherits host-internal and cross-tenant authority
-        (docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md).
+        (docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md).
         The baseline line "Boot latency ... cold 15-30 s, warm ~5 s; no
         per-phase timeline" is superseded by measured S0a receipts: fresh
         cold 8.6 s, owner-sized refresh 26.6 s (was 662.7 s before the
@@ -528,7 +528,7 @@ boundaries:
     - >-
       Guest-originated traffic never carries host-internal authority or
       another tenant's identity. TARGET invariant; currently VIOLATED
-      (docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md);
+      (docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md);
       S1a restores it before S4 opens capsule egress or S9 creates forks.
   excluded:
     - Binary distribution between computers (owner decision 2026-10-01; a trusted host build cache is a later, separate decision).
@@ -682,18 +682,18 @@ now:
     status: testing
     evidence_refs:
       - docs/archive/reports/s0b-disposable-probe-station-close-2026-10-04.md
-      - docs/reports/s1a-host-boundary-station-close-2026-10-04.md
-      - docs/reports/s0m-record-native-station-close-2026-10-04.md
+      - docs/archive/reports/s1a-host-boundary-station-close-2026-10-04.md
+      - docs/archive/reports/s0m-record-native-station-close-2026-10-04.md
       - docs/archive/reports/s2-layering-runtime-checkpoint-2026-10-04.md
-      - docs/evidence/s1a-refusal-matrix-2026-10-04.json
-      - docs/evidence/s0b-go-effect-2026-10-04.json
-      - docs/evidence/s0b-snapshot-resume-2026-10-04.json
-      - docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md
-      - docs/problems/s2-builder-substrate-2026-10-04.md
-      - docs/problems/s2-host-builder-landed-2026-10-04.md
-      - docs/problems/node-b-deploy-disk-headroom-2026-10-04.md
-      - docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md
-      - docs/problems/ci-docs-only-head-strands-runtime-deploy-2026-10-04.md
+      - docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json
+      - docs/archive/evidence/s0b-go-effect-2026-10-04.json
+      - docs/archive/evidence/s0b-snapshot-resume-2026-10-04.json
+      - docs/archive/problems/s2-runtime-exec-still-baseline-2026-10-04.md
+      - docs/archive/problems/s2-builder-substrate-2026-10-04.md
+      - docs/archive/problems/s2-host-builder-landed-2026-10-04.md
+      - docs/archive/problems/node-b-deploy-disk-headroom-2026-10-04.md
+      - docs/archive/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md
+      - docs/archive/problems/ci-docs-only-head-strands-runtime-deploy-2026-10-04.md
       - docs/problems/guest-vm-embedded-dolt-memory-starved-2026-10-01.md
   decision:
     what: >-
@@ -866,13 +866,13 @@ receipts:
     identity: main@7e412ca7 (instrument + deadlock hotfix), evidence refresh 4708a034, deployed fd8b2973
     proof_refs:
       - docs/archive/reports/s0a-boot-timeline-landing-2026-10-01.md
-      - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
-      - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
-      - docs/evidence/s0a-guest-layout-2026-10-01.json
-      - docs/evidence/s0a-runtime-closure-2026-10-01.json
-      - docs/evidence/s0a-tap-reachability-2026-10-01.json
-      - docs/evidence/s0a-gateway-token-visibility-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-fresh-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
+      - docs/archive/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
+      - docs/archive/evidence/s0a-guest-layout-2026-10-01.json
+      - docs/archive/evidence/s0a-runtime-closure-2026-10-01.json
+      - docs/archive/evidence/s0a-tap-reachability-2026-10-01.json
+      - docs/archive/evidence/s0a-gateway-token-visibility-2026-10-01.json
     panel: >-
       S0a boundary panel recorded in the S0 station file (S1-sufficient,
       S3-insufficient-as-archived); forced 21bbabff, the forgeable-caller
@@ -931,7 +931,7 @@ receipts:
       and gemini's paths-ignore proposal (docs pushes must not run any
       deploy steps at all).
     report: >-
-      docs/reports/s0m-record-native-station-close-2026-10-04.md
+      docs/archive/reports/s0m-record-native-station-close-2026-10-04.md
       (reporter, iCloud PDF same title).
     note: >-
       Action-1's precommit->resolve leg: record->packet->wake->consume->
@@ -953,7 +953,7 @@ receipts:
     closed_at: '2026-10-04T05:55:00Z'
     landed_receipts: >-
       Deployed refusal matrix PASSED —
-      docs/evidence/s1a-refusal-matrix-2026-10-04.json (builds a3f0d48e
+      docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json (builds a3f0d48e
       boundary + b15f012a oracle + POST legs): R1 tap->tap FORWARD
       timeout, R2 vmctl internal 403, R3 maild forged owner 403, R4
       corpusd mint POST 403, R5 proxy publish POST 403; L1 gateway dial,
@@ -974,7 +974,7 @@ receipts:
       beyond the two POST targets (would violate its no-authority
       invariant on open registration).
     report: >-
-      docs/reports/s1a-host-boundary-station-close-2026-10-04.md
+      docs/archive/reports/s1a-host-boundary-station-close-2026-10-04.md
       (reporter, iCloud PDF same title).
     residuals: >-
       Egress remains open by design (default-deny internet is deferred to
@@ -985,7 +985,7 @@ receipts:
       a third-party TUI; no in-guest exec surface) is carried as
       discovered-unrepaired with repair owner TBD (S1 or hardening).
       The S0b registration-genesis defect
-      (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md)
+      (docs/archive/problems/s0b-registration-computer-missing-genesis-2026-10-04.md)
       is S0b's first named blocker.
   - id: smg-to-sa-transition-2026-10-06
     kind: station_transition
@@ -1029,10 +1029,10 @@ receipts:
       /api/texture/management-open endpoint is the deterministic
       acceptance surface, not the product path.
     defect_field_handed_to_sa:
-      - docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
-      - docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
-      - docs/problems/sa1-wake-outbox-rearm-storm-2026-10-06.md
-      - docs/problems/sa2-appendevent-unbounded-scan-2026-10-06.md
+      - docs/archive/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+      - docs/archive/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
+      - docs/archive/problems/sa1-wake-outbox-rearm-storm-2026-10-06.md
+      - docs/archive/problems/sa2-appendevent-unbounded-scan-2026-10-06.md
     residuals: >-
       Host-pressure reclaim hibernates a VM with a live probe run
       (recorded under S2 hibernate contract; vmctl journal 2026-10-06).
@@ -1199,7 +1199,7 @@ idea of what a change is.
 **Update 2026-10-05:**
 - S1a landed and was deployed-verified: network isolation plus
   transport-bound internal authority; refusal matrix 5/5 refused, 5/5
-  legitimate flows green (`docs/evidence/s1a-refusal-matrix-2026-10-04.json`).
+  legitimate flows green (`docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json`).
 - **Correction:** guest→host traffic keeps its real guest source IP. It
   does not arrive as loopback (`bffad45`). The exposure was the
   caller-controlled headers.
@@ -1234,7 +1234,7 @@ what is known now. It is the input to that hardening pass.
   - frontend injection into tracking computers through a genuinely
     platform-signed update offer.
 - Full chain and fix shape:
-  `docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
+  `docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
 
 **Known weaker boundaries (audit and S0a):**
 - The guest runtime runs as unconfined root.
@@ -1529,7 +1529,7 @@ the purpose of all this infra". This is not one autopaper but a platform
 for others' autopapers, with white-label copies built from the primary.
 The rearchitecture analysis is `docs/archive/world-wire-rearchitecture-2026-10-05.md`
 (read it with its director notes); the evidence is
-`docs/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
+`docs/archive/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
 
 How this metamission treats it:
 - **v5 status:** the retired World Wire metamission
@@ -1876,7 +1876,7 @@ first runs and were fixed/proven end-to-end on
 `computer-6450a253b8b6ebc0866471973694f5be` (release `36743b1f6ddb`,
 `build.commit 2f0e2cac`, atomic `current/` swap, entrypoint → release
 binary). Remaining S2-g residual gates are in
-`docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`.
+`docs/archive/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`.
 
 ### Handoff 2026-10-05 — S2 STATION CLOSED
 

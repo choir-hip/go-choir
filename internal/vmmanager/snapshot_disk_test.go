@@ -12,7 +12,7 @@ import (
 )
 
 // Real-disk snapshot budget and dead-snapshot cleanup
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 39-48).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 39-48).
 //
 // Ways this could fail, written first:
 //   - the budget still counts logical bytes, so btrfs-compressed snapshots

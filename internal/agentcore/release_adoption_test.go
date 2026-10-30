@@ -15,7 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
-// P8 failure modes pinned here (docs/reports/p6-p8-release-adopt-2026-10-15.md):
+// P8 failure modes pinned here (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md):
 //   A1 a tampered record (a field changed, the id kept) is adopted;
 //   A2 a self-consistent record that was never published is adopted;
 //   A3 corpusd's stored record or blob was altered after publish;

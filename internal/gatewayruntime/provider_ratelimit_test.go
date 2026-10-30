@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// docs/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md:
+// docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md:
 // the gateway's per-computer limiter answered 429 with Retry-After, and the
 // guest retried after 0.5 s and 1 s and failed, so callers died on rejected
 // calls. Failure modes pinned: a call rejected by the limiter fails instead

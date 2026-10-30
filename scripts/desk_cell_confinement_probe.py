@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Staging proof of desk cell confinement (F4) and guest egress policy (F6).
 
-Problem record: docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md
+Problem record: docs/problems/desk-boundary-residuals-2026-10-21.md
 Code: internal/yaegikernel/desk_cell_selftest*.go, internal/agentcore/isolation_selftest.go,
 internal/vmmanager/guest_egress.go.
 

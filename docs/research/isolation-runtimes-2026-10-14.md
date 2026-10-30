@@ -11,13 +11,13 @@ Each proposal names its own class.
 Sources: the code at `f54f05c42` (`internal/vmmanager`, `internal/vmctl`,
 `internal/capsule`, `nix/node-b.nix`, `nix/autoputer-vm.nix`); the
 reports [vm-density-limits-2026-10-14](../reports/vm-density-limits-2026-10-14.md)
-and [roadmap-sequencing-appdev-security-2026-10-14](../reports/roadmap-sequencing-appdev-security-2026-10-14.md);
+and [roadmap-sequencing-appdev-security-2026-10-14](../archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md);
 [computer-ontology](../computer-ontology.md); the S9 and SP definitions;
 upstream release notes, docs and security advisories read today through
 the GitHub API and the web (URLs in the Sources section at the end). No
 runtime was installed or benchmarked for this report. Every performance
 number is either an upstream claim (cited) or an estimate (labelled).
-`docs/reports/self-hosting-and-desktop-2026-10-14.md` is a parallel survey
+`docs/reports/desktop-sync-and-local-vms-2026-10-14.md` is a parallel survey
 that is not on `main` yet; section 6 states what it needs from this one.
 
 ## The short answer

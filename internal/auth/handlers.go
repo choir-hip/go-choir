@@ -1553,7 +1553,7 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 // start-operation POST and no route checks it. It stays accepted so a
 // computer still serving an older SettingsApp can mint its self-development
 // bundle; remove it once every computer serves the form without it
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 10).
 var validScopes = map[string]bool{
 	"read:texture":                       true,
 	"write:texture":                      true,

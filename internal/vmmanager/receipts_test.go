@@ -17,7 +17,7 @@ import (
 
 // Phase 0 step 1 of docs/vmctl-360-review-2026-10-10.md: every Firecracker
 // process vmmanager kills leaves an attributable receipt. Today's 09:25:48
-// kill (docs/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md) could
+// kill (docs/archive/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md) could
 // not be traced to a caller because no kill recorded who asked.
 //
 // Ways the receipt can fail:

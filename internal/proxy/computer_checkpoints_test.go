@@ -1,7 +1,7 @@
 package proxy
 
 // The owner's checkpoint surface (slice 3 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. Ways it could fail:
 //
 //  1. the listing is forwarded without the lifecycle scope, or an API key for

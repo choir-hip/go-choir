@@ -8,7 +8,7 @@ import (
 )
 
 // Living stories (Cut 2 unit 2b,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
 // "Living stories"; pre-flight review A6 and A6').
 //
 // Captures reach management as one system record per poll that wrote new

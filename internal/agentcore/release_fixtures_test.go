@@ -17,7 +17,7 @@ import (
 )
 
 // Fixtures shared by the P6/P7/P8 tests
-// (docs/reports/p6-p8-release-adopt-2026-10-15.md): a real git source
+// (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): a real git source
 // repository, a patch made outside it, a frozen bundle bound to an
 // operation, and a current release.
 

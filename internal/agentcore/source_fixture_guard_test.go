@@ -13,7 +13,7 @@ import (
 )
 
 // The fixture guard (L2a R2-7,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
 // written before the code:
 //   - the fixture's registry entry is missing, or its tos_class is not
 //     test_fixture, so nothing can tell it from a real feed;

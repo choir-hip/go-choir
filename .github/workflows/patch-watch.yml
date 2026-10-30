@@ -1,5 +1,5 @@
 # Patch watch (DRAFT, report-only).
-# Design: docs/reports/patch-pipeline-time-to-patch-2026-10-15.md, section 4.1
+# Design: docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md, section 4.1
 # and rollout step 1. Compares what main DECLARES (host and guest kernel,
 # Firecracker, the production Go toolchain, npm lock) against primary feeds:
 # kernel.org, the kernel CNA vulns repo, CISA KEV, Firecracker advisories,

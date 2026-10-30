@@ -207,7 +207,7 @@ func (h *Handler) authenticatedInternalOwner(w http.ResponseWriter, r *http.Requ
 }
 
 // callerClass says who reached maild, which decides what it may do
-// (docs/problems/maild-send-gate-defects-2026-10-14.md). It comes from the
+// (docs/archive/problems/maild-send-gate-defects-2026-10-14.md). It comes from the
 // transport, never from a header the caller sets.
 type callerClass string
 

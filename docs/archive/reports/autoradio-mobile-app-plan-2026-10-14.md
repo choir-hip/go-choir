@@ -65,14 +65,14 @@ Owner scope ruling, about 21:20 UTC: **Autoradio is not a super app.**
 - Plan for a family of focused apps.
 
 Constraints carried in from the day's rulings: foundations first ("deepen
-foundations, don't accelerate growth", `docs/reports/strategy-takeaways-2026-10-14.md`);
+foundations, don't accelerate growth", `docs/archive/reports/strategy-takeaways-2026-10-14.md`);
 a prototype is welcome if framed as one and not "setting architecture that
 will be annoying to refactor" (`docs/reports/owner-roadmap-rulings-2026-10-14.md`,
 ruling 5); the voice principle: "I want my AI to be clearly sounding like
 AI, and then we're going to be mixing in human voices"
-(`docs/reports/pricing-and-economics-notes-2026-10-14.md`); and the
+(`docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`); and the
 app-store constraint: no web desktop and no app store inside the app
-(`docs/reports/choir-state-and-vision-2026-10-14.md` §2.10).
+(`docs/archive/reports/choir-state-and-vision-2026-10-14.md` §2.10).
 
 ## Bottom line
 
@@ -211,7 +211,7 @@ the phone submits revisions and requests exactly as the desktop does.
 ```
 
 - **Listen** exists as a web prototype (`prototype/autoradio-2026-10-14`,
-  `docs/reports/autoradio-prototype-2026-10-14.md`): the front page in
+  `docs/archive/reports/autoradio-prototype-2026-10-14.md`): the front page in
   rank order, one sentence at a time in a machine voice, related clips
   from publishers' own enclosure URLs, and "new since you last listened"
   by story version. The native app ports its pure logic
@@ -1497,12 +1497,12 @@ the App Store; no shared cross-platform code before the iOS app settles.
 
 ## Sources
 
-Choir (code and docs): `docs/reports/autoradio-prototype-2026-10-14.md`,
-`docs/reports/choir-state-and-vision-2026-10-14.md` (§2.1, §2.10, §2.11),
-`docs/reports/strategy-takeaways-2026-10-14.md`,
+Choir (code and docs): `docs/archive/reports/autoradio-prototype-2026-10-14.md`,
+`docs/archive/reports/choir-state-and-vision-2026-10-14.md` (§2.1, §2.10, §2.11),
+`docs/archive/reports/strategy-takeaways-2026-10-14.md`,
 `docs/reports/owner-notes-2026-10-14.md`,
-`docs/reports/pricing-and-economics-notes-2026-10-14.md`,
-`docs/reports/self-hosting-and-desktop-2026-10-14.md` (main checkout),
+`docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`,
+`docs/reports/desktop-sync-and-local-vms-2026-10-14.md` (main checkout),
 `docs/research/autopaper-media-and-rights-2026-10-14/README.md`,
 `docs/learn/04-computer-lifecycle.md`, `docs/precommitment-records.md`,
 `frontend/src/lib/TextureEditor.svelte`,

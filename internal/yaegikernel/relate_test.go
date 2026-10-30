@@ -11,7 +11,7 @@ import (
 
 // choir.Relate is the research desk's record of a published story's
 // entities (docs/problems/related-stories-no-entity-layer-2026-10-26.md,
-// slice a; design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// slice a; design docs/reports/related-stories-graph-design-2026-10-19.md
 // §3.2 and §11 slice 1). Ways it can fail at the cell, written first:
 //
 //  E1 Another desk gets the verb, or its handle reaches the host.

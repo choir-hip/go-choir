@@ -128,7 +128,7 @@ func TestComputerSurfaceRefusesMissingHashedAssetWithoutHTMLFallback(t *testing.
 // boot wrapper points CHOIR_BASELINE_RELEASE_ROOT at it; `current` holds no
 // frontend. The surface must serve the release's SPA from there, and must
 // still refuse a baseline root outside /nix/store and the private store
-// (docs/problems/layered-release-spa-underivable-2026-10-09.md).
+// (docs/archive/problems/layered-release-spa-underivable-2026-10-09.md).
 func TestComputerSurfaceServesLayeredReleaseFromUpdaterStore(t *testing.T) {
 	updaterRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(updaterRoot, "current"), 0o755); err != nil {

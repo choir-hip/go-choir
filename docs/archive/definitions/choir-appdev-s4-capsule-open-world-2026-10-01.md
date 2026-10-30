@@ -31,12 +31,12 @@ start:
       "Capsules are air-gapped (empty netns, internal/capsule/namespace.go);
       the guest Nix store is read-only EROFS with no nix on the runtime PATH.
       curl | bash and nixpkgs are impossible inside a capsule today."
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115)
     - >-
       "Guest VM egress is open and tap->tap forwarding appears permitted
       (internal/vmmanager/manager.go setupHostNetworking; host firewall does
       not filter FORWARD). The guest runtime unit runs as unconfined root."
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:124-128)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:124-128)
     - >-
       Capsule creation currently builds an overlay root and launches a broker
       in new user, mount, network, UTS, IPC, and cgroup namespaces
@@ -134,8 +134,8 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission S4 intent (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573)
-    - owner approval of the metamission after consensus review (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379)
+    - owner-ratified metamission S4 intent (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573)
+    - owner approval of the metamission after consensus review (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379)
     - docs/computer-ontology.md:39-50,85-105
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
@@ -160,7 +160,7 @@ boundaries:
         Existing host networking permits tap forwarding and masquerading, while
         capsules currently have no recorded egress or usable Nix store
         (internal/vmmanager/manager.go:2686-2753;
-        docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115).
+        docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115).
     introduced: []
     repaired:
       - none; this station remains checkpoint_incomplete pending S1 and S0b.
@@ -201,8 +201,8 @@ now:
       broker, not general guest egress or cross-computer publication.
     status: proposed
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:512-518
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573
   decision:
     what: >-
       Select exactly one capsule-private Nix store mechanism only from the S0b
@@ -210,8 +210,8 @@ now:
       store.
     kind: architecture
     status: proposal
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:566-573
-    owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:566-573
+    owner_ratification_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
   belief:
     believed_state: >-
       Existing capsules are offline namespaces with an overlay root; their
@@ -261,11 +261,11 @@ receipts: []
 
 - S0b selects exactly one: a capsule-private writable upper or the Nix
   local-overlay store. No dual implementation is a fallback or completion
-  path (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:566-573).
+  path (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:566-573).
 - The selection probe must falsify or support: absent Nix DB on the EROFS
   lower; inability to mount an overlay over `/nix/store` in the capsule user
   namespace; nested Nix sandbox failure; and unresolved closure paths after
-  disposal (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:570-572).
+  disposal (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:570-572).
 - Capsule destruction already terminates the namespace leader, unmounts the
   overlay, removes the private tree on successful cleanup, and revokes capsule
   capabilities (internal/capsule/executor.go:484-550). S4 must prove that this
@@ -375,4 +375,4 @@ receives its result as content-addressed evidence.
 
 App-desk egress declarations (manifest to grant) and ingress (host service,
 records only) are specified in
-[app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md) (NET-10).
+[app-agent-network-policy-2026-10-21.md](../../design/app-agent-network-policy-2026-10-21.md) (NET-10).

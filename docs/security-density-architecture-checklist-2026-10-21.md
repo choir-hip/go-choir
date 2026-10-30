@@ -99,14 +99,14 @@ item below:
     iCloud Drive "Choir Backups/desk-cell-confinement-2026-10-21.bundle"
     (verified). Landing is SEC-01 and SEC-03: start from `land/`.
   - Before: the branch was local to the owner's machine
-    (`docs/reports/selfdev-readiness-2026-10-15.md:569-571`); paused 10-15
+    (`docs/archive/reports/selfdev-readiness-2026-10-15.md:569-571`); paused 10-15
     as "needs a rebase and Linux Docker tests"
-    (`docs/reports/handoff-2026-10-15.md:372`).
+    (`docs/archive/reports/handoff-2026-10-15.md:372`).
   - Contents per docs: a separate unprivileged user per desk,
     `no_new_privs`, Landlock V5, an empty network namespace, seccomp
     `DeskCellSeccompFilter` (no socket/connect/exec/fork/ptrace/mount/bpf/
     io_uring; `clone` only with `CLONE_THREAD`), and the host-side guest
-    egress (mangle) policy (`docs/reports/boundary-strength-ladder-2026-10-15.md:188-205`;
+    egress (mangle) policy (`docs/archive/reports/boundary-strength-ladder-2026-10-15.md:188-205`;
     `selfdev-readiness-2026-10-15.md:335-350`).
   - Next: SEC-01 and SEC-03 land it, rebased from `land/` onto current
     main.
@@ -139,7 +139,7 @@ item below:
   - Existing work: `origin/land/desk-cell-confinement` (9cee80a2d; REC-01),
     rebased 10-15 and 831 commits behind main; its own landing record
     (432cbede0) lists what the rebase found.
-  - Plans: [desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md)
+  - Plans: [desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](problems/desk-boundary-residuals-2026-10-21.md)
     (needs inventory, failure modes 1-9); security review F4 and M4; ladder
     rung 1; ACTIVE landing order item 6; owner notes §31 (landed before
     launch).
@@ -160,7 +160,7 @@ item below:
     carry Exec and WriteFile.
   - Existing work: none. Plans: none before this change.
   - Plan update: new problem record
-    [desk-frame-actions-not-role-checked-by-host-2026-10-21.md](problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md)
+    [desk-frame-actions-not-role-checked-by-host-2026-10-21.md](problems/desk-boundary-residuals-2026-10-21.md)
     (this change). The role table should come from the desk manifest
     (ARCH-02).
 - [x] **SEC-03 · P0 · red — Host egress floor for guest taps**
@@ -197,7 +197,7 @@ item below:
     pool, sweep at start). Egress is open (MASQUERADE to any destination).
   - Plans: desk-cells doc Problem 2 (inventory, mangle design, failure
     modes 10-16); review §3.6, §4.5; S1 definition acceptance item 2;
-    [s0-tap-egress-unfiltered-2026-10-01.md](problems/s0-tap-egress-unfiltered-2026-10-01.md).
+    s0-tap-egress-unfiltered-2026-10-01.md.
   - Plan update owed: no plan makes rule failure fail closed; the desk-cells
     doc's mention of open branch `fix/tap-deny-guest-range` is stale (it
     landed).
@@ -243,7 +243,7 @@ item below:
     but follows redirects unguarded (`:746-757`). Guarded today:
     `sourcefetch.Client` paths (fetch_url, Read, content, sources).
   - Plans: review F5; desk-cells residual (claims a host policy that was on
-    the unlanded `land/desk-cell-confinement` branch); [research-fetch-url-has-no-address-guard-2026-10-10.md](problems/research-fetch-url-has-no-address-guard-2026-10-10.md)
+    the unlanded `land/desk-cell-confinement` branch); [research-fetch-url-has-no-address-guard-2026-10-10.md](archive/problems/research-fetch-url-has-no-address-guard-2026-10-10.md)
     (no "fixed" status line; its egressTables cache leak still "not fixed").
   - Plan update owed: a problem record for browser and Obscura paths.
   - Research (2026-10-21, launch checklist L2-06): no automated capture
@@ -411,7 +411,7 @@ item below:
 - [ ] **RES-02 · P0 · red — A hard memory budget per desk worker**
   - Now: soft `GOMEMLIMIT` (MemTotal/16), `RLIMIT_AS` 8 GiB (meaningless in
     an 8 GiB guest), `oom_score_adj` 1000 (f93bbfd84).
-  - Plans: [desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md](problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md)
+  - Plans: [desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md](archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md)
     ("still open: an RSS budget per worker"). No slice owns it.
 - [ ] **RES-03 · P1 · orange — Bound the capsule `exec-go-session` worker**
   - Now: no `MemoryLimitBytes`, rlimit or `GOMEMLIMIT`
@@ -479,7 +479,7 @@ item below:
     in-guest 1.5 s spacer (`research_children.go:30-37`). Fairness, not
     spending caps (owner: track spending, don't cap).
   - Plans: none at the gateway; management-delegation design O5;
-    [research-fanout-overruns-computer-model-budget-2026-10-11.md](problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
+    [research-fanout-overruns-computer-model-budget-2026-10-11.md](archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
   - Prompt caching already landed (3f142fe2f and follow-ups).
 - [ ] **RES-12 · P2 · orange — Batch endpoints for calls that can wait**
   (CPU lever C12, `reports/computer-cpu-efficiency-2026-10-14.md:552-560`).
@@ -661,7 +661,7 @@ item below:
 
 Done in this change (2026-10-21):
 
-- [x] Problem record: [desk-frame-actions-not-role-checked-by-host-2026-10-21.md](problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md) (SEC-02).
+- [x] Problem record: [desk-frame-actions-not-role-checked-by-host-2026-10-21.md](problems/desk-boundary-residuals-2026-10-21.md) (SEC-02).
 - [x] Problem record: [jailer-copies-store-image-per-vm-2026-10-21.md](problems/jailer-copies-store-image-per-vm-2026-10-21.md) (RES-05).
 - [x] Status lines: desk-cells (REC-01), jailer (SEC-04), loopback (plus the
   proxy-route residual, SEC-11), engineering network grants (NET-05),

@@ -52,10 +52,10 @@ section 9, Conflicts with the restore design.
 
 Evidence, not re-derived here:
 [keep-set accounting](../evidence/keep-set-accounting-2026-10-29.md),
-[storage inventory and its capture-body correction](../evidence/node-b-storage-inventory-2026-10-29.md),
-[paper disk and base liveness](../evidence/paper-disk-and-base-liveness-2026-10-29.md),
+[storage inventory and its capture-body correction](../archive/evidence/node-b-storage-inventory-2026-10-29.md),
+paper disk and base liveness,
 [research, object-store section](../evidence/data-architecture-research-2026-10-28.md),
-[data rearchitecture](data-rearchitecture-2026-10-28.md),
+[data rearchitecture](../archive/design/data-rearchitecture-2026-10-28.md),
 [selection, 2026-10-29 sections](../definitions/choir-data-architecture-selection-2026-10-28.md),
 [more than one home](../problems/data-has-more-than-one-home-2026-10-24.md),
 [secrets vault](secrets-vault-design-2026-10-28.md),

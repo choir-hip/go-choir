@@ -194,7 +194,7 @@ now:
       downstream symptoms.
     scope_if_supported: registered obligation kinds on staging computers
     status: proposed
-    evidence_refs: [docs/evidence/problem-doc-triage-2026-10-08.jsonl]
+    evidence_refs: [docs/archive/evidence/problem-doc-triage-2026-10-08.jsonl]
   decision:
     what: >-
       Registry-plus-existing-drivers over a new unified reconciler (prefer
@@ -229,7 +229,7 @@ receipts: []
 # SL — Obligation terminality
 
 This station enforces operational invariant **O1** from the
-[operational invariants register](../operational-invariants-register-2026-10-08.md),
+[operational invariants register](../../operational-invariants-register-2026-10-08.md),
 with O2 (continuations derive from durable state), O3 (reject at commit, never
 dead-letter silently) and O4 (one active run per agent) as direct
 dependencies. It is the largest unowned invariant behind the liveness cluster

@@ -305,7 +305,7 @@ func TestPublicProposalAndDecisionRequireAuthThenForwardGuestRefuse(t *testing.T
 // POST .../self-development/operations to a "propose" action: it answers 405
 // before auth, the guest is never called, and no scope (the retired
 // computer:self_development:propose, or admin) reopens it
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 10).
 func TestSelfDevelopmentOperationsPostIsRefusedAtTheProxy(t *testing.T) {
 	guestCalls := 0
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

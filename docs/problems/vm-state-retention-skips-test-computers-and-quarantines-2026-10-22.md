@@ -7,8 +7,8 @@ landed; station docs/definitions/choir-launch-fp0-vm-retention-2026-10-22.md. Mu
 of the fix: red (VM lifecycle: vmctl deletes VM state).
 
 Related: docs/problems/node-b-disk-fills-from-the-paper-data-image-2026-10-22.md
-(the disk floor), docs/problems/retention-prune-would-destroy-the-paper-2026-10-16.md
-(retention's warmness guard), docs/problems/node-b-disk-free-space-2026-10-09.md.
+(the disk floor), docs/archive/problems/retention-prune-would-destroy-the-paper-2026-10-16.md
+(retention's warmness guard), docs/archive/problems/node-b-disk-free-space-2026-10-09.md.
 
 ## Evidence (FP0, read-only on Node B, 2026-10-22)
 
@@ -160,7 +160,7 @@ Reproduced or confirmed by reading the code at 7430e1f31:
   Sonnet's probes). The scan also reads every dir under vm-state, not only
   `vm-*` and `candidate-*`, so operator-saved dirs are in scope. The
   10-07 pair in the candidate-fleet dir is the owner's pre-restore image and
-  possibly unique (docs/problems/node-b-disk-free-space-2026-10-09.md;
+  possibly unique (docs/archive/problems/node-b-disk-free-space-2026-10-09.md;
   docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md:
   484 paths absent from the restored disk, check never closed). Today they
   are kept only if their dir still resolves to the owner's ownership: by

@@ -3,7 +3,7 @@
 Status: **draft for the owner to post.** Nothing has been posted anywhere.
 Owner ruling: owner notes §27 item 5 ("An agent drafts the upstream yaegi
 loop bug report; the owner posts it"). Origin:
-[desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md](../problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+[desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md](../archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 Choir already works around this in `normalizeCellSource` (rewrites
 `for init; ; {` to `for init; true; {`), so the report is a courtesy to
 upstream, not a blocker for us.

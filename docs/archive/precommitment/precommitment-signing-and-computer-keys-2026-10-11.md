@@ -130,7 +130,7 @@ decisions and missing code rather than hard problems:
 - The state-homes inventory calls these keys "realization-scoped identity,
   probably correct … created per realization", with "trust in a new
   realization's signer" unverified
-  (`docs/state-homes-inventory-2026-10-08.md:42,73`). A fresh disk silently
+  (`docs/operational-invariants-register-2026-10-08.md:42,73`). A fresh disk silently
   mints a new key, because the loader creates a key whenever none exists.
 
 ### 1.3 The verifier-control key (generated in the guest, pinned on first use)
@@ -181,11 +181,11 @@ Details behind the table:
   `/var/lib/go-choir/vm-state/<vm>/` (`internal/vmmanager/manager.go:774-777`).
   I found no LUKS, dm-crypt or fscrypt anywhere in the repo.
 - The SH definition names "deletion of the debugfs copier" as an
-  artifact (`docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md:63`).
+  artifact (`docs/archive/definitions/choir-appdev-sh-state-homes-2026-10-08.md:63`).
   Host-side reading of guest files was routine until then.
 - The metamission defers "encryption at rest for snapshots and exports"
   and a "signer and credential lifecycle review"
-  (`docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:1259-1264`).
+  (`docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:1259-1264`).
 - Only the privacy DEK is escrowed (`internal/autoputer/run.go:400-407`).
   The signer keys are not, so a lost disk loses them. The 10-01 audit
   flagged exactly this

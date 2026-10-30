@@ -37,7 +37,7 @@ Two guards therefore exist, and they are not the same guard:
    embedded engine locks a row for it. (Hypothesis: it does not.)
 2. **`engineMu`** serialises `ogStore` with `ogReadStore`. It was added in
    488e8cd0 for a data race in the engine, recorded in
-   [embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md](../problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md):
+   embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md:
    `unescapeHTMLCodepoints` wrote into a JSON buffer that aliased a shared,
    cached prolly node.
 
@@ -80,7 +80,7 @@ more than overlapping it:
 
 A larger `MaxConcurrent` before the store has headroom adds contention for
 the same mutex, not throughput
-([research-more-slow-and-hidden-2026-10-21.md](../problems/research-more-slow-and-hidden-2026-10-21.md), E6).
+([research-more-slow-and-hidden-2026-10-21.md](../../problems/research-more-slow-and-hidden-2026-10-21.md), E6).
 
 ## Measured here
 
@@ -147,7 +147,7 @@ side table and of each other.
 
 ## What this batch lands for it
 
-- The side table (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
+- The side table (docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 - Kind labels on `GetObject` and `ListObjectsPage`.
 - The two probes above and this design.
 - Nothing that removes or narrows `engineMu`.

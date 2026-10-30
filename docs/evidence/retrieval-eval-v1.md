@@ -1,9 +1,9 @@
 # retrieval-eval-v1: definition (frozen 2026-10-14)
 
 The yardstick for retrieval over the Dolt object graph (rung 0 of
-[object-graph-retrieval-research-2026-10-14](../reports/object-graph-retrieval-research-2026-10-14.md)
+[object-graph-retrieval-research-2026-10-14](../archive/reports/object-graph-retrieval-research-2026-10-14.md)
 §5-6; problem record
-[corpus-retrieval-windowed-unindexed-untimed-2026-10-14](../problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md)).
+[corpus-retrieval-windowed-unindexed-untimed-2026-10-14](../archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md)).
 Every retrieval rung is measured on this set before the next is built; a
 rung that moves nothing is reverted or kept only for latency.
 

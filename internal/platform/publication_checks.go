@@ -216,7 +216,7 @@ func (o *StoreCheckOverlay) CheckOverlay(ctx context.Context, version CheckOverl
 	if owner := strings.TrimSpace(version.OwnerID); owner != "" {
 		// The checks are keyed by owner, version and anchor: read exactly
 		// those rows, never the whole kind
-		// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+		// (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md).
 		ids := make([]string, 0, len(citations))
 		for _, cite := range citations {
 			ids = append(ids, publicationCheckID(owner, version.PublicationVersionID, cite.AnchorID))

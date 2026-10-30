@@ -147,7 +147,7 @@
 PASS
 
 
-## Merged from docs/evidence/host-floor-real-netfilter-2026-10-21.txt (2026-10-21)
+## Merged from docs/evidence/host-floor-real-netfilter-2026-10-22.txt (2026-10-21)
 
 # scripts/vmmanager-netfilter-test.sh at lane/host-b4-b5 (SEC-03 group 2), 2026-10-21T23:26:25Z
 # Linux 6.18.37, iptables v1.8.13 (nf_tables); unprivileged user+net+mount namespace

@@ -12,7 +12,7 @@ import (
 // The SPA catch-all must not answer API paths. A client of a removed /api
 // route got 200 index.html (a JSON parse error, not a 404), and an unknown
 // API POST got a 405 text body, which hid route drift
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 6).
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 6).
 //
 // Failure modes pinned: unknown /api GET serves the SPA; unknown /api POST
 // answers 405; the 404 is not JSON; a non-API path that merely starts with

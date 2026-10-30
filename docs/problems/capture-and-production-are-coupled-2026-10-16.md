@@ -47,7 +47,7 @@ one capture and a published article.
 4. **Retrieval cannot see the world model, because there is none.**
    `SearchWireCorpus` is a keyword match over the titles of the newest
    1,000 captures, about 5 hours
-   (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+   (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 
 ## Classification
 

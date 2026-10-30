@@ -23,7 +23,7 @@ import (
 )
 
 // Intake labels (L2a A1 / R2-3 / R2-4,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways they can
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways they can
 // fail, written before the code:
 //  1. With intake.labels off, a poll still calls Jev (cost and a model on
 //     the poll path before the fixture passed).

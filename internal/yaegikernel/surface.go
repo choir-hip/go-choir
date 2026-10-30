@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// The desk interaction surface (docs/problems/trace-review-desk-protocol-friction-2026-10-10.md
+// The desk interaction surface (docs/archive/problems/trace-review-desk-protocol-friction-2026-10-10.md
 // F13). The runtime already decides each desk's exact choir package in
 // ChoirExports; this file shows it to the desk three ways from that one
 // source: a generated prompt block (DeskSurface), choir.Help in the REPL,
@@ -366,7 +366,7 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 // A packet written as JSON inside a Go map literal (`"claims":[] ,`,
 // `[]any{{"k":"v"}}`) does not parse (T3,
 // docs/problems/tool-call-failures-dual-model-2026-10-21.md; cluster I of
-// docs/reports/cross-model-cell-errors-2026-10-13.md).
+// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 var (
 	packetVerbRE    = regexp.MustCompile(`\bchoir\.(?:ReportPacket|Report|Cast|Note|Ask|Reply|Escalate|Resolve|Precommit|Disagreement)\(`)
 	literalSyntaxRE = regexp.MustCompile(`expected type, found|expected ';', found ':'|expected operand|expected expression|missing ',' in (?:argument list|composite literal)|expected '[)}\]]', found`)
@@ -382,7 +382,7 @@ var (
 )
 
 // jsonResultMisuse reports a cell that used a world verb's JSON bytes as a
-// map or a struct (cluster C, docs/reports/cross-model-cell-errors-2026-10-13.md).
+// map or a struct (cluster C, docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 func jsonResultMisuse(src, msg string) bool {
 	if strings.Contains(msg, "yaegikernel.JSON") {
 		return true
@@ -396,7 +396,7 @@ const jsonResultHint = "choir.Read, choir.ReadCapture, choir.PollSource and choi
 var undefinedFieldRE = regexp.MustCompile(`undefined (?:method|field): (\w+)`)
 
 // resultFieldHint names the choir result field closest to a missing one
-// (cluster D, docs/reports/cross-model-cell-errors-2026-10-13.md). yaegi
+// (cluster D, docs/archive/reports/cross-model-cell-errors-2026-10-13.md). yaegi
 // does not say which type the value had, so a name several result types
 // share lists them with a %T probe, a case slip names the exact spelling,
 // and anything else names the closest field and its type's fields.
@@ -482,7 +482,7 @@ func choirResultTypes() []reflect.Type {
 
 // topLevelDefineRE matches what yaegi reports for a top-level `x := v[i]`,
 // `x := v.F.G` or `a, ok := ...` it cannot compile (cluster A,
-// docs/reports/cross-model-cell-errors-2026-10-13.md).
+// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 var topLevelDefineRE = regexp.MustCompile(`constant definition loop|compile panic`)
 
 const topLevelDefineHint = "At cell top level, `x := v[i]`, `x := v.F.G` and `a, ok := ...` do not compile here. " +

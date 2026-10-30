@@ -10,7 +10,7 @@ import (
 
 // A Write's pSupported reaches the revision metadata and, through the
 // turn's transaction, the new citation's check memo with the authoring
-// model (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+// model (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 func TestWriteSelfScoreReachesTheCitationCheck(t *testing.T) {
 	h, s, rec := cellAuthorSetup(t, "selfscore")
 	ctx := context.Background()

@@ -20,8 +20,8 @@ import (
 // Realization key delivery (station SH slice 3, operational invariant O21):
 // a realization of an existing computer receives the computer's privacy key
 // from custodian escrow, sealed to a recipient key the realization generated.
-// Design and review: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
-// (slice 3 revision) and docs/evidence/sh-panel-review-2026-10-08.md.
+// Design and review: docs/archive/definitions/choir-appdev-sh-state-homes-2026-10-08.md
+// (slice 3 revision) and docs/archive/evidence/sh-panel-review-2026-10-08.md.
 //
 // Binding: the caller presents the capability minted by exchanging its own
 // credential envelope; that capability's nonce is the envelope nonce, which

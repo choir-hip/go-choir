@@ -167,7 +167,7 @@ dead. Two residuals surfaced on the deployed owner guest:
 The owner-guest SMG probe's final verdict is pending a re-run on
 `41822a4c` (first probe ran on the residue-wedged build and timed out
 with `no bound producer report observed` — evidence
-`docs/evidence/smg-rlm-acceptance-owner-postfix-2026-10-06.json`).
+`docs/archive/evidence/smg-rlm-acceptance-owner-postfix-2026-10-06.json`).
 
 ## Deployed observation 2026-10-07 (on `19d7913e`, owner `computer-03335285`)
 

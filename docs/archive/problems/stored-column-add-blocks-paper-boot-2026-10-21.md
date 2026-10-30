@@ -8,7 +8,7 @@ Mutation class of the fix: orange (database schema and boot path).
 51667a3ce added four kind-scoped STORED generated columns to `og_objects`
 (`og_meta_agent_id`, `og_meta_capture_id`, `og_meta_doc_id`,
 `og_rec_addressee`) and their indexes, for the reads measured in
-[research-more-slow-and-hidden-2026-10-21.md](research-more-slow-and-hidden-2026-10-21.md) E6.
+[research-more-slow-and-hidden-2026-10-21.md](../../problems/research-more-slow-and-hidden-2026-10-21.md) E6.
 
 The staging deploy (run 39632119465) refreshed the Autopaper computer
 (vm-1669020a, critical_protected) at 16:20:16 UTC. The guest runtime
@@ -113,7 +113,7 @@ the start and the end of the step.
 
 **Superseded** by the rollback-safe side table in
 [store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md](store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md)
-(lane FP1, `docs/definitions/choir-launch-fp1-store-throughput-2026-10-21.md`).
+(lane FP1, `docs/archive/definitions/choir-launch-fp1-store-throughput-2026-10-21.md`).
 The reasons the panel review gave against the plain-column design, as relayed
 to the lane by the orchestrator (the panel's own text is not in this
 repository, so treat the list as the lane's record of it, not a transcript):

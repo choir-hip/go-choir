@@ -8,7 +8,7 @@ Problem first; no fix here.
 ## Settled target
 
 The RLM consensus (D7b/M6.5,
-[rlm-implementation-consensus-2026-08-29.md](../reviews/rlm-implementation-consensus-2026-08-29.md) §7):
+[rlm-implementation-consensus-2026-08-29.md](../archive/reviews/rlm-implementation-consensus-2026-08-29.md) §7):
 a nested activation gets "a carve-out of the parent's budget", children are
 "metered exactly like bare calls", depth cap 2-3, and one kill reclaims the
 tree. The checklist names the resources: tokens, wall time, egress bytes,
@@ -41,7 +41,7 @@ total.
    child has "further choir.Research". The child preamble, the surface
    summary and the module set all say it cannot. An agent that reads the
    comment could widen depth by mistake. This is how the tree in
-   [research-fanout-overruns-computer-model-budget-2026-10-11.md](research-fanout-overruns-computer-model-budget-2026-10-11.md)
+   [research-fanout-overruns-computer-model-budget-2026-10-11.md](../archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md)
    spread to 780 children.
 3. **The settled design (depth 2-3) and the owner's later ruling (depth 1,
    PD1) disagree**, and no record calls the difference a deliberate deviation.

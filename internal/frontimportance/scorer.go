@@ -36,7 +36,7 @@ const (
 	defaultScoresPath = "/var/lib/go-choir/front-importance/scores.json"
 	scorerComputerID  = "host:front-importance"
 	// defaultRetention bounds how long a score row outlives its story's
-	// time in the scored window (docs/problems/autopaper-section-pages-empty-2026-10-15.md).
+	// time in the scored window (docs/archive/problems/autopaper-section-pages-empty-2026-10-15.md).
 	defaultRetention = 14 * 24 * time.Hour
 )
 
@@ -64,7 +64,7 @@ type scoreRow struct {
 // scoringCriteria versions the judgement prompt in scoreStory. Bump it when
 // the criteria change so every row is rescored under the new text (within
 // the per-run call bound). 2: general editorial criteria for seriousness
-// and promotion (docs/problems/front-importance-underrates-major-stories-2026-10-14.md).
+// and promotion (docs/archive/problems/front-importance-underrates-major-stories-2026-10-14.md).
 const scoringCriteria = 2
 
 // frontStory is the part of a front row the scorer reads.

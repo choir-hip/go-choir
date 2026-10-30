@@ -8,7 +8,7 @@ import (
 )
 
 // Corpus search reads Jev's labels as topic hints for captures
-// (docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md,
+// (docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md,
 // symptom 3). Ways the label listing can fail, written first:
 //   - it returns an older version of a relabelled capture, so the hint is
 //     the label management already corrected;

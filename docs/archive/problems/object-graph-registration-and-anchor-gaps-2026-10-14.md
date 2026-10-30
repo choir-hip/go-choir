@@ -95,7 +95,7 @@ Two of these are dynamic and invisible to a literal scan:
 | Kind | State |
 |---|---|
 | `choir.universal_wire_story_cluster` | H-OG2 below |
-| `choir.media_item`, `choir.audio_recording`, `choir.transcript`, `choir.autoradio_run_sheet` | no writer in any commit's live code; named by current Autoradio and Autopaper media research (`docs/research/autopaper-media-and-rights-2026-10-14/repo-media-survey.md`, `docs/research/puter-everything-2026-10-14/media.md`) as the kinds to reuse |
+| `choir.media_item`, `choir.audio_recording`, `choir.transcript`, `choir.autoradio_run_sheet` | no writer in any commit's live code; named by current Autoradio and Autopaper media research (`docs/research/autopaper-media-and-rights-2026-10-14/repo-media-survey.md`, `docs/archive/research/puter-everything-2026-10-14/media.md`) as the kinds to reuse |
 
 ### Staging evidence
 

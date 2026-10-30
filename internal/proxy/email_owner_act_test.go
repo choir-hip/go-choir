@@ -24,7 +24,7 @@ func (stubEmailAPIKeys) GetUserByID(id string) (*auth.User, error) {
 	return &auth.User{ID: id, Email: "owner@example.com"}, nil
 }
 
-// FM 18 (docs/problems/maild-send-gate-defects-2026-10-14.md): approving a
+// FM 18 (docs/archive/problems/maild-send-gate-defects-2026-10-14.md): approving a
 // send is an owner act, so a headless API key (which an agent inside the
 // computer may hold) never reaches maild's send route; the owner's browser
 // session does. Other mail routes keep API-key access.

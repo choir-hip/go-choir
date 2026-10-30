@@ -4,7 +4,7 @@ Date: 2026-10-14. Station:
 [L2a](../definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md).
 Inputs:
 - the owner's architecture (station header);
-- the Jev pair probe (`docs/evidence/l2a-jev-pair-probe-2026-10-14.md`,
+- the Jev pair probe (`docs/archive/evidence/l2a-jev-pair-probe-2026-10-14.md`,
   26/26);
 - the intake defects (`docs/problems/autopaper-intake-defects-2026-10-14.md`);
 - a code survey of the poll path, Jev, object-graph edges, research

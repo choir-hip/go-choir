@@ -56,7 +56,7 @@ type AppenderStats struct {
 // fsync succeeds having written nothing (the PostgreSQL rule since 2018). A
 // writer that goes on and repairs the file later has to remember what it
 // does not know, and three review rounds each found a way for that memory to
-// outlive the lock (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
+// outlive the lock (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
 // So the first failed fsync, or failed write, poisons the Appender for good:
 // the call that failed returns its error, and every later call, for any
 // computer, returns ErrAppenderPoisoned without touching a file. The failed

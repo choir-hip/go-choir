@@ -21,7 +21,7 @@ func (c *captureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // Keenable adds search capacity beside the providers that rate-limit
-// (docs/problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
+// (docs/archive/problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
 // It posts {query, max_results} with X-API-Key and maps description or
 // snippet and published_at into the plane's result.
 func TestKeenableProviderSearches(t *testing.T) {

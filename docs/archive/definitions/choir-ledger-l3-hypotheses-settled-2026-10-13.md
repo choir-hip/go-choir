@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station L3 of the ledger metamission
-# (docs/definitions/choir-ledger-metamission-2026-10-13.md): hypotheses
+# (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): hypotheses
 # settled and scored. The design is settled in docs/precommitment-records.md
 # §5.1 (settlement is separate from scoring; a committing desk never settles
 # its own hypotheses; a score uses the committed version and its original
@@ -77,7 +77,7 @@ start:
     - >-
       Not present: a seq-precedes-cited-capture check; per-source analytics
       (lead time, independent corroboration, corrections); an off-host copy
-      of the ledger (L3's entry criterion; docs/reports/choir-state-and-vision-2026-10-14.md:109).
+      of the ledger (L3's entry criterion; docs/archive/reports/choir-state-and-vision-2026-10-14.md:109).
     - >-
       Prompts: management opens stories with choir.Cast("texture:new", ...)
       carrying hypotheses {statement, probability} and is told probability
@@ -222,7 +222,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - owner rulings in docs/precommitment-records.md §5 (2026-10-14)
-    - docs/definitions/choir-ledger-metamission-2026-10-13.md (spine)
+    - docs/archive/definitions/choir-ledger-metamission-2026-10-13.md (spine)
     - docs/choir-doctrine.md
   must_preserve:
     - Texture is the sole writer of canonical document revisions

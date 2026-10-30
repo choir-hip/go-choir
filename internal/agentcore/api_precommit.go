@@ -7,7 +7,7 @@ import (
 )
 
 // HandlePrecommit serves /api/precommit/ (calibration level 2,
-// docs/reports/choir-mcp-precommitments-2026-10-14.md): agents outside the
+// docs/archive/reports/choir-mcp-precommitments-2026-10-14.md): agents outside the
 // desks write claims and settlements as commitment records on this
 // computer and read their calibration. The proxy gates the prefix with the
 // precommit:read / precommit:write API key scopes. It is not on

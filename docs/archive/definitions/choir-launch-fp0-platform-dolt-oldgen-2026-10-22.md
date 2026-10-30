@@ -31,7 +31,7 @@ finish:
     Store A's oldgen stops growing between squashes, and the history it
     holds now is dropped once by a supervised squash.
   artifact: >-
-    docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md
+    docs/archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md
     (cause, writer map, readings, runbook, cadence); doltbatch Mode and
     PLATFORM_DOLT_SNAPSHOTS (90ea1e378).
   acceptance:
@@ -88,7 +88,7 @@ now:
     owner's flip, after the first-hour auto GC check in record §4.
   source_ref: ea77517f7
   deploy_identity: unchanged
-  candidate: {id: pdolt-snapshots-off, state: pushed, ref: lane/fp0-platform-dolt-oldgen, base: f0b1ee313, digest: none, scope: [internal/doltbatch/committer.go, internal/doltbatch/committer_test.go, internal/platform/store.go, internal/platform/snapshot_mode_test.go, internal/projectionbase/squash.go, internal/projectionbase/squash_test.go, nix/node-b.nix, scripts/dolt-history-audit.sh, scripts/test-dolt-history-audit.sh, scripts/off-host-backup.sh, scripts/off-host-backup-dolt-snapshot-test.sh, scripts/off-host-restore-drill.sh, .github/scripts/deploy-impact-classify, .github/scripts/deploy-impact-classify-test, docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md, docs/definitions/choir-launch-fp0-platform-dolt-oldgen-2026-10-22.md]}
+  candidate: {id: pdolt-snapshots-off, state: pushed, ref: lane/fp0-platform-dolt-oldgen, base: f0b1ee313, digest: none, scope: [internal/doltbatch/committer.go, internal/doltbatch/committer_test.go, internal/platform/store.go, internal/platform/snapshot_mode_test.go, internal/projectionbase/squash.go, internal/projectionbase/squash_test.go, nix/node-b.nix, scripts/dolt-history-audit.sh, scripts/test-dolt-history-audit.sh, scripts/off-host-backup.sh, scripts/off-host-backup-dolt-snapshot-test.sh, scripts/off-host-restore-drill.sh, .github/scripts/deploy-impact-classify, .github/scripts/deploy-impact-classify-test, docs/archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md, docs/archive/definitions/choir-launch-fp0-platform-dolt-oldgen-2026-10-22.md]}
   conjecture:
     id: C-pdolt-snapshots-off
     claim: >-
@@ -100,7 +100,7 @@ now:
     delta_o: record §4 step 2
     scope_if_supported: Store A
     status: active
-    evidence_refs: [docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md]
+    evidence_refs: [docs/archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md]
   decision:
     what: stop Store A's snapshots at the source (switch, off by file); a supervised squash on newgen 4 GiB, slow auto GC or monthly
     kind: operational

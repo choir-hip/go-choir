@@ -319,7 +319,7 @@ Residuals:
   end done, in every slot.
 - D: no long-running exec primitive for Go changes. Addressed on the same
   branch: capsule jobs (`choir.Start`, `choir.Poll`, `choir.Stop`),
-  [capsule-long-exec-2026-10-15.md](../design/capsule-long-exec-2026-10-15.md).
+  [capsule-long-exec-2026-10-15.md](../../design/capsule-long-exec-2026-10-15.md).
 - E: `choir.Exec` still defaults to `/`.
 - The management Cast and the drill request still say "build the release
   tree". The overlay now says what that means for each path.

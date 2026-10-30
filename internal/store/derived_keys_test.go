@@ -20,7 +20,7 @@ import (
 )
 
 // The Store's side of the og_key_index side table
-// (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
+// (docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 // Ways it can fail, written before the code:
 //  1. A writer of og_objects the table does not know: the source guard below
 //     and a behavioural test of the production writer, the projector.

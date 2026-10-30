@@ -1,7 +1,7 @@
 # platform-dolt's oldgen grows 1.5 to 2.5 GiB an hour and nothing collects it (2026-10-22)
 
 Date: 2026-10-22, 15:00 UTC. Found by: FP0, read-only on Node B, while
-measuring [node-b-disk-fills-from-the-paper-data-image-2026-10-22.md](node-b-disk-fills-from-the-paper-data-image-2026-10-22.md).
+measuring [node-b-disk-fills-from-the-paper-data-image-2026-10-22.md](../../problems/node-b-disk-fills-from-the-paper-data-image-2026-10-22.md).
 Status: open, problem record before any fix. Mutation class of a fix: red
 (Store A is the platform's canonical event and control store, vmctl's route
 database and the checkpoint source).

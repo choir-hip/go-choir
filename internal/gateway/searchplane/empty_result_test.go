@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// docs/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md.
+// docs/archive/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md.
 // Failure modes: one narrow query that finds nothing cools down every
 // provider it reached, so the next caller's broad query starts no provider;
 // a provider that returns nothing on every query is never benched.

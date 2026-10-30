@@ -3,7 +3,7 @@ package platform
 // The depth of a front story's latest version: how many distinct sources it
 // cites and how long its body is. The front page weighs importance by depth
 // so the paper does not lead with a one-source stub
-// (docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md).
+// (docs/archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md).
 // Both are read from the version manifest the front row already loads; no
 // capture or computer is read.
 

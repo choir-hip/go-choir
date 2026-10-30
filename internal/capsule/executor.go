@@ -795,7 +795,7 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 // also needs CAP_NET_ADMIN to bring up lo. The broker's
 // DropBrokerCapabilities clears it from the permitted and bounding sets once
 // the forwarder is listening, which clears it from the ambient set as well
-// (docs/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md).
+// (docs/archive/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md).
 func BrokerAmbientCaps(egress bool) []uintptr {
 	ambient := []uintptr{unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP, unix.CAP_DAC_OVERRIDE, unix.CAP_FOWNER, unix.CAP_CHOWN, unix.CAP_SETUID, unix.CAP_SETGID}
 	if egress {
@@ -2145,7 +2145,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		return nil, fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
 	}
 	if !hasAutoputer {
-		// Option A (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md):
+		// Option A (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md):
 		// a change with no binary input ships this computer's running
 		// binary, hashed and bound to the commit the capsule source is
 		// pinned to, instead of a capsule build.

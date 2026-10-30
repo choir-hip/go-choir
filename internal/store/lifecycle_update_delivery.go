@@ -18,7 +18,7 @@ import (
 // moves the delivery bookkeeping so at-least-once is provable and poison
 // packets die against the attempt cap instead of respawning the desk forever.
 //
-// Design receipt: docs/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
+// Design receipt: docs/archive/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
 // — bind at dispatch, consume at commit; bounded redelivery; owner-head armed
 // independently (it is not a packet and never appears in Items).
 

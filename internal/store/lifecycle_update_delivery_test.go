@@ -14,7 +14,7 @@ import (
 // exhausts at the cap, and consumption itself happens inside ApplyTextureTurn.
 // These tests pin the bookkeeping contract — no packet escapes pending without
 // a disposition, and the breaker event is exactly-once per command id.
-// Receipt: docs/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
+// Receipt: docs/archive/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
 
 func seedBoundProducerReport(t *testing.T, s *Store, start types.StartLifecycleRequest, updateID, producerUpdateID, deliveredToRunID string, attempts int) types.CoagentSourcePacket {
 	t.Helper()
@@ -243,7 +243,7 @@ func TestReconcileUpdateDeliveryForcedExhaust(t *testing.T) {
 // pending scan sees it again. Before the fix the reducer re-stamped
 // DeliveredAt=&now on unbind, so the freed packet failed the
 // DeliveredAt==nil filter in ListPendingLifecycleUpdates and never rebound.
-// Receipt: docs/problems/s0m-freed-control-never-rebinds-2026-10-03.md
+// Receipt: docs/archive/problems/s0m-freed-control-never-rebinds-2026-10-03.md
 func seedBoundControlPacket(t *testing.T, s *Store, start types.StartLifecycleRequest, updateID, producerUpdateID, deliveredToRunID, workItemID string, attempts int) types.CoagentSourcePacket {
 	t.Helper()
 	ctx := context.Background()

@@ -3,7 +3,7 @@
 Date: 2026-10-14. Station:
 [L2a](../definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md).
 Window: 06:51-12:51 UTC on the paper (computer-1355b83b…), scored in
-[l2a-after-window-1-2026-10-14.md](../evidence/l2a-after-window-1-2026-10-14.md)
+[l2a-after-window-1-2026-10-14.md](../../evidence/l2a-after-window-1-2026-10-14.md)
 (merge recall 0.174 = 8 of 46, 55 of 425 captures attributed, 31
 false-merge candidates). Status: documented; fixes follow in separate
 commits. Mutation class of this note: green.

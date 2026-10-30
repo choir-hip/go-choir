@@ -465,7 +465,7 @@ var MirrorClientKeys = []string{
 
 // cellExecEnv is the clean environment of an exec action: a safe baseline,
 // the build toolchain when the worker carries one
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // option B), then the payload's variables minus anything credential-shaped.
 // The payload comes last, so a cell may override a toolchain variable.
 func cellExecEnv(payloadEnv map[string]string, lookup func(string) (string, bool)) []string {

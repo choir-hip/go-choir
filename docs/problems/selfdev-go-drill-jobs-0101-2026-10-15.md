@@ -6,7 +6,7 @@ on staging build `e83735f2a` (exit 6: the scenario's claim failed). The build
 carries capsule jobs (`choir.Start`/`Poll`/`Stop`, job receipts, job wake;
 [design](../design/capsule-long-exec-2026-10-15.md)) and the Freeze
 receipt-slot fix
-([selfdev-freeze-receipts-refused](selfdev-freeze-receipts-refused-2026-10-15.md)).
+([selfdev-freeze-receipts-refused](../archive/problems/selfdev-freeze-receipts-refused-2026-10-15.md)).
 
 Evidence: owner trace bundle
 `~/.config/choir-qa/traces/selfdev-jobs-0101/` (`receipt.json`,

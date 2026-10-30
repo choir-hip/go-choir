@@ -15,7 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/calibration"
 )
 
-// Calibration level 2 (docs/reports/choir-mcp-precommitments-2026-10-14.md):
+// Calibration level 2 (docs/archive/reports/choir-mcp-precommitments-2026-10-14.md):
 // `choir precommit add|settle|list|calibration|import-ledger` write and read
 // an agent's calibrated claims on a Choir computer. Agent identity defaults
 // come from $CHOIR_AGENT, $CHOIR_MODEL, $CHOIR_SESSION and $CHOIR_PROJECT.

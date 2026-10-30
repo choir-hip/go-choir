@@ -15,7 +15,7 @@ import (
 // success between them, bench a provider. One empty result is usually the
 // query's doing (a narrow site: filter, a date the index lacks), not the
 // provider's; benching on it took healthy providers out for every caller
-// (docs/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md).
+// (docs/archive/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md).
 const EmptyStreakBeforeCooldown = 10
 
 // BackoffPolicy computes cooldown durations from outcome class and strike count.
@@ -24,7 +24,7 @@ type BackoffPolicy struct {
 	// MaxByClass bounds each class's backoff below MaxCooldown, so a
 	// transient fault (a rate limit, a malformed body) can never bench a
 	// provider for days, and an exhausted quota is probed every few hours
-	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	// (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 	MaxByClass  map[OutcomeClass]time.Duration
 	MaxCooldown time.Duration
 	Multiplier  float64
@@ -118,7 +118,7 @@ func (p BackoffPolicy) CooldownDuration(class OutcomeClass, strikeCount int) tim
 // UpdatedAt plus MaxByClass of the row's last failure class, and overall
 // at most UpdatedAt plus MaxCooldown. A deadline persisted under an older,
 // longer policy otherwise outlives the policy change that shortened it
-// (docs/problems/search-stale-cooldowns-outlive-policy-2026-10-15.md).
+// (docs/archive/problems/search-stale-cooldowns-outlive-policy-2026-10-15.md).
 // It never lengthens a deadline, and a class with no MaxByClass entry
 // (auth_error) is bounded by MaxCooldown only. UpdatedAt can be later than
 // the moment the bench was set, which only loosens the clamp.

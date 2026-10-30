@@ -21,7 +21,7 @@ import (
 
 // choir.Relate, the research desk's record of what a published story is
 // about (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice a;
-// design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// design docs/reports/related-stories-graph-design-2026-10-19.md
 // §3.2, §6 and §11 slice 1). A research cell has read the story and asked
 // System 1, per candidate entity, whether the story is centrally or
 // incidentally about it; this host step checks each attachment against the

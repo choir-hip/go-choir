@@ -4,7 +4,7 @@ Date: 2026-10-14, 06:04-06:10 UTC. Deploy 5e4b6fa7 (CI green; 231 of 231
 health probes 200; vmctl restarted 06:03:36 with
 `VM_HIBERNATE_MODE=snapshot`, `VM_SNAPSHOT_BUDGET_GIB=48`,
 `VM_BALLOON_FREE_PAGE_REPORTING=1`). Design:
-docs/reports/s3-snapshot-hibernate-design-2026-10-14.md. Probe:
+docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md. Probe:
 `scripts/s3_snapshot_probe.py`; receipt
 `~/.config/choir-qa/traces/s3/proof-1.json`.
 

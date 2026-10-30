@@ -16,7 +16,7 @@ databases). Nothing on Node B or staging was queried or changed; the only
 Node B contact was read-only (`systemctl show` for the Dolt binary path,
 `du` of the corpus directory, `journalctl` of corpusd).
 
-Companions: [claims-events-entities-ontology-2026-10-14.md](claims-events-entities-ontology-2026-10-14.md)
+Companions: [claims-events-entities-ontology-2026-10-14.md](../../reports/claims-events-entities-ontology-2026-10-14.md)
 (the ledger layer this retrieval serves),
 [search-is-duplicated-and-discarded-2026-10-14.md](../problems/search-is-duplicated-and-discarded-2026-10-14.md),
 [l2a-merge-recall-on-the-paper-2026-10-14.md](../problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
@@ -148,7 +148,7 @@ latency (checked: corpusd's journal for the last 2 h holds only lifecycle and
 artifact-GC lines). What exists:
 
 - JSON_EXTRACT full scans "~1.4 s/call under drain" (`dolt_store.go:150`;
-  [texture-latency-layered-evidence-2026-10-01](../problems/texture-latency-layered-evidence-2026-10-01.md)):
+  texture-latency-layered-evidence-2026-10-01):
   guest Dolt reads 7 ms idle, 1-3.7 s under desk drain; `engineMu` held ~97%
   of wall time over 5 minutes; `ListObjectsByMetadata` ~1.4 s/call,
   `ListObjects` ~1.6 s/call, `ReadObjectSnapshotFiltered` ~580 ms/call.

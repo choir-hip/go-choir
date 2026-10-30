@@ -34,7 +34,7 @@ import (
 // management_task is management's delegated intake task (S2a): every role
 // agentprofile registers must be here, or the post-cutover write guard
 // refuses its agent object
-// (docs/problems/s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
+// (docs/archive/problems/s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
 var v2LiveSet = map[string]bool{
 	"management": true, "engineering": true, "research": true,
 	"texture": true, "conductor": true, "processor": true,

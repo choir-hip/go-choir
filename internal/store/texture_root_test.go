@@ -2,7 +2,7 @@ package store
 
 // PD3 S1: the Texture root desk is the master document's own Texture desk,
 // named by an additive texture_root marker written by compare-and-set
-// (docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
+// (docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
 // fail, written before the code:
 //
 //   - the switch is missing, unknown to the allowlist, or on by default;

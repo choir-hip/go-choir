@@ -9,7 +9,7 @@ import (
 )
 
 // A second Firecracker build, chosen per computer at each launch (NET-08,
-// RES-16; P3 of docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
+// RES-16; P3 of docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
 //
 // VM_FIRECRACKER_BIN is one binary for the host, so a Firecracker bump
 // changes every computer in one deploy and refuses every hibernate snapshot

@@ -18,7 +18,7 @@ import (
 )
 
 // Calibration feedback: the in-context digest of the ICRL experiment
-// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 //
 // The runtime collects each desk's settled self-scores from the tape:
 //   - hypotheses a desk opened in its Casts (management, Texture), settled

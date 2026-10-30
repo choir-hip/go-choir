@@ -35,7 +35,7 @@ filesystem allows, else a full byte copy
   filesystems), each launch makes a full copy of the about 2.9 GB image, and
   the code only logs it (`confinement.go:656-658`).
 - No document records this cost. The security review assumes the image is
-  shared "as a read-only hard link" (`docs/reports/computer-isolation-security-review-2026-10-14.md:923-926`);
+  shared "as a read-only hard link" (`docs/archive/reports/computer-isolation-security-review-2026-10-14.md:923-926`);
   the code copies.
 
 ## Why it matters now

@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// F11 (docs/design/choir-event-table-f-c-2026-10-22.md section 3.6): the
+// F11 (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 3.6): the
 // vocabulary fences must see choir_events. The full pass reads both
 // object-row tables; the narrowed replay fence re-reads a replayed stamped op
 // from choir_events by tape position and never skips one it cannot find.

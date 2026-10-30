@@ -2,7 +2,7 @@
 **Date:** 2026-09-23 (rewritten for the desk-RLM rectification)
 **Classification:** Green Architecture Doctrine
 **Authority:** `docs/choir-doctrine.md`, `docs/agent-product-doctrine.md`,
-`docs/desk-rlm-rectification-plan-2026-09-23.md`
+`docs/archive/desk-rlm-rectification-plan-2026-09-23.md`
 
 ---
 

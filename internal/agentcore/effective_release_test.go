@@ -15,7 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-// P6 failure modes pinned here (docs/reports/p6-p8-release-adopt-2026-10-15.md):
+// P6 failure modes pinned here (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md):
 //   I1 /health reports the release the process started with after `current`
 //      moved;
 //   I2 a self-developed computer reports the base build's tree;

@@ -27,14 +27,14 @@ RAID1 pair (`nix/disks.nix`), which survives one disk failing. It does not
 survive losing the host (hardware, provider account, fire, a bad
 `nixos-rebuild`, an operator `rm`, ransomware) or a software error that
 damages both mirrors at once (the 2026-10-05 artifact GC deleting live
-bodies was exactly that class: `docs/problems/s0-gc-og-wrong-store-deletion-2026-10-05.md`).
+bodies was exactly that class: `docs/archive/problems/s0-gc-og-wrong-store-deletion-2026-10-05.md`).
 
 The only "backups" that have ever existed were on-node, temporary, and
 partial:
 
 - Dolt copies under `/var/tmp` taken before a risky step, kept until the
   step's soak ended, then deleted (the 48 GB pre-2.4.2 copy, the 2026-09-11
-  and 2026-10-03 copies; `docs/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md`).
+  and 2026-10-03 copies; `docs/archive/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md`).
   Same disk, same failure domain.
 - `s0-gc-og-wrong-store-deletion-2026-10-05.md`: "On-node backups cover
   dolt state, not `platform-artifacts`." The file-CAS bodies it lost were

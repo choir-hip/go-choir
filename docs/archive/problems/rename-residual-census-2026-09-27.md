@@ -60,7 +60,7 @@ reviewed and redone until excellent."
 | **Demoted verbs still live + prompt-taught.** §11.5 assigned cutting `Message`/`Outcome`/`Spawn`/`Assign` to R3b/R3c; all three settled stations closed without cutting or recording a deferral. | `internal/yaegikernel/choir.go:154-169` exports all four on every desk set; `rlm_engineering_runtime.yaml:51-53` teaches them; `broker.go` carries a process-local mock for `Assign` | HIGH — panel consensus (sol/codex/claude/gemini/glm53) |
 | **`report_to_texture` provenance drift.** R3c definition's falsifier says it must not remain a live management host tool; `tool_profiles.go:396-404` registers it anyway and mission-graph quietly re-rules the point without an owner-visible amendment. | `docs/archive/definitions/choir-management-live-cast-2026-09-26.md:104-106` vs `tool_profiles.go:390-404` | MEDIUM-HIGH |
 | **`Cast` ignores `to_desk` — every cast opens an Engineering assignment.** `IntentCast` passes `in.ToDesk` as `TargetDocID`; `openDelegatedCastAssignment` hardcodes `agentprofile.Engineering` | `internal/agentcore/rlm_reduce.go:776-784`, `engineering_assignment_runtime.go:435` | adjudicate: defect or engineering-only scope (plan §11 implies the latter) |
-| **Plan §1 premise falsified.** "Live vocabulary: already cut over" contradicts this census. | `docs/desk-rlm-rectification-plan-2026-09-23.md:22` | stale-mark needed |
+| **Plan §1 premise falsified.** "Live vocabulary: already cut over" contradicts this census. | `docs/archive/desk-rlm-rectification-plan-2026-09-23.md:22` | stale-mark needed |
 
 ### Class C — deferred by owner ruling (R5b)
 

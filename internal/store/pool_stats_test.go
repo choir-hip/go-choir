@@ -8,7 +8,7 @@ import (
 
 // PoolStats reports both one-connection pools' sql.DBStats, so the time
 // callers spend waiting for the store's only write connection shows without
-// a stall (docs/problems/paper-post-refresh-health-windows-2026-10-22.md).
+// a stall (docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md).
 // Ways it could fail: the read pool reported as the write pool; a wait that
 // gave up (context deadline) not counted; durations in the wrong unit.
 func TestStorePoolStatsCountsAWaitOnTheWriteConnection(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// Rerun 12 (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
+// Rerun 12 (docs/archive/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
 // a read-only Texture cell auto-committed a "no change" decision, and that
 // commit consumed the engineering result the model had not yet read. The
 // owner's document then said nothing had been built.

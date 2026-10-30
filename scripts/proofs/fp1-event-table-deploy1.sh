@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FP1 follow-up F-c, deploy 1 (inert) deployed proof: run telemetry in its own
-# table, docs/design/choir-event-table-f-c-2026-10-22.md section 4.1 and 6.3.
+# table, docs/archive/design/choir-event-table-f-c-2026-10-22.md section 4.1 and 6.3.
 #
 # Deploy 1 adds choir_events, the projector route, the union readers, the
 # witness rule and manifest class, and store schema epoch 2. No writer stamps

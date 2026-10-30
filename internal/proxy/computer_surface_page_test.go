@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-// docs/problems/recovering-computer-shows-raw-json-2026-10-09.md.
+// docs/archive/problems/recovering-computer-shows-raw-json-2026-10-09.md.
 // Failure modes pinned: a browser page load shows raw JSON; the page never
 // retries; API callers lose the structured refusal.
 func TestComputerSurfaceResolveErrorIsAPageForBrowsers(t *testing.T) {
@@ -46,7 +46,7 @@ func TestComputerSurfaceResolveErrorIsAPageForBrowsers(t *testing.T) {
 	}
 }
 
-// docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md
+// docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md
 // (owner ruling: recovery is automatic). Failure modes pinned: the page asks
 // the owner to restart; it stops checking.
 func TestComputerSurfaceUnansweringComputerRestartsByItself(t *testing.T) {

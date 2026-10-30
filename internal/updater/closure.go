@@ -541,7 +541,7 @@ func sha256Hex(b []byte) [32]byte { return sha256.Sum256(b) }
 // self-development release lists its layer's own frontend this way, so the
 // release manifest names exactly the frontend the release dir serves and the
 // checkpoint's frontend identity is derivable from it
-// (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md). A symlink
+// (docs/archive/problems/layered-checkpoint-identity-gate2-2026-10-10.md). A symlink
 // or an empty subtree refuses: the manifest cannot name either.
 func ExtractClosureSubtree(blob []byte, storeBase, subdir, targetDir string) ([]ManifestFile, error) {
 	subdir = strings.Trim(filepath.ToSlash(filepath.Clean(subdir)), "/")

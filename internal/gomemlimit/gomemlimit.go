@@ -1,7 +1,7 @@
 // Package gomemlimit sets a soft Go memory limit for the guest daemon and its
 // desk-session workers, derived from guest RAM.
 //
-// Why (docs/reports/lr-guest-memory-return-2026-10-14.md): nothing bounds
+// Why (docs/archive/reports/lr-guest-memory-return-2026-10-14.md): nothing bounds
 // memory inside a guest. Without a limit the Go GC lets a heap grow to twice
 // its live size before collecting, and every page the guest touches is held
 // by the host (free page reporting returns only what the guest frees). A soft

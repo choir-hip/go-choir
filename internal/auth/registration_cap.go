@@ -9,7 +9,7 @@ import (
 )
 
 // A first cap on sign-ups, with a waitlist (L4-03; P7 of
-// docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
+// docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
 //
 // Every registered user gets a computer on Node B at first use, and the only
 // limit today is host memory admission, which refuses a start after the

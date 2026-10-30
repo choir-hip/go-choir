@@ -184,7 +184,7 @@ updates in turn. The paper computer's idle gaps will tell.
 ## S3, fast resume: status
 
 Not started. Cold boot to healthy is 7 to 11 s across the fleet
-(`docs/evidence/o7-boot-cost-vs-history-2026-10-09.md`), so a snapshot
+(`docs/archive/evidence/o7-boot-cost-vs-history-2026-10-09.md`), so a snapshot
 resume mostly buys **keeping work alive across a reclaim**, not speed.
 Prerequisites: S1's remaining items, Firecracker's API socket, and a
 quiescence fence (today the guest's planned-restart endpoint only answers

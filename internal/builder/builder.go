@@ -8,7 +8,7 @@
 // The builder runs on the host (Node B), where `nix` is present and the
 // store is writable. A privileged-builder-capsule was rejected because
 // every capsule is NS_USER+NEWNET confined with a forced read-only
-// /nix/store (docs/problems/s2-builder-substrate-2026-10-04.md).
+// /nix/store (docs/archive/problems/s2-builder-substrate-2026-10-04.md).
 package builder
 
 import (

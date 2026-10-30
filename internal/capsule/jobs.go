@@ -125,7 +125,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	}
 	// A memory need takes the job's lease share first (the hook; it may
 	// raise the live budget), then raises the capsule against that budget
-	// (docs/reports/memory-hotplug-controller-design-2026-10-14.md section 9).
+	// (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md section 9).
 	if admit != nil {
 		release, err := admit(caps.ID, spec)
 		if err != nil {

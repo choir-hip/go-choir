@@ -11,7 +11,7 @@ import (
 )
 
 // ogKindTextureRoot names the computer's master document (PD3 S1,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). The master is
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). The master is
 // an ordinary Texture document created by the ordinary create path; its own
 // desk, texture:<master>, is the Texture root, so no write check changes.
 // One marker per owner and computer, written only by compare-and-set: the

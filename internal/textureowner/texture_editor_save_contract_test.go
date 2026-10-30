@@ -12,7 +12,7 @@ import (
 // handler decodes strictly (DisallowUnknownFields) and always writes a
 // user-authored revision, so the client must not send authorship fields.
 //
-// Failure modes this pins (docs/problems/surface-broken-calls-2026-10-14.md):
+// Failure modes this pins (docs/archive/problems/surface-broken-calls-2026-10-14.md):
 //   - the editor sends author_kind/author_label and every Save gets 400;
 //   - the server starts accepting client-chosen authorship (it must not: the
 //     public route writes user revisions only);

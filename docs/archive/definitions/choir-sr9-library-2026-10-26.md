@@ -208,7 +208,7 @@ boundaries:
   authority_sources:
     - owner 2026-10-26 statements quoted in the header
     - owner rulings 2026-10-24 18:5x and 19:0x (first-pass ledger) on updates, the Updates app, Q1 to Q5
-    - owner 2026-10-14 distribution plan (docs/reports/selfdev-update-architecture-2026-10-15.md:46-71)
+    - owner 2026-10-14 distribution plan (docs/archive/reports/selfdev-update-architecture-2026-10-15.md:46-71)
     - SR8 staged auto-approve (metamission station note)
     - the readiness metamission spine
   must_preserve:
@@ -319,7 +319,7 @@ receipts: []
 # SR9: the Choir Library
 
 The design is
-[docs/design/library-package-propagation-2026-10-26.md](../design/library-package-propagation-2026-10-26.md).
+[docs/design/library-package-propagation-2026-10-26.md](../../design/library-package-propagation-2026-10-26.md).
 Its section 17 is the step list this station runs, in order, each step
 landed alone behind its switch with its deployed proof on T-A
 (`computer-6c50d6e566143ae32cdb660faa60e24d`), T-B and T-C (b@c computers

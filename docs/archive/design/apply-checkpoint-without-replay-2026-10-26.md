@@ -6,7 +6,7 @@ fix commits on `lane/apply-replay-bound` (7f3a8e1c2 tests, 131567413 fix) bound
 the replay (scratch on the data volume, admission, in-flight watch, stale-root
 removal at start, a named hold); they are kept as the guard for the manual
 replay paths, not proposed as the answer.
-Problem record: [apply-checkpoint-replay-fills-guest-tmp-2026-10-26](../problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
+Problem record: [apply-checkpoint-replay-fills-guest-tmp-2026-10-26](../../problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
 
 ## The owner's questions, answered first
 
@@ -73,7 +73,7 @@ rebuild it.
 
 - 2026-08-13, `6b28999e2` "bind checkpoint witness and refuse platform/cycle
   restore (red)", under the tape-recovery Definition
-  ([archive/choir-tape-recovery-2026-08-13.md](../archive/choir-tape-recovery-2026-08-13.md)).
+  ([archive/choir-tape-recovery-2026-08-13.md](../choir-tape-recovery-2026-08-13.md)).
   Its action (line 40): "Refuse checkpoint creation while any behavior-bearing
   VM-local row is not event- or receipt-derivable"; proves (line 41): "A
   checkpoint that cannot be rebuilt from the tape is not recorded; the witness
@@ -87,7 +87,7 @@ rebuild it.
 - 2026-10-14, `59530c2f2`, the first commit of `bindCheckpointAtHead` and
   `openReplayProbe`: bind the head and the witness under one append hold,
   because a busy computer's checkpoint named one head and witnessed another
-  ([selfdev-go-drill-jobs-0101-2026-10-15](../problems/selfdev-go-drill-jobs-0101-2026-10-15.md),
+  ([selfdev-go-drill-jobs-0101-2026-10-15](../../problems/selfdev-go-drill-jobs-0101-2026-10-15.md),
   item 1).
 
 Provenance (standing question 1): derivability-at-bind is an orchestrator
@@ -125,7 +125,7 @@ proof.
   12:3x); the second append hold; minutes in `materializing` (planned-boot
   work waits on it, `actorruntime/handler.go:61-81`). Also removed: the
   apply-time eligibility refusal that ordinary stock-app use triggers
-  ([stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24](../problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md)):
+  ([stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24](../../problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md)):
   an underived table would now mark the checkpoint `not_derivable`, visible,
   instead of blocking every apply.
 - **Unchanged:** the witness value and digest, route projection, rollback,
@@ -479,7 +479,7 @@ signal. (b) "One per day for 7 days" is a new selection rule inside artifact GC
 (`projectionBasePins`), which today keeps the newest two bases per computer,
 every pin and in-flight seeds; it needs day buckets and a join to the verdict
 table, in a protected surface with its own history
-([platform-artifact-retention-2026-10-22](../problems/platform-artifact-retention-2026-10-22.md)).
+([platform-artifact-retention-2026-10-22](../../problems/platform-artifact-retention-2026-10-22.md)).
 (c) "An unverified or `not_derivable` base is removed once a newer verified one
 exists" confuses the base (always tape-derived, a valid replay start) with the
 checkpoint's live witness (what the verdict judges); it needs a ruling on what

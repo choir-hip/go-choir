@@ -9,7 +9,7 @@ import (
 )
 
 // The automatic checkpoint cadence per computer (X1 slice 3,
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md, F6; review 329).
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, F6; review 329).
 // The guest compiles the cadence off. The computers this selector names run it,
 // with the host's values:
 //

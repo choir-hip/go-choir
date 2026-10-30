@@ -31,7 +31,7 @@ start:
       Apps are compiled into one SPA bundle via a static registry and app
       backends into the one autoputer binary; a new app currently requires
       rebuilding both monoliths
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:116-118).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:116-118).
     - >-
       The frontend registry is a static APP_REGISTRY whose entries use source
       imports and whose launcher projections and app lookup derive from that
@@ -134,8 +134,8 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission, S7 app-packages intent (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:581-583)
-    - owner-ratified two-layer app-release architecture (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437,479-489)
+    - owner-ratified metamission, S7 app-packages intent (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:581-583)
+    - owner-ratified two-layer app-release architecture (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437,479-489)
     - docs/choir-doctrine.md
     - docs/computer-ontology.md
   must_preserve:
@@ -159,12 +159,12 @@ boundaries:
       Package disable and purge are deliberately added lifecycle scope: they
       make package divergence reversible rather than leaving enabled code
       outside the pinned-head contract
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343).
     - >-
       Package app-data migration compatibility and interruption recovery are
       deliberately added scope: release restore must cover package state, and
       S10's curated seed data makes unversioned package schemas non-portable
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343,602-604).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:341-343,602-604).
   heresy_delta:
     discovered: >-
       Static registry entries and monolithic release contents cannot represent
@@ -224,7 +224,7 @@ now:
     status: proposal
     evidence_ref: >-
       S7 intent and two-layer design
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:479-489,581-583).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:479-489,581-583).
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
@@ -335,7 +335,7 @@ data-flow rule are defined once in S4 ("Egress capability model"). S7 adds:
 The manifest's `egress` and `ingress` blocks, the install and upgrade
 approval rules, and the rule that ingress always lands on a host service and
 reaches the desk as records are in
-[app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md) (NET-10).
+[app-agent-network-policy-2026-10-21.md](../../design/app-agent-network-policy-2026-10-21.md) (NET-10).
 
 ## Owner direction, 2026-10-14: convert the existing apps first
 
@@ -362,7 +362,7 @@ Owner notes §5 and §36: each app agent is its own RLM desk, app agents get
 their own desks, and many more app desks are coming (Mail, Calendar,
 Slides, a video editor). The manifest above has no desk component, and the
 email desk design
-([agentic-email-desk-2026-10-14.md](../reports/agentic-email-desk-2026-10-14.md))
+([agentic-email-desk-2026-10-14.md](../../reports/agentic-email-desk-2026-10-14.md))
 never mentions packages, so the two plans are related but not yet joined.
 When S7-0 is designed:
 
@@ -376,10 +376,10 @@ When S7-0 is designed:
 
 Design of the join, with the fields it needs from the desk manifest and the
 failure modes of the install:
-[app-package-carries-app-desk-2026-10-21.md](../design/app-package-carries-app-desk-2026-10-21.md).
+[app-package-carries-app-desk-2026-10-21.md](../../design/app-package-carries-app-desk-2026-10-21.md).
 
 Items ARCH-01 to ARCH-05 of the
-[security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md) track
+[security, density and architecture checklist](../../security-density-architecture-checklist-2026-10-21.md) track
 this. Still owed in this file: owner ruling D1 (whether a package is
 installed is a tape fact, not part of the release closure; owner notes §23)
 and the edits listed in `choir-lp-s6-commit-gate-2026-10-20.md:391-397`.

@@ -8,7 +8,7 @@ import (
 // cellEgressLog collects the per-call egress rows of one desk cell so they
 // are appended once, inside the cell's desk.cell event, instead of as one
 // desk.egress event each (journal cut R4,
-// docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md).
+// docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md).
 //
 // The rows have the same fields the standalone desk.egress events had, so a
 // reader that takes a row out of a cell event reads what it read before. A row

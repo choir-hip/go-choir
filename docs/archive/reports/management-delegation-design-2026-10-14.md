@@ -257,7 +257,7 @@ engineering assignment without a capsule:
   so it shows in `/api/runs`, in the trace and in `/api/costs`. This is
   cut 1's L5 shape ("child runs leave events, report only to the parent
   inbox, and the parent cell does not block on them",
-  `docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md:139`).
+  `docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md:139`).
   Research children today are not this: no run record, results returned
   to a parent cell that blocks on `wg.Wait()`
   (`internal/agentcore/research_children.go:133-135`, `:154-172`).
@@ -601,7 +601,7 @@ Consequences:
   minute). At about 2 minutes per intake task, about 1 task runs on
   average, so K = 4 leaves room for answer tasks and bursts.
 - **Memory.** A desk worker costs about 17 MiB private
-  (`docs/evidence/guest-memory-split-balloon-2026-10-14.md`). K = 4 tasks
+  (`docs/archive/evidence/guest-memory-split-balloon-2026-10-14.md`). K = 4 tasks
   add about 68 MiB at peak, released at task end. The daemon's per-run
   memory is unmeasured (hypothesis: small next to its 690 MiB).
 - **Model calls.** The gateway allows 60 calls a minute per computer
@@ -612,7 +612,7 @@ Consequences:
   split is open decision O5.
 - **No spend caps.** These bounds limit concurrency for memory and the
   rate limit. They never refuse or cap model spend (owner ruling,
-  `docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md:253-255`).
+  `docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md:253-255`).
 
 ## 8. Restart semantics
 
@@ -659,7 +659,7 @@ Consequences:
 
   This gives an always-busy paper a bounded way to become idle, which the
   open problem in
-  `docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`
+  `docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`
   ("how an always-busy computer takes updates") needs. Who requests the
   drain (the deploy's refresh) is the owner's deploy-shape decision (O6).
   S2 does not depend on it.
@@ -683,7 +683,7 @@ Consequences:
   event as story X" could be fed by a system act with no model call, and
   tasks would handle only new and uncertain captures. That changes L2a's
   settled "labels are advice, management decides"
-  (`docs/reports/l2a-synthesis-intake-design-2026-10-14.md:73-77`, "Labels are
+  (`docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md:73-77`, "Labels are
   advice; management decides"), so it
   is the owner's call (O3) and not in the slices. If the owner rules it in,
   it is the proposed destination after S4 (R2-22). S4's standing route is

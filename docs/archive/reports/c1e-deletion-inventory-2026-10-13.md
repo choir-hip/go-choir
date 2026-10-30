@@ -1,7 +1,7 @@
 # C1e inventory: work items, packets and path B (2026-10-13)
 
 Read-only inventory on main 18d01cc0 for station C1e of the re-engineering
-metamission (scope: `docs/definitions/choir-reeng-cut1-authority-2026-10-12.md`,
+metamission (scope: `docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md`,
 `scope_split`). Counts are matching lines per file (`grep -c`), production
 code only; test files and `.claude/worktrees/` copies are excluded, and the
 deletion gate must exclude those copies too.

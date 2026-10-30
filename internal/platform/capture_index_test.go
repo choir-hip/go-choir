@@ -16,7 +16,7 @@ import (
 )
 
 // The capture projection (problem record
-// docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+// docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 // Failure modes guarded here, written before the code:
 //   5. the migration is not idempotent, or a re-run repeats work;
 //   7. a failed projection write, a lost table, or captures written before

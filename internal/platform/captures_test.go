@@ -31,7 +31,7 @@ func (f fakeGuestLookup) LookupGuestContext(_ context.Context, remoteAddr string
 	return &vmctl.GuestOwnership{Found: false}, nil
 }
 
-// W1b2 (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// W1b2 (docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // captures are shared content in Store B. Failure modes pinned: a body
 // reaches a Dolt row; a guest writes captures owned by another computer; the
 // metadata names a body that is not on disk; a re-poll writes duplicates; a

@@ -415,7 +415,7 @@ what changes, and the later record that checks the change.
 
 ## Records (round 0e, FP0, committed 2026-10-29 about 21:00 UTC; the commit is the witness)
 
-From the host storage audit (docs/evidence/node-b-storage-inventory-2026-10-29.md),
+From the host storage audit (docs/archive/evidence/node-b-storage-inventory-2026-10-29.md),
 before the census and before any retention change.
 
 **R0e-01.** In the census, `event_json` plus the rest of

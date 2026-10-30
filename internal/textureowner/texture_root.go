@@ -1,7 +1,7 @@
 package textureowner
 
 // The Texture root desk (PD3 S1,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). The root is
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). The root is
 // not a new agent: it is the Texture desk of the computer's master document,
 // texture:<master>, created by the ordinary create path and named by the
 // texture_root marker. Every write check is the one each Texture already

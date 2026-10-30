@@ -8,7 +8,7 @@ review:
   reviewer: none (owner approved the v5 outline 2026-10-05; file-level panel pending)
   frozen_ref: none
   verdict: none
-  evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md ("v5 plan" -> SA)
+  evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md ("v5 plan" -> SA)
 
 start:
   captured_at: '2026-10-05T00:00:00Z'
@@ -163,7 +163,7 @@ now:
     restart with migration minted ~=0 and storm absent, then SMG legs.
     OPENING DEFECT FIELD (slice 1 starts here):
     (RESOLVED 2026-10-07 — owner VM boot loop unblocked):
-    docs/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md
+    docs/archive/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md
     — projection base watermark was stale at seq 148431 (recovery tail
     423720 > MaxRecoveryTailEvents 10000). Replay of all 572,151 events
     completed via choir-rebuild-base --source http (DiskEventSource
@@ -219,7 +219,7 @@ now:
     DEPLOYED ACCEPTANCE RESIDUAL: ca8c8c18 pushed 2/2 "healthy" but the
     owner canary's apply failed with updater health-probe 503 and
     rolled back — the push gate is not commit-bound
-    (docs/problems/app-layer-push-health-gate-not-commit-bound-2026-10-07.md,
+    (docs/archive/problems/app-layer-push-health-gate-not-commit-bound-2026-10-07.md,
     deterministic on retry). Behavioral proof on the owner computer is
     blocked by that platform-update fence defect; vm-48bc0981 runs the
     fix but has no API key for driving a delegated cast.
@@ -289,9 +289,9 @@ now:
     evidence_refs:
       - internal/objectgraph/dolt_store.go:62-66
       - internal/store/dolt_maintenance.go:290-310
-      - docs/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md
+      - docs/archive/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md
       - docs/problems/guest-vm-embedded-dolt-memory-starved-2026-10-01.md
-      - docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md
+      - docs/archive/problems/s0m-management-live-occurrence-storm-2026-10-03.md
       - internal/store/lifecycle.go:965 (MigrateActorWakeOutbox re-arms on every boot)
       - internal/agentcore/runtime.go:2588
   decision:

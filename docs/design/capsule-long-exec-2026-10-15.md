@@ -4,14 +4,14 @@ Date: 2026-10-15. Mutation class: **orange** (capsule runtime behavior),
 with red-adjacent edges named in §6. Branch `feat/capsule-long-exec`.
 
 The substrate fix named in
-[selfdev-freeze-receipts-refused-2026-10-15.md](../problems/selfdev-freeze-receipts-refused-2026-10-15.md)
+[selfdev-freeze-receipts-refused-2026-10-15.md](../archive/problems/selfdev-freeze-receipts-refused-2026-10-15.md)
 (option D, and its clustering assessment: three drill failures since
 2026-10-14 share the cost of the Go build inside a capsule whose exec model
 is 30 s commands in 60 s cells). `choir.Exec` is killed at 30 s
 (`yaegikernel.DefaultExecTimeout`, exit -1) and a cell at 60 s, so a
 self-development change that touches Go cannot build `bin/autoputer`
 (minutes, a 2 GiB-peak link) or run `go test`. This blocks Station A of
-[selfdev-update-architecture-2026-10-15.md](../reports/selfdev-update-architecture-2026-10-15.md).
+[selfdev-update-architecture-2026-10-15.md](../archive/reports/selfdev-update-architecture-2026-10-15.md).
 
 This note records the design, the failure modes written before the code,
 and the residuals. It reuses the mechanics of the Claude delegate's

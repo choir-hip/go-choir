@@ -17,7 +17,7 @@ import (
 // The out-of-memory leg of the isolation self-test (SDC RES-01, RES-02): the
 // deployed proof that a runaway cell is killed by its worker's cgroup and
 // not by the kernel's choice of the daemon
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 //
 // The deployed desks refuse to run a deliberate runaway on a prompt
 // (docs/problems/fp2-step4-deployed-oom-not-drivable-desk-refuses-runaway-2026-10-22.md),

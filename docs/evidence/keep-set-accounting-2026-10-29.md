@@ -291,7 +291,7 @@ rebuildable inside that: proj_capture_* and og_lookup_keys (~0.17 GB).
 
 ## 7. Everything else (disposable or derived), side by side
 
-Sizes from [the inventory](node-b-storage-inventory-2026-10-29.md) (du, taken
+Sizes from [the inventory](../archive/evidence/node-b-storage-inventory-2026-10-29.md) (du, taken
 earlier today) and the later receipts; the root fs is now 358 GB used, 110 GB
 free (77%) [V `df`]. Not additive (hardlinks, reflinks).
 

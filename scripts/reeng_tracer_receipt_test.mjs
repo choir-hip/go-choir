@@ -1,7 +1,7 @@
 // node --test scripts/reeng_tracer_receipt_test.mjs
 //
 // The tracer's receipt across a kill
-// (docs/problems/tracer-killed-leaves-computer-running-2026-10-15.md).
+// (docs/archive/problems/tracer-killed-leaves-computer-running-2026-10-15.md).
 // Ways the repair could fail, written before the code:
 //  - K1 a SIGKILL leaves nothing: the receipt on disk must already hold the
 //    minted computer id while the run is in progress;

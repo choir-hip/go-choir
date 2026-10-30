@@ -22,16 +22,16 @@ how do we test it? It builds on the following and does not repeat them:
 
 - [the computer isolation security review](computer-isolation-security-review-2026-10-14.md),
   which has the threat model, live Node B evidence, and findings F1 to F13;
-- [the isolation runtimes research](../research/isolation-runtimes-2026-10-14.md);
+- [the isolation runtimes research](../../research/isolation-runtimes-2026-10-14.md);
 - the problem records
-  [firecracker-runs-as-root-without-jailer](../problems/firecracker-runs-as-root-without-jailer-2026-10-14.md),
-  [desk-cells-run-as-guest-root-and-egress-is-open](../problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md),
-  [loopback-is-a-credential](../problems/loopback-is-a-credential-2026-10-14.md)
+  [firecracker-runs-as-root-without-jailer](../../problems/firecracker-runs-as-root-without-jailer-2026-10-14.md),
+  [desk-cells-run-as-guest-root-and-egress-is-open](../../problems/desk-boundary-residuals-2026-10-21.md),
+  [loopback-is-a-credential](../../problems/loopback-is-a-credential-2026-10-14.md)
   and
   [guest-can-arm-own-selfdev-mode](../problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
 
 The principal-identity design
-(`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`) had not
+(`docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md`) had not
 landed on `origin/main` when this was written (checked 2026-10-15). The
 key assignments below are therefore this report's proposal, to be
 reconciled with that design when it lands.
@@ -371,7 +371,7 @@ deployed).**
 - **Admits AF_INET6 in L2 capsules**, which is the socket family
   CVE-2026-53362 needs.
 - **The guest kernel version decides the rest.** Evidence from 2026-10-01
-  shows guests on **6.18.37** (`docs/evidence/s0a-guest-layout-2026-10-01.json:174`),
+  shows guests on **6.18.37** (`docs/archive/evidence/s0a-guest-layout-2026-10-01.json:174`),
   one release before the 6.18.38 fix. The S3 design cites a 6.18.45
   config. Which kernel runs in guests now must be read from a live guest.
 
@@ -1093,8 +1093,8 @@ Repository (at 795e085bb unless noted):
   `cmd/auth/main.go`; `internal/keyescrow/keyescrow.go`
 - Docs: the security review, isolation runtimes, the four problem records
   linked at the top, `docs/reports/owner-notes-2026-10-14.md` §17 and
-  §18, `docs/reports/computer-cpu-efficiency-2026-10-14.md`, and
-  `docs/evidence/s0a-guest-layout-2026-10-01.json`
+  §18, `docs/archive/reports/computer-cpu-efficiency-2026-10-14.md`, and
+  `docs/archive/evidence/s0a-guest-layout-2026-10-01.json`
 
 MicroVM, VMM and KVM:
 

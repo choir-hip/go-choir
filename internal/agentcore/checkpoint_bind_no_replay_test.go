@@ -1,7 +1,7 @@
 package agentcore
 
 // The checkpoint bind without a replay
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 and 4.6
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 and 4.6
 // slice 1). The bind reads the head and the live witness under one append
 // hold and publishes. It installs no snapshot, replays no tape and writes no
 // scratch: the replay proved derivability early, and

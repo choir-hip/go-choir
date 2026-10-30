@@ -103,7 +103,7 @@ captured with the existing snapshot path
 Restoring many machines from one template shares its memory pages
 copy-on-write. Shared pages between tenants are the side channel DEC-05
 names (same class as KSM; Flush+Reload on shared pages,
-`docs/reports/computer-isolation-security-review-2026-10-14.md:1125`).
+`docs/archive/reports/computer-isolation-security-review-2026-10-14.md:1125`).
 **DEC-05's default stands:** a template is per tenant (captured for that
 tenant, restored only for that tenant's leases), or the machine cold boots.
 A cross-tenant template is a later option only if the owner rules DEC-05

@@ -27,7 +27,7 @@ func (paperGuest) LookupGuestContext(context.Context, string) (*vmctl.GuestOwner
 	return &vmctl.GuestOwnership{Found: true, UserID: "owner-1", ComputerID: "computer-1"}, nil
 }
 
-// W1b2 (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// W1b2 (docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // research polls one registry source into shared web_capture objects in the
 // store behind corpusd, never this computer's own graph. Failure modes
 // pinned: a capture lands in the guest instead of the shared store; a re-poll

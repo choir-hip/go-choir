@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station LU of the ledger metamission
-# (docs/definitions/choir-ledger-metamission-2026-10-13.md): guest updates.
+# (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): guest updates.
 # Owner 2026-10-14, in session: "we do have to just improve the updating
 # system in general. Like, I want to be pushing safe updates out to guest
 # computers. And similarly, I think this is going to relate to the
@@ -17,7 +17,7 @@ definition_version: 4
 # Changelog. Round 1 (346d968c): first draft. Round 2: a convergent panel
 # (claude, gemini, glm, muse, deepseek accept with repairs; gpt-6-luna
 # send_back) adjudicated in
-# docs/reports/lu-guest-updates-adjudication-2026-10-14.md; every blocking
+# docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md; every blocking
 # finding adopted. Slices re-cut: LU1a (host-only retry) and LU2 first,
 # then LU1b (drain), LU3a (rings), LU3b (probation and rollback), LU5, LU4
 # only if measured. Acceptance re-scoped (the 60-minute lag is conditional
@@ -61,9 +61,9 @@ slices:
 
 review:
   reviewer: agentic-consensus convergent round 4 on b158b954, per slice (claude, omp-gemini38, omp-glm53-flash, omp-deepseek-v41-flash, omp-gpt6-luna; omp-muse-spark timed out at 1800 s). LU1a 3 accept, 2 accept with repairs; LU2 2 accept, 2 accept with repairs, 1 send_back (its blocker, V7, adopted); LU3a 2 accept, 3 with repairs; LU3b 3 accept, 2 with repairs; LU4 5 accept; LU1b 5 send_back; LU5 3 accept, 1 with repairs, 1 send_back. Earlier rounds 3 (7ccc5ded), 2 (cca944f7) and 1 (346d968c) were each send_back
-  frozen_ref: commit b158b954 (round 4); round-5 repairs (V1-V19) adopted after the round, as for L1 (docs/definitions/choir-ledger-l1-restart-2026-10-13.md review)
+  frozen_ref: commit b158b954 (round 4); round-5 repairs (V1-V19) adopted after the round, as for L1 (docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md review)
   verdict: accept (scoped to LU1a, LU2, LU3a, LU3b, LU4); send_back for LU1b and LU5
-  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md, section "Round 4 (per slice)" (raw outputs in the session scratchpad panel-lu/round4/)
+  evidence_ref: docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md, section "Round 4 (per slice)" (raw outputs in the session scratchpad panel-lu/round4/)
 
 start:
   captured_at: 2026-10-14T10:47:00Z
@@ -104,13 +104,13 @@ start:
       10-14, was not refreshed after intake.labels went on (06:50), and
       took e3437f1c only through an owner-approved manual refresh that ran
       as a crash boot and closed its in-flight runs
-      (docs/evidence/owner-approved-refreshes-2026-10-14.json).
+      (docs/archive/evidence/owner-approved-refreshes-2026-10-14.json).
     - >-
       At 05:48 UTC the paper's refresh crossed work-state epoch 1 -> 2 (C1e
       B1); the guest read the planned restart as a crash
       (internal/agentcore/planned_restart.go:133-136) and closed all 14
       schedules for about an hour
-      (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
+      (docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
       Schedules now survive crashes (ce59d406); runs, rounds and pending
       arrivals still close.
     - >-
@@ -330,7 +330,7 @@ standing_questions:
   q3_deletion_citers: >-
     LU1a removes CI's per-computer refresh loop; its citers are
     .github/scripts/deploy-workflow-contract-test and the receipt mapping
-    recorded in docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md,
+    recorded in docs/archive/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md,
     both updated in the same commit. LU1b replaces the hibernate
     fence's single flag with reasons; citers are hibernate.go, the actor
     handler and their tests. LU2 replaces the marker's epoch check; citers
@@ -419,12 +419,12 @@ now:
     delta_o: the guest reports why it refused (executing run ids, roots, kinds, ages), so a refusal names its cause
     scope_if_supported: the live paper and the owner's computer on staging
     status: proposed
-    evidence_refs: [docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md, docs/evidence/owner-approved-refreshes-2026-10-14.json, docs/reports/lu-guest-updates-adjudication-2026-10-14.md]
+    evidence_refs: [docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md, docs/archive/evidence/owner-approved-refreshes-2026-10-14.json, docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md]
   decision:
     what: "LU1a and LU2 now; LU3a after them; LU1b after the structural decision; LU3b after L1c, L1b and LU1b; LU5 after its design round; LU4 only if O5 rules it in; defaults of design §6 until the owner rules"
     kind: operational
     status: proposal
-    evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md
+    evidence_ref: docs/archive/reports/lu-guest-updates-adjudication-2026-10-14.md
     owner_ratification_ref: "owner 2026-10-14 in session approved the station and its six-point direction; O1-O3b, O5, O7-O10 open"
   belief:
     believed_state: >-

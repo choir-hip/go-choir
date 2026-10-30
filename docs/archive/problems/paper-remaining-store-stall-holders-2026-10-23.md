@@ -14,9 +14,9 @@ to the `/health` probe files; an env-gated census test on a seeded local
 Dolt store). Records cited, not repeated, for the GC:
 [paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md)
 (GC holds the one write connection; time about 16.6 s per GiB),
-[paper-unreachable-minutes-after-every-boot-2026-10-22.md](paper-unreachable-minutes-after-every-boot-2026-10-22.md)
+[paper-unreachable-minutes-after-every-boot-2026-10-22.md](../../problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md)
 (F2, H4: the first pass after a boot),
-[paper-post-refresh-health-windows-2026-10-22.md](paper-post-refresh-health-windows-2026-10-22.md)
+[paper-post-refresh-health-windows-2026-10-22.md](../../problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md)
 (the four 503 bursts inside GC windows, the holder log's origin),
 [guest-dolt-storage-growth-2026-10-15.md](guest-dolt-storage-growth-2026-10-15.md)
 (FM5, online GC and sessions).
@@ -398,7 +398,7 @@ longer. **[H]**
 page for the rest of the family. (c) Start the pass after the boot's other
 reads settle (the `ListObjects` seed and the first GC are inside the same
 window, see
-[boot-reads-with-the-seed-shape-2026-10-23.md](boot-reads-with-the-seed-shape-2026-10-23.md)).
+[boot-reads-with-the-seed-shape-2026-10-23.md](../../problems/boot-reads-with-the-seed-shape-2026-10-23.md)).
 One sample in thirty minutes and once a boot: not the next fix.
 
 ## 3. `selfdev.(*Store).ListByStates` is `/health`'s own read

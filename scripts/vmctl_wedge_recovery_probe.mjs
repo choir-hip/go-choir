@@ -1,5 +1,5 @@
 // vmctl wedge recovery acceptance (owner ruling 2026-10-10,
-// docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md):
+// docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md):
 // a computer that stops answering recovers by itself, with no owner action.
 //
 // The probe freezes a disposable guest's Firecracker process (SIGSTOP), so the

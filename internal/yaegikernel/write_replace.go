@@ -18,7 +18,7 @@ import (
 // open(O_WRONLY|O_TRUNC) on an existing file fails with EACCES even for the
 // namespace's root. Directories are 0777, so creating and renaming entries is
 // allowed; the replace edits the file without loosening the lower tree
-// (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
+// (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
 //
 // perm is used for a new file. When explicitMode is false and the replace path
 // runs, the replacement keeps the old file's permission bits plus owner-write,

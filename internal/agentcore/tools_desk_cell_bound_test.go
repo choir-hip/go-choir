@@ -15,7 +15,7 @@ import (
 // On the paper (2026-10-16) a management cell with timeout_ms=1000 was
 // killed after running 3 ms: the bound started before the host read the
 // cell's pending updates and emits, and that second went to the cell
-// (docs/problems/desk-cell-timeout-counts-host-prep-2026-10-16.md).
+// (docs/archive/problems/desk-cell-timeout-counts-host-prep-2026-10-16.md).
 //
 // Ways this could fail, written first:
 //  1. host preparation slower than the bound kills a cell that has not run;

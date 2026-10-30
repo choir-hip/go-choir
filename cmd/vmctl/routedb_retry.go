@@ -36,7 +36,7 @@ func sleepContext(ctx context.Context, d time.Duration) bool {
 // behaviour was log.Fatalf on the first failed ping: on 2026-10-15 a stalled
 // platform Dolt made vmctl exit every 30 s, hit start-limit-hit after 10
 // restarts and left the host with no VM lifecycle until a manual reset-failed
-// (docs/problems/dolt-clustering-assessment-2026-10-15.md section 7).
+// (docs/archive/problems/dolt-clustering-assessment-2026-10-15.md section 7).
 func retryWithBackoff(ctx context.Context, p retryPolicy, what string, attempt func(context.Context) error) error {
 	sleep := p.Sleep
 	if sleep == nil {

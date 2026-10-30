@@ -218,7 +218,7 @@ const RevisionMetaPSupported = "texture_write_p_supported"
 // revisionCitationSelfScore reads a revision's citation self-score and the
 // model that wrote it: the Write's pSupported from the revision metadata
 // and "<provider>/<model>" from its provenance
-// (docs/reports/icrl-calibration-experiment-2026-10-14.md). A missing or
+// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md). A missing or
 // malformed value is no self-score.
 func revisionCitationSelfScore(rev types.Revision) (*float64, string) {
 	var meta map[string]any

@@ -43,7 +43,7 @@ import, or bootstrap chain creates `files/Source/platform`. Prior
 self-development evidence (M9a et al.) all ran on Node B's long-lived
 computer whose Source tree was populated manually on 2026-09-05 by an
 operator rsync onto a mounted data.img
-(`docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md:51-66`) — the
+(`docs/archive/evidence/rlm-option-b-actuator-refresh-2026-09-05.md:51-66`) — the
 same "does not exist" failure, fixed by hand and never productized.
 `docs/archive/mission-super-console-source-mount-promotion-v0.md` already
 recorded "no sandbox startup path creates stable Source/platform".

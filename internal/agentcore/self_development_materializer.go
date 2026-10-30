@@ -248,7 +248,7 @@ func (rt *Runtime) recordSettlementApplied(ctx context.Context, operation selfde
 
 // selfdevSettlementAttemptReason and selfdevSettlementAttemptLimit bound the
 // crash-boot settlement of one operation across boots
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.5): the
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.5): the
 // attempt is spent durably before the work, so a settlement that crashes the
 // computer is counted, and the second crash is the last.
 const (
@@ -517,7 +517,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	// crash-boot settlement reads the journal only and never asks the host
 	// (G9).
 	//
-	// P4 (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md §5): an
+	// P4 (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md §5): an
 	// operation a consensus decision accepted applies only as the host build
 	// corpusd voted on, frontend-only or not; the capsule's files are never
 	// its release.

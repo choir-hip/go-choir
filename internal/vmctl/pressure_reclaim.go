@@ -101,7 +101,7 @@ type HostPressureSample struct {
 	// Pressure is any signal over its threshold, reported. ReclaimPressure
 	// is the subset a hibernation can relieve (memory, state-dir disk): a
 	// CPU or IO stall is reported, never answered by killing a guest
-	// (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
+	// (docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
 	//
 	// Under the sustained signal ReclaimPressure means this one sample
 	// qualifies (avg60 over threshold and memory under the floor, or the

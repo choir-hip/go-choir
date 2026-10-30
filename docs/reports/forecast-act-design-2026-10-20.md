@@ -9,12 +9,12 @@ events, settled by rules first; a desk sees aggregates of its own record,
 not item verdicts; no token-budget learner yet."
 
 Reads behind this: [precommitment records](../precommitment-records.md), the
-[ICRL experiment](icrl-calibration-experiment-2026-10-14.md), the
+[ICRL experiment](../archive/reports/icrl-calibration-experiment-2026-10-14.md), the
 [three-day letter](choir-last-three-days-2026-10-17.md), the
 [op-ed design](op-ed-section-design-2026-10-20.md),
-[witness (b)](../problems/capture-first-creation-witness-missing-2026-10-15.md),
+witness (b),
 the [source coverage gaps](source-coverage-gap-analysis-2026-10-20.md), the
-[L3 station](../definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md)
+[L3 station](../archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md)
 (which this design narrows) and
 [the signal is sparse](../signal-is-sparse-not-the-learner-2026-08-01.md),
 whose point is that correction must come from outside the learner: here, a

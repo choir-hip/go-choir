@@ -3,7 +3,7 @@
 Date: 2026-10-09. Owner: "can we clear up free space on node b?"
 Operational invariant O10 (declared bound per growth surface). Related:
 [`guest-store-history-bloat-and-memory-shape`](guest-store-history-bloat-and-memory-shape-2026-10-09.md),
-[`ci-deploy-latency-per-service-go-builds`](ci-deploy-latency-per-service-go-builds-2026-10-09.md).
+[`ci-deploy-latency-per-service-go-builds`](../../problems/ci-deploy-latency-per-service-go-builds-2026-10-09.md).
 
 ## Evidence (read-only survey, ~12:00Z)
 

@@ -31,7 +31,7 @@ So a shared-URL signal is both thin and noisy. Coverage needs a wider signal
   edge reaches a capture: `PublishTextureToGraph` writes the capture only inside
   the transclusion object's JSON metadata. Finding "which stories cite this
   capture" is a JSON scan, the access pattern that made article opens slow
-  (see [article-open-slow-store-b-scans-2026-10-16.md](article-open-slow-store-b-scans-2026-10-16.md)).
+  (see [article-open-slow-store-b-scans-2026-10-16.md](../archive/problems/article-open-slow-store-b-scans-2026-10-16.md)).
 - `og_edges` already indexes `(to_id, kind)`, so the reverse lookup is cheap once
   a `cites_capture` edge exists.
 - `graphCitationEdges` treats unknown edge kinds as external citations, so a new

@@ -7,7 +7,7 @@ Documented before any fix. Evidence from building and launching
 `cmd/desktop` on this Mac (darwin/arm64, macOS 27.2, go1.26.4, Wails
 `v3.0.0-alpha2.104`) at `main` 6415505e3. Nothing here touches Node B or
 staging; `cmd/desktop` is not deployed. Follows the survey in
-[reports/self-hosting-and-desktop-2026-10-14.md](../reports/self-hosting-and-desktop-2026-10-14.md) §2.2.
+[reports/self-hosting-and-desktop-2026-10-14.md](../reports/desktop-sync-and-local-vms-2026-10-14.md) §2.2.
 Mutation class of the fix: orange for the desktop client (no server change).
 
 ## Findings

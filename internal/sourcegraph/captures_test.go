@@ -30,7 +30,7 @@ func feedItems(items ...sources.Item) []CaptureItem {
 	return out
 }
 
-// W1b failure modes (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// W1b failure modes (docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // a re-poll writes duplicate captures; a body lands in og_objects.body; the
 // metadata names bytes that were never written; an item without a body or an
 // http URL becomes a capture anyway.

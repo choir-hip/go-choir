@@ -24,7 +24,7 @@ start:
       verification, minted a platform_follow checkpoint, promoted the
       route, and restored to the pinned head via tape_reconstruct.
       Five substrate strands peeled doc-first.
-    evidence_ref: docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md
+    evidence_ref: docs/archive/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R5a
   owner_directive: >-
@@ -205,7 +205,7 @@ now:
     scope_if_supported: last precondition before M11 discharged
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §4 (strata), §11.2 (R5a), §11.4 (R5 split ruling)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §4 (strata), §11.2 (R5a), §11.4 (R5 split ruling)
       - docs/evidence/choir-rlm-v2-mapping-2026-09-10.md §1 §3 (frozen maps)
   belief:
     believed_state: >-
@@ -306,8 +306,8 @@ receipts:
 
 # R5a — Vocabulary Decoders + Seed Freeze (last station before M11)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11.2
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11.2
 (R5a, off spine, must precede M11): per-family frozen decoders, the V1→V2 normalization
 point, and the keep-`choir:co-super-assignment:v3` decision. R5b (the rename itself) is
 deferred indefinitely per §11.4 — this station freezes the *read* side so a pre-migration

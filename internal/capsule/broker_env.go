@@ -12,7 +12,7 @@ import (
 // autoputer's PATH behind the system profile (so exec.LookPath in the broker
 // resolves `sh` as the service PATH intends), HOME and TMPDIR, and the build
 // toolchain carry (yaegikernel.BuildToolchainCarry) the broker hands its
-// workloads (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// workloads (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // option B). Nothing else crosses.
 func BrokerProcessEnv(lookup func(string) (string, bool)) []string {
 	brokerPath, _ := lookup("PATH")

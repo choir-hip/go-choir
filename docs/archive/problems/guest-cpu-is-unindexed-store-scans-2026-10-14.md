@@ -194,7 +194,7 @@ C2, `34d7aff82` C3, `5f4a0e029` C5, `2177bef7c` C4 (host), `529d36434`
 commit that adds this section.
 
 **Measured before/after** (CPU ms per call, same store, one process;
-`docs/evidence/store-scan-levers-bench-2026-10-14.json`; 15,000 records,
+`docs/archive/evidence/store-scan-levers-bench-2026-10-14.json`; 15,000 records,
 60,289 `og_objects`, management inbox of 12,557 records):
 
 | read | before | after | lever |

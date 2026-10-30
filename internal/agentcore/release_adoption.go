@@ -18,7 +18,7 @@ import (
 )
 
 // Source adoption (P8, Station B minimal;
-// docs/reports/p6-p8-release-adopt-2026-10-15.md). An owner asks this
+// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md). An owner asks this
 // computer to adopt a published release as source. Before any state change
 // the computer verifies the record against its id and against the
 // published copy, verifies the patch bytes, scans them, and checks the patch

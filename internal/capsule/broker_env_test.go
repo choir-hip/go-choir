@@ -9,7 +9,7 @@ import (
 
 // The executor's broker launch carries the guest's build toolchain to the
 // broker (hop 1 of B1 in
-// docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
+// docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
 // and keeps the PATH rule the broker's sh resolution depends on; nothing
 // else from the autoputer's environment (credentials, gateway token files)
 // crosses.

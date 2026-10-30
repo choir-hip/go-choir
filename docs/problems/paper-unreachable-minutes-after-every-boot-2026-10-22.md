@@ -37,7 +37,7 @@ Yes. Every deploy, and every crash restart, makes the paper unreachable
 for several minutes: the public front page's live reads, its desks and
 the owner's view of it. FP1's acceptance says "the paper boots in under two
 minutes", and the derived-key validation's first pass is "seconds of
-engine time" (docs/definitions/choir-launch-fp1-store-throughput-2026-10-21.md).
+engine time" (docs/archive/definitions/choir-launch-fp1-store-throughput-2026-10-21.md).
 Boot does finish in about 2 minutes, but the computer is not reachable
 until about 6.
 
@@ -216,7 +216,7 @@ confirm it.
   - every writer that marks Dolt history dirty waits on `doltCommitMu`
     (`internal/store/store.go:240`; ten call sites);
   - Dolt's session-aware GC also waits for in-flight statements on other
-    sessions to reach a safepoint (docs/problems/dolt-clustering-assessment-2026-10-15.md),
+    sessions to reach a safepoint (docs/archive/problems/dolt-clustering-assessment-2026-10-15.md),
     so a long read-store statement can stretch the GC.
   The boot GC (`run.go:206`, before the store opens) leaves a journal over
   4 GiB to this online pass by design ("a larger journal is left to the
@@ -523,7 +523,7 @@ it passes (bunch 18 review, DeepSeek, High).
   503s) from about 2 min to 12 min.
 
 
-## Merged from docs/problems/paper-post-refresh-health-windows-2026-10-22.md (2026-10-22)
+## Merged from docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md (2026-10-22)
 
 **The paper's health has two failing windows after a planned refresh (2026-10-22).**
 Date: 2026-10-22, 18:50 UTC. Found by: FP0, after deploy V's planned refresh of the paper. Status: open, problem record before any fix. Mutation class of a fix: red (guest boot path and the paper's availability).

@@ -32,7 +32,7 @@ start:
       M9a platform-to-computer signed push exists and was proven on staging
       with a 1-file payload; nothing in CI calls it. No computer-to-computer
       publication surface exists (M9b unbuilt).
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123)
     - >-
       The updater is a root-owned guest boundary: it stages a private release,
       swaps current, restarts, health-probes, and restores the prior release
@@ -129,7 +129,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission spine (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379, 605-617)
+    - owner-ratified metamission spine (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379, 605-617)
     - docs/choir-doctrine.md
     - docs/computer-ontology.md
     - AGENTS.md:119-131
@@ -195,7 +195,7 @@ now:
       S8 publication and S9 ephemeral-fork facilities have landed.
     status: proposed
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617
       - internal/agentcore/platform_update.go:59-90
   decision:
     what: >-
@@ -205,8 +205,8 @@ now:
       exemption only on structural component-absence proof.
     kind: architecture
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617
-    owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617
+    owner_ratification_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379
   belief:
     believed_state: >-
       The existing tracking-only signed update path preserves its own
@@ -238,7 +238,7 @@ receipts: []
 ## Mechanism sketch
 
 - Host selection consumes S8's source record; it does not import a publisher's binary.
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-587)
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-587)
 - The selected record enters the platform base only through the host's normal mainline
   authority and the platform-control signing domain.
 - A security offer binds severity, deadline, target component, signed content, and its
@@ -249,13 +249,13 @@ receipts: []
 - For every divergent computer, the host evaluates compatibility on an S9 ephemeral fork.
   A clean result can rebase and apply only under a predeclared owner policy; otherwise it,
   a conflict, or an inconclusive result remains a proposal.
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617)
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617)
 - Tracking computers auto-apply through the signed update path. A divergent computer may
   be exempt only with structural proof that the affected component is absent.
 - At deadline the host records one disposition for every computer. If the computer cannot
   rebase or is asleep, the host denies the vulnerable capability, notifies the owner, and
   later independently verifies removal on the real computer.
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617)
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:605-617)
 
 ## Safety case
 
@@ -277,6 +277,6 @@ verification must agree.
 ## Changes of hand
 
 S8 supplies the reviewable source record and S9 supplies isolated, re-keyed ephemeral forks
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-600).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-600).
 S11 returns host-mainline provenance, the signed offer, per-computer dispositions, and
 fail-closed evidence. S10 template work and any fleet presentation remain outside this station.

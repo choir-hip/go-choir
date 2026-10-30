@@ -6,7 +6,7 @@ Panel: `.agentic-consensus/restore-zero-post-completion-20260909/` (gitignored t
 Prompt: `.agentic-consensus/restore-zero-post-completion-review-prompt.md`.
 HEAD at review: `6145b60c`. Snapshotting binary: `9341b5d1`.
 
-This is **not** a second completion claim. It is the missing post-completion gate on the claim already recorded in `docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md`. The 01:09 panel (`agentic-consensus-20260909-010928`) was the snapshotting **design** review, not this gate. The 00:41 panel that accepted W=1/W=13 remains demoted.
+This is **not** a second completion claim. It is the missing post-completion gate on the claim already recorded in `docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`. The 01:09 panel (`agentic-consensus-20260909-010928`) was the snapshotting **design** review, not this gate. The 00:41 panel that accepted W=1/W=13 remains demoted.
 
 ## Panel
 
@@ -77,7 +77,7 @@ The Reject camp is right about **coverage**, not about a live lifetime-replay pa
 Medium-high on the skip heresy being gone on this computer. Medium on `completed` as the registry word for the original action-7 deployed-proof list. High that the receipt’s log-absence inference needed correction.
 
 
-## Merged from docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md (2026-09-09)
+## Merged from docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md (2026-09-09)
 
 **Restore-Zero: constructed-computer deploy skip — 2026-09-09.**
 Class: green (problem documentation; no runtime behavior change). Authority: `docs/definitions/choir-rlm-restore-zero-2026-09-08.md`. Mutation class of the *named problem*: red (protected: Texture/canonical computer identity, vmctl refresh, constructed `ComputerVersion`, deploy routing). This file does not repair it.
@@ -85,7 +85,7 @@ Class: green (problem documentation; no runtime behavior change). Authority: `do
 (Full text in git history at the path above.)
 
 
-## Merged from docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md (2026-09-09)
+## Merged from docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md (2026-09-09)
 
 **Restore-Zero Deployed Proof and Telemetry — 2026-09-09.**
 Class: green (evidence only). Authority: `docs/definitions/choir-rlm-restore-zero-2026-09-08.md` (finish.acceptance items 7, 8, 9).
@@ -94,7 +94,7 @@ Class: green (evidence only). Authority: `docs/definitions/choir-rlm-restore-zer
 (Full text in git history at the path above.)
 
 
-## Merged from docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md (2026-09-09)
+## Merged from docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md (2026-09-09)
 
 **Restore-Zero: retained-store boot of snapshotting contract — 2026-09-09.**
 Class: green (problem-closed verification; no further runtime mutation in this receipt). Authority: `docs/definitions/choir-rlm-restore-zero-2026-09-08.md`. Source identity: `9341b5d18d5b962a4440671233efd402038a8b8a`.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The claims layer's offline study, E0 (docs/reports/claims-events-entities-ontology-2026-10-14.md
-§12.3; results in docs/reports/claims-e0-e6a-results-2026-10-14.md).
+§12.3; results in docs/archive/reports/claims-e0-e6a-results-2026-10-14.md).
 
 Steps, each idempotent (model calls are cached by claims_lib.omp):
   freeze    build the frozen evaluation set from a pull (claims_ledger_pull.py):

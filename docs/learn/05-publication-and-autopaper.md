@@ -232,7 +232,7 @@ feed's validators are stored only when nothing was deferred and nothing
 failed (`keepValidators`), so a 304 can never hide an unprocessed item.
 This ordering was fixed in panel round 2 of L2a: the first design
 truncated before the repeat check and would have re-read the same first N
-items forever ([L2a design](../reports/l2a-synthesis-intake-design-2026-10-14.md)
+items forever ([L2a design](../archive/reports/l2a-synthesis-intake-design-2026-10-14.md)
 R2-1; [intake defects](../problems/autopaper-intake-defects-2026-10-14.md),
 defect 1). Note that `pollState`, which holds the validators and the
 handled set, is process memory, not durable state (code). After a restart
@@ -267,7 +267,7 @@ epoch mismatch as a crash on purpose, so nothing resumes into a new schema.
 Under the code of that morning a crash closed every schedule, so all 14
 closed and nothing was published from about 05:48 to 06:49, when the owner
 restarted them by hand
-([planned refresh closes paper schedules](../problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
+([planned refresh closes paper schedules](../archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
 vmctl logged `planned_restart=true` because its request succeeded; only the
 guest console showed the guest's verdict. Two lessons: a rule that is
 correct for work (do not resume across a schema change) was wrong for
@@ -290,7 +290,7 @@ keeps the schedules; it does not make the paper exempt from reclaim.
 **A capture can leave the feed before it is read.** An item beyond the
 per-poll limit is counted as deferred, but if the feed drops it before the
 next poll, it is gone. Only a per-source cursor would fix that
-([L2a design](../reports/l2a-synthesis-intake-design-2026-10-14.md) R2-1,
+([L2a design](../archive/reports/l2a-synthesis-intake-design-2026-10-14.md) R2-1,
 residual).
 
 ### 2.4 Options and trade-offs
@@ -346,7 +346,7 @@ posts the items to corpusd's `POST /internal/platform/captures`
 (`HandleCaptures`, `internal/platform/captures.go`). A guest reaches
 corpusd directly at its platform URL, not through the proxy (a correction
 recorded in
-[capture route unreachable through proxy](../problems/capture-route-unreachable-through-proxy-2026-10-11.md)).
+capture route unreachable through proxy).
 corpusd checks the caller with `requireInternalOrBoundGuestWrite`
 (`internal/platform/authority.go`): either a trusted host-internal caller
 (loopback plus `X-Internal-Caller: true`), or a guest whose tap address
@@ -388,7 +388,7 @@ content. Desks read them through `choir.ReadCapture`, which pages blocks.
 captures into the polling computer's own embedded graph. The owner: the
 paper "shouldnt run on embedded dolt, but global dolt ... the point is to
 make it a resource for everyone"
-([captures built per computer](../problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md)).
+(captures built per computer).
 The store taxonomy already said so; the design doc of 10-09 had drifted from
 it, and the station was written from the design doc without checking the
 taxonomy. This is standing question 2 (settled-decision conformance) and
@@ -401,7 +401,7 @@ proxy, which does not forward the route." The correction: the guest's
 `CHOIR_PLATFORM_URL` comes from the kernel command line and takes
 precedence over `RUNTIME_CORPUSD_URL`; guests reach corpusd directly. The
 real cause was that the test computer still ran a superseded build
-([capture route](../problems/capture-route-unreachable-through-proxy-2026-10-11.md),
+(capture route,
 correction). Lesson from the record itself: "read which setting wins before
 naming a cause from one variable."
 
@@ -410,20 +410,20 @@ Hacker News feed items carry live point and comment counts in their text,
 so every poll that sees a changed count writes a new capture. In one
 six-hour window, 146 of 425 captures (34%) re-captured a URL already
 captured, 120 of them with an unchanged title
-([L2a merge recall](../problems/l2a-merge-recall-on-the-paper-2026-10-14.md),
+([L2a merge recall](../archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md),
 finding 4). They cost intake work and create spurious judge pairs.
 
 **Retention is designed, not enforced.** Capture bodies were to shrink to a
 stub after a bounded window, with cited bodies pinned; "no code enforces
 the capture body retention window"
-([state and vision](../reports/choir-state-and-vision-2026-10-14.md) §3.8).
+([state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md) §3.8).
 
 **Network-address identity has a sharp edge.** The tap binding is only as
 good as the address map. The same family of bug disabled Jev on the paper
 for a whole morning (section 4.3). And loopback counts as trusted: any
 process on the host that sets `X-Internal-Caller: true` from 127.0.0.1 is
 an internal caller (`trustedInternalTransport`, code). The
-[isolation review](../reports/computer-isolation-security-review-2026-10-14.md)
+[isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
 §3.5 treats that as a High finding for every host service, corpusd
 included.
 
@@ -544,7 +544,7 @@ was open. A management run's first cell only *read* them, and the runtime
 committed a cursor advance for what that cell had shown. The run then
 failed. Nothing undid the advance and nothing re-showed the records, so the
 28 captures were never disposed
-([captures undisposed after failed management runs](../problems/captures-undisposed-after-failed-management-runs-2026-10-14.md)).
+([captures undisposed after failed management runs](../archive/problems/captures-undisposed-after-failed-management-runs-2026-10-14.md)).
 This is ack-on-receive in disguise. The fix (e3437f1cd) moves the read
 mark to the end of a completed turn, and after a failed turn schedules one
 durable retry with backoff (2, 4, 8, 16 minutes), bounded so a provider
@@ -559,7 +559,7 @@ authorized for this VM". The gateway pinned each credential to the first
 guest address that ever called Jev (`BindJevPeer`), but a computer's guest
 address comes from a host port allocated at each boot, while its credential
 persists across boots. After any cold boot on a new port, Jev refused that
-computer ([L2a merge recall](../problems/l2a-merge-recall-on-the-paper-2026-10-14.md),
+computer ([L2a merge recall](../archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md),
 finding 2). In the code at this commit, the credential ensure path that
 vmctl calls for every ready computer now moves the pin to the current
 address (`JevPeerMoved`, `internal/gateway/config.go`), so only host
@@ -570,7 +570,7 @@ be reconciled by the authority that knows both.
 **Intake fell behind at 28 sources.** With one task slot, arrivals ran at
 about 270 captures an hour while 8 tasks completed in 34 minutes; queue
 wait was p50 425 s and p95 1,506 s, task duration p50 241 s
-([management intake backlog](../problems/management-intake-backlog-at-28-sources-2026-10-14.md)).
+([management intake backlog](../archive/problems/management-intake-backlog-at-28-sources-2026-10-14.md)).
 By Little's law the backlog had to grow. With a p50 task time of about four
 minutes, one slot serves roughly 15 tasks an hour (arithmetic); the only
 answers are more slots (S2b's K = 4), cheaper dispositions (Jev settling
@@ -642,7 +642,7 @@ Three hazards recur.
 
 A **story** is a Texture document with a trajectory of kind `story`; its
 boundary is the set of captures management opened it from or fed into it
-([L2a design](../reports/l2a-synthesis-intake-design-2026-10-14.md) A3).
+([L2a design](../archive/reports/l2a-synthesis-intake-design-2026-10-14.md) A3).
 Opening is deterministic: `storyOpeningIDs`
 (`internal/store/story_open.go`) derives the document, trajectory and seed
 revision ids from (owner, computer, command id, record id) with
@@ -658,7 +658,7 @@ ledger with no training step.
 The owner's measure is not merge recall but **articles per source**: "we
 should be able to scale up the sources while only scaling up article
 production significantly sublinearly"
-([L2a merge recall](../problems/l2a-merge-recall-on-the-paper-2026-10-14.md)).
+([L2a merge recall](../archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md)).
 The baseline window: 70.8 captures an hour, 30.2 new stories an hour, 2.35
 captures per new story, 1.65 distinct pages per new story, and only 7.4% of
 stories with two or more intake outlets. Read plainly: almost every
@@ -926,7 +926,7 @@ matcher returned spans and the writer kept only the block and the excerpt.
 The reader re-found the quote with `indexOf`, so a phrase that occurred
 twice in a block was marked at the first occurrence, not the one verified,
 and an ellipsis quote was never a substring and rendered unmarked
-([object-graph gaps](../problems/object-graph-registration-and-anchor-gaps-2026-10-14.md),
+([object-graph gaps](../archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md),
 H-OG3). The general lesson: when a verifier computes *where*, persist the
 where; re-deriving it later is a second, weaker verifier.
 
@@ -1068,7 +1068,7 @@ Dolt store and Store B, now passes `objectgraph.CheckWrite`
 whose kind is not registered (7f287a135, H-OG1). Before that commit the
 registry was consulted on one write path only, and 26 object kinds and 12
 edge kinds were being written with no registration
-([object-graph gaps](../problems/object-graph-registration-and-anchor-gaps-2026-10-14.md)).
+([object-graph gaps](../archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md)).
 Replay and migrations stay ungated, because replay must never refuse
 history. The dead kind `choir.universal_wire_story_cluster` was deleted
 (427d14ffd, H-OG2); its string stays in the frozen decode table, because old
@@ -1102,7 +1102,7 @@ latest unpublished revision would keep it while reducing loss.
 **The signing key lives where root processes can read it.** The platform
 signing key is a file on Node B. The isolation review found that host
 services and every Firecracker VMM run as root
-([isolation review](../reports/computer-isolation-security-review-2026-10-14.md),
+([isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md),
 short answer 1 and 3). A VMM escape could sign manifests as the platform.
 
 **A self-carried public key proves little.** Each signature stores its own
@@ -1192,13 +1192,13 @@ only when at least half the stories are scored.
 
 **The lead was our thinnest article.** On 14 October the lead was a
 one-paragraph, one-source story on the Mauritius riots, importance 8
-([front page leads with a one-source stub](../problems/front-page-leads-with-a-one-source-stub-2026-10-14.md)).
+([front page leads with a one-source stub](../archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md)).
 The rank read the importance of the *event*, not the quality of *our
 article*. The depth factor and the two-source lead rule (1f84fa908) fixed
 the ranking. The trace then showed why the story was thin: research did
 search the web, but on 1 or 2 of 9 search providers, the rest cooling, and
 reported one of the two pages it read
-([deepen important stories](../reports/autopaper-deepen-important-stories-2026-10-14.md)).
+([deepen important stories](../archive/reports/autopaper-deepen-important-stories-2026-10-14.md)).
 A rank can hide thin coverage; only more research fixes it, and research is
 bounded by search-provider health ([doc 3](03-gateway-and-providers.md)).
 The designed "deepen tick" (a durable 20-minute wake that hands management
@@ -1210,7 +1210,7 @@ An evaluation against a reference ranking of 100 live stories found the
 largest lever was the criteria, not the model or listwise ranking: adding
 general editorial seriousness criteria raised Spearman ρ over all 100 from
 0.81 to 0.90 and moved that story to 9th, at about $0.0043 per 100 stories
-([front importance underrates major stories](../problems/front-importance-underrates-major-stories-2026-10-14.md)).
+([front importance underrates major stories](../archive/problems/front-importance-underrates-major-stories-2026-10-14.md)).
 A listwise judge was slower, costlier and worse on the top 30. The record
 is candid that the criteria were written after reading the owner's example,
 so that story's improvement is not independent evidence; the whole-list
@@ -1398,14 +1398,14 @@ the codebase.
   built), rights and licensing of captured text
   (`docs/research/autopaper-media-and-rights-2026-10-14/`), and retrieval
   internals, which [doc 1](01-ledger-and-store.md) and the
-  [retrieval research](../reports/object-graph-retrieval-research-2026-10-14.md)
+  [retrieval research](../archive/reports/object-graph-retrieval-research-2026-10-14.md)
   cover.
 - **Built on:** [Autopaper SW design](../autopaper-sw-design-2026-10-09.md),
-  [state and vision](../reports/choir-state-and-vision-2026-10-14.md) §2.4
-  and §3.8, [L2a design](../reports/l2a-synthesis-intake-design-2026-10-14.md),
+  [state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md) §2.4
+  and §3.8, [L2a design](../archive/reports/l2a-synthesis-intake-design-2026-10-14.md),
   [claims, events and entities](../reports/claims-events-entities-ontology-2026-10-14.md),
-  [deepen important stories](../reports/autopaper-deepen-important-stories-2026-10-14.md),
-  [ranking and contributions intent](../reports/autopaper-ranking-and-contributions-intent-2026-10-14.md),
+  [deepen important stories](../archive/reports/autopaper-deepen-important-stories-2026-10-14.md),
+  [ranking and contributions intent](../archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md),
   [computer ontology](../computer-ontology.md), and the problem records
   linked in each section.
 - **Upstream:** RFC 9110 (HTTP semantics, conditional requests); Unicode

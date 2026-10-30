@@ -1,7 +1,7 @@
 # A guest-runtime fix never reaches a computer that already has an app layer
 
 Date: 2026-10-09. Status: open. Mutation class of a fix: red (deployment
-routing). Related: [`fresh-realization-skips-file-hydration`](fresh-realization-skips-file-hydration-2026-10-09.md)
+routing). Related: [`fresh-realization-skips-file-hydration`](../../problems/fresh-realization-skips-file-hydration-2026-10-09.md)
 (version skew), [`layered-release-spa-underivable`](layered-release-spa-underivable-2026-10-09.md).
 
 ## Evidence

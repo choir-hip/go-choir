@@ -21,7 +21,7 @@ import (
 
 // POST /api/model-policy/verify is the owner's (and, through
 // choir.ProductAPI, management's) path to one model call with an image
-// (docs/problems/models-configured-text-only-2026-10-15.md, desk seam).
+// (docs/archive/problems/models-configured-text-only-2026-10-15.md, desk seam).
 // Ways it can fail, written before the code:
 //   - an unauthenticated caller spends the owner's model budget;
 //   - inline base64 is echoed in the response or sent on in the model

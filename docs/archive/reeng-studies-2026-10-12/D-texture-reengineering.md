@@ -18,14 +18,14 @@ Mutation class of the eventual work: **red**, because it changes Texture canonic
 1. **"~60 cells per turn" is not real.** It comes from reading a total as a
    per-turn figure. `docs/reports/persistent-desks-overnight-2026-10-11.md:25`
    says "Texture's turns fell to sixty-six cells with seven errors". The
-   source receipt is `docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md:249`:
+   source receipt is `docs/archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md:249`:
    "Texture: 12 turns, 66 cells, 7 errors", which is about 5.5 cells per turn.
    Other measured averages:
    - S1e: 50 cells over 7 turns, about 7.1 (`…pd1…:264`).
    - The 2026-10-11 20:22Z demo: 47 calls over 9 turns, about 5.2 [journal].
    - S1c totals 87 cells with 34 errors (`persistent-desks-overnight…:15`).
      That is the only regime where single turns reached 13 and 18 cells
-     (`docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md:7-9, 62-64`).
+     (`docs/archive/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md:7-9, 62-64`).
    - No doc says "60 cells per turn". A grep of `docs/` and `skills/` finds the
      figure only as the 66-cell and 87-cell totals.
 2. **Cell count is not the main latency cost. Output size is.** On the
@@ -242,14 +242,14 @@ abandoned writes [inference].
 | M10 | `Ask` "resolves on the target's Reply" | On Texture an Ask folds into a research question control; nothing replies. An Ask to management is refused. | `surface.go:44` vs `texture_dispatch_fold.go:57-61, 107-110` |
 | M11 | `Note` is "raw unscored transport"; the role prompt says to keep sending Notes and Asks | A Note to research opens or continues research work and **counts as a research round** against the cap of 4 | `surface.go:46`, `texture.yaml:75-78` vs `texture_dispatch_fold.go:111-117`, `texture_turn_runtime.go:161, 298-309` |
 | M12 | "the runtime drops further rounds and notes it in the turn" | The drop note goes only into the committed `reason`. The cell receipt has op, doc and revision ids only, so the model never sees the drop. | `tool_profiles.go:252` vs `texture_turn_runtime.go:400-405, 422-424`, `texture_cell_author.go:158-161` |
-| M13 | Research "keeps working after a report" | Research rounds are model-ended activations that only a Texture control restarts | `run_system.yaml:31` vs `docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md:19-27, 160-163` |
+| M13 | Research "keeps working after a report" | Research rounds are model-ended activations that only a Texture control restarts | `run_system.yaml:31` vs `docs/archive/problems/research-desk-structural-flaw-root-cause-2026-10-11.md:19-27, 160-163` |
 | M14 | ReadDoc returns "revision_id and content" | It also returns the full outline with ids. The *prompt's* outline is capped (64 nodes, 4,000 bytes) and goes stale after reactivation. | `run_system.yaml:18`, `revision_policy.yaml:21` vs `session_loop.go:54-62`, `texture_agent_revision.go:828-830` |
 | M15 | Inbox holds "delivered acts and ledger traffic"; use ReadDoc or Inbox "only if this diff needs more context" | Reports arrive only through `Updates()`, and the wake is ids-only, so a read cell is mandatory | `run_system.yaml:18`, `revision_policy.yaml:16` vs `choir.go:721-743`, `coagent_update_packet.go:161` |
 | M16 | A mid-activation wake says "Treat this packet as the next user turn … payloads are bound as choir.Updates()" | The cell hides reports past the scheduled seq | `coagent_update_packet.go:161, 318`, `management_controller.go:1716-1721` vs `tools_desk.go:520-529` |
 | M17 | The surface lists 23 functions "this desk can call" | 6 matter: ReadDoc, Updates, ApplyTexture, Cast, Ask, Note. `Message` and `Emit` are retired stubs that are still exported. Precommit, Report, ReportPacket, Resolve, Disagreement, Reply, CancelAct, Escalate, Pack, Emits, ReadFile, ListDir and Context are noise for Texture. | `choir.go:268-273`, `surface.go:40-41` |
 | M18 | `Context()` gives "agent, run, desk, doc and assignment ids" | It returns `computer_id`, `activation_id` and `co_super_slot` | `surface.go:29` vs `choir.go:778-787` |
 | M19 | "You never name work items" | `Updates()` exposes `work_item_id`. That is the T3-class bait: 26 refusals in one demo set. | `run_system.yaml:31` vs `intent.go:114`, `desk-cell-ergonomics…:84-104` |
-| M20 | The citation shape `source_entity {target:{kind:"web_url",uri}}` | The schema accepts 24 target kinds, including `diff_hunk`, `patch`, `test_run`, `command_output` and `texture_span`. None is described. There is no `web_capture` kind or quote selector in the edit API (the app design calls this out). | `surface.go:39`, `revision_policy.yaml:80` vs `texturedoc/schema.go:376-387`, `docs/autopaper-app-design-2026-10-11.md:187-190, 278` |
+| M20 | The citation shape `source_entity {target:{kind:"web_url",uri}}` | The schema accepts 24 target kinds, including `diff_hunk`, `patch`, `test_run`, `command_output` and `texture_span`. None is described. There is no `web_capture` kind or quote selector in the edit API (the app design calls this out). | `surface.go:39`, `revision_policy.yaml:80` vs `texturedoc/schema.go:376-387`, `docs/autopaper-sw-design-2026-10-09.md:187-190, 278` |
 | M21 | Cell "hard rules": no `func main`, no `import "choir"` | The normalizer already handles both | `run_system.yaml:19` vs `cell_normalize.go:14-45` |
 | M22 | Vocabulary not on the surface: morphisms, "Effects-OFF", appagent, Conductor, the `[CMD]` label rules, "update_coagent records", "controls" (self-dev block) | None of these exist as affordances | `run_system.yaml:14,25,44`, `revision_policy.yaml:30,60-61`, `coagent_update_packet.go:296-306`, `tool_profiles.go:249` |
 | M23 | Contradictory research pressure | The role prompt says "keep sending … Ask … Note". The run overlay says "open the research desk once and name every branch". The runtime caps rounds at 4. | `texture.yaml:72-78` vs `run_system.yaml:37` vs `texture_turn_runtime.go:161` |

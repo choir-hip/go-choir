@@ -30,16 +30,16 @@ start:
     - >-
       Self-dev control plane is live: M11 rendered evidence in the Texture
       document, while the effect plane reaches only the served release
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-109).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-109).
     - >-
       Capsules are air-gapped today; S4 supplies recorded capsule egress and
       a capsule-private Nix store before this station may start
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-114,
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-114,
       560-573).
     - >-
       Texture transclusion and rich formatting are not integrated; the shared
       fallback is plain ledger entries with the gap recorded
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:357-362).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:357-362).
     - >-
       The existing capsule client reaches its broker through a Unix-domain
       socket from outside the capsule namespace
@@ -140,8 +140,8 @@ weak_measures:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission spine (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379)
-    - S5 station intent (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:574-577)
+    - owner-ratified metamission spine (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379)
+    - S5 station intent (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:574-577)
     - repository mutation and landing contract (AGENTS.md:109-131, 193-202)
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
@@ -211,10 +211,10 @@ now:
     status: proposal
     evidence_ref: >-
       S5 intent plus owner-ratified metamission authorization
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379, 574-577)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:373-379, 574-577)
     owner_ratification_ref: >-
       owner ratified the metamission spine on 2026-10-01
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379);
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379);
       this bridge protocol remains a station proposal.
   belief:
     believed_state: >-

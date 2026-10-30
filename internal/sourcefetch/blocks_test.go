@@ -11,7 +11,7 @@ import (
 )
 
 // Ways the block extractor can fail, written before the code (Cut 2 unit
-// 2a, docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md):
+// 2a, docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md):
 //
 //   - The DOM walk merges paragraphs, so a quote's block is the whole page
 //     (the C8 census: the old flattener had no blank lines, one block per

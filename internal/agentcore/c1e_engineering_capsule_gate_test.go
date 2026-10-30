@@ -1,7 +1,7 @@
 package agentcore
 
 // C1e B1 follow-up: the capsule gate on records assignments
-// (docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md).
+// (docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md).
 //
 // The drill on staging e9d727a7: management casts engineering on records,
 // the engineering run starts, and every capsule_go_eval cell is refused

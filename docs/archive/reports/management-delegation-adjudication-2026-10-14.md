@@ -215,7 +215,7 @@ the task had no error. AC5's join uses the same computation.
 ### B10. A 10-minute task deadline does not fit the management model's latency (4: deepseek, glm, luna, muse)
 
 Evidence: the problem doc records free-preview calls taking "from seconds to
-nine minutes per call" (`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md:53`).
+nine minutes per call" (`docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md:53`).
 Run 305a582d on deepseek-v4.1-flash averaged 29 s per call (1,680 s over 58
 calls, design §2.4). At 4-6 calls a task, a 9-minute call alone would close
 most tasks at their deadline. The re-delegations that followed would thrash

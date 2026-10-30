@@ -70,7 +70,7 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	// asked at each Freeze: the per-computer source.projection setting loads
 	// after this executor is built (agentcore Runtime.Start) and can change at
 	// runtime, so reading sourceproj.Enabled() here would miss it
-	// (docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md).
+	// (docs/problems/freeze-replays-a-changed-tree-2026-10-26.md).
 	executor.SetBinaryReuseGate(sourceproj.Enabled)
 	log.Printf("capsule executor: binary reuse by binary-input diff gated on source projection (asked at each freeze)")
 	// Capsule memory per doctrine (RES-04) is a policy: observe keeps the

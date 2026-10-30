@@ -738,7 +738,7 @@ the drill computers are cold-booted first.
     "required Go vet and the Go release binary build could not complete
     because dependency downloads stopped progressing". This is the capsule
     Go-modules question that is still open
-    (`docs/reports/capsule-go-modules-decision-2026-10-14.md`, routes A/B/C,
+    (`docs/reports/capsule-go-module-proxy-design-2026-10-14.md`, routes A/B/C,
     no recorded ruling). It cost one round and about 10 minutes.
 13. **A retry names a test package that does not exist yet.** Rounds 2 and 3
     report the required `go test ./internal/selfdevprobe/` failing "because
@@ -1885,7 +1885,7 @@ pre-check; the assignment ends cancelled with the refusal as its cause,
 not stranded).
 
 
-## Merged from docs/problems/engineering-result-strands-on-the-completed-casting-turn-2026-10-10.md (2026-10-10)
+## Merged from docs/problems/engineering-completion-path-cluster-2026-10-20.md (2026-10-10)
 
 **An engineering result never wakes management: it is delivered to the casting turn, which has already completed (2026-10-10).**
 Status: documented, not fixed. Mutation class of the fix: `red` (persistent management wake and lifecycle packet delivery).

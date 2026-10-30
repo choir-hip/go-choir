@@ -73,7 +73,7 @@ cost/benefit test at this boundary (below).
 
 3. **The builder-substrate decision was deferred, not made — and the
    deferral is honest but must be explicit, not silent.** Verified:
-   `docs/evidence/s0b-builder-substrate-decision-2026-10-04.json` exists,
+   `docs/archive/evidence/s0b-builder-substrate-decision-2026-10-04.json` exists,
    correctly states all three substrates remain unselected/unfalsified, and
    binds requirements for S2. The gaps falsify **no candidate**: the
    sealed-boundary probes measured product surfaces only —
@@ -87,7 +87,7 @@ cost/benefit test at this boundary (below).
    only the aggregation surface, not the finding.
 
 4. **Station-aggregation debt (paperwork, must land with the close record):**
-   the canonical probe index `docs/evidence/s0-probe-index-2026-10-01.json`
+   the canonical probe index `docs/archive/evidence/s0-probe-index-2026-10-01.json`
    still lists only the seven S0a receipts; the ten S0b receipts (five
    probed + five folded gap/decision receipts) must be indexed with their
    mapping to the definition's original named receipts (snapshot/UFFD/reflink

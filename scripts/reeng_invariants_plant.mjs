@@ -2,7 +2,7 @@
 // Planted-violation generator for the Cut 0 invariant checker
 // (scripts/reeng_invariants.mjs). Acceptance row "the invariant checker run
 // against planted-violation copies of a real bundle (one per rule)" in
-// docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md: a rule never shown
+// docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md: a rule never shown
 // failing on a planted violation does not count.
 //
 //   node scripts/reeng_invariants_plant.mjs <bundle.json> <outdir>

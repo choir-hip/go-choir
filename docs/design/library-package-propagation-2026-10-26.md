@@ -4,7 +4,7 @@ Status: **design, green** (docs only, no code). This is an architectural
 design that a build will follow, so it is reviewed like the change it
 designs: **tier 2** (Devin and DeepSeek). It is station SR9 of
 [the readiness metamission](../definitions/choir-selfdev-readiness-metamission-2026-10-24.md),
-and its goal file is [choir-sr9-library-2026-10-26.md](../definitions/choir-sr9-library-2026-10-26.md).
+and its goal file is [choir-sr9-library-2026-10-26.md](../archive/definitions/choir-sr9-library-2026-10-26.md).
 
 - **Revision 2.** This revision answers review 257 (both seats requested
   changes; the disposition is in section 21). It also adds the owner's
@@ -335,7 +335,7 @@ previous applied patches on the host, so it is recorded as a residual.
   computers only when main merges it and the base image deploys.
 - **Why.** The owner ruled that core changes are never adopted directly
   between diverged computers [D,
-  `docs/reports/selfdev-update-architecture-2026-10-15.md:46-71`].
+  `docs/archive/reports/selfdev-update-architecture-2026-10-15.md:46-71`].
 - **Mixed candidates are common today.** T1a's Reader redesign touched
   `app.css`, `read.html`, `reader.js`, `reader-chrome.css` and `theme.ts`
   beside its package [V, the T1a goal file's `now.candidate`].

@@ -230,7 +230,7 @@ func sortedKeys(m map[string][]string) []string {
 // TestEveryWrittenKindIsRegistered is H-OG1's standing check: every object
 // and edge kind production code names must be in DefaultRegistry, so the
 // write gate never refuses a live writer
-// (docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+// (docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 func TestEveryWrittenKindIsRegistered(t *testing.T) {
 	objects, edges := scanKindLiterals(t)
 	if len(objects) < 40 || len(edges) < 20 {

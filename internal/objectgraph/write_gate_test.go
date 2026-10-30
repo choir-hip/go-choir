@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Failure modes (docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md):
+// Failure modes (docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md):
 // F2 an unregistered write reaches the interceptor (the event tape); F4 a
 // tombstone of a historic kind is refused; F5 one write method is
 // ungated.

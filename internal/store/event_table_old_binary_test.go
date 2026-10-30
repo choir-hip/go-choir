@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// F5 (docs/design/choir-event-table-f-c-2026-10-22.md section 5): what a
+// F5 (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 5): what a
 // pre-deploy-1 binary does with a stamped op. Written and run on main
 // 6c60685cc before any F-c code: Validate passes an object op stamped
 // Table "choir_events", and the projector ignores the stamp and upserts the

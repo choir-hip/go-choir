@@ -48,7 +48,7 @@ type JobCompletion struct {
 }
 
 // JobAdmission is the seam for memory leases (virtio-mem,
-// docs/reports/memory-hotplug-controller-design-2026-10-14.md section 9):
+// docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md section 9):
 // called before a job starts; release runs when its memory is returned
 // (the job's end, or its capsule's when the boost was retained). A
 // non-nil error refuses the start.

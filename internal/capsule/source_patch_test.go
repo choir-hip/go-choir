@@ -10,7 +10,7 @@ import (
 )
 
 // Ways the capsule source patch can fail the builder (M11 rerun 10,
-// docs/problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md):
+// docs/archive/problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md):
 //
 //  1. An added file is diffed against a phantom empty line, so its hunk
 //     reads "@@ -1 +1,N @@" with a stray context line and git apply

@@ -1,6 +1,6 @@
 # Live defects found by the dead-code census, 2026-10-12
 
-The dead-code census ([docs/reports/dead-code-census-2026-10-12.md](../reports/dead-code-census-2026-10-12.md),
+The dead-code census ([docs/archive/reports/dead-code-census-2026-10-12.md](../archive/reports/dead-code-census-2026-10-12.md),
 Part D) was looking for unused code. Along the way it found behavior that is
 wrong today. This record names each defect and its evidence before any fix
 (problem documentation first). The census agents read code, not production
@@ -51,7 +51,7 @@ traces, so any claim about what a model does is marked as a hypothesis.
 - **Evidence:** `/provider/v1/search/health`, `/search/health/reset`,
   `/breakers` and `/breakers/reset` (`internal/gateway/handlers.go:1083-1097`)
   can be reached from any computer's tap network. Recorded first in
-  [search-plane-cooldown-on-caller-cancel-2026-10-09.md](search-plane-cooldown-on-caller-cancel-2026-10-09.md)
+  [search-plane-cooldown-on-caller-cancel-2026-10-09.md](../archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md)
   (lines 84-98), which proposes `isAuthorizedCredentialCaller`.
 - **Status: already repaired, not a live defect.** b445fd21 ("fix(gateway):
   search-health and breaker ops routes are loopback-operator only")

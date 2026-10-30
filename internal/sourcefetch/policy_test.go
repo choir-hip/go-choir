@@ -60,7 +60,7 @@ func TestClientRedirectPolicyRejectsForbiddenTargets(t *testing.T) {
 	}
 }
 
-// docs/problems/research-fetch-url-has-no-address-guard-2026-10-10.md (D2):
+// docs/archive/problems/research-fetch-url-has-no-address-guard-2026-10-10.md (D2):
 // the client checked the resolved address and then dialed the hostname, so a
 // second resolution (DNS rebinding) could land on a private address. Failure
 // modes pinned: the dial goes to the hostname instead of a checked address;

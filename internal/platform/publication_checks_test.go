@@ -209,7 +209,7 @@ func TestNotCapturedCitationIsUnreadSource(t *testing.T) {
 
 // The overlay scanned every check row in Store B by JSON path on each
 // resolve: 890-2400 ms of a 1 s article open
-// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md). It now
+// (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md). It now
 // reads a version's checks and judgements by their IDs. Ways it could fail:
 // a resolve still scans; a check or verdict is missed because its ID is
 // computed differently from the one publish wrote; a batch read returns an

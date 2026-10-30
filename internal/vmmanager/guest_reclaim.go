@@ -8,7 +8,7 @@ import (
 )
 
 // Proactive reclaim of cold guest page cache (RES-06; P4 of
-// docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
+// docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md).
 //
 // Free page reporting returns to the host only pages the guest frees, and a
 // busy guest frees page cache only under memory pressure, so a computer's

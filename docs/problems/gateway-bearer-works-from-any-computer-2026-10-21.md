@@ -69,7 +69,7 @@ guest address from each boot's host port. The pin was the first address
 that used the bearer, for the credential's whole life, so after a cold boot
 onto a new port every Jev call from the paper was refused ("Jev bearer is
 not authorized for this VM") and the paper labelled nothing for hours
-([l2a-merge-recall-on-the-paper-2026-10-14.md](l2a-merge-recall-on-the-paper-2026-10-14.md),
+([l2a-merge-recall-on-the-paper-2026-10-14.md](../archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md),
 finding 2). The repair moved the pin from the host: vmctl names the current
 guest address on every credential ensure
 (`ensureExistingGatewayCredential`, `ownership.go:1746-1822`).

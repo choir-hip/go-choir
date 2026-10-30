@@ -19,7 +19,7 @@ import (
 
 // On the paper (2026-10-16) runaway cells filled the guest: the OOM killer
 // took a Texture worker at 12:46 and the daemon at 18:55, closing every run
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 // Each dead worker reached the model as "frame: read header: EOF", and the
 // model re-ran the same loop.
 //

@@ -113,7 +113,7 @@ type ActingPack struct {
 	// of its own settled self-scores, never a per-item verdict. Present
 	// only while the computer's calibration.feedback setting is on and the
 	// run is in the experiment's digest arm
-	// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+	// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 	Calibration *CalibrationDigest `json:"calibration,omitempty"`
 }
 

@@ -61,7 +61,7 @@ Two consequences:
 
 ## Evidence
 
-- `docs/evidence/s0m-stranded-bound-2026-10-02.json` — five probe runs, each
+- `docs/archive/evidence/s0m-stranded-bound-2026-10-02.json` — five probe runs, each
   `ok:false` with `no control packet bound to a live carrier within window`;
   trajectories `d81d1bd4`, `bc35b9d8`, `16585a04`, `b86cc432`, `5c8cf4ac`.
 - `boot-timeline.json` epoch 1026: `MigrateActorWakeOutbox` minted 2009 pending;
@@ -116,7 +116,7 @@ the post-boot backlog — after the first probe's bind window elapsed.
 
 The real residual is downstream and is a substrate defect, now its own doc:
 
-- **`docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md`** —
+- **`docs/archive/problems/s0m-management-live-occurrence-storm-2026-10-03.md`** —
   after the probe killed carrier `d8a17dee`, the freed control `1ed83383`
   released its claim back to `pending` (the c9180cd3 release works) but never
   re-bound: the persistent-Management re-drive is in a live-occurrence storm

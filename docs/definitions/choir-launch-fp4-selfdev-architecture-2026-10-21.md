@@ -168,7 +168,7 @@ standing_questions:
     Deleted: the supersede branch of reclaimSupersededAssignmentCapsules.
     Citers to grep and repair in the same commit: engineering_assignment_reclaim_test.go,
     the SDC ARCH-10 text (plan update owed: supersede versus FIFO as a doctrine
-    deviation, now repaired), docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md
+    deviation, now repaired), docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md
     (different cause; unchanged), and any prompt text that tells management a
     new Cast supersedes.
   q4_consumers: >-
@@ -235,7 +235,7 @@ now:
     same proposition. P3: the guard reads only refusals after the last
     successful freeze. P4: dead letters log their cause. Records:
     docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md,
-    docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md.
+    docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md.
     Round 4b (review of 8727d5f41, accept with edits): P1 wired through
     commitCompleteIntent in a test; the report race fixed at its source
     (a per-assignment saga mutex: the fate-wake resume defers to the live

@@ -1,7 +1,7 @@
 package store
 
 // Deploy 2 of run telemetry in its own table (F-c): the writer
-// (docs/design/choir-event-table-f-c-2026-10-22.md section 4.2). Ways the
+// (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 4.2). Ways the
 // writer can fail, written before the code; each test names the one it
 // catches:
 //

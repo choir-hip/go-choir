@@ -37,7 +37,7 @@ func (rt *Runtime) SetCandidateJudge(judge CandidateJudge) {
 const candidateJudgmentModel = "~typesafe/jev-latest"
 
 // Support judgement off every desk's turn
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture
 // revision commit lists its new citation pairs by their check memos
 // (store.planSupportPairs) and, once the commit has returned, hands the
 // revision's pairs to JudgeRevisionSupport. A background job, bounded by

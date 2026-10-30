@@ -20,7 +20,7 @@ import (
 )
 
 // The Autopaper source schedule (W1c,
-// docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md).
+// docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md).
 // Failure modes pinned, written before the code:
 //  1. Restarts: see source_schedule_restart_test.go (a standing schedule
 //     survives a crash; only the poll in flight closes).

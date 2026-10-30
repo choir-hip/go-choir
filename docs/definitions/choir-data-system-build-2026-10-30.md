@@ -179,12 +179,12 @@ start:
       The nightly off-host backup failed on 10-30 (restic OOM). Its next
       run, about 03:00 UTC on 10-31, rewrites the 52 GB Store A copy
       inside the data directory
-      (docs/problems/offhost-backup-store-a-copy-and-restic-oom-2026-10-30.md).
+      (docs/archive/problems/offhost-backup-store-a-copy-and-restic-oom-2026-10-30.md).
     - >-
       Data stores today are Store A (platform Dolt, port 13306), Store B
       (corpus Dolt, port 13307), a Dolt store inside each computer,
       platform-artifacts CAS and tape-seg segments. Inventory in
-      docs/evidence/node-b-storage-inventory-2026-10-29.md.
+      docs/archive/evidence/node-b-storage-inventory-2026-10-29.md.
     - >-
       Evidence behind the frame, in docs/evidence/:
       tape-window-sizing-2026-10-30, paper-tape-composition-2026-10-30,

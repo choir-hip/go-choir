@@ -81,7 +81,7 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	if rounds, _ := s.OpenRounds(ctx, owner, computer, research); len(rounds) != 0 {
 		t.Fatalf("round still open after the final Report: %+v", rounds)
 	}
-	// B13 (docs/problems/reeng-cut2-breakage-2026-10-13.md): the records a
+	// B13 (docs/archive/problems/reeng-cut2-breakage-2026-10-13.md): the records a
 	// run started with stay visible for the whole run, so a desk can look
 	// at them in as many cells as it likes; the next run starts past them.
 	if out := cell(`import "choir"
@@ -402,7 +402,7 @@ func TestOpeningCastFieldsLiftOntoTheTypedCast(t *testing.T) {
 }
 
 // A cell marks read only the records a choir.Records() call in its run
-// returned (docs/problems/autopaper-arrivals-unanswered-2026-10-13.md).
+// returned (docs/archive/problems/autopaper-arrivals-unanswered-2026-10-13.md).
 // Before, every cell's commit advanced the cursor to the head at cell
 // start, so eight capture records that landed between a turn's Records()
 // call and its acting cell were consumed unseen. Ways this could fail,

@@ -149,7 +149,7 @@ now:
     scope_if_supported: management desk on the in-cell carrier + cast
     status: supported
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3c)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3c)
   belief:
     believed_state: >-
       Management is live on the host desk-cell carrier (R3c landed): its
@@ -189,8 +189,8 @@ receipts:
 
 # R3c — Management Live + Cast (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
 management desk on cells; `choir.Cast(engineering)` opens+binds+executes an
 assignment (the R2-deferred deployed proof); `report_to_texture` retires to
 the staged path. Proof: a management cell Cast → engineering assignment →

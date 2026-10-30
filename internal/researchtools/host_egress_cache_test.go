@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// docs/problems/research-fetch-url-has-no-address-guard-2026-10-10.md
+// docs/archive/problems/research-fetch-url-has-no-address-guard-2026-10-10.md
 // (adjacent finding): the egress tool table was cached under the address of
 // a value receiver, so every call missed and added an entry. Failure mode
 // pinned: repeated calls on one deps set grow the cache.

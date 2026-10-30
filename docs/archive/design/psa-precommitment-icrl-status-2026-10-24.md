@@ -5,8 +5,8 @@ the owner's design day on "PSA / pre-commitment records / ICRL in the REPL"
 (owner brief, 2026-10-24 about 05:45 UTC). The owner expects that "we may not
 have fully integrated PSA/precommitment records and in-context reinforcement
 learning" yet. This document says how far that is true. It inherits
-[Choir Doctrine](../choir-doctrine.md) and
-[precommitment-records.md](../precommitment-records.md), the normative
+[Choir Doctrine](../../choir-doctrine.md) and
+[precommitment-records.md](../../precommitment-records.md), the normative
 mechanism document. It is not doctrine.
 
 Read at `origin/main` 911be16b1. Every claim about code is marked **verified**
@@ -86,14 +86,14 @@ has been run (§8.1, §8.4).
 value of PSA is storing records in the desk's Yaegi REPL, with context packs
 and on-demand retrieval; it serves as in-context reinforcement learning,
 where feedback to models enables self-learning without modifying weights"
-(§1.2; [owner notes §1](../reports/owner-notes-2026-10-14.md)). The working
+(§1.2; [owner notes §1](../../reports/owner-notes-2026-10-14.md)). The working
 hypothesis is that "in-context RL is to in-context learning as RL is to
 self-supervised pretraining". The document calls the evidence "thin but
 consistent". It names the same mechanism as the driver of long-horizon reward
 hacking, and so makes context design "a safety decision": feed the desk
 observations and discrepancies, and keep independent scores out of its
 context, or sample and delay them (§1.2, §4.7). The archived memo
-([memo-predictive-icrl-delta-2026-09-10](../archive/precommitment/memo-predictive-icrl-delta-2026-09-10.md)
+([memo-predictive-icrl-delta-2026-09-10](../precommitment/memo-predictive-icrl-delta-2026-09-10.md)
 §1) adds two warnings this design follows. Rest the headline claim on
 classes of prediction that can be settled objectively (code, tests, dated
 events), not on judging reading. Prospective prediction also anchors: it can
@@ -225,10 +225,10 @@ Design and pre-registration:
 - **The switch.** `calibration.feedback` defaults to false
   (`internal/store/computer_setting.go:31-36`, :66). The owner ruled on
   2026-10-14: "calibration feedback stays off"
-  ([owner notes §19](../reports/owner-notes-2026-10-14.md), line 332). The
+  ([owner notes §19](../../reports/owner-notes-2026-10-14.md), line 332). The
   forecast-act design (2026-10-20) keeps it off until the H-ICRL readout.
   The only evidence file is the baseline
-  (`docs/evidence/icrl-calibration/baseline.json`). No phase-0 or phase-1
+  (`docs/archive/evidence/icrl-calibration/baseline.json`). No phase-0 or phase-1
   result is in the repo. Hypothesis: the experiment's settlement writer
   (`scripts/icrl_calibration.py settle`) was never run on a schedule. No
   ledger entry records it.
@@ -334,7 +334,7 @@ Design and pre-registration:
 | Score-carrying supervision pack, per-agent box score | §5.5 | function built, no caller | `commitment_views.go:528,367,378` |
 | Materiality coverage, critics, neutral probe | §3.1, §2.4 | no ("theory only" for the probe) | precommitment-records §2.4 |
 | Signing, `commit_hash`, publication of commitments | §6 | no | precommitment-records §6 |
-| Historical back-tests (H0), claims layer, public box scores | §5.5-5.7 | no (offline E0 and E6a ran) | `docs/reports/claims-e0-e6a-results-2026-10-14.md` |
+| Historical back-tests (H0), claims layer, public box scores | §5.5-5.7 | no (offline E0 and E6a ran) | `docs/archive/reports/claims-e0-e6a-results-2026-10-14.md` |
 | Package subscriptions, update decisions as precommitments | none | no | §4 below |
 
 **Status drift.** precommitment-records.md §8.1 (dated 2026-10-14) and the
@@ -479,7 +479,7 @@ Each is named in §6 or left to precommitment-records §8.
 
 What is settled (owner notes §13, §15, §16;
 [selfdev-update-architecture-2026-10-15](../reports/selfdev-update-architecture-2026-10-15.md);
-[lu-guest-updates-design-2026-10-14](../reports/lu-guest-updates-design-2026-10-14.md)):
+[lu-guest-updates-design-2026-10-14](../../reports/lu-guest-updates-design-2026-10-14.md)):
 
 - Only source is published, and the host is the build authority.
 - Computers diverge, so a host-built binary for A is not valid for B.
@@ -490,7 +490,7 @@ What is settled (owner notes §13, §15, §16;
 - S7 packages: the manifest is on the paused branch
   `origin/feat/s7-0-app-packages`, and package presence is a fold of
   `choir.app_package_event` on the tape
-  ([app-package-carries-app-desk §1](app-package-carries-app-desk-2026-10-21.md)).
+  ([app-package-carries-app-desk §1](../../design/app-package-carries-app-desk-2026-10-21.md)).
 
 ### 4.1 Concrete now (code exists, or tonight's evidence)
 
@@ -513,7 +513,7 @@ What is settled (owner notes §13, §15, §16;
      the pristine Slides CSS, so approving it would have reverted Slides.
      Problem record on lane `fp0-apprewrite` 6cb4b3da4.
   3. A computer with a layered `bin/autoputer` stops receiving guest fixes
-     (`docs/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md`).
+     (`docs/archive/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md`).
 
   These are material consequences in §3.1's sense: each would flip an
   approval. A commitment written at apply time could predict them ("after
@@ -560,7 +560,7 @@ What is settled (owner notes §13, §15, §16;
 
 ### 5.1 The self-development drill (staging, 03:02-03:39 UTC, PASS 19/19)
 
-Source: [selfdev-drill-2026-10-24](../evidence/selfdev-drill-2026-10-24.md).
+Source: [selfdev-drill-2026-10-24](../../evidence/selfdev-drill-2026-10-24.md).
 The precommitments were read from the local bundle
 `~/.config/choir-qa/traces/fp0-selfdev-1024a/bundle-a1.json` (outside the
 repo; run events only, no ledger records).

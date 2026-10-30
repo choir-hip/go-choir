@@ -101,7 +101,7 @@ live occurrences defer on `slot occupied`, and the probe legs time out.
 
 ## Probe evidence
 
-`docs/evidence/smg-rlm-acceptance-owner-clean-2026-10-06.json` — probe on
+`docs/archive/evidence/smg-rlm-acceptance-owner-clean-2026-10-06.json` — probe on
 computer `03335285`, escalate leg submitted 17:24, timed out at 45min
 deadline with `bound_report=false`, `mgmt_signal=false`.
 
@@ -139,7 +139,7 @@ until explicit `choir computer start`, epoch 1108) — the bearer path never
 re-resolves by design, so health recovery does not self-heal routing.
 
 **Fix verification outcome**: SMG probe on the fixed runtime
-(`docs/evidence/smg-rlm-acceptance-fixedruntime-2026-10-06.json`) —
+(`docs/archive/evidence/smg-rlm-acceptance-fixedruntime-2026-10-06.json`) —
 `prompt_bar_submit` OK, but no persistent Management mint arrived in 40
 min: the texture desk never authored `open_persistent_super` (the S0m
 agency edge). The mint-no-start defect is therefore not exercised on the

@@ -43,7 +43,7 @@ DeepSeek share: 285 of 526 calls (54%) overall; 193 of 434 (44%) when the
      `internal/modelpolicy/model_policy.go`, the `ManagementTask*`
      constants.
    - This is management delegation S2a, design R2-9 and O5
-     (docs/reports/management-delegation-design-2026-10-14.md §9). R2-9
+     (docs/archive/reports/management-delegation-design-2026-10-14.md §9). R2-9
      requires a non-preview, bounded-latency model, because a task has a
      10-minute deadline. It named deepseek-v4.1-flash as the *proposed*
      default.

@@ -27,7 +27,7 @@ ruling on each switch.
   `internal/vmmanager/computer_select.go`,
   `internal/store/computer_setting.go`, D2 design (§0, §5), `ci.yml`,
   `scripts/node-b-ci-gate`, `.github/scripts/node-b-ci-deploy`,
-  `docs/roadmap-2026-10-26.md`, and CLAUDE.md. I read no live system and
+  `docs/archive/roadmap-2026-10-26.md`, and CLAUDE.md. I read no live system and
   called nothing on staging. Where I did not verify something in the repo it
   is marked **unverified**.
 - **Sources.** Fetched this session: Google SRE Workbook, "Canarying

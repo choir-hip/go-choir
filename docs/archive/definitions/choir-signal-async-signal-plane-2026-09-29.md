@@ -26,7 +26,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent

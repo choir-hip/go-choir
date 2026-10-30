@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Automatic checkpoints (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+// Automatic checkpoints (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md,
 // 4.1, 4.2 and slice 3). The owner: "We shouldn't have to bind checkpoints
 // manually. It shouldn't be a cli command but done automatically after n
 // events or time."

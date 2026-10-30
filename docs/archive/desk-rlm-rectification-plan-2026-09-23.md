@@ -54,7 +54,7 @@ Stated 2026-09-23, in conversation:
 **Naming — three strata, different states:**
 
 - *Live vocabulary:* **STALE — partially falsified 2026-09-27** (see
-  `docs/problems/rename-residual-census-2026-09-27.md`). The canonical
+  `docs/archive/problems/rename-residual-census-2026-09-27.md`). The canonical
   desk constants did rename (`agentprofile.Super = "management"`,
   `CoSuper = "engineering"`, `Researcher = "research"`,
   `internal/agentprofile/agentprofile.go:12-14`) and desk agent IDs are
@@ -605,7 +605,7 @@ after R3b; `M7` after R3c; `R4` after R3d; `R5a` anywhere before M11;
   and prompt-taught (`rlm_engineering_runtime.yaml:51-53`), and
   `yaegikernel/broker.go` still backs `Assign` with a process-local mock.
   Post-spine residual pass owns the cut/deferral decision (census:
-  `docs/problems/rename-residual-census-2026-09-27.md`).
+  `docs/archive/problems/rename-residual-census-2026-09-27.md`).
 - The `commit`+`CommitInboxCursor` atomicity gap is R2x scope (cursor).
 - `engineering:{docID}` desk agent "never runs"
   (`engineering_desk.go:18-19`) — still true; do not write acceptance as

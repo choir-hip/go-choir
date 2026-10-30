@@ -30,15 +30,15 @@ start:
     - >-
       Semantic snapshots already exist: ProjectionBase blobs plus replay
       watermark W with PlanRecovery; the owner computer blob is about 16 GB
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:135-140).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:135-140).
     - >-
       Publication remains source-only in the intended cross-computer path:
       an adopter builds in its own capsule and no binary from the publisher
-      executes on the adopter (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:235-239).
+      executes on the adopter (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:235-239).
     - >-
       Encryption at rest is an open prerequisite before any export; current
       on-host hibernate protection is root-only permissions, not export
-      protection (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:653-654).
+      protection (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:653-654).
 
 finish:
   deliver: >-
@@ -116,8 +116,8 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission, docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:153-294
-    - org-template station intent, docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:602-604
+    - owner-ratified metamission, docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:153-294
+    - org-template station intent, docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:602-604
     - docs/computer-ontology.md:54-61
   must_preserve:
     - 'Publication is source plus pinned inputs; no cross-tenant binary execution.'
@@ -134,7 +134,7 @@ boundaries:
       S2 builder-substrate receipt: before S10 becomes executable, the S2
       landing receipt must identify the working Nix-closure evaluation
       substrate required by S10 install
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
   protected_surfaces: [identity material minting]
   heresy_delta:
     discovered: >-
@@ -190,15 +190,15 @@ now:
       template plaintext, installed disk, Dolt history, logs, and artifact
       graph, with seeded excluded-class and deleted-data witnesses.
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:253-258
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:253-258
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285
   decision:
     what: >-
       Sequence org-template work after S9 supplies sibling-computer identity
       minting and selective semantic-export boundaries.
     kind: operational
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:70-74
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:70-74
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-
@@ -229,7 +229,7 @@ receipts: []
 
 An org template is a portable semantic reconstruction record, not a machine
 snapshot. The latter is exact but computer-bound and contains live secrets;
-the former is the stated distribution form (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:490-498).
+the former is the stated distribution form (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:490-498).
 
 The export boundary starts from an explicit allowlist: base revision, patch
 stack, source-build inputs, curated seed-data classes, and policy. It records
@@ -239,15 +239,15 @@ not copy a parent disk and then attempt a deletion pass.
 The installed computer resolves the selected base and pinned inputs, builds the
 selected source locally, and activates only its own resulting release. Parent
 closures are never a substitute; the existing cross-computer acceptance shape
-requires that no publisher binary execute on an adopter (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:235-239).
+requires that no publisher binary execute on an adopter (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:235-239).
 
 Fresh identity minting precedes child runtime or network access, following the
 S9 construction invariant for ComputerID, signer keys, privacy key, and gateway
-token (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:587-599). The template contains no identity material.
+token (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:587-599). The template contains no identity material.
 
 Encryption protects the exported semantic package at rest. Root-only host file
 permissions are insufficient for this boundary; the metamission explicitly
-requires at-rest encryption before export (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:653-654).
+requires at-rest encryption before export (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:653-654).
 
 ## Evidence and risk
 
@@ -258,7 +258,7 @@ with encryption and integrity bindings identified. The authorized decrypt
 boundary then scans template plaintext and fresh state for an excluded-class
 canary, deleted-data remnant, parent keys, and parent closure paths across disk,
 Dolt history, logs, and the artifact graph
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:271-285).
 
 Current publication export metadata sets `private_material_omitted`, but that
 metadata assertion is not a scrub proof and does not define an org template

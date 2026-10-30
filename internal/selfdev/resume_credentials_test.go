@@ -21,7 +21,7 @@ import (
 )
 
 // S3 re-credential on resume, guest install
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 29-33, 35).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 29-33, 35).
 //
 // Ways this could fail, written first:
 //   - install sends the frozen (expired) capability anywhere, or needs it, so a

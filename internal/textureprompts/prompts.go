@@ -31,7 +31,7 @@ func DefaultSystemPrompt() string {
 }
 
 // RootSection is the Texture root's instructions (PD3 S1,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). It is not part
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). It is not part
 // of the prompt core: the run of the document the texture_root marker names
 // carries it in its request turn, with the ledger.
 func RootSection() string {

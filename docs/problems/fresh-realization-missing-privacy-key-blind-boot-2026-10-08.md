@@ -6,7 +6,7 @@ realization). Found by the recovery admission staging acceptance run.
 ## Evidence
 
 Disposable `computer-f177676f…` (user `6c13cf31…`), driver log
-[`evidence/recovery-admission-staging-demo-2026-10-08.log`](../evidence/recovery-admission-staging-demo-2026-10-08.log):
+`evidence/recovery-admission-staging-demo-2026-10-08.log`:
 
 - 22:50:16Z vmctl ownership removed (chain retained) → concurrent resolves
   refused `projection_base_missing` (503, Retry-After 60, one deduplicated
@@ -60,7 +60,7 @@ fatal guest startup error as a typed refusal promptly.
 
 **Decided.** Owner ratified operational invariant O21 ("a realization holds
 no unique state", [register](../operational-invariants-register-2026-10-08.md),
-[inventory](../state-homes-inventory-2026-10-08.md)) and its consequence for
+[inventory](../operational-invariants-register-2026-10-08.md)) and its consequence for
 this key: the escrowed key is delivered to the same computer's new
 realization automatically — bound to ComputerID and realization epoch,
 consume-once, recorded in key-escrow transparency before unwrap, delivered
@@ -77,7 +77,7 @@ as its own red slice proved on a lose-the-disk disposable.
 
 Disposable `computer-13ec9b0d8c80b7a3b14ec8309495a9dc`, fresh signup then
 vmctl ownership removal (chain retained), log
-[`evidence/sh-slice1-key-refusal-staging-2026-10-09.log`](../evidence/sh-slice1-key-refusal-staging-2026-10-09.log):
+`evidence/sh-slice1-key-refusal-staging-2026-10-09.log`:
 first resolves refused `projection_base_missing` (repair job ran); once
 the base was published the refusal became `privacy_key_unavailable`
 (503, 31 ms) within 30 s instead of a keyless boot; after a vmctl restart

@@ -2,7 +2,7 @@
 
 Status: open; documented, not fixed. Class of a fix: red (key escrow,
 store schema). Found by the Store A pre-split liveness investigation
-(docs/evidence/store-a-pre-split-tables-2026-10-29.md).
+(docs/archive/evidence/store-a-pre-split-tables-2026-10-29.md).
 
 `computer_key_escrows`, `computer_key_escrow_transparency`,
 `computer_key_unwrap_requests` and `computer_key_unwrap_approvals` are

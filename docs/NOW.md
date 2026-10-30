@@ -15,7 +15,7 @@ live owners elsewhere.
   A promoted working Definition is the sole current authority root.
 - The learning and alignment mechanism (precommitment records, PSA):
   [`precommitment-records.md`](precommitment-records.md).
-- Direction and state: [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
+- Direction and state: [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 - Detailed architecture: [`current-architecture.md`](current-architecture.md).
 
 ## History

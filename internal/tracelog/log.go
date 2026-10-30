@@ -14,7 +14,7 @@
 // loss loses at most the lines since the last Sync, always the newest ones.
 //
 // Fail-stop, from the host segment writer's five review rounds
-// (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md). After a
+// (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md). After a
 // failed fsync nothing past the last successful one is known to be durable,
 // and bytes that can still be read are not proof that they are: the kernel
 // may have dropped the dirty pages and marked them clean, so a second fsync

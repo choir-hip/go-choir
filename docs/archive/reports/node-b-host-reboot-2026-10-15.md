@@ -1,7 +1,7 @@
 # Node B host reboot to kernel 6.18.55 (2026-10-15)
 
 Owner approval: "reboot go" (2026-10-15). Runbook:
-[docs/runbooks/node-b-host-reboot.md](../runbooks/node-b-host-reboot.md).
+[docs/runbooks/node-b-host-reboot.md](../../runbooks/node-b-host-reboot.md).
 The script receipt and run log are kept outside the repo in
 `~/.config/choir-qa/traces/node-b-reboot-2026-10-15/`.
 

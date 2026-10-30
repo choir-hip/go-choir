@@ -1,5 +1,5 @@
 // Command escrowkey inspects, seals and unseals the host escrow private key
-// file (station FP9, docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md,
+// file (station FP9, docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md,
 // "The escrow key"). It prints states and public-key fingerprints only,
 // never key material.
 //

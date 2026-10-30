@@ -9,7 +9,7 @@ import (
 
 // Failure modes pinned here (docs/definitions/choir-reeng-cut2-evidence-to-
 // publication-2026-10-12.md unit 2a, and the C8 quote census in
-// docs/reports/reeng-c8-quote-census-2026-10-13.md):
+// docs/archive/reports/reeng-c8-quote-census-2026-10-13.md):
 //   - a tolerant tier accepts a quote the source does not say, or the
 //     rendered span is the model's words instead of the source's own bytes;
 //   - tolerant offsets land on the wrong bytes after a multibyte character,

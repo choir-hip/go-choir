@@ -36,7 +36,7 @@ cannot be built on once its work is done.
   settles the trajectory when a terminal run carries the settlement trigger
   and `lifecycleSettlementReady` holds; `internal/store/lifecycle.go` (about
   line 5263) writes `settled`, a terminal status.
-- The 2026-10-09 fix (docs/problems/texture-settled-work-refuses-owner-revise-2026-10-09.md)
+- The 2026-10-09 fix (docs/problems/settled-document-refuses-owner-revision-2026-10-26.md)
   reopens settled Texture work on a live trajectory and named this case as
   its residual: "Whether a document trajectory should ever settle while its
   owner keeps it is a Texture contract question (living documents, Gate 3)."
@@ -215,7 +215,7 @@ marker was not checked). The owner revision's own label (review 277 LOW) is
 fixed on lane/f1-label (review 280), not yet deployed.
 
 
-## Merged from docs/problems/texture-settled-work-refuses-owner-revise-2026-10-09.md (2026-10-09)
+## Merged from docs/problems/settled-document-refuses-owner-revision-2026-10-26.md (2026-10-09)
 
 **After Texture settles its work, the owner cannot revise the document (2026-10-09).**
 Found by the Texture acceptance suite, third run on staging (build 7bc8f374; receipt `evidence/texture-acceptance-2026-10-09T18-59-43-320Z.json`), fresh disposable account `1d20b772…` (`computer-7799ad0b…`, VM `vm-549ec1d9…`), document `1ae32977…`. Mutation class of the eventual fix: red (lifecycle work items, owner revision intake). Problem first; no fix in this commit.

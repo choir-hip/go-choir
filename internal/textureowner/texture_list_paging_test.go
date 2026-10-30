@@ -10,7 +10,7 @@ import (
 
 // GET /api/texture/documents hard-coded 50 and ignored ?limit, so scripts
 // asking for 100 or 500 were silently truncated and documents past the newest
-// 50 could not be listed at all (docs/problems/surface-broken-calls-2026-10-14.md,
+// 50 could not be listed at all (docs/archive/problems/surface-broken-calls-2026-10-14.md,
 // item 7).
 //
 // Failure modes pinned: limit ignored; no way past the first page; a page

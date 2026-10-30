@@ -6,7 +6,7 @@ import (
 )
 
 // The C toolchain and ICU cgo environment reach capsule workloads
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // option B). Ways it could fail:
 //
 //	B1. a hop drops a variable, so gcc or the ICU headers are missing again;

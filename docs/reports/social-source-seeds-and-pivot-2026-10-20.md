@@ -4,7 +4,7 @@ Mutation class: orange (registry rows plus one outlet-key rule); rollback is a
 git revert. Owner direction: `docs/reports/owner-notes-2026-10-14.md` sections
 30 and 32 (start AT Protocol and Fediverse ingestion; choose supernodes that
 are themselves aggregating, then pivot out from them). Prior research:
-`docs/reports/multilingual-osint-sourcing-research-2026-10-13.md`.
+`docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md`.
 
 ## The rule that governs everything
 

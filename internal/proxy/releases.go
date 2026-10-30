@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 )
 
-// Releases at the proxy (P7, docs/reports/p6-p8-release-adopt-2026-10-15.md).
+// Releases at the proxy (P7, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 //
 //	POST /api/computers/<id>/releases   publish an applied operation   owner act
 //	GET  /api/releases                  list published releases (the caller's, under owner reads)   read

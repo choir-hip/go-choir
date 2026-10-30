@@ -255,7 +255,7 @@ in
   # load it by modalias, this makes it explicit. Inert without the device.
   # virtio_mem (=m) serves vmctl's memory leases on computers launched with
   # a hotplug region; Firecracker refuses a resize until the driver binds
-  # (docs/reports/memory-hotplug-controller-design-2026-10-14.md). The
+  # (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md). The
   # onlining policy (memhp_default_state=online_movable) is on the command
   # line of those computers only. Inert without the device.
   boot.kernelModules = [ "overlay" "virtio_balloon" "virtio_mem" ];
@@ -578,7 +578,7 @@ EOF
   # as one unprivileged user per desk, never as the runtime's root: no
   # capabilities, no_new_privs, Landlock, a cell seccomp filter and an empty
   # network namespace (internal/yaegikernel/desk_cell_confinement*.go;
-  # docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+  # docs/problems/desk-boundary-residuals-2026-10-21.md).
   # No home, no shell, no supplementary groups. The uid and gid of each are the
   # desk manifest's (internal/deskmanifest, Sandbox.UID): the spawner uses the
   # number and never looks a user up, so these entries exist for operators
@@ -1049,7 +1049,7 @@ EOF
       # go-icu-regex). The capsule executor appends these bin dirs to every
       # capsule workload's PATH and hands it the four cgo variables above;
       # the store is read-only through the capsule's lower root
-      # (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
+      # (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
       CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath (with pkgs; [ gcc binutils pkg-config ]);
       # The frontend's locked dependencies, carried to capsule workloads like
       # the toolchain above, so a frontend build whose package files match

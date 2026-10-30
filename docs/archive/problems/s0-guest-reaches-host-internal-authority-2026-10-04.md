@@ -18,7 +18,7 @@ only). This record covers the general authority consequence.
 
 ### Leg 1: reachability (staging, S0a)
 
-`docs/evidence/s0a-tap-reachability-2026-10-01.json`: from inside a guest,
+`docs/archive/evidence/s0a-tap-reachability-2026-10-01.json`: from inside a guest,
 TCP dials succeeded to another guest's `:8085`, the host's vmctl `:8083`, and
 `1.1.1.1:443`.
 
@@ -33,7 +33,7 @@ TCP dials succeeded to another guest's `:8085`, the host's vmctl `:8083`, and
 - The packet therefore takes the **INPUT path, not POSTROUTING**: the
   per-tap `-o lo -j MASQUERADE` rules exist but have 0 packets/0 bytes and
   cannot fire; **no source NAT occurs**.
-- Deployed proof (`docs/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`):
+- Deployed proof (`docs/archive/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`):
   a guest-originated SYN to `hostIP:8086` was captured at host INPUT with
   `SRC=10.200.207.2 DST=127.0.0.1` — the real guest tap IP, not loopback.
 - `FORWARD -i tap -j ACCEPT` / `-o tap -j ACCEPT` plus a general outbound
@@ -191,7 +191,7 @@ Authority (transport-bound; X-Internal-Caller demoted to marker):
   autoputer + agentcore; /internal/runtime + /internal/diag gated.
 
 Deployed verification (two disposable accounts, builds b15f012a + POST
-legs on the follow-up deploy): `docs/evidence/s1a-refusal-matrix-2026-10-04.json`
+legs on the follow-up deploy): `docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json`
 — tap->tap FORWARD timeout, vmctl internal 403, maild forged owner 403,
 corpusd mint POST 403, proxy publish POST 403; bound-owner CV resolve +
 maild read + source-service search + egress + product page all green;

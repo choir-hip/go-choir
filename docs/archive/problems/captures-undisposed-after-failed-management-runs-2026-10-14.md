@@ -5,7 +5,7 @@ Status: cause confirmed from the run trace; fixed on branch
 "Fix" below.
 
 Found by the S0 probe of management delegation
-(`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`, section
+(`docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md`, section
 "S0 baseline", on branch `management-delegation-s0-s1`): on the live paper,
 45 captures that arrived 06:51-09:12 UTC had no disposition at probe time,
 33 of them more than 15 minutes after arrival. 28 arrived in the 08:22 UTC
@@ -13,7 +13,7 @@ burst, while two management runs failed with the opencode-go circuit open.
 
 ## Contract
 
-The L2a design (`docs/reports/l2a-synthesis-intake-design-2026-10-14.md`,
+The L2a design (`docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md`,
 R2-5) and management's prompt: every capture gets a disposition: a story
 opened from it, a feed into a story, or a decline to its source.
 

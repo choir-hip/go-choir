@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Cut 0 invariant checker, artifact (3) of
-// docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md.
+// docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md.
 //
 //   node scripts/reeng_invariants.mjs <bundle.json> [--json <out>]
 //

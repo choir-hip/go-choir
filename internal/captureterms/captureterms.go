@@ -1,5 +1,5 @@
 // Package captureterms is the tokenizer of Store B's capture term table
-// (rung 3 of docs/reports/object-graph-retrieval-research-2026-10-14.md).
+// (rung 3 of docs/archive/reports/object-graph-retrieval-research-2026-10-14.md).
 // It replaces nothing: it decides which terms a capture's title, outlet and
 // language are found by, and which terms a query word looks up, so that
 // every capture the corpus search's Go matcher (researchtools

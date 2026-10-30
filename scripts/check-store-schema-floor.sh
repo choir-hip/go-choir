@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The store floor on the deploy path (docs/design/choir-event-table-f-c-2026-10-22.md
+# The store floor on the deploy path (docs/archive/design/choir-event-table-f-c-2026-10-22.md
 # 4.5; review finding H on F-c deploy 1).
 #
 # A guest whose store holds events stamped for choir_events must never run a

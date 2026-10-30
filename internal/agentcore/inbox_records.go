@@ -17,7 +17,7 @@ import (
 )
 
 // Records as work state, Cut 1 landing L3a
-// (docs/definitions/choir-reeng-cut1-authority-2026-10-12.md, "Cursor and
+// (docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md, "Cursor and
 // wakes"): the Texture-research conversation runs on addressed records
 // alone. A desk's inbox id is its desk agent id (texture:<doc>,
 // research:<doc>); each cell shows the records in (cursor, head] and

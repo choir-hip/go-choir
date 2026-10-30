@@ -14,7 +14,7 @@ import (
 )
 
 // S3 re-credential on resume
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md, "What the
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md, "What the
 // platform allows"). A snapshot resume keeps the realization (same
 // realization_id and realization epoch) but the guest's frozen capability may
 // be long expired. This pins the platform rules the host relies on, with no

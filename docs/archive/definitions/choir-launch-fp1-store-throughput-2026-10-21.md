@@ -13,7 +13,7 @@ review:
     sol send back (A1 boot ALTER, A2 withdrawal races), Argon accept (A2 as
     non-blocking). FP0: fix A2 and the malformed-family recovery on
     lane/b2-store-b1fix; A1 is pre-existing, recorded, not fixed here.
-  evidence_ref: docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md (panel findings P1, P2)
+  evidence_ref: docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md (panel findings P1, P2)
 
 start:
   captured_at: 2026-10-21T18:10:00Z
@@ -49,7 +49,7 @@ finish:
     on it only when validated, otherwise on the unchanged JSON path;
     (2) start/end/duration logs for every store step before the listener;
     (3) GetObject and ListObjectsPage labelled by object kind; (4) the
-    engine-concurrency design, docs/design/store-engine-concurrency-2026-10-21.md;
+    engine-concurrency design, docs/archive/design/store-engine-concurrency-2026-10-21.md;
     (5) optionally L3-05.
   acceptance:
     - action: go test of the new internal/objectgraph and internal/store tests (differential reads, writer maintenance, rollback simulation, writer storm, plan shape, open-with-many-rows, no-scan op counts), then internal/store, internal/objectgraph, internal/computerversion and internal/projectionbase once each through the heavy wrapper
@@ -62,7 +62,7 @@ finish:
     git revert of the batch commits. The side table stays on the paper's
     database, additive; an older binary lists it as an unknown table and
     reports replay-ineligible until it is dropped by hand
-    (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md,
+    (docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md,
     finding 3). Forward again repairs it online.
   landing:
     required: true
@@ -91,7 +91,7 @@ boundaries:
   authority_sources:
     - the metamission and the orchestrator's brief (2026-10-21)
     - CLAUDE.md, docs/standing-questions.md
-    - docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md
+    - docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md
     - docs/problems/research-more-slow-and-hidden-2026-10-21.md (E6)
   must_preserve:
     - Nothing on the boot path scans or rewrites og_objects; the validator starts after the listener is up and holds the engine only per page.
@@ -220,7 +220,7 @@ now:
       stamps makes deploy 1 its floor, so that is a platform decision.
     kind: architecture
     status: proposal
-    evidence_ref: docs/design/choir-event-table-f-c-2026-10-22.md (Status, deploy 2)
+    evidence_ref: docs/archive/design/choir-event-table-f-c-2026-10-22.md (Status, deploy 2)
     owner_ratification_ref: the owner's section 8 defaults (2026-10-22) and FP0's brief naming the selector pattern
   belief:
     believed_state: >-
@@ -254,7 +254,7 @@ now:
     lane once deploy 2 has staging numbers.
   followup: >-
     Journal growth (lane/fp1-journal-growth, 2026-10-22): problem record
-    docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
+    docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md.
     FP0 asked for the dry-run fix; the tests-first measurement on the real
     tape harness showed the dry run costs about 5% (133/141/136 KiB per
     event without/with/without), because finalize rewrites the same chunks
@@ -343,7 +343,7 @@ receipts:
   - id: fp1-journal-growth
     boundary: define
     identity: lane/fp1-journal-growth (problem record commits)
-    proof_refs: [docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md]
+    proof_refs: [docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md]
     rollback_ref: git revert of the record commits (docs only)
     disposition: problem documented, causes ranked, fixes proposed; nothing implemented
   - id: fp1-side-table
@@ -364,7 +364,7 @@ receipts:
   - id: fp1-engine-concurrency-design
     boundary: define
     identity: 636612d3e, b630883d0
-    proof_refs: [docs/design/store-engine-concurrency-2026-10-21.md, internal/objectgraph/engine_concurrency_probe_test.go]
+    proof_refs: [docs/archive/design/store-engine-concurrency-2026-10-21.md, internal/objectgraph/engine_concurrency_probe_test.go]
     rollback_ref: git revert 636612d3e
     disposition: design landed in the lane, nothing implemented; next batch named
   - id: fp1-panel-fixes

@@ -73,7 +73,7 @@ type SourcePacket struct {
 	// PComplete is a final research Report's self-score: the desk's
 	// probability that the Report answers every question the Cast asked,
 	// stated before any settlement
-	// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+	// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 	PComplete *float64 `json:"p_complete,omitempty"`
 }
 

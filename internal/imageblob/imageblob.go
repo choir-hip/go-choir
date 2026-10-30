@@ -3,7 +3,7 @@
 // bytes, and travels as an artifact:sha256 ref; transcripts, run events,
 // logs and API responses carry the ref, and only the HTTP body to the
 // gateway carries the bytes
-// (docs/problems/models-configured-text-only-2026-10-15.md, FM11-FM12).
+// (docs/archive/problems/models-configured-text-only-2026-10-15.md, FM11-FM12).
 package imageblob
 
 import (

@@ -2,11 +2,11 @@
 definition_version: 4
 
 # Station C1e of the re-engineering metamission
-# (docs/definitions/choir-reeng-metamission-2026-10-12.md): engineering and
+# (docs/archive/definitions/choir-reeng-metamission-2026-10-12.md): engineering and
 # self-development on records, then the wholesale deletion of packets and
 # work items. Scope is cut 1's scope_split (C1e items) in
-# docs/definitions/choir-reeng-cut1-authority-2026-10-12.md; the code map
-# and the dependency order are docs/reports/c1e-deletion-inventory-2026-10-13.md
+# docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md; the code map
+# and the dependency order are docs/archive/reports/c1e-deletion-inventory-2026-10-13.md
 # (read-only inventory on 18d01cc0). This file is the executable station
 # over that scope; it adds no scope.
 readiness: reviewed
@@ -141,7 +141,7 @@ finish:
     - action: >-
         L7's story baseline: on B3's and B5's identities, the tracer story
         scenario's fold-derived run acceptance is fetched and compared with
-        Cut 0's recorded level (docs/reports/reeng-cut0-measurements-2026-10-12.md
+        Cut 0's recorded level (docs/archive/reports/reeng-cut0-measurements-2026-10-12.md
         §4), recording trajectory, acceptance id, level reached and the
         comparison
       proves: the tracer story reaches at least Cut 0's recorded level with acceptance derived from the fold (cut 1 L7)
@@ -207,8 +207,8 @@ boundaries:
   mutation_class: red
   authority_sources:
     - docs/re-engineering-decisions-2026-10-12.md (§2, §9, §10, §12; D9 for the Verify binding)
-    - docs/definitions/choir-reeng-cut1-authority-2026-10-12.md scope_split (convergent panel 2026-10-13, .agentic-consensus/c1-scope-2026-10-13)
-    - docs/definitions/choir-reeng-metamission-2026-10-12.md (C1e station; runs after C2's autopaper_live and L1a)
+    - docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md scope_split (convergent panel 2026-10-13, .agentic-consensus/c1-scope-2026-10-13)
+    - docs/archive/definitions/choir-reeng-metamission-2026-10-12.md (C1e station; runs after C2's autopaper_live and L1a)
     - docs/choir-doctrine.md (Texture sole canonical writer; management admits engineering through delegated casts; engineering capsule-bound mutation)
   must_preserve:
     - Texture is the sole writer of canonical document revisions
@@ -245,7 +245,7 @@ now:
       Management Casts engineering on records with the right parent, but
       each assignment ends with a cancel report about 10 s later and
       engineering never freezes (three Casts, drill timed out). Problem
-      doc docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md
+      doc docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md
       (a60591f5); diagnosis from the trace is in progress.
     Earlier (B1 build): steps 1-4 on branch c1e-b1, rebased onto main
     with L2a (no semantic clash; management has Stories, Feed, Decline
@@ -269,8 +269,8 @@ now:
     delta_o: the I7 checker route-scoped to the engineering pairs from B1, reading zero minted work items and packets on the deployed engineering drill; zero everywhere from B4
     scope_if_supported: engineering and self-development on staging
     status: weakened  # contradicted on the code read (packet-reads report); deployed test is B1's round trip
-    evidence_refs: [docs/reports/c1e-deletion-inventory-2026-10-13.md, docs/reports/c1e-management-packet-reads-2026-10-13.md]
-  decision: {what: "run steps 0-8 in order, each its own commit, deployed as batches B0-B5", kind: operational, status: proposal, evidence_ref: docs/reports/c1e-deletion-inventory-2026-10-13.md, owner_ratification_ref: not_applicable}
+    evidence_refs: [docs/archive/reports/c1e-deletion-inventory-2026-10-13.md, docs/archive/reports/c1e-management-packet-reads-2026-10-13.md]
+  decision: {what: "run steps 0-8 in order, each its own commit, deployed as batches B0-B5", kind: operational, status: proposal, evidence_ref: docs/archive/reports/c1e-deletion-inventory-2026-10-13.md, owner_ratification_ref: not_applicable}
   belief:
     believed_state: >-
       B0 is landed and its instrument is proven deployed. The census

@@ -257,7 +257,7 @@ func TestPromptCoreCastsTheOwnersWordsByRevision(t *testing.T) {
 
 // PD3 S1: the root's instructions are a section chosen from the texture_root
 // marker, never part of the prompt core every Texture reads
-// (docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
+// (docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
 // fail: the section leaks into the core (every document's Texture would act
 // as the root, and the core would blow its budget); it does not ask for the
 // refs line the coverage proof checks; it lets the root dispatch work or

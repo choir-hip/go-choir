@@ -92,7 +92,7 @@ measurement, **[H]** hypothesis with its test named, **[I]** inference.
 
 Each Firecracker microVM has a VMM thread, one host thread per vCPU, and an
 API thread; the repo measured VMM plus virtio at 0.007 cores for the paper
-[V: `docs/reports/computer-cpu-efficiency-2026-10-14.md` §1a]. A vCPU thread
+[V: `docs/archive/reports/computer-cpu-efficiency-2026-10-14.md` §1a]. A vCPU thread
 is an ordinary host task that issues `KVM_RUN`; when the guest executes
 `HLT` (idle), the thread blocks in KVM. The host scheduler therefore sees
 only runnable vCPUs. A computer "waiting on the model API" is a halted
@@ -161,7 +161,7 @@ accounting suggests:
 - **Lock-holder preemption.** The store serializes every `ogStore` read and
   write through `engineMu`; it was held 70% of a 122 s window, 89% of that
   in reads, and a second reader can add at most about 2x before the guest's
-  own cores contend [V: `docs/design/store-engine-concurrency-2026-10-21.md`].
+  own cores contend [V: `docs/archive/design/store-engine-concurrency-2026-10-21.md`].
   If the goroutine holding that mutex is preempted by the host for 10 ms,
   every reader waits 10 ms. KVM's directed yield (the yield hypercall and
   PLE-driven yields on Intel) can help only when the lock holder is a
@@ -738,16 +738,16 @@ Primary (verified 2026-10-28):
 
 Repo evidence:
 
-- `docs/reports/computer-cpu-efficiency-2026-10-14.md` (measured CPU split,
+- `docs/archive/reports/computer-cpu-efficiency-2026-10-14.md` (measured CPU split,
   halt polling 0.094 cores, 73% halted, APICv off, store 73%).
 - `docs/reports/vm-density-limits-2026-10-14.md` (idle 0.008-0.009 cores,
   1.2 cores busy, 1.3-4.4 GiB used, deploy storm, 20 busy on the EPYC, SMT
   off halves).
-- `docs/design/store-engine-concurrency-2026-10-21.md` (engine mutex 70%,
+- `docs/archive/design/store-engine-concurrency-2026-10-21.md` (engine mutex 70%,
   89% reads, 1.4 s scans, MaxConcurrent analysis).
 - `docs/problems/host-kernel-216-days-unpatched-2026-10-15.md` (SMT
   decision, nosmt estimate, marker TTL, sweeper behavior).
-- `docs/reports/boundary-strength-ladder-2026-10-15.md` (CPU side door,
+- `docs/archive/reports/boundary-strength-ladder-2026-10-15.md` (CPU side door,
   VMScape state, microcode EOL, stranger policy options).
 - `docs/security-density-architecture-checklist-2026-10-21.md` (NET-07,
   DEC-06, L17 jailer off).

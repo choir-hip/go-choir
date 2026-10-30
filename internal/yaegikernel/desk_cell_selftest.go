@@ -14,7 +14,7 @@ import (
 )
 
 // Desk cell self-test: the staging proof of desk cell confinement (F4,
-// docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+// docs/problems/desk-boundary-residuals-2026-10-21.md).
 //
 // Local tests cannot prove Landlock (the CI and Docker kernels have none), and
 // a guest is never reached by SSH. So the guest runtime can, on an owner's

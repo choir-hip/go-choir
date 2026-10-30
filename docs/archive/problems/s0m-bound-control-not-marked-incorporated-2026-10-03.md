@@ -23,7 +23,7 @@ But the bound control packet `3fbf9bb4` stayed `pending` — it was never
 marked incorporated — and on terminalize a second `claim_released_pending`
 freed it again. No `system:reducer` resolve could fire.
 
-Evidence: `docs/evidence/s0m-stranded-bound-rebind3-2026-10-03.json` —
+Evidence: `docs/archive/evidence/s0m-stranded-bound-rebind3-2026-10-03.json` —
 `rebound_live_run` (run `c55287d3`) → `claim_released_pending` for the same
 update_id.
 

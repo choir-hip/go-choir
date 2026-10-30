@@ -34,7 +34,7 @@ func TestClassifyCall_QuotaLimited(t *testing.T) {
 
 // A per-second plan limit clears in seconds; benching the provider for a day
 // discarded most of the plane after one burst of research children (S1c,
-// docs/problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
+// docs/archive/problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
 // Quota exhaustion keeps the long bench even when it arrives as a 429.
 func TestRateLimitBenchesBrieflyQuotaExhaustionForADay(t *testing.T) {
 	p := DefaultBackoffPolicy()
@@ -59,7 +59,7 @@ func TestRateLimitBenchesBrieflyQuotaExhaustionForADay(t *testing.T) {
 	}
 	// Quota exhaustion benches far longer than a rate limit, but is probed
 	// hourly so an owner top-up is seen within hours, not days
-	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	// (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 	if d := p.CooldownDuration(OutcomeQuotaLimited, 1); d < time.Hour {
 		t.Fatalf("quota exhaustion must bench at least an hour, got %s", d)
 	}

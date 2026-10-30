@@ -1,7 +1,7 @@
 package agentcore
 
 // P4 end to end, in one process
-// (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md, "Tests").
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md, "Tests").
 //
 // The guest runtime is wired as production M7 is (derivable fixture: store,
 // appender, real updater engine on its unix socket, verifier, route ledger).

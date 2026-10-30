@@ -6,7 +6,7 @@ import (
 )
 
 // vmctl reconciles every Firecracker process on the host against its
-// registry (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
+// registry (docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
 // Failure modes pinned: a non-Firecracker process or one without --id is
 // reported as a VM; either --id spelling is missed; reaping touches a VM
 // the manager is running.

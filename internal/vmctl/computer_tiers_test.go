@@ -6,7 +6,7 @@ import (
 )
 
 // Computer tiers (owner ruling 2026-10-13,
-// docs/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md).
+// docs/archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md).
 // Ways this could fail, written before the code: a downgraded account keeps
 // a persisted always-on class; the platform computer is reclaimed or idle
 // hibernated; a hibernated platform computer is never woken; a paid

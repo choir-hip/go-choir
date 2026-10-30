@@ -64,4 +64,4 @@ one hour.
    `choir.*` calls (affordance invariant).
 
 Mutation class of a fix: orange (desk cell transport, prompt text).
-Full study: docs/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md.
+Full study: docs/archive/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md.

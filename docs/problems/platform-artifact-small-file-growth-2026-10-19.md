@@ -13,7 +13,7 @@ fix below: **red** (the event tape write path and the evidence store;
 protected surfaces: computer events, pin receipts, checkpoint and replay).
 
 Related records: the tape rate is also a guest cost
-([`guest-dolt-storage-growth-2026-10-15`](guest-dolt-storage-growth-2026-10-15.md):
+([`guest-dolt-storage-growth-2026-10-15`](../archive/problems/guest-dolt-storage-growth-2026-10-15.md):
 about 240 KB of guest Dolt journal per tape event) and the tape was left
 open in
 [`artifact-store-grows-12gb-a-day-2026-10-14`](artifact-store-grows-12gb-a-day-2026-10-14.md)

@@ -20,7 +20,7 @@ import (
 // Before it, a worker's bound was a virtual address cap (RLIMIT_AS 8 GiB) in
 // an 8 GiB guest and a soft Go limit: two runaway cells filled the guest and
 // the kernel killed the daemon, the largest process
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 // Now each worker is created inside its own cgroup (<root>/w-<id>) with
 // memory.max and memory.high from its desk's manifest row, no swap, a process
 // cap, and oom.group: the kernel kills the worker at its budget, never the

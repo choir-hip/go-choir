@@ -14,7 +14,7 @@ import (
 )
 
 // Deploy refresh through the guest's planned-restart marker
-// (docs/problems/owner-computer-pinned-as-canary-2026-10-13.md). Owner rule:
+// (docs/archive/problems/owner-computer-pinned-as-canary-2026-10-13.md). Owner rule:
 // deploys never restart a busy computer; a planned restart for an update may
 // resume work, keyed by a marker written before the restart.
 //

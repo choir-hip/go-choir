@@ -120,7 +120,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.WorldEvent"},
 		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.EventMembership"},
 		// An owner-requested source adoption of a published release (P8,
-		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
+		// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ReleaseAdoption"},
 		// The file object (I27; docs/design/file-object-2026-10-24.md): a file
 		// with a stable id and its plaintext digest, and the path view from a
@@ -138,7 +138,7 @@ func DefaultRegistry() *Registry {
 		{Kind: KindStreamSeqLease, Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterStore},
 
 		// --- VM store: written through PutBatch before the write gate
-		// existed (H-OG1, docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+		// existed (H-OG1, docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 		// Identity is lifecycleCanonicalID: a key scoped by computer.
 		{Kind: "choir.actor_wake_outbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "store.ActorWakeOutbox"},
 		{Kind: "choir.capture_disposition", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Writer: WriterRuntime, Schema: "types.CaptureDisposition"},
@@ -207,7 +207,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.entity_review", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityReviewRow"},
 		{Kind: "choir.entity_stopword", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "platform.entityStopwordRow"},
 		// A published software release record (P7,
-		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
+		// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
 		// executable bytes; the patch lives in the host content store.
 		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Writer: WriterCorpusd, Schema: "release.Record"},
 		// The Choir Library (S2, docs/design/library-package-propagation-2026-10-26.md

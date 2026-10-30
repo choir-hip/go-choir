@@ -9,7 +9,7 @@ import (
 )
 
 // Async search, worker side (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md;
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md;
 // pre-flight item 6: a cell's host calls end with the cell, so arrivals are
 // written by the worker's single reader loop into a store the cell reads).
 // Ways the store can fail:
@@ -174,7 +174,7 @@ func TestSearchWaitReturnsAtDoneOrBound(t *testing.T) {
 	}
 }
 
-// Budget routing (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// Budget routing (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md
 // §4.1) adds a paid provider after the start frame when the free answers
 // fall short. Its arrival must count in N, or the count reads "2/1
 // answered, -1 pending".

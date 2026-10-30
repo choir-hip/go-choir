@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// The store floor (docs/design/choir-event-table-f-c-2026-10-22.md 4.5;
+// The store floor (docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.5;
 // review finding A on deploy 1). The epoch receipt says which binary opened
 // the store last, and every older binary's Open rewrites it. The floor says
 // the lowest epoch that may run on the store at all, and only binaries that

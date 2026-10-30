@@ -1,10 +1,10 @@
 # corpusd Admits `effect_accepted` Without Checking Its Authority
 
 Date: 2026-10-15. Source: S1 of
-[principal-identity-and-signed-acts-2026-10-15.md](../reports/principal-identity-and-signed-acts-2026-10-15.md)
+[principal-identity-and-signed-acts-2026-10-15.md](../archive/reports/principal-identity-and-signed-acts-2026-10-15.md)
 (§0 "`effect_accepted` is not authorized at append", §5, §6 S1), and the
 residual named in
-[guest-can-arm-own-selfdev-mode-2026-10-15.md](guest-can-arm-own-selfdev-mode-2026-10-15.md)
+[guest-can-arm-own-selfdev-mode-2026-10-15.md](../archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md)
 ("Heresy delta", second line). Owner rulings: the report's defaults are
 accepted ([owner-notes-2026-10-14.md §19](../reports/owner-notes-2026-10-14.md)):
 the proxy signs S1 owner-act receipts; passkey acts on `approve.choir.news`

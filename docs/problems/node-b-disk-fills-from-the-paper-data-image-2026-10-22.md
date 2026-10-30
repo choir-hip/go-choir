@@ -33,7 +33,7 @@ Date: 2026-10-22, 14:40 UTC. Found by: FP0, when deploy R (main 0bf8a097d, CI 39
   writes a new oldgen archive each time (a 25.7 GB file from 11:12, a 6.2 GB
   file at 14:54), so oldgen grows about 1.5 to 2.5 GiB an hour and nothing
   collects it. Own record:
-  [platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md](platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md).
+  [platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md](../archive/problems/platform-dolt-oldgen-grows-every-auto-gc-2026-10-22.md).
 - **Holders:** VM state about 185 GiB (paper 80, candidate fleet 41, test
   computers about 60), nix store about 85 GiB,
   `dolt-backup-20261015-pre-2.4.2` 48.5 GB, swap file 16 GiB (its removal
@@ -78,7 +78,7 @@ image's fill crosses a threshold is the bounded remedy until discard
 
 ## Cause (read in docs and code; the guest-side half is a hypothesis)
 
-The paper's Dolt journal grows about 1.6 GiB per 10 minutes (docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md). The online GC frees that inside the guest every few minutes, but the host image never gets the space back:
+The paper's Dolt journal grows about 1.6 GiB per 10 minutes (docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md). The online GC frees that inside the guest every few minutes, but the host image never gets the space back:
 
 - Firecracker 1.16.1 has no virtio-blk discard. nix/node-b.nix says so where it deliberately leaves VM_DATA_DISCARD unset. So the guest's frees never reach the host.
 - **Hypothesis, confirmed by Evidence 2 (15:00):** the guest filesystem keeps writing to blocks it never used before, so the host's sparse image grows until the whole cap is allocated. The guest reports 39.5 GB used while the host holds about 80 GiB.
@@ -296,7 +296,7 @@ Proposal, docs only; no number below changes in this lane.
 
 - **No CI log in the repo measures a deploy's disk footprint.** The repo's
   claims are "single-digit GiB" (the preflight's own comment and
-  [node-b-deploy-disk-preflight-floor-2026-08-26.md](../evidence/node-b-deploy-disk-preflight-floor-2026-08-26.md))
+  node-b-deploy-disk-preflight-floor-2026-08-26.md)
   and FP0's "about 3 GiB" above; neither cites a `nix path-info -S` or a
   `df` before and after. So the exact figure is **unknown**.
 - The one measured component: each deploy adds a system generation whose
@@ -315,7 +315,7 @@ Proposal, docs only; no number below changes in this lane.
 space drops below `min-free` during a build, nix runs a store GC inside the
 build, and that GC deletes the build's own unrooted inputs ("not a valid
 path"; the deploy looped on 2026-09-17,
-[mission-mail-attachments…](../archive/mission-mail-attachments-and-app-cutover-2026-09-17.md) item 2;
+mission-mail-attachments… item 2;
 ci.yml's prebuild runs `nix store gc` first for the same reason). The
 90 GiB floor is above `min-free` plus a deploy's footprint, which is why it
 holds. **Lowering only `DEPLOY_MIN_FREE_KIB` to 30 GiB (option 1 above)

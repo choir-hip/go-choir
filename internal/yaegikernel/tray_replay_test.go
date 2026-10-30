@@ -7,7 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 )
 
-// docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md (F2): after a
+// docs/archive/problems/prompt-bar-minesweeper-demo-2026-10-10.md (F2): after a
 // Texture cell staged a turn whose reduce failed, later cells that staged
 // nothing (println("ping ok"), choir.Help) failed with the same "persist
 // tray-1" error. Failure modes pinned: a cell that stages nothing ships an

@@ -20,7 +20,7 @@ func senderAuthenticatedFor(cfg *Config, headers map[string]string, fromAddress 
 }
 
 // senderAuthenticated reports whether a received message's From address is
-// authenticated (G2, G3; docs/problems/maild-send-gate-defects-2026-10-14.md):
+// authenticated (G2, G3; docs/archive/problems/maild-send-gate-defects-2026-10-14.md):
 // an Authentication-Results header (RFC 8601) whose authserv-id is one of
 // trusted, the receiving server's, that reports
 //

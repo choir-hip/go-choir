@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 )
 
-// LR lever 6 (docs/reports/lr-lever6-cell-output-design-2026-10-14.md): a
+// LR lever 6 (docs/archive/reports/lr-lever6-cell-output-design-2026-10-14.md): a
 // desk cell's printed output over cellOutputBound characters reaches the
 // transcript as a head, a marker line and a tail; the whole text stays in the
 // worker session, read back with choir.CellOut(handle). Value views (listed

@@ -26,7 +26,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent
@@ -144,7 +144,7 @@ now:
       signal-plane+desk-consumption'
     status: resolved
     evidence_refs:
-    - 'docs/evidence/m0-residual-texture-runtime-restart-2026-09-30.md (repair section; fix d1d875a0)'
+    - 'docs/archive/evidence/m0-residual-texture-runtime-restart-2026-09-30.md (repair section; fix d1d875a0)'
   decision:
     what: 'redeploy-first per owner; SSE fix bundled (small, same mission)'
     kind: operational
@@ -174,8 +174,8 @@ receipts:
       chunk); QA repro timed out but failure attributed to named residual
       — texture desk passivated runtime_restarted with no re-wake.
       Baseline legs recorded for the executed legs.'
-    evidence_ref: 'docs/evidence/m0-residual-texture-runtime-restart-2026-09-30.md
-      + docs/evidence/m0-qa-baseline-timings-2026-09-30.json'
+    evidence_ref: 'docs/archive/evidence/m0-residual-texture-runtime-restart-2026-09-30.md
+      + docs/archive/evidence/m0-qa-baseline-timings-2026-09-30.json'
   - id: m0-runtime-restart-rewake-fix
     kind: outcome
     status: settled

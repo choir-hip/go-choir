@@ -46,14 +46,14 @@ Firecracker's seccomp filters reduce but do not remove this.
 - Verify snapshot/restore, balloon and the planned virtio-mem/pmem paths
   work under the jailer's chroot.
 - Pair with the tap isolation fix
-  (docs/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)
+  (docs/archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)
   and the red-team station LT's first experiment (assumed VMM breach).
 
 ## Design: slice 1 (J1), 2026-10-14
 
 Mutation class **red** (vmctl, VM lifecycle, snapshot validity, host
 firewall). Source plan: the security review
-(docs/reports/computer-isolation-security-review-2026-10-14.md) §4.2 (the
+(docs/archive/reports/computer-isolation-security-review-2026-10-14.md) §4.2 (the
 jailer contract), §6.2 (use the Firecracker jailer now) and §7.2 J1.
 
 ### Facts checked before design (Node B, read-only, about 18:00 UTC)

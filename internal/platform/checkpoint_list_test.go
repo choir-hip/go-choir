@@ -1,7 +1,7 @@
 package platform
 
 // The read-only checkpoint listing (slice 3 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. Ways it could fail:
 //
 //  1. a checkpoint published before the host judged them has no sequence or

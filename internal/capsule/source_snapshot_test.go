@@ -280,7 +280,7 @@ func TestRequireFrozenComputerSurfaceSource(t *testing.T) {
 
 // A symlink escapes the subject tree only when its target, resolved against
 // the link's own directory, leaves the root. The C1e B1 drill
-// (docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
+// (docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
 // had its terminal Complete refused on frontend/node_modules/.bin/acorn ->
 // ../acorn/bin/acorn, an in-tree link a lexical ".." prefix test calls escaping.
 //

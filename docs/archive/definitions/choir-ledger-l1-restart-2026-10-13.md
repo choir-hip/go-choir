@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station L1 of the ledger metamission
-# (docs/definitions/choir-ledger-metamission-2026-10-13.md): no crash loops.
+# (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): no crash loops.
 # Owner 2026-10-13, in session: "we never get into a crash loop". The
 # specification is the restart design v3
 # (docs/restart-subsystem-design-2026-10-13.md), reviewed by a lateral
@@ -173,7 +173,7 @@ receipts:
   - id: L1a-3
     boundary: implement
     identity: 18d01cc0
-    proof_refs: [docs/problems/crash-boots-redrive-applies-2026-10-13.md, internal/agentcore/crash_settle_test.go, docs/evidence/l1a3-landing-2026-10-13.json]
+    proof_refs: [docs/problems/crash-boots-redrive-applies-2026-10-13.md, internal/agentcore/crash_settle_test.go, docs/archive/evidence/l1a3-landing-2026-10-13.json]
     rollback_ref: revert 18d01cc0
     disposition: crash boots settle platform updates and decided self-development ops from the updater journal and never call the updater; the planned marker clears whenever an apply returns
     landing: {source_commit: 18d01cc0, ci_ref: 38463609655 success, deploy_ref: CI deploy job success, environment_identity: staging 18d01cc0, deployed_acceptance: crash scenario l1a3-crash-2 pass (regression); matrix cells not yet run}

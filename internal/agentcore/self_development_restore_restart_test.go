@@ -14,7 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
-// R1, R2 of docs/reports/p5-host-build-layered-apply-2026-10-15.md: a
+// R1, R2 of docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md: a
 // restore that takes a layered release away (or brings one back) changes
 // the binary that must serve; a restore between two plain releases does not.
 func TestRestoredExecDiffers(t *testing.T) {

@@ -16,7 +16,7 @@
 //
 // The requested go test may run as a check cell, not a job: the engineering
 // prompt and Freeze admit a receipted cell that panics when the test fails
-// (docs/problems/go-served-1143-first-full-selfdev-loop-test-job-not-done-2026-10-15.md).
+// (docs/archive/problems/go-served-1143-first-full-selfdev-loop-test-job-not-done-2026-10-15.md).
 // Ways the cell check could fail, written before the code:
 //  - G1 a check cell whose go test failed (the cell panicked) counts;
 //  - G2 a cell that runs go test but never panics counts (its exit code

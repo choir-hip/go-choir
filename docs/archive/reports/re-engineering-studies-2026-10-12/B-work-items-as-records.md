@@ -24,7 +24,7 @@ Evidence labels used below:
   assignments. Many writers mutate them. They are not crash-closed: no boot
   path writes `cancelled` [V]. And they are the recurring bug locus in the
   Texture loop: a clustering assessment found five closure bugs in one day
-  [D, `docs/problems/clustering-texture-obligation-closure-2026-10-09.md`],
+  [D, `docs/archive/problems/clustering-texture-obligation-closure-2026-10-09.md`],
   and P2d2 is blocked on the one-work-item run model.
 - **What records already do.** A record is immutable. It carries a typed
   act, an addressee, a parent (`ParentID`) and related ids, and evidence

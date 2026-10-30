@@ -10,7 +10,7 @@ other sources, and user should be able to publish their texture to autopaper.
 thats an op-ed.... this may already be implicitly built actually. just needs
 better connection." Section 30 ties op-eds to reader corrections; corrections
 are out of scope here. Station LC intent (Opinion section, labelled, separate
-from synthesized news): `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`.
+from synthesized news): `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`.
 **Mutation class:** step 2 (research search) orange; step 3 (publish mode and
 public listing) red: publication mode chosen by route, public listing.
 Protected surfaces: Texture canonical publish path, the public front list,

@@ -8,7 +8,7 @@ import (
 )
 
 // Desk cell confinement (F4,
-// docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+// docs/problems/desk-boundary-residuals-2026-10-21.md).
 //
 // Management, Texture and research run model-authored Go in a desk session
 // worker. Doctrine I18: Yaegi is not the security boundary, so the worker

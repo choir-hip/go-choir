@@ -24,7 +24,7 @@ const (
 )
 
 // Send gate modes (MAILD_SEND_GATE_MODE;
-// docs/problems/maild-send-gate-defects-2026-10-14.md).
+// docs/archive/problems/maild-send-gate-defects-2026-10-14.md).
 const (
 	// SendGateEnforce: only the owner's session (a host caller) may approve
 	// and send; approval replies and trusted senders need an aligned DMARC

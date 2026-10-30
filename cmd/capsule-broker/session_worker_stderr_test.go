@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// docs/problems/capsule-session-worker-dies-at-start-2026-10-09.md.
+// docs/archive/problems/capsule-session-worker-dies-at-start-2026-10-09.md.
 // Failure mode: a worker that exits before its ready handshake (a fatal in
 // the hardening floor) leaves only "read header: EOF"; its stderr, which
 // names the cause, is discarded.

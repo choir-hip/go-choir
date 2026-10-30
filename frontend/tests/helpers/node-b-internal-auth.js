@@ -6,7 +6,7 @@
 // `-H @<root-only header file>` when that file is readable and to nothing
 // otherwise, as the CI deploy does (.github/workflows/ci.yml), so the secret
 // never appears on a command line. Without it these calls work only while
-// hostauth is in observe mode (docs/problems/surface-broken-calls-2026-10-14.md,
+// hostauth is in observe mode (docs/archive/problems/surface-broken-calls-2026-10-14.md,
 // item 9). It contains no quotes, so it is safe inside single- or
 // double-quoted JS strings that build the remote command, but it must sit
 // outside any single-quoted shell string.

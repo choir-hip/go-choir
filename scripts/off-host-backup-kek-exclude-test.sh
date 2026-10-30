@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The escrow key's KEK never travels in the daily backup (station FP9,
-# docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md, "The escrow
+# docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md, "The escrow
 # key"). A sealed escrow key in the backup is worth nothing if the key that
 # opens it rides along.
 #

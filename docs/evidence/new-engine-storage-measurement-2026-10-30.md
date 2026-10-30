@@ -7,7 +7,7 @@ by the settler the records name: load the census-frozen keep set into each
 engine on a scratch host directory, measure `pg_total_relation_size` and the
 SQLite file after `VACUUM`. No record was edited. Inputs:
 [keep-set accounting](keep-set-accounting-2026-10-29.md) and
-[the storage inventory](node-b-storage-inventory-2026-10-29.md).
+[the storage inventory](../archive/evidence/node-b-storage-inventory-2026-10-29.md).
 
 Labels: **[V]** verified by a command in this run (Node B, 2026-10-30
 00:03 to 01:57 UTC); **[I]** inferred or extrapolated, basis stated.

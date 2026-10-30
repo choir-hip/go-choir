@@ -25,7 +25,7 @@ import (
 
 // choir.System1, the research desk's closed-question verb
 // (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md, F1-F11;
-// design: docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// design: docs/reports/related-stories-graph-design-2026-10-19.md
 // 3.1). System1 is the fast intuitive judge: a research cell passes closed
 // choice questions, this host step sends them through the one CandidateJudge
 // the support judge and the intake labeller use (Jev today; the cell never

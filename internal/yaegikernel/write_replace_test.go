@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// p5-go-served-0825 (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md):
+// p5-go-served-0825 (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md):
 // choir.WriteFile on an existing source file failed with "permission denied"
 // because the capsule's source files are 0444 in an immutable lower layer and
 // directories are 0777. These tests reproduce that file-mode shape as an

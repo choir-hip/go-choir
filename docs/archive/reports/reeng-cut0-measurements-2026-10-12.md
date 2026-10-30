@@ -1,6 +1,6 @@
 # Cut 0 measurements (artifact 7)
 
-Written 2026-10-13 for `docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md`
+Written 2026-10-13 for `docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md`
 artifact (7). Sources: two kept trace bundles (the owner's data, outside the
 repo; only counts, timings and ids appear here), the tracer receipts and log
 for `c0-accept-1`, `scripts/reeng_invariants.mjs`, and GitHub Actions job times.
@@ -39,7 +39,7 @@ minutes with free capacity (deploy 8 to 9 min, mint 12 s, prompt 1 s). On
 accept-1 the mint started 03:30:59Z and the computer answered 03:40:33Z, four
 seconds after the node reported the deployed commit (03:40:29Z). That wait
 overlapped the b9f195b1 deploy job (03:32:44Z to 03:39:44Z) and the memory
-condition in `docs/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md`;
+condition in `docs/archive/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md`;
 these bundles cannot tell the two apart. dev-8 started 25 minutes after its
 deploy finished, so its 12.4 s is a mint-only figure, not a push-to-ready one.
 
@@ -187,7 +187,7 @@ deploy can follow a docs push when an earlier scripts push's CI run was
 cancelled and folded into it; the tracer should start only once no CI run
 on main is queued or deploying. Checker: I1 pass, I2 fail, I3 fail (ten
 post-boot dispatches; the first two are Cut 1 breakage B1,
-docs/problems/reeng-cut1-breakage-2026-10-13.md), I4 fail, I5 unknown (no
+docs/archive/problems/reeng-cut1-breakage-2026-10-13.md), I4 fail, I5 unknown (no
 parallel egress in one cell this time).
 
 Export refusal across test computers: with the key of a different (stopped)

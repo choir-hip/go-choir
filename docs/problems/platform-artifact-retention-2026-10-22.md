@@ -8,7 +8,7 @@ Evidence labels: **[V]** code or doc read at file:line. **[M]** measured by FP0,
 
 Related records, not repeated here:
 [artifact-store-grows-12gb-a-day-2026-10-14](artifact-store-grows-12gb-a-day-2026-10-14.md) (the GC fix),
-[checkpointd-scratch-leaks-superseded-generations-2026-10-15](checkpointd-scratch-leaks-superseded-generations-2026-10-15.md),
+[checkpointd-scratch-leaks-superseded-generations-2026-10-15](../archive/problems/checkpointd-scratch-leaks-superseded-generations-2026-10-15.md),
 [platform-artifact-small-file-growth-2026-10-19](platform-artifact-small-file-growth-2026-10-19.md),
 [tape-sweeps-destroyed-and-orphans-2026-10-20](tape-sweeps-destroyed-and-orphans-2026-10-20.md),
 [no-off-host-backup-2026-10-20](no-off-host-backup-2026-10-20.md),

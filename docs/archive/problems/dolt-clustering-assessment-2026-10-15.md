@@ -97,7 +97,7 @@ process state, but I cannot say which state. [E]
 | Data dir | 25 G (`/var/lib/go-choir/platform-dolt`); corpus Dolt 23 G | `du -sh` |
 | `noms/oldgen` | 24 G in 260 `.darc` archives | `du`, `ls` |
 | Journal (`vvvv...`) | 230 MB six minutes after the restart; `journal.idx` 3.5 MB | `ls -laS` |
-| Commits (`dolt_log`) | 90,385 on 10-14 00:08, **92,290 on 10-15 00:00** (+1,905/day); the 08-26 incident store had 6.9 M | history-audit journal lines; `docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md` |
+| Commits (`dolt_log`) | 90,385 on 10-14 00:08, **92,290 on 10-15 00:00** (+1,905/day); the 08-26 incident store had 6.9 M | history-audit journal lines; `docs/archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md` |
 | oldgen growth | 22.77 G -> 24.38 G in 24 h (+1.6 G/day) while the live set is much smaller; the 09-18/19 import is 19.6 G of it | history audit; `ls --time-style` |
 | Unit limits | `MemoryHigh=3G`, `MemorySwapMax=0`, `OOMScoreAdjust=-500`, no `MemoryMax`, no watchdog, default 90 s stop timeout | `systemctl cat`; `nix/node-b.nix:687-715` |
 | Memory | cgroup at 3.11 G four minutes after boot (anon 2.0 G, page cache 1.0 G); the last two lifetimes peaked at 3.0 G and 3.5 G, i.e. at or over `MemoryHigh` | `memory.stat`; systemd `Consumed` lines |

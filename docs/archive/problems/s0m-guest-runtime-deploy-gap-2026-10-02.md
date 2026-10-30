@@ -74,7 +74,7 @@ For every station whose change lives in the guest runtime:
 
 ## Related
 
-- `docs/problems/s0m-stranded-bound-control-deadlock-2026-10-02.md`
+- `docs/archive/problems/s0m-stranded-bound-control-deadlock-2026-10-02.md`
 - `docs/problems/s0m-stranded-bound-release-root-landed-2026-10-02.md`
 - `docs/evidence/s0m-…` — earlier deployed proof, now superseded by this
   guest-staleness finding.

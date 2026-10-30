@@ -161,7 +161,7 @@ func (g *replayHealthGate) tick() {
 func Run() {
 	bootMark("process_main_entry")
 	// The daemon's soft Go memory limit, derived from guest RAM
-	// (docs/reports/lr-guest-memory-return-2026-10-14.md).
+	// (docs/archive/reports/lr-guest-memory-return-2026-10-14.md).
 	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())
 	ensureDeskCgroups()
 	ensureDocToolCgroups()
@@ -519,7 +519,7 @@ func Run() {
 		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
 		// P4: the guest-core signer signs management's reviewer ballot for
 		// corpusd's decision poster; it acts only under an owner's
-		// standing_consensus arm (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+		// standing_consensus arm (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
 		socket := strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_SOCKET"))
 		if socket == "" {
 			socket = "/run/choir-signers/guest-core/signer.sock"
@@ -647,7 +647,7 @@ func Run() {
 	// choir.ProductAPI (broker ActionProductAPI); the typed
 	// product_api_request tool is deleted. The canonical route table is
 	// the same server `s`, bound to this computer's boot identity (the
-	// computer routes require it; docs/problems/surface-broken-calls-2026-10-14.md).
+	// computer routes require it; docs/archive/problems/surface-broken-calls-2026-10-14.md).
 	rt.Runtime.SetProductAPIHandler(s, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")))
 	log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
@@ -708,7 +708,7 @@ func Run() {
 			}
 			runtimeServing.Store(true)
 			// The side table's online check starts after the runtime: never on
-			// the boot path (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
+			// the boot path (docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 			db.StartDerivedKeyValidation(ctx)
 			db.StartTelemetryRetirement(ctx, func() bool {
 				return (fileSyncService == nil || fileSyncService.HydrationSettled()) && db.TelemetryRetireOn(ctx, os.Getenv("CHOIR_OWNER_ID"))

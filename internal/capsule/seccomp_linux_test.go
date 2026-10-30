@@ -60,7 +60,7 @@ func TestBrokerSeccompAllowsSetpgidChildStart(t *testing.T) {
 	}
 }
 
-// docs/problems/capsule-session-worker-dies-at-start-2026-10-09.md: the
+// docs/archive/problems/capsule-session-worker-dies-at-start-2026-10-09.md: the
 // session worker inherits the broker's filter and must apply its own
 // Landlock under it. Failure mode: the broker filter refuses the Landlock
 // syscalls (EPERM, reported by go-landlock as "ABI v0"), so every worker

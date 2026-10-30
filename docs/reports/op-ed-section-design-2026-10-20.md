@@ -14,7 +14,7 @@ document is green. The class of the work it describes is in §9.
   §27 item 14 (a one-line AI-written disclosure on published stories, line
   609), §27 item 19 (the forecast act, line 621).
 - Earlier intent: station LC in
-  [the ranking and contributions intent](autopaper-ranking-and-contributions-intent-2026-10-14.md)
+  [the ranking and contributions intent](../archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
   (line 56): op-eds that cite the paper's stories at pinned versions, in a
   clearly labelled Opinion section.
 - Authority: [agent product doctrine](../agent-product-doctrine.md).

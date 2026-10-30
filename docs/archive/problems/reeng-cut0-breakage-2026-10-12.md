@@ -5,7 +5,7 @@ each problem found during Cut 0 and fixed in the same commit is appended
 here in that commit. A problem not fixed in the same commit gets its own
 problem doc first. Reviewed once at the cut's close.
 
-Cut: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md.
+Cut: docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md.
 
 ## B1. Stored run progress events lost their phase; cost extraction read nothing
 

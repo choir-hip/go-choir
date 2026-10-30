@@ -218,7 +218,7 @@ measures:
 
 now:
   status: completed
-  slice: "Completed on deployed proof of commit e3396329 (CI run 34571343061, staging https://choir.news serves e3396329 ok, retained computer active at epoch 909, fast-path reboot verified in 29s). All 15 acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes), version-selected V1 decode seam, writer cutover to V2 canonical desks (management, engineering, research), frozen per-function mapping table, unknown live refusal, live alias retirement, engineering desk end-to-end proof, staging decoder matrix verification, carrier coverage over object-graph objects and edges with crash-consistent migration and write guard, historic reader compatibility, closed write roots, longest-first ID substitution, unified verifier spelling, and physical staging proof on computer-03335285269bdba4f94377e56879f9e6 with effects OFF. Deployed evidence: docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md."
+  slice: "Completed on deployed proof of commit e3396329 (CI run 34571343061, staging https://choir.news serves e3396329 ok, retained computer active at epoch 909, fast-path reboot verified in 29s). All 15 acceptance items are satisfied: frozen V1 field inventory artifact published (12 classes), version-selected V1 decode seam, writer cutover to V2 canonical desks (management, engineering, research), frozen per-function mapping table, unknown live refusal, live alias retirement, engineering desk end-to-end proof, staging decoder matrix verification, carrier coverage over object-graph objects and edges with crash-consistent migration and write guard, historic reader compatibility, closed write roots, longest-first ID substitution, unified verifier spelling, and physical staging proof on computer-03335285269bdba4f94377e56879f9e6 with effects OFF. Deployed evidence: docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md."
   question: none
   reconciliation:
     observed_at: "2026-09-11T07:15:00Z"
@@ -277,7 +277,7 @@ receipts:
     boundary: implement
     commit_or_artifact: "e3396329 (deployed proof commit); CI run 34571343061 green; staging serves e3396329 ok; owner computer active at epoch 909"
     proof_refs:
-      - "docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md"
+      - "docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md"
       - "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt (item 1)"
       - "docs/evidence/choir-rlm-v2-mapping-2026-09-10.md (item 4)"
       - "docs/evidence/choir-rlm-decoder-matrix-2026-09-10.md (item 8)"
@@ -318,7 +318,7 @@ receipts:
     boundary: define
     commit_or_artifact: "freeze commit (this commit): artifact plus manifest plus gate plus CI wiring; no runtime source touched"
     proof_refs:
-      - "docs/evidence/choir-rlm-v1-inventory-2026-09-10.json: 308 rows, 894 pinned-query hits claimed, 306 verified, 3 unknown allowlisted"
+      - "docs/archive/evidence/choir-rlm-v1-inventory-2026-09-10.json: 308 rows, 894 pinned-query hits claimed, 306 verified, 3 unknown allowlisted"
       - "docs/evidence/choir-rlm-v1-inventory-corpus-2026-09-10.txt: 661-file manifest (self-covering fix 36c529d6)"
       - "scripts/check-v1-inventory.sh PASS (ci mode); --freeze FAILED on exactly the 3 allowlisted owner rows"
       - ".github/workflows/ci.yml v1-inventory job wired into check aggregation"

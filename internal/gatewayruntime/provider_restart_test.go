@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// docs/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md
+// docs/archive/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md
 // (second instance): a deploy restarted the host gateway and a busy
 // computer's model call failed "connection refused", failing its run.
 // Failure modes pinned: a call sent while the gateway is down fails instead

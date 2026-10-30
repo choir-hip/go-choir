@@ -3,7 +3,7 @@
 Date: 2026-10-14. Mutation class: green/yellow (offline study; no runtime
 change). Design: [claims, events and entities §12.3 E0](../../reports/claims-events-entities-ontology-2026-10-14.md);
 historical half: [backtesting §3.4](../../research/historical-precommitment-backtesting-2026-10-14.md).
-Results: [claims-e0-e6a-results](../../reports/claims-e0-e6a-results-2026-10-14.md).
+Results: [claims-e0-e6a-results](../../archive/reports/claims-e0-e6a-results-2026-10-14.md).
 
 ## 1. The frozen evaluation set
 

@@ -130,7 +130,7 @@ probe's join may also miss a disposition named only in free text.
   growth; it deploys after C1e B1.
 - The cost-track report names management's one-turn queue as the serial
   ceiling for one computer
-  (`docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`).
+  (`docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`).
 - Model choice for management (a free preview model with minutes of
   latency) is a model-policy question for SM; pricing is being
   researched now (owner: "token pricing per model and provider is easily

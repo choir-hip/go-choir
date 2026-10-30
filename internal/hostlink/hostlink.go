@@ -3,7 +3,7 @@
 // renewal and search. A host deploy stops those services for up to a couple
 // of minutes while busy guests keep running; a guest client that sent once
 // failed whatever turn was in flight, and could not even record that failure
-// (docs/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md).
+// (docs/archive/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md).
 //
 // A refused dial never reached the host, so resending it is safe for any
 // method. Transport resends only that, with backoff, for up to RestartWait

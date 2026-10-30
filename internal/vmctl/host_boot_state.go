@@ -13,7 +13,7 @@ import (
 var hostBootRoot = "/"
 
 // HostBootStatePath serves the installed-but-not-booted fact
-// (docs/reports/patch-lanes-plan-2026-10-15.md, slice 1).
+// (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 1).
 const HostBootStatePath = "/internal/vmctl/host/boot-state"
 
 // HandleHostBootState handles GET /internal/vmctl/host/boot-state: whether

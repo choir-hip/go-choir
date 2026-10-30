@@ -10,7 +10,7 @@ design, the failure modes the code must hold (written before any test), and
 the ceremony. Code follows on the same branch, each commit naming the
 failure modes it closes.
 
-Sources: `docs/reports/selfdev-update-architecture-2026-10-15.md` (P6, P7,
+Sources: `docs/archive/reports/selfdev-update-architecture-2026-10-15.md` (P6, P7,
 P8, §1.1, §1.5, §1.6, §1.8, Station B) and its owner rulings at the top:
 
 1. **Only source is ever published.** Binaries come only from the host
@@ -26,7 +26,7 @@ P8, §1.1, §1.5, §1.6, §1.8, Station B) and its owner rulings at the top:
 
 P5 (host build, layered apply) is being built in parallel on
 `feat/p5-host-build-layered-apply` (design
-`docs/reports/p5-host-build-layered-apply-2026-10-15.md`). This branch does
+`docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md`). This branch does
 not build anything on the host and does not touch the materializer. The
 seams are named in "Seams with P5" below.
 

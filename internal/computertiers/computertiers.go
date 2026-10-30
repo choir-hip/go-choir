@@ -1,6 +1,6 @@
 // Package computertiers is the authority for computer tiers until billing
 // exists (owner ruling 2026-10-13,
-// docs/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md).
+// docs/archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md).
 //
 // A paid account's computers are always on. A platform computer, such as
 // the Autopaper paper computer, is a tier above every user tier and is

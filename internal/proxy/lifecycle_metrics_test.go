@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md: the
+// docs/archive/problems/tracer-paper-blind-to-test-publications-2026-10-13.md: the
 // publish stages counted every 201 and every "published" as an error
 // (errors: 49 with by_status {http_201: 49}). Failure modes pinned: a 2xx
 // other than 200 counts as an error; the publish path's "published" counts

@@ -200,7 +200,7 @@ linearly (EG1 phone data: 2,048 tokens costs ~15× a 256-token chunk, not
 ### 2.3 Sizing the workload
 
 **Incremental.** The search audit
-([search-efficiency report §5](../reports/search-efficiency-and-reuse-2026-10-14.md))
+([search-efficiency report §5](../archive/reports/search-efficiency-and-reuse-2026-10-14.md))
 estimates ~4,500 captures/day × ~10 blocks ≈ 45k chunks, plus 50–100k
 distinct search hits (one short chunk each, title + snippet), for
 ~100–150k chunks/day.
@@ -539,4 +539,4 @@ Pass criteria for adoption:
 - RunPod L4 price aggregate: https://computeprices.com/providers/runpod/gpus/l4
 - Hetzner GPU matrix: https://www.hetzner.com/dedicated-rootserver/matrix-gpu/ ; GEX44 launch price: https://lowendbox.com/blog/need-a-cheap-gpu-server-hetzner-brings-them-back-with-some-controversy/
 - Gemma 4 Apache 2.0 license change: https://www.implicator.ai/google-releases-gemma-4-under-apache-2-0-dropping-its-custom-ai-license/
-- Repo context: docs/reports/search-efficiency-and-reuse-2026-10-14.md §5, docs/problems/search-is-duplicated-and-discarded-2026-10-14.md, internal/qdrant/ollama_embedder.go, internal/vmctl/pressure_reclaim.go
+- Repo context: docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §5, docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md, internal/qdrant/ollama_embedder.go, internal/vmctl/pressure_reclaim.go

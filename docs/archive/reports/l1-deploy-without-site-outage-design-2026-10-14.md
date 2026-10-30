@@ -1,7 +1,7 @@
 # L1: Deploy Without Taking The Site Down
 
 Date: 2026-10-14. Station: L1 (24/7 paper, owner ruling 6). Problem:
-`docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md`.
+`docs/archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md`.
 Mutation class of the change: red (deployment routing). This note is
 green.
 

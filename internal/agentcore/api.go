@@ -170,7 +170,7 @@ type runtimeHealthResponse struct {
 	// report from a binary that is not the applied release.
 	LayeringBootguard string `json:"layering_bootguard,omitempty"`
 	// EffectiveRelease is the release, tree, event head and CodeRef this
-	// computer runs (P6, docs/reports/p6-p8-release-adopt-2026-10-15.md).
+	// computer runs (P6, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
 }
 
@@ -260,7 +260,7 @@ const modelPolicyVerifyMaxBodyBytes = 28 << 20
 // (image_base64, image_fixture or an image_ref in the computer's image
 // store), as the owner. An inline image is stored by content hash and the
 // call carries its ref; the response names the ref, never the bytes
-// (docs/problems/models-configured-text-only-2026-10-15.md).
+// (docs/archive/problems/models-configured-text-only-2026-10-15.md).
 func (h *APIHandler) HandleModelPolicyVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

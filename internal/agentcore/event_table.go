@@ -11,7 +11,7 @@ import (
 )
 
 // store.event_table at the runtime seam (run telemetry in its own table,
-// deploy 2: docs/design/choir-event-table-f-c-2026-10-22.md 4.2). The store's
+// deploy 2: docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2). The store's
 // writer stamps the ten batched telemetry kinds for choir_events only when
 // both keys hold:
 //

@@ -159,7 +159,7 @@ func BrokerInetSeccompFilter() seccomp.Filter {
 
 // delegateExtraSyscalls are what the Claude delegate's binary (Claude Code,
 // built on Bun) needs beyond the workload allowlist
-// (docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md).
+// (docs/archive/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md).
 // uSockets arms its loop timer through a timerfd; refused, Bun panics at
 // start ("us_create_timer returned null"). JavaScriptCore parks a thread for
 // the collector with SIGPWR and rt_sigsuspend; refused, sigsuspend returns

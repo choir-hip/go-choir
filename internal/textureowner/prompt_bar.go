@@ -21,7 +21,7 @@ import (
 // promptBarCommitTimeout bounds the durable conductor-decision commit. It is
 // deliberately decoupled from the client request context: a proxy/upstream
 // disconnect must not abort an in-flight Dolt projection batch mid-commit
-// (receipt: docs/problems/s0m-prompt-bar-submit-context-canceled-2026-10-02.md).
+// (receipt: docs/archive/problems/s0m-prompt-bar-submit-context-canceled-2026-10-02.md).
 const promptBarCommitTimeout = 120 * time.Second
 
 type promptBarSubmitRequest struct {
@@ -247,7 +247,7 @@ func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text
 
 // SubmitOwnerPrompt submits a request the computer makes on its owner's
 // behalf, after the owner's act, through the prompt bar's own path (a
-// release adoption, P8: docs/reports/p6-p8-release-adopt-2026-10-15.md).
+// release adoption, P8: docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 // The commit outlives the caller's context like the prompt bar's does.
 func (h *Handler) SubmitOwnerPrompt(ctx context.Context, ownerID, text, commandID string) (agentcore.PromptSubmission, error) {
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptBarCommitTimeout)

@@ -126,7 +126,7 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 	}
 	// yaegi v0.16.1 predates Go 1.21's min and max builtins; models reach
 	// for them (s[:min(n, len(s))], cluster G of
-	// docs/reports/cross-model-cell-errors-2026-10-13.md).
+	// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 	if _, err := s.Eval(context.Background(), minMaxPrelude); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("yaegi: predeclare min and max: %w", err)
@@ -155,7 +155,7 @@ max := func(x int, rest ...int) int {
 // module-style path ("go-choir/choir", "github.com/.../choir") to the
 // predeclared "choir": models write the repo's path for it, and the
 // allowlist refused every such cell (cluster E of
-// docs/reports/cross-model-cell-errors-2026-10-13.md). Only a path whose
+// docs/archive/reports/cross-model-cell-errors-2026-10-13.md). Only a path whose
 // last element is exactly "choir" is rewritten.
 func aliasChoirImports(src string) string {
 	prefix := ""
@@ -266,7 +266,7 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		// the same defect family already preserves as "constant definition
 		// loop", and a panic leaves the same zero-valued ghosts an ordinary
 		// failed compile does (cluster A,
-		// docs/reports/cross-model-cell-errors-2026-10-13.md).
+		// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 		res.Duration = time.Since(start)
 		return res, &EvalError{err: withCompileErrorLine(compilePanic, src), Reuse: ReusePreserve, Kind: DiagCompile}
 	}

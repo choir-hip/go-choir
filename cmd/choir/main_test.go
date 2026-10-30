@@ -303,7 +303,7 @@ func TestExecutionIdentityCLICommonCommitAllowsBoundMixedGeneration(t *testing.T
 	}
 
 	// A merged receipt carries the proxy artifact of the deploy that last
-	// moved it (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
+	// moved it (docs/archive/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
 	// R4): it joins like an unselected proxy; unmarked, it stays a conflict.
 	mergedReceipt := func(proxyArtifact string) json.RawMessage {
 		return json.RawMessage(`{
@@ -941,7 +941,7 @@ func TestComputerImportResidueSnapshotUsesProductPath(t *testing.T) {
 	}
 }
 
-// The manual bind is deleted (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+// The manual bind is deleted (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md,
 // 4.4): checkpoints are bound automatically, and the read half survives as
 // `choir computer checkpoints`.
 func TestComputerCheckpointBindIsGone(t *testing.T) {

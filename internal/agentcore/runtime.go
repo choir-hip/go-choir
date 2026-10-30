@@ -368,7 +368,7 @@ type Runtime struct {
 	// selfdevStartupMu guards the startup-manifest fields below:
 	// recordStartupManifest rewrites them after a restore or rematerialize
 	// while /health and the effective-release report read them from other
-	// goroutines (docs/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md).
+	// goroutines (docs/archive/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md).
 	// Read them through startupManifest(), write through setStartupManifest().
 	selfdevStartupMu            sync.RWMutex
 	selfdevStartupReleaseDigest string
@@ -376,7 +376,7 @@ type Runtime struct {
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
 	// Release identity and source adoption (P6/P8,
-	// docs/reports/p6-p8-release-adopt-2026-10-15.md): the guest's source
+	// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): the guest's source
 	// repository (CHOIR_CAPSULE_SOURCE_ROOT unless set), the per-release
 	// tree cache, the published-release reader and the owner-prompt
 	// submitter the adoption request goes through.
@@ -2025,7 +2025,7 @@ func (rt *Runtime) persistActivationStateWithEvent(ctx context.Context, rec *typ
 	// is parked, not ended: it keeps its capsule and round (C1e D7), so the
 	// kick does not fire on passivation. Best-effort: the kick never masks
 	// the persisted transition. Receipt:
-	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
+	// docs/archive/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
 	if assignedEngineeringRun(rec) && engineeringRunEnded(rec.State) {
 		rt.kickEngineeringReconcileAfterPersist(rec)
 	}
@@ -2576,7 +2576,7 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 // for this computer's owner. A pending mutation means the controller owes the
 // document another activation even while no run is in flight — the window
 // between activations must not read as "idle" to host lifecycle (idle sweep,
-// pressure reclaim). Receipt: docs/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md.
+// pressure reclaim). Receipt: docs/archive/problems/vmctl-pressure-reclaim-mid-respawn-gap-2026-09-28.md.
 func (rt *Runtime) pendingDeskMutations(ctx context.Context) int {
 	if rt == nil || rt.store == nil {
 		return 0
@@ -2763,7 +2763,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 		// No spawned work item here: the spawn created it (ensure at
 		// spawnCoagent), and the resume reads only the state and reason.
 		// Ensuring it again looked it up by a JSON scan of every work item,
-		// 75 s on the paper (docs/problems/paper-post-refresh-health-windows-2026-10-22.md A3).
+		// 75 s on the paper (docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md A3).
 		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
 			log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
 			return false
@@ -3852,7 +3852,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		// committed terminal fate (freeze/verify for selfdev casts). An
 		// end_turn without one used to close the run with prose and strand the
 		// self-development operation in `executing` forever — the probe wedge
-		// recorded in docs/problems/m11-engineering-desk-deferral-2026-09-27.md
+		// recorded in docs/archive/problems/m11-engineering-desk-deferral-2026-09-27.md
 		// (fourth wedge). The guard rejects narrative-only endings: retry with
 		// a bounded reminder, then fail the run so assignment fate joins.
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(rt.engineeringCompletionGuard(rec, deliveries)))

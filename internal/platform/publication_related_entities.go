@@ -2,7 +2,7 @@ package platform
 
 // Shared central entities as a related-stories signal
 // (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice b;
-// design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// design docs/reports/related-stories-graph-design-2026-10-19.md
 // §4.1 and §5). Two stories are related when both are centrally about one
 // entity (a mentions_entity edge with role central, written by the research
 // desk's choir.Relate export, publication_story_entities.go). An incidental

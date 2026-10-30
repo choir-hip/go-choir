@@ -474,7 +474,7 @@ func TestRestoreTailReceiptBounds(t *testing.T) {
 	}
 }
 
-// Rerun 12 (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
+// Rerun 12 (docs/archive/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
 // a rollback target older than the newest recovery start point must still
 // restore, and a target that is not on the chain must refuse. Failure modes
 // pinned:

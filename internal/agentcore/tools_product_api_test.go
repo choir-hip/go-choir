@@ -183,7 +183,7 @@ func TestProductAPIAllowlistRefusesRoutesTheGuestDoesNotServe(t *testing.T) {
 	}
 }
 
-// P2b (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): only
+// P2b (docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md): only
 // the Texture desk writes a Texture, so ProductAPI refuses every non-GET
 // /api/texture/ route for every desk. The rule is by prefix and method, so a
 // Texture route added later is refused without a list to update; the paths

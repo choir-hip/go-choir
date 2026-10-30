@@ -354,7 +354,7 @@ async function waitForOperation(page, computerID, operationID, wanted, timeout =
 // A change starts with POST /api/prompt-bar on a computer armed propose_only:
 // C1e B1 deleted the start-operation POST, and engineering's Freeze opens the
 // operation on the request's trajectory
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 10). The operations
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 10). The operations
 // list is newest first, so the first match is the newest operation.
 async function startChange(page, computerID, commandID, text, timeout = 3_600_000) {
   const run = await postJSON(page, '/api/prompt-bar', { text, command_id: commandID });
@@ -427,7 +427,7 @@ try {
 
   // Pin the newest checkpoint the computer has bound: the M9a restore target.
   // POST /lifecycle/checkpoint is deleted; the computer binds its own
-  // (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4), and a
+  // (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4), and a
   // fresh owner computer has bound none until its cadence runs (it runs only
   // on computers the host selected), so a missing one is a recorded gap.
   const lifecycle = (rest) => `/api/computers/${encodeURIComponent(computerID)}/lifecycle/${rest}`;
@@ -515,7 +515,7 @@ try {
       result.legs.apply_events = ['materialization_applied', 'checkpoint_published', 'route_projection_updated'].every((kind) => appliedKinds.includes(kind));
       // Gate 2 track B: the apply made this computer layered. Can it still
       // mint a checkpoint? Every second change depends on it
-      // (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md).
+      // (docs/archive/problems/layered-checkpoint-identity-gate2-2026-10-10.md).
       // After apply the desks resume, and a replay over a chain that is still
       // growing ends in "projection repair required" (rerun 12). Retry while
       // the computer settles; the attempts are recorded, never hidden.

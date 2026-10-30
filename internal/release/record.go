@@ -1,5 +1,5 @@
 // Package release is the software release record (P7,
-// docs/reports/p6-p8-release-adopt-2026-10-15.md): a content-addressed
+// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): a content-addressed
 // statement of one applied self-development change as source, published to
 // the Autopaper object graph (Store B) by its owner from the computer that
 // made it, and adopted by other computers as source onto their own trees.

@@ -7,7 +7,7 @@ import (
 )
 
 // Management tasks (management delegation S2a,
-// docs/reports/management-delegation-design-2026-10-14.md, round 2). A task
+// docs/archive/reports/management-delegation-design-2026-10-14.md, round 2). A task
 // is a bounded sub-RLM of the management desk: its own run, session and
 // inbox (management-task:<id>), opened by management's choir.Delegate with
 // a Cast into that inbox, holding a lease on the captures the round's

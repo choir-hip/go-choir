@@ -53,7 +53,7 @@ type checkpointPublishFunc func(ctx context.Context, binding checkpointBinding) 
 // scratch or store row: whether the
 // witnessed state is derivable from the tape is proven where a checkpoint is
 // used, by restore, which reconstructs to H and refuses a witness mismatch
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1). The
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1). The
 // authority accepts a checkpoint only at its current head (checkpoints.go
 // Publish): a head that moved during the scan is refused there, and the bind
 // retries. publish nil returns the binding without publishing.

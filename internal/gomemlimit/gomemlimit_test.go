@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Failure modes these tests guard (docs/reports/lr-guest-memory-return-2026-10-14.md):
+// Failure modes these tests guard (docs/archive/reports/lr-guest-memory-return-2026-10-14.md):
 //   - a limit near the working set (GC thrash): fractions and floors are pinned;
 //   - an operator's GOMEMLIMIT overridden by the computed one;
 //   - a malformed GOMEMLIMIT handed to a worker (the Go runtime refuses to

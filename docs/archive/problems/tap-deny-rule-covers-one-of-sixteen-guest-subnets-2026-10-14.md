@@ -3,7 +3,7 @@
 Status: fix committed on branch `fix/tap-deny-guest-range`; not pushed and
 not deployed (see "Fix" at the end). Found by reading code. **Not confirmed on Node B**: no host
 state was read. Found while researching
-[reports/self-hosting-and-desktop-2026-10-14.md](../reports/self-hosting-and-desktop-2026-10-14.md).
+[reports/self-hosting-and-desktop-2026-10-14.md](../../reports/desktop-sync-and-local-vms-2026-10-14.md).
 Mutation class of the fix: red (vmctl, guest isolation; the S1a security
 floor).
 

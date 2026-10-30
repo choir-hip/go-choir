@@ -5,8 +5,8 @@ Status: **SUPERSEDED roadmap, retained as a record** (2026-10-14 prune). The
 R-series spine it ratified (2026-09-25) has landed; the "World Wire" it
 aims at is now Autopaper (live 2026-10-13). Current sequencing lives in
 [`ACTIVE.md`](ACTIVE.md) and
-[`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](reports/roadmap-sequencing-appdev-security-2026-10-14.md);
-direction in [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
+[`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md);
+direction in [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 AGENTS.md still names this file as the mission roadmap; the owner should
 repoint that line (see `reports/docs-pruning-plan-2026-10-14.md`).
 Its predecessor overview and the 09-22 situation brief were removed in the
@@ -242,7 +242,7 @@ Only after the computer demonstrably develops itself (Phase 3 gate).
 
 > **Superseded in part 2026-09-23, revised 2026-09-25.** The M2-tail…M8
 > region is replaced by the desk-RLM rectification sequence
-> ([`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md),
+> ([`desk-rlm-rectification-plan-2026-09-23.md`](archive/desk-rlm-rectification-plan-2026-09-23.md),
 > proposed under owner review). R0 and R2 landed; R3/R4/R5's 2026-09-23
 > drafts were deleted 2026-09-25 and the spine restructured by consensus —
 > see **§11** of that plan for the current mission list: R2x substrate

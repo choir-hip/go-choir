@@ -27,7 +27,7 @@ derivations**, one per `cmd/*`. Each derivation:
 
 Since 16806d8e, Node B builds run with `max-jobs=2`, `cores=6` inside a
 7G memory slice
-([`node-b-memory-overcommitted-swap`](node-b-memory-overcommitted-swap-2026-10-09.md)).
+([`node-b-memory-overcommitted-swap`](../archive/problems/node-b-memory-overcommitted-swap-2026-10-09.md)).
 That removes the swap pressure but serializes these redundant compiles
 further. Observed on 2026-10-09: two concurrent toplevel builds (the
 prebuild of run N+1 overlapping the deploy of run N) at load 61.

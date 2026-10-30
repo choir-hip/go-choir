@@ -85,7 +85,7 @@ func TestEgressForwarderSplicesLoopbackToTheEgressSocket(t *testing.T) {
 
 const brokerCapsHelperEnv = "CHOIR_BROKER_CAPS_HELPER"
 
-// docs/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md: a process
+// docs/archive/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md: a process
 // launched into the capsule user namespace holds only its ambient
 // capabilities. Failure modes pinned: the L2 ambient set cannot bring up lo
 // (every L2 capsule dies at start); CAP_NET_ADMIN survives the broker's

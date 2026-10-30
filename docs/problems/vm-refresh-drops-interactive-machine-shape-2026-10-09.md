@@ -2,7 +2,7 @@
 
 Date: 2026-10-09. Status: open. Mutation class of a fix: red (vmctl / VM
 lifecycle). Found during the owner compaction window
-([`guest-store-history-bloat-and-memory-shape-2026-10-09`](guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
+([`guest-store-history-bloat-and-memory-shape-2026-10-09`](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
 
 ## Evidence
 

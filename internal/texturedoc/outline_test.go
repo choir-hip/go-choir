@@ -9,7 +9,7 @@ import (
 
 // The outline names every block's id, type and opening text, so a Texture
 // cell can address an edit without guessing ids
-// (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
+// (docs/archive/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
 // With no node bound, a long document is listed in full.
 func TestOutlineListsEveryBlockID(t *testing.T) {
 	doc := StructuredTextureDoc{Schema: "texture.doc.v1", Doc: Node{Type: "doc"}}

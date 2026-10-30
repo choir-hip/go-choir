@@ -6,7 +6,7 @@ After any guest cold boot the guest's stderr and journal are host-unreadable.
 The layered-apply marker `go-choir-autoputer: layering release` and the boot
 sequence go nowhere the host can read; the only evidence was a one-off
 `layering-diag.log` inside the guest's `/mnt/persistent` data image (durable
-but not a stream). See docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md.
+but not a stream). See docs/archive/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md.
 
 ## Root cause (source-traced)
 

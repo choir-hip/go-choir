@@ -75,7 +75,7 @@ content, body, sources and citations, with the direction in metadata
 Texture desk (`dispatchTextureRevisionWake`, `texture_controller.go:26`). If
 the desk had completed its work item the handler reopens one
 (`reopenTextureWorkForOwner`, `:277`; the fix for
-`docs/problems/texture-settled-work-refuses-owner-revise-2026-10-09.md`); a
+`docs/problems/settled-document-refuses-owner-revision-2026-10-26.md`); a
 refused or cancelled item still refuses (409). It is idempotent on
 `client_request_id`: the revision id hashes owner, computer, trajectory and
 that id, so a replay returns the same revision.

@@ -16,7 +16,7 @@ import (
 // so a destroyed computer is attributable from the host. The 10-10 kill of a
 // busy self-development computer could not be traced to a caller because no
 // kill recorded who asked
-// (docs/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md).
+// (docs/archive/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md).
 //
 // A receipt is evidence, not authority: writing it never gates the kill, and a
 // write failure is logged rather than blocking it.

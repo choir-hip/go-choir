@@ -7,7 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Rerun 13 (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
+// Rerun 13 (docs/archive/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
 // Texture decided "wait_for_evidence" on an engineering report. The decision
 // disposed the report, but the postcondition required this run's own revision
 // to be the document head, so the activation deferred and its 29 buffered

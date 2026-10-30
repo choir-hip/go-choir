@@ -1,7 +1,7 @@
 package frontimportance
 
 // Ways carrying score rows past the window can fail (see
-// docs/problems/autopaper-section-pages-empty-2026-10-15.md):
+// docs/archive/problems/autopaper-section-pages-empty-2026-10-15.md):
 //
 //  1. A story that left the newest 100 loses its row (and its section).
 //  2. Carried rows never expire (the file grows without bound), or expire

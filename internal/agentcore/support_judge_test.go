@@ -19,7 +19,7 @@ import (
 )
 
 // Support judgement off management's turn
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): a Texture
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md): a Texture
 // commit lists its new pairs by their check memos, and the runtime judges
 // them with Jev after the commit returns. Ways it can fail, written first
 // (the note's list):

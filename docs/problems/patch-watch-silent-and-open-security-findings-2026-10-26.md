@@ -54,7 +54,7 @@ the owner); 6.18.58 is optional hygiene for a maintenance window
 (`nix/kernel-security-floor`, then `nix flake update nixpkgs-kernel`).
 
 
-## Merged from docs/problems/patch-watch-govulncheck-reachable-findings-2026-10-19.md (2026-10-19)
+## Merged from docs/problems/patch-watch-silent-and-open-security-findings-2026-10-26.md (2026-10-19)
 
 **Patch Watch: govulncheck reachable findings, 2026-10-19.**
 Mutation class: green for this document; the fix that follows is orange (dependency versions change runtime behavior of HTTP/2, gRPC, and OTel code).

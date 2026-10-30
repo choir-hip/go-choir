@@ -179,6 +179,6 @@ Android:
 Repo documents:
 
 - `docs/reports/texture-media-and-autoradio-design-2026-10-20.md`, sections 5 and 6
-- `docs/reports/autoradio-mobile-app-plan-2026-10-14.md`
+- `docs/archive/reports/autoradio-mobile-app-plan-2026-10-14.md`
 - `docs/reports/owner-notes-2026-10-14.md`, section 28
 - Frontend sizes counted on 2026-10-20: `frontend/src/lib/TextureEditor.svelte`, `PromptSurface.svelte`, `frontend/package.json` (Svelte 4, Vite 5)

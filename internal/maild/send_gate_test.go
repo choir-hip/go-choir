@@ -1,7 +1,7 @@
 package maild
 
 // E1 send-gate tests. Each test names the failure mode it covers from
-// docs/problems/maild-send-gate-defects-2026-10-14.md ("FM n").
+// docs/archive/problems/maild-send-gate-defects-2026-10-14.md ("FM n").
 
 import (
 	"encoding/json"

@@ -41,7 +41,7 @@ type ImageResolver func(ref string) ([]byte, string, error)
 // SetImageResolver lets transcripts carry image refs: each artifact_ref
 // image source is replaced by its bytes in the request body to the gateway
 // only, so the bytes never enter a transcript, run event or log
-// (docs/problems/models-configured-text-only-2026-10-15.md, FM11).
+// (docs/archive/problems/models-configured-text-only-2026-10-15.md, FM11).
 func (p *Provider) SetImageResolver(resolve ImageResolver) { p.resolveImage = resolve }
 
 // resolveImageRefs returns req with artifact_ref image sources inlined as
@@ -253,7 +253,7 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		// The gateway's per-computer limiter rejects with 429 and the
 		// seconds until its window resets. Waiting that out queues the call
 		// instead of failing it after 1.5 s
-		// (docs/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
+		// (docs/archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
 		if wait, ok := retryAfter(httpResp); ok && httpResp.StatusCode == http.StatusTooManyRequests && rateLimitWaits < maxRateLimitWaits {
 			rateLimitWaits++
 			lastErr = gatewayStatusError(httpResp.Status, body)

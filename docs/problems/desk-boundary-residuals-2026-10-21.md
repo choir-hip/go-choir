@@ -8,9 +8,9 @@ documented; the fixes follow in the lane. Mutation class of the fixes: **red**
 image). Items are those of the
 [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
 The two larger records for this batch already exist:
-[desk-frame-actions-not-role-checked-by-host](desk-frame-actions-not-role-checked-by-host-2026-10-21.md)
+[desk-frame-actions-not-role-checked-by-host](desk-boundary-residuals-2026-10-21.md)
 (SEC-02) and
-[desk-cells-run-as-guest-root-and-egress-is-open](desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md)
+[desk-cells-run-as-guest-root-and-egress-is-open](desk-boundary-residuals-2026-10-21.md)
 (SEC-01).
 
 ## The one cause
@@ -52,7 +52,7 @@ the cap.** `deskWorkerMemoryLimitBytes` is 8 GiB `RLIMIT_AS` in an 8 GiB guest
 unit has `OOMPolicy=continue` and no memory settings
 (`nix/autoputer-vm.nix:929-941`). On 2026-10-16 two runaway cells filled the
 guest and the kernel killed the daemon
-([record](desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md));
+([record](../archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md));
 the only mitigation since is `oom_score_adj` 1000 on the worker
 (`desk_worker_memlimit_linux.go`), which orders victims and bounds nothing.
 Capsules sit in a root-level `/sys/fs/cgroup/capsule/<id>`
@@ -170,15 +170,15 @@ Status after the second batch (lane `lane/fp2-b2-on-main`, not deployed):
   observe (e2acf6025). Still root: the split is open.
 
 
-## Merged from docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md (2026-10-14)
+## Merged from docs/problems/desk-boundary-residuals-2026-10-21.md (2026-10-14)
 
 **Desk Cells Run as Guest Root, and Guest Egress Is Open.**
-Date: 2026-10-14. Found by the computer isolation security review ([docs/reports/computer-isolation-security-review-2026-10-14.md](../reports/computer-isolation-security-review-2026-10-14.md), findings F4 and F6). This record re-reads the code on `origin/main` (980ffaf4e) and adds the guest egress inventory the fix needs. Status: documented; not fixed on main. The fix was local to the owner's iMac until 2026-10-21, w
+Date: 2026-10-14. Found by the computer isolation security review ([docs/archive/reports/computer-isolation-security-review-2026-10-14.md](../archive/reports/computer-isolation-security-review-2026-10-14.md), findings F4 and F6). This record re-reads the code on `origin/main` (980ffaf4e) and adds the guest egress inventory the fix needs. Status: documented; not fixed on main. The fix was local to the owner's iMac until 2026-10-21, w
 
 (Full text in git history at the path above.)
 
 
-## Merged from docs/problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md (2026-10-21)
+## Merged from docs/problems/desk-boundary-residuals-2026-10-21.md (2026-10-21)
 
 **The Daemon Answers a Desk Worker's Frames Without Checking the Desk's Role.**
 Date: 2026-10-21. Found while auditing desk isolation for the [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md) (item SEC-02). Read from code at `origin/main` 8f71f9c64; nothing was run. Status: documented; no fix yet. Mutation class of any fix: **red** (desk authority boundary, product API reachability from model code).

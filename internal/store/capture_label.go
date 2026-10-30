@@ -13,7 +13,7 @@ import (
 )
 
 // Intake labels (L2a A1 / R2-3,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Jev labels each
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Jev labels each
 // new capture against the computer's story shortlist. A label is its own
 // object, keyed by (capture, version), and never part of the arrival
 // record: the arrival's command digest covers the whole record, so a

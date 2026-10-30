@@ -79,7 +79,7 @@ this week, which triggers the clustering rule:
 Two causes underlie all three:
 1. **Texture cannot read what it was asked to write about.** The design
    already names the fix and it never landed:
-   `docs/autopaper-app-design-2026-10-11.md` §4.4, "Needed on the desk
+   `docs/autopaper-sw-design-2026-10-09.md` §4.4, "Needed on the desk
    surface: `ReadCapture` on Texture and management (read-only, shared
    content)", slice C. Management got it; Texture did not. Texture
    already embeds captures and its Write already reads them, so reading

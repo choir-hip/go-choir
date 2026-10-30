@@ -6,7 +6,7 @@ green (docs only). It is the table that [SDC NET-01](../security-density-archite
 guest NIC") need before either can close an egress path without breaking a
 capability. It also answers SDC NET-01's complaint that the desk-cells
 inventory "misses YouTube, iTunes, podcast feeds and Obscura"
-([desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](../problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md),
+([desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md](../problems/desk-boundary-residuals-2026-10-21.md),
 table at line 87).
 
 **Basis and method.** The tree of branch `lane/b8-network` after the Obscura
@@ -35,7 +35,7 @@ in and out; C7 app agents' declared ingress and egress.
    through the guarded client (`internal/sources/telegram.go:28-102`). The
    owner then ruled "no MTProto, no cookie routes, no Telegram account" and
    kept the 73 Telegram rows unscheduled
-   ([owner notes](../reports/owner-notes-2026-10-14.md) lines 758 and 797-803).
+   ([owner notes](owner-notes-2026-10-14.md) lines 758 and 797-803).
    SDC NET-01's "Telegram's MTProto connection given its own host route" and
    capability 3's "(MTProto, not HTTP)" describe a plan that is not in the
    code. If MTProto is reinstated it is a new row here.

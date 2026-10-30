@@ -6,7 +6,7 @@ supersedes the owner's "delete `auth/recovery/request` for now" ruling;
 see "Landing reconciliation" below.
 Mutation class of the fix: **red** (auth/session). Found by the
 2026-10-14 sequencing report
-([roadmap-sequencing-appdev-security-2026-10-14.md](../reports/roadmap-sequencing-appdev-security-2026-10-14.md)).
+([roadmap-sequencing-appdev-security-2026-10-14.md](../archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md)).
 
 ## What happens (findings)
 

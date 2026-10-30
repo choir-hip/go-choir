@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """E6a: the say-do record of Choir's own desks on the paper, from existing
 ledger data, read-only (docs/reports/claims-events-entities-ontology-2026-10-14.md
-§7, §12.3; results in docs/reports/claims-e0-e6a-results-2026-10-14.md).
+§7, §12.3; results in docs/archive/reports/claims-e0-e6a-results-2026-10-14.md).
 
 Input: a pull by claims_ledger_pull.py (published stories, their texture
 and research inbox records, the captures they name). Nothing is written to

@@ -1,14 +1,14 @@
 # D6 design: guest page cache goes back to the host (2026-10-26)
 
 Station D (density), item D6 of
-[choir-density-2026-10-26.md](../definitions/choir-density-2026-10-26.md)
+[choir-density-2026-10-26.md](../archive/definitions/choir-density-2026-10-26.md)
 ("balloon inflation returns guest page cache", RES-10 step 3, unbuilt,
 red). Evidence:
 [start-refused-for-memory-no-reclaim-2026-10-26.md](../problems/start-refused-for-memory-no-reclaim-2026-10-26.md) §1, §3, gap 4;
 [balloon-stats-unread-no-emergency-inflation-2026-10-21.md](../problems/balloon-stats-unread-no-emergency-inflation-2026-10-21.md);
 [guest-damon-reclaim-state-unreported-2026-10-22.md](../problems/guest-damon-reclaim-state-unreported-2026-10-22.md);
 [guest-memory-return-outcomes-2026-10-22.md](../reports/guest-memory-return-outcomes-2026-10-22.md);
-[lr-guest-memory-return-2026-10-14.md](../reports/lr-guest-memory-return-2026-10-14.md).
+[lr-guest-memory-return-2026-10-14.md](../archive/reports/lr-guest-memory-return-2026-10-14.md).
 
 - **Revision 2** (2026-10-26), after review 320 (tier 2: Devin, approve;
   DeepSeek v4.1 flash, "direction accepted; do not build S3/S4 as
@@ -131,7 +131,7 @@ free page reporting on, never inflated; statistics on for one computer;
 hinting never.** No code inflates it and no code asks a running guest to
 free cache outside a capsule's teardown. There is no unwired balloon
 implementation; `MemoryController.SetBalloonTargetMiB` in
-`docs/reports/vm-backend-interface-2026-10-14.md` is documentation only.
+`docs/reports/vm-hypervisor-seam-design-2026-10-21.md` is documentation only.
 
 ## 2. Why guest page cache never returns
 

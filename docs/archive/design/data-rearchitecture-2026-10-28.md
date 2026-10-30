@@ -5,10 +5,10 @@ Status: direction, not ratified. Mutation class of the work it proposes: red
 2026-10-28: "the data architecture remains the major bottleneck. As long as we
 have regular memory and storage issues we aren't ready to build autoradio...
 throw more hardware at the problem isn't the solution because efficiency is
-margins". Inputs: docs/design/three-dolt-stores-2026-10-28.md (with FP0's
+margins". Inputs: docs/archive/design/three-dolt-stores-2026-10-28.md (with FP0's
 correction), docs/problems/paper-never-checkpointed-2026-10-27.md,
-docs/problems/store-a-weekly-squash-2026-10-20.md,
-docs/design/store-engine-concurrency-2026-10-21.md. [V] verified, [H]
+docs/archive/problems/store-a-weekly-squash-2026-10-20.md,
+docs/archive/design/store-engine-concurrency-2026-10-21.md. [V] verified, [H]
 hypothesis.
 
 ## Diagnosis
@@ -89,7 +89,7 @@ before writing replacement storage code.
    source entities first).
 5. Compare authority engines on the same logical workload and on idiomatic
    physical layouts; compare host control and corpus separately. The
-   [expanded alternatives research](../evidence/storage-engine-alternatives-2026-10-29.md)
+   [expanded alternatives research](../../evidence/storage-engine-alternatives-2026-10-29.md)
    keeps SQL, COW KV and LSM candidates open.
 6. Prove portable checkpoints and retire the heavy capture path only after
    equivalent state, witness, recovery and content/key completeness are shown.
@@ -175,7 +175,7 @@ a later replacement behind the same retrieval interface.
 The owner requested a deeper alternatives comparison before accepting the
 default pair: extra initial setup is acceptable for better long-term resource
 utilization or stability. The
-[research and primary-source ledger](../evidence/storage-engine-alternatives-2026-10-29.md)
+[research and primary-source ledger](../../evidence/storage-engine-alternatives-2026-10-29.md)
 records the positive case, maintenance mechanism and falsifier for each
 candidate. It is green research, not ratification or an execution design.
 
@@ -210,7 +210,7 @@ Review perspectives carried forward:
 - Priorities: security first, stability second, scalability and simplicity
   jointly next. A few more setup steps are acceptable for durable resource
   savings; minimizing engine variety does not mean combining failure domains.
-- The [control/corpus resource investigation](../evidence/control-corpus-resource-profile-2026-10-29.md)
+- The [control/corpus resource investigation](../../evidence/control-corpus-resource-profile-2026-10-29.md)
   maps current control duties and distinguishes live state, receipt retention
   and Dolt history. Its multi-hour active-paper reconstruction includes actual
   publishing and corpus memory-limit failure. The initial 30-second idle

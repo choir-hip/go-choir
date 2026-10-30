@@ -6,7 +6,7 @@ Operational invariants O10 (declared bound per growth surface), O11
 (memory budgets), O21 (a realization holds no unique state). Prior record:
 [`guest-dolt-journal-and-host-image-leak-2026-10-03`](guest-dolt-journal-and-host-image-leak-2026-10-03.md)
 (offline GC, store 27 → 6.7 GiB; durable fixes never landed) and
-[`guest-vm-embedded-dolt-memory-starved-2026-10-01`](guest-vm-embedded-dolt-memory-starved-2026-10-01.md)
+`guest-vm-embedded-dolt-memory-starved-2026-10-01`
 (the owner's slow Texture traced to the embedded store starving for
 memory; "fixed" with more RAM). Mutation class of a fix: red (guest
 persistent state, VM shape, projection bases).

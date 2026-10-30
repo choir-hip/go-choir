@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Wedged guests (docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
+// Wedged guests (docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
 // A guest whose process is alive but that refuses a TCP connection to its
 // service port for wedgedAfterDefault running is wedged: it can do no work
 // anyone will ever see. A busy guest still accepts the connection even when

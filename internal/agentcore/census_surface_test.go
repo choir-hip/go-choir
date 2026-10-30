@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// C1e B0 (docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
+// C1e B0 (docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
 // acceptance 6): the checker's I7 read work items and packets from the
 // trajectory snapshot and passed when those arrays were missing, so it would
 // pass vacuously once B5 deletes them. The census is the authoritative,

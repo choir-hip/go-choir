@@ -2,7 +2,7 @@
 
 One log per cut window (docs/re-engineering-decisions-2026-10-12.md §12.4):
 problems found and fixed in the same commit during Cut 1 of
-`docs/definitions/choir-reeng-cut1-authority-2026-10-12.md`. Problems that
+`docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md`. Problems that
 are not fixed in the commit that finds them get their own problem doc.
 
 ## B1. A crash boot starts a new research run that takes a pre-boot Cast
@@ -64,7 +64,7 @@ still running before the fix).
 ## B3. A cell that starts with a type, var or const declaration fails
 
 Found 2026-10-13 by the desk cell-error analysis of the Cut 0 bundles
-(docs/reports/reeng-desk-cell-errors-2026-10-13.md, mechanism M1): 22 of
+(docs/archive/reports/reeng-desk-cell-errors-2026-10-13.md, mechanism M1): 22 of
 67 failed cells, the largest class, and it repeats (the model's next cell
 often has the same shape). yaegi picks file or statement parsing from a
 cell's first token, so `type T ...` followed by statements fails

@@ -1031,12 +1031,12 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	writeLine(done)
 
 	// served/results/unique/seen measure reuse
-	// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md):
+	// (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md):
 	// seen is how many of this search's distinct URLs the computer already
 	// received from an earlier search within a day.
 	unique, seen := h.searchClient.observeResultURLs(computerID, resultURLs)
 	// routing/escalated/paid_calls/today measure spend
-	// (docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
+	// (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
 	skipped := append(append([]searchplane.Cooling{}, stream.Cooling...), route.Skipped...)
 	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d %s",
 		computerID, answered, len(started), len(skipped), len(done.Pending), searchSkippedSummary(skipped),
@@ -1115,7 +1115,7 @@ type SearchDailyCalls struct {
 // SearchMonthlyPace is a monthly-quota provider's pace for today: the
 // billing period, the calls counted in it before today, the period's
 // target and today's cap, (target - used) / days_left
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md).
 type SearchMonthlyPace struct {
 	PeriodStart     string `json:"period_start"`
 	PeriodEnd       string `json:"period_end"`

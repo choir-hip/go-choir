@@ -1275,7 +1275,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	// record carries both halves of the boot in one file. The fetch is
 	// observation, not shared-state mutation — like waitForGuestReady it must
 	// not run under m.mu, where a slow runtime_started would serialize every
-	// boot (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
+	// boot (docs/archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	tl.fetchGuestBootTimeline(hostURL)
 	tl.finish("healthy", nil)
 	if perr := tl.persist(m.cfg.StateDir); perr != nil {
@@ -1526,7 +1526,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 
 	// Same contract as bootVM: the guest-receipt fetch and final persist are
 	// observation work and must not hold m.mu
-	// (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
+	// (docs/archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	tl.fetchGuestBootTimeline(hostURL)
 	tl.finish("healthy", nil)
 	if perr := tl.persist(m.cfg.StateDir); perr != nil {

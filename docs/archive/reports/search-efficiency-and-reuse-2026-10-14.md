@@ -1,7 +1,7 @@
 # Search efficiency and reuse: design (2026-10-14)
 
-Problem record: `docs/problems/search-is-duplicated-and-discarded-2026-10-14.md`
-(evidence, failure modes). Companion: `docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`
+Problem record: `docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md`
+(evidence, failure modes). Companion: `docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`
 (provider health; the budget-aware router sketch reused in §3).
 Owner rule: efficiency before scaling; "I would rather put more money into
 storing more text and making the object graph bigger" than into repeat

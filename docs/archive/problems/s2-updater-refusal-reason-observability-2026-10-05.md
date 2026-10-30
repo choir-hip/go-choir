@@ -24,4 +24,4 @@ Five distinct refusal attempts on the disposable (2026-10-05 05:54 → 07:05) co
 Return the computed error as an additional field alongside the stable `error` string. The stable string stays the machine-facing discriminator (existing callers and the CI push classifier `grep -qiE '"error"|refused|rejected'` keep working); `reason` carries the diagnosis.
 
 ## Why not more
-The daemon cannot log it: it is a separate systemd unit whose journal lives inside the guest and is not host-readable for disposables, which is the same observability hole recorded for the layered exec in `docs/problems/s2-runtime-exec-still-baseline-2026-10-04.md`. The HTTP response is the only channel that already exists and already crosses the host boundary.
+The daemon cannot log it: it is a separate systemd unit whose journal lives inside the guest and is not host-readable for disposables, which is the same observability hole recorded for the layered exec in `docs/archive/problems/s2-runtime-exec-still-baseline-2026-10-04.md`. The HTTP response is the only channel that already exists and already crosses the host boundary.

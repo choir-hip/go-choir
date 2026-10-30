@@ -1,7 +1,7 @@
 package selfdevprotocol
 
 // The read-only listing of a computer's checkpoints
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4 and slice
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4 and slice
 // 3). Checkpoints are bound automatically; this is how an owner or the
 // cadence sees them, with the host's verdict on each.
 

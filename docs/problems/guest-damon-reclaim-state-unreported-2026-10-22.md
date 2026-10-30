@@ -35,7 +35,7 @@ Nothing in the guest reports DAMON state today, and
 
 From the 2026-10-14 reads of the guest kernel config (kernel 6.18.37;
 `docs/reports/vm-density-limits-2026-10-14.md` §2,
-`docs/reports/lr-guest-memory-return-2026-10-14.md` "Guest kernel"):
+`docs/archive/reports/lr-guest-memory-return-2026-10-14.md` "Guest kernel"):
 
 | Option | Value | Meaning here |
 |---|---|---|

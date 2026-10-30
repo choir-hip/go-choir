@@ -99,6 +99,6 @@ Residuals (C2 follow-up unless named):
 ## Next actions
 
 1. Derive E1-E4 read-only from the paper computer and Store B; write
-   `docs/evidence/c2-close-receipts-2026-10-13.json`.
+   `docs/archive/evidence/c2-close-receipts-2026-10-13.json`.
 2. A1 badge as a compatible orange change with its own Landing Loop.
 3. Close C2 when E1-E4 pass; reopen 2b if E1 or E2 fails.

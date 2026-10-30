@@ -38,7 +38,7 @@ The one thing worth remembering: the loop now works twice on a real app, and Tex
 
 - Reader-6: candidate selfdev-1c1f6265 accepted 09:12:36; promoted as 443bf5b82, review 243 PASS; landed 7fbe45512; deployed 09:27:46 (CI 40180198088); b@c upstreamed 09:28:10. Rejected candidate selfdev-84dc7585.
 - Trace review round 6: docs/evidence/selfdev-trace-reviews-2026-10-25.md (R6-1 to R6-6). Problem doc: docs/problems/texture-retypes-owner-directions-2026-10-25.md.
-- PD3 design: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md; reviews 244 and 245 send back, 246 accept.
+- PD3 design: docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md; reviews 244 and 245 send back, 246 accept.
 - PD3 S1: landed 7f769cc34 (tests abee5065b, cae0e7d32); reviews 247 (send back, one blocker) and 248 (approve); deployed 11:26:11 (CI 40188211719); switch texture.root_desk on for b@c only at 11:32:12.
 - S1 acceptance: docs/evidence/pd3-s1-acceptance-2026-10-25.md; master document ef0e2ef8 on b@c; coverage three of three; isolation run 9587225f.
 - Live station: PD3 S2 in lane pd3-s2. Metamission ledger: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md.

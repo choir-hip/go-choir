@@ -134,8 +134,8 @@ more resources towards making sure we do have a quality article. That is
 doing web research in addition to pulling from our source ingestion."
 So: rank by importance and depth (sources cited, length); an important,
 thin story is deepened by research that searches the web
-(docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md and
-docs/reports/autopaper-deepen-important-stories-2026-10-14.md, to come).
+(docs/archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md and
+docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md, to come).
 
 Sections: "a very simple classification of world news, U.S. politics,
 business and finance, and tech and AI. [...] pages or sections where

@@ -23,7 +23,7 @@ metamission:
       status: complete
       depends_on: []
     - id: m-sub-signal-plane
-      path: docs/definitions/choir-signal-async-signal-plane-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-async-signal-plane-2026-09-29.md
       readiness: drafted
       status: working
       depends_on: [m0-debug-stabilize]
@@ -33,7 +33,7 @@ metamission:
       status: superseded  # 2026-10-05: absorbed into app-dev SR (choir-appdev-sr-desk-surface-cleanup-2026-10-05.md)
       depends_on: [m-sub-signal-plane]
     - id: m1-typed-commitments
-      path: docs/definitions/choir-signal-typed-commitments-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-typed-commitments-2026-09-29.md
       readiness: drafted
       status: working
       depends_on: []
@@ -43,7 +43,7 @@ metamission:
       status: superseded  # 2026-10-05: absorbed into app-dev SM (model policy rewrite + evals)
       depends_on: [m0a-research-rlm-cutover, m1-typed-commitments]
     - id: m3-research-hillclimb
-      path: docs/definitions/choir-signal-research-hillclimb-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-research-hillclimb-2026-09-29.md
       readiness: drafted
       status: pending
       depends_on: [m2-model-policy-rlm-module]  # 2026-10-05: read as app-dev SM
@@ -53,7 +53,7 @@ metamission:
       status: complete
       depends_on: []
     - id: m5-management-scorer
-      path: docs/definitions/choir-signal-management-scorer-jev-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-management-scorer-jev-2026-09-29.md
       readiness: drafted
       status: pending
       depends_on: [m1-typed-commitments, m4-jev-transport]
@@ -74,7 +74,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent

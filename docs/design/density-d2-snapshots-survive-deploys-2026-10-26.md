@@ -1,7 +1,7 @@
 # D2 design: memory snapshots that survive a platform deploy (2026-10-26)
 
 Station D (density), item D2 of
-[choir-density-2026-10-26.md](../definitions/choir-density-2026-10-26.md).
+[choir-density-2026-10-26.md](../archive/definitions/choir-density-2026-10-26.md).
 It supersedes the L20 section of
 [fp10-snapshot-levers-and-host-slab-2026-10-22.md](fp10-snapshot-levers-and-host-slab-2026-10-22.md)
 (see §4.1 for where and why it differs). Evidence:
@@ -1445,7 +1445,7 @@ was not.
 | 6, `security_epoch` is a manual declaration | `autoputer` and the desk runtime are outside the floor by design (§3.1) | **Accepted; FP0 ruled** (header, §6.6): a CI check over named surfaces, raise or reviewed marker in the same change. The residual DeepSeek names is stated in §6.7: a busy resumed computer runs pre-fix code until its next idle moment, with no hard bound for one that is never idle. The dissent "make the epoch automatic over all guest code" was not taken: it would reduce D2 to case (a'), and the check is the conservative middle. |
 | 7, H1 fix bundled behind the switch | config.go:47-49; node-b-ci-deploy:508-516 | **Accepted.** Slice S1b, switch-independent. |
 | 8, "durable" overstated; M1 contradicted §4.6 | deploy_refresh_retry.go:276-288 forgets skipped entries | **Accepted.** §5.1 step 5 rewords; retention never deletes a running release by any rule (§4.6, M1). |
-| 9, deliverable shape | goal file docs/definitions/choir-density-2026-10-26.md:331-345 | **Accepted.** The fp10 doc gains a short "L20 revised 2026-10-26" section that points here, so there is one authority and the deliverable the goal file named exists. |
+| 9, deliverable shape | goal file docs/archive/definitions/choir-density-2026-10-26.md:331-345 | **Accepted.** The fp10 doc gains a short "L20 revised 2026-10-26" section that points here, so there is one authority and the deliverable the goal file named exists. |
 | "Worth it?", gate S6 on the deploy-level number | — | **Accepted.** S6 gate 2 (§7) and the R9 method and threshold (§10). A proxy read today puts the share at 61% with the revised floor, 37% if every surface change took a raise. |
 | Risk, embeds and generated files | `//go:embed` cannot leave the package directory | **Answered**: whole package directories are listed (§3.1). |
 

@@ -1,7 +1,7 @@
 package agentcore
 
 // The crash-boot settlement of a self-development apply, bounded and without
-// a replay (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.5
+// a replay (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.5
 // and 4.6 slice 1; docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md,
 // the 12:3x addendum). b@c's boot settled an apply whose journal was terminal
 // `applied`, and the settlement bound a checkpoint by replaying the tape into

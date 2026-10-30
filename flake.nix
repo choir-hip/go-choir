@@ -71,7 +71,7 @@
         }];
       };
 
-      # Go toolchain lane (docs/reports/patch-lanes-plan-2026-10-15.md,
+      # Go toolchain lane (docs/archive/reports/patch-lanes-plan-2026-10-15.md,
       # slice 3). Go point releases carry only security and critical fixes,
       # and they are the cheapest patch in the inventory: 1.26.9 closed 22
       # reachable standard-library govulncheck findings that the base's
@@ -100,7 +100,7 @@
       choirGo = mkChoirGo pkgs;
       buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
 
-      # Dolt lane (docs/reports/dolt-upgrade-compat-2026-10-15.md). The sql-server
+      # Dolt lane (docs/archive/reports/dolt-upgrade-compat-2026-10-15.md). The sql-server
       # for Store A and Store B, the host `dolt` CLI and the dev shell all use
       # pkgs.dolt; the locked nixpkgs ships 2.1.9. Same pattern as choirGo: the
       # base's own recipe with a newer version, source hash and vendor hash

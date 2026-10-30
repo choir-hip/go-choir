@@ -130,7 +130,7 @@ func (h *publicationHead) publication() PublicationSummary {
 // GetPublicationNavByRoute answers a link with its route, publication and
 // nav alone: the reader's poll for a newer version needs nothing else, and
 // the full bundle costs about a second to build
-// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+// (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md).
 func (s *Service) GetPublicationNavByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
 	steps := newResolveSteps()
 	defer steps.logIfSlow(routePath + " (nav)")

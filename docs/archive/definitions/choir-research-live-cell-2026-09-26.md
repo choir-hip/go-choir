@@ -159,7 +159,7 @@ now:
     scope_if_supported: research desk on cells + D2 cap boundary closed
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3r), §7 D2
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3r), §7 D2
   belief:
     believed_state: >-
       CHARTERED. Research verbs already stage and reduce (R2 substrate);
@@ -245,7 +245,7 @@ receipts:
 
 # R3r — Research Live Cell (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
 (R3r, off spine): research on cells with the network/memory cap policy resolved — the D2 residual,
 contained here. Proof: a research cell Report mints a record under its cap boundary.

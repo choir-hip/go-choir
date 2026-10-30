@@ -14,7 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// The owner's calibration routes (docs/reports/icrl-calibration-experiment-2026-10-14.md):
+// The owner's calibration routes (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md):
 //
 //   - GET /api/calibration: each desk's digest as the guest computes it;
 //     with detail=1, the settled observations (arm and held-out marked) and

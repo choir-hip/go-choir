@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md.
+// docs/archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md.
 // Failure modes: Brave asked for more than its 20-result limit (422, a
 // week-long cooldown). Redaction of the provider errors a search stream
 // returns is covered in search_stream_test.go.

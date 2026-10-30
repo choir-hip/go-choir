@@ -1,6 +1,6 @@
 package vmmanager
 
-// S3 snapshot hibernate (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+// S3 snapshot hibernate (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 //
 // In snapshot mode a hibernate asks the guest to fence (close run admission,
 // confirm nothing is running, sync), pauses the VM, writes a full Firecracker

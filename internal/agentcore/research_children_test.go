@@ -65,7 +65,7 @@ func (p *researchChildProvider) CallWithTools(ctx context.Context, req provideri
 	}, nil
 }
 
-// Mission docs/definitions/choir-research-fanout-2026-10-10.md. Failure
+// Mission docs/archive/definitions/choir-research-fanout-2026-10-10.md. Failure
 // modes pinned: the parent cell gets no results or results out of order; a
 // child cannot reach the web; a child can report (authority leak); children
 // are not budgeted against the root; one unknown model fails

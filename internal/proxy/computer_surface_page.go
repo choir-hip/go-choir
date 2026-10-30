@@ -11,7 +11,7 @@ import (
 // writeComputerSurfaceResolveError answers a desktop page load whose
 // computer is starting, recovering or briefly blocked. A browser gets a
 // small page in plain words that retries itself; API callers keep the
-// structured JSON (docs/problems/recovering-computer-shows-raw-json-2026-10-09.md).
+// structured JSON (docs/archive/problems/recovering-computer-shows-raw-json-2026-10-09.md).
 func writeComputerSurfaceResolveError(w http.ResponseWriter, r *http.Request, err error) {
 	if !wantsHTMLPage(r) {
 		writeResolveError(w, err)
@@ -29,7 +29,7 @@ func writeComputerSurfaceResolveError(w http.ResponseWriter, r *http.Request, er
 		case "guest_reattach_pending":
 			// Running but not answering. vmctl restarts a guest that stays
 			// unreachable by itself (wedge.go); the owner never has to
-			// (docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
+			// (docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
 			message = "Your computer is not answering."
 			detail = "If it stays this way it restarts by itself within a few minutes. This page will keep checking."
 		case "privacy_key_unavailable":

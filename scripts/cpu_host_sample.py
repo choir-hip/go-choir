@@ -15,7 +15,7 @@ It reads /proc/<pid>/{stat,status,io,cmdline} (the cmdline only to find
 the --id of a firecracker process), cgroup cpu.stat files and
 /sys/kernel/debug/kvm. It reads no guest memory, no environment and no
 secrets, and changes nothing. Used by
-docs/reports/computer-cpu-efficiency-2026-10-14.md.
+docs/archive/reports/computer-cpu-efficiency-2026-10-14.md.
 """
 import os, time, json, glob, sys
 WIN = float(sys.argv[1]) if len(sys.argv) > 1 else 60

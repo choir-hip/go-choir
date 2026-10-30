@@ -12,7 +12,7 @@ import (
 // (field text, query word) pair corpusTermIn accepts must leave the capture
 // a candidate in the table: each of the word's parts is a stored term (or
 // a prefix of one). Problem record failure modes 8 and 9
-// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+// (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
 // two-letter tokens, CJK without spaces, Arabic and Hebrew with attached
 // prefixes, Thai, hyphens, apostrophes, digits, case, diacritics, marks.
 // The one named deviation: a word of fewer than captureterms.MinPrefixRunes

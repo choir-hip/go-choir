@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// The test tier (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md,
+// The test tier (docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md,
 // R2, lever 2). Ways this could fail, written before the code: a running
 // tracer computer, protected by recent activity, outlives a real user's
 // idle computer under pressure; a paid or platform account whose email

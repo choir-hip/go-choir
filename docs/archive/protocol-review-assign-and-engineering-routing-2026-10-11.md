@@ -116,7 +116,7 @@ confirmed by a trace or a test.
   - So the prompt offers a verb that claims an effect, and then forbids the
     effect it claims.
 - Use: the problem record's trace audit counts `choir.Assign` at **0 uses**
-  (`docs/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md:38`).
+  (`docs/archive/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md:38`).
 - History: the broker action dates from 5e396897 (2026-08-26, "Phase 1 —
   versioned flat DTO broker protocol"). The verb dates from af0cc214
   (2026-09-04). It was a placeholder for subagent spawning, and that
@@ -223,7 +223,7 @@ branches:
    (`engineering_assignment_seed.go:24`) seeds it for ten test files, and
    the replay goldens' manifest records exactly that seed
    (`parent_run_id: run-management-assignment`,
-   `docs/evidence/rlm-replay/goldens/manifest.json`).
+   `docs/archive/evidence/rlm-replay/goldens/manifest.json`).
 
 Approximate size of what exists only for branches 2 and 3:
 
@@ -415,7 +415,7 @@ than about a second admission path that bypasses management.
   feeding the Texture directly. (Receipt: the content is quoted in the
   JSON.)
 - **Rerun 12**
-  (`docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md`,
+  (`docs/archive/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md`,
   Failure 3). The Texture told the owner that no change had been applied
   when it had been. The Texture wrote from a cancel report of the producing
   run. Hypothesis H1 in that record: the Texture renders from desk reports
@@ -440,9 +440,9 @@ than about a second admission path that bypasses management.
   - input: `state` plus typed `questions` (choice, binary and so on, with
     criteria). Output: a full probability distribution and a confidence
     score per question (`gatewayruntime/jev.go:13-28`).
-  - Receipt `docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md`:
+  - Receipt `docs/archive/evidence/m4-jev-transport-roundtrip-2026-09-30.md`:
     331 input tokens, $0.000014 per call.
-  - Routing experiment `docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md`:
+  - Routing experiment `docs/archive/problems/prompt-bar-minesweeper-demo-2026-10-10.md`:
     24 of 24 correct, p50 208 ms, p90 269 ms.
 - **Where it is used:**
   - one caller, `judgeFrozenCandidate`

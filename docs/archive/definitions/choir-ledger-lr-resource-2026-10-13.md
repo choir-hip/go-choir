@@ -2,12 +2,12 @@
 definition_version: 4
 
 # Station LR of the ledger metamission
-# (docs/definitions/choir-ledger-metamission-2026-10-13.md): resource
+# (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): resource
 # efficiency and model cost. Owner 2026-10-13, in session, after the live
 # paper computer was hibernated under host pressure: "we should really do
 # our resource efficiency and cost mission tonight". The specification is
 # the clustering assessment
-# (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md); this
+# (docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md); this
 # file tracks its execution. Levers 1 and 2 are small host-only slices run
 # under the assessment directly; levers 3, 4 and 6 each need a design and a
 # panel before code.
@@ -120,8 +120,8 @@ boundaries:
   mutation_class: red
   authority_sources:
     - owner 2026-10-13 in session (resource and cost mission tonight)
-    - owner 2026-10-13 tier ruling (docs/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md)
-    - docs/reports/resource-efficiency-memory-assessment-2026-10-13.md
+    - owner 2026-10-13 tier ruling (docs/archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md)
+    - docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md
   must_preserve:
     - paid and platform computers are never reclaimed for pressure
     - a crash boot never resumes work
@@ -140,7 +140,7 @@ now:
       rollback tag lr-pre-stack-0510): lever 6 (choir.CellOut), lever 7
       (model prices, docs/evidence/model-prices-2026-10-14.md),
       longcat-2.5-preview-free out of the default pool
-      (docs/evidence/model-latency-paper-2026-10-14.md: 21.8 s p50,
+      (docs/archive/evidence/model-latency-paper-2026-10-14.md: 21.8 s p50,
       115 s p90, 932 s max), support judgement moved to Jev off
       management's turn, the research-prompt renderer and prompt fixes.
       Acceptance on a fresh computer (stack-paper-0527): 6 stories in
@@ -169,8 +169,8 @@ now:
     delta_o: priced models (lever 7), so the effect reads in dollars
     scope_if_supported: every desk on every computer
     status: proposed
-    evidence_refs: [docs/reports/resource-efficiency-memory-assessment-2026-10-13.md]
-  decision: {what: "levers 1, 2, 7, 6, then the balloon probe, then store compaction", kind: operational, status: proposal, evidence_ref: docs/reports/resource-efficiency-memory-assessment-2026-10-13.md, owner_ratification_ref: not_applicable}
+    evidence_refs: [docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md]
+  decision: {what: "levers 1, 2, 7, 6, then the balloon probe, then store compaction", kind: operational, status: proposal, evidence_ref: docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md, owner_ratification_ref: not_applicable}
   belief:
     believed_state: >-
       Lever 1 is live (d3f7d9b2, CI 38487491968, deployed 00:08:49 UTC;
@@ -182,7 +182,7 @@ now:
   next_action: >-
     Owner 2026-10-14: SA (agent density) and S3 (fast resume) join this
     station as one cost track; SP is investigated, not built
-    (docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md). Lever 6
+    (docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md). Lever 6
     deploys after B1. Then, in order: (1) a host sampler on Node B (per
     guest host memory and CPU from the Firecracker PIDs, state-dir bytes,
     procmem for active guests, the /api/costs delta, the pressure sample,

@@ -30,7 +30,7 @@ func TestRoleVerbSets(t *testing.T) {
 	// Every granted verb is one the broker serves: its verb switch in
 	// cmd/capsule-broker/main.go (a main package, so listed here). lstat,
 	// readlink, mkdir_all, remove_all, symlink, truncate and file_hash were
-	// granted with no handler (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md,
+	// granted with no handler (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md,
 	// residual 12); exec covers each of them.
 	brokerVerbs := map[string]bool{
 		"exec": true, "read_file": true, "write_file": true, "list_dir": true, "stat": true,

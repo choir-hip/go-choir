@@ -10,7 +10,7 @@ import (
 
 // ListObjectsByKindOwnerComputerPage serves GET /api/runs' legacy half: the
 // runs of one owner whose computer_id is empty, without reading every run of
-// the kind (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md
+// the kind (docs/archive/problems/paper-remaining-store-stall-holders-2026-10-23.md
 // section 4).
 //
 // Ways it can fail, written before the code:

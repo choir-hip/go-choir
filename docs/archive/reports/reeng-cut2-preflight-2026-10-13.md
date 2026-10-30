@@ -1,6 +1,6 @@
 # Cut 2 pre-flight: the cited facts on current main, 2026-10-13
 
-Cut 2 (docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md)
+Cut 2 (docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md)
 was written against main 03499ef9. Its `start.observed` facts were
 re-verified read-only on 76ab40fd (Cut 1 core), 104 commits later.
 

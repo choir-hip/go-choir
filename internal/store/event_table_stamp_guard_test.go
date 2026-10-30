@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-// Deploy 1 of F-c (docs/design/choir-event-table-f-c-2026-10-22.md) is inert:
+// Deploy 1 of F-c (docs/archive/design/choir-event-table-f-c-2026-10-22.md) is inert:
 // no production code sets ProjectionOp.Table. The guard is type-based (round
 // 1c, DeepSeek): a syntactic check missed elided literals such as
 // []computerevent.ProjectionOp{{Table: "choir_events"}}, the style most

@@ -7,10 +7,10 @@ while the browser runs and gives it back afterwards.
 
 - Mutation class: **red** (vmctl, VM lifecycle, Firecracker launch config,
   host memory admission, a new guest-to-host call).
-- Parent analysis: [Playwright in capsules](playwright-in-capsules-memory-2026-10-15.md)
+- Parent analysis: [Playwright in capsules](../../reports/playwright-in-capsules-memory-2026-10-15.md)
   section 1.4 (virtio-mem) and section 6 slice S4; density lever L11 in
-  [VM density limits](vm-density-limits-2026-10-14.md).
-- Backend seam: [VM backend interface](vm-backend-interface-2026-10-14.md)
+  [VM density limits](../../reports/vm-density-limits-2026-10-14.md).
+- Backend seam: [VM backend interface](../../reports/vm-hypervisor-seam-design-2026-10-21.md)
   (`MemoryController`, capability matrix row "virtio-mem").
 - This commit is documentation only. It names the problem and the failure
   modes before any code (CLAUDE.md, "Problem Documentation First").

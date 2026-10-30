@@ -136,7 +136,7 @@ func writeReceipt(t *testing.T, body string) {
 
 // A partial deploy that did not move the proxy carries the proxy's artifact
 // forward with its own commit. /health must still answer the platform
-// commit (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
+// commit (docs/archive/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
 // M3/M6), while the proxy's per-service identity stays strict: it was not
 // deployed by this receipt's deploy.
 func TestPlatformSnapshotReadsMergedReceiptAfterPartialDeploy(t *testing.T) {

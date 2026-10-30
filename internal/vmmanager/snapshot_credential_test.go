@@ -11,7 +11,7 @@ import (
 )
 
 // S3 re-credential on resume, host side
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 26-28,
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md, items 26-28,
 // 33, 35-38). The host mints a fresh envelope for the snapshot's realization
 // and delivers it in the resumed call, so a snapshot outlives the frozen
 // capability's renewal window.

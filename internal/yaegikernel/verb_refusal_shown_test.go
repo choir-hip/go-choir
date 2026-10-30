@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// S1e (docs/problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md):
+// S1e (docs/archive/problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md):
 // a research round ended its cell with a bare choir.ReportPacket call that
 // was refused; the cell showed "=> " and the round's leads never reached
 // Texture. Failure modes pinned: a refused verb ending a cell shows nothing;

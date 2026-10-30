@@ -29,7 +29,7 @@
  *     Texture chevrons, and an older version offers the newer one;
  *   - nothing scrolls horizontally at 375px;
  *   - the edge compresses the story bundle, the page and its scripts and
- *     styles (docs/problems/edge-serves-everything-uncompressed-2026-10-16.md).
+ *     styles (docs/archive/problems/edge-serves-everything-uncompressed-2026-10-16.md).
  * Screenshots are attached and written under test-results (or
  * AUTOPAPER_SCREENSHOT_DIR when set). Skips when no story is published.
  *

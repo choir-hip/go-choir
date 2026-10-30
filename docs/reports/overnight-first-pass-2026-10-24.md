@@ -99,7 +99,7 @@ You can answer these in one message, by number.
 - Deploys: D31 cc6479939 (VM slice round 2); D32 0cbc52edc (jailer and host-only DNS for class test); D33 824b84106 (self-development promotion classification); D34 911be16b1 (engineering job park); D35 92771df65 (event table deploy 2, inert); D36 0894e48fe (platform Dolt GOMEMLIMIT 3GiB under MemoryHigh 4G); D37 22a01746f (boot credential re-minted after offline maintenance; decisive proof at tonight's 04:00 compaction); D38 dc3f5ee3b (stream_seq seed by phase; the paper's seed 550 ms, append 391 ms).
 - Ledger: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md, through 7f5615e61.
 - Problem records: docs/problems/selfdev-apply-on-a-constructed-computer-breaks-vmctl-list-2026-10-24.md; offline-maintenance-outlives-the-boot-credential-2026-10-24.md; engineering-busy-polls-its-own-job-2026-10-24.md; platform-dolt-gc-throttled-at-memory-high-2026-10-24.md; idle-sweep-hibernates-a-computer-just-after-its-apply-restart-2026-10-24.md; successive-selfdev-applies-do-not-compound-2026-10-24.md; texture-supervision-doc-stops-at-the-decision-boundary-2026-10-24.md; on lane/fp0-apprewrite: staged-engineering-rounds-break-on-desk-reads-of-blocked-2026-10-24.md and long-engineering-run-dies-on-corpusd-cas-invalid-connection-2026-10-24.md.
-- Design: docs/design/computer-update-architecture-rnd-2026-10-24.md; docs/design/psa-precommitment-icrl-status-2026-10-24.md.
+- Design: docs/design/computer-update-architecture-rnd-2026-10-24.md; docs/archive/design/psa-precommitment-icrl-status-2026-10-24.md.
 - Evidence: docs/evidence/selfdev-drill-2026-10-24.md; drill traces under ~/.config/choir-qa/traces/fp0-selfdev-1024a and fp0-jobpark-1024b.
 - Apps: b@c computer computer-6c50d6e566143ae32cdb660faa60e24d; Slides apply selfdev-41ea6ea6 (04:27); v5 trajectory 80db9c3f-f482-53c6-8604-be36bb0e6283, Texture doc 679b943b-e4ac-5abb-b03b-22f33ec0e1d8; lost v4 stages in /Users/wiz/Dev/lanes/_runs/apprewrite/v4/stage3.patch; conductor log /Users/wiz/Dev/lanes/_runs/apprewrite/log.md.
 - D39 a3715cdc2 (media and preference tables as tape projections; b@c checkpoint ce22d325 at 13:23:28). The five-app candidate: op selfdev-79dc4bf4 (rejected 13:2x, patch kept), v6 trajectory 9da63b10-127f-53da-818b-92716d14f03a, Texture doc d4fe7dda-97b2-532b-b943-c5dd7272201c, patch /Users/wiz/Dev/lanes/_runs/apprewrite/v6/patch.diff. The checkpoint bug: docs/problems/stock-ui-writes-make-a-computer-checkpoint-ineligible-2026-10-24.md; fix lane lane/fp0-media-replay. Clustering assessment: docs/problems/engineering-work-product-durability-cluster-2026-10-24.md.
@@ -109,7 +109,7 @@ You can answer these in one message, by number.
 - Owed: D37's proof at the 04:00 compaction; a second clean platform Dolt GC. b@c's System/model-policy.toml is restored to its original (read back identical at 15:23).
 
 
-## Merged from docs/reports/overnight-groundwork-pass-2026-10-23.md (2026-10-23)
+## Merged from docs/reports/overnight-first-pass-2026-10-24.md (2026-10-23)
 
 **The overnight groundwork pass.**
 Written on Friday, October twenty-third, at about half past eleven UTC. It covers the overnight stretch from the restart at about five UTC to now, about six and a half hours of the launch first pass, as run by FP0.

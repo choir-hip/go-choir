@@ -2,7 +2,7 @@
 
 Date: 2026-10-13. Author: research agent (Claude Code), read-only on the repo.
 Mutation class of this document: green (docs only). No code, registry or config was changed.
-Companion to `docs/reports/multilingual-osint-sourcing-research-2026-10-13.md` (news-outlet RSS and general sourcing). That report is not repeated here; where this one overlaps it says so.
+Companion to `docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md` (news-outlet RSS and general sourcing). That report is not repeated here; where this one overlaps it says so.
 
 ## 0. How to read this report
 

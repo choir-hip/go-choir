@@ -231,7 +231,7 @@ levels:
 - platform Dolt for platform-visible facts, publication metadata, routing
   records, public artifacts, citation graph, and compute accounting.
 
-Read [adr-dolt-as-canonical-state.md](adr-dolt-as-canonical-state.md).
+Read adr-dolt-as-canonical-state.md.
 
 ### SQLite
 

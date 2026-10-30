@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Overnight run, 2026-10-20 to 2026-10-21. Run as
-# `/goal docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md`.
+# `/goal docs/archive/definitions/choir-overnight-research-oped-sources-2026-10-20.md`.
 # Owner 2026-10-20 ~23:30 UTC (docs/reports/owner-notes-2026-10-14.md
 # section 32): research more for every reader, op-eds as connected Texture
 # publishing, wave-1 schedules plus AT Protocol and Fediverse ingestion, and
@@ -78,7 +78,7 @@ start:
       section 6). Pollers are rss, telegram, gdelt. No AT Protocol or
       Fediverse code exists. Bluesky per-account RSS
       (bsky.app/profile/<handle>/rss) and Mastodon tag and account RSS work
-      as plain rss rows (docs/reports/multilingual-osint-sourcing-research-2026-10-13.md).
+      as plain rss rows (docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md).
       Mastodon /api/v1/trends/links is public and carries a per-day uses
       history; Bluesky getAuthorFeed, getFeed, getList and getTrends answer
       unauthenticated (web research, 2026-10-20, session notes).

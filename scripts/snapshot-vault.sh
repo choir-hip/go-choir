@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The snapshot vault's host script (SDC NET-06, review F12; goal file
-# docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md).
+# docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md).
 #
 # A volume whose key is read from /dev/urandom when the host boots and is
 # never written down: a sparse file, a loop device, a dm-crypt PLAIN mapping

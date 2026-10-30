@@ -297,7 +297,7 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 	// fingerprints then read that snapshot on the read pool while appends and
 	// writes proceed. The replay below stops at the head, and desks keep
 	// working meanwhile
-	// (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md).
+	// (docs/archive/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md).
 	var (
 		liveHead      *computerevent.Head
 		live          computerversion.ObservationSet

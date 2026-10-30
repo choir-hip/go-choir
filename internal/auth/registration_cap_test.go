@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// L4-03 (docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md, P7):
+// L4-03 (docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md, P7):
 // a first cap on registered users, with a waitlist. Failure modes guarded,
 // written before the code:
 //  1. the cap on by default (AUTH_REGISTRATION_CAP unset or 0 is off);

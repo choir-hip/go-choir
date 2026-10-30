@@ -9,7 +9,7 @@ Node B state was changed. Owner's words: "Search deadline I don't quite
 understand. What I know is search needs to be fast, iterative, deep, broad,
 recursive, comprehensive."
 
-Inputs: [problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md](../problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md),
+Inputs: [problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md](problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md),
 the search code path from the cell verb to the providers, 24 hours of Node B
 gateway journal (2026-10-10 21:09Z to 2026-10-11 21:09Z, 509 searches), a
 read-only copy of the gateway's search health store taken at 21:09Z, and the
@@ -314,7 +314,7 @@ of 64 egress calls.
 **Depth, recursion and coverage are left to the model.** Nothing reads pages
 in bulk, follows links, or checks what a plan said should be covered.
 Children are one level deep and share one 64-call budget. The research
-record [problems/research-leaves-leads-unresolved-and-unexplained-2026-10-11.md](../problems/research-leaves-leads-unresolved-and-unexplained-2026-10-11.md)
+record [problems/research-leaves-leads-unresolved-and-unexplained-2026-10-11.md](problems/research-leaves-leads-unresolved-and-unexplained-2026-10-11.md)
 shows the result: leads end as "unverified" with no plan to resolve them.
 
 ### Clustering (CLAUDE.md, Convergence Before Patching)
@@ -389,7 +389,7 @@ today's numbers ChatGPT is in the slow lane and the other four are fast.
 **G4. Batch queries.** `POST /provider/v1/search` accepts `queries[]`, up to
 about 8. All variants run concurrently under one deadline, with a
 per-provider concurrency cap to avoid the rate-limit bursts in
-[problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md](../problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
+[problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md](problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
 The response holds a merged list per query plus one fused list across
 queries (reciprocal-rank fusion, deduplicated by normalized URL). Breadth
 then costs one cell call and one deadline instead of N of each.
@@ -435,7 +435,7 @@ concurrently (about 6 at a time) under one deadline. For each it returns:
 This is the "read pages, follow links" primitive. It reuses the existing
 fetch and import paths and charges the egress budget per URL. It must land
 after the address guard in
-[problems/research-fetch-url-has-no-address-guard-2026-10-10.md](../problems/research-fetch-url-has-no-address-guard-2026-10-10.md),
+[problems/research-fetch-url-has-no-address-guard-2026-10-10.md](problems/research-fetch-url-has-no-address-guard-2026-10-10.md),
 because batch reading multiplies that exposure.
 
 **H3. `choir.SearchMany(queries, budget)`.** The cell-side form of G4. It

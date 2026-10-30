@@ -15,7 +15,7 @@ import (
 )
 
 // The guest reads the gateway's NDJSON search stream (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // Ways it can fail:
 //  1. The client reads the whole body before returning a line, so a slow
 //     provider delays every earlier provider's results.

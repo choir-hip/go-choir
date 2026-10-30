@@ -3,7 +3,7 @@ package textureowner
 // PD3 S1: one Texture root desk per computer, the master document's own
 // Texture desk, woken by a debounced texture_root_digest after other
 // documents' commits, behind texture.root_desk
-// (docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
+// (docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md). Ways it can
 // fail, written before the code (the design's numbering):
 //
 //	3   the root wakes on every commit (digests are coalesced and rate bound);

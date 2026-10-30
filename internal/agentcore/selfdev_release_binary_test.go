@@ -10,7 +10,7 @@ import (
 )
 
 // Verification binds a reused release binary to this computer's running
-// build (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A5).
+// build (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A5).
 // Ways it could fail: a deploy restarted the computer between Freeze and
 // Verify, so the reused binary is not the running build and a pass would
 // approve a release that names the wrong executable; the running identity is

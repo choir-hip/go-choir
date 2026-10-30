@@ -8,7 +8,7 @@ Related:
 (RES-16; "Proof on one test computer"; "Every computer, the paper
 included"),
 [node-b-disk-fills-from-the-paper-data-image-2026-10-22.md](node-b-disk-fills-from-the-paper-data-image-2026-10-22.md),
-[firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md),
+[firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-17-for-every-computer-2026-10-22.md),
 [memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md),
 and the FP8 definition (P3, and "NET-08 and RES-16").
 
@@ -493,7 +493,7 @@ Local verification at 70c82a1eb:
   cold boot, as patch releases did on 1.16.x.
 
 
-## Merged from docs/problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md (2026-10-22)
+## Merged from docs/problems/firecracker-1-17-for-every-computer-2026-10-22.md (2026-10-22)
 
 **Firecracker 1.16.1 restores virtio-mem snapshots wrong (2026-10-22).**
 Status: problem record, before code. Mutation class of the fix: **red** (VM lifecycle, the host's VMM binary and jailer). Related: `guest-data-image-never-trims-2026-10-20.md` (the 1.17 plan), `firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md`, `host-kernel-216-days-unpatched-2026-10-15.md`.

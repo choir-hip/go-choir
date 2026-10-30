@@ -60,7 +60,7 @@ week."), compared against the five-Haiku baseline, measures it.
    saturation or a budget refusal, saying what remains.
 2. Owner direction 2026-10-10: research recursively fans out to multiple
    models (RLM pattern). The settled design is the 2026-08-29 RLM
-   consensus D7b and M6.5 (docs/reviews/rlm-implementation-consensus-2026-08-29.md):
+   consensus D7b and M6.5 (docs/archive/reviews/rlm-implementation-consensus-2026-08-29.md):
    a nested activation of research-or-smaller authority, with a
    carve-out of the parent's budget and caps on width and depth. The
    2026-09-15 ontology consensus adds that its results return as values

@@ -147,7 +147,7 @@ Tests b79cab192 (failed on main 6c60685cc), fix 4e6f96833.
   which then no longer matches the staged freeze intent.
 
 
-## Merged from docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md (2026-10-22)
+## Merged from docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md (2026-10-22)
 
 **FP4 round 4: a landed report answered "digest conflict", the guard keeps a stale refusal, and a dead letter has no cause (2026-10-22).**
 Found in the FP4 round 3 drill and its re-run on the test computer `computer-71afbf1461dffabcce8eeebe558d03bd` (deploys J and Q), reported by FP0. Companion to docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md (P1 of round 4). Problem documentation only; there is no fix in this commit. Causes are read from code at 6c60685cc; where the trace does not confirm them they are 

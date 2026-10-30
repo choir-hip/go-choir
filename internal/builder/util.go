@@ -57,7 +57,7 @@ func writeFileAtomic(path string, content []byte, mode os.FileMode) error {
 // the receipt a concrete, reproducible code_commit.
 //
 // The admission is decided on the tree git committed, never on the patch
-// text (H15-H17 of docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+// text (H15-H17 of docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md):
 // after the commit, the changes are read with `diff --raw --no-renames`
 // against the base, links and git metadata are refused, and admit (when set)
 // decides the rest; a file the apply wrote that the commit does not carry

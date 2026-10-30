@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md
+// docs/archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md
 // (ops routes amendment). Failure modes: a computer on its tap reads
 // provider health or resets a search or inference breaker, with or without
 // asserting X-Internal-Caller; an operator on Node B loopback is refused.

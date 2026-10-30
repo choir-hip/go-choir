@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// P6 at vmctl (docs/reports/p6-p8-release-adopt-2026-10-15.md). Failure
+// P6 at vmctl (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md). Failure
 // modes pinned:
 //   I6 vmctl list probes a guest (list must read only what was reported);
 //   I7 a guest reports another computer's identity, or an unbound caller

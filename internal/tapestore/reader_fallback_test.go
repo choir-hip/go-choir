@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// Round 5 (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md,
+// Round 5 (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md,
 // round_5_design): a segment error falls back to the legacy file only when
 // that file hashes to the requested digest, and every such read is counted.
 // Both enabled-mode P1s of round 4 end in an acknowledged pin whose valid

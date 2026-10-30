@@ -11,7 +11,7 @@ import (
 // cacheLogMeta is what the per-call usage line says about the request, so the
 // journal can separate "our prompt bytes drifted between calls" from "the
 // backend routed the call to a cold cache"
-// (docs/reports/chatgpt-cache-ratio-2026-10-15.md, lever 1). Hashes and
+// (docs/archive/reports/chatgpt-cache-ratio-2026-10-15.md, lever 1). Hashes and
 // counts only: no prompt text, tool output or argument value is kept.
 type cacheLogMeta struct {
 	key        string

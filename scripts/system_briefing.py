@@ -4,7 +4,7 @@
 A system briefing is a read-aloud programme for the owner: what changed,
 the state of the system with evidence labels, decisions waiting, pathways,
 and concepts (docs/briefings/README.md; design in
-docs/reports/autoradio-programming-engine-2026-10-14.md section 5). This
+docs/archive/reports/autoradio-programming-engine-2026-10-14.md section 5). This
 script is the gatherer only. It makes no model calls; a writer (a person or
 an agent) reads the pack and the sources it points to and writes the
 briefing.

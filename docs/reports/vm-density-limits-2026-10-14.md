@@ -125,7 +125,7 @@ and (hard) virtio-mem.
    24.5 GB allocated now; on 10-13 the state dir read 6.9 GB (that read's
    method is not recorded, so the growth rate is unconfirmed). An offline
    compaction once took the owner's image from 17.7 GB to 4.5 GB
-   ([store bloat](../problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
+   ([store bloat](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
 8. **Busy CPU, first number.** The paper computer (14 sources, busy 24/7)
    used 2,463 CPU-seconds in 2,042 s of life: **1.2 cores on average**.
    That includes its boot replay. This is one sample, with a Xeon core.
@@ -261,7 +261,7 @@ Before CPU, two limits outside the host bind:
   20 paper-like busy computers cost about $2,200 a day, and the host's busy
   limit is also a budget decision. Search providers are cooling for most
   of the hour already
-  ([problem](../problems/search-providers-cooling-most-of-the-time-2026-10-14.md)).
+  ([problem](../archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md)).
 
 I/O: busy computers write Dolt commits through ext4, then btrfs zstd, then
 RAID1. Per-VM I/O is unmeasured, because there is no per-VM cgroup (lever
@@ -474,7 +474,7 @@ Steps:
 
 - Busy CPU is one sample (the paper, 1.2 cores including boot replay). The
   EPYC busy limit moves between about 15 and 30 with it.
-  - Follow-up: [computer CPU efficiency](computer-cpu-efficiency-2026-10-14.md)
+  - Follow-up: [computer CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md)
     profiles that CPU. 98% of the paper's guest time is the main daemon,
     and most of that is unindexed store scans.
   - Its target is 0.2 to 0.3 core, about 50 busy computers per EPYC by

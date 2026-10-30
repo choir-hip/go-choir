@@ -14,7 +14,7 @@ import (
 )
 
 // The story library (L2a A2,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md): every living
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md): every living
 // story of one computer, newest first, with no cap. The ProductAPI document
 // list keeps its cap for the UI; intake labels and management's
 // choir.Stories read this.

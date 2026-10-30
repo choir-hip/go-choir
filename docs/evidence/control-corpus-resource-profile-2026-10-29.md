@@ -19,7 +19,7 @@ cancellation.
 Earlier comparison and sources:
 [engine alternatives](storage-engine-alternatives-2026-10-29.md),
 [selection goal](../definitions/choir-data-architecture-selection-2026-10-28.md),
-[initial direction](../design/data-rearchitecture-2026-10-28.md).
+[initial direction](../archive/design/data-rearchitecture-2026-10-28.md).
 
 ## Conclusions and corrections
 
@@ -343,33 +343,33 @@ not be charged solely to the database process or ignored as "not ingestion."
 
 ### Earlier receipts and their discontinuities
 
-- [August 26 history incident](platform-dolt-oldgen-218g-dead-history-2026-08-26.md):
+- [August 26 history incident](../archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md):
   225G repository, approximately 4.5G current chunk state, 6.9M Dolt commits;
   a SQL dump attempt reached 27.3G peak and OOMed. **This predates the A/B
   split and contained corpus rows**; it is evidence about the old shared
   store/history mechanism, not a control-only workload baseline.
-- [October 5 corpus](../problems/world-wire-corpus-resource-burn-2026-10-05.md):
+- [October 5 corpus](../archive/problems/world-wire-corpus-resource-burn-2026-10-05.md):
   99 GB, 10.2 GB RSS, millions of objects/fetches/ingestion rows and sustained
   CPU. The report's claim that it shared control authority used stale
   taxonomy; the later code/deployment evidence places control separately.
 - The October 9 corpus reset breaks the size history: the old 104G repository
   and history-free 23 GB dump must not be joined smoothly to later small-store
-  readings. See the [reset receipt](../problems/node-b-disk-free-space-2026-10-09.md)
-  and [October 9 memory/config receipt](../problems/node-b-memory-overcommitted-swap-2026-10-09.md).
-- [October 15 control clustering](../problems/dolt-clustering-assessment-2026-10-15.md):
+  readings. See the [reset receipt](../archive/problems/node-b-disk-free-space-2026-10-09.md)
+  and [October 9 memory/config receipt](../archive/problems/node-b-memory-overcommitted-swap-2026-10-09.md).
+- [October 15 control clustering](../archive/problems/dolt-clustering-assessment-2026-10-15.md):
   about 25G directory, 92,290 commits, oldgen growth about 1.6G/day, stalls and
   substantial service I/O. The precise stall mechanism was not proven then.
-- [October 22 control growth](../problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md):
+- [October 22 control growth](../archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md):
   about 36 GiB, almost all oldgen. Large new archive files may be conjoin
   repacking; their file sizes cannot be read as newly ingested bytes.
-- [October 24 control pressure](../problems/platform-dolt-gc-throttled-at-memory-high-2026-10-24.md):
+- [October 24 control pressure](../archive/problems/platform-dolt-gc-throttled-at-memory-high-2026-10-24.md):
   a 3G high limit, little file cache, heavy refault/reads and GC convoys;
   a later GC at the same cap succeeded, so pressure alone was not sufficient
   to explain every stall. Current 4G/high and 3GiB Go soft-limit settings
   differ from that receipt.
-- [October 28 control squash](../problems/store-a-weekly-squash-2026-10-20.md):
+- [October 28 control squash](../archive/problems/store-a-weekly-squash-2026-10-20.md):
   50.89 GiB, 120,335 commits before maintenance; OOM at 10G and rollback.
-- [October 29 corpus front outage](../problems/corpus-dolt-throttled-at-memory-high-front-times-out-2026-10-29.md):
+- October 29 corpus front outage:
   fast listing stage but failed object/edge reads, memory pressure and runtime
   mitigation. The new kernel receipt above extends that record with an
   actual later OOM; it does not settle leak versus cache versus workload.

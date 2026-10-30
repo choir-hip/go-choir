@@ -13,7 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Journal cuts R1 and R3 (docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md,
+// Journal cuts R1 and R3 (docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md,
 // "Build: journal cuts R1 to R4"): three run-event lines are published on the
 // live bus and not appended to the tape, because nothing reads them durably:
 // the loop.progress line written before each model call (phase

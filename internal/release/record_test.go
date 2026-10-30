@@ -8,7 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-// Failure modes from docs/reports/p6-p8-release-adopt-2026-10-15.md pinned
+// Failure modes from docs/archive/reports/p6-p8-release-adopt-2026-10-15.md pinned
 // here: R1 (a record whose id is not its canonical digest), R6 (reserved
 // fields, executable bytes), A1 (a tampered record with its id kept), A4
 // (patch bytes that do not hash to the record).

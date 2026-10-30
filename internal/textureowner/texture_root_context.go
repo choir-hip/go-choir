@@ -1,7 +1,7 @@
 package textureowner
 
 // The Texture root's shared context (PD3 S2,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md, "Shared
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md, "Shared
 // context (S2)"): at wake, the run of every document other than the master
 // carries an excerpt of the master's latest revision in its request turn,
 // outside the prompt core, as read-only context: at most 4 KiB, the "Waits

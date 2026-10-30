@@ -21,7 +21,7 @@ start:
       commitment_record; Addressee+EvidenceRefs on the record; typed
       divergence surfacing). Deployed live-record acceptance deferred —
       handed to this station's doc desk report-cast (see its receipts).
-    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3b)
+    evidence_ref: docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3b)
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R3b
 
@@ -134,7 +134,7 @@ now:
     scope_if_supported: non-capsule desk cell execution host-side
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3b)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3b)
   belief:
     believed_state: >-
       The capsule-broker sessionWorker (cmd/capsule-broker/session_worker.go,
@@ -192,8 +192,8 @@ receipts:
 
 # R3b — Host Desk-Cell Carrier (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
 host-side spawn of the sessionWorker pattern for non-capsule desks;
 restricted stdlib; `InCellCarrier` fanned per profile; `Cast` validates
 target desk + kind. Kill mid-cell → derivable wake re-fires.

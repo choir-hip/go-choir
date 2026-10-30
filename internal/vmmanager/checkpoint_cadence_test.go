@@ -10,7 +10,7 @@ import (
 )
 
 // The automatic checkpoint cadence per computer (X1 slice 3,
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md, F6; review 329).
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, F6; review 329).
 // The guest compiles the cadence off. The host names the computers that run
 // it, with the values, as kernel boot arguments, so FP0 turns it on for one
 // computer, reads last_bind_millis, and only then widens it. Written before the

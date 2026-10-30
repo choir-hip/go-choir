@@ -28,7 +28,7 @@ import (
 // Epochs:
 //   - 1: the unified Dolt workspace.
 //   - 2: choir_events, run telemetry in its own table
-//     (docs/design/choir-event-table-f-c-2026-10-22.md, deploy 1). An older
+//     (docs/archive/design/choir-event-table-f-c-2026-10-22.md, deploy 1). An older
 //     binary ignores ProjectionOp.Table and calls the table unknown. The
 //     epoch fences only the updater's Apply of a release that declares an
 //     epoch: Apply refuses an epoch-1 release on an epoch-2 store. A CI

@@ -24,7 +24,7 @@ engine mutex held 70% of the time, 247.6 s of waiting.
 | `ListObjectsByMetadataPage choir.source_ref $.doc_id` | 4 | 2.1 s | 517 ms |
 
 The first, second and last rows are this batch's three JSON scans (E6 in
-[research-more-slow-and-hidden-2026-10-21.md](research-more-slow-and-hidden-2026-10-21.md)).
+[research-more-slow-and-hidden-2026-10-21.md](../../problems/research-more-slow-and-hidden-2026-10-21.md)).
 `GetObject` rose from about 50 to 88 calls a second between 14:24 and now
 and nobody can say which kind of object is being read: the op label carries
 no kind. Labelling `GetObject` and `ListObjectsPage` by kind is part of this
@@ -279,7 +279,7 @@ its real engine share before and after, and the deploy.
 Two reviewers (GPT-6.1-sol: send back; Gemini 4 Argon: accept, with the
 same race as a non-blocking finding). FP0 adjudicated: fix P1 and P2 in this
 lane; the boot ALTER (sol A1) is pre-existing and has its own record,
-[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md).
+[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](../../problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md).
 These are static code proofs, not staging incidents.
 
 **P1. Withdrawing a family races with reads and with validation
@@ -333,7 +333,7 @@ cost remain as residuals below.
   minutes while it is written (P2's fix), at the 25% duty cycle.
 - Boot can still ALTER og_objects when an older generated column is
   missing: pre-existing, its own record
-  ([boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
+  ([boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](../../problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
 
 - A rollback to a binary without the extractor change leaves `og_key_index`
   as an unknown table (finding 3). Landing the extractor commit one deploy

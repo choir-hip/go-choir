@@ -12,7 +12,7 @@ start:
     settlement_sha: bddd4f00
     ci_run: '34571343061'
     staging_identity: staging https://choir.news serves the mission-two deployed commit e3396329 on the retained computer computer-03335285269bdba4f94377e56879f9e6; effects OFF; pre-A checkpoint 99949fe2.
-    deployed_proof: docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+    deployed_proof: docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     entrypoint: false
     next_action: none
     inherited_residues:
@@ -104,7 +104,7 @@ start:
   start_correction:
     - correction: The draft pinned `main@6f1a8014`, staging `cb571960`, retained-computer epoch 896, and described mission two as still holding the working-entrypoint position while blocking this mission on it.
       corrected: 'Mission two is `completed` at deployed commit e3396329 (CI 34571343061, deployed proof artifact published, settlement doc bddd4f00), records `entrypoint: false` and `next_action: none`, and its post-completion GC work landed through a907f713. The stale gate is replaced by `start.predecessor_receipt` and `start.entry_gate`; `now` no longer treats mission two as unfinished.'
-      evidence_ref: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md:220-290; docs/ACTIVE.md:248-251; docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+      evidence_ref: docs/definitions/choir-rlm-versioned-rename-2026-09-09.md:220-290; docs/ACTIVE.md:248-251; docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - correction: The draft's worktree inventory said "untracked user artifacts only" and derived its claims from a mid-cleanup tree.
       corrected: 'Re-verified at a907f713: clean tree with three pre-existing untracked paths, preserved. The GC commits are in-tree and out of this mission''s scope.'
       evidence_ref: 2026-09-11 read-only git status at a907f713
@@ -121,7 +121,7 @@ now:
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
       - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
       - docs/archive/choir-opencode-provider-research-2026-09-10.md
-      - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+      - docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/mission-residues.md (R7 inherited, R8 deferred)
       - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
     policy_resolution_ref: not_applicable (no cell policy resolution observed yet; P5-roster establishes the eval-arm overlay)
@@ -150,7 +150,7 @@ now:
     - docs/archive/choir-opencode-provider-research-2026-09-10.md
     - docs/archive/reports/choir-rlm-missions-overview-2026-09-09.md
     - docs/mission-residues.md
-    - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+    - docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-completed-phase-audit-2026-09-12.md
     - docs/evidence/rlm-roster/p5-roster-evidence.md

@@ -81,7 +81,7 @@ The paper now has the shape of a real paper: related reading, an honest label, a
   - docs/reports/source-coverage-gap-analysis-2026-10-20.md
   - docs/reports/yaegi-upstream-issue-draft-2026-10-20.md
   - docs/problems/related-stories-dead-end-2026-10-20.md
-  - docs/problems/guest-store-compaction-scheduled-2026-10-20.md
+  - docs/archive/problems/guest-store-compaction-scheduled-2026-10-20.md
   - docs/reports/telemetry-batching-design-2026-10-20.md
   - docs/problems/hostauth-enforce-flip-2026-10-20.md
   - docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md, last section

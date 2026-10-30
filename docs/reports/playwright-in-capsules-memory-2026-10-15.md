@@ -20,11 +20,11 @@ Sources:
   worker VM should carry Playwright/Chromium";
 - [computer ontology](../computer-ontology.md);
 - [VM density limits](vm-density-limits-2026-10-14.md);
-- [computer CPU efficiency](computer-cpu-efficiency-2026-10-14.md);
-- [VM backend interface](vm-backend-interface-2026-10-14.md);
+- [computer CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md);
+- [VM backend interface](vm-hypervisor-seam-design-2026-10-21.md);
 - [isolation runtimes](../research/isolation-runtimes-2026-10-14.md). It is
   under `docs/research/`, not `docs/reports/`;
-- [guest memory return](lr-guest-memory-return-2026-10-14.md);
+- [guest memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md);
 - the [backend browser learnings](../archive/backend-browser-substrate-learnings.md);
 - the code at `e9d85a71d`:
   - `internal/vmmanager/balloon.go`;
@@ -147,7 +147,7 @@ cases:
 Free page reporting (`internal/vmmanager/balloon.go`; the balloon is
 configured with `amount_mib: 0` and `free_page_reporting: true`) works like
 this (from docs: Firecracker `docs/ballooning.md` and
-[guest memory return](lr-guest-memory-return-2026-10-14.md)):
+[guest memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md)):
 - The guest kernel reports free blocks of at least `page_reporting_order`.
   That is the pageblock order, 2 MiB on x86_64.
 - It reports about 2 seconds after the blocks become free.
@@ -290,7 +290,7 @@ It has four costs:
   is there.
 - **No host controller.** vmmanager's `fcapi.go` has no balloon calls today,
   and the backend seam marks run-time balloon resize as "no"
-  ([VM backend interface](vm-backend-interface-2026-10-14.md) section 4).
+  ([VM backend interface](vm-hypervisor-seam-design-2026-10-21.md) section 4).
   New controller: **red** (VM lifecycle).
 - **`MemTotal` would mislead the guest.** With `deflate_on_oom` on, Linux's
   `virtio_balloon` does not lower the guest's `MemTotal` when it inflates.
@@ -388,7 +388,7 @@ v52.0):
 
 Choir's Cloud Hypervisor backend wires cold boot, stop and metrics only. It
 has no snapshot, no balloon resize and no virtio-mem
-([VM backend interface](vm-backend-interface-2026-10-14.md) section 4). It
+([VM backend interface](vm-hypervisor-seam-design-2026-10-21.md) section 4). It
 is test-computer only behind `VM_BACKENDS_ENABLED`.
 
 On Cloud Hypervisor, the lease design would be the same with `vm.resize` in
@@ -780,7 +780,7 @@ The slice starts with static and mocked routes.
 - The [isolation runtimes](../research/isolation-runtimes-2026-10-14.md)
   report names "fetchers, Chromium" as host-side tools that belong under
   gVisor and are red-team targets.
-- The [security review](computer-isolation-security-review-2026-10-14.md)
+- The [security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
   already lists in-guest Obscura's missing address guard as a finding (F5).
   A host browser driven by guests is a larger version of the same SSRF
   surface.

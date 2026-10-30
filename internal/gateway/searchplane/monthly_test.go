@@ -15,7 +15,7 @@ import (
 )
 
 // Keenable's monthly pace and rate limit
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md).
 // Ways it can fail, written before the code:
 //  1. The period total passes the target (and so the allowance): on any
 //     day, under demand above the pace, across restarts, or by concurrent

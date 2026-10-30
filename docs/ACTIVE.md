@@ -3,10 +3,10 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 Sequencing lives here and in
-[`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](reports/roadmap-sequencing-appdev-security-2026-10-14.md)
+[`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md)
 (the 2026-09-22 R-series stack is superseded); the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
-[`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
+[`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
 ## Active goal (2026-10-30): the lean system
 
@@ -39,7 +39,7 @@ architecture remains the major bottleneck"; design for many hosts and about
 planned job), owner budgets and hard gates (bounded peak memory first),
 candidates with the incumbent as control, tape-replay bake-off, differential
 shadow on d@e, ratify. Working hypothesis in
-[`design/data-rearchitecture-2026-10-28.md`](design/data-rearchitecture-2026-10-28.md).
+[`design/data-rearchitecture-2026-10-28.md`](archive/design/data-rearchitecture-2026-10-28.md).
 
 ## Superseded (2026-10-28): consolidate and scale
 
@@ -84,7 +84,7 @@ receipt in the file). Its open items continue as station SR6 above.
 
 **Goal:** [`definitions/choir-lp-s6-commit-gate-2026-10-20.md`](definitions/choir-lp-s6-commit-gate-2026-10-20.md)
 (`/goal` file, `readiness: reviewed`, verdict accept with edits). Under the
-[ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md), station LP.
+[ledger metamission](archive/definitions/choir-ledger-metamission-2026-10-13.md), station LP.
 
 **Priority change (owner, 2026-10-20, [owner notes §28](reports/owner-notes-2026-10-14.md)):**
 "yes, we should do the missions in order through app packages as recommended."
@@ -101,8 +101,8 @@ result, host-build digests, applied release and heads, and names each join as
 compared at the gate or only recorded; proven by the go-served tracer drill on
 staging. **Open for the owner (defaults in force):** whether a failing declared
 test refuses the owner's own approval; whether to approve the closure or the
-patch. Reading: [selfdev update architecture](reports/selfdev-update-architecture-2026-10-15.md),
-the [S6 station definition](definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
+patch. Reading: [selfdev update architecture](archive/reports/selfdev-update-architecture-2026-10-15.md),
+the [S6 station definition](archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md),
 and the S7 definition for what follows.
 
 ## Daytime work (2026-10-21, owner notes section 35)
@@ -141,13 +141,13 @@ in plans, with **P0** items before launch and a suggested P0 order. It
 found that the desk-cell confinement branch (landing order item 6 below)
 existed only on the owner's iMac (pushed 2026-10-21 as
 `land/desk-cell-confinement`), and two new problems:
-[desk frame actions are not role-checked by the daemon](problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md)
+[desk frame actions are not role-checked by the daemon](problems/desk-boundary-residuals-2026-10-21.md)
 and [the jailer copies the shared store image per VM](problems/jailer-copies-store-image-per-vm-2026-10-21.md).
 Owner direction: [owner notes §36](reports/owner-notes-2026-10-14.md).
 
 ## Overnight run (2026-10-20 → 10-21, owner notes section 32)
 
-**Goal:** [`definitions/choir-overnight-research-oped-sources-2026-10-20.md`](definitions/choir-overnight-research-oped-sources-2026-10-20.md)
+**Goal:** [`definitions/choir-overnight-research-oped-sources-2026-10-20.md`](archive/definitions/choir-overnight-research-oped-sources-2026-10-20.md)
 (`readiness: drafted`). After the backup snapshot path lands: Research more
 for every reader (logged out included), op-eds as connected Texture
 publishing with an Opinion section, wave-1 schedules plus AT Protocol and
@@ -163,7 +163,7 @@ Owner notes section 33 changed the rest of the night: no more Luna arms;
 Sonnet rewrites of Slides, Pdf, Epub, Podcast, Calendar and FileBrowser, one
 at a time; and a durable fix for the backup verify through the tape segment
 store, goal
-[`definitions/choir-tape-segments-a2-repack-2026-10-21.md`](definitions/choir-tape-segments-a2-repack-2026-10-21.md)
+[`definitions/choir-tape-segments-a2-repack-2026-10-21.md`](archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md)
 (round 5 and r1 landed; owner notes 34: the write flag is on for every
 computer, repack next, legacy deletes gated on evidence and the owner's
 yes; see its now card). The delegate's one-round build landed
@@ -215,16 +215,16 @@ health probes 200 throughout):
   The capsule-gate fix (bc09dcc1) and the Freeze fixes (9874ebc5,
   96b82cec) followed; the engineering drill still cannot reach Freeze
   because capsules cannot fetch Go modules
-  ([decision for the owner](reports/capsule-go-modules-decision-2026-10-14.md)).
+  ([decision for the owner](reports/capsule-go-module-proxy-design-2026-10-14.md)).
 - LR: lever 6 (cell output out of the transcript), lever 7 (prices;
   `/api/costs` reports dollars), LongCat out of the default pool (too
-  slow: [evidence](evidence/model-latency-paper-2026-10-14.md)), Jev
+  slow: [evidence](archive/evidence/model-latency-paper-2026-10-14.md)), Jev
   judges citation support off management's turn, the research-prompt
   renderer and prompt fixes, the balloon (free page reporting) and soft
   Go memory limits.
 - S3 real hibernation: a memory snapshot instead of a kill; wake to
   healthy in 103 ms against 9.7 s cold, open work kept
-  ([evidence](evidence/s3-snapshot-hibernate-staging-2026-10-14.md)); the
+  ([evidence](archive/evidence/s3-snapshot-hibernate-staging-2026-10-14.md)); the
   credential window (resume past the guest capability's expiry, up to
   12 h) deployed in 9ace75e5, proof in progress.
 - L2a fixture passes (merge recall 1.0, 0 false merges); next is the
@@ -248,11 +248,11 @@ updates (station LU) and the capsule Go module proxy alongside. Puter
 review for app agents: `docs/research/puter-everything-2026-10-14/README.md`.
 Autopaper front-page ranking and personalization (station LF) and reader
 contributions, op-eds and editing (station LC), intent only, design first:
-`docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`.
+`docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`.
 Sequencing proposal for the rest of the app-development metamission,
 auth (station LA: recovery is broken today) and security (SP before
 agentic red teaming, station LT):
-`docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`.
+`docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`.
 
 **Waiting on the owner:** the Go-module route for capsules (A, B or C);
 SP0's host, recovery targets, and whether the escrow custodian key and
@@ -263,15 +263,15 @@ age; the reader spec decision.
 measure against baseline A; management delegating to sub-RLMs (owner
 direction; design first); the balloon's return measured after desk
 workers exit; the daemon's store memory (the real density lever:
-[split](evidence/guest-memory-split-balloon-2026-10-14.md)); research
+[split](archive/evidence/guest-memory-split-balloon-2026-10-14.md)); research
 searching the corpus first. Residual for 10-14/15: Autopaper across
 several computers on one host
-([analysis](reports/cost-track-sa-s3-sp-investigation-2026-10-14.md)).
+([analysis](archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md)).
 
 **New station LU, guest updates** (owner-approved 2026-10-14; drafted):
-[station file](definitions/choir-ledger-lu-guest-updates-2026-10-14.md),
+[station file](archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md),
 [design note](reports/lu-guest-updates-design-2026-10-14.md),
-[panel adjudication](reports/lu-guest-updates-adjudication-2026-10-14.md).
+[panel adjudication](archive/reports/lu-guest-updates-adjudication-2026-10-14.md).
 Pull with a bounded drain instead of a once-per-deploy push, so the busy
 paper updates by itself; planned boots across epoch changes; rings,
 health and rollback; one apply path with self-development. Reviewed per
@@ -282,11 +282,11 @@ LU2 must land before C1e's next epoch bump.
 
 ## Next (2026-10-13): ledger metamission (reviewed)
 
-The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)
+The [ledger metamission](archive/definitions/choir-ledger-metamission-2026-10-13.md)
 turns the roadmap the owner asked for into stations: L0 closes the
 re-engineering metamission below (E3 rerun passed, A1 badge, C1e, final
 review); L1 ends crash loops
-([station file](definitions/choir-ledger-l1-restart-2026-10-13.md) over the
+([station file](archive/definitions/choir-ledger-l1-restart-2026-10-13.md) over the
 [restart design v3](restart-subsystem-design-2026-10-13.md); L1a-1 and
 L1a-2 landed, L1a-3 next, before C1e); L2 bounded
 attention; L3 hypotheses settled and scored; L4 Taiwan and East Asia as
@@ -301,7 +301,7 @@ accepted the repaired spine and the L1 station file (2026-10-13). L1a-3
 (crash boots settle from the updater journal, never re-apply) landed at
 18d01cc0. Cross-model cell errors (owner 2026-10-13: errors every model
 makes point at the tool and prompt surface): report at
-docs/reports/cross-model-cell-errors-2026-10-13.md; fixes for clusters
+docs/archive/reports/cross-model-cell-errors-2026-10-13.md; fixes for clusters
 A (stopgap), B, D, E, F, G, the hint scanner and the Texture and
 management prompts pushed at d2324a55; cluster C's decode hint at
 cdffb40d (unpushed until the paper run); the typed Read result and the
@@ -309,16 +309,16 @@ yaegi substrate fix for cluster A are residuals. The paper tracer's blind
 spot is fixed at 29bbab97 (owner-scoped publication read). The paper run
 on d2324a55 measured the cell-error change (37/283 failing cells against
 165/828; clusters A-G down to 6 cells). C1e
-(docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md)
+(docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md)
 is reviewed and B0 is landed at 19e56c54: the runtime census of work
 items and packets, I7 read from it, I2 and I3 on records, the checker's
 --require for missing evidence, and the tracer off work_items. The paper
 run passed and the deployed checker read I7 pass. The step-7 uncertainty,
 answered on the code read
-(docs/reports/c1e-management-packet-reads-2026-10-13.md), moves into B1:
+(docs/archive/reports/c1e-management-packet-reads-2026-10-13.md), moves into B1:
 the Report lacks the assignment identity and a typed outcome, and the
 records wake cannot resume a parked caster. The B1 design note
-(docs/reports/c1e-b1-design-note-2026-10-13.md) is in convergent round 3
+(docs/archive/reports/c1e-b1-design-note-2026-10-13.md) is in convergent round 3
 after two send_backs.
 
 2026-10-14: the paper computer was hibernated under host pressure at
@@ -326,8 +326,8 @@ after two send_backs.
 platform tier above every user tier), landed at 188f98c3; Autopaper is
 live again since 23:53 UTC. The owner then asked for the resource and
 cost mission tonight: station LR
-([file](definitions/choir-ledger-lr-resource-2026-10-13.md), over the
-[assessment](reports/resource-efficiency-memory-assessment-2026-10-13.md)).
+([file](archive/definitions/choir-ledger-lr-resource-2026-10-13.md), over the
+[assessment](archive/reports/resource-efficiency-memory-assessment-2026-10-13.md)).
 Lever 1 (signal-specific reclaim) is live at d3f7d9b2; lever 2 (test
 tier) and L1's L1b-0 (the always-on sweep warms a failed computer once
 per 24 h) are pushed at 6c6bc1aa. Next: verify them, adjudicate B1 round
@@ -336,7 +336,7 @@ per 24 h) are pushed at 6c6bc1aa. Next: verify them, adjudicate B1 round
 ## Current (2026-10-13): re-engineering metamission
 
 The live spine is the
-[re-engineering metamission](definitions/choir-reeng-metamission-2026-10-12.md):
+[re-engineering metamission](archive/definitions/choir-reeng-metamission-2026-10-12.md):
 three cuts to Autopaper live, with decisions in
 [re-engineering-decisions-2026-10-12.md](re-engineering-decisions-2026-10-12.md).
 
@@ -345,28 +345,28 @@ three cuts to Autopaper live, with decisions in
   on deepseek-v4.1-flash and gpt-6-luna, each the other's fallback.
 - **D0, dead-code census and removal: landed.** About 50,000 lines
   deleted, all owner-approved
-  ([census and rulings](reports/dead-code-census-2026-10-12.md)).
+  ([census and rulings](archive/reports/dead-code-census-2026-10-12.md)).
 - **C0, eyes: landed 2026-10-13.** Trace export without SSH, a tracer
   with a crash drill, an invariant checker, request-id routing, one REPL
   per desk, broker handle reissue
-  ([receipts](evidence/c0-eyes-acceptance-2026-10-13.json),
-  [measurements](reports/reeng-cut0-measurements-2026-10-12.md)).
+  ([receipts](archive/evidence/c0-eyes-acceptance-2026-10-13.json),
+  [measurements](archive/reports/reeng-cut0-measurements-2026-10-12.md)).
 - **C1, authority: core landed 2026-10-13 (76ab40fd).** Crash closure;
   records as the work state for Texture with research and management;
   prompts that teach only callable verbs
-  ([cut file](definitions/choir-reeng-cut1-authority-2026-10-12.md),
-  [crash](evidence/c1-core-crash-acceptance-2026-10-13.json) and
-  [management](evidence/c1-core-mgmt-acceptance-2026-10-13.json) receipts).
+  ([cut file](archive/definitions/choir-reeng-cut1-authority-2026-10-12.md),
+  [crash](archive/evidence/c1-core-crash-acceptance-2026-10-13.json) and
+  [management](archive/evidence/c1-core-mgmt-acceptance-2026-10-13.json) receipts).
   C1e (engineering on records, wholesale deletions) runs after C2's live
   window.
 - **C2, evidence to publication: Autopaper live 2026-10-13.** The
   designated paper computer publishes in public from its schedules
-  ([receipt](evidence/c2-autopaper-live-2026-10-13.json)); stories open in
+  ([receipt](archive/evidence/c2-autopaper-live-2026-10-13.json)); stories open in
   the Texture app. Residual items in the cut's now card. Next: C1e, the
   owner computer's update path, then the completion review.
 - **C2 pre-flight (done).** Pre-flight
-  ([drift](reports/reeng-cut2-preflight-2026-10-13.md),
-  [quote census](reports/reeng-c8-quote-census-2026-10-13.md)); unit 2a
+  ([drift](archive/reports/reeng-cut2-preflight-2026-10-13.md),
+  [quote census](archive/reports/reeng-c8-quote-census-2026-10-13.md)); unit 2a
   next, ending with Autopaper live.
 - **Pace (owner 2026-10-13):** fast loop, no long runs; one
   claim-directed tracer scenario per landing (metamission
@@ -378,7 +378,7 @@ plan.
 ## Roadmap (owner-ratified 2026-10-09)
 
 Three gates, in order, each with an exit test — see "v6 plan" in the
-[metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md):
+[metamission](archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md):
 
 1. **Stable computer** — SH (O21) → SL (O1) → O7/O12 checks → O8/O9 →
    Texture contract. Exit: lose-the-disk proof, SL fault matrix, Texture
@@ -395,25 +395,25 @@ Three gates, in order, each with an exit test — see "v6 plan" in the
    the host-level store, starting from zero content.
 
 Deferred: S3, SA density, S7–S11, and
-[SP production infrastructure](definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md)
+[SP production infrastructure](archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md)
 (O22; until Gates 1–2 pass human QA). Corpus (Store B) teardown owner-approved
 2026-10-09; processor/reconciler deletion committed.
 
 ## Persistent desks metamission (2026-10-11; drafted successors)
 
-[`definitions/choir-persistent-desks-metamission-2026-10-11.md`](definitions/choir-persistent-desks-metamission-2026-10-11.md)
+[`definitions/choir-persistent-desks-metamission-2026-10-11.md`](archive/definitions/choir-persistent-desks-metamission-2026-10-11.md)
 (`readiness: executable`): one persistent research desk per document (PD1,
-[station file](definitions/choir-pd1-persistent-research-desk-2026-10-11.md))
+[station file](archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md))
 is the worked example. Successor stations are drafted, not scheduled:
-[PD2 sessions outlive runs](definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md),
-[PD3 Texture root desk](definitions/choir-pd3-texture-root-desk-2026-10-11.md),
-[PD4 computer controls computer](definitions/choir-pd4-computer-controls-computer-2026-10-11.md).
+[PD2 sessions outlive runs](archive/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md),
+[PD3 Texture root desk](archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md),
+[PD4 computer controls computer](archive/definitions/choir-pd4-computer-controls-computer-2026-10-11.md).
 Re-engineering (above) superseded parts of their sequencing; check its
 decisions before starting any of them.
 
 ## Current Mission — Supervised App Development Metamission
 
-[`definitions/choir-supervised-app-development-metamission-2026-10-01.md`](definitions/choir-supervised-app-development-metamission-2026-10-01.md)
+[`definitions/choir-supervised-app-development-metamission-2026-10-01.md`](archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md)
 (`readiness: executable`, `now.status: working`) — **owner-approved
 2026-10-01** after agentic-consensus review (5/5 convergent + 7/7
 divergent; all required revisions applied in v3). Thirteen stations;
@@ -478,19 +478,19 @@ divergent; all required revisions applied in v3). Thirteen stations;
   checkpoints (`checkpointd`), typed vmctl admission, deposit upcast.
   Cadence/replay repaired-with-residual; admission awaits its staging
   refusal demo. Record:
-  [`problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md`](problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md).
+  [`problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md`](archive/problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md).
 - **SL** obligation terminality **working** (opened 2026-10-08, owner
   direction "proceed with mission next"):
-  [`definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md`](definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md)
+  [`definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md`](archive/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md)
   — enforce operational invariant O1 from the
   [operational invariants register](operational-invariants-register-2026-10-08.md)
   (draft, owner-approved set). Absorbs SA slice 1 (Management storm
   convergence). First slice: read-only obligation inventory.
 - **SH** state homes **working** (opened 2026-10-08, owner direction
   "good policy and good ideas. Let's do it"):
-  [`definitions/choir-appdev-sh-state-homes-2026-10-08.md`](definitions/choir-appdev-sh-state-homes-2026-10-08.md)
+  [`definitions/choir-appdev-sh-state-homes-2026-10-08.md`](archive/definitions/choir-appdev-sh-state-homes-2026-10-08.md)
   — enforce O21, a realization holds no unique state
-  ([inventory](state-homes-inventory-2026-10-08.md)). Escrowed privacy key
+  ([inventory](operational-invariants-register-2026-10-08.md)). Escrowed privacy key
   delivered to a computer's new realization (owner-ratified). Slice 1: typed
   `privacy_key_unavailable` refusal and prompt guest fatal-startup reporting.
 Ordered ahead of the Autopaper work per owner direction 2026-10-01
@@ -498,21 +498,21 @@ Ordered ahead of the Autopaper work per owner direction 2026-10-01
 
 ## Parallel Mission — Jev / Supervision Metamission
 
-[`definitions/choir-jev-supervision-metamission-2026-09-29.md`](definitions/choir-jev-supervision-metamission-2026-09-29.md)
+[`definitions/choir-jev-supervision-metamission-2026-09-29.md`](archive/definitions/choir-jev-supervision-metamission-2026-09-29.md)
 is still `working` but no longer the live entrypoint — the app-dev
 metamission took spine position 2026-10-01 on owner approval. Its
 station files and receipts remain valid; it resumes as parallel work or
 is folded when its remaining stations intersect S1-S11.
 ## Parallel Mission — Texture Latency Cutover
 
-[`definitions/choir-texture-latency-cutover-2026-10-01.md`](definitions/choir-texture-latency-cutover-2026-10-01.md)
+[`definitions/choir-texture-latency-cutover-2026-10-01.md`](archive/definitions/choir-texture-latency-cutover-2026-10-01.md)
 (`readiness: executable`, `now.status: working`) — owner-directed
 2026-10-01: bound Texture editor request latency end-to-end (proxy resolve +
 guest store + lifecycle snapshot). Three ordered cuts: trajectory-scoped or
 version-memoized snapshot read, TTL-cached vmctl route resolution, and —
 only if the timing matrix still fails — decoupling the objectgraph read
 mutex from writes. Evidence map:
-[`problems/texture-latency-layered-evidence-2026-10-01.md`](problems/texture-latency-layered-evidence-2026-10-01.md).
+`problems/texture-latency-layered-evidence-2026-10-01.md`.
 Independent of the capacity mission's substrate work; runs parallel.
 
 ## History (pruned 2026-10-14)
@@ -529,7 +529,7 @@ and recoverable from Git history. Recorded problems are in
 The superseded 2026-09-22 R-series roadmap is
 [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md)
 (kept only because AGENTS.md names it); sequencing now lives in this file
-and [`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](reports/roadmap-sequencing-appdev-security-2026-10-14.md).
+and [`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md).
 
 ## Graph Rule
 

@@ -2,7 +2,7 @@ package yaegikernel
 
 import "testing"
 
-// Desk cell confinement (docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+// Desk cell confinement (docs/problems/desk-boundary-residuals-2026-10-21.md).
 //
 // Ways the policy half could fail, written first:
 //  1. a desk role maps to no identity, or two desks share one, so a cell

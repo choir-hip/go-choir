@@ -10,9 +10,9 @@ Owner request (2026-10-15): "we should turn nested virt off and update our
 kernel and nixos and other systems. we need to be updating regularly! min
 time to patch is essential. look into intelligent approaches here."
 
-Inputs: [the host kernel problem](../problems/host-kernel-216-days-unpatched-2026-10-15.md),
+Inputs: [the host kernel problem](../../problems/host-kernel-216-days-unpatched-2026-10-15.md),
 [the boundary-strength ladder](boundary-strength-ladder-2026-10-15.md),
-[the restart subsystem design](../restart-subsystem-design-2026-10-13.md),
+[the restart subsystem design](../../restart-subsystem-design-2026-10-13.md),
 `flake.nix`, `flake.lock`, `.github/workflows/ci.yml`, `nix/node-b.nix`,
 `nix/autoputer-vm.nix`, `internal/vmctl/deploy_refresh.go`,
 `internal/agentcore/planned_restart.go` and `internal/vmmanager/snapshot.go`.
@@ -216,7 +216,7 @@ documented acceptance, or a hardware move.
 `mkGuestImage` takes `vmConfig.boot.kernelPackages.kernel.dev` from the
 guest NixOS configuration (`flake.nix`), so the guest kernel also follows
 the main `nixpkgs` input; guests were last seen on 6.18.37 (ladder report,
-`docs/evidence/s0a-guest-layout-2026-10-01.json`). It reaches production as a
+`docs/archive/evidence/s0a-guest-layout-2026-10-01.json`). It reaches production as a
 file under `/var/lib/go-choir/guest/` that node-b activation advances
 atomically, and each computer picks it up on its next cold boot. This is the
 one kernel Choir can patch without a host outage. Capsules share the guest
@@ -425,7 +425,7 @@ answer the questions that decide how fast to move when the answer is no:
 The research desk is built for this: read-only world-evidence authority
 (CLAUDE.md, desk ontology). The dogfooding slice is a **triage record per
 advisory** written as a precommitment record
-([docs/precommitment-records.md](../precommitment-records.md)): a typed
+([docs/precommitment-records.md](../../precommitment-records.md)): a typed
 prediction committed before the evidence that resolves it. The predictions
 should be ones the deterministic feeds can resolve, or scoring becomes an
 argument:
@@ -738,7 +738,7 @@ storage or migration path. A second host therefore buys, for patching:
 
 It does not shorten the outage of the computers on the host being rebooted.
 It costs a second machine's rent (the EPYC 7371 in
-[vm-density-limits](vm-density-limits-2026-10-14.md); price **UNVERIFIED**
+[vm-density-limits](../../reports/vm-density-limits-2026-10-14.md); price **UNVERIFIED**
 here), a second patch surface on the same pipeline, and frozen microcode on
 that CPU too (section 3.3). The recommendation is to not buy it for patching
 alone. When the EPYC arrives for density, the pipeline adds the canary
@@ -1033,12 +1033,12 @@ Repository (code and documents): `flake.nix`, `flake.lock`,
 `internal/vmmanager/snapshot.go`, `internal/vmmanager/boot_timeline.go`,
 `internal/updater/kernel_capabilities.go`,
 `scripts/verify-host-hardening.py`,
-[host kernel problem](../problems/host-kernel-216-days-unpatched-2026-10-15.md),
+[host kernel problem](../../problems/host-kernel-216-days-unpatched-2026-10-15.md),
 [boundary-strength ladder](boundary-strength-ladder-2026-10-15.md),
-[restart subsystem design](../restart-subsystem-design-2026-10-13.md),
+[restart subsystem design](../../restart-subsystem-design-2026-10-13.md),
 [S3 snapshot hibernate design](s3-snapshot-hibernate-design-2026-10-14.md),
-[VM density limits](vm-density-limits-2026-10-14.md),
-[precommitment records](../precommitment-records.md).
+[VM density limits](../../reports/vm-density-limits-2026-10-14.md),
+[precommitment records](../../precommitment-records.md).
 
 Cited through the ladder report (not re-fetched here): Intel servicing for
 CPUID 906EA, Firecracker's production host guide on SMT, the Vercel Sandbox

@@ -61,8 +61,8 @@ Already scheduled in the cut definitions (all of these are still LIVE today and 
 Dead items are sorted by approximate size (handler plus the code that exists only to serve it; tests
 excluded unless stated). Each item lists routes and handler location, what it does, why dead
 (evidence), citers, scheduling, proposal, risk. "Cut 1/Cut 2/no" refers to
-docs/definitions/choir-reeng-cut1-authority-2026-10-12.md and
-docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md; I grepped both for every route
+docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md and
+docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md; I grepped both for every route
 path and feature word; unless stated the answer is **no**.
 
 ---
@@ -164,7 +164,7 @@ path and feature word; unless stated the answer is **no**.
     (only test fixtures in cmd/choir/main_test.go mention the path); the `choir computer bootstrap-chain`
     command uses `lifecycle/bootstrap-chain` instead. Added 2026-07-18 (5483a082).
   - rollbacks, kernel-capabilities, events/{digest}: no FE, CLI, script, nix or CI caller. rollbacks has
-    docs-only mention (docs/evidence/m11-episode-call-map-2026-09-27.md:24 plans it; the m11 probe script does
+    docs-only mention (docs/archive/evidence/m11-episode-call-map-2026-09-27.md:24 plans it; the m11 probe script does
     not call it). kernel-capabilities has only Go tests and the proxy action table. These are reachable from the
     proxy (`rollback`, `read` actions) and from management's ProductAPI (`/api/computers/` is allowlisted,
     so GET kernel-capabilities and GET events/{digest} could be called dynamically).
@@ -402,8 +402,8 @@ path and feature word; unless stated the answer is **no**.
   (proxy/handlers.go:833-835). The autoputer's `RegisterTerminalRoutes` (internal/autoputer/terminal.go:439-443)
   has **no caller** (`git grep RegisterTerminalRoutes`: definition + doc only), so the route is not even
   registered in the guest. Replacement `/api/super-console/ws` is live (SuperConsoleApp.svelte:195).
-  Already flagged in docs/reviews/rlm-implementation-consensus-2026-08-29.md:350 (TEST-MIGRATE-FIRST) and
-  docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md:157. Not in either cut.
+  Already flagged in docs/archive/reviews/rlm-implementation-consensus-2026-08-29.md:350 (TEST-MIGRATE-FIRST) and
+  docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md:157. Not in either cut.
   Proposal: remove the 410 case, `RegisterTerminalRoutes`, and the `/api/terminal/ws` assertions in
   terminal_test.go; docs/heresy-detectors.md H028 names this string as a detector, so update the detector in
   the same change.
@@ -443,7 +443,7 @@ path and feature word; unless stated the answer is **no**.
 | `POST /api/texture/management-open` (textureowner/management_open.go, 224 lines) | scripts/smg_rlm_acceptance_probe.mjs:125 (SMG mission 2026-10-06) | deterministic owner-side management opener that mints a lifecycle control | no, but Cut 1 replaces the control accumulator it uses | remove with Cut 1 or earlier |
 | `GET /internal/diag/tcp-dial` (autoputer/boot_timeline.go:585-745, about 140 lines with http probe) | frontend/tests/s0a-reality-probe.mjs:102, scripts/s1a_refusal_matrix_probe.mjs:67 | in-guest reachability probe instrument (S0a/S1a) | no | remove with the S0a/S1a probes; it is a network-dial primitive inside the guest, host-sourced-caller gated (server/host_caller.go) |
 | `GET /internal/boot/timeline` (autoputer) and `GET /internal/vmctl/boot-timeline` | frontend/tests/s0a-reality-probe.mjs:89,94; scripts/s2_station_acceptance.sh:37 | boot timeline observer (S0a) | no | keep/owner question (observability) |
-| `GET /api/prompts`, `GET|PUT|DELETE /api/prompts/{role}` (agentcore/prompts.go, 239 lines) | none in code. Specs only mock/ignore it; deployed use is ad hoc `curl` (docs/evidence/sr-deployed-acceptance-2026-10-06.json). PUT/DELETE gated by `EnableTestAPIs`, never on in nix | read-only introspection of composed desk prompts and tool registry | no | keep GET (acceptance introspection); delete PUT/DELETE and the `PromptStore().Save/Reset` plumbing |
+| `GET /api/prompts`, `GET|PUT|DELETE /api/prompts/{role}` (agentcore/prompts.go, 239 lines) | none in code. Specs only mock/ignore it; deployed use is ad hoc `curl` (docs/archive/evidence/sr-deployed-acceptance-2026-10-06.json). PUT/DELETE gated by `EnableTestAPIs`, never on in nix | read-only introspection of composed desk prompts and tool registry | no | keep GET (acceptance introspection); delete PUT/DELETE and the `PromptStore().Save/Reset` plumbing |
 | `POST /internal/computers/platform-updates/offer`, `PUT /internal/computers/platform-updates/blob/{sha}`, `POST /internal/runtime/platform-update` | scripts/s2_station_acceptance.sh:84-101, m9a/s1a/s2 probes only; no CI or nix caller | platform-update offer mint, blob upload and apply trigger | no | keep (the update path is manual today); owner question whether deploy automation should call them |
 | `POST /internal/vmctl/remove` | scripts/sh_lose_the_disk_proof.mjs:108 | drop an ownership row | no | keep (ops) |
 | `GET /api/computers/{id}/self-development/operations/{id}/receipts` | scripts/m11_selfdev_episode_probe.mjs:445 | operation receipts | no | keep |
@@ -469,7 +469,7 @@ Totals for this section: about 20 leaf endpoints.
 | `/internal/runtime/runs/{id}/events`, `/internal/self-development/restart-handoff` | maild trace_events.go, updater runtime.go |
 | `/internal/source-service/{search,items,ingestion-handoff/latest}` | researchtools |
 | choir-updater `/v1/*`, receipt-signer `/v1/*` | agentcore and receiptsigner clients |
-| `/internal/debug/pprof/` | operator diagnostics by design (docs/problems/texture-list-cold-latency-2026-10-09.md) |
+| `/internal/debug/pprof/` | operator diagnostics by design (docs/archive/problems/texture-list-cold-latency-2026-10-09.md) |
 | cut-scheduled but live now: `/api/universal-wire/stories`, merge-preview, accept-merge, `/internal/wire/platform/publications/texture`, `/internal/platform/texture/sync`, `/internal/texture/{documents,revisions}/` | FE UniversalWireApp, `choir wire stories`, TextureCompareMergePanel, agentcore wire_platform_publish.go |
 
 ---

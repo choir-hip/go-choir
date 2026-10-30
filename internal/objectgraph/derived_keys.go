@@ -18,7 +18,7 @@ import (
 // commitment record by addressee, a source ref by doc_id, an actor wake
 // outbox row by projected). The design, its
 // failure modes and its rollback are in
-// docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md.
+// docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md.
 //
 // In short. The table is created empty at open (nothing scales with
 // og_objects). Every writer of og_objects derives the object's keys into the

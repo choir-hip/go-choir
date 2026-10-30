@@ -17,7 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-// P7/P8 at the proxy (docs/reports/p6-p8-release-adopt-2026-10-15.md).
+// P7/P8 at the proxy (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md).
 // Failure modes pinned:
 //   R3/A11 publish and adopt are the owner's acts: an agent key, `admin`
 //          included, without owner:acts is refused before any upstream call;

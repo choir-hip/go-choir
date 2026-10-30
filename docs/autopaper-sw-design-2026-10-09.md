@@ -2,14 +2,14 @@
 
 Date: 2026-10-09. Status: **rough draft, co-designed with the owner.**
 Station: `SW-world-wire-interface` in the
-[app-dev metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md).
+[app-dev metamission](archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md).
 Gate 3 (Autopaper) ships as an MVP in October, after Gate 1 (today) and
 Gate 2 (tomorrow).
 
 Inputs:
 - *Choir — Canonical Project Context* (2026-10-08);
 - [Prospective Self-Alignment](precommitment-records.md);
-- [Store B inventory](evidence/world-wire-store-b-inventory-2026-10-09.md);
+- [Store B inventory](archive/evidence/world-wire-store-b-inventory-2026-10-09.md);
 - [precommitment records memo](<Precommitment Records — Engineering Memo.md>).
 
 v1 and v2 of this draft are superseded (git history). v2 specified a staged
@@ -399,7 +399,7 @@ Notes for whoever does it:
   doctrine mapping the former names to Autopaper.
 
 
-## Merged from docs/autopaper-app-design-2026-10-11.md (2026-10-11)
+## Merged from docs/autopaper-sw-design-2026-10-09.md (2026-10-11)
 
 **Autopaper app design: the news UI on the protocol.**
 > **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Publishing changes from one permalink per document to one immutable permalink per version, with chevrons and a "new version available" control; captures share Texture's block model.

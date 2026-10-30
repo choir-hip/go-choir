@@ -87,7 +87,7 @@ boundaries:
     - owner 2026-10-21 (the metamission quotes)
     - docs/security-density-architecture-checklist-2026-10-21.md RES-08, DEC-05
     - docs/reports/vm-density-limits-2026-10-14.md lever L10, finding 3, residual on fincore
-    - docs/reports/computer-isolation-security-review-2026-10-14.md §1.5, §3.7, §4.7
+    - docs/archive/reports/computer-isolation-security-review-2026-10-14.md §1.5, §3.7, §4.7
   must_preserve:
     - No cross-tenant shared guest mapping without the DEC-05 panel's verdict.
     - The metamission's boundaries.must_preserve (no boot-path scan of og_objects, no boot-time resumer without a planned-restart marker, red fails closed).

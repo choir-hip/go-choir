@@ -1,7 +1,7 @@
 package platform
 
 // The Autopaper front list (Cut 2 unit 2b, Reader W3a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md):
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md):
 // one row per story publication, newest first, read from Store B alone.
 // Building a row reads the publication, its has_version edges, its latest
 // version and that version's manifest, all object-graph rows behind corpusd;

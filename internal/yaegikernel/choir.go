@@ -517,7 +517,7 @@ func (s *ChoirScope) Exec(command string, args []string) (ExecResult, error) {
 }
 
 // Message and Emit are retired (protocol P2c,
-// docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): one agent
+// docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md): one agent
 // reaches another only through a record addressed to it. They stay exported
 // so a model that still calls them is told what to use instead of hitting an
 // undefined symbol; the reducer keeps its IntentMessage branch for one release

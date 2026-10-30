@@ -1,7 +1,7 @@
 package store
 
 // Deploy 1 of run telemetry in its own table (F-c):
-// docs/design/choir-event-table-f-c-2026-10-22.md. Every failure mode in
+// docs/archive/design/choir-event-table-f-c-2026-10-22.md. Every failure mode in
 // section 5 was written down before the code; each test below names the one
 // it catches. Deploy 1 has no writer that stamps an op, so these tests put
 // stamped ops on the tape or project them directly, exactly as deploy 2's

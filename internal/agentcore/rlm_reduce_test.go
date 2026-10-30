@@ -469,7 +469,7 @@ func TestChannelCastWakesAddressedActor(t *testing.T) {
 // TestChannelCastRejectsTextureTarget proves the reduce-time refusal: channel
 // mail addressed to a texture desk (agent-scoped or bare) is rejected at cast
 // time, not persisted as a durable dead letter that the actor boundary would
-// silently drop. Receipt: docs/problems/s0m-channel-mail-texture-dead-letter-2026-10-02.md.
+// silently drop. Receipt: docs/archive/problems/s0m-channel-mail-texture-dead-letter-2026-10-02.md.
 func TestChannelCastRejectsTextureTarget(t *testing.T) {
 	rt, s := testRuntime(t)
 	scope := testReductionScope()
@@ -556,7 +556,7 @@ func TestCommitSkipsInboxCursorEntryWhenCursorDidNotMove(t *testing.T) {
 }
 
 // The paper's top store_stalled holder is ListRunMemoryEntriesForAgent
-// (docs/problems/run-memory-entries-hold-the-engine-2026-10-23.md). A desk
+// (docs/archive/problems/run-memory-entries-hold-the-engine-2026-10-23.md). A desk
 // cell read it twice: at cell start (LoadInboxCursorForDesk in
 // rlmReductionForDeskCall) and again at commit (recoverPartialActCommit loaded
 // the cursor before it knew it needed it). The common cell, a fresh act with

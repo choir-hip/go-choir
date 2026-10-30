@@ -11,7 +11,7 @@ import (
 )
 
 // Opening an article cost about a second of server time on every request
-// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md). A slow
+// (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md). A slow
 // resolve logs the time of each step, so the fix aims at measured costs.
 //
 // Ways this could fail, written first: a slow resolve logs nothing; the

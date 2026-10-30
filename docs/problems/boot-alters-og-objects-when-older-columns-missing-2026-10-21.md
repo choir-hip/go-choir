@@ -15,7 +15,7 @@ generated column in `metadataIndexColumns` and `recordColumns` that is not
 there, runs `ALTER TABLE og_objects ADD COLUMN ... STORED`. A STORED column
 rewrites every row of og_objects while it holds the engine mutex. On a
 populated store that is the failure of
-[stored-column-add-blocks-paper-boot-2026-10-21.md](stored-column-add-blocks-paper-boot-2026-10-21.md):
+[stored-column-add-blocks-paper-boot-2026-10-21.md](../archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md):
 21 GB read and a listener that never came up.
 
 The columns this applies to are the ones already on main before FP1:
@@ -24,7 +24,7 @@ every store since long before), and the record columns of 8f6708541 and
 85d2295b7 (2026-10-14): `og_rec_inbox`, `og_rec_sender_inbox`,
 `og_rec_conversation_id`, `og_rec_inbox_seq`, `og_rec_claim`. FP1 adds no
 column to og_objects; its side table is created empty
-(`docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md`).
+(`docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md`).
 
 Where it runs (`internal/autoputer/run.go`):
 
@@ -91,4 +91,4 @@ complete.
 
 This is out of FP1's scope by FP0's adjudication (2026-10-21) and is named
 as a residual in
-[choir-launch-fp1-store-throughput-2026-10-21.md](../definitions/choir-launch-fp1-store-throughput-2026-10-21.md).
+[choir-launch-fp1-store-throughput-2026-10-21.md](../archive/definitions/choir-launch-fp1-store-throughput-2026-10-21.md).

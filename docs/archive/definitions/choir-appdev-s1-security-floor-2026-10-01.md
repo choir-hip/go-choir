@@ -170,7 +170,7 @@ now:
     S1a host-boundary hotfix COMPLETE on deployed evidence: network
     isolation + authority binding deployed (a3f0d48e) and the refusal
     matrix passed on two disposable accounts (d37408ee,
-    docs/evidence/s1a-refusal-matrix-2026-10-04.json — 5/5 refusals,
+    docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json — 5/5 refusals,
     5/5 legitimate flows green). S0b resumes next; the rest of S1
     (runtime identity, token scrubbing, capsule/yaegi floor) remains.
     Landed 2026-10-04 (deploy pending): gateway token off the kernel
@@ -217,8 +217,8 @@ now:
       and fleet work, using deployed negative proofs rather than source inspection.
     kind: architecture
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:519-522
-    owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:519-522
+    owner_ratification_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:375-379
   belief:
     believed_state: >-
       The checked source exposes broad tap forwarding and egress, imports the
@@ -245,7 +245,7 @@ receipts:
     closed_at: '2026-10-05T00:40:00Z'
     boundary_evidence: >-
       S1a closed on the deployed refusal matrix
-      (docs/evidence/s1a-refusal-matrix-2026-10-04.json, deploy b15f012a):
+      (docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json, deploy b15f012a):
       5/5 refusals (tap->tap FORWARD drop, vmctl internal 403, maild
       forged-owner 403, corpusd mint 405, proxy publish 405) + 5/5
       legitimate flows green (gateway dial, bound-owner CV resolve,
@@ -265,14 +265,14 @@ receipts:
       (docs/problems/s1-non-root-runtime-child-uid-boundary-2026-10-04.md).
       The owner computer's stale-active mark (candidate-fleet-e15cb89f,
       last_active bumped by a deploy refresh on a dead VM) is filed under
-      docs/problems/s0-storage-lifecycle-gaps-2026-10-05.md, not a reaper
+      docs/archive/problems/s0-storage-lifecycle-gaps-2026-10-05.md, not a reaper
       target.
   - id: s1a-refusal-matrix-2026-10-04
     kind: deployed_acceptance
     status: closed
     closed_at: '2026-10-04T05:35:00Z'
     deploy_identity: 'b15f012acab6e2e9d947c90d22739de947dfcee6 (S1a network+authority + diag mode=http oracle live on staging)'
-    evidence: docs/evidence/s1a-refusal-matrix-2026-10-04.json
+    evidence: docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json
     note: >-
       Two disposable accounts (A=computer-6450a253/10.200.220.2,
       B=computer-cbcce1fa/10.200.221.2). All guest-originated through the
@@ -313,9 +313,9 @@ The runtime and capsule containment must make that floor meaningful even when
 model-authored code is adversarial.
 ## S1a slice — host-boundary hotfix (pulled ahead of S0b, 2026-10-04)
 
-Scoped by `docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`
+Scoped by `docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`
 and the deployed correction
-`docs/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`:
+`docs/archive/evidence/s1a-guest-to-host-addr-preservation-2026-10-04.json`:
 guest-originated packets arrive at host INPUT post-DNAT with the **real
 guest tap IP** (`SRC=10.200.207.2 DST=127.0.0.1` observed); the `lo`
 MASQUERADE rules provably never fire. RemoteAddr is therefore a usable

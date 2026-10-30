@@ -330,7 +330,7 @@ func fnv32(key string) uint32 {
 // role; a pool, a free model or a preview model is not honoured. The pin
 // was deepseek-v4.1-flash until the owner's 3:1 GPT split (2026-10-15),
 // which it kept at a fifth of the paper's calls on DeepSeek
-// (docs/problems/pool-split-misses-three-to-one-management-task-pin-2026-10-15.md).
+// (docs/archive/problems/pool-split-misses-three-to-one-management-task-pin-2026-10-15.md).
 const (
 	ManagementTaskRole     = agentprofile.ManagementTask
 	ManagementTaskProvider = "chatgpt"

@@ -1,7 +1,7 @@
 package store
 
 // Rollback below F-c deploy 1
-// (docs/design/choir-event-table-f-c-2026-10-22.md, status section).
+// (docs/archive/design/choir-event-table-f-c-2026-10-22.md, status section).
 //
 // This file ships in the revert commit of deploy 1, never in deploy 1
 // itself: scripts/rollback/fc-deploy1-rollback.sh copies it to

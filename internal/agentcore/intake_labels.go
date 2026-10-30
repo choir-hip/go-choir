@@ -17,7 +17,7 @@ import (
 )
 
 // Intake labels (L2a A1 / R2-3 / R2-4,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). When the
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). When the
 // computer's intake.labels setting is on, a poll's new captures are each
 // labelled by Jev against a shortlist of the computer's stories and the
 // poll's other new captures, after the captures are written and before the

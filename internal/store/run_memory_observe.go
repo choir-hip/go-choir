@@ -9,7 +9,7 @@ import (
 )
 
 // ListRunMemoryEntriesForAgent is the paper's top store_stalled holder
-// (docs/problems/run-memory-entries-hold-the-engine-2026-10-23.md). Its
+// (docs/archive/problems/run-memory-entries-hold-the-engine-2026-10-23.md). Its
 // callers are three sites in agentcore; the stall line cannot tell them
 // apart and records no duration. This file is the observation: a call
 // counter, and one log line for a call over the slow threshold, at most once

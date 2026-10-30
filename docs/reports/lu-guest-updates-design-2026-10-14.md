@@ -1,7 +1,7 @@
 # LU: Guest Updates (design note, round 5: per-slice status)
 
 Date: 2026-10-14. Station: LU of the ledger metamission
-([station file](../definitions/choir-ledger-lu-guest-updates-2026-10-14.md)).
+([station file](../archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md)).
 Owner, in session, 2026-10-14: "we do have to just improve the updating
 system in general. Like, I want to be pushing safe updates out to guest
 computers. And similarly, I think this is going to relate to the
@@ -23,7 +23,7 @@ a trace.
   continuations from new work, shared one flag with hibernation, raced its
   own 2-minute fence, and had two update drivers; and that the busy paper
   could not use a drain it did not yet have. Adjudication:
-  [`lu-guest-updates-adjudication-2026-10-14.md`](lu-guest-updates-adjudication-2026-10-14.md).
+  [`lu-guest-updates-adjudication-2026-10-14.md`](../archive/reports/lu-guest-updates-adjudication-2026-10-14.md).
   Changes: the drain defers held work instead of blocking it (R1, R2),
   admits by run lineage (R3), uses a gate with reasons (R4), ends in one
   synchronous final call (R5); vmctl is the only update driver (R6); LU1
@@ -207,8 +207,8 @@ layered releases:
 - **CI no longer drives the platform-update offer.** The app-layer push
   was deleted in a47122de after it caused version skew (new realizations
   booted older code) and landed on 0 of 2 computers
-  (`docs/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md`;
-  bind gaps in `docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`).
+  (`docs/archive/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md`;
+  bind gaps in `docs/archive/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`).
 
 ### 1.4 Admission holds today (guest)
 
@@ -252,7 +252,7 @@ about 29.5 minutes of deferral.
 - 05:48 UTC 10-14: the paper's first refresh after two busy deferrals was
   an epoch-cutover boot (epoch 1 → 2, C1e B1); the guest read it as a
   crash and closed all 14 schedules; the paper was silent about an hour
-  (`docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`).
+  (`docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`).
   Refreshes at 06:03 and 06:36 were planned: the paper did have quiet
   moments that night (R23).
 - After intake.labels went on (06:50) and ce59d406 deployed (07:46), the
@@ -261,7 +261,7 @@ about 29.5 minutes of deferral.
 - About 10:20 UTC 10-14: the paper took e3437f1c only through an
   owner-approved manual refresh, a crash boot that closed its in-flight
   runs; the owner's computer took it the same way, a crash boot by D7
-  (`docs/evidence/owner-approved-refreshes-2026-10-14.json`).
+  (`docs/archive/evidence/owner-approved-refreshes-2026-10-14.json`).
 - The owner's computer ran 761d94c5 for more than a day, deferred on every
   deploy (ledger metamission `blocker_or_risk`).
 
@@ -400,7 +400,7 @@ about 29.5 minutes of deferral.
   it calls `POST /internal/vmctl/update-sweep` once (a kick, 202) and
   reports the update state. Pending computers are not a deploy failure; the receipt's
   `active_computers` status maps them to `pending`, as the deferred case
-  does today (`docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md`).
+  does today (`docs/archive/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md`).
   An owner's forced refresh goes through vmctl; it may interrupt a drain
   (a crash boot, the owner's act) but never the window between a final
   call's commit and the kill (S18).

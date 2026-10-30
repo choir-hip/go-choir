@@ -44,7 +44,7 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		// GET lists. C1e B1 deleted the guest's start-operation POST; a
 		// change starts with POST /api/prompt-bar on an armed computer, so
 		// the collection is read-only here too
-		// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
+		// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 10).
 		return strings.TrimSpace(decoded), "read", true
 	case "rollbacks":
 		return strings.TrimSpace(decoded), "rollback", true

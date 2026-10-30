@@ -2,8 +2,8 @@
 
 The contract between `choir trace export` (writer), `scripts/reeng_tracer.mjs`
 (driver) and `scripts/reeng_invariants.mjs` (checker). Station C0 of
-`docs/definitions/choir-reeng-metamission-2026-10-12.md`; artifact (1) of
-`docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md`.
+`docs/archive/definitions/choir-reeng-metamission-2026-10-12.md`; artifact (1) of
+`docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md`.
 
 A bundle is one JSON file describing one trajectory on one computer, read only
 through product API routes (`https://choir.news/api/...`) under the owner's

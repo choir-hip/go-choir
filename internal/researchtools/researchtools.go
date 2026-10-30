@@ -148,7 +148,7 @@ func universalWirePlatformOwnerID() string {
 }
 
 // logCorpusSearch writes one journal line per corpus search (rung 0 of
-// docs/reports/object-graph-retrieval-research-2026-10-14.md): the query,
+// docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): the query,
 // both halves' latency and counts, and the capture ids returned, so the
 // retrieval eval set can be grown from real searches and their hits.
 func logCorpusSearch(query, computerID string, storiesElapsed time.Duration, stories int, capturesElapsed time.Duration, captures []CorpusCapture, note string) {

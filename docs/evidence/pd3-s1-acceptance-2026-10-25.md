@@ -1,7 +1,7 @@
 # PD3 S1 acceptance on b@c, 2026-10-25
 
 The Texture root desk and master document
-([PD3](../definitions/choir-pd3-texture-root-desk-2026-10-11.md), slice S1),
+([PD3](../archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md), slice S1),
 deployed in 7f769cc34 (CI 40188211719 success, deployed 11:26:11 UTC, vmctl
 NRestarts 0). b@c (computer-6c50d6e566143ae32cdb660faa60e24d) booted onto it
 at 11:29. Run by FP0 with `scripts/proof-pd3-root-desk` (run 1, stopped at

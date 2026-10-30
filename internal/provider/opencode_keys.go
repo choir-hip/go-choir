@@ -14,7 +14,7 @@ import (
 	"unicode"
 )
 
-// OpenCode key pool (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md).
+// OpenCode key pool (docs/archive/problems/opencode-key-exhausted-no-failover-2026-10-15.md).
 // The gateway may hold several OpenCode accounts: OPENCODE_API_KEY (or the
 // older OPENCODE_GO_API_KEY) and OPENCODE_API_KEY_ALT_<n>. A key that answers
 // 402 (out of funds) or 401 (a revoked or expired credential,

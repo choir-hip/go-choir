@@ -1,7 +1,7 @@
 # CI deploys to Node B as root, and stdin is the deploy
 
 Date: 2026-10-21. Item: SDC SEC-14, second half (review F13,
-`docs/reports/computer-isolation-security-review-2026-10-14.md` §3, "CI is
+`docs/archive/reports/computer-isolation-security-review-2026-10-14.md` §3, "CI is
 root on Node B"). Mutation class of the fix: red (deployment routing).
 
 ## Problem

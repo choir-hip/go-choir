@@ -18,7 +18,7 @@ import (
 )
 
 // The typed capture projection and its term table (rungs 2-3 of
-// docs/reports/object-graph-retrieval-research-2026-10-14.md). og_objects
+// docs/archive/reports/object-graph-retrieval-research-2026-10-14.md). og_objects
 // stays the authority: both tables are rebuilt from it, are written after
 // each capture (a failed projection write never fails the capture). Corpus search and URL citation lookup read them over all
 // history instead of the newest 1,000 captures.

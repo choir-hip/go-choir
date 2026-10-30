@@ -1,7 +1,7 @@
 package agentcore
 
 // Automatic checkpoints (slice 3 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. The owner: "We shouldn't have to bind checkpoints manually. It
 // shouldn't be a cli command but done automatically after n events or time."
 // Ways it could fail:

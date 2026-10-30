@@ -134,7 +134,7 @@ parse inline marks. The candidates:
   when it wrote v1-v4. Deploys never restart a busy computer, so a
   computer busy across the deploy keeps its old build. The paper computer
   `computer-1355b83b…` reported 66fe0917 at 03:50
-  (`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`).
+  (`docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md`).
   Whether the owner's prompt-bar document lives on that computer was not
   observed. To check, without reading content: `GET /api/runtime/observability`
   `build.commit` in the owner's session, compared with the v4 revision's
@@ -148,7 +148,7 @@ parse inline marks. The candidates:
   holds for `PlainDoc` bases: an owner draft read as markdown, whose text
   nodes get no marks (`base.go:79-85`). Five of thirty published stories
   showed this on 2026-10-13
-  (`docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md`).
+  (`docs/archive/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md`).
 - **H3 (edge case):** a closer followed directly by a letter
   (`**A.**The`) fails Write's flanking rule (`inline.go:117-118`) and stays
   literal. The owner's screenshot shows a space after the closer, so this
@@ -221,7 +221,7 @@ On the owner's computer (hypothesis; run timings were not read):
 
 - Management is one serial turn per owner, `management:<owner>`. On the
   paper computer it was held by one longcat run from 03:13 to past 03:50,
-  with 2-9 min per call (`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`).
+  with 2-9 min per call (`docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md`).
 - If the owner's document is on that computer, every management-dependent
   step of the prompt-bar answer waits behind the paper. That includes the
   support judgement that triggers v4.

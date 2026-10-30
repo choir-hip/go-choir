@@ -1,6 +1,6 @@
 package texturewrite
 
-// H-OG3 (docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md):
+// H-OG3 (docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md):
 // a citation's Ref keeps the span the quote check found, so a reader can
 // mark the exact words without matching again. Failure modes, written
 // before the code:

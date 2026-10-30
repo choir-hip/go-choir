@@ -11,7 +11,7 @@ import (
 
 // vmctl names the computer's current guest address when it reconciles the
 // gateway credential, so the gateway moves the Jev pin with the computer
-// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md, finding 2).
+// (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md, finding 2).
 // Ways it can fail, written before the code:
 //  1. the ensure carries no address, so the pin stays on the first boot's
 //     address and Jev refuses the computer after every cold boot;

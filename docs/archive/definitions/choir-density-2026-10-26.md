@@ -71,7 +71,7 @@ start:
       VM_MEMORY_HOTPLUG=off, VMCTL_ADMISSION_MODE=measured.
     - >-
       Snapshot wake is 0.1 to 0.4 s
-      (docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md) but every
+      (docs/archive/evidence/s3-snapshot-hibernate-staging-2026-10-14.md) but every
       guest-artifact deploy voids every snapshot: 0 of 8 resumed in 58 h,
       each wake a cold boot on launch_config_mismatch
       (docs/problems/hibernate-writes-whole-guest-and-deploys-void-snapshots-2026-10-22.md, R1).
@@ -332,7 +332,7 @@ may take it to tier 2. D2's design is reviewed like the change it designs.
 ## D2 build spec: snapshots survive a deploy where safe (design, then stop)
 
 **Design delivered 2026-10-26:**
-[docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md](../design/density-d2-snapshots-survive-deploys-2026-10-26.md)
+[docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md](../../design/density-d2-snapshots-survive-deploys-2026-10-26.md)
 (supersedes the fp10 L20 section, which now carries an "L20 revised
 2026-10-26" pointer; tier 2 review 306 answered in its §12; slices S0-S6
 there, with S1b and S1c added, are the build spec; S6 is gated on S5 and
@@ -465,7 +465,7 @@ section is the starting point) and stop there for review.
   guest size), falling back to `DefaultNeedBytes` (2 GiB) when unmeasured,
   never the peak. The peak stays recorded and shown. Evidence for the
   numbers: a snapshot wake settles at about 0.3 to 0.4 GiB and a cold boot at
-  1.15 to 1.37 GiB (docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md;
+  1.15 to 1.37 GiB (docs/archive/evidence/s3-snapshot-hibernate-staging-2026-10-14.md;
   hibernate-writes-whole-guest R5), against b@c's 7847 MiB peak. The 1 GiB
   floor covers both.
 - Failure modes: overcommit, the admitted computer later grows to its peak

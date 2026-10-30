@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Readers of the run events journal cuts R1 and R3 changed.
 
-docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md,
+docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md,
 "Build: journal cuts R1 to R4". No network, no host: it imports the two
 scripts and feeds them event lists.
 

@@ -14,7 +14,7 @@ of telemetry. The window form goes through a panel."
 Inputs, read in full: CLAUDE.md,
 [`tape-volume-forward-fix-and-surgery-2026-10-19`](tape-volume-forward-fix-and-surgery-2026-10-19.md)
 (the "forward fix"; §3.5, §6, A0 to A3),
-[`projection-event-volume-design-2026-10-19`](projection-event-volume-design-2026-10-19.md)
+[`projection-event-volume-design-2026-10-19`](../archive/reports/projection-event-volume-design-2026-10-19.md)
 (the "volume design"; stage 2),
 [`platform-artifact-small-file-growth-2026-10-19`](../problems/platform-artifact-small-file-growth-2026-10-19.md)
 (the "host record"), and the code cited inline.

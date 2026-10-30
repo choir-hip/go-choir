@@ -12,7 +12,7 @@ import (
 // A same-slot reconcile re-presenting a different armed/exhausted set must not
 // reuse the same CommandID — that collision is what produced the
 // `lifecycle command digest conflict` startup-refusal crash loop.
-// Receipt: docs/problems/m0-residual-texture-delivery-command-digest-crashloop-2026-09-30.md
+// Receipt: docs/archive/problems/m0-residual-texture-delivery-command-digest-crashloop-2026-09-30.md
 
 func deliveryReq(targetRunID, breakerReason string, items ...types.ReconcileUpdateDeliveryItem) types.ReconcileUpdateDeliveryRequest {
 	return types.ReconcileUpdateDeliveryRequest{

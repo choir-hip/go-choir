@@ -13,7 +13,7 @@ import (
 
 // ogKindReleaseAdoption is one owner-requested source adoption of a
 // published release on this computer (P8,
-// docs/reports/p6-p8-release-adopt-2026-10-15.md). It is written once, after
+// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md). It is written once, after
 // every verification passed and the request reached the computer's desks;
 // the projection interceptor puts it on the computer's tape. Its status is
 // derived from the self-development operation on its trajectory, never

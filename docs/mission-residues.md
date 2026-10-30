@@ -13,7 +13,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   Local fault injection and interruption resumption are proven
   (`install_test.go`, `restore_base_test.go`); the production-boundary
   drill is recorded, not substituted. Source:
-  `docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md`
+  `docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`
   section on blocked prerequisites; mission-0 `now.blocker_or_risk`.
   Revisit: when a scoped product control for live fault injection exists;
   owned by whichever mission charters it. Mission-1 scope: neither

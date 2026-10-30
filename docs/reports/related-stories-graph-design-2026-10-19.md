@@ -165,7 +165,7 @@ Each fact below was read from the code at 44650e46e.
 The event doc deferred Store B event writes because they would "confound
 the soak" (§4, Q1). That reason is gone. The Dolt 2.4.2 soak ended on
 2026-10-17 at 15:46 with 5,606 liveness probes over 48 hours and no
-strikes (`docs/reports/handoff-2026-10-15.md`, the "Dolt soak passed"
+strikes (`docs/archive/reports/handoff-2026-10-15.md`, the "Dolt soak passed"
 row). Store B retrieval landed the same day. Store B write routes are no
 longer blocked by the soak. They are still red work, with the ceremony
 in §11.
@@ -179,7 +179,7 @@ in §11.
   source entities, transclusions, provenance and the check overlay. Eight
   front stories resolved in 0.16 to 0.26 s after the 2026-10-16 fixes,
   against 1.1 to 1.3 s before (handoff row; problem doc
-  `docs/problems/article-open-slow-store-b-scans-2026-10-16.md`). The
+  `docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md`). The
   reader polls a lighter nav view (`GetPublicationNavByRoute`, `:121`).
   Related stories must not add to either.
 - **`graphCitationEdges` treats unknown kinds as citations.**
@@ -980,7 +980,7 @@ Open, recorded and not blocking:
   on shared captures.
 
 
-## Merged from docs/reports/related-stories-phase3-research-review-2026-10-20.md (2026-10-20)
+## Merged from docs/reports/related-stories-graph-design-2026-10-19.md (2026-10-20)
 
 **Related stories, phase 3: the research desk reviews the graph, Jev classifies.**
 Design, 2026-10-20. Extends [related stories, computed from the graph](related-stories-graph-design-2026-10-19.md) (phase 1 shared captures, live; phase 2 events, waiting on the one-incident blind rerun). Owner asks, owner notes §28: "more connections between articles … review all the existing articles and make sure that they are correctly connected in the object graph when they touch on similar topics, events, and e

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only pull of a paper computer's published stories, desk records and
 captures, for the claims layer's offline study (E0) and the desks' say-do
-eval (E6a). docs/reports/claims-e0-e6a-results-2026-10-14.md.
+eval (E6a). docs/archive/reports/claims-e0-e6a-results-2026-10-14.md.
 
 Reads, through the owner's API and the public publication routes:
   - every published story on the front (paginated), resolved to its

@@ -99,7 +99,7 @@ correct repair — same "fix the write, not the read" reasoning as the
 
 ## Evidence
 
-- Staging probe `docs/evidence/s0m-stranded-bound-rebind2-2026-10-03.json`
+- Staging probe `docs/archive/evidence/s0m-stranded-bound-rebind2-2026-10-03.json`
   (`ok=false`, 8-min `claim_released_pending` loop, `final_update.disposition=pending`).
 - Local reproducer `zz_rebind_repro_test.go` (`ErrLifecycleInvalidTransition`,
   stale `agent.ActiveRunID=c8243d9e`).
@@ -118,7 +118,7 @@ correct repair — same "fix the write, not the read" reasoning as the
 the agent's live activation — folded into the same atomic commit batch
 (run+trajectory+event+receipt+agent). Commit `ed406f45`; deployed to staging.
 
-Deployed re-proof `docs/evidence/s0m-stranded-bound-rebind3-2026-10-03.json`:
+Deployed re-proof `docs/archive/evidence/s0m-stranded-bound-rebind3-2026-10-03.json`:
 texture `ApplyTexture{open_researcher}` → control `3fbf9bb4` bound to carrier
 `cf8c0a9e` → probe cancelled it mid-bind → `claim_released_pending` →
 **`rebound_live_run`** to fresh carrier `c55287d3` (correct agent

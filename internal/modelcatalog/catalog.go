@@ -57,7 +57,7 @@ const (
 // default for every model the catalog configures; a model goes here only
 // when it is known text-only or its image support through our route is
 // UNVERIFIED. Delete a line once scripts/vision_probe.py --model <id>
-// passes on staging (docs/problems/models-configured-text-only-2026-10-15.md).
+// passes on staging (docs/archive/problems/models-configured-text-only-2026-10-15.md).
 func TextOnlyModels() map[string]string {
 	const zaiText = "believed text-only: Z.AI ships vision as separate GLM-*V models (UNVERIFIED for this version)"
 	const unverified = "UNVERIFIED: no doc or code confirms image input through OpenCode for this model"
@@ -296,11 +296,11 @@ func (m PoolMember) SlotWeight() int {
 // longcat-2.5-preview-free was measured and left the pool on 2026-10-14:
 // 21.8 s median and 115 s p90 per call on the paper computer, up to 932 s,
 // against 2.5 s and 10 s for gpt-6-luna; a management turn on it held the
-// paper for 38 minutes (docs/evidence/model-latency-paper-2026-10-14.md).
+// paper for 38 minutes (docs/archive/evidence/model-latency-paper-2026-10-14.md).
 // cat-jam-free left the pool on 2026-10-15 (owner: a dual pool of
 // deepseek-v4.1-flash and gpt-6-luna). An OpenCode key is parked for every
 // model after any 429, so its free-tier 429s parked the keys deepseek uses
-// (docs/reports/chatgpt-cache-ratio-2026-10-15.md §7.3). The owner weighted
+// (docs/archive/reports/chatgpt-cache-ratio-2026-10-15.md §7.3). The owner weighted
 // it 1:3 the same day. Owner 2026-10-16: "we are using Opencode too much. We
 // will hit our weekly limit soon. Let's go 100% gpt-6 luna for now." Owner
 // 2026-10-21: "We have Opencode quota now"; the dual pool is back at 1:3, so

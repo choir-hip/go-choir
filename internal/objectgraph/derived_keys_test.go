@@ -16,7 +16,7 @@ import (
 
 // The three hot reads (run by agent_id, records by addressee, source_ref by
 // doc_id) on the og_key_index side table
-// (docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
+// (docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md).
 // Ways the change can fail, written before the code; each has a test here
 // unless it says where it lives:
 //

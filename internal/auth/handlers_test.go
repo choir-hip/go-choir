@@ -3627,7 +3627,7 @@ func TestCreateAPIKeyRejectsInvalidScope(t *testing.T) {
 }
 
 // Calibration level 2: an agent's claim key carries only the precommit
-// scopes (docs/reports/choir-mcp-precommitments-2026-10-14.md §3).
+// scopes (docs/archive/reports/choir-mcp-precommitments-2026-10-14.md §3).
 func TestCreateAPIKeyAcceptsPrecommitScopes(t *testing.T) {
 	h, priv := testHandlerEnv(t)
 	user, err := h.store.CreateUser("apikey-precommit-user", "akprecommit@example.com")

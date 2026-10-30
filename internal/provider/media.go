@@ -22,7 +22,7 @@ import (
 )
 
 // Image limits, applied at the gateway before any adapter serializes an
-// image (docs/problems/models-configured-text-only-2026-10-15.md, failure
+// image (docs/archive/problems/models-configured-text-only-2026-10-15.md, failure
 // mode 7). Anthropic refuses images over 5 MB or 8000 px a side and resizes
 // long edges over 1568 px itself, so sending more costs bytes and buys
 // nothing.

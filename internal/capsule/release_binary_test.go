@@ -11,7 +11,7 @@ import (
 )
 
 // Ways reusing the running binary at Freeze can go wrong
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A1-A8):
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A1-A8):
 //
 //  A1. A Go input is classified as not touching the binary, so the reused
 //      binary does not reflect the frozen source.

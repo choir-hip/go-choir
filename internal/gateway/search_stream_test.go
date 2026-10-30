@@ -15,7 +15,7 @@ import (
 )
 
 // POST /provider/v1/search streams NDJSON (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // Ways it can fail:
 //  1. The handler buffers, so a slow provider delays the lines of the
 //     providers that already answered.
@@ -198,7 +198,7 @@ func TestHandleSearch_FinalLineCountsEligibleAndListsCoolingSeparately(t *testin
 		t.Fatalf("second start cooling = %+v, want quota and broken with their until", start.Cooling)
 	}
 	// Each skipped provider says why, by class, never by summary
-	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	// (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 	if start.Cooling[0].Reason != "quota_limited" || start.Cooling[1].Reason != "server_error" {
 		t.Fatalf("second start cooling reasons = %+v, want quota_limited and server_error", start.Cooling)
 	}

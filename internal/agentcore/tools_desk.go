@@ -1165,7 +1165,7 @@ func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 // tail), the lost session, and the usual cause. On the paper a bare "frame:
 // read header: EOF" told the Texture desk nothing, and it re-ran the same
 // runaway loop until the guest OOM killer took the daemon
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 func cellWorkerDiedError(exit string, elapsed time.Duration) string {
 	if i := strings.Index(exit, "; stderr:"); i >= 0 {
 		exit = exit[:i]

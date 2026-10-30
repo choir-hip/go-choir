@@ -173,7 +173,7 @@ vision is the architecture supervision lives in.
 - `docs/precommitment-records.md` — the core mechanism.
 - `docs/signal-is-sparse-not-the-learner-2026-08-01.md` — the foundational
   argument.
-- `docs/reports/choir-state-and-vision-2026-10-14.md` — what is built, designed
+- `docs/archive/reports/choir-state-and-vision-2026-10-14.md` — what is built, designed
   and vision today, and the business model.
 - `docs/ACTIVE.md` — current sequencing (`docs/world-wire-mission-stack-2026-09-22.md`
   is a superseded roadmap kept for reference).

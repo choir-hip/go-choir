@@ -1,7 +1,7 @@
 # Related stories are thin: no subject nodes in the graph, and no desk can ask System 1 a question (2026-10-20)
 
 Status: documented; design in
-[related stories, phase 3](../reports/related-stories-phase3-research-review-2026-10-20.md);
+[related stories, phase 3](../reports/related-stories-graph-design-2026-10-19.md);
 the verb (design §3.1, order step 3) follows in later commits. Continues
 [a published story is a dead end](related-stories-dead-end-2026-10-20.md).
 Mutation class of the first fix: red (gateway calls, research desk surface).

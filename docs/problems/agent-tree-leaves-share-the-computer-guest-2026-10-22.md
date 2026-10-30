@@ -43,7 +43,7 @@ There is no place to run a leaf outside that guest, so:
   exists: a machine with no identity, no state and no authority.
 - The 2026-10-11 fan-out record shows what a wide tree inside one guest
   does to the computer's shared budget: 239 children, 4 results
-  ([research-fanout-overruns-computer-model-budget-2026-10-11.md](research-fanout-overruns-computer-model-budget-2026-10-11.md)).
+  ([research-fanout-overruns-computer-model-budget-2026-10-11.md](../archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md)).
   That record is about the model budget, not isolation; it is cited only for
   the shape of the load.
 - "Worker VM", the name the old design used, is retired

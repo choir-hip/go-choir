@@ -2,7 +2,7 @@
 
 Date: 2026-10-21. Status: open; the first slice is built on
 `lane/fp10-arch13-fanin` (station FP10, ARCH-13 in
-[the security and density checklist](../security-density-architecture-checklist-2026-10-21.md)),
+[the security and density checklist](../../security-density-architecture-checklist-2026-10-21.md)),
 off by default, not deployed. Mutation class of the fix: red (the guest
 store's write path; the checklist classes ARCH-13 red, the cited design
 classes the cadence change orange; this station takes the stricter one).
@@ -234,7 +234,7 @@ the same test is the likely remover; the whole package passed under
 -race in one process on this VM (1033 s), and no store code or test
 removes another test's path. The crash itself is pre-existing: the same
 test panics identically on 3b220fa02, and
-[agentcore-store-open-tables-changed-under-load-2026-10-22](agentcore-store-open-tables-changed-under-load-2026-10-22.md)
+agentcore-store-open-tables-changed-under-load-2026-10-22
 records the same crash in Close after a failed open (its hypothesis 3).
 Round 7's teardown order is not the cause.
 

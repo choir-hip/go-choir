@@ -3,7 +3,7 @@
 **Status: FINAL, 2026-10-13.** Written before the designated paper
 computer's first publish (computer-1355b83bced1613eb048ee28d66688a8, owner
 e5962310-8767-4624-87e5-a9b93a4e1db1;
-docs/reports/reeng-autopaper-paper-computer-2026-10-13.md). Compatibility
+docs/archive/reports/reeng-autopaper-paper-computer-2026-10-13.md). Compatibility
 begins at the paper's first Autopaper permalink: from then on the record
 schema, normtext, the cid formula, the extractor versions, the Ref shape,
 the /v<n> route shape and the manifest schema change only compatibly
@@ -241,7 +241,7 @@ Three optional fields on `CastHypothesis` (and on the folded
 - `resolves_by`, RFC 3339.
 
 The station is
-docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md (L3-1).
+docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md (L3-1).
 
 | Declaration | File | Digest at the freeze | Digest after |
 |---|---|---|---|

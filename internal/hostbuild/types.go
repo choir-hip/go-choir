@@ -1,5 +1,5 @@
 // Package hostbuild is the host build service (P5,
-// docs/reports/p5-host-build-layered-apply-2026-10-15.md): a computer sends
+// docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md): a computer sends
 // the source patch of an accepted self-development candidate, and the host,
 // the sole builder, builds bin/autoputer (and the frontend, one flake
 // evaluation) from the computer's base commit plus that patch, stores the

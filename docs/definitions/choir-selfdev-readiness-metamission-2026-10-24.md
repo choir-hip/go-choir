@@ -188,7 +188,7 @@ metamission:
         published. Red (Texture canonical schema and writes), tier 2. Runs
         now in parallel; the Reader and T1a candidates use it once live.
     - id: PD3
-      path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11, rewritten 2026-10-25; PD2 landed as fcb424b92)
+      path: docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md (drafted 2026-10-11, rewritten 2026-10-25; PD2 landed as fcb424b92)
       readiness: executable
       status: complete  # 2026-10-26 00:40, receipts S1 and S2 in its file
       depends_on: [SR5]
@@ -228,7 +228,7 @@ metamission:
         Synthetic DeepSeek. Specs per app: the 2026-10-24 v7 brief
         (_runs/apprewrite/v7/request.txt) is the starting list.
     - id: SR9
-      path: docs/definitions/choir-sr9-library-2026-10-26.md (design docs/design/library-package-propagation-2026-10-26.md; the Choir Library)
+      path: docs/archive/definitions/choir-sr9-library-2026-10-26.md (design docs/design/library-package-propagation-2026-10-26.md; the Choir Library)
       readiness: drafted
       status: pending
       depends_on: [SR5]
@@ -284,7 +284,7 @@ metamission:
       depends_on: [SR5]
       note: >-
         Tent pole 2, an agentic red-teaming loop on the sandbox layers
-        (docs/reports/boundary-strength-ladder-2026-10-15.md): break, fix,
+        (docs/archive/reports/boundary-strength-ladder-2026-10-15.md): break, fix,
         break again, each boundary a precommitted claim settled by attack.
     - id: T3
       path: docs/design/computer-update-architecture-rnd-2026-10-24.md U2 to U7 (intent)

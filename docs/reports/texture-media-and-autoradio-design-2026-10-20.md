@@ -61,7 +61,7 @@ two survey agents returned; the main ones are repeated here).
   (around line 240-300) says not to add display modes or recreate
   `source_embed` without a promoted schema change. This design is that change.
 - **Autoradio** has a 1,563-line plan
-  (`docs/reports/autoradio-mobile-app-plan-2026-10-14.md`): UIKit-first Swift,
+  (`docs/archive/reports/autoradio-mobile-app-plan-2026-10-14.md`): UIKit-first Swift,
   no general web view, iOS 26 minimum, on-device speech (Parakeet) and
   speech synthesis (Kokoro), code under `mobile/`, Android later in Kotlin and
   Compose. A browser prototype sits on `prototype/autoradio-2026-10-14`,

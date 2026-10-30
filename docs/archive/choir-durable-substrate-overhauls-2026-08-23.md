@@ -139,7 +139,7 @@ receipts:
     proof_refs: [docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md]
     rollback_ref: "git revert mission commits"
     disposition: "Keys acceptance deployed-proven on staging: custodian escrow on boot, backfill via per-boot upgrade, two-approval unwrap gate with self-approval rejection and premature-reveal refusal, DEK digest verified, transparency log chained seq 0->2; PRF 1b handler-proven, browser proof residual."
-    problem_ref: docs/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md
+    problem_ref: docs/archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md
     authorization_ref: "owner direction 2026-08-25; design 3.2"
     candidate_or_evidence_refs: [docs/evidence/track-k-keys-acceptance-staging-2026-08-26.md]
     landing:

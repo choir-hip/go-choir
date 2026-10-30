@@ -13,7 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// SL slice 2 (docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md).
+// SL slice 2 (docs/archive/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md).
 // Failure modes pinned: the store signals before commit or not at all; a
 // persistent dispatch error retries forever; a transient error exhausts
 // without backoff; exhaustion drops the wake without a durable fate.

@@ -18,12 +18,12 @@ review:
 metamission:
   stations:
     - id: P1
-      path: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
+      path: docs/archive/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
       readiness: reviewed
       status: landed (staging 0f1c86c7; completion panel pending)
       depends_on: []
     - id: P2
-      path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
+      path: docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md
       readiness: reviewed
       status: landed (P2a, P2b, P2c on staging b172895b; receipts P2a-deployed, P2c-deployed)
       depends_on: [P1]
@@ -43,7 +43,7 @@ metamission:
       status: pending (owner 2026-10-12: scoring needs intelligence, never the runtime; re-author after re-engineering Cut 1)
       depends_on: [P3]
     - id: P5
-      path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (re-authored on the protocol)
+      path: docs/archive/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (re-authored on the protocol)
       readiness: intent
       status: pending
       depends_on: [P4, P2d]
@@ -113,7 +113,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 and P2 landed (staging b172895b); P2d1 landed. Owner 2026-10-12 moved the remaining protocol work into the re-engineering metamission (docs/definitions/choir-reeng-metamission-2026-10-12.md): P2d2 is Cut 1's Texture inbox, P3's shape is replaced by hypothesis-shaped Casts
+  slice: P1 and P2 landed (staging b172895b); P2d1 landed. Owner 2026-10-12 moved the remaining protocol work into the re-engineering metamission (docs/archive/definitions/choir-reeng-metamission-2026-10-12.md): P2d2 is Cut 1's Texture inbox, P3's shape is replaced by hypothesis-shaped Casts
   source_ref: a2bcf724
   deploy_identity: staging a2bcf724
   candidate: none
@@ -146,7 +146,7 @@ now:
     (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md,
     owner routing decision); idle test computers keep their old build
     after a deploy, so deployed demos use fresh test computers
-    (docs/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md)
+    (docs/archive/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md)
   next_action: none here; continue in the re-engineering metamission (R1 first)
 
 receipts: []
@@ -155,7 +155,7 @@ receipts: []
 # One protocol between agents
 
 The design is
-[docs/precommitment-records.md](../precommitment-records.md).
+[docs/precommitment-records.md](../../precommitment-records.md).
 This metamission lands it in five stations, each through the landing loop.
 P1 changes no desk surface; it makes every Texture dispatch a record. Each
 later station removes a side channel or adds a measurement.

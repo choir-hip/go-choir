@@ -11,7 +11,7 @@ import (
 )
 
 // Result cache and in-flight join
-// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md). Ways it
+// (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md). Ways it
 // can fail, numbered as in that record:
 //  1. A cached answer is served after its TTL (news goes stale).
 //  2. A failed or empty search is cached and hides a later success.

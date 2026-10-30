@@ -96,7 +96,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - docs/operational-invariants-register-2026-10-08.md (O21, O22, O10)
-    - docs/state-homes-inventory-2026-10-08.md
+    - docs/operational-invariants-register-2026-10-08.md
     - docs/computer-ontology.md
   must_preserve:
     - one writer per durable home; a replica is never a second writer
@@ -136,7 +136,7 @@ What Gate 1 work must not foreclose (cheap now, expensive later):
 - every durable home keeps exactly one writer and is reached through
   configuration (address, path), not a hard-coded host assumption;
 - no new realization-local or host-local state outside the
-  [state homes inventory](../state-homes-inventory-2026-10-08.md);
+  [state homes inventory](../../operational-invariants-register-2026-10-08.md);
 - logs stay structured (journald fields, guest console lines with computer
   and VM ids) so a later shipper needs no code change;
 - the Store A rebuild keeps append receipts and escrow transparency intact

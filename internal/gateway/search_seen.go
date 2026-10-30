@@ -17,7 +17,7 @@ const searchSeenPerComputer = 50000
 // searchURLSeen remembers, per computer, the result URLs returned to it in
 // the last ttl, so the per-search log line can say how many of a search's
 // URLs the computer had already received
-// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md: result
+// (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md: result
 // duplication was not measurable). Measurement only: it changes no answer.
 type searchURLSeen struct {
 	ttl time.Duration

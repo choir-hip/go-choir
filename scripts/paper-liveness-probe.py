@@ -11,7 +11,7 @@ The paper is "healthy" only when its /health is ok AND its source schedules are
 not overdue AND it made an inference call in the last 30 minutes. This probe
 covers the third term. A healthy-but-idle paper (all schedules active, none
 polled, nothing queued) passed the old health and disk check for 1h45m on
-2026-10-15 (docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md).
+2026-10-15 (docs/archive/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md).
 
 The paper's VM id is looked up, not hardcoded: internal/computertiers/
 computer-tiers.json lists the platform (critical_protected) computer ids, and
