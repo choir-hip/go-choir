@@ -20,6 +20,69 @@ The README is the open-source front door; this file is the operating contract,
 and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
 architecture. Do not let this file drift into doctrine.
 
+## Operating Tempo: The Data System Cutover (owner, 2026-10-30)
+
+Owner, 2026-10-30: "Remember, we are working at agentic speed. We can't let
+code review slow us down. We reviewed the plan a bunch of times for a
+reason. So we can do the migration in bulk, and let runtime checks be the
+verifier, not code review." And: "with our current (old) data architecture,
+we are hopeless. So getting the new system up and running is essential.
+Better to rapidly get it 85% there, and iterate for the last mile, than move
+slowly thinking that will improve safety. Thats false. We do our best with
+planning then execute with pace and overwhelming force."
+
+The data system build
+([docs/definitions/choir-data-system-build-2026-10-30.md](docs/definitions/choir-data-system-build-2026-10-30.md))
+runs under these rules. Where this section conflicts with the rest of this
+file, it wins for that work.
+
+1. **Runtime checks are the verifier, not code review.** There is no
+   code-review gate, and the tiers under Mutation Classes are suspended for
+   this work. The proof is:
+   - the static repo gates;
+   - CI and the deploy;
+   - the drills, the hard gates and the differential (migrated state
+     answers like the old state);
+   - the keep-set checks;
+   - deployed acceptance on staging.
+
+   A check that has not run proves nothing.
+2. **85% fast, then iterate.** Get the whole new system running the fleet
+   first, then finish the last mile on it. A mechanism the cutover does not
+   need waits for phase 2.
+3. **Overwhelming force.** Fan out parallel Sonnet builders, each in its own
+   worktree, split by package boundary. Opus orchestrates, integrates and
+   adjudicates. Never wait idle on CI or a deploy; build the next piece
+   while it runs.
+4. **Downtime is acceptable.** Stop, drain, migrate, switch. Build no
+   zero-downtime machinery, no dual writes, and no compatibility shims
+   beyond what running d@e first needs. Old code paths are deleted at the
+   cutover, not kept beside the new ones.
+5. **Do not patch the old data system** (the Dolt stores, projection bases,
+   legacy pins) unless it blocks the cutover. Note the failure in the
+   mission ledger and move on.
+6. **Light ceremony.**
+   - A commit names its mutation class and its rollback in one line.
+   - The mission's own defects need no separate doc-first commit: a
+     one-line ledger entry (problem and evidence) lands with the fix.
+7. **Authority is granted.** The owner authorized:
+   - the fleet cutover;
+   - deleting the old data once the differential and keep-set checks are
+     green;
+   - downtime;
+   - skipping the nightly backup.
+
+   No blocking asks remain for this mission.
+8. **What still holds:**
+   - the keep set (newspaper content, the Autopaper object graph, the
+     owner's emails, Textures, precommitment records, the agent record);
+   - the restart rules below;
+   - no secrets or the owner's email addresses in the repo;
+   - adversarial drills on d@e, never on the paper or the owner's live
+     computers;
+   - "Escalate on dead ends", except that the first response is a shift
+     of approach, not a pause.
+
 ## Desk Ontology
 
 Persistent root RLM desks come in two kinds (doctrine I26, owner 2026-10-21).
@@ -184,7 +247,8 @@ Classify every mission/change by mutation class before editing:
 Do not count newly discovered heresies as regressions, and do not count
 discovery alone as repair.
 
-**Code review is risk-tiered, Devin by default** (owner, 2026-10-23: "we
+**Code review is risk-tiered, Devin by default** (suspended for the data
+system cutover; see Operating Tempo) (owner, 2026-10-23: "we
 should be more judicious, allocating code review to hard stuff and trusting
 that we can handle the easy stuff cold"; "make devin the go-to reviewer").
 Cheap checks run before any review, every time: the repo gates
@@ -296,6 +360,9 @@ after non-convergence is a known failure mode, not persistence.
 Every platform behavior-changing mission must observe the following invariant:
 
 > **Documenting a problem is the first priority. Fixing it is second.**
+
+During the data system cutover, a ledger entry that lands with the fix is
+enough for the mission's own defects (Operating Tempo, rule 6).
 
 When staging evidence (or any reliable evidence) reveals a new problem, the
 first commit that follows must be a checkpoint or mission doc update that names

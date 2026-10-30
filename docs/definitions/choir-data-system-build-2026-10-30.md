@@ -369,6 +369,21 @@ boundaries:
     worktrees, working against C0's harness. Code lands on main as it
     builds, enabled only for the proof ring (the d@e test computer), and is
     drilled there as one system. Nothing widens to the fleet before C5.
+  tempo: >-
+    This mission runs under AGENTS.md "Operating Tempo". In practice:
+    - Fold, freeze, build. D0 and D1 are one pass each and take hours,
+      not days.
+    - Fan out C0 to C3 at once: as many parallel Sonnet builders as there
+      are disjoint package sets, each in its own worktree. Opus
+      integrates.
+    - Land on main continuously. While CI and the deploy run, the next
+      piece is being built.
+    - When something fails, fix forward. A failing drill is the next
+      task, not a reason to stop.
+    - Take the most direct route the frame allows, and record any choice
+      in the ledger in one line.
+    - The goal stops only for the keep set, or a defect that would lose
+      owner data.
   agents: >-
     Opus for design and adjudication. Sonnet subagents for following a
     plan, optimizing a metric and investigations (owner 2026-10-22).
