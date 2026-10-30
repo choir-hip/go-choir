@@ -117,14 +117,17 @@ type ReceiptVerifier interface {
 // operations; agents, capsules, reducers, vmctl, and route projections never
 // receive this object or its append capability.
 type ComputerEventAppender struct {
-	computerID       string
-	pins             ArtifactPinner
-	projection       ProjectionStore
-	cas              HeadCAS
-	verifier         ReceiptVerifier
-	reader           ArtifactReader
-	cipher           *PrivateArtifactCipher
-	livePayloads     map[string][]byte
+	computerID   string
+	pins         ArtifactPinner
+	projection   ProjectionStore
+	cas          HeadCAS
+	verifier     ReceiptVerifier
+	reader       ArtifactReader
+	cipher       *PrivateArtifactCipher
+	livePayloads map[string][]byte
+	// replayPrefetched holds the current replay page's projection-batch
+	// payloads, fetched concurrently (replay_prefetch.go).
+	replayPrefetched map[string][]byte
 	replayProjection bool
 	// replayObserver receives tail-bounded recovery telemetry: page
 	// enumerations, applied sequences, and durable commits. Nil disables
@@ -148,13 +151,13 @@ type ComputerEventAppender struct {
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
-	replayActive             bool
-	replaySeq                uint64
-	replayCommittedSeq       uint64
-	replayAppliedRows        uint64 // rows applied during this Reconstruct call
+	replayActive       bool
+	replaySeq          uint64
+	replayCommittedSeq uint64
+	replayAppliedRows  uint64 // rows applied during this Reconstruct call
 	// replayPayloadNanos is time spent fetching projection-batch payloads
 	// from the host during a replay: one request per event.
-	replayPayloadNanos atomic.Int64
+	replayPayloadNanos       atomic.Int64
 	replayCheckpointEvery    int
 	replayCheckpointInterval time.Duration
 }
@@ -887,9 +890,10 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	// was unmeasured.
 	// Where the time goes: fetching pages from the host, applying events
 	// (reduce, receipt verify, projection writes), and periodic commits.
-	var replayFetch, replayApply, replayCommit time.Duration
+	var replayFetch, replayPrefetch, replayApply, replayCommit time.Duration
 	replayPages := 0
 	a.replayPayloadNanos.Store(0)
+	defer func() { a.replayPrefetched = nil }()
 	replayStarted := time.Now()
 	defer func() {
 		snap := a.ReplaySnapshot()
@@ -897,8 +901,8 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			return
 		}
 		elapsed := time.Since(replayStarted)
-		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, apply %s of which payload fetch %s, commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
-			replayFetch.Round(time.Millisecond), replayPages, replayApply.Round(time.Millisecond), time.Duration(a.replayPayloadNanos.Load()).Round(time.Millisecond), replayCommit.Round(time.Millisecond))
+		log.Printf("computer event appender: replay applied %d events through seq=%d in %s (%.0f events/s; fetch %s in %d pages, payload prefetch %s, apply %s of which payload fetch %s, commit %s)", snap.AppliedRows, snap.Sequence, elapsed.Round(time.Millisecond), float64(snap.AppliedRows)/max(elapsed.Seconds(), 1e-3),
+			replayFetch.Round(time.Millisecond), replayPages, replayPrefetch.Round(time.Millisecond), replayApply.Round(time.Millisecond), time.Duration(a.replayPayloadNanos.Load()).Round(time.Millisecond), replayCommit.Round(time.Millisecond))
 	}()
 	if err := a.RecoverPrepared(ctx); err != nil {
 		return err
@@ -999,6 +1003,9 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 			if len(page) == 0 {
 				break
 			}
+			prefetchStarted := time.Now()
+			a.replayPrefetched = a.prefetchReplayPayloads(ctx, page)
+			replayPrefetch += time.Since(prefetchStarted)
 			for _, record := range page {
 				if err := apply(record); err != nil {
 					return err
@@ -1025,6 +1032,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 					return ctxErr
 				}
 			}
+			a.replayPrefetched = nil
 			if len(page) < pageSize || after == ^uint64(0) {
 				break
 			}
@@ -1150,7 +1158,11 @@ func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, even
 			SchemaVersion:  1,
 		}}
 		fetchStarted := time.Now()
-		resolved, err := ResolvePayloads(ctx, a.reader, a.cipher, event.ComputerID, event.EventID, refs)
+		reader := a.reader
+		if a.replayPrefetched != nil {
+			reader = prefetchedReader{computerID: a.computerID, held: a.replayPrefetched, next: a.reader}
+		}
+		resolved, err := ResolvePayloads(ctx, reader, a.cipher, event.ComputerID, event.EventID, refs)
 		a.replayPayloadNanos.Add(int64(time.Since(fetchStarted)))
 		if err != nil {
 			return nil, err
