@@ -6,7 +6,8 @@ package platform
 //     the computer has a Files tree root or not;
 //  2. the declaration is accepted without the computer's capability, or for
 //     another computer;
-//  3. keeping every snapshot ever taken: only the newest three stay live and
+//  3. keeping every snapshot ever taken: only the newest four stay live (at least the
+//     snapshot.MaxCandidates a restore considers) and
 //     the rest become collectable, so storage is bounded;
 //  4. an older snapshot outliving a newer one (ordering by head sequence, not
 //     arrival);
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/filecas"
+	"github.com/yusefmosiah/go-choir/internal/snapshot"
 )
 
 func putSnapshotRoot(t *testing.T, h *Handler, body any, internal bool) int {
@@ -39,7 +41,7 @@ func putSnapshotRoot(t *testing.T, h *Handler, body any, internal bool) int {
 	return rec.Code
 }
 
-func TestSnapshotRootsKeepNewestThreeAndSharedChunks(t *testing.T) {
+func TestSnapshotRootsKeepNewestFourAndSharedChunks(t *testing.T) {
 	f := newGCFixture(t)
 	handler := NewHandler(f.service)
 	old := 9 * 24 * time.Hour
@@ -51,7 +53,7 @@ func TestSnapshotRootsKeepNewestThreeAndSharedChunks(t *testing.T) {
 	shared, sharedPath := chunk("shared")
 	paths := map[string]string{}
 	digests := map[string]string{}
-	for _, name := range []string{"s1", "s2", "s3", "s4"} {
+	for _, name := range []string{"s0", "s1", "s2", "s3", "s4"} {
 		digests[name], paths[name] = chunk(name)
 	}
 	// Declared out of order: head sequence, not arrival, decides which stay.
@@ -64,7 +66,8 @@ func TestSnapshotRootsKeepNewestThreeAndSharedChunks(t *testing.T) {
 		}
 	}
 	declare("s4", 40)
-	declare("s1", 10, shared) // oldest: dropped, but shares a chunk
+	declare("s0", 5, shared) // oldest: dropped, but shares a chunk
+	declare("s1", 10)
 	declare("s3", 30, shared) // live and shares it
 	declare("s2", 20)
 
@@ -87,7 +90,7 @@ func TestSnapshotRootsKeepNewestThreeAndSharedChunks(t *testing.T) {
 	}
 
 	live, err := f.store.LiveSnapshotRoots(f.ctx, computer)
-	if err != nil || len(live) != snapshotRootRetention || live[0].HeadSequence != 40 || live[2].HeadSequence != 20 {
+	if err != nil || len(live) != snapshotRootRetention || live[0].HeadSequence != 40 || live[3].HeadSequence != 10 {
 		t.Fatalf("live snapshot roots = %+v, %v", live, err)
 	}
 	var rows int
@@ -96,13 +99,22 @@ func TestSnapshotRootsKeepNewestThreeAndSharedChunks(t *testing.T) {
 	}
 
 	report := f.run(activeWindow())
-	for name, p := range map[string]string{"s2": paths["s2"], "s3": paths["s3"], "s4": paths["s4"], "shared": sharedPath, "tree": treePath} {
+	for name, p := range map[string]string{"s1": paths["s1"], "s2": paths["s2"], "s3": paths["s3"], "s4": paths["s4"], "shared": sharedPath, "tree": treePath} {
 		if !exists(p) {
 			t.Fatalf("live chunk %s was swept (report %+v)", name, report.Namespaces["file-cas-chunks"])
 		}
 	}
-	if exists(paths["s1"]) {
+	if exists(paths["s0"]) {
 		t.Fatalf("chunk of a dropped snapshot kept (report %+v)", report.Namespaces["file-cas-chunks"])
+	}
+}
+
+// A restore considers the newest snapshot.MaxCandidates snapshots and falls
+// back down the list when the newest is unusable; a fallback whose chunks were
+// already swept is no fallback.
+func TestSnapshotRootRetentionCoversEveryRestoreCandidate(t *testing.T) {
+	if snapshotRootRetention < snapshot.MaxCandidates {
+		t.Fatalf("snapshotRootRetention %d keeps fewer roots than the %d snapshots a restore may fall back to", snapshotRootRetention, snapshot.MaxCandidates)
 	}
 }
 

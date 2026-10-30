@@ -255,7 +255,9 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 		ComputerID: computerID,
 		DB:         scratch.DB(),
 		TempDir:    t.TempDir(),
-		Head:       func(ctx context.Context) (*computerevent.Head, error) { return scratch.Head(ctx, computerID) },
+		Head: func(ctx context.Context, db *sql.DB) (*computerevent.Head, error) {
+			return choirstore.ReadProjectionHead(ctx, db, computerID)
+		},
 		Witness: func(ctx context.Context, db *sql.DB) (selfdevprotocol.VMLocalContentWitness, error) {
 			return LiveStoreWitness(ctx, db)
 		},

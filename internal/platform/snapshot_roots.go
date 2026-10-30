@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_computer_snapshot_roots_computer_head ON computer
 const (
 	// snapshotRootRetention is how many snapshot roots per computer stay live;
 	// older ones become collectable.
-	snapshotRootRetention = 3
+	snapshotRootRetention = 4
 	// maxSnapshotRootChunks bounds one declaration (65536 x 4 MiB = 256 GiB).
 	maxSnapshotRootChunks = 65536
 	maxSnapshotRootBody   = 8 << 20

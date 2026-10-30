@@ -166,7 +166,7 @@ func newFixture(t *testing.T, bytesApprox int) *fixture {
 			ComputerID: testComputer,
 			DB:         db.Read,
 			TempDir:    t.TempDir(),
-			Head: func(context.Context) (*computerevent.Head, error) {
+			Head: func(context.Context, *sql.DB) (*computerevent.Head, error) {
 				return &computerevent.Head{ComputerID: testComputer, Sequence: 41, CanonicalEventHead: strings.Repeat("e", 64)}, nil
 			},
 			Witness:  witnessOf,
@@ -187,9 +187,6 @@ func TestSnapshotRoundTripAcrossChunks(t *testing.T) {
 	ref, err := TakeSnapshot(ctx, f.cfg)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if f.tape.held != 1 {
-		t.Fatalf("the capture ran in %d append holds, want 1", f.tape.held)
 	}
 	if got := len(ref.Record.Manifest.Files[0].Chunks); got < 3 {
 		t.Fatalf("%d chunks, want a multi-chunk snapshot", got)

@@ -57,6 +57,17 @@ func (s *Store) HeadTx(ctx context.Context, tx *sql.Tx, computerID string) (*com
 	return scanProjectionHead(tx.QueryRowContext(ctx, projectionHeadSQL, computerID))
 }
 
+// ReadProjectionHead reads the event head from any handle on a store file:
+// the live pool, or a VACUUM INTO copy of it (snapshot v1 records the head
+// inside its copy, not the head the live store held before or after the
+// copy). A store with no head row returns nil.
+func ReadProjectionHead(ctx context.Context, db *sql.DB, computerID string) (*computerevent.Head, error) {
+	if db == nil {
+		return nil, fmt.Errorf("computer event projection: nil database")
+	}
+	return scanProjectionHead(db.QueryRowContext(ctx, projectionHeadSQL, computerID))
+}
+
 const projectionHeadSQL = `SELECT computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch FROM computer_event_projection_heads WHERE computer_id=?`
 
 func scanProjectionHead(row *sql.Row) (*computerevent.Head, error) {
@@ -69,6 +80,30 @@ func scanProjectionHead(row *sql.Row) (*computerevent.Head, error) {
 		return nil, fmt.Errorf("computer event projection: read head: %w", err)
 	}
 	return &head, nil
+}
+
+// NewestEventOfKind reports the newest finalized event of kind on this
+// store's local index: its sequence and when it finalized. It reads the local
+// index only, never the tape.
+func (s *Store) NewestEventOfKind(ctx context.Context, computerID string, kind computerevent.EventKind) (sequence uint64, at time.Time, found bool, err error) {
+	db := s.ReadDB()
+	if db == nil {
+		return 0, time.Time{}, false, fmt.Errorf("computer event index: nil store")
+	}
+	var finalized sql.NullTime
+	var prepared time.Time
+	row := db.QueryRowContext(ctx, `SELECT sequence, finalized_at, prepared_at FROM computer_event_index WHERE computer_id=? AND event_kind=? AND status='finalized' ORDER BY sequence DESC LIMIT 1`, computerID, string(kind))
+	if err := row.Scan(&sequence, &finalized, &prepared); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, time.Time{}, false, nil
+		}
+		return 0, time.Time{}, false, fmt.Errorf("computer event index: newest %s: %w", kind, err)
+	}
+	at = prepared
+	if finalized.Valid {
+		at = finalized.Time
+	}
+	return sequence, at, true, nil
 }
 
 func (s *Store) Prepare(ctx context.Context, request computerevent.CASRequest) error {

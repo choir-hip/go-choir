@@ -212,7 +212,7 @@ func TestMaterializeRestoresTheNewestSnapshotWhenTheDiskIsMissing(t *testing.T) 
 	}
 	ref, err := snapshot.TakeSnapshot(ctx, snapshot.Config{
 		ComputerID: computerID, DB: source.Read, TempDir: t.TempDir(),
-		Head: func(context.Context) (*computerevent.Head, error) {
+		Head: func(context.Context, *sql.DB) (*computerevent.Head, error) {
 			return &computerevent.Head{ComputerID: computerID, Sequence: 7, CanonicalEventHead: strings.Repeat("b", 64)}, nil
 		},
 		Witness:  witnessOf,

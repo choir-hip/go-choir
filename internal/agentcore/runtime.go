@@ -110,6 +110,8 @@ type Runtime struct {
 	sourceSweepStop chan struct{}
 	// cadence is the automatic checkpoint bind (checkpoint_cadence.go).
 	cadence checkpointCadence
+	// snapshots is the periodic snapshot producer (snapshot_producer.go).
+	snapshots snapshotProducer
 
 	runningMu sync.Mutex
 	running   map[string]context.CancelFunc // loop_id → cancel function
@@ -1012,6 +1014,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// binds nothing before its initial delay, and counts from the platform's
 	// newest checkpoint (checkpoint_cadence.go).
 	rt.startCheckpointCadence(ctx)
+	// Snapshots: a computer with no snapshot takes one once boot has settled,
+	// then one per interval (snapshot_producer.go). Same rule: nothing at boot.
+	rt.startSnapshotProducer(ctx)
 	// U1: the guest source repository follows the effective release. Spawned,
 	// because git on a large repository is seconds; the cast gate reconciles
 	// again before it uses the repository.
@@ -1093,6 +1098,7 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
 	rt.stopCheckpointCadence()
+	rt.stopSnapshotProducer()
 	rt.stopProjector()
 	rt.stopSourceScheduleSweep()
 	rt.stopEventLayer()

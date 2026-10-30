@@ -147,8 +147,13 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 		return plan, false, nil
 	}
 
-	// An empty store with a chain: this computer's disk is missing.
-	if _, err := os.Stat(choirstore.LegacyDoltWorkspacePath(storePath)); err == nil {
+	// An empty store with a chain: this computer's disk is missing. The legacy
+	// branch is for a workspace that still holds a Dolt database. The bare
+	// directory is not that test: store.Open always creates the .texture
+	// sidecar beside the state file, so a stat of it is true on every
+	// production computer and would hide snapshot install, the bounded tail and
+	// the typed base_missing refusal.
+	if legacyDoltWorkspaceHoldsDatabase(choirstore.LegacyDoltWorkspacePath(storePath)) {
 		log.Printf("autoputer: legacy Dolt workspace present beside an empty store for %s; the guest migrator owns this boot", computerID)
 		return recoveryplan.RecoveryPlan{Action: recoveryplan.RecoveryResume, TargetSequence: targetSeq, Reason: "legacy Dolt workspace awaits migration"}, false, nil
 	}

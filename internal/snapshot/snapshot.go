@@ -53,6 +53,9 @@ const (
 	scanPageSize = computerevent.EventReplayPageSize
 )
 
+// ErrTooLarge means the copy exceeds Config.MaxPlaintextBytes.
+var ErrTooLarge = errors.New("snapshot: store copy exceeds the size cap")
+
 // ErrNoSnapshot means the tape holds no usable snapshot_recorded event.
 var ErrNoSnapshot = errors.New("snapshot: no snapshot on the tape")
 
@@ -104,23 +107,28 @@ type RootRegistrar interface {
 }
 
 // Appender is the slice of computerevent.ComputerEventAppender TakeSnapshot
-// needs.
+// needs. It does not include HoldAppends: the capture takes no append hold.
 type Appender interface {
-	HoldAppends(fn func() error) error
 	AppendNewPrivatePayload(ctx context.Context, event computerevent.Event, input computerevent.TransitionInput, plaintext []byte, mediaType string, cipher *computerevent.PrivateArtifactCipher) (computerevent.Receipt, string, error)
 }
 
 // Config is what TakeSnapshot needs.
 type Config struct {
 	ComputerID string
-	// DB is any handle on the live store; VACUUM INTO reads a committed
-	// snapshot through it.
+	// DB is the live store's READ pool (dbx SQLiteDB.Read, mode=ro), never the
+	// single write connection: VACUUM INTO reads one committed snapshot
+	// through it while writers keep committing, so a 30 GB store blocks no
+	// write and no append for the minutes the copy takes.
 	DB *sql.DB
 	// TempDir holds the VACUUM INTO file until it is uploaded. It must have
-	// room for the store; the live volume's scratch directory is right.
+	// room for the store: the data volume beside the store, not tmpfs.
 	TempDir string
-	// Head reads the store's event head (nil for an empty store).
-	Head func(ctx context.Context) (*computerevent.Head, error)
+	// Head reads the event head from a handle on the COPY (nil for an empty
+	// store). The copy carries the store's own head and projection tables,
+	// committed in the same transactions as the state, so the head read there
+	// is exactly the head the file captures; a head read from the live store
+	// would race the writers.
+	Head func(ctx context.Context, snapshotDB *sql.DB) (*computerevent.Head, error)
 	// Witness computes the witness v3 of a read handle on the snapshot copy,
 	// with the same extractor configuration as the live witness.
 	Witness func(ctx context.Context, snapshotDB *sql.DB) (selfdevprotocol.VMLocalContentWitness, error)
@@ -129,6 +137,9 @@ type Config struct {
 	Cipher       *computerevent.PrivateArtifactCipher
 	Chunks       ChunkStore
 	Appender     Appender
+	// MaxPlaintextBytes, when positive, refuses a copy larger than it before
+	// anything is uploaded (ErrTooLarge).
+	MaxPlaintextBytes int64
 	// Now overrides the clock in tests.
 	Now func() time.Time
 }
@@ -147,11 +158,12 @@ func (c Config) validate() error {
 	return nil
 }
 
-// TakeSnapshot writes the store with VACUUM INTO, seals and stores it, and
-// appends the snapshot_recorded event. The head is read in the same append
-// hold as the VACUUM, so the file is the state at exactly that head; the
-// witness is computed from the copy, outside the hold, so appends wait only
-// for the VACUUM.
+// TakeSnapshot writes the store with VACUUM INTO on the read pool, seals and
+// stores it, and appends the snapshot_recorded event. Nothing is held: writers
+// and appends continue while the copy is made. VACUUM INTO reads one
+// consistent committed state, the head and the witness are both read from the
+// copy, and the events committed after the copy are the tape tail Restore
+// replays.
 func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if err := cfg.validate(); err != nil {
 		return Ref{}, err
@@ -181,19 +193,13 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		_ = os.Remove(copyPath + "-shm")
 	}()
 
-	var head *computerevent.Head
-	capture := func() error {
-		var err error
-		if head, err = cfg.Head(ctx); err != nil {
-			return fmt.Errorf("snapshot: read store head: %w", err)
-		}
-		if _, err = cfg.DB.ExecContext(ctx, "VACUUM INTO ?", copyPath); err != nil {
-			return fmt.Errorf("snapshot: vacuum into: %w", err)
-		}
-		return nil
+	if _, err := cfg.DB.ExecContext(ctx, "VACUUM INTO ?", copyPath); err != nil {
+		return Ref{}, fmt.Errorf("snapshot: vacuum into: %w", err)
 	}
-	if err := cfg.Appender.HoldAppends(capture); err != nil {
-		return Ref{}, err
+	if cfg.MaxPlaintextBytes > 0 {
+		if info, err := os.Stat(copyPath); err == nil && info.Size() > cfg.MaxPlaintextBytes {
+			return Ref{}, fmt.Errorf("%w: %d bytes, cap %d", ErrTooLarge, info.Size(), cfg.MaxPlaintextBytes)
+		}
 	}
 
 	// The copy is a rollback-journal file; the dbx opener switches it to WAL,
@@ -203,8 +209,16 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 	if err != nil {
 		return Ref{}, fmt.Errorf("snapshot: open copy: %w", err)
 	}
-	witness, werr := cfg.Witness(ctx, snapDB.Read)
+	head, herr := cfg.Head(ctx, snapDB.Read)
+	var witness selfdevprotocol.VMLocalContentWitness
+	var werr error
+	if herr == nil {
+		witness, werr = cfg.Witness(ctx, snapDB.Read)
+	}
 	_ = snapDB.Close()
+	if herr != nil {
+		return Ref{}, fmt.Errorf("snapshot: read head of the copy: %w", herr)
+	}
 	if werr != nil {
 		return Ref{}, fmt.Errorf("snapshot: witness of the copy: %w", werr)
 	}
@@ -382,6 +396,11 @@ func Install(ctx context.Context, cfg RestoreConfig, candidates []Candidate) (Re
 // maxCandidates bounds the snapshots kept while scanning; older ones are only
 // reached if the newer ones are unusable.
 const maxCandidates = 4
+
+// MaxCandidates is the number of newest snapshots a restore considers. The
+// platform keeps at least this many snapshot roots live
+// (internal/platform snapshot_roots.go), so every candidate's chunks survive.
+const MaxCandidates = maxCandidates
 
 // Scan reads the tape from its start and returns the newest snapshot_recorded
 // events (oldest first). visit, when set, sees every event in order and stops
