@@ -515,12 +515,14 @@ rename. The directory has its own hash-chained audit log. Today's Go
 literal is compiled in as **version 1**. It is also the fallback when the
 directory is empty or unreadable, so a fresh host works as it does now.
 
-**Why not Store A?** The gateway has no Dolt dependency today, and it
-serves every inference call. Putting the policy behind Dolt would make
-every model call fate-share with the platform store (standing question 7).
+**Why not the control database?** (Written against Store A; Store A is now
+the PostgreSQL control database.) The gateway has no database dependency
+today, and it serves every inference call. Putting the policy behind the
+control database would make every model call fate-share with the platform
+store (standing question 7).
 A small file document read at boot and on change keeps the gateway's read
 path as it is. If later work needs the policy queried with other platform
-state, Store A can take a projection of this document; it must not become
+state, the control database can take a projection of this document; it must not become
 a second authority.
 
 ### 3.2 Distribution and enforcement
@@ -926,8 +928,9 @@ pool, per-task routing finer than a pool, and cost-aware routing.
    override are also owner decisions, and so are rulings R1 to R5 of
    2026-10-23 (section 9). Everything else here waits for ratification.
 2. **Does it conform to settled decisions?**
-   - Two Dolt stores: yes. It adds no Dolt store. Vault and policy are
-     gateway files (3.1).
+   - Host PostgreSQL (control and graph databases) plus guest SQLite: yes. It
+     adds no database. Vault and policy are gateway files (3.1). (Written
+     against the former two-Dolt-store rule.)
    - Platform-owned secrets and catalog, with computer-owned per-computer
      policy: yes. The host never writes a guest file (3.4).
    - Desks act by semantic act, management does not mutate, and research

@@ -1,6 +1,6 @@
 # Platform OS And App State
 
-**Status:** canonical platform-level state ledger — **stale as of 2026-09-22**;
+**Status:** canonical platform-level state ledger — **stale as of 2026-09-22** (storage facts refreshed 2026-10-30: Dolt is deleted, guests run SQLite, the host runs PostgreSQL);
 predates the RLM carrier cutover and precommitment-records direction. Read as
 a substrate reference; current mission state lives in `ACTIVE.md` and the
 [RLM Engineering Carrier](archive/choir-rlm-engineering-carrier-2026-09-11.md).
@@ -24,16 +24,16 @@ computer lifecycle, self-development, or public/default behavior changes.
 this narrative if they drift. At this revision it registers 18 surfaces:
 
 ```text
-Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Universal Wire,
+Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Autopaper,
 Podcast, Image, Audio, Video, PDF, EPUB, Slides, Calendar, Source,
 Super Console, Settings
 ```
-(2026-10-14: "Universal Wire" is the pre-rename app name for Autopaper; the
+(2026-10-14: Autopaper was previously named Universal Wire; the
 registry has since changed, so treat this list as a 2026-07 snapshot.)
 
 Registration means code-live surface, not feature completeness or semantic
-endorsement of its visible name. `Universal Wire` is retained implementation
-vocabulary pending the Autopaper rename (docs/autopaper-sw-design-2026-10-09.md section 9); Source is the hidden reader/viewer
+endorsement of its visible name. The old name Universal Wire is retained implementation
+vocabulary in code pending the Autopaper rename (docs/autopaper-sw-design-2026-10-09.md section 9); Source is the hidden reader/viewer
 path. Detailed rows below describe selected high-impact surfaces; absence of a
 row does not mean absence from the registry.
 
@@ -107,11 +107,11 @@ platform docs record the common baseline and the desired divergence semantics.
   `choir-ip.com` is legacy DNS and still needs Cloudflare authority/credentials
   before it can redirect reliably to the current primary domain.
 - **Runtime shape:** Go proxy/runtime services, Svelte frontend, `vmctl`, NixOS
-  host services, Firecracker-backed user computers, and embedded per-user Dolt
-  for runtime/control product state.
+  host services, Firecracker-backed user computers, and per-user SQLite
+  (`state.db`) for runtime/control product state, with host PostgreSQL (control and graph databases) for platform state (updated 2026-10-30).
 - **Public platform state:** host/platform services own accounts, routing,
   lifecycle, publication/public artifact records, and aggregate health. Browsers
-  do not talk to Dolt directly.
+  do not talk to a database directly.
 - **Computer lifecycle and disk retention:** primary computer realizations stay
   warm while capacity allows; configured always-on primaries have a protected
   lane. Reclaim ranks unprotected idle realizations. Obsolete worker/candidate
@@ -289,10 +289,10 @@ Known gaps:
 ## Live State Rules
 
 - User-computer state that must follow a user across devices belongs in
-  product APIs backed by embedded Dolt, not browser storage.
+  product APIs backed by the guest SQLite store, not browser storage.
 - `/api/ws` is the owner/computer-scoped notification and catch-up fabric for
   product events. It is not canonical storage.
-- Desktop live sync is canonicalized through Dolt-backed product APIs:
+- Desktop live sync is canonicalized through guest-store-backed product APIs:
   `desktop_sessions`, `desktop_app_instances`, and
   `desktop_window_placements` split presence/driver state, shared app identity,
   semantic order, and session-local placement/focus.

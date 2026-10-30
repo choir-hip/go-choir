@@ -5,6 +5,13 @@ operational invariant class beside the doctrine's derived semantic invariants
 (`docs/choir-doctrine.md` § Derived Architectural Invariants). Not doctrine
 until promoted. Doctrine wins on conflict.
 
+Status 2026-10-30: evidence ids below name Dolt-era problems (Store A, the
+guest Dolt workspaces, corpus-dolt, "world wire", now Autopaper). Those
+stores were deleted in the data system cutover (host PostgreSQL, guest
+SQLite, the tape); the invariants stand and the evidence is historical. The
+audit-record retention in O22 now concerns the control database and the
+sealed tape segments.
+
 ## Why this exists
 
 The doctrine states Choir's **semantic** invariants precisely (I1…: writer
