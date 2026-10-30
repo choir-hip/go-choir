@@ -15,7 +15,7 @@ import (
 )
 
 // The failure modes these fixtures cover are listed in
-// docs/reports/patch-lanes-plan-2026-10-15.md, slice 1.
+// docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 1.
 
 type system struct {
 	name     string

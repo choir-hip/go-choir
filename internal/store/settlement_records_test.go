@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Cut 2 breakage B10 (docs/problems/reeng-cut2-breakage-2026-10-13.md): on
+// Cut 2 breakage B10 (docs/archive/problems/reeng-cut2-breakage-2026-10-13.md): on
 // the records route the records are the work, so a trajectory is not ready
 // to settle while its Texture has unread records or an open round.
 //

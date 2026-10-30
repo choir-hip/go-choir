@@ -2,7 +2,7 @@
 //
 // Proves the Cut 0 invariant checker on planted violations before any pass
 // is trusted (acceptance row "checker on planted-violation copies",
-// docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md). A realistic
+// docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md). A realistic
 // synthetic bundle (the shape of docs/reports/reeng-trace-bundle-format-2026-10-12.md:
 // a prompt-bar story, Texture/management/research desks, a crash drill
 // mid-run, an owner follow-up after the boot, publication) passes I1-I5.

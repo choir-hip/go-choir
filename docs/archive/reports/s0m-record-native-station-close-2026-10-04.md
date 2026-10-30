@@ -89,19 +89,19 @@ docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md.
 Deployed terminal commit: a4fcdb8d, deployed under CI run 37165170516
 (confirmed by x-choir-build-commit). Boundary-close receipts:
 docs/evidence/s0m-ask-acceptance-2026-10-04.json (trajectory 684ddcb1),
-docs/evidence/s0m-stranded-bound-disposable-2026-10-04.json
+docs/archive/evidence/s0m-stranded-bound-disposable-2026-10-04.json
 (disposable computer-ca3a2cf9: cancel -> claim released -> rebound ->
 incorporated),
-docs/evidence/s0m-channel-mail-reject-2026-10-04.json
+docs/archive/evidence/s0m-channel-mail-reject-2026-10-04.json
 (trajectory aef9a197: choir.Emit to "texture" refused at cast time).
 Consume-marking fix: d61c9b1b; idle-mask fix: d20483e8; channel-mail
 reject: b18f3baf; stranded-bound release: c9180cd3; mint-retry fix:
 ebfd2e98.
 Problem docs opened by the station:
-docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md,
-docs/problems/s0m-management-live-occurrence-storm-2026-10-03.md,
-docs/problems/s0m-guest-runtime-deploy-gap-2026-10-02.md,
-docs/problems/node-b-deploy-disk-headroom-2026-10-04.md,
-docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md.
+docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md,
+docs/archive/problems/s0m-management-live-occurrence-storm-2026-10-03.md,
+docs/archive/problems/s0m-guest-runtime-deploy-gap-2026-10-02.md,
+docs/archive/problems/node-b-deploy-disk-headroom-2026-10-04.md,
+docs/archive/problems/s0b-registration-computer-missing-genesis-2026-10-04.md.
 Texture model drift record:
-docs/evidence/s0m-texture-model-swap-2026-10-02.md.
+docs/archive/evidence/s0m-texture-model-swap-2026-10-02.md.

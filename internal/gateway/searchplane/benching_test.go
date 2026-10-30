@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Benching model (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+// Benching model (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 // Ways it can fail, written before the code:
 //  1. A bench stops being set at all (a real 402 must still bench).
 //  2. The episode test is too wide, so a provider in a true outage is

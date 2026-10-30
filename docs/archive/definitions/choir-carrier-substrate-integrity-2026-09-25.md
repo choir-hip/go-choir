@@ -165,7 +165,7 @@ now:
     scope_if_supported: all desk assignments, including management's own
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11
   decision:
     what: >-
       Fold both repairs into one substrate-integrity mission on the spine;
@@ -173,7 +173,7 @@ now:
       atomic-or-recovering.
     kind: operational
     status: settled
-    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11.2/§11.4
+    evidence_ref: docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11.2/§11.4
     owner_ratification_ref: owner 2026-09-25 — plan §11 + this goal ratified
   belief:
     believed_state: >-

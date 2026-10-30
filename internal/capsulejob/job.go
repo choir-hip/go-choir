@@ -75,7 +75,7 @@ const (
 	// Claude delegate's `choir-delegate wait`).
 	WaitMaxSeconds = 25
 	// MaxMemoryMiB bounds a job's declared memory need: the default hotplug
-	// region (docs/reports/memory-hotplug-controller-design-2026-10-14.md
+	// region (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md
 	// section 9).
 	MaxMemoryMiB = 4096
 

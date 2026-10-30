@@ -15,7 +15,7 @@ import (
 )
 
 // SoftwareReleaseKind is the Store B object a published release record is
-// (P7, docs/reports/p6-p8-release-adopt-2026-10-15.md). Its body is the
+// (P7, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md). Its body is the
 // record's canonical JSON; its id names the publisher's owner and the
 // release id (the record's sha256).
 const SoftwareReleaseKind objectgraph.ObjectKind = "choir.software_release"

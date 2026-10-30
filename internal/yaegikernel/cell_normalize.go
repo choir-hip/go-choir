@@ -153,7 +153,7 @@ func (s *Session) normalizeCellSource(src string) string {
 // as a declaration, and retries it as `package main; func main() { ... }`
 // in file mode: an installed main that re-runs on every later cell, so the
 // closure's staged intents replay into cells that staged nothing (F2,
-// docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md). A leading empty
+// docs/archive/problems/prompt-bar-minesweeper-demo-2026-10-10.md). A leading empty
 // statement makes the first token a semicolon, so yaegi takes its ordinary
 // statement path and evaluates the fragment exactly once.
 //
@@ -181,7 +181,7 @@ func guardLeadingFuncStatement(src string) string {
 // the loop variable never ends; a constant-true condition takes forStmt3,
 // which is wired correctly. On the paper such cells grew until the guest
 // OOM killer took a worker and then the daemon
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 //
 // It scans tokens rather than parsing, so it reaches every cell shape. A
 // header ends at its first brace outside parentheses and brackets, as in

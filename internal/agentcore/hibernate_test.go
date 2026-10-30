@@ -13,7 +13,7 @@ import (
 )
 
 // S3 snapshot hibernate, guest fence
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 //
 // Ways this could fail, written first:
 //   - the fence closes while a work occurrence is inside, so the snapshot

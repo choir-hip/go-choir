@@ -16,8 +16,8 @@ import (
 )
 
 // Corpus search and URL citation lookup over all of a computer's captures
-// (rungs 2-3 of docs/reports/object-graph-retrieval-research-2026-10-14.md;
-// problem record docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+// (rungs 2-3 of docs/archive/reports/object-graph-retrieval-research-2026-10-14.md;
+// problem record docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 // corpusd answers from its capture projection and term table; the guest
 // still ranks with its own matcher. Any refusal (route absent on an older
 // corpusd, projection still building, CORPUSD_CAPTURE_SEARCH=off on the

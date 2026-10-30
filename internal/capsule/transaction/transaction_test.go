@@ -159,7 +159,7 @@ func TestCapsuleEffectBundleValidateRefusesIncompleteFreeze(t *testing.T) {
 // capsule-go-eval:sha256: receipt refs — the prefix capsule-go-eval cells mint
 // (capsule/executor.go:722) and the executor resolves (executor.go:879).
 // Requiring capsule-exec: alone made every prompted freeze unbuildable;
-// receipt: docs/problems/m11-freeze-secret-screen-and-ref-prefix-2026-09-28.md.
+// receipt: docs/archive/problems/m11-freeze-secret-screen-and-ref-prefix-2026-09-28.md.
 func TestCapsuleEffectBundleValidateAcceptsGoEvalReceiptRefs(t *testing.T) {
 	digest := func(fill byte) string { return repeatHex(fill) }
 	bundle := CapsuleEffectBundle{
@@ -184,7 +184,7 @@ func TestCapsuleEffectBundleValidateAcceptsGoEvalReceiptRefs(t *testing.T) {
 }
 
 // A bundle's release_binary provenance must bind the release's bin/autoputer
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // A6/A7): a record naming another hash, an unknown origin, or a reused binary
 // without equal running and source commits is refused; a legacy bundle
 // without the record still validates.

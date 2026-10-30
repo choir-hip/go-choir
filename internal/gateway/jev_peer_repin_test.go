@@ -12,7 +12,7 @@ import (
 )
 
 // The Jev bearer follows its computer across boots
-// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md, finding 2).
+// (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md, finding 2).
 // A computer keeps its gateway token across boots, but its guest address
 // comes from the host port of each boot. The Jev route pins the bearer to
 // the first address that used it, so after a cold boot onto a new port

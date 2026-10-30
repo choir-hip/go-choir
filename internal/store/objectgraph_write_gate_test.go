@@ -13,7 +13,7 @@ import (
 // The write gate refuses new writes of unregistered kinds on the computer's
 // store, but replay of a tape that already carries one still projects it
 // (H-OG1, failure mode F3 in
-// docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+// docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 func TestObjectGraphWriteGateRefusesNewWritesButReplayProjectsHistory(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

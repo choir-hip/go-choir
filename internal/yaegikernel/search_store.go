@@ -11,7 +11,7 @@ import (
 )
 
 // Async search, worker side (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // choir.SearchStart asks the host to start a search and returns at once. The
 // host streams each provider's answer to the worker as a StreamSearchArrival
 // frame, and the worker's single reader loop (workerMux) writes it into the

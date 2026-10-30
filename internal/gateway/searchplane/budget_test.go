@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Budget routing (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// Budget routing (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md
 // §4.1). Failure modes, numbered as there:
 //  1. The free tier is sufficient and a paid provider is called anyway.
 //  2. The free tier falls short and no paid provider is reached, including

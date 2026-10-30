@@ -75,7 +75,7 @@ func TestSelfDevelopmentVerifierOptionRejectsRelativeSocket(t *testing.T) {
 	}
 }
 
-// B12b (docs/problems/reeng-cut2-breakage-2026-10-13.md): buildRuntimeConfig
+// B12b (docs/archive/problems/reeng-cut2-breakage-2026-10-13.md): buildRuntimeConfig
 // copies the runtime config field by field, and a field it leaves out is
 // read from the guest's environment and then dropped (CHOIR_PROXY_URL was).
 // Every string field LoadConfig sets must survive the copy, except the ones

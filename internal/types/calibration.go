@@ -1,7 +1,7 @@
 package types
 
 // Agent calibration records (calibration level 2,
-// docs/reports/choir-mcp-precommitments-2026-10-14.md). An agent outside the
+// docs/archive/reports/choir-mcp-precommitments-2026-10-14.md). An agent outside the
 // computer's desks (Claude Code, any MCP client) writes a claim with a
 // probability, and scorers append settlements. Both are
 // choir.commitment_record objects with existing record kinds: the claim is a

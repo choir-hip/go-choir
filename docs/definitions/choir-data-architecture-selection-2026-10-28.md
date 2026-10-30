@@ -525,7 +525,7 @@ choir', where one vm controls others). But review this critically."
 FP0 critical review (evidence, not a decision):
 - Supported: the harness is light. Desk workers are about 17 MiB private
   each and Choir's own retained heap about 50 MiB; the daemon's 690 MiB
-  private is mostly the store (docs/evidence/guest-memory-split-balloon-2026-10-14.md;
+  private is mostly the store (docs/archive/evidence/guest-memory-split-balloon-2026-10-14.md;
   docs/problems/daemon-memory-res18-2026-10-22.md). Dolt's versioning is
   read by no product path.
 - Not yet supported: that the engine is the concurrency bottleneck. The
@@ -533,7 +533,7 @@ FP0 critical review (evidence, not a decision):
   mutex was held 70% of 122 s on the paper, about 89% of it reads
   (GetObject 10,701 calls), and the design note's verdict on more slots is
   "nothing: adds waiters" until the work is reduced
-  (docs/design/store-engine-concurrency-2026-10-21.md). SQLite also has one
+  (docs/archive/design/store-engine-concurrency-2026-10-21.md). SQLite also has one
   writer; the win comes from fewer bytes, WAL readers that do not block,
   and an in-process cache of immutable objects, which the refs+CAS model
   makes safe. Raise caps only on a measured curve.
@@ -646,7 +646,7 @@ code, production experiments, engine ratification or the migration.
 
 The [expanded comparison](../evidence/storage-engine-alternatives-2026-10-29.md)
 records primary sources, positive cases, failure mechanisms and qualitative
-falsifiers. The [direction note](../design/data-rearchitecture-2026-10-28.md)
+falsifiers. The [direction note](../archive/design/data-rearchitecture-2026-10-28.md)
 now distinguishes hypotheses from deployed properties and carries the review
 perspectives. Neither is a new execution design or consensus ratification.
 
@@ -768,7 +768,7 @@ or performed in this review; documentation landing does not resolve them.
 
 ## Storage audit 2026-10-29 (FP0): what the disk holds, mapped to the plan
 
-Input: [Node B storage inventory](../evidence/node-b-storage-inventory-2026-10-29.md)
+Input: [Node B storage inventory](../archive/evidence/node-b-storage-inventory-2026-10-29.md)
 (read-only, Sonnet, 2026-10-29), after the owner asked for "a better
 accounting of what all our data is and where its saved and what is
 real/valuable/unique and what is junk". It is a host disk audit, not the
@@ -948,7 +948,7 @@ dropping them, not a history rebuild, is what makes Store A small.
   tables, `sources`, the June publication/provenance/retrieval/artifact/
   consent tables, the empty vtext/issues tables), committed as Dolt commit
   `cgpbr0lk...`. Store A has 35 tables; the four key-escrow tables are
-  intact (279 escrow rows). Evidence: docs/evidence/store-a-pre-split-tables-2026-10-29.md.
+  intact (279 escrow rows). Evidence: docs/archive/evidence/store-a-pre-split-tables-2026-10-29.md.
   R0f-01 (no production writer) settles **confirmed** by that evidence.
 - `go-choir-platform-dolt-squash` then ran by hand: preflight ok, reflink
   backup, squash; **OOM-killed at its 10G MemoryMax after 82 s, 6.6 G read,

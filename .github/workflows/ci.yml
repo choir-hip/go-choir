@@ -100,7 +100,7 @@ jobs:
               # The push before-SHA is never the main plan base: with no
               # trustworthy staging base every lane runs, because a docs-only
               # verdict here also skips deploy-impact
-              # (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+              # (docs/archive/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
               if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
                 health_json="$(mktemp)"
                 curl -fsS --max-time 10 https://choir.news/health >"$health_json" 2>/dev/null || true
@@ -352,7 +352,7 @@ jobs:
         if: success()
         run: scripts/ci-prune-go-cache "$RUNNER_TEMP/go-cache-restored-at"
 
-  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 3):
+  # Report-only (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 3):
   # reachable vulnerabilities for the toolchain go.mod names (its toolchain
   # directive, the production compiler) and the locked modules. Never gates
   # check; the daily Patch Watch workflow files the issues. It waits for check
@@ -383,7 +383,7 @@ jobs:
         run: |
           # Actions runs `bash -e -o pipefail`; a report-only step must not end
           # at govulncheck's non-zero exit or an empty summary grep
-          # (docs/problems/patch-watch-govulncheck-reachable-findings-2026-10-19.md).
+          # (docs/problems/patch-watch-silent-and-open-security-findings-2026-10-26.md).
           set +e
           set -uo pipefail
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govulncheck.txt" 2>&1
@@ -816,7 +816,7 @@ jobs:
       - name: Build frontend
         run: cd frontend && pnpm build
 
-  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 4):
+  # Report-only (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 4):
   # advisories against package-lock.json, the lock the Nix build ships.
   # Runtime dependencies are what users' browsers run; dev dependencies are
   # listed separately. Never gates check; Patch Watch files the issues. Waits

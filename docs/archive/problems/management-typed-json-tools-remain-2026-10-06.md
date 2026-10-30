@@ -116,7 +116,7 @@ pending=2), probe trajectory `afe7e407` submitted, then the live-
 occurrence storm regrew from the replayed backlog (`running_runs: 4`,
 pending=72 within ~15 min) and starved the trajectory again —
 `texture_turn_committed` never appeared. Evidence:
-docs/evidence/smg-rlm-acceptance-2026-10-06b.json.
+docs/archive/evidence/smg-rlm-acceptance-2026-10-06b.json.
 
 Sharpened hypothesis: the storm is not transient work — it is replayed
 persistent-management controls from August trajectories that keep

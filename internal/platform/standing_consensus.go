@@ -1,9 +1,9 @@
 package platform
 
 // P4: standing autonomous acceptance on test computers
-// (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md;
-// docs/reports/selfdev-update-architecture-2026-10-15.md §1.3, P4;
-// docs/reports/principal-identity-and-signed-acts-2026-10-15.md §6 S2).
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md;
+// docs/archive/reports/selfdev-update-architecture-2026-10-15.md §1.3, P4;
+// docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md §6 S2).
 //
 // corpusd is the decision poster. Under an owner's standing_consensus arm it
 // collects the two verification ballots reversible-selfdev-v1 needs, each

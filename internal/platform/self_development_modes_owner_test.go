@@ -17,7 +17,7 @@ import (
 )
 
 // P3: only an owner act may set the self-development mode
-// (docs/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md). The guest's
+// (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md). The guest's
 // event:append capability may only consume the grant the owner armed.
 
 type modeAuthorityFixture struct {

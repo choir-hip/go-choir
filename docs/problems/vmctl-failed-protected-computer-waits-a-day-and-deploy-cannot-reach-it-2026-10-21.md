@@ -5,10 +5,10 @@ Date: 2026-10-21. Status: **fix built** on lane/host-vmctl-b4-b5 (FP3 group
 "we need paper publishing 24/7, even after crashes."
 
 This is the vmctl half of the 50-minute Autopaper outage in
-[stored-column-add-blocks-paper-boot-2026-10-21.md](stored-column-add-blocks-paper-boot-2026-10-21.md)
+[stored-column-add-blocks-paper-boot-2026-10-21.md](../archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md)
 ("What followed", and its "Fix order" item 4), and the second occurrence of
 item 2 of
-[paper-computer-disk-full-outage-2026-10-15.md](paper-computer-disk-full-outage-2026-10-15.md).
+[paper-computer-disk-full-outage-2026-10-15.md](../archive/problems/paper-computer-disk-full-outage-2026-10-15.md).
 Read those for the timeline. This record states the two defects, pins the code
 that causes each, and writes the failure modes before any test.
 

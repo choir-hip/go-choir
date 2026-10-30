@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cut 0 tracer (docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md, artifact 2;
+// Cut 0 tracer (docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md, artifact 2;
 // bundle contract docs/reports/reeng-trace-bundle-format-2026-10-12.md).
 //
 // One attempt:
@@ -117,7 +117,7 @@ if (!['story', 'crash', 'management', 'research', 'paper', 'engineering', 'adopt
 // which touches no Go input; go asks for a Go file and its test, so Freeze
 // must build bin/autoputer and the desk must run the build and the test as
 // capsule jobs (docs/design/capsule-long-exec-2026-10-15.md §7). go-served
-// is Station A's probe (P5, docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+// is Station A's probe (P5, docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md):
 // a guest route GET /api/selfdev-probe that answers the run's nonce, which
 // only a binary built from the patched source can serve. The claim adds:
 // the route does not serve the nonce before apply, serves it after apply
@@ -180,7 +180,7 @@ if (REQUIRE_SERVED && (GO_CHANGE || REWRITE)) {
   process.exit(2);
 }
 // --autonomous (engineering scenario; P4,
-// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md): the drill's
+// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md): the drill's
 // only owner act is arming standing_consensus once (reversible-selfdev-v1,
 // for --autonomy-min minutes, at most 24 h; test-tier computers only). There
 // is no owner_approval step: corpusd's decision poster decides from the host
@@ -1122,7 +1122,7 @@ async function paperScenario(c, out, n, deadline, phase) {
     }
     // Each opened story's publication, read as its owner by doc id: the
     // front list shows only the allowlisted paper owner's stories, never a
-    // minted test computer's (docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md).
+    // minted test computer's (docs/archive/problems/tracer-paper-blind-to-test-publications-2026-10-13.md).
     for (const story of claim.stories) {
       const r = await c.api(`/api/platform/texture/publications?doc_id=${encodeURIComponent(story.doc_id)}`);
       if (r.status !== 200 || !r.body) continue;
@@ -1172,8 +1172,8 @@ async function paperScenario(c, out, n, deadline, phase) {
 // ---- engineering scenario ----------------------------------------------------
 //
 // engineeringScenario is the cut-1 self-development drill on records (C1e
-// step 4, acceptance 3; docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
-// design docs/reports/c1e-b1-design-note-2026-10-13.md). On a fresh test
+// step 4, acceptance 3; docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
+// design docs/archive/reports/c1e-b1-design-note-2026-10-13.md). On a fresh test
 // computer: the owner arms propose_only (Freeze opens a candidate only under
 // a proposing mode; a fresh computer's mode is off), then asks for one small
 // change only engineering can make (a static file on the computer's frontend
@@ -1572,7 +1572,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
   await served('pre_apply');
   if (CHANGE === 'go-served') await probe('pre_apply');
   // The computer binds checkpoints itself (POST /lifecycle/checkpoint is
-  // deleted: docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4);
+  // deleted: docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4);
   // the restore target is the newest it has bound, at or before this head.
   const pinPreApplyCheckpoint = async () => {
     const { checkpoint, row, error } = await pinNewestCheckpoint((p) => c.api(p, 'GET', undefined, RESTORE_MIN * 60_000), lc);
@@ -1935,7 +1935,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
 // ---- adopt scenario (Station B minimal, P8) --------------------------------
 //
 // adoptScenario proves source adoption onto the adopter's own tree
-// (docs/reports/p6-p8-release-adopt-2026-10-15.md, "Station B tracer probe"):
+// (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md, "Station B tracer probe"):
 //   1. computer A (this attempt's mint) runs the engineering drill (static
 //      change) to applied, with no restore;
 //   2. A's owner publishes the applied operation as a release R
@@ -2346,7 +2346,7 @@ const RECEIPT_PATH = join(TRACE_DIR, 'receipt.json');
 
 // The receipt goes to disk as each phase happens, marked in_progress, so a
 // kill (even SIGKILL) leaves the minted computer and the phases
-// (docs/problems/tracer-killed-leaves-computer-running-2026-10-15.md).
+// (docs/archive/problems/tracer-killed-leaves-computer-running-2026-10-15.md).
 function persistReceipt() {
   try {
     writePrivate(RECEIPT_PATH, `${JSON.stringify(inProgressReceipt(receipt, iso()), null, 2)}\n`);

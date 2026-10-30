@@ -57,7 +57,7 @@ func main() {
 
 	// Retrieval indexes and projections build beside the listener: corpusd
 	// serves on the old query shapes until each one reports live
-	// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+	// (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 	store.StartRetrievalMigrations(context.Background(), 10*time.Minute)
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
@@ -161,7 +161,7 @@ func main() {
 			log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 		}
 	}
-	// P4 decision poster (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md):
+	// P4 decision poster (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md):
 	// under an owner's standing arm it mints a ConsensusDecisionReceipt from
 	// the host's capsule-verifier ballot on this operation's P5 host build
 	// (signed here, platform-control) and the guest's signed reviewer

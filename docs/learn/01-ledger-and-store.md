@@ -51,7 +51,7 @@ If you only have twenty minutes, read "The short answer", section 2.3
    them as a `projection_batch_recorded` event, appends it, and only then
    applies it to Dolt (`internal/store/projection_tape.go`). So the cost of
    a write is the cost of an append: about five host round trips and two
-   serializable transactions (doc: [CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md) §1c).
+   serializable transactions (doc: [CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §1c).
 4. **The commitment ledger is records on that tape.** Precommits,
    reports, resolves, disagreements and directives are typed
    `CommitmentRecord`s (`internal/types/commitment.go`) stored as
@@ -63,7 +63,7 @@ If you only have twenty minutes, read "The short answer", section 2.3
    write amplification and history that garbage collection cannot reclaim
    while any commit references it. Choir learned this the hard way: 6.9
    million per-mutation commits grew the platform store to 218 GB
-   (doc: [218 GB evidence](../evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)).
+   (doc: [218 GB evidence](../archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)).
    Choir now commits on a debounce and barely uses Dolt's history features
    at all: no production query uses `AS OF` (code, by search).
 6. **There are three Dolt stores, not two.** Store A is the host's
@@ -79,14 +79,14 @@ If you only have twenty minutes, read "The short answer", section 2.3
    73% of the paper computer's main-process CPU was the embedded Dolt
    engine, and 52% was one access path that filters every commitment record
    by a JSON field no index can see (doc:
-   [guest CPU is unindexed store scans](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
+   [guest CPU is unindexed store scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
    The cost grows with records ever written, not with work done.
 9. **The fix is an access path, not a patch.** An indexed replacement half
    exists (`metadataIndexColumns`, generated columns) but is wired into
    only the unpaged read. Wire it in, add the missing fields, then move hot
    reads onto typed projection tables, and guard every shipped query with a
    plan-shape test, because Dolt's planner can turn 1.5 ms into 12 s when
-   one index is added (doc: [retrieval research](../reports/object-graph-retrieval-research-2026-10-14.md) §4 G).
+   one index is added (doc: [retrieval research](../archive/reports/object-graph-retrieval-research-2026-10-14.md) §4 G).
 
 ## 1. Primer: logs, chains, compare-and-swap and event sourcing
 
@@ -391,7 +391,7 @@ This is the design's strongest property and its biggest cost:
   canonical-JSON passes, one ed25519 verification, a dry-run serializable
   transaction that applies the projection and rolls back, an insert, and a
   second serializable transaction that applies it again (doc: [CPU
-  efficiency](../reports/computer-cpu-efficiency-2026-10-14.md) §1c). The
+  efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §1c). The
   measured share was 8 to 10% of the main process, plus about 0.18 cores
   of host work. That is significant but not the main cost; section 7 is.
 
@@ -421,17 +421,17 @@ identical before and after. Its comment states the principle: "The
 projection store is a cache of the tape (O21) and nothing reads its Dolt
 history." The owner store measured 8.9 GiB of which history and old chunk
 generations were 81%; `dolt gc --full` after squashing took it to 1.7 GiB
-(doc: [guest store history bloat](../problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
+(doc: [guest store history bloat](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
 
 ### 2.7 Where the tape is weak
 
 | weakness | evidence | why it matters |
 |---|---|---|
-| **Per-write overhead.** Five round trips, two serializable transactions, many JSON canonicalizations per small object write. | doc: [CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md) §1c, levers C6/C7 | Write latency and host CPU scale with object writes, which agents produce in bulk. |
-| **Replay page scanned the whole chain.** `WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?` took 3.6 s even when it returned zero rows, because Dolt chose the primary key `(computer_id, idempotency_key)` and ignored the unique `(computer_id, sequence)` index. It caused a deploy rollback. | doc: [replay page scans](../problems/replay-page-query-scans-whole-chain-2026-10-09.md); fixed in code as point lookups `sequence IN (...)` (`internal/platform/event_replay.go`) | A query planner choice turned recovery into a 34-minute operation. Section 8 explains why. |
+| **Per-write overhead.** Five round trips, two serializable transactions, many JSON canonicalizations per small object write. | doc: [CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §1c, levers C6/C7 | Write latency and host CPU scale with object writes, which agents produce in bulk. |
+| **Replay page scanned the whole chain.** `WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?` took 3.6 s even when it returned zero rows, because Dolt chose the primary key `(computer_id, idempotency_key)` and ignored the unique `(computer_id, sequence)` index. It caused a deploy rollback. | doc: [replay page scans](../archive/problems/replay-page-query-scans-whole-chain-2026-10-09.md); fixed in code as point lookups `sequence IN (...)` (`internal/platform/event_replay.go`) | A query planner choice turned recovery into a 34-minute operation. Section 8 explains why. |
 | **Per-run sequence by scan.** `Store.AppendEvent` loads up to 10,000 earlier events of the run with bodies and decodes each to find `max(seq)` (`internal/store/store.go`, `AppendEvent`). `StreamSeq` already moved to an in-memory high-water mark (`maxStreamSeq`); `Seq` did not. | doc: CPU report §1c, measured 4.5 ms per append at 1-50 prior events rising to 25.6 ms at 400-800 | O(n) per append is O(n²) per run. |
 | **Check-then-act around the interceptor.** In `putBatch`, preconditions (`ObjectCondition`) are evaluated under the engine lock, the lock is released, and then the interceptor appends. Nothing at this layer re-checks the conditions when the batch is applied. | code: `internal/objectgraph/dolt_store.go`, `putBatch` | Atomicity of a conditional write in production depends on callers holding their own lock across the call. `CommitInboxRecords` does (it holds `trajectoryMu` across planning and `PutBatchConditional`, `internal/store/inbox.go`). **Inference:** a caller that does not has a time-of-check/time-of-use window. Worth a test. |
-| **Unbounded receipts.** `computer_event_append_receipts` grows one row per event with no declared retention. | doc: [Store A dead data and history](../problems/store-a-dead-wire-data-and-unbounded-history-2026-10-09.md) | Idempotency needs some of it; nobody has said how long. |
+| **Unbounded receipts.** `computer_event_append_receipts` grows one row per event with no declared retention. | doc: Store A dead data and history | Idempotency needs some of it; nobody has said how long. |
 
 ## 3. Commitment records: the ledger on the tape
 
@@ -453,7 +453,7 @@ order. The tape provides both: a record's position in a hash chain whose
 head the host signed is evidence of when it was written. **Inference:** a
 proof of pre-outcome ordering also needs the evidence's own arrival time on
 the same or a comparable clock; the state report notes that "pre-outcome
-ordering is not proven" yet (doc: [state and vision](../reports/choir-state-and-vision-2026-10-14.md) §2.5).
+ordering is not proven" yet (doc: [state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md) §2.5).
 
 ### 3.2 The record type
 
@@ -484,7 +484,7 @@ object graph and therefore through the tape (writers in
 
 Since the P1-P2 protocol work, every inter-desk message is a commitment
 record (Cast, Ask, Note, Report, Resolve) rather than a free message (doc:
-[state and vision](../reports/choir-state-and-vision-2026-10-14.md) §3.3).
+[state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md) §3.3).
 That is a good authority decision: every message is now a durable,
 attributable, ordered commitment. But it changed the *access pattern*.
 Records are now read like a mailbox, constantly:
@@ -588,7 +588,7 @@ Until August, `internal/platform/store.go` and the old cycle store called
 store accumulated 6,903,253 commits and 218 GB in `.dolt/noms/oldgen`
 against about 4.5 GB of live data. GC could not help: "Dolt GC — shallow
 *or* `--full` — preserves everything reachable from any commit on any
-branch" (doc: [218 GB evidence](../evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)).
+branch" (doc: [218 GB evidence](../archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md)).
 Note also the record of how the root cause was found: eleven of twelve
 consensus models approved the wrong hypothesis (shallow GC), and the one
 dissent was right.
@@ -617,7 +617,7 @@ CALL DOLT_BRANCH('experiment'); CALL DOLT_MERGE('experiment'); -- Git-style
 Merges are three-way, cell by cell, with conflicts recorded in system
 tables. The retrieval research measured `AS OF` a tag as fast as a head
 read (8.6 ms p50 versus 22.5 ms at head in one test) and a day's
-`DOLT_COMMIT` at 0.29 s (doc: [retrieval research](../reports/object-graph-retrieval-research-2026-10-14.md) §4 F).
+`DOLT_COMMIT` at 0.29 s (doc: [retrieval research](../archive/reports/object-graph-retrieval-research-2026-10-14.md) §4 F).
 
 **How much of this does Choir use? Almost none.** A search of non-test code
 under `internal/` and `cmd/` finds no `AS OF`, no `dolt_history_` or
@@ -657,8 +657,8 @@ among every goroutine. The guest sets every embedded pool to one connection
 call takes a process-wide `engineMu` (`internal/objectgraph/engine_mutex.go`,
 which also records wait and hold time per caller). The reason was a real
 data race: Dolt's `unescapeHTMLCodepoints` mutated a JSON buffer that
-aliased a shared, cached prolly node (doc: [embedded Dolt single
-connection](../problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md)).
+aliased a shared, cached prolly node (doc: embedded Dolt single
+connection).
 Upstream fixed it on 16 July in 6bea93f2f665; Choir upgraded past it in
 5b0772561, and `go.mod` now pins `github.com/dolthub/dolt/go
 v0.40.5-0.20260716231223-6bea93f2f665` (code). The problem record's plan
@@ -669,7 +669,7 @@ mutex in measured steps". **The first step landed; the second has not**
 The consequence is that every read and write in the guest's object graph
 queues on one lock. An earlier measurement found `engineMu` held about 97%
 of wall time over five minutes under desk drain (doc: retrieval research
-§1.4, citing [texture latency layered evidence](../problems/texture-latency-layered-evidence-2026-10-01.md)).
+§1.4, citing texture latency layered evidence).
 A slow query is therefore not just slow; it delays everything behind it,
 including health and the Texture editor.
 
@@ -747,7 +747,7 @@ Until this week, the registry was consulted on **one** write path,
 `ObjectGraphStore` and its HTTP routes never asked. A source scan found 26
 object kinds and 12 edge kinds being written with no registration,
 including `choir.commitment_record` itself (doc: [object graph
-registration gaps](../problems/object-graph-registration-and-anchor-gaps-2026-10-14.md), H-OG1).
+registration gaps](../archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md), H-OG1).
 Registration was a convention, not a check.
 
 Commit 7f287a135 made it a check. `CheckWrite(objects, edges)` refuses any
@@ -834,8 +834,8 @@ It did not start that way. Before the Store A/B split (19 September), the
 world-wire tables lived beside the event heads. On 9 October Store A still
 held about 17 million rows of abandoned wire data (`og_objects` 6.09M,
 `og_edges` 3.05M, `ingestion_events` 3.00M and more), 22 GB on disk, all in
-old chunk generations, and 86,021 Dolt commits (doc: [Store A dead data and
-history](../problems/store-a-dead-wire-data-and-unbounded-history-2026-10-09.md)).
+old chunk generations, and 86,021 Dolt commits (doc: Store A dead data and
+history).
 The record states the lesson that matters for any Dolt store: "Dropping
 them frees nothing. Dolt history retains every chunk ever committed ...
 Reclaiming needs a history rebuild (a fresh repo from current state)."
@@ -865,7 +865,7 @@ The guest's embedded store "indexes the externally pinned event chain and
 materializes the accepted effective state; it is never the sole durable
 event copy or an alternate head authority" (doc: computer ontology). The
 operational invariant behind it is O21, "a realization holds no unique
-state" (doc: [guest store history bloat](../problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
+state" (doc: [guest store history bloat](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
 If a guest's disk dies, the computer comes back by installing a verified
 projection base and replaying the tape tail. That is also why compaction
 may squash the guest store's Dolt history: nothing depends on it.
@@ -889,7 +889,7 @@ judgments remain as history (doc: [claims, events and entities](../reports/claim
 
 On 14 October at 16:46 UTC a 60-second Go CPU profile was taken of the
 paper computer's main `autoputer` process, with a host sample over the same
-window (doc: [CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md) §1b;
+window (doc: [CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §1b;
 evidence file `docs/evidence/computer-cpu-guest-profile-2026-10-14T1646Z.txt`).
 The numbers:
 
@@ -977,7 +977,7 @@ So the cost model is:
 Both *R* and *k* grow for the life of the computer, and neither depends on
 how much work the run did. The problem record's hypothesis, still
 unmeasured, is that "the paper's CPU per model call rises over the
-computer's life" (doc: [guest CPU is unindexed store scans](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
+computer's life" (doc: [guest CPU is unindexed store scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
 This is the signature of a missing access path: cost proportional to
 history instead of to change.
 
@@ -1015,7 +1015,7 @@ scan-and-filter reads under one engine mutex" (doc: CPU report §1b):
 
 1. the Texture document list going from 0.15 s to 1 to 2.7 s after idle
    (`internal/server/debug_pprof.go` header; doc:
-   [texture list cold latency](../problems/texture-list-cold-latency-2026-10-09.md));
+   [texture list cold latency](../archive/problems/texture-list-cold-latency-2026-10-09.md));
 2. 77% of the main heap under `AppendNewPayload` (doc:
    [Autopaper intake defects](../problems/autopaper-intake-defects-2026-10-14.md));
 3. this CPU profile.
@@ -1072,7 +1072,7 @@ found **functional indexes work** on a JSON path over `LONGTEXT` (a hidden
 generated column; `EXPLAIN` shows `IndexedTableAccess`), "provided the
 query uses the same literal expression: today's code passes the path as a
 bind parameter and wraps `CAST(metadata AS JSON)`, which no index can
-match" (doc: [retrieval research](../reports/object-graph-retrieval-research-2026-10-14.md) §3.1).
+match" (doc: [retrieval research](../archive/reports/object-graph-retrieval-research-2026-10-14.md) §3.1).
 The rule to remember: **the planner matches indexes to expressions by
 text, at plan time. A value supplied later cannot select an index.**
 
@@ -1101,7 +1101,7 @@ names as seen in Choir's reports):
    `computer_id` prefix, read all 576,855 rows of the computer, filtered,
    and sorted. `FORCE INDEX` did not change the plan. Rewriting the range
    as point lookups, `sequence IN (a+1, ..., a+n)`, used the right index:
-   0.02 s instead of 3.6 s (doc: [replay page scans](../problems/replay-page-query-scans-whole-chain-2026-10-09.md);
+   0.02 s instead of 3.6 s (doc: [replay page scans](../archive/problems/replay-page-query-scans-whole-chain-2026-10-09.md);
    the shipped query is in `internal/platform/event_replay.go`). Lesson:
    when a planner will not do a range, an `IN` list of points on a dense
    key is a reliable workaround.
@@ -1286,18 +1286,18 @@ next mechanism only when the current one stops moving the number.
   `AS OF`, history tables, branches, merges or tags is from a text search
   of non-test files under `internal/` and `cmd/`.
 - **Measured numbers** are from the cited reports and problem records, not
-  re-measured here: [computer CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md),
-  [guest CPU is unindexed store scans](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md),
-  [retrieval research](../reports/object-graph-retrieval-research-2026-10-14.md),
-  [replay page scans](../problems/replay-page-query-scans-whole-chain-2026-10-09.md),
-  [218 GB history](../evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md),
-  [Store A dead data](../problems/store-a-dead-wire-data-and-unbounded-history-2026-10-09.md),
-  [guest store history bloat](../problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md),
-  [embedded Dolt single connection](../problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md),
-  [object graph registration gaps](../problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+  re-measured here: [computer CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md),
+  [guest CPU is unindexed store scans](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md),
+  [retrieval research](../archive/reports/object-graph-retrieval-research-2026-10-14.md),
+  [replay page scans](../archive/problems/replay-page-query-scans-whole-chain-2026-10-09.md),
+  [218 GB history](../archive/evidence/platform-dolt-oldgen-218g-dead-history-2026-08-26.md),
+  Store A dead data,
+  [guest store history bloat](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md),
+  embedded Dolt single connection,
+  [object graph registration gaps](../archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 - **Doctrine and design:** [Choir doctrine](../choir-doctrine.md),
   [computer ontology](../computer-ontology.md),
-  [state and vision](../reports/choir-state-and-vision-2026-10-14.md),
+  [state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md),
   [claims, events and entities](../reports/claims-events-entities-ontology-2026-10-14.md),
   [Precommitment Records — Engineering Memo](../precommitment-records.md).
 - **Upstream:** Dolt's documentation on

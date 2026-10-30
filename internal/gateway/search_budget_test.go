@@ -18,7 +18,7 @@ import (
 )
 
 // Budget routing end to end through HandleSearch
-// (docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1). Ways it can
+// (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §4.1). Ways it can
 // fail here (numbers from that record):
 //  1. A sufficient free answer still calls a paid provider.
 //  5. A capped provider is not named with reason "capped" on the start
@@ -265,7 +265,7 @@ func TestSearchClient_StreamBoundGrowsByTheEscalationWindow(t *testing.T) {
 }
 
 // Keenable's monthly pace on the operator route
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md): the
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md): the
 // route shows the period, its use before today, the target and today's
 // cap, so the owner can read the pace against the billing page.
 func TestHandleSearchHealth_ReportsKeenableMonthlyPace(t *testing.T) {

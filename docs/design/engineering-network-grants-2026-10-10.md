@@ -131,7 +131,7 @@ Guest-to-host service ports 8082/8083/8084/8086/8087/8787 are explicitly
 accepted (`manager.go:3366`). Earlier records:
 `docs/problems/s0-tap-egress-unfiltered-2026-10-01.md` (it names "proxy-only
 egress via a recorded capsule proxy" as the intended S1 direction) and
-`docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
+`docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md`.
 
 ### 2.6 Problems found while researching (documentation-first)
 

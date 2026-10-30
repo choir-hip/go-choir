@@ -47,7 +47,7 @@ requester:
   the assignment, for example "a frozen candidate that passes these checks".
   It already makes rule-settled precommitments in its capsule (Freeze,
   Verify, the assignment's end; see
-  [design/psa-precommitment-icrl-status-2026-10-24.md](../design/psa-precommitment-icrl-status-2026-10-24.md)).
+  [design/psa-precommitment-icrl-status-2026-10-24.md](../archive/design/psa-precommitment-icrl-status-2026-10-24.md)).
 - **The settlement.** When the work stops, engineering's event on the tape
   (blocked, capsule revoked) also resolves that precommitment as a failure.
   The stop and its settlement are one fact, not two.

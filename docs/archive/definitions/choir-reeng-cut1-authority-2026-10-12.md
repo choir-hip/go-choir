@@ -74,7 +74,7 @@ start:
       (rlm_reduce.go:364-494, :766-830).
     - >-
       Boot violates the restart rule both ways
-      (docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md).
+      (docs/problems/crash-boots-redrive-applies-2026-10-13.md).
       A markerless boot refuses only pre-boot actor wakes
       (internal/actorruntime/handler.go:105-126, :168-172). Boot phases
       (internal/agentcore/runtime.go:748-761): passivate runs as
@@ -249,7 +249,7 @@ finish:
     conductor_run.yaml:9-13), becomes an owner-emitted Cast to a new
     texture:<doc>.
     (6c) Deletions the dead-code census found for this cut
-    (docs/reports/dead-code-census-2026-10-12.md Part C, B14): the 17
+    (docs/archive/reports/dead-code-census-2026-10-12.md Part C, B14): the 17
     legacy relational tables in internal/store with no production writer
     (agents, runs, channel_messages, inbox_deliveries, run_acceptances,
     run_continuations, trajectories, work_items, browser_sessions,
@@ -371,7 +371,7 @@ boundaries:
   authority_sources:
     - docs/re-engineering-decisions-2026-10-12.md §2, §9, §10, §12 (owner 2026-10-12, including the delegation in §12)
     - CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned Update)"
-    - docs/definitions/choir-reeng-metamission-2026-10-12.md (C1 depends on C0)
+    - docs/archive/definitions/choir-reeng-metamission-2026-10-12.md (C1 depends on C0)
   must_preserve:
     - only the Texture desk writes a Texture
     - a crash restart never resumes work; a planned restart resumes once
@@ -430,12 +430,12 @@ now:
     engineering acts to Texture (reducer test); I6 and I7 in the checker;
     L6 surfaces and prompts teach only callable verbs, with the parity test
     over Texture, research and management prompts. Breakages B1-B4 fixed
-    (docs/problems/reeng-cut1-breakage-2026-10-13.md); B4, a records wake
+    (docs/archive/problems/reeng-cut1-breakage-2026-10-13.md); B4, a records wake
     reactivating a parked Texture run that nobody ran, was found by the
     field run c1-l3b-mgmt-1. Evidence:
-    docs/evidence/c1-core-mgmt-acceptance-2026-10-13.json,
-    docs/evidence/c1-core-crash-acceptance-2026-10-13.json,
-    docs/evidence/c1-l3b-mgmt-field-2026-10-13.json. C1e items remain
+    docs/archive/evidence/c1-core-mgmt-acceptance-2026-10-13.json,
+    docs/archive/evidence/c1-core-crash-acceptance-2026-10-13.json,
+    docs/archive/evidence/c1-l3b-mgmt-field-2026-10-13.json. C1e items remain
     (scope_split below).
   source_ref: 76ab40fd
   deploy_identity: staging 76ab40fd
@@ -463,7 +463,7 @@ now:
       recipient view, read by someone other than the builder
     scope_if_supported: the four root desks and sub-researchers on staging test computers
     status: proposed
-    evidence_refs: [docs/reports/re-engineering-studies-2026-10-12/B-work-items-as-records.md, docs/problems/clustering-texture-obligation-closure-2026-10-09.md]
+    evidence_refs: [docs/archive/reports/re-engineering-studies-2026-10-12/B-work-items-as-records.md, docs/archive/problems/clustering-texture-obligation-closure-2026-10-09.md]
   decision:
     what: >-
       Delivery and identity, chosen for review (prose "Decisions"). D1 an
@@ -497,7 +497,7 @@ now:
     evidence_ref: docs/re-engineering-decisions-2026-10-12.md §2, §12
     owner_ratification_ref: decisions §2 and §12 ratify the direction and delegate the mechanism (§12, "I trust your judgement"); D1-D9 are this file's proposal
   belief:
-    believed_state: the code claims above hold except where L1 changed boot (runtime.go Start, closePreBootRunsAfterCrash); Cut 0 landed (docs/evidence/c0-eyes-acceptance-2026-10-13.json)
+    believed_state: the code claims above hold except where L1 changed boot (runtime.go Start, closePreBootRunsAfterCrash); Cut 0 landed (docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json)
     main_uncertainty: whether one cutover this size converges inside the redesign tripwire
     next_observation: Cut 0's measurements (push-to-healthy-computer time, baselines), then the deletion inventory re-grepped on Cut 0's landed commit
   blocker_or_risk: >-
@@ -509,7 +509,7 @@ now:
     convergent panel (claude opus and deepseek-v4.1-flash answered; codex
     and the two GPT anchors hit usage limits;
     .agentic-consensus/c1-scope-2026-10-13, receipt in
-    docs/reports/reeng-plan-review-2026-10-13.md). C1 closes on its core,
+    docs/archive/reports/reeng-plan-review-2026-10-13.md). C1 closes on its core,
     the conversations Autopaper uses, and the engineering and
     self-development items move to station C1e, run after C2's
     autopaper_live and before the completion review. Reason: engineering
@@ -537,7 +537,7 @@ now:
     blocked on staging and on the owner's computer.
   next_action: >-
     Landing order, revised by the plan review of 2026-10-13
-    (docs/reports/reeng-plan-review-2026-10-13.md). Each push that changes
+    (docs/archive/reports/reeng-plan-review-2026-10-13.md). Each push that changes
     behavior goes through deploy and one claim-directed tracer scenario
     under the identity fence (scripts/reeng_tracer.mjs --scenario,
     --expect-sha). Pushes are batched by dependency, as separate commits.
@@ -550,7 +550,7 @@ now:
     a planned restart allows) until L3 re-derives it from records and
     wakes (D8); passivation itself stays for that path.
     Accepted 2026-10-13 on 50ed3337 by --scenario crash
-    (docs/evidence/c1-l1-crash-acceptance-2026-10-13.json): the run open at
+    (docs/archive/evidence/c1-l1-crash-acceptance-2026-10-13.json): the run open at
     the crash closed with the fate, I3 pass on a 150 s quiet window, 4m54s
     end to end. Field run c1-l1-1
     (6d676094): the in-flight run closed with the fate, nothing moved until

@@ -16,7 +16,7 @@ import (
 )
 
 // S3 snapshot hibernate tests. The failure list these cover is in
-// docs/reports/s3-snapshot-hibernate-design-2026-10-14.md; each test names
+// docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md; each test names
 // the items it pins.
 
 const testFCVersion = "Firecracker v1.15.1"

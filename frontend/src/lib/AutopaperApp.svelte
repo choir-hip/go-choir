@@ -77,7 +77,7 @@
   // A section page is the server's own list for that section (`?section=`),
   // newest first back as far as the paper goes, with its own cursor: it is
   // not a filter over the front page's rows, so a quiet section still shows
-  // its older stories (docs/problems/autopaper-section-pages-empty-2026-10-15.md).
+  // its older stories (docs/archive/problems/autopaper-section-pages-empty-2026-10-15.md).
   type SectionPage = {
     first: FrontStory[];
     older: FrontStory[];

@@ -232,7 +232,7 @@ Each with its effect on memory, read volume, durability and restore.
 3. **The substrate: fewer, bigger tape files (tape segments, A2 repack).**
    The memory is the three flat directories' trees. Segments are on for
    writes (`PLATFORM_TAPE_SEGMENTS=write`,
-   `docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md`), so new
+   `docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md`), so new
    pins stop adding files; the repack of the legacy 9 M files is not built.
    - Memory: the tree peak shrinks with the file count, roughly in
      proportion; the index shrinks too. The real fix for both the backup

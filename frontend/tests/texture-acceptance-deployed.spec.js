@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from './helpers/fixtures.js';
 import { NODE_B_INTERNAL_AUTH } from './helpers/node-b-internal-auth.js';
 
-// Texture acceptance suite (Gate 1 exit item): docs/texture-acceptance-suite.md.
+// Texture acceptance suite (Gate 1 exit item): docs/archive/texture-acceptance-suite.md.
 // Each check is a failure the owner reported this week or the crash rule
 // (AGENTS.md "Restarts End Work (Crash) Or Resume It"). Writes a receipt to
 // docs/evidence/texture-acceptance-<stamp>.json.

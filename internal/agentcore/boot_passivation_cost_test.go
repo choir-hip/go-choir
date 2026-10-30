@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Window A (docs/problems/paper-post-refresh-health-windows-2026-10-22.md):
+// Window A (docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md):
 // on a planned boot the paper's /health failed for 75 s while boot
 // passivation ran one JSON scan of every work item, for the one parked run
 // that had a requester. The scan re-ensured a spawned work item that the

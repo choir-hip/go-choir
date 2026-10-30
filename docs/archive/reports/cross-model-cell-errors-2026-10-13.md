@@ -192,7 +192,7 @@ Landed on staging at d2324a55:
 
 Two fixes followed: C's decode hint (cdffb40d) and the field hint that names every type or the exact case (a17ea6c3).
 
-The paper run on d2324a55 (docs/evidence/free-models-paper-3-2026-10-13.json):
+The paper run on d2324a55 (docs/archive/evidence/free-models-paper-3-2026-10-13.json):
 
 - 37 of 283 cells failed, 13.1% (19.9% before).
 - Clusters A to G account for 6 failed cells (about 105 before).

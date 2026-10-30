@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Texture's citation self-score (docs/reports/icrl-calibration-experiment-2026-10-14.md):
+// Texture's citation self-score (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md):
 // a Write's pSupported rides the revision metadata, and the turn that
 // lists a new pair copies it, with the authoring model, onto the pair's
 // check memo, where Jev's verdict on the same key settles it. Ways it can

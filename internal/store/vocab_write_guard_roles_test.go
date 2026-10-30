@@ -4,7 +4,7 @@ package store
 // every live desk role agentprofile registers. S2a added management_task to
 // agentprofile but not to the V2 live set, and every management task on the
 // paper was refused at "persist agent"
-// (docs/problems/s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
+// (docs/archive/problems/s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
 // Package tests never run with the cutover active, so nothing caught it.
 //
 // Failure modes this guards: a role registered in agentprofile but missing

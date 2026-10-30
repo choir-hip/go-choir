@@ -1,6 +1,6 @@
 // Command ledger-witness prints where inbox records sit on a computer's
 // event chain, read-only from the host's event artifacts: L3's witness (a)
-// (docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
+// (docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
 //
 //	ledger-witness --computer computer-... --head <sha256> --records id1,id2 \
 //	  [--artifacts-root /var/lib/go-choir/platform-artifacts] [--max-events 50000]

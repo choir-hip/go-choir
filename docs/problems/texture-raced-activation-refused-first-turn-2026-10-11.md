@@ -32,7 +32,7 @@ same window are UI stream pages cancelled by the browser, not this failure.
 ## What is known
 
 - The activation race is the one in
-  [smg-management-open-invalid-transition-2026-10-07.md](smg-management-open-invalid-transition-2026-10-07.md):
+  [smg-management-open-invalid-transition-2026-10-07.md](../archive/problems/smg-management-open-invalid-transition-2026-10-07.md):
   the `initial_dispatch` wake activates Texture before `EnsureTextureHandoff`
   submits, and the loser recovers the winner's run
   (`recoverRacedTextureActivation`, internal/textureowner/texture_agent_revision.go).

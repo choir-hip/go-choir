@@ -11,7 +11,7 @@ review:
   frozen_ref: 'main@c069eb42'
   verdict: accept
   evidence_ref: >-
-    docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+    docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
     ("SO — ops substrate (new parallel station; gates S3)")
 
 
@@ -226,9 +226,9 @@ now:
       declared shapes, CI deploy gating.
     status: testing
     evidence_refs:
-      - docs/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md
-      - docs/problems/ci-docs-only-head-strands-runtime-deploy-2026-10-04.md
-      - docs/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md
+      - docs/archive/problems/guest-dolt-journal-and-host-image-leak-2026-10-03.md
+      - docs/archive/problems/ci-docs-only-head-strands-runtime-deploy-2026-10-04.md
+      - docs/archive/problems/guest-stderr-unreachable-after-cold-boot-2026-10-04.md
       - internal/store/dolt_maintenance.go:290-320
       - internal/vmctl/ownership.go:1220-1224
   decision:
@@ -240,7 +240,7 @@ now:
     kind: architecture
     status: settled
     evidence_ref: >-
-      docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+      docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
       ("SO — ops substrate (new parallel station; gates S3)", v4 Orientation 2026-10-05)
     owner_ratification_ref: >-
       owner direction 2026-10-05 ("shouldn't need 16gb at all") and the v4
@@ -310,7 +310,7 @@ now:
     director). GC hazard: artifact GC's `og` namespace flagged 421k/421k
     files "unreachable" — do NOT run og in active mode until a director
     decision classifies WW corpus (keep/archive/delete). Docs for
-    director: docs/problems/world-wire-corpus-resource-burn-2026-10-05.md +
+    director: docs/archive/problems/world-wire-corpus-resource-burn-2026-10-05.md +
     docs/archive/world-wire-rearchitecture-2026-10-05.md.
 receipts:
   - id: s0-1-storage-lifecycle-2026-10-05
@@ -341,6 +341,6 @@ one of those four surfaces, not to a release or security defect.
 
 The full slice ordering, evidence requirements, and the memory-budget
 diagnosis/hypothesis/measure/shrink/elasticity plan live in
-docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
 ("SO — ops substrate (new parallel station; gates S3)", v4 Orientation
 2026-10-05). This file is the executable contract for the station.

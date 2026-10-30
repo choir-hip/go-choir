@@ -1,7 +1,7 @@
 # Choir Current Architecture
 
 **Last updated:** 2026-10-14 (terminology and status rows refreshed in the docs prune; section bodies still carry the 2026-09-23 desk-RLM rectification rewrite and older text) — rewritten for the desk-RLM rectification
-(`docs/desk-rlm-rectification-plan-2026-09-23.md`). The prior revision
+(`docs/archive/desk-rlm-rectification-plan-2026-09-23.md`). The prior revision
 (2026-07-24, stale-bannered 2026-09-22) described the Super/CoSuper/Researcher
 hierarchy and `update_coagent` as the agent-to-agent primitive; that model is
 superseded. The working mission set is the R-sequence in `ACTIVE.md`.
@@ -643,7 +643,7 @@ nothing writes a revision back, so the owner sees only their own last edit.
 Effects also remain OFF, and no current goal file authorizes
 capsule/self-development effects. The desk-RLM rectification sequence (R0–R5 in
 `ACTIVE.md`, planned in
-[desk-rlm-rectification-plan-2026-09-23.md](desk-rlm-rectification-plan-2026-09-23.md))
+[desk-rlm-rectification-plan-2026-09-23.md](archive/desk-rlm-rectification-plan-2026-09-23.md))
 closes this gap: persistent root desks, the semantic-act surface, delegated
 cast, the commitment ledger, and Texture's editorial projection of the ledger
 into revisions. The bounded supervision contract it must satisfy —

@@ -36,7 +36,7 @@ graph write guard (`internal/store/vocab_migrate_og.go`, `ogRoleLeafKeys`
 includes `authority_profile`) treats that field as one vocabulary token and
 checks it against the V2 set (`internal/vocabmigrate/fence.go`, `v2LiveSet`).
 A single role passes; any joined path fails. Same class as
-[s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md](s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
+[s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md](../archive/problems/s2a-management-tasks-refused-by-vocab-fence-2026-10-14.md).
 
 ## Effect
 

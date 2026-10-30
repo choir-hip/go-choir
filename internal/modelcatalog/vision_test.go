@@ -8,7 +8,7 @@ import (
 
 // Owner 2026-10-15: vision is on by default for every configured model;
 // text-only models opt out by name
-// (docs/problems/models-configured-text-only-2026-10-15.md).
+// (docs/archive/problems/models-configured-text-only-2026-10-15.md).
 func TestVisionIsTheDefaultForConfiguredModels(t *testing.T) {
 	for _, id := range []string{
 		"gpt-6-luna",

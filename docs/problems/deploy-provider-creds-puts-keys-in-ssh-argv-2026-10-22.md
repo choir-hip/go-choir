@@ -29,7 +29,7 @@ Found 2026-10-22 by reading code. No value was read or printed.
 The exposure lasts only while the command runs, and only on the owner's
 laptop and the remote shell. It is still a credential in argv: the class
 of leak that the kernel-command-line token records closed for gateway
-tokens (`docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md`).
+tokens (`docs/archive/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md`).
 
 ## Interim rule
 

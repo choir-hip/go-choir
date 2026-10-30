@@ -133,7 +133,7 @@ otherwise. Nothing was run on staging by this lane.
 ### P1 (RES-05). The jailer copies the store image per VM
 
 Recorded in
-[jailer-copies-store-image-per-vm-2026-10-21.md](../problems/jailer-copies-store-image-per-vm-2026-10-21.md).
+[jailer-copies-store-image-per-vm-2026-10-21.md](../../problems/jailer-copies-store-image-per-vm-2026-10-21.md).
 `prepareJail` places every read-only file (kernel, initrd, the about 2.9 GB
 store image) with `placeReadOnlyCopy`: a reflink (a new inode) or a full
 copy (`internal/vmmanager/confinement.go:600-664`). The page cache is per
@@ -162,7 +162,7 @@ hotplug and visual capture already select `class:test`
 `VM_FIRECRACKER_BIN` (and `VM_JAILER_BIN`) is one path for the whole host
 (`config.go:22`, `nix/node-b.nix:1282, 1289`). Moving to 1.17 (needed for
 data-drive discard,
-[guest-data-image-never-trims-2026-10-20.md](../problems/guest-data-image-never-trims-2026-10-20.md))
+[guest-data-image-never-trims-2026-10-20.md](../../problems/guest-data-image-never-trims-2026-10-20.md))
 therefore changes every computer's VMM in one deploy and refuses every
 hibernate snapshot at once (`firecracker_version_mismatch`), with no canary.
 `VM_DATA_DISCARD` is likewise host-wide. Found while checking NET-08: the
@@ -174,9 +174,9 @@ virtio-mem hotplug region at 512 GiB in every version from 1.15.1 to
 1.17.0, not only in 1.17. Node B's Xeon E-2236 has 39-bit physical
 addresses (2^39 = 512 GiB), so no computer can plug memory on this host
 under any of them (firecracker issue #6255, open;
-[memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
+[memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
 The host moves to 1.16.2 for its other fixes
-([firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](../problems/firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md)).
+([firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](../../problems/firecracker-1-17-for-every-computer-2026-10-22.md)).
 1.17 does not change hotplug here, either way.
 
 ### P4 (RES-06). Guest page cache is never reclaimed while the guest is busy
@@ -224,7 +224,7 @@ selected" in the probe: two other possible causes FP0's read separates.
 ### P6 (RES-14). Nobody has read which method the snapshot budget uses
 
 Recorded in
-[snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md](../problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).
+[snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md](../../problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).
 The FIEMAP bound landed (9001e9842); vmctl gained `CAP_SYS_ADMIN` with the
 jailer unit change (10e9f18e1), so the exact `btrfs_extents` method may now
 succeed. No staging hibernate line has been read since. A reading only;
@@ -329,7 +329,7 @@ activation under the metamission's lease. Record outputs under
    earlier reason (1.17 moves the hotplug region past the E-2236's 39-bit
    limit) was wrong. Every version from 1.15.1 to 1.17.0 puts it at
    512 GiB, so hotplug fails on Node B with or without 1.17
-   ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
+   ([memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md](../../problems/memory-hotplug-cannot-work-on-node-b-39-bit-cpu-2026-10-22.md)).
    No NET-08 step may count a hotplug failure against 1.17. Before
    filling the hashes, check whether the latest 1.17.x release fixes
    #6255. The host's `choirFirecrackerBelow` bound in `flake.nix` keeps
@@ -403,7 +403,7 @@ activation under the metamission's lease. Record outputs under
 
 The 13:06 reading (ledger) could not tell "DAMON reclaim not running" from
 "DAMON frees, reporting does not return". Record:
-[guest-damon-reclaim-state-unreported-2026-10-22.md](../problems/guest-damon-reclaim-state-unreported-2026-10-22.md).
+[guest-damon-reclaim-state-unreported-2026-10-22.md](../../problems/guest-damon-reclaim-state-unreported-2026-10-22.md).
 The guest's host-only procmem route now carries `memory_return` (DAMON
 reclaim parameters and counters, kdamond CPU, `page_reporting_order` and
 whether a device registered, the balloon's negotiated reporting bit,
@@ -411,7 +411,7 @@ reclaim/refault vmstat, free memory by block order); read only, absent
 files absent. `scripts/fp8_memory_return_probe.py` samples it with host
 RSS and the RES-10 reader every 30 s across a burst and 20 idle minutes;
 outcomes and levers in
-[guest-memory-return-outcomes-2026-10-22.md](../reports/guest-memory-return-outcomes-2026-10-22.md).
+[guest-memory-return-outcomes-2026-10-22.md](../../reports/guest-memory-return-outcomes-2026-10-22.md).
 Found while testing on a 6.18.37 kernel: `page_reporting_order` reads -1
 until a reporting device registers, so -1 on a guest means nothing is
 being reported. Orange, guest image only; FP0 deploys, then runs the probe

@@ -12,8 +12,8 @@ Clubhouse / intellectual salon" and, for organizations, as asynchronous
 meetings that drive the multi-agent system. It would mix Autopaper news,
 podcasts and the listener's own work, and the listener could interrupt at any
 point, record a take, and publish it or share it with a team
-(`docs/reports/choir-state-and-vision-2026-10-14.md` §2.11). The voice
-principle (`docs/reports/pricing-and-economics-notes-2026-10-14.md`): "I want
+(`docs/archive/reports/choir-state-and-vision-2026-10-14.md` §2.11). The voice
+principle (`docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`): "I want
 my AI to be clearly sounding like AI, and then we're going to be mixing in
 human voices — that contrast is so much better." The owner has also ruled
 that foundations come first and that a prototype is welcome "if its framed as

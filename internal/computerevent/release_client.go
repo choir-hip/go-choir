@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Release reads (P8, docs/reports/p6-p8-release-adopt-2026-10-15.md): a
+// Release reads (P8, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): a
 // guest reads a published release record and its patch from corpusd with
 // its own computer capability (event:read). The caller verifies every byte;
 // these methods only move them.

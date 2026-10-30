@@ -19,7 +19,7 @@ import (
 
 // S1 owner-act receipts and the effect_accepted admission gate
 // (docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md;
-// docs/reports/principal-identity-and-signed-acts-2026-10-15.md §5, §6 S1).
+// docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md §5, §6 S1).
 //
 // An owner mode write must carry a receipt the proxy signed with its own
 // host-owner-act key; corpusd records it single-use and names it in the

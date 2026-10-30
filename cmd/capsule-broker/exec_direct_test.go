@@ -148,7 +148,7 @@ var guestToolchain = map[string]string{
 // Direct exec gets the guest's C toolchain and ICU cgo flags when the broker
 // carries them, appended after the baseline PATH (busybox/bash resolution is
 // unchanged), and nothing else from the broker's environment
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B1-B4).
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B1-B4).
 func TestDirectExecEnvCarriesBuildToolchain(t *testing.T) {
 	env := directExecEnvFrom(toolchainLookup(guestToolchain), nil)
 	joined := "\n" + strings.Join(env, "\n") + "\n"

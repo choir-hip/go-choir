@@ -26,7 +26,7 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	}
 	// Approving and sending is an owner act: it needs the owner's browser
 	// session, never a headless API key, which an agent inside the computer
-	// may hold (docs/problems/maild-send-gate-defects-2026-10-14.md).
+	// may hold (docs/archive/problems/maild-send-gate-defects-2026-10-14.md).
 	if authResult.AuthMethod == "api_key" && isEmailOwnerActRoute(r) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "owner session required: approving and sending mail needs the owner's signed-in session, not an API key"})
 		return

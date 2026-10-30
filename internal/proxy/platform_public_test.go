@@ -222,7 +222,7 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 // The proposal is recorded for its author by corpusd and nowhere else. R3d
 // deleted the author guest's /internal/texture/proposals route; the proxy
 // used to POST there anyway (after resolving, and so starting, the author's
-// computer) and always fell back (docs/problems/surface-broken-calls-2026-10-14.md,
+// computer) and always fell back (docs/archive/problems/surface-broken-calls-2026-10-14.md,
 // item 2). Failure modes pinned: a request reaches the author computer, the
 // proxy calls corpusd's delivery-state route, or the client sees a delivery
 // state corpusd did not record.

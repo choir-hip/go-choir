@@ -1,7 +1,7 @@
 package store
 
 // Run telemetry in its own table (F-c), deploy 1:
-// docs/design/choir-event-table-f-c-2026-10-22.md.
+// docs/archive/design/choir-event-table-f-c-2026-10-22.md.
 //
 // choir_events holds the choir.event objects whose projection op the writer
 // stamped with Table "choir_events" (section 2.2). The stamp is on the tape,

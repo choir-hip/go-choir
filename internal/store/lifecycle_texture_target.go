@@ -215,7 +215,7 @@ func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTexture
 // document's Texture agent opened the work. Any turn of that Texture may
 // follow up on it: one research desk per request, followed up by every
 // later turn (owner decision 2026-10-11,
-// docs/problems/texture-research-opener-dropped-silently-2026-10-11.md).
+// docs/archive/problems/texture-research-opener-dropped-silently-2026-10-11.md).
 // The recorded opener must be a real Texture run of the same agent and
 // trajectory, so a shared channel alone is not provenance.
 func lifecycleTargetWorkOpenedByTexture(ctx context.Context, reader lifecycleTextureControlTargetReader, work types.WorkItemRecord, req LifecycleTextureControlTargetRequest) bool {

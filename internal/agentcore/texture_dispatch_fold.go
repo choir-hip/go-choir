@@ -16,7 +16,7 @@ import (
 const textureFoldedTurnLocalID = "tray-turn"
 
 // foldTextureDispatch is how a Texture cell dispatches (protocol P2a,
-// docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md). Texture's
+// docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md). Texture's
 // staged Cast, Ask and Note to research or management fold into the cell's
 // one turn, so each dispatch commits with it; a cell that dispatched with
 // no turn verb commits as a Wait. The returned intents exclude the folded

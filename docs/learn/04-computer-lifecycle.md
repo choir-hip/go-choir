@@ -34,7 +34,7 @@ the incident that showed it), then the options and their trade-offs.
 
 The security side of the same machinery (the VMM running as root, loopback
 as a credential, side channels) is covered in depth in the
-[computer isolation security review](../reports/computer-isolation-security-review-2026-10-14.md).
+[computer isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md).
 This document points to it rather than repeating it.
 
 ## The short answer
@@ -295,7 +295,7 @@ marks it records:
    persist the merged record.
 
 Step 8's lock release is a lesson in itself. The comment in the code cites
-[s0-fetch-guest-timeline-deadlock](../problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md):
+[s0-fetch-guest-timeline-deadlock](../archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md):
 holding a global lock across a network wait serializes every boot behind
 the slowest guest. The general rule: **never hold a shared lock across I/O
 you do not control.** The same rule reappears in the S3 design, where a
@@ -361,7 +361,7 @@ pipe lost its reader. Hours later the guest wrote one line to its console,
 Firecracker got `SIGPIPE`, and its signal handler deadlocked on its own
 logger lock while holding the serial device lock. vCPU 0 froze; the guest
 accepted TCP but answered nothing (doc:
-[firecracker-sigpipe-deadlock](../problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md)).
+[firecracker-sigpipe-deadlock](../archive/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md)).
 The fix is in `internal/vmmanager/console_file.go`: the console is now a
 file Firecracker writes directly. "A file needs no reader and outlives
 every vmctl." The lesson: **a child that must outlive its parent must not
@@ -374,7 +374,7 @@ logged `eligible=0 protected=2`: its registry held two ownerships while
 twelve Firecracker processes ran. The other ten had dropped out of the
 registry when reattach failed after earlier vmctl restarts, and every
 reclaim, idle and stop path acts only on the registry (doc:
-[node-b-oom-from-retained-qa-computers](../problems/node-b-oom-from-retained-qa-computers-2026-10-10.md)).
+[node-b-oom-from-retained-qa-computers](../archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md)).
 The repair is `ReconcileVMProcesses`: it lists live Firecracker processes
 from `/proc` (`LiveFirecrackerVMs`, `internal/vmmanager/process_control.go:25`)
 and makes the registry account for each one. The lesson is the
@@ -410,7 +410,7 @@ the owner's, and vmctl dies last.
   protected from reclaim because it was `premium_always_on`, and
   impossible to restart because the resolve guard kept answering
   `guest_reattach_pending` (doc:
-  [owner-computer-stranded](../problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md)).
+  [owner-computer-stranded](../archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md)).
   The wedge watchdog is the repair: protection must be bounded by evidence
   that the guest can still do work.
 - **Every VMM runs as root in vmctl's namespaces and cgroup.** That is the
@@ -504,7 +504,7 @@ where it stopped: same processes, same open sockets (which are now dead on
 the far side), same page cache.
 
 Important properties, all upstream facts that the S3 design checked
-(doc: [S3 snapshot hibernate design](../reports/s3-snapshot-hibernate-design-2026-10-14.md),
+(doc: [S3 snapshot hibernate design](../archive/reports/s3-snapshot-hibernate-design-2026-10-14.md),
 "Compatibility finding"):
 
 - **Full vs diff.** A full snapshot writes every guest page. A diff
@@ -757,7 +757,7 @@ host services.
    still a kill then, so its next wake was a crash boot that closed its 14
    schedules, and since API keys never wake a computer, nothing woke it
    for hours (doc:
-   [live-paper-computer-reclaimed-no-computer-tiers](../problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md)).
+   [live-paper-computer-reclaimed-no-computer-tiers](../archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md)).
    The root cause was that "protection is per moment, not per computer".
    The repair is the tiers file. Notice what the repair is: a class that
    belongs to the computer, held in one reviewed place, instead of a
@@ -766,7 +766,7 @@ host services.
    held memory; admission refused the new owner's first boot again and
    again with `host_memory_pressure`, while nothing reclaimed the idle test
    computers fast enough to make room (doc:
-   [new-owner-waits-while-qa-computers-hold-node-b-memory](../problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md)).
+   [new-owner-waits-while-qa-computers-hold-node-b-memory](../archive/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md)).
    Admission and reclaim were not coupled: a refused start did not ask
    reclaim to make room.
 4. **14 October, reclaim wedged a user.** PSI `some avg10` crossed 1.0
@@ -798,7 +798,7 @@ never update.** The idle sweeper never hibernates an ordinary computer while
 the host has room, so an idle test or user computer keeps its old build
 until something kills it. Pressure reclaim had been hiding this by
 restarting computers most days (doc:
-[idle-test-computers-keep-old-builds-root-cause](../problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md)).
+[idle-test-computers-keep-old-builds-root-cause](../archive/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md)).
 Two policies, each reasonable, combined into a third that nobody chose.
 
 ### 5.4 Options
@@ -863,7 +863,7 @@ until one is written: a cheap copy.
 (`VM_INTERACTIVE_CPU_COUNT=4`, `VM_INTERACTIVE_MEM_MIB=8192`,
 `nix/node-b.nix:791-792`). The comment there records why: a 4 GiB trial on
 the compacted owner store thrashed and was rolled back (doc:
-[guest store history bloat and memory shape](../problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
+[guest store history bloat and memory shape](../archive/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md)).
 
 **Balloon.** `firecrackerBalloonConfig` (`internal/vmmanager/balloon.go:17`)
 adds `{"amount_mib": 0, "deflate_on_oom": true, "free_page_reporting":
@@ -880,7 +880,7 @@ by `LimitFor` (`:129`). A soft limit makes Go's garbage collector run and
 its scavenger return memory to the guest kernel before the heap doubles;
 it never kills. The same package fixes Dolt's cache budget before Dolt
 reads the limit: Dolt sizes its caches once, at first use, from the Go
-limit (doc: [LR guest memory return](../reports/lr-guest-memory-return-2026-10-14.md)).
+limit (doc: [LR guest memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md)).
 `GOMEMLIMIT` in the environment always wins, which makes `GOMEMLIMIT=off`
 the rollback.
 
@@ -909,7 +909,7 @@ so guest children cannot read it from `/proc/cmdline`
 resent with backoff for up to 3 minutes (`RestartWait`). Anything that did
 reach the host is returned as it was. This is what lets a guest ride
 through a host service restart (doc:
-[host-deploy-restart-fails-in-flight-guest-turns](../problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md)).
+[host-deploy-restart-fails-in-flight-guest-turns](../archive/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md)).
 
 ### 6.3 What the measurements say
 
@@ -932,7 +932,7 @@ and page cache; its true private floor is about 0.13 GiB plus kernel
 overhead. Second, a busy computer drifts to the ceiling because nothing
 bounds its page cache. The CPU follow-up found that 98% of the paper's
 guest time is the main daemon, and most of that is unindexed store scans
-(doc: [computer CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md);
+(doc: [computer CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md);
 doc 1 of this series, [the ledger and the store](01-ledger-and-store.md),
 explains why). Those scans are also what fills the page cache
 (*inference*: the density report marks "the 640 MiB idle page cache is
@@ -1033,12 +1033,12 @@ and the gateway's graceful drain (`TimeoutStopSec = "11min"`,
 `nix/node-b.nix:975`) held proxy, auth and corpusd down while it finished.
 The site went down for 3 min 9 s, 4 min 0 s and 11 min 13 s on three
 deploys that night (doc:
-[deploy-takes-staging-down-during-gateway-drain](../problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md)).
+[deploy-takes-staging-down-during-gateway-drain](../archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md)).
 The repair sets `restartIfChanged = false` on the five services, so the
 only restart is the one after the pointer sync, and restarts the gateway
 last and alone. The next deploy's probe saw 417 of 417 `/health` samples
 answer 200 (doc:
-[L1 deploy without site outage](../reports/l1-deploy-without-site-outage-design-2026-10-14.md)).
+[L1 deploy without site outage](../archive/reports/l1-deploy-without-site-outage-design-2026-10-14.md)).
 The residual: model calls from computers are refused while the gateway
 drains (2 min 39 s on that deploy), and a 10-second proxy drain caused five
 502s on a later one.
@@ -1094,12 +1094,12 @@ guard, receipts.
   binary read work-state epoch 2 and the marker said 1. By design that is a
   crash boot, which closed all 14 schedules; the paper was silent about an
   hour (doc:
-  [planned-refresh-closes-paper-schedules](../problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
+  [planned-refresh-closes-paper-schedules](../archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
   The epoch exists only in the marker; nothing persists it in the store.
 - **A deploy with every computer deferred failed.** Under
   `set -eo pipefail`, `grep -lx 'refreshed' | wc -l` exits 1 when nothing
   matches, and the script died at an assignment (doc:
-  [deploy-refresh-all-deferred-fails-deploy](../problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md)).
+  [deploy-refresh-all-deferred-fails-deploy](../archive/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md)).
   A shell lesson worth keeping: `set -e` turns "zero results" into
   "failure" whenever a pipeline's first command signals no match.
 - **No health gate and no rollback after an image refresh.** CI fails the
@@ -1112,12 +1112,12 @@ guard, receipts.
   root-cause document was written.
 - **The owner saw a blank screen** during a deploy, probably an
   `index.html` whose script chunks were not yet served (*hypothesis* in
-  [owner-blank-screen-during-deploy](../problems/owner-blank-screen-during-deploy-2026-10-13.md)).
+  [owner-blank-screen-during-deploy](../archive/problems/owner-blank-screen-during-deploy-2026-10-13.md)).
 
 ### 7.4 The LU design: pull with a deadline
 
 LU (doc: [LU guest updates design](../reports/lu-guest-updates-design-2026-10-14.md),
-round 5, with its [adjudication](../reports/lu-guest-updates-adjudication-2026-10-14.md))
+round 5, with its [adjudication](../archive/reports/lu-guest-updates-adjudication-2026-10-14.md))
 turns the push into a pull. Its invariants are a compact course in update
 design:
 
@@ -1354,15 +1354,15 @@ happened for real.
 
 - **Built on:** [computer ontology](../computer-ontology.md);
   [VM density limits](../reports/vm-density-limits-2026-10-14.md);
-  [S3 snapshot hibernate design](../reports/s3-snapshot-hibernate-design-2026-10-14.md);
+  [S3 snapshot hibernate design](../archive/reports/s3-snapshot-hibernate-design-2026-10-14.md);
   [LU guest updates design](../reports/lu-guest-updates-design-2026-10-14.md)
-  and [adjudication](../reports/lu-guest-updates-adjudication-2026-10-14.md);
-  [L1 deploy without site outage](../reports/l1-deploy-without-site-outage-design-2026-10-14.md);
-  [LR guest memory return](../reports/lr-guest-memory-return-2026-10-14.md);
-  [LR provisional scaling cost](../reports/lr-scaling-cost-provisional-2026-10-14.md);
+  and [adjudication](../archive/reports/lu-guest-updates-adjudication-2026-10-14.md);
+  [L1 deploy without site outage](../archive/reports/l1-deploy-without-site-outage-design-2026-10-14.md);
+  [LR guest memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md);
+  [LR provisional scaling cost](../archive/reports/lr-scaling-cost-provisional-2026-10-14.md);
   [isolation runtimes](../research/isolation-runtimes-2026-10-14.md);
-  [computer isolation security review](../reports/computer-isolation-security-review-2026-10-14.md)
-  §3.3, §3.4, §3.8; [computer CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md);
+  [computer isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
+  §3.3, §3.4, §3.8; [computer CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md);
   and the problem documents linked in sections 2, 4, 5, 6 and 7.
 - **Read in code at 980ffaf4e:** `internal/vmmanager/` (`manager.go`,
   `snapshot.go`, `snapshot_lifecycle.go`, `fcapi.go`, `balloon.go`,

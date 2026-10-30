@@ -15,7 +15,7 @@ import (
 )
 
 // S3 snapshot hibernate, guest side
-// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+// (docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 //
 // Before the host pauses this guest and writes its memory to disk, it asks
 // the guest to fence: close work admission, confirm nothing is running, renew

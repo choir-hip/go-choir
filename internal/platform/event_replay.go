@@ -26,7 +26,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	// after+pageSize) on the (computer_id, sequence) index. A range predicate
 	// (sequence > ?) makes Dolt plan the primary key and read the computer's
 	// whole chain per page
-	// (docs/problems/replay-page-query-scans-whole-chain-2026-10-09.md).
+	// (docs/archive/problems/replay-page-query-scans-whole-chain-2026-10-09.md).
 	head, err := readComputerEventHead(ctx, s.platform.store.db, computerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("event replay: %w", err)

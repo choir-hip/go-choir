@@ -98,7 +98,7 @@ recommends one.
 A blocker that is not about Claude: the engineering capsule still cannot
 reliably build `bin/autoputer`, which Freeze requires. It has no C
 toolchain on its PATH, and 1 CPU with 1 GiB is too small.
-[selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md](../problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
+[selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md](../archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
 records this, and the lead chose fixes A then B there. Until those land,
 both slices end at "tests pass, release build blocked" for Go changes.
 
@@ -966,6 +966,6 @@ The owner does the following. No agent touches the token at any point.
   [choir-doctrine.md](../choir-doctrine.md) (`I18`, `I19`, `I24`)
 - [engineering-network-grants-2026-10-10.md](../design/engineering-network-grants-2026-10-10.md)
 - [capsule-go-module-proxy-design-2026-10-14.md](capsule-go-module-proxy-design-2026-10-14.md)
-- [c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md](../problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
-- [selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md](../problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
+- [c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md](../archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
+- [selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md](../archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md)
 - the code paths cited inline

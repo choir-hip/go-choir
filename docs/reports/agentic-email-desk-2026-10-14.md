@@ -6,7 +6,7 @@ it proposes are orange and red (§8, each classed where it appears).
 
 Related plan (note added 2026-10-21): the Mail app is also a first-party
 app package in S7-0
-([choir-appdev-s7-app-packages-2026-10-01.md](../definitions/choir-appdev-s7-app-packages-2026-10-01.md),
+([choir-appdev-s7-app-packages-2026-10-01.md](../archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md),
 addendum "App packages carry app-agent desks"). The email desk below should
 be the desk that package carries. Tracked as ARCH-01 to ARCH-05 in the
 [checklist](../security-density-architecture-checklist-2026-10-21.md).
@@ -19,7 +19,7 @@ cited by URL, fetched 2026-10-14), **inference** (reasoning, not tested),
 ## The brief
 
 Owner rulings, 2026-10-14 about 21:40 UTC
-([autoradio plan](autoradio-mobile-app-plan-2026-10-14.md), "Owner rulings"):
+([autoradio plan](../archive/reports/autoradio-mobile-app-plan-2026-10-14.md), "Owner rulings"):
 
 > Choir's email app becomes a full desk app agent with its own RLM; every
 > paid account gets its own agentic email address; by default it sends
@@ -123,7 +123,7 @@ maild (`nix/node-b.nix:239`).
 - A guest Maildir and `POST /api/mail/inbound` still exist in the computer
   (`internal/autoputer/maildir.go`, registered in `run.go:554`). Their
   host-side producer (the spool/drain) was removed in `8e060b98b`. The
-  route has no caller (doc: `docs/reports/dead-code-census-2026-10-12/routes.md:464`).
+  route has no caller (doc: `docs/archive/reports/dead-code-census-2026-10-12/routes.md:464`).
 
 ### 1.3 The Mail app (code)
 
@@ -134,7 +134,7 @@ Quarantine; compose and reply through drafts; send with the version hash;
 in a sandboxed `srcdoc` iframe behind a regex blocklist sanitizer
 (`MailApp.svelte:1163-1177`) and a CSP whose `img-src https:` loads remote
 images. No threading, no autocomplete, no search beyond a client filter
-(doc: [puter review](../research/puter-everything-2026-10-14/collaboration.md) §2).
+(doc: [puter review](../archive/research/puter-everything-2026-10-14/collaboration.md) §2).
 
 ### 1.4 Defects that block an agent (code; each needs a problem doc first)
 
@@ -145,7 +145,7 @@ images. No threading, no autocomplete, no search beyond a client filter
 | G3 | **The authentication check is unaligned.** `hasPassingAuthenticationResultEvidence` accepts any `dkim=pass` or `spf=pass` substring in any `Authentication-Results` header, regardless of the domain or which server wrote it | `webhook.go:275-287` | a sender can add their own header, or pass DKIM for an unrelated domain, and gain "trusted" status |
 | G4 | **The `edit:` reply has no consumer.** It replaces the draft body with "Owner approval reply requested edits: <text>" and re-sends for approval; the agent that would rewrite the draft was deleted | `drafts.go:818-860` | approving the edited draft would send the instruction itself to the recipient |
 | G5 | **Delivery feedback is recorded but ignored.** Only `email.received` is acted on; `email.bounced`, `email.complained` and `email.suppressed` sit in `email_webhook_events` | `webhook.go:125-160` | no per-user suppression, no pause on complaints: an agent with a bad list damages the shared domain |
-| G6 | **The risk-alert recipient comes from a guest header** (isolation review F10, fix W6) | doc: [isolation review](computer-isolation-security-review-2026-10-14.md) §3.5 | a guest can make Choir's domain mail any address |
+| G6 | **The risk-alert recipient comes from a guest header** (isolation review F10, fix W6) | doc: [isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md) §3.5 | a guest can make Choir's domain mail any address |
 
 Smaller fidelity gaps (code): the headers map is `map[string]string`, so
 repeated headers (`Received`, several `Authentication-Results`) collapse to
@@ -296,7 +296,7 @@ it owns the computer-wide schedule. **It never sends mail itself.**
 
 ### 2.7 What it gives Autoradio
 
-Autoradio is voice-first and continuous ([autoradio plan](autoradio-mobile-app-plan-2026-10-14.md),
+Autoradio is voice-first and continuous ([autoradio plan](../archive/reports/autoradio-mobile-app-plan-2026-10-14.md),
 owner rulings). The email desk supplies three things:
 
 1. **Mail updates.** A segment built from `MailSummarize`: how many new,
@@ -682,7 +682,7 @@ the host.
 ### 5.3 HTML sanitization and the reader
 
 - Sanitize **on the host at ingest** with an allowlist (port the Puter
-  allowlist, [puter review](../research/puter-everything-2026-10-14/collaboration.md)
+  allowlist, [puter review](../archive/research/puter-everything-2026-10-14/collaboration.md)
   §2). Store the raw message and the sanitized HTML. The client renders only
   the sanitized form, still in the sandboxed iframe.
 - **Block remote images by default**, which closes tracking pixels and IP
@@ -814,7 +814,7 @@ from the email.
 Texture with the capture id → Texture writes a document that cites the
 capture. PDFs and ebooks embed through the Texture mini-app pattern (PDF
 reader, images, audio, video:
-[autoradio plan](autoradio-mobile-app-plan-2026-10-14.md) §5). An `.ics`
+[autoradio plan](../archive/reports/autoradio-mobile-app-plan-2026-10-14.md) §5). An `.ics`
 invite yields follow-ups and dates, not a calendar entry (no calendar app).
 
 ### 6.5 Sending Texture documents as email
@@ -951,17 +951,17 @@ Code (at `c3c9b4cf8`): `internal/maild/{config,api,webhook,ingest,store,drafts,s
 `internal/filecas/filecas.go`; `internal/pii/redactor.go`; commits
 `9679837f3`, `8e060b98b`, `142ae362a`.
 
-Docs: [autoradio plan](autoradio-mobile-app-plan-2026-10-14.md);
+Docs: [autoradio plan](../archive/reports/autoradio-mobile-app-plan-2026-10-14.md);
 [owner notes](owner-notes-2026-10-14.md);
 [desk runtime](../learn/02-desk-runtime.md);
 [gateway and providers](../learn/03-gateway-and-providers.md);
 [computer lifecycle](../learn/04-computer-lifecycle.md);
-[isolation review](computer-isolation-security-review-2026-10-14.md);
+[isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md);
 [precommitment records](../precommitment-records.md);
 [claims ontology](claims-events-entities-ontology-2026-10-14.md);
-[puter review, collaboration](../research/puter-everything-2026-10-14/collaboration.md);
-[roadmap sequencing](roadmap-sequencing-appdev-security-2026-10-14.md);
-[dead-code census, routes](dead-code-census-2026-10-12/routes.md).
+[puter review, collaboration](../archive/research/puter-everything-2026-10-14/collaboration.md);
+[roadmap sequencing](../archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md);
+[dead-code census, routes](../archive/reports/dead-code-census-2026-10-12/routes.md).
 
 Web (fetched 2026-10-14):
 - Resend pricing, limits and retention: <https://resend.com/pricing>

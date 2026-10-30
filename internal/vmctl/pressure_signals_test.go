@@ -7,7 +7,7 @@ import (
 )
 
 // Reclaim answers memory and disk pressure only
-// (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
+// (docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
 // Ways this could fail, written before the code: a CPU or IO stall spike
 // hibernates an idle computer, which relieves neither and crash-boots it
 // on wake; a memory shortage stops being answered; a decision cannot be

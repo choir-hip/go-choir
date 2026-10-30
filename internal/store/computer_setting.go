@@ -12,7 +12,7 @@ import (
 )
 
 // ogKindComputerSetting is one owner-set switch on one computer (L2a A6 /
-// R2-7, docs/reports/l2a-synthesis-intake-design-2026-10-14.md). A setting
+// R2-7, docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). A setting
 // is the owner's act through the product API; no desk sets one.
 const ogKindComputerSetting = objectgraph.ObjectKind("choir.computer_setting")
 
@@ -29,7 +29,7 @@ const SettingIntakeLabels = "intake.labels"
 const SettingManagementSerialTasks = "management.serial_tasks"
 
 // SettingCalibrationFeedback turns on the in-context calibration digest
-// of the ICRL experiment (docs/reports/icrl-calibration-experiment-2026-10-14.md):
+// of the ICRL experiment (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md):
 // desks in the digest arm read their own settled calibration as a user
 // turn and in choir.Pack(). Off by default; off computes and shows nothing,
 // and turning it off is the rollback.
@@ -64,7 +64,7 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 
 // SettingEventTable moves the ten batched telemetry kinds to their own table,
 // choir_events (4 prolly trees per insert instead of 13): the writer stamps
-// their projection ops for it (docs/design/choir-event-table-f-c-2026-10-22.md
+// their projection ops for it (docs/archive/design/choir-event-table-f-c-2026-10-22.md
 // 4.2). It takes effect only on a computer the host also names
 // (CHOIR_EVENT_TABLE_COMPUTERS, a grant on the credential disk), because once
 // an op is stamped deploy 1 is that computer's rollback floor. Off by
@@ -162,7 +162,7 @@ const SettingTextureHoldTrajectory = "texture.hold_trajectory"
 const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 
 // SettingTextureRootDesk turns on the Texture root desk (PD3 S1,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md): commits on
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md): commits on
 // other documents mint a debounced texture_root_digest, whose dispatch
 // ensures one master document (named by the texture_root marker) and wakes
 // its own Texture desk, texture:<master>, to render the computer's open

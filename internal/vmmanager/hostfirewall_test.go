@@ -10,7 +10,7 @@ import (
 )
 
 // Guest isolation on the host firewall
-// (docs/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md).
+// (docs/archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md).
 //
 // Failure modes, written before the code:
 //

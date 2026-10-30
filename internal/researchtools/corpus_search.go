@@ -15,7 +15,7 @@ import (
 )
 
 // The corpus search's capture half (symptom 3 of
-// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
+// docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
 // research finds what this computer already captured before it goes to the
 // web. It is a keyword search over each capture's metadata (title, outlet,
 // source id, language) and Jev's label for it (outlet, script, and the

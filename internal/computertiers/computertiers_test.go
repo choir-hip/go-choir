@@ -6,7 +6,7 @@ import (
 )
 
 // Ways the tier file could fail, written before the code
-// (docs/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md):
+// (docs/archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md):
 // a malformed file ships and every computer silently falls to the free
 // tier; an id is mistyped and protects nothing; an id appears twice with
 // two meanings; an unknown field (a typo of a list name) is ignored.

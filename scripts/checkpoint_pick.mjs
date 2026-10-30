@@ -1,7 +1,7 @@
 // The restore target of a proof run now comes from the checkpoints the
 // computer binds automatically (GET /api/computers/{id}/lifecycle/checkpoints),
 // not from a manual bind: POST /lifecycle/checkpoint is deleted
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4).
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4).
 
 // pickNewestCheckpoint returns the newest listed checkpoint a restore would
 // not refuse (restore refuses only a checkpoint the host judged

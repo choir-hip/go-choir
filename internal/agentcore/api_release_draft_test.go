@@ -19,7 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
-// P7 guest side, failure modes pinned (docs/reports/p6-p8-release-adopt-2026-10-15.md):
+// P7 guest side, failure modes pinned (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md):
 //   R5 an unapplied operation is drafted, or a patch with secret-bearing
 //      added lines;
 //   R6 the record carries anything but source (host build digests only,

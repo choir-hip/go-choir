@@ -139,7 +139,7 @@ func TestExecuteToolBatchProjectionAndCaps(t *testing.T) {
 	}
 }
 
-// LR lever 6 (docs/reports/lr-lever6-cell-output-design-2026-10-14.md
+// LR lever 6 (docs/archive/reports/lr-lever6-cell-output-design-2026-10-14.md
 // L6-3): the 100 KiB backstop cut falls on a rune boundary, never inside a
 // UTF-8 sequence, and names the bytes it shows.
 func TestCapToolOutputCutsOnARuneBoundary(t *testing.T) {

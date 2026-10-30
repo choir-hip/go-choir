@@ -11,8 +11,8 @@ import (
 )
 
 // Result cache and in-flight join
-// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md,
-// docs/reports/search-efficiency-and-reuse-2026-10-14.md §1).
+// (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md,
+// docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §1).
 //
 // An identical search (same scope, same query up to whitespace, same
 // max_results) answered within the TTL is replayed from memory without

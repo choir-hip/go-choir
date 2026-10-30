@@ -13,7 +13,7 @@ var (
 )
 
 // RedactSummary strips URL query strings and credential-shaped values from a
-// provider error summary (docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md).
+// provider error summary (docs/archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md).
 // Summaries are stored in the health database and returned to computers.
 func RedactSummary(msg string) string {
 	msg = urlQueryPattern.ReplaceAllString(msg, "$1?[redacted]")

@@ -904,7 +904,7 @@ func TestTrajectorySummaryViewSuppliesCancelPreconditions(t *testing.T) {
 // A failed owner Cancel leaves a durable intent; a retry that derives a new
 // idempotency key from the advanced version conflicts with it. The summary
 // view exposes a public intent so the UI resumes it exactly
-// (docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// (docs/archive/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
 // Failure modes pinned: no intent in the summary; a non-public intent
 // offered for resume; the offered values not resuming (409 instead of
 // cancelled).

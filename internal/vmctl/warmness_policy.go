@@ -220,7 +220,7 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 		// A guest with in-flight runs is not idle — LastActiveAt tracks
 		// ownership-resolution traffic only, so a computer mid-desk-run reads
 		// stale here. Consult the guest's own busy signal before candidacy;
-		// receipt: docs/problems/vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md
+		// receipt: docs/archive/problems/vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md
 		if busyProbe != nil && busyProbe(own) {
 			continue
 		}

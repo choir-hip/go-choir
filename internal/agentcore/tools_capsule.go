@@ -85,7 +85,7 @@ type frozenTreeReader interface {
 // bin/autoputer was reused from the running build when that build is no
 // longer the one running (a deploy restarted the computer after Freeze), or
 // when the running identity cannot be read
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A5).
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A5).
 func releaseBinaryStillRunning(toolCtx *CapsuleToolCtx, bundle transaction.CapsuleEffectBundle) error {
 	if bundle.ReleaseBinary == nil || bundle.ReleaseBinary.Origin != capsule.ReleaseBinaryReusedRunning {
 		return nil
@@ -1067,7 +1067,7 @@ const freezeDistinctReceiptsRequired = "distinct build, test, and dependency/too
 
 // freezeReceiptSlotsError diagnoses a Freeze whose three receipt slots name
 // fewer than three distinct receipts: which slots share which receipt, and
-// what each slot should cite (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
+// what each slot should cite (docs/archive/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
 // It decides nothing new: nil exactly when the slots hold three or more
 // distinct refs, the count the executor's resolver dedupes to.
 // freezeSourceChangeError refuses a candidate whose capsule changed no

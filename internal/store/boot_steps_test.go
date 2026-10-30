@@ -12,7 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
-// docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md: the paper's
+// docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md: the paper's
 // boot hung for 50 minutes and the log said nothing about which step. Every
 // store step between the process start and the listener now logs its start,
 // and its end with a duration. Ways this can fail: a step has no start line

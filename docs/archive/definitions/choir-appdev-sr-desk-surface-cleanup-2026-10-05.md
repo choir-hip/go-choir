@@ -8,7 +8,7 @@ review:
   reviewer: none (owner approved the v5 outline 2026-10-05; file-level panel pending)
   frozen_ref: none
   verdict: none
-  evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md ("v5 plan" -> SR)
+  evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md ("v5 plan" -> SR)
 
 start:
   captured_at: '2026-10-05T00:00:00Z'
@@ -150,9 +150,9 @@ now:
     scope_if_supported: The research desk on the in-cell carrier.
     status: supported
     evidence_refs:
-      - docs/evidence/sr-deployed-acceptance-2026-10-06.json
-      - docs/evidence/sr-deployed-prompt-research-4467a4fb.json
-      - docs/evidence/sr-deployed-prompt-research-12d3adc0.json
+      - docs/archive/evidence/sr-deployed-acceptance-2026-10-06.json
+      - docs/archive/evidence/sr-deployed-prompt-research-4467a4fb.json
+      - docs/archive/evidence/sr-deployed-prompt-research-12d3adc0.json
   decision:
     what: Delete the typed research surface and processor/reconciler; rewrite the prompts.
     kind: architecture
@@ -176,7 +176,7 @@ receipts:
     kind: station_terminal
     station: SR-desk-surface-cleanup
     status: closed
-    terminal_receipt: docs/evidence/sr-deployed-acceptance-2026-10-06.json
+    terminal_receipt: docs/archive/evidence/sr-deployed-acceptance-2026-10-06.json
     identity: 'https://choir.news deployed_commit=12d3adc0 (guest 10.200.4.2 build.deployed_commit matches)'
     landing:
       source_commit: 44a0e221 (docs; runtime HEAD 12d3adc0)

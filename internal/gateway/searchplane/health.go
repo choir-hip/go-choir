@@ -114,7 +114,7 @@ func normalizeExpiredLocked(rec ProviderHealth, now time.Time) ProviderHealth {
 // was in flight, by another call reporting the same fact. Charging every
 // in-flight call a strike made the backoff exponent grow with our own
 // concurrency (Parallel: three strikes, 96 h, from one 402;
-// docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+// docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 func sameEpisode(rec ProviderHealth, outcome Outcome) bool {
 	if outcome.At.IsZero() || rec.CooldownUntil == nil {
 		return false

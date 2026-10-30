@@ -32,7 +32,7 @@ seed-only tree as the computer's latest file root and cite it on the tape. The o
 are still in older roots in the content store, but the computer's current
 state no longer contains them — silent data loss on every lost or moved
 realization. This is the files row of the
-[state homes inventory](../state-homes-inventory-2026-10-08.md), which
+[state homes inventory](../operational-invariants-register-2026-10-08.md), which
 assumed hydration covered a fresh realization.
 
 ## Fix direction
@@ -50,7 +50,7 @@ the checkpoint job's audited key use (seq 35).
 ## Re-run after the fix (2026-10-09 02:21–02:36Z): still fails, two new causes
 
 Lose-the-disk proof on disposable `computer-bb7eee83…`
-(receipt [`evidence/sh-lose-the-disk-2026-10-09.json`](../evidence/sh-lose-the-disk-2026-10-09.json)):
+(receipt [`evidence/sh-lose-the-disk-2026-10-09.json`](../archive/evidence/sh-lose-the-disk-2026-10-09.json)):
 
 - **Key: pass.** Fresh realization `vm-4db30e98…` booted 02:21:42 and logged
   `privacy key delivered from custodian escrow … (head 4)`. Transparency

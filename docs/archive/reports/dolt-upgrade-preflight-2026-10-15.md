@@ -2,7 +2,7 @@
 
 Owner ruling: update Dolt to the latest version, after checking
 compatibility. Research is on branch `ops/dolt-upgrade`
-(`docs/reports/dolt-upgrade-compat-2026-10-15.md`). This is rollout step 2:
+(`docs/archive/reports/dolt-upgrade-compat-2026-10-15.md`). This is rollout step 2:
 a backup, then 2.4.2 run against scratch copies. Production was not changed.
 
 ## Backup (14:50:31–14:50:34 UTC, 3 s outage)

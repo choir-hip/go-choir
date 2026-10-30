@@ -289,7 +289,7 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 	// Exit loop on cap: the last successful body is already stored above.
 	// Read GuestReceipt under the lock, release, then mark — markDetail
 	// re-acquires t.mu, so calling mark inside the critical section is a
-	// self-deadlock (docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
+	// self-deadlock (docs/archive/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md).
 	t.mu.Lock()
 	hasReceipt := t.GuestReceipt != nil
 	if !hasReceipt {

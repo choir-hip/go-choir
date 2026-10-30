@@ -9,7 +9,7 @@ import (
 // logs its end and duration (or its failure). Every store step between the
 // process start and the listener is wrapped in one, so a boot that hangs
 // leaves a "status=starting" line with no end: that line names the step. The
-// 2026-10-21 outage (docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md)
+// 2026-10-21 outage (docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md)
 // had no such line for its ALTER, and took 50 minutes to read.
 //
 //	done := objectgraph.BootPhase("store: open", "runtime-schema/apply-ddl")

@@ -53,7 +53,7 @@ less-important apps through self-development, which waits on app packages.
 ## Open risks carried from the slice
 
 - The seccomp fix for the Bun timer (fea6d7c5b,
-  `docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md`) was
+  `docs/archive/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md`) was
   verified on aarch64 in Docker only; this is its first staging run on
   x86_64.
 - Claude's own Bash tool fails inside bwrap without `CAP_SYS_ADMIN` (design

@@ -15,7 +15,7 @@ import (
 )
 
 // CheckpointVerdictRecord is the host's judgment of one published checkpoint
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, slice 2). The
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, slice 2). The
 // record is operational state in Store A, never part of the semantic tape.
 type CheckpointVerdictRecord struct {
 	ComputerID       string                            `json:"computer_id"`

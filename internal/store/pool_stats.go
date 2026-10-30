@@ -6,7 +6,7 @@ import "database/sql"
 // them. The write pool holds one connection, so
 // WaitCount and WaitDurationMS are how often and how long callers waited for
 // it: their growth between store_stalled 503s shows how loaded the one write
-// connection is (docs/problems/paper-post-refresh-health-windows-2026-10-22.md).
+// connection is (docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md).
 type PoolStats struct {
 	Write PoolStat `json:"write"`
 	Read  PoolStat `json:"read"`

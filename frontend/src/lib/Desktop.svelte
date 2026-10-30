@@ -127,7 +127,7 @@
   // answering. The browser never restarts it: vmctl restarts a guest that
   // stays unreachable by itself (docs/vmctl-360-review-2026-10-10.md Phase 0
   // step 2; owner ruling in
-  // docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
+  // docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
   const BOOTSTRAP_NOT_ANSWERING_AFTER_ATTEMPT = 3;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';

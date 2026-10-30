@@ -58,12 +58,12 @@ The backup is real now: it has been restored and read. If I were holding the pho
 
 ## Names and receipts
 
-- Goal: docs/definitions/choir-ledger-metamission-2026-10-13.md; owner notes sections 32 and 33.
+- Goal: docs/archive/definitions/choir-ledger-metamission-2026-10-13.md; owner notes sections 32 and 33.
 - Backup: docs/problems/no-off-host-backup-2026-10-20.md, item 21.
-- Segment store: docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md; landed 8791f9b8f, deployed 06:27 UTC.
+- Segment store: docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md; landed 8791f9b8f, deployed 06:27 UTC.
 - Drill report: docs/reports/selfdev-two-arm-drill-imageapp-2026-10-21.md.
 - Fixes: carried patch secrets 85250d067; management network prompt 7b6cbd918; seccomp siblings 4d45601d0; capsule release dir 871c3c145; drill brief f9ad90709; Complete refused during a job b03f57414; xattr refused as unsupported and build cleanup 16a5aa0e0; management carried-patch prompt 10132ed5b.
 - Engineering failures 16 to 26: docs/problems/engineering-completion-path-cluster-2026-10-20.md.
 - Research more: rx-c4e206c940e3.
 - SlidesApp drills a to h, deploys cbef56155 to 10132ed5b; the delegate test computer is stopped. Structural options: failure 26 in the cluster doc.
-- Overnight goal: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md.
+- Overnight goal: docs/archive/definitions/choir-overnight-research-oped-sources-2026-10-20.md.

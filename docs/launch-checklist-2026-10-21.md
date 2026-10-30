@@ -262,7 +262,7 @@ the panel's agreed order:
   went to 70% busy at c038df7c6. The next step, four stored generated
   columns (51667a3ce), blocked the paper's boot: adding them rewrites every
   row of `og_objects` on the boot path, holding the store's one connection
-  (docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md). It was
+  (docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md). It was
   reverted in f2c4a3ec3. Measured locally on 20,000 rows: a plain nullable
   column adds in 8 ms and indexes in 94 ms, while a stored generated column
   takes 2.3 to 3.6 s. Next: plain columns that the four writers of

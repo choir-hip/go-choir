@@ -7,7 +7,7 @@ Status: documented; fix follows in a separate commit.
 CI run 38441988844 (40b196f4), job "Deploy to Staging (Node B)":
 
 - The NixOS switch failed once on the known dbus-broker reload stall
-  (docs/problems/deploy-switch-dbus-reload-and-vmctl-health-window-2026-10-09.md),
+  (docs/archive/problems/deploy-switch-dbus-reload-and-vmctl-health-window-2026-10-09.md),
   retried, and completed at 18:00:33.
 - The new active-computer refresh (bcc556de) deferred both active computers
   at 18:00:40: the owner's always-on computer (candidate-fleet-e15cb89f…)

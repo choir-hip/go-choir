@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// docs/problems/paper-post-refresh-health-windows-2026-10-22.md, "Findings:
+// docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md, "Findings:
 // an instrument that names the holder at the stall": a store_stalled 503
 // names, from inside the guest and at the moment the reads gave up, the
 // goroutine that holds the store's one connection inside the engine, and the

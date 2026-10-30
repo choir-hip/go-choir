@@ -1,7 +1,7 @@
 package platform
 
 // The host's verdict on a published checkpoint (slice 2 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. Ways it could fail:
 //
 //  1. a published checkpoint has no pending verdict, so nothing ever asks the

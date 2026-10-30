@@ -21,7 +21,7 @@ import (
 )
 
 // EffectiveRelease is what code this computer runs and at which head (P6,
-// docs/reports/p6-p8-release-adopt-2026-10-15.md): the CLAUDE.md "Product
+// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): the CLAUDE.md "Product
 // restore vs platform deploy" pre-flight. Platform deploy SHA and a
 // computer's effective identity diverge on purpose once computers
 // self-develop, so identity is never the SHA alone.

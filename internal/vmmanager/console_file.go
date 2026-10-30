@@ -10,7 +10,7 @@ import (
 )
 
 // Firecracker's console is a file, not a pipe
-// (docs/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md).
+// (docs/archive/problems/firecracker-sigpipe-deadlock-after-vmctl-restart-2026-10-10.md).
 // A pipe needs a reader, and its reader was a goroutine in the vmctl that
 // launched the VM. Once that vmctl exited, the guest's next console write
 // raised SIGPIPE in firecracker, whose handler deadlocked the vCPU. A file

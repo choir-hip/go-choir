@@ -60,7 +60,7 @@ Research: docs/research/historical-precommitment-backtesting-2026-10-14.md
 ## Roadmap consequences (lead's reading)
 
 1. Security and agentic red teaming before the app rebuilds (already the
-   owner's order; docs/reports/computer-isolation-security-review-2026-10-14.md
+   owner's order; docs/archive/reports/computer-isolation-security-review-2026-10-14.md
    in progress).
 2. Self-development gate, then app agents (LP, S7-0) as the next month's
    main build.

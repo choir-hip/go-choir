@@ -131,7 +131,7 @@ func TestDurabilityTableIsTheDesignedTen(t *testing.T) {
 	}
 }
 
-// F9 (docs/design/choir-event-table-f-c-2026-10-22.md section 2.1): every
+// F9 (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 2.1): every
 // EventKind has a storage entry, and the table cannot keep an entry for a
 // kind that no longer exists.
 func TestEveryEventKindHasAStorageClass(t *testing.T) {

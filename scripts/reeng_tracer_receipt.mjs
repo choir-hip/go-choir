@@ -1,7 +1,7 @@
 // The tracer's receipt across a kill, kept apart so node --test can prove it
 // (scripts/reeng_tracer_receipt_test.mjs). A tracer killed with its parent
 // shell left no receipt and its computer running
-// (docs/problems/tracer-killed-leaves-computer-running-2026-10-15.md):
+// (docs/archive/problems/tracer-killed-leaves-computer-running-2026-10-15.md):
 //  - the receipt is now written as each phase happens, marked in_progress,
 //    so even SIGKILL leaves the minted computer id and the phases on disk;
 //  - SIGINT, SIGTERM and SIGHUP record the interruption, stop the minted

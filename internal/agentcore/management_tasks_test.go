@@ -18,7 +18,7 @@ import (
 )
 
 // Management delegation S2a through the real reduce and commit paths
-// (docs/reports/management-delegation-design-2026-10-14.md §11, round 2).
+// (docs/archive/reports/management-delegation-design-2026-10-14.md §11, round 2).
 // Ways it can fail, written before the code (numbers are the note's):
 //
 //	FM1  the parent waits on a task (a barrier, or a commit that waits for

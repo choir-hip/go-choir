@@ -8,7 +8,7 @@ review:
   reviewer: pending (owner directive 2026-10-06 supersedes authoring panel on scope)
   frozen_ref: none
   verdict: none
-  evidence_ref: docs/problems/management-typed-json-tools-remain-2026-10-06.md
+  evidence_ref: docs/archive/problems/management-typed-json-tools-remain-2026-10-06.md
 
 start:
   captured_at: '2026-10-06T03:45:00Z'
@@ -114,7 +114,7 @@ boundaries:
   mutation_class: orange
   authority_sources:
     - owner 2026-10-06 (kill all ad-hoc JSON tool calls; RLM-only prompts)
-    - docs/problems/management-typed-json-tools-remain-2026-10-06.md
+    - docs/archive/problems/management-typed-json-tools-remain-2026-10-06.md
   must_preserve:
     - Lifecycle control binding validation (report_to_texture semantics).
     - Executor-acknowledged assignment cancellation.
@@ -176,9 +176,9 @@ now:
     `initial_dispatch` lost AND the fresh-mint watchdog's
     redriveStrandedFreshMintManagement returned false on zero bound
     packets (escalate binds none), slot deadlocked. Probe timed out 45min
-    (`docs/evidence/smg-rlm-acceptance-owner-clean-2026-10-06.json`). NEW
+    (`docs/archive/evidence/smg-rlm-acceptance-owner-clean-2026-10-06.json`). NEW
     SUBSTRATE DEFECT — problem doc
-    `docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md`,
+    `docs/archive/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md`,
     fix 01199fb1 fail-releases the slot at the watchdog deadline.
 
     2026-10-06 post-fix probe (owner computer refreshed to build
@@ -252,7 +252,7 @@ now:
   blocker_or_risk: >-
     RESOLVED for close. Two NEW substrate defects discovered en route and
     carried forward to SA, not blocking SMG: (a)
-    docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+    docs/archive/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
     — a delegated-cast producer report fails the
     ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm,
     killing every subsequent management activation in a ~30s burn loop;
@@ -270,8 +270,8 @@ receipts:
     next_station: choir-appdev-sa-agent-density-2026-10-05
     evidence_ref: docs/evidence/smg-rlm-acceptance-disposable-2026-10-06.json
     problem_refs:
-      - docs/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
-      - docs/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
+      - docs/archive/problems/sa-delegated-report-poisons-management-listing-2026-10-06.md
+      - docs/archive/problems/sa-management-mint-no-start-slot-deadlock-2026-10-06.md
     named_edge: >-
       Re-run legs 1-3 on the owner computer after SA slice 1 (owner-guest
       storm convergence). Director 2026-10-06 directive satisfied: legs

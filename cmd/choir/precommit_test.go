@@ -17,7 +17,7 @@ import (
 )
 
 // Calibration level 2 CLI and MCP
-// (docs/reports/choir-mcp-precommitments-2026-10-14.md). Ways the CLI could
+// (docs/archive/reports/choir-mcp-precommitments-2026-10-14.md). Ways the CLI could
 // fail, written before the code:
 //   - a claim is sent without p, or with a p the CLI silently defaulted;
 //   - repeated --tag/--evidence flags keep only the last value;

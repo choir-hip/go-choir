@@ -6,7 +6,7 @@ Draft for owner review, 2026-10-11. Owner direction (2026-10-11): "lock
 down the system so that all interagent comms are done through the
 precommitment records protocol. That's the real design ... Gotta bring the
 future forward." Problem record:
-[problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md](../../problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md).
+[problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md](../problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md).
 Theory: [Prospective Self-Alignment](../../precommitment-records.md)
 (working paper, October 9 revision; §2 the record and the loop, §4.1
 procedural fidelity, §7 reputation, §10 implementation status). Mechanism:

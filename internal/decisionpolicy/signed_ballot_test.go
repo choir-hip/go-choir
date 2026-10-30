@@ -14,7 +14,7 @@ import (
 )
 
 // P4 failure modes 1-6 at the ballot verifier
-// (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
 
 type pinnedKeys map[string]ed25519.PublicKey
 

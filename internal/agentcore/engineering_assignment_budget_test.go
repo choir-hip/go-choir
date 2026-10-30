@@ -4,7 +4,7 @@ import "testing"
 
 // The engineering capsule's memory must hold the cmd/autoputer link and fit
 // the default guest's capsule admission budget
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // B5). Measured 2026-10-14 in a linux/arm64 container: the relink's largest
 // process peaked at 1,891,288 KiB (1.80 GiB) with DWARF, 1,571,536 KiB
 // (1.50 GiB) with -ldflags=-s -w; GOGC=50 did not lower it (1.75 GiB). At

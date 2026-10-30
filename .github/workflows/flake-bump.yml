@@ -1,5 +1,5 @@
-# Weekly full nixpkgs bump (docs/reports/patch-lanes-plan-2026-10-15.md,
-# slice 5; docs/reports/patch-pipeline-time-to-patch-2026-10-15.md, 5.1
+# Weekly full nixpkgs bump (docs/archive/reports/patch-lanes-plan-2026-10-15.md,
+# slice 5; docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md, 5.1
 # "Everything else"). The base `nixpkgs` input is a frozen nixos-unstable
 # snapshot; left alone it stops patching everything that is not in its own
 # lane (systemd, OpenSSH, glibc, OpenSSL, Caddy, Dolt, SearXNG, the
@@ -82,7 +82,7 @@ jobs:
           pr-body: |
             Weekly base bump: `nixpkgs` moves to the current `nixos-unstable`
             head. `nixpkgs-kernel` (the kernel lane) is not touched.
-            Design: docs/reports/patch-lanes-plan-2026-10-15.md, slice 5.
+            Design: docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 5.
 
             ```
             {{ env.GIT_COMMIT_MESSAGE }}

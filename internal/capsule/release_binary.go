@@ -31,7 +31,7 @@ const (
 	ReleaseBinaryCapsuleBuilt = "capsule_built"
 	// ReleaseBinaryReusedRunning: the change touches no binary input, so
 	// Freeze staged this computer's running executable instead of a build
-	// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option A).
+	// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option A).
 	ReleaseBinaryReusedRunning = "reused_running"
 )
 
@@ -208,7 +208,7 @@ func PlanReleaseBinaryReuseWith(ctx context.Context, changes []FileChange, sourc
 // builds its capsule executor before the per-computer source.projection
 // setting is loaded and the setting can change at runtime, so the answer is
 // read each time Freeze builds its differ, never latched at construction
-// (docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md).
+// (docs/problems/freeze-replays-a-changed-tree-2026-10-26.md).
 // The zero value has no gate and is off.
 type reuseGate struct{ fn atomic.Pointer[func() bool] }
 

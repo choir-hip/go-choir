@@ -13,7 +13,7 @@ import (
 )
 
 // Source guards for deploy 1 of F-c
-// (docs/design/choir-event-table-f-c-2026-10-22.md section 5).
+// (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 5).
 
 // storeSourceFiles parses this package's non-test sources.
 func storeSourceFiles(t *testing.T, match func(name string) bool) map[string]*ast.File {

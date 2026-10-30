@@ -5,8 +5,8 @@ codex, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash,
 muse-spark-1.3). Prompt: `.agentic-consensus/roadmap-prompt-2026-10-13.md`.
 Raw outputs are session diagnostics under
 `.agentic-consensus/roadmap-lateral-2026-10-13/`. Inputs:
-docs/reports/roadmap-after-autopaper-live-DRAFT-2026-10-13.md,
-docs/reports/multilingual-osint-sourcing-research-2026-10-13.md, the C2
+docs/archive/reports/roadmap-after-autopaper-live-DRAFT-2026-10-13.md,
+docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md, the C2
 close receipts and the arrivals problem record.
 
 ## The shared reframe (8 of 8)

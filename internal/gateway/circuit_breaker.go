@@ -24,7 +24,7 @@ import (
 // a free preview model's upstream rate limit (429), its 5xx, its timeouts.
 // Those open that model's breaker only; one provider-wide breaker let
 // cat-jam-free's 429s fail deepseek on the same provider
-// (docs/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md).
+// (docs/archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md).
 // The provider breaker counts only failures to reach the provider at all
 // (refused or reset connections, DNS, TLS), which no model escapes.
 //

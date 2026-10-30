@@ -19,7 +19,7 @@ import (
 // ListObjectsPage (a TopN over every remaining row per page, quadratic) and
 // kept only the rows with no computer_id; ListLifecycleRunsByOwner, the second,
 // returns the lifecycle rows
-// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md section 4).
+// (docs/archive/problems/paper-remaining-store-stall-holders-2026-10-23.md section 4).
 //
 // Ways the fix can fail, written before the code:
 //  1. The answer changes: a run of another owner leaks in, a legacy run is

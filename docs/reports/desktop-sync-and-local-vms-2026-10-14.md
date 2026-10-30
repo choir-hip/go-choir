@@ -17,13 +17,13 @@ files from the folder, like a Google Drive or Dropbox. And we're going to
 want to incorporate this into the mobile app."
 
 Inputs:
-- [self-hosting-and-desktop-2026-10-14.md](self-hosting-and-desktop-2026-10-14.md)
+- [self-hosting-and-desktop-2026-10-14.md](desktop-sync-and-local-vms-2026-10-14.md)
   (the desktop survey, §2 and §3)
-- [vm-backend-interface-2026-10-14.md](vm-backend-interface-2026-10-14.md)
+- [vm-backend-interface-2026-10-14.md](vm-hypervisor-seam-design-2026-10-21.md)
   (the `vmbackend` seam; on commit b6f27ded4, not yet on `main`)
 - [isolation-runtimes-2026-10-14.md](../research/isolation-runtimes-2026-10-14.md)
   (§5, §6: libkrun and Virtualization.framework for the desktop)
-- [choir-state-and-vision-2026-10-14.md](choir-state-and-vision-2026-10-14.md)
+- [choir-state-and-vision-2026-10-14.md](../archive/reports/choir-state-and-vision-2026-10-14.md)
   (mobile and app-store constraints)
 
 External facts come from primary sources where we could find them (Apple,
@@ -606,7 +606,7 @@ port-and-path match with the per-session `state`. Red (auth).
 ## 5. How this connects to the mobile app
 
 There is no mobile code in the repo today. The Autoradio app is vision
-([choir-state-and-vision-2026-10-14.md](choir-state-and-vision-2026-10-14.md)).
+([choir-state-and-vision-2026-10-14.md](../archive/reports/choir-state-and-vision-2026-10-14.md)).
 What carries over:
 
 - **The sync API is the contract.** `files-sync/changes`, If-Match writes,
@@ -704,7 +704,7 @@ Local models:
 - https://docs.ollama.com/api/openai-compatibility
 
 
-## Merged from docs/reports/self-hosting-and-desktop-2026-10-14.md (2026-10-14)
+## Merged from docs/reports/desktop-sync-and-local-vms-2026-10-14.md (2026-10-14)
 
 **Self-Hosting Choir, and the Desktop App as a Server-less Deployment.**
 Date: 2026-10-14. Research and design survey, read at `main` f54f05c42. Mutation class of this note: **green** (docs only). Most of the work it proposes is orange or red (§6). Nothing here was run against Node B or staging. One public, read-only probe was made: `GET https://choir.news/api/platform/publications/front` returned 200.

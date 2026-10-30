@@ -9,7 +9,7 @@ Owner ruling (2026-10-15): "update Dolt to the latest version; research that
 everything is compatible first." Background:
 [dolt-clustering-assessment-2026-10-15](../problems/dolt-clustering-assessment-2026-10-15.md),
 [platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15](../problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15.md),
-[embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11](../problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md).
+embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.
 
 Tags: **[E]** evidence (command output, upstream source or release text, file
 and line). **[H]** hypothesis. Sources: `gh api repos/dolthub/dolt/releases`

@@ -9,7 +9,7 @@ import (
 )
 
 // Guest egress policy (F6,
-// docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+// docs/problems/desk-boundary-residuals-2026-10-21.md).
 //
 // Ways this could fail, written first:
 //  1. the host service ports in the egress chain drift from

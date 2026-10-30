@@ -1,7 +1,7 @@
 package agentcore
 
 // Freeze's distinct-receipts refusal must name the slots that share a
-// receipt (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
+// receipt (docs/archive/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
 // In drill selfdev-ab-2239 the desk passed the same receipt as
 // build_recipe_ref and test_receipts[0] and was told only "distinct build,
 // test, and dependency/toolchain execution receipts are required"; it

@@ -341,7 +341,7 @@ func TestSessionImportStatementMix(t *testing.T) {
 	}
 }
 
-// Cluster A (docs/reports/cross-model-cell-errors-2026-10-13.md): yaegi
+// Cluster A (docs/archive/reports/cross-model-cell-errors-2026-10-13.md): yaegi
 // v0.16.1 panics compiling a top-level comma-ok or `x := v[i].F`, and the
 // panic poisoned the worker, losing its heap, 21 times in one run. The same
 // defect family as "constant definition loop", which already preserves.

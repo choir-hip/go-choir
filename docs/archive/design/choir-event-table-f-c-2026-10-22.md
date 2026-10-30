@@ -852,7 +852,7 @@ Why a stamp and not the alternatives (section 7 has the full comparison):
 Created empty by `bootstrap` (`store.go:765`) in `schemaDDL` (`:253`) as
 `CREATE TABLE IF NOT EXISTS`, with the indexes inline. Nothing scales with
 `og_objects` at boot. This is the og_key_index precedent
-(`docs/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md`,
+(`docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md`,
 "Design").
 
 ```sql

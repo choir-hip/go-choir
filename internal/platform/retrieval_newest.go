@@ -7,7 +7,7 @@ import (
 )
 
 // Newest-N reads over Store B are time-bounded (§4 G2 of
-// docs/reports/object-graph-retrieval-research-2026-10-14.md): Dolt 2.1.9
+// docs/archive/reports/object-graph-retrieval-research-2026-10-14.md): Dolt 2.1.9
 // answers "ORDER BY updated_at DESC LIMIT n" over an equality prefix by
 // sorting the whole range, so a computer with a million captures pays for a
 // million rows to read a thousand. The ladder reads disjoint windows,

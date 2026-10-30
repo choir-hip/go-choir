@@ -6,7 +6,7 @@ import (
 )
 
 // TestFreedLifecycleControlRebindsAfterCarrierCancel is the regression for
-// docs/problems/s0m-freed-control-stale-activerunid-blocks-rebind-2026-10-03.md.
+// docs/archive/problems/s0m-freed-control-stale-activerunid-blocks-rebind-2026-10-03.md.
 // A research carrier bound mid-delivery that is cancelled (the
 // open_researcher/ask kill path) must release its claim AND the freed packet
 // must re-drive a fresh carrier — not re-strand because TerminalizeRun left

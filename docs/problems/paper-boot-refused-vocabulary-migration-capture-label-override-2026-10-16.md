@@ -112,7 +112,7 @@ is never rewritten. See
 `live-writes-refused-by-deposit-upcast-prose-leaves-2026-10-16.md`.
 
 
-## Merged from docs/problems/live-writes-refused-by-deposit-upcast-prose-leaves-2026-10-16.md (2026-10-16)
+## Merged from docs/problems/paper-boot-refused-vocabulary-migration-capture-label-override-2026-10-16.md (2026-10-16)
 
 **The paper's live writes are refused (or rewritten) by the deposit upcast: prose leaves with "-super-" read as identities (2026-10-16).**
 Status: fixed in b8feaa147 and deployed 16:30; outcome below. Third symptom of the class in the clustering assessment of `paper-boot-refused-vocabulary-migration-capture-label-override-2026-10-16.md`. **A boot with a replay tail can take the paper down again.**

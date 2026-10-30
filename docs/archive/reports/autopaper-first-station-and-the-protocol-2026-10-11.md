@@ -49,8 +49,8 @@ If I were holding the phone, I would read the design draft and answer its eight 
 ## Names and receipts
 
 - Staging identity at writing: 25c8b5b0 for the host (CI 38149299934); the insert-only capture fix deployed with 8031258a (CI 38149043966).
-- Goal files: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md (complete; receipts W1-panel1, W1-panel2, W1-panel3, W1-fix, W1-fix2); docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (blocked; receipt W2-review1); docs/definitions/choir-autopaper-metamission-2026-10-11.md; docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md (receipts S1g, S1h).
-- Protocol: docs/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md; docs/precommitment-records.md (draft for owner review).
+- Goal files: docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md (complete; receipts W1-panel1, W1-panel2, W1-panel3, W1-fix, W1-fix2); docs/archive/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (blocked; receipt W2-review1); docs/archive/definitions/choir-autopaper-metamission-2026-10-11.md; docs/archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md (receipts S1g, S1h).
+- Protocol: docs/archive/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md; docs/precommitment-records.md (draft for owner review).
 - W1 fixes: 726aa392 (generic-route capture refusal, validators kept only after a write, lost-successor re-arm, overdue flag, request batching); 56ec63e0 (insert-only capture create, bounded error text).
 - Research: 2d093972 (prompt v5), 25c8b5b0 (prompt v6, coverage before confirmation); PD1 receipts S1h and S1i; the hill-climb pauses for the protocol.
 - Theory: docs/precommitment-records.md (the paper you sent, already in the repo since October 9, identical to the PDF); the design now cites it.

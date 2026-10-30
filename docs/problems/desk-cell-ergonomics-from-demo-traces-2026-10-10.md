@@ -7,10 +7,10 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
 
 - Every management cell ran twice under one call id. The duplicate's failure
   read as an API error after the original had already committed
-  (docs/problems/responses-stream-duplicates-tool-calls-2026-10-10.md).
+  (docs/archive/problems/responses-stream-duplicates-tool-calls-2026-10-10.md).
 - Every delegated cast was reaped before its spawn, so management's correct
   `choir.Cast("engineering", …)` never produced engineering work
-  (docs/problems/delegated-cast-reaped-before-spawn-2026-10-10.md).
+  (docs/problems/delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md).
 
 ## Kernel ergonomics (every desk)
 
@@ -96,7 +96,7 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
   (`internal/store/lifecycle_texture_target.go`) requires the caller run
   to be the creating run. That run-level provenance is deliberate (the
   August 8 test "same channel is not provenance"; kept intact in
-  docs/evidence/effects-red-texture-caller-reactivate-2026-08-17.md), so
+  docs/archive/evidence/effects-red-texture-caller-reactivate-2026-08-17.md), so
   this record does not change it. The defect is the message. One error
   string covers seven conditions (wrong id, scope, trajectory, closed
   status, assignee, authority profile, provenance) and says nothing about

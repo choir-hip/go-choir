@@ -209,7 +209,7 @@ var frozenOGObjectKinds = map[string]bool{
 // C1e deletes (work items and delivery packets). The runtime census lists
 // objects of these kinds so the checker can see that none is minted once
 // the code that minted them is gone
-// (docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md).
+// (docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md).
 // Not a decoder table: naming a kind here decodes nothing.
 var RetiredWorkStateKinds = []string{"choir.work_item", "choir.worker_update"}
 

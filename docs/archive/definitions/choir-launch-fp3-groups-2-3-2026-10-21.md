@@ -210,11 +210,11 @@ now:
 
 # FP3 groups 2 and 3
 
-Problem records: [host-egress-floor-fails-open-2026-10-21.md](../problems/host-egress-floor-fails-open-2026-10-21.md)
+Problem records: [host-egress-floor-fails-open-2026-10-21.md](../../problems/host-egress-floor-fails-open-2026-10-21.md)
 (group 2); the SEC-11 residual in
-[loopback-is-a-credential-2026-10-14.md](../problems/loopback-is-a-credential-2026-10-14.md)
+[loopback-is-a-credential-2026-10-14.md](../../problems/loopback-is-a-credential-2026-10-14.md)
 (with its 2026-10-21 addendum)
-and [hostauth-enforce-flip-2026-10-20.md](../problems/hostauth-enforce-flip-2026-10-20.md)
+and [hostauth-enforce-flip-2026-10-20.md](../../problems/hostauth-enforce-flip-2026-10-20.md)
 (group 3).
 
 ## What was built
@@ -356,7 +356,7 @@ Cut 2 (group 3: 239a23c02 .. 93205a30d), after the deploy:
 ## Containment gaps after cut 2 (lane fp3-containment-gaps)
 
 Problem record:
-[host-containment-gaps-after-fp3-cut-2-2026-10-22.md](../problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
+[host-containment-gaps-after-fp3-cut-2-2026-10-22.md](../../problems/host-containment-gaps-after-fp3-cut-2-2026-10-22.md).
 Deploy T's proof left 28 containment failures. Twelve came from the
 deploy's rename of deploy.env after the units restarted. Sixteen came from
 caddy, goproxy, qdrant and searx hiding nothing. The fix (844e0026b, red;
@@ -487,7 +487,7 @@ namespace error, if corpusd is not connected to 13307, or if step 3 shows
 a missing key.
 ## SEC-10 proof (guest side, lane/fp3-sec10-guest-dns)
 
-Problem record: [guest-dns-host-resolver-unused-2026-10-22.md](../problems/guest-dns-host-resolver-unused-2026-10-22.md).
+Problem record: [guest-dns-host-resolver-unused-2026-10-22.md](../../problems/guest-dns-host-resolver-unused-2026-10-22.md).
 The lane lands with `VMCTL_GUEST_DNS_ONLY=` empty, so its own deploy changes
 no computer. Then, on Node B as root:
 

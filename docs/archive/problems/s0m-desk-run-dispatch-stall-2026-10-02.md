@@ -57,7 +57,7 @@ a duplicate that does land no-ops past pending.
 
 ## Evidence
 
-- `docs/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json` (v3: timeout)
-- `docs/evidence/s0m-rn3c-escalate-acceptance-v4-2026-10-02.json` (v4: timeout, deepseek pending)
-- `docs/evidence/s0m-ask-acceptance-2026-10-02.json` (ask probe: timeout)
+- `docs/archive/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json` (v3: timeout)
+- `docs/archive/evidence/s0m-rn3c-escalate-acceptance-v4-2026-10-02.json` (v4: timeout, deepseek pending)
+- `docs/archive/evidence/s0m-ask-acceptance-2026-10-02.json` (ask probe: timeout)
 - Guest health: `running_runs: 0`, `desk_pending_mutations: 14` at ~T+8min post-boot.

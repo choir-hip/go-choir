@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// docs/problems/engineering-result-strands-on-the-completed-casting-turn-2026-10-10.md:
+// docs/problems/engineering-completion-path-cluster-2026-10-20.md:
 // management completed its turn seconds after casting, so the engineering
 // result was delivered to a dead run and nothing woke management. The fix
 // parks the casting turn while its own cast is open, so the result resumes

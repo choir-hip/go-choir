@@ -10,7 +10,7 @@ import (
 )
 
 // Job memory on the executor; the design and failure modes are in
-// docs/reports/memory-hotplug-controller-design-2026-10-14.md section 9.
+// docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md section 9.
 
 // SetLiveMemoryBudget makes the capsule budget follow the guest's memory:
 // budget is read at every admission (LiveMemoryBudget); a reading of 0

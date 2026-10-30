@@ -1,7 +1,7 @@
 # A cancelled run skips the post-turn hook, so its rounds stay open (2026-10-14)
 
 Status: found in code while building management delegation S2a
-(`docs/reports/management-delegation-design-2026-10-14.md`). Not seen on
+(`docs/archive/reports/management-delegation-design-2026-10-14.md`). Not seen on
 staging; hypothesis about frequency only. S2a handles the case for
 management task runs; the general case is open.
 

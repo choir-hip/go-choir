@@ -17,7 +17,7 @@ import (
 
 // Freeze stages the running binary for a change with no binary input, and
 // refuses to for a Go change or a source pinned to another commit
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
 // A1-A4, A8). Ways it could fail: the reused file is not the running bytes;
 // the provenance is missing or names the wrong origin; a desk-built binary is
 // replaced; a Go change ships the running binary; the error does not say the

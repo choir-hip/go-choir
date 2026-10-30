@@ -32,17 +32,17 @@ start:
       frozen, awaiting approval and applied under qualified consensus, rendered
       evidence in Texture, and restored a pinned head; its probe did not assert
       a runtime code effect
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-100).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-100).
     - >-
       Self-dev effect reaches only the served release: StageGrantedRelease writes
       under var/lib/artifact/release, the updater swaps current, and the computer
       surface is the current/frontend reader; the runtime itself is executed from
       the image Nix store
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:102-109).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:102-109).
     - >-
       Semantic snapshots already provide ProjectionBase blobs plus replay
       watermark W and PlanRecovery, while the current owner blob is about 16 GB
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:136-140).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:136-140).
     - >-
       Existing release staging requires a frozen engineering capsule and emits
       its staged release from its merged capsule tree
@@ -146,7 +146,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified metamission 2026-10-01 (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:153-173, 373-379)
+    - owner-ratified metamission 2026-10-01 (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:153-173, 373-379)
     - docs/choir-doctrine.md
     - docs/computer-ontology.md
     - existing M7 decision and materialization machinery (internal/agentcore/api_self_development.go:902-1032; internal/agentcore/self_development_materializer.go:39-158)
@@ -173,7 +173,7 @@ heresy_delta:
     - >-
       M11 proved a control-plane decision and pinned restore without asserting a
       runtime code effect, so an approval receipt alone is not evidence of a
-      complete guest release (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-109).
+      complete guest release (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:94-109).
   introduced: []
   repaired:
     - none; this station remains checkpoint_incomplete pending S2 and S5.
@@ -227,7 +227,7 @@ now:
       canonical event, checkpoint and route-projection chain.
     kind: architecture
     status: proposal
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:578-580
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:578-580
     owner_ratification_ref: none — the specific M7 full-release extension is not separately owner-ratified.
   belief:
     believed_state: >-
@@ -294,7 +294,7 @@ receipts: []
   `internal/agentcore/self_development_materializer.go:546-655`).
 - The updater-kill sweep deliberately strengthens the spine's S6 bullet with
   fault-boundary proof of its one-transaction invariant
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:578-580).
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:578-580).
 - At every transaction boundary, kill the updater, restart/reconcile normally,
   and observe one joined identity: release digest, canonical head, checkpoint,
   route, runtime, frontend and changed backend response.
@@ -311,13 +311,13 @@ receipts: []
   (`internal/updater/updater.go:524-537`).
 - In this station, “resume” means the existing cold-resume lifecycle path;
   machine-snapshot resume and its proof remain exclusively S3 work
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134,
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134,
   544-559).
 - S2 hands over a realizable, base-compatible app-layer closure. S5 hands over
   the owner-visible tested preview, supervision evidence, and serving-path-
   attested rendered-content digest. S6 hands S7/S8 a single approved, complete
   release record—not a capsule directory or binary
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543,
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543,
   575-587).
 - The existing crash proof recovers a parked Materializing operation through the
   same reconciler with exactly one event chain; S6 expands that proof to every

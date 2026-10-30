@@ -7,7 +7,7 @@ test (`TestBootReadCensus`). Mutation class of the fixes named below: red
 (the event sequence allocator, a boot-path read) and orange (a read path).
 
 Parent record:
-[stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md](stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md)
+[stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md](../archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md)
 (on `origin/lane/fp0-stream-seq-seed`; its fix is not on `main` or on the
 paper). Claims are marked **[V]** verified (a plan, a measurement, a log line
 or the code, named beside it) or **[H]** hypothesis.

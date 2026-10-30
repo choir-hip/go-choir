@@ -148,7 +148,7 @@ attempted twice in one call. (Amended 2026-10-14: with three members, "at
 most once" stranded a deepseek thread on cat-jam behind the same open
 circuit. Failover now walks the remaining members forward, each at most
 once, and never goes back; see
-docs/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md.)
+docs/archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md.)
 
 **6. Every choice is recorded.**
 
@@ -256,7 +256,7 @@ the catalog but outside the default pool.
 Code b0d69d4d, CI 38312172697 green, staging health and the test
 computer's guest build both b0d69d4d. Probe `scripts/m0_pools_acceptance.mjs`
 on a fresh test computer (computer-d57369c008d75ec0d3069dd4efe5a97b),
-artifact docs/evidence/m0-model-pools-acceptance-2026-10-12.json: PASS.
+artifact docs/archive/evidence/m0-model-pools-acceptance-2026-10-12.json: PASS.
 Four documents authored in 24-35 s; 9 model-bearing runs, every one
 recording spec and hash assignment, every model a pool member; each of 9
 threads kept one model; both members used (gpt-6-luna on 4 threads,

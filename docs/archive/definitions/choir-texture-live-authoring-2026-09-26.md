@@ -187,7 +187,7 @@ now:
     scope_if_supported: texture desk full-RLM + cell-verb authoring
     status: supported
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3d, D14)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3d, D14)
       - owner directive 2026-09-26: full RLM, Go-only, no other tools
   belief:
     believed_state: >-
@@ -257,8 +257,8 @@ receipts:
 
 # R3d — Texture Live + Authoring, full RLM (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
 (R3d) + the owner directive in `start.owner_directive`: texture is a
 full-RLM desk — `desk_go_eval` only; genuine `AuthorAppAgent` revisions
 metabolizing ledger traffic under editorial discretion are authored by a

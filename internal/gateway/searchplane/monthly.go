@@ -11,7 +11,7 @@ import (
 // MonthlyQuota is a provider's monthly free allowance, spent at a pace:
 // each UTC day's cap is what is left of the period's target divided by the
 // days left in the period, today included
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md).
 // Because the remainder is re-divided every day, a quiet day raises the
 // later days' caps, and the period total never passes the target: on day
 // k of n, used + cap <= used + (target-used)/(n-k+1) <= target.

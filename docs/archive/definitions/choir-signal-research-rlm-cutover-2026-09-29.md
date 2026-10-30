@@ -26,7 +26,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent
@@ -123,7 +123,7 @@ now:
   status: superseded
   director_note_2026_10_05: >-
     ABSORBED into the app-dev metamission station SR
-    (docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md).
+    (docs/archive/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md).
     Phase 1 (13 in-cell choir.* verbs) landed; the deletion commit, deployed
     verify and prompt rewrite never happened and are SR's scope. This file
     stalled at 'phase 1 landed' when the spine moved on 2026-10-01.

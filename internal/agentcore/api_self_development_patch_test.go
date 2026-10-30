@@ -19,7 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
-// The source-patch export (docs/reports/selfdev-readiness-2026-10-15.md B3)
+// The source-patch export (docs/archive/reports/selfdev-readiness-2026-10-15.md B3)
 // serves a frozen candidate's source.patch so an agent outside the computer
 // can open a draft PR. Ways it could fail, written before the route:
 //   - it serves a patch before the candidate is frozen (requested or

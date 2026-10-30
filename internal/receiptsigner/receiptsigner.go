@@ -111,7 +111,7 @@ func allowedGuestReceipt(kind string) bool {
 }
 
 // The guest-core key signs exactly one ballot seat (P4 / S2,
-// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md): management's
+// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md): management's
 // independent-reviewer verdict. The capsule-verifier seat is corpusd's vote
 // on its own host build (platform-control); this signer refuses it so a guest
 // cannot even produce the wrong-domain ballot corpusd would refuse.

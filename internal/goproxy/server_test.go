@@ -572,7 +572,7 @@ func TestEvictionKeepsTheCacheUnderItsCap(t *testing.T) {
 }
 
 // A systemd DynamicUser StateDirectory is a symlink into /var/lib/private
-// (docs/problems/goproxy-cache-root-is-a-symlink-2026-10-14.md). The cache
+// (docs/archive/problems/goproxy-cache-root-is-a-symlink-2026-10-14.md). The cache
 // opened through the link must count the real files and evict files, never
 // the link itself.
 func TestCacheRootThroughSymlinkCountsAndEvictsRealFiles(t *testing.T) {

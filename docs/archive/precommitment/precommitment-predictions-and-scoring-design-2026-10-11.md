@@ -4,7 +4,7 @@
 
 Draft for owner review, 2026-10-11. Stations P3 (predictions required) and
 P4 (scoring) of
-[definitions/choir-precommitment-protocol-metamission-2026-10-11.md](../../definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
+[definitions/choir-precommitment-protocol-metamission-2026-10-11.md](../definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
 Parent design:
 [precommitment-protocol-design-2026-10-11.md](../../precommitment-records.md)
 (§4 the prediction, §5 resolution and scoring, §7 stations, §9 decisions,
@@ -158,7 +158,7 @@ hypothesis, and P3's demo measures it.
 
 ### 1.2 Jev today
 
-- Transport landed (M4, `docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md`).
+- Transport landed (M4, `docs/archive/evidence/m4-jev-transport-roundtrip-2026-09-30.md`).
   It runs as gateway `POST /provider/v1/judgments` with the model pinned
   server-side (`typesafe/jev-1.13-20260917`). Question types are `noul`,
   `choice` and `score` (`internal/gateway/jev.go:152`). The measured cost

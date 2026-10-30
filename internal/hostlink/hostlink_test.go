@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// docs/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md:
+// docs/archive/problems/host-deploy-restart-fails-in-flight-guest-turns-2026-10-10.md:
 // a deploy stopped the host services for 1 min 48 s and every guest call in
 // flight failed "connection refused". Failure modes pinned: a call sent
 // while the host is down fails instead of waiting; the resent POST arrives

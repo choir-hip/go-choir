@@ -129,7 +129,7 @@ func TestImportResidueSnapshotUsesDedicatedTimeout(t *testing.T) {
 }
 
 // Restore keeps the dedicated long budget (the manual checkpoint bind that
-// shared it is deleted: docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4).
+// shared it is deleted: docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.4).
 func TestRestoreUsesDedicatedTimeout(t *testing.T) {
 	var requests int
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

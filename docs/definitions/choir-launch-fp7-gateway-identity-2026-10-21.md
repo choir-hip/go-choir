@@ -193,7 +193,7 @@ now:
       is a separate, later landing.
     kind: operational
     status: settled
-    evidence_ref: the Jev pin incident (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md finding 2), hostauth's observe-then-enforce rollout, and the batch 1 panel (d5a62eace)
+    evidence_ref: the Jev pin incident (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md finding 2), hostauth's observe-then-enforce rollout, and the batch 1 panel (d5a62eace)
     owner_ratification_ref: not_applicable
   belief:
     believed_state: >-

@@ -6,13 +6,13 @@ service, a new guest-to-host tap port). Status (2026-10-21): landed on main
 NET-02 of the [checklist](../security-density-architecture-checklist-2026-10-21.md).
 
 Decision source: the owner, 2026-10-14, on
-[capsule-go-modules-decision-2026-10-14.md](capsule-go-modules-decision-2026-10-14.md):
+[capsule-go-modules-decision-2026-10-14.md](capsule-go-module-proxy-design-2026-10-14.md):
 "I like the Go module cache, and I like the better version with a small
 [module] proxy on the host." That picks option B (no Go egress beyond the
 platform) in its read-through form, which also answers B's open cost (a
 change that adds a new module still needs the network).
 
-Evidence: [c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md](../problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md),
+Evidence: [c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md](../archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md),
 cause 3. proxy.golang.org answers every module zip request with a redirect
 to `storage.googleapis.com`, which the L2 egress proxy refuses, so
 `go build ./cmd/autoputer` fails in every implementation capsule and no
@@ -405,9 +405,9 @@ changes `go.sum`, and that change becomes part of its frozen subject
   Linux, which this Mac cannot cross-compile. CI compiles it.
 
 
-## Merged from docs/reports/capsule-go-modules-decision-2026-10-14.md (2026-10-14)
+## Merged from docs/reports/capsule-go-module-proxy-design-2026-10-14.md (2026-10-14)
 
 **Decision: How Engineering Capsules Get Go Modules.**
-Date: 2026-10-14. For the owner. Found by the C1e B1 engineering drill (docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md).
+Date: 2026-10-14. For the owner. Found by the C1e B1 engineering drill (docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md).
 
 (Full text in git history at the path above.)

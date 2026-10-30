@@ -7,10 +7,10 @@ session on 2026-10-13.
 ## Where we are
 
 - The re-engineering metamission
-  (docs/definitions/choir-reeng-metamission-2026-10-12.md) has landed C0
+  (docs/archive/definitions/choir-reeng-metamission-2026-10-12.md) has landed C0
   (eyes) and C1-core (records as the only work state on Texture, research
   and management; crash closes work). C2 reached Autopaper live on
-  2026-10-13 (docs/evidence/c2-autopaper-live-2026-10-13.json): one
+  2026-10-13 (docs/archive/evidence/c2-autopaper-live-2026-10-13.json): one
   designated paper computer, 14 sources, 26 stories and 76 versions in the
   watched hour, crash proof passed. Open in that metamission: C1e
   (engineering and self-development on records, wholesale deletion of
@@ -51,7 +51,7 @@ session on 2026-10-13.
    Asian social platforms (Weibo, Bilibili, Zhihu, PTT, Naver ...), and
    multilingual media broadly. A deep-research pass on how to get there
    cheaply runs before this review:
-   docs/reports/multilingual-osint-sourcing-research-2026-10-13.md.
+   docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md.
 5. **Security:** agentic red teaming (including reporting on breaking out of
    our own VM sandbox), the auth rebuild, the deferred hardening pass.
 6. **Research retrieval:** search and retrieval over our own corpus and
@@ -70,16 +70,16 @@ session on 2026-10-13.
 
 ## Deferred work being brought back (from the gate metamission)
 
-From docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md,
+From docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md,
 deferred 2026-10-09 ("prove the system for human QA before I invest more
 money into it, and before we make the infrastructure more complex"):
 
-- SA agent density (docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md):
+- SA agent density (docs/archive/definitions/choir-appdev-sa-agent-density-2026-10-05.md):
   2-4 GiB VMs, memory budget, the embedded-Dolt engine bottleneck,
   operational versus versioned store split.
 - S3 fast resume (snapshot secrecy, one-shot invariants).
 - SP production infrastructure
-  (docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md):
+  (docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md):
   second host, logs/metrics/alerts over WireGuard, zero-downtime deploys,
   multi-host placement. Node B today: one OVH host, 12 cores, 31 GiB.
 - S7 app packages, S8 source publication, S9 forks and fleets, S10 org
@@ -91,7 +91,7 @@ money into it, and before we make the infrastructure more complex"):
   endpoint's authority model; signer and credential lifecycle; supply-chain
   review of pinned inputs; an external review before public launch. Plus
   today's: a guest can reach corpusd internal routes
-  (docs/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md),
+  (docs/archive/problems/s0-guest-reaches-host-internal-authority-2026-10-04.md),
   the auth rebuild, sandbox-escape red teaming.
 
 ## New evidence since the draft (C2 close receipts, 2026-10-13)
@@ -103,7 +103,7 @@ money into it, and before we make the infrastructure more complex"):
   verdicts were followed by a revision rewriting the failing sentence.
 - But management left 46 of 118 arrival items unanswered (no story, feed or
   decline), 40 of them from one 8-record burst when tier 1 started
-  (docs/problems/autopaper-arrivals-unanswered-2026-10-13.md). One desk
+  (docs/archive/problems/autopaper-arrivals-unanswered-2026-10-13.md). One desk
   answering every capture does not scale as-is; this bears directly on
   sources growth and cost.
 

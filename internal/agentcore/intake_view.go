@@ -15,7 +15,7 @@ import (
 )
 
 // Management sees labels and the whole library (L2a A2 / R2-6,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Labels join a
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Labels join a
 // captures record's view where the store is (loadCellRecords), naming the
 // version shown; inboxRecordView stays a pure function of the record.
 

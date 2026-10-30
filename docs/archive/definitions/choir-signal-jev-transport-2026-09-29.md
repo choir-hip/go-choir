@@ -26,7 +26,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent
@@ -144,7 +144,7 @@ now:
     delta_o: 'M5 uses it'
     scope_if_supported: 'all judgment transport for the computer'
     status: resolved
-    evidence_refs: ['docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md']
+    evidence_refs: ['docs/archive/evidence/m4-jev-transport-roundtrip-2026-09-30.md']
   decision:
     what: 'gateway POST /provider/v1/judgments → OpenRouter
       typesafe/jev-1.13, per owner §12.2'
@@ -173,5 +173,5 @@ receipts:
       bearer. Refusal probes: missing bearer 401, peer-IP-mismatched bearer 403
       (BindJevPeer), exhausted VM-A judgments bucket 429 while VM-B still 200 —
       per-VM rate buckets independent. Rollback documented.'
-    evidence_ref: 'docs/evidence/m4-jev-transport-roundtrip-2026-09-30.md'
+    evidence_ref: 'docs/archive/evidence/m4-jev-transport-roundtrip-2026-09-30.md'
 ---

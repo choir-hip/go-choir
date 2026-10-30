@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FP1 follow-up F-c, deploy 2 (the writer) deployed proof: run telemetry in its
-# own table, docs/design/choir-event-table-f-c-2026-10-22.md sections 4.2 and
+# own table, docs/archive/design/choir-event-table-f-c-2026-10-22.md sections 4.2 and
 # 6.3.
 #
 # Deploy 2 adds the writer behind two keys, both required, both off as

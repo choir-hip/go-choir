@@ -645,7 +645,7 @@ in
         # and the app ~475 KB of script and CSS. The explicit list keeps
         # text/event-stream (live Texture and trajectory updates) unencoded,
         # so a compressor never buffers a stream; WebSocket upgrades pass
-        # untouched (docs/problems/edge-serves-everything-uncompressed-2026-10-16.md).
+        # untouched (docs/archive/problems/edge-serves-everything-uncompressed-2026-10-16.md).
         # A request that asks for a stream is never wrapped: Caddy's encoder
         # holds the headers until the first body write, so an idle stream
         # would not open (lifecycle.js waits for open before its snapshot).
@@ -956,7 +956,7 @@ in
         # a digest until the owner opts in from the Mail app.
         "MAILD_CORPUSD_URL=http://127.0.0.1:8086"
         "MAILD_DIGEST=on"
-        # Send gate (docs/problems/maild-send-gate-defects-2026-10-14.md):
+        # Send gate (docs/archive/problems/maild-send-gate-defects-2026-10-14.md):
         # only the owner's session approves and sends; a guest drafts and
         # proposes. Rollback: "legacy" restores the pre-E1 rules for guest
         # sends, approval-reply authentication and trusted senders.
@@ -986,7 +986,7 @@ in
     after = [ "network-online.target" ] ++ pgClientAfter;
     wants = [ "network-online.target" ];
     requires = [ "postgresql.service" ];
-    # P5 host build service (docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+    # P5 host build service (docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md):
     # corpusd evaluates `.#autoputer` from the deployed checkout's object
     # store at a computer's base commit plus its frozen patch; the build
     # itself runs in the nix daemon's sandbox (remote builders included).
@@ -1011,7 +1011,7 @@ in
       EnvironmentFile = [
         "-/var/lib/go-choir/secrets/corpusd-escrow-operators.env"
         # Retrieval rollback switch, flippable without a deploy
-        # (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+        # (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
         # write CORPUSD_CAPTURE_SEARCH=off to
         # /var/lib/go-choir/unit-env/corpusd-retrieval.env and restart
         # corpusd; the search and URL routes refuse and every guest falls
@@ -1034,7 +1034,7 @@ in
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
         "CHOIR_OWNER_ACT_MODE=${ownerActMode}"
         # The public Autopaper front list shows only the designated paper
-        # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
+        # computer's owner (Cut 2 2b; docs/archive/reports/reeng-autopaper-paper-computer-2026-10-13.md),
         # so tracer test computers' stories stay off choir.news's front page.
         "CORPUSD_AUTOPAPER_OWNERS=e5962310-8767-4624-87e5-a9b93a4e1db1"
         # Opinion pieces: any signed-in user's Texture published as a
@@ -1078,7 +1078,7 @@ in
         # append-only segments instead of one file each. Owner notes 34
         # ("2. B"): on for every computer after residual r1 (687867fd5).
         # Rollback: set back to off; new pins go legacy again and segments
-        # stay readable (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
+        # stay readable (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
         "PLATFORM_TAPE_SEGMENTS=write"
         # P5 host build service. The checkout is the deploy's /opt/go-choir
         # (read only: its objects, never its worktree); the base is the
@@ -1294,7 +1294,7 @@ in
       # vmctl must outlive every VM under global OOM. Firecracker children
       # set their own priority at launch (+500, lowered to -400 for
       # protected computers by vmctl's process reconcile) instead of
-      # inheriting this (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
+      # inheriting this (docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
       OOMScoreAdjust = -900;
       # Let Firecracker child processes survive vmctl process replacement.
       # The new vmctl process reattaches using durable ownership + pid files
@@ -1469,7 +1469,7 @@ in
         # Free page reporting (virtio balloon, never inflated): freed guest
         # memory returns to the host while the guest runs. Applies at each
         # computer's next cold boot. Rollback: delete this line
-        # (docs/reports/lr-guest-memory-return-2026-10-14.md).
+        # (docs/archive/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
         # RES-10 balloon statistics (internal/vmmanager/balloon_stats.go):
         # staged per computer like the FP8 features. Step 1 (W2, FP0 under the
@@ -1562,7 +1562,7 @@ in
         # resident pages. Full and no computer selected: inert. FP0 names
         # one test computer for the proof, never the paper or the owner's
         # computer. Rollback: set the list empty again and deploy.
-        # D5 (docs/definitions/choir-density-2026-10-26.md), step 1: diff on
+        # D5 (docs/archive/definitions/choir-density-2026-10-26.md), step 1: diff on
         # for d@e only, the proof computer. Proved 2026-10-26 20:24: a Diff
         # hibernate wrote 503 MB of an 8.6 GB image in 1.6 s and woke in
         # 287 ms to healthy. Step 2: every test computer (class:test).
@@ -1596,7 +1596,7 @@ in
         # computer, so any self-development proof computer can preview.
         "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,class:test"
         # store.event_table, the host half (F-c deploy 2,
-        # docs/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
+        # docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
         # computer's guest writer may stamp its telemetry for choir_events;
         # the owner's setting store.event_table must also be on. OFF while
         # empty. ComputerIDs only (no class:test, no "*"): once a computer
@@ -2063,7 +2063,7 @@ in
   # made no inference call for 30 minutes, judged from the gateway journal line
   # "inference succeeded for autoputer <vm>" (scripts/paper-liveness-probe.py;
   # tests: scripts/test_paper_liveness_probe.py;
-  # docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md).
+  # docs/archive/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md).
   # The paper's vm id is looked up, not hardcoded: the platform computer in the
   # tracked tiers file, mapped to its vm_id by vmctl's ownerships.json. The
   # probe reads only. See alerts:  journalctl -u go-choir-paper-liveness-probe -p err
@@ -2223,7 +2223,7 @@ in
         # PERIOD_USED seeds the 10-05..11-05 period with the billing page's
         # count (10,776 used at 10-15 03:40Z): the daily counts began
         # 10-14, so they never saw most of it. It is ignored from 11-05 on;
-        # drop it then. docs/problems/search-throughput-keenable-underused-2026-10-15.md
+        # drop it then. docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md
         "CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE=100000"
         "CHOIR_SEARCH_KEENABLE_RENEW_DAY=5"
         "CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT=90"
@@ -2482,7 +2482,7 @@ in
       DynamicUser = true;
       # A top-level state dir the dynamic user owns: a nested one under root's
       # 0750 /var/lib/go-choir is not traversable by the dynamic user
-      # (docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
+      # (docs/archive/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
       StateDirectory = "go-choir-goproxy";
       StateDirectoryMode = "0750";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
@@ -2530,7 +2530,7 @@ in
       TimeoutStopSec = "60s";
       DynamicUser = true;
       # Top-level, as for goproxy
-      # (docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
+      # (docs/archive/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
       StateDirectory = "go-choir-pkgmirror";
       StateDirectoryMode = "0750";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
@@ -2839,7 +2839,7 @@ in
   };
   boot.kernel.sysctl."vm.swappiness" = 1;
 
-  # KVM halt polling off (docs/reports/computer-cpu-efficiency-2026-10-14.md,
+  # KVM halt polling off (docs/archive/reports/computer-cpu-efficiency-2026-10-14.md,
   # lever C5 there, C4 in the store-scan fix mission). After each guest HLT
   # the host spun up to 200 us (the default halt_poll_ns=200000) hoping the
   # vCPU wakes again: 0.07-0.10 core per busy computer (7-9% of the paper),
@@ -2857,7 +2857,7 @@ in
   boot.kernelParams = [ "kvm.halt_poll_ns=0" ];
 
   # Nested virtualization off (docs/problems/host-kernel-216-days-unpatched-
-  # 2026-10-15.md; docs/reports/boundary-strength-ladder-2026-10-15.md rung
+  # 2026-10-15.md; docs/archive/reports/boundary-strength-ladder-2026-10-15.md rung
   # 4a). No Choir guest runs a hypervisor: Firecracker is host-only and its
   # guests never get VMX. nested=Y only widened the KVM surface: the
   # Januscape shadow-MMU bug needs guest root plus nested virtualization.

@@ -153,7 +153,7 @@ the listener understands, and the listener's questions settle it.
 Pathways are presented as typed alternatives with probabilities. A
 briefing can be shared with a team while each listener's model stays
 separate. Sent to the programming-engine design
-(`docs/reports/autoradio-programming-engine-2026-10-14.md`) as a
+(`docs/archive/reports/autoradio-programming-engine-2026-10-14.md`) as a
 first-class programme type. It also refines the tagline: "multiplayer
 intelligence for the learning economy" is literal, because the learner
 is the human too.
@@ -161,7 +161,7 @@ is the human too.
 ## 12. Autoradio: context over invariants, response over schedule, elevation over engagement
 
 Owner rulings on the programming-engine design
-(`docs/reports/autoradio-programming-engine-2026-10-14.md`):
+(`docs/archive/reports/autoradio-programming-engine-2026-10-14.md`):
 
 - **Contextual mix.** The voice mix has no hard rules ("≥50% human",
   "≤4 min AI"). Briefings drawn from private, text-only state will be
@@ -205,7 +205,7 @@ Lead:
   existing appdev stations: S6 (commit gate and full release), S7 (app
   packages), S8 (source publication) and gate 2. Its output, prerequisites
   in dependency order plus the minimal proving sequence, is
-  `docs/reports/selfdev-update-architecture-2026-10-15.md`.
+  `docs/archive/reports/selfdev-update-architecture-2026-10-15.md`.
 - The capsule build fixes still land tonight: every path needs a capsule
   that can build the binary.
 
@@ -229,7 +229,7 @@ because each computer diverges. Binary updates come back through a more
 modular architecture: app packages, then binary updates per package.
 
 Lead: recorded at the top of
-`docs/reports/selfdev-update-architecture-2026-10-15.md`.
+`docs/archive/reports/selfdev-update-architecture-2026-10-15.md`.
 - Station A is unchanged: the host builds the originating computer's own
   tree.
 - Station B adopts as source, building the patch onto the adopter's own
@@ -252,7 +252,7 @@ Lead: recorded at the top of
 - **Order:** Station A → minimal Station B → S7.
 
 Recorded at the top of
-`docs/reports/selfdev-update-architecture-2026-10-15.md`.
+`docs/archive/reports/selfdev-update-architecture-2026-10-15.md`.
 
 ## 17. What is an agent's identity? The security boundary that can keep a key
 
@@ -272,7 +272,7 @@ record attach to.
   real boundary. Without it, a desk key is only a label.
 
 Sent to the principal-identity design
-(`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
+(`docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
 progress).
 
 ## 17. What is an agent's identity? The security boundary that can keep a key
@@ -293,7 +293,7 @@ record attach to.
   real boundary. Without it, a desk key is only a label.
 
 Sent to the principal-identity design
-(`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
+(`docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
 progress).
 
 ## 18. Red teaming becomes capture the flag: sign with a key you shouldn't have
@@ -314,7 +314,7 @@ Lead:
   isolation mechanism, its known escape classes (with dated evidence) and
   which keys it may hold.
 - **Research:** recent microVM, container and sandbox escapes. Report:
-  `docs/reports/boundary-strength-ladder-2026-10-15.md`.
+  `docs/archive/reports/boundary-strength-ladder-2026-10-15.md`.
 - **When:** red teaming itself stays with the security stream scheduled
   just before production, alongside the secrets vault.
 
@@ -360,7 +360,7 @@ Disposition: branch `feat/keenable-throughput` paces Keenable to the free
 monthly allowance (persisted across gateway restarts, never into
 pay-as-you-go), rate-limits it under 10 rps, routes to it first while it has
 budget, and raises whichever demand-side search limit binds. Problem doc:
-docs/problems/search-throughput-keenable-underused-2026-10-15.md.
+docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md.
 
 ## 21. No Claude in Choir for now; fewer parallel agents (2026-10-15, ~04:00 UTC)
 
@@ -390,7 +390,7 @@ input tokens per call. The cost is mostly context, not writing. Disposition:
 measure by desk, stage and story; rank levers (importance triage before
 research, fewer and shorter search results in context, per-turn context
 compaction, cache-friendly prefixes, cheaper triage models); implement the
-safest behind flags. Report: docs/reports/autopaper-compute-halving-2026-10-15.md,
+safest behind flags. Report: docs/archive/reports/autopaper-compute-halving-2026-10-15.md,
 branch `feat/autopaper-compute-halving`.
 
 ## 23. Morning rulings (2026-10-15, ~10:00 UTC)
@@ -421,7 +421,7 @@ branch `feat/autopaper-compute-halving`.
 - **Platform Dolt (Store A) history: squash weekly** (owner, ~11:10 UTC).
   The store keeps every commit: 92k commits and 24 GB of old history,
   growing about 1.6 GB a day, and nothing reads it
-  ([assessment](../problems/dolt-clustering-assessment-2026-10-15.md)).
+  ([assessment](../archive/problems/dolt-clustering-assessment-2026-10-15.md)).
   Ruling: after the Dolt liveness probe is live, back up the Dolt data
   directory, then in a quiet window do one squash and a full GC. After
   that, squash every week. Current rows and the event-tape rows are kept;
@@ -440,7 +440,7 @@ branch `feat/autopaper-compute-halving`.
   coverage, both more breadth and depth, to really deliver on the quality
   promise." Disposition: there will be no quality-ranking patch. The
   measurement of stub prevalence is kept as a problem record
-  (docs/problems/autopaper-ranking-ignores-article-quality-2026-10-15.md).
+  (docs/archive/problems/autopaper-ranking-ignores-article-quality-2026-10-15.md).
   Next comes the ingestion breadth and depth expansion. Quality and
   importance should follow from the world model, not from per-article
   proxies.
@@ -681,7 +681,7 @@ Owner, on waking:
   in addition to management." Told that no desk calls Jev today (management
   reads Jev's intake labels): "Even if management isn't using Jev as a tool,
   then research should." Design:
-  `docs/reports/related-stories-phase3-research-review-2026-10-20.md`.
+  `docs/reports/related-stories-graph-design-2026-10-19.md`.
 - The research verb is named `choir.System1`, not `choir.Jev` (about 12:00
   UTC): "rather than choir.jev, we should make it choir.system1". System 1
   is the fast judge that answers with a distribution; the desk reasons and
@@ -708,7 +708,7 @@ Owner, on waking:
   It should be able to read and classify stories very well and very
   cheaply, more cheaply than the model behind research, GPT-6 Luna, and
   much faster as well." Recorded as §12 of
-  `docs/reports/related-stories-phase3-research-review-2026-10-20.md`.
+  `docs/reports/related-stories-graph-design-2026-10-19.md`.
 - New initiative: "how can we get images, photographs that we have the
   rights to republish into articles when they are relevant and
   illustrative. What are the rules around republishing images and how can
@@ -900,7 +900,7 @@ Owner, before sleep. The order is backup and disk cleanup first, then:
   other intelligent strategies which can pivot out from there to other info".
 - Briefing questions 6 to 12 wait until after 2026-10-21 ("wakeup 5:15,
   leave 6:15, home by 7-8pm").
-- Goal: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md.
+- Goal: docs/archive/definitions/choir-overnight-research-oped-sources-2026-10-20.md.
 
 ## 33. Overnight changes: Sonnet-only app rewrites; shard the flat artifact directories (2026-10-21, ~03:20 UTC)
 

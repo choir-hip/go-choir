@@ -183,7 +183,7 @@ now:
     scope_if_supported: selfdev lifecycle is product-internal; M11 prep unblocked
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (M7)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (M7)
       - internal/agentcore/self_development_materializer.go
   belief:
     believed_state: >-
@@ -272,8 +272,8 @@ receipts:
 
 # M7 — Skip the Harness: Derivable Selfdev Continuations (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
 (M7, on spine): selfdev operations advance to materialization on derivable continuations, driven by the
 management cell — no external OMP/CLI stepping process. Proof: a self-dev op reaches a materialized
 change with no external driver.

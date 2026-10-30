@@ -22,7 +22,7 @@ It never changes anything and never prints a secret:
   * boot: whether the host runs what it last activated (kernel, kernel
     modules, kernel command line, declared KVM module parameters), and
     kvm_intel nested=N whatever is declared
-    (docs/reports/patch-lanes-plan-2026-10-15.md, slice 1). A pending
+    (docs/archive/reports/patch-lanes-plan-2026-10-15.md, slice 1). A pending
     reboot is a FAIL unless --allow-reboot-pending.
 
     python3 - --boot-state-json < scripts/verify-host-hardening.py

@@ -16,7 +16,7 @@ type Config struct {
 	// MinInterval paces calls to a provider: at most one call per interval,
 	// across every computer. A per-second plan limit is a fact about our
 	// traffic, not the provider's health, so it is met by pacing, not by a
-	// bench (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	// bench (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
 	MinInterval map[string]time.Duration
 	// PaceWait is how long a call may wait for its slot; a provider whose
 	// slot is further away is skipped for that search as paced.
@@ -34,7 +34,7 @@ type Config struct {
 	// shortfall) or RoutingFanout (every eligible provider at once). The
 	// zero value is fan-out, the path before budget routing; ConfigFromEnv
 	// defaults to budget
-	// (docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
+	// (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
 	Routing string
 	// Tiers gives each provider a tier and a relative cost; nil means
 	// DefaultProviderTiers. A provider not named is paid at
@@ -107,7 +107,7 @@ func (t ProviderTier) rank() int {
 // every priced paid provider.
 const UnknownProviderCost = 1000
 
-// Budget routing defaults (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// Budget routing defaults (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md
 // §4.1). Costs are list prices per 1,000 calls as last seen (verify on the
 // billing pages); caps bound each paid provider to a few dollars a day.
 // Brave is free on its Free AI plan within its pacing (1 request/s); it has
@@ -137,13 +137,13 @@ func EscalationWindow(cfg Config) time.Duration {
 
 // DefaultProviderRPS paces Brave to its Free AI plan's one request a second
 // and Keenable to 8 a second, under its plan's 10
-// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+// (docs/archive/problems/search-throughput-keenable-underused-2026-10-15.md).
 const DefaultProviderRPS = "brave=1,keenable=8"
 
 // DefaultPaceWait is the default PaceWait.
 const DefaultPaceWait = 3 * time.Second
 
-// Result cache defaults (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// Result cache defaults (docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md
 // §1): 177 of 300 measured repeats came within 10 minutes, 255 within an
 // hour.
 const (

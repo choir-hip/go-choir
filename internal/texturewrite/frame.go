@@ -370,7 +370,7 @@ func firstNonEmpty(values ...string) string {
 // there. A source that is an internal record (an engineering assignment
 // report, a ledger ref: no http(s) URL, no capture id) is not something
 // research can Read, and casting it to "capture" one only returns "record not
-// found" (docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md).
+// found" (docs/archive/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md).
 // For that source the hint says to state the outcome in the document without
 // citing it, and sends a blocker to management for one bounded re-cast, or to
 // the owner.

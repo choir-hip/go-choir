@@ -87,7 +87,7 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 // restart is a system failure, not a wake. Interrupted runs stay passivated
 // (runtime_restarted), pending reports and owner revisions wait for the
 // owner's next action, and no turn starts or resumes on its own (owner rule,
-// docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// docs/archive/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
 // The engineering desk's boot re-provision (path B) is deleted (C1e step 3).
 func (rt *Handler) Start(ctx context.Context) error {
 	if rt.Core != nil && rt.Core.MaintenanceHeld() {
@@ -188,7 +188,7 @@ type passivatedTextureAuthority struct {
 }
 
 // selectPassivatedTextureAuthority applies the passivated-residue supersession
-// contract (docs/reviews/passivated-authority-structural-assessment-2026-08-28.md
+// contract (docs/archive/reviews/passivated-authority-structural-assessment-2026-08-28.md
 // section 6): passivated multiplicity is crash-loop residue, not concurrent
 // live authority; exactly one uniquely dominant candidate may be resumed while
 // every loser stays passivated. Candidates are ordered by mutation
@@ -592,7 +592,7 @@ func (rt *Handler) reconcileAgentWakeLockedFor(ctx context.Context, doc types.Do
 	// — the dead run proved nothing. Packets whose delivery budget is spent
 	// terminalize as delivered (delivery_attempts_exhausted) inside the
 	// reconcile-delivery command so nothing loops forever.
-	// Receipt: docs/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
+	// Receipt: docs/archive/problems/texture-desk-activation-contract-respawn-loop-2026-09-28.md
 	stranded, exhausted, strandedErr := rt.textureStrandedDeliveries(ctx, ownerID, doc, textureAgentID)
 	if strandedErr != nil {
 		return nil, strandedErr
@@ -899,7 +899,7 @@ func (rt *Handler) reconcileTextureUpdateDelivery(ctx context.Context, doc types
 	// receipt, while a request whose armed/exhausted set drifted across a boot
 	// gets a fresh ID instead of colliding on the prior receipt's digest —
 	// which surfaced as `lifecycle command digest conflict` startup refusals
-	// (docs/problems/m0-residual-texture-delivery-command-digest-crashloop-2026-09-30.md).
+	// (docs/archive/problems/m0-residual-texture-delivery-command-digest-crashloop-2026-09-30.md).
 	commandKey := "bind:" + strings.TrimSpace(targetRunID)
 	if strings.TrimSpace(targetRunID) == "" {
 		commandKey = "exhaust:" + breakerRunID + ":" + fmt.Sprintf("%d", breakerStreak)

@@ -16,7 +16,7 @@ Found 2026-10-22 by reading code. No backup was opened.
   password and the REST credentials under `secrets/offhost-backup`) then
   opens the provider keys together with everything else. The FP9 record
   names that class: "one backup secret opens keys and data together"
-  (`docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`, heresy
+  (`docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`, heresy
   delta).
 - The escrow key's KEK is already excluded by name, `key-escrow-kek*`
   (`off-host-backup.sh:188-228`). Nothing comparable protects the provider

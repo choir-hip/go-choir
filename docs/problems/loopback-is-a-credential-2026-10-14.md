@@ -1,7 +1,7 @@
 # Loopback Is a Credential on Node B
 
 Date: 2026-10-14. Source: the computer isolation security review
-(docs/reports/computer-isolation-security-review-2026-10-14.md, findings
+(docs/archive/reports/computer-isolation-security-review-2026-10-14.md, findings
 F2 and F3, section 3.5), re-checked read-only on Node B at about 19:30 UTC
 and against the code at origin/main 980ffaf4e. Status (2026-10-21): the
 host-internal credential landed (44656ef90) and enforces (9a42a7abb); Dolt
@@ -114,7 +114,7 @@ rules at every service start. A non-root service needs to traverse
 `/var/lib/go-choir/services/<name>/bin/<name>`, its state is under it), and
 opening that directory to others would expose all of the above. The same
 trap already bit goproxy
-(docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md). Moving
+(docs/archive/problems/goproxy-unit-cannot-create-cache-2026-10-14.md). Moving
 services to their own users therefore needs, in order: tighten the inner
 modes, give `/var/lib/go-choir` a traversal group, then move each service
 with a recursive `StateDirectory` chown.

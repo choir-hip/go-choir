@@ -2,7 +2,7 @@
 
 > **Unratified design — not a Definition, not executable authority.** Candidate
 > revision under owner review; the ontology cutover decision is open (see
-> `docs/reports/choir-state-and-vision-2026-10-14.md`, open question 2). PICL below is the
+> `docs/archive/reports/choir-state-and-vision-2026-10-14.md`, open question 2). PICL below is the
 > pre-rename name for precommitment records. *Stale as of 2026-09-22.*
 
 

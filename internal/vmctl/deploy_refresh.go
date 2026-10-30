@@ -18,7 +18,7 @@ import (
 // Deploy refresh: how a deploy moves active computers onto the new guest
 // image without crash-closing their work (owner rule "Restarts End Work
 // (Crash) Or Resume It (Planned Update)";
-// docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
+// docs/archive/problems/owner-computer-pinned-as-canary-2026-10-13.md).
 //
 // Before killing a VM for a deploy, vmctl asks the guest to write its own
 // planned-restart marker (POST /internal/runtime/planned-restart). The guest

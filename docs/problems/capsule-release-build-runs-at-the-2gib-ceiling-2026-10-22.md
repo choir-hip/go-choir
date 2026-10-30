@@ -77,7 +77,7 @@ marked confirmed in code, confirmed by measurement, or hypothesis.
 - **The link peak is close to the cap (measured earlier).** 1.50 GiB
   anonymous stripped, 1.80 GiB with DWARF
   (`engineering_assignment_runtime.go:27-33`;
-  `docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`).
+  `docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`).
   The broker, the session worker and the `go` command itself share the
   same 2 GiB.
 

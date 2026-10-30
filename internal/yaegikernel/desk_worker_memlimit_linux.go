@@ -28,7 +28,7 @@ func ApplyWorkerMemoryLimit(bytes uint64) error {
 // own: it is 8 GiB, the size of the guest. On the paper two runaway cells
 // filled the guest and the kernel killed the daemon, the largest process,
 // closing every run
-// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 // Raising one's own score needs no privilege.
 func VolunteerForOOMKill() error {
 	return os.WriteFile("/proc/self/oom_score_adj", []byte("1000"), 0)

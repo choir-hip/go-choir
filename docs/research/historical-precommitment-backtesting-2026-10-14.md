@@ -9,7 +9,7 @@ Inherits: [claims, events and entities](../reports/claims-events-entities-ontolo
 say–do), the [precommitment memo](../precommitment-records.md)
 (prequential discipline, the hindsight problem), and
 [media and rights](autopaper-media-and-rights-2026-10-14/README.md).
-`docs/reports/object-graph-retrieval-research-2026-10-14.md` is not on
+`docs/archive/reports/object-graph-retrieval-research-2026-10-14.md` is not on
 main at this commit and is not drawn on.
 
 ## The brief (owner, 2026-10-14, about 17:30 UTC)

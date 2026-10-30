@@ -77,7 +77,7 @@ Repair = append the missing `materialization_failed` event via the corpusd
 event CAS under a capability minted by the platform signing key, then cold
 boot the VM so the embedded projection replays to platform head
 (`ErrNeedsProjectionRepair` is expected until replay). Receipt:
-`docs/evidence/s2-wedge-discharge-2026-10-05.json`.
+`docs/archive/evidence/s2-wedge-discharge-2026-10-05.json`.
 
 ## Residual
 

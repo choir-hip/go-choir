@@ -12,7 +12,7 @@ import (
 )
 
 // The per-computer intake enable (L2a A6 / R2-7,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
 // written before the code:
 //   - a computer with no setting reads as on, so labels run before the
 //     fixture passed (the default must be off);

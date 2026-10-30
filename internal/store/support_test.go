@@ -11,7 +11,7 @@ import (
 )
 
 // Support judgement in the store
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture
 // commit lists its new pairs by their check memos; the runtime's Jev job
 // records verdicts as a system act. Ways it can fail, written first:
 //   - the commit still sends management a pairs record, so management's

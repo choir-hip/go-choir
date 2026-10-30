@@ -2,7 +2,7 @@
 
 Owner request, 2026-10-13: "Run agentic consensus reviewing the plan rn.
 Lateral and then convergent. And update the plan if intelligent signals
-emerge." Plan under review: docs/definitions/choir-reeng-metamission-2026-10-12.md
+emerge." Plan under review: docs/archive/definitions/choir-reeng-metamission-2026-10-12.md
 (with its `boundaries.pace` ruling) and the three cut files.
 
 ## Panels
@@ -32,7 +32,7 @@ claim-directed scenario per landing, and the full story at cut boundaries.
 | C2 | identity fence | **adopted**, landed | 9 of 9. `--expect-sha` waits for staging and an idle CI lane, and exits 5 on a build change mid-run. |
 | C3 | I3 passes an observed quiet window | **adopted**, landed with the boundary fix | 9 of 9. gpt-6.1-sol showed by a synthetic bundle that an upper-bound `boot_at` hides a dispatch between the real boot and readiness. The checker now reads from the restart request when `boot_at` is an upper bound. |
 | C4 | vacuous bundles never pass | **adopted**, landed | The checker exits 3 when no rule passed; scenario acceptance names the rules its claim reads. |
-| C5 | cell-error analysis now | **adopted**, done | docs/reports/reeng-desk-cell-errors-2026-10-13.md: 21.8% of 308 cells fail; 52% of failures are kernel-fixable. The top mechanism (M1, a leading type/var/const) is fixed (Cut 1 breakage B3). |
+| C5 | cell-error analysis now | **adopted**, done | docs/archive/reports/reeng-desk-cell-errors-2026-10-13.md: 21.8% of 308 cells fail; 52% of failures are kernel-fixable. The top mechanism (M1, a leading type/var/const) is fixed (Cut 1 breakage B3). |
 | C6 | prompt truth with each mechanism | **adopted** | 8 of 9 (one abstained). Generated verb lists and instructions that a landing makes false change in that landing; L6 keeps the full rewrite and the reverse parity test. |
 | C7 | scripted, model-free desk probe | **rejected** | 8 of 9. It adds a red provider-routing surface and resembles the shadow harnesses the cutover deletes. Fallback, unused so far: a tracer-controlled slow page to pin a research cell in flight. |
 | C8 | quote-in-block census now | **adopted**, offline | Report missing quotes, raw bytes and block structure separately. Today's flattened captures cannot measure the future extractor's rate. |

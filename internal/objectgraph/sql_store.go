@@ -14,7 +14,7 @@ import (
 // commitmentRecordKind is the object kind of the addressed-record ledger
 // (internal/store inbox.go). Its inbox, conversation and claim reads are the
 // hot scans the record-scoped generated columns below serve
-// (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md).
+// (docs/archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md).
 const commitmentRecordKind = ObjectKind("choir.commitment_record")
 
 // metadataIndexColumn is one generated column over a metadata field that an
@@ -671,7 +671,7 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 // snapshotFetchByID fetches objects by canonical id inside tx, in id order.
 // Fixed-size IN batches: a short list keeps the statement cheap
 // in the IN list, and one list of every survivor cost 42% of guest CPU on a
-// long-lived computer (docs/problems/texture-list-cold-latency-2026-10-09.md).
+// long-lived computer (docs/archive/problems/texture-list-cold-latency-2026-10-09.md).
 func snapshotFetchByID(ctx context.Context, tx *sql.Tx, ids []string) ([]Object, error) {
 	objects := make([]Object, 0, len(ids))
 	for start := 0; start < len(ids); start += snapshotFetchBatch {

@@ -23,7 +23,7 @@ usage: vision_probe.py --cred FILE [--host URL] [--model provider/model ...]
        [--seed N] [--save-png FILE] [--out FILE]
 
 Default models: chatgpt/gpt-6-luna and opencode-go/deepseek-v4.1-flash
-(docs/problems/models-configured-text-only-2026-10-15.md). To clear a model
+(docs/archive/problems/models-configured-text-only-2026-10-15.md). To clear a model
 off the text-only opt-out list, run it here with --model and delete its
 line in internal/modelcatalog TextOnlyModels once it passes.
 """

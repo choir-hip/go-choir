@@ -223,7 +223,7 @@ is recorded in
 `docs/problems/m11-freeze-secret-gate-refuses-genuine-binary-2026-09-27.md`
 (supporting finding 1: "staging under the subject path yields capsule
 release contains no frozen runtime artifacts") and in
-`docs/problems/s0-selfdev-executing-wedge-2026-10-04.md` (probe 8 hit
+`docs/archive/problems/s0-selfdev-executing-wedge-2026-10-04.md` (probe 8 hit
 this exact error; probe 9 froze with the tree at `/var/lib/artifact/release/`).
 M11 reruns 7-13 (2026-10-10, packet path) froze with "52 files at
 var/lib/artifact/release, executable bin/autoputer"
@@ -298,7 +298,7 @@ engineering five times; each assignment ended with a real final Report,
 to storage.googleapis.com and return 403. Engineering correctly did not
 Freeze. The engineering-on-records path works up to the release build;
 the build needs the owner's decision
-(docs/reports/capsule-go-modules-decision-2026-10-14.md).
+(docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
 
 ## After the Go module proxy (865dc152, drill 18:02 UTC)
 

@@ -5,7 +5,7 @@
 // from its own settled track record (owner notes 2026-10-14 §1, §3).
 //
 // Design, failure modes and ceremony:
-// docs/reports/choir-mcp-precommitments-2026-10-14.md. Level 1 is the
+// docs/archive/reports/choir-mcp-precommitments-2026-10-14.md. Level 1 is the
 // Markdown ledger docs/calibration/claude-ledger.md.
 //
 // Records reuse choir.commitment_record and its existing record kinds: a

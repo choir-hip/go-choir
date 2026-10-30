@@ -164,7 +164,7 @@ scope):
 1. Budget: 3 deepens an hour, as proposed; the depth log and /api/costs
    report the extra spend, and the cap is the setting's to change.
 2. Order: search provider health first
-   (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md,
+   (docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md,
    in progress, with a clustering assessment of the three earlier
    benching problems), then the deepen tick.
 3. Rollout: ships behind `paper.deepen`, default off, turned on for the

@@ -1813,7 +1813,7 @@ func (s *Store) listLifecycleRunsByScopeFiltered(ctx context.Context, ownerID, c
 	// Run-kind rows only, scoped to the owner/computer columns, with bodies
 	// fetched in batches inside one read transaction. Point-fetching each run
 	// body under the engine mutex was the largest boot cost once per Texture
-	// document (docs/problems/texture-list-cold-latency-2026-10-09.md).
+	// document (docs/archive/problems/texture-list-cold-latency-2026-10-09.md).
 	objects, err := graph.ReadObjectSnapshotFiltered(ctx, ownerID, computerID, []objectgraph.ObjectKind{ogKindRun}, func(_ objectgraph.ObjectKind, metadata json.RawMessage) bool {
 		return keepMetadata == nil || keepMetadata(metadata)
 	})
@@ -2323,7 +2323,7 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	// starts, so it is read first and documents and revisions are narrowed to
 	// that one document. Without it every Texture document and revision in the
 	// computer was fetched, once per document at boot
-	// (docs/problems/texture-list-cold-latency-2026-10-09.md).
+	// (docs/archive/problems/texture-list-cold-latency-2026-10-09.md).
 	bound, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return types.LifecycleSnapshot{}, err

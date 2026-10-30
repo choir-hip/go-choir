@@ -3,7 +3,7 @@
 Mutation class: **yellow** (review-panel configuration and skill tooling;
 changes future review pressure, no product runtime behavior).
 Protected surfaces touched: none.
-Problem record: [`docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`](../problems/agentic-consensus-panel-anchor-rot-2026-10-03.md).
+Problem record: [`docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md`](../archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md).
 Rollback: `git revert` of the panel commit.
 
 ## Why

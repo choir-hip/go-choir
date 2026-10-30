@@ -32,20 +32,20 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
   run. The
   raced-activation fix worked: `recovered raced activation` appeared, no
   `dispatcher: poison`, no `mutation authority mismatch`. Problem doc:
-  `docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md`.
+  `docs/archive/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md`.
   Judged not a new failure class, so landing continued.
 - `go-served-1143` (build `7b8944f03`, after the broker re-dial and write-replace
   fixes): **first full self-development loop on staging**: reached `restore`,
   17 of 18 checks passed (Freeze, verify, owner approval, layered apply with one
   planned restart, route receipt, restore, probe gone); only `go_test_job_done`
   failed (jobs count 3, done 2). Problem doc:
-  `docs/problems/go-served-1143-first-full-selfdev-loop-test-job-not-done-2026-10-15.md`.
+  `docs/archive/problems/go-served-1143-first-full-selfdev-loop-test-job-not-done-2026-10-15.md`.
 - `p5-go-served-0825` (P5, build `2eae77de6`): FAIL, `pass=false`,
   `reached=engineering_final_report`. Three engineering assignments ended
   `failed` with no bundle (Texture re-cast through round 5); no poison, no
   broker timeout. P5's apply path was therefore not exercised; P5 is deployed
   and dormant. Problem doc:
-  `docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md`.
+  `docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md`.
   Reasons for the failed assignments not read from the ledger (hypothesis:
   jobs-0101 A1-A3 class).
 
@@ -91,7 +91,7 @@ computer kept running and was reattached. Not a P4 code failure: the platform
 Dolt server had deadlocked from about 09:49 (0% CPU, queries never returned),
 which hung checkpointd, held the switch, and made vmctl's ping time out; the
 coordinator restarted it at 10:47:27. Problem doc:
-`docs/problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15.md`.
+`docs/archive/problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15.md`.
 After the reboot the deploy is rerun for all of main.
 
 ## Locally validated, not yet deployed
@@ -127,7 +127,7 @@ deploy-time regressions seen.
 |---|---|---|
 | main with P4 (rerun), patch lanes, hotplug, Exa | `3327ee047` | green, deployed, staging ok |
 | capsule broker re-dial + write-replace fix | `a64f28e1f` | green, deployed |
-| Dolt guardrails (checkpointd HOME, ctx open, vmctl ping retry, liveness probe) | `7b8944f03` | green, deployed; probe timer active, ok probes; checkpointd no longer panics and publishes checkpoints, but still exits 1 because one computer's replay stops at a commitment record with no verified identity formula (`docs/problems/checkpointd-replay-upcast-missing-identity-formula-2026-10-15.md`) |
+| Dolt guardrails (checkpointd HOME, ctx open, vmctl ping retry, liveness probe) | `7b8944f03` | green, deployed; probe timer active, ok probes; checkpointd no longer panics and publishes checkpoints, but still exits 1 because one computer's replay stops at a commitment record with no verified identity formula (`docs/archive/problems/checkpointd-replay-upcast-missing-identity-formula-2026-10-15.md`) |
 | cleanup/delete-choir-assign | within `3327ee047` | green |
 | account recovery | `13380efc7` | green, deployed; `POST /auth/recovery/request` for an unknown address returns 200 `{"ok":true}`, auth logs `user_not_found` and no token text |
 | Dolt compaction (paper only) | `c92746ed0` | **CI red**: heresy detector I4 (`CALL DOLT_RESET` in `internal/store/dolt_compaction.go`); not deployed (`docs/problems/dolt-compaction-trips-heresy-i4-ci-red-2026-10-15.md`) |
@@ -139,13 +139,13 @@ the feature is flag-off by design, so there is no hotplug proof yet.
 The refusal is the probe's own message; the likely cause is that vmctl read
 the hotplug selection before refreshing the test tier, so a freshly minted
 test account cold booted without the device. See P5 in
-`docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md`.) Exa: still
+`docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md`.) Exa: still
 `exa=error` in the gateway search summary after the deploy (4 lines, from the
 tracer computer's searches); the failing step is not named in the summary line;
 cap 150 stays.
 
 **Open concern:** the paper made no inference calls after 10:56 (stories stop at
-10:55); see `docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md`.
+10:55); see `docs/archive/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md`.
 
 P6-P8 (earlier note, now resolved as above): merging `feat/p6-p8-release-adopt` conflicts in six red files
 (`agentcore/api.go`, `api_self_development.go`, `platform/handlers.go`,
@@ -161,14 +161,14 @@ on a red surface.
 | step | commit | result |
 |---|---|---|
 | paper lost-wake fix | `964c598ca` | green, deployed 13:14Z; paper booted planned; probe timer active with ok lines; 28 schedules active and 0 overdue; paper inference continuous |
-| P6-P8 merge (option (a)) | `ff01e0a2f` | CI red: data race in the startup-manifest fields (`docs/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md`) |
+| P6-P8 merge (option (a)) | `ff01e0a2f` | CI red: data race in the startup-manifest fields (`docs/archive/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md`) |
 | startup-manifest mutex | `e485b1966` | green incl. race shards, deployed 13:59Z; `/health` on the paper shows the P6 `effective_release` (serving_release_digest, event_head, code_ref, build_commit) |
 
 Tracer `adopt-1400` (build `e485b1966`): publisher applied; tampered and
 unpublished records refused unchanged; adoption named release and trajectory;
 adopter applied after one planned restart; `adopter_serves_the_change` and
 `identity_names_adoption` read false 0.15 s after applied, probably too early
-(`docs/problems/adopt-1400-adopter-applied-served-and-identity-read-too-early-2026-10-15.md`).
+(`docs/archive/problems/adopt-1400-adopter-applied-served-and-identity-read-too-early-2026-10-15.md`).
 Note: the paper's identity block carries `tree_error: commit e485b19… not in the
 source repository` (the paper has no checkout of the new commit).
 
@@ -176,7 +176,7 @@ Tracer `adopt-1418` (same build, polling tracer): not a passing adopt loop. The
 publisher applied and both negative cases were refused unchanged, but the
 adopter's desks never opened an operation (one engineering assignment failed in
 about 2 minutes, Texture closed `done`), so the polled checks never mattered
-(`docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md`).
+(`docs/archive/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md`).
 
 ## Afternoon landings (after the adopt drill)
 
@@ -195,7 +195,7 @@ about 2 minutes, Texture closed `done`), so the polled checks never mattered
   (`Deactivated successfully`, 76-88 ms, no panic or exit 1). The CI SBOM candidate job hit a
   network flake (`proxy.golang.org` stream error), was rerun once and passed.
 - Paper cache ratio after the frame.go change: 72-76%, but it was already 76% before it
-  (`docs/problems/paper-chatgpt-cache-ratio-below-85-after-restarts-2026-10-15.md`).
+  (`docs/archive/problems/paper-chatgpt-cache-ratio-below-85-after-restarts-2026-10-15.md`).
 
 ## Skipped or pending (as of writing)
 

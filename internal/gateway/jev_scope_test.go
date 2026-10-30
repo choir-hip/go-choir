@@ -13,7 +13,7 @@ import (
 )
 
 // Intake labels have their own rate scope (L2a R2-3,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
 // written before the code:
 //   - labels draw on the shared judgments bucket, so a poll of many new
 //     captures starves the support judge publication needs;

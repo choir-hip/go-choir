@@ -2,10 +2,10 @@
 definition_version: 4
 
 # Cut 2, evidence to publication. Station C2 of
-# docs/definitions/choir-reeng-metamission-2026-10-12.md; depends on C1
-# (docs/definitions/choir-reeng-cut1-authority-2026-10-12.md: records,
+# docs/archive/definitions/choir-reeng-metamission-2026-10-12.md; depends on C1
+# (docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md: records,
 # conversations, rounds, hypothesis ids, cursors, Texture's inbox) and C0
-# (docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md: trace export,
+# (docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md: trace export,
 # tracer, invariant checker, fresh test computers, request-id fix).
 # Authority: docs/re-engineering-decisions-2026-10-12.md §2-§8, §10, §12
 # (owner 2026-10-12; §12 wins over every earlier draft). Code-cited detail
@@ -473,7 +473,7 @@ boundaries:
 now:
   status: autopaper live; residual acceptance items open
   slice: >-
-    Autopaper is live on choir.news (docs/evidence/c2-autopaper-live-2026-10-13.json).
+    Autopaper is live on choir.news (docs/archive/evidence/c2-autopaper-live-2026-10-13.json).
     The designated paper computer ran its schedules from one owner act
     (15:22 UTC, 4 sources, then 14 on the owner's tiered-rollout ruling):
     in the watched hour 54 polls brought 80 captures, management read every
@@ -489,8 +489,8 @@ now:
     (read-only published view) and the logged-out home opens Autopaper
     (cf91e617, staging spec 2 of 2). Breakages B10, B12, B12b and B13
     fixed; B11 (cell compiler panic on a slice literal over
-    choir.Records()) open (docs/problems/reeng-cut2-breakage-2026-10-13.md).
-    The close review panel (docs/reports/c2-close-review-adjudication-2026-10-13.md)
+    choir.Records()) open (docs/archive/problems/reeng-cut2-breakage-2026-10-13.md).
+    The close review panel (docs/archive/reports/c2-close-review-adjudication-2026-10-13.md)
     split 5 holds-with-residuals to 2 reopen; adjudicated: C2 acceptance
     stays open on four read-only receipts owed from the live paper, E1 v5+
     versions cite captures that arrived after the previous version, E2
@@ -501,14 +501,14 @@ now:
     "unread source" badge (not-captured shows as pending), pending badges
     that never drain, the model comparison (transfer by amendment), the
     story-prose defects
-    (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md,
+    (docs/archive/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md,
     fixed for new revisions at d75cb193), and tier 2 and 3 sources gated on
-    E3's latency table. Receipts (docs/evidence/c2-close-receipts-2026-10-13.json):
+    E3's latency table. Receipts (docs/archive/evidence/c2-close-receipts-2026-10-13.json):
     E1 pass, E2 pass, E4 pass with a gap (4 of 68 unsupported verdicts
     never repaired), E3 fail: 46 of 118 arrival items unanswered, traced
     to a cursor bug (a cell's commit marked read every record up to the
     head at cell start, shown or not;
-    docs/problems/autopaper-arrivals-unanswered-2026-10-13.md), fixed at
+    docs/archive/problems/autopaper-arrivals-unanswered-2026-10-13.md), fixed at
     cff54bf5 (deployed 18:25). Deploys defer busy computers whose guests
     predate the planned-restart route, and an all-deferred refresh failed
     the deploy job (fixed b4ead3e0); the paper was refreshed by operator
@@ -545,7 +545,7 @@ now:
       layer, together with the share of citations not captured.
     scope_if_supported: AI news stories on one paper computer
     status: proposed
-    evidence_refs: [docs/reports/reeng-c8-quote-census-2026-10-13.md]
+    evidence_refs: [docs/archive/reports/reeng-c8-quote-census-2026-10-13.md]
   decision:
     what: >-
       Two units with the freeze between them; the defaults in the prose
@@ -558,7 +558,7 @@ now:
       deleted before the paper's first schedule run.
     kind: architecture
     status: settled (pre-flight panel 2026-10-13 under the owner's delegation)
-    evidence_ref: docs/reports/reeng-cut2-preflight-review-2026-10-13.md
+    evidence_ref: docs/archive/reports/reeng-cut2-preflight-review-2026-10-13.md
     owner_ratification_ref: "owner 2026-10-12 delegation (§12: 'I trust your judgement')"
   belief:
     believed_state: C1 core landed (records for Texture with research and management, crash closure); normtext, quotematch and Ref exist; no block capture, Read verb, async search, Write verb, version chain or public front list yet

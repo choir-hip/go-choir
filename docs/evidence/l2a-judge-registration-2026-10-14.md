@@ -1,7 +1,7 @@
 # L2a Registered Judge
 
 Date: 2026-10-14, registered before any S1a run. Station:
-[L2a](../definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md),
+[L2a](../archive/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md),
 acceptance actions 1 (fixture) and 2 (live windows).
 
 ## Model and route

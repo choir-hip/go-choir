@@ -48,7 +48,7 @@ func Snapshot(service string) Info {
 // ("this receipt's deploy moved this binary"), which the execution-identity
 // join relies on, and Info is inside guest-signed evidence that a proxy
 // decodes strictly, so a new Info field would break guest/host version skew
-// (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+// (docs/archive/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
 type Platform struct {
 	DeployedCommit string `json:"deployed_commit,omitempty"`
 	DeployedAt     string `json:"deployed_at,omitempty"`

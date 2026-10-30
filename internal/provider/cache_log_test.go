@@ -11,7 +11,7 @@ import (
 
 // The chatgpt usage line must carry the cache key, its label, the input item
 // count and the two prefix hashes, so analysis can tell prompt drift from
-// backend routing (docs/reports/chatgpt-cache-ratio-2026-10-15.md, lever 1).
+// backend routing (docs/archive/reports/chatgpt-cache-ratio-2026-10-15.md, lever 1).
 // Failure modes pinned: a field is missing; call N's prefix_hash_prev differs
 // from call N-1's prefix_hash although the bytes only grew; prompt text, tool
 // output or a non-hash conversation id reaches the log.

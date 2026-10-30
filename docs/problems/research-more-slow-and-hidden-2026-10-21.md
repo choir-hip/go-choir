@@ -48,7 +48,7 @@ desks search at once (three searches ended together at 04:50:02), so
 they also contend.
 
 This was named and deferred on 2026-10-14
-([corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md](corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+([corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md](../archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
 "`store.SearchDocuments` … scans every Texture document in the guest:
 guest-side, not touched here"). The paper has grown since.
 
@@ -178,9 +178,9 @@ waiting for the store, and holds its dispatcher slot while it waits.
 
 This is the fourth record on one substrate:
 
-- [texture-list-cold-latency-2026-10-09.md](texture-list-cold-latency-2026-10-09.md);
-- [embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md](embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md);
-- [guest-cpu-is-unindexed-store-scans-2026-10-14.md](guest-cpu-is-unindexed-store-scans-2026-10-14.md);
+- [texture-list-cold-latency-2026-10-09.md](../archive/problems/texture-list-cold-latency-2026-10-09.md);
+- embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md;
+- [guest-cpu-is-unindexed-store-scans-2026-10-14.md](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md);
 - this one.
 
 The substrate is the object graph used as a JSON document store, read by

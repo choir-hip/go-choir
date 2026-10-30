@@ -730,7 +730,7 @@ def render(data: dict) -> str:
     L.append("")
     L.append("- Date: %s" % data["date"])
     L.append("- Rules: `%s` (every rule is stated in the script docstring and in "
-             "`docs/reports/goal-precommitments-2026-10-14.md`)" % data["rules_version"])
+             "`docs/archive/reports/goal-precommitments-2026-10-14.md`)" % data["rules_version"])
     L.append("- Source: `docs/definitions/*.md`, settled from each file's own "
              "`now.status` and `receipts` only")
     L.append("")

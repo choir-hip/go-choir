@@ -182,7 +182,7 @@ actor_wake_outbox.projected: validation pass starts over N rows`, which is N.
    `TopN` still sorts the whole kind per page); only splits the mutex hold.
 4. **A new `og_objects` generated column and index.** Costs journal bytes on
    every `og_objects` write
-   ([`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md))
+   ([`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](../archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md))
    and a schema change needs its own deploy. Not chosen.
 
 Chosen: option 1, a fourth derived-key family, `actor_wake_outbox.projected`,

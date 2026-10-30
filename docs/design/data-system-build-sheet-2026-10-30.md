@@ -4,7 +4,7 @@ Station D1 of [the build goal](../definitions/choir-data-system-build-2026-10-30
 These are the decisions each builder needs, and nothing more. The frame is
 [`choir-data-system-frame-2026-10-30.md`](choir-data-system-frame-2026-10-30.md),
 revision 2. The package split and every call site are in
-[the Dolt coupling census](../evidence/dolt-coupling-census-2026-10-30.md),
+the Dolt coupling census,
 §5 (WP0 and WP-A to WP-F).
 
 ## Decisions

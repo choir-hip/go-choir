@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """ICRL calibration experiment: settlement writer and measurement
-(docs/reports/icrl-calibration-experiment-2026-10-14.md; precommitment §3).
+(docs/archive/reports/icrl-calibration-experiment-2026-10-14.md; precommitment §3).
 
 Subcommands:
   selftest   the arm and held-out rules agree with internal/calibration
@@ -8,7 +8,7 @@ Subcommands:
              reproduces E6a's management ECE (0.144) from its bins.
   baseline   recompute E6a's management numbers from e6a-raw.json (the
              metric code's reproducibility check), written to
-             docs/evidence/icrl-calibration/baseline.json.
+             docs/archive/evidence/icrl-calibration/baseline.json.
   pending    read the computer's calibration view (GET /api/calibration
              ?detail=1) and save it; print counts per desk and arm.
   settle     settle pending hypotheses (frozen M1 judge) and completed

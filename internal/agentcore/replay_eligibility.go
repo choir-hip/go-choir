@@ -30,7 +30,7 @@ const (
 	// extractor leaves out while it is empty (computerversion.OptionalTables),
 	// so it may be absent from both observation sets. Present in both, it is
 	// admitted with content like ReplayEventProjection; present on one side
-	// only is schema drift (docs/design/choir-event-table-f-c-2026-10-22.md
+	// only is schema drift (docs/archive/design/choir-event-table-f-c-2026-10-22.md
 	// section 3.3).
 	ReplayEventProjectionOptional ReplayObservationClass = "event_projection_optional"
 )

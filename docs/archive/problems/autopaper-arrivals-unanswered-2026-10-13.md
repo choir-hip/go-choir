@@ -1,9 +1,9 @@
 # Autopaper: capture arrivals that management never answered (2026-10-13)
 
 Status: fixed at cff54bf5; the rerun passed on a minted test computer
-(docs/evidence/c2-close-receipts-2026-10-13.json, E3_rerun). Cause confirmed
+(docs/archive/evidence/c2-close-receipts-2026-10-13.json, E3_rerun). Cause confirmed
 from the run trace (H2). Found by the C2 close receipts (E3) requested by the close review panel
-(docs/reports/c2-close-review-adjudication-2026-10-13.md).
+(docs/archive/reports/c2-close-review-adjudication-2026-10-13.md).
 
 ## Contract
 
@@ -19,7 +19,7 @@ to the source, naming the capture ids).
 Derived from the paper's management inbox, every story inbox, every source
 inbox, revisions and runs, through the product API with the paper's key
 (analysis kept outside the repo; the counts are recorded in
-docs/evidence/c2-close-receipts-2026-10-13.json).
+docs/archive/evidence/c2-close-receipts-2026-10-13.json).
 
 - 34 arrival records carried 120 capture items from 15:22 to 17:52. The two
   newest records (17:52:51) were still in flight and are excluded: 118 items.

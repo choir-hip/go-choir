@@ -29,7 +29,7 @@ const sourcePatchExportMaxBytes = 2 << 20
 // sourcePatchExport is the read-only answer of
 // GET /api/computers/<id>/self-development/operations/<op>/source-patch: a
 // frozen candidate's source.patch with the bindings an outside agent needs
-// to open a draft PR (docs/reports/selfdev-readiness-2026-10-15.md B3).
+// to open a draft PR (docs/archive/reports/selfdev-readiness-2026-10-15.md B3).
 type sourcePatchExport struct {
 	OperationID           string `json:"operation_id"`
 	ComputerID            string `json:"computer_id"`

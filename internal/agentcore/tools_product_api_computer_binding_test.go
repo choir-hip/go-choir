@@ -13,7 +13,7 @@ import (
 // The management desk's choir.ProductAPI reaches /api/computers/ through the
 // real computers router, which requires the caller's computer binding. Before
 // the fix the in-process request carried none, so every call got 403
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 3).
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 3).
 //
 // Failure modes pinned:
 //   - no binding: every computer read is refused;

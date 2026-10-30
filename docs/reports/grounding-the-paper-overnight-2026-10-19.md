@@ -66,7 +66,7 @@ The paper ran all night on gpt-6-luna with a clean console. Disk metadata sits n
 
 ## Names and receipts
 
-- Problem docs: docs/problems/articles-relay-outlets-instead-of-grounding-them-2026-10-19.md (baseline, changes, hourly measures, options for the carried prose, the Saudi correction); docs/problems/support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md; docs/problems/support-failure-rewakes-texture-per-revision-2026-10-18.md.
+- Problem docs: docs/problems/articles-relay-outlets-instead-of-grounding-them-2026-10-19.md (baseline, changes, hourly measures, options for the carried prose, the Saudi correction); docs/problems/support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md; docs/problems/support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md.
 - First change set, deployed 02:15 UTC: 7a43a3bb5 (span pair unit), 3c006b881 (news rules), 11da38c0b (embed drop), b5dd95722 (test); research prompt version 10.
 - Second rules, deployed 04:14:35 UTC: 8be39bb36, CI run 39197635727; problem recorded first in ff6ab680f.
 - Hourly records: 07b64ab61, 97628ffa8, a8a0f8fd7, 6ce9615ed, bb9dbea1b, bd280e507, 8013d7d1e.
@@ -74,4 +74,4 @@ The paper ran all night on gpt-6-luna with a clean console. Disk metadata sits n
 - Failing-pair median text: 417, 183, 160, 220, 146, 129, 146, 176 characters. Support records per Texture run: 33, 32, 18, 22, 33, 12, 19, 23 percent.
 - Stories named: Lambie c0fb708e; Alberta referendum v14 to v18; Saudi pub62337ab28 v7; midterm travel v5; Albania v29; France protests v25 to v35.
 - Scripts (session scratchpad): grounding/measure.py, grounding/carried.py, grounding/show.py, grounding/support.py, baseline grounding/baseline-front-20261019T0152.json.
-- Handoff: docs/reports/handoff-2026-10-15.md.
+- Handoff: docs/archive/reports/handoff-2026-10-15.md.

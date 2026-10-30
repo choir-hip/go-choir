@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station L2a of the ledger metamission
-# (docs/definitions/choir-ledger-metamission-2026-10-13.md): synthesis
+# (docs/archive/definitions/choir-ledger-metamission-2026-10-13.md): synthesis
 # intake. Owner 2026-10-14, in session: "intake redesign, very important.
 # until then we are just copying. after that we are synthesizing." And:
 # "we should be compounding. Not turning captures into copied articles,
@@ -209,7 +209,7 @@ boundaries:
   authority_sources:
     - owner 2026-10-14 in session (synthesis principle; "intake redesign, very important"; Jev categorizes, topic researchers on the corpus; learned boundaries; dormancy)
     - docs/reports/owner-roadmap-rulings-2026-10-14.md
-    - docs/definitions/choir-ledger-metamission-2026-10-13.md (L2 note, overnight plan)
+    - docs/archive/definitions/choir-ledger-metamission-2026-10-13.md (L2 note, overnight plan)
   must_preserve:
     - Texture is the sole writer of canonical revisions
     - every captures record gets an answer (a story, a feed or a decline)
@@ -274,7 +274,7 @@ now:
     delta_o: the labelled fixture and a judge registered before the run, from a different model family
     scope_if_supported: Autopaper's intake on every source class
     status: testing
-    evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md, docs/evidence/l2a-jev-pair-probe-2026-10-14.md]
+    evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md, docs/archive/evidence/l2a-jev-pair-probe-2026-10-14.md]
   decision:
     what: >-
       L2a first in the deploy lane, then C1e B1, then LR lever 6. Round-1
@@ -300,7 +300,7 @@ now:
       The pair probe (01:00 UTC) answered the first-order question: 26 of
       26 cross-lingual pairs correct across en, ja, pt, es, ar, fr and de,
       0.2 s median, about $0.00003 a pair
-      (docs/evidence/l2a-jev-pair-probe-2026-10-14.md).
+      (docs/archive/evidence/l2a-jev-pair-probe-2026-10-14.md).
     next_observation: the S0 design note; the second baseline window (23:53-05:53 UTC) scored before the paper is enabled
   blocker_or_risk: >-
     Topic addressing and spawning are new runtime surface. Researcher
@@ -311,7 +311,7 @@ now:
     intake.labels is ON on the live paper since 2026-10-14T06:50:58Z
     (paper on build 9ace75e5, refreshed by the deploy and read back; its
     schedules were restored at about 06:49 after a deploy refresh closed
-    them, docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
+    them, docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     Next: the after-window 06:51-12:51 UTC, scored with
     scripts/l2a_window_pairs.py and compared with baseline A (15:00-21:00
     UTC 10-13) under the tripwire; watch that a deploy refresh does not

@@ -3,7 +3,7 @@
 Date: 2026-10-23. Author: an FP0 design worker. Status: **design, round 3,
 not built; ready to build** (bunch 164, Devin: "READY TO BUILD", no
 silent-reuse or fail-open path). It answers the gate in
-`docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md`
+`docs/archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md`
 ("Gate on F-c deploy 2"), option 1, the persisted high-water mark.
 
 **Mutation class of the build: red.** It touches:
@@ -233,7 +233,7 @@ A refill after a failure waits at least 1 s. `reserved` never decreases.
   The finalize can wait behind an engine-mutex hold; the paper has shown
   104 s.
 - The runway is N/2 = 32,768 numbers. At the paper's 8 to 18 events/s
-  [V `docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`]
+  [V `docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`]
   that is about 30 minutes.
 - Against a 134 s worst-case refill it covers about 240 events/s, a 13x
   margin over the measured peak.

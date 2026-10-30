@@ -481,7 +481,7 @@ Two different epochs exist and must not be confused:
 
 Mutation class: **red** (VM lifecycle: snapshot budget, stop paths, vmctl
 start). Evidence (Node B, 2026-10-14, `compsize`; recorded in
-[artifact store problem](../problems/artifact-store-grows-12gb-a-day-2026-10-14.md)
+[artifact store problem](../../problems/artifact-store-grows-12gb-a-day-2026-10-14.md)
 "Also found"): the root filesystem is btrfs `compress=zstd:3`; an 8 GiB
 snapshot memory file uses about 560 MB of disk (6%). Item 17's budget counts
 logical bytes, so `VM_SNAPSHOT_BUDGET_GIB=48` admits about 6 snapshots where

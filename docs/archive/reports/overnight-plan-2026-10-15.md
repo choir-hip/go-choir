@@ -38,7 +38,7 @@ because it is always busy; /tmp/paper-refresh-loop.sh on Node B
    and deploy it, so the paper takes the GC fix. Confirm dolt_gc in its
    /health and a flat disk.
    - **Safety:** if the paper's disk is above 75% before this lands, rerun
-     docs/runbooks/offline-guest-gc.md (proven tonight).
+     docs/archive/runbooks/offline-guest-gc.md (proven tonight).
 5. **Station A prerequisites,** on branches, deployed where safe:
    - S1 owner-act receipts (principal identity report);
    - P4 standing consensus mode with a decision poster outside the guest;

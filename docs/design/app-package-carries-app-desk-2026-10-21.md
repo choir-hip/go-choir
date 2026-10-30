@@ -12,7 +12,7 @@ Owner direction: app agents are desks and "app agents get their own desks"
 (owner notes §5, §36); doctrine I26 and CLAUDE.md "Desk Ontology" (an app desk
 ships with its app package and is the sole agent writer of its app's object
 kinds); the S7 addendum of 2026-10-21 in
-[choir-appdev-s7-app-packages-2026-10-01.md](../definitions/choir-appdev-s7-app-packages-2026-10-01.md);
+[choir-appdev-s7-app-packages-2026-10-01.md](../archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md);
 owner ruling D1 (owner notes §23: whether a package is installed is a fact on
 the computer's tape, not part of its release closure; install-time API version
 check; install only from the host-built catalog until there is a sandboxed

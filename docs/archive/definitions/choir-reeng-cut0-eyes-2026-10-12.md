@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Cut 0, "eyes": the first cut of the re-engineering metamission
-# (docs/definitions/choir-reeng-metamission-2026-10-12.md, station C0).
+# (docs/archive/definitions/choir-reeng-metamission-2026-10-12.md, station C0).
 # Authority: docs/re-engineering-decisions-2026-10-12.md §10 item 0 and
 # §12 (cutover decisions win over everything else, including the studies
 # and the superseded drafts R1 and R5 at 03499ef9, whose transport and
@@ -39,7 +39,7 @@ start:
       probe: four goroutines, results rotated a->c, b->a, c->b, all waiting
       ~300 ms. The research prompt still invites parallel calls
       (internal/runtimeprompts/overlays/rlm_research_runtime.yaml:25).
-      Documented: docs/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md.
+      Documented: docs/archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md.
     - >-
       Second REPL: acquire re-keys a busy persistent session to
       key+"#run:"+runID (internal/agentcore/tools_desk.go:129-131), and
@@ -98,7 +98,7 @@ start:
       self-development apply/rollback (agentcore/platform_update.go:263,
       self_development_materializer.go:315, 390), so the owner restart boots
       markerless: a crash. The known violation it should expose:
-      docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md.
+      docs/problems/crash-boots-redrive-applies-2026-10-13.md.
     - >-
       A per-computer hold exists: POST /internal/vmctl/hold (host-internal
       only; internal/vmctl/handlers.go:530-556, 1716) sets a durable
@@ -196,7 +196,7 @@ finish:
     cell is bound, with a test that fails on an expired handle first. No
     live session confirms it (owner pace ruling 2026-10-13, metamission
     boundaries.pace: nothing runs live to confirm what the code says).
-    (7) Measurements, in docs/reports/reeng-cut0-measurements-2026-10-12.md:
+    (7) Measurements, in docs/archive/reports/reeng-cut0-measurements-2026-10-12.md:
     push to healthy fresh test computer (split into CI, deploy, mint, first
     ready prompt bar); per-turn token and latency figures from the three
     tracer bundles kept so far (Cut 2's baseline); and the run-acceptance level today's
@@ -289,15 +289,15 @@ boundaries:
   protected_surfaces: [internal/yaegikernel/sidecar.go, internal/yaegikernel/session_loop.go, internal/yaegikernel/transport.go, internal/agentcore/tools_desk.go]
 
 metamission:
-  parent: docs/definitions/choir-reeng-metamission-2026-10-12.md
+  parent: docs/archive/definitions/choir-reeng-metamission-2026-10-12.md
   depends_on: []
   feeds: [C1 authority, C2 evidence to publication]
 
 now:
   status: landed
   slice: >-
-    All seven artifacts landed (receipts docs/evidence/c0-eyes-acceptance-2026-10-13.json;
-    measurements docs/reports/reeng-cut0-measurements-2026-10-12.md). The
+    All seven artifacts landed (receipts docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json;
+    measurements docs/archive/reports/reeng-cut0-measurements-2026-10-12.md). The
     70-minute session was replaced by a handle test (owner pace ruling);
     the second-run desk wait was dropped from the I5 load because runs of
     one desk agent are serialized. Acceptance read on c0-fast-1 (287734c5):
@@ -306,7 +306,7 @@ now:
     (Cut 2); I5's request-id and one-worker halves hold; a key for another
     test computer reads nothing. Plan review 2026-10-13 added tracer
     scenarios, the identity fence and the I3 quiet window
-    (docs/reports/reeng-plan-review-2026-10-13.md).
+    (docs/archive/reports/reeng-plan-review-2026-10-13.md).
   source_ref: af92cb94
   deploy_identity: staging 6d676094
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -326,7 +326,7 @@ now:
     delta_o: run progress events and the causal chain reachable through one owner-scoped API read
     scope_if_supported: staging test computers, the fixed AI-news script, one owner restart per run
     status: supported (the drill found the restart defect and Cut 1 breakage B1 within one run each, without SSH; the race test failed before the request-id fix)
-    evidence_refs: [docs/evidence/c0-eyes-acceptance-2026-10-13.json, docs/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md, docs/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md]
+    evidence_refs: [docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json, docs/archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md, docs/archive/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md]
   decision:
     what: >-
       Export in the choir CLI (agent-operable under a scoped key), tracer
@@ -377,7 +377,7 @@ trusted more. Then the read route and `choir trace export` (1), the
 SSH-free mint and the tracer (2), and the checker proven on planted
 violations (3). Land, deploy, run the tracer. Then the handle reissue
 by test (6) and the measurements (7). During the cut window, problems fixed in
-the same commit go into `docs/problems/reeng-cut0-breakage-2026-10-12.md`
+the same commit go into `docs/archive/problems/reeng-cut0-breakage-2026-10-12.md`
 (decisions §12.4). Others get their own problem doc first.
 
 **Standing questions.** 1: owner-settled scope (§10, §12, §13); the operational

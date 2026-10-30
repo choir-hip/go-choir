@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// Retrieval timing (rung 0 of docs/reports/object-graph-retrieval-research-2026-10-14.md;
-// docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+// Retrieval timing (rung 0 of docs/archive/reports/object-graph-retrieval-research-2026-10-14.md;
+// docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
 // every Store B retrieval call is timed and counted. Counts and latency
 // buckets are on corpusd /health under "retrieval"; each call at the route
 // level also writes one structured journal line, and primary-key and edge

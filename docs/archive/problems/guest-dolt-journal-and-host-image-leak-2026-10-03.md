@@ -9,7 +9,7 @@ desk texture activations pinned `pending` (`desk_pending_mutations` climbing
 
 **Mutation class:** `red` — persistent data image surgery + GC policy on a
 protected surface (data persistence, VM lifecycle). Break-glass path is the
-documented runbook `docs/runbooks/offline-guest-gc.md`.
+documented runbook `docs/archive/runbooks/offline-guest-gc.md`.
 
 ## Evidence
 
@@ -92,7 +92,7 @@ growth path has a *reachable, scheduled* bound.
 
 ## Immediate repair (this finding's own boundary)
 
-1. Un-wedge the owner guest now via `docs/runbooks/offline-guest-gc.md`
+1. Un-wedge the owner guest now via `docs/archive/runbooks/offline-guest-gc.md`
    (hold → stop → mount rw → `dolt gc` → verify heads → maintenance-serve →
    unhold). Proven twice; expected reclaim ~20+ GiB journal.
 2. Reclaim host dead images after owner review (the `.corrupt` is forensic —

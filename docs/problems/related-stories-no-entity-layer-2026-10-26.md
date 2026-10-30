@@ -3,7 +3,7 @@
 Status: documented; build in slices below (lane `related-review`).
 Continues [related stories are thin: no subject nodes](related-stories-thin-no-subject-nodes-2026-10-20.md)
 and builds the ratified design
-[related stories, phase 3](../reports/related-stories-phase3-research-review-2026-10-20.md)
+[related stories, phase 3](../reports/related-stories-graph-design-2026-10-19.md)
 (slices 1 to 5) with the entity kind of
 [claims, events and entities](../reports/claims-events-entities-ontology-2026-10-14.md)
 (owner rulings D1 to D5 and D7 to D13, ratified 2026-10-20).

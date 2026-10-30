@@ -39,7 +39,7 @@ func TestRLMEngineeringOverlayOffersProposalWhenArmed(t *testing.T) {
 }
 
 // Support judgement left management
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): Jev judges a
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md): Jev judges a
 // Texture commit's citation pairs off management's turn, so the overlay
 // must not teach Judge, support_pairs records or judging pairs by hand.
 func TestRLMManagementOverlayCarriesNoSupportJudgement(t *testing.T) {
@@ -54,7 +54,7 @@ func TestRLMManagementOverlayCarriesNoSupportJudgement(t *testing.T) {
 }
 
 // The overlay must teach the release root the freeze actually reads. The C1e
-// B1 drill (docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
+// B1 drill (docs/archive/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
 // staged the tree under /workspace/platform because the overlay said so, and
 // Freeze refused with "capsule release contains no frozen runtime artifacts".
 //
@@ -110,7 +110,7 @@ func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
 	}
 }
 
-// Drill selfdev-ab-2239 (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md):
+// Drill selfdev-ab-2239 (docs/archive/problems/selfdev-freeze-receipts-refused-2026-10-15.md):
 // for a frontend-only change the desk built Go seven times under the 30 s
 // exec bound, never built the frontend, cited one receipt as both build and
 // test, read Freeze's refusal as "build Go", and finished blocked without
@@ -301,7 +301,7 @@ func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
 }
 
 // Research searches the computer's own corpus before the web (symptom 3 of
-// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
+// docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
 // the overlay's evidence doctrine names choir.SearchWireCorpus before it
 // teaches web search, and says a capture it returns is citable.
 func TestRLMResearchOverlaySearchesTheCorpusFirst(t *testing.T) {

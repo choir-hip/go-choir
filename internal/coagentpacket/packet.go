@@ -2,7 +2,7 @@
 // (coagent_source_packet.v1): the reducer validates a committed report with
 // it, and the cell kernel validates choir.ReportPacket at the call, so a
 // desk learns of a malformed packet in the same cell
-// (docs/problems/research-report-packets-rejected-by-schema-2026-10-09.md).
+// (docs/archive/problems/research-report-packets-rejected-by-schema-2026-10-09.md).
 package coagentpacket
 
 import (

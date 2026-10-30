@@ -21,7 +21,7 @@ import (
 )
 
 // Autopaper captures are shared content (W1b2,
-// docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // the paper's computer writes them here, into Store B, and any bound
 // computer reads them. Bodies live on host disk by sha256, never in Dolt
 // rows (the 104 G lesson).

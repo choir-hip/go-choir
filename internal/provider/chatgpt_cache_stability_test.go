@@ -11,7 +11,7 @@ import (
 )
 
 // chatgpt prompt-cache stability and routing
-// (docs/reports/autopaper-compute-halving-2026-10-15.md §5).
+// (docs/archive/reports/autopaper-compute-halving-2026-10-15.md §5).
 //
 // Measured 2026-10-15 on the paper computer: gpt-6-luna reports a cached
 // count that equals the desk's static prefix (system plus tools: 2,560,

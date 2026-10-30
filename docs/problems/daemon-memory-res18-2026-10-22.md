@@ -165,7 +165,7 @@ Readings:
   (`schema.(*indexImpl).copy` from `UnmarshalSchemaAtAddr`, about 38 GiB, 15%),
   reached from objectgraph list and get calls. That is a CPU cost, not
   retained memory; it belongs to the CPU track
-  ([computer-cpu-efficiency-2026-10-14.md](../reports/computer-cpu-efficiency-2026-10-14.md)).
+  ([computer-cpu-efficiency-2026-10-14.md](../archive/reports/computer-cpu-efficiency-2026-10-14.md)).
 - Desk workers are small: 7 to 14 at 0.16 to 0.35 GiB RSS together, most
   of it the shared binary.
 
@@ -187,7 +187,7 @@ within minutes. So, today:
   (density lever L5, RES-06: DAMON_RECLAIM, already built and selected per
   computer by `VM_GUEST_RECLAIM_ONLY`), and fewer bytes written by the
   store (the tape-volume work:
-  [projection-event-volume-design-2026-10-19.md](../reports/projection-event-volume-design-2026-10-19.md)).
+  [projection-event-volume-design-2026-10-19.md](../archive/reports/projection-event-volume-design-2026-10-19.md)).
 - The daemon's heap matters as the **floor** of a guest's shape. It sets
   the smallest base memory the paper could run in (RES-09 aims at a
   1.5 to 2 GiB base), and it is what is left once reclaim takes the cold
@@ -202,7 +202,7 @@ within minutes. So, today:
    25 MiB per GiB both times. Live grew 9 GiB in about 6.5 hours today
    (12 GiB at 04:59, 21 GiB at 10:36, 22 GiB at 11:22), which would add
    about 35 MiB of heap an hour, about 0.8 GiB a day, until the history is
-   compacted ([guest-store-compaction-scheduled-2026-10-20.md](guest-store-compaction-scheduled-2026-10-20.md)).
+   compacted ([guest-store-compaction-scheduled-2026-10-20.md](../archive/problems/guest-store-compaction-scheduled-2026-10-20.md)).
    The live figures are rounded to whole GiB, so the per-GiB ratio is
    good to about 5%.
 2. **The paper's page cache fills its guest within two to six minutes of
@@ -222,7 +222,7 @@ within minutes. So, today:
    reclaim. Not a controlled comparison (activity differs and is not read
    here), but it is the first reading of a computer with reclaim on.
 4. **The node cache knob has no per-computer path** (above), so the LR
-   report's optional Dolt probe ([lr-guest-memory-return-2026-10-14.md](../reports/lr-guest-memory-return-2026-10-14.md)
+   report's optional Dolt probe ([lr-guest-memory-return-2026-10-14.md](../archive/reports/lr-guest-memory-return-2026-10-14.md)
    step 8) cannot run without changing every guest image.
 5. **A text heap profile of the paper is 1.1 GB.** `heap?debug=1` at 10:25
    took 37 s and returned 1,146 MB (139,753 stack records): a real load on a
@@ -239,7 +239,7 @@ within minutes. So, today:
   boot is the base, and a lease can only raise it. A limit fixed at boot is
   then lower than a recomputed one: the GC works harder during a lease,
   nothing grows unbounded. Leases are for capsule jobs, not the daemon
-  ([memory-hotplug-controller-design-2026-10-14.md](../reports/memory-hotplug-controller-design-2026-10-14.md), J14).
+  ([memory-hotplug-controller-design-2026-10-14.md](../archive/reports/memory-hotplug-controller-design-2026-10-14.md), J14).
 - **It starts to matter with RES-09's small base.** On a 1.5 to 2 GiB base
   the daemon's limit is 0.75 to 1 GiB, which is under this daemon's live
   heap (about 1 GiB): the GC would run near its 50% CPU cap. A computer

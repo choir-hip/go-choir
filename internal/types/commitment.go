@@ -148,7 +148,7 @@ type CommitmentScore struct {
 	// ScorerAgentID names the scorer ("scorer:<name>" for an independent
 	// calibration scorer). Self marks the speaker's own score, written
 	// with the act before any settlement; its model is the record's
-	// provenance model (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+	// provenance model (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md).
 	ScorerAgentID string             `json:"scorer_agent_id,omitempty"`
 	Self          bool               `json:"self,omitempty"`
 	Answers       map[string]string  `json:"answers,omitempty"`
@@ -315,7 +315,7 @@ type CommitmentRecord struct {
 	// started ends.
 	Job *CommitmentJob `json:"job,omitempty"`
 	// Calibration is the body of an agent calibration record (level 2,
-	// docs/reports/choir-mcp-precommitments-2026-10-14.md): a claim an agent
+	// docs/archive/reports/choir-mcp-precommitments-2026-10-14.md): a claim an agent
 	// wrote through /api/precommit (Kind precommit) or one scorer's
 	// settlement of it (Kind resolve). Desk packs exclude these records in
 	// their query.

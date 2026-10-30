@@ -17,7 +17,7 @@ import (
 )
 
 // Host-requested planned restart (owner rule "Restarts End Work (Crash) Or
-// Resume It (Planned Update)"; docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
+// Resume It (Planned Update)"; docs/archive/problems/owner-computer-pinned-as-canary-2026-10-13.md).
 // Before a deploy refresh, the host asks the guest to write its own
 // planned-restart marker; a busy guest refuses so the host leaves it for its
 // next idle moment.

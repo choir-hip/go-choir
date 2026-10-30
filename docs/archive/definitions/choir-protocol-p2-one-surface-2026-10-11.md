@@ -392,7 +392,7 @@ receipts:
       reports carried no sources and Texture rejected them; the trace shows
       research's search timed out at the guest while the gateway logged
       success at 30.4 seconds
-      (docs/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md).
+      (docs/archive/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md).
       Revision seven has an empty "Chips and compute" heading (content
       observation, not a protocol defect). Management Cast was not
       exercised. Evidence: session scratchpad demo19 and p2a/audit-raw.json.

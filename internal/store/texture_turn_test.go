@@ -400,7 +400,7 @@ func TestApplyTextureTurnNonRevisionOutcomesDispositionInboundWithoutFakeRevisio
 // incorporate disposition must record the update disposition without
 // re-settling the already-terminal work — otherwise the update is wedged
 // pending forever and every desk turn fails with invalid transition.
-// Receipt: docs/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
+// Receipt: docs/archive/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
 // (staging op6: 33 consecutive apply_owner_revision failures).
 func TestApplyTextureTurnIncorporatesReportAfterProducerWorkSettled(t *testing.T) {
 	s, start, caller, work := setupLifecycleTextureTargetFixture(t)
@@ -704,7 +704,7 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 	})
 }
 
-// PD1 (docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md):
+// PD1 (docs/archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md):
 // a document's one research desk takes new work while it is busy with
 // earlier work. Failure modes pinned: opening work on an existing research
 // agent is refused because no new agent is opened; a control is refused

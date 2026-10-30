@@ -59,7 +59,7 @@ type healthResponse struct {
 	Store   string         `json:"store"`
 	Build   buildinfo.Info `json:"build"`
 	// Retrieval counts and times Store B retrieval calls since start
-	// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+	// (docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 	Retrieval *RetrievalSnapshot `json:"retrieval,omitempty"`
 	// Tape is the tape segment flag and the file/record counters of the pin
 	// path and the reader (docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md

@@ -29,7 +29,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
-// Guest legs of docs/reports/p5-host-build-layered-apply-2026-10-15.md:
+// Guest legs of docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md:
 // G1-G8 through the real reconciler, the real updater engine and the
 // derivable fixture's tape, with a fake corpusd host build route.
 

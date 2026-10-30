@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// docs/problems/trace-review-desk-protocol-friction-2026-10-10.md F13: a desk
+// docs/archive/problems/trace-review-desk-protocol-friction-2026-10-10.md F13: a desk
 // did not know its own interaction surface. Texture spent ~19 of 20 turns in
 // rerun 11 guessing choir names (PendingUpdates, Ledger, Poll, Help …) and
 // its prompt taught a bare ReadDoc().
@@ -266,7 +266,7 @@ func TestSessionCellErrorCarriesSurfaceHint(t *testing.T) {
 }
 
 // Texture probed its write verb with turns built to fail, to read the valid
-// values from the rejection (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
+// values from the rejection (docs/archive/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
 // Write's help gives the whole grammar, so the only way to learn it is not
 // a staged write.
 func TestWriteHelpGivesTheWholeGrammar(t *testing.T) {

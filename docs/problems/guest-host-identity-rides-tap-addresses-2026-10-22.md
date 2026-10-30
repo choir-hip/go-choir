@@ -20,7 +20,7 @@ all read from the code on main d1c60ad87:
    SDC SEC-05); goproxy logs the source address as attribution
    (`internal/goproxy/server.go:232`). A rule that was wrong for one of
    sixteen subnets already happened once
-   ([tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md](tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)).
+   ([tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md](../archive/problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md)).
 2. **The guest reads host identity from its default route.**
    `HostSourcedCaller` and `HostPeerCaller` compare the peer with the
    gateway read from `/proc/net/route` (`internal/server/host_caller.go:31-100`).

@@ -553,7 +553,7 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 // keeps it out of retention entirely. An account on an ephemeral domain says
 // nothing about whether the computer is disposable: the paper runs under such
 // an account and is critical_protected
-// (docs/problems/retention-prune-would-destroy-the-paper-2026-10-16.md).
+// (docs/archive/problems/retention-prune-would-destroy-the-paper-2026-10-16.md).
 func retentionOwnershipProtected(own *VMOwnership, warmness WarmnessPolicyConfig) bool {
 	return warmnessClassProtected(warmnessClassForOwnership(own, warmness))
 }

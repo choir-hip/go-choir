@@ -1,7 +1,7 @@
 # Trace lines leave the tape and the store (R7): design (2026-10-22)
 
 Date: 2026-10-22. Station: FP1, step R7 of
-[`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](../problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md),
+[`paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22`](../archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md),
 section "Root cause, second investigation". Lane
 `lane/fp1-trace-segment-design`, from `origin/lane/fp1-journal-root-cause`
 `73718ec65`. Every `file:line` below is on that checkout unless it names
@@ -104,7 +104,7 @@ model, close to 53% of it. The cost is per op, not per byte: one path in
 each of the 13 prolly trees of `og_objects`, plus about 47 KiB of prepare
 and finalize per tape event.
 
-F-c (`docs/design/choir-event-table-f-c-2026-10-22.md`) moves the same ten
+F-c (`docs/archive/design/choir-event-table-f-c-2026-10-22.md`) moves the same ten
 kinds into `choir_events`, with 4 trees. The owner accepted its defaults
 at 13:20 today (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
 commit `0bf8a097d`) **[V]**. Deploy 1 is built on `lane/fp1-event-table`
@@ -840,7 +840,7 @@ workload.
 ### 9.2 Build notes for S0 and S1: where the code forces a change (2026-10-22)
 
 Written before the S1 code, from reading `internal/tapestore/appender.go`
-and its fail-stop history (`docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md`,
+and its fail-stop history (`docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md`,
 rounds 1 to 5). Each item names the design text it changes. None changes
 a ruling or the S2 to S7 plan.
 
@@ -1079,7 +1079,7 @@ record, first section) **[M]**. With a pass every 25 minutes at about
 1.18 GiB, a pass takes about 22 s, so the store is stopped for about 1.5% of
 the time, against about 4% today (a 25 s pass every 10 minutes). In FP0's
 hour of probes, at least four 503 bursts sat inside a GC window
-(`docs/problems/paper-post-refresh-health-windows-2026-10-22.md`,
+(`docs/problems/paper-unreachable-minutes-after-every-boot-2026-10-22.md`,
 "Holders found so far") **[M]**. Those become about 2.5 times rarer. The
 other bursts come from other holders of the single write connection under
 full load. R7 removes about 2.6 of about 7 tape events a second, and each

@@ -44,4 +44,4 @@ The one thing worth remembering: none of this research overturns the plan, and i
 - Raw memos, gitignored: .agentic-consensus/data-arch/research/out-devin and out-deepseek
 - Verified on GitHub: Cloud Hypervisor v54.0 of October fourteenth; Cloud Hypervisor issue 8645, open; Firecracker issue 6255, open; the minio/minio repository, archived
 - DoltLite beta: dolthub.com/blog/2026-08-31-doltlite-beta
-- Prior report: docs/reports/data-architecture-state-and-paths-2026-10-28.md
+- Prior report: docs/reports/data-system-cutover-2026-10-30.md

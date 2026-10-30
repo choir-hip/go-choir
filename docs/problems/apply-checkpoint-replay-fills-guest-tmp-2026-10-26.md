@@ -139,7 +139,7 @@ Consequences:
   nearest measurements: compact projection bases are about 1.7 GB
   (`nix/node-b.nix:1316`); the per-event journal cost of the same write path is
   141 KiB per event on the local tape harness and 220 to 310 KiB per event on
-  the paper (`docs/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`,
+  the paper (`docs/archive/problems/paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md`,
   sections "Correction" and the 10-15 cross-check). So a probe needs about
   **2 x blob + 0.14 to 0.31 GiB per 1k tail events**. The b@c log lines
   (`after=36377 … after=44569`) are the slow-page log, printed only when a page
@@ -157,7 +157,7 @@ No automatic path reaches it. The paper is not at risk from it today.
   (`internal/apihandler/routes.go:57`, `platform_update.go:778`) and the boot
   sweep (`runtime.go:949-955` → `settleOrResumePlatformUpdate`,
   `platform_update.go:947`). The POST has had no caller since b9f195b1c deleted
-  the station probes (`docs/reports/surface-audit-cli-mcp-api-2026-10-14.md:307`;
+  the station probes (`docs/archive/reports/surface-audit-cli-mcp-api-2026-10-14.md:307`;
   a repo grep finds no script, nix unit or Go caller). Deploys reach computers
   through vmctl's planned refresh, a different mechanism (marker plus base
   refresh), including the busy-refresh of `critical_protected` and

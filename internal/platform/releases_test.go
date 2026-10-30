@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 )
 
-// Failure modes from docs/reports/p6-p8-release-adopt-2026-10-15.md pinned
+// Failure modes from docs/archive/reports/p6-p8-release-adopt-2026-10-15.md pinned
 // here: R1 (id is not the digest), R2 (patch blob absent or altered), R3 (a
 // guest publishes with its own capability), R4 (publisher fields name
 // another computer or owner), R7 (the write bypasses the gate), R8 (a

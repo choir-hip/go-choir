@@ -13,7 +13,7 @@ import (
 )
 
 // FP4 round 4, P2
-// (docs/problems/fp4-r4-report-conflict-guard-scope-dead-letter-2026-10-22.md).
+// (docs/problems/frozen-candidate-lost-when-complete-cites-a-duplicate-execution-ref-2026-10-22.md).
 // Two writers of one terminal report (the worker's Complete and the fate
 // wake's resume) share its command id, because the id is derived from the
 // proposition, but their requests differ in evidence, so the second got

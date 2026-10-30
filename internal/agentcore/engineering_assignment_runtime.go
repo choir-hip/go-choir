@@ -29,7 +29,7 @@ const (
 	// the drill's link thrash for 14+ minutes) and fits the default 4 GiB
 	// guest's admission budget (3/4 of MemTotal) with one engineering
 	// capsule live at a time
-	// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B5).
+	// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B5).
 	engineeringAssignmentMemoryMax = int64(2 << 30)
 	// engineeringAssignmentMemoryRequest is the capsule's doctrine request
 	// (RES-04, internal/capsule/capsule_memory.go): memory.high under the

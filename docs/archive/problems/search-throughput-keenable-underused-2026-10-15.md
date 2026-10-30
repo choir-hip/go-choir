@@ -39,8 +39,8 @@ least 10-14 14:56Z (2,335 lines).
 
 ### Search volume (earlier records)
 
-From docs/problems/search-is-duplicated-and-discarded-2026-10-14.md and
-docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md:
+From docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md and
+docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md:
 searches per day (all computers) 10-11 490, 10-12 401, **10-13 3,183,
 10-14 4,226 by 14:21Z**; the Autopaper computer makes about two thirds.
 Repeats are 3.5–4.4% of searches, so the result cache (30 min) saves few

@@ -144,7 +144,7 @@ Revert the fix commit: the replay branch answers the frozen operation
 unconditionally again. No data or schema to migrate.
 
 
-## Merged from docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md (2026-10-26)
+## Merged from docs/problems/freeze-replays-a-changed-tree-2026-10-26.md (2026-10-26)
 
 **Freeze rebuilds the Go binary for a frontend-only follow-up after an apply.**
 Date: 2026-10-26. Status: open; documented before the fix. Mutation class of the fix: orange (capsule Freeze reuse rule, additive).

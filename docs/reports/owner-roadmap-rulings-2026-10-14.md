@@ -16,7 +16,7 @@ defaults and recommendations wherever they differ.
 > 1. We should optimize resource utilization, to scale agents per vm and
 > ram/storage/cpu/token efficiency per task. track spending, but dont set
 > budget caps. see the previously deferred missions from
-> docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+> docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
 > 2. Telegram should be read through mtproto. But source scaling (with
 > other sources) should be deferred to after the software architecture
 > improvements

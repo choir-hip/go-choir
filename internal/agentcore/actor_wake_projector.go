@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// SL slice 2 (docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md):
+// SL slice 2 (docs/archive/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md):
 // the projector is event-driven. It sweeps when the store signals a committed
 // wake write, when the earliest failed dispatch is due again, or on a slow
 // audit timer that exists only to expose a missed signal.

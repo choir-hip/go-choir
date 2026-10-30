@@ -59,7 +59,7 @@ start:
       WithToolLoopBudget) and a per-activation egress ledger
       (researchtools.NewEgressBudgetLedger).
     - >-
-      Settled design (docs/reviews/rlm-implementation-consensus-2026-08-29.md
+      Settled design (docs/archive/reviews/rlm-implementation-consensus-2026-08-29.md
       D7b and M6.5): dataflow recursion is a bare models.Call (no tools);
       actor recursion is a nested activation with a manifest that is a
       subset of the parent's grants, a carve-out of the parent's budget,

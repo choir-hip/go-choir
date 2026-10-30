@@ -1,11 +1,11 @@
 # C8 quote census: do research's quotes land in the pages they cite?
 
 Written 2026-10-13 for the Cut 2 pre-flight, item C8 in
-`docs/reports/reeng-plan-review-2026-10-13.md` ("quote-in-block census now;
+`docs/archive/reports/reeng-plan-review-2026-10-13.md` ("quote-in-block census now;
 report missing quotes, raw bytes and block structure separately"). Cut 2's
 conjecture C2-1 has a `delta_o` asking what share of research-reported quotes
 land inside one extracted block of the page they cite
-(`docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md`).
+(`docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md`).
 This census is offline and read-only. It cannot measure that rate, because
 the future extractor does not exist and no bundle holds a page's HTML. It
 measures what today's data can show, and says where the gaps are.

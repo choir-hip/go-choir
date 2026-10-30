@@ -102,7 +102,7 @@ func (rt *Runtime) assignedEngineeringCapsuleUsable(ctx context.Context, assignm
 	// without reporting, or parked blocked by budget/rate-limit) cannot drive
 	// its capsule to a terminal fate. Capsule liveness alone is not proof of
 	// usability — the run is the driver. Receipt:
-	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
+	// docs/archive/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
 	// RunBlocked is dead for assignment purposes: blocked runs are excluded
 	// from residency and replaced, never resumed, so the capsule can never
 	// reach terminal fate through it. Terminal or missing rows are dead.

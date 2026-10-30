@@ -197,7 +197,7 @@ on the owner's machine; every one exited 6 (the claim failed).
   `failed` final Report naming the one blocker: Go module zips redirect to
   `storage.googleapis.com`, which capsule egress refuses. Engineering
   correctly did not Freeze. Owner chose the host module proxy
-  (`docs/reports/capsule-go-modules-decision-2026-10-14.md`); deployed at
+  (`docs/reports/capsule-go-module-proxy-design-2026-10-14.md`); deployed at
   3439462a.
 - **`selfdev-goproxy-1802`** (18:02, staging 865dc152): the module proxy
   worked (513 requests, 513 hits, 0 misses, 331.8 MB). Freeze not reached:
@@ -205,7 +205,7 @@ on the owner's machine; every one exited 6 (the claim failed).
   cgroup), then missing ICU headers, then a link still running at 13 min 43 s
   when the 30-minute drill ended. 59 cells, about 40 of them starting,
   polling or repairing the build. Recorded in
-  `docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`.
+  `docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`.
 
 Freeze has therefore never been reached on the records path. The last
 candidate that reached `applied` and was restored on staging is M11 rerun
@@ -282,7 +282,7 @@ What: the same tracer run continues past Freeze. Its checks name each step:
 `restore_to_pre_apply_head` and, with `--require-served`,
 `served_change_then_restored`. Branch: none; failures here are new findings.
 Known risks from the earlier path: the apply's checkpoint starved by resumed
-work (`docs/problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md`),
+work (`docs/archive/problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md`),
 zombie operations pinning a computer busy
 (`selfdev-zombie-operations-pin-owner-computer-2026-10-10.md`, open), and
 `releaseBinaryStillRunning` refusing a pass if anything restarts the computer
@@ -556,7 +556,7 @@ that name its checks, so the harness, not the acting agent, settles them.
   `internal/agentcore/engineering_precommit_rules.go`,
   `scripts/reeng_tracer.mjs` (`engineeringScenario`),
   `scripts/qa_test_computer.mjs` (key scopes).
-- Problem docs: `docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`,
+- Problem docs: `docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md`,
   `c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md`,
   `goproxy-cache-root-is-a-symlink-2026-10-14.md`,
   `desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md`,

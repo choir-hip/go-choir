@@ -25,7 +25,7 @@ func testSigningKey(t *testing.T) computerevent.SigningKey {
 	return computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}
 }
 
-// G7 of docs/reports/p5-host-build-layered-apply-2026-10-15.md: a layered
+// G7 of docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md: a layered
 // release that declares the commit its binary was built from is healthy only
 // when the serving process reports that commit. A base binary still serving
 // (the overlay failed, the wrapper fell back) must not read as applied.

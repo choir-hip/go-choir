@@ -630,10 +630,10 @@ Ontology](computer-ontology.md), [The Automatic Computer — Choir
 Vision](choir-vision.md), and [The Signal Is Sparse, Not the
 Learner](signal-is-sparse-not-the-learner-2026-08-01.md).
 
-It extends the proposals in [Persistent RLM Actors and Capsule-Isolated Go
-Orchestration](memo-persistent-rlm-actors-2026-08-09.md) and [Live and
+It extends the proposals in Persistent RLM Actors and Capsule-Isolated Go
+Orchestration and Live and
 Retrospective Evals for the RLM
-Computer](memo-live-retrospective-evals-2026-08-09.md).
+Computer.
 
 The historical Autopaper activation Definition
 (`choir-autopaper-activation-2026-07-10`, retired to Git history) and its

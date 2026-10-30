@@ -1,7 +1,7 @@
 package agentcore
 
 // The guest's checkpoint surface after the manual bind is deleted (slice 3 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. Ways it could fail:
 //
 //  1. POST /lifecycle/checkpoint still binds: a second, manual publication

@@ -155,7 +155,7 @@ holds numbered and zero rows, as it does today. The trace log design's pre-rollb
 
 - The trace segment log design lists this as a discovered heresy and says it needs its own
   record before any fix. This is that record. The design does not change the fold.
-- `docs/problems/sa2-appendevent-unbounded-scan-2026-10-06.md` is the earlier work on the
+- `docs/archive/problems/sa2-appendevent-unbounded-scan-2026-10-06.md` is the earlier work on the
   same allocator. The fold bypasses the allocator that record made cheap.
 - Acceptance evidence as a URL, not a copy (design heresy delta) is a separate weakness;
   this record only shows that, for a folded event, the URL points at the wrong event today.

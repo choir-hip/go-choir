@@ -1,7 +1,7 @@
 # Calibration Level 2: Precommitments Through the Choir CLI and MCP
 
 Date: 2026-10-14. Author: Claude (subagent of the lead), for owner review.
-Level 1 is [docs/calibration/claude-ledger.md](../calibration/claude-ledger.md):
+Level 1 is [docs/calibration/claude-ledger.md](../../calibration/claude-ledger.md):
 claims in a Markdown table, settled by hand. This document designs level 2,
 where any agent writes the same records into a Choir computer through an
 API call, from the Choir CLI or a Choir MCP server. The calibration record
@@ -14,13 +14,13 @@ these scores aren't limited to our development repo [...] now we get to
 run the experiment to prove or provide evidence against the notion that
 you can improve calibration with in-context reinforcement learning."
 
-Related designs: [precommitment records](../precommitment-records.md)
+Related designs: [precommitment records](../../precommitment-records.md)
 (the merged design: §2 the record, §4.6 one schema across computers, §5
 scoring, multi-scorers, self never governs), and its archived sources
-[predictions and scoring](../archive/precommitment/precommitment-predictions-and-scoring-design-2026-10-11.md)
+[predictions and scoring](../precommitment/precommitment-predictions-and-scoring-design-2026-10-11.md)
 §4 (separate the answer from the score; one score record per scorer);
 [claims E0/E6a results](claims-e0-e6a-results-2026-10-14.md) §5 (the
-feedback loop); [owner notes](owner-notes-2026-10-14.md) §1 and §3 (PSA as
+feedback loop); [owner notes](../../reports/owner-notes-2026-10-14.md) §1 and §3 (PSA as
 in-context RL; multi-scoring; calibrated self-scoring).
 
 **Status (2026-10-14, branch `calibration-level2`, not pushed or
@@ -178,7 +178,7 @@ writes nothing new.
 > every CLI command that is not declared CLI-only (51 tools), generated
 > from one command registry. The four tools below keep their names and
 > arguments. See
-> [choir-cli-mcp-parity-2026-10-14.md](choir-cli-mcp-parity-2026-10-14.md).
+> [choir-cli-mcp-parity-2026-10-14.md](../../reports/choir-cli-mcp-parity-2026-10-14.md).
 
 The repository has no MCP plumbing and no MCP dependency. A stdio MCP
 server is small enough to write directly in Go with the standard

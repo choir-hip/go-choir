@@ -75,7 +75,7 @@ boundaries:
   mutation_class: green for this station (docs); every build step in the design is red (VM lifecycle, vmctl)
   authority_sources:
     - docs/security-density-architecture-checklist-2026-10-21.md (RES-20)
-    - docs/reports/vm-backend-interface-2026-10-14.md
+    - docs/reports/vm-hypervisor-seam-design-2026-10-21.md
     - docs/research/isolation-runtimes-2026-10-14.md
   must_preserve:
     - no edit to vmmanager, vmctl, the VM image or nix while FP8 owns them

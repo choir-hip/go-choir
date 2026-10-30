@@ -150,7 +150,7 @@ type ComputerEventAppender struct {
 	// canonical derivable-continuation seam. It runs detached — the
 	// append never waits and the observer can never block or alter the
 	// event commit. Atomic so it can be swapped while appends run
-	// (docs/problems/post-commit-observer-race-2026-10-13.md).
+	// (docs/archive/problems/post-commit-observer-race-2026-10-13.md).
 	postCommitObserver atomic.Pointer[func(kind EventKind)]
 	// appendBarrier runs first in every append entry point, before a.mu is
 	// taken (docs/reports/telemetry-batching-design-2026-10-20.md 4.3). The

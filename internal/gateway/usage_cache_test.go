@@ -67,7 +67,7 @@ func TestGatewayRelaysCachedInputTokens(t *testing.T) {
 	}
 }
 
-// F6 (docs/reports/autopaper-compute-halving-2026-10-15.md): the cached share
+// F6 (docs/archive/reports/autopaper-compute-halving-2026-10-15.md): the cached share
 // per provider must be readable on staging from GET /health, so a deploy's
 // effect on the chatgpt hit rate is a counter delta, not a guest cost pull.
 func TestGatewayHealthReportsPromptCacheHitRatePerProvider(t *testing.T) {

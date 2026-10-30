@@ -26,7 +26,7 @@ start:
       owner: this session
       touch: goal_owned
       recovery: git
-    - path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    - path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       status: dirty
       class: other_agent_wip
       owner: other agent
@@ -166,7 +166,7 @@ now:
   # Recon 2026-09-30 (M3 slice first move — inspect before freezing).
   # QA fixture / rubric / baseline on current main:
   # - A prior M0 QA baseline exists:
-  #   docs/evidence/m0-qa-baseline-timings-2026-09-30.json — it recorded
+  #   docs/archive/evidence/m0-qa-baseline-timings-2026-09-30.json — it recorded
   #   ok=false at leg prompt_bar_submit (the stall itself, no research leg)
   #   so it is a probe harness receipt, NOT a quality baseline.
   # - There is NO frozen QA fixture, NO groundedness/attribution rubric, and

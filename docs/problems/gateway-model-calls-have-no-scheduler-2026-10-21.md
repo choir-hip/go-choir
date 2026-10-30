@@ -1,7 +1,7 @@
 # The Gateway Rejects Model Calls Instead of Scheduling Them (RES-11)
 
 Date: 2026-10-21. Source: the 2026-10-11 fan-out incident
-([research-fanout-overruns-computer-model-budget-2026-10-11.md](research-fanout-overruns-computer-model-budget-2026-10-11.md)),
+([research-fanout-overruns-computer-model-budget-2026-10-11.md](../archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md)),
 the checklist item RES-11 and owner decision DEC-07 ("track spending, never
 cap"), and a re-read of the code at origin/main 26c4e1ed0. Station:
 [FP7](../definitions/choir-launch-fp7-gateway-identity-2026-10-21.md).

@@ -12,7 +12,7 @@ import (
 )
 
 // Corrections (L2a A3 / R2-5,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). The runtime
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). The runtime
 // compares each of management's dispositions with the capture's newest
 // label. A mismatch is recorded as a choir.capture_label_override object
 // linked to the label version it corrects, with management's reason; label

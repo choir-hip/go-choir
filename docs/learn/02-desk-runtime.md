@@ -72,7 +72,7 @@ the trade-off field guide in
 5. **Management used to be one serial turn, and that stopped the paper.**
    On 14 October one management run held management's only turn for over
    30 minutes while captures waited
-   ([problem](../problems/management-serial-turn-blocks-paper-2026-10-14.md)).
+   ([problem](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md)).
    S2a and S2b (on `origin/main`) let management delegate capture intake
    to *management tasks*: bounded sub-agents with their own run, session
    and inbox, K = 4 at once, coordinated by store preconditions rather
@@ -92,7 +92,7 @@ the trade-off field guide in
 8. **The runtime's cost is not the interpreter.** On the live paper,
    Yaegi is about 2% of CPU; the store scans *around* each cell and at
    each run's end are 24% and 44%
-   ([CPU report](../reports/computer-cpu-efficiency-2026-10-14.md)). The
+   ([CPU report](../archive/reports/computer-cpu-efficiency-2026-10-14.md)). The
    design is sound; its read paths are unindexed.
 
 ## 1. Primer: loops, code as action, actors and crashes
@@ -149,7 +149,7 @@ values (research) or as later records (management tasks). The design
 point is that the model sees references and small views while the bulk
 stays in the environment: "The RLM design point is that the model sees
 references and small views while the bulk stays in the cell's
-environment" ([LR lever 6](../reports/lr-lever6-cell-output-design-2026-10-14.md)).
+environment" ([LR lever 6](../archive/reports/lr-lever6-cell-output-design-2026-10-14.md)).
 
 Recursion needs bounds. Choir allows one level: research children cannot
 call `choir.Research`, and management tasks cannot delegate
@@ -332,7 +332,7 @@ with `memory.max` of 1 GiB, a CPU quota, 256 pids and a 6-hour
 fail-closed deadline (`internal/agentcore/engineering_assignment_runtime.go`,
 `engineeringAssignmentMemoryMax`, `engineeringAssignmentPidsMax`,
 `engineeringAssignmentDeadline`). Capsules are covered in the isolation
-review ([security review](../reports/computer-isolation-security-review-2026-10-14.md) §3.2).
+review ([security review](../archive/reports/computer-isolation-security-review-2026-10-14.md) §3.2).
 
 ### 2.3 Where it is weak
 
@@ -368,7 +368,7 @@ review ([security review](../reports/computer-isolation-security-review-2026-10-
   inter-desk traffic still bypassed records: Texture opened research and
   management through lifecycle controls (77 and 73 uses in the traces),
   `choir.Message` and `choir.Emit` still existed
-  ([problem](../problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)).
+  ([problem](../archive/problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)).
   Today both verbs return "retired" errors (`choir.go`, `Message`, `Emit`)
   and the reducer routes every desk's conversation through records
   (`internal/agentcore/inbox_records.go`, `recordsDesk`). Doctrine I5
@@ -411,7 +411,7 @@ I19).
 
 **One interpreter per desk session, not per cell.** A desk's session is a
 long-lived worker process holding one Yaegi interpreter
-([CPU report](../reports/computer-cpu-efficiency-2026-10-14.md) §2,
+([CPU report](../archive/reports/computer-cpu-efficiency-2026-10-14.md) §2,
 citing `internal/yaegikernel/session.go`). Each cell arrives as one
 newline-delimited JSON `SessionFrame` over a Unix socket
 (`internal/yaegikernel/session_loop.go`). The frame carries the cell's
@@ -442,7 +442,7 @@ no cursor" (`internal/agentcore/rlm_reduce.go`).
 the cell's result even when the model wrote the call as a bare statement
 and ignored the error. That fix came from an incident where a verb error
 "vanishes as final expression"
-([problem](../problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md)).
+([problem](../archive/problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md)).
 
 **Imports.** Model cells may import a small safe stdlib set (`fmt`,
 `strings`, `bytes`, `time`, `math`, `sort`, `strconv`, `encoding/json`,
@@ -468,7 +468,7 @@ stays in the session for a later cell to read. The measurement that
 motivated it: research cells' p90 stdout was 27,042 characters, and one
 cell printing six search records raised the next call's input from 7,211
 to 30,221 tokens until compaction
-([LR lever 6](../reports/lr-lever6-cell-output-design-2026-10-14.md)).
+([LR lever 6](../archive/reports/lr-lever6-cell-output-design-2026-10-14.md)).
 
 **Deadlines.** A management cell that sets no `timeout_ms` gets a host
 deadline of 300 seconds (`internal/agentcore/tools_desk.go`,
@@ -486,7 +486,7 @@ no host deadline, because research legitimately waits on
   (`actingCommitmentPackForDesk`) is 11% and loading the cell's records
   (`loadCellRecords` → `ListInboxRecords`) is 9%, both by unindexed scans
   that parse every row's JSON
-  ([CPU report](../reports/computer-cpu-efficiency-2026-10-14.md),
+  ([CPU report](../archive/reports/computer-cpu-efficiency-2026-10-14.md),
   "The short answer" and §1b). You can see the scan in
   `ListInboxRecords` (`internal/store/inbox.go`): it lists every
   commitment record for the inbox by metadata, then filters by sequence
@@ -500,7 +500,7 @@ no host deadline, because research legitimately waits on
 - **The transcript grows with every call.** In run 305a582d, input grew
   from 13,668 to 137,087 tokens per call over 58 calls: 4.1 million input
   tokens for one management turn
-  ([delegation design](../reports/management-delegation-design-2026-10-14.md)
+  ([delegation design](../archive/reports/management-delegation-design-2026-10-14.md)
   §2.4). Lever 6 bounds one source of growth (prints), not the turn's
   length.
 - **A runaway cell is a whole-worker failure.** The 860-second cell
@@ -589,7 +589,7 @@ Measured on the paper: 12 worker processes at 15:25 UTC on 14 October,
 process (CPU report §2). The memory-return work set the worker's Go soft
 memory limit to 1/16 of guest RAM, at least 256 MiB, and notes that
 "workers are not measured yet"
-([memory return](../reports/lr-guest-memory-return-2026-10-14.md)).
+([memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md)).
 
 ### 4.3 Where it is weak
 
@@ -597,7 +597,7 @@ memory limit to 1/16 of guest RAM, at least 256 MiB, and notes that
   run, and a run that ended normally left its worker alive: "Every Texture
   turn, every research run and every management wake adds one idle
   process ... Nothing reclaims it until the computer restarts"
-  ([problem](../problems/desk-workers-leak-until-restart-2026-10-11.md)).
+  ([problem](../archive/problems/desk-workers-leak-until-restart-2026-10-11.md)).
   The fix is the agent key plus retention and LRU bounds above. The
   lesson: **every cache needs an eviction rule that runs even when
   nothing else happens.**
@@ -813,8 +813,8 @@ idle.
   is 44% of the paper's guest CPU: at the end of every desk run it scans
   every commitment record matching the inbox, then once per conversation,
   with `JSON_EXTRACT(CAST(metadata AS JSON))` on every row
-  ([CPU report](../reports/computer-cpu-efficiency-2026-10-14.md);
-  [problem](../problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
+  ([CPU report](../archive/reports/computer-cpu-efficiency-2026-10-14.md);
+  [problem](../archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md)).
   The conversation heads are already maintained as cached objects in
   `planInboxRecords`; the fix the report proposes (levers C1 to C3) is to
   index the metadata fields and fold rounds incrementally. The design is
@@ -833,7 +833,7 @@ idle.
   2,100 wakes (`minted 2106 pending wakes` and similar, eight boots in
   eight hours) from an O(all objects) migration scan; the projector then
   spent hours dispatching dead wakes while owner work queued behind them
-  ([problem](../problems/sa1-wake-outbox-rearm-storm-2026-10-06.md)).
+  ([problem](../archive/problems/sa1-wake-outbox-rearm-storm-2026-10-06.md)).
   The per-sweep pacing and the dead-wake disposal
   (`ErrNoPendingActorOccurrence` → mark projected) are its repairs. The
   lesson: **a recovery path that re-arms everything on boot is a load
@@ -895,7 +895,7 @@ paper's management inbox: 154 runs; management was in a run 46% of the
 window; 105 of 132 capture arrivals found management already busy;
 duration p95 812 s and max 3,601 s; arrival-to-handling p95 about 21 to
 25 minutes
-([delegation design](../reports/management-delegation-design-2026-10-14.md)
+([delegation design](../archive/reports/management-delegation-design-2026-10-14.md)
 §2.2-2.3).
 
 On 14 October at 03:50 UTC the owner noticed the newest article was 28
@@ -903,7 +903,7 @@ minutes old. One management run (1565c043, model
 `longcat-2.5-preview-free`) had held the only turn since 03:13 while it
 checked citations itself, one capture per cell, with model calls of 9
 minutes and input growing to 113,382 tokens
-([problem](../problems/management-serial-turn-blocks-paper-2026-10-14.md)).
+([problem](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md)).
 Nothing was lost; everything waited.
 
 The note names the three costs of a serial turn: **latency** (everything
@@ -959,7 +959,7 @@ The coordination is done by the store, not by locks:
 
 S2a ran one task at a time, and at 28 sources it fell behind: 149 of 154
 captures undisposed after 34 minutes, queue wait p50 425 s
-([problem](../problems/management-intake-backlog-at-28-sources-2026-10-14.md)).
+([problem](../archive/problems/management-intake-backlog-at-28-sources-2026-10-14.md)).
 S2b (commit 433ce4d6e on `origin/main`) runs K tasks at once:
 
 - **K = 4 by default, at most 8**
@@ -1017,7 +1017,7 @@ checked for this document.
 | shape | how it scales | why (not) |
 |---|---|---|
 | one serial turn (before) | does not | head-of-line blocking; the 14 October outage |
-| parallel management turns over inbox partitions | some | rejected by all six panelists: "a single cursor and a single active run ... would need the same lease machinery anyway" ([adjudication](../reports/management-delegation-adjudication-2026-10-14.md)) |
+| parallel management turns over inbox partitions | some | rejected by all six panelists: "a single cursor and a single active run ... would need the same lease machinery anyway" ([adjudication](../archive/reports/management-delegation-adjudication-2026-10-14.md)) |
 | management tasks, K at once (S2a, S2b) | K × task rate | chosen: bounded, leased, coordinated by store preconditions |
 | deterministic intake (Jev-labelled feeds as system acts) | no model call per item | the destination after tasks; recorded acts that can be overridden |
 
@@ -1123,12 +1123,12 @@ crashes"):
 - **August: held-computer boot crash loops.** The owner's computer would
   not boot for weeks; startup reconcile hit a deterministic fatal path on
   every boot, and the problem was chased as four different root causes
-  first ([problem](../reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md)).
+  first ([problem](../archive/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md)).
   This is the origin of "a crash never resumes".
 - **12 October: a crash left work open and re-cast engineering.** Crash
   boots closed wakes but not the work items behind them, and an
   engineering reconcile re-cast restart-cancelled assignments up to three
-  times ([problem](../problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md)).
+  times ([problem](../problems/crash-boots-redrive-applies-2026-10-13.md)).
   The agreed fix was records-as-work plus round closures at boot. In
   today's code `closeOpenRoundsAfterCrash` exists, and the re-cast path
   (`engineering_desk.go`, `engineeringMaxRecastAttempts`) is gone from
@@ -1149,7 +1149,7 @@ crashes"):
   for about an hour until an owner act restarted them. vmctl logged
   `planned_restart=true` because its request succeeded; only the guest
   console showed the guest overruled it
-  ([problem](../problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
+  ([problem](../archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md)).
   The same record found the paper had also been hibernated under memory
   pressure with no snapshot, and its wake was a markerless boot. Ruling 6
   and `recoverSourceSchedulesAtBoot` came from this.
@@ -1348,13 +1348,13 @@ resume.
   `internal/runtimeprompts/overlays/rlm_management_runtime.yaml`;
   `internal/provideriface/config.go`.
 - **Doc** (numbers quoted, not re-measured):
-  [CPU efficiency](../reports/computer-cpu-efficiency-2026-10-14.md),
-  [management delegation design](../reports/management-delegation-design-2026-10-14.md)
-  and [adjudication](../reports/management-delegation-adjudication-2026-10-14.md),
-  [LR lever 6](../reports/lr-lever6-cell-output-design-2026-10-14.md),
-  [guest memory return](../reports/lr-guest-memory-return-2026-10-14.md),
-  [state and vision](../reports/choir-state-and-vision-2026-10-14.md) §3.3
-  and §4.4, [isolation review](../reports/computer-isolation-security-review-2026-10-14.md),
+  [CPU efficiency](../archive/reports/computer-cpu-efficiency-2026-10-14.md),
+  [management delegation design](../archive/reports/management-delegation-design-2026-10-14.md)
+  and [adjudication](../archive/reports/management-delegation-adjudication-2026-10-14.md),
+  [LR lever 6](../archive/reports/lr-lever6-cell-output-design-2026-10-14.md),
+  [guest memory return](../archive/reports/lr-guest-memory-return-2026-10-14.md),
+  [state and vision](../archive/reports/choir-state-and-vision-2026-10-14.md) §3.3
+  and §4.4, [isolation review](../archive/reports/computer-isolation-security-review-2026-10-14.md),
   [doctrine](../choir-doctrine.md) (I1, I3, I5, I18, I19, I21, I26),
   `CLAUDE.md` ("Restarts End Work"), and the problem records linked in
   each section.

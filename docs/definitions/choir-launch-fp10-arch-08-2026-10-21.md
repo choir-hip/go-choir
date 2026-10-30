@@ -71,7 +71,7 @@ boundaries:
   mutation_class: green (docs); yellow (test); orange (result fields and a log line)
   authority_sources:
     - SDC ARCH-08 and DEC-07
-    - docs/reviews/rlm-implementation-consensus-2026-08-29.md D7b/M6.5
+    - docs/archive/reviews/rlm-implementation-consensus-2026-08-29.md D7b/M6.5
     - owner PD1 2026-10-11 (one level of fan-out)
     - CLAUDE.md and docs/choir-doctrine.md
   must_preserve:

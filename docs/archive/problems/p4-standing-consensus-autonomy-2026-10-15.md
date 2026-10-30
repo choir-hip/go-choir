@@ -5,7 +5,7 @@ Date: 2026-10-15. Source: P4 of
 (§1.3, §3 P4, §4 Station A), with its signatures from S2 of
 [principal-identity-and-signed-acts-2026-10-15.md](../reports/principal-identity-and-signed-acts-2026-10-15.md)
 (§3.2, §6 S2). Built on S1
-([effect-accepted-admitted-without-authority-2026-10-15.md](effect-accepted-admitted-without-authority-2026-10-15.md),
+([effect-accepted-admitted-without-authority-2026-10-15.md](../../problems/effect-accepted-admitted-without-authority-2026-10-15.md),
 branch `feat/s1-owner-act-receipts`, 890fd42d6 and 8a71922a7), whose
 corpusd gate refuses `qualified-consensus:` "until S2", and on P5
 ([p5-host-build-layered-apply-2026-10-15.md](../reports/p5-host-build-layered-apply-2026-10-15.md),

@@ -146,7 +146,7 @@ func (g *GuestCredentials) installExchangeLocked(envelope platform.ComputerCrede
 }
 
 // InstallResumeEnvelope re-credentials a guest resumed from a memory snapshot
-// (S3, docs/reports/s3-snapshot-hibernate-design-2026-10-14.md "Re-credential
+// (S3, docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md "Re-credential
 // on resume"). The host delivers a fresh envelope for this same realization
 // over the host-only resumed call; the frozen capability may be long expired
 // and is never needed. It runs the boot protocol: verify the envelope against
@@ -427,7 +427,7 @@ func (g *GuestCredentials) SetSelfDevelopmentMode(ctx context.Context, change pl
 
 // RequestConsensusDecision asks corpusd's decision poster for a decision on
 // one operation under the standing_consensus arm (P4,
-// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). It returns
+// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md). It returns
 // the HTTP status with the response: 200 a decision, 409 a dissent or a
 // pending host build (the response says which) or stale heads, 403 a
 // refusal, 503 no host build service.

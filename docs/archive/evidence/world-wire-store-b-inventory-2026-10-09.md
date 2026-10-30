@@ -12,7 +12,7 @@ Owner: the Universal Wire app "wasnt connecting to it correctly. the
 articles didnt load." Work moved to stabilizing the computer and enabling
 self-development. Ingestion stopped on 10-05 (`sourcecycled` out of the
 boot set). The 10-05 analysis is
-[`world-wire-rearchitecture-2026-10-05`](../archive/world-wire-rearchitecture-2026-10-05.md).
+[`world-wire-rearchitecture-2026-10-05`](../world-wire-rearchitecture-2026-10-05.md).
 
 ## State now
 
@@ -100,7 +100,7 @@ All 633 are `published`. Since the 12:33Z reset none of them resolve.
   rows. Dolt keeps every chunk that any commit references, so GC cannot
   reclaim it. This is the same mechanism as Store A's 86k-commit history.
   It is unbounded retention rather than a leak of unreferenced space.
-- Design consequence ([Autopaper design](../autopaper-sw-design-2026-10-09.md)
+- Design consequence ([Autopaper design](../../autopaper-sw-design-2026-10-09.md)
   §6): this store, behind corpusd, stays the host-level publish and read
   store. It holds only published material (a low write rate), ingestion
   stays in each paper's embedded Dolt, and its history gets a declared

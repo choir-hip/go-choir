@@ -11,7 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 )
 
-// Release commands (P7/P8, docs/reports/p6-p8-release-adopt-2026-10-15.md):
+// Release commands (P7/P8, docs/archive/reports/p6-p8-release-adopt-2026-10-15.md):
 // list and show published releases, publish an applied operation as a
 // release (owner act), adopt a published release as source onto a computer's
 // own tree (owner act), and read a computer's adoptions.

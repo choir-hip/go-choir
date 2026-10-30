@@ -2,7 +2,7 @@
 
 Status: **design, green.** No code. Written by an FP0 design worker on lane
 `lane/fp0-s7-replan` from `origin/main` at `d7437aabc`. Goal file:
-[choir-appdev-s7-app-packages-2026-10-01.md](../definitions/choir-appdev-s7-app-packages-2026-10-01.md).
+[choir-appdev-s7-app-packages-2026-10-01.md](../archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md).
 
 Owner direction (ledger 19:3x and FP0's relay): app packages come first. They
 are the platform upgrade the self-development program needs before its first
@@ -79,7 +79,7 @@ route on main.
 ### 1.2 On the paused branch (`d9340a9a0`, `5fe486f52`, `4bc762102`, 2026-10-14)
 
 `git merge-tree` against main conflicts in four files
-(`docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md`,
+(`docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md`,
 `frontend/src/lib/PromptSurface.svelte`, `internal/objectgraph/registry.go`,
 `internal/store/store.go`); the branch base is 2,248 commits behind main.
 

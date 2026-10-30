@@ -11,7 +11,7 @@ import (
 // own Nix store. The autoputer service sets it; each capsule hop carries it
 // to the next, and workload commands get those directories appended to
 // their PATH. A capsule sees the store read-only through its lower root
-// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
+// (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
 const BuildToolchainPathEnv = "CHOIR_CAPSULE_BUILD_PATH"
 
 // FrontendDepsEnv names the guest's Nix-built frontend dependencies (its

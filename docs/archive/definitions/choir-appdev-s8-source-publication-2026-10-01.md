@@ -31,12 +31,12 @@ start:
       "M9a platform->computer signed push exists and was proven on staging
       with a 1-file payload; nothing in CI calls it. No computer->computer
       publication surface exists (M9b unbuilt)."
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123)
     - >-
       "Capsules are air-gapped (empty netns, internal/capsule/namespace.go);
       the guest Nix store is read-only EROFS with no nix on the runtime PATH.
       curl | bash and nixpkgs are impossible inside a capsule today."
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115)
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:112-115)
     - >-
       StageGrantedRelease permits an engineering capability to stage only from
       a frozen capsule, so S8 must use S6's accepted release rather than a
@@ -120,7 +120,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - owner direction in session 2026-10-01 (source only)
-    - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
+    - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
     - docs/computer-ontology.md
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
@@ -143,7 +143,7 @@ boundaries:
       M9a's platform-control-signed update is an adjacent, verification-first
       transport, but it is not a computer-to-computer source publication or a
       recipient-owned adoption authority
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-123).
     introduced: >-
       No runtime heresy is introduced by this drafted goal; implementation risk
       is treating a discoverable publication signature as authority to mutate B
@@ -199,8 +199,8 @@ now:
       platform-base updates.
     status: proposed
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-587
-      - docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md:55-60
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-587
+      - docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md:55-60
       - internal/agentcore/platform_update.go:59-90
   decision:
     what: >-
@@ -209,9 +209,9 @@ now:
       computer through its own gate.
     kind: architecture
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-433
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-433
     owner_ratification_ref: >-
-      docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:434-437
+      docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:434-437
       (owner 2026-10-01: "source only")
   belief:
     believed_state: >-
@@ -245,7 +245,7 @@ receipts: []
 
 The cross-computer unit is the shared record, not an updater payload:
 **base revision + patch stack + pinned inputs + build recipe + tests +
-receipts** (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:470-477).
+receipts** (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:470-477).
 
 When S6 completes, it supplies the approved, restorable app-layer change. S8
 serializes its source identity into a host-registry record and binds each
@@ -255,7 +255,7 @@ payload. S8 does not turn the record into an A-to-B executable release.
 For an S7 package, the record also carries the package manifest and its
 app-data compatibility and restore requirements; the package's own artifact
 defines those as release-bound data
-(docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md:55-60).
+(docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md:55-60).
 
 B obtains the record through the registry, so review is of the patch, base,
 recipe, tests, every pinned input, and package contract before any build or
@@ -301,7 +301,7 @@ approval; B's gate is the sole admission route to B's desired code.
 
 S4's capsule egress recorder and CAS are a prerequisite because its declared
 purpose is to capture fetched payloads so S8 can rebuild while origins are
-unavailable (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573).
+unavailable (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:560-573).
 S8 deliberately leaves transport policy, package shape, fork construction, and
 platform mainlining to their named stations.
 

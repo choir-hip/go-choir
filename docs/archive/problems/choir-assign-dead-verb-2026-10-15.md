@@ -13,12 +13,12 @@ persisted, and no tray intent exists for it.
 
 ## Evidence
 
-- `docs/reports/master-report-protocol-research-autopaper-2026-10-11.md`
+- `docs/archive/reports/master-report-protocol-research-autopaper-2026-10-11.md`
   (about line 81): Assign only writes into a map inside the worker and returns
   "dispatched"; nothing else happens. Recommended: delete.
 - `docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md`:
   the trace audit counts `choir.Assign` at 0 uses.
-- `docs/reports/dead-code-census-2026-10-12/desk-config.md` section 1.4: the
+- `docs/archive/reports/dead-code-census-2026-10-12/desk-config.md` section 1.4: the
   deletion checklist (parity and broker test lines included).
 - No caller: grep across `internal`, `cmd`, `nix` and the runtime prompts finds
   no use besides the definition, the broker, and tests that exercise it.

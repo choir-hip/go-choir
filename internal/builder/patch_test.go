@@ -204,7 +204,7 @@ func writePatch(t *testing.T, patch string) string {
 	return p
 }
 
-// H15 (docs/reports/p5-host-build-layered-apply-2026-10-15.md): the paths
+// H15 (docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md): the paths
 // the admission sees are the paths git committed, however the patch spells
 // them: any first segment, no git header, C-quoted names.
 func TestPatchedTreeAdmissionSeesWhatGitWrites(t *testing.T) {

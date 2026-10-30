@@ -176,7 +176,7 @@ func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 	}
 }
 
-// F12 (docs/design/choir-event-table-f-c-2026-10-22.md section 3.3): the
+// F12 (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 3.3): the
 // optional event projection class. Absent from both sets is eligible (an
 // empty table is not observed); present in both with equal hashes is
 // eligible; present on one side only is schema drift.

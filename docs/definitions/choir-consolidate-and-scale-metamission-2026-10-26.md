@@ -43,7 +43,7 @@ metamission:
         unpushed; D2's next-deploy proof). Trains 13 to 26b landed; see
         the ledger.
     - id: D
-      path: docs/definitions/choir-density-2026-10-26.md
+      path: docs/archive/definitions/choir-density-2026-10-26.md
       readiness: executable
       status: working
       depends_on: []
@@ -152,7 +152,7 @@ metamission:
       depends_on: [F, R]
       note: >-
         Deferred: email (numbered addresses and the autopaper@ inbox,
-        docs/design/email-numbered-addresses-and-autopaper-inbox-review-2026-10-26.md;
+        docs/archive/design/email-numbered-addresses-and-autopaper-inbox-review-2026-10-26.md;
         owner: tomorrow or later), SR7 recoverable changes, SR8 staged
         auto-approve, T1b Choir in Choir, T2, T3 (U2, U3, U5 to U7);
         PR-12 step-up (owner 12:1x: "tentatively passkeys when needed for
@@ -270,7 +270,7 @@ now:
     next_observation: >-
       Per-table sizes of the paper's captured base and Store A, read-only.
   open_decision: >-
-    Owner questions in docs/design/data-rearchitecture-2026-10-28.md: where
+    Owner questions in docs/archive/design/data-rearchitecture-2026-10-28.md: where
     Dolt's versioning is load-bearing; dedup scope; Autoradio after step 4.
   blocker: >-
     Token budget (owner, 2026-10-28: tokens return tomorrow). b@c citation

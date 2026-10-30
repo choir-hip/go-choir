@@ -21,14 +21,14 @@ mission is written against an invariant instead of a symptom.
 
 - Seven parallel triage agents read every `docs/problems/*.md` in full and
   recorded cluster, revealed invariant, status, enforcer and fix refs:
-  [`evidence/problem-doc-triage-2026-10-08.jsonl`](evidence/problem-doc-triage-2026-10-08.jsonl).
+  [`evidence/problem-doc-triage-2026-10-08.jsonl`](archive/evidence/problem-doc-triage-2026-10-08.jsonl).
 - **Status reflects doc text, which is often stale.** Spot checks found fixes
   recorded in commits, `ACTIVE.md` or station reports but never back-written
   to the problem doc (e.g. `sa2-appendevent-unbounded-scan` fixed in
   `475902d7`; `smg-management-open-invalid-transition` fixed and
   deployed-verified in `e9cd9fed`; `s0-tap-egress-unfiltered` closed by S1a).
   Of 85 docs triaged open/unclear, 36 are cited by non-docs commits:
-  [`evidence/problem-doc-open-xref-2026-10-08.tsv`](evidence/problem-doc-open-xref-2026-10-08.tsv).
+  `evidence/problem-doc-open-xref-2026-10-08.tsv`.
   Treat per-doc status as an upper bound on openness until reconciled (P1).
 - Doc-level counts by triage: liveness 41, recovery 24, release 20,
   resources 17, contracts 14, selfdev 9, security 8, observability 4,
@@ -113,7 +113,7 @@ Evidence (~9): `held-computer-boot-terminal-outcome-scan-crash`,
 Alarm: none. Proof: none general — a boot-cost budget test on an owner-scale
 store would make this enforceable. Goal: 1.
 *Update 2026-10-09:* first fleet measurement
-([evidence](evidence/o7-boot-cost-vs-history-2026-10-09.md)). Health is
+([evidence](archive/evidence/o7-boot-cost-vs-history-2026-10-09.md)). Health is
 history-independent (7–11 s at 0.4–5.2 GB); runtime start grows ~4–5 s
 per GB (31 s at 5.2 GB). Partial violation, seconds not minutes; residual
 `o7-runtime-start-scales-with-store`. The boot timeline already carries
@@ -151,7 +151,7 @@ without changing ComputerID") as an enforceable property.
 Evidence: `fresh-realization-missing-privacy-key-blind-boot` (privacy key
 only on the realization disk), `sa-projection-base-watermark-never-refreshed`
 (local store was the only fast restore path). Inventory and findings:
-[state-homes-inventory-2026-10-08.md](state-homes-inventory-2026-10-08.md)
+[state-homes-inventory-2026-10-08.md](operational-invariants-register-2026-10-08.md)
 (privacy key, capsule artifacts, 15-minute file window; updater `current` and
 signer trust unverified). Enforcer: unowned. Alarm: none. Proof: lose-the-disk
 disposable — destroy the data disk, realize again, identical effective head,
@@ -280,7 +280,7 @@ Enforcer: partial. Goal: 1.
 ## Texture — the owner's document is always the owner's
 
 Added 2026-10-09 from the Gate 1 Texture acceptance suite
-(`docs/texture-acceptance-suite.md`) and the clustering assessment
+(`docs/archive/texture-acceptance-suite.md`) and the clustering assessment
 `problems/clustering-texture-obligation-closure-2026-10-09.md`. Gate 1 calls
 for Texture's own invariants; these are the first four, each with the
 suite check that measures it.
@@ -346,7 +346,7 @@ regression passed unit tests and an 8-model frozen-candidate review.
    alarm and its staging proof — those become the missions.
 
 
-## Merged from docs/state-homes-inventory-2026-10-08.md (2026-10-08)
+## Merged from docs/operational-invariants-register-2026-10-08.md (2026-10-08)
 
 **State Homes Inventory.**
 Date: 2026-10-08. Status: **draft inventory** (read-only survey, green). Enforces the proposed operational invariant **O21 — a realization holds no unique state** in the [operational invariants register](operational-invariants-register-2026-10-08.md). Restates, operationally, what [computer-ontology.md](computer-ontology.md) already says: "a realization may be replaced without changing ComputerID" and "realization is

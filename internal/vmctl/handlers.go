@@ -234,7 +234,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		byKind[string(own.Kind)]++
 	}
 	// Health never probes a guest: one that does not answer would make
-	// vmctl itself look down (docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
+	// vmctl itself look down (docs/archive/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
 	idleEligible := h.registry.IdleOwnershipsSeen()
 	releaseCurrent, releaseComputers := h.guestReleaseHealth(ownerships)
 	writeVMCTLJSON(w, http.StatusOK, vmctlHealthResponse{

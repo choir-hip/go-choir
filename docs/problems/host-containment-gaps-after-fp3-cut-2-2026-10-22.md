@@ -234,7 +234,7 @@ comes first.
 
 - corpus-dsn.env (Store B DSN) is now
   `/var/lib/go-choir/unit-env/corpus-dsn.env`; the runbook
-  docs/runbooks/platform-dolt-authority-split-2026-09-18.md is updated.
+  docs/archive/runbooks/platform-dolt-authority-split-2026-09-18.md is updated.
 - The retrieval and opinion kill switch is now
   `/var/lib/go-choir/unit-env/corpusd-retrieval.env`.
 - The proxy's environment is now `/var/lib/go-choir/unit-env/deploy.env`.

@@ -9,7 +9,7 @@ import (
 
 // slowResolveThreshold is the resolve time above which corpusd logs each
 // step's time. Opening an article cost about a second on every request
-// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+// (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md).
 var slowResolveThreshold = 300 * time.Millisecond
 
 // resolveSteps times the steps of one publication resolve.

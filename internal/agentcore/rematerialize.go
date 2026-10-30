@@ -413,7 +413,7 @@ type CheckpointBindReport struct {
 	ComputerID string `json:"computer_id"`
 	// CheckpointEligible is false only when the host has judged the checkpoint
 	// not_derivable. The bind no longer proves derivability (no replay): the
-	// host does, after the publish (docs/design/apply-checkpoint-without-replay-2026-10-26.md,
+	// host does, after the publish (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md,
 	// slice 2), and restore enforces it again whenever the checkpoint is used.
 	CheckpointEligible bool `json:"checkpoint_eligible"`
 	// CheckpointVerdict is the host's verdict at the time of the answer:

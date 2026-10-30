@@ -1,6 +1,6 @@
 # Choir master report: the protocol, research, and Autopaper 2026-10-11
 
-> **Revised 2026-10-12.** The owner's line-by-line review changed several proposals here: no runtime-owned research job and no budgets, async search instead of the deadline ladder, a permalink per version, no runtime scoring, and "research has no loop" corrected (it loops within a run; what it lacks is a way to end or continue its own work). The research-job and deadline-ladder drafts named below are deleted. See [../re-engineering-decisions-2026-10-12.md](../re-engineering-decisions-2026-10-12.md).
+> **Revised 2026-10-12.** The owner's line-by-line review changed several proposals here: no runtime-owned research job and no budgets, async search instead of the deadline ladder, a permalink per version, no runtime scoring, and "research has no loop" corrected (it loops within a run; what it lacks is a way to end or continue its own work). The research-job and deadline-ladder drafts named below are deleted. See [../re-engineering-decisions-2026-10-12.md](../../re-engineering-decisions-2026-10-12.md).
 
 Written Sunday, October eleventh, late evening UTC. It covers the whole day since you decided that precommitment records are the protocol between agents, about ten hours of work. The last two hours were research and design only, at your request, done by seven research agents whose key claims I checked against the code.
 
@@ -119,16 +119,16 @@ Then the smaller ones:
 ## Names and receipts
 
 - Staging: b172895b (CI 38170958509 green). Docs pushed through ba32e0cb.
-- Protocol goal files: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md; docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md (receipts P2a-deployed, P2c-deployed; landed); docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md (P2d1 landed; P2d2 held; receipts P2d-review1 to P2d-review3); docs/definitions/choir-precommitment-protocol-metamission-2026-10-11.md; design docs/precommitment-records.md (owner answers recorded in section 9).
+- Protocol goal files: docs/archive/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md; docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md (receipts P2a-deployed, P2c-deployed; landed); docs/archive/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md (P2d1 landed; P2d2 held; receipts P2d-review1 to P2d-review3); docs/archive/definitions/choir-precommitment-protocol-metamission-2026-10-11.md; design docs/precommitment-records.md (owner answers recorded in section 9).
 - Research and design documents from tonight:
-  - docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
+  - docs/archive/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
   - docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md
-  - docs/autopaper-app-design-2026-10-11.md
+  - docs/autopaper-sw-design-2026-10-09.md
   - docs/precommitment-records.md
   - docs/precommitment-records.md
   - docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md
-  - docs/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md
-- Other problem records: docs/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md (corrected); docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md; docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md.
+  - docs/archive/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md
+- Other problem records: docs/archive/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md (corrected); docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md; docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md.
 - Verified code points: researchtools.go shouldRequireResearchUpdateAfterTool and its next_instruction; broker.go handleAssign; universal_wire.go fixed claims; platform service.go new publication id per publish; rlm_reduce.go distribution notes in the question packet; lifecycle_commit_act.go 10,000-record scan; gateway handlers.go 30-second search deadline; node-b.nix keepalive mode and warmness_policy.go primary skip.
 - Demos: test computers demo-p2a-2026-10-11 (document 07968375) and demo-p2c-2026-10-11 (document 34f4781e).
 - Operating rule added to CLAUDE.md: understand before tuning; panels for uncertainty, not ceremony.

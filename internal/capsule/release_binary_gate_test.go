@@ -10,7 +10,7 @@ import (
 )
 
 // The binary-reuse gate is read each time Freeze builds its differ, not once
-// at construction (docs/problems/freeze-rebuilds-the-binary-after-an-apply-2026-10-26.md):
+// at construction (docs/problems/freeze-replays-a-changed-tree-2026-10-26.md):
 // the autoputer builds its executor before the per-computer source.projection
 // setting is loaded, so a gate read at construction was false on a computer
 // whose projection is on by setting. Ways it could fail: the gate is latched

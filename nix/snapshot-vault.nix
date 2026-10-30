@@ -19,7 +19,7 @@
 # running with snapshots refused. vmctl wants the vault and starts after it; it
 # does not require it. A switch does not restart or stop the vault (that would
 # unmount a volume VMMs still map); a change to this unit applies at the next
-# boot. See docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md for
+# boot. See docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md for
 # the proof steps and the rollback (remove the enable, redeploy, reboot).
 #
 # The jailer is not supported with the vault: a jailed VMM captures inside its

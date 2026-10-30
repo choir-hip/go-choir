@@ -8,7 +8,7 @@ import (
 )
 
 // Node B global OOM 2026-10-10
-// (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md):
+// (docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md):
 // reattach skips left Firecracker processes running outside the registry,
 // so pressure reclaim, the idle sweeper and stop could not see them, new
 // computers kept booting onto a starved host, every VM inherited vmctl's
@@ -275,7 +275,7 @@ func TestPressureReclaimNeverTakesABusyComputer(t *testing.T) {
 
 var allowAllRoutes ComputerVersionRouteGuard = func(context.Context, string, string) error { return nil }
 
-// docs/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md: after a
+// docs/archive/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md: after a
 // vmctl restart, a guest too busy to answer the reattach health check was
 // killed as an "orphan" and rebooted by the next resolve (rerun 11, 08:57Z).
 // Resolve must retry reattach and refuse with Retry-After, never boot over

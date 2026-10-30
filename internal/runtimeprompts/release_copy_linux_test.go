@@ -14,7 +14,7 @@ import (
 )
 
 // The engineering overlay's release-copy step must work under the capsule's
-// real constraints (docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md):
+// real constraints (docs/archive/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md):
 // the build output carries 0444 modes (vite copies frontend/public files that
 // makeSubjectTreeReadOnly made read-only), and a first copy that exited
 // non-zero (cp -a: the capsule's seccomp refuses the xattr/ACL reads, EPERM)

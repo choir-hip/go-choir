@@ -130,9 +130,9 @@ func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionCont
 }
 
 // runResearchChildren serves choir.Research (RLM actor recursion; settled
-// design docs/reviews/rlm-implementation-consensus-2026-08-29.md D7b/M6.5,
+// design docs/archive/reviews/rlm-implementation-consensus-2026-08-29.md D7b/M6.5,
 // results as return values per the 2026-09-15 ontology consensus; mission
-// docs/definitions/choir-research-fanout-2026-10-10.md). Each child is a
+// docs/archive/definitions/choir-research-fanout-2026-10-10.md). Each child is a
 // research-child desk on its own model loop: read-only world verbs, no
 // further choir.Research (PD1), no messaging, reporting or writes, and an inert
 // ledger reduction (no run record, no channel). The whole tree ends with the

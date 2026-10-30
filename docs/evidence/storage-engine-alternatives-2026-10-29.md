@@ -9,7 +9,7 @@ goal's acceptance gates. The owner requested that alternatives stay open:
 stability longterm."
 
 This extends the [selection mission](../definitions/choir-data-architecture-selection-2026-10-28.md),
-[initial direction](../design/data-rearchitecture-2026-10-28.md),
+[initial direction](../archive/design/data-rearchitecture-2026-10-28.md),
 [previous consensus](data-architecture-consensus-2026-10-28.md), and
 [portability inventory](portability-inventory-and-verification-2026-10-28.md).
 Three independent read-only research slices covered server engines, COW engines
@@ -70,7 +70,7 @@ writer for all computers on the host.
   "Everything else is derived" is not an established description today.
 - The two host Dolt processes deliberately isolate control from corpus
   maintenance (`nix/node-b.nix:1148-1197`). The
-  [October 29 incident](../problems/corpus-dolt-throttled-at-memory-high-front-times-out-2026-10-29.md)
+  October 29 incident
   records severe corpus pressure while platform Dolt remained below its own
   pressure threshold. Shared host pressure and application dependencies
   still caused an outage. These are existing receipts, not new measurements.

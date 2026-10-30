@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Failure modes (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md):
+// Failure modes (docs/archive/problems/opencode-key-exhausted-no-failover-2026-10-15.md):
 // a 402 key is parked for hours and the call retried on another key; a 429
 // key is parked briefly; a session stays on one healthy key; with every key
 // parked no upstream call is made; key values never appear in errors.

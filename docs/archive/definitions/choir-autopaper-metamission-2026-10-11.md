@@ -20,17 +20,17 @@ review:
 metamission:
   stations:
     - id: W1
-      path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
+      path: docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
       readiness: executable
       status: complete
       depends_on: []
     - id: W2
-      path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
+      path: docs/archive/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
       readiness: drafted
       status: pending (carried by re-engineering Cut 2 on Cut 1; owner 2026-10-12)
       depends_on: [W1]
     - id: W3a
-      path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
+      path: docs/archive/definitions/choir-autopaper-w3a-reader-2026-10-11.md
       readiness: drafted
       status: pending (revised 2026-10-12 to a linked permalink per version; independent of the re-engineering stations)
       depends_on: [W1]
@@ -127,7 +127,7 @@ now:
     rounds and held for the owner's review (one open question: how a
     Texture run takes directive work from outside the owner's request).
     The Autopaper app is designed
-    (docs/autopaper-app-design-2026-10-11.md): a news front page whose
+    (docs/autopaper-sw-design-2026-10-09.md): a news front page whose
     stories open as Textures with quoted, captured sources, built on the
     protocol. It proposes a reader slice (one permalink per story, a public
     front page, citations that quote captures) that does not depend on
@@ -147,7 +147,7 @@ now:
     delta_o: Texture turn latency under polling load is not yet measured; W2 puts Texture and polling on one computer
     scope_if_supported: one Autopaper computer, a handful of sources
     status: supported
-    evidence_refs: [docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md receipts W1c, W1-hour, W1-read, W1-fix, W1-fix2, W1-panel3]
+    evidence_refs: [docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md receipts W1c, W1-hour, W1-read, W1-fix, W1-fix2, W1-panel3]
   decision: {what: "shared content (captures, published Textures) in Store B behind corpusd, bodies in host content storage; computers hold overlays", kind: architecture, status: settled (owner 2026-10-11), evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md, owner_ratification_ref: "owner 2026-10-11: yes, move the write path to host store"}
   belief:
     believed_state: >-
@@ -160,7 +160,7 @@ now:
   blocker_or_risk: the MVP source list is still open (design §8 open item 3); W1 used six stand-in sources
   next_action: >-
     owner reviews the master report
-    (docs/reports/master-report-protocol-research-autopaper-2026-10-11.md):
+    (docs/archive/reports/master-report-protocol-research-autopaper-2026-10-11.md):
     the Autopaper app design and its reader slice, P2d2's open question, and
     the research job (Autopaper's quality depends on research). Then author
     the reader slice as a station and re-author W2 on P2d

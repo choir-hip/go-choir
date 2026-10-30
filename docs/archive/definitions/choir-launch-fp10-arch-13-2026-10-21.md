@@ -5,7 +5,7 @@ definition_version: 4
 # (choir-launch-first-pass-metamission-2026-10-21.md): store fan-in for wide
 # trees. Authority: the metamission's FP10 entry ("the P2 items ... each
 # decided item by item") and SDC ARCH-13, whose plan is option (c) of
-# docs/reports/projection-event-volume-design-2026-10-19.md and SA slices 4
+# docs/archive/reports/projection-event-volume-design-2026-10-19.md and SA slices 4
 # and 6.
 readiness: drafted
 
@@ -177,7 +177,7 @@ boundaries:
   mutation_class: green (docs); yellow (tests); red (guest store write path)
   authority_sources:
     - metamission FP10 entry; SDC ARCH-13
-    - docs/reports/projection-event-volume-design-2026-10-19.md §4(c), §5 stage 1
+    - docs/archive/reports/projection-event-volume-design-2026-10-19.md §4(c), §5 stage 1
     - docs/choir-doctrine.md and CLAUDE.md
   must_preserve:
     - Default behavior unchanged in kind - count mode commits inline every 100 events as today.
@@ -604,7 +604,7 @@ now:
     delta_o: the observe counters (this slice) are the oracle, including finalize_commit_waits for the bounded stall
     scope_if_supported: guest store at the deployed SHA
     status: testing
-    evidence_refs: [docs/problems/guest-checkpoint-on-the-write-path-2026-10-21.md, d1ec806e2, a95e8ff16]
+    evidence_refs: [docs/archive/problems/guest-checkpoint-on-the-write-path-2026-10-21.md, d1ec806e2, a95e8ff16]
   decision:
     what: take option (c) plus a lock-free mark, behind a computer setting, default off
     kind: safety

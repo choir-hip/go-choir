@@ -12,7 +12,7 @@ import (
 
 // choir.Relate is the research desk's record of what a published story is
 // about (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice
-// a; design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// a; design docs/reports/related-stories-graph-design-2026-10-19.md
 // §3.2 and §11 slice 1, the entity attachments; pair relations stay
 // choir.RelateStories). The desk has read the story and asked System 1 for
 // each candidate entity whether the story is centrally or incidentally about

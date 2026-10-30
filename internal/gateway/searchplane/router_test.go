@@ -10,7 +10,7 @@ import (
 )
 
 // Async search (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // The router starts every eligible provider at once and hands each one's
 // completion to the caller as it lands. Ways it can fail:
 //  1. Providers start in waves, so a later provider waits on an earlier one.

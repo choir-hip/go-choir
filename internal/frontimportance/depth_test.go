@@ -1,7 +1,7 @@
 package frontimportance
 
 // Ways the per-run depth summary (the deepen measure, written before the
-// code; docs/reports/autopaper-deepen-important-stories-2026-10-14.md) can
+// code; docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md) can
 // fail:
 //
 //  1. A story whose depth corpusd did not report counts as thin (or as

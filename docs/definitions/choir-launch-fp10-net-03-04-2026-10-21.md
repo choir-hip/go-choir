@@ -78,10 +78,10 @@ boundaries:
   mutation_class: green for this station (docs); every build step in the design is red (vmmanager, vmctl, gateway auth, guest image)
   authority_sources:
     - docs/security-density-architecture-checklist-2026-10-21.md (NET-03, NET-04, SEC-05)
-    - docs/reports/computer-isolation-security-review-2026-10-14.md section 4.6
+    - docs/archive/reports/computer-isolation-security-review-2026-10-14.md section 4.6
     - docs/learn/03-gateway-and-providers.md section 2.4
     - docs/reports/guest-network-inventory-2026-10-21.md
-    - docs/reports/boundary-strength-ladder-2026-10-15.md (Vghost, VsockDrop)
+    - docs/archive/reports/boundary-strength-ladder-2026-10-15.md (Vghost, VsockDrop)
   must_preserve:
     - no edit to vmmanager, vmctl, the VM image or nix while FP8 owns them
     - public internet egress stays open until NET-01 gives each path a host route

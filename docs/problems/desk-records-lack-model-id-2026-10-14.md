@@ -1,7 +1,7 @@
 # Desk Records Carry No `model_id` (2026-10-14)
 
 Found by: E6a, the desks' first box score
-([claims-e0-e6a-results](../reports/claims-e0-e6a-results-2026-10-14.md)
+([claims-e0-e6a-results](../archive/reports/claims-e0-e6a-results-2026-10-14.md)
 §4 and finding **F2**). Computer: the live paper
 (computer-1355b83b…), read-only through the QA owner credential.
 Mutation class of the fix: **orange** (runtime behaviour: what the
@@ -13,7 +13,7 @@ deploy (the experiment's phase 0 check).
 
 ## Evidence
 
-- `docs/evidence/claims-e6a/box-score.json`, key `model_ids_on_records`:
+- `docs/archive/evidence/claims-e6a/box-score.json`, key `model_ids_on_records`:
   `{"empty": 2931}`. Every Cast, Report, Ask and Note the pull read
   (2026-10-13 15:24Z to 2026-10-14 18:15Z, 373 stories) has
   `provenance.model_id == ""`.

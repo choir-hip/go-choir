@@ -56,7 +56,7 @@ Measured on 08-28: `delivered-pending-runs=1280`. This corpus became the fuel
 for every later scan death.
 
 ### Phase 1 - Held computer, GUI boot hang (08-27)
-- Problem doc `docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
+- Problem doc `docs/archive/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
   (first observed 08-27, deployed `c4b7a9a5`): browser stuck at
   `COMPUTER BOOT IS STILL PENDING`; `bootstrap.resolve` errors 3/5, max 15s.
 - Deep cause documented: maintenance hold
@@ -249,7 +249,7 @@ defect, not a new one.
 ## 9. References
 
 - Problem receipts: `docs/problems/held-computer-*2026-08-28.md` (9 files),
-  `docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
+  `docs/archive/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
 - Fix commits: `eb27cac8`, `34896b7e`, `3c25ea25`, `445c8fc2`, `fdb0759c`,
   `757af7e1`, `04fd704d`, `9023abbb`, `3a38a6e8`, `fb1c9e93`, `d17457f1`,
   `15e6d6d0`, `5e5e8671`, `59acb782`, `093c270a`, `82cbd2b7`, `56fcf9f8`

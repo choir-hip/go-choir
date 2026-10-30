@@ -162,7 +162,7 @@ duration is an upper bound.
 5. **History grows without bound (slower class).** One commit per 100 events
    pins about 1.5 MB of superseded chunks per commit. Only a history squash
    plus `dolt gc --full` reclaims it: the offline `projection-compact` tool,
-   `docs/runbooks/offline-guest-gc.md`. Nothing on the guest reads Dolt
+   `docs/archive/runbooks/offline-guest-gc.md`. Nothing on the guest reads Dolt
    history. Texture history follows the revision chain, and the checkpoint
    witness is the content root; `HASHOF('HEAD')` is audit-only
    (`computerversion/dolt_state_extractor.go`).

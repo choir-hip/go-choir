@@ -3,7 +3,7 @@
 Status: built, not deployed, timer disabled. Class: red (Store A is the platform's canonical
 event and control database, the vmctl route database and the checkpoint
 source; a squash cannot be undone, and the store is stopped for it).
-Owner rulings: [notes 2026-10-14](../reports/owner-notes-2026-10-14.md) §23
+Owner rulings: [notes 2026-10-14](../../reports/owner-notes-2026-10-14.md) §23
 ("Store A history is squashed weekly with a backup first": the store keeps
 every commit, 92k commits and 24 GB of old history, growing about 1.6 GB a
 day, and nothing reads it; "after the Dolt liveness probe is live, back up
@@ -28,7 +28,7 @@ was the same mechanism at 6.9 M commits and 218 G; its squash was done by hand
 history audit only fails at 1 M commits or 50 GiB, a signal with no consumer.
 
 The paper's guest store had the same disease and was fixed on 2026-10-19
-([paper-disk-full-again](paper-disk-full-again-history-growth-2026-10-19.md)):
+(paper-disk-full-again):
 13,700 commits to 2, 51.95 GB to 8.06 GB, root hash identical, by a squash
 plus a bounded full GC. That method is proven; Store A needs it as a tool and
 a schedule.

@@ -3,7 +3,7 @@ definition_version: 4
 
 # Tape segment store, stage A2 (the production writer behind a flag) and
 # the copy-only repack of the legacy tape files. Run as
-# `/goal docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md`.
+# `/goal docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md`.
 # Owner 2026-10-21 ~03:20 UTC (docs/reports/owner-notes-2026-10-14.md
 # section 33): "we should shard the flat directories... we need a durable
 # fix for the backup verify". The durable fix already designed for these

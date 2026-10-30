@@ -8,7 +8,7 @@ orange (a read shape, an online index) and red (anything that changes where
 the durable inbox cursor lives).
 
 Parent record (the census that named this holder, 49 of 97):
-[boot-reads-with-the-seed-shape-2026-10-23.md](boot-reads-with-the-seed-shape-2026-10-23.md)
+[boot-reads-with-the-seed-shape-2026-10-23.md](../../problems/boot-reads-with-the-seed-shape-2026-10-23.md)
 (on `origin/lane/fp0-boot-read-census`, section "Not asked, seen"). Claims
 are marked **[V]** verified (a plan, a measurement, a log line or the code,
 named beside it) or **[H]** hypothesis.
@@ -98,7 +98,7 @@ graph, same Dolt engine). Index `idx_run_memory_entries_owner_agent_created
 (owner_id, agent_id, created_at)` serves the equality and the created_at
 order (`store.go:598`); `kind` is not in it. Row count on the paper:
 424,992 rows (0.76 GiB) at the 10-19 probe
-([paper-disk-full-again-history-growth-2026-10-19.md](paper-disk-full-again-history-growth-2026-10-19.md),
+(paper-disk-full-again-history-growth-2026-10-19.md,
 line 344), written at about 3.7 entries a second on 10-22
 ([paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md](paper-dolt-journal-grows-1-6-gib-per-10-minutes-2026-10-22.md)),
 and a cursor entry is written after a cell whenever the cursor moved
@@ -434,7 +434,7 @@ Two exist and one is a trap.
   fourth index line there would build on the paper at its first boot after
   the deploy, on the boot path, before the listener, holding the engine for as
   long as the build takes. That is the shape the repo has already refused
-  twice: [boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)
+  twice: [boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](../../problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)
   and [stored-column-add-blocks-paper-boot-2026-10-21.md](stored-column-add-blocks-paper-boot-2026-10-21.md),
   and R5 of the journal record ("run as an explicit migration, never at
   boot"). So the index does **not** go in `schemaDDL`.
@@ -779,7 +779,7 @@ Because the observation is unchanged, a live store that dropped it and a fresh
 store agree in every hashed observation. They still must agree in structure,
 and the repo's rule for a table with rows applies regardless of the witness
 (no boot-time DDL against a populated table,
-[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
+[boot-alters-og-objects-when-older-columns-missing-2026-10-21.md](../../problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md)).
 
 **Design.** The kind index in reverse, in `internal/store/run_memory_duplicate_index.go`.
 

@@ -37,7 +37,7 @@ Read-only review at `204b66ff5`. Nothing was edited, deployed or sent.
 - Polls go through `researchtools.PollSourceOnce`. Pollers exist only for `rss`, `telegram` and `gdelt` (`poll_source.go:317-331`).
 - Captures are written through corpusd with the key `canonicalURL#docHash` (`sourcegraph/captures.go:171`).
 - Registry rows carry `License`, `TOSClass` and `StoreBodyPolicy` fields (`sources/types.go:51-61`). There are 256 rows, none of them email or Substack.
-- The paper computer `computer-1355b83b…` belongs to a dedicated Autopaper account, not to the owner (`docs/problems/paper-computer-disk-full-outage-2026-10-15.md:9`). FP0 proof scripts refuse every mutating step against it.
+- The paper computer `computer-1355b83b…` belongs to a dedicated Autopaper account, not to the owner (`docs/archive/problems/paper-computer-disk-full-outage-2026-10-15.md:9`). FP0 proof scripts refuse every mutating step against it.
 - Sender authentication requires aligned DMARC/DKIM from a trusted authserv-id, and with none configured it fails closed (`sender_auth.go:11-41`). `MAILD_TRUSTED_AUTHSERV_IDS` is unset in nix (`node-b.nix:1052-1057`).
 
 **Resend limits (verified 2026-10-26)**

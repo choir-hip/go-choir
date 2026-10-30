@@ -58,7 +58,7 @@ history, so every crash boot gets slower.
   last 30 minutes) is the only check that catches it, and only after 30
   minutes.
 - It is the same family as the post-refresh windows
-  ([paper-post-refresh-health-windows-2026-10-22.md](paper-post-refresh-health-windows-2026-10-22.md))
+  ([paper-post-refresh-health-windows-2026-10-22.md](paper-unreachable-minutes-after-every-boot-2026-10-22.md))
   and the derived-keys validation pass: whole-history work on the boot path
   or right after it.
 

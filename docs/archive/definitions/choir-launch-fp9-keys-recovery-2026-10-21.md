@@ -4,7 +4,7 @@ definition_version: 4
 # Station FP9 of the launch first pass (batch B9, keys and recovery): SDC
 # NET-06 (data at rest, review F12), NET-09 (keys behind policy signers;
 # passkey-bound owner acts) and launch checklist L2-04 (backup ready for
-# launch). Run as `/goal docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`.
+# launch). Run as `/goal docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`.
 # Authority: the owner's statements quoted in the metamission
 # (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md) and its
 # FP9 entry; the worker rules sent with the lane. This is a worker lane: it
@@ -50,7 +50,7 @@ start:
       the keys and the data in one repository (off-host-backup.sh:133-153).
     - >-
       The tape segment writer is deployed with PLATFORM_TAPE_SEGMENTS=write
-      (docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md, "r1_and_flag");
+      (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md, "r1_and_flag");
       no repack or census tool exists in main (that file, "blocker"); the
       restore drill (scripts/off-host-restore-drill.sh) covers tape files,
       Dolt, one image and the Dolt snapshots, not segments.
@@ -139,10 +139,10 @@ boundaries:
   mutation_class: red
   authority_sources:
     - docs/problems/data-at-rest-snapshots-images-escrow-key-plaintext-2026-10-21.md
-    - docs/reports/computer-isolation-security-review-2026-10-14.md section 3.8 and 4.8
-    - docs/reports/boundary-strength-ladder-2026-10-15.md rungs 5 and 6, plan items 7 and 8
+    - docs/archive/reports/computer-isolation-security-review-2026-10-14.md section 3.8 and 4.8
+    - docs/archive/reports/boundary-strength-ladder-2026-10-15.md rungs 5 and 6, plan items 7 and 8
     - docs/problems/host-compromise-blast-radius-2026-10-20.md (plan items 2 and 3, held privately)
-    - docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md and docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md section 6.1
+    - docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md and docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md section 6.1
     - CLAUDE.md (no tape delete, no tape edit, no head rewind)
   protected_surfaces: [snapshot custody, the escrow private key, key-escrow loading in corpusd and checkpointd, VMM file view, off-host backup scope, the tape (read-only in the tool, copy-only writes)]
   must_preserve:

@@ -2,7 +2,7 @@
 
 Status: open. Known shape (F5 and F5a in
 [computer-update-architecture-rnd-2026-10-24](../design/computer-update-architecture-rnd-2026-10-24.md),
-P13 in [selfdev-update-architecture-2026-10-15](../reports/selfdev-update-architecture-2026-10-15.md)).
+P13 in [selfdev-update-architecture-2026-10-15](../archive/reports/selfdev-update-architecture-2026-10-15.md)).
 New: since D39, applying such a candidate is unsafe, not just stale.
 Mutation class of a fix: red (boot path, deployment routing, the source a
 release is built from). Nothing is fixed here.

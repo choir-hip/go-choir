@@ -218,7 +218,7 @@ func TestBrokerClientConcurrentCallsAfterReconnectGetTheirOwnResponses(t *testin
 	}
 }
 
-// Drill selfdev-jobs-0654 (docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md):
+// Drill selfdev-jobs-0654 (docs/archive/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md):
 // capsule state sits past sun_path, so the client dialed
 // /proc/self/fd/<N>/broker.sock through a directory descriptor that startBrokerLocked
 // closed; the first re-dial after a cell timeout failed with ENOTDIR for the

@@ -15,7 +15,7 @@ import (
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
-// Gate 2 track D (docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md):
+// Gate 2 track D (docs/archive/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md):
 // self-development is not a special operation. An ordinary engineering
 // assignment that freezes a change opens its own promotion candidate.
 //

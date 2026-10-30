@@ -13,7 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// P2a (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md) on the
+// P2a (docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md) on the
 // Cut 2 turn: a Texture cell's staged Cast, Ask and Note fold into the cell's
 // one turn (Write, Done, Wait, Reject) as addressed records (inbox_records,
 // Cut 1 L3a/L3b) with the cursor advance over the range the cell read

@@ -1,7 +1,7 @@
 # A new owner's computer waits while finished QA computers hold Node B memory
 
 Found 2026-10-13 by the Cut 0 tracer agent (station C0 of
-`docs/definitions/choir-reeng-metamission-2026-10-12.md`). Status:
+`docs/archive/definitions/choir-reeng-metamission-2026-10-12.md`). Status:
 documented; mitigated for the tracer, not fixed for owners.
 
 ## What happens
@@ -18,7 +18,7 @@ computers, new mints succeeded within about 12 seconds again
 vmctl refuses a start that would add a VM to a host below its memory
 floor (`RecoveryRefusalHostMemoryPressure`, internal/vmctl/host_capacity.go),
 the guard added after the 2026-10-10 out-of-memory incident
-(docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md). Idle
+(docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md). Idle
 QA computers are not reclaimed fast enough to make room, so the new
 owner's boot waits on retry. The confirming observation is vmctl's
 refusal reason for that owner's computer in the health or ownership

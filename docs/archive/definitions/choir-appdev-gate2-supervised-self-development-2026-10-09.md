@@ -275,49 +275,49 @@ receipts:
     ref: docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json
     result: satisfied (17/17; applied 15:07:54; post-apply checkpoint on attempt 4; candidate B rejected by the owner; restored the pinned head, witness matched)
   - id: m11-rerun-12-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T13-21-08Z.json
     result: partial (14/17; applied; restore refused below the newest base; Texture document false after apply; post-apply checkpoint on a moving chain)
   - id: vmctl-wedge-recovery-probe-2026-10-10
-    ref: docs/evidence/vmctl-wedge-recovery-probe-2026-10-10T12-47Z.json
+    ref: docs/archive/evidence/vmctl-wedge-recovery-probe-2026-10-10T12-47Z.json
     result: satisfied (7/7; frozen guest untouched 3 min, stopped as wedged at ~7 min, reload booted a new epoch)
   - id: vmctl-no-escalation-probe-2026-10-10
-    ref: docs/evidence/vmctl-no-escalation-probe-2026-10-10T12-1xZ.json
+    ref: docs/archive/evidence/vmctl-no-escalation-probe-2026-10-10T12-1xZ.json
     result: satisfied (9/9; resolve and wake left a frozen guest running; owner restart attributed)
   - id: vmctl-receipt-probe-2026-10-10
-    ref: docs/evidence/vmctl-receipt-probe-2026-10-10T11-24Z.json
+    ref: docs/archive/evidence/vmctl-receipt-probe-2026-10-10T11-24Z.json
     result: satisfied (6/6; refresh and stop each leave an attributable destruction receipt)
   - id: m11-rerun-2026-10-09
-    ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-09T20-30-55Z.json
     result: partial (5/16; blocked at awaiting_approval)
   - id: m11-rerun-4-2026-10-09
-    ref: docs/evidence/m11-rerun-2026-10-09T22-01-41Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-09T22-01-41Z.json
     result: partial (5/16; capsule worked; freeze failed on a new source directory)
   - id: m11-rerun-5-2026-10-09
-    ref: docs/evidence/m11-rerun-2026-10-09T23-15-26Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-09T23-15-26Z.json
     result: partial (5/16; frozen; verifier failed closed on the in-cell draft mirror)
   - id: m11-rerun-6-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T00-19-25Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T00-19-25Z.json
     result: partial (5/16; failed on the shared inference breaker opened by 400s)
   - id: m11-rerun-7-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T00-49-59Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T00-49-59Z.json
     result: partial (10/16; approved; apply stalled in materializing)
   - id: m11-rerun-8-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T02-27-23Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T02-27-23Z.json
     result: partial (apply hold worked; replay diverged on V1-spelled engineering ids)
   - id: m11-rerun-9-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T03-54-51Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T03-54-51Z.json
     result: partial (10/16; engineering replays exactly; 2 recorded events upcast)
   - id: m11-rerun-2026-10-09-2132-2148
-    ref: docs/evidence/m11-rerun-2026-10-09T21-32-17Z.json, docs/evidence/m11-rerun-2026-10-09T21-48-21Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-09T21-32-17Z.json, docs/archive/evidence/m11-rerun-2026-10-09T21-48-21Z.json
     result: partial (5/16; capsule worker floor — engineering exhausted its 200-call budget, then a completion guard; Landlock/seccomp fixed in e3225820, 733bec77)
   - id: m11-rerun-10-attempts-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T05-54-57Z.json, docs/evidence/m11-rerun-2026-10-10T06-00-20Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T05-54-57Z.json, docs/archive/evidence/m11-rerun-2026-10-10T06-00-20Z.json
     result: blocked (0/16; first page load timed out during the Node B OOM)
   - id: m11-rerun-10-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T07-00-32Z.json
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T07-00-32Z.json
     result: partial (5/16; verifier correctly rejected an unappliable source.patch)
   - id: m11-rerun-11-2026-10-10
-    ref: docs/evidence/m11-rerun-2026-10-10T08-36-30Z.json (pending probe exit); progress log in problems/vmctl-restart-reboots-busy-computer-2026-10-10.md
+    ref: docs/archive/evidence/m11-rerun-2026-10-10T08-36-30Z.json (pending probe exit); progress log in problems/vmctl-restart-reboots-busy-computer-2026-10-10.md
     result: partial (first completed apply, 09:21; guest killed after candidate B started, by a mid-run deploy)
 ---
 

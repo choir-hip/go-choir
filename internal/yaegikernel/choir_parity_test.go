@@ -406,7 +406,7 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 }
 
 // TestNoDeskJudgesSupport pins that support judgement is off every desk
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): the runtime
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md): the runtime
 // asks Jev about a Texture commit's citation pairs after the commit, so no
 // module set exports Judge and the surface does not document it. Ways it
 // can fail: management keeps choir.Judge (its serial turn is back in the

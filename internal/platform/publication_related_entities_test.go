@@ -2,7 +2,7 @@ package platform
 
 // The related-stories walk reads shared central entities
 // (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice b;
-// design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// design docs/reports/related-stories-graph-design-2026-10-19.md
 // §4.1 and §5). Ways it can fail, written before the code:
 //
 //  X1 Two stories centrally about one entity and sharing no capture are not

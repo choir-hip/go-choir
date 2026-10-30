@@ -6,7 +6,7 @@ Date: 2026-10-21. Base: `main` at d1c60ad87, plus FP8's branch
 Problem: [vmmanager-has-no-hypervisor-seam-2026-10-21.md](../problems/vmmanager-has-no-hypervisor-seam-2026-10-21.md).
 
 This report updates
-[vm-backend-interface-2026-10-14](vm-backend-interface-2026-10-14.md)
+[vm-backend-interface-2026-10-14](vm-hypervisor-seam-design-2026-10-21.md)
 (the interface, failure modes F1 to F8, S1 to S5 and CH1 to CH4, and the
 staging test plan still hold) for what changed since: the jailer and
 virtio-mem landed on main, and FP8 adds a per-computer VMM build. Read
@@ -283,7 +283,7 @@ hibernate-across-deploy check fails, or if the CH cage needs lifecycle
 changes beyond the receipt check.
 
 
-## Merged from docs/reports/vm-backend-interface-2026-10-14.md (2026-10-14)
+## Merged from docs/reports/vm-hypervisor-seam-design-2026-10-21.md (2026-10-14)
 
 **VM Backend Interface: Firecracker and Cloud Hypervisor Behind One Seam.**
 Date: 2026-10-14, about 21:00 UTC. Base: `origin/main` at `980ffaf4e`.

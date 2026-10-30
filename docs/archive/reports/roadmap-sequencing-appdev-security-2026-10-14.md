@@ -32,10 +32,10 @@ node-a (see "Node-a stopgap" below).
 - **S1 security floor is half done.** S1a (host boundary: network
   isolation, authority binding) is complete on deployed evidence; the
   runtime identity, token scrubbing and capsule/Yaegi floor remain
-  (`docs/definitions/choir-appdev-s1-security-floor-2026-10-01.md`).
+  (`docs/archive/definitions/choir-appdev-s1-security-floor-2026-10-01.md`).
 - **One host.** Everything runs on Node B; SP (second host, off-host
   copies, failover) is designed and deferred
-  (`docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`).
+  (`docs/archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md`).
 
 ## Proposed order
 

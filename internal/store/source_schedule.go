@@ -12,7 +12,7 @@ import (
 )
 
 // ogKindSourceSchedule is one Autopaper source's poll schedule on the
-// paper's computer (W1c, docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md).
+// paper's computer (W1c, docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md).
 // It is this computer's working state; the captures it produces are shared
 // content in Store B.
 const ogKindSourceSchedule = objectgraph.ObjectKind("choir.source_schedule")

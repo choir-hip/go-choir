@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// docs/problems/research-fetch-url-has-no-address-guard-2026-10-10.md (D1):
+// docs/archive/problems/research-fetch-url-has-no-address-guard-2026-10-10.md (D1):
 // research's fetch_url used a plain http.Client, so a research cell (or a
 // page that prompt-injects one) could GET the guest runtime on loopback or
 // any private address the guest can route to. Failure modes pinned: the

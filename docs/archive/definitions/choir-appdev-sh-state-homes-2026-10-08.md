@@ -43,7 +43,7 @@ start:
       and vmctl waited 30m blind
       (docs/problems/fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
     - >-
-      State homes inventory (docs/state-homes-inventory-2026-10-08.md):
+      State homes inventory (docs/operational-invariants-register-2026-10-08.md):
       privacy key and capsule artifacts exist only on the realization; files
       have a 15-minute loss window; updater `current` and signer trust
       unverified.
@@ -159,7 +159,7 @@ now:
     delta_o: the state homes inventory plus the lose-the-disk proof
     scope_if_supported: staging computers
     status: proposed
-    evidence_refs: [docs/state-homes-inventory-2026-10-08.md]
+    evidence_refs: [docs/operational-invariants-register-2026-10-08.md]
   decision:
     what: >-
       Deliver the escrowed privacy key to the same computer's new
@@ -200,9 +200,9 @@ receipts:
 # SH — State homes
 
 This station enforces operational invariant **O21** from the
-[operational invariants register](../operational-invariants-register-2026-10-08.md):
+[operational invariants register](../../operational-invariants-register-2026-10-08.md):
 a realization holds no unique state. The
-[state homes inventory](../state-homes-inventory-2026-10-08.md) lists every
+[state homes inventory](../../operational-invariants-register-2026-10-08.md) lists every
 piece of guest persistent state with its durable home and verdict.
 
 Slices, in order:

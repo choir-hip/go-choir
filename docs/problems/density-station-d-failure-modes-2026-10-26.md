@@ -3,7 +3,7 @@
 Companion to `docs/problems/start-refused-for-memory-no-reclaim-2026-10-26.md`
 (FP0's investigation of the 11:49 refusal; landing with
 `docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md`).
-Goal file: `docs/definitions/choir-density-2026-10-26.md`. Each section is
+Goal file: `docs/archive/definitions/choir-density-2026-10-26.md`. Each section is
 committed before the tests and code of its item (problem documentation
 first). Mutation class of this document: green. Every item it describes is
 red.
@@ -260,7 +260,7 @@ none) instead of staying resident.
 computer's `MemoryPeakRSSBytes`, the highest resident memory of its last
 start, clamped to the guest size. For b@c that is 7847 MiB, from one long
 run; a snapshot wake lands at about 0.3 to 1.4 GiB and settles near 0.3 to
-0.4 GiB (`docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`), a cold
+0.4 GiB (`docs/archive/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`), a cold
 boot at 1.15 to 1.37 GiB. At 11:49 the peak made a 448 MiB shortfall
 (13650 MiB required against 13202 MiB) that a charge near the settled size
 would not have had. An over-charge means refused starts and, with D1, extra

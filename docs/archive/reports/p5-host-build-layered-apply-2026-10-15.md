@@ -7,7 +7,7 @@ This commit is docs only: the design, the failure modes the code must hold
 (written before the tests), and the ceremony. Code follows in later commits
 on the same branch, each naming the failure modes it closes.
 
-Sources: `docs/reports/selfdev-update-architecture-2026-10-15.md` (P5, §1.2
+Sources: `docs/archive/reports/selfdev-update-architecture-2026-10-15.md` (P5, §1.2
 step 3 and 5, §1.4, Station A) and its owner rulings at the top (source only;
 the host is the sole builder; builds are reproducible and host-signed; adoption
 is source onto the adopter's own tree). The problem this closes is residual R4

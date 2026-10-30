@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// SEC-02 / ARCH-07 (docs/problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md):
+// SEC-02 / ARCH-07 (docs/problems/desk-boundary-residuals-2026-10-21.md):
 // the daemon decides what a worker may ask for from the worker it spawned
 // (role, epoch, slot token), never from a field in the frame, and refuses
 // every host-served action outside that desk's table.

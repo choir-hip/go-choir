@@ -196,7 +196,7 @@ export function frontProminence(story: FrontStory, edition: number): number {
 // story's prominence is its importance times its depth times a recency
 // decay with a 24-hour half-life, measured from the edition time (so it
 // still reads no clock). Depth is the quality of our article, not of the
-// event (docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md):
+// event (docs/archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md):
 // one source (or none) halves it, two sources weigh 0.75, three or more
 // count in full, and a body under FRONT_THIN_WORDS words weighs a further
 // 0.8. A story citing fewer than two sources never leads; it can still sit

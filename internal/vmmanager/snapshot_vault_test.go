@@ -16,7 +16,7 @@ import (
 // probed as such, and takes the kill path (a cold wake) otherwise.
 //
 // The failure modes below are written in the goal file
-// (docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md, "Failure
+// (docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md, "Failure
 // modes, written before code", V1 to V15) before this code. The probe tests
 // run the real probe over a fixture mountinfo and a fixture sysfs: no test
 // weakens the probe to pass on a development machine.

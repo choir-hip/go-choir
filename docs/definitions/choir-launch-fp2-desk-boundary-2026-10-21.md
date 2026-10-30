@@ -166,7 +166,7 @@ boundaries:
   authority_sources:
     - CLAUDE.md "Desk Ontology" and docs/agent-product-doctrine.md "Authority Boundaries" (Texture sole writer of canonical revisions; management admits engineering through delegated casts; engineering capsule-bound mutation; research read-only world evidence)
     - docs/security-density-architecture-checklist-2026-10-21.md items named above, and owner notes sections 36 and 37
-    - docs/problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md and docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md
+    - docs/problems/desk-boundary-residuals-2026-10-21.md and docs/problems/desk-boundary-residuals-2026-10-21.md
   must_preserve:
     - No desk's authority widens. The manifest reproduces the old tables and every difference narrows (exec, write_file and emit leave the Texture, management and research handles; emit leaves all frame tables). A parity test fails if a change widens a desk.
     - A desk or role the manifest does not know fails closed everywhere (frames, handles, cell identity, sandbox profile).
@@ -389,9 +389,9 @@ is decided in six places that nobody reads together, and the daemon that
 answers its frames does not check which desk sent them. The confinement that
 would make the worker a real boundary exists on a branch 831 commits behind.
 The memory limit is a virtual address cap in an 8 GiB guest. Records:
-[desk-frame-actions-not-role-checked-by-host](../problems/desk-frame-actions-not-role-checked-by-host-2026-10-21.md),
-[desk-cells-run-as-guest-root-and-egress-is-open](../problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md),
-[desk-cell-init-only-for-loop-never-ends-guest-oom](../problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md),
+[desk-frame-actions-not-role-checked-by-host](../problems/desk-boundary-residuals-2026-10-21.md),
+[desk-cells-run-as-guest-root-and-egress-is-open](../problems/desk-boundary-residuals-2026-10-21.md),
+[desk-cell-init-only-for-loop-never-ends-guest-oom](../archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md),
 and the new
 [desk-boundary-residuals-2026-10-21](../problems/desk-boundary-residuals-2026-10-21.md)
 (RES-03, RES-04, SEC-13, SEC-15, ARCH-05, ARCH-07, each with a code reference

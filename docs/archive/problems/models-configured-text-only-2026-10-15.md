@@ -14,7 +14,7 @@ computer are inert files).
 > text-only ones. (owner, 2026-10-15)
 
 Motivation: the Playwright-in-capsules report
-([playwright-in-capsules-memory-2026-10-15.md](../reports/playwright-in-capsules-memory-2026-10-15.md)
+([playwright-in-capsules-memory-2026-10-15.md](../../reports/playwright-in-capsules-memory-2026-10-15.md)
 §5.3) plans screenshots as visual evidence for self-development review,
 scored by agents. It found: "No catalog model may receive an image." The
 scorer stage (S3) cannot start until a model can see.

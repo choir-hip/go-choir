@@ -2,7 +2,7 @@
 
 Date: 2026-10-14 (owner in session, about 15:20-15:30 UTC). Status: notes
 toward a pricing model; nothing here is built (no billing exists). The
-business-model section of docs/reports/choir-state-and-vision-2026-10-14.md
+business-model section of docs/archive/reports/choir-state-and-vision-2026-10-14.md
 (§8) has the wider vision.
 
 ## Owner positions
@@ -72,7 +72,7 @@ business-model section of docs/reports/choir-state-and-vision-2026-10-14.md
 - Risks: bring-your-own inference depends on each platform's terms;
   zero inference margin leaves no buffer if provider prices rise (keep the
   included allowance adjustable); compute prices rising makes CPU
-  efficiency (docs/reports/computer-cpu-efficiency-2026-10-14.md, in
+  efficiency (docs/archive/reports/computer-cpu-efficiency-2026-10-14.md, in
   progress) a margin question.
 
 Next: a two-sided model (cost-plus per user under light, typical and heavy

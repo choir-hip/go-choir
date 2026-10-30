@@ -17,7 +17,7 @@ package types
 //   - Span, when present, is where Quote sits in the block, as the quote
 //     check found it, so a reader marks the exact words without matching
 //     again. Refs written before it have none (H-OG3,
-//     docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+//     docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 type Ref struct {
 	Doc     string   `json:"doc"`
 	Version string   `json:"version"`

@@ -4,7 +4,7 @@
 
 Design doc for the owner's review, 2026-10-11. Resolves the structural question
 that held protocol station P2d2
-([definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md](../definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md),
+([definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md),
 receipt P2d-review3, `now.decision.open_question`). Read-only research against
 `main` 3e277431. No code changed. Mutation class of the eventual change: red
 (Texture root, owner-reserved).

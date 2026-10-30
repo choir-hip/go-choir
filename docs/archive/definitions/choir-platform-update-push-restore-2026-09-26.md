@@ -137,7 +137,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
+    - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
     - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md (platform-follow-v1)
     - docs/agent-product-doctrine.md
     - docs/computer-ontology.md
@@ -195,7 +195,7 @@ now:
     wrong receipt kind — all refused before any canonical mutation).
     Staging probe scripts/m9a_platform_update_probe.mjs green 2026-09-26
     on deployed 44e4169e — see receipts and
-    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md.
+    docs/archive/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md.
     The landing peeled four real substrate gaps (documented first in
     docs/problems/platform-update-stranded-tail-and-baseless-checkpoint-2026-09-26.md):
     stranded post-applied tail + baseless-computer checkpoint refusal
@@ -243,7 +243,7 @@ now:
       to restore from
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
       - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md
       - internal/vmctl/handlers.go:1228-1297 (proxy transport)
       - internal/updater/updater.go:115-228 (apply state machine)
@@ -260,7 +260,7 @@ now:
       boundary probe 2026-09-26 (scout findings, this file's
       now.slice + receipts)
     owner_ratification_ref: >-
-      docs/desk-rlm-rectification-plan-2026-09-23.md §11 ratified
+      docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 ratified
       2026-09-25; docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md
       Phase-2 platform-follow-v1
   belief:
@@ -320,7 +320,7 @@ receipts:
     materialization_applied..checkpoint_published..route_projection_
     updated..restore_requested; restore = tape_reconstruct base_sequence
     0, 6 tail events, witness_matched, frontend_restaged. Evidence:
-    docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md."
+    docs/archive/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md."
   - "settled 2026-09-26: CI runs 36271885607 (1d967302), 36274533664
     (b920c85a), 36276769293 (c61be3f1), 36277989883 (44e4169e) all
     green; Node B deploys confirmed via embedded_commit manifests
@@ -332,8 +332,8 @@ receipts:
 
 # M9a — Platform-Signed Update Push + Restore (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
 (M9a, on spine, unblocked by M7): a tracking computer applies a platform-signed
 update push and restores to a pinned head — the forward transaction and the
 restore edge M11 needs. Architecture ratified:

@@ -31,11 +31,11 @@ start:
       Semantic snapshots already exist: ProjectionBase blobs + replay
       watermark W with PlanRecovery (rebase/resume/refuse, tail bound
       10,000) landed 9341b5d1; the owner computer's blob is about 16 GB
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:136-140).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:136-140).
     - >-
       VM state lives on btrfs, so reflink copies of data.img are available;
       Firecracker snapshot create/load is unused
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:142-143).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:142-143).
     - >-
       Data-image statistics expose file bytes, virtual capacity, and
       state-directory bytes, but FileBytes and StateDirBytes currently report
@@ -142,7 +142,7 @@ boundaries:
     - owner-ratified metamission, 2026-10-01
     - docs/choir-doctrine.md
     - docs/computer-ontology.md
-    - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+    - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
   must_preserve:
     - Every committed change is restorable through the pinned-head path.
     - No guest-side writable Nix store or daemon outside a capsule boundary.
@@ -212,8 +212,8 @@ now:
       categories stated here.
     status: proposed
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:588-601
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:270-285
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:588-601
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:270-285
   decision:
     what: >-
       Reflinked disk plus cold boot, host-side re-encryption, and new genesis
@@ -223,8 +223,8 @@ now:
       access.
     kind: architecture
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:588-601,642-646
-    owner_ratification_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:147-151,425-437
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:588-601,642-646
+    owner_ratification_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:147-151,425-437
   belief:
     believed_state: >-
       Semantic recovery supplies a portable reconstruction substrate, while
@@ -258,7 +258,7 @@ parent key or route transferable.
 
 The same-owner all-class path first consumes S3's quiesce protocol: after guest
 health shows no active `engineMu` work, sync and fsfreeze make the source disk
-consistent (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:544-549).
+consistent (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:544-549).
 Only then may it reflink the whole `data.img`. Before any child execution —
 including Firecracker launch, guest runtime, route registration, or network
 setup — host-side re-encryption and new genesis mint the child ComputerID,
@@ -296,10 +296,10 @@ remain independent computers, not retained copies available for parent merge.
 Texture transcludes each fork source into the parent's work document. This is
 the fleet view, not a new dashboard; rich transclusion remains an external
 cutover dependency and must be recorded as a plain-ledger gap until available
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:357-362).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:357-362).
 The only return path is S8 publication and parent adoption of source plus pinned
 inputs, never a disk, closure, event-chain, or key transfer
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-601).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:584-601).
 
 # Risk boundary
 
@@ -307,7 +307,7 @@ A scrub-after-copy claim is rejected: deleted rows can remain in Dolt history
 or on disk, so only fresh-disk semantic reconstruction can prove selective
 exclusion. The negative proof scans disk, history, logs, and artifact graph as
 the metamission requires
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:270-285).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:270-285).
 
 S9 consumes S1 rather than widening networking itself. Today's tap setup turns
 on forwarding and accepts forwarding in both tap directions

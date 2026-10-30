@@ -1,6 +1,6 @@
 package frontimportance
 
-// The deepen measure (docs/reports/autopaper-deepen-important-stories-2026-10-14.md):
+// The deepen measure (docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md):
 // each run logs how deep the paper's important stories are, from the
 // importance this run writes and the depth corpusd serves on the front
 // list. It only logs; nothing reads it back.

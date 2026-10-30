@@ -9,7 +9,7 @@ import (
 )
 
 // Guest egress policy (F6,
-// docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md).
+// docs/problems/desk-boundary-residuals-2026-10-21.md).
 //
 // Every packet a guest sends enters the host on its tap (vm-*). Before nat
 // and filter see it, mangle PREROUTING sends it through CHOIR-GUEST-EGRESS:

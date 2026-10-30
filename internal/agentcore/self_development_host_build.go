@@ -24,7 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/updater"
 )
 
-// P5 (docs/reports/p5-host-build-layered-apply-2026-10-15.md): a frozen,
+// P5 (docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md): a frozen,
 // accepted candidate that touched Go input runs only as a host-built layered
 // release. The capsule's own bin/autoputer is a test artifact on this path.
 

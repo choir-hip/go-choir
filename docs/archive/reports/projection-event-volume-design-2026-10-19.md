@@ -11,9 +11,9 @@ protected surfaces).
 
 Inputs (read first):
 
-- [`platform-artifact-small-file-growth-2026-10-19`](../problems/platform-artifact-small-file-growth-2026-10-19.md)
+- [`platform-artifact-small-file-growth-2026-10-19`](../../problems/platform-artifact-small-file-growth-2026-10-19.md)
   (host: 111 GiB of small files, 4.02 files per tape event).
-- [`paper-disk-full-again-history-growth-2026-10-19`](../problems/paper-disk-full-again-history-growth-2026-10-19.md)
+- `paper-disk-full-again-history-growth-2026-10-19`
   (guest: 48 GiB Dolt store, about 6.8 GiB live, the rest history; the
   offline full GC was aborted for memory).
 - [`guest-dolt-storage-growth-2026-10-15`](../problems/guest-dolt-storage-growth-2026-10-15.md)

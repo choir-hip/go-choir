@@ -14,7 +14,7 @@ import (
 )
 
 // Per-computer settings (L2a A6 / R2-7,
-// docs/reports/l2a-synthesis-intake-design-2026-10-14.md). A setting is an
+// docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). A setting is an
 // owner act through the product API at /api/computer-settings, which is not
 // on management's ProductAPI allowlist.
 

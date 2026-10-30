@@ -1,7 +1,7 @@
 # Research desk redesign: get to the bottom of things (2026-10-12)
 
 Read-only design research against `main` a401c878. No repo file changed.
-Inputs: the code below, `docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md`,
+Inputs: the code below, `docs/archive/problems/research-desk-structural-flaw-root-cause-2026-10-11.md`,
 `docs/precommitment-records.md`,
 `docs/precommitment-records.md`,
 `docs/archive/texture-directive-inbox-design-2026-10-11.md`. I did not read Node B

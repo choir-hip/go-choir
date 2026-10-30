@@ -115,7 +115,7 @@ Interpretation against the Restore-Zero contract:
 
 That is prefix=0 retained-store recovery on the snapshotting binary. Guest `/health` `ready` is supporting context, not the acceptance line. Genesis guest `computer-bb0f4fa5` (`local=0 W=0 H=0`) is not this proof. Host/proxy SHA `9341b5d1` without this guest boot is not this proof.
 
-Receipt: `docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md`.
+Receipt: `docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md`.
 
 ## Why "Reload app" came back after that boot
 

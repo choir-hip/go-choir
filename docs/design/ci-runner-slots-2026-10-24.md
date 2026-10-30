@@ -14,7 +14,7 @@ proposes is in `.github/workflows/ci.yml`, which the worker token cannot push
 - Baseline run 40138087758: jobs started within 2 s of plan's end except three
   shards (+12 to +26 s), `Build Frontend` (+28 s) and the prebuild at +62 s
   (22:21:51, plan ended 22:20:49). The prebuild is the deploy floor on main
-  (finding 2 of docs/problems/ci-critical-path-race-shards-2026-10-22.md), so
+  (finding 2 of docs/problems/ci-wall-clock-2026-10-24.md), so
   its 50 s of queueing is 50 s of push-to-deploy once the tests are under it.
 - A pull-request run has no deploy jobs (prebuild, frontend, deploy-impact are
   skipped), 22 jobs ready, and all started within 3 s (run 40150248142:

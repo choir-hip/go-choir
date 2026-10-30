@@ -15,7 +15,7 @@ runtime: platform update resume: vmctl client: ComputerVersion route resolution 
 
 ## Evidence
 
-- `docs/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json`.
+- `docs/archive/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json`.
 - Event tape, update `s0b-m9a-20261004-0707`:
   - sequence 2 `effect_accepted`
   - sequence 3 `materialization_started`
@@ -41,7 +41,7 @@ No repair was made. The disposable computer remains active on the M9a release an
 ## Boundary panel adjudication (2026-10-04)
 
 The S0b boundary panel (11 agents, convergent;
-`docs/consensus/s0b-boundary-panel-2026-10-04.md`) confirmed the
+`docs/archive/consensus/s0b-boundary-panel-2026-10-04.md`) confirmed the
 source-traced chain and refined the repair-boundary reading:
 
 - **Provenance:** the binding leg was introduced by the S1a red commit

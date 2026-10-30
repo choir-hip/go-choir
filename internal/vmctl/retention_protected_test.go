@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// docs/problems/retention-prune-would-destroy-the-paper-2026-10-16.md: the
+// docs/archive/problems/retention-prune-would-destroy-the-paper-2026-10-16.md: the
 // paper's account is on an ephemeral email domain, so retention prune treated
 // the critical_protected platform computer as a disposable test computer.
 // Ways it could fail, written before the code:

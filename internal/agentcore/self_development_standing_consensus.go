@@ -1,7 +1,7 @@
 package agentcore
 
 // P4: the guest side of standing autonomous acceptance
-// (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md §5).
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md §5).
 //
 // After management's Verify moves an operation to awaiting_approval, and
 // only while the owner's standing_consensus arm is the computer's mode, the

@@ -732,7 +732,7 @@ were last reset; nobody has classified them.
 **Strong.** Per-tap anti-spoofing (S1a), the destination deny for the first
 /16, NixOS's reverse-path filter in `mangle` (drops forged sources whose
 return path is not the same tap), and the S1a refusal matrix proven on
-staging on 4 October (`docs/evidence/s1a-refusal-matrix-2026-10-04.json`).
+staging on 4 October (`docs/archive/evidence/s1a-refusal-matrix-2026-10-04.json`).
 
 **Weak.**
 - **Latent cross-guest gap**: the deny covers 1 of the 16 /16s the
@@ -1093,7 +1093,7 @@ core-scheduling cookie itself (v52); Firecracker needs the helper to do it.
 ## 5. Firecracker and Cloud Hypervisor through this lens
 
 The isolation-runtimes research
-([docs/research/isolation-runtimes-2026-10-14.md](../research/isolation-runtimes-2026-10-14.md))
+([docs/research/isolation-runtimes-2026-10-14.md](../../research/isolation-runtimes-2026-10-14.md))
 covers features, density and migration. This section looks only at isolation.
 
 ### 5.1 The confinement story
@@ -1444,17 +1444,17 @@ the staging proofs from section 7.
   handling; Caddy's configuration; the SP standby and backups (neither exists
   yet to review); the macOS desktop runtime.
 - **Prior documents this review builds on:**
-  [firecracker-runs-as-root-without-jailer](../problems/firecracker-runs-as-root-without-jailer-2026-10-14.md),
+  [firecracker-runs-as-root-without-jailer](../../problems/firecracker-runs-as-root-without-jailer-2026-10-14.md),
   [tap-deny-rule-covers-one-of-sixteen-guest-subnets](../problems/tap-deny-rule-covers-one-of-sixteen-guest-subnets-2026-10-14.md),
-  [isolation-runtimes](../research/isolation-runtimes-2026-10-14.md),
+  [isolation-runtimes](../../research/isolation-runtimes-2026-10-14.md),
   [computer-cpu-efficiency](computer-cpu-efficiency-2026-10-14.md) §5,
-  [vm-density-limits](vm-density-limits-2026-10-14.md),
-  [self-hosting-and-desktop](self-hosting-and-desktop-2026-10-14.md),
+  [vm-density-limits](../../reports/vm-density-limits-2026-10-14.md),
+  [self-hosting-and-desktop](../../reports/desktop-sync-and-local-vms-2026-10-14.md),
   [S1 security floor](../definitions/choir-appdev-s1-security-floor-2026-10-01.md),
-  [S1 non-root runtime remainder](../problems/s1-non-root-runtime-child-uid-boundary-2026-10-04.md),
-  [capsule Go module proxy design](capsule-go-module-proxy-design-2026-10-14.md),
-  [computer ontology](../computer-ontology.md),
-  [Choir doctrine](../choir-doctrine.md) (I18, I19).
+  [S1 non-root runtime remainder](../../problems/s1-non-root-runtime-child-uid-boundary-2026-10-04.md),
+  [capsule Go module proxy design](../../reports/capsule-go-module-proxy-design-2026-10-14.md),
+  [computer ontology](../../computer-ontology.md),
+  [Choir doctrine](../../choir-doctrine.md) (I18, I19).
 - **Upstream sources:**
   - Firecracker: the
     [jailer](https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md),

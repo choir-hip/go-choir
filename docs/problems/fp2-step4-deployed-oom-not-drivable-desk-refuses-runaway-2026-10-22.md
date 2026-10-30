@@ -94,7 +94,7 @@ cgroup creation code (`internal/yaegikernel/desk_cgroup.go`,
 (`docs/evidence/fp2-desk-boundary-20261022.json`) shows each desk worker in
 its own confinement with a distinct uid. The yaegi for-loop bug that caused
 the 2026-10-16 accidental runaway
-(`docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md`)
+(`docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md`)
 is fixed, so the accidental runaway path is also narrowed.
 
 ## Residual / recommendation (no runtime fix here, green)

@@ -64,7 +64,7 @@
    The stub is one shallow research round plus degraded search providers,
    not a missing web search. The twenty newest research runs (13:22–13:41)
    show the same provider state. Detail:
-   docs/reports/autopaper-deepen-important-stories-2026-10-14.md.
+   docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md.
 
 ## Fix direction
 
@@ -77,7 +77,7 @@ with fewer than 2 sources may not lead. Missing fields leave the factor at
 
 Part 2: the paper's management learns which of its own published stories
 are important but thin and opens bounded web research to deepen them.
-Design note: docs/reports/autopaper-deepen-important-stories-2026-10-14.md.
+Design note: docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md.
 
 Measure: share of the top 10 with 3 or more sources, and the median
 sources of the top 10, over a six-hour window before and after (baseline

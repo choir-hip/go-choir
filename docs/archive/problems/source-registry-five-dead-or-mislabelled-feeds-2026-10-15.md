@@ -2,7 +2,7 @@
 
 Status: documented; fix follows in a separate commit. First found by the
 2026-10-13 sourcing research
-(docs/reports/multilingual-osint-sourcing-research-2026-10-13.md §1, §12).
+(docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md §1, §12).
 It is an L0 parallel item in the ledger metamission ("registry repairs").
 Mutation class of the fix: orange (catalog data in
 `internal/sources/registry.json`; no code). Rollback: git revert.

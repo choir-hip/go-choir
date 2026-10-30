@@ -11,11 +11,11 @@ are appended in §10 with a reason and a date.
 
 Inputs: the first box score
 ([claims-e0-e6a-results](claims-e0-e6a-results-2026-10-14.md) §4–§5),
-owner notes 1 and 3 ([owner-notes](owner-notes-2026-10-14.md)), the
+owner notes 1 and 3 ([owner-notes](../../reports/owner-notes-2026-10-14.md)), the
 `model_id` problem
-([desk-records-lack-model-id](../problems/desk-records-lack-model-id-2026-10-14.md)),
+([desk-records-lack-model-id](../../problems/desk-records-lack-model-id-2026-10-14.md)),
 the prompt-cache work
-([prompt-cache-breaks-across-turns](../problems/prompt-cache-breaks-across-turns-2026-10-14.md),
+([prompt-cache-breaks-across-turns](../../problems/prompt-cache-breaks-across-turns-2026-10-14.md),
 branch `worktree-agent-a2974b69ac404317d`, not yet on main).
 
 Mutation class: **orange** (runtime context: a user turn and a pack
@@ -174,7 +174,7 @@ check (§4) bounds how much of it is learning the judge.
 
 ## 4. Measurement
 
-Script: [`scripts/icrl_calibration.py`](../../scripts/icrl_calibration.py).
+Script: [`scripts/icrl_calibration.py`](../../../scripts/icrl_calibration.py).
 - `baseline`: recomputes the E6a management numbers (ECE, Brier, bins)
   from `e6a-raw.json`, the reproducibility check of the metric code.
 - `pending` / `settle`: reads the computer's pending self-scores
@@ -281,7 +281,7 @@ primary judge and not under the second, that is learning the judge.
 
 ## 9. Claude's prediction
 
-Recorded in [`docs/calibration/claude-ledger.md`](../calibration/claude-ledger.md)
+Recorded in [`docs/calibration/claude-ledger.md`](../../calibration/claude-ledger.md)
 open claims, row 19.
 
 ## 10. Amendments
@@ -292,7 +292,7 @@ open claims, row 19.
   the E6a baseline that is 0.0060 (resolved only, n = 559); E6a's 0.013
   came from `claimslab`'s finer decomposition. ECE 0.144, Brier 0.116 and
   mean p 0.65 against 0.79 observed (resolved only) reproduce
-  (`docs/evidence/icrl-calibration/baseline.json`).
+  (`docs/archive/evidence/icrl-calibration/baseline.json`).
 - **2026-10-14 (clarification).** The script automates the calibration
   harm rule. The operational stop rules (run failure rate and input
   tokens per arm) are read at the daily check from `/api/runs` and

@@ -19,7 +19,7 @@ import (
 )
 
 // Management tasks (management delegation S2a,
-// docs/reports/management-delegation-design-2026-10-14.md, round 2).
+// docs/archive/reports/management-delegation-design-2026-10-14.md, round 2).
 //
 // Management hands capture intake to tasks with choir.Delegate. A task is a
 // run of profile management and role management_task, reading its own inbox

@@ -13,7 +13,7 @@ import (
 
 // What a restart's first stream_seq must be, after the stream_seq lease
 // (docs/problems/stream-seq-high-water-mark-design-2026-10-23.md; the seed
-// record is docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
+// record is docs/archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
 // These tests began as the bounded seed's; the seed is now the lease's, and
 // the bounded windows are its cross-check. Ways it can fail:
 //  1. A trusted restart lists the event kind: the engine takes the kind index,

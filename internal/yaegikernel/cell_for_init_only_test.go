@@ -10,7 +10,7 @@ import (
 // every iteration, so a body that advances the loop variable never ends. On
 // the paper, cells scanning a string with `for i := 0; ; { … i = pos + n }`
 // grew until the guest OOM killer took a worker (12:46) and then the daemon
-// (18:55) (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+// (18:55) (docs/archive/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
 //
 // Ways this could fail, written first: a broken shape is missed (a `=`
 // init, two variables, a call or index in the init, a loop inside a closure

@@ -2,7 +2,7 @@ package agentcore
 
 // choir.Relate, the research desk's record of a published story's entities
 // (docs/problems/related-stories-no-entity-layer-2026-10-26.md, slice a;
-// design docs/reports/related-stories-phase3-research-review-2026-10-20.md
+// design docs/reports/related-stories-graph-design-2026-10-19.md
 // §3.2, §6 and §11 slice 1). The ways it can fail, written before the code:
 //
 //  E1 The verb works for a desk other than research, or on a computer that

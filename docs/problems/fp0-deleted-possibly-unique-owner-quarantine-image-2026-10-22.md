@@ -22,7 +22,7 @@ information.
 
 ## What the repo already said about them
 
-- `docs/problems/node-b-disk-free-space-2026-10-09.md:20`: the 39ddc7f2
+- `docs/archive/problems/node-b-disk-free-space-2026-10-09.md:20`: the 39ddc7f2
   image is the "owner pre-restore image (10-07)" and "Holds 484 paths
   absent today: possibly unique"; line 125 keeps both images "pending the
   484-path check".

@@ -31,7 +31,7 @@ work on the paths that boot and wake guests.
 ## What changed since
 
 Tape segments (A2) are on for every computer (`PLATFORM_TAPE_SEGMENTS=write`,
-`docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md`): new
+`docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md`): new
 projection-batch pins go to per-computer segments instead of one file
 each. If that works, the file count stops growing. The legacy files stay
 until the repack, which is not built. No reading since the flag went on

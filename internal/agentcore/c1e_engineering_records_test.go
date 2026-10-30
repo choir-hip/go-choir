@@ -1,7 +1,7 @@
 package agentcore
 
 // C1e batch B1: engineering on records
-// (docs/reports/c1e-b1-design-note-2026-10-13.md, "Ways this could fail",
+// (docs/archive/reports/c1e-b1-design-note-2026-10-13.md, "Ways this could fail",
 // written before the code). Each item names the test that pins it.
 //
 //  1. A management turn reads an engineering Report before the row is

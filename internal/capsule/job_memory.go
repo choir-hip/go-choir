@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Job memory (docs/reports/memory-hotplug-controller-design-2026-10-14.md
+// Job memory (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md
 // section 9). A job may declare memory it needs beyond its capsule's size.
 // The executor admits that need against the capsule budget, which is read
 // live (3/4 of the guest's current MemTotal, so a memory lease that plugged

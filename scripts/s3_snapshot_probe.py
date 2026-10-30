@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Staging proof for snapshot hibernation (S3, docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+"""Staging proof for snapshot hibernation (S3, docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md).
 
 1. Mint a test computer (scripts/qa_test_computer.mjs); act only on it.
 2. Leave state on it: a computer setting, read back before and after.
@@ -37,7 +37,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # readable, nothing otherwise, the way ci.yml's deploy sends it. The marker
 # header is a hint, never authority; without the token these calls are
 # refused once hostauth enforces
-# (docs/problems/surface-broken-calls-2026-10-14.md, item 9).
+# (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 9).
 TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
 VMCTL_AUTH = f"-H 'X-Internal-Caller: true' $(test -r {TOKEN_HEADER_FILE} && echo -H @{TOKEN_HEADER_FILE})"
 

@@ -11,7 +11,7 @@ definition_version: 4
 # order (efficiency, Autopaper scaling, then LP) and relaxes LP's spine edge
 # to LU, LR and L2a. This file is the executable station. The reviewed
 # station definition
-# (docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md)
+# (docs/archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md)
 # stays the source of the six acceptance legs and the divergence addendum;
 # where the two differ, this file governs execution.
 readiness: reviewed
@@ -54,7 +54,7 @@ start:
     - >-
       The loop runs end to end on test computers: drill go-served-1920 passed 18
       of 18 checks (freeze, approval, host build, layered apply, route served,
-      restore with the witness matched) (docs/reports/handoff-2026-10-15.md s2).
+      restore with the witness matched) (docs/archive/reports/handoff-2026-10-15.md s2).
     - >-
       The decision binds operation, capsule, bundle digest, verifier ref,
       authority and expected heads (internal/agentcore/self_development_decision_binding.go);
@@ -165,7 +165,7 @@ boundaries:
     - owner 2026-10-09, rebase question goes into S6 (S6 definition addendum, not panel reviewed)
     - owner 2026-10-10 S5 cut from Gate 2; owner 2026-10-14/15 distribution plan and D1 (owner notes sections 15, 16, 23)
     - docs/choir-doctrine.md, docs/computer-ontology.md, CLAUDE.md
-    - docs/reports/selfdev-update-architecture-2026-10-15.md (P5 to P9, LU relation)
+    - docs/archive/reports/selfdev-update-architecture-2026-10-15.md (P5 to P9, LU relation)
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
     - Owner or declared-consensus approval gates every commit; the paper and the owner's computer stay propose-only (owner notes section 27 item 4).
@@ -278,7 +278,7 @@ now:
       derive divergence from the tape.
     kind: architecture
     status: proposal
-    evidence_ref: docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md:430-436; docs/reports/selfdev-update-architecture-2026-10-15.md:689
+    evidence_ref: docs/archive/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md:430-436; docs/archive/reports/selfdev-update-architecture-2026-10-15.md:689
     owner_ratification_ref: >-
       The S5 cut is owner-stated 2026-10-10 and the divergence addendum is
       owner-directed 2026-10-09. The gate semantic is not ratified: open
@@ -371,7 +371,7 @@ lu_dependency:
     divergence signal LU3a must consume (rings hold diverged computers), so S6
     supplies LU, not the reverse. Two soft couplings. LU2's persisted work-state
     epoch is not on main, so the gate keeps refusing an epoch-bumping release
-    (docs/reports/selfdev-update-architecture-2026-10-15.md, "LU2: a soft
+    (docs/archive/reports/selfdev-update-architecture-2026-10-15.md, "LU2: a soft
     prerequisite"). LU5 later folds the materializer's apply hold into LU's
     single gate. Leg 6 is proven through today's CI push and vmctl refresh, not
     LU's pull. The ledger spine's LP `depends_on: [L2a, LR, LU]` is relaxed for

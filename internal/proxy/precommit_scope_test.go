@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Calibration level 2 (docs/reports/choir-mcp-precommitments-2026-10-14.md
+// Calibration level 2 (docs/archive/reports/choir-mcp-precommitments-2026-10-14.md
 // §6 item 9). Ways the scope gate could fail, written before the code:
 //   - /api/precommit/ falls through to read:runtime / write:runtime, so an
 //     agent's claim key must also be able to start runs;

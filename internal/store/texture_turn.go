@@ -589,7 +589,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		// desk incorporated the report). The pending update is still live state
 		// the desk must be able to disposition — otherwise the update is
 		// permanently pending and every subsequent desk turn fails identically.
-		// Receipt: docs/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
+		// Receipt: docs/archive/problems/texture-incorporate-deadlock-settled-producer-2026-09-28.md
 		if workItemTerminal(work.Status) {
 			if disposition.WorkDisposition != types.WorkItemOpen && disposition.WorkDisposition != work.Status {
 				// A settle request for a different terminal shape conflicts.

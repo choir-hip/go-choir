@@ -4004,7 +4004,7 @@ func TestDecodeLifecycleObjectFrozenKindBoundary(t *testing.T) {
 }
 
 // The snapshot reads only its own document's objects. Failure modes pinned
-// (docs/problems/texture-list-cold-latency-2026-10-09.md): the snapshot read
+// (docs/archive/problems/texture-list-cold-latency-2026-10-09.md): the snapshot read
 // every Texture document and revision in the computer (boot ran it once per
 // document); narrowing must not drop the bound document, its head, or bind a
 // sibling trajectory's document.

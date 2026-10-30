@@ -1,7 +1,7 @@
 # Dead-code census, 2026-10-12
 
 Station D0 of the re-engineering metamission
-(docs/definitions/choir-reeng-metamission-2026-10-12.md). Owner, 2026-10-12:
+(docs/archive/definitions/choir-reeng-metamission-2026-10-12.md). Owner, 2026-10-12:
 "identify all the dead code and remove it, after I learn about it and what it
 does/did." Nothing is removed until the owner rules on this document.
 
@@ -38,7 +38,7 @@ the owner the questions that a grep cannot answer.
   auth redesign, after Autopaper's functional requirements are met. The
   broken recovery flow, the passkey and session routes no UI calls, and
   the unreachable root status are inputs to that redesign, recorded in
-  [docs/problems/auth-redesign-inputs-2026-10-12.md](../problems/auth-redesign-inputs-2026-10-12.md).
+  [docs/problems/auth-redesign-inputs-2026-10-12.md](../../problems/auth-redesign-inputs-2026-10-12.md).
 - **Trusted email outbox** (B7): explained to the owner, who agreed with
   the recommendation: delete it (decisionpolicy stays; it is live in
   self-development approval). The receipt design is kept in
@@ -65,7 +65,7 @@ the owner the questions that a grep cannot answer.
   acceptance computer's guest build are both 6505fa33.
 - **Acceptance PASS.** `scripts/m0_pools_acceptance.mjs` ran on a fresh
   test computer (computer-695920eae4e77b5324166e20d3bc510b); artifact
-  [docs/evidence/d0-dead-code-acceptance-2026-10-12.json](../evidence/d0-dead-code-acceptance-2026-10-12.json).
+  [docs/archive/evidence/d0-dead-code-acceptance-2026-10-12.json](../evidence/d0-dead-code-acceptance-2026-10-12.json).
   - Four documents authored in 24 to 45 s.
   - Both pool members used, 4 threads each.
   - Every thread kept one model, and nothing was refused.
@@ -103,7 +103,7 @@ the owner the questions that a grep cannot answer.
     receipts cite its digests, so editing it would orphan those receipts.
   - Leftovers landed in 964bdd25; acceptance PASS on fresh computer
     computer-779ea55381c44b0bcbf4409c3c97351d (guest build 964bdd25):
-    `docs/evidence/d0-leftovers-acceptance-2026-10-12.json`.
+    `docs/archive/evidence/d0-leftovers-acceptance-2026-10-12.json`.
 
 ## Size
 
@@ -451,7 +451,7 @@ Each of these was built on purpose and might return. A grep cannot decide them.
         `runtime-package`. These are April lifecycle endpoints with no caller,
         and guests no longer fetch a runtime package.
       - Lock the gateway ops routes to a caller check (open problem
-        `docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md`).
+        `docs/archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md`).
 11. **The `comprehensive` test tag** (14 files, 6,000 lines). Recommendation:
     - Delete the two files that do not compile.
     - Drop the tag from the ones that pass (`apihandler`, `content`,
@@ -524,7 +524,7 @@ Each of these was built on purpose and might return. A grep cannot decide them.
 
 Each needs a problem record before any fix (CLAUDE.md: problem documentation
 first). The records, with evidence and owners, are in
-[docs/problems/dead-code-census-live-defects-2026-10-12.md](../problems/dead-code-census-live-defects-2026-10-12.md)
+[docs/problems/dead-code-census-live-defects-2026-10-12.md](../../problems/dead-code-census-live-defects-2026-10-12.md)
 (D1 to D6). D7 is in the M0 acceptance section of
 docs/model-pools-design-2026-10-12.md.
 

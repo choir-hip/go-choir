@@ -15,7 +15,7 @@ import (
 )
 
 // ReportedRelease is what a computer last told vmctl it runs (P6,
-// docs/reports/p6-p8-release-adopt-2026-10-15.md): its effective release,
+// docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): its effective release,
 // tree, event head and CodeRef. It is a report, not an authority: vmctl
 // never probes a guest to list it (I6), never derives divergence or route
 // state from it (I8), and shows it next to its own construction_version so

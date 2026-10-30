@@ -104,7 +104,7 @@ The day's real change is that the computer now takes care of its own memory and 
 
 ## Names and receipts
 
-Goal file: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md, with its ledger alongside. Handoff and roadmap: docs/roadmap-2026-10-26.md, section 1.2.
+Goal file: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md, with its ledger alongside. Handoff and roadmap: docs/archive/roadmap-2026-10-26.md, section 1.2.
 
 Trains on main: 21 013e6bce0, 22 9a9273fef, 23 0b99a404b, 24 cfa57e532, 25 d61fef6c8, 26 d2242fd85 and 26b 4831fe67d, 28 f6bd05924 (bearer wake), 29 cba66873b (deletes, rollback command, switches). Earlier trains 13 to 20 are in the ledger.
 

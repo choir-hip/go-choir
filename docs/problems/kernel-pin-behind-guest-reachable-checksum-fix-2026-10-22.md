@@ -138,7 +138,7 @@ against `http://127.0.0.1:8083`):
    - hibernate by snapshot, then wake, works on 1.16.2: the boot kind is
      `snapshot_resume`, and the snapshot meta and timeline record
      `Firecracker v1.16.2` (step 2 of "FP0 verifies after the deploy" in
-     [firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md);
+     [firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-17-for-every-computer-2026-10-22.md);
      the `scripts/s3_snapshot_probe.py` pattern). A failure here is
      fail-closed (the refused snapshot cold boots), but it is a reason
      not to give the paper the image.

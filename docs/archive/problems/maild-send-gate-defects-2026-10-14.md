@@ -1,7 +1,7 @@
 # maild's Send Gate Can Be Opened by the Party It Gates
 
 Date: 2026-10-14. Source: the agentic email desk design
-([report](../reports/agentic-email-desk-2026-10-14.md), §1.4, defects G1–G6),
+([report](../../reports/agentic-email-desk-2026-10-14.md), §1.4, defects G1–G6),
 re-checked read-only against the code at `origin/main` `6b07fd651`. Status:
 **documented** (phase E0, docs only); G1–G4 and G6 **repaired on branch
 `fix/maild-send-gate-2026-10-14`, not deployed** (phase E1; see "E1 status"). Mutation class of the repair:
@@ -180,7 +180,7 @@ source address, which it cannot make loopback. Until hostauth moves from
 `observe` to `enforce`, **any process in the host network namespace**
 (Firecracker VMMs, SearXNG, goproxy) can still claim the host session class
 on loopback; that is F2 in
-[loopback-is-a-credential](loopback-is-a-credential-2026-10-14.md), and
+[loopback-is-a-credential](../../problems/loopback-is-a-credential-2026-10-14.md), and
 enforce closes it for maild's send route with no further maild change.
 
 ## Heresy delta

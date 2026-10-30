@@ -6,7 +6,7 @@ owner puts in: what changed, where the system stands, which decisions wait
 on the owner, where the work can go next, and the concepts underneath,
 pitched just past the owner's current level. It is v0 of the system-briefing
 programme designed for Autoradio
-([programming engine design §5](../reports/autoradio-programming-engine-2026-10-14.md)):
+([programming engine design §5](../archive/reports/autoradio-programming-engine-2026-10-14.md)):
 a script and a written briefing, before any phone app or Autoradio desk
 exists.
 
@@ -89,6 +89,6 @@ records on the owner's computer and settle the same way.
 
 ## Briefings
 
-- [2026-10-14](system-briefing-2026-10-14.md): the foundations push,
+- [2026-10-14](../archive/briefings/system-briefing-2026-10-14.md): the foundations push,
   security hardening, Autopaper's front page and synthesis intake, and the
   calibration work.

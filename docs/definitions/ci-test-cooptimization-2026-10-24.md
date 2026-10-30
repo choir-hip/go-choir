@@ -38,7 +38,7 @@ start:
       - the pre-land mirror on the agents VM runs light -race only and skips agentcore and store ("GitHub PR CI shards it"); FP0 has been landing without a PR run, so heavy-race failures surface on main (W2, 2026-10-24) and cost a fix-forward cycle
       - the agents VM has 10 GiB memory and its /home is 96% full (go-build cache 76 GB)
     prior_work:
-      - docs/problems/ci-critical-path-race-shards-2026-10-22.md (fix landed as 17a7b353f and 1ed31abef; its status line is stale; shard 1 is the new outlier)
+      - docs/problems/ci-wall-clock-2026-10-24.md (fix landed as 17a7b353f and 1ed31abef; its status line is stale; shard 1 is the new outlier)
       - docs/archive/choir-ci-optimization-2026-07-16.md
 
 finish:

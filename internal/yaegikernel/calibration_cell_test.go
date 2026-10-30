@@ -10,7 +10,7 @@ import (
 )
 
 // Self-scores and the calibration digest in the cell
-// (docs/reports/icrl-calibration-experiment-2026-10-14.md). Ways it can
+// (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md). Ways it can
 // fail, written first: P8 a pSupported outside [0,1] stages; a Write
 // without one is refused (it is optional); the interpreter cannot call
 // the variadic Write; choir.Pack().Calibration is unreadable in a cell.

@@ -13,7 +13,7 @@ import (
 )
 
 // Generated-column access paths for the hot record reads
-// (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md). Ways
+// (docs/archive/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md). Ways
 // they can fail, written before the code:
 //
 //  1. A generated column refuses a write: a long value, a non-JSON body.

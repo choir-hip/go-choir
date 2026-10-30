@@ -175,7 +175,7 @@ If I were holding the phone, I would let tonight's builders land, watch the pape
 - Phase-one review panel output: the session scratchpad, panel-phase1/run1.
 
 
-## Merged from docs/reports/data-architecture-state-and-paths-2026-10-28.md (2026-10-28)
+## Merged from docs/reports/data-system-cutover-2026-10-30.md (2026-10-28)
 
 **The data architecture, state and paths.**
 I wrote this on Wednesday, October twenty-eighth, in the early afternoon UTC. It covers a three-round review panel that ran for about an hour and a half today, with Devin and DeepSeek on the panel. It also covers where the data architecture stands after this week.
@@ -183,7 +183,7 @@ I wrote this on Wednesday, October twenty-eighth, in the early afternoon UTC. It
 (Full text in git history at the path above.)
 
 
-## Merged from docs/reports/lost-disk-comes-back-whole-2026-10-30.md (2026-10-30)
+## Merged from docs/reports/data-system-cutover-2026-10-30.md (2026-10-30)
 
 **A lost disk comes back whole.**
 I wrote this on the evening of October thirtieth. It covers about three hours of the data system mission, from late afternoon to nine at night, while you were away. It is a checkpoint letter, not the mission's closing report.

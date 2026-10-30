@@ -228,7 +228,7 @@ reads the path in `RUNTIME_GATEWAY_TOKEN_FILE`, falling back to the
 `internal/provideriface/config.go:291`). This replaced the original
 channel, the kernel command line, which any guest process could read from
 `/proc/cmdline` (doc:
-[s1-gateway-token-on-kernel-cmdline](../problems/s1-gateway-token-on-kernel-cmdline-2026-10-04.md)).
+[s1-gateway-token-on-kernel-cmdline](../archive/problems/s1-gateway-token-on-kernel-cmdline-2026-10-04.md)).
 
 **Validation.** Every inference, search and Jev call runs
 `authenticateAutoputer` (code: `handlers.go:644`): parse the bearer, look
@@ -250,7 +250,7 @@ calls it, `BindJevPeer` (`config.go:437`) records the caller's guest IP,
 and later calls from any other address are refused. Because a computer
 gets a new guest address on each boot, only the host can move the pin,
 through the ensure route with a `peer_ip` (code: `config.go:336-399`;
-doc: [l2a-merge-recall-on-the-paper](../problems/l2a-merge-recall-on-the-paper-2026-10-14.md)).
+doc: [l2a-merge-recall-on-the-paper](../archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md)).
 That is the right shape for binding: **the party that knows the truth
 (vmctl, which assigned the address) moves the pin; the party being
 checked (the guest) cannot.**
@@ -405,7 +405,7 @@ pool is, in order:
 
 LongCat left the pool on 14 October after measuring 21.8 s median and
 115 s p90 per call against 2.5 s and 10 s for gpt-6-luna; the catalog
-comment cites `docs/evidence/model-latency-paper-2026-10-14.md`. Note a
+comment cites `docs/archive/evidence/model-latency-paper-2026-10-14.md`. Note a
 small drift: the state-and-vision report (§3.6) says every desk runs on
 deepseek and luna; the code still includes cat-jam-free as the second
 member (owner, 13 October: free models join the pool to measure them).
@@ -451,7 +451,7 @@ models) (code: `openCodeWireShapeForModel`, `provider.go:1220`).
 - **Two of three pool members share one provider.** When opencode-go's
   breaker was provider-wide, a cat-jam-free rate limit took deepseek down
   with it (doc:
-  [free-model-429-opens-provider-circuit-stub-stories](../problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md)).
+  [free-model-429-opens-provider-circuit-stub-stories](../archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md)).
   Keying breakers per model fixed the coupling in the gateway, but a
   provider-level outage (account, network, billing) still removes two
   members at once. A pool is only as diverse as its least-shared
@@ -588,10 +588,10 @@ bursts cannot starve inference.
 
 | date | what happened | lesson |
 |---|---|---|
-| 10-10 | One computer's nine `400 Bad Request` responses opened the shared opencode-go breaker; another computer's Texture run failed with "circuit open" ([inference-breaker-trips-on-client-errors](../problems/inference-breaker-trips-on-client-errors-2026-10-10.md)) | count only provider-side failures; log the 4xx reason, which was being discarded |
+| 10-10 | One computer's nine `400 Bad Request` responses opened the shared opencode-go breaker; another computer's Texture run failed with "circuit open" ([inference-breaker-trips-on-client-errors](../archive/problems/inference-breaker-trips-on-client-errors-2026-10-10.md)) | count only provider-side failures; log the 4xx reason, which was being discarded |
 | 10-11 | Eleven ChatGPT 429s opened the chatgpt breaker; conductor, management, research and both verifiers all routed there, so four of six roles stopped ([chatgpt-usage-limit-stops-research-and-management](../problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)) | one account is one failure domain; roles need fallbacks on another provider |
-| 10-11 | Research fan-out made 239 child activations; the 60-per-minute limiter rejected 2,546 calls; children retried blind and died; Texture made one call in five minutes ([research-fanout-overruns-computer-model-budget](../problems/research-fanout-overruns-computer-model-budget-2026-10-11.md)) | a rate limit is a schedule the client must respect; honour `Retry-After` |
-| 10-14 | cat-jam-free 429s opened the provider-wide opencode-go breaker; deepseek on the same provider failed; failover stopped at the first fallback; 29 research runs failed and stub stories published ([free-model-429-opens-provider-circuit-stub-stories](../problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md)) | key breakers by (provider, model); fail over through the whole pool; hold uncited revisions |
+| 10-11 | Research fan-out made 239 child activations; the 60-per-minute limiter rejected 2,546 calls; children retried blind and died; Texture made one call in five minutes ([research-fanout-overruns-computer-model-budget](../archive/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md)) | a rate limit is a schedule the client must respect; honour `Retry-After` |
+| 10-14 | cat-jam-free 429s opened the provider-wide opencode-go breaker; deepseek on the same provider failed; failover stopped at the first fallback; 29 research runs failed and stub stories published ([free-model-429-opens-provider-circuit-stub-stories](../archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md)) | key breakers by (provider, model); fail over through the whole pool; hold uncited revisions |
 
 The last row is the clearest example of a **cascading failure**: a free
 model's upstream rate limit became a provider-wide breaker, which became
@@ -697,7 +697,7 @@ search gateway" while the gateway logged the same search as a success
 after 30.4 seconds. The guest's client timeout, each provider's timeout
 and the gateway handler's bound were all 30 seconds, so anything near the
 limit succeeded after the guest had given up (doc:
-[guest-search-timeout-equals-gateway-provider-timeout](../problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md)).
+[guest-search-timeout-equals-gateway-provider-timeout](../archive/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md)).
 A measurement found 51 of 509 searches (10%) ran exactly 30.0 s at the
 gateway. The first proposal was a **deadline ladder** (provider about
 10 s, gateway about 25 s, guest about 35 s). The owner chose async search
@@ -709,7 +709,7 @@ The long inference bound has its own cost. A deploy stops every changed
 unit and starts none until all stops finish; the gateway's graceful drain
 of up to 11 minutes kept proxy, auth and corpusd down for that long, and
 the site answered 502 for up to 11 min 13 s (doc:
-[deploy-takes-staging-down-during-gateway-drain](../problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md)).
+[deploy-takes-staging-down-during-gateway-drain](../archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md)).
 The site part is repaired; model calls are still refused during the
 drain (open item D3 in that record). A drain that protects one service by
 holding all the others hostage is a fate-sharing bug, not a timeout bug.
@@ -791,7 +791,7 @@ credential, the response kept as a raw distribution.
    queue wait 2 minutes, call timeout 90 s (`:57-61`). The job holds no
    durable obligation: a crash leaves pairs pending and nothing resumes
    at boot, in line with the restart rule (doc:
-   [support-judgement-to-jev design](../reports/support-judgement-to-jev-design-2026-10-14.md)).
+   [support-judgement-to-jev design](../archive/reports/support-judgement-to-jev-design-2026-10-14.md)).
 2. **Intake labels** for Autopaper: is this new capture the same event as
    a shortlisted story? Concurrency 4 (code:
    `internal/agentcore/intake_labels.go:44`, task text at `:281`).
@@ -801,7 +801,7 @@ credential, the response kept as a raw distribution.
 The design change on 14 October is a lesson in **moving work off a serial
 path**. A management turn spent 38 minutes hand-checking one Texture's
 citations while no story moved (doc:
-[management-serial-turn-blocks-paper](../problems/management-serial-turn-blocks-paper-2026-10-14.md)).
+[management-serial-turn-blocks-paper](../archive/problems/management-serial-turn-blocks-paper-2026-10-14.md)).
 Judging a listed pair needs no desk reasoning, so it became a bounded
 background job with its own budget, and management's turn went back to
 dispositions. The design names its falsifier: if Jev's verdicts are worse
@@ -1206,14 +1206,14 @@ Runners-up: `internal/gateway/searchplane/router.go` and `policy.go`
 - **From Choir documents (doc):** incident timelines and counts, search
   volumes and provider health, cost windows, latency figures and cache
   breaker analysis:
-  [choir-state-and-vision](../reports/choir-state-and-vision-2026-10-14.md)
+  [choir-state-and-vision](../archive/reports/choir-state-and-vision-2026-10-14.md)
   §3.6-3.7, §8.2, §9.2;
-  [search-efficiency-and-reuse](../reports/search-efficiency-and-reuse-2026-10-14.md);
-  [support-judgement-to-jev design](../reports/support-judgement-to-jev-design-2026-10-14.md);
-  [prompt-cache-analysis](../reports/prompt-cache-analysis-2026-10-14.md);
-  [pricing-and-economics-notes](../reports/pricing-and-economics-notes-2026-10-14.md);
-  [cost-track investigation](../reports/cost-track-sa-s3-sp-investigation-2026-10-14.md);
-  [computer isolation security review](../reports/computer-isolation-security-review-2026-10-14.md)
+  [search-efficiency-and-reuse](../archive/reports/search-efficiency-and-reuse-2026-10-14.md);
+  [support-judgement-to-jev design](../archive/reports/support-judgement-to-jev-design-2026-10-14.md);
+  [prompt-cache-analysis](../archive/reports/prompt-cache-analysis-2026-10-14.md);
+  [pricing-and-economics-notes](../archive/reports/pricing-and-economics-notes-2026-10-14.md);
+  [cost-track investigation](../archive/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md);
+  [computer isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
   §3.5, §4.6;
   [model-prices](../evidence/model-prices-2026-10-14.md); and the problem
   records linked in sections 2 to 8.

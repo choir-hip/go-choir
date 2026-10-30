@@ -13,7 +13,7 @@ Restart rules: CLAUDE.md, "Restarts End Work (Crash) Or Resume It
 
 The first reboot below happened on 2026-10-15 at 10:49 UTC: Node B booted
 6.18.55 and the go-choir configuration
-([handoff-2026-10-15.md](../reports/handoff-2026-10-15.md)). That 6.18.55
+([handoff-2026-10-15.md](../archive/reports/handoff-2026-10-15.md)). That 6.18.55
 generation is now a kernel known to boot on this host. The KF deploy stages
 **6.18.57** ([kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md](../problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)),
 and the next reboot changes the kernel (6.18.55 to 6.18.57) and the
@@ -339,7 +339,7 @@ these checks read-only at any time:
   **Paper healthy = health ok AND schedules not overdue AND inference in
   the last 30 minutes.** Health ok alone passed for 1h45m on 2026-10-15
   while 26 of 28 schedules were overdue and the paper made no call
-  ([problem](../problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md)).
+  ([problem](../archive/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md)).
   Schedules: `GET /api/autopaper/sources/schedules` with the paper
   credential; none may have `overdue: true`. Inference: the host timer
   `go-choir-paper-liveness-probe` alerts at journal priority err

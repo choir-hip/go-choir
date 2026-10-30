@@ -121,7 +121,7 @@ All citations are at `origin/main` 308513aa3.
   gateway restart (`internal/provider/opencode_keys.go:31-34`).
 - A gateway restart drains for up to 11 minutes (`nix/node-b.nix`
   go-choir-gateway `TimeoutStopSec`), and a drain has taken staging down
-  before (`docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md`).
+  before (`docs/archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md`).
 - OpenCode already has a multi-key pool. It reads `OPENCODE_API_KEY` and
   `OPENCODE_API_KEY_ALT_<n>`, parks a key on 401, 402 and 429, and keeps
   one key per session for the cache (`opencode_keys.go:17-24`, `:98-133`).
@@ -281,7 +281,7 @@ prompt cache is kept, exactly as OpenCode does today.
   yield a key.
 
 What this does not protect, stated plainly as FP9 did for the escrow key
-(`docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`, FP9-C2):
+(`docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`, FP9-C2):
 a root read of Node B's filesystem gets the KEK and the records together.
 Owner ruling R5 (2026-10-23): for now the KEK is only kept out of
 backups. A TPM (`LoadCredentialEncrypted=`) or a network unlock after boot

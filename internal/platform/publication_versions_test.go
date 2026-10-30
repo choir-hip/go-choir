@@ -1,7 +1,7 @@
 package platform
 
 // Ways per-version permalinks can fail (Cut 2 unit 2b,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md),
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md),
 // written before the code:
 //
 //  1. Every publish mints a new publication, version and route

@@ -77,7 +77,7 @@ func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 }
 
 // Support judgement left management
-// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): the default
+// (docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md): the default
 // management prompt must not teach Judge or support_pairs records.
 func TestManagementDefaultPromptCarriesNoSupportJudgement(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Management)
@@ -92,7 +92,7 @@ func TestManagementDefaultPromptCarriesNoSupportJudgement(t *testing.T) {
 }
 
 // Research searches the computer's own corpus before the web (symptom 3 of
-// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
+// docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
 func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
 	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
 	if err != nil {

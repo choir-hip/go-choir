@@ -19,7 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// The calibration digest (docs/reports/icrl-calibration-experiment-2026-10-14.md
+// The calibration digest (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md
 // §5). Failure modes these tests pin: P1 the digest enters the system
 // prompt; P2 it repeats when unchanged; P3 the control arm or a computer
 // with the setting off sees it; P4 a pending item becomes an observation;

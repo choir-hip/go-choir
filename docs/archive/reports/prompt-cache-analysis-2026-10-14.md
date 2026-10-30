@@ -129,7 +129,7 @@ the prompt grows by one document per revision within an activation.
 ## Expected hit rate and savings
 
 Inputs:
-- `docs/evidence/model-latency-paper-2026-10-14.md`: 760 calls over 100
+- `docs/archive/evidence/model-latency-paper-2026-10-14.md`: 760 calls over 100
   runs (about 7.6 calls per run); median prompt 10.8K (luna), 11.9K
   (cat-jam) and 15.2K (deepseek) tokens.
 - `docs/evidence/model-prices-2026-10-14.md`, last window: deepseek

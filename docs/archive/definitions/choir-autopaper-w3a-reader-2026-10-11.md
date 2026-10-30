@@ -3,7 +3,7 @@ definition_version: 4
 
 # W3a — the Autopaper reader on published Textures. Station of
 # definitions/choir-autopaper-metamission-2026-10-11.md; design
-# docs/autopaper-app-design-2026-10-11.md §4.6, §5 slice 1, §6 R2 and R3.
+# docs/autopaper-sw-design-2026-10-09.md §4.6, §5 slice 1, §6 R2 and R3.
 # Proposed ahead of W2 because it needs nothing from the held protocol
 # station P2d2 (design §5, open question 3).
 readiness: drafted
@@ -73,7 +73,7 @@ finish:
     columns exist; publishing hard-codes "v1" today), and stops copying
     every past revision into each publish. The bundle carries prev, next
     and latest for the chevrons and the "new version available" control
-    (study docs/reports/re-engineering-studies-2026-10-12/E-unified-document-model.md §5). Step 2, the public front list: a GET route listing the
+    (study docs/archive/reports/re-engineering-studies-2026-10-12/E-unified-document-model.md §5). Step 2, the public front list: a GET route listing the
     paper's published routes with title, dek, updated time and version
     count, served from the shared store, never from a paper computer.
     Step 3, the autopaper app: the front page and the story page, on the
@@ -100,7 +100,7 @@ value:
   mutation_class: red (publication and route projection) for steps 1 and 2; orange (app) for steps 3 and 4
   authority_sources:
     - docs/autopaper-sw-design-2026-10-09.md
-    - docs/autopaper-app-design-2026-10-11.md
+    - docs/autopaper-sw-design-2026-10-09.md
     - owner direction 2026-10-11 evening (stories as Textures that transclude their sources, built on the protocol, designed first)
   must_preserve:
     - only the Texture desk writes a Texture (P2b)
@@ -136,7 +136,7 @@ now:
       later citation slice).
     kind: sequencing
     status: proposed
-    evidence_ref: docs/autopaper-app-design-2026-10-11.md §5, §8
+    evidence_ref: docs/autopaper-sw-design-2026-10-09.md §5, §8
   belief:
     believed_state: the public resolve route and renderers exist; per-version linked permalinks and the front list do not
     main_uncertainty: how many per-publish objects a version-append needs (design §6 R2)

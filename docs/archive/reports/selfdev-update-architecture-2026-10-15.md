@@ -152,7 +152,7 @@ Each step below names where it lives and what exists today.
    capsule, runs its checks, stages its precommitments and Freezes. Lives in:
    the guest, on the tape. Exists: yes, but Freeze has never been reached on
    the records path. The fix is the unlanded `selfdev-land` branch
-   (`docs/reports/selfdev-readiness-2026-10-15.md`, B1).
+   (`docs/archive/reports/selfdev-readiness-2026-10-15.md`, B1).
 2. **Frozen candidate (guest).** Freeze opens the operation, writes the
    bundle to `/mnt/persistent/choir-updater/incoming/<digest>/` with
    `source.patch`, and management's Verify records a verdict. Exists: yes.
@@ -164,7 +164,7 @@ Each step below names where it lives and what exists today.
    stops being a release input. It stays a test artifact. Exists: the builder
    library and CLI (`internal/builder`, `cmd/choir-builder --source-patch`),
    with no service, no route and no caller (S2-f residual,
-   `docs/problems/s2-selfdev-runtime-changes-binary-carried-2026-10-04.md`).
+   `docs/archive/problems/s2-selfdev-runtime-changes-binary-carried-2026-10-04.md`).
 4. **Autonomous accept (corpusd).** *New.* On a computer the owner has armed
    for standing autonomy, a consensus actuator collects signed ballots from
    the two verification seats, reduces them under `reversible-selfdev-v1`,
@@ -183,7 +183,7 @@ Each step below names where it lives and what exists today.
    `materialization_applied`, the checkpoint and the route. Exists: everything
    after the mint. The layered-checkpoint identity defect must be closed for
    a second change or a restore to work
-   (`docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md`).
+   (`docs/archive/problems/layered-checkpoint-identity-gate2-2026-10-10.md`).
 6. **Publish (guest to host).** *New.* After `applied`, the guest (or the
    owner's CLI) publishes the release record. The record becomes a Store B
    object of a new kind. The patch and the closure are already in the host
@@ -202,7 +202,7 @@ Each step below names where it lives and what exists today.
    pending update under station LU (pull, quiet moment or drain, rings,
    health). Computers that diverged (running a release the platform does not
    contain) are held, never overwritten. Exists: designed (LU1a and LU2
-   reviewed, LU5 drafted; `docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md`).
+   reviewed, LU5 drafted; `docs/archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md`).
 
 ### 1.3 What "autonomous" maps to in code
 
@@ -374,7 +374,7 @@ act by the publisher.
    code is in `internal/platform/platform_update.go:151-262`. Minting when B
    asks, not when CI deploys, closes the S2-g bind gaps ("offer binds a
    different realization", "base event head is stale";
-   `docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`). If B's base
+   `docs/archive/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md`). If B's base
    differs from R's build base, the host builder rebuilds R for B's base
    first. If the patch does not apply, adoption refuses with a typed reason,
    and B can open a rebase candidate.

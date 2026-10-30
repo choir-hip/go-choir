@@ -8,19 +8,19 @@ local branches `fix/selfdev-mode-owner-only` (6bee3d318),
 and `security/internal-route-auth`. None of those branches is deployed.
 Claims not confirmed in code or evidence are marked **UNVERIFIED**.
 
-Sources read first: [CLAUDE.md](../../CLAUDE.md),
-[choir-doctrine.md](../choir-doctrine.md),
-[computer-ontology.md](../computer-ontology.md), the problem records
+Sources read first: [CLAUDE.md](../../../CLAUDE.md),
+[choir-doctrine.md](../../choir-doctrine.md),
+[computer-ontology.md](../../computer-ontology.md), the problem records
 [guest-can-arm-own-selfdev-mode](../problems/guest-can-arm-own-selfdev-mode-2026-10-15.md),
 [maild-send-gate-defects](../problems/maild-send-gate-defects-2026-10-14.md)
-and [loopback-is-a-credential](../problems/loopback-is-a-credential-2026-10-14.md),
+and [loopback-is-a-credential](../../problems/loopback-is-a-credential-2026-10-14.md),
 the reports [surface audit](surface-audit-cli-mcp-api-2026-10-14.md),
 [self-development update architecture](selfdev-update-architecture-2026-10-15.md)
 and [computer isolation security review](computer-isolation-security-review-2026-10-14.md),
 and two earlier key studies this report builds on rather than repeats:
-[precommitment-records.md §6](../precommitment-records.md) and its archived
+[precommitment-records.md §6](../../precommitment-records.md) and its archived
 code audit
-[precommitment-signing-and-computer-keys-2026-10-11.md](../archive/precommitment/precommitment-signing-and-computer-keys-2026-10-11.md).
+[precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment/precommitment-signing-and-computer-keys-2026-10-11.md).
 
 ## The governing principle
 

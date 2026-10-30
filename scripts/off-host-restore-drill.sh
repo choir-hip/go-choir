@@ -37,7 +37,7 @@ S="${OFFHOST_SECRETS_DIR:-/var/lib/go-choir/secrets/offhost-backup}"
 D="${OFFHOST_DRILL_DIR:-/var/lib/go-choir-restore-drill}"
 # The drill chmods $D and deletes under it: an absolute path below / only
 # (review round 3 F3 of
-# docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
+# docs/archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
 case "$D" in /*) ;; *) echo "OFFHOST_DRILL_DIR must be an absolute path, not '$D'" >&2; exit 2 ;; esac
 case "$D/" in */../*|*/./*) echo "OFFHOST_DRILL_DIR must not contain . or .. components: '$D'" >&2; exit 2 ;; esac
 [ -n "$(printf '%s' "$D" | tr -d /)" ] || { echo "OFFHOST_DRILL_DIR must not be /" >&2; exit 2; }
@@ -149,7 +149,7 @@ snap)
     # Freshness when Store A makes no snapshot commits (PLATFORM_DOLT_SNAPSHOTS=off):
     # the head no longer moves, so the receipt count read before the capture
     # must be in the restore (review round 1 R2 of
-    # docs/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
+    # docs/archive/problems/platform-dolt-oldgen-rate-and-squash-window-2026-10-22.md).
     # A manifest from this change on always carries the field and Store A's
     # entry, a number or "unread" (review round 2 R9); only one with no
     # field at all predates the marker.

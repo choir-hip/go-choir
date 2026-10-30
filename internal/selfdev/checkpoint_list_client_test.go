@@ -1,7 +1,7 @@
 package selfdev
 
 // The guest's read of its checkpoint listing (slice 3 of
-// docs/design/apply-checkpoint-without-replay-2026-10-26.md), written before
+// docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md), written before
 // the code. Ways it could fail:
 //
 //  1. the client reads another computer's listing, or sends no capability;

@@ -4,7 +4,7 @@ Date: 2026-10-15. Mutation class of the fix: **red** (capsule isolation:
 the seccomp filter of the broker and of the delegate stage). This note is
 evidence only; the fix comes in a later commit. It closes the first item of
 the UNVERIFIED list in
-[claude-delegate-slice1-2026-10-14.md](../design/claude-delegate-slice1-2026-10-14.md) §6
+[claude-delegate-slice1-2026-10-14.md](../../design/claude-delegate-slice1-2026-10-14.md) §6
 ("Claude Code (Bun) runs under the capsule's seccomp allowlist and
 Landlock"): it does not.
 

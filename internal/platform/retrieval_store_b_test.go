@@ -14,7 +14,7 @@ import (
 )
 
 // Store B retrieval rung 1 (problem record
-// docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+// docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
 // Failure modes guarded here, written before the code:
 //   1. the time-bounded ladder changes an answer (boundary rows, future
 //      rows, rows older than every window, ties, every limit);

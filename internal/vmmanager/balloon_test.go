@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Failure modes this guards (docs/reports/lr-guest-memory-return-2026-10-14.md):
+// Failure modes this guards (docs/archive/reports/lr-guest-memory-return-2026-10-14.md):
 //   - the balloon appears with the gate off (every cold boot changes shape);
 //   - a field name Firecracker 1.15.1 rejects (deny_unknown_fields) fails
 //     every boot on the host;

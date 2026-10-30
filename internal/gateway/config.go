@@ -70,7 +70,7 @@ const (
 // go green. None does today: the former "runtime" and "dolt" probes targeted
 // 127.0.0.1:8085, where nothing listens since computers run in VMs, "ollama"
 // is not deployed, and qdrant was removed (owner, 2026-10-28)
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 5). An entry added
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 5). An entry added
 // here can be overridden via GATEWAY_HEALTH_<SERVICE>_URL.
 var DefaultServiceHealthURLs = map[string]string{}
 
@@ -342,7 +342,7 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 // attests; only this caller can move it, never the Jev route itself. An
 // empty peer leaves the pin as it is; an address that is not a Choir guest
 // address is refused and changes nothing
-// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
+// (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
 func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*CredentialEnsureResult, error) {
 	peerIP = strings.TrimSpace(peerIP)
 	if peerIP != "" {

@@ -1,7 +1,7 @@
 // The Texture editor's Save body must decode under the server's strict
 // decoder. POST /api/texture/documents/{id}/revisions rejects unknown fields
 // with 400, and every Save failed while the client sent author_kind and
-// author_label (docs/problems/surface-broken-calls-2026-10-14.md, item 1).
+// author_label (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 1).
 //
 // Failure modes this pins:
 //   - the client adds a field the server's request struct does not declare;

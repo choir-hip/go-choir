@@ -26,7 +26,7 @@ const (
 	// mode: bound to a computer, one policy and an expiry, never to an
 	// operation, and never consumed by the guest. Only an owner act arms
 	// it, only on a test-tier computer, for at most
-	// StandingConsensusMaxWindow (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+	// StandingConsensusMaxWindow (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md).
 	SelfDevelopmentModeStandingConsensus = "standing_consensus"
 )
 
@@ -49,7 +49,7 @@ var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS confl
 // host-internal caller after it has authenticated the owner's session or an
 // owner API key scoped computer:self_development:mode. The guest's
 // event:append capability may only consume the grant the owner armed
-// (docs/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
+// (docs/archive/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
 var ErrSelfDevelopmentModeOwnerRequired = errors.New("self-development mode: owner authority required")
 
 // Mode writers, recorded as mode_writer in every new ModeReceipt. Receipts

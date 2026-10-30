@@ -256,7 +256,7 @@ func callKeyEscrowHandler(t *testing.T, handler http.HandlerFunc, method, target
 // home of a computer's key (O21). Once the computer has a chain, re-uploading
 // the same key is idempotent and keeps the original wrap; a different key is
 // refused and never replaces it
-// (docs/problems/key-escrow-overwritable-by-guest-2026-10-08.md).
+// (docs/archive/problems/key-escrow-overwritable-by-guest-2026-10-08.md).
 func TestKeyEscrowIsWriteOncePerKeyDigest(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	ctx := context.Background()

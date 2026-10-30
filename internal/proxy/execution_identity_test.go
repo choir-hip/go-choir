@@ -341,7 +341,7 @@ func TestDeploymentIdentityReceiptRefusesMissingHostInventory(t *testing.T) {
 	}
 }
 
-// A merged receipt (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md)
+// A merged receipt (docs/archive/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md)
 // carries the platform deployed_commit; the strict identity decoder must
 // accept it (R1) and refuse one that conflicts with the target (R2).
 func TestDeploymentIdentityReceiptAcceptsMergedPlatformCommit(t *testing.T) {

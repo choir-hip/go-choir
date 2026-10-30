@@ -1,7 +1,7 @@
 package types
 
 // EventStorage says where a choir.event is stored once the writer stamps it:
-// which table (docs/design/choir-event-table-f-c-2026-10-22.md section 2.1), or
+// which table (docs/archive/design/choir-event-table-f-c-2026-10-22.md section 2.1), or
 // the guest-local trace log (docs/design/trace-segment-log-2026-10-22.md
 // section 2.2).
 //

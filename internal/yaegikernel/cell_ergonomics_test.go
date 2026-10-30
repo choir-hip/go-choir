@@ -247,7 +247,7 @@ func TestWorldVerbJSONPrintsAsTextAndListedValuesShowInFull(t *testing.T) {
 	}
 }
 
-// Cluster B (docs/reports/cross-model-cell-errors-2026-10-13.md): the
+// Cluster B (docs/archive/reports/cross-model-cell-errors-2026-10-13.md): the
 // bound-define rewrite turned every `x := e` on a bound x into `x = e`, so
 // a new type failed at compile time ("cannot use type") or at runtime
 // through reflect.Set, which killed the worker. Failure modes pinned: a
@@ -287,7 +287,7 @@ func TestBoundNameRedefinedWithNewTypeRuns(t *testing.T) {
 	}
 }
 
-// Clusters E, F and G (docs/reports/cross-model-cell-errors-2026-10-13.md).
+// Clusters E, F and G (docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 // Failure modes pinned: an import of the choir package by a module-style
 // path ("go-choir/choir", "github.com/.../choir") is refused instead of
 // naming the predeclared package; a path that only ends in "choir" as part
@@ -330,7 +330,7 @@ func TestChoirImportPathsMinMaxAndSearchTotal(t *testing.T) {
 	}
 }
 
-// Cluster D (docs/reports/cross-model-cell-errors-2026-10-13.md): models
+// Cluster D (docs/archive/reports/cross-model-cell-errors-2026-10-13.md): models
 // read a record's or update's id as .ID (15 of 16 cells in Texture's first
 // survey cell); the fields are RecordID and UpdateID, and "undefined
 // method: ID" named neither. Failure modes pinned: r.ID does not compile

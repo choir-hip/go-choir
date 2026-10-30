@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md: Claude Code
+// docs/archive/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md: Claude Code
 // is a Bun binary. Failure modes, written before the change:
 //
 //	D1 the delegate filter refuses timerfd_create: uSockets' loop timer

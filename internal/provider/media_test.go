@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-// Failure modes: docs/problems/models-configured-text-only-2026-10-15.md.
+// Failure modes: docs/archive/problems/models-configured-text-only-2026-10-15.md.
 
 func testPNG(t *testing.T, w, h int, c color.Color) []byte {
 	t.Helper()

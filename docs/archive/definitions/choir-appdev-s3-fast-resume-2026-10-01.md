@@ -34,11 +34,11 @@ start:
       recorded. Hibernate is stop (vmmanager HibernateVM); resume is a cold
       boot plus recovery planning. vmctl polls readiness every 250 ms.
       Every guest-image deploy reboots active computers
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
     - >-
       VM state lives on btrfs, so reflink copies of data.img are available;
       Firecracker snapshot create/load is unused
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:142-143).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:142-143).
     - >-
       The guest health surface exposes cumulative engine-lock wait and hold
       counters for the latency drain probe, not a durable zero-active-work or
@@ -128,7 +128,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - owner direction in session 2026-10-01 (machine snapshots, latency targets)
-    - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
+    - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
     - docs/computer-ontology.md
     - AGENTS.md:109-131
   must_preserve:
@@ -189,14 +189,14 @@ now:
       staging; not cross-host restore, export, or fork construction.
     status: proposed
     evidence_refs:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:544-559
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:544-559
   decision:
     what: >-
       Use machine snapshots only for exact, same-computer hibernate/resume;
       semantic snapshots remain the portable fork and distribution mechanism.
     kind: architecture
     status: settled
-    evidence_ref: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
+    evidence_ref: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437
     owner_ratification_ref: >-
       owner 2026-10-01: "I ratify #1"; the owner-ratified metamission records
       machine snapshots for resume and semantic snapshots for distribution.
@@ -210,13 +210,13 @@ now:
       and lazily restore a safe snapshot inside the target budget.
     next_observation: >-
       S0's owner-sized snapshot create/resume and UFFD lazy-loading measurement
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-511),
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-511),
       followed by the S1 and S2 completion receipts.
   blocker_or_risk: >-
     A stale disk, advanced effective release/event head, or a second memory
     load can corrupt filesystem state or duplicate live secrets; omission of a
     post-resume repair is an identity and availability risk
-    (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:455-459).
+    (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:455-459).
   next_action: >-
     Promotes to working when S1-security-floor and
     S2-layering-runtime-from-release complete; then consume the S0 timeline and
@@ -270,10 +270,10 @@ internal/vmctl/ownership.go:2072-2086); S3 extends its accounting to snapshot
 space without changing its authority policy.
 
 S0 hands S3 the per-phase timeline and owner-sized snapshot measurements
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-511).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:503-511).
 S3 adds hibernate-write and btrfs-space observations beside resume time, then
 deploys a cold-path trim selected from S0's measured attribution, not a guessed
 optimization. S2 hands S3 the effective-release identity that invalidates a
 snapshot after an app-layer change; S1 supplies the security floor required
 before preserved memory and refreshed credentials are operated
-(docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:519-559).
+(docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:519-559).

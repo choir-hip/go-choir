@@ -21,7 +21,7 @@ type VerbSet map[string]bool
 // an existing read-only file itself (yaegikernel.WriteFileReplacing) and exec
 // covers the rest. A grant without a handler only turns a role check into
 // "unknown verb"
-// (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
+// (docs/archive/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
 var RoleVerbSets = func() map[AgentRole]VerbSet {
 	sets := map[AgentRole]VerbSet{}
 	// A role the manifest does not name has no entry, so HasVerb is false

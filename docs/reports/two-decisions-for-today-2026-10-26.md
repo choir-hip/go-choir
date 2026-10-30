@@ -48,4 +48,4 @@ Say yes to step-up for the code-changing acts, with a fifteen-minute grace perio
 
 - Step-up: residual register PR-12; docs/problems/no-step-up-and-no-platform-owner-2026-10-22.md; internal/proxy/owner_acts.go lines 25 to 39 (cookie sessions pass every owner act); refresh token 720 hours (internal/auth/config.go); owner ruling R1 of 2026-10-23 covers vault acts only.
 - Refresh race: residual register SD-01; docs/problems/promoted-stack-stays-base-moved-2026-10-26.md; U4 design in docs/design/computer-update-architecture-rnd-2026-10-24.md, "U4 design: rebasing an applied stack onto a new base", switch source.rebase_offer; owner update rulings, launch-first-pass ledger 19:0x on 2026-10-25.
-- Email questions: docs/design/email-numbered-addresses-and-autopaper-inbox-review-2026-10-26.md.
+- Email questions: docs/archive/design/email-numbered-addresses-and-autopaper-inbox-review-2026-10-26.md.

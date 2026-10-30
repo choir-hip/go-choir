@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rollback below F-c deploy 1 (run telemetry in its own table):
-# docs/design/choir-event-table-f-c-2026-10-22.md, status section.
+# docs/archive/design/choir-event-table-f-c-2026-10-22.md, status section.
 #
 # A bare git revert of deploy 1 boots the older binary over stores that
 # deploy 1 opened; its replay manifest calls the empty choir_events unknown,

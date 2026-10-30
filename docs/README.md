@@ -3,7 +3,7 @@
 This is the map of the docs tree, not a second doctrine and not a list of every
 file. It was rewritten in the 2026-10-14 prune (what was removed and why:
 [`archive/PRUNED-2026-10-14.md`](archive/PRUNED-2026-10-14.md); the plan:
-[`reports/docs-pruning-plan-2026-10-14.md`](reports/docs-pruning-plan-2026-10-14.md)).
+[`reports/docs-pruning-plan-2026-10-14.md`](archive/reports/docs-pruning-plan-2026-10-14.md)).
 
 Choir documentation has four lanes:
 
@@ -22,9 +22,9 @@ location. `choir-doctrine.md` is the apex doctrine and `AGENTS.md` (also
 Read in this order, about an hour in total:
 
 1. [`../README.md`](../README.md) — what Choir is and how to run it.
-2. [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md)
+2. [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md)
    — the long state-and-vision report (built, designed, planned, business).
-   [`reports/strategy-takeaways-2026-10-14.md`](reports/strategy-takeaways-2026-10-14.md)
+   [`reports/strategy-takeaways-2026-10-14.md`](archive/reports/strategy-takeaways-2026-10-14.md)
    and [`reports/owner-notes-2026-10-14.md`](reports/owner-notes-2026-10-14.md)
    are the latest owner direction.
 3. [`choir-vision.md`](choir-vision.md) — the automatic computer, in two pages.
@@ -67,22 +67,22 @@ Read the relevant contract before touching its protected surface.
   [`archive/skills/`](archive/skills/).
 - **Changing agent/desk behavior**: [`agent-product-doctrine.md`](agent-product-doctrine.md),
   [`choir-prompting-invariants.md`](choir-prompting-invariants.md),
-  [`desk-rlm-rectification-plan-2026-09-23.md`](desk-rlm-rectification-plan-2026-09-23.md)
+  [`desk-rlm-rectification-plan-2026-09-23.md`](archive/desk-rlm-rectification-plan-2026-09-23.md)
   (desk ontology, sections 1-10), and the settled design decisions in
   [`re-engineering-decisions-2026-10-12.md`](re-engineering-decisions-2026-10-12.md).
 - **Architecture and state**: [`current-architecture.md`](current-architecture.md),
   [`platform-os-app-state.md`](platform-os-app-state.md) (a platform ledger, dated),
-  [`state-homes-inventory-2026-10-08.md`](state-homes-inventory-2026-10-08.md),
+  [`state-homes-inventory-2026-10-08.md`](operational-invariants-register-2026-10-08.md),
   [`operational-invariants-register-2026-10-08.md`](operational-invariants-register-2026-10-08.md)
   (draft invariants awaiting owner promotion), [`restart-subsystem-design-2026-10-13.md`](restart-subsystem-design-2026-10-13.md),
   [`model-pools-design-2026-10-12.md`](model-pools-design-2026-10-12.md),
   [`texture-live-supervision-architecture.md`](texture-live-supervision-architecture.md),
-  [`texture-acceptance-suite.md`](texture-acceptance-suite.md).
+  [`texture-acceptance-suite.md`](archive/texture-acceptance-suite.md).
 - **Autopaper (the automatic newspaper)**: [`autopaper-sw-design-2026-10-09.md`](autopaper-sw-design-2026-10-09.md),
-  [`autopaper-app-design-2026-10-11.md`](autopaper-app-design-2026-10-11.md),
-  the Store A/B split in [`runbooks/platform-dolt-authority-split-2026-09-18.md`](runbooks/platform-dolt-authority-split-2026-09-18.md).
+  [`autopaper-app-design-2026-10-11.md`](autopaper-sw-design-2026-10-09.md),
+  the Store A/B split in [`runbooks/platform-dolt-authority-split-2026-09-18.md`](archive/runbooks/platform-dolt-authority-split-2026-09-18.md).
 - **Security and the VM boundary**: [`vmctl-360-review-2026-10-10.md`](vmctl-360-review-2026-10-10.md),
-  [`reports/computer-isolation-security-review-2026-10-14.md`](reports/computer-isolation-security-review-2026-10-14.md).
+  [`reports/computer-isolation-security-review-2026-10-14.md`](archive/reports/computer-isolation-security-review-2026-10-14.md).
 - **Why and lineage**: [`signal-is-sparse-not-the-learner-2026-08-01.md`](signal-is-sparse-not-the-learner-2026-08-01.md)
   (the foundational argument), [`why-texture-2026-06-15.md`](why-texture-2026-06-15.md),
   [`memo-per-computer-frontend-2026-08-13.md`](memo-per-computer-frontend-2026-08-13.md),

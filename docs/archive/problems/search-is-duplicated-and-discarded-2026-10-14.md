@@ -9,7 +9,7 @@ class of any fix: **red** (gateway provider calls). Problem first; fixes
 come after this commit and reference it. Companion: the cooling record
 (`search-providers-cooling-most-of-the-time-2026-10-14.md`), which covers
 provider health and spent accounts. Design:
-`docs/reports/search-efficiency-and-reuse-2026-10-14.md`.
+`docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md`.
 
 ## Evidence
 

@@ -2,9 +2,9 @@
 
 Status: owner-agreed design direction, written after an iterative review
 of the master report
-([reports/master-report-protocol-research-autopaper-2026-10-11.md](reports/master-report-protocol-research-autopaper-2026-10-11.md))
+([reports/master-report-protocol-research-autopaper-2026-10-11.md](archive/reports/master-report-protocol-research-autopaper-2026-10-11.md))
 and six read-only studies
-([reports/re-engineering-studies-2026-10-12/](reports/re-engineering-studies-2026-10-12/README.md)).
+([reports/re-engineering-studies-2026-10-12/](archive/reports/re-engineering-studies-2026-10-12/README.md)).
 The owner asked for agreement before any code change ("extremely high
 stakes decision making"). This record holds what was agreed. Where an
 earlier design or a study proposes something different, this record wins
@@ -38,7 +38,7 @@ live. Deferred missions come after.
    now. Do not build behaviour on top of the limit.
 6. **Restart rule unchanged** (CLAUDE.md): a crash closes work, a planned
    restart may resume it. The code breaks it today in both directions
-   ([problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md](problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md)).
+   ([problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md](problems/crash-boots-redrive-applies-2026-10-13.md)).
 7. **Language.** Provider failure is normal: say "M of N search providers
    active". "Degraded" means users get worse searchability or results.
 
@@ -220,7 +220,7 @@ It owns its work; the runtime does not.
   inference). Desks lose the blocking search call (§12).
 - Concurrency lives on the host. Model-authored goroutines must not call
   `choir.*` network verbs until the transport correlates by request id
-  ([problems/parallel-choir-calls-cross-wire-results-2026-10-12.md](problems/parallel-choir-calls-cross-wire-results-2026-10-12.md)).
+  ([problems/parallel-choir-calls-cross-wire-results-2026-10-12.md](archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md)).
 - This replaces the deadline-ladder station; the 30-second tie it
   documented disappears when nothing waits on the slowest provider.
 

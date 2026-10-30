@@ -1,7 +1,7 @@
 package platform
 
 // Per-version permalinks (Cut 2 unit 2b,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 //
 // A story is one publication per (owner, source doc). Each committed
 // revision of the doc publishes as version n, n its Texture revision number

@@ -62,20 +62,6 @@ nodes:
       - AGENTS.md
       - docs/README.md
       - cmd/doccheck/main.go
-  - id: choir-seam-repair-2026-07-10
-    title: Choir Contradiction and Seam Repair
-    path: docs/archive/choir-seam-repair-2026-07-10.md
-    ledger: ''
-    status: settled
-    kind: product_completion
-    entrypoint: false
-    depends_on: []
-    enables: []
-    sources:
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/agent-product-doctrine.md
-      - docs/computer-ontology.md
   - id: choir-coherent-computer-convergence-2026-07-21
     title: Converge Choir on One Durable Agentic Computer
     path: docs/archive/choir-coherent-computer-convergence-2026-07-21.md
@@ -120,8 +106,8 @@ nodes:
     sources:
       - docs/archive/choir-coherent-computer-convergence-2026-07-21.md
       - docs/evidence/continuous-texture-supervision-definition-consensus-2026-08-07.md
-      - docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md
-      - docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
+      - docs/archive/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md
+      - docs/archive/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md
       - docs/evidence/continuous-texture-supervision-direct-key-ceremony-2026-08-09.md
       - docs/archive/choir-supervised-self-development-effects-2026-08-11.md
       - docs/standing-questions.md
@@ -178,53 +164,6 @@ nodes:
       Superseded 2026-08-20 by compact Definition v2 (candidate-proof, retired to Git history 2026-09-22).
     sources:
       - docs/ACTIVE.md
-  - id: choir-scheduling-and-candidate-proof-2026-08-21
-    title: Scheduling Contract and Candidate Proof
-    path: docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md
-    ledger: ''
-    status: superseded
-    kind: spine
-    entrypoint: false
-    execution_mode: superseded_incomplete_mission_evidence
-    depends_on:
-      - choir-private-go-actor-kernel-2026-08-12
-    enables:
-      - choir-substrate-and-scheduling-readiness-2026-09-02
-    note: >-
-      Superseded 2026-09-02 by the 3-Definition autonomous engineering sequence:
-      Definition 1 (choir-substrate-and-scheduling-readiness-2026-09-02) owns FIFO
-      scheduling and normal-boot stability; Definition 3
-      (choir-supervised-self-development-on-rlm-2026-09-02) owns Candidate A self-development.
-    sources:
-      - docs/archive/choir-scheduling-and-candidate-proof-2026-08-21.md
-      - docs/standing-questions.md
-      - docs/choir-doctrine.md
-      - docs/ACTIVE.md
-  - id: choir-substrate-and-scheduling-readiness-2026-09-02
-    title: Substrate & Scheduling Readiness
-    path: docs/archive/choir-substrate-and-scheduling-readiness-2026-09-02.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on: []
-    enables: []
-    note: >-
-      Phase 1 of autonomous engineering sequence, revised 2026-09-03 to the
-      boot-is-recovery ontology. Completed 2026-09-03: live-trigger-only Super wakes,
-      FIFO selection across 4 cycles, boot-does-not-schedule assertion, producer report
-      settlement via store-layer CAS reducer, isolated exact-run resume, terminal probe
-      negative/positive verified, and >15 normal boots to health 200 without hold.
-    sources:
-      - docs/archive/choir-substrate-and-scheduling-readiness-2026-09-02.md
-      - docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md
-      - docs/evidence/effects-red-substrate-boot-probe-partial-evidence-2026-09-03.md
-      - docs/evidence/effects-red-substrate-scheduling-readiness-complete-evidence-2026-09-03.md
-      - docs/standing-questions.md
-      - docs/choir-doctrine.md
-      - docs/computer-ontology.md
-      - docs/ACTIVE.md
   - id: choir-rlm-target-architecture-cutover-2026-09-04
     title: Choir RLM Target Architecture Cutover
     path: docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md
@@ -234,7 +173,6 @@ nodes:
     entrypoint: false
     execution_mode: blocked_incomplete
     depends_on:
-      - choir-substrate-and-scheduling-readiness-2026-09-02
     enables: []
     note: >-
       Phase 2 comprehensive RLM target architecture cutover. 6-step implementation
@@ -272,8 +210,8 @@ nodes:
     sources:
       - docs/archive/choir-rlm-restore-zero-2026-09-08.md
       - docs/archive/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md
-      - docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md
-      - docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md
+      - docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md
+      - docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md
       - docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md
       - docs/ACTIVE.md
   - id: choir-rlm-versioned-rename-2026-09-09
@@ -295,27 +233,8 @@ nodes:
       reboot in 29s.
     sources:
       - docs/archive/choir-rlm-versioned-rename-2026-09-09.md
-      - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
+      - docs/archive/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/ACTIVE.md
-  - id: choir-host-orchestrated-recovery-2026-08-22
-    title: Host-Orchestrated Recovery (Cold Recover Current)
-    path: docs/archive/choir-host-orchestrated-recovery-2026-08-22.md
-    ledger: ''
-    status: settled
-    kind: subordinate_contract
-    entrypoint: false
-    execution_mode: superseded_non_executable
-    depends_on:
-      - choir-tape-recovery-2026-08-13
-    enables: []
-    note: >-
-      Superseded 2026-08-23 by choir-durable-substrate-recovery-2026-08-23.
-      Initial cold recover_current attempt blank-seeded sparse image without a
-      differential base, hitting the same 132k-event replay timeout.
-    sources:
-      - docs/archive/choir-host-orchestrated-recovery-2026-08-22.md
-      - docs/evidence/effects-red-guest-dependent-restore-2026-08-22.md
-      - docs/evidence/effects-red-recovery-no-differential-base-2026-08-23.md
   - id: choir-durable-substrate-overhauls-2026-08-23
     title: Durable Substrate Overhauls
     path: docs/archive/choir-durable-substrate-overhauls-2026-08-23.md
@@ -326,7 +245,6 @@ nodes:
     execution_mode: completed_non_executable
     depends_on: []
     enables:
-      - choir-private-go-actor-kernel-2026-08-12
     note: >-
       Completed 2026-08-26 (commits f0e68b0a..e65e91c4). All 4 substrate overhaul tracks
       implemented and verified: Track K key escrow with 2-of-N quorum gate and
@@ -339,32 +257,6 @@ nodes:
       - docs/archive/choir-durable-substrate-2026-08-23.md
       - docs/choir-doctrine.md
       - docs/computer-ontology.md
-      - docs/ACTIVE.md
-      - AGENTS.md
-  - id: choir-private-go-actor-kernel-2026-08-12
-    title: Private Go Actor Kernel
-    path: docs/archive/choir-private-go-actor-kernel-2026-08-12.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: completed_non_executable
-    depends_on:
-      - choir-durable-substrate-overhauls-2026-08-23
-    enables:
-      - choir-scheduling-and-candidate-proof-2026-08-21
-    note: >-
-      Completed 2026-08-26; settled, non-executable. Established private
-      programmable Go activations via a process-per-activation Yaegi sidecar
-      inside disposable guest-local capsules with unified Bash/Go broker
-      routing, opaque handles, durable continuity across forced
-    sources:
-      - docs/archive/choir-supervised-self-development-effects-2026-08-11.md
-      - docs/archive/memo-persistent-rlm-actors-2026-08-09.md
-      - docs/standing-questions.md
-      - docs/computer-ontology.md
-      - docs/agent-product-doctrine.md
-      - docs/choir-doctrine.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-rlm-engineering-carrier-2026-09-11
@@ -389,44 +281,6 @@ nodes:
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/standing-questions.md
-  - id: choir-sub-rlm-document-channel-2026-09-22
-    title: Sub-RLM Document Channel / Carrier Landing (M2)
-    path: docs/archive/choir-sub-rlm-document-channel-2026-09-22.md
-    ledger: ''
-    status: superseded
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on: []
-    enables: []
-    note: >-
-      Superseded 2026-09-23. Its remaining carrier and document-channel
-      scope is replaced by the desk-RLM rectification R-sequence (R0–R5),
-      retained here only as the historical M2 record.
-    sources:
-      - docs/world-wire-mission-stack-2026-09-22.md
-      - docs/archive/choir-rlm-engineering-carrier-2026-09-11.md
-  - id: choir-ontology-kernel-draft-2026-09-22
-    title: Ontology Kernel (K, landed substrate)
-    path: docs/definitions/choir-ontology-kernel-2026-09-24.md
-    ledger: ''
-    status: working
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-sub-rlm-document-channel-2026-09-22
-    enables: []
-    note: >-
-      K — substrate landed + boot/doom fixes deployed (main@66981cef);
-      deletion pass pending owner sweep ruling. The ratified ontology
-      cutover kernel: derivable continuations, fenced atomic commit,
-      serial-per-actor, dispatcher as sole consumer, write-fenced
-      migration. Its 2026-09-22 draft duplicate was deleted 2026-09-25.
-    sources:
-      - docs/world-wire-mission-stack-2026-09-22.md
-      - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
-      - docs/problems/root-cause-wrong-path-cluster-2026-09-22.md
   - id: choir-strand2-freeze-order-patch-2026-09-23
     title: Strand-2 Freeze-Order Patch (R0)
     path: docs/archive/definitions/choir-strand2-freeze-order-patch-2026-09-23.md
@@ -443,11 +297,10 @@ nodes:
       effect; prompt gate; Quiesce/WithoutCancel/watchdog coverage.
       Archived receipt.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/problems/document-cast-stray-complete-settlement-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-desk-vocabulary-docs-cutover-draft-2026-09-23
     title: Desk Vocabulary + Docs Cutover (R1, superseded draft)
-    path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
     status: superseded
     kind: spine
@@ -460,30 +313,10 @@ nodes:
       stratum-A sweep survives as re-authored work; this draft's goal file
       was deleted (stale anchor main@b0adf6f7 / deploy 4de7fdf9).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
-  - id: choir-commitment-ledger-desk-carrier-draft-2026-09-23
-    title: Commitment Ledger + Desk Carrier + Verbs (R2)
-    path: docs/archive/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-ontology-kernel-draft-2026-09-22
-    enables: []
-    note: >-
-      R2 — closed on substrate 2026-09-25 (landed+deployed 537fce04,
-      resolve 5404d2c7; now.status=complete). Delivered the commitment
-      record (OG object), the engineering-cell carrier, semantic-act
-      verbs, delegated-cast admission. Deployed desk-cell cast proof
-      deferred into R3c of the restructure (plan §11).
-    sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/precommitment-records.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-live-desks-supervision-loop-draft-2026-09-23
     title: Live Desks + Supervision Loop (R3, superseded draft)
-    path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
     status: superseded
     kind: spine
@@ -499,12 +332,12 @@ nodes:
       not-reachable-alone defect. Goal file deleted (stale anchor +
       dead super_controller.go citation).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       - docs/texture-live-supervision-architecture.md
       - docs/why-texture-2026-06-15.md
   - id: choir-commitment-scores-surfacing-draft-2026-09-23
     title: Commitment Scores + Surfacing + Context Packs (R4, superseded draft)
-    path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
     status: superseded
     kind: spine
@@ -518,11 +351,11 @@ nodes:
       epistemic gate — now strictly after R3d, with R3's smuggled
       score scope removed. Goal file deleted (stale anchor).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       - docs/precommitment-records.md
   - id: choir-durable-vocabulary-migration-draft-2026-09-23
     title: Durable Vocabulary Migration (R5, superseded draft)
-    path: docs/desk-rlm-rectification-plan-2026-09-23.md
+    path: docs/archive/desk-rlm-rectification-plan-2026-09-23.md
     ledger: ''
     status: superseded
     kind: spine
@@ -537,30 +370,10 @@ nodes:
       deleted (stale anchor; its finish.acceptance forced the migrate
       half the panel rejected).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
-  - id: choir-rectification-spine-2026-09-25
-    title: Rectification Spine — durable meta-goal
-    path: docs/definitions/choir-rectification-spine-2026-09-25.md
-    ledger: ''
-    status: settled
-    kind: spine
-    entrypoint: false
-    execution_mode: completed_non_executable
-    depends_on:
-      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
-    enables:
-      - choir-jev-supervision-metamission-2026-09-29
-    note: >-
-      Complete 2026-09-29: final station M11 (selfdev gate) settled on
-      staging e886f576 — probe run 9 satisfied. The spine's durable
-      meta-goal is archived; its receipts remain. Next frontier is the
-      Jev/supervision metamission.
-    sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
-      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-texture-latency-cutover-2026-10-01
     title: Texture Latency Cutover — bound editor request latency end-to-end
-    path: docs/definitions/choir-texture-latency-cutover-2026-10-01.md
+    path: docs/archive/definitions/choir-texture-latency-cutover-2026-10-01.md
     ledger: ''
     status: working
     kind: product_completion
@@ -576,20 +389,17 @@ nodes:
       gated on the timing matrix — decoupling the objectgraph read mutex
       from writes. Evidence: docs/problems/texture-latency-layered-evidence-2026-10-01.md.
     sources:
-      - docs/definitions/choir-texture-latency-cutover-2026-10-01.md
-      - docs/problems/texture-latency-layered-evidence-2026-10-01.md
+      - docs/archive/definitions/choir-texture-latency-cutover-2026-10-01.md
   - id: choir-jev-supervision-metamission-2026-09-29
     title: Jev / Supervision Metamission — signal plane to management-scored commitments
-    path: docs/definitions/choir-jev-supervision-metamission-2026-09-29.md
+    path: docs/archive/definitions/choir-jev-supervision-metamission-2026-09-29.md
     ledger: ''
     status: working
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
-      - choir-rectification-spine-2026-09-25
     enables:
-      - choir-world-wire-metamission-2026-10-01
     note: >-
       Owner-ratified 2026-09-29 metamission spine (definition_version 4,
       readiness ladder). Still working; demoted from entrypoint
@@ -600,7 +410,7 @@ nodes:
       - docs/archive/orientation-jev-supervision-metamission-2026-09-29.md
   - id: choir-supervised-app-development-metamission-2026-10-01
     title: Supervised App Development, Fast Resume, Forks, Source Publication
-    path: docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
+    path: docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
     ledger: ''
     status: working
     kind: spine
@@ -608,7 +418,6 @@ nodes:
     execution_mode: mission_orchestrator
     depends_on: []
     enables:
-      - choir-world-wire-metamission-2026-10-01
     note: >-
       Owner-approved 2026-10-01 after agentic-consensus review
       (dirs agentic-consensus-20261001-133535 convergent +
@@ -621,8 +430,7 @@ nodes:
       completion only and discharged). Ordered ahead of World Wire per
       owner direction.
     sources:
-      - docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md
-      - docs/problems/guest-release-propagation-manual-2026-10-01.md
+      - docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md
   - id: choir-appdev-s0m-record-native-messaging-2026-10-01
     title: S0m Record-Native Messaging — records as acts, packets derived
     path: docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
@@ -648,31 +456,6 @@ nodes:
       - docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
       - docs/archive/agent-messaging-system-state-2026-10-01.md
       - docs/desk-system-harness-architecture-2026-10-01.md
-  - id: choir-world-wire-metamission-2026-10-01
-    title: World Wire Metamission — compounding self-citing KB, verticals sequenced
-    path: docs/archive/definitions/choir-world-wire-metamission-2026-10-01.md
-    ledger: ''
-    status: superseded  # 2026-10-05 v5: rewrite pending from docs/archive/world-wire-rearchitecture-2026-10-05.md
-    kind: spine
-    entrypoint: false
-    execution_mode: mission_orchestrator
-    depends_on:
-      - choir-jev-supervision-metamission-2026-09-29
-    enables: []
-    note: >-
-      Successor spine designed from the 2026-10-01 convergent panel + June
-      attempt-12 receipt. RLM-native compounding knowledge base on the object
-      graph; processor/reconciler stay non-desk but shift per-item->per-set.
-      Stations W0 (KB-graph schema, green/parallel) -> W1 tiered dedup -> W2
-      batched processor -> W3 corpus reconciler -> W4 edition assembly -> W5
-      AI vertical -> W6 Taiwan/geopolitics/semis/internal-democracy -> W7
-      region ladder -> W8 scale hardening. Live ingestion gated on capacity
-      acceptance; W0 design runs green in parallel. status=intent until the
-      Jev spine's remaining stations + capacity acceptance discharge.
-    sources:
-      - docs/archive/definitions/choir-world-wire-metamission-2026-10-01.md
-      - docs/archive/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md
-      - .agentic-consensus/manifest.tsv
   - id: choir-carrier-substrate-integrity-2026-09-25
     title: Carrier Substrate Integrity (R2x, station)
     path: docs/archive/definitions/choir-carrier-substrate-integrity-2026-09-25.md
@@ -682,7 +465,6 @@ nodes:
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on:
-      - choir-commitment-ledger-desk-carrier-draft-2026-09-23
     enables: []
     note: >-
       Landed 2026-09-25 (ebdaef45, 53035642): deadline wake armed at
@@ -690,7 +472,7 @@ nodes:
       recoverPartialActCommit. Deployed-cancel proof deferred — lever
       CHOIR_ASSIGNMENT_DEADLINE committed.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-texture-ledger-consumer-2026-09-25
     title: Texture Ledger Consumer (R3a, station)
     path: docs/archive/definitions/choir-texture-ledger-consumer-2026-09-25.md
@@ -708,7 +490,7 @@ nodes:
       Deployed live-record proof deferred to a doc desk report-cast (R3c);
       packet-path deletion is R3d's.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-desk-cell-carrier-2026-09-25
     title: Host Desk-Cell Carrier (R3b, station)
     path: docs/archive/definitions/choir-desk-cell-carrier-2026-09-25.md
@@ -729,7 +511,7 @@ nodes:
       actuator=rlm; Cast rejects an unknown desk. Kill mid-cell respawns
       clean. Deployed live-desk acceptance deferred to R3c (actuator).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-management-live-cast-2026-09-26
     title: Management Live + Cast (R3c, station)
     path: docs/archive/definitions/choir-management-live-cast-2026-09-26.md
@@ -748,7 +530,7 @@ nodes:
       the R2 spawn saga). report_to_texture stays as a typed control path;
       the unstructured report flow stages via Report/ReportPacket.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-texture-live-authoring-2026-09-26
     title: Texture Live + Authoring (R3d, station)
     path: docs/archive/definitions/choir-texture-live-authoring-2026-09-26.md
@@ -767,7 +549,7 @@ nodes:
       revisions citing ledger evidence; typed texture tools and the
       desk-originated worker_updates consumer path deleted.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-research-live-cell-2026-09-26
     title: Research Live Cell (R3r, station)
     path: docs/archive/definitions/choir-research-live-cell-2026-09-26.md
@@ -786,7 +568,7 @@ nodes:
       budget (calls + fetched bytes) and an 8GiB RLIMIT_AS worker cap;
       generic host tools retired; D2 discharged.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
   - id: choir-commitment-scores-packs-2026-09-26
     title: Commitment Scores + Surfacing + Context Packs (R4, station)
     path: docs/archive/definitions/choir-commitment-scores-packs-2026-09-26.md
@@ -807,7 +589,7 @@ nodes:
       the learning-claims gate (claim_gate backed|unbacked on the
       selfdev verification payload).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       - docs/precommitment-records.md
   - id: choir-selfdev-derivable-continuations-2026-09-26
     title: Skip the Harness — Derivable Selfdev Continuations (M7, station)
@@ -827,7 +609,7 @@ nodes:
       owner decision is never synthesized by the loop; API path stays;
       revert+redeploy restores API-driven advance.
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       - docs/precommitment-records.md
   - id: choir-platform-update-push-restore-2026-09-26
     title: Platform-Signed Update Push + Restore (M9a, station)
@@ -847,7 +629,7 @@ nodes:
       platform-follow evidence class, and restored to the pinned head via
       tape reconstruct (witness matched, frontend restaged).
     sources:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md
       - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md
   - id: choir-selfdev-gate-2026-09-27
     title: Self-Development Gate — Supervised Episode on Records (M11, station)
@@ -865,14 +647,14 @@ nodes:
       qualified consensus, apply tail events confirmed, candidate-B
       rejected, falsified record visible in the live Texture doc,
       pinned-head restore via tape_reconstruct). Evidence:
-      docs/evidence/m11-probe-run9-satisfied-2026-09-29.json.
+      docs/archive/evidence/m11-probe-run9-satisfied-2026-09-29.json.
       Probe: scripts/m11_selfdev_episode_probe.mjs.
     sources:
       - docs/archive/definitions/choir-selfdev-gate-2026-09-27.md
-      - docs/evidence/m11-episode-call-map-2026-09-27.md
+      - docs/archive/evidence/m11-episode-call-map-2026-09-27.md
   - id: choir-appdev-sr-desk-surface-cleanup-2026-10-05
     title: SR Desk-Surface Cleanup — finish research RLM cutover, delete processor/reconciler
-    path: docs/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
+    path: docs/archive/definitions/choir-appdev-sr-desk-surface-cleanup-2026-10-05.md
     ledger: ''
     status: pending
     kind: station
@@ -886,7 +668,7 @@ nodes:
       v5 2026-10-05. Absorbs Jev M0a (choir-signal-research-rlm-cutover-2026-09-29).
   - id: choir-appdev-sh-state-homes-2026-10-08
     title: SH State Homes — a realization holds no unique state (O21)
-    path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
+    path: docs/archive/definitions/choir-appdev-sh-state-homes-2026-10-08.md
     ledger: ''
     status: working
     kind: station
@@ -898,11 +680,11 @@ nodes:
     note: >-
       2026-10-08 owner direction. Operational invariant O21 from
       docs/operational-invariants-register-2026-10-08.md; inventory in
-      docs/state-homes-inventory-2026-10-08.md. Escrow key delivery to a new
+      docs/operational-invariants-register-2026-10-08.md. Escrow key delivery to a new
       realization owner-ratified. Prerequisite for desktop hosted<->local.
   - id: choir-appdev-sp-production-infrastructure-2026-10-09
     title: SP Production Infrastructure — the platform's durable homes survive its host (O22)
-    path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+    path: docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
     ledger: ''
     status: planned
     kind: station
@@ -916,7 +698,7 @@ nodes:
       documented on request ("But do document sp"). Not executable.
   - id: choir-appdev-gate2-supervised-self-development-2026-10-09
     title: Gate 2 — self-development with live Texture supervision (owner asks, capsule builds, preview, approve, release, rollback)
-    path: docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md
+    path: docs/archive/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md
     ledger: ''
     status: working
     kind: station
@@ -932,7 +714,7 @@ nodes:
       the exit test. First slice: re-run the M11 episode on the current build.
   - id: choir-appdev-sl-obligation-terminality-2026-10-08
     title: SL Obligation Terminality — every durable obligation has one driver and a recorded terminal fate (O1)
-    path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
+    path: docs/archive/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
     ledger: ''
     status: working
     kind: station
@@ -949,7 +731,7 @@ nodes:
       inventory.
   - id: choir-appdev-sa-agent-density-2026-10-05
     title: SA Agent Density — many concurrent desk activations in a 2-4 GiB guest
-    path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md
+    path: docs/archive/definitions/choir-appdev-sa-agent-density-2026-10-05.md
     ledger: ''
     status: working
     kind: station
@@ -967,7 +749,7 @@ nodes:
       Slice 1 storm convergence next.
   - id: choir-appdev-smg-management-rlm-cutover-2026-10-06
     title: SMG Management RLM Cutover — delete ad-hoc typed tools, in-cell verbs only
-    path: docs/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
+    path: docs/archive/definitions/choir-appdev-smg-management-rlm-cutover-2026-10-06.md
     ledger: ''
     status: closed
     kind: station
@@ -986,7 +768,7 @@ nodes:
       smg-to-sa-transition-2026-10-06.
   - id: choir-persistent-desks-metamission-2026-10-11
     title: Persistent desks — four persistent root desks per computer that scale inside themselves (overnight mission)
-    path: docs/definitions/choir-persistent-desks-metamission-2026-10-11.md
+    path: docs/archive/definitions/choir-persistent-desks-metamission-2026-10-11.md
     ledger: ''
     status: working
     kind: spine
@@ -1001,7 +783,7 @@ nodes:
       PD4 computer controls computer (intent).
   - id: choir-pd1-persistent-research-desk-2026-10-11
     title: PD1 — one persistent research desk per computer; rounds, not recursion
-    path: docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
+    path: docs/archive/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
     ledger: ''
     status: working
     kind: station
@@ -1012,7 +794,7 @@ nodes:
     enables: [choir-pd2-desk-sessions-outlive-runs-2026-10-11]
   - id: choir-pd2-desk-sessions-outlive-runs-2026-10-11
     title: PD2 — a desk's Go session outlives its run
-    path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
+    path: docs/archive/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
     ledger: ''
     status: working  # deployed on staging 2026-10-11 (receipt S1d-PD2); acceptance continues
     kind: station
@@ -1023,7 +805,7 @@ nodes:
     enables: [choir-pd3-texture-root-desk-2026-10-11]
   - id: choir-pd3-texture-root-desk-2026-10-11
     title: PD3 — one Texture root desk per computer with per-document sub-RLMs and a master document
-    path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
+    path: docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md
     ledger: ''
     status: complete  # 2026-10-26 00:40; S1 and S2 live on b@c; S3 and S4 excluded (owner)
     kind: station
@@ -1034,7 +816,7 @@ nodes:
     enables: [choir-pd4-computer-controls-computer-2026-10-11]
   - id: choir-pd4-computer-controls-computer-2026-10-11
     title: PD4 — one autoputer controls another, each with its own four desks (intent)
-    path: docs/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
+    path: docs/archive/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
     ledger: ''
     status: blocked
     kind: station
@@ -1045,7 +827,7 @@ nodes:
     enables: []
   - id: choir-research-fanout-2026-10-10
     title: Research fan-out (superseded by PD1)
-    path: docs/definitions/choir-research-fanout-2026-10-10.md
+    path: docs/archive/definitions/choir-research-fanout-2026-10-10.md
     ledger: ''
     status: superseded
     kind: station
@@ -1055,7 +837,7 @@ nodes:
     enables: [choir-pd1-persistent-research-desk-2026-10-11]
   - id: choir-precommitment-protocol-metamission-2026-10-11
     title: One protocol between agents — precommitment records (P1-P5)
-    path: docs/definitions/choir-precommitment-protocol-metamission-2026-10-11.md
+    path: docs/archive/definitions/choir-precommitment-protocol-metamission-2026-10-11.md
     ledger: ''
     status: working
     kind: spine
@@ -1069,7 +851,7 @@ nodes:
       Unblocks Autopaper W2.
   - id: choir-protocol-p1-record-first-controls-2026-10-11
     title: P1 — Texture's controls mint cast records in the same commit as their packets
-    path: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
+    path: docs/archive/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
     ledger: ''
     status: landed
     kind: station
@@ -1080,7 +862,7 @@ nodes:
     enables: [choir-protocol-p2-one-surface-2026-10-11]
   - id: choir-protocol-p2-one-surface-2026-10-11
     title: P2 — one surface (Texture uses Cast and Ask; Message, Emit and Texture-write ProductAPI routes deleted)
-    path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
+    path: docs/archive/definitions/choir-protocol-p2-one-surface-2026-10-11.md
     ledger: ''
     status: landed
     kind: station
@@ -1091,7 +873,7 @@ nodes:
     enables: [choir-protocol-p2d-texture-addressing-2026-10-11]
   - id: choir-protocol-p2d-texture-addressing-2026-10-11
     title: P2d — texture addressing (management feeds any Texture through a record; delegated cast only to engineering)
-    path: docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
+    path: docs/archive/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
     ledger: ''
     status: working
     kind: station
@@ -1106,7 +888,7 @@ nodes:
       not built.
   - id: choir-autopaper-metamission-2026-10-11
     title: Autopaper (Gate 3) — content in the graph, living Textures, automatic publishing
-    path: docs/definitions/choir-autopaper-metamission-2026-10-11.md
+    path: docs/archive/definitions/choir-autopaper-metamission-2026-10-11.md
     ledger: ''
     status: working
     kind: spine
@@ -1121,7 +903,7 @@ nodes:
       (intent).
   - id: choir-autopaper-w1-content-in-the-graph-2026-10-11
     title: W1 — content in the graph; Dolt past the race fix, captures in Store B, the source schedule
-    path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
+    path: docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
     ledger: ''
     status: complete
     kind: station
@@ -1132,7 +914,7 @@ nodes:
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
   - id: choir-autopaper-w3a-reader-2026-10-11
     title: W3a — the Autopaper reader (a linked permalink per version, public front page, story pages; old Universal Wire app deleted)
-    path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
+    path: docs/archive/definitions/choir-autopaper-w3a-reader-2026-10-11.md
     ledger: ''
     status: pending
     kind: station
@@ -1143,7 +925,7 @@ nodes:
     enables: []
   - id: choir-autopaper-w2-living-textures-2026-10-11
     title: W2 — living Textures; captures reach management, Textures open and revise on evidence, records and spend per story
-    path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
+    path: docs/archive/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
     ledger: ''
     status: blocked
     kind: station
@@ -1157,7 +939,7 @@ nodes:
       as a separate station.
   - id: choir-reeng-metamission-2026-10-12
     title: Re-engineering — three cuts to Autopaper live (eyes, authority, evidence to publication)
-    path: docs/definitions/choir-reeng-metamission-2026-10-12.md
+    path: docs/archive/definitions/choir-reeng-metamission-2026-10-12.md
     ledger: ''
     status: working  # executing since 2026-10-12; C0 landed 2026-10-13, C1 core landed 2026-10-13 (76ab40fd), C2 executing
     kind: spine
@@ -1173,7 +955,7 @@ nodes:
       R1-R6 (03499ef9) superseded and deleted.
   - id: choir-reeng-d0-dead-code-2026-10-12
     title: "D0 — dead-code census and removal before the cuts"
-    path: docs/reports/dead-code-census-2026-10-12.md
+    path: docs/archive/reports/dead-code-census-2026-10-12.md
     ledger: ''
     status: settled  # landed 2026-10-12 at 6505fa33; receipt in the census Result section
     kind: subordinate_contract
@@ -1188,9 +970,9 @@ nodes:
       owner's rulings on its Part B.
   - id: choir-reeng-cut0-eyes-2026-10-12
     title: "Cut 0 — eyes: trace export, tracer, invariant checker, fresh computers, cross-wire and one-REPL fixes"
-    path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
+    path: docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md
     ledger: ''
-    status: settled  # landed 2026-10-13; receipts docs/evidence/c0-eyes-acceptance-2026-10-13.json
+    status: settled  # landed 2026-10-13; receipts docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
@@ -1199,7 +981,7 @@ nodes:
     enables: [choir-reeng-cut1-authority-2026-10-12]
   - id: choir-reeng-cut1-authority-2026-10-12
     title: "Cut 1 — authority: records, conversations, hypothesis ids, cursors, crash closure, routing through management"
-    path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
+    path: docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md
     ledger: ''
     status: working  # core landed 2026-10-13 at 76ab40fd; C1e items remain, after C2's live window
     kind: subordinate_contract
@@ -1210,9 +992,9 @@ nodes:
     enables: [choir-reeng-cut2-evidence-to-publication-2026-10-12]
   - id: choir-reeng-cut2-evidence-to-publication-2026-10-12
     title: "Cut 2 — evidence to publication: async search, research, Texture write, one document model, permalinks, Autopaper live"
-    path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
+    path: docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
     ledger: ''
-    status: working  # Autopaper live 2026-10-13 (docs/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open
+    status: working  # Autopaper live 2026-10-13 (docs/archive/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
@@ -1221,7 +1003,7 @@ nodes:
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
   - id: choir-reeng-c1e-engineering-on-records-2026-10-13
     title: "C1e — engineering and self-development on records, path B deleted, L5, L7, packets and work items deleted"
-    path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md
+    path: docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md
     ledger: ''
     status: working  # B0 landed at 19e56c54; B1 design note in convergent round 3 (rounds 1-2 send_back, repairs adopted)
     kind: subordinate_contract
@@ -1232,7 +1014,7 @@ nodes:
     enables: []
   - id: choir-ledger-metamission-2026-10-13
     title: Ledger — bounded attention, hypotheses settled and scored, Taiwan vertical, read models, no crash loops
-    path: docs/definitions/choir-ledger-metamission-2026-10-13.md
+    path: docs/archive/definitions/choir-ledger-metamission-2026-10-13.md
     ledger: ''
     status: reviewed  # convergent round 2 accepted 2026-10-13; owner ratification and owner decisions gate executable; L0 closing, L1 working, L2-L5 intent
     kind: spine
@@ -1244,13 +1026,13 @@ nodes:
       Owner 2026-10-13: precommitment records are the throughline; cost and
       performance first; Taiwan and East Asia first; no crash loops; the
       roadmap becomes a metamission that stays open to additions. Roadmap
-      reviewed in docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md;
+      reviewed in docs/archive/reports/roadmap-lateral-review-synthesis-2026-10-13.md;
       restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.
       Convergent round 1 (8a1477c3): send_back, findings adopted; round 2
       (d46d3d08): accept.
   - id: choir-overnight-research-oped-sources-2026-10-20
     title: Overnight 2026-10-20 — research more for every reader, op-eds on the paper, wave-1 and social sources, self-development two-arm drill
-    path: docs/definitions/choir-overnight-research-oped-sources-2026-10-20.md
+    path: docs/archive/definitions/choir-overnight-research-oped-sources-2026-10-20.md
     ledger: ''
     status: working  # drafted 2026-10-20 ~23:55 UTC under owner notes section 32; runs beside S6
     kind: side
@@ -1263,7 +1045,7 @@ nodes:
       S6 slices; the self-development drill runs on test computers only.
   - id: choir-tape-segments-a2-repack-2026-10-21
     title: Tape segments A2 — the production segment writer behind a flag, then a copy-only repack, so the weekly backup verify stops walking 9.7M files
-    path: docs/definitions/choir-tape-segments-a2-repack-2026-10-21.md
+    path: docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md
     ledger: ''
     status: working  # 2026-10-21 09:30 UTC: round 5 closes the two enabled-mode P1s; flag flip and repack are owner steps (now card)
     kind: side
@@ -1289,11 +1071,11 @@ nodes:
       Owner 2026-10-20: "we should do the missions in order through app
       packages as recommended" (S6, then S7-0, rewrites after). Moves LP ahead
       of the 2026-10-14 order. Station definition:
-      docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md;
+      docs/archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md;
       S7-0 successor stub inside the goal file.
   - id: choir-ledger-l1-restart-2026-10-13
     title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
-    path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
+    path: docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md
     ledger: ''
     status: working  # L1a landed (L1a-3 at 18d01cc0); L1b-0 (warm-sweep retry bound) pushed at 6c6bc1aa; next the fault-injection harness, then L1b
     kind: station
@@ -1307,7 +1089,7 @@ nodes:
       "we never get into a crash loop".
   - id: choir-ledger-l3-hypotheses-settled-2026-10-13
     title: L3 — hypotheses settled and scored (resolves_by and criterion, settler records, per-scorer scores, Brier per desk with denominators)
-    path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
+    path: docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
     ledger: ''
     status: pending  # reviewed 2026-10-15 (four panel rounds, docs/evidence/l3-file-review-2026-10-15.md); next the read-only witness precondition, then L3-1; L3-2 gated on the off-host ledger copy
     kind: station
@@ -1317,7 +1099,7 @@ nodes:
     enables: [choir-ledger-metamission-2026-10-13]
   - id: choir-ledger-l2a-synthesis-intake-2026-10-14
     title: L2a — synthesis intake (one story per event across languages, written from convergence and conflict)
-    path: docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
+    path: docs/archive/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
     ledger: ''
     status: working  # drafted; panel review of the file first; owner 2026-10-14 "intake redesign, very important"
     kind: station
@@ -1327,7 +1109,7 @@ nodes:
     enables: [choir-ledger-metamission-2026-10-13]
   - id: choir-ledger-lr-resource-2026-10-13
     title: LR — resource efficiency and model cost (signal-specific reclaim, test tier, priced models, cell output out of the transcript, balloon, store compaction)
-    path: docs/definitions/choir-ledger-lr-resource-2026-10-13.md
+    path: docs/archive/definitions/choir-ledger-lr-resource-2026-10-13.md
     ledger: ''
     status: working  # levers 1-2 landed (d3f7d9b2, 6c6bc1aa verified 00:24 UTC); next lever-6 design
     kind: station
@@ -1338,10 +1120,10 @@ nodes:
     note: >-
       Owner 2026-10-13: "we should really do our resource efficiency and
       cost mission tonight", after the paper computer was reclaimed.
-      Specification: docs/reports/resource-efficiency-memory-assessment-2026-10-13.md.
+      Specification: docs/archive/reports/resource-efficiency-memory-assessment-2026-10-13.md.
   - id: choir-ledger-lu-guest-updates-2026-10-14
     title: LU — guest updates (pull with a bounded drain, planned boots across epochs, health and rollback, rings, one apply path with self-development)
-    path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
+    path: docs/archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
     ledger: ''
     status: working  # drafted 2026-10-14; reviewed per slice 2026-10-14 (round 4): LU1a, LU2, LU3a, LU3b, LU4 reviewed; LU1b, LU5 drafted; LU1a and LU2 may start; LU1b structural decision escalated
     kind: station

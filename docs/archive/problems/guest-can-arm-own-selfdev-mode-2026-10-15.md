@@ -2,7 +2,7 @@
 
 Date: 2026-10-15 (local probe run 2026-10-14 22:34 UTC). Source:
 prerequisite P3 of
-[docs/reports/selfdev-update-architecture-2026-10-15.md](../reports/selfdev-update-architecture-2026-10-15.md)
+[docs/archive/reports/selfdev-update-architecture-2026-10-15.md](../reports/selfdev-update-architecture-2026-10-15.md)
 (§1.3 "Close the guest-arming hole first", §"Unverified claims"). Code read
 at origin/main 99f98e211. Status: **confirmed** by an in-process probe;
 repair follows in a separate commit on branch `fix/selfdev-mode-owner-only`

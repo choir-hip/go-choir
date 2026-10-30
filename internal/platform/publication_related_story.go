@@ -2,7 +2,7 @@ package platform
 
 // The related_story edge of the related-stories walk (docs/problems/related-
 // stories-thin-no-subject-nodes-2026-10-20.md, "Build: the related_story
-// edge"; design docs/reports/related-stories-phase3-research-review-2026-10-20.md).
+// edge"; design docs/reports/related-stories-graph-design-2026-10-19.md).
 // Two stories that share no capture can still be about one subject. The
 // research desk reads both, asks System 1, and records a judged pair on its
 // tape (choir.RelateStories); the computer exports the pair here as one

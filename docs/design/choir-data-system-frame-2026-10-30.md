@@ -494,7 +494,7 @@ that the account was deleted, not what it held.
 
 ## 8. Where every current folder goes
 
-Sizes are from the [2026-10-29 inventory](../evidence/node-b-storage-inventory-2026-10-29.md)
+Sizes are from the [2026-10-29 inventory](../archive/evidence/node-b-storage-inventory-2026-10-29.md)
 before that day's deletions; they show which things are large, not today's
 exact bytes.
 

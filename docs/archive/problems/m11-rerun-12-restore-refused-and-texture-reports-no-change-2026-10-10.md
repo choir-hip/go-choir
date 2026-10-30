@@ -6,7 +6,7 @@ replay, actor delivery of Texture emissions).
 Evidence class: staging, disposable QA computer
 `computer-75c31e98bdbcd8d23116922467d2329a` (VM
 `vm-ce25f113b83df722248562a46b12c504`), build 19ba3034, probe receipt
-`docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json`. Host-side console
+`docs/archive/evidence/m11-rerun-2026-10-10T13-21-08Z.json`. Host-side console
 of a disposable computer only.
 
 ## How far it got: 14 of 17 checks

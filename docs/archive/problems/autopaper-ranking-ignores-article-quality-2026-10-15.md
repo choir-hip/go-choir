@@ -53,7 +53,7 @@ already has a depth term, but a weak one.
    with at least 2 sources. Older pages ("Older stories") are appended in
    server order, unranked.
 
-   Origin: docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md.
+   Origin: docs/archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md.
 
 ### What the score ignores
 

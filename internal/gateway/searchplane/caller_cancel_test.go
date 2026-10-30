@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md.
+// docs/archive/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md.
 // Failure modes: a caller that goes away (cancel or its own shorter
 // deadline) strikes every provider it started and cools the plane down; a
 // provider that really overruns the request timeout is no longer struck; a

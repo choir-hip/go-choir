@@ -5,7 +5,7 @@ upstream issue, not drilled on Node B.** Found by: Sonnet's review of the KF
 deploy (F1), checked by the kf-r2 lane against the Firecracker source.
 Mutation class of any fix: **red** (VM lifecycle, the host VMM's guest
 memory layout). Corrects an earlier premise in
-[firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md),
+[firecracker-1-16-1-virtio-mem-restore-bugs-2026-10-22.md](firecracker-1-17-for-every-computer-2026-10-22.md),
 [kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md](kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)
 and the FP8 definition's NET-08 note, which said Firecracker **1.17** moves
 the hotplug region to 512 GiB.
@@ -63,7 +63,7 @@ vm-c5c801f8 in
 [daemon-memory-res18-2026-10-22.md](daemon-memory-res18-2026-10-22.md),
 "J14"). **No plug has ever been recorded succeeding on Node B.** The
 2026-10-15 probe was refused before plugging
-([overnight-landing-2026-10-15.md:136](../reports/overnight-landing-2026-10-15.md)),
+([overnight-landing-2026-10-15.md:136](../archive/reports/overnight-landing-2026-10-15.md)),
 and FP8's RES-09 probe did not run on 2026-10-22 (host memory admission;
 metamission ledger 03:16). FP8 P5 diagnoses the refusal as a selection
 ordering bug. Once that is fixed, the probe would reach the plug and fail

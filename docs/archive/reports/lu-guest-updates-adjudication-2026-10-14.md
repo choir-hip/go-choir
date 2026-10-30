@@ -1,7 +1,7 @@
 # LU: Guest Updates, Panel Adjudication (round 1)
 
 Date: 2026-10-14. Reviewed: the design note
-([`lu-guest-updates-design-2026-10-14.md`](lu-guest-updates-design-2026-10-14.md))
+([`lu-guest-updates-design-2026-10-14.md`](../../reports/lu-guest-updates-design-2026-10-14.md))
 and the station file
 ([`choir-ledger-lu-guest-updates-2026-10-14.md`](../definitions/choir-ledger-lu-guest-updates-2026-10-14.md))
 at commit 346d968c (round 1). Mode: convergent. Raw outputs (session
@@ -212,7 +212,7 @@ answered and written into round 4. The station stays `drafted`.
 | T15 | **Mixed fleet during LU1b's rollout**: guests without the drain endpoint answer 404 (deepseek) | — | **Adopt.** A 404 falls back to LU1a's quiet-moment path and never counts toward "stuck" |
 | T16 | **Two-database migration crash** after the actor-log step commits (luna, gemini) | `adapter.go:100-115` | **Adopt.** Acceptance injects a failure after the actor-log step; the re-run is idempotent |
 | T17 | **Where the epoch lives**: the store-schema epoch is a workspace file, which cannot join a Dolt transaction (glm R-c) | `store.go:678-682` | **Adopt.** The work-state epoch is a row in the Dolt store, advanced in the step's Dolt transaction |
-| T18 | **The kick and the deploy receipt**: whether the sweep route is synchronous, and what the deploy receipt says for pending computers (glm R-d) | `ci.yml:1520-1545`; `docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md` | **Adopt.** The route is a kick (202); pending is not a deploy failure; q3 names `.github/scripts/deploy-workflow-contract-test` and the receipt mapping |
+| T18 | **The kick and the deploy receipt**: whether the sweep route is synchronous, and what the deploy receipt says for pending computers (glm R-d) | `ci.yml:1520-1545`; `docs/archive/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md` | **Adopt.** The route is a kick (202); pending is not a deploy failure; q3 names `.github/scripts/deploy-workflow-contract-test` and the receipt mapping |
 | T19 | **Refused or stuck computers would never hibernate** under the F27 rule (glm) | design | **Adopt.** F27 applies only while an attempt is in progress; an idle refused or stuck computer hibernates normally |
 | T20 | **Ring 0 canary minting can fail** (gemini) | design | **Adopt.** A failed mint halts ring 0 and alerts; it never advances |
 | T21 | **A target collected by Nix GC before vmctl roots it** (gemini) | `node-b.nix:1006-1013` | **Rejected.** The guest image is part of the active system closure (the activation script interpolates `${guestImage}`), so the system profile roots the target before the symlink moves |

@@ -43,7 +43,7 @@ frontend-only Files change had to build `bin/autoputer` in the capsule
 (Freeze: "the running binary was built from 824b8410… but the capsule source
 is pinned to 0cbc52edc…; build bin/autoputer"), about 7 minutes. Once that
 layer applies, the computer runs a binary built from the old base. That is
-the known [guest-runtime-fix-never-reaches-layered-computers](guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md)
+the known [guest-runtime-fix-never-reaches-layered-computers](../archive/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md)
 shape. The guest code is identical between those two commits (only
 `internal/vmctl` changed), so nothing regresses tonight.
 

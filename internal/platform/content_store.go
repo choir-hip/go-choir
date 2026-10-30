@@ -21,7 +21,7 @@ import (
 //	sha256/release/<sha>          release record source patches (P7)
 //
 // It generalizes the platform-update blob store
-// (docs/reports/p6-p8-release-adopt-2026-10-15.md, "The content store").
+// (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md, "The content store").
 const (
 	contentNamespacePlatformUpdate = "platform-update"
 	contentNamespaceRelease        = "release"

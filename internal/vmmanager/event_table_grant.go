@@ -9,7 +9,7 @@ import (
 )
 
 // The store.event_table selector, host side (run telemetry in its own
-// table, deploy 2: docs/design/choir-event-table-f-c-2026-10-22.md 4.2). The
+// table, deploy 2: docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2). The
 // guest's writer stamps telemetry ops for choir_events only on a computer
 // named here and with the owner's setting on. Off while the list is empty
 // (nix/node-b.nix, go-choir-vmctl Environment):

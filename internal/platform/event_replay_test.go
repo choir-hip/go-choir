@@ -130,7 +130,7 @@ func replayPageSequences(records []computerevent.DurableEvent) []uint64 {
 }
 
 // The replay page is served by sequence point lookups bounded by the head
-// (docs/problems/replay-page-query-scans-whole-chain-2026-10-09.md). Failure
+// (docs/archive/problems/replay-page-query-scans-whole-chain-2026-10-09.md). Failure
 // modes: wrong or reordered rows, a short final page, a nonempty page at or
 // past the head, and a gap below the head silently read as end of chain.
 func TestEventsPageWalksGaplessChainToHead(t *testing.T) {

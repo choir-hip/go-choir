@@ -920,7 +920,7 @@ Live documents pointed to, not absorbed:
 [historical back-testing](research/historical-precommitment-backtesting-2026-10-14.md),
 [re-engineering decisions](re-engineering-decisions-2026-10-12.md),
 [owner notes](reports/owner-notes-2026-10-14.md),
-[ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md),
+[ledger metamission](archive/definitions/choir-ledger-metamission-2026-10-13.md),
 [computer ontology](computer-ontology.md), `skills/throughline/SKILL.md`. Code:
 `internal/types/commitment.go`, `internal/store/inbox.go`.
 

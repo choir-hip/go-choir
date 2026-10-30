@@ -133,7 +133,7 @@ def story_doc_ids(c, start=None, end=None):
     """Every story document management (or its tasks) may have disposed a
     capture into. GET /api/texture/documents lists only the 50 most recently
     updated documents, so a window scored an hour later loses most of its
-    stories that way (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md,
+    stories that way (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md,
     finding 1). The list is joined with every texture:<doc> in the receipts
     of management's runs and its tasks' runs, and every story id their cells
     and outputs name (a Note's receipt names no inbox). Without a window,

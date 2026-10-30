@@ -55,7 +55,7 @@ metamission:
         dual-model census for L3-05, and the capture-label read
         (c893a956a, landed).
     - id: FP1
-      path: docs/definitions/choir-launch-fp1-store-throughput-2026-10-21.md (the lane's first commit)
+      path: docs/archive/definitions/choir-launch-fp1-store-throughput-2026-10-21.md (the lane's first commit)
       readiness: intent
       status: pending
       depends_on: []
@@ -67,7 +67,7 @@ metamission:
         until the table is complete and its rows validated against
         content_hash. Then boot-path progress logs, then engine concurrency
         so desk slots can rise above 8. The panel findings on the first
-        design are in docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md.
+        design are in docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md.
         Lane worktree lanes/b2-store, branch lane/b2-store.
     - id: FP2
       path: docs/definitions/choir-launch-fp2-desk-boundary-2026-10-21.md (the lane's first commit)
@@ -88,7 +88,7 @@ metamission:
       depends_on: []
       note: >-
         Red, host. First the two vmctl defects behind today's outage
-        (docs/problems/stored-column-add-blocks-paper-boot-2026-10-21.md):
+        (docs/archive/problems/stored-column-add-blocks-paper-boot-2026-10-21.md):
         the 24-hour wait before a failure-stopped always-on computer is
         retried (now two outages; 2026-10-15 item 2), and a rollback deploy
         that cannot refresh a protected computer that is unhealthy outside
@@ -326,7 +326,7 @@ now:
     delta_o: hold times per boot read on the paper's console at each planned refresh
     scope_if_supported: the next store deploys after D13
     status: active
-    evidence_refs: [docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md]
+    evidence_refs: [docs/archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md]
   decision:
     what: overnight lanes are platform groundwork only (storage, memory, security, boot stalls); no new high-level design before the owner's morning agenda
     kind: operational

@@ -160,7 +160,7 @@ now:
       - "docs/reports/choir-rlm-substrate-repairs-and-g1-producer-2026-09-05.md"
       - ".agentic-consensus/agentic-consensus-20260904-234730/manifest.tsv"
       - "docs/evidence/rlm-live-proof-staging-gaps-2026-09-04.md (G1 owner-gate)"
-      - "docs/evidence/rlm-option-b-actuator-refresh-2026-09-05.md"
+      - "docs/archive/evidence/rlm-option-b-actuator-refresh-2026-09-05.md"
       - "docs/evidence/rlm-option-b-exact-bind-go-eval-2026-09-05.md"
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "git status --short"

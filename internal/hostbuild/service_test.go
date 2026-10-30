@@ -21,7 +21,7 @@ import (
 )
 
 // The failure modes these tests hold are H1-H14 of
-// docs/reports/p5-host-build-layered-apply-2026-10-15.md.
+// docs/archive/reports/p5-host-build-layered-apply-2026-10-15.md.
 
 const testBaseCommit = "0123456789abcdef0123456789abcdef01234567"
 

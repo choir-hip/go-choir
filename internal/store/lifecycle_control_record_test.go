@@ -14,7 +14,7 @@ import (
 // P1 (record-first controls): every control mints one cast record in the
 // same commit as its packet, the packet names the record, a replay mints
 // nothing, and an owner-issued control records the owner as its emitter
-// (docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md).
+// (docs/archive/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md).
 
 func controlRecordFor(t *testing.T, s *Store, packet types.CoagentSourcePacket) *types.CommitmentRecord {
 	t.Helper()

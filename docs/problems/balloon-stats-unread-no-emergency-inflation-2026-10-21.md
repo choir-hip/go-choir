@@ -17,8 +17,8 @@ Step 3 (inflation) not built. Design in
   no `PATCH /balloon`, no `PATCH /balloon/statistics`). Nothing in vmctl or
   vmmanager reads guest memory pressure from the VMM.
 - The backend seam's `MemoryController.SetBalloonTargetMiB` is documented
-  (`docs/reports/vm-backend-interface-2026-10-14.md`) but unimplemented.
-- The rationale in `docs/reports/lr-guest-memory-return-2026-10-14.md:86-88`
+  (`docs/reports/vm-hypervisor-seam-design-2026-10-21.md`) but unimplemented.
+- The rationale in `docs/archive/reports/lr-guest-memory-return-2026-10-14.md:86-88`
   ("with `--no-api` nobody can read stats") is stale: snapshot hibernate mode
   always has an API socket (`playwright-in-capsules-memory-2026-10-15.md` §1.3;
   `memory_hotplug.go` `wantsAPISocket`).

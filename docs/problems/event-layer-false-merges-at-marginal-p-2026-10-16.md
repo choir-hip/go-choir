@@ -307,6 +307,6 @@ session scratchpad (not in the repo).
   case for phase 3's typed relation (same incident, development, same
   thread, shared central entity) judged per pair, rather than one event
   identity that has to mean both
-  (`docs/reports/related-stories-phase3-research-review-2026-10-20.md`).
+  (`docs/reports/related-stories-graph-design-2026-10-19.md`).
 - **Next for the instrument:** keep each judge's full answer in the output,
   and parse the last verdict word, not the first.

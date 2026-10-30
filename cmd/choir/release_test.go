@@ -13,7 +13,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 )
 
-// P8 at the client (docs/reports/p6-p8-release-adopt-2026-10-15.md): the
+// P8 at the client (docs/archive/reports/p6-p8-release-adopt-2026-10-15.md): the
 // owner adopts exactly the record that hashes to the id they named. A host
 // answer that does not verify is refused before the adoption request is
 // sent (A1 at the client), and the adoption sends the verified record.

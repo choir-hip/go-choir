@@ -1,7 +1,7 @@
 # Auth Boundary Gaps From the Surface Audit
 
 Date: 2026-10-14. Source: the surface audit
-(`docs/reports/surface-audit-cli-mcp-api-2026-10-14.md`, §2 "Latent", §3
+(`docs/archive/reports/surface-audit-cli-mcp-api-2026-10-14.md`, §2 "Latent", §3
 items 2 and 4, §4 FIX, §6 Risky), each finding re-read against the code at
 `origin/main` e9d85a71d. Status: documented (7bb8a5b15); repaired on branch
 `fix/auth-boundary-audit` (not pushed, not deployed; see "Repair record"

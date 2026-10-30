@@ -5,7 +5,7 @@ flags:
 comments:
   - "Texture's prompt core (Cut 2 2a): the frame, Write, citations and the turn verbs. The verb list is generated from the module set and appended by the runtime."
   - "Revision-shape rules are the owner direction of 2026-10-10, carried over from the retired run_system overlay."
-  - "The news-story rule (2026-10-13) restores that overlay's 'no coordination metadata in reader prose', lost in Cut 2; see docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md."
+  - "The news-story rule (2026-10-13) restores that overlay's 'no coordination metadata in reader prose', lost in Cut 2; see docs/archive/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md."
   - "The story headline rule (2026-10-14): the store titles a story from the heading its revision leads with and holds a story revision without one; see docs/problems/instruction-text-published-as-story-titles-2026-10-14.md."
   - "The owner's-intention rules (owner, 2026-10-25): the newest direction governs, casts carry the owner's words, no superseded or in-flight re-cast, corrections forwarded; see docs/design/texture-holds-the-trajectory-2026-10-25.md."
   - "Casts name the owner's revisions and the runtime attaches the words (2026-10-25): Texture retyped a direction into a Go string and the retry paraphrased it; see docs/problems/texture-retypes-owner-directions-2026-10-25.md."

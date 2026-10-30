@@ -8,7 +8,7 @@ The owner, today: working at the limit and wanting to learn faster in
 software architecture, platform engineering and security. This series is
 built for that. Each document takes one part of Choir and walks the same
 arc that the
-[computer isolation security review](../reports/computer-isolation-security-review-2026-10-14.md)
+[computer isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
 walks:
 
 1. **Primer.** The general idea, from first principles, as you would meet
@@ -34,12 +34,12 @@ number comes from Node B it comes from a dated report that measured it.
 
 | # | document | what it teaches | the one idea to keep |
 |---|---|---|---|
-| 1 | [The ledger and the store](01-ledger-and-store.md) ([PDF](01-ledger-and-store.pdf)) | append-only logs and hash chains, compare-and-swap, event sourcing, commitment records, Dolt (prolly trees, commits, `AS OF`, branches), the object graph and its write gate, Store A, Store B and the guest store, indexes and query plans | the tape is the truth and every table is a view; a view without an access path costs CPU forever |
-| 2 | [The desk runtime](02-desk-runtime.md) ([PDF](02-desk-runtime.pdf)) | agent loops and code as action, the four root desks and their authority, Yaegi cells, desk workers, records, inboxes and wakes, management delegation (S2a, S2b), crash versus planned restart | desks talk only through addressed records, and a crash restart ends work |
-| 3 | [The gateway and providers](03-gateway-and-providers.md) ([PDF](03-gateway-and-providers.pdf)) | credential custody, guest identity, model catalog, policy and pools, retries, circuit breakers and failover, timeouts, Jev typed judgements, the search plane and budget routing, metering and prompt caching | a chokepoint is only as good as what it counts and what it trusts |
-| 4 | [The computer lifecycle](04-computer-lifecycle.md) ([PDF](04-computer-lifecycle.pdf)) | microVMs and KVM, vmctl and vmmanager, the computer state machine, snapshots and hibernation, admission and pressure reclaim, the memory and disk model, deploys, refreshes and LU guest updates, runtime alternatives | a computer is not a VM: it is a durable identity that a VM sometimes runs |
-| 5 | [Publication and Autopaper](05-publication-and-autopaper.md) ([PDF](05-publication-and-autopaper.pdf)) | sources and schedules, content-addressed captures, intake labels (L2a) and backpressure, stories as a precision and recall problem, Texture as sole writer, quote checking and Unicode, signed immutable publication to the Autopaper object graph, the front page | a pipeline of single-purpose authorities, each idempotent and each fact with one writer |
-| 6 | [Reasoning about trade-offs: a field guide](06-reasoning-about-tradeoffs.md) ([PDF](06-reasoning-about-tradeoffs.pdf)) | failure modes, deadline budgets, correlation and races, idempotency, single state authority, fail closed versus fail open, blast radius, defence in depth, crash-only design, backpressure, observability, each with a real Choir incident; a one-page pre-flight card | most failures are not crashes, and every principle has a dated Choir receipt |
+| 1 | [The ledger and the store](01-ledger-and-store.md) (PDF) | append-only logs and hash chains, compare-and-swap, event sourcing, commitment records, Dolt (prolly trees, commits, `AS OF`, branches), the object graph and its write gate, Store A, Store B and the guest store, indexes and query plans | the tape is the truth and every table is a view; a view without an access path costs CPU forever |
+| 2 | [The desk runtime](02-desk-runtime.md) (PDF) | agent loops and code as action, the four root desks and their authority, Yaegi cells, desk workers, records, inboxes and wakes, management delegation (S2a, S2b), crash versus planned restart | desks talk only through addressed records, and a crash restart ends work |
+| 3 | [The gateway and providers](03-gateway-and-providers.md) (PDF) | credential custody, guest identity, model catalog, policy and pools, retries, circuit breakers and failover, timeouts, Jev typed judgements, the search plane and budget routing, metering and prompt caching | a chokepoint is only as good as what it counts and what it trusts |
+| 4 | [The computer lifecycle](04-computer-lifecycle.md) (PDF) | microVMs and KVM, vmctl and vmmanager, the computer state machine, snapshots and hibernation, admission and pressure reclaim, the memory and disk model, deploys, refreshes and LU guest updates, runtime alternatives | a computer is not a VM: it is a durable identity that a VM sometimes runs |
+| 5 | [Publication and Autopaper](05-publication-and-autopaper.md) (PDF) | sources and schedules, content-addressed captures, intake labels (L2a) and backpressure, stories as a precision and recall problem, Texture as sole writer, quote checking and Unicode, signed immutable publication to the Autopaper object graph, the front page | a pipeline of single-purpose authorities, each idempotent and each fact with one writer |
+| 6 | [Reasoning about trade-offs: a field guide](06-reasoning-about-tradeoffs.md) (PDF) | failure modes, deadline budgets, correlation and races, idempotency, single state authority, fail closed versus fail open, blast radius, defence in depth, crash-only design, backpressure, observability, each with a real Choir incident; a one-page pre-flight card | most failures are not crashes, and every principle has a dated Choir receipt |
 
 Each document is 10,000 to 12,500 words: 19 to 22 printed pages in the
 dense A4 layout of the PDFs (21, 20, 19, 22, 21 and 20 pages), or about an
@@ -108,7 +108,7 @@ The numbers in brackets name the document that teaches that part.
    document where availability and security pull against each other.
 4. **Document 4, the computer lifecycle.** The machine underneath: VMs,
    snapshots, memory, deploys. Read the
-   [isolation security review](../reports/computer-isolation-security-review-2026-10-14.md)
+   [isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
    right after it; document 4 points there instead of repeating it.
 5. **Document 5, publication and Autopaper.** The whole system composed
    end to end, from a feed item to the front page. It is the best test of
@@ -125,7 +125,7 @@ The numbers in brackets name the document that teaches that part.
 | "is the platform secure enough for strangers?" | 4 (sections 1, 2, 8) | the isolation review, then 3 (section 2, guest identity) and 6 (sections 6 to 8) |
 | "why did the paper stop or publish junk?" | 5 | 2 (section 6, delegation), then 6 (section 10, backpressure) |
 | "why did a deploy or restart hurt?" | 4 (section 7) | 2 (section 7), then 6 (section 9) |
-| "what does a model call cost, and why?" | 3 (sections 3 and 8) | the [prompt cache analysis](../reports/prompt-cache-analysis-2026-10-14.md) |
+| "what does a model call cost, and why?" | 3 (sections 3 and 8) | the [prompt cache analysis](../archive/reports/prompt-cache-analysis-2026-10-14.md) |
 
 ## How to study with these documents
 
@@ -160,7 +160,7 @@ places to check:
   although the upstream race that required this is fixed (documents 1
   and 6).
 - The problem record
-  [crash restart leaves work open](../problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md)
+  [crash restart leaves work open](../problems/crash-boots-redrive-applies-2026-10-13.md)
   still says "not fixed", but the re-cast path it describes is gone and a
   crash closer exists (document 2).
 - The front-importance timer reads the provider key file and calls
@@ -273,7 +273,7 @@ to read the series.
 [standing questions](../standing-questions.md) (the pre-flight question
 set; every question is backed by a dated failure),
 [agent product doctrine](../agent-product-doctrine.md), and the
-[state and vision report](../reports/choir-state-and-vision-2026-10-14.md).
+[state and vision report](../archive/reports/choir-state-and-vision-2026-10-14.md).
 Then pick one open problem in `docs/problems/` a week and trace it from
 the problem doc to the code to the fix commit: that is the fastest way
 to turn the series into judgement.

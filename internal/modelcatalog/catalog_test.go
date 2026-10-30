@@ -5,7 +5,7 @@ import "testing"
 // LongCat 2.5 Preview left the default pool on 2026-10-14: on the paper
 // computer its calls took 21.8 s at the median, 115 s at p90 and up to 932 s,
 // against 2.5 s and 10 s for gpt-6-luna, and one 38-minute management turn on
-// it stopped the paper (docs/evidence/model-latency-paper-2026-10-14.md).
+// it stopped the paper (docs/archive/evidence/model-latency-paper-2026-10-14.md).
 // gpt-6-luna stays last so a thread that fails over from it wraps to deepseek.
 // cat-jam-free left the default pool on 2026-10-15 (owner): an OpenCode key
 // is parked for every model after any 429, so its free-tier 429s parked the

@@ -12,7 +12,7 @@ product routes and stopped again at 18:42).
 
 Follows [c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md](c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
 (cause 3, Go modules) and the owner's option B,
-[capsule-go-module-proxy-design-2026-10-14.md](../reports/capsule-go-module-proxy-design-2026-10-14.md),
+[capsule-go-module-proxy-design-2026-10-14.md](../../reports/capsule-go-module-proxy-design-2026-10-14.md),
 deployed at 3439462a.
 
 ## Outcome

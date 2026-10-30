@@ -110,7 +110,7 @@ func runDelegateStage(runDir, binary string) error {
 		return fmt.Errorf("delegate capability drop: %w", err)
 	}
 	// Without timerfd Bun panics at start (us_create_timer returned null);
-	// docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md.
+	// docs/archive/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md.
 	if err := capsule.LoadDelegateFilter(); err != nil {
 		return fmt.Errorf("delegate seccomp: %w", err)
 	}

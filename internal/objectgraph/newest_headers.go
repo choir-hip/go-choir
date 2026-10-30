@@ -10,7 +10,7 @@ import (
 // argument, never by the size of a kind: the old seed listed the event kind
 // ordered by updated_at, which the engine plans as the kind index, a TopN
 // over every row of the kind, and a cold read of each one's body
-// (docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
+// (docs/archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
 
 // NewestObjectHeadersSQL reads the newest `limit` rows of og_objects of every
 // kind: kind and metadata only, in idx_og_objects_updated order walked

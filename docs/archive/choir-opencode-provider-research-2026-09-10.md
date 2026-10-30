@@ -285,7 +285,7 @@ Templates to copy:
 - **There is no no-SSH credential mutation path today.** `docs/standing-questions.md:87-95`
   requires diagnosis/lifecycle/acceptance through the product API or a scoped CLI key with
   SSH as break-glass; the joined-runtime review
-  (`docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md:190-222`)
+  (`docs/archive/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md:190-222`)
   confirms provider-secret renewal is still SSH-shaped. This prerequisite therefore needs
   the SSH the owner offered, and that is a known, documented gap rather than a surprise.
 - **No provider sets a User-Agent today.** Verified: every egress site sets only

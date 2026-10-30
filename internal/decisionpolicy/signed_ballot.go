@@ -1,8 +1,8 @@
 package decisionpolicy
 
 // Signed ballots and the consensus decision receipt (P4 / S2:
-// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md §2-3;
-// docs/reports/principal-identity-and-signed-acts-2026-10-15.md §3.2, §6 S2).
+// docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md §2-3;
+// docs/archive/reports/principal-identity-and-signed-acts-2026-10-15.md §3.2, §6 S2).
 //
 // A ConsensusBallot is a computerevent.Receipt: RFC 8785 canonical JSON under
 // the "choir-receipt-v1\0" preimage prefix, so its kind, issuer and signer

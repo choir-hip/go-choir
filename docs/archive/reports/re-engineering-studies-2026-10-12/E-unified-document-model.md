@@ -43,7 +43,7 @@ facts in the code shape the design.
    derived from source plus GUID or URL (`internal/sources/types.go:194-205`).
    A later body for the same URL counts as "Repeated" and writes nothing. The
    app design's claim that "a later capture of the same URL with a different
-   body is a different capture" (`docs/autopaper-app-design-2026-10-11.md`
+   body is a different capture" (`docs/autopaper-sw-design-2026-10-09.md`
    §4.4) is not true of W1 polls today. This matters for D (re-capture
    alignment), which is deferred.
 4. **A source entity carries one anchor.** **[V]**
@@ -815,7 +815,7 @@ still stand; only the labels change.
   surfaces: `internal/platform/service.go`, `publication_graph.go`,
   `service_publication_read.go`, `internal/proxy/platform_publish.go`.
 - **Overlap:** this subsumes W3a step 1
-  (`docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md:67-70`) and
+  (`docs/archive/definitions/choir-autopaper-w3a-reader-2026-10-11.md:67-70`) and
   extends it with `/v<n>`, `nav`, and the latest endpoint. Land it *as* W3a
   step 1 rather than as a separate station.
 - **Rollback:** `git revert`. Appended versions remain readable as separate

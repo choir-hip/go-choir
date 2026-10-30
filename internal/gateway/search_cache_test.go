@@ -17,7 +17,7 @@ import (
 )
 
 // The gateway's result cache, end to end through HandleSearch
-// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md). Ways it
+// (docs/archive/problems/search-is-duplicated-and-discarded-2026-10-14.md). Ways it
 // can fail here (numbers from that record):
 //  3. Computer B is answered from computer A's search under the default
 //     (per-computer) scope.

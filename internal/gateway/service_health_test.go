@@ -215,7 +215,7 @@ func TestLoadServiceHealthURLs_Override(t *testing.T) {
 // Readiness aggregates every default probe, so a default naming a service
 // that does not run on the host keeps /health/ready "degraded" forever.
 // runtime and dolt (127.0.0.1:8085), ollama (:11434) did exactly
-// that (docs/problems/surface-broken-calls-2026-10-14.md,
+// that (docs/archive/problems/surface-broken-calls-2026-10-14.md,
 // item 5).
 func TestDefaultServiceHealthURLsProbeOnlyLiveHostServices(t *testing.T) {
 	if len(DefaultServiceHealthURLs) != 0 {

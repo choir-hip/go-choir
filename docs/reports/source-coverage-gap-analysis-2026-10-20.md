@@ -57,7 +57,7 @@ The live schedule list is only readable through the paper's owner API
 needs the paper credential. This analysis did not read it (read-only
 repo and public web only), so the 28 are reconstructed from the repo:
 
-- 14 are named in `docs/evidence/c2-autopaper-live-2026-10-13.json`
+- 14 are named in `docs/archive/evidence/c2-autopaper-live-2026-10-13.json`
   (owner act 15:22 and tier 1 at 15:28 UTC, 2026-10-13): `rss:bbc_world`,
   `rss:guardian_world`, `rss:npr_world`, `arxiv:cs_ai`, `rss:techcrunch`,
   `rss:theverge`, `rss:wired`, `rss:ars`, `rss:venturebeat`,

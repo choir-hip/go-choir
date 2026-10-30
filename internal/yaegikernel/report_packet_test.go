@@ -8,7 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// docs/problems/research-report-packets-rejected-by-schema-2026-10-09.md.
+// docs/archive/problems/research-report-packets-rejected-by-schema-2026-10-09.md.
 // Failure modes (each seen on staging, run 5): a claim written as "claim"
 // instead of "text"; a source carrying "title"/"date" outside target;
 // selectors as strings. Each was rejected only at reduce time, after the

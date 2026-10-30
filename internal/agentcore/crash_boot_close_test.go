@@ -10,7 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Cut 1 landing L1 (docs/definitions/choir-reeng-cut1-authority-2026-10-12.md,
+// Cut 1 landing L1 (docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md,
 // "Restart"): a crash restart never resumes work. At a markerless boot every
 // pre-boot run that is pending, running, parked (passivated) or blocked
 // becomes terminal with the fate interrupted_by_restart, and boot creates no

@@ -43,7 +43,7 @@ edge, not the pending-mutation wedge.
 
 ## Evidence
 
-- `docs/evidence/m0-qa-baseline-timings-2026-09-30.json` — leg table
+- `docs/archive/evidence/m0-qa-baseline-timings-2026-09-30.json` — leg table
   (probe timed out after 15min; the `texture:failed` and engineering
   `cancelled` legs are pre-refresh historical runs swept by an over-broad
   run filter — probe bug, not this trajectory's events).

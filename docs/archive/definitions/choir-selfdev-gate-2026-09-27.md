@@ -169,7 +169,7 @@ now:
     decision before the handler's op transition, returning 409 for a
     decision that committed (probe tolerates; correct end-state).
     Episode evidence:
-    docs/evidence/m11-probe-run9-satisfied-2026-09-29.json — primary op
+    docs/archive/evidence/m11-probe-run9-satisfied-2026-09-29.json — primary op
     selfdev-fab16b4e28c535ec06c6615537f7b4f9 driverless
     frozen→awaiting_approval→accepted→applied with qualified consensus,
     apply tail events (materialization_applied, checkpoint_published,
@@ -209,8 +209,8 @@ now:
       and the falsified candidate-B record readable in the live Texture
       doc (document 42c8b813-cdd2-53af-bdb3-4df12e611d8f).
     evidence_refs:
-      - docs/evidence/m11-probe-run9-satisfied-2026-09-29.json
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11.2 (M11), §11.3 (owner rulings)
+      - docs/archive/evidence/m11-probe-run9-satisfied-2026-09-29.json
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11.2 (M11), §11.3 (owner rulings)
       - docs/world-wire-mission-stack-2026-09-22.md (3e gate)
   belief:
     believed_state: >-
@@ -253,8 +253,8 @@ receipts:
 
 # M11 — Self-Development Gate (final spine station)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md)
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md)
 §11.2 and the mission stack's 3e gate: the reversible-selfdev-v1 episode, receipts as
 scored commitment_records readable in the live Texture doc.
 

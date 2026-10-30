@@ -21,7 +21,7 @@ start:
       open+bind; both selection-path sweeps deleted; commit self-heals via
       recoverPartialActCommit). Deployed-cancel proof deferred — see its
       blocker_or_risk. The ledger-consumer mission may start.
-    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3a)
+    evidence_ref: docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3a)
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R3a
 
@@ -135,7 +135,7 @@ now:
     scope_if_supported: all desk evidence resolution in textureowner
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (R3a)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11 (R3a)
   decision:
     what: >-
       Keep dual-read (not a flag-day): the ledger resolver runs alongside
@@ -143,7 +143,7 @@ now:
       additive consumer, not a cutover.
     kind: operational
     status: settled
-    evidence_ref: docs/desk-rlm-rectification-plan-2026-09-23.md §11
+    evidence_ref: docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11
     owner_ratification_ref: owner 2026-09-25 — ratified the spine; R3a is
       the next station under the meta-goal
   belief:
@@ -206,8 +206,8 @@ receipts:
 
 # R3a — Texture Ledger Consumer (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
 `ResolveTextureActorOccurrence` + `producerOccurrence*` +
 `evidenceSourceEntitiesFromWorkerUpdates` + the `ListAllPendingLifecycleUpdates`
 desk-evidence branch resolve desk acts from `choir.commitment_record`;

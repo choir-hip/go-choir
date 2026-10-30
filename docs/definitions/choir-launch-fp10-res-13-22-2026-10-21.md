@@ -78,7 +78,7 @@ boundaries:
   authority_sources:
     - owner 2026-10-21 (the metamission quotes)
     - docs/reports/vm-density-limits-2026-10-14.md (levers L3, L4, L19, L20; order section 4)
-    - docs/reports/s3-snapshot-hibernate-design-2026-10-14.md (validity rules, failure modes 7, 8, 17)
+    - docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md (validity rules, failure modes 7, 8, 17)
   must_preserve:
     - The metamission's must_preserve list, in full.
     - A snapshot loads only if every validity rule in validateSnapshot holds; no slice weakens a rule, only adds the facts it compares.

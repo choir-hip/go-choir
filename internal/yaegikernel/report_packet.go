@@ -19,7 +19,7 @@ const reportPacketShape = `packet shape: {"kind":"evidence_update","summary":"..
 // checkReportPacket validates a ReportPacket body at the call with the same
 // contract the reducer applies at commit (coagentpacket), and defaults
 // schema_version. A malformed packet fails in the cell that wrote it instead
-// of after it (docs/problems/research-report-packets-rejected-by-schema-2026-10-09.md).
+// of after it (docs/archive/problems/research-report-packets-rejected-by-schema-2026-10-09.md).
 func checkReportPacket(packetJSON string) (string, error) {
 	var packet types.SourcePacket
 	decoder := json.NewDecoder(strings.NewReader(packetJSON))

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md: one
+// docs/archive/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md: one
 // guest that accepted TCP but never answered made every vmctl health call
 // take 8 s, so the deploy gate and choir.news reported vmctl down. Failure
 // modes pinned:

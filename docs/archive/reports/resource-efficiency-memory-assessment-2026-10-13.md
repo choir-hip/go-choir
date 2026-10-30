@@ -3,7 +3,7 @@
 Date: 2026-10-13, about 00:05 UTC on the 14th. Requested by the owner
 ("we should really do our resource efficiency and cost mission tonight")
 after the live paper computer was reclaimed under pressure
-(docs/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md,
+(docs/archive/problems/live-paper-computer-reclaimed-no-computer-tiers-2026-10-13.md,
 fixed at 188f98c3).
 
 This is the clustering assessment the operating contract requires before
@@ -169,7 +169,7 @@ re-sent part further. Whether they do is unmeasured.
 result above a size bound is stored in a cell variable and the model
 sees its handle, length and head. Red-adjacent (prompt and runtime
 contract of every desk). It needs the cross-model cell surface work
-(docs/reports/cross-model-cell-errors-2026-10-13.md) to stay consistent.
+(docs/archive/reports/cross-model-cell-errors-2026-10-13.md) to stay consistent.
 Measured by this same query: research's last-call input median and
 input per published story version.
 

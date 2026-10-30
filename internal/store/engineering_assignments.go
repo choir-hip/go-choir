@@ -195,7 +195,7 @@ func ComputeRecordEngineeringAssignmentReportDigest(req types.RecordEngineeringA
 
 // TerminalPropositionV1 is the frozen version domain for terminal settlement
 // identity (settlement gate item 3). Every proposition digest input is
-// prefixed with it; the receipt is docs/evidence/choir-rlm-settlement-item3-define-2026-09-09.md.
+// prefixed with it; the receipt is docs/archive/evidence/choir-rlm-settlement-item3-define-2026-09-09.md.
 const TerminalPropositionV1 = "choir:terminal-proposition:v1"
 
 // terminalPropositionCommandV1 is one ordered command claim: digest, declared

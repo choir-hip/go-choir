@@ -25,7 +25,7 @@ type BrokerClient struct {
 	// because a path past sun_path is reached through a /proc/self/fd/<N>
 	// directory descriptor that must be open only for the dial. A client that
 	// stored that address would re-dial through a closed, reused descriptor
-	// (docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md).
+	// (docs/archive/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md).
 	socketPath string
 	publicKey  ed25519.PublicKey // injected at spawn, used for capability verification
 

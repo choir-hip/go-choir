@@ -26,7 +26,7 @@ or 429 (60 s). On any other status the call returns that status, and the
 next key is never tried. `pick` hashes the session to one healthy key, so
 a session that hashes to a key whose credential is revoked or expired
 fails on every call for as long as the key stays configured. The pool
-from 2026-10-15 (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md)
+from 2026-10-15 (docs/archive/problems/opencode-key-exhausted-no-failover-2026-10-15.md)
 covered funds and rate limits, not a dead credential.
 
 Is it a product defect? Yes. The paper loses about a third of its model
@@ -41,7 +41,7 @@ docs/evidence show:
   2026-10-09 has the same 409. Cancel ends the document's trajectory, so
   the 409 is the documented behavior. It is a named residual of the
   supervised self-development gate
-  (docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md:445),
+  (docs/archive/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md:445),
   not FP2.
 - T8 counted open work items after the crash restart: 3 and 5 on
   2026-10-09, 1 today. That also predates FP2. Whether a crash restart

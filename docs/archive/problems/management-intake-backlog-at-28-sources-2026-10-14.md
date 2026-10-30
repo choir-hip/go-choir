@@ -22,7 +22,7 @@ Intake is about 270 captures an hour at 28 sources; one task at a time
 disposes of far fewer (8 tasks in 34 minutes). The backlog grows, so
 captures are disposed of late (stale) rather than lost. This is the
 throughput S2a deliberately left for S2b
-(docs/reports/management-delegation-design-2026-10-14.md §13: K = 4, the
+(docs/archive/reports/management-delegation-design-2026-10-14.md §13: K = 4, the
 durable slot starter and queue, guards so two tasks never open the same
 story at once).
 
@@ -32,5 +32,5 @@ story at once).
 2. Interim, if the backlog keeps growing: lower `max_items` or lengthen
    the interval on the highest-volume, lowest-yield schedules (e.g. the
    Hacker News lists, which also cause most re-captures per
-   docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md) instead of
+   docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md) instead of
    removing the new sections' sources.

@@ -3,11 +3,11 @@
 Date: 2026-10-14. Mutation class: **green/yellow**. This is an offline
 study: no runtime wiring, no Store B writes, no change on any computer.
 The paper was read through the QA owner credential, read only. Design:
-[claims, events and entities](claims-events-entities-ontology-2026-10-14.md)
+[claims, events and entities](../../reports/claims-events-entities-ontology-2026-10-14.md)
 §12.3 (E0, E6a). Historical half:
-[backtesting](../research/historical-precommitment-backtesting-2026-10-14.md)
+[backtesting](../../research/historical-precommitment-backtesting-2026-10-14.md)
 §3.4 (H0). Protocol, frozen before the labelled live runs:
-[docs/evidence/claims-e0/protocol.md](../evidence/claims-e0/protocol.md).
+[docs/evidence/claims-e0/protocol.md](../../evidence/claims-e0/protocol.md).
 
 ## Bottom line
 
@@ -78,7 +78,7 @@ The paper was read through the QA owner credential, read only. Design:
 | `scripts/claims_e6a.py` | Desks' say–do from existing ledger data; second scorer; self-scores |
 | `scripts/claims_prompts.py`, `claims_lib.py` | Frozen prompts (hashes in the protocol); omp runner with a content-addressed call cache |
 | `docs/evidence/claims-e0/` | Protocol, evalset manifest (ids only), `results.json`, `recall-by-body-kind.json`, `h0-result*.json`, `route-result.json` |
-| `docs/evidence/claims-e6a/box-score.json` | The desks' box score |
+| `docs/archive/evidence/claims-e6a/box-score.json` | The desks' box score |
 
 **Models.** Every model ran through omp. Extractors: `openai-codex/gpt-6-luna`
 and `opencode-go/deepseek-v4.1-flash`. Labeller and judges:
@@ -260,7 +260,7 @@ example shows the shape; it is not a finding about these companies.
 
 ### 3.5 Routing diagnostic
 
-The test set is the after-window of `docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md`,
+The test set is the after-window of `docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md`,
 titles only: 47 items and 77 pairs. Gold has three parts:
 - 46 cross-outlet same-event pairs, from the registered judge;
 - 21 same-story pairs that the hand reading called legitimate;

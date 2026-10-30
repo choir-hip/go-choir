@@ -9,7 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Prompt-cache measurement (docs/reports/prompt-cache-analysis-2026-10-14.md).
+// Prompt-cache measurement (docs/archive/reports/prompt-cache-analysis-2026-10-14.md).
 //
 // Failure modes pinned here:
 //   - cached tokens are priced at the full input rate (overstates cost up to

@@ -165,7 +165,7 @@ now:
     scope_if_supported: ledger read surface complete; M11 live-doc gate unblocked
     status: active
     evidence_refs:
-      - docs/desk-rlm-rectification-plan-2026-09-23.md §2 (foliation), §11 (R4)
+      - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §2 (foliation), §11 (R4)
       - docs/precommitment-records.md (score semantics)
   belief:
     believed_state: >-
@@ -248,8 +248,8 @@ receipts:
 # R4 — Commitment Scores + Surfacing + Context Packs (station on the rectification spine)
 
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under `choir-rectification-spine-2026-09-25.md`.
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
 (R4, on spine): derived accrual views, materiality projection, context packs, learning-claims gate.
 Proof: a falsified commitment stays visible in the doc; the acting desk's pack contains zero
 own-score fields.

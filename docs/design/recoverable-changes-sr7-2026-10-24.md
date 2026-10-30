@@ -45,7 +45,7 @@ Labels:
 | Store: epoch 3, a raise-only floor, no migration framework | confirmed [code] | `internal/storeschema/schema.go:54`; `floor.go:111-121`, checked at `store.go:938`; the updater refuses an older-epoch release (`internal/updater/updater.go:459-461`) |
 | **New:** destructive DDL runs at Open | [code] | DROP of retired tables (`store.go:1102`, `:1113`; `texture.go:369`, `:377`); primary-key reshapes (`store.go:3597`; `texture.go:479-481`, `:2446-2448`) |
 | **New:** the store-floor CI guard is not wired in | [code] | `scripts/check-store-schema-floor.sh` exists; `ci.yml` never calls it |
-| CI baseline | [run] | Run 40138087758 (CI0's baseline, `docs/definitions/ci-test-cooptimization-2026-10-24.md`): push to deploy 19.9 min. Plan ended 22:20:49; prebuild started 22:21:51 (+62 s); the outlier non-runtime shard 1 ran 17.3 min, the next 9.1 min. `go-vet-build` ran 90 s here and 101 s in 40132893674. The account runs at most 20 jobs at once, and 24-25 are ready when plan ends (`docs/problems/ci-critical-path-race-shards-2026-10-22.md` finding 3) |
+| CI baseline | [run] | Run 40138087758 (CI0's baseline, `docs/definitions/ci-test-cooptimization-2026-10-24.md`): push to deploy 19.9 min. Plan ended 22:20:49; prebuild started 22:21:51 (+62 s); the outlier non-runtime shard 1 ran 17.3 min, the next 9.1 min. `go-vet-build` ran 90 s here and 101 s in 40132893674. The account runs at most 20 jobs at once, and 24-25 are ready when plan ends (`docs/problems/ci-wall-clock-2026-10-24.md` finding 3) |
 
 ## 1. Failure modes (written before the design)
 
@@ -462,7 +462,7 @@ It feeds `check`. The gate's steps are not added to `go-vet-build`.
 - The new job becomes ready around +100 s. The prebuild becomes ready about
   +12 s after plan ends, as soon as `deploy-impact` ends (it needs
   `[plan, deploy-impact]`, `ci.yml:818`; median from
-  `docs/problems/ci-critical-path-race-shards-2026-10-22.md` table and finding
+  `docs/problems/ci-wall-clock-2026-10-24.md` table and finding
   3). So it is already queued, so it waits behind the prebuild for the next slot [H: GitHub
   queues in roughly FIFO order; the 5-run measure decides].
 - It restores the `vet-build` Go cache lane read-only and builds two small

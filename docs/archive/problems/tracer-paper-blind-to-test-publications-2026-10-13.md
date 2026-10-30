@@ -45,7 +45,7 @@ takes the owner from the caller's credential, and corpusd answers at
 front list shows the publication (`on_front`). The paper scenario passes on
 a publication with `publish_mode` auto whose public route resolves.
 
-It passed on d2324a55 (docs/evidence/free-models-paper-3-2026-10-13.json):
+It passed on d2324a55 (docs/archive/evidence/free-models-paper-3-2026-10-13.json):
 8 stories published from a test computer, all with `on_front` false, as the
 allowlist intends. The proxy counter that files 201s under errors is still
 open.

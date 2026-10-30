@@ -231,7 +231,7 @@ now:
     choir.Ask/Note). Texture desk model moved to
     opencode-go/deepseek-v4.1-flash@high on owner direction (258916d5 +
     live guest data.img edit, receipt
-    docs/evidence/s0m-texture-model-swap-2026-10-02.md). Channel-mail-to-
+    docs/archive/evidence/s0m-texture-model-swap-2026-10-02.md). Channel-mail-to-
     texture:* reduce-time rejection landed b18f3baf; prompt audit held.
     docs/current-architecture.md updated with the record-native invariant.
     S0m acceptance leg ask->report->resolve DEPLOYED-VERIFIED 2026-10-04
@@ -253,15 +253,15 @@ now:
     dump-20260918 rollback ref + nix gc, 84G→103G; a4fcdb8d deployed under
     run 37165170516). Boundary-close receipts landed 2026-10-04:
     stranded-bound probe re-run on a real DISPOSABLE computer
-    (computer-ca3a2cf9, docs/evidence/s0m-stranded-bound-disposable-2026-10-04.json —
+    (computer-ca3a2cf9, docs/archive/evidence/s0m-stranded-bound-disposable-2026-10-04.json —
     cancel → claim released → rebound → incorporated) and the channel-mail
     reduce-time refusal verified live (trajectory aef9a197,
-    docs/evidence/s0m-channel-mail-reject-2026-10-04.json). New discovery
+    docs/archive/evidence/s0m-channel-mail-reject-2026-10-04.json). New discovery
     filed: fresh registered computers reach active pre-genesis and the
     first write 500s until bootstrap-chain
-    (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md).
+    (docs/archive/problems/s0b-registration-computer-missing-genesis-2026-10-04.md).
     Recurring headroom risk noted in
-    docs/problems/node-b-deploy-disk-headroom-2026-10-04.md. Next station:
+    docs/archive/problems/node-b-deploy-disk-headroom-2026-10-04.md. Next station:
     S1a host-boundary hotfix, then S0b resumes.
   candidate: main@a4fcdb8d
   conjecture:
@@ -329,7 +329,7 @@ now:
     act", red surface); (iii) a path-parity audit — whether
     `update_coagent`/legacy runs can write a bound control via the
     un-marked `QueueLifecycleUpdate` research branch. See
-    docs/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md
+    docs/archive/problems/s0m-bound-control-not-marked-incorporated-2026-10-03.md
     (panel resolution) + s0m-stranded-bound-control-deadlock-2026-10-02.md
     (deployed-verified).
 
@@ -375,7 +375,7 @@ receipts:
       nonexistent-desk instead of the designed open_researcher (a4fcdb8d).
       discovered: node-b deploy disk headroom was a standing blocker for all
       main commits — RESOLVED 2026-10-04 by reclaim
-      (docs/problems/node-b-deploy-disk-headroom-2026-10-04.md); recurring
+      (docs/archive/problems/node-b-deploy-disk-headroom-2026-10-04.md); recurring
       risk flagged for ops.
     rollback: >-
       git revert d20483e8 a4fcdb8d (label/probe only; no behavior the
@@ -408,7 +408,7 @@ receipts:
       management target); RN3c/d differ only in subtype + Notes keys
       (cast_objective:/retract_target:/question:). Per-kind unit tests
       cover the differential mint paths end-to-end.
-      Evidence: docs/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json
+      Evidence: docs/archive/evidence/s0m-rn3c-escalate-acceptance-2026-10-02.json
       (probe scripts/s0m_escalate_acceptance_probe.mjs).
     heresy_delta: >-
       discovered: none new — the engineering-desk binding residual
@@ -439,13 +439,13 @@ receipts:
       33032604-f085-57b4-ad7d-379095266226 minted record-native
       update_queued cell:…:report:tray-1:packet (no envelope), woke the
       bound texture desk, and update_delivered bound_to_activation.
-      Evidence: docs/evidence/s0m-rn3b-report-acceptance-2026-10-02.json
+      Evidence: docs/archive/evidence/s0m-rn3b-report-acceptance-2026-10-02.json
       (probe scripts/s0m_report_acceptance_probe.mjs; probe's own 25-min
       window closed between queue and deliver — the trajectory event chain
       is the oracle).
     heresy_delta: >-
       discovered: desk-name ToDesk was unreachable for lifecycle reports
-      (docs/problems/s0m-report-desk-target-resolution-2026-10-02.md,
+      (docs/archive/problems/s0m-report-desk-target-resolution-2026-10-02.md,
       repaired 758325af); research overlay lacked record-native verb
       signatures (docs/problems/s0m-report-verb-signature-undocumented-
       2026-10-02.md, repaired 267998a6). Residual: engineering-desk
@@ -472,11 +472,11 @@ receipts:
       06781638-cda3-4858-9c6e-609f69bd0822 with the packet in
       metadata.worker_update_ids — record→packet→wake→injection proven
       end-to-end on staging. Evidence:
-      docs/evidence/s0m-rn3a-note-acceptance-2026-10-02.json
+      docs/archive/evidence/s0m-rn3a-note-acceptance-2026-10-02.json
       (probe scripts/s0m_note_acceptance_probe.mjs).
     heresy_delta: >-
       discovered: engineering-desk directives mint but never bind
-      (docs/problems/s0m-directive-engineering-desk-2026-10-02.md) —
+      (docs/archive/problems/s0m-directive-engineering-desk-2026-10-02.md) —
       residual for RN3b, not a RN3a regression.
     rollback: git revert 87549c17 (docs commit ed9fa123 stands).
   - id: rn2-landing-2026-10-02
@@ -499,7 +499,7 @@ receipts:
       that exposed the wake-drift defect now pass with 3b3ce3e2.
     heresy_delta: >-
       discovered+repaired: actor-wake-outbox created_at drift
-      (docs/problems/actor-wake-outbox-createdat-drift-2026-10-02.md), fixed
+      (docs/archive/problems/actor-wake-outbox-createdat-drift-2026-10-02.md), fixed
       in 3b3ce3e2.
     rollback: git revert 3b3ce3e2 7bbe9ec6 (docs commit 1f7d0889 stands).
   - id: rn1-landing-2026-10-01

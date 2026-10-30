@@ -15,7 +15,7 @@ import (
 
 // Store B refuses an unregistered object or edge kind on every write
 // method and on the HTTP PUT route (H-OG1, failure mode F5 in
-// docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
+// docs/archive/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
 func TestObjectGraphStore_RefusesUnregisteredKinds(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	og := NewObjectGraphStore(store)

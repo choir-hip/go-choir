@@ -2,7 +2,7 @@
 
 Date: 2026-10-15 (~23:25 UTC on 10-14). Class: red (host kernel, every
 computer's isolation). Found by
-`docs/reports/boundary-strength-ladder-2026-10-15.md`; confirmed read-only on
+`docs/archive/reports/boundary-strength-ladder-2026-10-15.md`; confirmed read-only on
 Node B.
 
 ## Evidence (read-only, 2026-10-14 23:25 UTC)

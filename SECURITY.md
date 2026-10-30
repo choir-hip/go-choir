@@ -43,4 +43,4 @@ supported. There are no maintained release branches.
 ## How Choir keeps up with upstream fixes
 
 The patch pipeline and its time-to-patch targets are described in
-[docs/reports/patch-pipeline-time-to-patch-2026-10-15.md](docs/reports/patch-pipeline-time-to-patch-2026-10-15.md).
+[docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md](docs/archive/reports/patch-pipeline-time-to-patch-2026-10-15.md).

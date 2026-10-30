@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Failure modes (docs/problems/layered-release-spa-underivable-2026-10-09.md,
+// Failure modes (docs/archive/problems/layered-release-spa-underivable-2026-10-09.md,
 // "Residual 1 measured"): a deterministic refusal is retried ten times and
 // delays every boot by ~17 s; a transient error that clears is given up on
 // too early; a cancelled boot keeps retrying.

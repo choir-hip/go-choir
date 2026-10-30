@@ -207,7 +207,7 @@ var RestartWorkKinds = map[string]bool{
 }
 
 // TextureRootDigestKind is the Texture root's wake (PD3 S1,
-// docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md): minted after
+// docs/archive/definitions/choir-pd3-texture-root-desk-2026-10-11.md): minted after
 // commits on documents other than the master, coalesced and debounced, and
 // delivered to TextureRootDigestMailbox, whose handler checks the marked
 // master's liveness (and runs the ensure step) before it wakes the master's

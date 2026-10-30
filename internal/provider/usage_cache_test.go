@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Prompt-cache measurement (docs/reports/prompt-cache-analysis-2026-10-14.md).
+// Prompt-cache measurement (docs/archive/reports/prompt-cache-analysis-2026-10-14.md).
 // Each provider reports cached input tokens in its own usage shape; the parser
 // must carry them into Usage.CachedInputTokens as a subset of InputTokens.
 //

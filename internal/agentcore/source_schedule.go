@@ -18,7 +18,7 @@ import (
 )
 
 // The Autopaper source schedule (W1c,
-// docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// docs/archive/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // each scheduled source is a chain of durable source_poll_due wakes. A wake
 // polls the source with no model call, records the poll's usage on the
 // schedule, and arms the next wake.

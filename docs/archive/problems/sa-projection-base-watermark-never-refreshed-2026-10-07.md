@@ -421,7 +421,7 @@ disposable whose chain has no base yet is a legitimate refusal target.
 ### Admission staging acceptance (2026-10-08, deployed `85befb1c`/`67729e07`)
 
 Driver: scratchpad admission-refusal demo; log
-[`evidence/recovery-admission-staging-demo-2026-10-08.log`](../evidence/recovery-admission-staging-demo-2026-10-08.log).
+`evidence/recovery-admission-staging-demo-2026-10-08.log`.
 Fresh disposable `computer-f177676f…`, scheduler paused, vmctl ownership
 removed (chain retained, W=0, empty store on next realization):
 
@@ -436,7 +436,7 @@ removed (chain retained, W=0, empty store on next realization):
 - End-to-end restore: FAIL on an independent gap — the fresh realization has
   no guest privacy key, the runtime crash-loops, and vmctl waits 30 min.
   Recorded in
-  [`fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md`](fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
+  [`fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md`](../../problems/fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
 
 Also found during this run and fixed before the rerun: the artifact GC sweep
 held the service write lock and failed fresh boots

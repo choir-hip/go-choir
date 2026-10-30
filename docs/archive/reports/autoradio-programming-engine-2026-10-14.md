@@ -8,7 +8,7 @@ new client) with **red** edges (anything that sends mail, publishes a
 take, approves self-development, or changes Texture's schema), classed
 where each appears (§7.8).
 
-Companion to `docs/reports/autoradio-mobile-app-plan-2026-10-14.md` (the
+Companion to `docs/archive/reports/autoradio-mobile-app-plan-2026-10-14.md` (the
 mobile plan). That plan decides the client stack; this note designs the
 part the owner called the heart of it: the engine that decides what plays
 next, and how a listener talks to it.
@@ -57,14 +57,14 @@ Also binding, from the same rulings and earlier in the day:
 - "I want my AI to be clearly sounding like AI, and then we're going to be
   mixing in human voices — that contrast is so much better."
   "Competitors that keep you listening to an AI all day are a worse
-  experience." (doc: `docs/reports/pricing-and-economics-notes-2026-10-14.md`)
+  experience." (doc: `docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`)
 - "I hate thumbs up and thumbs down." Optimize importance, with attention
   as a weak signal; attention data stays on the reader's computer
-  (doc: `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`).
+  (doc: `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`).
 - Each app agent is its own RLM desk; one app-agent desk can have several
   front ends (doc: `docs/reports/owner-notes-2026-10-14.md` §5).
 - "Auto radio quality is very execution dependent. I don't want slop."
-  (doc: `docs/reports/choir-state-and-vision-2026-10-14.md` §2.11)
+  (doc: `docs/archive/reports/choir-state-and-vision-2026-10-14.md` §2.11)
 
 The voice-contrast principle above still holds as a value: the AI voice
 stays clearly AI, and human voices are mixed in where they exist. Ruling 1
@@ -601,7 +601,7 @@ computer, plus the supervision summary (counts, urgent flags).
 
 Each source contributes candidates with a `follow_reason`. The queries are
 shaped so they are seekable by the retrieval ladder's indexes
-(doc: `docs/reports/object-graph-retrieval-research-2026-10-14.md` §5),
+(doc: `docs/archive/reports/object-graph-retrieval-research-2026-10-14.md` §5),
 not window scans.
 
 | Source | Graph | Trigger and query shape | Candidates |
@@ -1486,7 +1486,7 @@ mode:
 
 | Class | Example | What happens |
 |---|---|---|
-| **Intent** | "Autopaper should rank by importance, not churn"; "the ontology needs a box score per outlet" | An **intent record**, verbatim span plus timestamp, filed for management as owner direction "recorded before any design work. Status: intent", the form this repository already uses (e.g. `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`). Not a directive: nothing is built from it until management or the owner promotes it |
+| **Intent** | "Autopaper should rank by importance, not churn"; "the ontology needs a box score per outlet" | An **intent record**, verbatim span plus timestamp, filed for management as owner direction "recorded before any design work. Status: intent", the form this repository already uses (e.g. `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`). Not a directive: nothing is built from it until management or the owner promotes it |
 
 - **Linked and checked on capture.** The desk links each intent to the
   goals, decisions and records it touches, and flags conflicts with
@@ -1983,17 +1983,17 @@ contract.
 
 ## Sources
 
-Choir (docs and code): `docs/reports/autoradio-mobile-app-plan-2026-10-14.md`
+Choir (docs and code): `docs/archive/reports/autoradio-mobile-app-plan-2026-10-14.md`
 (including "Owner rulings, 2026-10-14 ~21:40 UTC"),
-`docs/reports/autoradio-prototype-2026-10-14.md`,
+`docs/archive/reports/autoradio-prototype-2026-10-14.md`,
 `docs/reports/claims-events-entities-ontology-2026-10-14.md` (§0, §4.2-4.4,
 §8), `docs/precommitment-records.md` (§1, §2, §4.7, §5),
-`docs/reports/object-graph-retrieval-research-2026-10-14.md` (§0, §2, §5),
-`docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`,
+`docs/archive/reports/object-graph-retrieval-research-2026-10-14.md` (§0, §2, §5),
+`docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`,
 `docs/research/autopaper-media-and-rights-2026-10-14/README.md` (§4, §6, §7),
-`docs/reports/pricing-and-economics-notes-2026-10-14.md`,
+`docs/archive/reports/pricing-and-economics-notes-2026-10-14.md`,
 `docs/reports/owner-notes-2026-10-14.md` (§4-§6),
-`docs/reports/choir-state-and-vision-2026-10-14.md` (§2.11),
+`docs/archive/reports/choir-state-and-vision-2026-10-14.md` (§2.11),
 `docs/memo-diagonal-media-strategy-2026-09-17.md`,
 `docs/learn/README.md`, `docs/learn/02-desk-runtime.md`,
 `docs/learn/04-computer-lifecycle.md`, `docs/standing-questions.md`,

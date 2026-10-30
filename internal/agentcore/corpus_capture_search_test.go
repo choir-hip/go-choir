@@ -25,7 +25,7 @@ import (
 
 // Research searches the computer's own corpus before the web: the corpus
 // verb reaches captures, not only stories (symptom 3 of
-// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
+// docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
 // Ways it fails, written before the code:
 //   - captures are not searched at all, so a capture the paper already holds
 //     is fetched again from the web (the defect);

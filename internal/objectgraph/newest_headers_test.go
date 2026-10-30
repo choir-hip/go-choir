@@ -9,7 +9,7 @@ import (
 )
 
 // The newest-headers read serves the event stream_seq seed with bounded
-// work (docs/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
+// work (docs/archive/problems/stream-seq-seed-scans-the-event-kind-at-boot-2026-10-23.md).
 //
 // Ways it can fail, written before the code:
 //  1. The engine plans it as it planned the old seed: the kind index, a TopN

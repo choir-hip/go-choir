@@ -22,9 +22,9 @@ that would settle it. **[P]** means a prior-art claim, sourced in the
 Sources section. **[S]** marks speculation.
 
 Builds on, and does not repeat:
-[selfdev-update-architecture-2026-10-15](../reports/selfdev-update-architecture-2026-10-15.md)
+[selfdev-update-architecture-2026-10-15](../archive/reports/selfdev-update-architecture-2026-10-15.md)
 (the release record, Stations A to C, P9 and P13),
-[patch-pipeline-time-to-patch-2026-10-15](../reports/patch-pipeline-time-to-patch-2026-10-15.md)
+[patch-pipeline-time-to-patch-2026-10-15](../archive/reports/patch-pipeline-time-to-patch-2026-10-15.md)
 (lanes, the watcher, SLOs by severity),
 [lu-guest-updates-design-2026-10-14](../reports/lu-guest-updates-design-2026-10-14.md)
 (pull, drain, rings),
@@ -258,7 +258,7 @@ projection): make applies compound on one computer.**
     change had to build `bin/autoputer` from the **old** base (about 7
     minutes). Applying it would pin the computer to an old-base layered
     binary: the shape of
-    [guest-runtime-fix-never-reaches-layered-computers](../problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md),
+    [guest-runtime-fix-never-reaches-layered-computers](../archive/problems/guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md),
     produced by self-development itself.
   - **A related protocol wrinkle, out of scope here.** After an approval
     consumes `accept_once`, a reject of the next candidate is refused

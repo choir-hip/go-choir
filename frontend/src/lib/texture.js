@@ -117,7 +117,7 @@ export function lifecycleCurrentDocumentRevisionID(snapshot) {
 // createRevision posts an owner revision. The server decodes the body strictly
 // (unknown fields are a 400) and always records the authenticated owner as the
 // author, so the body carries no authorship fields
-// (docs/problems/surface-broken-calls-2026-10-14.md, item 1).
+// (docs/archive/problems/surface-broken-calls-2026-10-14.md, item 1).
 export async function createRevision(docId, { content, bodyDoc, sourceEntities, citations, metadata, parentRevisionId, allowRebase = false }) {
   const body = { content };
   if (bodyDoc !== undefined) {
@@ -358,7 +358,7 @@ export async function publishTextureAsOpinion(docId, { revisionId = '', slug = '
 // resolvePublication reads a published link's bundle. view 'nav' asks for
 // the route, publication and nav alone: the reader's poll for a newer
 // version needs nothing else, and the whole bundle costs about a second to
-// build (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+// build (docs/archive/problems/article-open-slow-store-b-scans-2026-10-16.md).
 export async function resolvePublication(routePath, { view = '' } = {}) {
   const params = new URLSearchParams({ route: routePath });
   if (view === 'nav') params.set('view', 'nav');

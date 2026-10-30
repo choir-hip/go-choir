@@ -16,7 +16,7 @@ How it was made, 22:37 to 22:51 UTC on 2026-10-10:
   window.
 
 Use: the research fan-out goal
-(`docs/definitions/choir-research-fanout-2026-10-10.md`) compares Choir's
+(`docs/archive/definitions/choir-research-fanout-2026-10-10.md`) compares Choir's
 document for the same prompt against `report.md`: distinct in-window items
 with correct dates and working sources, plus time to first and last
 revision. Items here are not independently verified; they carry the

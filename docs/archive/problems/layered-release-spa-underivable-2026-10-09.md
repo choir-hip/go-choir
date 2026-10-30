@@ -81,7 +81,7 @@ Owner browser confirmation pending. Residuals 1–2 open.
 ## Residual 1 measured: every boot of a layered computer spends ~17 s retrying (2026-10-09 18:19Z)
 
 Found while checking O7 (boot cost against history,
-`docs/evidence/o7-boot-cost-vs-history-2026-10-09.md`). Owner computer
+`docs/archive/evidence/o7-boot-cost-vs-history-2026-10-09.md`). Owner computer
 `candidate-fleet-e15cb89f…`, boot at 17:52:22, console log (timings only):
 
 - `starting server on 0.0.0.0:8085` at 17:52:22;

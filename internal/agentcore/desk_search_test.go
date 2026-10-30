@@ -18,7 +18,7 @@ import (
 )
 
 // Async search, host side (Cut 2 unit 2a,
-// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
 // Ways it can fail, written before the code:
 //  1. A stream outlives its desk session: release or reclaim closes the
 //     worker but the gateway stream keeps running (and pushing into a dead

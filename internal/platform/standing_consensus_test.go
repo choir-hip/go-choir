@@ -25,7 +25,7 @@ import (
 )
 
 // P4: the standing arm, the decision poster and the gate's consensus branch
-// (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). The numbers
+// (docs/archive/problems/p4-standing-consensus-autonomy-2026-10-15.md). The numbers
 // in comments are that record's failure modes.
 
 func mintStandingAct(t *testing.T, signer *owneract.Signer, computerID string, request SetSelfDevelopmentModeRequest, tier string, now time.Time) string {

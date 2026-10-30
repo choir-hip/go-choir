@@ -2,7 +2,7 @@
 
 Recorded by FP0 from a read-only Sonnet investigation, 2026-10-26 02:2x. Status: open, documented before any fix. The owner, creating the d@e.com account: "it took like 10 seconds to make that computer ... it should be instant to fork the base image." A fix is red (vmctl, boot path), tier 2.
 
-Recommended order, not yet decided: (1) reflink a prebuilt seeded data.img template (about 4 s, no guest change); (2) trace and trim rt.Start and the 800 ms boot-receipt poll (up to about 1.9 s); (3) design a Firecracker snapshot of a booted base restored at signup, with identity delivered after restore (about 1 to 2 s total; a guest change, and the same identity rules as forks); no standing warm pool. S9 forks (docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md) were reviewed but never built.
+Recommended order, not yet decided: (1) reflink a prebuilt seeded data.img template (about 4 s, no guest change); (2) trace and trim rt.Start and the 800 ms boot-receipt poll (up to about 1.9 s); (3) design a Firecracker snapshot of a booted base restored at signup, with identity delivered after restore (about 1 to 2 s total; a guest change, and the same identity rules as forks); no standing warm pool. S9 forks (docs/archive/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md) were reviewed but never built.
 
 ## Investigation
 
@@ -99,7 +99,7 @@ Existing machinery that already helps (all in the repo, none wired to creation):
   06:32:54 line) and 444 / 458 ms in other records. Post-resume it already delivers a fresh credential
   envelope (`guestHibernateResumed`, snapshot.go:1022) and steps the guest clock.
 - Not present: any warm pool, base template, or fork constructor. S9 (forks and fleets,
-  docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md) is reviewed/accepted on paper
+  docs/archive/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md) is reviewed/accepted on paper
   and never built. grep for prewarm/warm pool/template finds only the doctrine sentence that "post-auth
   prewarm may start immediately after register/login" (docs/runtime-invariants.md:50), the capsule
   doc, and the CPU report's idea C15 (a preforked desk-worker pool, unrelated).
@@ -133,7 +133,7 @@ poll to 100 to 150 ms. Saves up to ~0.6 s (poll slack) and up to ~1.9 s if the r
 decoupled, but only if `/health` 200 already means "safe to serve". The `replayHealthGate`
 (run.go:670-701) holds `/health` at 503 until replay finishes, but `rt.Start` runs after that gate in
 `afterReplay`; the runtime-started wait may be what guarantees genesis/lifecycle reconcile is done
-before the first user write (docs/problems/s0b-registration-computer-missing-genesis-2026-10-04.md
+before the first user write (docs/archive/problems/s0b-registration-computer-missing-genesis-2026-10-04.md
 fix shape 2 and 3). Verify that before decoupling; otherwise keep the gate and just fix the poll
 interval. Class: orange (observation path) unless it moves a readiness gate, then red. Also measure
 which `rt.Start` phase costs 1.47 s using the guest's "boot phase end ... dur=" lines before touching it
@@ -252,12 +252,12 @@ a memory scan); the owner's "about 10 s" (not reproduced: this account measured 
   process per file, 17 to 18 s) and is a different path. It is related only in lesson: per-file git
   forks are the usual hidden cost here, and the data-image seed above is a one-shot `git clone` plus
   `mkfs.ext4 -d`, not per-file processes, so 4 s is the measured total, not a fork storm.
-- docs/definitions/choir-appdev-s3-fast-resume-2026-10-01.md quoted "cold boot about 15-30 s, warm
+- docs/archive/definitions/choir-appdev-s3-fast-resume-2026-10-01.md quoted "cold boot about 15-30 s, warm
   boot about 5 s" and promised ~1 s snapshot wake. The snapshot wake did land (350 to 460 ms
   `wake_to_healthy` measured on existing computers), but it is only used for resume after hibernate,
   never for creation. A cold boot is still ~8 s of guest plus host work (today's refresh boots
   measure 8.2 to 14.5 s spawn->healthy).
-- docs/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md is where "fork the base image" lives:
+- docs/archive/definitions/choir-appdev-s9-forks-and-fleets-2026-10-01.md is where "fork the base image" lives:
   a two-path fork constructor (same-owner reflinked disk + cold boot, or semantic snapshot) with fresh
   child identity. It was reviewed 10-01 and never built (no fork constructor in `internal/`). Even the
   S9 same-owner path does a *cold boot*, so it would not be instant. The base-snapshot plus claim design

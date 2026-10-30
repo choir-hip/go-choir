@@ -25,9 +25,9 @@ Reading:
   times at p90. It is slow even on small inputs, so this is the model, not
   only the context.
 - It was the model on the 38-minute management turn that stopped the
-  paper (docs/problems/management-serial-turn-blocks-paper-2026-10-14.md),
+  paper (docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md),
   and on the 5-minute support judgement in the prompt-bar reproduction
-  (docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
+  (docs/archive/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
 - The owner added the free models to the pool on 2026-10-13 "to measure
   how much they carry and whether they meet the bar". On latency, LongCat
   does not. Cat Jam does, at the median and p90; its max (199 s) is worth

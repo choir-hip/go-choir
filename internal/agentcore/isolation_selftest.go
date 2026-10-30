@@ -23,7 +23,7 @@ import (
 )
 
 // POST /api/runtime/isolation-selftest: the staging proof of F4 and F6
-// (docs/problems/desk-cells-run-as-guest-root-and-egress-is-open-2026-10-14.md),
+// (docs/problems/desk-boundary-residuals-2026-10-21.md),
 // driven by scripts/desk_cell_confinement_probe.py. A guest is never reached
 // by SSH, and neither Landlock nor the host's egress policy can be proven off
 // staging, so the owner asks the guest to show it:

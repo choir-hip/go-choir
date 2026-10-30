@@ -14,7 +14,7 @@ import (
 // outside the registry, invisible to pressure reclaim, the idle sweeper and
 // stop; new computers kept booting onto the starved host; and every VM
 // inherited vmctl's OOM protection
-// (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
+// (docs/archive/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
 
 const (
 	// RecoveryRefusalHostMemoryPressure refuses a start that would add a VM

@@ -1,12 +1,12 @@
 # Guest memory, data images and the escrow key rest in plaintext on the host disks (SDC NET-06, review F12)
 
 Date: 2026-10-21. Station FP9 of the launch first pass
-(`docs/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`). Mutation
+(`docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`). Mutation
 class of the fixes: red (snapshot custody, the escrow key, the VMM's file
 view), with one orange item (file modes). Status: documented; no fix yet.
 
 This record re-reads F12 of
-[the isolation security review](../reports/computer-isolation-security-review-2026-10-14.md)
+[the isolation security review](../archive/reports/computer-isolation-security-review-2026-10-14.md)
 (section 3.8) against main at 0cb66b4cb, because the review's line numbers
 and one number (the 36 hour age limit) have moved, and the private design
 for the blast-radius record (`host-compromise-blast-radius-2026-10-20.md`,

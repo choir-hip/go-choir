@@ -1,7 +1,7 @@
 package vmmanager
 
 // Free page reporting through the virtio balloon
-// (docs/reports/lr-guest-memory-return-2026-10-14.md). Without it the host
+// (docs/archive/reports/lr-guest-memory-return-2026-10-14.md). Without it the host
 // keeps every page a guest has touched until the guest stops; with it the
 // guest kernel reports freed blocks (2 MiB by default) and Firecracker drops
 // them with MADV_DONTNEED, so host RSS follows guest use.

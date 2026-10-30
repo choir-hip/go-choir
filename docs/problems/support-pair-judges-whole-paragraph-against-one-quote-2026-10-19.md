@@ -2,7 +2,7 @@
 
 Status: documented, not fixed. Found at the 00:15 hourly check on
 2026-10-19. This is probably the main cause of the support-failure re-wakes
-in [support-failure-rewakes-texture-per-revision-2026-10-18](support-failure-rewakes-texture-per-revision-2026-10-18.md),
+in [support-failure-rewakes-texture-per-revision-2026-10-18](support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md),
 and it reaches published stories, not only held ones.
 
 ## Evidence (ledger)
@@ -56,7 +56,7 @@ failure.
 - `types.SupportPairKey` hashes (block hash, cited hash, quote, matcher).
   So any edit anywhere in the paragraph makes a new key for **every**
   citation in it. That means a new judgement and, on failure, a new wake.
-- `docs/reports/support-judgement-to-jev-design-2026-10-14.md` (failure
+- `docs/archive/reports/support-judgement-to-jev-design-2026-10-14.md` (failure
   mode 4) speaks of Jev judging "the committed sentence and the captured
   block". Its guard is "unchanged code path", so the paragraph unit
   probably came over from the older management judge. Either "sentence"
@@ -197,7 +197,7 @@ citation is outside the support judge's job, but this does narrow what
 it sees.
 
 
-## Merged from docs/problems/support-failure-rewakes-texture-per-revision-2026-10-18.md (2026-10-18)
+## Merged from docs/problems/support-pair-judges-whole-paragraph-against-one-quote-2026-10-19.md (2026-10-18)
 
 **A support failure re-wakes Texture once per revision, so an unsupportable story takes 7 to 9 turns (2026-10-18).**
 Status: documented, not fixed. The cycle ends on its own. **Correction (2026-10-19):** I first wrote that this is "a cost problem, not a correctness one" because "the gate holds every such story". Story c0fb708e ran the cycle while published (v4 to v10 in three minutes). The likely main cause is that a support pair judges a whole paragraph against one quote: [support-pair-judges-whole-paragraph-against-one-quote-2026

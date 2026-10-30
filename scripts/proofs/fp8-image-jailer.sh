@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FP8 (batch B6: the VM image, the jailer and density) deployed proofs.
 # Steps are "FP0 proof steps" in
-# docs/definitions/choir-launch-fp8-image-jailer-2026-10-21.md on
+# docs/archive/definitions/choir-launch-fp8-image-jailer-2026-10-21.md on
 # lane/fp8-image-jailer. Every behavior change there ships off and is selected
 # per computer, so the deploy changes no running computer until a reviewed
 # nix/node-b.nix change names a TEST computer. Those "turn on" edits (a nix

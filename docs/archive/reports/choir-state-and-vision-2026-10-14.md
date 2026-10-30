@@ -172,16 +172,16 @@ what it *is* (`docs/choir-vision.md`, "The One Idea").
 
 | Element | What it means | Status | Evidence |
 |---|---|---|---|
-| Persistent computer per user | A Firecracker VM with stable identity, durable state, one event chain; survives restarts and disk loss | **Built, verified on staging** | Lose-the-disk proof 2026-10-09 (`docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json`); S3 snapshot hibernation, wake in 103 ms (`docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`) |
+| Persistent computer per user | A Firecracker VM with stable identity, durable state, one event chain; survives restarts and disk loss | **Built, verified on staging** | Lose-the-disk proof 2026-10-09 (`docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json`); S3 snapshot hibernation, wake in 103 ms (`docs/archive/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`) |
 | Four persistent desks | Texture, management, engineering, research as recursive language-model (RLM) desks running Go cells | **Built, verified on staging** | C1 authority cut landed 76ab40fd; C1e B1 engineering on records e9d727a7 (`docs/ACTIVE.md`) |
-| Autopaper (automatic newspaper) | Sources polled 24/7, stories synthesized by desks, published automatically at permalinks | **Built, live on staging since 2026-10-13; quality and synthesis partial** | `docs/evidence/c2-autopaper-live-2026-10-13.json`; live front page at `https://choir.news/api/platform/publications/front`; merge recall 0.63 live (corrected from 0.174) vs 1.0 on fixture (`docs/evidence/l2a-after-window-1-2026-10-14.md`) |
-| Supervised self-development | The computer proposes changes to its own code and state in capsules, frozen, verified, approved, released, reversible | **Partly built: one complete probe-driven episode on staging; the gate program not passed** | M11 rerun 13 satisfied all 17 legs on 2026-10-10 (17b97b8fe; `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`); since the C1e cutover the engineering drill stops before Freeze because capsules cannot fetch Go modules (`docs/reports/capsule-go-modules-decision-2026-10-14.md`; host module proxy 3c6347e8) |
+| Autopaper (automatic newspaper) | Sources polled 24/7, stories synthesized by desks, published automatically at permalinks | **Built, live on staging since 2026-10-13; quality and synthesis partial** | `docs/archive/evidence/c2-autopaper-live-2026-10-13.json`; live front page at `https://choir.news/api/platform/publications/front`; merge recall 0.63 live (corrected from 0.174) vs 1.0 on fixture (`docs/evidence/l2a-after-window-1-2026-10-14.md`) |
+| Supervised self-development | The computer proposes changes to its own code and state in capsules, frozen, verified, approved, released, reversible | **Partly built: one complete probe-driven episode on staging; the gate program not passed** | M11 rerun 13 satisfied all 17 legs on 2026-10-10 (17b97b8fe; `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`); since the C1e cutover the engineering drill stops before Freeze because capsules cannot fetch Go modules (`docs/reports/capsule-go-module-proxy-design-2026-10-14.md`; host module proxy 3c6347e8) |
 | Precommitment records | Typed predictions committed before evidence, then settled and scored | **Partly built**: record type, append-once persistence, desk verbs, derived views exist; nothing settles or scores yet | `internal/types/commitment.go`; `docs/precommitment-records.md` §10; station L3 is intent |
 | Prospective self-alignment (PSA) | The research theory: procedural fidelity, calibration, materiality, oversight without readable chain of thought | **Theory; experiments H1-H5 not run** | `docs/precommitment-records.md` §8-10 |
-| Granular reputation | Track records per individual, agent, team, organization, institution, public figure, from settled records | **Designed** (claims, events and entities ontology and box scores, 14 Oct; no code) | `docs/reports/claims-events-entities-ontology-2026-10-14.md` (be8e0dabb, da9de233f); boundary "a source's record is a view over settled claims with denominators, never one reputation number" (`docs/definitions/choir-ledger-metamission-2026-10-13.md`) |
+| Granular reputation | Track records per individual, agent, team, organization, institution, public figure, from settled records | **Designed** (claims, events and entities ontology and box scores, 14 Oct; no code) | `docs/reports/claims-events-entities-ontology-2026-10-14.md` (be8e0dabb, da9de233f); boundary "a source's record is a view over settled claims with denominators, never one reputation number" (`docs/archive/definitions/choir-ledger-metamission-2026-10-13.md`) |
 | Learning economy, multiplayer intelligence | Many computers and people exchanging work, judgments and paid queries, with reputation routing demand | **Vision** | `docs/precommitment-records.md` §7; seed deck treatment `docs/deck/choir-seed-deck-treatment-2026-10-08.md` |
 | App agents ("every application as an app agent") | Each app is a window plus its own desk, a verb registry, an op log, versioned objects | **Designed (research)**; app windows exist without desks | `docs/research/puter-everything-2026-10-14/README.md`; station LP (S7 app packages) pending |
-| Contributions and op-eds | Readers bring sources, write op-eds citing pinned story versions, suggest edits | **Intent (station LC)**; needs accounts (LA) | `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
+| Contributions and op-eds | Readers bring sources, write op-eds citing pinned story versions, suggest edits | **Intent (station LC)**; needs accounts (LA) | `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
 | Front-page ranking and personalization | Importance, not churn; learned by scored predictions; personal re-ranking on the reader's computer | **First slices live (LF0 importance, LF1 sections); rest intent** | Commit 1f84fa908; front API carries `importance` and `section` |
 | Web desktop | Windows, Texture editor, files, mail, media, Autopaper app, console | **Built, live** | `frontend/src/lib/*.svelte`, `frontend/src/lib/apps/registry.ts` |
 | External agents via API | Anything that can make API calls can drive the computer | **Built (CLI and API keys); no MCP server yet** | `cmd/choir/main.go` verbs; delegated keys `choir api-key create` |
@@ -233,7 +233,7 @@ substrate.
 develop itself cannot be trusted to report the world." In practice the order
 has bent. Autopaper went live on 13 October before the self-development gate
 (Gate 2) passed, because the re-engineering metamission
-(`docs/definitions/choir-reeng-metamission-2026-10-12.md`) chose three cuts to
+(`docs/archive/definitions/choir-reeng-metamission-2026-10-12.md`) chose three cuts to
 "Autopaper live" and the owner then made Autopaper scaling, and today
 efficiency, the top priorities. This is a deliberate reordering by the owner,
 not drift, but it means the newspaper now runs on a computer whose
@@ -367,7 +367,7 @@ eighth of nine slices. The same design amends the wording "sources never
 precommit" (Choir records the claim for them) but keeps its intent.
 
 **The owner's ruling on risk** (about 14:55 UTC,
-`docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`): legal
+`docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`): legal
 risk from scoring public actors is accepted ("a serious best effort aiming
 for excellence ... attempting to be neutral and multi-perspectival"); the
 quality standards stay as the excellence bar: attribution evidence,
@@ -741,7 +741,7 @@ today) and the policy-governed multiagent consensus the doctrine describes
   the thread key (`internal/modelpolicy`, `internal/modelcatalog/catalog.go`).
   Every desk runs on deepseek-v4.1-flash and gpt-6-luna, each the other's
   fallback; LongCat was removed from the default pool on 14 October for
-  latency (`docs/evidence/model-latency-paper-2026-10-14.md`).
+  latency (`docs/archive/evidence/model-latency-paper-2026-10-14.md`).
 - **Search** (`internal/gateway/searchplane`): each query fans out to every
   eligible provider (searxng, keenable, parallel, tavily, brave, exa,
   serper, serpapi, chatgpt) and streams results; failures put a provider in
@@ -897,11 +897,11 @@ on 2026-10-11: no hill-climbing a prompt before the failure is understood
 from traces. The Mauritius stub investigation on 14 October is the pattern
 done right: the trace showed research *did* search the web, but on one or
 two of nine providers, so the fix moved to the search substrate
-(`docs/reports/autopaper-deepen-important-stories-2026-10-14.md`).
+(`docs/archive/reports/autopaper-deepen-important-stories-2026-10-14.md`).
 
 **Deletion as a practice:** the D0 dead-code census removed about 50,000
 lines, every deletion owner-approved
-(`docs/reports/dead-code-census-2026-10-12.md`; `docs/ACTIVE.md`).
+(`docs/archive/reports/dead-code-census-2026-10-12.md`; `docs/ACTIVE.md`).
 
 ### 4.4 Restarts end work (crash) or resume it (planned update)
 
@@ -915,14 +915,14 @@ computer twice is closed with that cause (`CLAUDE.md`).
 
 **Receipts:** auto-resume after a crash is how crash-restart loops happen.
 The August held-computer boot crash loops
-(`docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
+(`docs/archive/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
 and three siblings), a crash restart that left work open and re-cast
-engineering (`docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md`),
+engineering (`docs/problems/crash-boots-redrive-applies-2026-10-13.md`),
 crash boots that re-applied updates
 (`docs/problems/crash-boots-redrive-applies-2026-10-13.md`), and on
 14 October a planned refresh that closed the paper's schedules and left it
 silent for about an hour
-(`docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`),
+(`docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`),
 which produced the "standing intents survive" refinement (owner ruling 6).
 
 Station L1 turns this into a bound: at most (1 + allowance) spawns times
@@ -975,7 +975,7 @@ commit, run the deployed acceptance proof (`CLAUDE.md`, "Landing Loop").
   should be reachable through the product API or CLI under a scoped key.
   The C0 "eyes" cut built trace export without SSH, a tracer, an invariant
   checker and request-id routing for exactly this
-  (`docs/evidence/c0-eyes-acceptance-2026-10-13.json`).
+  (`docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json`).
 
 ### 4.8 Harness minimalism and minimal structure
 
@@ -1184,11 +1184,11 @@ per day rose from 101 (9 Oct) to 4,140 (14 Oct, to 14:08 UTC) because
 streaming search calls every paid provider. The doc's own clustering: this
 is the fourth search-plane fix in five days, and "the earlier fixes changed
 which outcomes count, never how a count becomes a bench"
-(`docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`).
+(`docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`).
 ac5c17db on `main` reworks the strike model; refills and a cost model are
 owner decisions. Each metered provider costs roughly $20-40 a day at this
 volume.
-A measurement the same afternoon (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`) found that only
+A measurement the same afternoon (`docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md`) found that only
 about 1.5% of returned results are read and none are kept, 27% of page
 reads fail at the publisher, exact repeats are 3.5% but a third of
 searches re-ask within ten minutes what the same computer just asked, and
@@ -1218,7 +1218,7 @@ not traced:* the task text from management delegation (S2a, deployed in the
 pre-demo deploy) is being used as the story title. Per the operating
 contract this needs a problem record and a trace before a fix. A
 one-paragraph, one-source stub led the front page earlier in the day
-(`docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md`).
+(`docs/archive/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md`).
 
 **4. Serial management and slow models.** From 03:20 UTC on 14 October no
 stories opened for over 30 minutes: one management run held the desk's only
@@ -1226,8 +1226,8 @@ turn for 1,680 s (58 calls, 4.1 M input tokens), and 105 of 132 arrivals
 found management busy. LongCat's latency was 21.8 s at the median and 932 s
 at the maximum. Then free-model 429s opened the whole provider circuit; 29
 research runs failed and stub stories auto-published
-(`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`,
-`docs/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md`).
+(`docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md`,
+`docs/archive/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md`).
 Fixed or mitigated: LongCat out of the pool, Jev doing support judgements,
 per-model breakers, a hold on uncited publishes, and S2a delegation.
 
@@ -1258,7 +1258,7 @@ on purpose.
 cross-model error class. Failing cells fell from 19.9% to 13.1% after the
 cluster fixes on 13 October, but concurrent `choir.*` calls in one cell can
 still receive each other's results
-(`docs/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md`).
+(`docs/archive/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md`).
 
 **10. Retired names in persisted identity.** "Universal Wire" appears in 26
 non-doc files, including the paper computer's VM identity; renaming
@@ -1454,7 +1454,7 @@ assessments:
    cancelled-run rounds all failed the same way: work that nothing would
    ever finish or close. The 9 October obligation inventory found one
    periodic driver against about 30 boot or event re-drivers, with retry
-   budgets on only four paths (`docs/evidence/sl-obligation-inventory-2026-10-09.md`).
+   budgets on only four paths (`docs/archive/evidence/sl-obligation-inventory-2026-10-09.md`).
    The "records as work state" cuts (C1, C1e) and the restart rules are the
    substrate answer.
 2. **Health counters that punish the wrong party.** Caller cancels, client
@@ -1499,7 +1499,7 @@ assessments:
 ## 7. Expected progress
 
 This section is a forecast built from the roadmap documents
-(`docs/ACTIVE.md`, the ledger metamission, `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`,
+(`docs/ACTIVE.md`, the ledger metamission, `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`,
 `docs/reports/owner-roadmap-rulings-2026-10-14.md`) and the pace of the last
 two weeks. It is not a commitment. Each item names its station, its
 dependencies, and the decision it needs from the owner, if any.
@@ -1538,7 +1538,7 @@ in order of expected effect:
 | Artifact store leak | About 12 GB a day of growth on Node B | Fix 89103722; GC activated with a 7-day window (fa3b3336); measure the reclaim |
 | Snapshot budget by real bytes | Hibernated computers keep deleted-but-mapped snapshot files | Deployed in the pre-demo deploy (ee2267ba) |
 | Prompt-cache hits | Every desk prompt carries the time to the second at about token 275, so nothing after it is cached across turns | Measurement landed (34a3e524); the fix (move or coarsen the timestamp) is next |
-| Guest daemon's store memory | 690 MiB private in the daemon vs about 17 MiB per desk worker: "the real density lever" | Measured (`docs/evidence/guest-memory-split-balloon-2026-10-14.md`) |
+| Guest daemon's store memory | 690 MiB private in the daemon vs about 17 MiB per desk worker: "the real density lever" | Measured (`docs/archive/evidence/guest-memory-split-balloon-2026-10-14.md`) |
 | Guest memory right-sizing, KSM | More computers per host | Design only |
 | Disk cleanup, Nix store retention | Single host disk pressure | Nix GC timer deployed (51c522b1) |
 | Jev cost accounting | Jev calls are missing from `/api/costs` | Gap named in `docs/evidence/model-prices-2026-10-14.md` |
@@ -1547,7 +1547,7 @@ Expected result by the end of the week: a measured per-computer RAM and
 disk figure after the levers, a measured cache-hit rate, and the
 oversubscription probe (how many paper-sized and small computers fit on
 Node B). The provisional read is about 4-5 paper-sized or about 20 small
-computers before pressure (`docs/reports/lr-scaling-cost-provisional-2026-10-14.md`).
+computers before pressure (`docs/archive/reports/lr-scaling-cost-provisional-2026-10-14.md`).
 
 **Autopaper scaling (L2a, S2a, LF), after or beside the optimizations.**
 - L2a: adjudicate the 31 false-merge candidates and trace the 38 missed
@@ -1568,7 +1568,7 @@ computers before pressure (`docs/reports/lr-scaling-cost-provisional-2026-10-14.
   story and captures per story should rise while stories per hour rise
   far less than captures per hour.
 - Fix instruction-phrased story titles (section 5.5).
-- Search reuse (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`):
+- Search reuse (`docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md`):
   measure the result cache (7250d36bf), then keep every search and page
   read as objects with provenance, look in held text first, and route by
   budget instead of calling every provider.
@@ -1672,7 +1672,7 @@ himself (8.6).
 | Cost | Fixed or per user | What drives it | What we know today |
 |---|---|---|---|
 | **Autopaper inference** (polling triage, research, writing, citation checks, ranking) | **Fixed per paper, amortized across all readers** | Number of sources and events, not readers | A priced window on the paper cost $0.33-$0.65 in usage, $2.91-$3.23 at list rates, 81% of list cost on a free-for-now model (`docs/evidence/model-prices-2026-10-14.md`). At list rates a 14-source paper is estimated at about $109 a day (`docs/reports/vm-density-limits-2026-10-14.md`). Logged-out readers trigger no inference: reads come from the host store |
-| **Search** (paid web search providers) | Mostly fixed for Autopaper; per user for personal research | Searches times providers per search | About 4,000 searches a day, each fanned out to every healthy provider; roughly $20-40 a day per metered provider at that volume; about 1.5% of results are read and none kept (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`) |
+| **Search** (paid web search providers) | Mostly fixed for Autopaper; per user for personal research | Searches times providers per search | About 4,000 searches a day, each fanned out to every healthy provider; roughly $20-40 a day per metered provider at that volume; about 1.5% of results are read and none kept (`docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md`) |
 | **Embeddings** (planned, for corpus-first retrieval) | Fixed | Tokens of captured text | 22-45 M tokens a day; fits Node B under a 3-core quota; a backfill is about $10 on a rented GPU or about $18 by API; an API serves the same model at $0.02 per million tokens (`docs/research/embeddinggemma-2-cpu-2026-10-14.md`) |
 | **Personal inference** (a user's own research, engineering, analysis; Autoradio conversations) | **Per user, on demand** | What the user and their agents ask for | Recorded per call with list prices and cached tokens, shown per computer at `/api/costs` (`internal/llmcost`, `internal/apihandler`); not billed |
 | **Compute** (the VM, memory, disk) | Per user (a computer each), plus the paper and platform | RAM held, disk held, CPU while working | A paper-sized computer holds about 5.6 GiB host RSS; small computers 1.2-1.3 GiB; Node B has 31 GiB and a 476 GB disk. The density report (`docs/reports/vm-density-limits-2026-10-14.md`, estimates to be replaced by a benchmark) puts a 16-core, 128 GB EPYC 7371 host at about 20 busy computers (CPU binds) and about 1,200-2,000 registered users, with idle computers hibernated to disk |
@@ -1709,7 +1709,7 @@ paper computer (section 3.8). The same holds for the planned box scores
 | Principle | Owner's words | Status in the repo |
 |---|---|---|
 | **Zero margin on inference** | "We would not be extracting any margin whatsoever on inference ... we'll sell inference at zero margin" | **Vision.** Costs are metered per call at list price (`internal/llmcost/pricing.go`), which is the prerequisite; there is no billing |
-| **Bring your own inference** | "Have ways for people to plug in their own inference if they already have inference credits ... we will support that eventually" | **Vision.** Today the gateway holds *platform* credentials only (`internal/provider/provider.go`; providers register when the operator's credentials exist). The ChatGPT route is the operator's own ChatGPT subscription through Codex OAuth (`ChatGPTProvider`, `https://chatgpt.com/backend-api/codex/responses`), shared by every computer. There is no per-user provider credential, no per-user routing, and no sign-in with a model provider. The LA scope note records "an OpenAI sign-in for users' own credits" as a later idea and that the owner does not want Choir reselling ChatGPT (`docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`) |
+| **Bring your own inference** | "Have ways for people to plug in their own inference if they already have inference credits ... we will support that eventually" | **Vision.** Today the gateway holds *platform* credentials only (`internal/provider/provider.go`; providers register when the operator's credentials exist). The ChatGPT route is the operator's own ChatGPT subscription through Codex OAuth (`ChatGPTProvider`, `https://chatgpt.com/backend-api/codex/responses`), shared by every computer. There is no per-user provider credential, no per-user routing, and no sign-in with a model provider. The LA scope note records "an OpenAI sign-in for users' own credits" as a later idea and that the owner does not want Choir reselling ChatGPT (`docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`) |
 | **Bulk and self-hosted inference** | "Buy inference in bulk and offer it at a lower price than API rates. And even self-host some of our own inference" | **Vision**, with one related research note: self-hosting embeddings is sized and recommended (CPU now, GPU only for multimodal or 10-50x volume) |
 | **Margin on compute** | "We will charge margins for cloud compute for VMs, for memory and storage" | **Vision.** Computer tiers exist (paid accounts always on, the platform tier above; 188f98c3), which is the product shape a compute price would attach to |
 | **Free reading, paid generation** | (seed deck, 8 Oct) "Reading a shared result can be free. Asking Choir to produce a new, personalized result is paid" | Consistent with the architecture; no paywall exists |
@@ -1903,11 +1903,11 @@ design puts the say-do eval of Choir's own desks first.
 
 | Risk | Why | Link |
 |---|---|---|
-| **Licensing for resale of derived data** | Selling a data feed is redistribution. Many sources forbid commercial use or redistribution (ACLED without a corporate licence, openrss.org, CNA and UDN as non-commercial, ransomware.live without written approval); Cofacts is CC BY-SA (share-alike on redistribution); terms for some paid news APIs are not stated. Whether a derived statistic (a box score, an aggregate) is "adapted material" is a question for counsel | `docs/reports/multilingual-osint-sourcing-research-2026-10-13.md`; `docs/reports/owner-roadmap-rulings-2026-10-14.md` ruling 12; `docs/research/autopaper-media-and-rights-2026-10-14/README.md` |
+| **Licensing for resale of derived data** | Selling a data feed is redistribution. Many sources forbid commercial use or redistribution (ACLED without a corporate licence, openrss.org, CNA and UDN as non-commercial, ransomware.live without written approval); Cofacts is CC BY-SA (share-alike on redistribution); terms for some paid news APIs are not stated. Whether a derived statistic (a box score, an aggregate) is "adapted material" is a question for counsel | `docs/archive/reports/multilingual-osint-sourcing-research-2026-10-13.md`; `docs/reports/owner-roadmap-rulings-2026-10-14.md` ruling 12; `docs/research/autopaper-media-and-rights-2026-10-14/README.md` |
 | **Substitution** | The rights research finds liability where output substitutes for the source. A feed of story text substitutes more than a feed of claims, events and settlements with links | Media and rights README, bottom line 2 |
 | **EU press publishers' right and AI Act labelling** | Applies to what the API serves into the EU as much as to the site | Media and rights README, points 3-4 |
 | **Neutrality vs customers** | Selling to funds or governments creates a perceived (or real) interest in what the paper says and how actors score. The ontology's excellence bar (attribution evidence, several readings, neutrality, right of reply, visible uncertainty) and a public scoring policy are the defence; customer data must never shape scores | Ontology §7.3; owner ruling of 14 Oct on accepted legal risk |
-| **Scoring public actors** | The owner has accepted the legal risk (defamation) of scoring public statements, "a serious best effort aiming for excellence"; the quality standards stay as the bar. Selling those scores raises the stakes | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md` (ruling about 14:55 UTC) |
+| **Scoring public actors** | The owner has accepted the legal risk (defamation) of scoring public statements, "a serious best effort aiming for excellence"; the quality standards stay as the bar. Selling those scores raises the stakes | `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md` (ruling about 14:55 UTC) |
 | **Privacy** | Autoradio and personal computers hold private work, mail and voice; aggregate box scores must never be computed over private data; agent consulting must prove that private data does not leave a computer. Dolt keeps history forever, which conflicts with erasure | Section 9.3 (erasure vs versioned history) |
 | **Zero inference margin** | Leaves no buffer if providers raise prices or free tiers end; the paper's own inference must be funded elsewhere | 8.2 |
 | **Bring-your-own terms** | Consumer subscriptions may not permit third-party, multi-user use; the current operator ChatGPT route should be checked too | 8.3 |
@@ -1923,16 +1923,16 @@ each group.
 
 | Risk | Why it matters | Evidence | Mitigation in the plan |
 |---|---|---|---|
-| **One host** | Every durable home (Store A, Store B, content store, escrow, every computer) is on Node B. A disk or host failure loses the platform and possibly the only copy of the ledger | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`; platform keys copied offline only on 14 Oct (`docs/evidence/platform-key-backup-2026-10-14.md`) | SP0-lite encrypted backups on node-a; SP with a second host |
+| **One host** | Every durable home (Store A, Store B, content store, escrow, every computer) is on Node B. A disk or host failure loses the platform and possibly the only copy of the ledger | `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`; platform keys copied offline only on 14 Oct (`docs/evidence/platform-key-backup-2026-10-14.md`) | SP0-lite encrypted backups on node-a; SP with a second host |
 | **Synthesis quality** | The product principle is one story per event; live merge recall is 0.63 (corrected from 0.174) and many stories still open from one capture | `docs/evidence/l2a-after-window-1-2026-10-14.md`; owner rulings observation (47 of 50 stories from one capture) | Adjudicate misses; L2a enable; S2a; corpus-first research |
-| **Search providers** | Deepening and research depend on web search; 7-8 of 9 providers were cooling in every sampled run | `docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`; ac5c17db | Backoff fix; paid accounts (owner) |
+| **Search providers** | Deepening and research depend on web search; 7-8 of 9 providers were cooling in every sampled run | `docs/archive/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`; ac5c17db | Backoff fix; paid accounts (owner) |
 | **Instruction text leaking into published titles** | At 14:20 UTC, 9 of the 20 front-page stories had titles that read as desk instructions ("Write the story of ...", "Open a story on ...") | Public front API, 14 Oct 14:20 UTC; "Open a story on" already named in the LF intent note | Needs a problem record and a trace before a fix (hypothesis: management task text used as title after S2a) |
 | **Lost publishes** | The guest's auto-publish queue is in memory; a publish lost to a crash is never retried, so a revision can exist without its public version | Code survey (`internal/agentcore/story_publish.go`) | None yet; candidate for the records substrate |
-| **Updates to busy computers** | The paper is never idle, so it is never refreshed automatically; one refresh closed its schedules for about an hour | `docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`; ce59d406 | Station LU (pull with a bounded drain) |
+| **Updates to busy computers** | The paper is never idle, so it is never refreshed automatically; one refresh closed its schedules for about an hour | `docs/archive/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`; ce59d406 | Station LU (pull with a bounded drain) |
 | **Pressure reclaim** | Reclaim hibernated a real user's computer during disk scans and builds; the snapshot was rejected after a deploy and the cold boot wedged for 5 minutes | `docs/problems/pressure-reclaim-wedged-a-user-computer-2026-10-14.md` | Signal-specific reclaim (d3f7d9b2), tiers, S3 snapshots |
 | **Self-development substrate drift** | The October 10 complete episode was on the pre-C1e substrate; engineering's work state has since moved to records | C1e B1 problem record; Go module decision | Rerun the drill end to end after the module proxy; LU5 one apply path |
-| **Serial bottlenecks** | One management desk turn at a time blocks the paper; the guest's embedded Dolt has historically run on one connection | `docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`; `docs/autopaper-sw-design-2026-10-09.md` §0 (C1) | S2a delegation; SA store split |
-| **Deploy safety** | Each deploy to the shared guest runtime is still a careful, one-at-a-time act; residual 502s on deploy (D4) | `docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md` | 2db4bc02; LU; SP1 zero-downtime deploys |
+| **Serial bottlenecks** | One management desk turn at a time blocks the paper; the guest's embedded Dolt has historically run on one connection | `docs/archive/problems/management-serial-turn-blocks-paper-2026-10-14.md`; `docs/autopaper-sw-design-2026-10-09.md` §0 (C1) | S2a delegation; SA store split |
+| **Deploy safety** | Each deploy to the shared guest runtime is still a careful, one-at-a-time act; residual 502s on deploy (D4) | `docs/archive/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md` | 2db4bc02; LU; SP1 zero-downtime deploys |
 | **Breadth of the code** | The two largest packages, `internal/agentcore` and `internal/textureowner`, are so large CI shards them; most incidents this week were in the boot, restart and lifecycle paths | Code survey (section 5) | D0-style deletions; the tracer and invariant checker |
 
 ### 9.2 Cost
@@ -1944,7 +1944,7 @@ each group.
   LongCat has since left the default pool for latency. When free tiers end,
   costs could rise severalfold at the same volume.
 - **Input dominates.** Tokens run about 28:1 input to output, with research
-  75% of input (`docs/reports/lr-scaling-cost-provisional-2026-10-14.md`).
+  75% of input (`docs/archive/reports/lr-scaling-cost-provisional-2026-10-14.md`).
   Prompt caching across turns is broken by a per-second timestamp.
 - **The real constraint is RAM, disk and CPU on one host**, as the owner
   said. A paper-sized computer holds about 5.6 GiB host RSS; Node B has
@@ -2073,24 +2073,24 @@ each group.
 
 | Station | Name | Status | Goal file or source |
 |---|---|---|---|
-| L0 | Close the re-engineering metamission (E3, A1, C1e, final review) | working | `docs/definitions/choir-reeng-metamission-2026-10-12.md` |
-| L1 | No crash loops (L1a landed; L1b, L1c next) | working | `docs/definitions/choir-ledger-l1-restart-2026-10-13.md` |
+| L0 | Close the re-engineering metamission (E3, A1, C1e, final review) | working | `docs/archive/definitions/choir-reeng-metamission-2026-10-12.md` |
+| L1 | No crash loops (L1a landed; L1b, L1c next) | working | `docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md` |
 | L2 | Bounded attention (L2b: digest, triage, burst) | pending | planned path `docs/definitions/choir-ledger-l2-bounded-attention-2026-10-13.md` (not yet authored) |
-| L2a | Synthesis intake: one story per event across languages | working | `docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md` |
-| LR | Resource efficiency and model cost (with S3, SA) | working | `docs/definitions/choir-ledger-lr-resource-2026-10-13.md` |
-| LU | Guest updates: pull with a bounded drain | working (reviewed) | `docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md` |
-| L3 | Hypotheses settled and scored | pending (intent) | planned path `docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md` (not yet authored) |
+| L2a | Synthesis intake: one story per event across languages | working | `docs/archive/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md` |
+| LR | Resource efficiency and model cost (with S3, SA) | working | `docs/archive/definitions/choir-ledger-lr-resource-2026-10-13.md` |
+| LU | Guest updates: pull with a bounded drain | working (reviewed) | `docs/archive/definitions/choir-ledger-lu-guest-updates-2026-10-14.md` |
+| L3 | Hypotheses settled and scored | pending (intent) | planned path `docs/archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md` (not yet authored) |
 | L4 | Taiwan and East Asia vertical | pending (intent) | planned path `docs/definitions/choir-ledger-l4-taiwan-2026-10-13.md` (not yet authored) |
 | L5 | Evidence reader and Autoradio prototype | pending (intent) | planned path `docs/definitions/choir-ledger-l5-read-models-2026-10-13.md` (not yet authored) |
-| LP | App packages (S6 commit gate, then S7) | pending | `docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md` |
-| LA | Auth: passkeys plus email magic link, recovery | pending (unauthored) | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
-| SP | Production infrastructure: second host, off-host copies, failover | deferred | `docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md` |
-| LT | Agentic red teaming | pending (unauthored) | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
-| LF | Front-page ranking and personalization (LF0, LF1 live) | pending (intent) | `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
+| LP | App packages (S6 commit gate, then S7) | pending | `docs/archive/definitions/choir-appdev-s7-app-packages-2026-10-01.md` |
+| LA | Auth: passkeys plus email magic link, recovery | pending (unauthored) | `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
+| SP | Production infrastructure: second host, off-host copies, failover | deferred | `docs/archive/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md` |
+| LT | Agentic red teaming | pending (unauthored) | `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
+| LF | Front-page ranking and personalization (LF0, LF1 live) | pending (intent) | `docs/archive/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
 | LC | Contributions, op-eds, editing | pending (intent) | same |
-| S2a | Management delegation to sub-RLMs | deployed 14 Oct | `docs/reports/management-delegation-design-2026-10-14.md` |
-| S3 | Snapshot hibernation | deployed, proven | `docs/reports/s3-snapshot-hibernate-design-2026-10-14.md` |
-| S4-S6 | Capsule open world, live preview, commit gate (Gate 2) | pending | `docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md` |
+| S2a | Management delegation to sub-RLMs | deployed 14 Oct | `docs/archive/reports/management-delegation-design-2026-10-14.md` |
+| S3 | Snapshot hibernation | deployed, proven | `docs/archive/reports/s3-snapshot-hibernate-design-2026-10-14.md` |
+| S4-S6 | Capsule open world, live preview, commit gate (Gate 2) | pending | `docs/archive/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md` |
 | S8-S11 | Publication and adoption, forks and fleets, org templates, fleet pushes | later | supervised app-development metamission |
 
 ## Appendix C. Key file map
@@ -2105,13 +2105,13 @@ each group.
 | Precommitment records | `docs/precommitment-records.md`, `docs/precommitment-records.md` |
 | Autopaper design | `docs/autopaper-sw-design-2026-10-09.md` |
 | Current work view | `docs/ACTIVE.md`, `docs/mission-graph.yaml` |
-| Active goal | `docs/definitions/choir-ledger-metamission-2026-10-13.md` |
-| Owner rulings and sequencing | `docs/reports/owner-roadmap-rulings-2026-10-14.md`, `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
+| Active goal | `docs/archive/definitions/choir-ledger-metamission-2026-10-13.md` |
+| Owner rulings and sequencing | `docs/reports/owner-roadmap-rulings-2026-10-14.md`, `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md` |
 | App agents research | `docs/research/puter-everything-2026-10-14/README.md` |
 | Media and rights research | `docs/research/autopaper-media-and-rights-2026-10-14/README.md` |
 | Pre-flight questions | `docs/standing-questions.md` |
 | Claims, events, entities, box scores | `docs/reports/claims-events-entities-ontology-2026-10-14.md` |
-| Search efficiency and reuse | `docs/reports/search-efficiency-and-reuse-2026-10-14.md` |
+| Search efficiency and reuse | `docs/archive/reports/search-efficiency-and-reuse-2026-10-14.md` |
 | Local embeddings | `docs/research/embeddinggemma-2-cpu-2026-10-14.md` |
 | VM density limits | `docs/reports/vm-density-limits-2026-10-14.md` |
 | Provider credentials (platform only) | `internal/provider/provider.go` (`ChatGPTProvider`, Codex OAuth) |

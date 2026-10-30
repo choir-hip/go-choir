@@ -57,7 +57,7 @@ so today's work (19834f68, rerun 11) did not create these.
    excluded "so a wedged op cannot pin the guest busy forever". An executing
    operation orphaned by a crash pins it anyway.
 3. **Busy computers never update.** Deploys leave active computers alone
-   (`ci.yml`, docs/problems/deploy-restarts-busy-computers-2026-10-09.md).
+   (`ci.yml`, docs/problems/always-busy-computer-never-updates-2026-10-15.md).
    A computer picks up new code at its next idle stop or wake. A computer
    that is never idle never boots onto code that could close its zombies.
    This deadlock is the "known weak spot" in that doc, reached through
@@ -66,7 +66,7 @@ so today's work (19834f68, rerun 11) did not create these.
    while others are open. Nothing stopped five attempts in five days from
    piling up.
 
-Related: docs/problems/s0-selfdev-executing-wedge-2026-10-04.md. That doc
+Related: docs/archive/problems/s0-selfdev-executing-wedge-2026-10-04.md. That doc
 covers an operation that stays in executing after its model turn ends,
 while the guest is still up. This doc covers the restart case. The fixes
 below close both cases at the next crash boot. They do not close the live

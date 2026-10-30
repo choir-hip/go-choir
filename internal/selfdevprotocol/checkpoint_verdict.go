@@ -1,7 +1,7 @@
 package selfdevprotocol
 
 // The host's verdict on a published checkpoint
-// (docs/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 "The proof"
+// (docs/archive/design/apply-checkpoint-without-replay-2026-10-26.md, 4.1 "The proof"
 // and residual R1). The guest binds a checkpoint from its live store without
 // replaying; the host (checkpointd) rebuilds the projection at the
 // checkpoint's head from the tape alone and compares the two witnesses.

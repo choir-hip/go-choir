@@ -68,8 +68,8 @@ boundaries:
   authority_sources:
     - docs/security-density-architecture-checklist-2026-10-21.md items RES-07, RES-19, RES-21
     - docs/reports/vm-density-limits-2026-10-14.md §4 and Residuals
-    - docs/definitions/choir-ledger-lr-resource-2026-10-13.md (source sweep, oversubscription probe)
-    - docs/reports/lr-guest-memory-return-2026-10-14.md (staging proof plan, steps 3-6)
+    - docs/archive/definitions/choir-ledger-lr-resource-2026-10-13.md (source sweep, oversubscription probe)
+    - docs/archive/reports/lr-guest-memory-return-2026-10-14.md (staging proof plan, steps 3-6)
   must_preserve:
     - A creating step runs on test computers only and refuses the paper, the owner computer and the delegate computer-ad1b46d4c20129e84b9e239cf4720fb9.
     - Reads are read-only; no secret is printed; no SQL, no tape edits, no guest block-device access.

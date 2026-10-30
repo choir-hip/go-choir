@@ -1,7 +1,7 @@
 # Prompt cache breaks across turns, and gpt-6-luna does not cache at all (2026-10-14)
 
 Owner, 2026-10-14: fix Choir's prompt caching across turns to cut
-inference cost. Analysis: `docs/reports/prompt-cache-analysis-2026-10-14.md`
+inference cost. Analysis: `docs/archive/reports/prompt-cache-analysis-2026-10-14.md`
 (findings B1-B11). Measurement landed in 34a3e524f and is deployed
 (staging build b349cbbef, deployed 17:13:44Z). This record is the first
 measured read of it. Problem first; the fixes come after this commit and

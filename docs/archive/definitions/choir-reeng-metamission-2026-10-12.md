@@ -25,13 +25,13 @@ metamission:
     - id: M0
       path: docs/model-pools-design-2026-10-12.md
       readiness: reviewed
-      status: landed (code b0d69d4d; staging acceptance PASS, docs/evidence/m0-model-pools-acceptance-2026-10-12.json; failover-event proof carried to C0)
+      status: landed (code b0d69d4d; staging acceptance PASS, docs/archive/evidence/m0-model-pools-acceptance-2026-10-12.json; failover-event proof carried to C0)
       depends_on: []
       note: model pools (owner 2026-10-12, "do this configuration setup first"); red; its acceptance is in the design doc
     - id: D0
-      path: docs/reports/dead-code-census-2026-10-12.md
+      path: docs/archive/reports/dead-code-census-2026-10-12.md
       readiness: reviewed
-      status: landed (6505fa33; about 50,000 lines deleted; staging acceptance PASS, docs/evidence/d0-dead-code-acceptance-2026-10-12.json)
+      status: landed (6505fa33; about 50,000 lines deleted; staging acceptance PASS, docs/archive/evidence/d0-dead-code-acceptance-2026-10-12.json)
       depends_on: [M0]
       note: >-
         dead-code census, then removal (owner 2026-10-12: "identify all the
@@ -41,25 +41,25 @@ metamission:
         it; the owner reads it and rules; removals land before C0 so the
         cuts start from a smaller system. Read-only until the owner rules.
     - id: C0
-      path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
+      path: docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: reviewed
-      status: landed (2026-10-13; receipts docs/evidence/c0-eyes-acceptance-2026-10-13.json)
+      status: landed (2026-10-13; receipts docs/archive/evidence/c0-eyes-acceptance-2026-10-13.json)
       depends_on: [D0]
     - id: C1
-      path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
+      path: docs/archive/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: reviewed
-      status: core landed (2026-10-13 at 76ab40fd; receipts docs/evidence/c1-core-mgmt-acceptance-2026-10-13.json, c1-core-crash-acceptance-2026-10-13.json); C1e items remain
+      status: core landed (2026-10-13 at 76ab40fd; receipts docs/archive/evidence/c1-core-mgmt-acceptance-2026-10-13.json, c1-core-crash-acceptance-2026-10-13.json); C1e items remain
       depends_on: [C0]
     - id: C1e
-      path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md (scope: cut 1 scope_split, C1e items)
+      path: docs/archive/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md (scope: cut 1 scope_split, C1e items)
       readiness: reviewed (convergent round 3 accept 2026-10-13)
       status: working (next B0, the instruments)
       depends_on: [C2]
-      note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review; waits for the ledger metamission's L1a (docs/definitions/choir-ledger-l1-restart-2026-10-13.md), which changes the same boot re-drivers (one shared-runtime cutover at a time, 2026-10-13)
+      note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review; waits for the ledger metamission's L1a (docs/archive/definitions/choir-ledger-l1-restart-2026-10-13.md), which changes the same boot re-drivers (one shared-runtime cutover at a time, 2026-10-13)
     - id: C2
-      path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
+      path: docs/archive/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: reviewed (pre-flight panel 2026-10-13 running)
-      status: autopaper live 2026-10-13 (docs/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open (cut now card)
+      status: autopaper live 2026-10-13 (docs/archive/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open (cut now card)
       note: ends with Autopaper live, then the model comparison
       depends_on: [C1]
 
@@ -217,7 +217,7 @@ boundaries:
     (8) No wait longer than 15 minutes without reading the trace in
     between.
     Amended by the plan review of 2026-10-13
-    (docs/reports/reeng-plan-review-2026-10-13.md, owner-requested
+    (docs/archive/reports/reeng-plan-review-2026-10-13.md, owner-requested
     lateral and convergent panels): (9) a landing is read by a
     claim-directed tracer scenario (scripts/reeng_tracer.mjs --scenario),
     the full story scenario only at cut boundaries; (10) every tracer run
@@ -262,13 +262,13 @@ now:
     delta_o: the trace export and invariant checker make substrate failures visible without SSH
     scope_if_supported: AI news and Autopaper on staging computers
     status: proposed
-    evidence_refs: [docs/reports/re-engineering-studies-2026-10-12/README.md, docs/re-engineering-decisions-2026-10-12.md §12]
+    evidence_refs: [docs/archive/reports/re-engineering-studies-2026-10-12/README.md, docs/re-engineering-decisions-2026-10-12.md §12]
   decision: {what: "three cuts, cutover deploy counts as a crash, forward-fix, one breakage log per cut, redesign tripwire", kind: sequencing, status: settled (owner 2026-10-12, delegated), evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12}
   belief:
     believed_state: the studies' and panels' code claims hold at 03499ef9
     main_uncertainty: how many fix loops L3 (records, cursors, packets and work items deleted) needs; whether Cut 2 starts tonight
     next_observation: L1's crash-scenario receipt, then L3's
-  blocker_or_risk: Cut 1 is a large red change across store, agentcore, textureowner and yaegikernel, now landed commit by commit (boundaries.pace 5); test computers left running hold Node B memory and stall mints (docs/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md); the owner's computer takes every cut (accepted risk, §13.1)
+  blocker_or_risk: Cut 1 is a large red change across store, agentcore, textureowner and yaegikernel, now landed commit by commit (boundaries.pace 5); test computers left running hold Node B memory and stall mints (docs/archive/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md); the owner's computer takes every cut (accepted risk, §13.1)
   next_action: C2 unit 2a per Cut 2's landing order (quotematch and Refs, block captures and Read, async search in parallel; then Texture Write; then support judgement), one claim-directed scenario per behavior push; tag reeng-cut2-last-good at 76ab40fd before 2a deploys
 
 receipts:

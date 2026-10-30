@@ -26,14 +26,14 @@ minted. All probes read-only or self-dev-arm-then-disarm; terminal state: VM
 active, no runs, self-development mode off.
 
 ### Probe 1 - capsule health map -> **gap**
-`docs/evidence/s0b-capsule-health-map-2026-10-04.json`. Guest reports ready +
+`docs/archive/evidence/s0b-capsule-health-map-2026-10-04.json`. Guest reports ready +
 empty desktop/runs; `/api/capsules` returns SPA-fallback HTML, not a capsule
 projection; `/run/choir/capsules` is unreachable across the sealed boundary;
 host VM-state dir has no capsule entries. **No observation was made** - this is
 a sealed-boundary gap, not evidence of capsule health.
 
 ### Probe 2 - M9a bundle lifecycle -> **partial + confirmed defect**
-`docs/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json`. Platform-control-signed
+`docs/archive/evidence/s0b-m9a-bundle-lifecycle-2026-10-04.json`. Platform-control-signed
 update offer accepted -> materialization_started -> materialization_applied ->
 checkpoint_published; restarted guest serves `S0B_M9A_20261004_0707` marker;
 product restore completed `witness_matched=true frontend_restaged=true`.
@@ -43,23 +43,23 @@ bound to route slot computer: no ownership for computer primary`. Root cause
 (source-traced): the fresh-owner/desktop slot contract is `computer:<owner>:primary`,
 but vmctl's guest binding calls `GetOwnershipByComputerID` on the slot's second
 component - `GetOwnershipByComputerID("primary")` - while the stable computer ID
-is `computer-ac...`. -> `docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md`.
+is `computer-ac...`. -> `docs/archive/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md`.
 
 ### Probe 3 - one Go effect -> **keydriver scope gap (no execution)**
-`docs/evidence/s0b-go-effect-2026-10-04.json`. Key minted by the probe driver
+`docs/archive/evidence/s0b-go-effect-2026-10-04.json`. Key minted by the probe driver
 lacked `computer:self_development:propose`; re-mint refused (`manage:keys`/`admin`
 required); the only stored staging session belongs to a different owner and was
 not used (single-disposable-account boundary preserved). No Go cell executed.
 `scripts/s0b_disposable_keydriver.mjs` now includes the scope for future runs.
 
 ### Probe 4 - absent runtime dep lifecycle -> **gap**
-`docs/evidence/s0b-absent-runtime-dep-2026-10-04.json`. Guest `/nix/store` is
+`docs/archive/evidence/s0b-absent-runtime-dep-2026-10-04.json`. Guest `/nix/store` is
 EROFS, sealed VM exposes no dependency-build/install/activate/dispose surface;
 `/internal/vmctl/runtime-package/autoputer` streams a package, not a build API.
 No observation.
 
 ### Probe 5 - snapshot/resume -> **gap**
-`docs/evidence/s0b-snapshot-resume-2026-10-04.json`. vmctl exposes
+`docs/archive/evidence/s0b-snapshot-resume-2026-10-04.json`. vmctl exposes
 resolve/resume/recover/refresh/runtime-package; **no** snapshot create/load,
 UFFD lazy-load, or reflink handler. Host state dir holds only live FC config +
 disk images. No observation.

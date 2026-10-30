@@ -3,7 +3,7 @@
 // Management lifecycle-control runs bound by assignment_trajectory_id), and
 // GET /api/runs/{id}/events pages each run's events in seq order. These
 // replace the /api/trace/trajectories/{id}/moments/* reads, which no route
-// ever served (docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md).
+// ever served (docs/archive/definitions/choir-reeng-cut0-eyes-2026-10-12.md).
 //
 // fetchJSON is the calling spec's own (page, path) => body helper, so the
 // spec keeps its auth and error handling.

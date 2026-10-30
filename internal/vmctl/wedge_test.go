@@ -13,7 +13,7 @@ import (
 )
 
 // Owner ruling 2026-10-10: a stranded computer recovers by itself
-// (docs/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
+// (docs/archive/problems/owner-computer-stranded-after-vmctl-restart-2026-10-10.md).
 //
 // Failure modes pinned here:
 //   - a protected guest that refuses every connection is never stopped (the

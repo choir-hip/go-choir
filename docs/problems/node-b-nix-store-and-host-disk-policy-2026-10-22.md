@@ -75,7 +75,7 @@ pressure trigger), whose "Deploy floor" section this record takes up.
     store path rooted under `builder/releases`.
 - The deploy floor (90 GiB) sits above `min-free` (80 GiB) plus a deploy's
   footprint. That is deliberate: on 2026-09-17
-  ([archive mission, item 2](../archive/mission-mail-attachments-and-app-cutover-2026-09-17.md))
+  (archive mission, item 2)
   `min-free` was 120 GiB and the floor 90 GiB, so every deploy build ran
   with free space under `min-free`; nix's auto-GC fired inside `nix build`,
   deleted the build's own not-yet-rooted inputs ("not a valid path") and

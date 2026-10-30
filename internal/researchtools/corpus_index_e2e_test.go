@@ -26,7 +26,7 @@ import (
 // and URL citation lookup, through CorpusdCaptureSink, against corpusd's
 // real routes on a real (embedded) Dolt Store B, with the guest's real
 // label store. Failure modes guarded (problem record
-// docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+// docs/archive/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
 //   8. the index path loses a match the window path finds, or ranks
 //      differently (label-only matches included);
 //   9. short tokens, CJK and attached-prefix scripts are not found;

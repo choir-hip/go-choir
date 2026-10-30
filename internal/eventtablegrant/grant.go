@@ -1,5 +1,5 @@
 // Package eventtablegrant is the host half of store.event_table (run
-// telemetry in its own table, docs/design/choir-event-table-f-c-2026-10-22.md
+// telemetry in its own table, docs/archive/design/choir-event-table-f-c-2026-10-22.md
 // 4.2). vmctl writes the grant onto a named computer's root-only credential
 // disk at cold boot (internal/vmmanager/event_table_grant.go); the guest
 // runtime reads it at boot (internal/agentcore/event_table.go). The writer

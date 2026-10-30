@@ -14,7 +14,7 @@ import (
 )
 
 // Management tasks in the store (management delegation S2a,
-// docs/reports/management-delegation-design-2026-10-14.md, round 2).
+// docs/archive/reports/management-delegation-design-2026-10-14.md, round 2).
 //
 // The store checks what it already holds, under the commit lock, and scores
 // nothing:

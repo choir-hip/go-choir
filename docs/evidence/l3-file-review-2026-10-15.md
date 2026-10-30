@@ -1,7 +1,7 @@
 # L3 goal-file review, 2026-10-15
 
 The file review of
-[choir-ledger-l3-hypotheses-settled-2026-10-13.md](../definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
+[choir-ledger-l3-hypotheses-settled-2026-10-13.md](../archive/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md).
 It took four agentic-consensus convergent rounds, from `drafted` to `reviewed`.
 Raw transcripts are local session diagnostics under `.agentic-consensus/`
 (gitignored). This file is the durable, adjudicated record.

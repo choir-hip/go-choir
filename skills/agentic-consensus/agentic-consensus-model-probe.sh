@@ -9,7 +9,7 @@
 # panel's independence claim while reporting success. `omp -p --mode json`
 # reports the provider/model that served the turn; this script asserts on it.
 #
-# See docs/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md
+# See docs/archive/problems/agentic-consensus-panel-anchor-rot-2026-10-03.md
 #
 # Usage:
 #   agentic-consensus-model-probe.sh                    # probe the default panel

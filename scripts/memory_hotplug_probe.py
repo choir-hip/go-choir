@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Staging proof for virtio-mem memory leases
-(docs/reports/memory-hotplug-controller-design-2026-10-14.md, sections 6
+(docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md, sections 6
 and 9.5).
 
 Runs ONLY on a test computer: one it mints (scripts/qa_test_computer.mjs;

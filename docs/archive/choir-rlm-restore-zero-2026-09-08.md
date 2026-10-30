@@ -245,8 +245,8 @@ now:
     - "internal/vmctl/recovery_authorities.go"
     - "docs/evidence/choir-rlm-restore-zero-reconciliation-2026-09-09.md"
     - "internal/projectionbase/verify.go and verify_test.go (slice 1)"
-    - "docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md"
-    - "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+    - "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
+    - "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
   blocker_or_risk: "Action 8 scoped owner failure-injection controls remain a recorded blocked prerequisite. Proxy 502-during-resolve and periodic near-head W publication are follow-on, not Restore-Zero remaining error."
   next_action: "none; Restore-Zero retained-store prefix=0 boot is observed. Follow-on: keep W within 10000 of future H (S1-B); optional proxy boot-screen during resolve lock."
 receipts:
@@ -412,7 +412,7 @@ receipts:
     simplification: "traces previous_head chain (in-degree 1); eliminates 148,000-file directory scan"
   - id: restore-zero-deployed-proof-2026-09-09
     boundary: verify
-    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md"
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     proof_refs:
       - "Node B: choir-rebuild-base published base W=1 (8ae2cc33, 621,056 bytes) and sidecar descriptor with vocabulary_version v1"
       - "Node B: choir-rebuild-base published base W=13 (ab740388, 920,064 bytes) in 6.39s"
@@ -434,11 +434,11 @@ receipts:
       ci_ref: "34310096303"
       deploy_ref: "Node B deploy 2026-09-09T04:30:46Z"
       environment_identity: "staging proxy 80d43427, computer epoch 890"
-      deployed_acceptance: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md"
+      deployed_acceptance: "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     registry_conformance_ref: "docs/ACTIVE.md; docs/mission-graph.yaml; docs/doc-authority-manifest.yaml"
   - id: restore-zero-blocked-prerequisites-2026-09-09
     boundary: verify
-    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md section 5"
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md section 5"
     proof_refs:
       - "docs/evidence/choir-rlm-restore-zero-deployed-baseline-2026-09-09.md section 5"
     rollback_ref: "not_applicable; evidence artifact"
@@ -479,7 +479,7 @@ receipts:
 
   - id: restore-zero-constructed-refresh-skip-2026-09-09
     boundary: verify
-    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md"
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     proof_refs:
       - "CI run 34323073581 attempt 2 success; deploy-receipt.json target 9341b5d1 activated_at 2026-09-09T07:49:24Z"
       - "artifacts.active_computers.status=empty"
@@ -492,7 +492,7 @@ receipts:
     problem_ref: "constructed-computer-version owner remains on 80d43427 after platform deploy of 9341b5d1; nonempty-store skip still live in that guest"
     authorization_ref: "Owner: snapshotting is the mission; do not mark complete on guest /health; G4 constructed-computer non-interference"
     candidate_or_evidence_refs:
-      - "docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md"
+      - "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     landing:
       source_commit: "9341b5d18d5b962a4440671233efd402038a8b8a"
       ci_ref: "34323073581"
@@ -503,7 +503,7 @@ receipts:
 
   - id: restore-zero-retained-boot-2026-09-09
     boundary: verify
-    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+    commit_or_artifact: "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     proof_refs:
       - "POST /api/computers/computer-03335285269bdba4f94377e56879f9e6/lifecycle/refresh HTTP 201 receipt_id 01a0853d-e18f-74a3-8170-8fa77ca8e183"
       - "epoch 893 -> 894; computer_url http://10.200.12.2:8085"
@@ -516,7 +516,7 @@ receipts:
     problem_ref: "constructed-computer CI skip blocked host deploy from booting PlanRecovery; owner-scoped refresh is the product path"
     authorization_ref: "Owner: snapshotting is the mission; complete only on prefix=0 retained boot, not guest /health or host SHA"
     candidate_or_evidence_refs:
-      - "docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md"
+      - "docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md"
     landing:
       source_commit: "9341b5d18d5b962a4440671233efd402038a8b8a"
       ci_ref: "34323073581"

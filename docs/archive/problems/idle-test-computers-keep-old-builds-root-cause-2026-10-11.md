@@ -147,7 +147,7 @@ At 18:35Z the four active VMs were the three test computers
 (`vm-82cf0bb7…` demo-arxiv-2026-10-10c, `vm-c31cb451…` demo-arxiv-2026-10-10,
 `vm-8cac78e5…` demo-ms-2026-10-10b) and the owner's constructed computer
 `candidate-fleet-e15cb89f…`. The docs identify that computer as the
-owner's G4-frozen computer (`docs/evidence/effects-red-cosuper-refresh-still-running-2026-08-17.md`).
+owner's G4-frozen computer (`docs/archive/evidence/effects-red-cosuper-refresh-still-running-2026-08-17.md`).
 It is the one protected. So all three test computers were idle for more
 than 30 m by vmctl's own clock, not busy by the guest probe, and not
 protected. The idle sweep skipped them only because of rule 6.

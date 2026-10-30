@@ -32,14 +32,14 @@ start:
       release is what it writes beneath var/lib/artifact/release/, the updater
       swaps CHOIR_UPDATER_ROOT/current, and the runtime is exec'd from the
       image's Nix store
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:102-110).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:102-110).
     - >-
       "M9a platform->computer signed push exists and was proven on staging
       with a 1-file payload; nothing in CI calls it"
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-122).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:120-122).
     - >-
       "Every guest-image deploy reboots active computers"
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:130-134).
     - >-
       The guest runtime wrapper sets CHOIR_UPDATER_ROOT on persistent storage
       and execs the image-built autoputer binary
@@ -57,12 +57,12 @@ start:
     - >-
       M9a has a staging proof that a tracking computer accepted a signed push
       and restored through its pinned head
-      (docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md:5-8,17-41).
+      (docs/archive/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md:5-8,17-41).
     - >-
       The owner-ratified spine makes the builder substrate an S2 dependency:
       S0b must choose host-side service, privileged builder-capsule, or scoped
       guest service before downstream closure-consuming stations proceed
-      (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
+      (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
 
 finish:
   deliver: >-
@@ -163,8 +163,8 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
-    - owner-ratified two-layer decision (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437)
-    - S2 station contract (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543)
+    - owner-ratified two-layer decision (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:425-437)
+    - S2 station contract (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-543)
     - docs/computer-ontology.md:100-121
     - AGENTS.md:109-131
   must_preserve:
@@ -200,7 +200,7 @@ heresy_delta:
     discarding the computed refusal reason (fixed 297eedf1/63865ede) — and one
     new open wedge: a post-swap guest restart loop can kill Firecracker and
     cold-boot the disposable
-    (docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md).
+    (docs/archive/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md).
     Require before completion: the executable/frontend/state/head serving
     join by digest, its deployed negative proofs, a clean rollback with
     unchanged boot id, and a CI-driven M9a push with request-to-healthy.
@@ -338,7 +338,7 @@ receipts:
       Rollback leg swap was correct but the post-swap guest restart loop
       killed Firecracker and cold-booted the disposable; criterion 6 needs
       one clean rollback leg with unchanged boot id.
-    evidence_ref: docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md
+    evidence_ref: docs/archive/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md
   - id: s2-e-rollback-atomicity-2026-10-05
     kind: station_slice
     status: landed
@@ -457,9 +457,9 @@ receipts:
       - /var/lib/go-choir/deploy-failures/s2-acceptance-20261005T*.jsonl (node B)
       - /tmp/s2-close-panel-r2/manifest.tsv (6 approve / 1 send-back)
       - CI run 37378327268 deploy log (app-layer push phase)
-      - docs/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md
-      - docs/problems/s2-refused-apply-wedges-pending-transition-2026-10-05.md
-      - docs/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md (open)
+      - docs/archive/problems/s2-app-layer-offer-bind-gaps-2026-10-05.md
+      - docs/archive/problems/s2-refused-apply-wedges-pending-transition-2026-10-05.md
+      - docs/archive/problems/s2-postswap-restart-loop-kills-vm-2026-10-05.md (open)
 
 ---
 
@@ -470,12 +470,12 @@ receipts:
 - The base remains the platform-owned NixOS image: kernel, systemd, capsule
   broker, updater, signers, and network policy. The app layer is the runtime,
   frontend, app modules, and skills, matching the ratified split
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:479-489).
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:479-489).
 - An accepted release carries the base-image identity used to build it and a
   complete Nix closure. Materialization unpacks that closure on the guest data
   disk, roots it for GC, and executes it at its original store paths; it does
   not make the shared EROFS store writable or introduce a guest-wide daemon
-  (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-533).
+  (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:523-533).
 - Retain the computer's selected base-image reference as a GC-rooted guest
   image generation. A release refuses before mutation when that reference or
   any closure dependency cannot resolve against the actually booted base.
@@ -490,7 +490,7 @@ receipts:
   computers. The deployed M9a record is evidence that signed push plus
   pinned-head restoration is a real product route, not evidence that it can
   already carry an app closure
-  (docs/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md:17-41).
+  (docs/archive/evidence/choir-platform-update-push-restore-deployed-2026-09-26.md:17-41).
 
 ## Builder dependency and handoff
 
@@ -498,7 +498,7 @@ receipts:
   service, privileged builder-capsule, or scoped guest-service substrates;
   **S2 includes landing that S0b-selected substrate before
   closure-consuming acceptance**. It MUST NOT choose a substitute by
-  convenience (docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
+  convenience (docs/archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md:538-543).
 - The landed builder hands S2 a closure, its derivation/input evidence, and
   the base identity it resolves against. S2 hands S6 a materialization contract
   for full releases; it does not absorb S6's commit gate.

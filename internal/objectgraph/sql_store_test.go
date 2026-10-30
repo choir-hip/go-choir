@@ -676,7 +676,7 @@ func TestSQLStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
 	}
 }
 
-// Failure modes pinned (docs/problems/texture-list-cold-latency-2026-10-09.md):
+// Failure modes pinned (docs/archive/problems/texture-list-cold-latency-2026-10-09.md):
 // phase 2 fetched every survivor in one IN list, and go-mysql-server's range
 // overlap check is quadratic in that list (42% of guest CPU on the owner
 // computer); batching must not drop, duplicate or reorder objects across a

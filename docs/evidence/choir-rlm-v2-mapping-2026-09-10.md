@@ -1,7 +1,7 @@
 # Mission-2 Frozen V1→V2 Mapping Tables — 2026-09-10
 
 Charter acceptance item 4. Code-free Define freeze. Source ref `main@121d03b8`.
-Inventory artifact `docs/evidence/choir-rlm-v1-inventory-2026-09-10.json` (308 rows).
+Inventory artifact `docs/archive/evidence/choir-rlm-v1-inventory-2026-09-10.json` (308 rows).
 No mapping is implied: every equivalence below is written down; the writer
 cutover (later item) verifies each row mechanically. Until owner ratification
 of §7, the three owner rows stay `unknown` and `check-v1-inventory.sh --freeze`

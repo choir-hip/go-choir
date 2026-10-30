@@ -102,7 +102,7 @@ Docs (current-state docs are fixed; dated records stay as receipts):
   imported any more, so neither ships in the built bundle or binary's
   code paths.
 - Dated records (`docs/definitions/*`, `docs/design/*`, `docs/reports/*`,
-  `docs/desk-rlm-rectification-plan-2026-09-23.md`,
+  `docs/archive/desk-rlm-rectification-plan-2026-09-23.md`,
   `docs/model-pools-design-2026-10-12.md`, older `docs/problems/*`) still
   mention zot and `super-console` as they were; they are receipts.
 - Old guests keep their `/api/super-console/ws` route until refreshed; the
