@@ -13,7 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -100,10 +100,9 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
 		return report, err
 	}
-	// The host's early word: a checkpoint it proved not derivable is refused
-	// before any base is installed. Anything else goes on to the
-	// reconstruction gate below, which stays the enforcement.
-	if err := rt.refuseNotDerivableCheckpoint(ctx, computerID, checkpoint); err != nil {
+	// A checkpoint whose witness is not version 3 was bound against the retired
+	// Dolt store; it cannot be judged and is refused before anything is read.
+	if err := selfdevprotocol.RefuseWitnessVersion(checkpoint.Request.VMLocalContentWitness.WitnessVersion); err != nil {
 		return report, err
 	}
 	priorReleaseDigest, err := rt.verifyPinnedFrontend(checkpoint)
@@ -115,36 +114,28 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	if !computerevent.IsSHA256(targetHead) {
 		return report, fmt.Errorf("%w: recovery target head is required", ErrRematerializeUnavailable)
 	}
-	src, err := rt.resolveRestoreBaseSource()
+	tape, err := rt.resolveRestoreTape()
 	if err != nil {
 		return report, err
 	}
-	var staged *choirstore.Store
-	var descriptor projectionbase.Descriptor
-	plan, err := planRestoreTarget(ctx, src, computerID, targetHead)
+	plan, err := planRestoreTarget(ctx, tape, computerID, targetHead)
 	if err != nil {
 		_ = os.RemoveAll(stagingRoot)
 		return report, err
 	}
 	targetSequence := plan.sequence
-	if !plan.fromBase {
-		// No base applies: replay the tape from genesis into the staged store.
-		// planRestoreTarget proved the target is on the canonical chain and
-		// inside the replay bound.
-		staged, err = choirstore.OpenFresh(filepath.Join(stagingRoot, filepath.Base(stagedMarker)))
-		if err != nil {
-			_ = os.RemoveAll(stagingRoot)
-			return report, fmt.Errorf("rematerialize: open staged workspace: %w", err)
-		}
-	} else {
-		staged, descriptor, err = installStagedBaseRef(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, plan.pinnedBase, targetHead, targetSequence)
-		if err != nil {
-			_ = os.RemoveAll(stagingRoot)
-			return report, err
-		}
-		// The install plan is the base-path gate: an empty staged store must
-		// resolve to RecoveryInstall with a tail inside the bound.
-		if _, err := projectionbase.PlanRecovery(true, descriptor.Sequence, true, descriptor.Sequence, targetSequence); err != nil {
+	// The staged store starts from the newest snapshot at or below the target,
+	// or from genesis when the tape holds none and the chain is inside the
+	// replay bound (planRestoreTarget refuses otherwise).
+	staged, record, err := rt.openStagedStore(ctx, tape, stagingRoot, filepath.Base(stagedMarker), computerID, plan)
+	if err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
+	if len(plan.candidates) > 0 {
+		// The install plan is the snapshot-path gate: an empty staged store
+		// must resolve to a tail inside the bound.
+		if _, err := recoveryplan.PlanRecovery(true, record.StoreHeadSequence, true, record.StoreHeadSequence, targetSequence); err != nil {
 			_ = staged.Close()
 			_ = os.RemoveAll(stagingRoot)
 			return report, err
@@ -157,8 +148,8 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: %w", err)
 	}
-	report.BaseSequence = descriptor.Sequence
-	report.BaseBlobSHA256 = descriptor.BlobSHA256
+	report.BaseSequence = record.StoreHeadSequence
+	report.BaseBlobSHA256 = record.Manifest.Root
 	report.TailTargetSequence = targetSequence
 	request.StagedWorkspacePath = staged.TexturePath()
 	if err := selfdevprotocol.RematerializeFromRequest(request); err != nil {
@@ -175,7 +166,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 		_ = os.RemoveAll(stagingRoot)
 		return report, fmt.Errorf("rematerialize: reconstruct through target: %w", reconstructErr)
 	}
-	applied, err := observer.tailReceipt(descriptor.Sequence, targetSequence)
+	applied, err := observer.tailReceipt(record.StoreHeadSequence, targetSequence)
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
@@ -183,29 +174,11 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	report.TailEventsApplied = applied
 	report.TailPagesFetched = observer.pages
-	version := replayCompletenessVersion(rt, nil)
-	if head, err := staged.Head(ctx, computerID); err == nil {
-		version = replayCompletenessVersion(rt, head)
-	}
-	extractor := replayDoltStateExtractor(staged.TexturePath())
-	var got selfdevprotocol.VMLocalContentWitness
-	if checkpoint.Request.VMLocalContentWitness.IsDoltHashWitness() {
-		// A v2 checkpoint is matched by Dolt table hashes (S3).
-		got, err = doltHashWitness(ctx, staged.DB(), extractor)
-	} else {
-		var replay computerversion.ObservationSet
-		replay, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "tape-rematerialize", Version: version})
-		if err != nil {
-			_ = staged.Close()
-			_ = os.RemoveAll(stagingRoot)
-			return report, fmt.Errorf("rematerialize: extract reconstructed witness: %w", err)
-		}
-		got, err = selfdevprotocol.WitnessFromObservationSet(replay)
-	}
+	got, err := storeWitness(ctx, staged.DB(), replayStateExtractor(staged.DB()))
 	if err != nil {
 		_ = staged.Close()
 		_ = os.RemoveAll(stagingRoot)
-		return report, err
+		return report, fmt.Errorf("rematerialize: extract reconstructed witness: %w", err)
 	}
 	if err := selfdevprotocol.WitnessContentMatches(got, checkpoint.Request.VMLocalContentWitness); err != nil {
 		_ = staged.Close()
@@ -264,27 +237,21 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	quarantinedMarker := filepath.Join(quarantineDir, filepath.Base(originalMarker))
 	quarantinedWorkspace := filepath.Join(quarantineDir, filepath.Base(originalWorkspace))
-	if err := os.Rename(originalMarker, quarantinedMarker); err != nil {
-		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: quarantine original marker: %w", err)
+	originalState, stagedState := rt.store.StatePath(), choirstore.StateDBPath(stagedMarker)
+	quarantinedState := filepath.Join(quarantineDir, filepath.Base(originalState))
+	// The original realization goes to quarantine, the staged one takes its
+	// place. A source that does not exist (the legacy marker, a workspace
+	// directory the store no longer keeps) is skipped; a failure undoes every
+	// rename already made.
+	flip := []renameStep{
+		{originalMarker, quarantinedMarker}, {originalWorkspace, quarantinedWorkspace},
+		{originalState, quarantinedState}, {originalState + "-wal", quarantinedState + "-wal"}, {originalState + "-shm", quarantinedState + "-shm"},
+		{stagedMarker, originalMarker}, {stagedWorkspace, originalWorkspace},
+		{stagedState, originalState}, {stagedState + "-wal", originalState + "-wal"}, {stagedState + "-shm", originalState + "-shm"},
 	}
-	if err := os.Rename(originalWorkspace, quarantinedWorkspace); err != nil {
-		_ = os.Rename(quarantinedMarker, originalMarker)
+	if err := applyRenames(flip); err != nil {
 		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: quarantine original workspace: %w", err)
-	}
-	if err := os.Rename(stagedMarker, originalMarker); err != nil {
-		_ = os.Rename(quarantinedMarker, originalMarker)
-		_ = os.Rename(quarantinedWorkspace, originalWorkspace)
-		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: flip staged marker: %w", err)
-	}
-	if err := os.Rename(stagedWorkspace, originalWorkspace); err != nil {
-		_ = os.Remove(originalMarker)
-		_ = os.Rename(quarantinedMarker, originalMarker)
-		_ = os.Rename(quarantinedWorkspace, originalWorkspace)
-		_ = os.RemoveAll(stagingRoot)
-		return report, fmt.Errorf("rematerialize: flip staged workspace: %w", err)
+		return report, fmt.Errorf("rematerialize: flip staged realization: %w", err)
 	}
 	_ = os.RemoveAll(stagingRoot)
 
@@ -373,9 +340,9 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	// The host's early word comes before anything is written: a refused
-	// restore leaves no restore intent on the tape.
-	if err := h.rt.refuseNotDerivableCheckpoint(r.Context(), computerID, request.Checkpoint); err != nil {
+	// A witness of another version is refused before anything is written: a
+	// refused restore leaves no restore intent on the tape.
+	if err := selfdevprotocol.RefuseWitnessVersion(request.Checkpoint.Request.VMLocalContentWitness.WitnessVersion); err != nil {
 		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
 		return
 	}
@@ -398,7 +365,7 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 // refused required base is a conflict the operator resolves by publishing or
 // selecting a compatible base, never a server error to retry blindly.
 func rematerializeRefusalStatus(err error) int {
-	if errors.Is(err, projectionbase.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) {
+	if errors.Is(err, recoveryplan.ErrBaseRefused) || errors.Is(err, ErrCheckpointNotDerivable) {
 		return http.StatusConflict
 	}
 	if errors.Is(err, ErrRematerializeUnavailable) {
@@ -485,21 +452,14 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 			return rt.publishOwnerRecoveryCheckpoint(ctx, computerID, manifest, binding)
 		}
 	}
-	binding, published, err := rt.bindCheckpoint(ctx, computerID, manifest.ContentDigest, manifest.Files, publish, false)
+	binding, published, err := rt.bindCheckpoint(ctx, computerID, manifest.ContentDigest, manifest.Files, publish)
 	if err != nil {
 		return report, err
 	}
 	report.ComputerID = computerID
-	// Eligible unless the host has already said the checkpoint is not
-	// derivable. Right after a publish the verdict is pending (the host
-	// judges within minutes); the listing shows it once it arrives.
+	// The host keeps no projection bases and rebuilds no checkpoint, so there
+	// is no host verdict to read: restore's own reconstruction gate judges.
 	report.CheckpointEligible = true
-	if published != nil {
-		if verdict, found := rt.checkpointVerdict(ctx, computerID, published.Checkpoint); found {
-			report.CheckpointVerdict = verdict.Status
-			report.CheckpointEligible = verdict.Status != selfdevprotocol.CheckpointVerdictNotDerivable
-		}
-	}
 	report.ReleaseDigest = manifest.ContentDigest
 	report.VMLocalContentWitness = binding.Witness
 	report.FrontendIdentity = binding.Frontend
@@ -738,4 +698,34 @@ func pinnedFrontendIdentity(root, releaseDigest string) (selfdevprotocol.Fronten
 		return selfdevprotocol.FrontendIdentity{}, err
 	}
 	return identity, nil
+}
+
+// renameStep is one rename of the realization flip.
+type renameStep struct{ from, to string }
+
+// applyRenames performs the steps in order, skipping a source that does not
+// exist, and undoes the ones already made when a step fails.
+func applyRenames(steps []renameStep) error {
+	var done []renameStep
+	for _, step := range steps {
+		if _, err := os.Lstat(step.from); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			undoRenames(done)
+			return err
+		}
+		if err := os.Rename(step.from, step.to); err != nil {
+			undoRenames(done)
+			return err
+		}
+		done = append(done, step)
+	}
+	return nil
+}
+
+func undoRenames(done []renameStep) {
+	for i := len(done) - 1; i >= 0; i-- {
+		_ = os.Rename(done[i].to, done[i].from)
+	}
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -436,11 +435,10 @@ type Runtime struct {
 	// it moves the operation, so a test can let the post-commit observer win
 	// that race.
 	selfdevDecisionBeforeTransition func(ctx context.Context, operationID string)
-	// restoreBaseSource overrides verified-base resolution for recovery
-	// (rematerialize, restore, replay-completeness). Nil builds a platform
-	// source from CorpusdURL plus guest credentials per call; tests inject
-	// a fake. There is no genesis fallback in either case.
-	restoreBaseSource projectionbase.BaseSource
+	// restoreTape overrides the recovery source (rematerialize, restore,
+	// replay-completeness): the tape and the snapshot chunks it names. Nil
+	// builds a platform source from the event client; tests inject a fake.
+	restoreTape restoreTape
 }
 
 // New creates a new Runtime with the given config, store, event bus, and

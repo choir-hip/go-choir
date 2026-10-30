@@ -33,7 +33,6 @@ import (
 	transaction "github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -168,138 +167,6 @@ func (s *payloadChainSource) FetchPayload(_ context.Context, _ string, artifactD
 	return nil, fmt.Errorf("test payload source: artifact %s not pinned", artifactDigest)
 }
 
-// liveBaseSource is a projection-base source that rebuilds the base at the
-// current live head on demand. The materializer's own checkpoint probe needs a
-// base that already contains every event the apply committed moments earlier —
-// a static seeded base can never reach head parity. The reconcile mutex
-// serializes the probe against appends, so the rebuild is stable.
-type liveBaseSource struct {
-	computerID string
-	cas        *derivableChainCAS
-	pinner     *derivableTestPinner
-	tempRoot   string
-
-	mu         sync.Mutex
-	rebuiltSeq int
-	pinnedHead string
-	descriptor projectionbase.Descriptor
-	blob       []byte
-}
-
-// pinAtHead freezes the advertised base at a historical chain head so the
-// watermark can advertise an earlier restore point while the live chain keeps
-// advancing past it.
-func (s *liveBaseSource) pinAtHead(ctx context.Context, targetHead string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var pinned []computerevent.DurableEvent
-	var pinSeq int
-	for _, record := range s.cas.snapshot() {
-		pinned = append(pinned, record)
-		if record.Request.Next.CanonicalEventHead == targetHead {
-			pinSeq = len(pinned)
-			break
-		}
-	}
-	if pinSeq == 0 {
-		return fmt.Errorf("test base source: %s is not on the live chain", targetHead)
-	}
-	if err := s.rebuildAt(ctx, pinned, targetHead); err != nil {
-		return err
-	}
-	s.pinnedHead = targetHead
-	return nil
-}
-
-func (s *liveBaseSource) PinBase(context.Context, string, string, string) error { return nil }
-
-func (s *liveBaseSource) PinnedBases(context.Context, string, string) ([]string, error) {
-	return nil, nil
-}
-
-func (s *liveBaseSource) Watermark(ctx context.Context, computerID string) (uint64, string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.ensure(ctx); err != nil {
-		return 0, "", err
-	}
-	return s.descriptor.Sequence, s.descriptor.BlobSHA256, nil
-}
-
-func (s *liveBaseSource) Descriptor(_ context.Context, _ string, _ string) (projectionbase.Descriptor, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.descriptor, nil
-}
-
-func (s *liveBaseSource) DownloadBlob(_ context.Context, _ string, _ string, dst io.Writer) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := dst.Write(s.blob)
-	return err
-}
-
-func (s *liveBaseSource) TailPage(_ context.Context, _ string, afterSequence uint64, pageSize int) ([]computerevent.DurableEvent, error) {
-	var page []computerevent.DurableEvent
-	for _, record := range s.cas.snapshot() {
-		if record.Request.Event.Sequence <= afterSequence {
-			continue
-		}
-		page = append(page, record)
-		if pageSize > 0 && len(page) >= pageSize {
-			break
-		}
-	}
-	return page, nil
-}
-
-func (s *liveBaseSource) ensure(ctx context.Context) error {
-	events := s.cas.snapshot()
-	if len(events) == 0 || s.pinnedHead != "" || len(events) == s.rebuiltSeq {
-		return nil
-	}
-	head, err := s.cas.Head(ctx, s.computerID)
-	if err != nil || head == nil {
-		return fmt.Errorf("test base source: live head unavailable: %v", err)
-	}
-	if err := s.rebuildAt(ctx, events, head.CanonicalEventHead); err != nil {
-		return err
-	}
-	s.rebuiltSeq = len(events)
-	return nil
-}
-
-func (s *liveBaseSource) rebuildAt(ctx context.Context, events []computerevent.DurableEvent, targetHead string) error {
-	head := &events[len(events)-1].Request.Next
-	chain := &payloadChainSource{
-		memChainSource: &memChainSource{events: events, head: head, computerID: s.computerID},
-		pinner:         s.pinner,
-	}
-	keyMaterial := make([]byte, 32)
-	for i := range keyMaterial {
-		keyMaterial[i] = byte(i + 23)
-	}
-	rebuilder, err := projectionbase.NewRebuilder(projectionbase.Config{
-		ComputerID: s.computerID, TargetHead: targetHead,
-		ArtifactsRoot: filepath.Join(s.tempRoot, fmt.Sprintf("artifacts-%d-%s", len(events), targetHead[:8])),
-		ScratchDir:    filepath.Join(s.tempRoot, fmt.Sprintf("scratch-%d-%s", len(events), targetHead[:8])),
-		KeyMaterial:   keyMaterial, BatchSize: 100, MemoryLimitRSS: 512 * 1024 * 1024,
-	})
-	if err != nil {
-		return err
-	}
-	result, err := rebuilder.Run(ctx, chain)
-	if err != nil {
-		return fmt.Errorf("test base source: rebuild at %s: %w", targetHead[:12], err)
-	}
-	blob, err := os.ReadFile(result.BlobPath)
-	if err != nil {
-		return err
-	}
-	s.descriptor, s.blob = result.Descriptor, blob
-	return nil
-}
-
 // collaborators; the receipt signer signs guest-core receipts for the updater
 // exactly like cmd/choir-updater's signer proxy.
 type derivableServiceManager struct{ restarts int }
@@ -346,7 +213,7 @@ type derivableSelfDevFixture struct {
 	applyCalls  atomic.Int32
 	service     *derivableServiceManager
 	platformKey ed25519.PrivateKey
-	baseSource  *liveBaseSource
+	baseSource  *restoreTapeFake
 	checkpoints map[string]selfdevprotocol.CheckpointResponse
 	// goPatch, when set, makes writeFrozenBundle freeze a Go change: a
 	// workspace/platform Go effect, source.patch, and its sha and base
@@ -721,8 +588,11 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 	}
 	operations.BindProjectionSink(productStore)
 	rt.selfdevOperations = operations
-	fx.baseSource = &liveBaseSource{computerID: computerID, cas: fx.cas, pinner: fx.pinner, tempRoot: t.TempDir()}
-	rt.restoreBaseSource = fx.baseSource
+	// The recovery tape is the live chain with no snapshot: every probe and
+	// restore replays from genesis, so any historical head is reachable while
+	// the chain continues forward.
+	fx.baseSource = newRestoreTapeFake(fx.cas.snapshot)
+	rt.restoreTape = fx.baseSource
 	WithSelfDevelopmentUpdater(updaterClient, updaterRoot, computerID, "realization-derivable")(rt)
 	rt.selfdevGuestImageManifest = fx.bootedManifest
 	WithSelfDevelopmentVerifier(verifierClient)(rt)

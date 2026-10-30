@@ -17,7 +17,7 @@ import (
 // pool's one connection is held by someone; engine_mutex_live cannot see a
 // raw s.db caller, and a goroutine dump taken from outside 1-2 s later finds
 // the holder gone. So the 503 branch, after its answer is written, takes one
-// goroutine snapshot at once and logs the goroutines inside the Dolt engine
+// goroutine snapshot at once and logs the goroutines inside the SQLite driver
 // that are not themselves waiting for a connection, with both pools' stats.
 // At most once a minute, and bounded.
 const (
@@ -28,7 +28,7 @@ const (
 	storeStallStackMax       = 8 << 20
 
 	choirModulePrefix  = "github.com/yusefmosiah/go-choir/"
-	engineModulePrefix = "github.com/dolthub/"
+	engineModulePrefix = "modernc.org/sqlite"
 	connWaitFrame      = "database/sql.(*DB).conn("
 )
 
@@ -62,25 +62,14 @@ func (rt *Runtime) logStoreStallHolders(unanswered []string) {
 		pools = &store.PoolStats{}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "store_stalled holders: computer=%s unanswered=%s engine_goroutines=%d shown=%d parked_in_conn=%d stack_truncated=%t %s write_pool{%s} read_pool{%s}",
+	fmt.Fprintf(&b, "store_stalled holders: computer=%s unanswered=%s engine_goroutines=%d shown=%d parked_in_conn=%d stack_truncated=%t write_pool{%s} read_pool{%s}",
 		rt.cfg.ComputerID, strings.Join(unanswered, ","), matched, len(lines),
-		strings.Count(dump, connWaitFrame), truncated, formatOnlineGC(pools.OnlineGC), formatPoolStat(pools.Write), formatPoolStat(pools.Read))
+		strings.Count(dump, connWaitFrame), truncated, formatPoolStat(pools.Write), formatPoolStat(pools.Read))
 	for _, line := range lines {
 		b.WriteString("\n")
 		b.WriteString(line)
 	}
 	log.Print(b.String())
-}
-
-// formatOnlineGC is the header field that names a running online Dolt GC pass
-// (docs/problems/paper-remaining-store-stall-holders-2026-10-23.md): the pass
-// holds the write pool's connection, and a snapshot taken just after it ends
-// names the first mover instead.
-func formatOnlineGC(g store.OnlineGCStatus) string {
-	if !g.Active {
-		return "online_gc=idle"
-	}
-	return "online_gc=active since=" + g.Since
 }
 
 func formatPoolStat(p store.PoolStat) string {
@@ -108,13 +97,12 @@ func allGoroutineStacks(max int) (string, bool) {
 }
 
 // storeStallHolderLines picks, from a runtime.Stack dump, the goroutines
-// with a Dolt or go-mysql-server frame that are not parked in
+// with a SQLite driver frame that are not parked in
 // database/sql.(*DB).conn, and renders each as one compact line: its first
 // choir frame (or its choir creator) and its first two engine frames. Only
 // goroutines with a choir frame or creator are shown: a connection is taken
-// from the pool only by a choir caller, and the engine's own background
-// goroutines (about eight per open store, parked for its lifetime) would
-// fill the cap. At most storeStallHolderMax lines, each at most
+// from the pool only by a choir caller, and the driver's own background
+// goroutines would fill the cap. At most storeStallHolderMax lines, each at most
 // storeStallHolderLineMax bytes and all together at most
 // storeStallHolderTotalMax. matched counts every engine goroutine, shown or
 // not.
@@ -199,5 +187,8 @@ func compactFrame(fn string) string {
 		}
 	}
 	fn = strings.TrimPrefix(fn, choirModulePrefix)
-	return strings.TrimPrefix(fn, engineModulePrefix)
+	if strings.HasPrefix(fn, engineModulePrefix) {
+		fn = strings.TrimLeft(strings.TrimPrefix(fn, engineModulePrefix), "./")
+	}
+	return fn
 }

@@ -12,8 +12,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -25,7 +23,7 @@ var ErrReplayCompletenessUnavailable = errors.New("replay completeness probe una
 const replayCompletenessSchemaVersion = 4
 
 // ReplayCompletenessReport is the read-only evidence returned by the product
-// replay probe. Replay state is built in a disposable Dolt workspace; the live
+// replay probe. Replay state is built in a disposable SQLite store; the live
 // runtime store is only observed.
 type ReplayCompletenessReport struct {
 	SchemaVersion      int                               `json:"schema_version"`
@@ -212,7 +210,7 @@ func differingReplayRunMemoryFields(live, replay map[string]string) []string {
 
 // ReplayCompleteness performs the effects Definition's pre-drop measurement.
 // It reconstructs the canonical event chain into a fresh workspace, hashes
-// that projection and the live workspace through DoltStateExtractor, and
+// that projection and the live store through SQLiteStateExtractor, and
 // returns the exact deterministic diff. No event is appended and the live
 // store is never used as the replay projection.
 func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (ReplayCompletenessReport, error) {
@@ -302,15 +300,15 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 		liveRunMemory []choirstore.RunMemoryEntryFingerprint
 		version       computerversion.ComputerVersion
 	)
-	extractor := replayDoltStateExtractor(rt.store.TexturePath())
+	extractor := replayStateExtractor(rt.store.DB())
 	if err := rt.eventAppender.HoldAppends(func() error {
 		var err error
 		if liveHead, err = rt.store.Head(ctx, computerID); err != nil {
 			return fmt.Errorf("replay completeness: read live event head: %w", err)
 		}
 		version = replayCompletenessVersion(rt, liveHead)
-		if live, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: version}); err != nil {
-			return fmt.Errorf("replay completeness: extract live Dolt state: %w", err)
+		if live, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-sqlite", Version: version}); err != nil {
+			return fmt.Errorf("replay completeness: extract live store state: %w", err)
 		}
 		if liveRunMemory, err = rt.store.ListRunMemoryEntryFingerprints(ctx); err != nil {
 			return fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
@@ -369,10 +367,10 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 	if err != nil {
 		return nil, fmt.Errorf("replay completeness: read replay event head: %w", err)
 	}
-	replayExtractor := replayDoltStateExtractor(replayStore.TexturePath())
+	replayExtractor := replayStateExtractor(replayStore.DB())
 	replay, err := replayExtractor.Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
 	if err != nil {
-		return nil, fmt.Errorf("replay completeness: extract replay Dolt state: %w", err)
+		return nil, fmt.Errorf("replay completeness: extract replay store state: %w", err)
 	}
 
 	replayRunMemory, err := replayStore.ListRunMemoryEntryFingerprints(ctx)
@@ -381,9 +379,7 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 	}
 	runMemory := compareReplayRunMemory(liveRunMemory, replayRunMemory)
 
-	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(
-		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
-	)
+	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(live, replay)
 	var objectGraph *ReplayObjectGraphComparison
 	if !result.Equivalent() {
 		// Diagnostic only: name the object-graph rows replay cannot
@@ -424,9 +420,9 @@ func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (_ *r
 }
 
 // openProbeReplayStore builds the disposable replay projection for the probe.
-// A live chain replays from its verified base (tail-only) when a base is
-// advertised; absent one, the probe replays the full tape from genesis —
-// the tape is the truth, a base is only a cost bound, and the refusal
+// A live chain replays from the newest snapshot the tape names (tail-only);
+// absent one, the probe replays the full tape from genesis —
+// the tape is the truth, a snapshot is only a cost bound, and the refusal
 // posture for unbounded replay is preserved by MaxRecoveryTailEvents. An
 // empty store probes the explicit bootstrap path without one. The caller
 // closes the store and removes the temp root.
@@ -476,34 +472,23 @@ func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoo
 		}
 		return replayStore, 0, "", 0, observer, nil
 	}
-	src, err := rt.resolveRestoreBaseSource()
+	tape, err := rt.resolveRestoreTape()
 	if err != nil {
 		return nil, 0, "", 0, nil, err
 	}
-	if advertisedBaseAbsent(ctx, src, computerID) {
-		// No advertised base: the platform has never published one for this
-		// computer (fresh probe computers in particular). Replay the whole
-		// chain — deterministic reduction makes the full replay the strongest
-		// completeness evidence — but keep the invariant the base exists to
-		// protect: refuse chains longer than the recovery tail bound.
-		if liveHead.Sequence > projectionbase.MaxRecoveryTailEvents {
-			return nil, 0, "", 0, nil, fmt.Errorf("%w: no advertised base and chain length %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, liveHead.Sequence, projectionbase.MaxRecoveryTailEvents)
-		}
-		replayStore, freshErr := choirstore.OpenFresh(filepath.Join(tempRoot, "runtime.db"))
-		if freshErr != nil {
-			return nil, 0, "", 0, nil, fmt.Errorf("replay completeness: open disposable workspace: %w", freshErr)
-		}
-		return replayStore, 0, "", liveHead.Sequence, observer, nil
-	}
-	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, liveHead.CanonicalEventHead)
+	// The newest snapshot at or below the live head starts the replay; with
+	// none, the whole chain replays from genesis — deterministic reduction
+	// makes the full replay the strongest completeness evidence — inside the
+	// recovery bound planRestoreTarget keeps.
+	plan, err := planRestoreTarget(ctx, tape, computerID, liveHead.CanonicalEventHead)
 	if err != nil {
 		return nil, 0, "", 0, nil, err
 	}
-	staged, descriptor, err := installStagedBase(ctx, src, tempRoot, "runtime.db", computerID, liveHead.CanonicalEventHead, targetSequence)
+	staged, record, err := rt.openStagedStore(ctx, tape, tempRoot, "runtime.db", computerID, plan)
 	if err != nil {
 		return nil, 0, "", 0, nil, err
 	}
-	return staged, descriptor.Sequence, descriptor.BlobSHA256, targetSequence, observer, nil
+	return staged, record.StoreHeadSequence, record.Manifest.Root, plan.sequence, observer, nil
 }
 
 func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerversion.ComputerVersion {
@@ -519,34 +504,4 @@ func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerve
 		CodeRef:            computerversion.CodeRef(codeRef),
 		ArtifactProgramRef: computerversion.ArtifactProgramRef(artifactRef),
 	}
-}
-
-func replayDoltStateExtractor(workspacePath string) computerversion.DoltStateExtractor {
-	return computerversion.DoltStateExtractor{
-		WorkspacePath: workspacePath,
-		Database:      "texture",
-		// A derived index is not state (objectgraph.DerivedKeysTable).
-		IgnoredTables: map[string]struct{}{objectgraph.DerivedKeysTable: {}},
-		IgnoredContentColumns: map[string]map[string]struct{}{
-			"computer_event_index": {
-				"prepared_at":  {},
-				"finalized_at": {},
-			},
-			"computer_event_projection_heads": {
-				"updated_at": {},
-			},
-		},
-	}
-}
-
-func filterReplayHeadObservation(obs computerversion.ObservationSet) computerversion.ObservationSet {
-	filtered := make([]computerversion.Observation, 0, len(obs.Observations))
-	for _, observation := range obs.Observations {
-		if strings.HasPrefix(observation.Key, "dolt:") && strings.HasSuffix(observation.Key, ":head") {
-			continue
-		}
-		filtered = append(filtered, observation)
-	}
-	obs.Observations = filtered
-	return obs
 }

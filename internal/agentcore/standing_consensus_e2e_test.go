@@ -34,13 +34,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/dbx"
-	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
-
 	"github.com/yusefmosiah/go-choir/internal/builder"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	transaction "github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/dbx/dbxtest"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
@@ -77,16 +75,8 @@ func (s staticKey) ResolveReceiptKey(string, string, string, uint64, time.Time) 
 func openE2ECorpusdStore(t *testing.T) (*platform.Store, string) {
 	t.Helper()
 	root := t.TempDir()
-	control, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
+	store, err := platform.OpenStore(context.Background(), dbxtest.PostgresDSN(t), dbxtest.PostgresDSN(t))
 	if err != nil {
-		t.Fatal(err)
-	}
-	graph, err := dbx.OpenPostgres(dbxtest.PostgresDSN(t), dbx.PGOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := platform.NewStore(control, graph)
-	if err := store.Bootstrap(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })

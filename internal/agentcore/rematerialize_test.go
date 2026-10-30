@@ -99,8 +99,8 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 	if string(served) != "<html>checkpoint</html>" {
 		t.Fatalf("served SPA = %q", served)
 	}
-	if _, err := os.Stat(result.QuarantinedMarker); err != nil {
-		t.Fatalf("quarantined marker missing: %v", err)
+	if _, err := os.Stat(choirstore.StateDBPath(result.QuarantinedMarker)); err != nil {
+		t.Fatalf("quarantined state file missing: %v", err)
 	}
 
 	quarantine, err := choirstore.Open(result.QuarantinedMarker)
@@ -109,7 +109,7 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 	}
 	t.Cleanup(func() { _ = quarantine.Close() })
 	var quarantined int
-	if err := quarantine.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'rematerialize_live_only'`).Scan(&quarantined); err != nil {
+	if err := quarantine.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'rematerialize_live_only'`).Scan(&quarantined); err != nil {
 		t.Fatal(err)
 	}
 	if quarantined == 0 {
@@ -118,7 +118,7 @@ func TestRematerializeFromTapeQuarantinesOriginalAndDropsLiveOnlyRows(t *testing
 
 	restored := rt.store
 	var surviving int
-	if err := restored.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'rematerialize_live_only'`).Scan(&surviving); err != nil {
+	if err := restored.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'rematerialize_live_only'`).Scan(&surviving); err != nil {
 		t.Fatal(err)
 	}
 	if surviving != 0 {
@@ -151,7 +151,15 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	witness.ContentRoot = strings.Repeat("0", 64)
+	// A valid witness of a different state: one table's digest altered.
+	for table := range witness.Tables {
+		witness.Tables[table] = strings.Repeat("0", 64)
+		break
+	}
+	witness, err = selfdevprotocol.NewWitnessV3(witness.Database, witness.SchemaHash, witness.Tables)
+	if err != nil {
+		t.Fatal(err)
+	}
 	checkpoint := rematerializeTestCheckpoint(t, computerID, witness, targetDigest, targetIdentity, acceptedHead)
 	if _, err := rt.RematerializeFromTape(ctx, computerID, checkpoint); err == nil {
 		t.Fatal("mismatched checkpoint witness was accepted")
@@ -159,7 +167,7 @@ func TestRematerializeFromTapeKeepsOriginalOnWitnessMismatch(t *testing.T) {
 	if rt.store == nil {
 		t.Fatal("mismatch closed the original realization")
 	}
-	if _, err := os.Stat(storePath); err != nil {
+	if _, err := os.Stat(choirstore.StateDBPath(storePath)); err != nil {
 		t.Fatalf("original marker was moved on mismatch: %v", err)
 	}
 	served, err := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))

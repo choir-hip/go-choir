@@ -30,10 +30,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
-	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -380,7 +380,7 @@ func Run() {
 		} else if materialized {
 			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 		}
-		provisionedGenesis := recoveryPlan.Action == projectionbase.RecoveryGenesis
+		provisionedGenesis := recoveryPlan.Action == recoveryplan.RecoveryGenesis
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
 			cancel()

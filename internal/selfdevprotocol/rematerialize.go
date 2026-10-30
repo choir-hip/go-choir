@@ -61,8 +61,9 @@ func RematerializeFromRequest(request RematerializeRequest) error {
 	return nil
 }
 
-// WitnessContentMatches compares the verification commitment. Dolt HEAD is an
-// audit receipt and is not the restore address, so it is not a match gate.
+// WitnessContentMatches compares the verification commitment of a
+// reconstructed store with a checkpoint's. The content root commits to the
+// schema hash and every table digest, so a match is a match of all of them.
 func WitnessContentMatches(got, want VMLocalContentWitness) error {
 	if err := got.Validate(); err != nil {
 		return fmt.Errorf("rematerialize: reconstructed witness refused: %w", err)
@@ -70,44 +71,16 @@ func WitnessContentMatches(got, want VMLocalContentWitness) error {
 	if err := want.Validate(); err != nil {
 		return fmt.Errorf("rematerialize: checkpoint witness refused: %w", err)
 	}
-	if got.version() != want.version() {
-		return fmt.Errorf("rematerialize: reconstructed witness is version %d, the checkpoint's is %d", got.version(), want.version())
+	if got.Database != want.Database {
+		return fmt.Errorf("rematerialize: reconstructed database does not match checkpoint")
 	}
-	if want.IsDoltHashWitness() {
-		return doltTablesMatch(got, want)
+	if tables := differingTables(got, want); len(tables) > 0 {
+		return fmt.Errorf("rematerialize: reconstructed %s does not match checkpoint", strings.Join(tables, ", "))
 	}
-	if got.Database != want.Database || got.ContentRoot != want.ContentRoot {
+	if got.ContentRoot != want.ContentRoot || got.DerivabilityDigest != want.DerivabilityDigest {
 		return fmt.Errorf("rematerialize: reconstructed content root does not match checkpoint")
 	}
-	if len(got.Schema) != len(want.Schema) || len(got.Tables) != len(want.Tables) {
-		return fmt.Errorf("rematerialize: reconstructed schema does not match checkpoint")
-	}
-	for table, schemaHash := range want.Schema {
-		if got.Schema[table] != schemaHash || got.Tables[table] != want.Tables[table] {
-			return fmt.Errorf("rematerialize: reconstructed table %s does not match checkpoint", table)
-		}
-	}
-	digest, err := witnessDerivabilityDigest(got)
-	if err != nil {
-		return err
-	}
-	if digest != want.DerivabilityDigest {
-		return fmt.Errorf("rematerialize: reconstructed derivability digest does not match checkpoint")
-	}
 	return nil
-}
-
-func witnessDerivabilityDigest(witness VMLocalContentWitness) (string, error) {
-	proof, err := computerevent.CanonicalJSON(struct {
-		Database    string            `json:"database"`
-		ContentRoot string            `json:"content_root"`
-		Schema      map[string]string `json:"schema"`
-		Tables      map[string]string `json:"tables"`
-	}{witness.Database, witness.ContentRoot, witness.Schema, witness.Tables})
-	if err != nil {
-		return "", err
-	}
-	return computerevent.DigestBytes(proof), nil
 }
 
 func overlapsPath(left, right string) bool {

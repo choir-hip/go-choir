@@ -18,8 +18,6 @@ var ErrReplayIneligible = errors.New("replay is ineligible")
 
 const replayEligibilityManifestVersion = 4
 
-const emptyDoltTableHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
 // ReplayObservationClass is the authority classification for one VM-local
 // schema object. Unknown objects are never eligible by default.
 type ReplayObservationClass string
@@ -49,7 +47,10 @@ type ReplayAirworthinessManifest struct {
 }
 
 var replayAirworthinessEntries = map[string]ReplayObservationClass{
-	"computer_event_index":            ReplayEventProjection,
+	"computer_event_index": ReplayEventProjection,
+	// store_meta holds the store schema version row, written identically by a
+	// live open and a replay open.
+	"store_meta":                      ReplayEventProjection,
 	"computer_event_projection_heads": ReplayEventProjection,
 	"computer_effective_state":        ReplayRetiredAbsent,
 	"agents":                          ReplayRetiredAbsent,
@@ -192,7 +193,7 @@ func replayEligibility(liveHead, replayHead *computerevent.Head, live, replay co
 		case ReplayRetiredAbsent:
 			record(&eligibility.RetiredTables, seenRetired, table)
 		case ReplayEmptyUntilSupported:
-			if content != "" && content != emptyDoltTableHash {
+			if content != "" && content != computerversion.EmptyTableDigest(table) {
 				record(&eligibility.UnsupportedTables, seenUnsupported, table)
 			}
 		case ReplayEventProjection, ReplayEventProjectionOptional:
@@ -277,8 +278,8 @@ func replayEligibility(liveHead, replayHead *computerevent.Head, live, replay co
 func replayObservationTables(observations computerversion.ObservationSet) (map[string]string, map[string]string) {
 	tables := make(map[string]string)
 	schemas := make(map[string]string)
-	const tablePrefix = "dolt:texture:table:"
-	const schemaPrefix = "dolt:texture:schema:"
+	const tablePrefix = "sqlite:texture:table:"
+	const schemaPrefix = "sqlite:texture:schema:"
 	for _, observation := range observations.Observations {
 		switch {
 		case strings.HasPrefix(observation.Key, tablePrefix):

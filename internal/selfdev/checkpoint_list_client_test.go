@@ -78,10 +78,7 @@ func signedCheckpointResponse(t *testing.T, key ed25519.PrivateKey, computerID s
 		AcceptedEventHead: digest('1'), EffectiveEventHead: digest('2'), EffectiveStateCommitment: digest('2'),
 		EventHeadReceiptID: "receipt-test", ReleaseDigest: digest('f'), ReconstructionDigest: digest('3'),
 		ReducerVersion: 1, OwnerRecovery: true,
-		VMLocalContentWitness: selfdevprotocol.VMLocalContentWitness{
-			Database: "texture", ContentRoot: digest('7'), DoltHead: digest('8'), DerivabilityDigest: digest('9'),
-			Schema: map[string]string{"agents": digest('a')}, Tables: map[string]string{"agents": digest('b')},
-		},
+		VMLocalContentWitness: mustWitnessV3(t, "texture", digest('a'), map[string]string{"agents": digest('b')}),
 		FrontendIdentity: selfdevprotocol.FrontendIdentity{Digest: digest('c'), Derivation: selfdevprotocol.FrontendDerivationRelease, ReleaseDigest: digest('f')},
 	}
 	checkpoint, _, err := selfdevprotocol.CheckpointFromRequest(request)
@@ -136,4 +133,15 @@ func TestFetchCheckpointByDigestVerifiesTheReceipt(t *testing.T) {
 	if got, err := missingCreds.FetchCheckpointByDigest(context.Background(), "computer-fetch", good.Checkpoint.Digest); err != nil || got != nil {
 		t.Fatalf("404 = %+v %v, want nil and no error", got, err)
 	}
+}
+
+// mustWitnessV3 is a valid v3 witness for tests that only need a checkpoint to
+// pass validation.
+func mustWitnessV3(t *testing.T, database, schemaHash string, tables map[string]string) selfdevprotocol.VMLocalContentWitness {
+	t.Helper()
+	w, err := selfdevprotocol.NewWitnessV3(database, schemaHash, tables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
 }
