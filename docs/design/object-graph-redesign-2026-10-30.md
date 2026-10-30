@@ -737,10 +737,13 @@ in `docs/definitions/choir-data-system-build-2026-10-30.ledger.md`.
 
   Done the same evening (ec2887f84, b957ef538): the payload prefetch took
   d@e from 206 to 298 events a second. The rest is apply, about 2.7 ms an
-  event. The per-step split (b6a093721) confirmed the cause: prepare and
-  finalize, two synchronous WAL commits an event, are 10.1 of 11.3 s of
-  apply; a replay now skips the sync (synchronous NORMAL, then FULL and a
-  checkpoint on every exit). The bound is 720,000
+  event. The per-step split (b6a093721) put 10.1 of 11.3 s of apply in
+  prepare and finalize, two commits an event, and a replay now skips the
+  WAL sync (synchronous NORMAL, then FULL and a checkpoint on every exit).
+  That was only part of it: at NORMAL d@e replays at 350 events a second,
+  prepare 1.5 s and finalize 6.4 s, so the sync was about 1.7 s and
+  finalize's own work, about 1.5 ms an event, is the rest. A profile of
+  finalize is the next step. The bound is 720,000
   events, about 40 minutes at 298 a second, and the producer snapshots
   when the tail reaches three quarters of it. Reading vmctl for this found
   a second refusal: its empty-store admission planned against the replay
