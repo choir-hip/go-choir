@@ -36,9 +36,11 @@ func (s *Store) graphHomeOn(ctx context.Context, ownerID, key string) bool {
 	}
 	setting, err := s.GetComputerSetting(ctx, ownerID, s.projectionTape.computerID, key)
 	if err != nil {
-		if !errors.Is(err, ErrNotFound) {
-			log.Printf("graph home: read %s: %v; treating it as off", key, err)
+		if errors.Is(err, ErrNotFound) {
+			// Never set on this computer: the declared default.
+			return KnownComputerSettings[key]
 		}
+		log.Printf("graph home: read %s: %v; treating it as off", key, err)
 		return false
 	}
 	return setting.Value

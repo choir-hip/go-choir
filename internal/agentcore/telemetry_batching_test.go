@@ -205,8 +205,8 @@ func TestBootConfiguresBatchingFromSettingAndEnv(t *testing.T) {
 	t.Setenv("CHOIR_OWNER_ID", "owner-telemetry")
 	rt := telemetryRuntime(t, computerID)
 	rt.configureTelemetryBatching(context.Background())
-	if rt.store.TelemetryBatchingConfigured() {
-		t.Fatal("batching configured with neither the env flag nor the setting")
+	if rt.store.TelemetryBatchingConfigured() != store.KnownComputerSettings[store.SettingTelemetryBatch] {
+		t.Fatal("with neither the env flag nor a stored setting, batching does not follow the declared default")
 	}
 	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-telemetry", ComputerID: computerID, Key: store.SettingTelemetryBatch, Value: true}); err != nil {
 		t.Fatal(err)

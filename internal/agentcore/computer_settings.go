@@ -39,9 +39,11 @@ func (rt *Runtime) computerSettingOn(ctx context.Context, ownerID, computerID, k
 	}
 	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, key)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("computer settings: read %s on %s: %v; treating it as off", key, computerID, err)
+		if errors.Is(err, store.ErrNotFound) {
+			// Never set on this computer: the declared default.
+			return store.KnownComputerSettings[key]
 		}
+		log.Printf("computer settings: read %s on %s: %v; treating it as off", key, computerID, err)
 		return false
 	}
 	return setting.Value

@@ -2232,7 +2232,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "none",
+   "ring": "R0",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -2243,8 +2243,8 @@
      "bound": "== 0"
     }
    ],
-   "retire": "delete",
-   "note": "Owner 2026-10-23: R7 replaces it. Delete with the CHOIR_TELEMETRY_BATCH env twin."
+   "retire": "delete the env twin CHOIR_TELEMETRY_BATCH once every computer runs batched",
+   "note": "2026-10-31: R7 is deleted and telemetry rides the one tape in sealed batches (docs/design/one-tape-durability-2026-10-31.md). On for d@e by stored setting; the default flips to on once d@e shows it."
   },
   {
    "id": "calibration_feedback",
