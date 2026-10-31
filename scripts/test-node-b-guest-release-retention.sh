@@ -17,6 +17,17 @@
 #   -   an unanswered vmctl (no answer, 5xx, 404 from a rolled-back vmctl) lets
 #       retention delete anything
 #   -   a symlink or an odd name is deleted
+#   M30 retention deletes a release a running VM needs (vmctl says so, or a
+#       live Firecracker's fc-config.json names it), a release a snapshot or a
+#       VM's guest-release.json names inside the support window, or the
+#       rollback target (the release older than current)
+#   M31 retention deletes while a deploy is materializing (a fresh .tmp-* tree)
+#   M32 retention drops below 2 releases
+#   M33 a stale-jail sweep removes the jail of a VM that has an ownership row
+#       (running or hibernated), of a VM a Firecracker still names, or acts on
+#       an unreadable ownership file; or the report mode removes anything
+#   M34 the dedupe tool fails the deploy (always exit 0), corrupts or loses a
+#       release, or misses shared blocks (same offset or shifted)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 materialize="$here/node-b-guest-release-materialize"
@@ -61,6 +72,8 @@ fixture() { # DIR: the standard tree
 	mkrelease "$rel" $USED 30
 	ln -s "$rel/$CUR" "$rel/iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"           # a symlink with a release name
 	mkdir -p "$rel/not-a-release" "$rel/.tmp-leftover"                  # odd names
+	touch -t 202001010000 "$rel/.tmp-leftover"                          # a stale leftover, not a running materialize
+	mkdir -p "$1/state"                                                 # an empty vm-state
 	ln -s "/nix/store/${CUR}-go-choir-guest-image" "$1/guest"           # the guest link
 }
 
@@ -92,7 +105,7 @@ answer() { # COMPLETE -> body file
 run_retention() { # DIR URL [extra env...]
 	local d="$1" url="$2"
 	shift 2
-	env GO_CHOIR_GUEST_RELEASES_DIR="$d/rel" GO_CHOIR_GUEST_LINK="$d/guest" GO_CHOIR_VMCTL_URL="$url" GO_CHOIR_NOW_EPOCH=$NOW "$@" bash "$retention" >"$d/out.log" 2>&1
+	env GO_CHOIR_GUEST_RELEASES_DIR="$d/rel" GO_CHOIR_GUEST_LINK="$d/guest" GO_CHOIR_VMCTL_URL="$url" GO_CHOIR_VM_STATE_DIR="$d/state" GO_CHOIR_NOW_EPOCH=$NOW "$@" bash "$retention" >"$d/out.log" 2>&1
 }
 exists() { [ -d "$1/rel/$2" ] && [ ! -L "$1/rel/$2" ]; }
 expect_kept() { # DIR NAME ID...
@@ -113,10 +126,10 @@ untouched() { # DIR NAME: symlink and odd names survive
 d="$root/t1"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
 run_retention "$d" "$URL"; rc=$?
 [ $rc -eq 0 ] || bad "200: exit $rc"
-expect_kept "$d" "200" $CUR $YOUNG $MID $USED $OOSRUN
-expect_gone "$d" "200" $OLD $OOS
+expect_kept "$d" "200" $CUR $YOUNG $MID $USED $OOSRUN $OLD
+expect_gone "$d" "200" $OOS
 untouched "$d" "200"
-[ $fail -eq 0 ] && ok "200: only the old unused and the out-of-support unused releases go; current, previous, young, in-use and running stay"
+[ $fail -eq 0 ] && ok "200: only the out-of-support unused release goes; current, previous, the rollback target, young, in-use and running stay"
 stop_stub
 
 f0=$fail
@@ -150,21 +163,86 @@ untouched "$d" "404"
 [ $fail -eq $f0 ] && ok "404 deletes nothing: only a parsed 200 is an answer (review 331: a vmctl rollback while release-bound VMs run)"
 stop_stub
 
+# no count cap: with the old KEEP_MAX=1 nothing extra is deleted
 f0=$fail
 d="$root/t6"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
-run_retention "$d" "$URL" GO_CHOIR_GUEST_RELEASE_KEEP_MAX=4
-# after the window rule: cur, young, mid, used, oosrun remain (5); cap 4 deletes snapshot-only releases, oldest first: used (30h)
-expect_kept "$d" "cap" $CUR $YOUNG $OOSRUN $MID
-expect_gone "$d" "cap" $USED $OLD $OOS
-[ $fail -eq $f0 ] && ok "the cap: the oldest snapshot-only release goes first"
+run_retention "$d" "$URL" GO_CHOIR_GUEST_RELEASE_KEEP_MAX=1
+expect_kept "$d" "no cap" $CUR $YOUNG $MID $USED $OOSRUN $OLD
+expect_gone "$d" "no cap" $OOS
+[ $fail -eq $f0 ] && ok "retention is by reference: KEEP_MAX no longer deletes referenced releases"
 stop_stub
 
+# a release no one references and that is not current, previous or the rollback target goes
 f0=$fail
 d="$root/t7"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
-run_retention "$d" "$URL" GO_CHOIR_GUEST_RELEASE_KEEP_MAX=1
-expect_kept "$d" "cap 1" $CUR $YOUNG $OOSRUN
-expect_gone "$d" "cap 1" $USED $MID
-[ $fail -eq $f0 ] && ok "cap 1: current, previous and a running release are never deleted, even past the window and the cap"
+mkrelease "$d/rel" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn 40
+run_retention "$d" "$URL"
+expect_gone "$d" "unreferenced" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+# ... unless a VM's guest-release.json (soft) names it
+fixture "$d"; mkrelease "$d/rel" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn 40
+mkdir -p "$d/state/vm-x"; echo '{"release":"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"}' >"$d/state/vm-x/guest-release.json"
+run_retention "$d" "$URL"
+expect_kept "$d" "guest-release.json" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+# ... and past the support window the soft reference stops counting (its snapshots refuse at wake)
+fixture "$d"; mkrelease "$d/rel" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn 300
+mkdir -p "$d/state/vm-x"; echo '{"release":"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"}' >"$d/state/vm-x/guest-release.json"
+run_retention "$d" "$URL"
+expect_gone "$d" "soft ref past window" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+# ... but an fc-config.json of a live Firecracker is hard, even past the window; a dead VM's is soft
+mkdir -p "$root/bin"
+printf '#!/bin/sh\ncase "$*" in *vm-live*) exit 0;; esac\nexit 1\n' >"$root/bin/pgrep"; chmod +x "$root/bin/pgrep"
+fixture "$d"; mkrelease "$d/rel" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn 300; mkrelease "$d/rel" pppppppppppppppppppppppppppppppp 300
+mkdir -p "$d/state/vm-live" "$d/state/vm-dead"
+echo '{"drives":[{"path_on_host":"'"$d"'/rel/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn/storedisk.erofs"}]}' | sed "s#$d/rel#/var/lib/go-choir/guest-releases#" >"$d/state/vm-live/fc-config.json"
+echo '{"drives":[{"path_on_host":"/var/lib/go-choir/guest-releases/pppppppppppppppppppppppppppppppp/storedisk.erofs"}]}' >"$d/state/vm-dead/fc-config.json"
+run_retention "$d" "$URL" PATH="$root/bin:$PATH"
+expect_kept "$d" "live fc-config" nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+expect_gone "$d" "dead fc-config past window" pppppppppppppppppppppppppppppppp
+[ $fail -eq $f0 ] && ok "references: unreferenced goes; guest-release.json keeps it in the window; a live VM's fc-config.json keeps it always"
+stop_stub
+
+# the rollback target and the minimum of two
+f0=$fail
+d="$root/t7b"; rm -rf "$d"; mkdir -p "$d/rel" "$d/state"
+mkrelease "$d/rel" $CUR 1000; mkrelease "$d/rel" $OLD 2000
+ln -s "/nix/store/${CUR}-go-choir-guest-image" "$d/guest"
+answer true; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"
+expect_kept "$d" "min 2" $CUR $OLD
+[ $fail -eq $f0 ] && ok "two releases, both past the window and unreferenced: both stay (rollback target, hard minimum of 2)"
+stop_stub
+
+# a deploy materializing: a fresh .tmp-* tree blocks every deletion
+f0=$fail
+d="$root/t7c"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
+mkdir -p "$d/rel/.tmp-dddddddddddddddddddddddddddddddd"
+run_retention "$d" "$URL"
+expect_kept "$d" "materializing" $CUR $YOUNG $MID $USED $OOSRUN $OLD $OOS
+grep -q "tmp_active=true" "$d/out.log" || bad "materializing: tmp_active not reported"
+[ $fail -eq $f0 ] && ok "a fresh .tmp-* tree (a deploy materializing) deletes nothing; a stale one does not block"
+stop_stub
+
+# --- stale jails ----------------------------------------------------------------
+f0=$fail
+d="$root/j1"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
+jb="$d/state/.jail/firecracker"
+mkdir -p "$jb/vm-a/root" "$jb/vm-hib/root" "$jb/vm-orphan/root" "$jb/vm-live/root" "$d/state/.jail/.shared"
+echo x >"$jb/vm-orphan/root/store.img"; echo x >"$d/state/.jail/.shared/abc-store.img"
+echo '{"ownerships":[{"vm_id":"vm-a","state":"running"},{"vm_id":"vm-hib","state":"hibernated"}]}' >"$d/state/ownerships.json"
+run_retention "$d" "$URL" PATH="$root/bin:$PATH"
+[ -d "$jb/vm-orphan" ] && grep -q "stale jail vm-orphan" "$d/out.log" || bad "jails report: orphan removed or not reported"
+run_retention "$d" "$URL" PATH="$root/bin:$PATH" GO_CHOIR_PRUNE_JAILS=1
+[ ! -e "$jb/vm-orphan" ] || bad "jails prune: the orphan jail is still there"
+[ -d "$jb/vm-a" ] && [ -d "$jb/vm-hib" ] || bad "jails prune: the jail of a running or hibernated VM was removed"
+[ -d "$jb/vm-live" ] && grep -q "Firecracker names it" "$d/out.log" || bad "jails prune: a jail a Firecracker names was removed"
+[ -f "$d/state/.jail/.shared/abc-store.img" ] || bad "jails prune: .shared was touched"
+mkdir -p "$jb/vm-orphan2"; echo 'not json' >"$d/state/ownerships.json"
+run_retention "$d" "$URL" GO_CHOIR_PRUNE_JAILS=1
+[ -d "$jb/vm-orphan2" ] || bad "jails prune: removed with an unreadable ownership file"
+rm "$d/state/ownerships.json"
+env GO_CHOIR_GUEST_RELEASES_DIR="$d/rel" GO_CHOIR_GUEST_LINK="$d/guest" GO_CHOIR_VMCTL_URL="$URL" GO_CHOIR_VM_STATE_DIR="$d/state" GO_CHOIR_NOW_EPOCH=$NOW bash "$retention" --prune-jails >"$d/out.log" 2>&1
+[ -d "$jb/vm-orphan2" ] || bad "jails prune: removed with a missing ownership file"
+[ $fail -eq $f0 ] && ok "jails: reported by default; --prune-jails removes only row-less, Firecracker-less jails; an unreadable ownership file removes nothing"
 stop_stub
 
 f0=$fail
@@ -181,6 +259,74 @@ d="$root/t9"; fixture "$d"; rm -f "$d/guest"
 run_retention "$d" "http://127.0.0.1:9"
 expect_kept "$d" "no link" $CUR $YOUNG $MID $USED $OOSRUN $OLD $OOS
 [ $fail -eq $f0 ] && ok "an unreadable guest link deletes nothing"
+
+# --- dedupe -------------------------------------------------------------------------
+# GO_CHOIR_DEDUPE_FAKE=1 compares bytes and counts what the kernel would share
+# (macOS has no FIDEDUPERANGE); the ioctl itself is exercised on Linux below.
+dedupe="$here/node-b-guest-release-dedupe"
+mkimg() { # PATH MODE: 64-block image; shift = one extra leading block; edit = 3 blocks rewritten
+	python3 -I - "$1" "$2" <<'PY'
+import sys, random
+random.seed(7)
+blocks = [random.randbytes(4096) for _ in range(64)]
+if sys.argv[2] in ("edit", "both"):
+    for i in (5, 20, 21): blocks[i] = random.randbytes(4096)
+if sys.argv[2] in ("shift", "both"):
+    blocks = [random.randbytes(4096)] + blocks
+open(sys.argv[1], "wb").write(b"".join(blocks))
+PY
+}
+mkdd() { # DIR MODE
+	rm -rf "$1"; mkdir -p "$1/rel"
+	mkrelease "$1/rel" $OLD 50; mkrelease "$1/rel" $CUR 10
+	chmod u+w "$1/rel/$OLD" "$1/rel/$CUR"
+	rm -f "$1/rel/$OLD/storedisk.erofs" "$1/rel/$CUR/storedisk.erofs"
+	mkimg "$1/rel/$OLD/storedisk.erofs" none
+	mkimg "$1/rel/$CUR/storedisk.erofs" "$2"
+}
+rundd() { env GO_CHOIR_DEDUPE_FAKE=1 GO_CHOIR_DEDUPE_MIN_BYTES=4096 "$@" python3 -I "$dedupe" "$d/rel" >"$d/dd.log" 2>&1; }
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import random; random.randbytes' 2>/dev/null; then
+f0=$fail
+d="$root/d1"; mkdd "$d" edit
+rundd; rc=$?
+res="$d/rel/.dedupe/$CUR.json"
+[ $rc -eq 0 ] || bad "dedupe: exit $rc"
+[ "$(jq -r '.bytes_deduped' "$res")" = "$((61 * 4096))" ] && [ "$(jq -r '.files["storedisk.erofs"].same_offset_bytes' "$res")" = "$((61 * 4096))" ] || bad "dedupe same-offset: $(cat "$res")"
+jq -e '.old == "'$OLD'" and .status == "ok" and .peak_rss_kb > 0' "$res" >/dev/null || bad "dedupe: result lacks old/status/peak_rss"
+jq -e '.status == "no_prior"' "$d/rel/.dedupe/$OLD.json" >/dev/null || bad "dedupe: the oldest release should record no_prior"
+[ $fail -eq $f0 ] && ok "dedupe: unshifted image shares every unchanged block at the same offset; result records bytes and peak RSS"
+
+f0=$fail
+d="$root/d2"; mkdd "$d" shift
+rundd; res="$d/rel/.dedupe/$CUR.json"
+[ "$(jq -r '.files["storedisk.erofs"].moved_bytes' "$res")" = "$((63 * 4096))" ] || bad "dedupe shifted: $(cat "$res")"
+d="$root/d3"; mkdd "$d" both
+rundd; res="$d/rel/.dedupe/$CUR.json"
+[ "$(jq -r '.bytes_deduped' "$res")" = "$((60 * 4096))" ] || bad "dedupe shifted+edited: $(cat "$res")"
+[ $fail -eq $f0 ] && ok "dedupe: a shifted image (one block inserted at the front) is found by the moved-block pass; edited blocks are not shared"
+
+f0=$fail
+d="$root/d4"; mkdd "$d" edit
+cmp -s "$d/rel/$CUR/storedisk.erofs" <(mkimg "$root/ref.img" edit; cat "$root/ref.img") || bad "dedupe: the new image's bytes changed"
+rundd GO_CHOIR_DEDUPE_MAX_INDEX=2; rc=$?
+[ $rc -eq 0 ] && jq -e '.status == "ok"' "$d/rel/.dedupe/$CUR.json" >/dev/null || bad "dedupe: a tiny index cap failed (exit $rc)"
+rm -rf "$d/rel/.dedupe"; chmod 0 "$d/rel/$OLD/storedisk.erofs" 2>/dev/null; chmod 0 "$d/rel/$CUR/storedisk.erofs" 2>/dev/null
+rundd; rc=$?
+chmod 644 "$d/rel/$OLD/storedisk.erofs" "$d/rel/$CUR/storedisk.erofs"
+[ $rc -eq 0 ] || bad "dedupe: an unreadable image exited $rc, want 0 (never fail the deploy)"
+env python3 -I "$dedupe" "$root/does-not-exist" >/dev/null 2>&1 || bad "dedupe: a missing releases dir failed"
+# without the fake: the real ioctl; where the filesystem has no FIDEDUPERANGE (macOS, tmpfs) the run records unsupported and exits 0
+d="$root/d5"; mkdd "$d" edit
+env GO_CHOIR_DEDUPE_MIN_BYTES=4096 python3 -I "$dedupe" "$d/rel" >"$d/dd.log" 2>&1; rc=$?
+[ $rc -eq 0 ] || bad "dedupe real ioctl: exit $rc"
+st="$(jq -r '.status' "$d/rel/.dedupe/$CUR.json")"
+case "$st" in ok | unsupported) ;; *) bad "dedupe real ioctl: status $st";; esac
+cmp -s "$d/rel/$OLD/storedisk.erofs" <(mkimg "$root/ref.img" none; cat "$root/ref.img") && cmp -s "$d/rel/$CUR/storedisk.erofs" <(mkimg "$root/ref.img" edit; cat "$root/ref.img") || bad "dedupe real ioctl: image bytes changed"
+echo "note: dedupe real ioctl status on this filesystem: $st ($(jq -r '.bytes_deduped' "$d/rel/.dedupe/$CUR.json") bytes)"
+[ $fail -eq $f0 ] && ok "dedupe: a tiny index cap, unreadable images, a missing directory and an unsupported filesystem all exit 0 and leave the images intact"
+else
+	echo "skip: dedupe cases need python3 >= 3.9"
+fi
 
 # --- materialize ------------------------------------------------------------------
 # These cases need GNU cp (--reflink) and stat (-c), as Node B has; elsewhere
@@ -246,6 +392,15 @@ if [ -d "$d/rel/$A" ]; then ok "materialize: the default mode reflinked (a refli
 	[ $fail -eq $f0 ] && ok "materialize: the default mode never falls back to a full copy (no reflink here: nothing made, exit 0)"
 fi
 
+f0=$fail
+d="$root/m6"; mkdir -p "$d"; src="$(mksrc "$d")"
+mkdir -p "$d/rel"; mkrelease "$d/rel" $OLD 50
+printf '{"first_current_at":"2020-01-01T00:00:00Z"}\n' >"$d/rel/$OLD/installed.json"   # the fixture clock is 2027; the real clock stamps the new release
+env GO_CHOIR_RELEASE_REFLINK=auto GO_CHOIR_GUEST_RELEASE_DEDUPE="$dedupe" GO_CHOIR_DEDUPE_SPAWN=direct GO_CHOIR_DEDUPE_FAKE=1 GO_CHOIR_DEDUPE_MIN_BYTES=1 bash "$materialize" "$src" "$d/rel" >"$root/mat.log" 2>&1; rc=$?
+[ $rc -eq 0 ] && [ -f "$d/rel/.dedupe/$A.json" ] && jq -e --arg o "$OLD" '.old == $o' "$d/rel/.dedupe/$A.json" >/dev/null || bad "materialize+dedupe: exit $rc, no result against the previous release"
+env GO_CHOIR_RELEASE_REFLINK=auto GO_CHOIR_GUEST_RELEASE_DEDUPE=/nonexistent bash "$materialize" "$d/src/${B}-go-choir-guest-image" "$d/rel" >/dev/null 2>&1 || bad "materialize: a missing dedupe tool failed the switch"
+[ $fail -eq $f0 ] && ok "materialize: starts the dedupe against the previous release after the install; a missing tool is ignored"
+
 fi
 # --- wiring in nix/node-b.nix (text assertions) ---------------------------------------
 nix="$here/../nix/node-b.nix"
@@ -254,6 +409,7 @@ grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-releases' && ok "nix: vmctl read
 grep -q 'd /var/lib/go-choir/guest-releases 0755 root root -' "$nix" && ok "nix: the tmpfiles rule" || bad "nix: the tmpfiles rule for guest-releases is missing"
 grep -q 'system.activationScripts.go-choir-guest-release' "$nix" && grep -q 'deps = \[ "go-choir-guest-release" \]' "$nix" && ok "nix: go-choir-guest-image depends on the release snippet" || bad "nix: the guest-image snippet does not depend on go-choir-guest-release"
 grep -q 'systemd.services.go-choir-guest-release-retention' "$nix" && grep -q 'systemd.timers.go-choir-guest-release-retention' "$nix" && ok "nix: the retention oneshot and timer" || bad "nix: the retention unit or timer is missing"
+grep -q 'guestReleaseDedupe' "$nix" && grep -q 'go-choir-guest-release-dedupe' "$nix" && ok "nix: the dedupe tool is wired" || bad "nix: the dedupe tool is not wired"
 grep -q 'guestReleaseRetention' "$nix" && grep -c 'guestReleaseRetention' "$nix" | grep -qE '^[3-9]' && ok "nix: the disk retention sweep calls it" || bad "nix: diskRetentionSweep does not call the release retention"
 
 grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "off"}' "$nix" && grep -q 'VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases' "$nix" && grep -q 'VM_GUEST_RELEASE_SUPPORT_WINDOW=168h' "$nix" && grep -q 'VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"' "$nix" && ok "nix: vmctl's four release variables follow the one switch" || bad "nix: the vmctl release env lines are missing"

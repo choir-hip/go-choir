@@ -15,7 +15,10 @@
 # is not materialized only means its snapshots cold boot). It never falls back
 # to a full copy: --reflink=always, because a silent copy is GBs per deploy.
 # GO_CHOIR_RELEASE_REFLINK=auto exists for the tests on filesystems without
-# reflinks.
+# reflinks. After the install it starts node-b-guest-release-dedupe detached
+# (GO_CHOIR_GUEST_RELEASE_DEDUPE names it) to share blocks with the previous
+# release; cp --reflink from the previous release first would not help, since
+# the new bytes come from the store path and would be overwritten anyway.
 (
 	set +e +u +o pipefail
 	src="$1"
@@ -40,6 +43,21 @@
 		&& { sync -f "$tmp/installed.json" 2>/dev/null || sync; } \
 		&& mv -T "$tmp" "$rel/$id" \
 		|| { note "finish"; chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"; exit 0; }
+	# Share the new release's blocks with the previous release's (storage
+	# growth per deploy is then the changed blocks, not 3.7 GB). Detached, idle
+	# IO, capped memory; a failure to start it is logged and ignored, and the
+	# retention timer runs it again within 30 minutes.
+	dedupe="${GO_CHOIR_GUEST_RELEASE_DEDUPE:-}"
+	if [ -n "$dedupe" ] && [ -x "$dedupe" ]; then
+		sr=$(command -v systemd-run || echo /run/current-system/sw/bin/systemd-run)
+		if [ "${GO_CHOIR_DEDUPE_SPAWN:-systemd}" = direct ]; then
+			"$dedupe" "$rel" "$id" || true
+		elif [ -x "$sr" ]; then
+			"$sr" --no-block --collect --quiet --unit="go-choir-guest-release-dedupe-$id" \
+				-p Nice=19 -p IOSchedulingClass=idle -p CPUWeight=1 -p MemoryMax=384M \
+				"$dedupe" "$rel" "$id" || echo "go-choir guest release $id dedupe not started; the retention timer will run it" >&2
+		fi
+	fi
 	exit 0
 ) || true
 exit 0

@@ -1984,3 +1984,35 @@ func TestRefreshBootConfigKeepsCallerShapeDropsStoredShape(t *testing.T) {
 		t.Fatalf("refresh with no caller shape kept the stale stored shape: cpu=%d mem=%d", got.MachineCPUCount, got.MachineMemSizeMib)
 	}
 }
+
+// A VM removed for good loses its jail (the jail pins a guest release's bytes
+// through hard links); a hibernated VM keeps it for its snapshot restore.
+func TestRemoveVMRemovesStoppedJailKeepsHibernated(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	mgr := NewManager(cfg)
+	for _, tc := range []struct {
+		vm       string
+		state    VMState
+		wantJail bool
+	}{
+		{"vm-stopped", StateStopped, false},
+		{"vm-failed", StateFailed, false},
+		{"vm-hibernated", StateHibernated, true},
+	} {
+		jail := mgr.jailDir(tc.vm)
+		if err := os.MkdirAll(filepath.Join(jail, "root"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		mgr.mu.Lock()
+		mgr.vms[tc.vm] = &VMInstance{Config: VMConfig{VMID: tc.vm}, State: tc.state}
+		mgr.mu.Unlock()
+		if err := mgr.RemoveVM(tc.vm); err != nil {
+			t.Fatalf("RemoveVM %s: %v", tc.vm, err)
+		}
+		_, err := os.Stat(jail)
+		if got := err == nil; got != tc.wantJail {
+			t.Errorf("%s: jail present = %v, want %v", tc.vm, got, tc.wantJail)
+		}
+	}
+}

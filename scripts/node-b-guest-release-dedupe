@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+# Guest release dedupe (owner mission 2026-10-31: minimize storage growth
+# while minimizing memory spikes).
+#
+#   node-b-guest-release-dedupe RELEASES_DIR [NEW_ID]
+#
+# Consecutive guest releases share ~95% of their 4 KiB blocks (about 181 MB of
+# the 3.4 GB store disk changed between two deploys), but each release is a
+# reflink copy of its own /nix/store file, so the shared blocks are stored
+# twice. This tool shares them: it asks the kernel (FIDEDUPERANGE) to point the
+# NEW release's identical blocks at the newest PRIOR release's extents. The
+# kernel byte-compares both ranges before sharing, so a wrong guess or a hash
+# collision cannot corrupt anything; a mismatch is just "not shared".
+#
+# Two passes per file (same name in both releases, >= 1 MiB):
+#   1. same offset: stream both files in 1 MiB chunks, share runs of equal
+#      4 KiB blocks. Needs no index and covers an unshifted image.
+#   2. moved blocks: erofs images of near-identical closures shift data when a
+#      file grows. Blocks of the new file still unshared are looked up by an
+#      8-byte blake2b hash in an index of the old file's blocks that were not
+#      same-offset matches (so the index is small when most blocks matched).
+#      Adjacent hits merge into one ioctl.
+#
+# Memory is bounded: two 1 MiB read buffers, a 1-byte-per-block bitmap of the
+# new file (0.9 MB for 3.4 GB), and the pass-2 index, capped at
+# GO_CHOIR_DEDUPE_MAX_INDEX entries (default 1,000,000, about 110 MB at the
+# cap; typically 5% of blocks, about 5 MB). Peak RSS is measured and recorded.
+# Read pages are dropped from the page cache with posix_fadvise(DONTNEED) as
+# the scan moves on, so the page cache does not grow to the file size (the
+# failure of the hashfile-based duperemove run: it hit its 2 GB cgroup cap).
+#
+# It never fails the deploy: it exits 0 always; any error is logged, and the
+# run is retried by the retention timer (3 attempts). It is meant to run at
+# nice 19 / idle IO (the systemd unit and the systemd-run call set both).
+# One run at a time (flock). Result per release: RELEASES_DIR/.dedupe/<id>.json
+# with bytes_deduped (kernel-reported; a range already shared reports its
+# length too, so this is an upper bound on newly shared bytes) and peak RSS.
+# With NEW_ID the named release is deduped; without, every release that has no
+# result file, oldest first, each against its newest older release.
+#
+# Env: GO_CHOIR_DEDUPE_MAX_INDEX, GO_CHOIR_DEDUPE_FAKE=1 (tests: compare
+# bytes, count what would be shared, issue no ioctl), GO_CHOIR_DEDUPE_MIN_BYTES.
+import calendar, errno, fcntl, hashlib, json, os, re, resource, struct, sys, time
+
+BS = 4096
+CHUNK = 256 * BS               # 1 MiB
+MAX_RUN = 2048 * BS            # 8 MiB per ioctl (the kernel caps a call at 16 MiB)
+FIDEDUPERANGE = 0xC0189436
+ID_RE = re.compile(r'^[0-9a-df-np-sv-z]{32}$')
+FAKE = os.environ.get('GO_CHOIR_DEDUPE_FAKE') == '1'
+MAX_INDEX = int(os.environ.get('GO_CHOIR_DEDUPE_MAX_INDEX', '1000000'))
+MIN_BYTES = int(os.environ.get('GO_CHOIR_DEDUPE_MIN_BYTES', str(1 << 20)))
+NAMES = ['storedisk.erofs', 'rootfs.ext4', 'initrd', 'vmlinux']
+
+
+def log(msg):
+    print('go-choir guest release dedupe: ' + msg, flush=True)
+
+
+class Unsupported(Exception):
+    pass
+
+
+def dedupe_range(src_fd, src_off, dst_fd, dst_off, length):
+    """Share [dst_off, +length) of dst with src's; returns bytes shared."""
+    if FAKE:
+        a = os.pread(src_fd, length, src_off)
+        b = os.pread(dst_fd, length, dst_off)
+        return length if a == b else 0
+    done = 0
+    while done < length:
+        n = min(length - done, MAX_RUN)
+        buf = bytearray(struct.pack('<QQHHI', src_off + done, n, 1, 0, 0) +
+                        struct.pack('<qQQiI', dst_fd, dst_off + done, 0, 0, 0))
+        try:
+            fcntl.ioctl(src_fd, FIDEDUPERANGE, buf, True)
+        except OSError as e:
+            if e.errno in (errno.ENOTTY, errno.EOPNOTSUPP, errno.EINVAL, errno.EXDEV, errno.ENOSYS):
+                raise Unsupported(os.strerror(e.errno))
+            raise
+        _, _, got, status, _ = struct.unpack_from('<qQQiI', buf, 24)
+        if status != 0 or got == 0:
+            return done  # the ranges differ, or an error status: stop this run
+        done += got
+    return done
+
+
+def drop_cache(fd, off, n):
+    try:
+        os.posix_fadvise(fd, off, n, os.POSIX_FADV_DONTNEED)
+    except (AttributeError, OSError):
+        pass
+
+
+def h8(block):
+    return hashlib.blake2b(block, digest_size=8).digest()
+
+
+def dedupe_file(old_path, new_path):
+    fo, fn = os.open(old_path, os.O_RDONLY), os.open(new_path, os.O_RDONLY)
+    try:
+        size = min(os.fstat(fo).st_size, os.fstat(fn).st_size)
+        nblocks = size // BS
+        end = nblocks * BS
+        matched = bytearray(nblocks)
+        same = 0
+        run_start = -1
+
+        def flush(end_blk):
+            nonlocal same, run_start
+            if run_start < 0:
+                return
+            got = dedupe_range(fo, run_start * BS, fn, run_start * BS, (end_blk - run_start) * BS)
+            for b in range(run_start, run_start + got // BS):
+                matched[b] = 1
+            same += got
+            run_start = -1
+
+        # pass 1: same offset
+        pos = 0
+        while pos < end:
+            n = min(CHUNK, end - pos)
+            a, b = os.pread(fo, n, pos), os.pread(fn, n, pos)
+            base = pos // BS
+            if a == b:
+                if run_start < 0:
+                    run_start = base
+                if (base + n // BS - run_start) * BS >= MAX_RUN:
+                    flush(base + n // BS)
+            else:
+                for i in range(n // BS):
+                    if a[i * BS:(i + 1) * BS] == b[i * BS:(i + 1) * BS]:
+                        if run_start < 0:
+                            run_start = base + i
+                    else:
+                        flush(base + i)
+            drop_cache(fo, pos, n)
+            drop_cache(fn, pos, n)
+            pos += n
+        flush(nblocks)
+
+        # pass 2: moved blocks
+        moved = 0
+        index = {}
+        truncated = False
+        if sum(matched) < nblocks:
+            pos = 0
+            while pos < end and not truncated:
+                n = min(CHUNK, end - pos)
+                a = os.pread(fo, n, pos)
+                for i in range(n // BS):
+                    if matched[pos // BS + i]:
+                        continue
+                    if len(index) >= MAX_INDEX:
+                        truncated = True
+                        break
+                    index.setdefault(h8(a[i * BS:(i + 1) * BS]), pos // BS + i)
+                drop_cache(fo, pos, n)
+                pos += n
+            cur = None  # (new block, old block, count)
+
+            def flush2():
+                nonlocal moved, cur
+                if cur:
+                    i0, j0, c = cur
+                    got = dedupe_range(fo, j0 * BS, fn, i0 * BS, c * BS)
+                    for b in range(i0, i0 + got // BS):
+                        matched[b] = 1
+                    moved += got
+                    cur = None
+
+            pos = 0
+            while pos < end:
+                n = min(CHUNK, end - pos)
+                base = pos // BS
+                if not all(matched[base:base + n // BS]):
+                    b = os.pread(fn, n, pos)
+                    for i in range(n // BS):
+                        blk = base + i
+                        j = None if matched[blk] else index.get(h8(b[i * BS:(i + 1) * BS]))
+                        if j is None:
+                            flush2()
+                        elif cur and cur[0] + cur[2] == blk and cur[1] + cur[2] == j and cur[2] * BS < MAX_RUN:
+                            cur = (cur[0], cur[1], cur[2] + 1)
+                        else:
+                            flush2()
+                            cur = (blk, j, 1)
+                    flush2()
+                drop_cache(fn, pos, n)
+                pos += n
+            flush2()
+        return {'blocks': nblocks, 'same_offset_bytes': same, 'moved_bytes': moved,
+                'index_entries': len(index), 'index_truncated': truncated}
+    finally:
+        os.close(fo)
+        os.close(fn)
+
+
+def first_at(rel, rid):
+    try:
+        with open(os.path.join(rel, rid, 'installed.json')) as f:
+            return calendar.timegm(time.strptime(json.load(f)['first_current_at'], '%Y-%m-%dT%H:%M:%SZ'))
+    except Exception:
+        try:
+            return os.stat(os.path.join(rel, rid)).st_mtime
+        except OSError:
+            return 0
+
+
+def peak_rss_kb():
+    r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return r // 1024 if sys.platform == 'darwin' else r
+
+
+def process(rel, new_id, ids):
+    older = sorted((i for i in ids if i != new_id and first_at(rel, i) <= first_at(rel, new_id)), key=lambda i: first_at(rel, i))
+    result = {'new': new_id, 'old': older[-1] if older else None, 'files': {}, 'bytes_deduped': 0}
+    marker = os.path.join(rel, '.dedupe', new_id + '.json')
+    attempts = 0
+    try:
+        with open(marker) as f:
+            prev = json.load(f)
+        if prev.get('status') in ('ok', 'unsupported', 'no_prior') or prev.get('attempts', 0) >= 3:
+            return
+        attempts = prev.get('attempts', 0)
+    except Exception:
+        pass
+    status = 'ok'
+    if not older:
+        status = 'no_prior'
+    else:
+        try:
+            for name in NAMES:
+                o, n = os.path.join(rel, older[-1], name), os.path.join(rel, new_id, name)
+                if not (os.path.isfile(o) and os.path.isfile(n)) or os.path.getsize(n) < MIN_BYTES:
+                    continue
+                t0 = time.time()
+                r = dedupe_file(o, n)
+                r['seconds'] = round(time.time() - t0, 1)
+                result['files'][name] = r
+                result['bytes_deduped'] += r['same_offset_bytes'] + r['moved_bytes']
+        except Unsupported as e:
+            status = 'unsupported'
+            result['error'] = str(e)
+        except Exception as e:  # never fail the deploy
+            status = 'error'
+            result['error'] = repr(e)
+            attempts += 1
+    result.update(status=status, attempts=attempts, peak_rss_kb=peak_rss_kb(), at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+    try:
+        tmp = marker + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(result, f)
+        os.replace(tmp, marker)
+    except OSError as e:
+        log('cannot write result: %s' % e)
+    log('%s against %s: %s, bytes_deduped=%d peak_rss_kb=%d%s' % (
+        new_id, result['old'], status, result['bytes_deduped'], result['peak_rss_kb'],
+        (' error=' + result['error']) if 'error' in result else ''))
+
+
+def main():
+    if len(sys.argv) < 2 or not os.path.isdir(sys.argv[1]):
+        log('no releases directory; nothing to do')
+        return
+    rel = sys.argv[1]
+    only = sys.argv[2] if len(sys.argv) > 2 else None
+    os.makedirs(os.path.join(rel, '.dedupe'), exist_ok=True)
+    lock = open(os.path.join(rel, '.dedupe', 'lock'), 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log('another run holds the lock; leaving it to that run')
+        return
+    ids = [i for i in os.listdir(rel) if ID_RE.match(i) and os.path.isdir(os.path.join(rel, i)) and not os.path.islink(os.path.join(rel, i))]
+    todo = [only] if only else sorted(ids, key=lambda i: first_at(rel, i))
+    for rid in todo:
+        if rid in ids:
+            process(rel, rid, ids)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except BaseException as e:  # never fail a deploy
+        log('aborted: %r' % (e,))
+    sys.exit(0)
