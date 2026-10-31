@@ -135,10 +135,10 @@ disk image), so the hypervisor work is independent of it:
 | S7 | Writer epoch (redesign §5) and the handoff | red | stale-epoch append refused on staging |
 | S1b | Sealed batches compressed (zstd), with the format version on the tape | red (tape format) | bytes per telemetry line measured before and after on d@e |
 | S9 | Tape retention: what of the tape, receipts and payloads may be dropped or cold-stored after a snapshot covers it, and on the Mac | red (tape, evidence) | design first; owner decides what is kept forever |
-| S10 | Snapshot cadence stated against the 720,000-event bound and the boot envelope | orange | the paper's tail never exceeds the bound |
+| S10 | Recovery inside its authority and time: replay takes a renewing capability source and renewal starts at the exchange; the bound restated in ops/bytes; the snapshot cadence stated against it | red (boot path, credentials) | a d@e recovery whose replay outlives one capability lifetime succeeds |
 | S8 | Hypervisor seam, then vfkit on a Mac with a bundle import: workstation mode | red | a computer moved Node B to a Mac and back |
 
-## 6a. Review of 2026-10-31 (Sonnet seat; Devin and DeepSeek pending)
+## 6a. Review of 2026-10-31 (Sonnet and Devin seats; DeepSeek pending)
 
 Adjudicated:
 
@@ -162,6 +162,19 @@ Adjudicated:
 - Noted, not gating: while the event index catch-up runs, a replay-to-live
   comparison differs (the live index is between trim states); the snapshot's
   own witness is computed in one read transaction and stays self-consistent.
+- Accepted, from Devin (verified in code): tail replay runs after the
+  credential exchange (internal/autoputer/run.go:365 after :294), so the
+  boot envelope is safe, but replay is handed the capability as a fixed
+  string, and the capability expires with the envelope
+  (internal/platform/credential_envelope.go:218); background renewal starts
+  only after replay (run.go:491). A replay longer than the capability's
+  lifetime (the paper's 720,000-event bound is about 40 minutes at 298
+  events a second) would lose its read authority mid-way. Fix: replay takes
+  a renewing token source, and renewal starts at the exchange (S10). Also:
+  after batching the bound must be stated in ops or bytes, not events (one
+  batch carries up to 64 ops).
+- Accepted, minor, fixed: the trim floor was read at every trim point inside
+  the finalize transaction; it is now written once per workspace.
 - Noted: retired run memory has no read-through to the tape
   (`get_run_memory_entry` answers not found for a retired run).
 
