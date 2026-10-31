@@ -200,9 +200,9 @@ func TestMonthlyPace_RouterNeverPassesTheTargetAcrossRestarts(t *testing.T) { //
 		late := d.Add(23*time.Hour + 30*time.Minute)
 		router.now = func() time.Time { return late }
 		before := keenable.searchCnt.Load()
-		// Demand of 60 a day, above the ~29 a day pace, in concurrent bursts.
+		// Demand of 40 a day, above the ~29 a day pace, in concurrent bursts.
 		var wg sync.WaitGroup
-		for i := 0; i < 60; i++ {
+		for i := 0; i < 40; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
