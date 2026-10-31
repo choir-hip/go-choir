@@ -540,6 +540,7 @@ type Manager struct {
 	vmOps    map[string]*sync.Mutex // serializes lifecycle operations per VM identity
 
 	healthCancel chan struct{}
+	sweepState   snapshotSweepState
 	healthDone   chan struct{}
 
 	// receiptMu serializes destruction receipt appends (receipts.go);
@@ -829,6 +830,7 @@ func (m *Manager) Start() {
 		go m.warmDataImageTemplate()
 	}
 	go m.healthCheckLoop()
+	go m.snapshotSweepLoop(m.healthCancel)
 	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s jailer=%t", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode(), m.cfg.Jailer.Enabled)
 }
 

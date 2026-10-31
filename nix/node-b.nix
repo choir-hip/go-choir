@@ -2139,6 +2139,10 @@ in
       # item 18) has no swap to go to now.
       Environment = offHostBackupEnv ++ [ "GOMAXPROCS=2" ];
       LoadCredential = offHostBackupCredentials;
+    } // {
+      # Waits for a prune in flight: prune takes the repository's exclusive lock.
+      after = [ "network-online.target" "go-choir-offhost-backup-prune.service" ];
+      wants = [ "network-online.target" ];
     });
 
   systemd.timers.go-choir-offhost-backup-verify = lib.mkIf offHostBackup.enable {
@@ -2147,6 +2151,43 @@ in
     timerConfig = {
       OnCalendar = "Sun *-*-* 06:00:00 UTC";
       RandomizedDelaySec = "30m";
+      Persistent = false;
+    };
+  };
+
+  # Weekly prune (owner, 2026-10-31: one solid backup, the last 2 daily
+  # snapshot sets; Node B holds delete access for it). node-a's timer starts
+  # its prune rest-server at 05:00 UTC Sunday for 2 h
+  # (docs/design/offhost-weekly-prune-node-a.patch); this unit follows at
+  # 05:05 with its own SSH key and delete password (off-host-backup.sh
+  # prune-keygen). Ordered after the nightly backup and before the weekly
+  # verify, so a long backup delays it and it delays the verify instead of
+  # colliding on the repository lock. The runtime cap sits under the
+  # server's 2 h window. Measured by hand on 2026-10-31: prune peak 7.5 GB,
+  # repack 6.9 GB at 426 GiB; the repository is 114 GiB after that prune.
+  # The Go heap stays under GOMEMLIMIT, the unit throttles at 7G and dies at
+  # 9G inside its own cgroup. Never run in the weekly backup's memory line.
+  systemd.services.go-choir-offhost-backup-prune = lib.mkIf offHostBackup.enable
+    (offHostBackupUnit "go-choir weekly off-host backup prune (restic forget + prune, keeps the last 2 snapshot sets)" "prune" {
+      OOMScoreAdjust = 1000;
+      MemoryHigh = "7G";
+      MemoryMax = "9G";
+      TimeoutStartSec = "100min";
+      Environment = offHostBackupEnv ++ [ "GOMEMLIMIT=6GiB" ];
+      LoadCredential = offHostBackupCredentials ++ [
+        "prune-ssh-key:${offHostBackup.secretsDir}/prune-ssh-key"
+        "prune-rest-password:${offHostBackup.secretsDir}/prune-rest-password"
+      ];
+    } // {
+      after = [ "network-online.target" "go-choir-offhost-backup.service" ];
+      wants = [ "network-online.target" ];
+    });
+
+  systemd.timers.go-choir-offhost-backup-prune = lib.mkIf offHostBackup.enable {
+    description = "Weekly off-host backup prune";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "Sun *-*-* 05:05:00 UTC";
       Persistent = false;
     };
   };

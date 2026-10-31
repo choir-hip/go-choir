@@ -100,6 +100,10 @@ func main() {
 	// Tape segments (stage A2): off unless PLATFORM_TAPE_SEGMENTS=write. The
 	// read path is segment first, legacy second whatever this says.
 	svc.SetTapeSegmentsMode(cfg.TapeSegments)
+	// Seal-time compaction of tape segments (rule F.2): each sealed segment is
+	// rewritten once as a fresh file, so btrfs frees the bookends of its
+	// fsynced appends. Background, low priority, never blocks an append.
+	svc.EnableTapeSealCompaction()
 	log.Printf("corpusd: tape segments: %s", svc.TapeSegmentsMode())
 	// Append-receipt compaction (docs/design/append-receipt-trim-2026-10-31.md):
 	// the named computers' receipt bodies are stored in the lossless compact

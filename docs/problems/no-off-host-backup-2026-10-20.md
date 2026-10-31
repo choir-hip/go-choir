@@ -758,3 +758,46 @@ with this. either edit node-a or the mike repo").
     not freed, by design. Still open: the tape and image pieces of the
     drill on this snapshot, and the weekly verify's cost, which waits for
     the segment store (`choir-tape-segments-a2-repack-2026-10-21.md`).
+
+### 14. Weekly prune: one solid backup (owner, 2026-10-31)
+
+Owner, 2026-10-31: one solid backup; a weekly automatic prune keeps the last
+2 daily snapshot sets; Node B holds delete access for it. A hand prune that
+day took node-a's daily repository from 426 to 114.6 GiB (prune peak 7.5 GB,
+repack 6.9 GB).
+
+How it runs:
+
+- node-a's `choir-backup-rest-prune` unit (the non-append-only rest-server
+  on port 8001, user `choir-backup-prune`, stops itself after 2 h) was
+  started by hand and had no timer. A node-a timer now opens it Sunday
+  05:00 UTC, after the 02:40 backup and before the verify. The node-a change
+  is a patch to `configuration.nix` only, no module change:
+  `docs/design/offhost-weekly-prune-node-a.patch`, for node-a's owner.
+- Node B's `go-choir-offhost-backup-prune` unit runs `off-host-backup.sh
+  prune` at 05:05 (ordered after the nightly backup, before the verify; the
+  tunnel waits up to 5 min for the server). It uses its own SSH key and
+  delete password (`prune-ssh-key`, `prune-rest-password` in the offhost
+  secrets directory); the daily credentials stay append-only.
+- The prune forgets whole snapshot sets by run tag (a main snapshot and its
+  shards), never a shard alone. Complete sets are main plus all shards, or
+  a pre-split full snapshot older than the first sharded set. The newest 2
+  complete sets stay, with any set at least as new (a run in flight or a
+  failed one); with no complete set nothing is forgotten; snapshots without
+  a run tag are never touched. Then `restic prune --max-unused 5%`.
+- Limits: MemoryHigh 7G, MemoryMax 9G, GOMEMLIMIT 6GiB, idle IO, cap 100 min
+  under the server's 2 h window. Status: `last_prune_*` in status.json;
+  `freshness` fails when no prune succeeded in 10 days or the last one failed.
+
+Setup, once, in this order:
+
+1. On Node B: `off-host-backup.sh prune-keygen` (prints the public key and
+   the htpasswd line; secrets stay in the secrets directory).
+2. Node-a's owner puts the htpasswd line (user `nodeb`, the repository user)
+   in `/var/lib/choir-backup/htpasswd-prune` (root, 0600), puts the key in
+   `prune.keys` in the patch, and applies the patch.
+3. Node B deploys the unit and timer. Until step 1 is done the unit fails at
+   start for the missing credentials, loudly.
+
+Open: a shard-aware `restic check` and the old giant trees in pre-split
+snapshots go away with the first prunes.

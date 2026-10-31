@@ -11,3 +11,7 @@ const openNoFollow = 0
 // only serialization, which is correct while the platform process is the
 // only writer (appendix A.5).
 func lockDir(*os.File) (func(), error) { return func() {}, nil }
+
+func statBlocks(os.FileInfo) int64 { return 0 }
+
+func copyOwner(os.FileInfo, *os.File) error { return nil }

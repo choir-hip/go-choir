@@ -1,0 +1,29 @@
+--- a/node-a/configuration.nix	2026-10-31 13:27:54.045848064 -0400
++++ b/node-a/configuration.nix	2026-10-31 13:28:02.677305932 -0400
+@@ -69,6 +69,26 @@
+     # snapshots (the workstation snapshots); rest-server's --max-size (95%
+     # of quotaGiB) is the limit instead.
+     enforceBtrfsQuota = false;
++    # Weekly prune (owner, 2026-10-31: one solid backup, the last 2 daily
++    # snapshot sets). Node B's go-choir-offhost-backup-prune unit connects
++    # as choir-backup-prune to the delete-capable rest-server on port 8001,
++    # which the timer below opens for 2 h. The key is printed by
++    # `off-host-backup.sh prune-keygen` on Node B; replace the placeholder.
++    prune.keys = [ "ssh-ed25519 AAAA...REPLACE... node-b-offhost-prune" ];
++  };
++
++  # Opens the prune server (choir-backup-rest-prune, which stops itself
++  # after prune.maxRuntime = 2h) at 05:00 UTC on Sundays: after the 02:40
++  # nightly backup, before Node B's prune unit at 05:05 and its verify.
++  # Needs /var/lib/choir-backup/htpasswd-prune (root, 0600, one line
++  # "nodeb:<bcrypt>"); without it the unit stays inactive on its condition.
++  systemd.timers.choir-backup-rest-prune = {
++    description = "Weekly window for the Choir backup prune server";
++    wantedBy = [ "timers.target" ];
++    timerConfig = {
++      OnCalendar = "Sun *-*-* 05:00:00 UTC";
++      Persistent = false;
++    };
+   };
+ 
+   time.timeZone = "UTC";

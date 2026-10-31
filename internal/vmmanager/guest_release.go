@@ -401,12 +401,14 @@ type GuestReleaseUsage struct {
 	Current  string              `json:"current"`
 	Complete bool                `json:"complete"`
 	InUse    []GuestReleaseInUse `json:"in_use"`
+	// SnapshotSweep counts the dead-snapshot sweep's discards.
+	SnapshotSweep SnapshotSweepStats `json:"snapshot_sweep"`
 }
 
 // GuestReleaseUsage lists the releases live VMs run and unconsumed snapshots
 // (younger than the max age, every root including the vault) name.
 func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
-	use := GuestReleaseUsage{Retain: m.releaseRetainOn(), Current: m.currentReleaseID(), Complete: true, InUse: []GuestReleaseInUse{}}
+	use := GuestReleaseUsage{Retain: m.releaseRetainOn(), Current: m.currentReleaseID(), Complete: true, InUse: []GuestReleaseInUse{}, SnapshotSweep: m.SnapshotSweepStats()}
 	byID := map[string]*GuestReleaseInUse{}
 	entry := func(id string) *GuestReleaseInUse {
 		if e, ok := byID[id]; ok {
@@ -440,6 +442,12 @@ func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
 			}
 			meta, err := readSnapshotMeta(snapshotDirIn(root, de.Name()))
 			if err != nil || meta.Consumed || meta.GuestRelease == "" || !now.Before(meta.CreatedAt.Add(m.snapshotMaxAge())) {
+				continue
+			}
+			// A snapshot the release rules permanently refuse (R3 to R6)
+			// can never load, so it pins nothing; the sweep removes it.
+			// R0 to R2 are not permanent and still pin.
+			if releaseDeadReason(m.releaseRefusal(meta, now)) != "" {
 				continue
 			}
 			e := entry(meta.GuestRelease)

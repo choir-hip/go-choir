@@ -26,3 +26,27 @@ func lockDir(d *os.File) (func(), error) {
 	}
 	return func() { _ = syscall.Flock(int(d.Fd()), syscall.LOCK_UN) }, nil
 }
+
+// statBlocks is st_blocks in bytes.
+func statBlocks(fi os.FileInfo) int64 {
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int64(st.Blocks) * 512
+	}
+	return 0
+}
+
+// copyOwner gives dst the owner of src when they differ.
+func copyOwner(src os.FileInfo, dst *os.File) error {
+	st, ok := src.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil
+	}
+	cur, err := dst.Stat()
+	if err != nil {
+		return err
+	}
+	if ct, ok := cur.Sys().(*syscall.Stat_t); ok && ct.Uid == st.Uid && ct.Gid == st.Gid {
+		return nil
+	}
+	return dst.Chown(int(st.Uid), int(st.Gid))
+}

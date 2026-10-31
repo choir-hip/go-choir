@@ -6,6 +6,16 @@
 //	taperepack census --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--rate N]
 //	taperepack copy   --root <artifacts> --work-dir <dir> [--computer <id>[,<id>]] [--apply] [--fresh] [--rate N]
 //	taperepack delete --root <artifacts> --work-dir <dir> --census-receipt <digest> [--computer <id>[,<id>]] [--keep-digests <file> [--keep-digests-empty-ok]] [--apply] [--max-age 24h] [--pause 250ms] [--rate N]
+//	taperepack compact --root <artifacts> [--computer <id>[,<id>] | --all-computers] [--apply] [--rate-mb 16] [--pause 1s] [--verify-records=true] [--compress=true] [--min-avg-extent 65536] [--max-segments N] [--compsize <path>]
+//
+// compact rewrites each sealed segment once as a fresh sequential file with
+// identical bytes (rule F of docs/design/small-object-storage-2026-10-31.md),
+// freeing the btrfs copy-on-write bookends its fsynced appends left. It is a
+// dry run unless --apply is given, and --apply needs --computer or
+// --all-computers. Every copy is verified before its rename. --compsize names
+// the compsize binary, run as "compsize -b <file>" before and after each
+// segment, for the disk bytes reclaimed (st_blocks does not show them on
+// btrfs). It needs no --work-dir and prints its report as one JSON line.
 //
 // census reads everything and writes nothing under the artifacts root. copy
 // is a dry run unless --apply is given, and --apply needs --computer: a
@@ -40,6 +50,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,10 +76,13 @@ func (l *listFlag) Set(v string) error {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: taperepack census|copy|delete [flags]")
+		fmt.Fprintln(stderr, "usage: taperepack census|copy|delete|compact [flags]")
 		return 2
 	}
 	sub := args[0]
+	if sub == "compact" {
+		return runCompact(args[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("taperepack "+sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := fs.String("root", "", "artifacts root (holds sha256/ and tape-seg/)")
@@ -159,4 +174,75 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	return 0
+}
+
+func runCompact(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("taperepack compact", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", "", "artifacts root (holds tape-seg/)")
+	var computers listFlag
+	fs.Var(&computers, "computer", "computer id; repeat or comma-separate")
+	all := fs.Bool("all-computers", false, "with --apply: every computer under tape-seg")
+	apply := fs.Bool("apply", false, "really rewrite (default is a dry run)")
+	rateMB := fs.Int64("rate-mb", 16, "copy rate per segment, MiB/s")
+	pause := fs.Duration("pause", time.Second, "rest between compacted segments")
+	verify := fs.Bool("verify-records", true, "read back every indexed record of each copy before its rename")
+	compress := fs.Bool("compress", true, "ask btrfs to compress the copies (btrfs.compression property)")
+	minExtent := fs.Int64("min-avg-extent", 0, "skip segments whose extents average at least this many bytes (0 = 64 KiB, -1 = never skip)")
+	maxSegs := fs.Int("max-segments", 0, "stop after this many compactions (0 = no limit)")
+	compsize := fs.String("compsize", "", "path of the compsize binary, for disk bytes before/after")
+	quiet := fs.Bool("quiet", false, "no progress lines")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *root == "" {
+		fmt.Fprintln(stderr, "taperepack compact: --root is required")
+		return 2
+	}
+	if *rateMB <= 0 {
+		fmt.Fprintln(stderr, "taperepack compact: --rate-mb must be positive")
+		return 2
+	}
+	opts := taperepack.CompactOptions{Root: *root, Computers: computers, AllComputers: *all, Apply: *apply, BytesPerSecond: *rateMB << 20, Pause: *pause, VerifyRecords: *verify, Compress: *compress, MinAvgExtentBytes: *minExtent, MaxSegments: *maxSegs}
+	if *compsize != "" {
+		bin := *compsize
+		opts.Measure = func(path string) (int64, error) { return compsizeDisk(bin, path) }
+	}
+	if !*quiet {
+		opts.Progress = func(s string) { fmt.Fprintln(stderr, s) }
+	}
+	rep, err := taperepack.Compact(opts)
+	if rep != nil {
+		rep.Results = nil // one line per segment went to stderr
+		b, _ := json.Marshal(rep)
+		fmt.Fprintln(stdout, string(b))
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "taperepack compact: %v\n", err)
+		return 1
+	}
+	if rep.Errors > 0 {
+		return 3
+	}
+	return 0
+}
+
+// compsizeDisk runs "compsize -b <path>" and returns the Disk Usage column of
+// its TOTAL line.
+func compsizeDisk(bin, path string) (int64, error) {
+	out, err := exec.Command(bin, "-b", path).Output()
+	if err != nil {
+		return 0, fmt.Errorf("compsize %s: %w", path, err)
+	}
+	return parseCompsizeTotal(string(out))
+}
+
+func parseCompsizeTotal(out string) (int64, error) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && f[0] == "TOTAL" {
+			return strconv.ParseInt(f[2], 10, 64)
+		}
+	}
+	return 0, fmt.Errorf("compsize: no TOTAL line in %q", out)
 }

@@ -36,6 +36,13 @@ type AppenderStats struct {
 	TornTails       uint64 `json:"torn_tails"`       // torn tails cut while sealing a segment found on disk
 	Errors          uint64 `json:"errors"`           // Append calls that failed after validation
 	Poisoned        bool   `json:"poisoned"`         // the fail-stop rule has fired
+
+	// Seal-time compaction (appender_compact.go).
+	Compactions       uint64 `json:"compactions"`        // sealed segments rewritten compactly
+	CompactedBytes    uint64 `json:"compacted_bytes"`    // their logical bytes
+	CompactionSkips   uint64 `json:"compaction_skips"`   // already compact, shared, or replaced
+	CompactionErrors  uint64 `json:"compaction_errors"`  // refused or failed (segment unchanged)
+	CompactionDropped uint64 `json:"compaction_dropped"` // queue full; left for the backfill
 }
 
 // Appender is the production segment writer (appendix A.5). It is safe for
@@ -69,7 +76,8 @@ type AppenderStats struct {
 // back, keeps only the whole, verified records (a torn tail is cut off, which
 // no reader can have seen as a record), fsyncs, seals it with an index of
 // those records and fsyncs the directory, then starts a fresh segment of its
-// own. A sealed segment is never modified. An offset is never reused, so a
+// own. A sealed segment is never modified (compaction, compact.go, may
+// replace its file with a verified byte-identical copy). An offset is never reused, so a
 // reader's cached location can only ever name the record that was there. The
 // bytes of a poisoned writer's unacknowledged tail may therefore be sealed
 // into the store (whole and verified, never acknowledged): a reader may serve
@@ -102,6 +110,9 @@ type Appender struct {
 	syncDir  func(path string) error
 
 	appends, records, bytes, syncs, segsCreated, idxCreated, seals, torn, errs atomic.Uint64
+
+	compactorState
+	compacted, compactedBytes, compSkipped, compErrors, compDropped atomic.Uint64
 }
 
 type computerLog struct {
@@ -154,6 +165,8 @@ func (a *Appender) Stats() AppenderStats {
 		Appends: a.appends.Load(), Records: a.records.Load(), Bytes: a.bytes.Load(), Syncs: a.syncs.Load(),
 		SegmentsCreated: a.segsCreated.Load(), IndexesCreated: a.idxCreated.Load(), Seals: a.seals.Load(),
 		TornTails: a.torn.Load(), Errors: a.errs.Load(), Poisoned: a.poisoned.Load(),
+		Compactions: a.compacted.Load(), CompactedBytes: a.compactedBytes.Load(), CompactionSkips: a.compSkipped.Load(),
+		CompactionErrors: a.compErrors.Load(), CompactionDropped: a.compDropped.Load(),
 	}
 }
 
@@ -501,6 +514,7 @@ func (a *Appender) sealUnowned(dir, id string, segno uint64) error {
 	}
 	a.idxCreated.Add(1)
 	a.seals.Add(1)
+	a.queueCompaction(id, segno)
 	return nil
 }
 
@@ -584,6 +598,7 @@ func (a *Appender) seal(dir, id string, segno uint64, size int64, entries map[op
 	}
 	a.idxCreated.Add(1)
 	a.seals.Add(1)
+	a.queueCompaction(id, segno)
 	return nil
 }
 

@@ -84,9 +84,38 @@ func (s *Service) tapeAppender() *tapestore.Appender {
 	defer s.tapeReaderMu.Unlock()
 	root := filepath.Clean(s.artifactsRoot)
 	if s.tapeAppenderVal == nil || s.tapeAppenderVal.Root() != root {
+		if s.tapeAppenderVal != nil {
+			s.tapeAppenderVal.StopSealCompaction()
+		}
 		s.tapeAppenderVal = tapestore.NewAppender(root)
+		if s.tapeSealCompaction.Load() {
+			s.tapeAppenderVal.StartSealCompaction(tapeSealCompactionConfig)
+		}
 	}
 	return s.tapeAppenderVal
+}
+
+// tapeSealCompactionConfig: rule F.2 of
+// docs/design/small-object-storage-2026-10-31.md. Each sealed segment is
+// rewritten once, byte for byte, as a fresh sequential file, ten seconds after
+// its seal, at 32 MiB/s on a nice-19, idle-IO thread, with btrfs compression
+// allowed on the copy. It frees the copy-on-write bookends that fsync-per-
+// append leaves on btrfs (measured 2026-10-31: 29.4 GB of sealed segments in
+// 50.5 GB of disk). Appends never wait for it.
+var tapeSealCompactionConfig = tapestore.SealCompaction{Delay: 10 * time.Second, BytesPerSecond: 32 << 20, Compress: true}
+
+// EnableTapeSealCompaction turns on seal-time compaction of tape segments for
+// the appender this service creates. corpusd calls it at startup.
+func (s *Service) EnableTapeSealCompaction() {
+	if s == nil {
+		return
+	}
+	s.tapeSealCompaction.Store(true)
+	s.tapeReaderMu.Lock()
+	defer s.tapeReaderMu.Unlock()
+	if s.tapeAppenderVal != nil {
+		s.tapeAppenderVal.StartSealCompaction(tapeSealCompactionConfig)
+	}
 }
 
 // tapeCounters are lifetime counters of the tape write path.

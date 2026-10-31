@@ -65,8 +65,11 @@ type Service struct {
 	// counters. A zero Service is mode off.
 	tapeAppenderVal *tapestore.Appender
 	tapeSegMode     atomic.Int32
-	tapeCount       tapeCounters
-	graphStore      *PublicationGraphStore // graph-native dual-write target
+	// tapeSealCompaction starts the appender's seal-time compaction worker
+	// (EnableTapeSealCompaction; corpusd sets it, tests do not).
+	tapeSealCompaction atomic.Bool
+	tapeCount          tapeCounters
+	graphStore         *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
 	// overlay supplies the live check overlay served beside a version.

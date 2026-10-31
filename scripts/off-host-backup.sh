@@ -15,6 +15,10 @@
 #   off-host-backup.sh verify      weekly: restic check of a rotating subset
 #   off-host-backup.sh freshness   every 6 h: fail if the backup is stale
 #   off-host-backup.sh archive TAG PATH...   tape-cleanup archive (never pruned)
+#   off-host-backup.sh prune-keygen   owner, once: the prune window's SSH key and
+#                                  delete password; prints what node-a needs
+#   off-host-backup.sh prune       weekly: forget all but the last 2 snapshot sets,
+#                                  then restic prune, through node-a's prune server
 #
 # Exit status: 0 ok; 1 failed or stale; 2 usage; 3 partial (everything that
 # could be uploaded was, but an item was skipped or unreadable); 4 disk guard;
@@ -70,6 +74,19 @@ MIN_FREE_GIB="${OFFHOST_MIN_FREE_GIB:-40}"
 MAX_AGE_HOURS="${OFFHOST_MAX_AGE_HOURS:-36}"
 MAX_VERIFY_AGE_HOURS="${OFFHOST_MAX_VERIFY_AGE_HOURS:-240}"
 RESTIC_HOST_TAG="go-choir-b"
+# The weekly prune (owner, 2026-10-31: one solid backup, keep the last 2
+# daily snapshot sets). It reaches node-a's separate, non-append-only
+# rest-server (services.choirBackupTarget.prune: user choir-backup-prune,
+# port 8001, started by a node-a timer for a window) with its own SSH key and
+# its own delete password; the daily credentials stay append-only.
+PRUNE_SSH_USER="${OFFHOST_PRUNE_SSH_USER:-choir-backup-prune}"
+PRUNE_REMOTE_PORT="${OFFHOST_PRUNE_REMOTE_REST_PORT:-8001}"
+PRUNE_LOCAL_PORT="${OFFHOST_PRUNE_LOCAL_PORT:-18001}"
+PRUNE_KEEP="${OFFHOST_PRUNE_KEEP:-2}"
+PRUNE_WAIT_SECONDS="${OFFHOST_PRUNE_WAIT_SECONDS:-300}"
+MAX_PRUNE_AGE_HOURS="${OFFHOST_MAX_PRUNE_AGE_HOURS:-240}"
+SSH_KEY_CRED=ssh-key
+REST_PW_CRED=rest-password
 
 STATUS="$STATE/status.json"
 STAGING="$STATE/staging"
@@ -326,7 +343,7 @@ tunnel_up() {
   [ "${OFFHOST_NO_TUNNEL:-}" = 1 ] && return 0
   [ -n "$NODE_A_HOST" ] || { err "OFFHOST_HOST is not set"; return 1; }
   CTL="$STATE/run/ssh.ctl"
-  ssh -i "$(cred ssh-key)" -o IdentitiesOnly=yes -o BatchMode=yes \
+  ssh -i "$(cred "$SSH_KEY_CRED")" -o IdentitiesOnly=yes -o BatchMode=yes \
     -o UserKnownHostsFile="$(cred known-hosts)" -o StrictHostKeyChecking=yes \
     -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=6 \
     -o ControlMaster=yes -o ControlPath="$CTL" \
@@ -349,7 +366,7 @@ restic_env() { # $1 = daily | archive
   export RESTIC_PASSWORD_FILE
   RESTIC_PASSWORD_FILE="$(cred restic-password)"
   export RESTIC_REST_USERNAME="$REST_USER"
-  RESTIC_REST_PASSWORD="$(cat "$(cred rest-password)")"; export RESTIC_REST_PASSWORD
+  RESTIC_REST_PASSWORD="$(cat "$(cred "$REST_PW_CRED")")"; export RESTIC_REST_PASSWORD
   export RESTIC_REPOSITORY="rest:http://127.0.0.1:$LOCAL_PORT/$REST_USER/$1"
   export RESTIC_CACHE_DIR="$STATE/restic-cache"
   export RESTIC_COMPRESSION=auto RESTIC_PACK_SIZE=64 RESTIC_READ_CONCURRENCY=2
@@ -641,6 +658,19 @@ cmd_freshness() {
   fi
   result_fresh attempt backup || bad=1
   result_fresh verify verify || bad=1
+  result_fresh prune prune || bad=1
+  # The prune clock starts when this check first sees status.json without
+  # one (the weekly prune was added after the backup's first success), so
+  # deploying the unit does not fail the check at once.
+  local pr since; pr="$(jq -r '.last_prune_epoch // 0' "$STATUS")"
+  since="$(jq -r '.prune_since_epoch // 0' "$STATUS")"
+  if [ "$since" -eq 0 ]; then
+    since="$t"; echo "{\"prune_since_epoch\":$t}" | status_merge
+  fi
+  [ "$pr" -gt "$since" ] && since="$pr"
+  if [ $(( (t - since) / 3600 )) -gt "$MAX_PRUNE_AGE_HOURS" ]; then
+    err "no successful prune in $MAX_PRUNE_AGE_HOURS h (last: $([ "$pr" -eq 0 ] && echo never || echo "$(( (t - pr) / 3600 )) h ago"))"; bad=1
+  fi
   if [ "$first" -gt 0 ] && [ $(( (t - first) / 3600 )) -gt "$MAX_VERIFY_AGE_HOURS" ] && { [ "$v" -eq 0 ] || [ $(( (t - v) / 3600 )) -gt "$MAX_VERIFY_AGE_HOURS" ]; }; then
     err "no passing verify in $MAX_VERIFY_AGE_HOURS h"; bad=1
   fi
@@ -711,6 +741,107 @@ cmd_keygen() { # owner, interactive, once. Prints the restic password to the ter
   } > /dev/tty
 }
 
+# Which snapshots the prune forgets. Input: `restic snapshots --json` on
+# stdin. A snapshot set is the main snapshot plus one snapshot per shard,
+# all tagged run-<id> (the id sorts by time). Sets are kept or forgotten
+# whole, so a shard never outlives or loses its main snapshot. Complete:
+# main + every shard ($1 shards in all), or a set from before the split
+# (no shard tags, older than the first shard-bearing set). The newest $2
+# complete sets stay, and every set at least as new as the oldest of them
+# (a run in flight or a failed run among them); with no complete set,
+# nothing is forgotten. Snapshots without a run tag are never touched.
+# Output: {"keep":[run ids],"forget":[snapshot ids]}.
+prune_select() { # $1 shards in a complete set, $2 sets to keep
+  jq -c --argjson total "$1" --argjson keep "$2" '
+    [ .[] | if (type == "object" and has("snapshots")) then .snapshots[] else . end ]
+    | map(select((.tags // []) | index("daily")))
+    | map(. + {run: ((.tags | map(select(startswith("run-"))) | first) // null),
+               shard: (((.tags | map(select(startswith("shard-"))) | first) // null) != null)})
+    | map(select(.run != null)) as $r
+    | ($r | map(select(.shard) | .run) | min) as $firstshard
+    | ($r | group_by(.run) | map({run: .[0].run, main: (map(select(.shard | not)) | length), shards: (map(select(.shard)) | length)})) as $sets
+    | ($sets | map(select(.main >= 1 and (.shards == $total or (.shards == 0 and ($firstshard == null or .run < $firstshard)))) | .run) | sort | reverse) as $complete
+    | if ($complete | length) == 0 then {keep: ($sets | map(.run)), forget: []}
+      else ($complete[:$keep] | last) as $cutoff
+        | {keep: ($sets | map(select(.run >= $cutoff) | .run) | sort),
+           forget: ($r | map(select(.run < $cutoff) | .id))}
+      end'
+}
+
+cmd_prune() {
+  local started rc plan shards_total b ids=() before after n_forget keep_json
+  need ssh restic jq || return
+  started="$(now)"
+  trap 'tunnel_down; attempt_interrupted' EXIT
+  install -d -m 0700 "$STATE/run"
+  attempt_start prune
+  # The prune credentials and port for the shared tunnel and restic helpers.
+  NODE_A_SSH_USER="$PRUNE_SSH_USER"; REMOTE_REST_PORT="$PRUNE_REMOTE_PORT"; LOCAL_PORT="$PRUNE_LOCAL_PORT"
+  SSH_KEY_CRED=prune-ssh-key; REST_PW_CRED=prune-rest-password
+  tunnel_up || { attempt_end failed "no tunnel"; return 1; }
+  restic_env daily
+  # node-a's timer starts the prune server shortly before this unit; the
+  # forward is up before the server may be, so wait for the repository.
+  local waited=0
+  until R cat config >/dev/null 2>&1; do
+    if [ "$waited" -ge "$PRUNE_WAIT_SECONDS" ]; then
+      err "prune server on node-a does not answer (is its window open? credentials placed?)"
+      attempt_end failed "prune server unreachable"; return 1
+    fi
+    sleep 10; waited=$(( waited + 10 ))
+  done
+  R unlock >/dev/null 2>&1 || true # removes only locks whose process is gone
+  shards_total=0
+  for b in $BIG_DIRS; do shards_total=$(( shards_total + ${b##*:} )); done
+  R snapshots --json > "$STATE/run/prune-snapshots.json" 2> "$STATE/run/prune.err" \
+    || { err "restic snapshots failed: $(tail -c 300 "$STATE/run/prune.err" | tr -d '\n')"; attempt_end failed "snapshots listing failed"; return 1; }
+  plan="$(prune_select "$shards_total" "$PRUNE_KEEP" < "$STATE/run/prune-snapshots.json")" \
+    || { err "could not read the snapshot list"; attempt_end failed "snapshot list unreadable"; return 1; }
+  while read -r b; do [ -n "$b" ] && ids+=("$b"); done < <(jq -r '.forget[]' <<<"$plan")
+  keep_json="$(jq -c '.keep' <<<"$plan")"
+  n_forget="${#ids[@]}"
+  before="$(repo_pack_bytes daily)"
+  log "prune: keeping sets $keep_json; forgetting $n_forget snapshots"
+  if [ "$n_forget" -gt 0 ]; then
+    R forget "${ids[@]}" > "$STATE/run/prune-forget.out" 2> "$STATE/run/prune.err"; rc=$?
+    if [ "$rc" -ne 0 ]; then
+      err "restic forget failed ($(exit_cause "$rc" restic)): $(tail -c 300 "$STATE/run/prune.err" | tr -d '\n')"
+      attempt_end failed "forget: $(exit_cause "$rc" restic)"; return 1
+    fi
+  fi
+  R prune --max-unused 5% > "$STATE/run/prune.out" 2> "$STATE/run/prune.err"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    err "restic prune failed ($(exit_cause "$rc" restic)): $(tail -c 300 "$STATE/run/prune.err" | tr -d '\n')"
+    attempt_end failed "prune: $(exit_cause "$rc" restic)"; return 1
+  fi
+  after="$(repo_pack_bytes daily)"
+  log "prune ok: repository ${before:-?} -> ${after:-?} bytes"
+  status_merge <<EOF
+{"last_prune_result":"ok","last_prune_cause":"","last_prune_epoch":$(now),"last_prune_forgotten":$n_forget,"last_prune_kept_runs":$keep_json,"last_prune_bytes_before":${before:-0},"last_prune_bytes_after":${after:-0},"last_prune_duration_seconds":$(( $(now) - started )),"repo_raw_bytes":${after:-0}}
+EOF
+}
+
+cmd_prune_keygen() { # owner, once. Prints only public material (key, htpasswd line).
+  need ssh-keygen base64 || return
+  command -v htpasswd >/dev/null 2>&1 || command -v nix-shell >/dev/null 2>&1 || need htpasswd || return
+  install -d -m 0700 "$SECRETS_DIR"
+  umask 077
+  local f
+  for f in prune-ssh-key prune-rest-password; do
+    [ -e "$SECRETS_DIR/$f" ] && { err "$SECRETS_DIR/$f exists; refusing to overwrite a key"; return 2; }
+  done
+  head -c 32 /dev/urandom | base64 | tr -d '\n=/+' > "$SECRETS_DIR/prune-rest-password"
+  ssh-keygen -q -t ed25519 -N "" -C "node-b-offhost-prune" -f "$SECRETS_DIR/prune-ssh-key"
+  echo "== Give node-a's owner these two lines (neither is secret) =="
+  echo "prune ssh public key (services.choirBackupTarget.prune.keys):"; cat "$SECRETS_DIR/prune-ssh-key.pub"
+  echo "htpasswd line (/var/lib/choir-backup/htpasswd-prune, root, 0600; the user is the repository user):"
+  if command -v htpasswd >/dev/null 2>&1; then
+    htpasswd -niB "$REST_USER" < "$SECRETS_DIR/prune-rest-password"
+  else
+    REST_USER="$REST_USER" nix-shell -p apacheHttpd --run 'htpasswd -niB "$REST_USER"' < "$SECRETS_DIR/prune-rest-password"
+  fi
+}
+
 case "${1:-}" in
   keygen) shift; cmd_keygen "$@" ;;
   init) shift; cmd_init "$@" ;;
@@ -719,5 +850,7 @@ case "${1:-}" in
   verify) shift; cmd_verify "$@" ;;
   freshness) shift; cmd_freshness "$@" ;;
   archive) shift; cmd_archive "$@" ;;
-  *) sed -n '2,24p' "$0" >&2; exit 2 ;;
+  prune-keygen) shift; cmd_prune_keygen "$@" ;;
+  prune) shift; cmd_prune "$@" ;;
+  *) sed -n '2,28p' "$0" >&2; exit 2 ;;
 esac

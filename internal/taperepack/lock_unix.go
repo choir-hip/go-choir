@@ -32,3 +32,13 @@ func lockWorkDir(path string) (release func(), err error) {
 	}
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
+
+// fsFree is the filesystem's free bytes for an unprivileged writer; -1 when
+// statfs fails.
+func fsFree(path string) int64 {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return -1
+	}
+	return int64(st.Bavail) * int64(st.Bsize)
+}
