@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/klauspost/compress/zstd"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -23,15 +24,62 @@ const (
 )
 
 type PrivateArtifactMetadata struct {
-	Version          int            `json:"version"`
-	ComputerID       string         `json:"computer_id"`
-	EventID          string         `json:"event_id"`
-	MediaType        string         `json:"media_type"`
-	PlaintextLength  int            `json:"plaintext_length"`
+	Version         int    `json:"version"`
+	ComputerID      string `json:"computer_id"`
+	EventID         string `json:"event_id"`
+	MediaType       string `json:"media_type"`
+	PlaintextLength int    `json:"plaintext_length"`
+	// Compression names the codec applied to the redacted plaintext before
+	// sealing ("zstd"); empty means none. It lives in the metadata, which is the
+	// AEAD associated data, so it cannot be flipped without failing the open.
+	// omitempty keeps uncompressed envelopes byte-identical to the legacy form.
+	// PlaintextLength is always the uncompressed length.
+	Compression      string         `json:"compression,omitempty"`
 	PrivacyClass     string         `json:"privacy_class"`
 	KeyVersionDigest string         `json:"key_version_digest"`
 	Nonce            string         `json:"nonce"`
 	SecretHandles    []SecretHandle `json:"secret_handles"`
+}
+
+const (
+	privateCompressionZstd = "zstd"
+	// Compress only above this size and only when it saves at least 5%.
+	privateCompressMinBytes = 256
+	// MaxPrivatePlaintextBytes caps decompressed output (decompression bombs).
+	MaxPrivatePlaintextBytes = 64 << 20
+)
+
+var (
+	privateZstdEncoder = mustZstdEncoder()
+	privateZstdDecoder = mustZstdDecoder()
+)
+
+func mustZstdEncoder() *zstd.Encoder {
+	e, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func mustZstdDecoder() *zstd.Decoder {
+	d, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(MaxPrivatePlaintextBytes))
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+// compressPrivatePayload returns the zstd form when it is worth it, else nil.
+func compressPrivatePayload(p []byte) []byte {
+	if len(p) <= privateCompressMinBytes {
+		return nil
+	}
+	out := privateZstdEncoder.EncodeAll(p, make([]byte, 0, len(p)/2))
+	if len(out)*100 > len(p)*95 {
+		return nil
+	}
+	return out
 }
 
 type privateArtifactEnvelope struct {
@@ -264,8 +312,13 @@ func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: nonce: %w", err)
 	}
+	sealed, compression := redacted, ""
+	if packed := compressPrivatePayload(redacted); packed != nil {
+		sealed, compression = packed, privateCompressionZstd
+	}
 	metadata := PrivateArtifactMetadata{
-		Version: privateArtifactVersionV1, ComputerID: computerID, EventID: eventID,
+		Compression: compression,
+		Version:     privateArtifactVersionV1, ComputerID: computerID, EventID: eventID,
 		MediaType: mediaType, PlaintextLength: len(redacted), PrivacyClass: privacyClass,
 		KeyVersionDigest: material.digest, Nonce: base64.RawStdEncoding.EncodeToString(nonce), SecretHandles: handles,
 	}
@@ -273,7 +326,7 @@ func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID
 	if err != nil {
 		return nil, PrivateArtifactMetadata{}, err
 	}
-	ciphertext := aead.Seal(nil, nonce, redacted, aad)
+	ciphertext := aead.Seal(nil, nonce, sealed, aad)
 	envelope, err := CanonicalJSON(privateArtifactEnvelope{Metadata: metadata, Ciphertext: base64.RawStdEncoding.EncodeToString(ciphertext)})
 	if err != nil {
 		return nil, PrivateArtifactMetadata{}, err
@@ -308,6 +361,19 @@ func (c *PrivateArtifactCipher) Decrypt(ctx context.Context, envelopeJSON []byte
 	plaintext, err := aead.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: authentication failed")
+	}
+	switch metadata.Compression {
+	case "":
+	case privateCompressionZstd:
+		if metadata.PlaintextLength > MaxPrivatePlaintextBytes {
+			return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: plaintext exceeds cap")
+		}
+		plaintext, err = privateZstdDecoder.DecodeAll(plaintext, make([]byte, 0, metadata.PlaintextLength))
+		if err != nil {
+			return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: decompress failed")
+		}
+	default:
+		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: unknown compression")
 	}
 	if len(plaintext) != metadata.PlaintextLength {
 		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: plaintext length mismatch")
