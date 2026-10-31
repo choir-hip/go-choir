@@ -2,7 +2,8 @@
 // differ between them (docs/design/data-system-build-sheet-2026-10-30.md).
 //
 // Guests use SQLite (modernc.org/sqlite): one write connection, a read pool,
-// WAL, synchronous=FULL. The host uses PostgreSQL (pgx stdlib) through a
+// WAL, synchronous=FULL, a 64 MiB journal_size_limit on writers. The host
+// uses PostgreSQL (pgx stdlib) through a
 // connector that rebinds `?` placeholders to `$n`, so query text keeps one
 // placeholder style. Upserts are written `INSERT ... ON CONFLICT (...) DO
 // UPDATE SET c = excluded.c`, which both engines accept.
@@ -64,6 +65,15 @@ func (d *SQLiteDB) Close() error {
 	return errors.Join(errs...)
 }
 
+// SQLiteJournalSizeLimit is the WAL size a writer keeps on disk after the WAL
+// restarts (journal_size_limit). Without it SQLite never shrinks the WAL, so
+// the growth a long read transaction pins (a snapshot capture, a compact copy)
+// stays on disk at its high-water mark: 584 MB on the paper, 2026-10-31
+// (docs/design/append-clustered-store-2026-10-31.md part 1). 64 MiB is 16x
+// the 1000-page autocheckpoint, so ordinary traffic never truncates and
+// regrows the file.
+const SQLiteJournalSizeLimit int64 = 64 << 20
+
 // SQLiteDSN returns the modernc DSN for path with Choir's pragmas.
 func SQLiteDSN(path string, opts SQLiteOptions, readOnly bool) string {
 	busy := opts.BusyTimeout
@@ -80,6 +90,7 @@ func SQLiteDSN(path string, opts SQLiteOptions, readOnly bool) string {
 		q.Add("mode", "ro")
 	} else {
 		q.Add("_txlock", "immediate")
+		q.Add("_pragma", fmt.Sprintf("journal_size_limit(%d)", SQLiteJournalSizeLimit))
 	}
 	return "file:" + path + "?" + q.Encode()
 }
