@@ -42,6 +42,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -258,6 +259,44 @@ func firstFile(t *testing.T, dir string) string {
 	return filepath.Join(dir, entries[0].Name())
 }
 
+// packEntries reads a format 2 bundle's objects.idx lines.
+func packEntries(t *testing.T, dir string) []map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, bundle.PackIndexName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []map[string]any
+	for _, line := range bytes.Split(bytes.TrimSpace(raw), []byte("\n")) {
+		var e map[string]any
+		if err := json.Unmarshal(line, &e); err != nil {
+			t.Fatalf("index line %q: %v", line, err)
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// dropIndexLine rewrites objects.idx without the first line of kind.
+func dropIndexLine(t *testing.T, dir, kind string) {
+	t.Helper()
+	p := filepath.Join(dir, bundle.PackIndexName)
+	raw, _ := os.ReadFile(p)
+	var kept [][]byte
+	dropped := false
+	for _, line := range bytes.SplitAfter(raw, []byte("\n")) {
+		if !dropped && bytes.Contains(line, []byte(`"kind":"`+kind+`"`)) {
+			dropped = true
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if !dropped {
+		t.Fatalf("no %s line in the index", kind)
+	}
+	_ = os.WriteFile(p, bytes.Join(kept, nil), 0o640)
+}
+
 func TestBundleExportVerify(t *testing.T) {
 	src := newDrillComputer(t, "computer-bundle-src")
 	src.appendEvent(computerevent.EventGenesisImported, "", nil)
@@ -291,6 +330,41 @@ func TestBundleExportVerify(t *testing.T) {
 	if _, err := bundle.Verify(out); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
+	// E6: the tape objects are packed, not one file each.
+	if m.FormatVersion != 2 {
+		t.Fatalf("format version = %d, want 2", m.FormatVersion)
+	}
+	for _, sub := range []string{bundle.EventsDir, bundle.PayloadsDir, bundle.PinsDir} {
+		if _, err := os.Stat(filepath.Join(out, sub)); !os.IsNotExist(err) {
+			t.Fatalf("the bundle holds a %s directory", sub)
+		}
+	}
+	if got, want := int64(len(packEntries(t, out))), m.Counts.Events+m.Counts.Payloads+m.Counts.PinReceipts; got != want {
+		t.Fatalf("index lines = %d, want %d", got, want)
+	}
+
+	// E7: an export stopped part way (bytes past the last index line, a torn
+	// last line) resumes: the next export keeps the durable part and verifies.
+	interrupted := filepath.Join(t.TempDir(), "interrupted")
+	copyTree(t, out, interrupted)
+	_ = os.Remove(filepath.Join(interrupted, bundle.ManifestName))
+	if f, err := os.OpenFile(filepath.Join(interrupted, bundle.PackName), os.O_APPEND|os.O_WRONLY, 0); err == nil {
+		_, _ = f.Write([]byte("bytes no index line names"))
+		_ = f.Close()
+	}
+	if f, err := os.OpenFile(filepath.Join(interrupted, bundle.PackIndexName), os.O_APPEND|os.O_WRONLY, 0); err == nil {
+		_, _ = f.Write([]byte(`{"kind":"events","digest":"torn`))
+		_ = f.Close()
+	}
+	if mi := mustExport(t, src, interrupted); mi.Counts != m.Counts {
+		t.Fatalf("resumed export counts = %+v, want %+v", mi.Counts, m.Counts)
+	}
+	if _, err := bundle.Verify(interrupted); err != nil {
+		t.Fatalf("verify after a resumed export: %v", err)
+	}
+	if got := len(packEntries(t, interrupted)); got != len(packEntries(t, out)) {
+		t.Fatalf("resumed export index lines = %d, want %d", got, len(packEntries(t, out)))
+	}
 
 	// E4: a second export rewrites no content-addressed file, and after the
 	// source advances, names the new head.
@@ -313,8 +387,22 @@ func TestBundleExportVerify(t *testing.T) {
 	// E5: damaged copies are refused.
 	damage := map[string]func(dir string){
 		"payload bytes": func(dir string) {
-			p := firstFile(t, filepath.Join(dir, bundle.PayloadsDir))
-			_ = os.WriteFile(p, []byte("not the payload"), 0o640)
+			var off int64 = -1
+			for _, e := range packEntries(t, dir) {
+				if e["kind"] == bundle.PayloadsDir {
+					off = int64(e["offset"].(float64))
+					break
+				}
+			}
+			f, err := os.OpenFile(filepath.Join(dir, bundle.PackName), os.O_RDWR, 0)
+			if err != nil || off < 0 {
+				t.Fatalf("open pack: %v (payload offset %d)", err, off)
+			}
+			b := make([]byte, 1)
+			_, _ = f.ReadAt(b, off)
+			b[0] ^= 0xff
+			_, _ = f.WriteAt(b, off)
+			_ = f.Close()
 		},
 		"chunk bytes": func(dir string) {
 			p := firstFile(t, filepath.Join(dir, bundle.ChunksDir))
@@ -322,7 +410,8 @@ func TestBundleExportVerify(t *testing.T) {
 			raw[0] ^= 0xff
 			_ = os.WriteFile(p, raw, 0o640)
 		},
-		"missing event": func(dir string) { _ = os.Remove(firstFile(t, filepath.Join(dir, bundle.EventsDir))) },
+		"missing event":       func(dir string) { dropIndexLine(t, dir, bundle.EventsDir) },
+		"missing pin receipt": func(dir string) { dropIndexLine(t, dir, bundle.PinsDir) },
 		"receipt order": func(dir string) {
 			p := filepath.Join(dir, bundle.ReceiptsName)
 			raw, _ := os.ReadFile(p)

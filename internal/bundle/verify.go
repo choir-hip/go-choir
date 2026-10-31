@@ -24,8 +24,8 @@ func ReadManifest(dir string) (Manifest, error) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return Manifest{}, fmt.Errorf("bundle: decode manifest: %w", err)
 	}
-	if m.FormatVersion != FormatVersion {
-		return Manifest{}, fmt.Errorf("bundle: format version %d is not %d", m.FormatVersion, FormatVersion)
+	if m.FormatVersion != 1 && m.FormatVersion != 2 {
+		return Manifest{}, fmt.Errorf("bundle: format version %d is not 1 or 2", m.FormatVersion)
 	}
 	if !safeComputerID(m.ComputerID) || m.Tape.StartSeq < 0 || m.Tape.HeadSeq < m.Tape.StartSeq || !validDigest(m.Tape.StartHead) || !validDigest(m.Tape.HeadDigest) {
 		return Manifest{}, fmt.Errorf("bundle: manifest is malformed")
@@ -55,6 +55,11 @@ func Verify(dir string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
+	objs, err := openObjects(dir, m.FormatVersion, false)
+	if err != nil {
+		return m, fmt.Errorf("bundle: open tape objects: %w", err)
+	}
+	defer objs.close()
 	var got Totals
 	if m.SnapshotRoot != nil {
 		seen := map[string]bool{}
@@ -93,7 +98,7 @@ func Verify(dir string) (Manifest, error) {
 		if !validDigest(row.EventDigest) {
 			return m, fmt.Errorf("bundle: receipt %d has an invalid event digest", row.Sequence)
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, EventsDir, row.EventDigest))
+		raw, err := objs.get(EventsDir, row.EventDigest)
 		if err != nil {
 			return m, fmt.Errorf("bundle: event %d: %w", row.Sequence, err)
 		}
@@ -130,7 +135,7 @@ func Verify(dir string) (Manifest, error) {
 				continue
 			}
 			seenPayload[digest] = true
-			if err := checkFile(dir, PayloadsDir, digest); err != nil {
+			if _, err := objs.get(PayloadsDir, digest); err != nil {
 				return m, err
 			}
 			got.Payloads++
@@ -140,7 +145,7 @@ func Verify(dir string) (Manifest, error) {
 			if i > 0 {
 				want = payloads[i-1]
 			}
-			if err := checkPin(dir, digest, m.ComputerID, want); err != nil {
+			if err := checkPin(objs, digest, m.ComputerID, want); err != nil {
 				return m, fmt.Errorf("bundle: event %d: %w", row.Sequence, err)
 			}
 			if !seenPin[digest] {
@@ -188,13 +193,10 @@ func checkFile(dir, sub, digest string) error {
 	return nil
 }
 
-func checkPin(dir, digest, computerID, artifact string) error {
-	raw, err := os.ReadFile(filepath.Join(dir, PinsDir, digest))
+func checkPin(objs objects, digest, computerID, artifact string) error {
+	raw, err := objs.get(PinsDir, digest)
 	if err != nil {
 		return fmt.Errorf("pin receipt %s: %w", digest, err)
-	}
-	if computerevent.DigestBytes(raw) != digest {
-		return fmt.Errorf("pin receipt %s does not hash to its name", digest)
 	}
 	var receipt computerevent.Receipt
 	if err := receipt.UnmarshalJSON(raw); err != nil {

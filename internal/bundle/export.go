@@ -96,8 +96,17 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	if err := os.MkdirAll(opts.Out, 0o750); err != nil {
 		return Manifest{}, err
 	}
+	objs, err := openObjects(opts.Out, FormatVersion, true)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("bundle: open tape objects: %w", err)
+	}
+	defer func() {
+		if objs != nil {
+			_ = objs.close()
+		}
+	}()
 	reader := tapestore.NewReader(artifactsRoot)
-	x := exporter{reader: reader, id: id, out: opts.Out, seenPayload: map[string]bool{}, seenPin: map[string]bool{}}
+	x := exporter{reader: reader, objs: objs, id: id, out: opts.Out, seenPayload: map[string]bool{}, seenPin: map[string]bool{}}
 	prev := m.Tape.StartHead
 	err = writeAtomicFrom(filepath.Join(opts.Out, ReceiptsName), 0o640, func(w io.Writer) error {
 		bw := bufio.NewWriter(w)
@@ -172,6 +181,12 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 			m.Bytes.Chunks += n
 		}
 	}
+	// The objects are durable before the manifest names them.
+	cerr := objs.close()
+	objs = nil
+	if cerr != nil {
+		return Manifest{}, fmt.Errorf("bundle: close tape objects: %w", cerr)
+	}
 	m.CreatedAt = now().UTC()
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -185,6 +200,7 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 
 type exporter struct {
 	reader      *tapestore.Reader
+	objs        objects
 	id, out     string
 	seenPayload map[string]bool
 	seenPin     map[string]bool
@@ -198,9 +214,8 @@ func (x *exporter) event(row ReceiptRow) (computerevent.Event, error) {
 	if !validDigest(row.EventDigest) {
 		return computerevent.Event{}, fmt.Errorf("bundle: receipt %d has an invalid event digest", row.Sequence)
 	}
-	path := filepath.Join(x.out, EventsDir, row.EventDigest)
-	raw, err := os.ReadFile(path)
-	fresh := err != nil || computerevent.DigestBytes(raw) != row.EventDigest
+	raw, err := x.objs.get(EventsDir, row.EventDigest)
+	fresh := err != nil
 	if fresh {
 		raw, _, err = x.reader.Read(x.id, tapestore.NSEvent, row.EventDigest)
 		if err != nil {
@@ -215,7 +230,7 @@ func (x *exporter) event(row ReceiptRow) (computerevent.Event, error) {
 		return computerevent.Event{}, fmt.Errorf("bundle: event %d does not match its append receipt", row.Sequence)
 	}
 	if fresh {
-		if err := writeAtomic(path, raw, 0o640); err != nil {
+		if err := x.objs.put(EventsDir, row.EventDigest, raw); err != nil {
 			return computerevent.Event{}, err
 		}
 	}
@@ -263,9 +278,8 @@ func (x *exporter) artifacts(row ReceiptRow, event computerevent.Event) error {
 // copyTape writes the tape object (the first namespace that holds it, as
 // the platform's FetchPayload probes) unless the out dir already has it.
 func (x *exporter) copyTape(dir, digest string, namespaces ...tapestore.NS) (int64, error) {
-	path := filepath.Join(x.out, dir, digest)
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
-		return info.Size(), nil
+	if n, ok := x.objs.size(dir, digest); ok {
+		return n, nil
 	}
 	var firstErr error
 	for _, ns := range namespaces {
@@ -276,7 +290,10 @@ func (x *exporter) copyTape(dir, digest string, namespaces ...tapestore.NS) (int
 			}
 			continue
 		}
-		return int64(len(raw)), writeAtomic(path, raw, 0o640)
+		if computerevent.DigestBytes(raw) != digest {
+			return 0, fmt.Errorf("bundle: tape object %s does not hash to its name", digest)
+		}
+		return int64(len(raw)), x.objs.put(dir, digest, raw)
 	}
 	return 0, firstErr
 }

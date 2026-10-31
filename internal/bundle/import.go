@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -226,23 +225,21 @@ func importFiles(dir, root string, m Manifest) (int64, error) {
 			written++
 		}
 	}
+	objs, err := openObjects(dir, m.FormatVersion, false)
+	if err != nil {
+		return written, fmt.Errorf("bundle: open tape objects: %w", err)
+	}
+	defer objs.close()
 	reader := tapestore.NewReader(root)
 	for _, kind := range []struct {
 		sub string
 		ns  tapestore.NS
 	}{{EventsDir, tapestore.NSEvent}, {PayloadsDir, tapestore.NSPayload}, {PinsDir, tapestore.NSReceipt}} {
-		entries, err := os.ReadDir(filepath.Join(dir, kind.sub))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		digests, err := objs.digests(kind.sub)
 		if err != nil {
 			return written, err
 		}
-		for _, entry := range entries {
-			digest := entry.Name()
-			if !entry.Type().IsRegular() || !validDigest(digest) {
-				continue // temp files of an interrupted export
-			}
+		for _, digest := range digests {
 			if _, _, err := reader.Read(m.ComputerID, kind.ns, digest); err == nil {
 				continue
 			}
@@ -252,8 +249,12 @@ func importFiles(dir, root string, m Manifest) (int64, error) {
 					continue
 				}
 			}
+			raw, err := objs.get(kind.sub, digest)
+			if err != nil {
+				return written, err
+			}
 			dst := filepath.Join(root, filepath.FromSlash(kind.ns.LegacyRel(digest)))
-			if _, err := copyVerified(filepath.Join(dir, kind.sub, digest), dst, digest, 0o640); err != nil {
+			if err := writeAtomic(dst, raw, 0o640); err != nil {
 				return written, err
 			}
 			written++

@@ -12,13 +12,15 @@
 //	                     producer and time. Written last: a directory without
 //	                     it is an unfinished export.
 //	chunks/<digest>      the snapshot's sealed chunks
-//	events/<digest>      the canonical event bytes of the range
-//	payloads/<digest>    the payloads the events' artifact refs name
-//	pins/<digest>        the pin receipts the append receipts name
+//	objects.pack, .idx   the tape objects (format 2, objects.go): the
+//	                     canonical event bytes of the range, the payloads
+//	                     the events' artifact refs name, and the pin
+//	                     receipts the append receipts name
 //	receipts.jsonl       the append receipts of the range in sequence order
 //
-// Every file under chunks/, events/, payloads/ and pins/ is named by the
-// sha256 of its bytes, so the format does not depend on the host's storage
+// Format 1 kept each tape object as its own file (events/<digest>,
+// payloads/<digest>, pins/<digest>); it is still read. Every chunk and tape
+// object is named by the sha256 of its bytes, so the format does not depend on the host's storage
 // layout (legacy files or tape segments): export reads through the
 // platform's tape reader (internal/tapestore), import writes the legacy
 // layout, which that reader serves.
@@ -43,8 +45,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-// FormatVersion is the bundle format this package writes and reads.
-const FormatVersion = 1
+// FormatVersion is the bundle format this package writes. It reads
+// formats 1 and 2.
+const FormatVersion = 2
 
 const (
 	ManifestName = "manifest.json"
