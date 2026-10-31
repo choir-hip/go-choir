@@ -32,7 +32,7 @@ Seven older lanes remain, each waiting on a decision:
 |---|---|---|
 | lane/fp3-cuts-on-main | ownerActMode observe to enforce in nix/node-b.nix (SEC-12: corpusd refuses an owner-mode write without the proxy's signed act). Red, auth | owner decision; then a deploy and a check of corpusd refusals |
 | lane/host-b4-b5, lane/host-b4-b5-on-main | the same enforce commit, plus host containment and proxy commits that triage matched to main by subject | delete with fp3-cuts-on-main once that one lands or closes |
-| lane/cite-promote | b@c citation toggle in the Texture editor (texture-citation-marker.ts); merges cleanly | its Playwright specs, then an orange deploy |
+| lane/cite-promote | not a fix: a verbatim hand-promotion (2026-10-27) of b@c's self-development patch selfdev-5de7f406…, the citation toggle, which the owner reports did not work | parked (owner, 2026-10-31): the owner sees it running before any promotion; it waits until the data system, sync and the Mac app work, then returns with the PSA, self-development and Autopaper pivot |
 | lane/fp0-jobpark-wired | a test only (capsule_job_park_wired_test.go); the fix landed | land the test if the wired path is otherwise uncovered, else delete |
 | lane/fp0-apprewrite, lane/fp4-r4 | problem records not on main | land the records as docs |
 | lane/fp0-obligations | a design doc; merges cleanly | land as docs, or delete if superseded |
