@@ -79,9 +79,14 @@ type PageCacheLayering struct {
 	// plain mount, a lowerdir with several layers, or lowerdir+= / datadir+=
 	// options. Such layers would be counted as base and again under
 	// persistent.
-	Stacked     bool   `json:"stacked,omitempty"`
-	Partitioned bool   `json:"partitioned"`
-	Reason      string `json:"reason,omitempty"` // why partitioned is false
+	Stacked bool `json:"stacked,omitempty"`
+	// Layers names the erofs layers of a layered guest image's store overlay
+	// (lowerdir=/nix/.ro-app:/nix/.ro-base): "app", "base". Both are base
+	// image, never persistent, so the overlay is attributable and not Stacked.
+	// Empty for a single-image guest.
+	Layers      []string `json:"layers,omitempty"`
+	Partitioned bool     `json:"partitioned"`
+	Reason      string   `json:"reason,omitempty"` // why partitioned is false
 }
 
 // PageCache is the whole read: meminfo, the store's layering, then each root.
@@ -305,7 +310,9 @@ func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 		}
 		overlays++
 		for _, opt := range strings.Split(f[sep+3], ",") {
-			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && strings.Contains(v, ":") {
+			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && v == layeredStoreLowerdir {
+				got.Layers = []string{"app", "base"}
+			} else if ok && strings.Contains(v, ":") {
 				got.Stacked = true // several lower layers (a colon inside a path also lands here: fail closed)
 			} else if strings.HasPrefix(opt, "lowerdir+=") || strings.HasPrefix(opt, "datadir+=") {
 				got.Stacked = true // layers appended through the newer mount API
@@ -344,6 +351,10 @@ func unescapeMountinfo(s string) string {
 	return b.String()
 }
 
+// layeredStoreLowerdir is the lowerdir of a layered guest image's store
+// overlay (nix/guest-layered-store.nix): app over base, both read-only erofs.
+const layeredStoreLowerdir = "/nix/.ro-app:/nix/.ro-base"
+
 func servePageCache(w http.ResponseWriter) {
 	out, err := readGuestPageCache()
 	if err != nil {
@@ -366,7 +377,7 @@ func readGuestPageCache() (PageCache, error) {
 			layering.Reason = "no store mount in mountinfo"
 		case layering.Stacked:
 			layering.Reason = "stacked overlay"
-		case layering.FSType == "overlay" && layering.Upper == "":
+		case layering.FSType == "overlay" && layering.Upper == "" && len(layering.Layers) == 0:
 			layering.Reason = "overlay without a parsed upperdir"
 		default:
 			layering.Partitioned = true

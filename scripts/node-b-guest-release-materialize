@@ -15,7 +15,18 @@
 # is not materialized only means its snapshots cold boot). It never falls back
 # to a full copy: --reflink=always, because a silent copy is GBs per deploy.
 # GO_CHOIR_RELEASE_REFLINK=auto exists for the tests on filesystems without
-# reflinks. After the install it starts node-b-guest-release-dedupe detached
+# reflinks.
+#
+# Layered images (docs/design/layered-guest-image-2026-10-31.md): a source
+# with storedisk-app.erofs and no storedisk.erofs is layered. Its base layer
+# (storedisk-base.erofs, named by the source's layers.json) is copied once into
+# GO_CHOIR_GUEST_BASES_DIR/<base_id>/ (default: guest-bases beside RELEASES_DIR;
+# reflink, 0444, never rewritten, an existing base is kept), the app layer goes
+# into the release as storedisk-app.erofs, and the release gets a normalized
+# layers.json. The release has no file named storedisk.erofs on purpose: an
+# older vmctl then refuses it (release_missing) instead of launching it with
+# one drive. A single-image source is materialized exactly as before.
+# After the install it starts node-b-guest-release-dedupe detached
 # (GO_CHOIR_GUEST_RELEASE_DEDUPE names it) to share blocks with the previous
 # release; cp --reflink from the previous release first would not help, since
 # the new bytes come from the store path and would be overwritten anyway.
@@ -34,7 +45,35 @@
 	tmp="$rel/.tmp-$id"
 	[ -e "$tmp" ] && { chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"; }
 	mkdir -p "$tmp" || { note "mkdir"; rm -rf "$tmp"; exit 0; }
-	for f in vmlinux initrd rootfs.ext4 storedisk.erofs kernel-params build.json guest-image-manifest release.json; do
+	disk=storedisk.erofs
+	if [ ! -e "$src/storedisk.erofs" ] && [ -e "$src/storedisk-app.erofs" ]; then
+		# Layered image: see the header. The base is installed first; a release
+		# that then fails leaves a young unreferenced base, which retention
+		# sweeps once it is old enough.
+		disk=storedisk-app.erofs
+		base_store=$(sed -n 's/.*"base" *: *"\([^"]*\)".*/\1/p' "$src/layers.json" 2>/dev/null | head -1)
+		base_id=$(basename "$base_store" | cut -c1-32)
+		if ! printf '%s' "$base_id" | grep -Eq '^[0-9a-df-np-sv-z]{32}$'; then
+			note "layers.json names no base"
+			rm -rf "$tmp"
+			exit 0
+		fi
+		bases="${GO_CHOIR_GUEST_BASES_DIR:-$(dirname "$rel")/guest-bases}"
+		if [ ! -d "$bases/$base_id" ]; then
+			btmp="$bases/.tmp-$base_id"
+			[ -e "$btmp" ] && { chmod -R u+w "$btmp" 2>/dev/null; rm -rf "$btmp"; }
+			mkdir -p "$btmp" \
+				&& cp --reflink="$mode" "$src/storedisk-base.erofs" "$btmp/storedisk-base.erofs" \
+				&& chmod 0444 "$btmp/storedisk-base.erofs" \
+				&& chmod 0555 "$btmp" \
+				&& { sync -f "$btmp/storedisk-base.erofs" 2>/dev/null || sync; } \
+				&& mv -T "$btmp" "$bases/$base_id" \
+				|| { note "base $base_id"; chmod -R u+w "$btmp" 2>/dev/null; rm -rf "$btmp" "$tmp"; exit 0; }
+		fi
+		printf '{"schema":1,"layout":"layered","base_id":"%s","base_store_path":"%s"}\n' "$base_id" "$base_store" >"$tmp/layers.json" \
+			|| { note "layers.json"; rm -rf "$tmp"; exit 0; }
+	fi
+	for f in vmlinux initrd rootfs.ext4 "$disk" kernel-params build.json guest-image-manifest release.json; do
 		cp --reflink="$mode" "$src/$f" "$tmp/$f" || { note "reflink $f"; rm -rf "$tmp"; exit 0; }
 	done
 	printf '{"store_path":"%s","first_current_at":"%s"}\n' "$src" "$(date -u +%FT%TZ)" >"$tmp/installed.json" \

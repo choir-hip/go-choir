@@ -296,6 +296,33 @@ Build steps:
 Pass: steps 3 to 7 hold. A failed gate is documented first, in the mission
 ledger.
 
+## 7a. S1 landed (build step 2, 2026-10-31, branch lane/layered-image)
+
+vmctl reads both layouts; the fleet stays on the single image. Deviations
+and decisions from the text above:
+
+- The layered release carries its own `layers.json`
+  (`{"schema":1,"layout":"layered","base_id","base_store_path"}`, written by
+  `node-b-guest-release-materialize` from the image's `layers.json`), not new
+  `release.json` fields; `release.json` is built in Nix and unchanged.
+- Bases live in `/var/lib/go-choir/guest-bases/<base_id>/storedisk-base.erofs`
+  (`VM_GUEST_BASES_DIR` overrides; default is `guest-bases` beside the releases
+  directory). `guestRelease.StoreDisk` is the app layer for a layered release.
+- `VMConfig.BaseDiskPath` (omitted when empty) adds the `base` drive last;
+  `snapshotBoundPaths` appends it after the single-image set, so single-image
+  bound paths and fc configs are byte-identical.
+- `GET /internal/vmctl/guest-releases` entries carry `base_id`; retention keeps
+  a base while a remaining release, an in_use entry or a live `fc-config.json`
+  names it, or it is under two hours old, and deletes none when a remaining
+  release's `layers.json` is unreadable.
+- Builder identity: `BaseStoreDiskBasePath` (flag `-base-storedisk-base`, env
+  `CORPUSD_HOST_BUILD_BASE_STOREDISK_BASE`); the base leg is its `<base_id>`
+  directory name, never a 3.4 GB read.
+- The updater wrapper mounts one overlay over `/nix/.ro-app:/nix/.ro-base`
+  when both are mounted; single-image guests keep `lowerdir=/nix/store`.
+- `debug_pagecache` reports `layers: ["app","base"]` for the layered store
+  overlay instead of `stacked`.
+
 ## 8. This commit's own effect
 
 `flake.nix` is a floor input, so pushing this commit moves `floor_digest`

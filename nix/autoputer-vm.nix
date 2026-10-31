@@ -196,6 +196,15 @@ let
     fi
     if [ -z "$layering_guarded" ] && [ -n "$release_bin" ] && [ -x "$release_bin" ] && [ -d "$priv_store" ] && [ -n "$(ls -A "$priv_store" 2>/dev/null)" ]; then
       mkdir -p "$overlay_work" || true
+      # Layered guest image (docs/design/layered-guest-image-2026-10-31.md
+      # 1.3): /nix/store is itself an overlay of the two erofs layers, and the
+      # kernel allows two stacked overlays at most. Mount ONE overlay over both
+      # layers directly (private store as the upper) so the depth stays 1. A
+      # single-image guest has no /nix/.ro-app and keeps lowerdir=/nix/store.
+      store_lower=/nix/store
+      if grep -q ' /nix/.ro-app ' /proc/mounts 2>/dev/null && grep -q ' /nix/.ro-base ' /proc/mounts 2>/dev/null; then
+        store_lower=/nix/.ro-app:/nix/.ro-base
+      fi
       # The release's own root (frontend, share, skills) is its layerdir —
       # point the baseline root at it so the computer surface serves the
       # new release even when the store overlay is not in effect. Keep the
@@ -215,12 +224,12 @@ let
         echo "guard_key=$(basename "$(readlink "$CHOIR_UPDATER_ROOT/current" 2>/dev/null || echo unknown)")"
         ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
           echo unshare_ok
-          ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store && echo mount_ok || echo mount_fail:\$?
+          ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=$store_lower,upperdir='$priv_store',workdir='$overlay_work' /nix/store && echo mount_ok || echo mount_fail:\$?
           [ -x '$release_bin' ] && echo exec_path_resolves || echo exec_path_missing
         " -- "$@" 2>&1 || echo unshare_or_stage_failed:\$?
       } > "$diag" 2>&1 || true
       ${pkgs.util-linux}/bin/unshare -m --propagation private ${pkgs.runtimeShell} -c "
-        ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=/nix/store,upperdir='$priv_store',workdir='$overlay_work' /nix/store &&
+        ${pkgs.util-linux}/bin/mount -t overlay overlay -o lowerdir=$store_lower,upperdir='$priv_store',workdir='$overlay_work' /nix/store &&
         exec '$release_bin' \"\$@\"
       " -- "$@" || {
         # The overlay failed (private mount-ns semantics, or a guest kernel

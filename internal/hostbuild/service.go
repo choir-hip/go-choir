@@ -48,6 +48,9 @@ type Config struct {
 	Installable       string
 	BaseManifestPath  string
 	BaseStoreDiskPath string
+	// BaseStoreDiskBasePath is a layered image's base layer; empty for a
+	// single image (BaseStoreDiskPath is then the whole storedisk.erofs).
+	BaseStoreDiskBasePath string
 
 	MaxQueue           int
 	BuildTimeout       time.Duration
@@ -551,6 +554,7 @@ func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, 
 		ResultLink:            filepath.Join(workDir, "result"),
 		BaseManifestPath:      s.cfg.BaseManifestPath,
 		BaseStoreDiskPath:     s.cfg.BaseStoreDiskPath,
+		BaseStoreDiskBasePath: s.cfg.BaseStoreDiskBasePath,
 		OutDir:                filepath.Join(workDir, "out"),
 		SourceDir:             s.cfg.SourceDir,
 		SourcePatch:           s.patchPath(job.JobID),

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,13 @@ type Request struct {
 	// BaseStoreDiskPath is the deployed storedisk.erofs; its sha256 is the
 	// second base-identity leg.
 	BaseStoreDiskPath string
+	// BaseStoreDiskBasePath is the layered image's base layer
+	// (guest-bases/<base_id>/storedisk-base.erofs). When set,
+	// BaseStoreDiskPath is the app layer and the identity is the per-layer
+	// pair: the app layer's sha256 and the base's id (never re-read: a base is
+	// content-keyed by its store hash and never rewritten). Empty for a
+	// single-image base, which is hashed whole as before.
+	BaseStoreDiskBasePath string
 	// OutDir is where the exported closure blob + evidence receipt land.
 	OutDir string
 	// CodeCommit is the repo commit the installable was built from. When
@@ -93,6 +101,31 @@ func parseBaseManifest(path string) (commit string, storePaths []string, digest 
 	return commit, storePaths, digest, nil
 }
 
+var baseIDPattern = regexp.MustCompile(`^[0-9a-df-np-sv-z]{32}$`)
+
+// baseDiskIdentity is the store-disk leg of the base identity. A single image
+// (basePath empty) is the sha256 of the whole file. A layered image is the
+// app layer's sha256 plus the base's id, read from its <base_id> directory so
+// the multi-GB base is not read on every build; a base that does not sit in
+// such a directory is hashed whole.
+func baseDiskIdentity(diskPath, basePath string) (disk, baseID, baseSHA string, err error) {
+	disk, err = fileSHA256(diskPath)
+	if err != nil {
+		return "", "", "", err
+	}
+	if basePath == "" {
+		return disk, "", "", nil
+	}
+	if id := filepath.Base(filepath.Dir(basePath)); baseIDPattern.MatchString(id) {
+		return disk, id, "", nil
+	}
+	baseSHA, err = fileSHA256(basePath)
+	if err != nil {
+		return "", "", "", err
+	}
+	return disk, "", baseSHA, nil
+}
+
 // fileSHA256 streams a file's sha256.
 func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
@@ -129,7 +162,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	diskDigest, err := fileSHA256(req.BaseStoreDiskPath)
+	diskDigest, baseID, baseDigest, err := baseDiskIdentity(req.BaseStoreDiskPath, req.BaseStoreDiskBasePath)
 	if err != nil {
 		return nil, fmt.Errorf("digest base store disk: %w", err)
 	}
@@ -138,6 +171,8 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		BuildCommit:              commit,
 		GuestImageManifestDigest: manifestDigest,
 		StoreDiskSHA256:          diskDigest,
+		StoreDiskBaseID:          baseID,
+		StoreDiskBaseSHA256:      baseDigest,
 		StorePaths:               basePaths,
 	}
 	baseSet := map[string]bool{}

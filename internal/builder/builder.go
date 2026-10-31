@@ -27,11 +27,16 @@ import (
 // the full store-path closure of the base runtime packages; every path an
 // app closure needs must already exist in this set.
 type BaseIdentity struct {
-	Contract                 string   `json:"contract"`
-	BuildCommit              string   `json:"build_commit"`
-	GuestImageManifestDigest string   `json:"guest_image_manifest_digest"`
-	StoreDiskSHA256          string   `json:"store_disk_sha256"`
-	StorePaths               []string `json:"store_paths"`
+	Contract                 string `json:"contract"`
+	BuildCommit              string `json:"build_commit"`
+	GuestImageManifestDigest string `json:"guest_image_manifest_digest"`
+	StoreDiskSHA256          string `json:"store_disk_sha256"`
+	// Layered images: StoreDiskSHA256 is then the app layer's, and the base is
+	// StoreDiskBaseID (its store hash) or, for a base outside a base-id
+	// directory, StoreDiskBaseSHA256.
+	StoreDiskBaseID     string   `json:"store_disk_base_id,omitempty"`
+	StoreDiskBaseSHA256 string   `json:"store_disk_base_sha256,omitempty"`
+	StorePaths          []string `json:"store_paths"`
 }
 
 // ClosureResult is the builder's emitted artifact set: the base image the

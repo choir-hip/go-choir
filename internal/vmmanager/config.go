@@ -60,6 +60,9 @@ func LoadConfigFromEnv() ManagerConfig {
 	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASES_DIR")); v != "" {
 		cfg.GuestReleasesDir = v
 	}
+	if v := strings.TrimSpace(os.Getenv("VM_GUEST_BASES_DIR")); v != "" {
+		cfg.GuestBasesDir = v
+	}
 	cfg.SnapshotReleaseRetain = strings.EqualFold(strings.TrimSpace(os.Getenv("VM_SNAPSHOT_RELEASE_RETAIN")), "on")
 	cfg.GuestReleaseSupportWindow = DefaultGuestReleaseSupportWindow
 	if v := strings.TrimSpace(os.Getenv("VM_GUEST_RELEASE_SUPPORT_WINDOW")); v != "" {

@@ -328,6 +328,90 @@ else
 	echo "skip: dedupe cases need python3 >= 3.9"
 fi
 
+# --- layered bases (docs/design/layered-guest-image-2026-10-31.md) -----------------------
+# Failure modes: a base deleted while a retained release, an in-use release or a
+# live Firecracker names it; a base kept forever after its last release went; a
+# base swept on its own age; an unreadable layers.json (fail closed); a base
+# materialized a moment ago (young) swept before its release is installed.
+BC=jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj; BX=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk; BU=llllllllllllllllllllllllllllllll
+BZ=mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm; BY=nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn; BI=pppppppppppppppppppppppppppppppp; BF=qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+mkbase() { # DIR ID HOURS_AGO
+	mkdir -p "$1/guest-bases/$2"
+	echo base >"$1/guest-bases/$2/storedisk-base.erofs"
+	touch -d "@$(hours "$3")" "$1/guest-bases/$2"
+}
+layer() { # DIR RELEASE BASE: make an existing release layered on BASE
+	local rd="$1/rel/$2"
+	mv "$rd/storedisk.erofs" "$rd/storedisk-app.erofs"
+	printf '{"schema":1,"layout":"layered","base_id":"%s","base_store_path":"/nix/store/%s-guest-store-base.erofs"}\n' "$3" "$3" >"$rd/layers.json"
+}
+basefixture() {
+	fixture "$1"
+	layer "$1" $CUR $BC
+	layer "$1" $OOS $BX
+	layer "$1" $USED $BU
+	mkbase "$1" $BC 100; mkbase "$1" $BX 100; mkbase "$1" $BU 100
+	mkbase "$1" $BZ 100 # nothing names it
+	mkbase "$1" $BY 1   # young
+	mkbase "$1" $BI 100 # named only by vmctl's in_use answer
+	mkdir -p "$1/guest-bases/not-a-base" "$1/guest-bases/.tmp-old"
+	touch -t 202001010000 "$1/guest-bases/.tmp-old"
+}
+base_exists() { [ -d "$1/guest-bases/$2" ] && [ ! -L "$1/guest-bases/$2" ]; }
+baseanswer() { # the answer, with an in_use entry that names BI
+	answer true
+	jq --arg bi "$BI" --arg r "$OOSRUN" '.in_use |= map(if .id == $r then . + {base_id:$bi} else . end)' "$root/answer.json" >"$root/answer2.json" && mv "$root/answer2.json" "$root/answer.json"
+}
+
+f0=$fail
+d="$root/b1"; basefixture "$d"; baseanswer; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"; rc=$?
+[ $rc -eq 0 ] || bad "bases: exit $rc"
+for b in $BC $BU $BI $BY; do base_exists "$d" $b || bad "bases: $b was deleted (named by a retained or in-use release, or young)"; done
+for b in $BX $BZ; do base_exists "$d" $b && bad "bases: $b was kept (nothing retained names it)"; done
+exists "$d" $OOS && bad "bases: the out-of-support release was kept"
+[ -d "$d/guest-bases/not-a-base" ] && [ -d "$d/guest-bases/.tmp-old" ] || bad "bases: an odd name was deleted"
+[ $fail -eq $f0 ] && ok "bases: a base stays while a retained, in-use or young release names it; one whose last release went, and an unnamed one, are swept"
+stop_stub
+
+f0=$fail
+d="$root/b2"; basefixture "$d"; answer true; echo '{' >"$d/rel/$USED/layers.json"; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"
+for b in $BC $BU $BX $BZ $BI $BY; do base_exists "$d" $b || bad "bases: $b was deleted with an unreadable layers.json (must fail closed)"; done
+[ $fail -eq $f0 ] && ok "bases: an unreadable layers.json of a retained release deletes no base"
+stop_stub
+
+f0=$fail
+d="$root/b3"; basefixture "$d"; answer true; start_stub 404
+run_retention "$d" "$URL"
+for b in $BC $BU $BX $BZ $BI $BY; do base_exists "$d" $b || bad "bases: $b was deleted without a vmctl answer"; done
+stop_stub
+start_stub 200 "$root/answer.json"; touch "$d/rel/.tmp-fresh"
+run_retention "$d" "$URL"
+for b in $BC $BU $BX $BZ $BI $BY; do base_exists "$d" $b || bad "bases: $b was deleted while a deploy materializes"; done
+[ $fail -eq $f0 ] && ok "bases: no vmctl answer, or a release materializing, deletes no base"
+stop_stub
+
+f0=$fail
+d="$root/b4"; basefixture "$d"; baseanswer
+mkdir -p "$d/state/vm-live"
+echo '{"drives":[{"path_on_host":"/var/lib/go-choir/guest-bases/'$BF'/storedisk-base.erofs"}]}' >"$d/state/vm-live/fc-config.json"
+mkbase "$d" $BF 100
+start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"
+base_exists "$d" $BF || bad "bases: a base a VM's fc-config.json names was deleted"
+[ $fail -eq $f0 ] && ok "bases: a base a VM's fc-config.json names stays"
+stop_stub
+
+f0=$fail
+d="$root/b5"; fixture "$d"; answer true; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/guest-bases" ] || bad "bases: a fleet with no guest-bases directory changed (exit $rc)"
+expect_kept "$d" "single-image" $CUR $YOUNG $MID $USED $OOSRUN $OLD
+expect_gone "$d" "single-image" $OOS
+[ $fail -eq $f0 ] && ok "bases: a single-image fleet (no guest-bases) retains exactly as before"
+stop_stub
+
 # --- materialize ------------------------------------------------------------------
 # These cases need GNU cp (--reflink) and stat (-c), as Node B has; elsewhere
 # they are skipped, not failed (review 331 Devin 2).
@@ -401,6 +485,46 @@ env GO_CHOIR_RELEASE_REFLINK=auto GO_CHOIR_GUEST_RELEASE_DEDUPE="$dedupe" GO_CHO
 env GO_CHOIR_RELEASE_REFLINK=auto GO_CHOIR_GUEST_RELEASE_DEDUPE=/nonexistent bash "$materialize" "$d/src/${B}-go-choir-guest-image" "$d/rel" >/dev/null 2>&1 || bad "materialize: a missing dedupe tool failed the switch"
 [ $fail -eq $f0 ] && ok "materialize: starts the dedupe against the previous release after the install; a missing tool is ignored"
 
+# layered sources (design step 2): base once into guest-bases, app into the release
+mklsrc() { # DIR [BASE_ID] -> src path of a layered image
+	local src="$1/src/${A}-go-choir-guest-image" bid="${2:-$BC}"
+	mkdir -p "$src"
+	for f in vmlinux initrd rootfs.ext4 storedisk-app.erofs storedisk-base.erofs kernel-params build.json guest-image-manifest release.json; do echo "$f" >"$src/$f"; done
+	printf '{"schema":1,"base":"/nix/store/%s-guest-store-base.erofs","app":"/nix/store/x-guest-store-app.erofs"}\n' "$bid" >"$src/layers.json"
+	echo "$src"
+}
+f0=$fail
+d="$root/l1"; mkdir -p "$d"; src="$(mklsrc "$d")"
+run_mat "$src" "$d/rel"; rc=$?
+rd="$d/rel/$A"; bd="$d/guest-bases/$BC"
+[ $rc -eq 0 ] || bad "layered materialize: exit $rc"
+for f in vmlinux initrd rootfs.ext4 storedisk-app.erofs kernel-params build.json guest-image-manifest release.json installed.json layers.json; do [ -f "$rd/$f" ] || bad "layered materialize: $f missing"; done
+[ -e "$rd/storedisk.erofs" ] && bad "layered materialize: the release has storedisk.erofs (an old vmctl would launch it with one drive)"
+[ -e "$rd/storedisk-base.erofs" ] && bad "layered materialize: the base was copied into the release"
+[ -f "$bd/storedisk-base.erofs" ] && [ "$(stat -c %a "$bd/storedisk-base.erofs")" = 444 ] && [ "$(stat -c %a "$bd")" = 555 ] || bad "layered materialize: the base is missing or not 0444/0555"
+jq -e --arg b "$BC" '.schema == 1 and .layout == "layered" and .base_id == $b' "$rd/layers.json" >/dev/null || bad "layered materialize: layers.json is wrong"
+ls -A "$d/rel" "$d/guest-bases" | grep -q '^\.tmp-' && bad "layered materialize: a .tmp tree is left"
+[ $fail -eq $f0 ] && ok "materialize: a layered image puts the base once in guest-bases (0444), the app layer in the release, no storedisk.erofs"
+
+f0=$fail
+inode=$(stat -c %i "$bd/storedisk-base.erofs"); echo changed >"$d/src/${A}-go-choir-guest-image/storedisk-base.erofs"
+mkdir -p "$d/src2"; src2="$d/src2/${B}-go-choir-guest-image"; cp -r "$d/src/${A}-go-choir-guest-image" "$src2"
+run_mat "$src2" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ -d "$d/rel/$B" ] || bad "layered materialize: a second release on the same base failed (exit $rc)"
+[ "$(cat "$bd/storedisk-base.erofs")" = "storedisk-base.erofs" ] && [ "$(stat -c %i "$bd/storedisk-base.erofs")" = "$inode" ] || bad "layered materialize: an existing base was rewritten"
+[ $fail -eq $f0 ] && ok "materialize: a second release on the same base leaves the base untouched (never rewritten)"
+
+f0=$fail
+d="$root/l2"; mkdir -p "$d"; src="$(mklsrc "$d")"; rm "$src/storedisk-base.erofs"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] || bad "layered missing base: exit $rc"
+[ -e "$d/rel/$A" ] && bad "layered missing base: a release directory exists"
+ls -A "$d/rel" "$d/guest-bases" 2>/dev/null | grep -q '^\.tmp-' && bad "layered missing base: a .tmp tree is left"
+d="$root/l3"; mkdir -p "$d"; src="$(mklsrc "$d")"; echo '{}' >"$src/layers.json"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/rel/$A" ] || bad "layered layers.json without a base: exit $rc or a release exists"
+[ $fail -eq $f0 ] && ok "materialize: a layered source missing its base, or naming none, exits 0 and leaves nothing"
+
 fi
 # --- wiring in nix/node-b.nix (text assertions) ---------------------------------------
 nix="$here/../nix/node-b.nix"
@@ -413,6 +537,8 @@ grep -q 'guestReleaseDedupe' "$nix" && grep -q 'go-choir-guest-release-dedupe' "
 grep -q 'guestReleaseRetention' "$nix" && grep -c 'guestReleaseRetention' "$nix" | grep -qE '^[3-9]' && ok "nix: the disk retention sweep calls it" || bad "nix: diskRetentionSweep does not call the release retention"
 
 grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "off"}' "$nix" && grep -q 'VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases' "$nix" && grep -q 'VM_GUEST_RELEASE_SUPPORT_WINDOW=168h' "$nix" && grep -q 'VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"' "$nix" && ok "nix: vmctl's four release variables follow the one switch" || bad "nix: the vmctl release env lines are missing"
+
+grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-bases' && grep -q 'd /var/lib/go-choir/guest-bases 0755 root root -' "$nix" && ok "nix: guest-bases exists (tmpfiles) and vmctl reads it read-only" || bad "nix: guest-bases is not wired for vmctl"
 
 echo "node-b-guest-release-retention tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

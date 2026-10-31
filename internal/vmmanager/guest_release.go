@@ -59,6 +59,13 @@ type guestRelease struct {
 	Initrd    string
 	Rootfs    string
 	StoreDisk string
+	// Layered releases (docs/design/layered-guest-image-2026-10-31.md): the
+	// app layer is StoreDisk (storedisk-app.erofs, deliberately not named
+	// storedisk.erofs, so an older vmctl's releaseByID refuses the release),
+	// BaseID names the base and BaseDisk is the shared read-only base file.
+	Layered  bool
+	BaseID   string
+	BaseDisk string
 	// KernelParams is the trimmed contents of <Dir>/kernel-params.
 	KernelParams   string
 	Policy         releasePolicy
@@ -73,6 +80,31 @@ func (m *Manager) releasesDir() string {
 	}
 	return "/var/lib/go-choir/guest-releases"
 }
+
+// basesDir is where layered images' base layers live, one directory per base
+// id, written once and never rewritten.
+func (m *Manager) basesDir() string {
+	if d := strings.TrimSpace(m.cfg.GuestBasesDir); d != "" {
+		return d
+	}
+	return filepath.Join(filepath.Dir(m.releasesDir()), "guest-bases")
+}
+
+// releaseLayers is a layered release's layers.json, written by
+// node-b-guest-release-materialize from the image's own layers.json.
+type releaseLayers struct {
+	Schema        int    `json:"schema"`
+	Layout        string `json:"layout"`
+	BaseID        string `json:"base_id"`
+	BaseStorePath string `json:"base_store_path"`
+}
+
+const (
+	releaseLayersSchema  = 1
+	releaseLayoutLayered = "layered"
+	baseDiskFile         = "storedisk-base.erofs"
+	appDiskFile          = "storedisk-app.erofs"
+)
 
 func (m *Manager) releaseSupportWindow() time.Duration {
 	if m.cfg.GuestReleaseSupportWindow > 0 {
@@ -127,12 +159,45 @@ func (m *Manager) releaseByID(id string) (guestRelease, error) {
 		return guestRelease{}, fmt.Errorf("release %s: kernel-params unreadable or empty", id)
 	}
 	rel.KernelParams = strings.TrimSpace(string(data))
-	for _, p := range []string{rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk} {
-		if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
+	layersData, layersErr := os.ReadFile(filepath.Join(dir, "layers.json"))
+	if layersErr == nil {
+		if err := m.loadReleaseLayers(&rel, layersData); err != nil {
+			return guestRelease{}, err
+		}
+	} else if !os.IsNotExist(layersErr) {
+		return guestRelease{}, fmt.Errorf("release %s: layers.json: %w", id, layersErr)
+	}
+	files := []string{rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk}
+	if rel.Layered {
+		files = append(files, rel.BaseDisk)
+	}
+	for _, p := range files {
+		if info, err := os.Lstat(p); err != nil || !info.Mode().IsRegular() {
 			return guestRelease{}, fmt.Errorf("release %s: %s is not a regular file", id, filepath.Base(p))
 		}
 	}
 	return rel, nil
+}
+
+// loadReleaseLayers turns rel into a layered release: the app layer replaces
+// StoreDisk, the base is addressed by its id under the bases directory. A
+// release with both storedisk.erofs and layers.json is ambiguous and refused.
+func (m *Manager) loadReleaseLayers(rel *guestRelease, data []byte) error {
+	var l releaseLayers
+	if err := json.Unmarshal(data, &l); err != nil {
+		return fmt.Errorf("release %s: layers.json: %w", rel.ID, err)
+	}
+	if l.Schema != releaseLayersSchema || l.Layout != releaseLayoutLayered || !releaseIDPattern.MatchString(l.BaseID) {
+		return fmt.Errorf("release %s: layers.json is not a schema %d layered layout", rel.ID, releaseLayersSchema)
+	}
+	if _, err := os.Lstat(filepath.Join(rel.Dir, "storedisk.erofs")); err == nil {
+		return fmt.Errorf("release %s: both storedisk.erofs and layers.json", rel.ID)
+	}
+	rel.Layered = true
+	rel.BaseID = l.BaseID
+	rel.StoreDisk = filepath.Join(rel.Dir, appDiskFile)
+	rel.BaseDisk = filepath.Join(m.basesDir(), l.BaseID, baseDiskFile)
+	return nil
 }
 
 // currentRelease resolves VM_GUEST_RELEASE_LINK once: readlink, take the
@@ -160,6 +225,7 @@ func (m *Manager) currentRelease() (guestRelease, bool) {
 // setLaunchRelease points cfg's boot artifacts at rel.
 func setLaunchRelease(cfg *VMConfig, rel guestRelease) {
 	cfg.KernelImagePath, cfg.InitrdPath, cfg.RootfsPath, cfg.StoreDiskPath = rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk
+	cfg.BaseDiskPath = rel.BaseDisk // "" for a single image: a stale base never rides along
 	cfg.KernelParams = rel.KernelParams
 	cfg.GuestRelease = rel.ID
 }
@@ -169,7 +235,7 @@ func setLaunchRelease(cfg *VMConfig, rel guestRelease) {
 // release cannot be resolved the launch stays legacy (m.cfg paths) and cfg
 // carries no release. With the switch off it does nothing.
 func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
-	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" {
+	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" || cfg.BaseDiskPath != "" {
 		return
 	}
 	if rel, ok := m.currentRelease(); ok {
@@ -191,6 +257,7 @@ func (m *Manager) refreshLaunchArtifacts(cfg *VMConfig, overrides VMConfig) {
 		return
 	}
 	cfg.GuestRelease = ""
+	cfg.BaseDiskPath = ""
 	if overrides.KernelImagePath == "" {
 		cfg.KernelImagePath = ""
 	}
@@ -294,7 +361,11 @@ func (m *Manager) releaseRefusal(meta *SnapshotMeta, now time.Time) string {
 
 // GuestReleaseInUse is one release in the in-use answer.
 type GuestReleaseInUse struct {
-	ID        string   `json:"id"`
+	ID string `json:"id"`
+	// BaseID is the layered base the release names, "" for a single image.
+	// Retention keeps a base while any retained release names it; this lets
+	// it also keep the base of a release that is only in use.
+	BaseID    string   `json:"base_id,omitempty"`
 	Running   []string `json:"running"`
 	Snapshots []string `json:"snapshots"`
 }
@@ -319,6 +390,9 @@ func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
 			return e
 		}
 		e := &GuestReleaseInUse{ID: id, Running: []string{}, Snapshots: []string{}}
+		if rel, err := m.releaseByID(id); err == nil {
+			e.BaseID = rel.BaseID
+		}
 		byID[id] = e
 		return e
 	}

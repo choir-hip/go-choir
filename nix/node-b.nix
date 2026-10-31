@@ -1339,7 +1339,7 @@ in
       # vm-state). Read-only here means a VMM escape cannot replace corpusd's
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
-      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" ];
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" ];
       LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
@@ -2736,6 +2736,7 @@ in
   systemd.tmpfiles.rules = [
     # D2 S2: guest release directories (root-owned; vmctl reads them read-only).
     "d /var/lib/go-choir/guest-releases 0755 root root -"
+    "d /var/lib/go-choir/guest-bases 0755 root root -"
     # The CI deploy gate's guest security-epoch mode (ciGateEpochCheck).
     "f+ /var/lib/go-choir/ci-gate-epoch-mode 0644 root root - ${ciGateEpochCheck}"
     # KSM off (SEC-09; review N4): merged pages across guests are a
