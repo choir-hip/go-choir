@@ -152,7 +152,21 @@ finish:
     store size; the disk ledger for both nodes; the applied docs triage; one
     off-host snapshot of the new repository with a restore drill; the closing
     report.
+  stopping_condition: >-
+    Owner, 2026-10-31: "the real verifier that we know that we're done with
+    our data system focus is when we have stopped the rapid state growth.
+    When we have state growth under control and no memory spikes to manage
+    it, then the data system is no longer the weakest link." Measured as:
+    Node B's used bytes and PostgreSQL rows flat day over day (growth only
+    from new user state, at a stated bytes-per-day rate for the paper's tape,
+    receipts and snapshots), and every maintenance job (retirement,
+    compaction copy, snapshot, backup, sweep) running inside its unit's
+    memory line with no OOM or near-OOM event, over at least two days.
+    Baseline 2026-10-31 15:15 UTC: 336 GB used of 476; the paper adds about
+    310,000 receipt rows (0.9 GB) a day before batching; each deploy adds a
+    3.8 GB guest release (retention keeps 8).
   acceptance:
+    - Growth: two consecutive days of the disk ledger and the per-day rates above, flat or falling, with the memory peaks of each maintenance unit.
     - L1: the paper's state.db size before and after, replay-completeness on the paper, the paper's /health and a published edition after the planned restart.
     - L2: the d@e kill drill (one kill comes back, three kills hold).
     - L4: each item's drill on d@e on the deployed release.
