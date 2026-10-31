@@ -357,3 +357,68 @@ lane/layered-image-r0	cb6dd4d87185a6d8a4ed2d14d23fff5e093673fc	landed_under_othe
 lane/release-storage	5259a7d764e53abbfb1f55d44ee1baf8cce8a11a	landed_under_other_id
 lane/private-payload-segments	529ae0d0cc67c39d8be1eaaf6f8069c9765a547d	landed_under_other_id
 cutover/data-system	3b812ff14bd41ea30c45934f70dd2c9b57fc5b57	PR 108, landed as squash 871ab6531
+beads/parallax-v2	1cf935638c395712ee5124daa90d7996613c7484	contained in main
+cascade/integrating-and-deploying-searxng-in-b45bea	0177d9ff153aa1e8a863be1f1731c8a35f1f8ef9	contained in main
+cascade/new-cascade-a40b71	2814c91a64f928472437db8fdcd1f0287816af2f	contained in main
+ci-speed-targeted-20260926	7d8e455ac8414a097494377175a97dbffaf636bb	contained in main
+claude/choir-autopaper-activation-debug-ck3dxd	54b5b28db58bb9831b18b7aa4b7295999e47c0b2	contained in main
+codex/ci-maintenance-doccheck-2026-07-16	805879d834680cdee0d44e04835a3d6535984226	contained in main
+codex/ci-optimization-checkpoint-2026-07-16	2606537d819f6e41a1f0762981d633ef9c65ae95	contained in main
+codex/ci-pareto-topology-2026-07-17	c74db16d423a4d2d0a56edb7fdef3aab11167604	contained in main
+codex/ci-race-acceptance-receipt-2026-07-16	e264e2b0038d19bea01bd0e781d6ecfd66d25360	contained in main
+codex/ci-race-terminal-closure-2026-07-17	2f1f49a72401e1125d20ffe13d798db23477e0d7	contained in main
+codex/ci-workflow-restoration-2026-07-16	f9de335214d21ef8794d523325f6eae5da3c512f	contained in main
+codex/conductor-vtext	c6057ba5bb005a7bc79e4cca018a260e951abac2	contained in main
+codex/redesign-mainline-clean	4956f4cdf40645c5249cbdff9e558e61d5edaa31	contained in main
+codex/sbom-ci-cache	da0368a5fa487c338e4668f4d403b768845c69d4	contained in main
+codex/ui-ux-polish	5cd599b97cc7f9b037ea7e106badfb07f7278447	contained in main
+docs/add-mission-gradient-method	18025c0e3f540e42f8d0fe54e4de07660d668a96	contained in main
+docs/security-density-checklist-2026-10-21	4023ddc4d721aae109a3023518d4d3a67055b7c5	contained in main
+docs/unify-left-right-brain	4d964bf3620d85b9a1867ec249b336067716ea82	contained in main
+fix/engineering-completion-path	130caf6d97d93363c580699164a37262bdc02490	contained in main
+fix/patch-watch-govulncheck-2026-10-19	ddd13bf95f39615c769c96be539e6f64c2f0cec5	contained in main
+integ/deploy-2026-10-31b	226cab848afd09be13fe2f61861ead76647e07a9	contained in main
+mission/store-consolidation-pr1	acfac89a29c4a9c682286a48dd9a9da3a6ca9e16	contained in main
+obs-never-blocks	424ee13f78c3c6b00fff40fbab6d0fd4445b3650	contained in main
+preflight/pf1a	78a2177fc95d130420a08d2f1d06e1c2fdfef628	contained in main
+reclaim-raw-write	614fd445f5ee94c1860c287eaf8bfd3db8c41307	contained in main
+rewrite/main-2026-10-31	11efa88c34fc5b95811490ce10672ea8c9c7a09e	contained in main
+selfdev/architecture-recovery	4a057498e49e9357eb9845d4f36c5ece9d5892be	contained in main
+selfdev/g1-round20-release	044b3e88419aa2284e8c2723e60d58ff5e1d8c2c	contained in main
+selfdev/g1-round29-deploy-repair	874325352b202baf6692d1abb4ca03ac1ff1ea85	contained in main
+selfdev/g1-round36-service-pointer	5433db2121c1c5ab23a7751a36716153205bdfa8	contained in main
+selfdev/g1-round39-canonical-guest	d03075859bfa8a019e1f2bb7dfd1be7b90a541fd	contained in main
+selfdev/g1-round41-guest-single-writer	bea259fe5b377093c9587deb0bfb83a70db8c9b2	contained in main
+selfdev/g1-round42-refresh-realization	d1b083def980d51eed659af72b8c56e378d2755e	contained in main
+selfdev/g1-round44-configured-target	c159aec299a18f09a446e7f590aaf8ec06f5b569	contained in main
+selfdev/g1-round46-credential-authority	e50c55989faeea406a39dcc512999fea716fd8fd	contained in main
+selfdev/g1-round48-realization-reservation	9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51	contained in main
+selfdev/g1-round50-guest-closure-classifier	bbcbf914d3f2c14a19f022a9f264ff00350f432c	contained in main
+selfdev/g1-round51-kernel-baseline	928fbf13715228b41dfbe7f6b9df7e7e6af56012	contained in main
+selfdev/g1-round52-platform-warm-failure	6f841ec4e5c699997bd262c7a00b12d9e63fc80c	contained in main
+selfdev/g1-round54-kernel-diagnostics	e5eeefd5f7cd190711737addbf1c31939a102347	contained in main
+selfdev/g1-round55-lookup-readiness	8beee4597a3fb580167eaa41ee2647a8af541001	contained in main
+selfdev/g1-round58-updater-transport	d83f505b833e5eb86a7e241a41a42879f5a46fd5	contained in main
+selfdev/g1-round59-updater-unit-entry	3402aa313af02fd5fbd8932f3e55c706a2d7b52c	contained in main
+selfdev/g1-round60-guest-signer-migration	af2d30f960a3c800c15535248a96d8be25bab068	contained in main
+selfdev/g1-round62-signer-stage-diagnostic	2dcf91737e6a66d56490d17ee807cd8712f966cb	contained in main
+selfdev/g1-round63-key-shape-diagnostic	45f80810e59cc6f04f1d78f794c37ce84d54ccda	contained in main
+selfdev/g1-round65-signer-startup-stage	3e54535f2ea1e428ae0e19523c3c13430dffec1c	contained in main
+selfdev/g1-round67-signer-serve-exit	a2e74539c046f6f4819350ccdc0d9812e5eb5c56	contained in main
+selfdev/g1-round69-signer-liveness	91c25300ce30b3017a5fec5fc77e3f5f9695cda8	contained in main
+selfdev/g1-round70-updater-namespace	a7f497ab2d7ec691d816e936ffa7f0748bf24f57	contained in main
+selfdev/g1-round71-genesis-authority	832ae951e84400a54bd7f8ef52a312e872b5c3ef	contained in main
+spike-1-qdrant-node-b	0a6b8c527056d864d886a227e9362e30d9d2cac8	contained in main
+lane/backup-memory	860feb2a9d98831b51c847fb25ba5eb7400adbd7	landed as a squash on main 2026-10-30/31
+lane/snapshot-sweep	31d0779f4c28d1908318debfe7789e03751c0343	landed as a squash on main 2026-10-30/31
+lane/tape-seg-compact	53c1b67ca6c1ec1727a1282bd19d669ff62f542a	landed as a squash on main 2026-10-30/31
+lane/mac-arm-guest	f157c2f7a93b73e0102f529fa355f1972f144d7d	landed as a squash on main 2026-10-30/31
+cutover/fix-host	5ca905c6f6c3d39e05c9aef5b29111fd33eb79cd	landed as a squash on main 2026-10-30/31
+cutover/fix-tests	8933d1ba99a2c3cc5045b299c01dc11a40107ede	landed as a squash on main 2026-10-30/31
+cutover/guest-dolt-delete	159b0f9996bdb0c4c93f38d1393f917d139572f4	landed as a squash on main 2026-10-30/31
+cutover/wp-a	fd752ccf2766d01bf4abfe41999da584c9a213a5	landed as a squash on main 2026-10-30/31
+cutover/wp-b	f4fb951cae04a3478687c48a0e3c34171f0763ac	landed as a squash on main 2026-10-30/31
+cutover/wp-c	0b17b422e0e6723802e0863f9f241c46d42efaa6	landed as a squash on main 2026-10-30/31
+cutover/wp-d	67689b08734e286bd56cba2a57c0cf5f38ab4c09	landed as a squash on main 2026-10-30/31
+cutover/wp-e	9071178d1e4d5175bf9fac8d8b5348b7d54a79d1	landed as a squash on main 2026-10-30/31
+cutover/wp-f	cae9c4e1072e3e7b0ae6fd27fa46baf9ed3fbd01	landed as a squash on main 2026-10-30/31
