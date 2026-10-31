@@ -49,17 +49,25 @@ let
   ciGateEpochCheck = "enforce";
   # Release materialization and retention (scripts/node-b-guest-release-*;
   # tests: scripts/test-node-b-guest-release-retention.sh).
+  # Dedupe (FIDEDUPERANGE, bounded memory; see the script header).
+  guestReleaseDedupe = pkgs.writeScript "go-choir-guest-release-dedupe"
+    ''
+      #!${pkgs.python3}/bin/python3
+      ${builtins.readFile ../scripts/node-b-guest-release-dedupe}
+    '';
   guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
     ''
-      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep ]}:$PATH"
+      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.systemd ]}:$PATH"
+      export GO_CHOIR_GUEST_RELEASE_DEDUPE="${guestReleaseDedupe}"
       ${builtins.readFile ../scripts/node-b-guest-release-materialize}
     '';
   guestReleaseRetention = pkgs.writeShellScript "go-choir-guest-release-retention"
     ''
-      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gawk pkgs.gnugrep pkgs.jq pkgs.btrfs-progs ]}:$PATH"
-      # R7 (2026-10-26): a release is 3.75 GiB, over the design's 3 GiB line,
-      # so the cap is 4, not the script's 8 (about 15 GiB exclusive at worst).
-      export GO_CHOIR_GUEST_RELEASE_KEEP_MAX="''${GO_CHOIR_GUEST_RELEASE_KEEP_MAX:-4}"
+      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gawk pkgs.gnugrep pkgs.jq pkgs.btrfs-progs pkgs.procps pkgs.findutils ]}:$PATH"
+      # Retention is by reference (2026-10-31), no count cap. Stale jails
+      # (no ownership row) are removed, not just reported.
+      export GO_CHOIR_PRUNE_JAILS="''${GO_CHOIR_PRUNE_JAILS:-1}"
+      export GO_CHOIR_GUEST_RELEASE_DEDUPE="${guestReleaseDedupe}"
       ${builtins.readFile ../scripts/node-b-guest-release-retention}
     '';
   # Auth signing material lives in this writable runtime directory.
@@ -1786,6 +1794,10 @@ in
       Type = "oneshot";
       Nice = 19;
       IOSchedulingClass = "idle";
+      CPUWeight = 1;
+      # The dedupe catch-up scans two 3.4 GB images; the tool holds about
+      # 20 MB (up to ~130 MB at its index cap) and drops read pages as it goes.
+      MemoryMax = "384M";
       LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
       ExecStart = guestReleaseRetention;
     };

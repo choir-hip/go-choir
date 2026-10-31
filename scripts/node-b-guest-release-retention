@@ -8,15 +8,32 @@
 # and a running VM keeps its bytes through open file descriptors or its jail's
 # shared copy.
 #
-# Keep: the current release (the guest link's target); the newest other release
-# by first_current_at ("previous"); any release under 2 hours old (a launch that
-# resolved just before a switch); every release in vmctl's in_use answer.
-# Delete: every other real directory named like a release id, with rm -rf.
-# Also delete a non-current release older than the support window that no
-# running VM uses (its snapshots can never resume, R6). Cap: above
-# GO_CHOIR_GUEST_RELEASE_KEEP_MAX (8), delete releases that only snapshots use,
-# oldest first. NEVER delete current, previous, young, or a release a running
-# VM uses, by any rule, the cap and the support window included.
+# Retention is by reference, not by count (owner, 2026-10-31). Keep:
+#   - the current release (the guest link's target);
+#   - the newest other release by first_current_at ("previous") and the newest
+#     release older than current (the rollback target; the same release in
+#     steady state), and any release newer than current (a switch pending);
+#   - any release under 2 hours old (a launch that resolved just before a switch);
+#   - every release a running VM uses (vmctl's in_use answer, or a live
+#     Firecracker whose fc-config.json names it): never deleted by any rule;
+#   - every release an unconsumed snapshot or hibernation names (vmctl's
+#     in_use answer) or that a VM's guest-release.json / stopped fc-config.json
+#     names, until it is past the support window (R6: older snapshots refuse
+#     at wake, so their bytes serve nothing);
+#   - a hard minimum of 2 releases, the newest ones.
+# Delete: every other real directory named like a release id. There is no
+# count cap: a release stays exactly while something can use it.
+# No deletion at all while a .tmp-* tree younger than an hour exists (a deploy
+# is materializing a release).
+#
+# Stale jails (internal/vmmanager creates vm-state/.jail/firecracker/<vm>; the
+# jail hard-links the store disk and so pins an old release's bytes): the run
+# reports every jail directory whose VM has no row in vm-state/ownerships.json,
+# and with --prune-jails (or GO_CHOIR_PRUNE_JAILS=1) removes them, unless a
+# Firecracker process names the VM, something is mounted inside, or the
+# ownership file cannot be read. A VM with a row (running, hibernated,
+# stopped) keeps its jail. Every run first starts the dedupe catch-up
+# (GO_CHOIR_GUEST_RELEASE_DEDUPE) for releases that have no result yet.
 #
 # vmctl's answer (GET /internal/vmctl/guest-releases):
 #   no answer (connection error, 5xx, unparsable)  delete nothing
@@ -26,15 +43,19 @@
 # Symlinks, odd names and .tmp-* trees are never touched.
 #
 # Env: GO_CHOIR_GUEST_RELEASES_DIR, GO_CHOIR_GUEST_LINK, GO_CHOIR_VMCTL_URL,
-# GO_CHOIR_GUEST_RELEASE_KEEP_MAX, GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS
-# (168), GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS (2), GO_CHOIR_NOW_EPOCH (tests).
+# GO_CHOIR_VM_STATE_DIR (/var/lib/go-choir/vm-state),
+# GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS (168),
+# GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS (2), GO_CHOIR_PRUNE_JAILS,
+# GO_CHOIR_NOW_EPOCH (tests). GO_CHOIR_GUEST_RELEASE_KEEP_MAX is retired.
 # Fails closed: a step that cannot read its input deletes nothing.
 set -u
 
 rel_dir="${GO_CHOIR_GUEST_RELEASES_DIR:-/var/lib/go-choir/guest-releases}"
 link="${GO_CHOIR_GUEST_LINK:-/var/lib/go-choir/guest}"
 vmctl="${GO_CHOIR_VMCTL_URL:-http://127.0.0.1:8083}"
-keep_max="${GO_CHOIR_GUEST_RELEASE_KEEP_MAX:-8}"
+state_dir="${GO_CHOIR_VM_STATE_DIR:-/var/lib/go-choir/vm-state}"
+prune_jails="${GO_CHOIR_PRUNE_JAILS:-0}"
+for arg in "$@"; do [ "$arg" = "--prune-jails" ] && prune_jails=1; done
 window_h="${GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS:-168}"
 young_h="${GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS:-2}"
 now="${GO_CHOIR_NOW_EPOCH:-$(date +%s)}"
@@ -42,7 +63,6 @@ id_re='^[0-9a-df-np-sv-z]{32}$'
 
 log() { echo "go-choir guest release retention: $*"; }
 
-case "$keep_max" in '' | *[!0-9]*) log "GO_CHOIR_GUEST_RELEASE_KEEP_MAX=$keep_max is not a number; using 8"; keep_max=8 ;; esac
 case "$window_h" in '' | *[!0-9]*) log "support window is not a number; using 168"; window_h=168 ;; esac
 case "$young_h" in '' | *[!0-9]*) log "young hours is not a number; using 2"; young_h=2 ;; esac
 
@@ -89,6 +109,8 @@ case "$code" in
 esac
 
 in_list() { printf '%s\n' "$2" | grep -qx "$1"; }
+# a Firecracker process names the VM id (its jail directory or API socket path)
+vm_alive() { pgrep -f "firecracker.*$1" >/dev/null 2>&1; }
 
 # --- the releases --------------------------------------------------------------------
 declare -A first_at
@@ -103,13 +125,45 @@ for d in "$rel_dir"/*; do
 	ids+=("$id")
 done
 
-# previous: the newest release other than current by first_current_at
+# filesystem references: guest-release.json names a release (soft: a snapshot
+# of it may resume); fc-config.json paths name one, hard when a Firecracker for
+# that VM is alive.
+fs_soft=""
+fs_hard=""
+if [ -d "$state_dir" ]; then
+	for vmd in "$state_dir"/*/; do
+		[ -d "$vmd" ] || continue
+		vm="$(basename "$vmd")"
+		r="$(jq -r '.release // empty' "$vmd/guest-release.json" 2>/dev/null)"
+		[ -n "$r" ] && fs_soft="$fs_soft
+$r"
+		for cfg in "$vmd/fc-config.json" "$vmd"/*/fc-config.json; do
+			[ -f "$cfg" ] || continue
+			for r in $(grep -o "guest-releases/[0-9a-df-np-sv-z]\{32\}" "$cfg" 2>/dev/null | cut -d/ -f2); do
+				if vm_alive "$vm"; then fs_hard="$fs_hard
+$r"; else fs_soft="$fs_soft
+$r"; fi
+			done
+		done
+	done
+fi
+
+# previous: the newest release other than current by first_current_at; rollback:
+# the newest release older than current.
 previous=""
 best=-1
+rollback=""
+rbest=-1
+cur_at="${first_at[$current]:-$now}"
 for id in "${ids[@]}"; do
 	[ "$id" = "$current" ] && continue
 	if [ "${first_at[$id]}" -gt "$best" ]; then best="${first_at[$id]}"; previous="$id"; fi
+	if [ "${first_at[$id]}" -le "$cur_at" ] && [ "${first_at[$id]}" -gt "$rbest" ]; then rbest="${first_at[$id]}"; rollback="$id"; fi
 done
+
+# a deploy materializing a release: delete nothing
+tmp_active=false
+if [ -n "$(find "$rel_dir" -maxdepth 1 -name '.tmp-*' -mmin -60 2>/dev/null | head -1)" ]; then tmp_active=true; fi
 
 window_s=$((window_h * 3600))
 young_s=$((young_h * 3600))
@@ -117,15 +171,14 @@ deleted=()
 remaining=()
 for id in "${ids[@]}"; do
 	age=$((now - first_at[$id]))
-	if [ "$id" = "$current" ] || [ "$id" = "$previous" ] || in_list "$id" "$running" || [ "$age" -lt "$young_s" ]; then
+	if [ "$id" = "$current" ] || [ "$id" = "$previous" ] || [ "$id" = "$rollback" ] || [ "${first_at[$id]}" -gt "$cur_at" ] \
+		|| in_list "$id" "$running" || in_list "$id" "$fs_hard" || [ "$age" -lt "$young_s" ] || [ "$tmp_active" = true ]; then
 		remaining+=("$id")
 		continue
 	fi
-	past_window=false
-	[ "$age" -gt "$window_s" ] && past_window=true
-	if [ "$past_window" = true ]; then
-		delete=true
-	elif [ "$complete" = true ] && ! in_list "$id" "$snapshots"; then
+	if [ "$age" -gt "$window_s" ]; then
+		delete=true # past the support window: no snapshot can resume on it (R6)
+	elif [ "$complete" = true ] && ! in_list "$id" "$snapshots" && ! in_list "$id" "$fs_soft"; then
 		delete=true
 	else
 		delete=false
@@ -133,22 +186,12 @@ for id in "${ids[@]}"; do
 	if [ "$delete" = true ]; then deleted+=("$id"); else remaining+=("$id"); fi
 done
 
-# the cap: snapshot-only releases, oldest first
-if [ "$complete" = true ] && [ "${#remaining[@]}" -gt "$keep_max" ]; then
-	only_snapshots=()
-	for id in "${remaining[@]}"; do
-		[ "$id" = "$current" ] || [ "$id" = "$previous" ] || in_list "$id" "$running" && continue
-		age=$((now - first_at[$id]))
-		[ "$age" -lt "$young_s" ] && continue
-		only_snapshots+=("$id")
-	done
-	# oldest first
-	sorted="$(for id in "${only_snapshots[@]}"; do echo "${first_at[$id]} $id"; done | sort -n | awk '{print $2}')"
-	count="${#remaining[@]}"
+# hard minimum of 2 releases: undo the oldest-first deletions, newest first
+if [ $((${#remaining[@]} + ${#deleted[@]})) -ge 2 ] && [ "${#remaining[@]}" -lt 2 ]; then
+	sorted="$(for id in "${deleted[@]}"; do echo "${first_at[$id]} $id"; done | sort -rn | awk '{print $2}')"
+	deleted=()
 	for id in $sorted; do
-		[ "$count" -gt "$keep_max" ] || break
-		deleted+=("$id")
-		count=$((count - 1))
+		if [ "${#remaining[@]}" -lt 2 ]; then remaining+=("$id"); else deleted+=("$id"); fi
 	done
 fi
 
@@ -160,6 +203,35 @@ for id in "${deleted[@]}"; do
 		rm -rf "$d" && log "deleted release $id"
 	fi
 done
-log "current=$current previous=${previous:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete"
+log "current=$current previous=${previous:-none} rollback=${rollback:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete tmp_active=$tmp_active"
+
+# --- stale jails ------------------------------------------------------------------
+own="$state_dir/ownerships.json"
+jail_root="$state_dir/.jail"
+if [ -d "$jail_root" ]; then
+	if ! rows="$(jq -er '.ownerships | map(.vm_id) | .[]' "$own" 2>/dev/null)" && ! jq -e '.ownerships | type == "array"' "$own" >/dev/null 2>&1; then
+		log "jails: $own is unreadable; reporting and removing nothing"
+	else
+		for jd in "$jail_root"/*/*/; do
+			[ -d "$jd" ] && [ ! -L "${jd%/}" ] || continue
+			vm="$(basename "$jd")"
+			printf '%s' "$vm" | grep -Eq '^[A-Za-z0-9_-]+$' || continue
+			in_list "$vm" "$rows" && continue
+			if vm_alive "$vm"; then log "jail $vm has no ownership row but a Firecracker names it; kept"; continue; fi
+			if grep -q " ${jd%/}/" /proc/mounts 2>/dev/null; then log "jail $vm has a mount inside; kept"; continue; fi
+			size="$(du -sk "$jd" 2>/dev/null | cut -f1)"
+			if [ "$prune_jails" = 1 ]; then
+				chmod -R u+w "${jd%/}" 2>/dev/null
+				rm -rf "${jd%/}" && log "removed stale jail $vm (no ownership row, ${size:-?} KiB listed; hard-linked bytes free only when the last link goes)"
+			else
+				log "stale jail $vm (no ownership row, ${size:-?} KiB listed); --prune-jails removes it"
+			fi
+		done
+	fi
+fi
+
+# --- dedupe catch-up --------------------------------------------------------------
+dedupe="${GO_CHOIR_GUEST_RELEASE_DEDUPE:-}"
+if [ -n "$dedupe" ] && [ -x "$dedupe" ]; then "$dedupe" "$rel_dir" || true; fi
 if command -v btrfs >/dev/null 2>&1; then btrfs filesystem du -s "$rel_dir" 2>/dev/null || true; fi
 exit 0
