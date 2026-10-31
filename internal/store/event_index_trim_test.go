@@ -255,8 +255,16 @@ func TestOpenCatchesUpAnOldStoreAndFloorsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	if got := len(trimTestRows(t, s2)); got != 30000-20000+1+4 {
-		t.Fatalf("rows after Open = %d, want %d", got, 30000-20000+1+4)
+	// The catch-up runs in the background after Open returns.
+	want := 30000 - 20000 + 1 + 4
+	deadline := time.Now().Add(20 * time.Second)
+	got := len(trimTestRows(t, s2))
+	for got != want && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		got = len(trimTestRows(t, s2))
+	}
+	if got != want {
+		t.Fatalf("rows after Open = %d, want %d", got, want)
 	}
 	floor, found, err := storeschema.ReadFloor(filepath.Join(sidecar, storeschema.FloorFile))
 	if err != nil || !found || floor.Version < projectionBatchTrimFloorEpoch {

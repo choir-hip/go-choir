@@ -47,9 +47,16 @@ var (
 	// share is smaller (the paper's event index trim frees about 7 GB of 32).
 	compactFreelistFraction = 0.10
 	compactFreelistBytes int64 = 2 << 30
-	// compactMaxLiveBytes is the largest live size boot will rewrite. The
-	// guest's boot-ready timeout is 90 minutes (VM_BOOT_READY_TIMEOUT).
-	compactMaxLiveBytes int64 = 40 << 30
+	// compactMaxLiveBytes is the largest live size boot will rewrite. Open
+	// runs before the guest's credential exchange, and the boot envelope
+	// lives at most 15 minutes from when vmctl mints it, before the VM starts
+	// (platform.maximumCredentialEnvelopeTTL). A boot that spends it here
+	// never becomes ready: the paper's 11efa88c3 boot spent 10 minutes in
+	// the event index catch-up and failed
+	// (docs/problems/offline-maintenance-outlives-the-boot-credential-2026-10-24.md).
+	// 4 GB rewrites in about a minute; a larger store is compacted off the
+	// boot path.
+	compactMaxLiveBytes int64 = 4 << 30
 	// compactSpaceFactor is the free space, as a multiple of the live size,
 	// the copy needs.
 	compactSpaceFactor = 1.2

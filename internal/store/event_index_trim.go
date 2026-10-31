@@ -18,7 +18,10 @@ package store
 // rows. Every other kind, and every prepared row, stays.
 //
 // The one-time catch-up (CatchUpProjectionBatchTrim) deletes to the same
-// boundary in chunks at Open.
+// boundary in chunks, in a goroutine Open starts and Close stops. It never
+// runs on the boot path: Open comes before the credential exchange, and the
+// boot envelope expires 15 minutes after vmctl mints it (the paper's
+// 11efa88c3 boot spent 10 minutes here and failed).
 
 import (
 	"context"
@@ -47,13 +50,15 @@ const (
 const _ = storeschema.Version - projectionBatchTrimFloorEpoch
 
 var (
-	// projectionBatchCatchUpChunk is the rows one catch-up transaction deletes.
-	projectionBatchCatchUpChunk = 50000
+	// projectionBatchCatchUpChunk is the rows one catch-up transaction
+	// deletes. Each chunk holds the event lock, so it is small enough that a
+	// live append waits well under a second.
+	projectionBatchCatchUpChunk = 5000
 	// projectionBatchCatchUpPause yields the single writer between chunks.
-	projectionBatchCatchUpPause = 20 * time.Millisecond
-	// projectionBatchCatchUpBudget bounds the catch-up's time at Open; what
-	// remains is finished by the next trim point or the next boot.
-	projectionBatchCatchUpBudget = 10 * time.Minute
+	projectionBatchCatchUpPause = 100 * time.Millisecond
+	// projectionBatchCatchUpBudget bounds one catch-up; what remains is
+	// finished by the next boot's catch-up.
+	projectionBatchCatchUpBudget = 6 * time.Hour
 )
 
 // projectionBatchTrimBoundary is the highest sequence whose batch row the trim
@@ -181,10 +186,30 @@ func (s *Store) trimChunk(ctx context.Context, computerID string, boundary uint6
 	return res.RowsAffected()
 }
 
-// runProjectionBatchCatchUp is the Open step: bounded, logged, never fatal.
-func (s *Store) runProjectionBatchCatchUp() {
+// startProjectionBatchCatchUp runs the catch-up in a goroutine that Close
+// cancels and drains with the lease goroutines: bounded, logged, never fatal.
+// A store that predates the window, or an older snapshot restored under this
+// binary, is brought to the state a replay would leave. Open and Reopen start
+// it on the published store, never on the boot path.
+func (s *Store) startProjectionBatchCatchUp() {
+	closing := s.leaseClosingChan()
 	ctx, cancel := context.WithTimeout(context.Background(), projectionBatchCatchUpBudget)
-	defer cancel()
+	s.lease.workers.Add(1)
+	go func() {
+		defer s.lease.workers.Add(-1)
+		defer cancel()
+		go func() {
+			select {
+			case <-closing:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		s.runProjectionBatchCatchUp(ctx)
+	}()
+}
+
+func (s *Store) runProjectionBatchCatchUp(ctx context.Context) {
 	start := time.Now()
 	n, err := s.CatchUpProjectionBatchTrim(ctx)
 	if err != nil {

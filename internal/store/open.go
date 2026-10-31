@@ -180,6 +180,19 @@ func (s *Store) ReplaceWorkspace(quarantineDir string) (*Store, WorkspaceReplace
 // copies a legacy workspace into the state file
 // before Open runs.
 func Open(dbPath string) (*Store, error) {
+	s, err := openStore(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	s.startProjectionBatchCatchUp()
+	return s, nil
+}
+
+// openStore is Open without the background work, which belongs to the store
+// that is published: Reopen opens a scratch store and moves its fields into
+// the receiver, so a goroutine started on the scratch would read a zeroed
+// store.
+func openStore(dbPath string) (*Store, error) {
 	statePath := StateDBPath(dbPath)
 	donePrepare := objectgraph.BootPhase("store: open", "prepare-path")
 	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
@@ -295,11 +308,6 @@ func Open(dbPath string) (*Store, error) {
 	}
 	doneEpoch(nil)
 
-	// The event index window's catch-up (event_index_trim.go): a store that
-	// predates it, or an older snapshot restored under this binary, is
-	// brought to the state a replay would leave. Bounded, logged, not fatal.
-	s.runProjectionBatchCatchUp()
-
 	s.initLeaseObs()
 	s.openTraceLogIfPresent()
 
@@ -359,7 +367,7 @@ func (s *Store) Reopen(path string) error {
 		// Adopting new handles over open ones would orphan them.
 		return fmt.Errorf("runtime store: reopen requires a closed store")
 	}
-	live, err := Open(path)
+	live, err := openStore(path)
 	if err != nil {
 		return err
 	}
@@ -442,6 +450,9 @@ func (s *Store) Reopen(path string) error {
 	// record where, so a reader can tell lines of an abandoned branch from the
 	// restored one (trace-log design 7.3).
 	s.writeTraceLogRestoreBoundary()
+	// The event index window's catch-up (event_index_trim.go) for the
+	// adopted store.
+	s.startProjectionBatchCatchUp()
 	return nil
 }
 
