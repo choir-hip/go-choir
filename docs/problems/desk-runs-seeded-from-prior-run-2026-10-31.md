@@ -42,7 +42,15 @@ shouldn't fix it yet. Let's note this for after the Mac app."
 ## Direction (not started)
 
 A desk run starts with the system prompt and the REPL only. Prior runs'
-memory becomes something the REPL can read on demand. Texture's
-carry-conversation case needs its own decision: continuity of a Texture
-conversation may still belong in context. Measure the seed bytes per
-activation before changing it.
+memory becomes something the REPL can read on demand.
+
+Texture is the exception, keyed by document (owner, 2026-10-31: "Texture
+should resume prior runs if it's continuing the same doc"). A Texture run
+that continues the same document resumes that document's prior run
+conversation. A Texture run on a different document starts fresh. Today's
+carry is keyed by agent (the newest run of the Texture agent, or the run
+named by actor_rewarm_source_loop_id), not by document, so a Texture wake on
+document B can carry document A's conversation. The fix keys the carry
+source by document id.
+
+Measure the seed bytes per activation before changing it.
