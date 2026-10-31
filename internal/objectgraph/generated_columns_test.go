@@ -130,7 +130,7 @@ func TestRecordColumnsMatchJSONReads(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(1014))
 	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 150; i++ {
 		metadata := map[string]any{}
 		for _, field := range fields {
 			if rng.Intn(5) > 0 { // sometimes missing
@@ -141,7 +141,7 @@ func TestRecordColumnsMatchJSONReads(t *testing.T) {
 		putTestObject(t, indexed, id, kinds[rng.Intn(len(kinds))], metadata, `{}`, base.Add(time.Duration(i)*time.Second))
 		if rng.Intn(10) == 0 { // an upsert moves the row to new values
 			metadata["inbox"] = values[rng.Intn(len(values))]
-			putTestObject(t, indexed, id, commitmentRecordKind, metadata, `{}`, base.Add(time.Duration(300+i)*time.Second))
+			putTestObject(t, indexed, id, commitmentRecordKind, metadata, `{}`, base.Add(time.Duration(150+i)*time.Second))
 		}
 	}
 

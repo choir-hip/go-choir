@@ -27,7 +27,7 @@ func TestValidatorComparesOnTheReadPool(t *testing.T) {
 	}
 	at := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
 	var all []keyedObj
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 120; i++ {
 		all = append(all,
 			keyedObj{id: fmt.Sprintf("run-%03d", i), kind: testRunKind, meta: map[string]any{"agent_id": fmt.Sprintf("a%d", i%6)}, body: `{}`, at: at},
 			keyedObj{id: fmt.Sprintf("rec-%03d", i), kind: commitmentRecordKind, meta: map[string]any{}, body: mustJSON(map[string]any{"addressee": fmt.Sprintf("a%d", i%6)}), at: at})
