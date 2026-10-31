@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Chaos drill runner: one scenario against d@e only (scripts/chaos/README.md).
+#
+#   scripts/chaos/run --list
+#   scripts/chaos/run s1-guest-crash                 (dry-run, the default)
+#   scripts/chaos/run s1-guest-crash --offline       (dry-run, no ssh at all)
+#   scripts/chaos/run s1-guest-crash --execute       (injects the fault)
+#   scripts/chaos/run s1-guest-crash --computer ID   (only to prove refusal:
+#                                                     anything but d@e exits 3)
+#
+# Each run: guard, pre-flight, map d@e to its VM, scenario precondition,
+# fault (its undo registered first), bounded wait, postconditions, one JSON
+# artifact under scripts/chaos/results/<scenario>-<run id>/artifact.json.
+# Touch ~/.choir-chaos-stop (or /run/choir-chaos-stop on Node B) to abort;
+# the undos still run.
+set -uo pipefail
+HERE=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/chaos/lib.sh
+. "$HERE/lib.sh"
+# shellcheck source=scripts/chaos/common-target.sh
+. "$HERE/common-target.sh"
+
+scn="" computer=$CHAOS_TARGET
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--execute) CHAOS_DRY=0 ;;
+	--dry-run) CHAOS_DRY=1 ;;
+	--offline) CHAOS_OFFLINE=1 ;;
+	--computer) [ $# -ge 2 ] || chaos_die 2 "--computer needs a value"; computer=$2; shift ;;
+	--list) for f in "$HERE"/s[0-9]*-*.sh; do b=${f##*/}; printf '%s\t%s\n' "${b%.sh}" "$(sed -n 's/^SCN_FAULT="\(.*\)"$/\1/p' "$f")"; done; exit 0 ;;
+	-h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+	s[0-9]*) scn=$1 ;;
+	*) chaos_die 2 "unexpected argument $1" ;;
+	esac
+	shift
+done
+[ -n "$scn" ] || chaos_die 2 "name a scenario (--list)"
+[ "$CHAOS_OFFLINE" = 1 ] && [ "$CHAOS_DRY" = 0 ] && chaos_die 2 "--offline is dry-run only"
+case "$scn" in *[!a-z0-9-]*) chaos_die 2 "bad scenario name" ;; esac
+[ -f "$HERE/$scn.sh" ] || chaos_die 2 "no scenario $scn (--list)"
+for a in "$computer" "$scn"; do chaos_guard_value "$a"; done
+chaos_guard_target "$computer"
+command -v jq >/dev/null || chaos_die 2 "needs jq"
+
+# shellcheck disable=SC1090
+. "$HERE/$scn.sh"
+CHAOS_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$$
+CHAOS_RUN_DIR=$CHAOS_RESULTS_DIR/$SCN_NAME-$CHAOS_RUN_ID
+mkdir -p "$CHAOS_RUN_DIR" || chaos_die 2 "cannot create $CHAOS_RUN_DIR"
+CHAOS_STARTED=$(chaos_now)
+trap chaos_finish EXIT
+trap 'chaos_abort "signal"' INT TERM
+
+info "scenario $SCN_NAME ($([ "$CHAOS_DRY" = 1 ] && echo dry-run || echo EXECUTE)); fault: $SCN_FAULT"
+scn_plan | sed 's/^/    plan| /' >&2
+chaos_preflight
+chaos_load_key
+scn_pre
+chaos_abort_if_stopped
+scn_inject
+scn_wait
+scn_post
