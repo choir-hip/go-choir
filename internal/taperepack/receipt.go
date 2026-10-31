@@ -71,6 +71,7 @@ func classifyReceipt(raw []byte) (e edge, st receiptStatus) {
 	artifact, _ := receipt.KindFields["artifact_digest"].(string)
 	namespace, _ := receipt.KindFields["pin_namespace"].(string)
 	mediaType, _ := receipt.KindFields["media_type"].(string)
+	privacyClass, _ := receipt.KindFields["privacy_class"].(string)
 	lengthNum, _ := receipt.KindFields["length"].(json.Number)
 	length, lengthErr := lengthNum.Int64()
 	if !tapestore.ValidDigest(artifact) {
@@ -88,7 +89,10 @@ func classifyReceipt(raw []byte) (e edge, st receiptStatus) {
 		e.ns, e.eligible = tapestore.NSEvent, true
 	case namespace == payloadNamespace:
 		e.ns = tapestore.NSPayload
-		e.private = mediaType == computerevent.PrivateArtifactMediaType
+		// The pin path segments an envelope only under the private class
+		// (event_artifacts.go pinPayload); an envelope pinned under another
+		// class stays loose there, so it stays loose here too.
+		e.private = mediaType == computerevent.PrivateArtifactMediaType && privacyClass == "private"
 		e.eligible = mediaType == computerevent.ProjectionBatchMediaType || e.private
 	default:
 		return e, receiptRejected

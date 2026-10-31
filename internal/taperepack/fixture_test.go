@@ -70,9 +70,14 @@ func (f *fixture) receipt(computer, namespace, mediaType, digest string, length 
 // receiptRaw is the signed receipt's bytes, written nowhere.
 func (f *fixture) receiptRaw(computer, namespace, mediaType, digest string, length int) []byte {
 	f.t.Helper()
+	// The host pins an encrypted envelope only under the private class.
+	class := "owner"
+	if mediaType == computerevent.PrivateArtifactMediaType {
+		class = "private"
+	}
 	fields := map[string]any{
 		"computer_id": computer, "artifact_digest": digest, "media_type": mediaType,
-		"length": length, "privacy_class": "owner", "pin_namespace": namespace,
+		"length": length, "privacy_class": class, "pin_namespace": namespace,
 		"request_commitment": strings.Repeat("a", 64),
 	}
 	r, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", fields, []computerevent.SigningKey{f.key}, time.Now())

@@ -3,9 +3,12 @@ package taperepack
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
@@ -78,5 +81,29 @@ func TestSealedBatchEnvelopesAreMigrated(t *testing.T) {
 				t.Fatalf("M2/M3 %s: copied under %s", name, c)
 			}
 		}
+	}
+}
+
+// An envelope the host pinned under a class other than private stays loose
+// on the pin path (event_artifacts.go pinPayload), so the repack keeps it
+// loose too (review 2026-10-31, both seats).
+func TestOwnerClassEnvelopeIsNotMigrated(t *testing.T) {
+	f := newFixture(t)
+	fields := map[string]any{
+		"computer_id": compA, "artifact_digest": strings.Repeat("b", 64), "media_type": computerevent.PrivateArtifactMediaType,
+		"length": 100, "privacy_class": "owner", "pin_namespace": payloadNamespace,
+		"request_commitment": strings.Repeat("a", 64),
+	}
+	r, err := computerevent.NewSignedReceipt("PinReceipt", "corpusd", fields, []computerevent.SigningKey{f.key}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, st := classifyReceipt(raw)
+	if st != receiptOK || e.private || e.eligible {
+		t.Fatalf("owner-class envelope: status %v private %v eligible %v, want ok, not private, not eligible", st, e.private, e.eligible)
 	}
 }
