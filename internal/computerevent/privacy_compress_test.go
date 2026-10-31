@@ -23,6 +23,9 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
+// The release holds compressed writes back; these tests exercise them.
+func init() { compressPrivateWrites = true }
+
 func realisticJSON(n int) []byte {
 	var b strings.Builder
 	b.WriteString(`{"tool_results":[`)

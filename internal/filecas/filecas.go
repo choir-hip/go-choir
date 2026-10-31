@@ -205,7 +205,7 @@ func SealChunk(dek []byte, computerID string, chunk []byte) ([]byte, string, err
 	// Compress first; keep the raw form (byte-identical to the original
 	// format) unless the saving is worth it. The nonce is over the original
 	// plaintext either way, so sealing stays deterministic.
-	if len(chunk) > 0 {
+	if len(chunk) > 0 && compressChunkWrites {
 		comp := zstdEncoder.EncodeAll(chunk, nil)
 		if len(comp) <= len(chunk)-len(chunk)*minCompressionSavingPercent/100 {
 			return sealChunkWithNonce(dek, computerID, nonce, comp, compressedAAD(computerID))
@@ -321,3 +321,9 @@ func validDigest(digest string) bool {
 	_, err := hex.DecodeString(digest)
 	return err == nil
 }
+
+// compressChunkWrites holds compressed writes back for one release, so the
+// release that can open a compressed chunk is deployed (and is the rollback
+// target) before any chunk is sealed compressed. OpenChunk always accepts
+// both forms.
+var compressChunkWrites = false

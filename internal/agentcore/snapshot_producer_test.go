@@ -312,15 +312,15 @@ func TestProducerClearsItsAttemptWhenTheSnapshotReturns(t *testing.T) {
 func TestSnapshotSettingsFromEnv(t *testing.T) {
 	env := map[string]string{}
 	get := func(k string) string { return env[k] }
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxDuration != 30*time.Minute {
-		t.Fatalf("defaults (on, 24h, 30m): %+v", s)
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 30*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
+		t.Fatalf("defaults (on, 168h backstop, by tape distance, 30m): %+v", s)
 	}
 	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "6h", "2h", "1"
 	if s := snapshotSettingsFromEnv(get); !s.Disabled || s.Interval != 6*time.Hour || s.MaxDuration != 2*time.Hour {
 		t.Fatalf("overrides: %+v", s)
 	}
 	env[envSnapshotInterval], env[envSnapshotMaxDuration], env[envSnapshotDisable] = "soon", "-5s", "0"
-	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 24*time.Hour || s.MaxDuration != 30*time.Minute {
+	if s := snapshotSettingsFromEnv(get); s.Disabled || s.Interval != 7*24*time.Hour || s.MaxDuration != 30*time.Minute || s.TailEvents != snapshotDefaultTailEvents {
 		t.Fatalf("garbage falls back to the defaults, never to off: %+v", s)
 	}
 }

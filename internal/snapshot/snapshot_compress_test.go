@@ -10,6 +10,7 @@ import (
 // but restore does not reassemble the exact pages (the size/geometry checks
 // compare plaintext lengths), or the stored bytes do not shrink.
 func TestCompressibleStoreSnapshotShrinksAndRestores(t *testing.T) {
+	t.Skip("compressed chunk writes are held back for one release (filecas.compressChunkWrites); enabled in the next")
 	ctx := context.Background()
 	f := newFixture(t, 0)
 	for i := 0; i < 20000; i++ {

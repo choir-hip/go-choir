@@ -56,7 +56,13 @@ const (
 	envSnapshotMaxDuration = "CHOIR_SNAPSHOT_MAX_DURATION"
 	envSnapshotDisable     = "CHOIR_SNAPSHOT_DISABLE"
 
-	snapshotDefaultInterval = 24 * time.Hour
+	// A snapshot bounds the replay a rebuild needs; it is due by tape
+	// distance (snapshotDefaultTailEvents), and the interval is only a weekly
+	// backstop for a quiet computer. Daily snapshots of the paper re-uploaded
+	// about 20 GB each: a fixed page-range cut shares few chunks across a
+	// day of writes (owner, 2026-10-31: "we need to reconsider how we do
+	// compaction if our current plan has us rewriting gbs every day").
+	snapshotDefaultInterval = 7 * 24 * time.Hour
 	// Three quarters of the recovery bound: a tail reaches the bound only if
 	// the snapshot due here fails for a third as long again (it retries every
 	// tick). Not half: each of the paper's snapshots writes about 25 GB of new
