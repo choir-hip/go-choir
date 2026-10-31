@@ -1,0 +1,96 @@
+# Native aarch64 guest image build (the Mac guest, Apple Virtualization).
+# A separate signal: it is not part of ci.yml, is not a needs: of the staging
+# deploy, and never gates it. Builds on GitHub's arm64 Linux runners so the
+# Mac app's guest image does not need an emulated or remote builder.
+# The x86 guest outputs are untouched; this only builds packages.aarch64-linux.
+name: Guest aarch64 Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, lane/ci-arm-guest]
+    paths:
+      - 'nix/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - '.github/workflows/guest-aarch64.yml'
+
+concurrency:
+  group: guest-aarch64-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build aarch64 guest image
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # The image is ~3.5 GB plus the store it builds from; free the preinstalled
+      # toolchains the way flake-bump.yml does.
+      - name: Free runner disk
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost || true
+          df -h /
+
+      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor;
+      # the erofs store-layer builders run bwrap inside the Nix sandbox.
+      - name: Allow unprivileged user namespaces
+        shell: bash
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
+
+      - name: Build the guest image and release.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build --print-build-logs --no-link \
+            .#packages.aarch64-linux.guest-image-layered \
+            .#packages.aarch64-linux.guest-release-json
+          df -h /
+
+      - name: Check outputs and write the manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          image=$(nix build --no-link --print-out-paths .#packages.aarch64-linux.guest-image-layered)
+          rel=$(nix build --no-link --print-out-paths .#packages.aarch64-linux.guest-release-json)
+          test -d "$image" && test -f "$rel"
+          mkdir -p out
+          cp "$rel" out/release.json
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "image: $image"
+            echo "== sizes (bytes) =="
+            find -L "$image" -type f -printf '%s %P\n' | sort -k2
+            echo "== du =="
+            du -shL "$image"
+            echo "== release.json =="
+            echo "floor_digest: $(jq -r .floor_digest "$rel")"
+            echo "security_epoch: $(jq -r .security_epoch "$rel")"
+            echo "== disk after build =="
+            df -h /
+          } | tee out/manifest.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: guest-aarch64-release
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
