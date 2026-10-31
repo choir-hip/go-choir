@@ -95,6 +95,11 @@ type resolveRequest struct {
 	// before the start (crash_loop.go). The proxy sets it only after it has
 	// authorized the owner.
 	OwnerStart bool `json:"owner_start,omitempty"`
+	// RemoveStaleRoute lets /internal/vmctl/remove drop an ownership that is
+	// not running and whose ComputerVersion route no longer joins it: a
+	// leftover whose broken route is the reason it is garbage
+	// (candidate-control-20260717-j, 2026-10-31). Remove only.
+	RemoveStaleRoute bool `json:"remove_stale_route,omitempty"`
 }
 
 // resolveResponse is the JSON response for POST /internal/vmctl/resolve.
@@ -793,11 +798,24 @@ func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
 	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
+		running := own != nil && (own.State == VMStateActive || own.State == VMStateDegraded)
+		if !req.RemoveStaleRoute || own == nil || running {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+			return
+		}
+		log.Printf("vmctl: remove: dropping %s/%s (%s, state %s) whose route does not join it: %v", req.UserID, req.DesktopID, own.VMID, own.State, err)
+	}
+
+	if h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID) == nil {
+		// Idempotent, but never reported as a removal it did not make.
+		writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "absent"})
+		return
+	}
+	if err := h.registry.RemoveOwnershipForDesktop(req.UserID, req.DesktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
-
-	_ = h.registry.RemoveOwnershipForDesktop(req.UserID, req.DesktopID)
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
