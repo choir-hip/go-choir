@@ -240,12 +240,14 @@ func TestTapeSegmentsOffWritesTheLegacyFilesExactlyAsToday(t *testing.T) {
 	prev := log.Writer()
 	log.SetOutput(&logs)
 	defer log.SetOutput(prev)
+	ran := 0
 	for name, c := range map[string]struct {
 		mode string
 		set  bool
 	}{"unset": {"", false}, "empty": {"", true}, "off": {"off", true}, "unknown value": {"writ", true}, "garbage": {"on;write", true}} {
 		t.Run(name, func(t *testing.T) {
 			f := newWriteFixture(t, c.mode, c.set)
+			ran++
 			chain := f.pinChain(t, "computer-flag-off", computerevent.EventProjectionBatchRecorded, computerevent.ProjectionBatchMediaType, projectionPayload("off"))
 			requireLegacyExactly(t, f.root, chain.legacyFiles())
 			requireNoSegments(t, f.root)
@@ -256,6 +258,9 @@ func TestTapeSegmentsOffWritesTheLegacyFilesExactlyAsToday(t *testing.T) {
 				t.Fatalf("mode = %q", got)
 			}
 		})
+	}
+	if ran == 0 {
+		t.Skip("no case ran (no PostgreSQL), so the log count proves nothing")
 	}
 	if n := strings.Count(logs.String(), "PLATFORM_TAPE_SEGMENTS"); n != 2 {
 		t.Fatalf("the unknown values logged %d lines naming the flag, want 2:\n%s", n, logs.String())
