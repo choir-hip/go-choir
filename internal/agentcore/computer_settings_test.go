@@ -82,7 +82,7 @@ func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
 		t.Fatalf("list after set = %s (%v)", rec.Body, err)
 	}
 	for _, setting := range listed.Settings {
-		if want := setting.Key == store.SettingIntakeLabels; setting.Value != want {
+		if want := setting.Key == store.SettingIntakeLabels || store.KnownComputerSettings[setting.Key]; setting.Value != want {
 			t.Fatalf("list after set: %s = %v, want %v (%s)", setting.Key, setting.Value, want, rec.Body)
 		}
 	}
