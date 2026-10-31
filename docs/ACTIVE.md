@@ -4,7 +4,7 @@
 corpus and does not make an unverified graph status into a live work claim.
 Sequencing: the owner's roadmap,
 [`roadmap-2026-10-31.md`](roadmap-2026-10-31.md) (data system, Mac app and
-sync, PSA/self-development/Autopaper, voice and Autoradio, the four S's,
+sync, PSA/self-development/Autopaper, voice and Autoradio, the five S's,
 agentic red teaming, economics, launch); this file names the live station in
 it. The 2026-10-14 sequencing and the 2026-09-22 R-series stack are
 superseded; the mission format is
