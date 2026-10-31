@@ -1,6 +1,6 @@
 # Choir Privacy Policy
 
-**Effective date:** 2026-10-30
+**Effective date:** 2026-10-31
 **Service:** Choir (https://choir.news)
 **Operator:** Choir
 
@@ -65,7 +65,9 @@ This content is stored in the working database on your computer (a per-user virt
 using SQLite on its own disk) and in PostgreSQL on Choir's server. Every
 revision is retained for history, diff, and audit purposes. Each computer's
 history is also kept as a sealed, append-only event log (the "tape") on Choir's
-server, from which the computer's state can be rebuilt.
+server, from which the computer's state can be rebuilt. The tape is encrypted
+under a key that belongs to your computer, and it is kept for the life of the
+computer (see Section 4).
 
 ### 1.4 Trace Events (Observability Data)
 
@@ -240,8 +242,8 @@ may adjust them as the system matures.
 | Source captures (metadata) | 1 year | Source health monitoring and provenance |
 | Published articles | Indefinite (revision history kept in PostgreSQL) | Published content is the product |
 | User textures / documents | Indefinite while account is active | Versioned artifact state; full revision history |
-| Trace events (raw) | 90 days | Observability and debugging |
-| Trace events (aggregated) | 1 year | Derived metrics and long-term analysis |
+| Trace events on the tape | Life of the computer | The tape is the computer's history; it is sealed and append-only |
+| Trace events in the working store | A rolling window (seven days for tool results, longer for results that accepted work cites) | Recent observability and recovery; older events stay on the tape |
 | Auth credentials (passkeys) | Until account deletion or credential removal | Required for authentication |
 | Refresh sessions | Until expiry or logout | Session management |
 | Account recovery tokens | Until expiry or shortly after use | Account recovery and abuse prevention |
@@ -250,10 +252,16 @@ may adjust them as the system matures.
 | LLM provider data | Controlled by provider policy | See Section 3.1 |
 
 **Event log history:** Each computer's history is kept as a sealed, append-only
-event log (the "tape"). Even after data is "deleted" from the current working
-state, earlier versions may remain in that log until explicitly purged. We
-commit to purging deleted-user data from that history as part of our erasure
-procedure (see Section 6).
+event log (the "tape"), encrypted under a key that belongs to that computer.
+Deleting an item removes it from the computer's working state, but its earlier
+versions remain on the tape. The tape is not rewritten. Stored file contents
+(binary attachments and other large blobs) can be deleted from Choir's servers
+on request; the tape keeps the record that they existed.
+
+**Restoring earlier states:** A computer can be restored to an earlier state
+for about a week. Restoration exists to recover from failed self-development,
+not as a long-term archive. We plan to let you keep your computer's long-term
+history on your own synced machine, on by default.
 
 ## 5. Data Security
 
@@ -329,8 +337,14 @@ You can request that we delete your personal data. We will:
   database.
 - Delete your textures, documents, and artifact state from PostgreSQL and
   from your computer's SQLite database.
-- Remove your data from your computer's event log history (the "tape").
-- Delete trace events attributable to your account.
+- Delete stored file contents (binary attachments and other large blobs) from
+  Choir's servers.
+
+Your computer's tape is not rewritten by an erasure request: it remains
+sealed under your computer's key. We plan to offer deletion of a whole
+computer, which destroys that key so the tape can no longer be read by anyone.
+It will be offered after your computer can sync to your own machine, so you
+can keep a copy first.
 
 **Limitations:** We may need to retain certain data where required by law, or
 where data has been anonymized/aggregated such that it no longer identifies
@@ -347,7 +361,8 @@ terms.
 
 You can request an export of your personal data in a machine-readable format.
 This includes your account information, textures/documents (with full revision
-history), and relevant trace events. Exports are provided in JSON and/or
+history), and relevant trace events. A computer's full history can also be
+exported as a sealed bundle of its tape. Exports are provided in JSON and/or
 Markdown format.
 
 ### 6.4 Right to Withdraw Consent

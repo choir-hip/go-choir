@@ -239,20 +239,23 @@ now:
       1.96M choir.event rows. Next: the same counts after S5's compact
       snapshot and planned rebase on d@e, then the paper.
   blocker_or_risk: >-
-    Owner decisions pending (morning letter,
-    docs/reports/night-of-the-lean-system-2026-10-31.md): (1) whether the
-    privacy policy promises a deleted item leaves the tape (crypto-shred
-    path), (2) the seven-day tool.result window versus acceptance
-    re-synthesis. The paper's /health reports store_stalled intermittently
-    while the backlog clears (vmctl only records it). No off-host copy until
-    the Mac pull or L5.
+    Owner decisions settled 2026-10-31: (1) the tape is the tape, kept for
+    the computer's life; no per-item deletion promise; binary blobs may be
+    deleted; whole-computer deletion (destroy the computer key) comes later,
+    behind several confirmations, after sync to the owner's machine. The
+    privacy policy now says so. (2) Tool results leave the working store
+    after seven days except those accepted evidence cites (to build);
+    restoration is for failed self-development, about a week back; long-term
+    history goes to the user's synced machine, on by default (Mac pull, S5a).
+    S5 is live on the paper: its copy staged 12:42 (20.1 GB of a 32.4 GB
+    file), the swap waits on the drill's row-count check. No off-host copy
+    until the Mac pull or L5.
   next_action: >-
-    Measure the paper after its retirement backlog; then build S5 (compact
-    snapshot plus planned rebase) on d@e, then the paper; then the Mac pull
-    over delta bundles (S5a), L5, and L6's handoff. Small follow-ups in the
-    ledger: retireCleared durable across restarts, retire pacing by measured
-    writer wait, /health naming background maintenance, a re-hash on bundle
-    export resume.
+    Drill counts agree -> push the skip-log commit, whose deploy is the
+    paper's planned restart -> verify the swap, replay to head, publishing,
+    and the file size. Then: keep tool.results cited by accepted evidence in
+    retirement; the Mac pull over delta bundles as the default long-term
+    history (S5a); L5; L6's handoff. Small follow-ups in the ledger.
 receipts:
   - id: build-superseded
     boundary: supersede

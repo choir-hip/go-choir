@@ -120,6 +120,7 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 		}
 	}
 	if pageCount == 0 || (float64(freelist) <= compactFreelistFraction*float64(pageCount) && freelist*pageSize < compactFreelistBytes) {
+		log.Printf("store: compact copy: not needed, %d of %d pages free", freelist, pageCount)
 		return false, nil
 	}
 	live := (pageCount - freelist) * pageSize
