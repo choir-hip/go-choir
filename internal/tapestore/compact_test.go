@@ -472,6 +472,11 @@ func TestCompactCountsExtentsOnLinux(t *testing.T) {
 	if err != nil || res.Action != CompactActionCompacted {
 		t.Fatalf("%+v %v", res, err)
 	}
+	if res.ExtentsBefore == -1 && res.ExtentsAfter == -1 {
+		// -1 is "FIEMAP unsupported": the CI runner's temp filesystem has no
+		// extent map, which btrfs and ext4 on Node B and the agents VM have.
+		t.Skip("FIEMAP unsupported on this filesystem")
+	}
 	if res.ExtentsBefore < 1 || res.ExtentsAfter < 1 || res.StBlocksBefore <= 0 || res.StBlocksAfter <= 0 {
 		t.Fatalf("measurements missing: %+v", res)
 	}
