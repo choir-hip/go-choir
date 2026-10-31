@@ -183,6 +183,35 @@ day on the paper (12/s average, 298/s peak); steady-state working store 8-10
 GB once compacted; a Mac pull of 3-10 GB a day before compression, about 1-5
 GB a day of growth on the Mac without GC.
 
+## 6a2. Review of the built bundle (2026-10-31, Sonnet seat; Devin and DeepSeek pending)
+
+The bundle as built (internal/bundle, cmd/choir-bundle) is host-side
+durability: a verified, importable copy of the tape and the snapshot chunks.
+It is not yet recovery on another machine. Accepted, as slices:
+
+- B1 keys: the snapshot manifest is sealed in the guest's snapshot_recorded
+  event; a bundle carries no key material, so an imported copy is ciphertext
+  until the computer's keys travel with it (redesign §11: Keychain on a Mac).
+- B2 authenticity: verify checks chunk digests and the chain, not that the
+  snapshot root derives from its chunks, nor the receipts' signatures; an
+  imported root with a high head_sequence would be preferred by
+  RecoveryBase. Verify must check signatures against a known host key set,
+  and import must refuse a root the tape does not name.
+- B3 host state: ownership, route, file-CAS roots and tombstones are not in
+  the bundle.
+- B4 import transaction: the whole range in one serializable transaction
+  (about 720,000 receipts on the paper) holds the head row lock throughout;
+  commit in chunks, advancing the head in the last.
+- B5 physics: the paper's roots carry about 25 GB of unique chunks each (most
+  page ranges change between snapshots), so a nightly pull is not an
+  increment until compact snapshots (6b) land; and one file per event and pin
+  is millions of small files a day: pack them into segments in the bundle
+  format, and record the last pulled sequence for incremental pulls.
+
+Fixed at once: the vmctl remove_stale_route override took any route error
+and any non-running state; it now needs the definite does-not-join refusal,
+an idle ownership, no protected or always-on tier, and 30 days idle.
+
 ## 6b. What compaction is (owner question, 2026-10-31)
 
 SQLite never returns deleted rows' pages to the disk; they go to the file's
