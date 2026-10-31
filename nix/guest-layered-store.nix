@@ -18,7 +18,7 @@
 # the same bytes, so the order of those lowers does not matter either.)
 #
 # Tool layers (docs/design/guest-tool-layers-2026-10-31.md): one more erofs
-# drive per name in nix/guest-tools.nix, label nix-tool-<name>, mounted at
+# drive per name in nix/guest-tools.nix, label tool-<name>, mounted at
 # /nix/.ro-tool-<name> and appended to the store overlay's lowers. vmctl
 # attaches EVERY slot: the tool's layer for a computer whose profile has it,
 # else that slot's empty placeholder (same label, no store paths), so the
@@ -29,7 +29,7 @@ let
   toolNames = if guestToolLayers then (import ./guest-tools.nix).names else [ ];
   toolMount = name: "/nix/.ro-tool-${name}";
   toolFileSystems = lib.listToAttrs (map (name: lib.nameValuePair (toolMount name) {
-    device = "/dev/disk/by-label/nix-tool-${name}";
+    device = "/dev/disk/by-label/tool-${name}";
     fsType = "erofs";
     options = [ "ro" "x-systemd.after=systemd-modules-load.service" "x-systemd.device-timeout=20s" ];
     neededForBoot = true;

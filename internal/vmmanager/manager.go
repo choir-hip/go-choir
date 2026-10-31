@@ -2131,7 +2131,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			"is_read_only":   true,
 		})
 		// Tool slots after the base, every slot of the release, read-only: the
-		// guest mounts each by label (nix-tool-<name>), so an omitted tool is
+		// guest mounts each by label (tool-<name>), so an omitted tool is
 		// its empty placeholder, never a missing drive.
 		for _, t := range cfg.ToolDisks {
 			drives = append(drives, map[string]interface{}{

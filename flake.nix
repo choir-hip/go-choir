@@ -585,7 +585,7 @@
         }).config;
 
         # -- Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md) --
-        # One erofs per name in nix/guest-tools.nix, label nix-tool-<name>:
+        # One erofs per name in nix/guest-tools.nix, label tool-<name> (an erofs label is under 16 bytes):
         # closure(roots) - closure(floor), from the guest's own package set and
         # nothing else, so a layer's store hash (its host id) moves only with
         # nixpkgs or nix/guest-tools.nix. Each slot also has an empty placeholder
@@ -630,9 +630,9 @@
           bwrap $args -- mkfs.erofs -zlz4 -T 0 --all-root -L ${label} --mount-point=/nix/store $out store
         '';
         toolLayer = pkgs.lib.genAttrs toolNames (n:
-          erofsForPaths { name = "guest-tool-${n}.erofs"; label = "nix-tool-${n}"; paths = toolLayerPaths.${n}; });
+          erofsForPaths { name = "guest-tool-${n}.erofs"; label = "tool-${n}"; paths = toolLayerPaths.${n}; });
         toolEmpty = pkgs.lib.genAttrs toolNames (n:
-          erofsForPaths { name = "guest-tool-${n}-empty.erofs"; label = "nix-tool-${n}"; paths = toolEmptyPaths; });
+          erofsForPaths { name = "guest-tool-${n}-empty.erofs"; label = "tool-${n}"; paths = toolEmptyPaths; });
         # Every root of every layer, as store paths (design 1.8: each must be in
         # the guest's closure, or the layer would carry a tool the guest does
         # not run while the real one stays in the base).
