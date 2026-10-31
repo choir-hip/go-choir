@@ -519,10 +519,15 @@
       mkGuestVm = commit: mkGuestVmWith { inherit commit; };
       # extraModules carries the layered-store prototype's mount module; the
       # deployed guest passes none, so its derivation is unchanged.
-      mkGuestVmWith = { commit, packages ? goChoirPackages, extraModules ? [ ], guestSystem ? "x86_64-linux", guestGo ? choirGo }: nixpkgs.lib.nixosSystem {
+      # toolStubs replaces the heavy tools (nix/guest-tools.nix) with empty
+      # packages: only the layered base's core probe sets it. toolLayers false
+      # (the Mac guest) mounts no tool slots and keeps the tools in the base.
+      mkGuestVmWith = { commit, packages ? goChoirPackages, extraModules ? [ ], guestSystem ? "x86_64-linux", guestGo ? choirGo, toolStubs ? false, toolLayers ? true }: nixpkgs.lib.nixosSystem {
         system = guestSystem;
         specialArgs = {
           goChoirPackages = packages;
+          guestToolStubs = toolStubs;
+          guestToolLayers = toolLayers;
           choirGo = guestGo;
           buildCommit = commit;
           inherit sourceRepoRemote;
@@ -550,23 +555,53 @@
       # both, so the x86_64 derivations are what they were.
       #   kernelImages: shell lines linking the boot kernel into the image
       #   guestModules: extra modules for both configs (the layered mount module)
-      mkGuestLayered = { pkgs, goPackages, guestSystem, guestGo, guestModules, kernelImages, name }: rec {
+      mkGuestLayered = { pkgs, goPackages, guestSystem, guestGo, guestModules, kernelImages, name, toolLayers ? true }: rec {
         probePackages = builtins.mapAttrs (n: p:
           if builtins.elem n guestLayerSlowPackages then p
           else pkgs.runCommand "${n}-base-probe-stub" { } "mkdir -p $out/bin $out/share/go-choir/skills"
         ) goPackages;
-        layeredVmConfig = (mkGuestVmWith {
+        layeredSystem = mkGuestVmWith {
           commit = buildCommit;
           packages = goPackages;
           extraModules = guestModules;
-          inherit guestSystem guestGo;
-        }).config;
+          inherit guestSystem guestGo toolLayers;
+        };
+        layeredVmConfig = layeredSystem.config;
         baseProbeVmConfig = (mkGuestVmWith {
           commit = "base-probe";
           packages = probePackages;
           extraModules = guestModules;
-          inherit guestSystem guestGo;
+          inherit guestSystem guestGo toolLayers;
         }).config;
+        # The core probe (docs/design/guest-tool-layers-2026-10-31.md 1.7): the
+        # base probe with every heavy tool replaced by an empty package. Its
+        # closure is what the guest needs with no tool layer attached.
+        coreProbeVmConfig = (mkGuestVmWith {
+          commit = "base-probe";
+          packages = probePackages;
+          extraModules = guestModules;
+          toolStubs = true;
+          inherit guestSystem guestGo toolLayers;
+        }).config;
+
+        # -- Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md) --
+        # One erofs per name in nix/guest-tools.nix, label nix-tool-<name>:
+        # closure(roots) - closure(floor), from the guest's own package set and
+        # nothing else, so a layer's store hash (its host id) moves only with
+        # nixpkgs or nix/guest-tools.nix. Each slot also has an empty placeholder
+        # with the same label, which vmctl attaches when the computer's profile
+        # omits the tool. The base drops the tool paths the core does not need.
+        # toolLayers = false (the Mac guest) has no slots: base = full probe.
+        toolsFile = import ./nix/guest-tools.nix;
+        toolNames = if toolLayers then toolsFile.names else [ ];
+        toolSet = toolsFile.forPkgs { pkgs = layeredSystem.pkgs; choirGo = guestGo; };
+        toolFloorPaths = pkgs.writeClosure toolSet.floor;
+        toolLayerPaths = pkgs.lib.genAttrs toolNames (n: pkgs.runCommand "guest-tool-${n}-paths" { } ''
+          sort -u ${pkgs.writeClosure toolSet.layers.${n}} > roots
+          sort -u ${toolFloorPaths} > floor
+          comm -23 roots floor > $out
+        '');
+        toolEmptyPaths = pkgs.writeText "guest-tool-empty-paths" "";
         # The root set microvm.nix's store disk takes: the toplevel, plus the
         # registration closure-info when nix is enabled.
         storeClosure = vmConfig: pkgs.writeClosure (
@@ -594,23 +629,68 @@
           done
           bwrap $args -- mkfs.erofs -zlz4 -T 0 --all-root -L ${label} --mount-point=/nix/store $out store
         '';
-        baseLayerPaths = storeClosure baseProbeVmConfig;
+        toolLayer = pkgs.lib.genAttrs toolNames (n:
+          erofsForPaths { name = "guest-tool-${n}.erofs"; label = "nix-tool-${n}"; paths = toolLayerPaths.${n}; });
+        toolEmpty = pkgs.lib.genAttrs toolNames (n:
+          erofsForPaths { name = "guest-tool-${n}-empty.erofs"; label = "nix-tool-${n}"; paths = toolEmptyPaths; });
+        # Every root of every layer, as store paths (design 1.8: each must be in
+        # the guest's closure, or the layer would carry a tool the guest does
+        # not run while the real one stays in the base).
+        toolRoots = pkgs.lib.concatMap (n: toolSet.layers.${n}) toolNames;
+        # The full probe's closure: the app layer is the real guest minus this.
+        fullProbePaths = storeClosure baseProbeVmConfig;
+        # The base: the full probe minus the tool paths the core probe does not
+        # need. A path both a tool and the core need stays in the base (and is
+        # also in the tool layer: identical bytes, served by the upper lower).
+        baseLayerPaths = if !toolLayers then fullProbePaths else pkgs.runCommand "guest-base-layer-paths" { } ''
+          sort -u ${fullProbePaths} > full
+          sort -u ${storeClosure coreProbeVmConfig} > core
+          sort -u ${pkgs.lib.concatMapStringsSep " " (n: "${toolLayerPaths.${n}}") toolNames} > tools
+          for r in ${pkgs.lib.concatMapStringsSep " " (r: "${r}") toolRoots}; do
+            if ! grep -qxF "$r" full; then
+              echo "guest tool root $r is not in the guest's closure: nix/guest-tools.nix and nix/autoputer-vm.nix name different packages" >&2
+              exit 1
+            fi
+          done
+          comm -23 tools core > detached
+          comm -23 full detached > $out
+        '';
         appLayerPaths = pkgs.runCommand "guest-app-layer-paths" { } ''
           sort -u ${storeClosure layeredVmConfig} > real
-          sort -u ${baseLayerPaths} > base
+          sort -u ${fullProbePaths} > base
           comm -23 real base > $out
         '';
         baseLayer = erofsForPaths { name = "guest-store-base.erofs"; label = "nix-base"; paths = baseLayerPaths; };
         appLayer = erofsForPaths { name = "guest-store-app.erofs"; label = "nix-app"; paths = appLayerPaths; };
-        # The two layers and their path lists, for measurement. The base's store
-        # hash is its reuse key: a deploy that leaves it alone builds only app.
+        # The image's tool files: tools/<name>.erofs and tools/<name>-empty.erofs
+        # (symlinks into their store paths), tool-layers (one line per slot:
+        # name, layer store path, empty store path; read by the install script)
+        # and each layer's path list.
+        toolFilesScript = pkgs.lib.concatMapStrings (n: ''
+          ln -s ${toolLayer.${n}} $out/tools/${n}.erofs
+          ln -s ${toolEmpty.${n}} $out/tools/${n}-empty.erofs
+          cp ${toolLayerPaths.${n}} $out/tools/${n}-paths
+          echo "${n} ${toolLayer.${n}} ${toolEmpty.${n}}" >> $out/tool-layers
+        '') toolNames;
+        layersJson = builtins.toJSON {
+          schema = 1;
+          base = "${baseLayer}";
+          app = "${appLayer}";
+          tools = map (n: { name = n; layer = "${toolLayer.${n}}"; empty = "${toolEmpty.${n}}"; }) toolNames;
+        };
+        # The layers and their path lists, for measurement. The base's and each
+        # tool layer's store hash is its reuse key: a deploy that leaves them
+        # alone builds only app.
         storeLayers = pkgs.runCommand "go-choir-guest-store-layers" { } ''
-          mkdir -p $out
+          mkdir -p $out/tools
           ln -s ${baseLayer} $out/storedisk-base.erofs
           ln -s ${appLayer} $out/storedisk-app.erofs
           cp ${baseLayerPaths} $out/base-paths
           cp ${appLayerPaths} $out/app-paths
-          echo '{"schema":1,"base":"${baseLayer}","app":"${appLayer}"}' > $out/layers.json
+          ${toolFilesScript}
+          cat > $out/layers.json <<'EOF'
+${layersJson}
+EOF
         '';
 
         # The layered guest image (docs/design/layered-guest-image-2026-10-31.md
@@ -634,7 +714,11 @@
         ln -s ${baseLayer} $out/storedisk-base.erofs
         cp ${baseLayerPaths} $out/base-paths
         cp ${appLayerPaths} $out/app-paths
-        echo '{"schema":1,"base":"${baseLayer}","app":"${appLayer}"}' > $out/layers.json
+        mkdir -p $out/tools
+        ${toolFilesScript}
+        cat > $out/layers.json <<'EOF'
+${layersJson}
+EOF
         cat > $out/build.json <<'EOF'
 {"schema_version":1,"artifact":"${name}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
 EOF
@@ -766,6 +850,7 @@ EOF
         guestGo = aarch64Choir.choirGo;
         guestModules = [ ./nix/guest-layered-store.nix ./nix/guest-aarch64.nix ];
         name = "go-choir-guest-image-aarch64";
+        toolLayers = false;
         kernelImages = vmConfig: "ln -s ${vmConfig.system.build.kernel}/${vmConfig.system.boot.loader.kernelFile} $out/Image";
       };
 

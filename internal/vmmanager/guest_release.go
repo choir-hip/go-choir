@@ -67,6 +67,9 @@ type guestRelease struct {
 	Layered  bool
 	BaseID   string
 	BaseDisk string
+	// Tools are the release's tool slots (schema 2 layers.json; tool_layers.go),
+	// in drive order. Empty for a schema 1 layered release and a single image.
+	Tools []releaseTool
 	// KernelParams is the trimmed contents of <Dir>/kernel-params.
 	KernelParams   string
 	Policy         releasePolicy
@@ -98,13 +101,19 @@ type releaseLayers struct {
 	Layout        string `json:"layout"`
 	BaseID        string `json:"base_id"`
 	BaseStorePath string `json:"base_store_path"`
+	// Tools (schema 2 only) are the tool slots (tool_layers.go).
+	Tools []releaseLayerTool `json:"tools,omitempty"`
 }
 
 const (
-	releaseLayersSchema  = 1
-	releaseLayoutLayered = "layered"
-	baseDiskFile         = "storedisk-base.erofs"
-	appDiskFile          = "storedisk-app.erofs"
+	releaseLayersSchema = 1
+	// releaseLayersSchemaTools is a layered release with tool slots. A vmctl
+	// that knows only schema 1 refuses it (release_missing) instead of
+	// launching it without the tool drives its guest waits for.
+	releaseLayersSchemaTools = 2
+	releaseLayoutLayered     = "layered"
+	baseDiskFile             = "storedisk-base.erofs"
+	appDiskFile              = "storedisk-app.erofs"
 )
 
 func (m *Manager) releaseSupportWindow() time.Duration {
@@ -172,6 +181,11 @@ func (m *Manager) releaseByID(id string) (guestRelease, error) {
 	if rel.Layered {
 		files = append(files, rel.BaseDisk)
 	}
+	// Every slot's layer AND placeholder: the profile may pick either at any
+	// later launch or wake, so a release missing one never loads.
+	for _, t := range rel.Tools {
+		files = append(files, t.Disk, t.EmptyDisk)
+	}
 	for _, p := range files {
 		if info, err := os.Lstat(p); err != nil || !info.Mode().IsRegular() {
 			return guestRelease{}, fmt.Errorf("release %s: %s is not a regular file", id, filepath.Base(p))
@@ -188,8 +202,18 @@ func (m *Manager) loadReleaseLayers(rel *guestRelease, data []byte) error {
 	if err := json.Unmarshal(data, &l); err != nil {
 		return fmt.Errorf("release %s: layers.json: %w", rel.ID, err)
 	}
-	if l.Schema != releaseLayersSchema || l.Layout != releaseLayoutLayered || !releaseIDPattern.MatchString(l.BaseID) {
-		return fmt.Errorf("release %s: layers.json is not a schema %d layered layout", rel.ID, releaseLayersSchema)
+	if (l.Schema != releaseLayersSchema && l.Schema != releaseLayersSchemaTools) || l.Layout != releaseLayoutLayered || !releaseIDPattern.MatchString(l.BaseID) {
+		return fmt.Errorf("release %s: layers.json is not a schema %d or %d layered layout", rel.ID, releaseLayersSchema, releaseLayersSchemaTools)
+	}
+	switch {
+	case l.Schema == releaseLayersSchema && len(l.Tools) > 0:
+		return fmt.Errorf("release %s: layers.json schema %d names tool layers", rel.ID, releaseLayersSchema)
+	case l.Schema == releaseLayersSchemaTools:
+		tools, err := m.loadReleaseTools(rel.ID, l.Tools)
+		if err != nil {
+			return err
+		}
+		rel.Tools = tools
 	}
 	if _, err := os.Lstat(filepath.Join(rel.Dir, "storedisk.erofs")); err == nil {
 		return fmt.Errorf("release %s: both storedisk.erofs and layers.json", rel.ID)
@@ -223,10 +247,12 @@ func (m *Manager) currentRelease() (guestRelease, bool) {
 	return rel, true
 }
 
-// setLaunchRelease points cfg's boot artifacts at rel.
-func setLaunchRelease(cfg *VMConfig, rel guestRelease) {
+// setLaunchRelease points cfg's boot artifacts at rel, and its tool slots at
+// the profile's choice for cfg's computer (tool_layers.go).
+func (m *Manager) setLaunchRelease(cfg *VMConfig, rel guestRelease) {
 	cfg.KernelImagePath, cfg.InitrdPath, cfg.RootfsPath, cfg.StoreDiskPath = rel.Kernel, rel.Initrd, rel.Rootfs, rel.StoreDisk
-	cfg.BaseDiskPath = rel.BaseDisk // "" for a single image: a stale base never rides along
+	cfg.BaseDiskPath = rel.BaseDisk           // "" for a single image: a stale base never rides along
+	cfg.ToolDisks = m.toolDisksFor(*cfg, rel) // nil without tool slots
 	cfg.KernelParams = rel.KernelParams
 	cfg.GuestRelease = rel.ID
 }
@@ -236,12 +262,13 @@ func setLaunchRelease(cfg *VMConfig, rel guestRelease) {
 // release cannot be resolved the launch stays legacy (m.cfg paths) and cfg
 // carries no release. With the switch off it does nothing.
 func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
-	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" || cfg.BaseDiskPath != "" {
+	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" || cfg.BaseDiskPath != "" || len(cfg.ToolDisks) > 0 {
 		return
 	}
 	if m.layeredSelected(cfg.ComputerID) {
 		if rel, ok := m.layeredCurrentRelease(); ok {
-			setLaunchRelease(cfg, rel)
+			m.setLaunchRelease(cfg, rel)
+			logToolProfile(*cfg)
 			return
 		}
 		// The ring computer's layered release or base is missing: the single
@@ -249,7 +276,7 @@ func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
 		log.Printf("vmmanager: computer %s (VM %s) is in the layered ring but the layered release is unavailable; cold boot falls back to the single image", cfg.ComputerID, cfg.VMID)
 	}
 	if rel, ok := m.currentRelease(); ok {
-		setLaunchRelease(cfg, rel)
+		m.setLaunchRelease(cfg, rel)
 	}
 }
 
@@ -268,6 +295,7 @@ func (m *Manager) refreshLaunchArtifacts(cfg *VMConfig, overrides VMConfig) {
 	}
 	cfg.GuestRelease = ""
 	cfg.BaseDiskPath = ""
+	cfg.ToolDisks = nil
 	if overrides.KernelImagePath == "" {
 		cfg.KernelImagePath = ""
 	}
@@ -308,7 +336,13 @@ func (m *Manager) reattachConfig(vmID string, epoch int64, overrides VMConfig) V
 	if m.releaseRetainOn() && overrides.StoreDiskPath == "" {
 		if rec, ok := m.readLaunchRecord(vmID, epoch); ok && rec.Release != "" {
 			if rel, err := m.releaseByID(rec.Release); err == nil {
-				setLaunchRelease(&cfg, rel)
+				m.setLaunchRelease(&cfg, rel)
+				// The running guest has the tool slots it was launched with,
+				// whatever the profile says now: its next snapshot must bind
+				// those files (design 1.5).
+				if len(rel.Tools) > 0 && toolDisksMatchRelease(rec.ToolDisks, rel) {
+					cfg.ToolDisks = append([]ToolDisk(nil), rec.ToolDisks...)
+				}
 			}
 		}
 	}
@@ -388,7 +422,10 @@ type GuestReleaseInUse struct {
 	// BaseID is the layered base the release names, "" for a single image.
 	// Retention keeps a base while any retained release names it; this lets
 	// it also keep the base of a release that is only in use.
-	BaseID    string   `json:"base_id,omitempty"`
+	BaseID string `json:"base_id,omitempty"`
+	// ToolIDs are the tool layer ids (layers and placeholders) the release
+	// names; retention keeps them like the base.
+	ToolIDs   []string `json:"tool_ids,omitempty"`
 	Running   []string `json:"running"`
 	Snapshots []string `json:"snapshots"`
 }
@@ -417,6 +454,7 @@ func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
 		e := &GuestReleaseInUse{ID: id, Running: []string{}, Snapshots: []string{}}
 		if rel, err := m.releaseByID(id); err == nil {
 			e.BaseID = rel.BaseID
+			e.ToolIDs = toolDiskIDs(rel)
 		}
 		byID[id] = e
 		return e

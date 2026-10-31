@@ -370,7 +370,8 @@ outputs. Do not push it alone. It lands with S1.
   - `go`, 0.23 GB.
 
   Each is worth an "is it needed in every guest" check. Trimming shrinks
-  the one-time base cost and the guest's cold-read set.
+  the one-time base cost and the guest's cold-read set. Taken up 2026-10-31
+  as tool layers: [guest tool layers](guest-tool-layers-2026-10-31.md).
 - **`vmlinux` is 411 MB.** That looks like a kernel with debug info. It is
   shared across releases today, but every kernel change costs 411 MB per
   release kept.

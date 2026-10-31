@@ -81,7 +81,8 @@ type PageCacheLayering struct {
 	// persistent.
 	Stacked bool `json:"stacked,omitempty"`
 	// Layers names the erofs layers of a layered guest image's store overlay
-	// (lowerdir=/nix/.ro-app:/nix/.ro-base): "app", "base". Both are base
+	// (lowerdir=/nix/.ro-app:/nix/.ro-base[:/nix/.ro-tool-<name>...]): "app",
+	// "base", then "tool-<name>" per tool layer. All are base
 	// image, never persistent, so the overlay is attributable and not Stacked.
 	// Empty for a single-image guest.
 	Layers      []string `json:"layers,omitempty"`
@@ -310,8 +311,8 @@ func parseStoreOverlay(mountinfo, mountpoint string) (PageCacheLayering, bool) {
 		}
 		overlays++
 		for _, opt := range strings.Split(f[sep+3], ",") {
-			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && v == layeredStoreLowerdir {
-				got.Layers = []string{"app", "base"}
+			if v, ok := strings.CutPrefix(opt, "lowerdir="); ok && layeredStoreLayers(v) != nil {
+				got.Layers = layeredStoreLayers(v)
 			} else if ok && strings.Contains(v, ":") {
 				got.Stacked = true // several lower layers (a colon inside a path also lands here: fail closed)
 			} else if strings.HasPrefix(opt, "lowerdir+=") || strings.HasPrefix(opt, "datadir+=") {
@@ -354,6 +355,35 @@ func unescapeMountinfo(s string) string {
 // layeredStoreLowerdir is the lowerdir of a layered guest image's store
 // overlay (nix/guest-layered-store.nix): app over base, both read-only erofs.
 const layeredStoreLowerdir = "/nix/.ro-app:/nix/.ro-base"
+
+// layeredStoreToolPrefix is a tool layer's lower
+// (docs/design/guest-tool-layers-2026-10-31.md 5), after app and base.
+const layeredStoreToolPrefix = "/nix/.ro-tool-"
+
+// layeredStoreLayers names the layers of a layered store overlay's lowerdir:
+// app, base, then tool-<name> for each tool lower. nil when the lowerdir is
+// anything else (it is then stacked, not attributable).
+func layeredStoreLayers(lowerdir string) []string {
+	rest, ok := strings.CutPrefix(lowerdir, layeredStoreLowerdir)
+	if !ok {
+		return nil
+	}
+	layers := []string{"app", "base"}
+	if rest == "" {
+		return layers
+	}
+	if !strings.HasPrefix(rest, ":") {
+		return nil
+	}
+	for _, lower := range strings.Split(rest[1:], ":") {
+		name, ok := strings.CutPrefix(lower, layeredStoreToolPrefix)
+		if !ok || name == "" || strings.ContainsAny(name, "/\\") {
+			return nil
+		}
+		layers = append(layers, "tool-"+name)
+	}
+	return layers
+}
 
 func servePageCache(w http.ResponseWriter) {
 	out, err := readGuestPageCache()

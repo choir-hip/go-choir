@@ -63,6 +63,10 @@ func LoadConfigFromEnv() ManagerConfig {
 	if v := strings.TrimSpace(os.Getenv("VM_GUEST_BASES_DIR")); v != "" {
 		cfg.GuestBasesDir = v
 	}
+	if v := strings.TrimSpace(os.Getenv("VM_GUEST_TOOLS_DIR")); v != "" {
+		cfg.GuestToolsDir = v
+	}
+	cfg.GuestToolProfile = parseToolProfile(os.Getenv("VM_GUEST_TOOL_PROFILE"))
 	cfg.GuestLayeredLink = strings.TrimSpace(os.Getenv("VM_GUEST_LAYERED_RELEASE_LINK"))
 	cfg.GuestLayeredComputers = parseLayeredComputers(os.Getenv("VM_GUEST_LAYERED_COMPUTERS"))
 	cfg.SnapshotReleaseRetain = strings.EqualFold(strings.TrimSpace(os.Getenv("VM_SNAPSHOT_RELEASE_RETAIN")), "on")

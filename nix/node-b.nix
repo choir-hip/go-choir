@@ -46,6 +46,17 @@ let
   # base is missing launches the single image. Rollback: remove the id (the
   # computer is single at its next cold boot); widen ring by ring.
   guestLayeredComputers = [ "computer-59c902c5d46caecc0a180a8557164e72" ];
+  # Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md 4): which
+  # heavy tools a layered ring computer gets, per layer. Selectors are the
+  # computer selector tokens plus none, grant:visual-capture and
+  # grant:claude-delegate; a layer not named here is attached for every
+  # computer. The ring computer without a matching rule gets the slot's empty
+  # placeholder, so the tool is absent from its store (a clear error, never a
+  # hang). Office: no Go caller (2026-10-31 inventory); the tool exec log
+  # measures use on the single-image fleet. Rollback: add the layer to the
+  # computer here (its next cold boot attaches it), or remove the computer from
+  # guestLayeredComputers (the single image carries every tool).
+  guestToolProfile = "toolchain=*;office=none;browser=grant:visual-capture;delegate=grant:claude-delegate";
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
   # commit's copy of scripts/check-guest-security-epoch over deployed..target,
@@ -1360,7 +1371,7 @@ in
       # vm-state). Read-only here means a VMM escape cannot replace corpusd's
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
-      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" "-/var/lib/go-choir/guest-layered" ];
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" "-/var/lib/go-choir/guest-tools" "-/var/lib/go-choir/guest-layered" ];
       LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
@@ -1458,6 +1469,9 @@ in
         # launch it (internal/vmmanager/layered_ring.go).
         "VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"
         "VM_GUEST_LAYERED_COMPUTERS=${lib.concatStringsSep "," guestLayeredComputers}"
+        # Tool layers of the layered ring (internal/vmmanager/tool_layers.go).
+        "VM_GUEST_TOOLS_DIR=/var/lib/go-choir/guest-tools"
+        "VM_GUEST_TOOL_PROFILE=${guestToolProfile}"
         # D2 S4: how long a user must be away before a computer that woke from
         # a snapshot onto an older release is updated (the planned,
         # marker-backed deploy refresh).
@@ -2881,6 +2895,7 @@ in
     # D2 S2: guest release directories (root-owned; vmctl reads them read-only).
     "d /var/lib/go-choir/guest-releases 0755 root root -"
     "d /var/lib/go-choir/guest-bases 0755 root root -"
+    "d /var/lib/go-choir/guest-tools 0755 root root -"
     # The CI deploy gate's guest security-epoch mode (ciGateEpochCheck).
     "f+ /var/lib/go-choir/ci-gate-epoch-mode 0644 root root - ${ciGateEpochCheck}"
     # KSM off (SEC-09; review N4): merged pages across guests are a

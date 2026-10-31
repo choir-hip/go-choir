@@ -26,6 +26,10 @@
 # layers.json. The release has no file named storedisk.erofs on purpose: an
 # older vmctl then refuses it (release_missing) instead of launching it with
 # one drive. A single-image source is materialized exactly as before.
+# A layered source with a tool-layers file also installs its tool layers and
+# their empty placeholders into GO_CHOIR_GUEST_TOOLS_DIR/<id>/tool.erofs
+# (default: guest-tools beside RELEASES_DIR; dedupe by id) and writes a
+# schema 2 layers.json (docs/design/guest-tool-layers-2026-10-31.md 7).
 # After the install it starts node-b-guest-release-dedupe detached
 # (GO_CHOIR_GUEST_RELEASE_DEDUPE names it) to share blocks with the previous
 # release; cp --reflink from the previous release first would not help, since
@@ -70,8 +74,56 @@
 				&& mv -T "$btmp" "$bases/$base_id" \
 				|| { note "base $base_id"; chmod -R u+w "$btmp" 2>/dev/null; rm -rf "$btmp" "$tmp"; exit 0; }
 		fi
-		printf '{"schema":1,"layout":"layered","base_id":"%s","base_store_path":"%s"}\n' "$base_id" "$base_store" >"$tmp/layers.json" \
-			|| { note "layers.json"; rm -rf "$tmp"; exit 0; }
+		# Tool layers (docs/design/guest-tool-layers-2026-10-31.md 7): each line
+		# of the image's tool-layers is "<name> <layer store path> <empty store
+		# path>". Each image is copied once into
+		# GO_CHOIR_GUEST_TOOLS_DIR/<id>/tool.erofs (id = its store hash; an
+		# existing id is kept, so a deploy that changes no tool copies nothing),
+		# and the release's layers.json becomes schema 2 with the slots. An
+		# image without tool-layers is a schema 1 layered release, as before.
+		schema=1
+		tools_json=""
+		if [ -e "$src/tool-layers" ]; then
+			tools="${GO_CHOIR_GUEST_TOOLS_DIR:-$(dirname "$rel")/guest-tools}"
+			install_tool() { # store path -> prints the id, or fails
+				local sp="$1" tid ttmp
+				tid=$(basename "$sp" | cut -c1-32)
+				printf '%s' "$tid" | grep -Eq '^[0-9a-df-np-sv-z]{32}$' || return 1
+				[ -e "$sp" ] || return 1
+				if [ ! -d "$tools/$tid" ]; then
+					ttmp="$tools/.tmp-$tid"
+					[ -e "$ttmp" ] && { chmod -R u+w "$ttmp" 2>/dev/null; rm -rf "$ttmp"; }
+					mkdir -p "$ttmp" \
+						&& cp --reflink="$mode" "$sp" "$ttmp/tool.erofs" \
+						&& chmod 0444 "$ttmp/tool.erofs" \
+						&& chmod 0555 "$ttmp" \
+						&& { sync -f "$ttmp/tool.erofs" 2>/dev/null || sync; } \
+						&& mv -T "$ttmp" "$tools/$tid" \
+						|| { chmod -R u+w "$ttmp" 2>/dev/null; rm -rf "$ttmp"; return 1; }
+				fi
+				printf '%s' "$tid"
+			}
+			n=0
+			while read -r tname tlayer tempty; do
+				[ -z "$tname" ] && continue
+				printf '%s' "$tname" | grep -Eq '^[a-z][a-z0-9]{0,15}$' \
+					|| { note "tool layer name $tname"; rm -rf "$tmp"; exit 0; }
+				lid=$(install_tool "$tlayer") || { note "tool layer $tname"; rm -rf "$tmp"; exit 0; }
+				eid=$(install_tool "$tempty") || { note "tool layer $tname placeholder"; rm -rf "$tmp"; exit 0; }
+				[ "$n" -gt 0 ] && tools_json="$tools_json,"
+				tools_json="$tools_json{\"name\":\"$tname\",\"id\":\"$lid\",\"empty_id\":\"$eid\"}"
+				n=$((n + 1))
+			done <"$src/tool-layers"
+			[ "$n" -gt 0 ] || { note "tool-layers names no tool"; rm -rf "$tmp"; exit 0; }
+			schema=2
+		fi
+		if [ "$schema" = 2 ]; then
+			printf '{"schema":2,"layout":"layered","base_id":"%s","base_store_path":"%s","tools":[%s]}\n' "$base_id" "$base_store" "$tools_json" >"$tmp/layers.json" \
+				|| { note "layers.json"; rm -rf "$tmp"; exit 0; }
+		else
+			printf '{"schema":1,"layout":"layered","base_id":"%s","base_store_path":"%s"}\n' "$base_id" "$base_store" >"$tmp/layers.json" \
+				|| { note "layers.json"; rm -rf "$tmp"; exit 0; }
+		fi
 	fi
 	for f in vmlinux initrd rootfs.ext4 "$disk" kernel-params build.json guest-image-manifest release.json; do
 		cp --reflink="$mode" "$src/$f" "$tmp/$f" || { note "reflink $f"; rm -rf "$tmp"; exit 0; }

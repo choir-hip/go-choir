@@ -21,9 +21,34 @@
 # needs per-VM networking, port assignment, and lifecycle control.
 # buildCommit is the current deployment commit in the guest's signed executable
 # identity, not the independently versioned ComputerVersion route source.
-{ config, lib, pkgs, goChoirPackages, choirGo, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, choirGo, guestToolStubs ? false, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 
 let
+  # The heavy tools, from the one file the tool layer builder also reads
+  # (docs/design/guest-tool-layers-2026-10-31.md). guestToolStubs is true only
+  # for the layered base's core probe (flake.nix), which replaces every tool
+  # with an empty package to learn what the core needs without them.
+  guestTools = (import ./guest-tools.nix).forPkgs { inherit pkgs choirGo; stub = guestToolStubs; };
+  toolPkgs = guestTools.packages;
+  # The tool exec log (design 6): wrappers ahead of the real binaries on PATH
+  # that journal the tool name (never its arguments) and name the missing
+  # tool layer when it is not attached.
+  toolExecLog = pkgs.runCommand "choir-tool-exec-log" { } (''
+    mkdir -p $out/bin
+    wrap() {
+      sed -e "s|@bash@|${pkgs.bash}/bin/bash|" -e "s|@logger@|${pkgs.util-linux}/bin/logger|" \
+        -e "s|@layer@|$1|g" -e "s|@name@|$2|g" -e "s|@real@|$3|" ${./guest-tool-exec-wrapper.sh} > "$out/bin/$2"
+      chmod 0555 "$out/bin/$2"
+    }
+  '' + lib.concatMapStrings (l:
+    if l.bins == null then ''
+      for f in ${l.package}/bin/*; do
+        if [ -x "$f" ] && [ ! -d "$f" ]; then wrap ${l.layer} "$(basename "$f")" "$f"; fi
+      done
+    '' else lib.concatMapStrings (b: ''
+      wrap ${l.layer} ${b} ${l.package}/bin/${b}
+    '') l.bins
+  ) guestTools.logged);
   documentPython = pkgs.python3.withPackages (ps: with ps; [
     beautifulsoup4
     ebooklib
@@ -39,13 +64,13 @@ let
   # a claude-mode capsule's broker runs it, and only on the allowlisted
   # computer. Upgrading it is a reviewed image change (flags are pinned to
   # this version in internal/claudedelegate).
-  claudeCode = pkgs.claude-code;
+  claudeCode = toolPkgs.claudeCode;
   # visual capture (docs/design/visual-evidence-slice-2026-10-15.md): full
   # Chromium (nixpkgs has no headless shell) in the store of every guest but
   # on no PATH. Only a capture job in a capsule of a computer the host granted
   # gets its path (CHOIR_CAPTURE_BROWSER, set by the capsule broker); the
   # fontconfig file names DejaVu so text renders without /etc/fonts.
-  captureBrowser = pkgs.chromium;
+  captureBrowser = toolPkgs.chromium;
   captureFontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
@@ -204,6 +229,12 @@ let
       store_lower=/nix/store
       if grep -q ' /nix/.ro-app ' /proc/mounts 2>/dev/null && grep -q ' /nix/.ro-base ' /proc/mounts 2>/dev/null; then
         store_lower=/nix/.ro-app:/nix/.ro-base
+        # Tool layers (docs/design/guest-tool-layers-2026-10-31.md 5): every
+        # /nix/.ro-tool-* mount (a real layer or its empty placeholder) is a
+        # lower of the store overlay, so it is a lower of this one too.
+        while read -r _ tool_mp _; do
+          case "$tool_mp" in /nix/.ro-tool-*) store_lower="$store_lower:$tool_mp" ;; esac
+        done < /proc/mounts || true
       fi
       # The release's own root (frontend, share, skills) is its layerdir —
       # point the baseline root at it so the computer surface serves the
@@ -622,6 +653,8 @@ EOF
   };
 
   systemd.tmpfiles.rules = [
+    # the tool exec log's once-a-minute stamps (any uid runs a tool)
+    "d /run/choir-tool-exec 1777 root root -"
     "d /mnt/persistent/choir-updater 0700 root root -"
     "d /mnt/persistent/choir-credentials 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
@@ -1011,6 +1044,8 @@ EOF
       # computer has run a capsule and every desk under enforce.
       CHOIR_RUNTIME_CAPABILITY_FLOOR = "observe";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
+        # first: the tool exec log's wrappers shadow the real binaries
+        toolExecLog
         busybox
         bash
         coreutils
@@ -1020,18 +1055,18 @@ EOF
         gnugrep
         gnumake
         gnused
-        choirGo # Go toolchain lane (flake.nix choirGo)
+        toolPkgs.go # Go toolchain lane (flake.nix choirGo)
         jq
         nodejs
-        gcc
-        binutils
+        toolPkgs.gcc
+        toolPkgs.binutils
         pkg-config
         gnutar
         systemd
         procps
         iproute2
         documentPython
-        libreoffice
+        toolPkgs.libreoffice
         pandoc
         poppler-utils
       ]));
@@ -1051,7 +1086,7 @@ EOF
       # dependencies remain). The capsule executor appends these bin dirs to
       # every capsule workload's PATH
       # (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
-      CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath (with pkgs; [ gcc binutils pkg-config ]);
+      CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath [ toolPkgs.gcc toolPkgs.binutils pkgs.pkg-config ];
       # The frontend's locked dependencies, carried to capsule workloads like
       # the toolchain above, so a frontend build whose package files match
       # needs no package registry (docs/design/delegate-one-round-build-2026-10-21.md).
@@ -1134,11 +1169,13 @@ EOF
   # ── System packages ──────────────────────────────────────────────────
   # Minimal set for debugging and runtime support.
   environment.systemPackages = with pkgs; [
+    # the tool exec log's wrappers win over the real binaries' names
+    (lib.hiPrio toolExecLog)
     coreutils
     curl
     findutils
     git
-    choirGo # Go toolchain lane (flake.nix choirGo)
+    toolPkgs.go # Go toolchain lane (flake.nix choirGo)
     jq
     gnutar
     gnumake
@@ -1150,7 +1187,7 @@ EOF
     procps
     iproute2
     documentPython
-    libreoffice
+    toolPkgs.libreoffice
     pandoc
     poppler-utils
     bash

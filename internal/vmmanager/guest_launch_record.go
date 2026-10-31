@@ -41,6 +41,9 @@ type launchRecord struct {
 	ImageTarget string    `json:"image_target"`
 	Epoch       int64     `json:"epoch"`
 	LaunchedAt  time.Time `json:"launched_at"`
+	// ToolDisks are the tool slots the launch attached (tool_layers.go). A
+	// reattach takes them from here, not from today's profile.
+	ToolDisks []ToolDisk `json:"tool_disks,omitempty"`
 }
 
 // kernelParams returns the guest kernel parameters for a launch now: the
@@ -93,7 +96,7 @@ func (m *Manager) writeLaunchRecord(cfg VMConfig) error {
 		// off (review 318 DeepSeek 6).
 		target = launchTargetUnreadable
 	}
-	return m.storeLaunchRecord(cfg.VMID, launchRecord{Release: cfg.GuestRelease, ImageTarget: target, Epoch: cfg.Epoch, LaunchedAt: time.Now().UTC()})
+	return m.storeLaunchRecord(cfg.VMID, launchRecord{Release: cfg.GuestRelease, ImageTarget: target, Epoch: cfg.Epoch, LaunchedAt: time.Now().UTC(), ToolDisks: cfg.ToolDisks})
 }
 
 func (m *Manager) storeLaunchRecord(vmID string, rec launchRecord) error {

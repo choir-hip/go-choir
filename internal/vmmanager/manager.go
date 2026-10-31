@@ -112,6 +112,14 @@ type VMConfig struct {
 	// (/dev/vdb). Empty for a single-image launch, which is unchanged.
 	BaseDiskPath string `json:"BaseDiskPath,omitempty"`
 
+	// ToolDisks are a layered release's tool slots (tool_layers.go;
+	// docs/design/guest-tool-layers-2026-10-31.md), in the release's order:
+	// each the tool layer or the slot's empty placeholder, as the profile
+	// chose for this computer. Attached after the base drive. Set only from a
+	// release with tool slots; empty otherwise, which leaves the drives
+	// unchanged.
+	ToolDisks []ToolDisk `json:"ToolDisks,omitempty"`
+
 	// Empty means use the manager default.
 	KernelParams string
 
@@ -320,6 +328,13 @@ type ManagerConfig struct {
 	// (<id>/storedisk-base.erofs). Empty means guest-bases beside the
 	// releases directory.
 	GuestBasesDir string
+	// GuestToolsDir is VM_GUEST_TOOLS_DIR, the tool layers
+	// (<id>/tool.erofs). Empty means guest-tools beside the releases
+	// directory. GuestToolProfile is VM_GUEST_TOOL_PROFILE parsed
+	// (tool_layers.go): a layer it does not name is attached for every
+	// computer.
+	GuestToolsDir    string
+	GuestToolProfile map[string][]string
 
 	// GuestLayeredLink is VM_GUEST_LAYERED_RELEASE_LINK, the symlink to the
 	// layered guest image installed beside the single one, and
@@ -2029,6 +2044,7 @@ func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfi
 	// current deploy (or the snapshot's own release) is chosen afresh.
 	cfg.GuestRelease = ""
 	cfg.BaseDiskPath = ""
+	cfg.ToolDisks = nil
 	if defaults.StoreDiskPath == "" {
 		return cfg
 	}
@@ -2114,6 +2130,17 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			"is_root_device": false,
 			"is_read_only":   true,
 		})
+		// Tool slots after the base, every slot of the release, read-only: the
+		// guest mounts each by label (nix-tool-<name>), so an omitted tool is
+		// its empty placeholder, never a missing drive.
+		for _, t := range cfg.ToolDisks {
+			drives = append(drives, map[string]interface{}{
+				"drive_id":       "tool-" + t.Name,
+				"path_on_host":   t.Path,
+				"is_root_device": false,
+				"is_read_only":   true,
+			})
+		}
 	}
 
 	// Build the guest kernel boot arguments.

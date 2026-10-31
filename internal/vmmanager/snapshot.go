@@ -500,6 +500,15 @@ func (m *Manager) snapshotBoundPaths(vmID string, cfg VMConfig) []string {
 		seen[path] = true
 		paths = append(paths, path)
 	}
+	// Tool slots last (tool_layers.go): a layer or placeholder replaced under
+	// its path refuses the wake. Without tool slots the list is unchanged.
+	for _, t := range cfg.ToolDisks {
+		if t.Path == "" || seen[t.Path] {
+			continue
+		}
+		seen[t.Path] = true
+		paths = append(paths, t.Path)
+	}
 	return paths
 }
 
@@ -518,7 +527,7 @@ func (m *Manager) expectedLaunchConfig(meta *SnapshotMeta, expect VMConfig) (VMC
 	// defaults): validateSnapshot refuses it first (release_missing).
 	if meta.GuestRelease != "" && m.releaseRetainOn() {
 		if rel, err := m.releaseByID(meta.GuestRelease); err == nil {
-			setLaunchRelease(&cfg, rel)
+			m.setLaunchRelease(&cfg, rel)
 		}
 	}
 	if expect.MachineCPUCount != 0 {

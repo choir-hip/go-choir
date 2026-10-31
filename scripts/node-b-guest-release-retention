@@ -52,7 +52,9 @@
 # GO_CHOIR_VM_STATE_DIR (/var/lib/go-choir/vm-state),
 # GO_CHOIR_GUEST_RELEASE_SUPPORT_WINDOW_HOURS (168),
 # GO_CHOIR_GUEST_RELEASE_YOUNG_HOURS (2), GO_CHOIR_PRUNE_JAILS,
-# GO_CHOIR_NOW_EPOCH (tests). GO_CHOIR_GUEST_RELEASE_KEEP_MAX is retired.
+# GO_CHOIR_GUEST_BASES_DIR, GO_CHOIR_GUEST_TOOLS_DIR (guest-bases and guest-tools
+# beside the releases directory), GO_CHOIR_NOW_EPOCH (tests).
+# GO_CHOIR_GUEST_RELEASE_KEEP_MAX is retired.
 # Fails closed: a step that cannot read its input deletes nothing.
 set -u
 
@@ -263,7 +265,53 @@ $r"; done
 		done
 	fi
 fi
-log "current=$current previous=${previous:-none} rollback=${rollback:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete tmp_active=$tmp_active"
+# --- tool layers (docs/design/guest-tool-layers-2026-10-31.md 7) ------------------
+# A tool layer or placeholder (guest-tools/<id>/) stays while a release that
+# stays names it in its layers.json (.tools[].id or .empty_id), vmctl's in_use
+# answer names it (tool_ids), any fc-config.json holds it, or it is young.
+# Never by its own age. Fails closed exactly as the bases do.
+tools_dir="${GO_CHOIR_GUEST_TOOLS_DIR:-$(dirname "$rel_dir")/guest-tools}"
+tools_deleted=0
+if [ -d "$tools_dir" ]; then
+	tools_ok=true
+	keep_tools="$(jq -r '.in_use[] | (.tool_ids // [])[]' "$body" 2>/dev/null)" || tools_ok=false
+	for id in "${remaining[@]}"; do
+		lj="$rel_dir/$id/layers.json"
+		[ -e "$lj" ] || continue
+		if ! t="$(jq -er '(.tools // [])[] | .id, .empty_id' "$lj" 2>/dev/null)" && ! jq -e '(.tools // []) | length == 0' "$lj" >/dev/null 2>&1; then
+			tools_ok=false
+			continue
+		fi
+		for x in $t; do
+			if printf '%s' "$x" | grep -Eq "$id_re"; then keep_tools="$keep_tools
+$x"; else tools_ok=false; fi
+		done
+	done
+	if [ -d "$state_dir" ]; then
+		for vmd in "$state_dir"/*/; do
+			for cfg in "$vmd/fc-config.json" "$vmd"/*/fc-config.json; do
+				[ -f "$cfg" ] || continue
+				for r in $(grep -o "guest-tools/[0-9a-df-np-sv-z]\{32\}" "$cfg" 2>/dev/null | cut -d/ -f2); do keep_tools="$keep_tools
+$r"; done
+			done
+		done
+	fi
+	if [ "$tools_ok" = true ] && [ "$tmp_active" = false ] && [ -z "$(find "$tools_dir" -maxdepth 1 -name '.tmp-*' -mmin -60 2>/dev/null | head -1)" ]; then
+		for td in "$tools_dir"/*; do
+			[ -d "$td" ] && [ ! -L "$td" ] || continue
+			tid="$(basename "$td")"
+			printf '%s' "$tid" | grep -Eq "$id_re" || continue
+			in_list "$tid" "$keep_tools" && continue
+			tt="$(stat -c %Y "$td" 2>/dev/null || echo "$now")"
+			[ $((now - tt)) -lt "$young_s" ] && continue
+			chmod -R u+w "$td" 2>/dev/null
+			rm -rf "$td" && { log "deleted tool layer $tid (no retained release names it)"; tools_deleted=$((tools_deleted + 1)); }
+		done
+	else
+		log "tool layers: a reference could not be read or an install is in progress; deleting none"
+	fi
+fi
+log "current=$current previous=${previous:-none} rollback=${rollback:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete tmp_active=$tmp_active bases_deleted=$bases_deleted tools_deleted=$tools_deleted"
 
 # --- stale jails ------------------------------------------------------------------
 own="$state_dir/ownerships.json"

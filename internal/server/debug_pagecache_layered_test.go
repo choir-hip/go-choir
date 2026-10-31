@@ -33,6 +33,24 @@ func TestParseStoreOverlayLayeredImageReportsAppAndBase(t *testing.T) {
 			t.Fatalf("%s = %+v, want stacked", opts, g)
 		}
 	}
+	// Tool layers (docs/design/guest-tool-layers-2026-10-31.md 5) after app
+	// and base are attributable too; anything else after them is not.
+	tools := layers + ":/nix/.ro-tool-browser:/nix/.ro-tool-toolchain"
+	got, _ = parseStoreOverlay(overlayLine(41, "/nix/store", tools), "/nix/store")
+	if got.Stacked || strings.Join(got.Layers, ",") != "app,base,tool-browser,tool-toolchain" {
+		t.Fatalf("layered store with tool layers = %+v", got)
+	}
+	for _, opts := range []string{
+		layers + ":/x",
+		layers + ":/nix/.ro-tool-",
+		layers + "x:/nix/.ro-tool-browser",
+		layers + ":/nix/.ro-tool-a/b",
+	} {
+		g, _ := parseStoreOverlay(overlayLine(41, "/nix/store", opts), "/nix/store")
+		if !g.Stacked || g.Layers != nil {
+			t.Fatalf("%s = %+v, want stacked", opts, g)
+		}
+	}
 	two := overlayLine(41, "/nix/store", layers) + overlayLine(42, "/nix/store", "lowerdir=/nix/store,upperdir=/u,workdir=/w")
 	if g, _ := parseStoreOverlay(two, "/nix/store"); !g.Stacked {
 		t.Fatalf("two overlays over a layered store = %+v, want stacked", g)

@@ -20,6 +20,8 @@ go.sum
 
 # the guest NixOS module and the scripts it reads
 nix/autoputer-vm.nix
+nix/guest-tools.nix
+nix/guest-tool-exec-wrapper.sh
 scripts/guest-signer-state-migrate
 scripts/guest-signer-state-project
 

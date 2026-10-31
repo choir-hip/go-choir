@@ -412,6 +412,75 @@ expect_gone "$d" "single-image" $OOS
 [ $fail -eq $f0 ] && ok "bases: a single-image fleet (no guest-bases) retains exactly as before"
 stop_stub
 
+# --- tool layers (docs/design/guest-tool-layers-2026-10-31.md 7) --------------------
+# Failure modes: a tool layer (or its empty placeholder) deleted while a
+# retained release, an in-use release or any fc-config.json names it; one kept
+# forever after its last release went; one swept on its own age; an unreadable
+# layers.json (fail closed); a young one (installed before its release) swept.
+TC=rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr; TCE=ssssssssssssssssssssssssssssssss; TX=vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+TXE=wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww; TU=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; TUE=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+TZ=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz; TY=11111111111111111111111111111111; TI=22222222222222222222222222222222
+TF=33333333333333333333333333333333
+mktool() { # DIR ID HOURS_AGO
+	mkdir -p "$1/guest-tools/$2"
+	echo tool >"$1/guest-tools/$2/tool.erofs"
+	touch -d "@$(hours "$3")" "$1/guest-tools/$2"
+}
+tool_layer() { # DIR RELEASE BASE LAYER_ID EMPTY_ID: make a layered release schema 2 with one slot
+	printf '{"schema":2,"layout":"layered","base_id":"%s","base_store_path":"/nix/store/%s-guest-store-base.erofs","tools":[{"name":"office","id":"%s","empty_id":"%s"}]}\n' "$3" "$3" "$4" "$5" >"$1/rel/$2/layers.json"
+}
+toolfixture() {
+	basefixture "$1"
+	tool_layer "$1" $CUR $BC $TC $TCE
+	tool_layer "$1" $OOS $BX $TX $TXE
+	tool_layer "$1" $USED $BU $TU $TUE
+	for x in $TC $TCE $TX $TXE $TU $TUE $TZ $TI $TF; do mktool "$1" $x 100; done
+	mktool "$1" $TY 1 # young
+	mkdir -p "$1/guest-tools/not-a-tool" "$1/guest-tools/.tmp-old"
+	touch -t 202001010000 "$1/guest-tools/.tmp-old"
+}
+tool_exists() { [ -d "$1/guest-tools/$2" ] && [ ! -L "$1/guest-tools/$2" ]; }
+toolanswer() { # the answer, with an in_use entry that names TI
+	baseanswer
+	jq --arg ti "$TI" --arg r "$OOSRUN" '.in_use |= map(if .id == $r then . + {tool_ids:[$ti]} else . end)' "$root/answer.json" >"$root/answer2.json" && mv "$root/answer2.json" "$root/answer.json"
+}
+
+f0=$fail
+d="$root/tl1"; toolfixture "$d"; toolanswer; start_stub 200 "$root/answer.json"
+mkdir -p "$d/state/vm-stopped"
+echo '{"drives":[{"path_on_host":"/var/lib/go-choir/guest-tools/'$TF'/tool.erofs"}]}' >"$d/state/vm-stopped/fc-config.json"
+run_retention "$d" "$URL"; rc=$?
+[ $rc -eq 0 ] || bad "tools: exit $rc"
+for x in $TC $TCE $TU $TUE $TI $TY $TF; do tool_exists "$d" $x || bad "tools: $x was deleted (named by a retained, in-use or fc-config release, or young)"; done
+for x in $TX $TXE $TZ; do tool_exists "$d" $x && bad "tools: $x was kept (nothing retained names it)"; done
+[ -d "$d/guest-tools/not-a-tool" ] && [ -d "$d/guest-tools/.tmp-old" ] || bad "tools: an odd name was deleted"
+grep -q 'tools_deleted=3' "$d/out.log" || bad "tools: the summary does not count 3 deleted tool layers: $(tail -1 "$d/out.log")"
+[ $fail -eq $f0 ] && ok "tools: a tool layer and its placeholder stay while a retained, in-use or fc-config release names them, or they are young; unnamed ones are swept"
+stop_stub
+
+f0=$fail
+d="$root/tl2"; toolfixture "$d"; toolanswer; echo '{' >"$d/rel/$USED/layers.json"; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"
+for x in $TC $TCE $TX $TXE $TU $TUE $TZ $TI $TY $TF; do tool_exists "$d" $x || bad "tools: $x was deleted with an unreadable layers.json (must fail closed)"; done
+stop_stub
+d="$root/tl3"; toolfixture "$d"; start_stub 404
+run_retention "$d" "$URL"
+for x in $TC $TCE $TX $TXE $TU $TUE $TZ $TI $TY $TF; do tool_exists "$d" $x || bad "tools: $x was deleted without a vmctl answer"; done
+stop_stub
+d="$root/tl4"; toolfixture "$d"; toolanswer; mkdir -p "$d/guest-tools/.tmp-$TZ"; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"
+tool_exists "$d" $TZ || bad "tools: a tool layer was deleted while one materializes"
+stop_stub
+[ $fail -eq $f0 ] && ok "tools: an unreadable layers.json, no vmctl answer, or a tool layer materializing deletes no tool layer"
+
+f0=$fail
+d="$root/tl5"; basefixture "$d"; baseanswer; start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/guest-tools" ] || bad "tools: a fleet with no guest-tools directory changed (exit $rc)"
+for b in $BC $BU $BI $BY; do base_exists "$d" $b || bad "tools: a schema 1 base $b was deleted"; done
+[ $fail -eq $f0 ] && ok "tools: a schema 1 layered fleet (no guest-tools) retains exactly as before"
+stop_stub
+
 # The layered ring's second release (design step 3/4): the layered link's target
 # stays; a layered release is outside the previous/rollback choice and the
 # "newer than current" keep, so installing one never displaces a single image's
@@ -556,6 +625,57 @@ run_mat "$src" "$d/rel"; rc=$?
 [ $rc -eq 0 ] && [ ! -e "$d/rel/$A" ] || bad "layered layers.json without a base: exit $rc or a release exists"
 [ $fail -eq $f0 ] && ok "materialize: a layered source missing its base, or naming none, exits 0 and leaves nothing"
 
+# tool layers (docs/design/guest-tool-layers-2026-10-31.md 7): each tool image
+# once into guest-tools/<id>/tool.erofs, a schema 2 layers.json naming the slots
+mktlsrc() { # DIR [SRC_NAME] -> src path of a layered image with two tool slots
+	local src st="$1/store"
+	src="$(mklsrc "$1")"
+	[ -n "${2:-}" ] && { mv "$src" "$1/src/$2-go-choir-guest-image"; src="$1/src/$2-go-choir-guest-image"; }
+	mkdir -p "$st"
+	for x in $TC $TCE $TU $TUE; do [ -e "$st/$x-guest-tool.erofs" ] || echo "tool $x" >"$st/$x-guest-tool.erofs"; done
+	printf 'browser %s %s\noffice %s %s\n' "$st/$TC-guest-tool.erofs" "$st/$TCE-guest-tool.erofs" "$st/$TU-guest-tool.erofs" "$st/$TUE-guest-tool.erofs" >"$src/tool-layers"
+	echo "$src"
+}
+f0=$fail
+d="$root/tm1"; mkdir -p "$d"; src="$(mktlsrc "$d")"
+run_mat "$src" "$d/rel"; rc=$?
+rd="$d/rel/$A"
+[ $rc -eq 0 ] && [ -d "$rd" ] || bad "tool materialize: exit $rc or no release ($(cat "$root/mat.log"))"
+for x in $TC $TCE $TU $TUE; do
+	f="$d/guest-tools/$x/tool.erofs"
+	[ -f "$f" ] && [ "$(stat -c %a "$f")" = 444 ] && [ "$(stat -c %a "$d/guest-tools/$x")" = 555 ] && [ "$(cat "$f")" = "tool $x" ] || bad "tool materialize: $x is missing, wrong, or not 0444/0555"
+done
+jq -e --arg b "$BC" --arg tc "$TC" --arg tce "$TCE" --arg tu "$TU" --arg tue "$TUE" \
+	'.schema == 2 and .layout == "layered" and .base_id == $b and .tools == [{name:"browser",id:$tc,empty_id:$tce},{name:"office",id:$tu,empty_id:$tue}]' "$rd/layers.json" >/dev/null || bad "tool materialize: layers.json is wrong: $(cat "$rd/layers.json")"
+ls -A "$d/rel" "$d/guest-tools" | grep -q '^\.tmp-' && bad "tool materialize: a .tmp tree is left"
+[ $fail -eq $f0 ] && ok "materialize: a layered image with tool-layers puts each tool image and placeholder once in guest-tools (0444) and writes a schema 2 layers.json"
+
+f0=$fail
+inode=$(stat -c %i "$d/guest-tools/$TU/tool.erofs"); echo changed >"$d/store/$TU-guest-tool.erofs"
+src2="$(mktlsrc "$d" "$B")"
+run_mat "$src2" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ -d "$d/rel/$B" ] || bad "tool materialize: a second release with the same tool ids failed (exit $rc)"
+[ "$(cat "$d/guest-tools/$TU/tool.erofs")" = "tool $TU" ] && [ "$(stat -c %i "$d/guest-tools/$TU/tool.erofs")" = "$inode" ] || bad "tool materialize: an existing tool layer was rewritten"
+[ "$(ls "$d/guest-tools" | wc -l)" = 4 ] || bad "tool materialize: a second release with the same ids added tool directories: $(ls "$d/guest-tools")"
+[ $fail -eq $f0 ] && ok "materialize: a deploy whose tool ids are unchanged copies no tool layer (dedupe by id, never rewritten)"
+
+f0=$fail
+d="$root/tm2"; mkdir -p "$d"; src="$(mktlsrc "$d")"; rm "$d/store/$TUE-guest-tool.erofs"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/rel/$A" ] || bad "tool materialize, missing placeholder: exit $rc or a release exists"
+grep -q "not materialized (tool layer office placeholder)" "$root/mat.log" || bad "tool materialize: the missing placeholder is not named: $(cat "$root/mat.log")"
+ls -A "$d/rel" "$d/guest-tools" 2>/dev/null | grep -q '^\.tmp-' && bad "tool materialize, missing placeholder: a .tmp tree is left"
+d="$root/tm3"; mkdir -p "$d"; src="$(mktlsrc "$d")"; echo "Bad/Name $d/store/$TC-guest-tool.erofs $d/store/$TCE-guest-tool.erofs" >"$src/tool-layers"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/rel/$A" ] || bad "tool materialize, bad name: exit $rc or a release exists"
+d="$root/tm4"; mkdir -p "$d"; src="$(mktlsrc "$d")"; : >"$src/tool-layers"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && [ ! -e "$d/rel/$A" ] || bad "tool materialize, empty tool-layers: exit $rc or a release exists"
+d="$root/tm5"; mkdir -p "$d"; src="$(mklsrc "$d")"
+run_mat "$src" "$d/rel"; rc=$?
+[ $rc -eq 0 ] && jq -e '.schema == 1 and (has("tools") | not)' "$d/rel/$A/layers.json" >/dev/null && [ ! -e "$d/guest-tools" ] || bad "tool materialize: a layered image without tool-layers is no longer schema 1"
+[ $fail -eq $f0 ] && ok "materialize: a missing tool image, a bad slot name or an empty tool-layers leaves no release (exit 0, reason logged); no tool-layers stays schema 1"
+
 fi
 # --- wiring in nix/node-b.nix (text assertions) ---------------------------------------
 nix="$here/../nix/node-b.nix"
@@ -572,6 +692,9 @@ grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "o
 grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-bases' && grep -q 'd /var/lib/go-choir/guest-bases 0755 root root -' "$nix" && ok "nix: guest-bases exists (tmpfiles) and vmctl reads it read-only" || bad "nix: guest-bases is not wired for vmctl"
 
 grep -q 'VM_GUEST_LAYERED_COMPUTERS=' "$nix" && grep -q 'VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"' "$nix" && grep -qE '^\s*guestLayeredComputers = \[ "computer-59c902c5d46caecc0a180a8557164e72" \];' "$nix" && ok "nix: the layered ring selector is on for d@e (ComputerIDs only)" || bad "nix: the layered ring selector is missing or not set to d@e"
+grep -q 'VM_GUEST_TOOL_PROFILE=${guestToolProfile}' "$nix" && grep -q 'VM_GUEST_TOOLS_DIR=/var/lib/go-choir/guest-tools"' "$nix" && grep -qE '^\s*guestToolProfile = "toolchain=\*;office=none;browser=grant:visual-capture;delegate=grant:claude-delegate";' "$nix" \
+	&& grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-tools' && grep -q 'd /var/lib/go-choir/guest-tools 0755 root root -' "$nix" \
+	&& ok "nix: the tool layer profile and guest-tools are wired for vmctl" || bad "nix: the tool layer profile or guest-tools wiring is missing"
 grep -q 'system.activationScripts.go-choir-guest-release-layered' "$nix" && grep -q 'guestImageLayered' "$nix" && ok "nix: the layered image is a second release and a second link, never the guest link" || bad "nix: the layered release activation is missing"
 awk '/system.activationScripts.go-choir-guest-image = \{/{f=1} f&&/src="\$\{guestImage\}"/{print "single"; exit}' "$nix" | grep -q single && ok "nix: the guest link still names the single image" || bad "nix: the guest link no longer names guestImage"
 
