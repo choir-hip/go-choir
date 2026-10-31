@@ -2028,12 +2028,13 @@ in
       # peak 256M, 2m24s; 1G: peak 1G, 3m34s). MemoryHigh makes the kernel
       # reclaim at 160M: peak 160M, 3m29s, 27 MB of swap, no kill. The
       # resident set is about 16 MB. The report treats the peak of this unit as
-      # cache-bound and flags only its oom_kill.
+      # cache-bound; the report judges memory by oom deltas, anon and pressure,
+      # never by peak.
       MemoryHigh = "160M";
       MemoryMax = "256M";
       TimeoutStartSec = "45min";
       Environment = [
-        "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.util-linux pkgs.postgresql_17 pkgs.systemd ]}"
+        "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.util-linux pkgs.postgresql_17 pkgs.systemd pkgs.btrfs-progs ]}"
         "GROWTH_DIR=/var/lib/go-choir/growth-meter"
       ];
       ExecStart = "${pkgs.python3}/bin/python3 -I ${../scripts/node-b-growth-meter}";

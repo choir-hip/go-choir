@@ -61,6 +61,13 @@ else
   printf '%s\t%s\n' $((5000 * mult)) "$path"
 fi
 EOF
+cat >"$root/bin/btrfs" <<'EOF'
+#!/usr/bin/env bash
+# fake btrfs filesystem du -s --raw PATH
+echo "btrfs $*" >>"$FAKE_DIR/btrfs.log"
+echo "     Total   Exclusive  Set shared  Filename"
+echo "  ${FAKE_BTRFS_TOTAL:-30000}  ${FAKE_BTRFS_EXCL:-10000}  ${FAKE_BTRFS_SHARED:-5000}  ${!#}"
+EOF
 cat >"$root/bin/runuser" <<'EOF'
 #!/usr/bin/env bash
 # fake runuser -u postgres -- psql ... -d DB -c SQL
@@ -105,17 +112,20 @@ mkdir -p "$w/state/vm-state/vm-aaa" "$w/state/vm-state/candidate-x" \
 printf 4242 >"$w/state/vm-state/vm-aaa/firecracker.pid"
 printf 'VmRSS:\t   2048 kB\n' >"$w/proc/4242/status"
 printf 'MemAvailable:   1000000 kB\n' >"$w/meminfo"
+printf '66 1 0:32 / / rw - btrfs /dev/x rw\n69 66 0:26 / /run rw - tmpfs tmpfs rw\n' >"$w/mountinfo"
 cg() { # unit peak max oom_kill
   d="$w/cg/system.slice/$1"
   echo "$2" >"$d/memory.peak"; echo "$2" >"$d/memory.current"; echo "$3" >"$d/memory.max"
   printf 'low 0\nhigh 0\nmax 0\noom 0\noom_kill %s\noom_group_kill 0\n' "$4" >"$d/memory.events"
+  printf 'anon %s\nfile 5\n' "${5:-1000}" >"$d/memory.stat"
+  printf 'some avg10=0.00 avg60=%s avg300=0.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1\n' "${6:-0.00}" >"$d/memory.pressure"
 }
 cg go-choir-vmctl.service 1000000000 8000000000 0
 cg postgresql.service 1000000000 4000000000 0
 
 run_meter() { # args...; env set by caller via env
   env -u BASH_ENV PATH="$root/bin:$PATH" FAKE_DIR="$root/fake" GROWTH_DIR="$root/ledger" \
-    GROWTH_STATE_ROOT="$w/state" GROWTH_CGROUP="$w/cg" GROWTH_PROC="$w/proc" GROWTH_MEMINFO="$w/meminfo" \
+    GROWTH_STATE_ROOT="$w/state" GROWTH_MOUNTINFO="$w/mountinfo" GROWTH_CGROUP="$w/cg" GROWTH_PROC="$w/proc" GROWTH_MEMINFO="$w/meminfo" \
     "$@"
 }
 t0=1793000000   # 2026-10-26T06:13:20Z
@@ -145,6 +155,10 @@ assert r['units']['go-choir-nix-gc.service']['logged_peak']==int(120.1*1048576)
 assert r['items']['pg.control.size']==123456
 assert r['items']['pg.control.computer_event_append_receipts.rows']==50
 assert r['errors']==[], r['errors']
+assert r['items']['fs.guest-releases']==5000
+assert r['items']['fs.guest-releases.excl']==10000 and r['items']['fs.guest-releases.shared']==5000 and r['items']['fs.guest-releases.real']==15000
+assert r['units']['go-choir-vmctl.service']['anon']==1000 and r['units']['go-choir-vmctl.service']['pressure_some_avg60']==0.0
+assert 'events_delta' not in r['units']['go-choir-vmctl.service']
 \""
 check "G2 first reading counts no receipts, only sets the mark" "! grep -q receipts_since_last.computer-a '$ledger' && [ ! -e '$root/fake/kind-sql.log' ]"
 check "G3 heavy stores measured on the first reading" "grep -q 'fs.artifacts.pin-receipts' '$ledger'"
@@ -183,7 +197,7 @@ assert 'fs.root.used' in r['items']
 # ---- report: baseline = reading 24h earlier --------------------------------
 rm -rf "$root/ledger"
 meter $t0 >/dev/null 2>&1
-cg go-choir-vmctl.service 7500000000 8000000000 0     # 94% of MemoryMax
+cg go-choir-vmctl.service 7500000000 8000000000 0 1000 0.00   # peak 94% of MemoryMax, all page cache
 cg postgresql.service 1000000000 4000000000 2         # oom_kill 0 -> 2 would need a prior reading
 FAKE_DU_MULT=100000 FAKE_HEAD=500 meter $((t0 + 43200)) >/dev/null 2>&1
 cg postgresql.service 1000000000 4000000000 3
@@ -191,11 +205,31 @@ FAKE_DU_MULT=100000 FAKE_HEAD=900 FAKE_OOM=1 meter $((t0 + 86400)) >/dev/null 2>
 METER_ARGS=--report meter $((t0 + 86400)) >"$root/report" 2>&1
 check "G5 report flags machine growth" "grep -q 'machine state growing: fs.nix-store' '$root/report'"
 check "G5 report flags machine row growth" "grep -q 'machine state growing: pg.control.computer_event_append_receipts.rows' '$root/report'"
-check "G5 report flags peak over 90%" "grep -q 'memory: go-choir-vmctl.service peak' '$root/report'"
-check "G5 report flags oom_kill increment" "grep -q 'oom_kill incremented: postgresql.service 2 -> 3' '$root/report'"
+check "G5 a peak near MemoryMax without anon or pressure is not flagged" "! grep -q '! .*go-choir-vmctl.service' '$root/report'"
+check "G5 report flags oom_kill delta, not the cumulative total" "grep -q 'oom_kill +1 since previous reading: postgresql.service' '$root/report' && ! grep -q 'oom_kill +3' '$root/report'"
 check "G5 report flags kernel OOM lines" "grep -q 'kernel OOM log lines' '$root/report'"
 check "G5 user-state growth is not a machine flag" "! grep -q 'machine state growing: fs.artifacts.tape-seg' '$root/report' && grep -q 'fs.artifacts.tape-seg' '$root/report'"
 check "G5 report prints the 24 h span" "grep -q '(24.0 h)' '$root/report'"
+
+# anon near the line and memory pressure flag
+cg go-choir-vmctl.service 7500000000 8000000000 0 7000000000 3.50
+meter $((t0 + 90000)) >/dev/null 2>&1
+METER_ARGS=--report meter $((t0 + 90000)) >"$root/report3" 2>&1
+check "G5 anon near MemoryMax flags" "grep -q 'memory: go-choir-vmctl.service anon' '$root/report3'"
+check "G5 memory pressure flags" "grep -q 'memory pressure: go-choir-vmctl.service some avg60 3.50' '$root/report3'"
+
+# reflink-aware growth: du grows, .real flat -> no flag; .real grows -> flag
+cg go-choir-vmctl.service 1000000000 8000000000 0
+rm -rf "$root/ledger"
+meter $t0 >/dev/null 2>&1
+FAKE_DU_MULT=100000 meter $((t0 + 86400)) >/dev/null 2>&1
+METER_ARGS=--report meter $((t0 + 86400)) >"$root/report4" 2>&1
+check "G5 du-only growth of a reflink store is not flagged" "! grep -q 'machine state growing: fs.guest-releases ' '$root/report4' && grep -q 'fs.guest-releases ' '$root/report4'"
+rm -rf "$root/ledger"
+meter $t0 >/dev/null 2>&1
+FAKE_BTRFS_EXCL=900000000 meter $((t0 + 86400)) >/dev/null 2>&1
+METER_ARGS=--report meter $((t0 + 86400)) >"$root/report5" 2>&1
+check "G5 real (exclusive+shared) growth is flagged" "grep -q 'machine state growing: fs.guest-releases.real' '$root/report5'"
 
 # flat day: no growth flags
 rm -rf "$root/ledger"
@@ -227,6 +261,7 @@ check "G7 TOOLS covers every run([...]) call" "[ '$tools' != MISMATCH ]"
 pkg_for() {
   case "$1" in
     df|du) echo coreutils ;;
+    btrfs) echo btrfs-progs ;;
     runuser) echo util-linux ;;
     psql) echo postgresql_17 ;;
     journalctl|systemctl) echo systemd ;;

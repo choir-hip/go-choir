@@ -31,6 +31,22 @@ and counts rows with sequence above it, per event_kind, through the
 (computer_id, event_kind, sequence) index. The first reading only sets the
 mark.
 
+Reflink-aware sizes: du sums allocated bytes per file, so a btrfs reflinked
+or deduped extent counts once per file that maps it (guest-releases read 29.2
+GiB while `btrfs filesystem du` showed 12.4 GiB exclusive + 9.9 GiB shared).
+For the reflink-heavy stores on btrfs (guest-releases, guest-bases,
+guest-layered) the reading keeps the du figure under its old key and adds
+<key>.excl, <key>.shared and <key>.real (excl + shared, each shared extent
+counted once = real disk use). The growth judgment uses <key>.real.
+
+Memory judgment: memory.peak includes page cache, so a peak near MemoryMax is
+shown but never flagged. A unit is flagged for an oom or oom_kill delta since
+the previous reading (memory.events counters are cumulative since unit start;
+state.json keeps the marks and each reading records events_delta), for anon
+memory (memory.stat) above ANON_FLAG of MemoryMax, or for memory.pressure some
+avg60 above PRESSURE_FLAG percent. Each live unit records anon and
+pressure_some_avg60.
+
 Heavy du (small-file stores such as pin-receipts take minutes) runs once per
 GROWTH_HEAVY_EVERY_H hours (default 23, so about daily); the other hours carry
 those items as absent. Day-over-day comparison needs one reading a day.
@@ -60,7 +76,7 @@ import time
 # Every external tool this script runs. The systemd wrapper PATH must carry
 # each one (scripts/test-node-b-growth-meter.sh checks the nix block against
 # this tuple and against the run([...]) calls below).
-TOOLS = ("df", "du", "runuser", "psql", "journalctl", "systemctl")
+TOOLS = ("df", "du", "btrfs", "runuser", "psql", "journalctl", "systemctl")
 
 GIB = 1 << 30
 
@@ -70,6 +86,11 @@ STATE_ROOT = ENV("GROWTH_STATE_ROOT", "/var/lib/go-choir")
 CGROUP = ENV("GROWTH_CGROUP", "/sys/fs/cgroup")
 PROC = ENV("GROWTH_PROC", "/proc")
 MEMINFO = ENV("GROWTH_MEMINFO", "/proc/meminfo")
+MOUNTINFO = ENV("GROWTH_MOUNTINFO", "/proc/self/mountinfo")
+# memory.pressure some avg60 (percent of time stalled) above this flags a unit.
+PRESSURE_FLAG = float(ENV("GROWTH_PRESSURE_FLAG", "1.0"))
+# anon memory above this fraction of MemoryMax flags a unit.
+ANON_FLAG = float(ENV("GROWTH_ANON_FLAG", "0.8"))
 MAX_FILE = int(ENV("GROWTH_MAX_FILE_BYTES", str(64 << 20)))
 HEAVY_EVERY_S = float(ENV("GROWTH_HEAVY_EVERY_H", "23")) * 3600
 DU_TIMEOUT = int(ENV("GROWTH_DU_TIMEOUT_S", "900"))
@@ -104,11 +125,6 @@ CLASSES = (
     ("fs.mail", "user"),                                       # owner email
     ("fs.logs", "machine"),
 )
-
-
-# Units whose memory.peak is reclaimable page and dentry cache by design (the
-# meter's own du walk): shown, never flagged for peak. oom_kill still flags.
-CACHE_BOUND_UNITS = ("go-choir-growth-meter.service",)
 
 
 def classify(name):
@@ -225,6 +241,37 @@ def du_total(path, errors, label):
     return None
 
 
+REFLINK_STORES = ("fs.guest-releases", "fs.guest-bases", "fs.guest-layered")
+
+
+def fs_type(path):
+    """Filesystem type of the longest mount point that prefixes path."""
+    best, typ = "", None
+    try:
+        with open(MOUNTINFO) as f:
+            for line in f:
+                pre, _, post = line.partition(" - ")
+                f1 = pre.split()
+                if len(f1) < 5 or not post:
+                    continue
+                mp = f1[4].replace("\\040", " ")
+                if (path == mp or path.startswith(mp.rstrip("/") + "/")) and len(mp) >= len(best):
+                    best, typ = mp, post.split()[0]
+    except OSError:
+        pass
+    return typ
+
+
+def btrfs_du(path, errors, label):
+    """(total, exclusive, set_shared) raw bytes from `btrfs filesystem du -s`."""
+    out = run(["btrfs", "filesystem", "du", "-s", "--raw", path], DU_TIMEOUT, errors, label)
+    for line in reversed((out or "").splitlines()):
+        f = line.split()
+        if len(f) >= 4 and all(x.isdigit() for x in f[:3]):
+            return int(f[0]), int(f[1]), int(f[2])
+    return None
+
+
 def measure_fs(items, errors, heavy_due, state):
     root = STATE_ROOT
     for name, path in (
@@ -239,6 +286,12 @@ def measure_fs(items, errors, heavy_due, state):
             v = du_total(path, errors, name)
             if v is not None:
                 items[name] = v
+            if name in REFLINK_STORES and fs_type(path) == "btrfs":
+                b = btrfs_du(path, errors, name + ".btrfs")
+                if b:
+                    items[name + ".excl"] = b[1]
+                    items[name + ".shared"] = b[2]
+                    items[name + ".real"] = b[1] + b[2]
     # vm-state: data.img apart from the rest, per vm directory.
     vmroot = f"{root}/vm-state"
     if os.path.isdir(vmroot):
@@ -335,6 +388,47 @@ def unit_names(errors):
     return sorted(set(names))
 
 
+def read_stat_anon(path):
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith("anon "):
+                    return int(line.split()[1])
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def read_pressure(path):
+    """some avg60 (percent) from memory.pressure, or None."""
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith("some "):
+                    for kv in line.split()[1:]:
+                        if kv.startswith("avg60="):
+                            return float(kv[6:])
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def events_delta(units, state):
+    """Per-unit memory.events change since the previous reading. The counters
+    are cumulative since unit start, so a lower value means the unit restarted:
+    the new value is then the delta. The first sight of a unit has no delta."""
+    marks = state.setdefault("event_marks", {})
+    for n, u in units.items():
+        ev = u.get("events") or {}
+        if not ev:
+            continue
+        prev = marks.get(n)
+        if prev is not None:
+            u["events_delta"] = {k: (v - prev[k] if k in prev and v >= prev[k] else v)
+                                 for k, v in ev.items()}
+        marks[n] = dict(ev)
+
+
 def measure_units(errors, since):
     units = {}
     names = unit_names(errors)
@@ -347,6 +441,8 @@ def measure_units(errors, since):
             "current": read_int(f"{d}/memory.current"),
             "max": read_int(f"{d}/memory.max"),
             "events": read_events(f"{d}/memory.events"),
+            "anon": read_stat_anon(f"{d}/memory.stat"),
+            "pressure_some_avg60": read_pressure(f"{d}/memory.pressure"),
         }
     # Oneshot maintenance units have no live cgroup: take the figure systemd
     # logged at their stop, plus their configured MemoryMax.
@@ -431,6 +527,7 @@ def take_reading():
     measure_fs(items, errors, heavy_due, state)
     measure_pg(items, errors, state, receipts)
     units = measure_units(errors, since)
+    events_delta(units, state)
     reading = {
         "ts": iso(NOW),
         "since": since,
@@ -556,47 +653,52 @@ def report():
             continue
         shown = f"{nv:,}" if isrows else f"{nv / GIB:.2f} GiB"
         print(f"  {k:<78} {cls:<8} {shown:>14} {human(d, isrows):>14}")
+        # du over-counts reflinked extents: judge the .real figure when present.
+        if k in REFLINK_STORES and f"{k}.real" in cur["items"]:
+            continue
+        if k.endswith((".excl", ".shared")):
+            continue
         if cls == "machine" and "receipts_since_last" not in k and k not in ("fs.root.size", "fs.root.avail"):
             if d > (MACHINE_GROW_ROWS if isrows else MACHINE_GROW_BYTES):
                 flags.append(f"machine state growing: {k} {human(d, isrows)}")
-    # memory: peak > 90% of max; oom_kill increments, over the last 24 h of readings
+    # memory: peaks include page cache, so they are shown, not flagged. Flag
+    # oom/oom_kill deltas, anon near MemoryMax, memory pressure.
     window = [r for r in rows if parse_iso(r["ts"]) >= tcur - 86400 - 1800]
-    seen = {}
+    prev = {}
     for r in window:
         for n, u in r["units"].items():
+            ev = u.get("events") or {}
+            d = u.get("events_delta")
+            for key in ("oom", "oom_kill"):
+                if d is not None:
+                    inc = d.get(key, 0)
+                else:  # rows from before events_delta: diff consecutive rows
+                    p = prev.get(n, {}).get(key)
+                    inc = 0 if p is None or key not in ev else (ev[key] - p if ev[key] >= p else ev[key])
+                if inc > 0:
+                    flags.append(f"{key} +{inc} since previous reading: {n} at {r['ts']}")
             mx = u.get("max")
-            if n in CACHE_BOUND_UNITS:
-                continue
-            for key in ("peak", "logged_peak"):
-                pk = u.get(key)
-                if pk and mx and pk > 0.9 * mx:
-                    seen[(n, key)] = max(seen.get((n, key), 0), pk)
-    for (n, key), pk in sorted(seen.items()):
-        mx = cur["units"].get(n, {}).get("max") or max(
-            (r["units"][n].get("max") or 0) for r in window if n in r["units"])
-        flags.append(f"memory: {n} {key} {pk / GIB:.2f} GiB is {100 * pk / mx:.0f}% of MemoryMax {mx / GIB:.2f} GiB")
-    prev = None
-    for r in window:
-        for n, u in r["units"].items():
-            ok = u.get("events", {}).get("oom_kill")
-            if ok is None:
-                continue
-            p = (prev or {}).get(n)
-            if p is not None and ok > p:
-                flags.append(f"oom_kill incremented: {n} {p} -> {ok} by {r['ts']}")
-        prev = {n: u.get("events", {}).get("oom_kill") for n, u in r["units"].items()}
+            an = u.get("anon")
+            if an and mx and an > ANON_FLAG * mx:
+                flags.append(f"memory: {n} anon {an / GIB:.2f} GiB is {100 * an / mx:.0f}% of MemoryMax {mx / GIB:.2f} GiB at {r['ts']}")
+            pr = u.get("pressure_some_avg60")
+            if pr is not None and pr > PRESSURE_FLAG:
+                flags.append(f"memory pressure: {n} some avg60 {pr:.2f}% at {r['ts']}")
+        prev = {n: dict(u.get("events") or {}) for n, u in r["units"].items()}
     ko = sum(r.get("kernel_oom_since_last", 0) for r in window)
     if ko:
         flags.append(f"kernel OOM log lines in the last 24 h: {ko}")
     errs = sum(len(r.get("errors", [])) for r in window)
     if errs:
         flags.append(f"{errs} measurement errors in the last 24 h (see ledger 'errors')")
-    print("  memory (newest reading): unit peak / MemoryMax / oom_kill")
+    print("  memory (newest reading): unit peak(incl. cache) / MemoryMax / anon / pressure avg60 / oom_kill delta")
     for n, u in sorted(cur["units"].items()):
         pk = u.get("peak") or u.get("logged_peak")
         mx = u.get("max")
         print(f"    {n:<48} {(pk or 0) / GIB:7.2f} GiB / {('%.2f GiB' % (mx / GIB)) if mx else 'none':>9} / "
-              f"{u.get('events', {}).get('oom_kill', '-')}")
+              f"{('%.3f GiB' % (u['anon'] / GIB)) if u.get('anon') is not None else '-':>10} / "
+              f"{('%.2f%%' % u['pressure_some_avg60']) if u.get('pressure_some_avg60') is not None else '-':>6} / "
+              f"{(u.get('events_delta') or {}).get('oom_kill', '-')}")
     if cur.get("vm_rss"):
         print("  firecracker RSS: " + ", ".join(f"{k}={v / GIB:.2f}GiB" for k, v in sorted(cur["vm_rss"].items())))
     if cur.get("mem_available") is not None:
