@@ -47,10 +47,12 @@ memory becomes something the REPL can read on demand.
 Texture is the exception, keyed by document (owner, 2026-10-31: "Texture
 should resume prior runs if it's continuing the same doc"). A Texture run
 that continues the same document resumes that document's prior run
-conversation. A Texture run on a different document starts fresh. Today's
-carry is keyed by agent (the newest run of the Texture agent, or the run
-named by actor_rewarm_source_loop_id), not by document, so a Texture wake on
-document B can carry document A's conversation. The fix keys the carry
-source by document id.
+conversation. A Texture run on a different document starts fresh. This
+already holds: the Texture agent id is per document (`texture:<docID>`,
+internal/agentcore/tool_profiles.go currentTextureAgentID), and the carry is
+keyed by agent id, so it only ever resumes the same document's prior run.
+(Corrected 2026-10-31: an earlier version of this paragraph said the carry
+was not per document; that was wrong.) Texture's carry stays; the change is
+for the other desks.
 
 Measure the seed bytes per activation before changing it.
