@@ -72,3 +72,22 @@ Defects in it, beyond the owner's point that it should not be in context:
 it tells a new run to "continue the same run"; it is a lossy copy of a lossy
 copy (checkpoint of checkpoints); its entry ids point into a run the new run
 is not part of; its size is unbounded in the number of messages.
+
+## Provenance
+
+- a7b43100b, 2026-06-13, "runtime: seed rewarm activations with actor
+  memory": Batch I of docs/mission-lifecycle-cutover-v0.md, after the
+  2026-06-11 durable-actor rearchitecture (295b4b14b). Its ledger entry: the
+  target model said "passivated actors rewarm from compacted memory plus
+  durable log tail"; a cold replacement activation started from the wake
+  prompt alone. The bridge selected prior completed *and* passivated
+  activations. It was labeled "a v0 bridge, not the final schema"; the open
+  edge was an actor-scoped memory snapshot plus log tail, which never
+  landed.
+- c791a0aef, 2026-07-14: moved with the runtime package retirement.
+- b5f8427e4, 2026-10-25 (texture.hold_trajectory): Texture's verbatim
+  carry-conversation path.
+
+Drift: the stated target was rewarming a passivated actor (the same work,
+parked and woken). Including completed runs made every new activation of a
+desk inherit its last finished task.
