@@ -350,6 +350,34 @@ stays. A bug is fixed, not hidden behind a flag.
 optimizing a metric, and investigations; Opus for design and open-ended
 work.
 
+**Hard problems: change the frame before the patch** (owner, 2026-10-31:
+"when having a recurring problem, ask foundational questions, redefine it, go
+to the physics... we should be calling this more"). When a problem recurs,
+resists two attempts, or is a design question with no settled answer, run
+the cognitive transforms ([skills/cognitive-transform-portfolio](skills/cognitive-transform-portfolio/SKILL.md))
+before writing code. At least:
+- **Ask the foundational question.** What is this thing, really? What job
+  does it do, and what is the record of truth it serves?
+- **Redefine the problem.** Is it a symptom of a frame that is wrong? Take
+  "when should compaction run?" (2026-10-31). It became "the working store is
+  derived, so compaction is a restore from a compact snapshot".
+- **Go to the physics.** Work out bytes per event, write amplification, the
+  time budgets (boot envelope, recovery bound), link bandwidth and the
+  information-theoretic floor. A design that ignores a bound fails at that
+  bound; the paper's boot did, at the 15-minute credential envelope.
+- **Map the design space.** List the options from cheapest physics to
+  dearest, before choosing one.
+- **Check the unification.** Can one mechanism do the work of several?
+  Backup, recovery and sync became one computer bundle.
+
+**Review while blocked** (owner, 2026-10-31). When the work waits on CI, a
+deploy or another long process, use that time to run an agentic-consensus
+panel (Devin and DeepSeek) plus a Sonnet seat on the design and the recent
+code. Its brief is big-picture alignment: architecture against
+implementation, and the physical and information-theoretic bounds. Do not
+use the panel for style. Adjudicate each finding in the design doc or the
+mission ledger.
+
 **Escalate on dead ends.** If you've been working on the same problem for 3+
 iterations or 2+ days without convergence, stop patching. Write a structural
 assessment — dependency graph, whether a substrate-level fix would eliminate the

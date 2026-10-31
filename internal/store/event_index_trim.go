@@ -28,6 +28,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -84,8 +85,21 @@ func (s *Store) ensureProjectionBatchTrimFloor() error {
 	if s.texturePath == "" {
 		return nil
 	}
-	return storeschema.WriteFloor(s.texturePath, projectionBatchTrimFloorEpoch, projectionBatchTrimFloorReason)
+	// Written once per workspace: the finalize at every trim point calls this,
+	// and a file read failing there would fail the append.
+	if _, done := projectionBatchTrimFloorWritten.Load(s.texturePath); done {
+		return nil
+	}
+	if err := storeschema.WriteFloor(s.texturePath, projectionBatchTrimFloorEpoch, projectionBatchTrimFloorReason); err != nil {
+		return err
+	}
+	projectionBatchTrimFloorWritten.Store(s.texturePath, struct{}{})
+	return nil
 }
+
+// projectionBatchTrimFloorWritten holds the workspace paths whose trim floor
+// this process has written or found.
+var projectionBatchTrimFloorWritten sync.Map
 
 // trimProjectionBatchIndexTx runs inside finalizeBatch's transaction, after
 // the row is finalized and the head updated. sequence is the new head. It
