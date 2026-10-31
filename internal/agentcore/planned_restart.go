@@ -72,6 +72,14 @@ func plannedRestartMarkerPending(storePath string, now time.Time) bool {
 	return true
 }
 
+// PlannedRestartMarkerPending reports, before anything consumes it, whether
+// this boot is planned: a marker no older than plannedRestartMaxAge at now.
+// Boot uses it to swap in a staged compact copy before the store opens
+// (store.RebaseOntoCompactCopy).
+func PlannedRestartMarkerPending(storePath string, now time.Time) bool {
+	return plannedRestartMarkerPending(storePath, now)
+}
+
 // errHibernateFenced refuses a planned-restart mark while the hibernate fence
 // is closed: the marker would be written into the snapshot being taken.
 var errHibernateFenced = errors.New("hibernate_fenced: the guest is being hibernated; a planned restart cannot be marked now")

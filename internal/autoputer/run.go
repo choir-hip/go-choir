@@ -189,6 +189,21 @@ func Run() {
 
 	// Every store step before the listener logs its start, end and duration:
 	// a boot that hangs names the step that has no end.
+	// A compact copy staged while the computer ran is swapped in on a planned
+	// boot, before the store opens; the tape replay below brings it to the
+	// canonical head (store/compact.go). A crash between its renames is
+	// finished or undone here on any boot.
+	doneRebase := objectgraph.BootPhase("autoputer: startup", "compact-rebase")
+	rebased, rebaseErr := store.RebaseOntoCompactCopy(rtCfg.StorePath, agentcore.PlannedRestartMarkerPending(rtCfg.StorePath, bootTimelineClock.start.UTC()))
+	doneRebase(rebaseErr)
+	if rebaseErr != nil {
+		log.Printf("autoputer: compact rebase: %v", rebaseErr)
+		if _, statErr := os.Stat(store.StateDBPath(rtCfg.StorePath)); errors.Is(statErr, os.ErrNotExist) {
+			boot.fatalf("autoputer: compact rebase left no state file: %v", rebaseErr)
+		}
+	} else if rebased != "" {
+		log.Printf("autoputer: compact rebase: %s", rebased)
+	}
 	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
 	db, err := store.Open(rtCfg.StorePath)
 	doneStoreOpen(err)

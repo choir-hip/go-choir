@@ -197,6 +197,9 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 		return
 	}
 	go func() {
+		// The replay is done: a rollback copy kept by a compaction rebase is
+		// no longer needed (compact.go).
+		s.removePrecompact()
 		wait := telemetryRetireFirstDelay
 		for {
 			select {
@@ -231,6 +234,11 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 				log.Printf("store: incremental vacuum: after %d pages: %v", freed, vacErr)
 			} else if freed > 0 {
 				log.Printf("store: incremental vacuum: %d pages returned", freed)
+			}
+			// A file the retirements left mostly free gets a compact copy,
+			// swapped in at the next planned restart (compact.go).
+			if _, cErr := s.PrepareCompactCopy(ctx); cErr != nil {
+				log.Printf("store: compact copy: %v", cErr)
 			}
 		}
 	}()
