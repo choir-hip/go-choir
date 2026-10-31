@@ -62,14 +62,16 @@
         let floor = nixpkgs.lib.fileContents ./nix/kernel-security-floor;
         in if builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+" floor != null then floor
         else throw "nix/kernel-security-floor must be exactly MAJOR.MINOR.PATCH (one line), got \"${floor}\"";
-      choirKernelPackages = (import nixpkgs-kernel { inherit system; }).linuxPackages_6_18;
-      choirKernelModule = { lib, ... }: {
-        boot.kernelPackages = choirKernelPackages;
+      mkChoirKernelPackages = sys: (import nixpkgs-kernel { system = sys; }).linuxPackages_6_18;
+      mkChoirKernelModule = sys: { lib, ... }:
+        let kernelPackages = mkChoirKernelPackages sys; in {
+        boot.kernelPackages = kernelPackages;
         assertions = [{
-          assertion = lib.versionAtLeast choirKernelPackages.kernel.version choirKernelSecurityFloor;
-          message = "choir kernel ${choirKernelPackages.kernel.version} is below the ${choirKernelSecurityFloor} security floor (nix/kernel-security-floor; docs/problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)";
+          assertion = lib.versionAtLeast kernelPackages.kernel.version choirKernelSecurityFloor;
+          message = "choir kernel ${kernelPackages.kernel.version} is below the ${choirKernelSecurityFloor} security floor (nix/kernel-security-floor; docs/problems/kernel-pin-behind-guest-reachable-checksum-fix-2026-10-22.md)";
         }];
       };
+      choirKernelModule = mkChoirKernelModule system;
 
       # Go toolchain lane (docs/archive/reports/patch-lanes-plan-2026-10-15.md,
       # slice 3). Go point releases carry only security and critical fixes,
@@ -98,7 +100,6 @@
           };
         });
       choirGo = mkChoirGo pkgs;
-      buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
 
       # Firecracker lane. The host's VMM and its jailer are both
       # pkgs.firecracker (nix/node-b.nix VM_FIRECRACKER_BIN, VM_JAILER_BIN),
@@ -217,6 +218,13 @@
           prefix = rootPath + "/";
         in
           if pkgs.lib.hasPrefix prefix full then pkgs.lib.removePrefix prefix full else full;
+
+      # The Go packages for one system. The x86_64 set (goChoirPackages below) is
+      # what deploys; the aarch64 set feeds only the aarch64 guest image (Mac,
+      # Apple Virtualization). The body is the same text for both systems.
+      mkChoirPackages = pkgs: let
+      choirGo = mkChoirGo pkgs;
+      buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
@@ -474,6 +482,10 @@
           subPackage = "cmd/pkgmirror";
         };
       };
+      in { inherit goChoirPackages mkGoService choirGo; };
+
+      x86ChoirPackages = mkChoirPackages pkgs;
+      inherit (x86ChoirPackages) goChoirPackages mkGoService;
 
     in
     let
@@ -507,18 +519,18 @@
       mkGuestVm = commit: mkGuestVmWith { inherit commit; };
       # extraModules carries the layered-store prototype's mount module; the
       # deployed guest passes none, so its derivation is unchanged.
-      mkGuestVmWith = { commit, packages ? goChoirPackages, extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
+      mkGuestVmWith = { commit, packages ? goChoirPackages, extraModules ? [ ], guestSystem ? "x86_64-linux", guestGo ? choirGo }: nixpkgs.lib.nixosSystem {
+        system = guestSystem;
         specialArgs = {
           goChoirPackages = packages;
-          inherit choirGo;
+          choirGo = guestGo;
           buildCommit = commit;
           inherit sourceRepoRemote;
         };
         modules = [
           microvm.nixosModules.microvm
           ./nix/autoputer-vm.nix
-          choirKernelModule
+          (mkChoirKernelModule guestSystem)
         ] ++ extraModules;
       };
 
@@ -532,88 +544,97 @@
       #   app  = closure(real guest) - closure(probe): the paths a deploy adds.
       # A path the probe misses lands in app (bytes, never correctness).
       guestLayerSlowPackages = [ "frontendDeps" ];
-      guestLayerProbePackages = builtins.mapAttrs (name: p:
-        if builtins.elem name guestLayerSlowPackages then p
-        else pkgs.runCommand "${name}-base-probe-stub" { } "mkdir -p $out/bin $out/share/go-choir/skills"
-      ) goChoirPackages;
-      guestLayeredVmConfig = (mkGuestVmWith {
-        commit = buildCommit;
-        extraModules = [ ./nix/guest-layered-store.nix ];
-      }).config;
-      guestBaseProbeVmConfig = (mkGuestVmWith {
-        commit = "base-probe";
-        packages = guestLayerProbePackages;
-        extraModules = [ ./nix/guest-layered-store.nix ];
-      }).config;
-      # The root set microvm.nix's store disk takes: the toplevel, plus the
-      # registration closure-info when nix is enabled.
-      guestStoreClosure = vmConfig: pkgs.writeClosure (
-        [ vmConfig.system.build.toplevel ]
-        ++ pkgs.lib.optional vmConfig.nix.enable
-          (pkgs.closureInfo { rootPaths = [ vmConfig.system.build.toplevel ]; })
-      );
-      erofsForPaths = { name, label, paths }: pkgs.runCommand name {
-        # The same multithreaded erofs-utils microvm.nix builds the store disk
-        # with, so both images come from one tool.
-        nativeBuildInputs = [
-          (pkgs.buildPackages.erofs-utils.overrideAttrs (a: {
-            configureFlags = a.configureFlags ++ [ "--enable-multithreading" ];
-          }))
-          pkgs.buildPackages.bubblewrap
-        ];
-        # The image holds store paths as data; it must not keep them alive.
-        __structuredAttrs = true;
-        unsafeDiscardReferences.out = true;
-      } ''
-        mkdir store
-        args="--dev-bind / / --chdir $(pwd)"
-        for d in $(sort -u ${paths}); do
-          args="$args --ro-bind $d $(pwd)/store/$(basename $d)"
-        done
-        bwrap $args -- mkfs.erofs -zlz4 -T 0 --all-root -L ${label} --mount-point=/nix/store $out store
-      '';
-      guestBaseLayerPaths = guestStoreClosure guestBaseProbeVmConfig;
-      guestAppLayerPaths = pkgs.runCommand "guest-app-layer-paths" { } ''
-        sort -u ${guestStoreClosure guestLayeredVmConfig} > real
-        sort -u ${guestBaseLayerPaths} > base
-        comm -23 real base > $out
-      '';
-      guestBaseLayer = erofsForPaths { name = "guest-store-base.erofs"; label = "nix-base"; paths = guestBaseLayerPaths; };
-      guestAppLayer = erofsForPaths { name = "guest-store-app.erofs"; label = "nix-app"; paths = guestAppLayerPaths; };
-      # The two layers and their path lists, for measurement. The base's store
-      # hash is its reuse key: a deploy that leaves it alone builds only app.
-      guest-store-layers = pkgs.runCommand "go-choir-guest-store-layers" { } ''
-        mkdir -p $out
-        ln -s ${guestBaseLayer} $out/storedisk-base.erofs
-        ln -s ${guestAppLayer} $out/storedisk-app.erofs
-        cp ${guestBaseLayerPaths} $out/base-paths
-        cp ${guestAppLayerPaths} $out/app-paths
-        echo '{"schema":1,"base":"${guestBaseLayer}","app":"${guestAppLayer}"}' > $out/layers.json
-      '';
+      # One layered guest for a system: the probe and real configs, the two
+      # erofs layers, the image. x86_64-linux (below) is the Firecracker fleet;
+      # aarch64-linux is the Mac guest (Apple Virtualization). Same text for
+      # both, so the x86_64 derivations are what they were.
+      #   kernelImages: shell lines linking the boot kernel into the image
+      #   guestModules: extra modules for both configs (the layered mount module)
+      mkGuestLayered = { pkgs, goPackages, guestSystem, guestGo, guestModules, kernelImages, name }: rec {
+        probePackages = builtins.mapAttrs (n: p:
+          if builtins.elem n guestLayerSlowPackages then p
+          else pkgs.runCommand "${n}-base-probe-stub" { } "mkdir -p $out/bin $out/share/go-choir/skills"
+        ) goPackages;
+        layeredVmConfig = (mkGuestVmWith {
+          commit = buildCommit;
+          packages = goPackages;
+          extraModules = guestModules;
+          inherit guestSystem guestGo;
+        }).config;
+        baseProbeVmConfig = (mkGuestVmWith {
+          commit = "base-probe";
+          packages = probePackages;
+          extraModules = guestModules;
+          inherit guestSystem guestGo;
+        }).config;
+        # The root set microvm.nix's store disk takes: the toplevel, plus the
+        # registration closure-info when nix is enabled.
+        storeClosure = vmConfig: pkgs.writeClosure (
+          [ vmConfig.system.build.toplevel ]
+          ++ pkgs.lib.optional vmConfig.nix.enable
+            (pkgs.closureInfo { rootPaths = [ vmConfig.system.build.toplevel ]; })
+        );
+        erofsForPaths = { name, label, paths }: pkgs.runCommand name {
+          # The same multithreaded erofs-utils microvm.nix builds the store disk
+          # with, so both images come from one tool.
+          nativeBuildInputs = [
+            (pkgs.buildPackages.erofs-utils.overrideAttrs (a: {
+              configureFlags = a.configureFlags ++ [ "--enable-multithreading" ];
+            }))
+            pkgs.buildPackages.bubblewrap
+          ];
+          # The image holds store paths as data; it must not keep them alive.
+          __structuredAttrs = true;
+          unsafeDiscardReferences.out = true;
+        } ''
+          mkdir store
+          args="--dev-bind / / --chdir $(pwd)"
+          for d in $(sort -u ${paths}); do
+            args="$args --ro-bind $d $(pwd)/store/$(basename $d)"
+          done
+          bwrap $args -- mkfs.erofs -zlz4 -T 0 --all-root -L ${label} --mount-point=/nix/store $out store
+        '';
+        baseLayerPaths = storeClosure baseProbeVmConfig;
+        appLayerPaths = pkgs.runCommand "guest-app-layer-paths" { } ''
+          sort -u ${storeClosure layeredVmConfig} > real
+          sort -u ${baseLayerPaths} > base
+          comm -23 real base > $out
+        '';
+        baseLayer = erofsForPaths { name = "guest-store-base.erofs"; label = "nix-base"; paths = baseLayerPaths; };
+        appLayer = erofsForPaths { name = "guest-store-app.erofs"; label = "nix-app"; paths = appLayerPaths; };
+        # The two layers and their path lists, for measurement. The base's store
+        # hash is its reuse key: a deploy that leaves it alone builds only app.
+        storeLayers = pkgs.runCommand "go-choir-guest-store-layers" { } ''
+          mkdir -p $out
+          ln -s ${baseLayer} $out/storedisk-base.erofs
+          ln -s ${appLayer} $out/storedisk-app.erofs
+          cp ${baseLayerPaths} $out/base-paths
+          cp ${appLayerPaths} $out/app-paths
+          echo '{"schema":1,"base":"${baseLayer}","app":"${appLayer}"}' > $out/layers.json
+        '';
 
-      # The layered guest image (docs/design/layered-guest-image-2026-10-31.md
-      # S2): the single image's artifacts plus storedisk-app.erofs,
-      # storedisk-base.erofs and layers.json, with the layered toplevel's
-      # initrd, kernel-params and release.json (its floor digest moves with the
-      # layered initrd, so snapshots never resume across layouts). Installed on
-      # Node B as a second release by the same materialize step; vmctl launches
-      # it only for the layered ring (VM_GUEST_LAYERED_COMPUTERS). The big
-      # files are symlinks into their own store paths: the Nix store holds each
-      # layer once, and the release install reflinks through the links.
-      guest-image-layered =
-        let
-          vmConfig = guestLayeredVmConfig;
-          name = "go-choir-guest-image-layered";
-        in pkgs.runCommand name { } ''
+        # The layered guest image (docs/design/layered-guest-image-2026-10-31.md
+        # S2): the single image's artifacts plus storedisk-app.erofs,
+        # storedisk-base.erofs and layers.json, with the layered toplevel's
+        # initrd, kernel-params and release.json (its floor digest moves with the
+        # layered initrd, so snapshots never resume across layouts). Installed on
+        # Node B as a second release by the same materialize step; vmctl launches
+        # it only for the layered ring (VM_GUEST_LAYERED_COMPUTERS). The big
+        # files are symlinks into their own store paths: the Nix store holds each
+        # layer once, and the release install reflinks through the links.
+        image =
+          let
+            vmConfig = layeredVmConfig;
+          in pkgs.runCommand name { } ''
         mkdir -p $out
-        ln -s ${vmConfig.boot.kernelPackages.kernel.dev}/vmlinux $out/vmlinux
+        ${kernelImages vmConfig}
         ln -s ${vmConfig.microvm.bootDisk} $out/rootfs.ext4
         ln -s ${vmConfig.system.build.initialRamdisk}/${vmConfig.system.boot.loader.initrdFile} $out/initrd
-        ln -s ${guestAppLayer} $out/storedisk-app.erofs
-        ln -s ${guestBaseLayer} $out/storedisk-base.erofs
-        cp ${guestBaseLayerPaths} $out/base-paths
-        cp ${guestAppLayerPaths} $out/app-paths
-        echo '{"schema":1,"base":"${guestBaseLayer}","app":"${guestAppLayer}"}' > $out/layers.json
+        ln -s ${appLayer} $out/storedisk-app.erofs
+        ln -s ${baseLayer} $out/storedisk-base.erofs
+        cp ${baseLayerPaths} $out/base-paths
+        cp ${appLayerPaths} $out/app-paths
+        echo '{"schema":1,"base":"${baseLayer}","app":"${appLayer}"}' > $out/layers.json
         cat > $out/build.json <<'EOF'
 {"schema_version":1,"artifact":"${name}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
 EOF
@@ -623,6 +644,20 @@ EOF
         cp ${vmConfig.environment.etc."choir-guest-image-manifest".source} $out/guest-image-manifest
         cp ${pkgs.writeText "release.json" (guestReleaseJsonFor buildCommit vmConfig)} $out/release.json
       '';
+      };
+      x86GuestLayered = mkGuestLayered {
+        inherit pkgs;
+        goPackages = goChoirPackages;
+        guestSystem = "x86_64-linux";
+        guestGo = choirGo;
+        guestModules = [ ./nix/guest-layered-store.nix ];
+        name = "go-choir-guest-image-layered";
+        kernelImages = vmConfig: "ln -s ${vmConfig.boot.kernelPackages.kernel.dev}/vmlinux $out/vmlinux";
+      };
+      guestLayeredVmConfig = x86GuestLayered.layeredVmConfig;
+      guestBaseLayer = x86GuestLayered.baseLayer;
+      guest-store-layers = x86GuestLayered.storeLayers;
+      guest-image-layered = x86GuestLayered.image;
 
       # ── Guest release metadata (docs/design/density-d2-snapshots-survive-
       # deploys-2026-10-26.md 3.1) ───────────────────────────────────────────
@@ -712,6 +747,28 @@ EOF
       # Convenience package that bundles the canonical guest artifacts.
       guest-image = mkGuestImage "go-choir-guest-image" guestVmConfig;
 
+      # ── aarch64 guest for the Mac (Apple Virtualization) ─────────────────
+      # The same guest module (nix/autoputer-vm.nix), the same layered store
+      # (nix/guest-layered-store.nix) and the same service set, built for
+      # aarch64-linux, plus nix/guest-aarch64.nix for what Virtualization.framework
+      # needs (virtio console, DHCP on the NAT). Not deployed to Node B and
+      # not consumed by any x86_64 output. The kernel is booted as `Image`
+      # (the uncompressed arm64 image VZLinuxBootLoader takes); there is no
+      # vmlinux ELF. Build from the Mac through an aarch64-linux builder:
+      #   nix build .#packages.aarch64-linux.guest-image-layered
+      aarch64System = "aarch64-linux";
+      aarch64Pkgs = importPkgs aarch64System;
+      aarch64Choir = mkChoirPackages aarch64Pkgs;
+      aarch64Guest = mkGuestLayered {
+        pkgs = aarch64Pkgs;
+        goPackages = aarch64Choir.goChoirPackages;
+        guestSystem = aarch64System;
+        guestGo = aarch64Choir.choirGo;
+        guestModules = [ ./nix/guest-layered-store.nix ./nix/guest-aarch64.nix ];
+        name = "go-choir-guest-image-aarch64";
+        kernelImages = vmConfig: "ln -s ${vmConfig.system.build.kernel}/${vmConfig.system.boot.loader.kernelFile} $out/Image";
+      };
+
       # Desktop dev shell — for building Choir Desktop with Wails v3.
       # Separate from the default shell so it doesn't
       # interfere with the main Go dev environment.
@@ -753,6 +810,17 @@ EOF
         # image (the deploy-level floor measurement reads it per commit; the
         # same text is lib.guestReleaseJson for pure evaluation).
         guest-release-json = pkgs.writeText "release.json" guestReleaseJson;
+      };
+
+      # The Mac guest (aarch64-linux): the layered base + app erofs, the
+      # uncompressed arm64 kernel Image, the initrd and the boot disk.
+      packages.${aarch64System} = {
+        guest-image-layered = aarch64Guest.image;
+        guest-store-layers = aarch64Guest.storeLayers;
+        guest-store-base-layer = aarch64Guest.baseLayer;
+        guest-kernel = aarch64Guest.layeredVmConfig.system.build.kernel;
+        guest-kernel-config = aarch64Guest.layeredVmConfig.boot.kernelPackages.kernel.configfile;
+        guest-release-json = aarch64Pkgs.writeText "release.json" (guestReleaseJsonFor buildCommit aarch64Guest.layeredVmConfig);
       };
 
       lib.guestReleaseJson = guestReleaseJson;
