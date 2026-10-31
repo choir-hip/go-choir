@@ -1668,6 +1668,15 @@ func (m *Manager) RemoveVM(vmID string) error {
 		return fmt.Errorf("vm %s is still running; stop it first", vmID)
 	}
 
+	// A VM removed for good leaves no jail behind: the jail hard-links the store
+	// disk and data image, so a stale one pins an old guest release's bytes
+	// after retention deletes the release. A hibernated VM keeps its jail (its
+	// snapshot restore uses it), and a VM with a live process keeps everything.
+	if (inst.State == StateStopped || inst.State == StateFailed) && validJailerID(vmID) && !(inst.PID > 0 && processExists(inst.PID)) {
+		if err := os.RemoveAll(m.jailDir(vmID)); err != nil {
+			log.Printf("vmmanager: remove jail of VM %s: %v", vmID, err)
+		}
+	}
 	delete(m.vms, vmID)
 	log.Printf("vmmanager: removed VM %s from management (persistent data preserved)", vmID)
 	return nil
