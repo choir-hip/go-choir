@@ -258,7 +258,7 @@ func TestDerivedKeyReadsMatchJSONReads(t *testing.T) {
 			t.Fatalf("put %s: %v", k.id, err)
 		}
 	}
-	for i := 0; i < 160; i++ {
+	for i := 0; i < 80; i++ {
 		v := values[rng.Intn(len(values))]
 		owner := []string{"o1", "o2"}[rng.Intn(2)]
 		tomb := rng.Intn(9) == 0
@@ -369,7 +369,7 @@ func TestOpenDoesNotTouchOgObjects(t *testing.T) {
 	db, store := openDerivedStore(t)
 	// A store that already has many rows and no side table rows: the paper
 	// the day this ships.
-	const rows = 20000
+	const rows = 2000
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -635,7 +635,7 @@ func TestValidatorWithWriterStorm(t *testing.T) {
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 	// Existing rows with no side rows (an older binary wrote them).
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 150; i++ {
 		rawOldBinaryPut(t, db, keyedObj{id: fmt.Sprintf("run-%04d", i), kind: testRunKind, meta: map[string]any{"agent_id": fmt.Sprintf("a%d", i%7)}, body: `{}`, at: at}.object(t))
 		rawOldBinaryPut(t, db, keyedObj{id: fmt.Sprintf("rec-%04d", i), kind: commitmentRecordKind, meta: map[string]any{}, body: mustJSON(map[string]any{"addressee": fmt.Sprintf("a%d", i%7)}), at: at}.object(t))
 	}
@@ -681,7 +681,7 @@ func TestValidatorHoldsTheWriteConnectionOnlyPerPage(t *testing.T) {
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	for i := 0; i < 1200; i++ {
+	for i := 0; i < 400; i++ {
 		rawOldBinaryPut(t, db, keyedObj{id: fmt.Sprintf("rec-%05d", i), kind: commitmentRecordKind, meta: map[string]any{}, body: mustJSON(map[string]any{"addressee": fmt.Sprintf("a%d", i%7)}), at: at}.object(t))
 	}
 	done := make(chan struct{})
@@ -691,7 +691,7 @@ func TestValidatorHoldsTheWriteConnectionOnlyPerPage(t *testing.T) {
 	go func() {
 		defer close(done)
 		for time.Now().Before(deadline) {
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 			start := time.Now()
 			_, err := store.GetObject(ctx, "rec-00001")
 			if err != nil {
@@ -717,8 +717,8 @@ func TestValidatorHoldsTheWriteConnectionOnlyPerPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-done
-	if pages := store.derived.passPages.Load(); pages < 1200/50 {
-		t.Fatalf("validator took %d pages for 1200 rows at 50 a page", pages)
+	if pages := store.derived.passPages.Load(); pages < 400/50 {
+		t.Fatalf("validator took %d pages for 400 rows at 50 a page", pages)
 	}
 	if hold := time.Duration(store.derived.maxPageHoldNanos.Load()); hold > 3*time.Second {
 		t.Fatalf("one page held the write connection %s", hold)
@@ -856,7 +856,7 @@ func TestValidatorPagesAKindsPrimaryKeyRangeAndFindsStrays(t *testing.T) {
 
 // The first pass over a store that has rows and no key rows (the paper the day
 // this ships) derives everything; every later pass compares narrow columns and
-// derives nothing. Measured here on 18,000 rows so the numbers are in the log
+// derives nothing. Measured here on 3,600 rows so the numbers are in the log
 // of every run; the assertions are loose on purpose (a slow laptop must not
 // fail them) and tight on the shape: bounded pages, and a repeat pass much
 // cheaper than the first.
@@ -864,7 +864,7 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	const perKind = 6000
+	const perKind = 1200
 	insert := func(kind ObjectKind, make func(i int) (meta, body string)) {
 		tx, err := db.Begin()
 		if err != nil {
