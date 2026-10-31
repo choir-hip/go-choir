@@ -2,7 +2,7 @@
  * Deployed staging proof: outbound mail attachments end-to-end on choir.news.
  *
  * Registers a fresh passkey account (virtual authenticator), provisions a
- * plus-code alias for it via host maildctl (test fixture — fresh accounts get
+ * numbered plus-code alias for it via host maildctl (reserve-test-number, bind-number) (test fixture — fresh accounts get
  * no alias by default), then drives the real Mail app: compose → attach one
  * client-uploaded file and one autoputer-FS file → approve → send to the
  * account's own alias and 000@choir.news → verify the inbound message lands
@@ -18,23 +18,31 @@ import { execSync } from 'node:child_process';
 const BASE_URL = process.env.BASE_URL || 'https://choir.news';
 const ROOT_ADDR = '000@choir.news';
 
-// Unique per run: aliases are global and cannot be re-owned.
+// Unique per run: aliases are global and cannot be re-owned. The alias lives
+// under the fresh account's own reserved test number (NNN+uitest<RUN>); a
+// plus-alias may be created only by the owner of its number.
 const RUN_ID = `${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
-const ALIAS_LOCAL = `000+uitest${RUN_ID}`;
-const ALIAS_ADDR = `${ALIAS_LOCAL}@choir.news`;
+let ALIAS_LOCAL = '';
+let ALIAS_ADDR = '';
 
 function uniqueEmail() {
   return `mail-attach-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
 }
 
+function nodeB(cmd) {
+  return execSync(`ssh -o ConnectTimeout=15 -o BatchMode=yes node-b "${cmd}"`, { stdio: 'pipe', timeout: 30_000 }).toString();
+}
+
 function provisionAlias(userID) {
   // Test fixture only: fresh accounts have no mail alias; the product has no
-  // self-serve alias route. Provision a trusted plus-code alias host-side.
-  execSync(
-    `ssh -o ConnectTimeout=15 -o BatchMode=yes node-b ` +
-      `"maildctl configure-workflow-alias --owner ${userID} --local-part ${ALIAS_LOCAL} --sender ${ALIAS_ADDR}"`,
-    { stdio: 'pipe', timeout: 30_000 },
-  );
+  // self-serve alias route. Reserve a test number, bind it to the fresh
+  // account, then create <number>+uitest<RUN> host-side.
+  const address = JSON.parse(nodeB('maildctl reserve-test-number')).address;
+  const number = address.split('@')[0];
+  nodeB(`maildctl bind-number --address ${address} --owner ${userID}`);
+  ALIAS_LOCAL = `${number}+uitest${RUN_ID}`;
+  ALIAS_ADDR = `${ALIAS_LOCAL}@choir.news`;
+  nodeB(`maildctl configure-workflow-alias --owner ${userID} --local-part ${ALIAS_LOCAL} --sender ${ALIAS_ADDR}`);
 }
 
 async function apiFetch(page, path, options = {}) {

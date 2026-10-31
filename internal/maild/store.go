@@ -1103,7 +1103,7 @@ func (s *Store) IsSenderWhitelisted(ctx context.Context, ownerID, aliasID, sende
 // ListAliases returns configured aliases for operator inspection.
 func (s *Store) ListAliases(ctx context.Context) ([]EmailAlias, error) {
 	rows, err := s.routingDB.QueryContext(ctx, `SELECT
-		id, domain, local_part, coalesce(canonical_number, 0), target_type,
+		id, domain, local_part, coalesce(canonical_number, -1), target_type,
 		target_id, visibility, receive_policy_id
 		FROM email_aliases
 		ORDER BY domain, local_part`)
