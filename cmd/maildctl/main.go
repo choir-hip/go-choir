@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/maild"
 )
@@ -37,6 +38,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	domain := fs.String("domain", "choir.news", "email domain")
 	localPart := fs.String("local-part", "", "email local part")
 	senderAddress := fs.String("sender", "", "sender email address")
+	addressFlag := fs.String("address", "", "numbered email address (bind-number)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -101,6 +103,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 			LocalPart:     *localPart,
 			SenderAddress: *senderAddress,
 		})
+	case "reserve-test-number":
+		out, err = store.ReserveTestNumber(ctx, *domain, time.Now(), maild.NumberReservationTTL)
+	case "bind-number":
+		address := strings.ToLower(strings.TrimSpace(*addressFlag))
+		local, dom, ok := strings.Cut(address, "@")
+		if !ok || local == "" || dom == "" || strings.TrimSpace(*ownerID) == "" {
+			_, _ = fmt.Fprintln(stderr, "maildctl bind-number: --address NUMBER@DOMAIN and --owner are required")
+			return 2
+		}
+		var alias maild.EmailAlias
+		alias, err = store.BindNumber(ctx, dom, local, *ownerID, time.Now())
+		out = map[string]string{"address": alias.LocalPart + "@" + alias.Domain, "owner": alias.TargetID}
 	default:
 		printUsage(stderr)
 		return 2
@@ -177,6 +191,10 @@ commands:
   source-packet --owner ID --message ID
   ingress-events --owner ID [--message ID] [--limit N]
   configure-workflow-alias --owner ID --local-part LOCAL --sender EMAIL [--domain DOMAIN]
+  reserve-test-number [--domain DOMAIN]
+                                reserve the next test number (10,000,000 range); expires unbound in 24h
+  bind-number --address NUMBER@DOMAIN --owner USER_ID
+                                bind a reserved test number to an account (idempotent for the same owner)
 
 common flags:
   --db PATH                     maild SQLite database path`)

@@ -316,18 +316,6 @@ func senderWhitelistRowID(aliasID, senderAddress string) string {
 	return shaRowID("email-sender-whitelist", strings.TrimSpace(aliasID)+":"+strings.ToLower(strings.TrimSpace(senderAddress)))
 }
 
-func canonicalNumberFromLocalPart(localPart string) int {
-	base, _, _ := strings.Cut(strings.TrimSpace(localPart), "+")
-	var n int
-	for _, r := range base {
-		if r < '0' || r > '9' {
-			return 0
-		}
-		n = n*10 + int(r-'0')
-	}
-	return n
-}
-
 func recipientRowID(messageID, kind, address string) string {
 	return shaRowID("email-recipient", messageID+":"+kind+":"+address)
 }

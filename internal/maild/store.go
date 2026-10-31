@@ -398,6 +398,9 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			return fmt.Errorf("routing schema migration: %w", err)
 		}
 	}
+	if err := ensureNumberSchema(s.routingDB); err != nil {
+		return err
+	}
 	if err := s.seedDefaults(cfg); err != nil {
 		return err
 	}
@@ -965,6 +968,19 @@ func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config Truste
 			_ = tx.Rollback()
 		}
 	}()
+	// A numbered namespace belongs to its number's owner: NNN+tag may be
+	// created only by the account bound to NNN.
+	if p := parseNumberedLocalPart(localPart); p.Numeric {
+		if !p.Canonical {
+			return EmailAlias{}, fmt.Errorf("plus-alias base %q is not a canonical number", p.Base)
+		}
+		var baseOwner string
+		berr := tx.QueryRowContext(ctx, `SELECT target_id FROM email_aliases
+			WHERE domain = ? AND local_part = ? AND target_type = 'user' AND disabled_at IS NULL`, domain, p.Base).Scan(&baseOwner)
+		if berr != nil || baseOwner != ownerID {
+			return EmailAlias{}, fmt.Errorf("plus-alias under number %s may be created only by its owner", p.Base)
+		}
+	}
 	var existingID, existingOwner string
 	err = tx.QueryRowContext(ctx, `SELECT id, target_id FROM email_aliases WHERE domain = ? AND local_part = ?`, domain, localPart).Scan(&existingID, &existingOwner)
 	if err != nil && err != sql.ErrNoRows {
@@ -980,8 +996,8 @@ func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config Truste
 		if _, err := tx.ExecContext(ctx, `INSERT INTO email_aliases (
 			id, domain, local_part, canonical_number, target_type, target_id,
 			visibility, receive_policy_id, created_at
-		) VALUES (?, ?, ?, ?, 'user', ?, 'unlisted', ?, ?)`,
-			aliasID, domain, localPart, canonicalNumberFromLocalPart(localPart), ownerID, DefaultTrustedWorkflowPolicyID, now); err != nil {
+		) VALUES (?, ?, ?, NULL, 'user', ?, 'unlisted', ?, ?)`,
+			aliasID, domain, localPart, ownerID, DefaultTrustedWorkflowPolicyID, now); err != nil {
 			return EmailAlias{}, fmt.Errorf("insert trusted workflow alias: %w", err)
 		}
 	} else if _, err := tx.ExecContext(ctx, `UPDATE email_aliases
@@ -1006,11 +1022,15 @@ func (s *Store) ConfigureTrustedWorkflowAlias(ctx context.Context, config Truste
 
 // ResolveAlias resolves a domain/local_part pair.
 func (s *Store) ResolveAlias(ctx context.Context, domain, localPart string) (EmailAlias, error) {
+	// Non-canonical numeric forms (0, 01, 0001, over-long) route nowhere.
+	if p := parseNumberedLocalPart(localPart); p.Numeric && !p.Canonical {
+		return EmailAlias{}, sql.ErrNoRows
+	}
 	var alias EmailAlias
 	err := s.routingDB.QueryRowContext(ctx, `SELECT
-		id, domain, local_part, canonical_number, target_type, target_id, visibility, receive_policy_id
+		id, domain, local_part, coalesce(canonical_number, -1), target_type, target_id, visibility, receive_policy_id
 		FROM email_aliases
-		WHERE domain = ? AND local_part = ? AND disabled_at IS NULL`,
+		WHERE domain = ? AND local_part = ? AND disabled_at IS NULL AND target_type != 'reserved'`,
 		domain, localPart).Scan(
 		&alias.ID,
 		&alias.Domain,

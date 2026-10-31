@@ -660,7 +660,7 @@ func seedTrustedUploadAlias(t *testing.T, store *Store, whitelist bool) {
 	if _, err := store.routingDB.Exec(`INSERT INTO email_aliases (
 		id, domain, local_part, canonical_number, target_type, target_id,
 		visibility, receive_policy_id, created_at
-	) VALUES ('alias-trusted-upload-test', 'choir.news', '000+upload-secret', 0, 'user', 'user-root', 'unlisted', 'policy-trusted-upload-test', ?)`, now); err != nil {
+	) VALUES ('alias-trusted-upload-test', 'choir.news', '000+upload-secret', NULL, 'user', 'user-root', 'unlisted', 'policy-trusted-upload-test', ?)`, now); err != nil {
 		t.Fatalf("insert trusted alias: %v", err)
 	}
 	if !whitelist {
