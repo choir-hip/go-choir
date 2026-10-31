@@ -1,0 +1,624 @@
+#!/usr/bin/env python3
+"""Node B growth meter: one JSON line per hour, metadata only, never content.
+
+Owner goal (docs/definitions/choir-lean-system-2026-10-30.md): Node B used
+bytes and PostgreSQL rows flat day over day, growing only with new user
+state; every maintenance job inside its memory line; no OOM; for at least two
+days. This is the proof instrument: an hourly reading and a day-over-day
+report.
+
+    node-b-growth-meter            take one reading, append it to the ledger
+    node-b-growth-meter --report   print day-over-day deltas and flags
+    node-b-growth-meter --stdout   take one reading, print it, write nothing
+
+What a reading holds (every number is a size, a count or a cgroup counter;
+no file is opened for content, no SQL touches a content column):
+  df of /; allocated bytes (du -x) of /nix/store, guest-releases, guest-bases,
+  guest-layered, each vm-state computer (data.img apart from the rest), the
+  platform-artifacts stores per computer (tape-seg, file-cas chunks and
+  roots, pin-receipts, computer-event, computer-event-payload, checkpoints);
+  PostgreSQL database sizes, per-table total size and n_live_tup, and the
+  append-receipt rows per computer and event_kind since the last reading.
+  Memory: memory.peak, memory.max and memory.events of every go-choir*
+  service, postgresql, nix-daemon (live cgroups), the "memory peak" figure
+  systemd logs when a oneshot maintenance unit stops (their cgroup is gone
+  after the run), Firecracker RSS by vm id, MemAvailable, kernel OOM kills.
+
+Receipt rates without a created_at index: the table has no index on
+created_at, so a created_at range is a full scan of millions of rows. The
+meter instead keeps the last max(sequence) per computer in the state file
+and counts rows with sequence above it, per event_kind, through the
+(computer_id, event_kind, sequence) index. The first reading only sets the
+mark.
+
+Heavy du (small-file stores such as pin-receipts take minutes) runs once per
+GROWTH_HEAVY_EVERY_H hours (default 23, so about daily); the other hours carry
+those items as absent. Day-over-day comparison needs one reading a day.
+
+Machine state vs user state is the static CLASSES map below (first matching
+prefix wins). "user" is the keep set (newspaper content, the Autopaper object
+graph, owner email, Textures, precommitment records, the agent record);
+"machine" is receipts, snapshots, images, releases, nix and logs; "mixed"
+holds both (a guest data.img holds the user's state.db and machine residue)
+and is shown but never raises the machine-growth flag.
+
+Ledger: GROWTH_DIR/YYYY-MM.jsonl (default /var/lib/go-choir/growth-meter).
+A line is about 16 KB on Node B (per-store children are capped at the ten
+largest plus one "~rest" aggregate), so a month (744 lines) is about 12 MB;
+the meter refuses to append past GROWTH_MAX_FILE_BYTES (64 MB) and says so.
+
+Exit codes: 0 reading taken or report printed (report flags do not fail the
+unit), 1 ledger refused or unwritable.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+# Every external tool this script runs. The systemd wrapper PATH must carry
+# each one (scripts/test-node-b-growth-meter.sh checks the nix block against
+# this tuple and against the run([...]) calls below).
+TOOLS = ("df", "du", "runuser", "psql", "journalctl", "systemctl")
+
+GIB = 1 << 30
+
+ENV = os.environ.get
+GROWTH_DIR = ENV("GROWTH_DIR", "/var/lib/go-choir/growth-meter")
+STATE_ROOT = ENV("GROWTH_STATE_ROOT", "/var/lib/go-choir")
+CGROUP = ENV("GROWTH_CGROUP", "/sys/fs/cgroup")
+PROC = ENV("GROWTH_PROC", "/proc")
+MEMINFO = ENV("GROWTH_MEMINFO", "/proc/meminfo")
+MAX_FILE = int(ENV("GROWTH_MAX_FILE_BYTES", str(64 << 20)))
+HEAVY_EVERY_S = float(ENV("GROWTH_HEAVY_EVERY_H", "23")) * 3600
+DU_TIMEOUT = int(ENV("GROWTH_DU_TIMEOUT_S", "900"))
+PSQL_TIMEOUT = int(ENV("GROWTH_PSQL_TIMEOUT_S", "120"))
+SELF_UNIT_GLOBS = ("go-choir-*.service", "postgresql.service", "nix-daemon.service")
+NOW = float(ENV("GROWTH_NOW", "0")) or time.time()
+
+# Heavy stores: millions of small files. Measured at most once per HEAVY_EVERY_S.
+HEAVY = ("pin-receipts", "computer-event", "computer-event-payload", "file-cas-chunks")
+
+# (prefix, class). First match wins. Documented in the module docstring.
+CLASSES = (
+    ("pg.control.computer_event_append_receipts", "machine"),  # host receipts
+    ("pg.graph", "user"),                                      # Autopaper object graph
+    ("pg.control", "mixed"),                                   # sessions, ledgers, records
+    ("pg.", "mixed"),
+    ("fs.nix-store", "machine"),
+    ("fs.guest-releases", "machine"),
+    ("fs.guest-bases", "machine"),
+    ("fs.guest-layered", "machine"),
+    ("fs.vm-state.", "mixed"),                                 # data.img holds state.db
+    ("fs.root", "machine"),
+    ("fs.artifacts.tape-seg", "user"),                         # the tape: the agent record
+    ("fs.artifacts.computer-event-payload", "user"),
+    ("fs.artifacts.computer-event", "user"),
+    ("fs.artifacts.file-cas", "user"),                         # Textures, owner files
+    ("fs.artifacts.pin-receipts", "machine"),
+    ("fs.artifacts.computer-checkpoints", "machine"),          # snapshots
+    ("fs.artifacts.computer-inputs", "machine"),
+    ("fs.artifacts.", "machine"),
+    ("fs.files", "user"),                                      # Textures / newspaper vtext
+    ("fs.mail", "user"),                                       # owner email
+    ("fs.logs", "machine"),
+)
+
+
+# Units whose memory.peak is reclaimable page and dentry cache by design (the
+# meter's own du walk): shown, never flagged for peak. oom_kill still flags.
+CACHE_BOUND_UNITS = ("go-choir-growth-meter.service",)
+
+
+def classify(name):
+    for prefix, cls in CLASSES:
+        if name.startswith(prefix):
+            return cls
+    return "machine"
+
+
+def run(argv, timeout, errors, label):
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        errors.append(f"{label}: timeout {timeout}s")
+        return None
+    except OSError as e:
+        errors.append(f"{label}: {e}")
+        return None
+    if p.returncode == 1 and argv[0] == "journalctl" and not p.stdout.strip():
+        return ""  # journalctl -g: exit 1 is "no match", not a failure
+    if p.returncode != 0:
+        errors.append(f"{label}: exit {p.returncode}: {p.stderr.strip()[:200]}")
+        # du exits 1 on a vanished file but still prints sizes; keep stdout.
+        return p.stdout or None
+    return p.stdout
+
+
+def read_int(path):
+    try:
+        with open(path) as f:
+            s = f.read().strip()
+        return None if s in ("", "max") else int(s)
+    except (OSError, ValueError):
+        return None
+
+
+def read_events(path):
+    out = {}
+    try:
+        with open(path) as f:
+            for line in f:
+                k, _, v = line.partition(" ")
+                if k in ("low", "high", "max", "oom", "oom_kill"):
+                    out[k] = int(v)
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+SIZE_RE = re.compile(r"([0-9.]+)\s*([KMGT]?)(?:i?B)?\s+memory peak")
+MULT = {"": 1, "K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
+
+
+def parse_peak_lines(text):
+    peaks = {}
+    for line in (text or "").splitlines():
+        m = SIZE_RE.search(line)
+        u = re.match(r"\s*([A-Za-z0-9@:._\\-]+\.(?:service))", line)
+        if m and u:
+            v = int(float(m.group(1)) * MULT[m.group(2)])
+            peaks[u.group(1)] = max(peaks.get(u.group(1), 0), v)
+    return peaks
+
+
+# ---- measurements ----------------------------------------------------------
+
+def measure_df(items, errors):
+    out = run(["df", "-B1", "--output=size,used,avail", "/"], 30, errors, "df")
+    if not out:
+        return
+    parts = out.strip().splitlines()[-1].split()
+    if len(parts) >= 3 and all(p.isdigit() for p in parts[:3]):
+        items["fs.root.size"] = int(parts[0])
+        items["fs.root.used"] = int(parts[1])
+        items["fs.root.avail"] = int(parts[2])
+
+
+KEEP_CHILDREN = int(ENV("GROWTH_KEEP_CHILDREN", "10"))
+
+
+def top_children(kids):
+    """Largest KEEP_CHILDREN children by name plus one aggregate, so a store
+    with 200 computer directories does not add 200 ledger keys an hour."""
+    ranked = sorted(kids.items(), key=lambda kv: (-kv[1], kv[0]))
+    out = dict(ranked[:KEEP_CHILDREN])
+    rest = ranked[KEEP_CHILDREN:]
+    if rest:
+        out["~rest"] = sum(v for _, v in rest)
+    return out
+
+
+def du_children(path, errors, label):
+    """Allocated bytes per immediate child plus the total, one du pass."""
+    out = run(["du", "-x", "-d1", "-B1", path], DU_TIMEOUT, errors, label)
+    res = {}
+    total = None
+    for line in (out or "").splitlines():
+        sz, _, p = line.partition("\t")
+        if not sz.isdigit():
+            continue
+        if p.rstrip("/") == path.rstrip("/"):
+            total = int(sz)
+        else:
+            res[os.path.basename(p.rstrip("/"))] = int(sz)
+    return total, res
+
+
+def du_total(path, errors, label):
+    out = run(["du", "-sx", "-B1", path], DU_TIMEOUT, errors, label)
+    if out:
+        f = out.split("\t")[0].split()
+        if f and f[0].isdigit():
+            return int(f[0])
+    return None
+
+
+def measure_fs(items, errors, heavy_due, state):
+    root = STATE_ROOT
+    for name, path in (
+        ("fs.nix-store", "/nix/store"),
+        ("fs.guest-releases", f"{root}/guest-releases"),
+        ("fs.guest-bases", f"{root}/guest-bases"),
+        ("fs.guest-layered", f"{root}/guest-layered"),
+        ("fs.files", f"{root}/files"),
+        ("fs.mail", f"{root}/mail"),
+    ):
+        if os.path.isdir(path):
+            v = du_total(path, errors, name)
+            if v is not None:
+                items[name] = v
+    # vm-state: data.img apart from the rest, per vm directory.
+    vmroot = f"{root}/vm-state"
+    if os.path.isdir(vmroot):
+        _, kids = du_children(vmroot, errors, "vm-state")
+        for kid, total in sorted(kids.items()):
+            if not kid.startswith("vm-"):
+                continue
+            img = 0
+            try:
+                st = os.stat(f"{vmroot}/{kid}/data.img")
+                img = st.st_blocks * 512
+            except OSError:
+                pass
+            items[f"fs.vm-state.{kid}.data.img"] = img
+            items[f"fs.vm-state.{kid}.other"] = max(total - img, 0)
+    art = f"{root}/platform-artifacts"
+    heavy_ok = []
+    for sub, path in (
+        ("tape-seg", f"{art}/tape-seg"),
+        ("file-cas-roots", f"{art}/sha256/file-cas-roots"),
+        ("computer-checkpoints", f"{art}/computer-checkpoints"),
+        ("computer-inputs", f"{art}/computer-inputs"),
+        ("file-cas-chunks", f"{art}/sha256/file-cas-chunks"),
+        ("pin-receipts", f"{art}/sha256/pin-receipts"),
+        ("computer-event", f"{art}/sha256/computer-event"),
+        ("computer-event-payload", f"{art}/sha256/computer-event-payload"),
+    ):
+        if not os.path.isdir(path):
+            continue
+        if sub in HEAVY and not heavy_due:
+            continue
+        total, kids = du_children(path, errors, sub)
+        if total is not None:
+            items[f"fs.artifacts.{sub}"] = total
+        for kid, v in top_children(kids).items():
+            items[f"fs.artifacts.{sub}.{kid}"] = v
+        if sub in HEAVY:
+            heavy_ok.append(sub)
+    if heavy_due and heavy_ok:
+        state["heavy_at"] = NOW
+
+
+def psql(db, sql, errors, label):
+    out = run(["runuser", "-u", "postgres", "--", "psql", "-X", "-At", "-F", "\t",
+               "-d", db, "-c", sql], PSQL_TIMEOUT, errors, label)
+    return [ln.split("\t") for ln in (out or "").splitlines() if ln]
+
+
+def measure_pg(items, errors, state, receipts):
+    dbs = psql("postgres", "select datname from pg_database where not datistemplate "
+               "and datname<>'postgres' order by 1", errors, "pg.dbs")
+    for (db,) in dbs:
+        r = psql(db, "select pg_database_size(current_database())", errors, f"pg.{db}.size")
+        if r:
+            items[f"pg.{db}.size"] = int(r[0][0])
+        for rel, total, live in psql(
+            db,
+            "select relname, pg_total_relation_size(relid), n_live_tup "
+            "from pg_stat_user_tables order by 2 desc limit 15", errors, f"pg.{db}.tables"):
+            items[f"pg.{db}.{rel}.bytes"] = int(total)
+            items[f"pg.{db}.{rel}.rows"] = int(live)
+    # Receipts since the last mark, per computer and event_kind, via indexes.
+    db = "control"
+    marks = state.setdefault("receipt_marks", {})
+    heads = psql(db, "with recursive c as (select min(computer_id) id from computer_event_append_receipts "
+                 "union all select (select min(computer_id) from computer_event_append_receipts "
+                 "where computer_id > c.id) from c where c.id is not null) "
+                 "select c.id, (select max(sequence) from computer_event_append_receipts r "
+                 "where r.computer_id = c.id) from c where c.id is not null",
+                 errors, "pg.receipt-heads")
+    for cid, head in heads:
+        head = int(head)
+        prev = marks.get(cid)
+        if prev is not None and head > prev:
+            rows = psql(db, "select event_kind, count(*) from computer_event_append_receipts "
+                        f"where computer_id = '{cid.replace(chr(39), '')}' and sequence > {int(prev)} "
+                        "group by 1", errors, "pg.receipt-kinds")
+            receipts[cid] = {k: int(n) for k, n in rows}
+            items[f"pg.control.receipts_since_last.{cid}"] = sum(receipts[cid].values())
+        elif prev is not None:
+            receipts[cid] = {}
+            items[f"pg.control.receipts_since_last.{cid}"] = 0
+        marks[cid] = head
+
+
+def unit_names(errors):
+    out = run(["systemctl", "list-units", "--all", "--no-legend", "--plain", "--type=service",
+               *SELF_UNIT_GLOBS], 30, errors, "systemctl")
+    names = []
+    for line in (out or "").splitlines():
+        f = line.split()
+        if f and f[0].endswith(".service"):
+            names.append(f[0])
+    return sorted(set(names))
+
+
+def measure_units(errors, since):
+    units = {}
+    names = unit_names(errors)
+    for n in names:
+        d = f"{CGROUP}/system.slice/{n}"
+        if not os.path.isdir(d):
+            continue
+        units[n] = {
+            "peak": read_int(f"{d}/memory.peak"),
+            "current": read_int(f"{d}/memory.current"),
+            "max": read_int(f"{d}/memory.max"),
+            "events": read_events(f"{d}/memory.events"),
+        }
+    # Oneshot maintenance units have no live cgroup: take the figure systemd
+    # logged at their stop, plus their configured MemoryMax.
+    j = run(["journalctl", "-o", "cat", "--no-pager", "--since", since,
+             "-g", r"memory peak", "-t", "systemd"], 60, errors, "journalctl.peaks")
+    for n, v in parse_peak_lines(j).items():
+        if n.startswith("go-choir-") or n in ("nix-daemon.service", "postgresql.service"):
+            u = units.setdefault(n, {"peak": None, "current": None, "max": None, "events": {}})
+            u["logged_peak"] = v
+    for n, u in units.items():
+        if u.get("max") is None:
+            out = run(["systemctl", "show", "-p", "MemoryMax", "--value", n], 15, errors, f"show.{n}")
+            s = (out or "").strip()
+            if s.isdigit():
+                u["max"] = int(s)
+    return units
+
+
+def measure_vms(errors):
+    vms = {}
+    base = f"{STATE_ROOT}/vm-state"
+    try:
+        kids = sorted(os.listdir(base))
+    except OSError:
+        return vms
+    for kid in kids:
+        if not kid.startswith("vm-"):
+            continue
+        try:
+            pid = int(open(f"{base}/{kid}/firecracker.pid").read().strip())
+            for line in open(f"{PROC}/{pid}/status"):
+                if line.startswith("VmRSS:"):
+                    vms[kid] = int(line.split()[1]) * 1024
+        except (OSError, ValueError):
+            continue
+    return vms
+
+
+def mem_available():
+    try:
+        for line in open(MEMINFO):
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def kernel_oom(since, errors):
+    out = run(["journalctl", "-k", "-o", "cat", "--no-pager", "--since", since,
+               "-g", r"Out of memory|oom-kill:|Killed process"], 60, errors, "journalctl.oom")
+    return len([ln for ln in (out or "").splitlines() if ln.strip()])
+
+
+# ---- state, ledger ---------------------------------------------------------
+
+def state_path():
+    return os.path.join(GROWTH_DIR, "state.json")
+
+
+def load_state():
+    try:
+        with open(state_path()) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def iso(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
+def take_reading():
+    t0 = time.time()
+    state = load_state()
+    errors = []
+    last = state.get("last_at")
+    since = iso(last) if last else iso(NOW - 3600)
+    heavy_due = (NOW - state.get("heavy_at", 0)) >= HEAVY_EVERY_S
+    items, receipts = {}, {}
+    measure_df(items, errors)
+    measure_fs(items, errors, heavy_due, state)
+    measure_pg(items, errors, state, receipts)
+    units = measure_units(errors, since)
+    reading = {
+        "ts": iso(NOW),
+        "since": since,
+        "heavy": heavy_due,
+        "items": items,
+        "classes": {k: classify(k) for k in items},
+        "receipts_since_last": receipts,
+        "units": units,
+        "vm_rss": measure_vms(errors),
+        "mem_available": mem_available(),
+        "kernel_oom_since_last": kernel_oom(since, errors),
+        "errors": errors,
+    }
+    reading["elapsed_s"] = round(time.time() - t0, 1)
+    try:
+        import resource
+        ru = resource.getrusage(resource.RUSAGE_SELF)
+        reading["self_maxrss_kb"] = ru.ru_maxrss // (1024 if sys.platform == "darwin" else 1)
+    except ImportError:
+        pass
+    state["last_at"] = NOW
+    return reading, state
+
+
+def append_ledger(reading, state):
+    os.makedirs(GROWTH_DIR, exist_ok=True)
+    path = os.path.join(GROWTH_DIR, reading["ts"][:7] + ".jsonl")
+    line = json.dumps(reading, separators=(",", ":"), sort_keys=True) + "\n"
+    if os.path.exists(path) and os.path.getsize(path) + len(line) > MAX_FILE:
+        print(f"growth-meter: {path} is at the {MAX_FILE} byte cap; not appending", file=sys.stderr)
+        return 1
+    with open(path, "a") as f:
+        f.write(line)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp = state_path() + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, state_path())
+    return 0
+
+
+# ---- report ----------------------------------------------------------------
+
+def read_ledger():
+    rows = []
+    try:
+        names = sorted(n for n in os.listdir(GROWTH_DIR) if re.match(r"\d{4}-\d{2}\.jsonl$", n))
+    except OSError:
+        return rows
+    for n in names[-3:]:
+        with open(os.path.join(GROWTH_DIR, n)) as f:
+            for ln in f:
+                try:
+                    rows.append(json.loads(ln))
+                except ValueError:
+                    pass
+    return rows
+
+
+def parse_iso(s):
+    return time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+
+
+def human(n, rows=False):
+    if rows or abs(n) < 1024:
+        return f"{n:+,}" if n else "0"
+    for u in ("KiB", "MiB", "GiB", "TiB"):
+        n /= 1024
+        if abs(n) < 1024:
+            return f"{n:+.1f} {u}"
+    return f"{n:+.1f} PiB"
+
+
+MACHINE_GROW_BYTES = int(ENV("GROWTH_FLAG_BYTES", str(64 << 20)))
+MACHINE_GROW_ROWS = int(ENV("GROWTH_FLAG_ROWS", "1000"))
+
+
+def report():
+    rows = read_ledger()
+    if len(rows) < 2:
+        print("growth-meter report: need at least two readings in the ledger")
+        return 0
+    cur = rows[-1]
+    tcur = parse_iso(cur["ts"])
+    base = None
+    for r in rows[:-1]:
+        # the reading closest to 24 h before the newest (carry heavy items
+        # from the newest earlier reading that has them).
+        if base is None or abs(parse_iso(r["ts"]) - (tcur - 86400)) < abs(parse_iso(base["ts"]) - (tcur - 86400)):
+            base = r
+    span_h = (tcur - parse_iso(base["ts"])) / 3600
+    print(f"growth-meter report: {base['ts']} -> {cur['ts']} ({span_h:.1f} h)")
+    if span_h < 20:
+        print(f"  note: baseline is only {span_h:.1f} h old; day-over-day needs about 24 h of ledger")
+    flags = []
+
+    def latest_item(key, upto):
+        for r in reversed(rows):
+            if parse_iso(r["ts"]) <= upto and key in r["items"]:
+                return r["items"][key]
+        return None
+
+    keys = sorted(cur["items"])
+    # heavy items may be absent from the newest hourly line: look back
+    for r in rows:
+        for k in r["items"]:
+            if k not in cur["items"] and k.split(".")[-1] not in ("avail",):
+                keys.append(k)
+    keys = sorted(set(keys))
+    print(f"  {'item':<78} {'class':<8} {'now':>14} {'delta':>14}")
+    for k in keys:
+        nv = latest_item(k, tcur)
+        bv = latest_item(k, parse_iso(base["ts"]))
+        if nv is None or bv is None:
+            continue
+        d = nv - bv
+        isrows = k.endswith(".rows") or "receipts_since_last" in k
+        cls = classify(k)
+        if d == 0 and not k.startswith("fs.root.") and not k.endswith(".size"):
+            continue
+        if k.endswith(".avail"):
+            continue
+        shown = f"{nv:,}" if isrows else f"{nv / GIB:.2f} GiB"
+        print(f"  {k:<78} {cls:<8} {shown:>14} {human(d, isrows):>14}")
+        if cls == "machine" and "receipts_since_last" not in k and k not in ("fs.root.size", "fs.root.avail"):
+            if d > (MACHINE_GROW_ROWS if isrows else MACHINE_GROW_BYTES):
+                flags.append(f"machine state growing: {k} {human(d, isrows)}")
+    # memory: peak > 90% of max; oom_kill increments, over the last 24 h of readings
+    window = [r for r in rows if parse_iso(r["ts"]) >= tcur - 86400 - 1800]
+    seen = {}
+    for r in window:
+        for n, u in r["units"].items():
+            mx = u.get("max")
+            if n in CACHE_BOUND_UNITS:
+                continue
+            for key in ("peak", "logged_peak"):
+                pk = u.get(key)
+                if pk and mx and pk > 0.9 * mx:
+                    seen[(n, key)] = max(seen.get((n, key), 0), pk)
+    for (n, key), pk in sorted(seen.items()):
+        mx = cur["units"].get(n, {}).get("max") or max(
+            (r["units"][n].get("max") or 0) for r in window if n in r["units"])
+        flags.append(f"memory: {n} {key} {pk / GIB:.2f} GiB is {100 * pk / mx:.0f}% of MemoryMax {mx / GIB:.2f} GiB")
+    prev = None
+    for r in window:
+        for n, u in r["units"].items():
+            ok = u.get("events", {}).get("oom_kill")
+            if ok is None:
+                continue
+            p = (prev or {}).get(n)
+            if p is not None and ok > p:
+                flags.append(f"oom_kill incremented: {n} {p} -> {ok} by {r['ts']}")
+        prev = {n: u.get("events", {}).get("oom_kill") for n, u in r["units"].items()}
+    ko = sum(r.get("kernel_oom_since_last", 0) for r in window)
+    if ko:
+        flags.append(f"kernel OOM log lines in the last 24 h: {ko}")
+    errs = sum(len(r.get("errors", [])) for r in window)
+    if errs:
+        flags.append(f"{errs} measurement errors in the last 24 h (see ledger 'errors')")
+    print("  memory (newest reading): unit peak / MemoryMax / oom_kill")
+    for n, u in sorted(cur["units"].items()):
+        pk = u.get("peak") or u.get("logged_peak")
+        mx = u.get("max")
+        print(f"    {n:<48} {(pk or 0) / GIB:7.2f} GiB / {('%.2f GiB' % (mx / GIB)) if mx else 'none':>9} / "
+              f"{u.get('events', {}).get('oom_kill', '-')}")
+    if cur.get("vm_rss"):
+        print("  firecracker RSS: " + ", ".join(f"{k}={v / GIB:.2f}GiB" for k, v in sorted(cur["vm_rss"].items())))
+    if cur.get("mem_available") is not None:
+        print(f"  MemAvailable: {cur['mem_available'] / GIB:.2f} GiB")
+    print("FLAGS:" if flags else "FLAGS: none")
+    for f in flags:
+        print(f"  ! {f}")
+    return 0
+
+
+def main(argv):
+    if "--report" in argv:
+        return report()
+    reading, state = take_reading()
+    if "--stdout" in argv:
+        print(json.dumps(reading, indent=1, sort_keys=True))
+        return 0
+    rc = append_ledger(reading, state)
+    print(f"growth-meter: {reading['ts']} items={len(reading['items'])} units={len(reading['units'])} "
+          f"errors={len(reading['errors'])} elapsed={reading['elapsed_s']}s")
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
