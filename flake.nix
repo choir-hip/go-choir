@@ -504,10 +504,13 @@
       # The guest NixOS system for a given commit stamp. The deployed guest uses
       # buildCommit; checks.guest-floor-commit-free builds it under two other
       # stamps to prove the floor digest ignores the stamp.
-      mkGuestVm = commit: nixpkgs.lib.nixosSystem {
+      mkGuestVm = commit: mkGuestVmWith { inherit commit; };
+      # extraModules carries the layered-store prototype's mount module; the
+      # deployed guest passes none, so its derivation is unchanged.
+      mkGuestVmWith = { commit, packages ? goChoirPackages, extraModules ? [ ] }: nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = {
-          goChoirPackages = goChoirPackages;
+          goChoirPackages = packages;
           inherit choirGo;
           buildCommit = commit;
           inherit sourceRepoRemote;
@@ -516,8 +519,77 @@
           microvm.nixosModules.microvm
           ./nix/autoputer-vm.nix
           choirKernelModule
-        ];
+        ] ++ extraModules;
       };
+
+      # ── Layered guest store, prototype (docs/design/layered-guest-image-
+      # 2026-10-31.md) ──────────────────────────────────────────────────────
+      # Not deployed: node-b.nix still binds guest-image. Two erofs layers:
+      #   base = the whole closure of a probe guest whose go-choir packages are
+      #          empty stubs and whose commit stamp is fixed, so its derivation
+      #          moves with nixpkgs, the guest Nix config, the kernel, the
+      #          guest scripts and the frontend lockfile, never with Go code;
+      #   app  = closure(real guest) - closure(probe): the paths a deploy adds.
+      # A path the probe misses lands in app (bytes, never correctness).
+      guestLayerSlowPackages = [ "frontendDeps" ];
+      guestLayerProbePackages = builtins.mapAttrs (name: p:
+        if builtins.elem name guestLayerSlowPackages then p
+        else pkgs.runCommand "${name}-base-probe-stub" { } "mkdir -p $out/bin $out/share/go-choir/skills"
+      ) goChoirPackages;
+      guestLayeredVmConfig = (mkGuestVmWith {
+        commit = buildCommit;
+        extraModules = [ ./nix/guest-layered-store.nix ];
+      }).config;
+      guestBaseProbeVmConfig = (mkGuestVmWith {
+        commit = "base-probe";
+        packages = guestLayerProbePackages;
+        extraModules = [ ./nix/guest-layered-store.nix ];
+      }).config;
+      # The root set microvm.nix's store disk takes: the toplevel, plus the
+      # registration closure-info when nix is enabled.
+      guestStoreClosure = vmConfig: pkgs.writeClosure (
+        [ vmConfig.system.build.toplevel ]
+        ++ pkgs.lib.optional vmConfig.nix.enable
+          (pkgs.closureInfo { rootPaths = [ vmConfig.system.build.toplevel ]; })
+      );
+      erofsForPaths = { name, label, paths }: pkgs.runCommand name {
+        # The same multithreaded erofs-utils microvm.nix builds the store disk
+        # with, so both images come from one tool.
+        nativeBuildInputs = [
+          (pkgs.buildPackages.erofs-utils.overrideAttrs (a: {
+            configureFlags = a.configureFlags ++ [ "--enable-multithreading" ];
+          }))
+          pkgs.buildPackages.bubblewrap
+        ];
+        # The image holds store paths as data; it must not keep them alive.
+        __structuredAttrs = true;
+        unsafeDiscardReferences.out = true;
+      } ''
+        mkdir store
+        args="--dev-bind / / --chdir $(pwd)"
+        for d in $(sort -u ${paths}); do
+          args="$args --ro-bind $d $(pwd)/store/$(basename $d)"
+        done
+        bwrap $args -- mkfs.erofs -zlz4 -T 0 --all-root -L ${label} --mount-point=/nix/store $out store
+      '';
+      guestBaseLayerPaths = guestStoreClosure guestBaseProbeVmConfig;
+      guestAppLayerPaths = pkgs.runCommand "guest-app-layer-paths" { } ''
+        sort -u ${guestStoreClosure guestLayeredVmConfig} > real
+        sort -u ${guestBaseLayerPaths} > base
+        comm -23 real base > $out
+      '';
+      guestBaseLayer = erofsForPaths { name = "guest-store-base.erofs"; label = "nix-base"; paths = guestBaseLayerPaths; };
+      guestAppLayer = erofsForPaths { name = "guest-store-app.erofs"; label = "nix-app"; paths = guestAppLayerPaths; };
+      # The two layers and their path lists, for measurement. The base's store
+      # hash is its reuse key: a deploy that leaves it alone builds only app.
+      guest-store-layers = pkgs.runCommand "go-choir-guest-store-layers" { } ''
+        mkdir -p $out
+        ln -s ${guestBaseLayer} $out/storedisk-base.erofs
+        ln -s ${guestAppLayer} $out/storedisk-app.erofs
+        cp ${guestBaseLayerPaths} $out/base-paths
+        cp ${guestAppLayerPaths} $out/app-paths
+        echo '{"schema":1,"base":"${guestBaseLayer}","app":"${guestAppLayer}"}' > $out/layers.json
+      '';
 
       # ── Guest release metadata (docs/design/density-d2-snapshots-survive-
       # deploys-2026-10-26.md 3.1) ───────────────────────────────────────────
@@ -640,6 +712,9 @@ EOF
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
         inherit guest-image;
+        # Layered guest store prototype (not deployed; see its design doc).
+        inherit guest-store-layers;
+        guest-store-base-layer = guestBaseLayer;
         # The release.json of this commit's guest image, without building the
         # image (the deploy-level floor measurement reads it per commit; the
         # same text is lib.guestReleaseJson for pure evaluation).

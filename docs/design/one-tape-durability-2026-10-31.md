@@ -125,6 +125,12 @@ disk image), so the hypervisor work is independent of it:
   tape store, and imports a bundle to start;
 - sync is then "export the new range on the serving side, import on the
   other": the same code as backup, run in both directions under the fence.
+- the guest image itself becomes two read-only erofs layers: a slow base
+  reused across deploys and a ~95 MB app layer per deploy, joined by an
+  overlay in the guest. Both build per arch, so an aarch64 vfkit guest
+  attaches the same pair
+  ([layered guest image](layered-guest-image-2026-10-31.md), measured
+  2026-10-31).
 
 ## 6. Slices, in build order
 
