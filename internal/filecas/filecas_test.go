@@ -121,7 +121,7 @@ func TestSealChunkIsDeterministicPerComputer(t *testing.T) {
 func TestOpenChunkAcceptsRandomNonceChunks(t *testing.T) {
 	key := bytes.Repeat([]byte{7}, 32)
 	nonce := bytes.Repeat([]byte{0x5a}, 24)
-	sealed, digest, err := sealChunkWithNonce(key, "computer-1", nonce, []byte("legacy chunk"))
+	sealed, digest, err := sealChunkWithNonce(key, "computer-1", nonce, []byte("legacy chunk"), []byte("computer-1"))
 	if err != nil {
 		t.Fatal(err)
 	}

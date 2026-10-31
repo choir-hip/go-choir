@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
@@ -24,7 +25,47 @@ const (
 	chunkKeyInfo    = "choir/filecas/v1/chunk"
 	chunkNonceInfo  = "choir/filecas/v1/chunk-nonce"
 	fileDigestInfo  = "choir/filecas/v1/file-digest"
+
+	// compressedAADSuffix marks a zstd-compressed chunk. It is part of the
+	// AEAD's associated data, so the marker is authenticated; nothing sniffs a
+	// plaintext prefix.
+	compressedAADSuffix = "\x00zstd"
+	// maxChunkPlaintext caps decompressed output so a bad frame cannot balloon
+	// memory.
+	maxChunkPlaintext = 64 << 20
+	// minCompressionSavingPercent: a chunk is stored compressed only when the
+	// compressed form is at least this much smaller than the raw chunk.
+	minCompressionSavingPercent = 5
 )
+
+// Failure modes (tests in filecas_test.go): an old raw-sealed chunk must still
+// open; an incompressible chunk must seal byte-identically to the old format;
+// a compressible chunk must round-trip and shrink; sealing must be
+// deterministic (same input twice, same digest); a wrong key or computer is
+// refused in both forms; a tampered compressed chunk is refused; a
+// decompression bomb is capped, not expanded.
+var (
+	zstdEncoder = mustZstdEncoder()
+	zstdDecoder = mustZstdDecoder(maxChunkPlaintext)
+)
+
+func mustZstdEncoder() *zstd.Encoder {
+	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}
+
+func mustZstdDecoder(maxBytes uint64) *zstd.Decoder {
+	dec, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(maxBytes), zstd.WithDecoderConcurrency(1))
+	if err != nil {
+		panic(err)
+	}
+	return dec
+}
+
+func compressedAAD(computerID string) []byte { return []byte(computerID + compressedAADSuffix) }
 
 // FileEntry describes one file in an encrypted file manifest. Chunks address
 // the encrypted bytes stored in the CAS, not their plaintext.
@@ -161,7 +202,16 @@ func SealChunk(dek []byte, computerID string, chunk []byte) ([]byte, string, err
 	if err != nil {
 		return nil, "", err
 	}
-	return sealChunkWithNonce(dek, computerID, nonce, chunk)
+	// Compress first; keep the raw form (byte-identical to the original
+	// format) unless the saving is worth it. The nonce is over the original
+	// plaintext either way, so sealing stays deterministic.
+	if len(chunk) > 0 {
+		comp := zstdEncoder.EncodeAll(chunk, nil)
+		if len(comp) <= len(chunk)-len(chunk)*minCompressionSavingPercent/100 {
+			return sealChunkWithNonce(dek, computerID, nonce, comp, compressedAAD(computerID))
+		}
+	}
+	return sealChunkWithNonce(dek, computerID, nonce, chunk, []byte(computerID))
 }
 
 // FileDigestKey derives the HMAC-SHA-256 key for the file object's digest from
@@ -197,7 +247,7 @@ func chunkNonce(dek []byte, computerID string, chunk []byte) ([]byte, error) {
 	return mac.Sum(nil)[:chacha20poly1305.NonceSizeX], nil
 }
 
-func sealChunkWithNonce(dek []byte, computerID string, nonce, chunk []byte) ([]byte, string, error) {
+func sealChunkWithNonce(dek []byte, computerID string, nonce, chunk, aad []byte) ([]byte, string, error) {
 	aead, err := chunkCipher(dek, computerID)
 	if err != nil {
 		return nil, "", err
@@ -207,7 +257,7 @@ func sealChunkWithNonce(dek []byte, computerID string, nonce, chunk []byte) ([]b
 	}
 	sealed := make([]byte, 0, len(nonce)+len(chunk)+aead.Overhead())
 	sealed = append(sealed, nonce...)
-	sealed = aead.Seal(sealed, nonce, chunk, []byte(computerID))
+	sealed = aead.Seal(sealed, nonce, chunk, aad)
 	sum := sha256.Sum256(sealed)
 	return sealed, hex.EncodeToString(sum[:]), nil
 }
@@ -228,7 +278,15 @@ func OpenChunk(dek []byte, computerID, digest string, sealed []byte) ([]byte, er
 	if len(sealed) < chacha20poly1305.NonceSizeX+aead.Overhead() {
 		return nil, fmt.Errorf("filecas: encrypted chunk too short")
 	}
-	return aead.Open(nil, sealed[:chacha20poly1305.NonceSizeX], sealed[chacha20poly1305.NonceSizeX:], []byte(computerID))
+	nonce, body := sealed[:chacha20poly1305.NonceSizeX], sealed[chacha20poly1305.NonceSizeX:]
+	if comp, err := aead.Open(nil, nonce, body, compressedAAD(computerID)); err == nil {
+		plain, derr := zstdDecoder.DecodeAll(comp, nil)
+		if derr != nil {
+			return nil, fmt.Errorf("filecas: decompress chunk: %w", derr)
+		}
+		return plain, nil
+	}
+	return aead.Open(nil, nonce, body, []byte(computerID))
 }
 
 func chunkCipher(dek []byte, computerID string) (cipher.AEAD, error) {
