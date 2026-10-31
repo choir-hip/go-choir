@@ -65,7 +65,10 @@ let
     '';
   guestReleaseMaterialize = pkgs.writeShellScript "go-choir-guest-release-materialize"
     ''
-      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.systemd ]}:$PATH"
+      # sed reads the layered source's layers.json: without it, activation
+      # (whose PATH has no sed) logged "layers.json names no base" and
+      # installed no layered release (2026-10-31, deploy fc5076ab0).
+      export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.systemd ]}:$PATH"
       export GO_CHOIR_GUEST_RELEASE_DEDUPE="${guestReleaseDedupe}"
       ${builtins.readFile ../scripts/node-b-guest-release-materialize}
     '';

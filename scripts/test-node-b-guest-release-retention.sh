@@ -575,5 +575,15 @@ grep -q 'VM_GUEST_LAYERED_COMPUTERS=' "$nix" && grep -q 'VM_GUEST_LAYERED_RELEAS
 grep -q 'system.activationScripts.go-choir-guest-release-layered' "$nix" && grep -q 'guestImageLayered' "$nix" && ok "nix: the layered image is a second release and a second link, never the guest link" || bad "nix: the layered release activation is missing"
 awk '/system.activationScripts.go-choir-guest-image = \{/{f=1} f&&/src="\$\{guestImage\}"/{print "single"; exit}' "$nix" | grep -q single && ok "nix: the guest link still names the single image" || bad "nix: the guest link no longer names guestImage"
 
+# Activation runs materialize with the wrapper's PATH alone (no sed on it),
+# so every tool the script calls must be on the wrapper's list; a missing sed
+# made the layered branch log "layers.json names no base" (fc5076ab0).
+mat_path=$(awk '/guestReleaseMaterialize = pkgs.writeShellScript/{f=1} f&&/export PATH=/{print; exit}' "$nix")
+missing=""
+grep -qE '(^|[^a-z])sed ' "$here/node-b-guest-release-materialize" && ! printf '%s' "$mat_path" | grep -q 'pkgs.gnused' && missing="$missing sed"
+grep -qE '(^|[^a-z])grep ' "$here/node-b-guest-release-materialize" && ! printf '%s' "$mat_path" | grep -q 'pkgs.gnugrep' && missing="$missing grep"
+grep -qE 'systemd-run' "$here/node-b-guest-release-materialize" && ! printf '%s' "$mat_path" | grep -q 'pkgs.systemd' && missing="$missing systemd-run"
+[ -z "$missing" ] && ok "nix: the materialize wrapper's PATH has every tool the script calls" || bad "nix: the materialize wrapper's PATH lacks:$missing"
+
 echo "node-b-guest-release-retention tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
