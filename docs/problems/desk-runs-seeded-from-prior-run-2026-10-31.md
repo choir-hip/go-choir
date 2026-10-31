@@ -56,3 +56,19 @@ was not per document; that was wrong.) Texture's carry stays; the change is
 for the other desks.
 
 Measure the seed bytes per activation before changing it.
+
+## How the seed is built today (no model call)
+
+`latestRunMemoryCheckpointAndTail` takes the prior run's latest compaction
+entry and every message after it (the whole conversation if it never
+compacted). `summarizeRunMemoryMessages` (run_memory.go ~1187) formats them:
+a header "Run memory checkpoint / Reason: actor_rewarm", the line
+"Operational invariant: continue the same run from this checkpoint, ...",
+the previous checkpoint cut to 2,000 characters, then one line per tail
+message (text to 500 characters, assistant text to 350, tool results to 250,
+tool calls by name and id). There is no cap on the number of lines.
+
+Defects in it, beyond the owner's point that it should not be in context:
+it tells a new run to "continue the same run"; it is a lossy copy of a lossy
+copy (checkpoint of checkpoints); its entry ids point into a run the new run
+is not part of; its size is unbounded in the number of messages.
