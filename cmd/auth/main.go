@@ -56,6 +56,7 @@ func main() {
 		log.Fatalf("auth email sign-in switch: %v", err)
 	}
 	handler.StartEmailSweeper(context.Background(), 0)
+	handler.StartNumberReconciler(context.Background(), 0)
 
 	s := server.NewServer("auth", cfg.Port)
 	registerRoutes(s, handler, rateLimiter)

@@ -62,6 +62,12 @@ type Handler struct {
 	emailSignIn        emailSignInState
 	signInMailer       SignInMailer
 	signInMailDispatch func(func())
+
+	// Numbered-address reconcile (number_reconcile.go).
+	numberAssigner NumberAssigner
+	numberNudge    chan struct{}
+	numbersMu      sync.Mutex
+	numbersDone    map[string]struct{}
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -77,7 +83,9 @@ func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519
 	if cfg != nil && strings.TrimSpace(cfg.MaildURL) != "" {
 		h.recoveryMailer = NewMaildRecoveryMailer(cfg.MaildURL, nil)
 		h.signInMailer = NewMaildSignInMailer(cfg.MaildURL, nil)
+		h.numberAssigner = NewMaildNumberAssigner(cfg.MaildURL, nil)
 	}
+	h.numberNudge = make(chan struct{}, 1)
 	h.initEmailSignIn()
 	return h
 }
@@ -904,6 +912,10 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s sign_count=%d result=success step=credential_stored", user.ID, dbCred.ID, dbCred.SignCount)
+
+	// The new account gets its numbered address off the request path; a
+	// failure is retried by the reconcile loop and never fails registration.
+	h.nudgeNumberReconcile()
 
 	// Issue cookie-backed auth state.
 	userInfo, err := h.issueSession(w, r, user, AuthMethodPasskey)

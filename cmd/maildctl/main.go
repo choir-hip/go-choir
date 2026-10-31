@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/maild"
 )
 
@@ -39,6 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	localPart := fs.String("local-part", "", "email local part")
 	senderAddress := fs.String("sender", "", "sender email address")
 	addressFlag := fs.String("address", "", "numbered email address (bind-number)")
+	authDB := fs.String("auth-db", "/var/lib/go-choir/auth/auth.db", "auth SQLite database path (plan-user-numbers, read-only)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -105,6 +107,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 		})
 	case "reserve-test-number":
 		out, err = store.ReserveTestNumber(ctx, *domain, time.Now(), maild.NumberReservationTTL)
+	case "plan-user-numbers":
+		var ids []string
+		ids, err = auth.ListNumberCandidatesReadOnly(ctx, *authDB)
+		if err != nil {
+			break
+		}
+		root := strings.TrimSpace(os.Getenv("MAILD_ROOT_OWNER_ID"))
+		if root == "" {
+			root = maild.DefaultRootOwnerID
+		}
+		var plan []maild.PlannedUserNumber
+		plan, err = store.PlanUserNumbers(ctx, root, ids)
+		if err != nil {
+			break
+		}
+		lines := make([]string, 0, len(plan))
+		for _, p := range plan {
+			state := "new"
+			if p.Existing {
+				state = "keeps"
+			}
+			lines = append(lines, fmt.Sprintf("%s -> %s (%s)", p.OwnerID, fmt.Sprintf("%03d", p.Number), state))
+		}
+		out = map[string]any{"count": len(lines), "plan": lines}
 	case "bind-number":
 		address := strings.ToLower(strings.TrimSpace(*addressFlag))
 		local, dom, ok := strings.Cut(address, "@")
@@ -193,6 +219,8 @@ commands:
   configure-workflow-alias --owner ID --local-part LOCAL --sender EMAIL [--domain DOMAIN]
   reserve-test-number [--domain DOMAIN]
                                 reserve the next test number (10,000,000 range); expires unbound in 24h
+  plan-user-numbers [--auth-db PATH]
+                                dry run: print account-id -> number for every real account, oldest first (no emails, writes nothing)
   bind-number --address NUMBER@DOMAIN --owner USER_ID
                                 bind a reserved test number to an account (idempotent for the same owner)
 
