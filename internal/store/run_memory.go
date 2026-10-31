@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -134,7 +133,7 @@ func normalizeRunMemoryEntry(entry types.RunMemoryEntry) (normalizedRunMemory, e
 		return normalizedRunMemory{}, fmt.Errorf("append run memory: kind is required")
 	}
 	if entry.EntryID == "" {
-		entry.EntryID = uuid.NewString()
+		entry.EntryID = newRunMemoryEntryID()
 	}
 	if entry.CreatedAt.IsZero() {
 		entry.CreatedAt = time.Now().UTC()
