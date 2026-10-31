@@ -212,6 +212,12 @@ func (h *Handler) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
 	emailHash := hashEmail(rt.Email)
 	log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s step=token_valid", emailHash, rt.UserID)
 
+	// A consumed recovery link was mailed to the stored address: it proves
+	// the inbox (docs/design/email-sign-in-2026-10-31.md, Data).
+	if err := h.store.SetEmailVerified(rt.UserID); err != nil {
+		log.Printf("[auth] operation=recovery_verify email_hash=%s user_id=%s result=warning step=set_email_verified error=%q", emailHash, rt.UserID, err)
+	}
+
 	// Look up the user.
 	user, err := h.store.GetUserByID(rt.UserID)
 	if err != nil {
@@ -356,7 +362,7 @@ func (h *Handler) HandleDeleteCredential(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requirePasskeySession(w, r)
 	if user == nil {
 		return
 	}
@@ -425,7 +431,7 @@ func (h *Handler) HandleRenameCredential(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requirePasskeySession(w, r)
 	if user == nil {
 		return
 	}
@@ -543,7 +549,7 @@ func (h *Handler) HandleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := h.requireAuthUser(w, r)
+	user := h.requirePasskeySession(w, r)
 	if user == nil {
 		return
 	}

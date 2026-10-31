@@ -25,6 +25,7 @@
   import Desktop from './lib/Desktop.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
   import RecoverRoute from './lib/RecoverRoute.svelte';
+  import EmailSignInRoute from './lib/EmailSignInRoute.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
@@ -58,6 +59,8 @@
   let isLegalDocumentRoute = false;
   /** /recover: landing page for an account-recovery email link. */
   let isRecoverRoute = false;
+  /** /signin/email: landing page for an email sign-in link. */
+  let isEmailSignInRoute = false;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
@@ -331,6 +334,20 @@
     }
   }
 
+  /** The email code was accepted: the session cookies are set. Same landing as a passkey sign-in. */
+  async function handleEmailSignedIn() {
+    passkeyError = '';
+    startAuthenticatedPrewarm();
+    const session = await checkSession();
+    if (session?.authenticated) {
+      window.localStorage?.setItem('choir.auth.returning', 'true');
+      authOverlayOpen = false;
+      pendingAuthIntent = null;
+      await prewarmAuthenticatedComputer().catch(() => {});
+      window.location.replace(window.location.href);
+    }
+  }
+
   function handleClearPasskeyError() {
     passkeyError = '';
   }
@@ -422,6 +439,10 @@
     return pathname === '/recover' || pathname === '/recover/';
   }
 
+  function isEmailSignInPath(pathname) {
+    return pathname === '/signin/email' || pathname === '/signin/email/';
+  }
+
   function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
     if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
     if (pathname === '/terms' || pathname === '/terms/') return 'terms';
@@ -433,6 +454,7 @@
     legalDocumentKind = legalKind || 'privacy';
     isLegalDocumentRoute = !!legalKind;
     isRecoverRoute = isRecoverPath(window.location.pathname);
+    isEmailSignInRoute = isEmailSignInPath(window.location.pathname);
     // The standalone /autopaper pages are gone: an old link replaces the
     // address with the story's public Texture route (the desktop opens it
     // in a Texture window) or the desktop home.
@@ -446,7 +468,7 @@
     // The recovery page stands alone: no session check, prewarm or
     // computer-surface handoff (a handoff reload would drop the in-memory
     // recovery token).
-    if (!isRecoverRoute) checkSession().then(async (session) => {
+    if (!isRecoverRoute && !isEmailSignInRoute) checkSession().then(async (session) => {
       if (session?.authenticated) {
         await prewarmAuthenticatedComputer().catch(() => {});
         if (await handoffToComputerSurfaceIfStale()) return;
@@ -511,6 +533,8 @@
     <LegalDocument kind={legalDocumentKind} />
   {:else if isRecoverRoute}
     <RecoverRoute />
+  {:else if isEmailSignInRoute}
+    <EmailSignInRoute />
   {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading" role="status" aria-live="polite">
       <span class="loading-orbit" aria-hidden="true"></span>
@@ -545,6 +569,7 @@
             {ceremonyInProgress}
             intentMessage={authIntentMessage}
             on:authbegin={handleAuthBegin}
+            on:emailsignedin={handleEmailSignedIn}
             on:clearpasskeyerror={handleClearPasskeyError}
           />
         </div>

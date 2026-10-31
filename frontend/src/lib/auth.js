@@ -236,6 +236,81 @@ export function recoveryTokenFromHash(hash) {
 }
 
 // ---------------------------------------------------------------------------
+// Email sign-in (docs/design/email-sign-in-2026-10-31.md)
+// ---------------------------------------------------------------------------
+
+/** Error from an email sign-in endpoint, carrying the HTTP status. */
+export class EmailSignInError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'EmailSignInError';
+    this.status = status;
+  }
+}
+
+async function postEmailJSON(path, body) {
+  // application/json and the attempt cookie (set by begin, HttpOnly, sent
+  // with credentials: 'include') are what the server requires of the code path.
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new EmailSignInError(err.error || `Email sign-in failed (${res.status})`, res.status);
+  }
+  return res.json().catch(() => ({}));
+}
+
+/**
+ * Asks Choir to email a sign-in code. The server answers the same way
+ * whether or not the address can sign in by email.
+ *
+ * @param {string} email
+ * @returns {Promise<{attempt_id: string}>}
+ */
+export function beginEmailSignIn(email) {
+  // The Mac app calls the backend from its native side with its own cookie
+  // jar (cmd/desktop/desktop_email.go), so the attempt cookie and the session
+  // land there.
+  return postEmailJSON(isDesktopBridge() ? '/desktop-auth/email/begin' : '/auth/email/begin', { email });
+}
+
+/**
+ * Submits the 8-digit code with the attempt it belongs to. On success the
+ * session cookies are set.
+ *
+ * @param {string} attemptId
+ * @param {string} code
+ */
+export function verifyEmailCode(attemptId, code) {
+  return postEmailJSON(isDesktopBridge() ? '/desktop-auth/email/verify' : '/auth/email/verify', { attempt_id: attemptId, code });
+}
+
+/**
+ * Redeems a sign-in link token. On success the session cookies are set.
+ *
+ * @param {string} token
+ */
+export function verifyEmailToken(token) {
+  return postEmailJSON('/auth/email/verify', { token });
+}
+
+/**
+ * Reads a sign-in token from a /signin/email#token=... URL fragment.
+ *
+ * @param {string} hash - window.location.hash
+ * @returns {string}
+ */
+export function emailTokenFromHash(hash) {
+  const raw = String(hash || '').replace(/^#/, '');
+  const value = new URLSearchParams(raw).get('token') || '';
+  return /^choir_st_[A-Za-z0-9_-]{16,}$/.test(value) ? value : '';
+}
+
+// ---------------------------------------------------------------------------
 // Passkey login
 // ---------------------------------------------------------------------------
 

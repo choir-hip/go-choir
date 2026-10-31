@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -49,6 +50,13 @@ func main() {
 	handler := auth.NewHandler(store, wa, cfg, signer)
 	rateLimiter := auth.NewIPRateLimiter(auth.AuthEndpointRateLimit, auth.AuthEndpointRateWindow)
 
+	// Email sign-in: with the switch off (AUTH_EMAIL_SIGN_IN), delete the
+	// attempts and email sessions a previous run left; a sweeper expires rows.
+	if err := handler.ApplyEmailSignInSwitch(); err != nil {
+		log.Fatalf("auth email sign-in switch: %v", err)
+	}
+	handler.StartEmailSweeper(context.Background(), 0)
+
 	s := server.NewServer("auth", cfg.Port)
 	registerRoutes(s, handler, rateLimiter)
 
@@ -81,4 +89,10 @@ func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *au
 	s.HandleFunc("DELETE /auth/credentials/{id}", limit(handler.HandleDeleteCredential))
 	s.HandleFunc("GET /auth/sessions", limit(handler.HandleListSessions))
 	s.HandleFunc("DELETE /auth/sessions/{id}", limit(handler.HandleRevokeSession))
+
+	// Email sign-in and address verification (switch auth.email_sign_in).
+	s.HandleFunc("POST /auth/email/begin", limit(handler.HandleEmailBegin))
+	s.HandleFunc("POST /auth/email/verify", limit(handler.HandleEmailVerify))
+	s.HandleFunc("POST /auth/email/verify-address/begin", limit(handler.HandleVerifyAddressBegin))
+	s.HandleFunc("POST /auth/email/verify-address/finish", limit(handler.HandleVerifyAddressFinish))
 }

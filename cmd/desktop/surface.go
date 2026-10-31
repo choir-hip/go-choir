@@ -65,6 +65,10 @@ func assetHandler(session *desktopSession) http.Handler {
 		switch {
 		case r.URL.Path == "/desktop-auth/start-session":
 			session.handleStart(w, r)
+		case r.URL.Path == desktopEmailBeginPath:
+			session.handleEmailBegin(w, r)
+		case r.URL.Path == desktopEmailVerifyPath:
+			session.handleEmailVerify(w, r)
 		case r.URL.Path == desktopBridgeScriptPath:
 			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")

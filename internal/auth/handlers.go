@@ -57,6 +57,11 @@ type Handler struct {
 	// recoveryMailDispatch runs a delivery off the request path. nil means
 	// a goroutine; tests substitute a synchronous runner.
 	recoveryMailDispatch func(func())
+
+	// Email sign-in (email_signin.go).
+	emailSignIn        emailSignInState
+	signInMailer       SignInMailer
+	signInMailDispatch func(func())
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
@@ -71,7 +76,9 @@ func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519
 	}
 	if cfg != nil && strings.TrimSpace(cfg.MaildURL) != "" {
 		h.recoveryMailer = NewMaildRecoveryMailer(cfg.MaildURL, nil)
+		h.signInMailer = NewMaildSignInMailer(cfg.MaildURL, nil)
 	}
+	h.initEmailSignIn()
 	return h
 }
 func (h *Handler) rotationGraceTTL() time.Duration {
@@ -293,7 +300,12 @@ func hashAPIKeySecret(secret string) string {
 
 // issueAccessJWT creates a signed Ed25519 JWT for the given user with the
 // configured access token TTL.
-func (h *Handler) issueAccessJWT(user *User) (string, error) {
+//
+// The method the session was made with rides the token as the "am" claim, at
+// issue and at every rotation, so a gate can read it on any route (the
+// Path=/auth refresh cookie is not sent to /api/*). A token without "am",
+// issued before email sign-in, reads as passkey and lives at most one TTL.
+func (h *Handler) issueAccessJWT(user *User, method string) (string, error) {
 	now := time.Now().UTC()
 	claims := jwt.MapClaims{
 		"sub":   user.ID,
@@ -301,6 +313,7 @@ func (h *Handler) issueAccessJWT(user *User) (string, error) {
 		"iat":   now.Unix(),
 		"exp":   now.Add(h.config.AccessTokenTTL).Unix(),
 		"scope": "access",
+		"am":    normalizeAuthMethod(method),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	return token.SignedString(h.signer)
@@ -310,19 +323,37 @@ func (h *Handler) issueAccessJWT(user *User) (string, error) {
 // hash in the database, and returns the raw token string. The raw token is
 // only ever returned once (to be set as a cookie) and never stored directly.
 // The deviceInfo (e.g. User-Agent) is stored for session management display.
-func (h *Handler) generateRefreshToken(user *User, deviceInfo string) (string, error) {
+// An email session expires at a fixed 7 days (never beyond the configured
+// refresh TTL); expiresAt, when set, carries an existing session's absolute
+// expiry across a rotation or a desktop handoff so neither extends it.
+func (h *Handler) generateRefreshToken(user *User, deviceInfo, method string) (string, error) {
+	return h.createRefreshSession(user, deviceInfo, method, nil)
+}
+
+func (h *Handler) createRefreshSession(user *User, deviceInfo, method string, expiresAt *time.Time) (string, error) {
 	raw := uuid.NewString()
 	hash := sha256.Sum256([]byte(raw))
 	hashHex := fmt.Sprintf("%x", hash)
 
 	now := time.Now().UTC()
+	method = normalizeAuthMethod(method)
+	expires := now.Add(h.config.RefreshTokenTTL)
+	if isEmailMethod(method) {
+		if limit := now.Add(h.emailSessionTTL()); limit.Before(expires) {
+			expires = limit
+		}
+		if expiresAt != nil && expiresAt.Before(expires) {
+			expires = *expiresAt
+		}
+	}
 	rs := &RefreshSession{
 		ID:         uuid.NewString(),
 		UserID:     user.ID,
 		TokenHash:  hashHex,
 		CreatedAt:  now,
-		ExpiresAt:  now.Add(h.config.RefreshTokenTTL),
+		ExpiresAt:  expires,
 		DeviceInfo: deviceInfo,
+		AuthMethod: method,
 	}
 	if err := h.store.CreateRefreshSession(rs); err != nil {
 		return "", fmt.Errorf("create refresh session: %w", err)
@@ -334,6 +365,12 @@ func (h *Handler) generateRefreshToken(user *User, deviceInfo string) (string, e
 // setAuthCookies sets the access JWT and refresh token cookies on the response.
 // Both cookies are HttpOnly, SameSite=Lax, and use the configured Secure flag.
 func (h *Handler) setAuthCookies(w http.ResponseWriter, accessToken, refreshToken string) {
+	h.setAuthCookiesFor(w, accessToken, refreshToken, h.config.RefreshTokenTTL)
+}
+
+// setAuthCookiesFor is setAuthCookies with the refresh cookie's lifetime
+// given, so an email session's cookie does not outlive its 7-day row.
+func (h *Handler) setAuthCookiesFor(w http.ResponseWriter, accessToken, refreshToken string, refreshTTL time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     AccessTokenCookieName,
 		Value:    accessToken,
@@ -347,7 +384,7 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 		Name:     RefreshTokenCookieName,
 		Value:    refreshToken,
 		Path:     "/auth",
-		MaxAge:   int(h.config.RefreshTokenTTL.Seconds()),
+		MaxAge:   int(refreshTTL.Seconds()),
 		Secure:   h.config.CookieSecure,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -358,19 +395,26 @@ func (h *Handler) setAuthCookies(w http.ResponseWriter, accessToken, refreshToke
 // an access JWT, generates a refresh token, and sets both as cookies. It
 // returns the user info for inclusion in the response body. The device info
 // (User-Agent) is captured from the request for session management.
-func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *User) (*userInfo, error) {
-	accessToken, err := h.issueAccessJWT(user)
+func (h *Handler) issueSession(w http.ResponseWriter, r *http.Request, user *User, method string) (*userInfo, error) {
+	return h.issueSessionExpiring(w, r, user, method, nil)
+}
+
+// issueSessionExpiring is issueSession for a session whose absolute expiry is
+// inherited (the desktop handoff of an email session).
+func (h *Handler) issueSessionExpiring(w http.ResponseWriter, r *http.Request, user *User, method string, expiresAt *time.Time) (*userInfo, error) {
+	method = normalizeAuthMethod(method)
+	accessToken, err := h.issueAccessJWT(user, method)
 	if err != nil {
 		return nil, fmt.Errorf("issue access JWT: %w", err)
 	}
 
 	deviceInfo := r.UserAgent()
-	refreshToken, err := h.generateRefreshToken(user, deviceInfo)
+	refreshToken, err := h.createRefreshSession(user, deviceInfo, method, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	h.setAuthCookies(w, accessToken, refreshToken)
+	h.setAuthCookiesFor(w, accessToken, refreshToken, h.refreshCookieTTL(method, expiresAt))
 
 	return &userInfo{
 		ID:        user.ID,
@@ -419,14 +463,18 @@ func (h *Handler) validateRefreshCookie(r *http.Request) (*RefreshSession, *User
 // info is carried over from the request for the new session.
 func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, oldSession *RefreshSession, user *User) error {
 	// Generate a new refresh token with device info from the request.
+	// The method is copied from the old row, and an email session keeps its
+	// original expiry: rotation never extends it.
 	deviceInfo := r.UserAgent()
-	newRefresh, err := h.generateRefreshToken(user, deviceInfo)
+	method := normalizeAuthMethod(oldSession.AuthMethod)
+	oldExpiry := oldSession.ExpiresAt
+	newRefresh, err := h.createRefreshSession(user, deviceInfo, method, &oldExpiry)
 	if err != nil {
 		return fmt.Errorf("generate new refresh token: %w", err)
 	}
 
 	// Issue new access JWT.
-	accessJWT, err := h.issueAccessJWT(user)
+	accessJWT, err := h.issueAccessJWT(user, method)
 	if err != nil {
 		return fmt.Errorf("issue new access JWT: %w", err)
 	}
@@ -441,7 +489,7 @@ func (h *Handler) rotateRefreshSession(w http.ResponseWriter, r *http.Request, o
 		return fmt.Errorf("delete old refresh session: %w", err)
 	}
 
-	h.setAuthCookies(w, accessJWT, newRefresh)
+	h.setAuthCookiesFor(w, accessJWT, newRefresh, h.refreshCookieTTL(method, &oldExpiry))
 	return nil
 }
 
@@ -858,7 +906,7 @@ func (h *Handler) HandleRegisterFinish(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[auth] operation=register_finish user_id=%s credential_id=%s sign_count=%d result=success step=credential_stored", user.ID, dbCred.ID, dbCred.SignCount)
 
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, r, user)
+	userInfo, err := h.issueSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
 		log.Printf("[auth] operation=register_finish user_id=%s result=error step=issue_session error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -989,7 +1037,7 @@ func (h *Handler) HandleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Issue cookie-backed auth state.
-	userInfo, err := h.issueSession(w, r, user)
+	userInfo, err := h.issueSession(w, r, user, AuthMethodPasskey)
 	if err != nil {
 		log.Printf("[auth] operation=login_finish user_id=%s credential_id=%s result=error step=issue_session error=%q", user.ID, string(credential.ID), err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create session"})
@@ -1109,7 +1157,7 @@ func (h *Handler) HandleRootStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
-	user := h.requireAuthUser(w, r)
+	user := h.requirePasskeySession(w, r)
 	if user == nil {
 		return
 	}
@@ -1280,6 +1328,12 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
 	userID := h.extractUserIDFromAuthCookies(r)
 	allDevices := r.URL.Query().Get("all") == "true" || r.URL.Query().Get("all_devices") == "true"
+	if allDevices && userID != "" {
+		if m, ok := h.sessionMethodFromRequest(r); !ok || isEmailMethod(m) {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: passkeyRequiredMessage})
+			return
+		}
+	}
 	if allDevices {
 		if userID != "" {
 			h.revokeRotatedGraceForUser(userID)
@@ -1391,6 +1445,13 @@ func transportListToJSON(transports []protocol.AuthenticatorTransport) string {
 // if valid, or an error if the token is invalid, expired, or tampered.
 // This is used by the proxy to verify auth state.
 func (h *Handler) ValidateAccessToken(tokenStr string) (string, error) {
+	userID, _, err := h.validateAccessTokenMethod(tokenStr)
+	return userID, err
+}
+
+// validateAccessTokenMethod is ValidateAccessToken that also returns the
+// session's auth method from the "am" claim (absent reads as passkey).
+func (h *Handler) validateAccessTokenMethod(tokenStr string) (string, string, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodEdDSA {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -1403,26 +1464,27 @@ func (h *Handler) ValidateAccessToken(tokenStr string) (string, error) {
 		return pub, nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("invalid access token: %w", err)
+		return "", "", fmt.Errorf("invalid access token: %w", err)
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", errors.New("invalid token claims")
+		return "", "", errors.New("invalid token claims")
 	}
 
 	userID, ok := claims["sub"].(string)
 	if !ok || userID == "" {
-		return "", errors.New("invalid token subject")
+		return "", "", errors.New("invalid token subject")
 	}
 
 	// Check scope is "access".
 	scope, _ := claims["scope"].(string)
 	if scope != "access" {
-		return "", errors.New("token is not an access token")
+		return "", "", errors.New("token is not an access token")
 	}
 
-	return userID, nil
+	method, _ := claims["am"].(string)
+	return userID, normalizeAuthMethod(method), nil
 }
 
 // LoadPrivateKey loads the Ed25519 private key from the configured path.
@@ -1476,11 +1538,20 @@ func (h *Handler) HandleDesktopExchangeRedirect(w http.ResponseWriter, r *http.R
 
 	code := uuid.NewString()
 	now := time.Now().UTC()
+	// The handoff carries the method of the session it validated, and an
+	// email session's absolute expiry, so a browser email session becomes an
+	// email session in the app (never a passkey one) and cannot be extended
+	// by handing it back and forth.
 	exchange := &DesktopExchangeCode{
-		Code:      code,
-		UserID:    userID,
-		CreatedAt: now,
-		ExpiresAt: now.Add(DesktopExchangeTTL),
+		Code:       code,
+		UserID:     userID,
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(DesktopExchangeTTL),
+		AuthMethod: normalizeAuthMethod(refreshSession.AuthMethod),
+	}
+	if isEmailMethod(exchange.AuthMethod) {
+		exp := refreshSession.ExpiresAt
+		exchange.NotAfter = &exp
 	}
 	if err := h.store.CreateDesktopExchangeCode(exchange); err != nil {
 		log.Printf("[auth] operation=desktop_exchange_redirect user_id=%s result=error step=create_code error=%q", userID, err)
@@ -1526,7 +1597,7 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid or expired exchange code"})
 		return
 	}
-	userState, err := h.issueSession(w, r, user)
+	userState, err := h.issueSessionExpiring(w, r, user, exchange.AuthMethod, exchange.NotAfter)
 	if err != nil {
 		log.Printf("[auth] operation=desktop_redeem user_id=%s result=error step=issue_session error=%q", exchange.UserID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create desktop session"})
@@ -1750,7 +1821,7 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, callerKey := h.requireAuthUserAny(w, r)
+	user, callerKey := h.requirePasskeySessionAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1891,7 +1962,7 @@ func (h *Handler) HandleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, callerKey := h.requireAuthUserAny(w, r)
+	user, callerKey := h.requirePasskeySessionAny(w, r)
 	if user == nil {
 		return
 	}

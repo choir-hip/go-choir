@@ -61,7 +61,27 @@ type Config struct {
 	// (AUTH_REGISTRATION_CAP; 0, the default, is no cap). At the cap a new
 	// sign-up is refused and its email waitlisted (registration_cap.go).
 	RegistrationCap int
+
+	// EmailSignIn is the auth.email_sign_in switch (AUTH_EMAIL_SIGN_IN: on,
+	// true, 1 or yes). Off, begin answers as if every address were unknown,
+	// verify refuses, and unconsumed attempts are deleted at startup.
+	EmailSignIn bool
+
+	// EmailCodeKey keys the HMAC of codes and of the stored email hash
+	// (AUTH_EMAIL_CODE_KEY, or the contents of AUTH_EMAIL_CODE_KEY_FILE). The
+	// service refuses to start with the switch on and no usable key.
+	EmailCodeKey []byte
+
+	// EmailSessionTTL is the absolute life of a session made by email
+	// (AUTH_EMAIL_SESSION_TTL, default 7 days). Rotation never extends it.
+	EmailSessionTTL time.Duration
 }
+
+// DefaultEmailSessionTTL is the absolute life of an email session.
+const DefaultEmailSessionTTL = 7 * 24 * time.Hour
+
+// minEmailCodeKeyLen is the shortest accepted AUTH_EMAIL_CODE_KEY.
+const minEmailCodeKeyLen = 32
 
 const (
 	// defaultLocalDir is the base directory for local worker defaults when
@@ -123,6 +143,23 @@ func LoadConfig() (*Config, error) {
 		cfg.RegistrationCap = n
 	}
 
+	cfg.EmailSignIn = envOn("AUTH_EMAIL_SIGN_IN")
+	cfg.EmailSessionTTL = envDuration("AUTH_EMAIL_SESSION_TTL", DefaultEmailSessionTTL)
+	key := strings.TrimSpace(os.Getenv("AUTH_EMAIL_CODE_KEY"))
+	if key == "" {
+		if path := strings.TrimSpace(os.Getenv("AUTH_EMAIL_CODE_KEY_FILE")); path != "" {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				if cfg.EmailSignIn {
+					return nil, fmt.Errorf("auth config: AUTH_EMAIL_CODE_KEY_FILE unreadable: %w", err)
+				}
+			} else {
+				key = strings.TrimSpace(string(raw))
+			}
+		}
+	}
+	cfg.EmailCodeKey = []byte(key)
+
 	originsStr := envOr("AUTH_RP_ORIGINS", DefaultRPOrigins)
 	cfg.RPOrigins = splitComma(originsStr)
 
@@ -155,6 +192,14 @@ func (c *Config) validate() error {
 	}
 	if c.RefreshTokenTTL <= 0 {
 		return fmt.Errorf("auth config: AUTH_REFRESH_TOKEN_TTL must be positive")
+	}
+	if c.EmailSessionTTL < 0 {
+		return fmt.Errorf("auth config: AUTH_EMAIL_SESSION_TTL must not be negative")
+	}
+	// Fail closed: an email sign-in service with no key would hash codes
+	// under nothing. Better the service does not start.
+	if c.EmailSignIn && len(c.EmailCodeKey) < minEmailCodeKeyLen {
+		return fmt.Errorf("auth config: AUTH_EMAIL_SIGN_IN is on but AUTH_EMAIL_CODE_KEY (or AUTH_EMAIL_CODE_KEY_FILE) is missing or shorter than %d bytes", minEmailCodeKeyLen)
 	}
 	return nil
 }
@@ -192,6 +237,15 @@ func envBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// envOn reports whether the variable is set to on, true, 1 or yes.
+func envOn(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "on", "true", "1", "yes":
+		return true
+	}
+	return false
 }
 
 // envDuration returns the duration value of the environment variable named key,

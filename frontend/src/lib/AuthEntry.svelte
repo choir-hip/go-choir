@@ -21,6 +21,7 @@
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
   import RecoveryRequestForm from './RecoveryRequestForm.svelte';
+  import EmailSignInForm from './EmailSignInForm.svelte';
 
   export let passkeyError = '';
   export let intentMessage = 'Open your private computer and keep working.';
@@ -30,7 +31,7 @@
 
   const dispatch = createEventDispatcher();
 
-  /** @type {'register' | 'login' | 'recover'} */
+  /** @type {'register' | 'login' | 'recover' | 'email'} */
   let view = 'register';
 
   /** Email input for the current view. */
@@ -107,7 +108,7 @@
       <p>{intentMessage}</p>
     </div>
 
-    {#if view !== 'recover'}
+    {#if view !== 'recover' && view !== 'email'}
     <div class="view-tabs" role="tablist" aria-label="Choose sign-in path">
       <button
         class="tab"
@@ -246,6 +247,24 @@
         >
           Lost your passkey?
         </button>
+        <button
+          type="button"
+          class="recovery-toggle"
+          data-email-signin-toggle
+          on:click={() => switchView('email')}
+          disabled={ceremonyInProgress}
+        >
+          Sign in with email
+        </button>
+      </div>
+    {:else if view === 'email'}
+      <div class="auth-view" data-email-signin-view>
+        <h2 class="recovery-title">Sign in with email</h2>
+        <EmailSignInForm
+          initialEmail={email.trim()}
+          on:signedin={() => dispatch('emailsignedin')}
+          on:back={() => switchView('login')}
+        />
       </div>
     {:else}
       <div class="auth-view" data-recovery-view>
@@ -254,11 +273,11 @@
       </div>
     {/if}
 
-    {#if displayError && view !== 'recover'}
+    {#if displayError && view !== 'recover' && view !== 'email'}
       <p class="error" id="auth-error" role="alert" data-passkey-error>{displayError}</p>
     {/if}
 
-    {#if view !== 'recover'}
+    {#if view !== 'recover' && view !== 'email'}
       <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
     {/if}
   </div>

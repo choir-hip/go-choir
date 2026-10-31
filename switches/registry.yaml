@@ -2468,6 +2468,33 @@
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
    "blocked_by": "owner of dispatch.wide_slots to state its proof (not in the 10-26 audit)",
    "note": "Added after the 10-26 audit; no walk data."
+  },
+  {
+   "id": "auth_email_sign_in",
+   "kind": "host_env",
+   "life": "ops",
+   "owner": "auth",
+   "class": "red",
+   "surface": "auth",
+   "introduced": "2026-10-31",
+   "nix": [
+    "AUTH_EMAIL_SIGN_IN"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "ring": "all",
+   "nix_value": "on",
+   "promote": [
+    {
+     "metric": "email_signin_unexpected_session_refusals",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep: the off position is the rollback and the incident kill switch (it ends every email session); review_by only",
+   "note": "Email sign-in (docs/design/email-sign-in-2026-10-31.md). On for staging. Off (a service restart) makes begin answer as if every address were unknown, makes verify refuse, and deletes every unconsumed attempt and every email_* refresh session at boot. Needs AUTH_EMAIL_CODE_KEY_FILE; the service refuses to start with the switch on and no key.",
+   "review_by": "2027-01-20"
   }
  ]
 }

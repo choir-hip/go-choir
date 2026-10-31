@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS refresh_sessions (
 	expires_at   DATETIME NOT NULL,
 	rotated_from TEXT,
 	device_info  TEXT,
-	last_used_at DATETIME
+	last_used_at DATETIME,
+	auth_method  TEXT NOT NULL DEFAULT 'passkey'
 );
 
 CREATE INDEX IF NOT EXISTS idx_credentials_user_id ON credentials(user_id);
@@ -84,7 +85,9 @@ CREATE TABLE IF NOT EXISTS desktop_exchange_codes (
 	access_token  TEXT  NOT NULL,
 	refresh_token TEXT  NOT NULL,
 	created_at  DATETIME NOT NULL,
-	expires_at  DATETIME NOT NULL
+	expires_at  DATETIME NOT NULL,
+	auth_method TEXT NOT NULL DEFAULT 'passkey',
+	not_after DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_desktop_exchange_expires_at ON desktop_exchange_codes(expires_at);
 
@@ -130,6 +133,31 @@ CREATE TABLE IF NOT EXISTS registration_waitlist (
 	attempts      INTEGER NOT NULL DEFAULT 1
 );
 
+-- Email sign-in (docs/design/email-sign-in-2026-10-31.md, email_signin.go).
+-- One row per begin, known address or not. Codes and link tokens are stored
+-- only as hashes; expired rows are the rate-limit history and are swept
+-- after 24 hours.
+CREATE TABLE IF NOT EXISTS email_signin_attempts (
+	id                 TEXT PRIMARY KEY,
+	user_id            TEXT REFERENCES users(id) ON DELETE CASCADE,
+	purpose            TEXT NOT NULL DEFAULT 'sign_in',
+	email_hash         TEXT NOT NULL,
+	code_hash          TEXT NOT NULL,
+	link_token_hash    TEXT NOT NULL,
+	cookie_hash        TEXT NOT NULL,
+	ip_hash            TEXT NOT NULL,
+	user_agent_summary TEXT NOT NULL DEFAULT '',
+	created_at         DATETIME NOT NULL,
+	expires_at         DATETIME NOT NULL,
+	attempts           INTEGER NOT NULL DEFAULT 0,
+	sent               INTEGER NOT NULL DEFAULT 0,
+	consumed_at        DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_email_signin_email_hash ON email_signin_attempts(email_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_email_signin_ip_hash ON email_signin_attempts(ip_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_email_signin_link_token ON email_signin_attempts(link_token_hash);
+CREATE INDEX IF NOT EXISTS idx_email_signin_user ON email_signin_attempts(user_id);
+
 CREATE TABLE IF NOT EXISTS owner_root_keys (
 	owner_id   TEXT PRIMARY KEY,
 	created_at DATETIME NOT NULL
@@ -172,6 +200,11 @@ var schemaMigrations = []string{
 	// Track K 1b: passkey PRF capability and per-credential evaluation salt.
 	`ALTER TABLE credentials ADD COLUMN prf_capable INTEGER NOT NULL DEFAULT 0`,
 	`ALTER TABLE credentials ADD COLUMN prf_salt BLOB`,
+	// Email sign-in: the method a session was made with rides the refresh row
+	// and the desktop exchange code; existing rows read as passkey.
+	`ALTER TABLE refresh_sessions ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'passkey'`,
+	`ALTER TABLE desktop_exchange_codes ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'passkey'`,
+	`ALTER TABLE desktop_exchange_codes ADD COLUMN not_after DATETIME`,
 }
 
 // User represents a row in the users table.
@@ -179,6 +212,9 @@ type User struct {
 	ID        string
 	Email     string
 	CreatedAt time.Time
+	// EmailVerifiedAt is when the address was proven (nil: not yet). Email
+	// sign-in mails only verified addresses.
+	EmailVerifiedAt *time.Time
 }
 
 // Credential represents a WebAuthn passkey row in the credentials table.
@@ -220,6 +256,9 @@ type RefreshSession struct {
 	RotatedFrom string
 	DeviceInfo  string
 	LastUsedAt  *time.Time
+	// AuthMethod is how the session was made: passkey (also the reading of an
+	// empty value), email_code or email_link.
+	AuthMethod string
 }
 
 // OpenStore opens (or creates) the SQLite database at dbPath and applies the
@@ -289,6 +328,14 @@ func (s *Store) bootstrap() error {
 		return fmt.Errorf("migrate drop username column: %w", err)
 	}
 
+	// users.email_verified_at comes after the table recreation above so the
+	// column survives it. The first time the column is added every existing
+	// account is backfilled as verified: registration has been invite-capped,
+	// so the existing set is known people. Later accounts start unverified.
+	if err := s.migrateEmailVerifiedAt(); err != nil {
+		return fmt.Errorf("migrate email_verified_at: %w", err)
+	}
+
 	// The legacy desktop handoff schema carried raw access and refresh bearer
 	// values. The redirect-only handoff now stores only a user reference, but
 	// the NOT NULL columns remain until a later table migration. Scrub any
@@ -299,6 +346,27 @@ func (s *Store) bootstrap() error {
 	}
 
 	return nil
+}
+
+// migrateEmailVerifiedAt adds users.email_verified_at and, only on the run
+// that adds it, marks every existing user with a credential verified.
+func (s *Store) migrateEmailVerifiedAt() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.Exec(`ALTER TABLE users ADD COLUMN email_verified_at DATETIME`)
+	if err != nil {
+		if isDuplicateColumnErr(err) {
+			return nil
+		}
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE users SET email_verified_at = created_at WHERE email_verified_at IS NULL AND EXISTS (SELECT 1 FROM credentials WHERE credentials.user_id = users.id)`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // isDuplicateColumnErr returns true if the error is a SQLite "duplicate column
@@ -461,26 +529,43 @@ func (s *Store) CreateUser(id, email string) (*User, error) {
 
 // GetUserByID returns the user with the given ID, or sql.ErrNoRows.
 func (s *Store) GetUserByID(id string) (*User, error) {
-	u := &User{}
-	err := s.db.QueryRow(
-		"SELECT id, email, created_at FROM users WHERE id = ?", id,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
+	return scanUser(s.db.QueryRow(
+		"SELECT id, email, created_at, email_verified_at FROM users WHERE id = ?", id,
+	))
 }
 
 // GetUserByEmail returns the user with the given email, or sql.ErrNoRows.
 func (s *Store) GetUserByEmail(email string) (*User, error) {
+	return scanUser(s.db.QueryRow(
+		"SELECT id, email, created_at, email_verified_at FROM users WHERE email = ?", email,
+	))
+}
+
+func scanUser(row *sql.Row) (*User, error) {
 	u := &User{}
-	err := s.db.QueryRow(
-		"SELECT id, email, created_at FROM users WHERE email = ?", email,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt)
-	if err != nil {
+	var verified sql.NullTime
+	if err := row.Scan(&u.ID, &u.Email, &u.CreatedAt, &verified); err != nil {
 		return nil, err
 	}
+	if verified.Valid {
+		t := verified.Time
+		u.EmailVerifiedAt = &t
+	}
 	return u, nil
+}
+
+// SetEmailVerified marks the user's address proven (idempotent). Recovery,
+// which consumes a link mailed to the address, and the verify-address flow
+// call it.
+func (s *Store) SetEmailVerified(userID string) error {
+	_, err := s.db.Exec(
+		"UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL",
+		time.Now().UTC(), userID,
+	)
+	if err != nil {
+		return fmt.Errorf("set email verified: %w", err)
+	}
+	return nil
 }
 
 // CreateCredential inserts a WebAuthn credential (passkey) record.
@@ -740,8 +825,8 @@ func (s *Store) CleanExpiredChallenges() (int64, error) {
 // CreateRefreshSession inserts a new refresh/session record.
 func (s *Store) CreateRefreshSession(rs *RefreshSession) error {
 	_, err := s.db.Exec(
-		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from, device_info) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom, rs.DeviceInfo,
+		"INSERT INTO refresh_sessions (id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, auth_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		rs.ID, rs.UserID, rs.TokenHash, rs.CreatedAt, rs.ExpiresAt, rs.RotatedFrom, rs.DeviceInfo, normalizeAuthMethod(rs.AuthMethod),
 	)
 	if err != nil {
 		return fmt.Errorf("create refresh session %q: %w", rs.ID, err)
@@ -758,9 +843,9 @@ func (s *Store) GetRefreshSessionByTokenHash(tokenHash string) (*RefreshSession,
 		lastUsedAt sql.NullTime
 	)
 	err := s.db.QueryRow(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE token_hash = ?",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE token_hash = ?",
 		tokenHash,
-	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rs.RotatedFrom, &deviceInfo, &lastUsedAt)
+	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rs.RotatedFrom, &deviceInfo, &lastUsedAt, &rs.AuthMethod)
 	if err != nil {
 		return nil, err
 	}
@@ -810,6 +895,11 @@ type DesktopExchangeCode struct {
 	UserID    string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	// AuthMethod is the method of the session that issued the handoff; the
+	// redeemed native session keeps it. NotAfter carries an email
+	// session's absolute expiry so a handoff cannot extend it.
+	AuthMethod string
+	NotAfter   *time.Time
 }
 
 func hashDesktopExchangeCode(code string) string {
@@ -820,8 +910,8 @@ func hashDesktopExchangeCode(code string) string {
 // CreateDesktopExchangeCode inserts a new one-time exchange code.
 func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
 	_, err := s.db.Exec(
-		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt,
+		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at, auth_method, not_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt, normalizeAuthMethod(c.AuthMethod), c.NotAfter,
 	)
 	if err != nil {
 		return fmt.Errorf("create desktop exchange code: %w", err)
@@ -840,12 +930,17 @@ func (s *Store) ConsumeDesktopExchangeCode(code string) (*DesktopExchangeCode, e
 	defer tx.Rollback()
 
 	row := tx.QueryRow(
-		"SELECT user_id, created_at, expires_at FROM desktop_exchange_codes WHERE code = ?",
+		"SELECT user_id, created_at, expires_at, auth_method, not_after FROM desktop_exchange_codes WHERE code = ?",
 		codeHash,
 	)
 	c := &DesktopExchangeCode{Code: code}
-	if err := row.Scan(&c.UserID, &c.CreatedAt, &c.ExpiresAt); err != nil {
+	var sessionExpires sql.NullTime
+	if err := row.Scan(&c.UserID, &c.CreatedAt, &c.ExpiresAt, &c.AuthMethod, &sessionExpires); err != nil {
 		return nil, err
+	}
+	if sessionExpires.Valid {
+		t := sessionExpires.Time
+		c.NotAfter = &t
 	}
 	if time.Now().UTC().After(c.ExpiresAt) {
 		_, _ = tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", codeHash)
@@ -1435,7 +1530,7 @@ func (s *Store) TouchCredentialLastUsed(credID string) error {
 // included in the struct but should not be exposed in API responses.
 func (s *Store) ListRefreshSessionsByUserID(userID string) ([]RefreshSession, error) {
 	rows, err := s.db.Query(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE user_id = ? ORDER BY created_at DESC",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE user_id = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -1451,7 +1546,7 @@ func (s *Store) ListRefreshSessionsByUserID(userID string) ([]RefreshSession, er
 			deviceInfo  sql.NullString
 			lastUsedAt  sql.NullTime
 		)
-		if err := rows.Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt); err != nil {
+		if err := rows.Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt, &rs.AuthMethod); err != nil {
 			return nil, err
 		}
 		if rotatedFrom.Valid {
@@ -1478,9 +1573,9 @@ func (s *Store) GetRefreshSessionByID(id string) (*RefreshSession, error) {
 		lastUsedAt  sql.NullTime
 	)
 	err := s.db.QueryRow(
-		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at FROM refresh_sessions WHERE id = ?",
+		"SELECT id, user_id, token_hash, created_at, expires_at, rotated_from, device_info, last_used_at, auth_method FROM refresh_sessions WHERE id = ?",
 		id,
-	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt)
+	).Scan(&rs.ID, &rs.UserID, &rs.TokenHash, &rs.CreatedAt, &rs.ExpiresAt, &rotatedFrom, &deviceInfo, &lastUsedAt, &rs.AuthMethod)
 	if err != nil {
 		return nil, err
 	}
@@ -1508,4 +1603,14 @@ func (s *Store) TouchRefreshSessionLastUsed(id string) error {
 		return fmt.Errorf("touch refresh session last_used: %w", err)
 	}
 	return nil
+}
+
+// DeleteEmailRefreshSessions removes every refresh session made by email, so
+// the harvest of a hole dies with the switch.
+func (s *Store) DeleteEmailRefreshSessions(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, "DELETE FROM refresh_sessions WHERE auth_method LIKE 'email\\_%' ESCAPE '\\'")
+	if err != nil {
+		return 0, fmt.Errorf("delete email refresh sessions: %w", err)
+	}
+	return res.RowsAffected()
 }

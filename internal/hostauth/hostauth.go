@@ -283,6 +283,15 @@ func Authorize(r *http.Request) bool {
 	return AuthorizeAtMost(r, ModeEnforce)
 }
 
+// Enforcing reports whether this process enforces the host-internal
+// credential: mode enforce with a credential loaded. A route that sends
+// Choir-branded mail needs it, because loopback alone is not proof across the
+// guest DNAT and Authorize passes in off and observe.
+func Enforcing() bool {
+	c := current()
+	return c.mode == ModeEnforce && c.hasToken
+}
+
 // AuthorizeAtMost is Authorize with the configured mode capped for one
 // route: a route newly put behind the credential can run observe while the
 // service enforces everywhere else (SEC-11). It never raises the mode: a

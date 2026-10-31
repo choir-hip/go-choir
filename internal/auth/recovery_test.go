@@ -732,7 +732,7 @@ func TestListSessionsReturnsSessionsWithoutTokenHash(t *testing.T) {
 
 	// Create a session.
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
@@ -791,12 +791,12 @@ func TestRevokeSessionSucceedsForOtherSession(t *testing.T) {
 
 	// Create two sessions (simulating two devices).
 	rec1 := httptest.NewRecorder()
-	_, err = h.issueSession(rec1, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	_, err = h.issueSession(rec1, httptest.NewRequest(http.MethodGet, "/", nil), user, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session 1: %v", err)
 	}
 	rec2 := httptest.NewRecorder()
-	_, err = h.issueSession(rec2, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	_, err = h.issueSession(rec2, httptest.NewRequest(http.MethodGet, "/", nil), user, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session 2: %v", err)
 	}
@@ -848,7 +848,7 @@ func TestRevokeSessionRejectsCurrentSession(t *testing.T) {
 
 	// Create a session and get the refresh token cookie.
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
@@ -898,7 +898,7 @@ func TestRevokeSessionRejectsAccessOnlyRequest(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestRevokeSessionRejectsNonOwner(t *testing.T) {
 	}
 
 	otherRec := httptest.NewRecorder()
-	_, err = h.issueSession(otherRec, httptest.NewRequest(http.MethodGet, "/", nil), other)
+	_, err = h.issueSession(otherRec, httptest.NewRequest(http.MethodGet, "/", nil), other, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue other session: %v", err)
 	}
@@ -944,7 +944,7 @@ func TestRevokeSessionRejectsNonOwner(t *testing.T) {
 
 	// Owner creates a session.
 	rec := httptest.NewRecorder()
-	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), owner)
+	_, err = h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), owner, AuthMethodPasskey)
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}

@@ -461,6 +461,7 @@ let
   # gateway-identities.json are open (the same problem record, item 3).
   hostSecretPaths = {
     jwtKey = "-${authSigningDir}/ed25519-key";
+    emailCodeKey = "-${authSigningDir}/email-code-key";
     providerEnv = "-/var/lib/go-choir/gateway-provider.env";
     codexAuth = "-/var/lib/go-choir/codex-auth.json";
     maildEnv = "-/var/lib/go-choir/maild.env";
@@ -830,14 +831,20 @@ in
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     serviceConfig = commonServiceHardening // {
-      ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -f /var/lib/go-choir/auth-signing/ed25519-key || ${pkgs.openssh}/bin/ssh-keygen -q -t ed25519 -N \"\" -f /var/lib/go-choir/auth-signing/ed25519-key'";
+      ExecStartPre = [
+        "${pkgs.bash}/bin/bash -c 'test -f /var/lib/go-choir/auth-signing/ed25519-key || ${pkgs.openssh}/bin/ssh-keygen -q -t ed25519 -N \"\" -f /var/lib/go-choir/auth-signing/ed25519-key'"
+        # Email sign-in HMAC key (AUTH_EMAIL_CODE_KEY_FILE): generated once,
+        # 0600, kept beside the signing key. Missing with the switch on, the
+        # service refuses to start.
+        "${pkgs.bash}/bin/bash -c 'test -s /var/lib/go-choir/auth-signing/email-code-key || (umask 077 && head -c 48 /dev/urandom | base64 -w0 > /var/lib/go-choir/auth-signing/email-code-key)'"
+      ];
       ExecStart = "${serviceExec "auth" goChoirPackages.auth}";
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
-      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" "emailCodeKey" ];
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
@@ -856,6 +863,11 @@ in
         "AUTH_COOKIE_SECURE=true"
         # Recovery links are mailed through maild (empty disables mail).
         "AUTH_MAILD_URL=http://127.0.0.1:8087"
+        # Email sign-in (docs/design/email-sign-in-2026-10-31.md, switch
+        # auth.email_sign_in). A flip is a service restart; off deletes the
+        # unconsumed attempts and email sessions at boot.
+        "AUTH_EMAIL_SIGN_IN=on"
+        "AUTH_EMAIL_CODE_KEY_FILE=${authSigningDir}/email-code-key"
         # Sign-up cap with a waitlist (L4-03, internal/auth/registration_cap.go):
         # unset is no cap. FP0 sets "AUTH_REGISTRATION_CAP=<n>" after reading
         # the count of users holding a passkey (FP8 station, L4-03).
