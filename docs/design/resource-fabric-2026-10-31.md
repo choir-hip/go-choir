@@ -819,8 +819,10 @@ Mike (`~/Dev/mike`) has built most of on-device voice. Read 2026-10-31:
   streams 80 ms chunks, and runs in Core ML on iOS, as GGUF through a C
   library on Android, and on WebGPU in the browser. Kokoro and Apple's
   voices remain.
-- **Hands-free voice.** This is designed and built natively, and runs in the
-  simulator only, untuned. The pieces:
+- **Hands-free voice.** This is designed and built natively, and the owner
+  uses it on device, with dictation and read-aloud, in daily use (owner,
+  2026-10-31: "I am using all of the voice modes on device"; Mike's docs
+  still say simulator only and are behind). The pieces:
   - one audio engine with Apple's voice processing, so echo cancellation
     hears the assistant;
   - Parakeet realtime EOU for live text and the end of an utterance;
@@ -868,8 +870,10 @@ Mike (`~/Dev/mike`) has built most of on-device voice. Read 2026-10-31:
 - **Voice on the tape.** In Choir a spoken turn is an owner act whose text
   goes on the tape. Whether audio is kept is a scope of the grant, and the
   default is no.
-- **Device testing.** Hands-free voice has not run on a device, and its
-  thresholds are untuned.
+- **Measured device numbers.** All voice modes run on device in the owner's
+  daily use; what is missing is recorded measurements (latency, battery,
+  memory, false turn ends) that placement in the fabric can use, and Mike's
+  docs catching up.
 - **Voice as an owner seat.** An approval spoken aloud must be bound to the
   owner: speaker verification exists, but a spoken "yes" is not a passkey,
   so irreversible classes still need a stronger seat.
