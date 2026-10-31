@@ -1964,6 +1964,54 @@ in
     };
   };
 
+  # Growth meter (scripts/node-b-growth-meter; test:
+  # scripts/test-node-b-growth-meter.sh;
+  # docs/definitions/choir-lean-system-2026-10-30.md). Hourly, metadata only:
+  # allocated bytes of the host stores, PostgreSQL sizes and rows, append
+  # receipts per computer and kind, and every service's memory.peak against
+  # MemoryMax, one JSON line to /var/lib/go-choir/growth-meter/YYYY-MM.jsonl
+  # (about 12 MB a month). Report: run the script with --report from the repo
+  # checkout, or `systemctl cat go-choir-growth-meter` for its store path.
+  # Idle CPU and IO, 256 MiB MemoryMax, 45 minute timeout. The PATH names
+  # every tool the script runs (the test checks the list; an activation
+  # wrapper once lacked sed).
+  # Rollback: remove this service and timer; the ledger stays on disk.
+  systemd.services.go-choir-growth-meter = {
+    description = "go-choir growth meter (hourly, metadata only)";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      CPUWeight = 1;
+      # Measured on Node B (systemd-run, same limits): the du walk over ~10M
+      # inodes fills the cgroup with reclaimable dentry/inode cache, so
+      # memory.peak climbs to whatever limit it is given (MemoryMax 256M alone:
+      # peak 256M, 2m24s; 1G: peak 1G, 3m34s). MemoryHigh makes the kernel
+      # reclaim at 160M: peak 160M, 3m29s, 27 MB of swap, no kill. The
+      # resident set is about 16 MB. The report treats the peak of this unit as
+      # cache-bound and flags only its oom_kill.
+      MemoryHigh = "160M";
+      MemoryMax = "256M";
+      TimeoutStartSec = "45min";
+      Environment = [
+        "PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.util-linux pkgs.postgresql_17 pkgs.systemd ]}"
+        "GROWTH_DIR=/var/lib/go-choir/growth-meter"
+      ];
+      ExecStart = "${pkgs.python3}/bin/python3 -I ${../scripts/node-b-growth-meter}";
+    };
+  };
+
+  systemd.timers.go-choir-growth-meter = {
+    description = "go-choir growth meter every hour";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "hourly";
+      RandomizedDelaySec = "2m";
+      # A missed reading is not resumed; the next one is current.
+      Persistent = false;
+    };
+  };
+
   # Autopaper daily digest (docs/reports/autopaper-daily-digest-design-2026-10-20.md,
   # docs/problems/autopaper-daily-digest-phase1-2026-10-20.md). A deterministic
   # host job: this oneshot makes one call to maild's host-internal run route,
