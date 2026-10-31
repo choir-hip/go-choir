@@ -30,9 +30,6 @@ import (
 	"testing"
 )
 
-// The writes are held off in the release; these tests exercise them.
-func init() { compressRecordWrites = true }
-
 type fixRec struct {
 	ns   NS
 	body []byte

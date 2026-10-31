@@ -63,13 +63,8 @@ func compressible(ns NS) bool { return ns == NSEvent || ns == NSReceipt }
 
 // packRecord frames body for writing: zstd when the namespace is compressible,
 // the body is large enough and the saving is worth it, raw otherwise.
-// compressRecordWrites holds compressed writes for one release: the release
-// before this one refuses record version 2, so readers ship first and a
-// rollback to them finds nothing it cannot read. Release two sets it true.
-var compressRecordWrites = false
-
 func packRecord(ns NS, digest [32]byte, body []byte) []byte {
-	if compressRecordWrites && compressible(ns) && len(body) >= minCompressBytes {
+	if compressible(ns) && len(body) >= minCompressBytes {
 		zstdInit()
 		c := zstdEnc.EncodeAll(body, make([]byte, 0, len(body)/2))
 		if len(c) > 0 && len(c)*100 <= len(body)*(100-minSavingsPct) {

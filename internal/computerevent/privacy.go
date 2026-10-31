@@ -313,7 +313,7 @@ func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID
 		return nil, PrivateArtifactMetadata{}, fmt.Errorf("private artifact cipher: nonce: %w", err)
 	}
 	sealed, compression := redacted, ""
-	if packed := compressPrivatePayload(redacted); packed != nil && compressPrivateWrites {
+	if packed := compressPrivatePayload(redacted); packed != nil {
 		sealed, compression = packed, privateCompressionZstd
 	}
 	metadata := PrivateArtifactMetadata{
@@ -424,9 +424,3 @@ func decodePrivateArtifactEnvelope(envelopeJSON []byte) (privateArtifactEnvelope
 	}
 	return envelope, nonce, ciphertext, nil
 }
-
-// compressPrivateWrites holds compressed writes back for one release, so the
-// release that can read a compressed envelope is deployed (and is the
-// rollback target) before any envelope is written compressed. Readers always
-// accept both forms.
-var compressPrivateWrites = false

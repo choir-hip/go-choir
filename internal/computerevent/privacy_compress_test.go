@@ -24,7 +24,6 @@ import (
 )
 
 // The release holds compressed writes back; these tests exercise them.
-func init() { compressPrivateWrites = true }
 
 func realisticJSON(n int) []byte {
 	var b strings.Builder

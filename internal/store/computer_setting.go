@@ -39,9 +39,10 @@ const SettingCalibrationFeedback = "calibration.feedback"
 // ten high-volume trace event kinds are sealed in small windows instead of one
 // acknowledged tape write each, and a crash may lose the open window
 // (docs/reports/telemetry-batching-design-2026-10-20.md). It is how telemetry
-// rides the one tape (docs/design/one-tape-durability-2026-10-31.md): on for
-// d@e first by stored setting, then the default once d@e shows it; off drains
-// the queue and is the rollback. The env flag
+// rides the one tape (docs/design/one-tape-durability-2026-10-31.md). On by
+// default for every computer (2026-10-31: d@e ran it from 10-30 across three
+// boots with no sealer error, while the paper's unbatched trace lines were
+// 82% of its host receipts); off drains the queue and is the rollback. The env flag
 // CHOIR_TELEMETRY_BATCH=on turns it on regardless.
 const SettingTelemetryBatch = "telemetry.batch"
 
@@ -217,7 +218,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:                 false,
 	SettingManagementSerialTasks:        false,
 	SettingCalibrationFeedback:          false,
-	SettingTelemetryBatch:               false,
+	SettingTelemetryBatch:               true,
 	SettingResearchSystem1:              false,
 	SettingResearchRelatedStory:         false,
 	SettingDebouncedCheckpoint:          false,

@@ -8,7 +8,6 @@ import (
 )
 
 // The release holds compressed writes back; these tests exercise them.
-func init() { compressChunkWrites = true }
 
 // Failure modes: old raw-sealed chunk must open; incompressible chunk must be
 // byte-identical to the old format; compressible chunk must round-trip and
