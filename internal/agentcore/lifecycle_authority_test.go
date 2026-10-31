@@ -329,8 +329,11 @@ func TestCancelLifecycleTrajectoryPersistsCancelledActivationProjection(t *testi
 }
 
 func TestLifecycleCancellationWinsActivationCompletionRace(t *testing.T) {
+	// One runtime for every round: each round has its own owner, document
+	// and run, so rounds share no state, and the open/close of a fresh store
+	// per round was most of the cost.
+	rt, s := testRuntime(t)
 	for round := range 10 {
-		rt, s := testRuntime(t)
 		ctx := context.Background()
 		suffix := fmt.Sprintf("%02d", round)
 		ownerID, docID, runID := "user-cancel-race-"+suffix, "doc-cancel-race-"+suffix, "run-cancel-race-"+suffix

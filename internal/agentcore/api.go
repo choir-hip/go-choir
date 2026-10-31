@@ -725,7 +725,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 // healthStoreBudget bounds /health's store reads, which run concurrently
 // under it: the proxy's runtime probe gives up at 2 s and vmmanager's at 3 s.
-const healthStoreBudget = time.Second
+var healthStoreBudget = time.Second // var only so health tests can shorten a stall; production never assigns it
 
 // runtimeHealthStalledResponse is /health's 503 when a store read missed its
 // budget. The counts that were not read are left out: a 0 would read as idle.

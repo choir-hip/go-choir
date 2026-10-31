@@ -450,6 +450,36 @@ func TestRematerializeRefusesFailureClasses(t *testing.T) {
 	})
 }
 
+// lazyChainTape serves an n-event chain generated on demand, so a test can
+// sit past the replay bound without holding or re-walking the whole chain.
+type lazyChainTape struct {
+	*restoreTapeFake
+	n          uint64
+	snapshotAt []uint64
+	head       func(uint64) string
+}
+
+func (l *lazyChainTape) EventsPage(_ context.Context, _ string, after uint64, size int) ([]computerevent.DurableEvent, error) {
+	if l.tapeErr != nil {
+		return nil, l.tapeErr
+	}
+	page := []computerevent.DurableEvent{}
+	for seq := after + 1; seq <= l.n && len(page) < size; seq++ {
+		var record computerevent.DurableEvent
+		record.Request.Event.Sequence = seq
+		record.Request.Next.CanonicalEventHead = l.head(seq)
+		for _, at := range l.snapshotAt {
+			if at == seq {
+				record.Request.Event.EventKind = computerevent.EventSnapshotRecorded
+				record.Request.Event.EventID = fmt.Sprintf("event-%d", seq)
+				record.Request.Event.PayloadCommitment = strings.Repeat("a", 64)
+			}
+		}
+		page = append(page, record)
+	}
+	return page, nil
+}
+
 func TestRestoreTailReceiptBounds(t *testing.T) {
 	full := &restoreReplayObserver{}
 	for _, seq := range []uint64{2, 3} {
@@ -489,23 +519,11 @@ func TestPlanRestoreTargetBeforeNewestSnapshot(t *testing.T) {
 	ctx := context.Background()
 	const computerID = "computer-restore-plan"
 	head := func(seq uint64) string { return fmt.Sprintf("%064x", seq) }
-	// chain is n events; the events at snapshotAt are snapshot_recorded.
-	tape := func(n uint64, snapshotAt ...uint64) *restoreTapeFake {
-		events := make([]computerevent.DurableEvent, 0, n)
-		for seq := uint64(1); seq <= n; seq++ {
-			var record computerevent.DurableEvent
-			record.Request.Event.Sequence = seq
-			record.Request.Next.CanonicalEventHead = head(seq)
-			for _, at := range snapshotAt {
-				if at == seq {
-					record.Request.Event.EventKind = computerevent.EventSnapshotRecorded
-					record.Request.Event.EventID = fmt.Sprintf("event-%d", seq)
-					record.Request.Event.PayloadCommitment = strings.Repeat("a", 64)
-				}
-			}
-			events = append(events, record)
-		}
-		return newRestoreTapeFake(func() []computerevent.DurableEvent { return events })
+	// chain is n events; the events at snapshotAt are snapshot_recorded. The
+	// chain is generated per page: the replay bound is ~720k events, and
+	// materializing (and re-walking per page) that many records cost minutes.
+	tape := func(n uint64, snapshotAt ...uint64) *lazyChainTape {
+		return &lazyChainTape{restoreTapeFake: newRestoreTapeFake(nil), n: n, snapshotAt: snapshotAt, head: head}
 	}
 
 	t.Run("a target past the snapshot starts from it", func(t *testing.T) {

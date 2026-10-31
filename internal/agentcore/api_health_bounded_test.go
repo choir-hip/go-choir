@@ -35,6 +35,11 @@ func newBoundedHealthFixture(t *testing.T) (*APIHandler, *choirstore.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = productStore.Close() })
+	// A stalled poll costs the whole store budget; half a second still dwarfs
+	// a healthy read, and halves every stall test's wall time.
+	previousBudget := healthStoreBudget
+	healthStoreBudget = 500 * time.Millisecond
+	t.Cleanup(func() { healthStoreBudget = previousBudget })
 	rt := &Runtime{
 		cfg:                 provideriface.Config{ComputerID: "computer-health"},
 		store:               productStore,
