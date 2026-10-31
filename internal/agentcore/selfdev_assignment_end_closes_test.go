@@ -511,6 +511,17 @@ func TestCancellationCloseRetriesATapeConflict(t *testing.T) {
 // iterations miss the race with probability about 0.07^8.
 const tapeRaceIterations = 8
 
+// shortenSelfdevCloseTimeout lets a wedged-append test hit the close's own
+// deadline in a fraction of a second instead of the production 15s. The
+// tests' 20s no-deadline guard is unchanged: a close with no deadline still
+// fails them.
+func shortenSelfdevCloseTimeout(t *testing.T) {
+	t.Helper()
+	previous := selfdevCloseTimeout
+	selfdevCloseTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { selfdevCloseTimeout = previous })
+}
+
 // blockingProjectionSink never commits: it waits for its context to end.
 type blockingProjectionSink struct{}
 
@@ -523,6 +534,7 @@ func (blockingProjectionSink) AppendProjectionOps(ctx context.Context, _ []compu
 // must keep a deadline of its own, as settleRulePrecommits does; a wedged
 // tape append must not hold the report path forever.
 func TestAssignmentEndCloseIsBounded(t *testing.T) {
+	shortenSelfdevCloseTimeout(t)
 	rt, _ := testRuntime(t)
 	computerID := rt.TextureComputerID()
 	assignment := endedAssignment(computerID, "assignment-close-bounded", types.EngineeringAssignmentCompleted)
@@ -561,6 +573,7 @@ func assertOperationUntouched(t *testing.T, rt *Runtime, computerID, operationID
 // mutex, and on the reconcile paths engineeringAssignmentOpenMu, across the
 // tape append. A wedged append must not hold them forever.
 func TestCancellationCloseIsBounded(t *testing.T) {
+	shortenSelfdevCloseTimeout(t)
 	rt, _ := testRuntime(t)
 	computerID := rt.TextureComputerID()
 	assignment := endedAssignment(computerID, "assignment-cancel-bounded", types.EngineeringAssignmentCancelled)

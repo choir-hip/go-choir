@@ -410,16 +410,21 @@ func TestAdmissionHoldsARequestUntilTheNewestCandidateSettles(t *testing.T) {
 
 // S3, S5: every settled state admits; every open state holds.
 func TestAdmissionHoldFollowsTheOperationState(t *testing.T) {
+	// Each state builds its own runtime and store, so the states run in
+	// parallel as subtests.
 	for _, state := range selfdev.AllStates {
-		f := newCarryHoldFixture(t, state)
-		err := f.admit(t)
-		open := false
-		for _, s := range selfdev.OpenStates {
-			open = open || s == state
-		}
-		if open != (err != nil) {
-			t.Fatalf("state %s: admission = %v; want held %v", state, err, open)
-		}
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			f := newCarryHoldFixture(t, state)
+			err := f.admit(t)
+			open := false
+			for _, s := range selfdev.OpenStates {
+				open = open || s == state
+			}
+			if open != (err != nil) {
+				t.Fatalf("state %s: admission = %v; want held %v", state, err, open)
+			}
+		})
 	}
 }
 

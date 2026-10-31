@@ -47,8 +47,10 @@ func TestPlannedBootPassivationScansNoKind(t *testing.T) {
 	if err := s.CreateRun(ctx, parent); err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
-	// The accumulated input: work items from earlier spawns.
-	for i := 0; i < 200; i++ {
+	// The accumulated input: work items from earlier spawns. A dozen are
+	// enough for the scan to see sibling kinds; the assertions are on minted
+	// work and parked state, not on how many items there are.
+	for i := 0; i < 12; i++ {
 		if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{OwnerID: ownerID, TrajectoryID: trajectoryID,
 			Objective: fmt.Sprintf("earlier spawn %d", i), ObjectiveFingerprint: fmt.Sprintf("spawned_coagent:earlier-%d", i),
 			Status: types.WorkItemCompleted}); err != nil {

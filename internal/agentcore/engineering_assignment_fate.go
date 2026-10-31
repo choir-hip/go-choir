@@ -500,8 +500,9 @@ func (rt *Runtime) failSelfdevOperation(ctx context.Context, operation selfdev.O
 const selfdevCloseAttempts = 3
 
 // selfdevCloseTimeout bounds a post-commit close detached from its request,
-// as settleRulePrecommits bounds settlement.
-const selfdevCloseTimeout = 15 * time.Second
+// as settleRulePrecommits bounds settlement. A var only so a test can shorten
+// the wait for a wedged append; production never assigns it.
+var selfdevCloseTimeout = 15 * time.Second
 
 // selfdevCloseContext is a close's context: detached from the request's
 // cancellation (the close runs after a commit) with its own deadline.

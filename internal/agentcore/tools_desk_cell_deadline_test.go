@@ -192,7 +192,7 @@ for {
 // Failure mode 4: other desks keep running cells past the management bound.
 func TestCellHostDeadlineLeavesOtherDesksAlone(t *testing.T) {
 	deskTestWorkerBin(t)
-	t.Setenv(managementCellDeadlineEnv, "1s")
+	t.Setenv(managementCellDeadlineEnv, "600ms")
 	for _, role := range []string{agentprofile.Research, agentprofile.Texture} {
 		workers := newDeskSessionWorkers()
 		tool := newDeskGoEvalTool(&Runtime{}, workers, role)
@@ -201,7 +201,7 @@ func TestCellHostDeadlineLeavesOtherDesksAlone(t *testing.T) {
 		execCtx.Role = role
 		ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
 		out, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(`import "time"
-time.Sleep(2 * time.Second)
+time.Sleep(1200 * time.Millisecond)
 fmt.Println("finished")`)+`}`))
 		workers.closeAll()
 		if err != nil {
@@ -216,23 +216,23 @@ fmt.Println("finished")`)+`}`))
 // Failure mode 5: the model's own timeout_ms keeps its meaning on management.
 func TestManagementCellOwnTimeoutStillApplies(t *testing.T) {
 	deskTestWorkerBin(t)
-	t.Setenv(managementCellDeadlineEnv, "1s")
+	t.Setenv(managementCellDeadlineEnv, "600ms")
 	workers := newDeskSessionWorkers()
 	t.Cleanup(workers.closeAll)
 	tool := newDeskGoEvalTool(&Runtime{}, workers, agentprofile.Management)
 	ctx := toolregistry.WithExecutionContext(context.Background(), deskEvalExecCtx(t))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(`import "time"
-time.Sleep(3 * time.Second)`)+`,"timeout_ms":500}`))
+time.Sleep(1500 * time.Millisecond)`)+`,"timeout_ms":300}`))
 	if err != nil {
 		t.Fatalf("desk_go_eval: %v", err)
 	}
-	if !strings.Contains(out, "timeout_ms=500") || strings.Contains(out, "management cell deadline") {
+	if !strings.Contains(out, "timeout_ms=300") || strings.Contains(out, "management cell deadline") {
 		t.Fatalf("own timeout not reported as itself: %s", out)
 	}
 
 	out, err = tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(`import "time"
-time.Sleep(2 * time.Second)
+time.Sleep(1200 * time.Millisecond)
 fmt.Println("finished")`)+`,"timeout_ms":5000}`))
 	if err != nil {
 		t.Fatalf("desk_go_eval: %v", err)
