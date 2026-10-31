@@ -93,7 +93,9 @@ else
   fail S1a "three pages: $(tail -3 "$out/logs/s1.err" "$out/logs/s1.jsonl" | tr '\n' ' ')"
 fi
 before="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_seq"])' "$store/follow.json" 2>/dev/null || echo -1)"
-follow --once --max-events "$max_events" >"$out/logs/s1-killed.jsonl" 2>"$out/logs/s1-killed.err" &
+# exec so $! is choir-bundle itself: killing the subshell of a backgrounded
+# function would orphan the pull and leave its store lock held.
+(exec "$bin" follow --backend "$backend" --computer "$computer" --store "$store" --header-file <(auth) --once --max-events "$max_events") >"$out/logs/s1-killed.jsonl" 2>"$out/logs/s1-killed.err" &
 pid=$!
 sleep 3
 kill -9 "$pid" 2>/dev/null || true
