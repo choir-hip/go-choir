@@ -321,6 +321,14 @@ type ManagerConfig struct {
 	// releases directory.
 	GuestBasesDir string
 
+	// GuestLayeredLink is VM_GUEST_LAYERED_RELEASE_LINK, the symlink to the
+	// layered guest image installed beside the single one, and
+	// GuestLayeredComputers is VM_GUEST_LAYERED_COMPUTERS, the ComputerIDs
+	// that launch it (the layered ring; empty selects none). See
+	// layered_ring.go.
+	GuestLayeredLink      string
+	GuestLayeredComputers []string
+
 	// GuestReleaseSupportWindow is VM_GUEST_RELEASE_SUPPORT_WINDOW: how long a
 	// superseded release's snapshots may still resume (default 168h).
 	GuestReleaseSupportWindow time.Duration

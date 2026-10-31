@@ -10,6 +10,12 @@
 #
 # Retention is by reference, not by count (owner, 2026-10-31). Keep:
 #   - the current release (the guest link's target);
+#   - the layered ring's current release (GO_CHOIR_GUEST_LAYERED_LINK's target,
+#     default /var/lib/go-choir/guest-layered), when the guest link names a
+#     single image. Layered releases are then outside the previous/rollback
+#     choice, which stays among single images, so a layered install never
+#     displaces a single image's rollback target; a non-current layered
+#     release stays like any other, by use, age and the support window;
 #   - the newest other release by first_current_at ("previous") and the newest
 #     release older than current (the rollback target; the same release in
 #     steady state), and any release newer than current (a switch pending);
@@ -52,6 +58,7 @@ set -u
 
 rel_dir="${GO_CHOIR_GUEST_RELEASES_DIR:-/var/lib/go-choir/guest-releases}"
 link="${GO_CHOIR_GUEST_LINK:-/var/lib/go-choir/guest}"
+layered_link="${GO_CHOIR_GUEST_LAYERED_LINK:-/var/lib/go-choir/guest-layered}"
 vmctl="${GO_CHOIR_VMCTL_URL:-http://127.0.0.1:8083}"
 state_dir="${GO_CHOIR_VM_STATE_DIR:-/var/lib/go-choir/vm-state}"
 prune_jails="${GO_CHOIR_PRUNE_JAILS:-0}"
@@ -73,6 +80,14 @@ if ! printf '%s' "$current" | grep -Eq "$id_re"; then
 	log "the guest link $link does not name a store path; deleting nothing"
 	exit 0
 fi
+
+layered_current="$(basename "$(readlink "$layered_link" 2>/dev/null)" 2>/dev/null | cut -c1-32)"
+printf '%s' "$layered_current" | grep -Eq "$id_re" || layered_current=""
+# a layered release is outside the previous/rollback choice while the fleet's
+# current is a single image
+cur_layered=false
+[ -e "$rel_dir/$current/layers.json" ] && cur_layered=true
+is_aside() { [ "$cur_layered" = false ] && [ -e "$rel_dir/$1/layers.json" ]; }
 
 # --- vmctl's answer -----------------------------------------------------------------
 auth=()
@@ -157,6 +172,7 @@ rbest=-1
 cur_at="${first_at[$current]:-$now}"
 for id in "${ids[@]}"; do
 	[ "$id" = "$current" ] && continue
+	is_aside "$id" && continue
 	if [ "${first_at[$id]}" -gt "$best" ]; then best="${first_at[$id]}"; previous="$id"; fi
 	if [ "${first_at[$id]}" -le "$cur_at" ] && [ "${first_at[$id]}" -gt "$rbest" ]; then rbest="${first_at[$id]}"; rollback="$id"; fi
 done
@@ -171,7 +187,9 @@ deleted=()
 remaining=()
 for id in "${ids[@]}"; do
 	age=$((now - first_at[$id]))
-	if [ "$id" = "$current" ] || [ "$id" = "$previous" ] || [ "$id" = "$rollback" ] || [ "${first_at[$id]}" -gt "$cur_at" ] \
+	newer=false
+	if [ "${first_at[$id]}" -gt "$cur_at" ] && ! is_aside "$id"; then newer=true; fi
+	if [ "$id" = "$current" ] || [ "$id" = "$previous" ] || [ "$id" = "$rollback" ] || [ "$newer" = true ] || [ "$id" = "$layered_current" ] \
 		|| in_list "$id" "$running" || in_list "$id" "$fs_hard" || [ "$age" -lt "$young_s" ] || [ "$tmp_active" = true ]; then
 		remaining+=("$id")
 		continue

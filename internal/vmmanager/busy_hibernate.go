@@ -87,7 +87,7 @@ func (m *Manager) busyCaptureRefusal(cfg VMConfig, resp guestHibernatePrepareRes
 	if resp.Outcome != "busy" || resp.Reason != "" {
 		return busyRefusedReason
 	}
-	if cfg.GuestRelease == "" || cfg.GuestRelease != m.currentReleaseID() {
+	if cfg.GuestRelease == "" || cfg.GuestRelease != m.currentReleaseIDFor(cfg.ComputerID) {
 		return busyRefusedRelease
 	}
 	return ""
@@ -102,7 +102,7 @@ func (m *Manager) busySnapshotRefusal(meta *SnapshotMeta, now time.Time) string 
 	if !now.Before(meta.CreatedAt.Add(m.busyHibernateMaxAge())) {
 		return snapshotReasonBusyMaxAge
 	}
-	if meta.GuestRelease == "" || meta.GuestRelease != m.currentReleaseID() {
+	if meta.GuestRelease == "" || meta.GuestRelease != m.currentReleaseIDFor(meta.ComputerID) {
 		return snapshotReasonBusyReleaseChanged
 	}
 	return ""

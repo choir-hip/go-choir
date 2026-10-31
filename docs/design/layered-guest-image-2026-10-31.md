@@ -323,6 +323,35 @@ and decisions from the text above:
 - `debug_pagecache` reports `layers: ["app","base"]` for the layered store
   overlay instead of `stacked`.
 
+## 7b. S2 landed (build steps 3 and 4, 2026-10-31, branch lane/layered-image-r0)
+
+- `.#guest-image-layered`: the single image's artifacts as symlinks into their
+  own store paths plus `storedisk-app.erofs`, `storedisk-base.erofs`,
+  `layers.json`, `app-paths`, `base-paths`, and the layered toplevel's
+  `initrd`, `kernel-params`, `release.json`. Its floor digest differs from the
+  single image's (the initrd differs), so a snapshot never resumes across
+  layouts: joining or leaving the ring is a cold boot.
+- `nix/node-b.nix` materializes it as a second release (the same script) and
+  repoints `/var/lib/go-choir/guest-layered` once the release directory
+  exists. The guest link still names the single image; the layered image is
+  never the fleet's current.
+- The ring: `VM_GUEST_LAYERED_COMPUTERS` (ComputerIDs only; `class:` and `*`
+  are ignored) from `guestLayeredComputers` in node-b.nix, ON for d@e as
+  shipped. Remove the id to return it to single at its next cold boot.
+  `VM_GUEST_LAYERED_RELEASE_LINK` names the second link. A ring computer whose
+  layered release or base does not load cold boots the single image (logged).
+  "Current" for a snapshot's refusal, busy-hibernate and the behind flag is
+  the current of that computer's layout (`currentReleaseFor`).
+- Retention keeps the layered link's target, and keeps layered releases out of
+  the previous/rollback choice while the fleet's current is single.
+- `scripts/check-guest-app-layer.sh DIR [--record FILE]` refuses an app layer
+  over 200 MB (or 200 paths) and records the path count. It is not wired into
+  a workflow (workflow edits are a security-gate change); run it after
+  `nix build .#guest-image-layered`.
+- Not changed: the host builder's base identity still reads the single image
+  (`CORPUSD_HOST_BUILD_BASE_STOREDISK`); the layered apply proof on d@e must
+  show whether that identity is accepted for a layered guest.
+
 ## 8. This commit's own effect
 
 `flake.nix` is a floor input, so pushing this commit moves `floor_digest`

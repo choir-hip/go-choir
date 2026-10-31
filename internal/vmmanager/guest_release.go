@@ -14,6 +14,7 @@ package vmmanager
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -238,6 +239,15 @@ func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
 	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" || cfg.BaseDiskPath != "" {
 		return
 	}
+	if m.layeredSelected(cfg.ComputerID) {
+		if rel, ok := m.layeredCurrentRelease(); ok {
+			setLaunchRelease(cfg, rel)
+			return
+		}
+		// The ring computer's layered release or base is missing: the single
+		// image launches instead of a failed boot (layered_ring.go).
+		log.Printf("vmmanager: computer %s (VM %s) is in the layered ring but the layered release is unavailable; cold boot falls back to the single image", cfg.ComputerID, cfg.VMID)
+	}
 	if rel, ok := m.currentRelease(); ok {
 		setLaunchRelease(cfg, rel)
 	}
@@ -307,7 +317,13 @@ func (m *Manager) reattachConfig(vmID string, epoch int64, overrides VMConfig) V
 
 // currentReleaseID is the id of the current release, "" when legacy.
 func (m *Manager) currentReleaseID() string {
-	if rel, ok := m.currentRelease(); ok {
+	return m.currentReleaseIDFor("")
+}
+
+// currentReleaseIDFor is the id of the release a cold boot of this computer
+// would launch from now, "" when legacy.
+func (m *Manager) currentReleaseIDFor(computerID string) string {
+	if rel, ok := m.currentReleaseFor(computerID); ok {
 		return rel.ID
 	}
 	return ""
@@ -340,7 +356,14 @@ func (m *Manager) releaseRefusal(meta *SnapshotMeta, now time.Time) string {
 	if err != nil {
 		return snapshotReasonReleaseMissing // R1
 	}
-	cur, ok := m.currentRelease()
+	computerID := meta.ComputerID
+	if computerID == "" {
+		computerID = meta.Config.ComputerID
+	}
+	// The release the computer would cold boot onto now: a ring computer is
+	// compared with the layered current, so a layout change (joining or
+	// leaving the ring) moves the floor and the snapshot cold boots.
+	cur, ok := m.currentReleaseFor(computerID)
 	if !ok {
 		return snapshotReasonReleaseCurrentUnknown // R2
 	}
@@ -450,7 +473,11 @@ func (m *Manager) GuestReleaseHealth() (string, map[string]GuestReleaseVMState) 
 		if rel == "" || inst.State != StateRunning {
 			continue
 		}
-		out[vmID] = GuestReleaseVMState{GuestRelease: rel, Behind: current != "" && current != rel}
+		cur := current
+		if m.layeredSelected(inst.Config.ComputerID) {
+			cur = m.currentReleaseIDFor(inst.Config.ComputerID)
+		}
+		out[vmID] = GuestReleaseVMState{GuestRelease: rel, Behind: cur != "" && cur != rel}
 	}
 	return current, out
 }

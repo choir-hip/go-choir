@@ -591,6 +591,39 @@
         echo '{"schema":1,"base":"${guestBaseLayer}","app":"${guestAppLayer}"}' > $out/layers.json
       '';
 
+      # The layered guest image (docs/design/layered-guest-image-2026-10-31.md
+      # S2): the single image's artifacts plus storedisk-app.erofs,
+      # storedisk-base.erofs and layers.json, with the layered toplevel's
+      # initrd, kernel-params and release.json (its floor digest moves with the
+      # layered initrd, so snapshots never resume across layouts). Installed on
+      # Node B as a second release by the same materialize step; vmctl launches
+      # it only for the layered ring (VM_GUEST_LAYERED_COMPUTERS). The big
+      # files are symlinks into their own store paths: the Nix store holds each
+      # layer once, and the release install reflinks through the links.
+      guest-image-layered =
+        let
+          vmConfig = guestLayeredVmConfig;
+          name = "go-choir-guest-image-layered";
+        in pkgs.runCommand name { } ''
+        mkdir -p $out
+        ln -s ${vmConfig.boot.kernelPackages.kernel.dev}/vmlinux $out/vmlinux
+        ln -s ${vmConfig.microvm.bootDisk} $out/rootfs.ext4
+        ln -s ${vmConfig.system.build.initialRamdisk}/${vmConfig.system.boot.loader.initrdFile} $out/initrd
+        ln -s ${guestAppLayer} $out/storedisk-app.erofs
+        ln -s ${guestBaseLayer} $out/storedisk-base.erofs
+        cp ${guestBaseLayerPaths} $out/base-paths
+        cp ${guestAppLayerPaths} $out/app-paths
+        echo '{"schema":1,"base":"${guestBaseLayer}","app":"${guestAppLayer}"}' > $out/layers.json
+        cat > $out/build.json <<'EOF'
+{"schema_version":1,"artifact":"${name}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
+EOF
+        cat > $out/kernel-params <<'EOF'
+${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
+EOF
+        cp ${vmConfig.environment.etc."choir-guest-image-manifest".source} $out/guest-image-manifest
+        cp ${pkgs.writeText "release.json" (guestReleaseJsonFor buildCommit vmConfig)} $out/release.json
+      '';
+
       # ── Guest release metadata (docs/design/density-d2-snapshots-survive-
       # deploys-2026-10-26.md 3.1) ───────────────────────────────────────────
       # release.json is built into every guest image. floor_digest covers what
@@ -714,6 +747,7 @@ EOF
         inherit guest-image;
         # Layered guest store prototype (not deployed; see its design doc).
         inherit guest-store-layers;
+        inherit guest-image-layered;
         guest-store-base-layer = guestBaseLayer;
         # The release.json of this commit's guest image, without building the
         # image (the deploy-level floor measurement reads it per commit; the
@@ -780,6 +814,9 @@ EOF
           # Bind the exact immutable guest image into the host system closure;
           # node-b activation advances /var/lib/go-choir/guest atomically.
           guestImage = guest-image;
+          # The layered image, installed as a second release beside it and
+          # launched only by the layered ring; never the fleet's current.
+          guestImageLayered = guest-image-layered;
         };
         modules = [
           ./nix/hardware.nix
