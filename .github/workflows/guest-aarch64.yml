@@ -8,7 +8,7 @@ name: Guest aarch64 Image
 on:
   workflow_dispatch:
   push:
-    branches: [main, lane/ci-arm-guest]
+    branches: [main]
     paths:
       - 'nix/**'
       - 'flake.nix'
