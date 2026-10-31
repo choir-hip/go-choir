@@ -20,7 +20,12 @@ package store
 //   - R8: the slice is not half-open (a row at a bound, whole or fractional
 //     seconds, goes the wrong way);
 //   - R9: the slice select scans every event and sorts (the plan leaves the
-//     partial index).
+//     partial index);
+//   - R10: a tool.result a stored run acceptance cites as evidence is
+//     retired, leaving the acceptance's served evidence read empty (owner,
+//     2026-10-31: keep the cited ones past the seven days), or an op without
+//     keep_cited keeps it (old ops on the tape must replay as they did), or
+//     an unknown keep_cited is accepted.
 
 import (
 	"context"
@@ -574,5 +579,50 @@ func TestRetireTelemetryNeedsTheTape(t *testing.T) {
 	}
 	if got := retireIDs(t, s); len(got) != 1 {
 		t.Fatalf("an unbound store retired: %v", got)
+	}
+}
+
+// R10: keep_cited=run_acceptance keeps the tool results a stored acceptance
+// cites, in both tables; an op without it retires them as before.
+func TestObjectRetireKeepsToolResultsAcceptanceCites(t *testing.T) {
+	ctx := context.Background()
+	for _, keep := range []string{computerevent.ObjectRetireKeepRunAcceptance, ""} {
+		t.Run("keep_cited="+keep, func(t *testing.T) {
+			h := newTapeHarness(t)
+			retireSeed(t, h, []retireEvent{
+				{id: "res-cited", kind: types.EventToolResult, at: retireBase},
+				{id: "res-cited-t", kind: types.EventToolResult, at: retireBase.Add(time.Minute), stamped: true},
+				{id: "res-plain", kind: types.EventToolResult, at: retireBase},
+				{id: "res-plain-t", kind: types.EventToolResult, at: retireBase.Add(time.Minute), stamped: true},
+			})
+			if _, err := h.store.UpsertRunAcceptance(ctx, types.RunAcceptanceRecord{
+				OwnerID: "owner-1", TargetMissionID: "mission-1", TrajectoryID: "traj-1",
+				EvidenceRefs: []types.RunAcceptanceEvidenceRef{
+					{RefID: "run:run-1", Kind: "run", RunID: "run-1"},
+					{RefID: "event:res-cited", Kind: "tool.result", EventID: "res-cited"},
+					{RefID: "event:res-cited-t", Kind: "tool.result", EventID: "res-cited-t"},
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			p := retireP([]string{"tool.result"}, retireBase.Add(-time.Hour), retireBase.Add(time.Hour), "")
+			p.KeepCited = keep
+			if err := h.store.AppendProjectionOps(ctx, []computerevent.ProjectionOp{retireOp(t, p)}); err != nil {
+				t.Fatal(err)
+			}
+			ids := retireIDs(t, h.store)
+			if hasID(ids, "res-plain") || hasID(ids, "res-plain-t") {
+				t.Fatalf("an uncited tool result stayed: %v", ids)
+			}
+			kept := hasID(ids, "res-cited") && hasID(ids, "res-cited-t")
+			if gone := !hasID(ids, "res-cited") && !hasID(ids, "res-cited-t"); keep != "" && !kept || keep == "" && !gone {
+				t.Fatalf("keep_cited=%q left %v", keep, ids)
+			}
+		})
+	}
+	bad := retireP([]string{"tool.result"}, retireBase, retireBase.Add(time.Hour), "")
+	bad.KeepCited = "everything"
+	if err := bad.Validate(); err == nil {
+		t.Fatal("an unknown keep_cited was accepted")
 	}
 }

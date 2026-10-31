@@ -42,7 +42,7 @@ const (
 	// finished runs from the working store; the entries stay on the sealed
 	// tape in the batches that recorded them.
 	ProjectionOpRunMemoryRetire = "run_memory_retire_recorded"
-	ProjectionBatchMediaType = "application/vnd.choir.projection-batch+json"
+	ProjectionBatchMediaType    = "application/vnd.choir.projection-batch+json"
 )
 
 var (
@@ -206,6 +206,11 @@ const (
 	ObjectRetirePhaseSome = "some"
 )
 
+// ObjectRetireKeepRunAcceptance keeps the events a stored run acceptance
+// cites in its evidence (owner, 2026-10-31: tool results go after seven days,
+// except those accepted evidence cites).
+const ObjectRetireKeepRunAcceptance = "run_acceptance"
+
 // ObjectRetireMaxSlice is the longest time slice one retire op may name. The
 // slice bounds the rows an op reads and removes (the apply holds the event
 // lock), and the op is as deterministic as the slice is exact.
@@ -223,7 +228,11 @@ type ObjectRetireProjection struct {
 	UpdatedFrom   string   `json:"updated_from"`
 	UpdatedBefore string   `json:"updated_before"`
 	Phase         string   `json:"phase,omitempty"`
-	Reason        string   `json:"reason,omitempty"`
+	// KeepCited, when ObjectRetireKeepRunAcceptance, keeps every matching
+	// row whose event a stored run acceptance cites. An op without it (every
+	// op recorded before 2026-10-31) applies as it always did.
+	KeepCited string `json:"keep_cited,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // DecodeObjectRetire parses and validates a retire body.
@@ -255,6 +264,9 @@ func (p ObjectRetireProjection) Validate() error {
 	}
 	if _, _, err := p.Slice(); err != nil {
 		return err
+	}
+	if p.KeepCited != "" && p.KeepCited != ObjectRetireKeepRunAcceptance {
+		return fmt.Errorf("object retire: unknown keep_cited %q", p.KeepCited)
 	}
 	switch p.Phase {
 	case ObjectRetirePhaseAny, ObjectRetirePhaseNone, ObjectRetirePhaseSome:

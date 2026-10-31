@@ -71,6 +71,20 @@ func retirePhasePredicate(p computerevent.ObjectRetireProjection, body, meta str
 	return ""
 }
 
+// retireKeepCitedPredicate keeps the rows whose event a stored run acceptance
+// cites in its evidence_refs. A body or metadata that is not JSON neither
+// cites nor is cited (a statement that errors on one row would wedge replay),
+// and the cited set excludes NULL, which would make NOT IN match nothing.
+func retireKeepCitedPredicate(p computerevent.ObjectRetireProjection, meta string) string {
+	if p.KeepCited != computerevent.ObjectRetireKeepRunAcceptance {
+		return ""
+	}
+	return ` AND COALESCE(CASE WHEN json_valid(` + meta + `) THEN CAST(json_extract(` + meta + `, '$.event_id') AS TEXT) END, '') NOT IN (
+		SELECT CAST(json_extract(e.value, '$.event_id') AS TEXT)
+		FROM og_objects ra, json_each(CASE WHEN json_valid(CAST(ra.body AS TEXT)) THEN CAST(ra.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
+		WHERE ra.object_kind = '` + string(ogKindRunAccept) + `' AND json_extract(e.value, '$.event_id') IS NOT NULL)`
+}
+
 func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []any) {
 	marks := make([]string, len(p.EventKinds))
 	args := make([]any, len(p.EventKinds))
@@ -86,7 +100,7 @@ func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []a
 func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
 	where := `object_kind = 'choir.event' AND updated_at >= ? AND updated_at < ? AND json_valid(metadata) AND json_extract(metadata, '$.kind') IN (` + marks + `)` +
-		retirePhasePredicate(p, "body", "metadata")
+		retirePhasePredicate(p, "body", "metadata") + retireKeepCitedPredicate(p, "metadata")
 	args := append([]any{from, before}, kindArgs...)
 	return where, args
 }
@@ -94,7 +108,7 @@ func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Tim
 // retireTableWhere is the choir_events selection of a retire op.
 func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
-	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata")
+	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata") + retireKeepCitedPredicate(p, "metadata")
 	args := append([]any{from, before}, kindArgs...)
 	return where, args
 }

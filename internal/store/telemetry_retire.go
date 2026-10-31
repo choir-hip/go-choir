@@ -49,10 +49,12 @@ var (
 // telemetryRetireGroup is one retirement the job runs: the kinds, the phase
 // filter, and how long the lines stay (0 retires every existing one).
 type telemetryRetireGroup struct {
-	name   string
-	kinds  []types.EventKind
-	phase  string
-	window func() time.Duration
+	name  string
+	kinds []types.EventKind
+	phase string
+	// keepCited is the op's keep_cited: the rows it keeps past the window.
+	keepCited string
+	window    func() time.Duration
 }
 
 func retireNow() time.Duration   { return 0 }
@@ -63,7 +65,9 @@ func retireToolResult() time.Duration {
 
 // telemetryRetireGroups is the retirement policy (section 11.6).
 //
-// tool.result goes after 7 days (L1 step 2). Its readers are the run
+// tool.result goes after 7 days (L1 step 2), except the results a stored run
+// acceptance cites as evidence: each cited event has a served read the record
+// names (owner, 2026-10-31). Its readers are the run
 // acceptance synthesis (agentcore/run_acceptance.go, an on-demand POST over the
 // newest 3000 events of a trajectory, run after a deploy proof), the
 // search-provider summary built inside it (trace_helpers.go) and the Texture
@@ -85,7 +89,7 @@ var telemetryRetireGroups = []telemetryRetireGroup{
 	{name: "unread kinds", kinds: []types.EventKind{types.EventToolInvoked, types.EventTextureAgentRevisionProgress}, window: retireNow},
 	{name: "phaseless loop.progress", kinds: []types.EventKind{types.EventRunProgress}, phase: computerevent.ObjectRetirePhaseNone, window: retireNow},
 	{name: "trace kinds", kinds: []types.EventKind{types.EventDeskCell, types.EventDeskEgress}, window: retireTrace},
-	{name: "tool results", kinds: []types.EventKind{types.EventToolResult}, window: retireToolResult},
+	{name: "tool results", kinds: []types.EventKind{types.EventToolResult}, keepCited: computerevent.ObjectRetireKeepRunAcceptance, window: retireToolResult},
 	{name: "phased loop.progress", kinds: []types.EventKind{types.EventRunProgress}, phase: computerevent.ObjectRetirePhaseSome, window: retireTrace},
 }
 
@@ -100,6 +104,7 @@ func (g telemetryRetireGroup) projection(from, before time.Time) computerevent.O
 		UpdatedFrom:   from.UTC().Format(time.RFC3339Nano),
 		UpdatedBefore: before.UTC().Format(time.RFC3339Nano),
 		Phase:         g.phase,
+		KeepCited:     g.keepCited,
 		Reason:        "telemetry retirement: " + g.name,
 	}
 }
