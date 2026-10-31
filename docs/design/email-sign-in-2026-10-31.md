@@ -1,6 +1,6 @@
 # Email sign-in
 
-Date: 2026-10-31. Status: design v2, revised after the tier-2 review (Devin
+Date: 2026-10-31. Status: design v3 (round 2 below), revised after the tier-2 review (Devin
 send_back: three blocking, nine should-fix or notes; see "Review round 1"
 at the end). Mutation class of the build: red (auth and session).
 
@@ -335,3 +335,48 @@ registration (verified address required, existing accounts backfilled);
 enumeration already open through login/register (stated as pre-existing);
 the Bearer branch; the test bootstrap (one virtual-authenticator passkey).
 D2: 7 days absolute, no sliding (adopted). All adopted or decided above.
+
+## Review round 2 (2026-10-31, Devin re-review: send_back on one new blocker)
+
+B1-B3 confirmed closed. v3 changes, binding on the build:
+
+1. (blocking) The desktop exchange carries the source session's expiry:
+   `desktop_exchange_codes` gains `not_after`, set from the source refresh
+   row at exchange-redirect; redeem caps the new session's expiry at it. An
+   email session can never be re-based past its original 7 days by
+   exchanging it, any number of times.
+2. The verified-address backfill marks only users with at least one
+   credential (`WHERE EXISTS (SELECT 1 FROM credentials WHERE user_id =
+   users.id)`); credential-less rows and the bootstrap admin stay unverified.
+3. Each endpoint consumes only its own purpose: `/auth/email/verify` only
+   `signin`, `verify-address/finish` only `verify_address`, the latter
+   requires a passkey session and the attempt's user must be the session's.
+4. The gate is `requireAuthUserAny` plus the method check only when the
+   caller is a cookie session (`callerKey == nil`); Bearer keys keep their
+   scope rules (`choir key` uses them).
+5. Logout-all is gated under both `all=true` and `all_devices=true`; when the
+   access JWT cannot be read, the method comes from the refresh row, and an
+   indeterminate method is refused.
+6. maild's sign-in route checks a new `hostauth.Enforcing()` (mode is
+   enforce) on top of the verbatim recovery gate; the recovery route keeps
+   its existing gate.
+7. Switching off also deletes every refresh session with an `email_*`
+   method, so a hole's harvest dies with the switch.
+8. Owner-act receipts cannot be joined to a refresh row (the credential ref is
+   a hash of a stateless access JWT). v1 states plainly that receipts do not
+   distinguish email-session acts; stamping the method into the act is a
+   follow-up.
+9. Lookup is exact as stored (as recovery does; `CreateUser` stores the
+   address verbatim); trim and lowercase only for `email_hash`.
+10. The attempt cookie binds only the `{attempt_id, code}` branch; the link
+    `{token}` is a bearer credential and works in another browser. The
+    cookie's `Secure` follows `CookieSecure` like the other auth cookies.
+11. The switch is env `AUTH_EMAIL_SIGN_IN`; a flip is a service restart, so
+    the deletions in 7 run at boot with the switch off. The test account runs
+    verify-address once from its passkey session before any sign-in mail
+    flows.
+12. `begin` sends the mail off the request path (as `recoveryMailDispatch`
+    does), so a known and an unknown address answer in the same time.
+
+The built code gets the landing review (one Devin seat on the frozen
+candidate) instead of a third design round.
