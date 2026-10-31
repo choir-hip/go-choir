@@ -1,341 +1,427 @@
-# Branching tape: a tree of linear chains, joined by publication (2026-10-31)
+# Branching tape: branches of one computer, a primary ref, no merge (2026-10-31)
 
 Status 2026-10-31: design only, nothing built. Mutation class of this
 document: green. The changes it orders are orange to red. **The doctrine
-delta in §4 needs owner ratification.**
+delta in §10 needs owner ratification.** Revision 2 replaces the first
+version (6401b01b8), in which the losing side of a split became a fork.
 
-Owner, 2026-10-31: "we may need to start branching our tape now... There
-are going to be edge-case states where both computers are running
-simultaneously, even in the best case. Maybe we should design it so you
-could have a VM running on the host and one running on your local machine
-simultaneously, intentionally. And be prepared for forking a VM on the
-host, or forking it locally." Then: "We might still maintain merging
-through publication, even if we do have, in some sense, a branching
-tape... remember our four S's: security, stability, simplicity, and
-scalability. In this case simplicity is probably the most important."
+Owner, 2026-10-31:
 
-Sources: [computer ontology](../computer-ontology.md) (forked computer,
-realization, capsule), [one tape](one-tape-durability-2026-10-31.md) §3-§5,
+- "There are going to be edge-case states where both computers are running
+  simultaneously, even in the best case... be prepared for forking a VM on
+  the host, or forking it locally."
+- "We might still maintain merging through publication, even if we do have,
+  in some sense, a branching tape... security, stability, simplicity, and
+  scalability. In this case simplicity is probably the most important."
+- "imagine a network issue where you end up having activity on both local
+  and host. One of those two gets committed as primary, but you want the
+  other one to really be the primary one. You shouldn't have to go through
+  the whole publication process to make that happen."
+- "First, we should be thinking about what would the circumstance be where
+  that happens."
+
+Sources: [computer ontology](../computer-ontology.md),
+[one tape](one-tape-durability-2026-10-31.md) §3-§5,
 [object graph redesign](object-graph-redesign-2026-10-30.md) §5.4 and §11,
 [data system frame](choir-data-system-frame-2026-10-30.md) (single writer,
-fenced), [hypervisor seam](../problems/vmmanager-has-no-hypervisor-seam-2026-10-21.md).
+fenced).
 
-## 0. The recommendation in one paragraph
+## 0. The recommendation
 
-Branching happens **between** chains, never **inside** one. Each ComputerID
-keeps one linear, hash-chained tape (`sequence`, `previous_head`, host CAS on
-`canonical_event_head`). The "branching tape" is the tree those chains form
-through **lineage**: a fork's genesis names a point on its parent's chain
-and shares the parent's prefix by reference. Concurrency on one computer is
-prevented by a **writer lease** (the planned writer epoch, made a lease).
-When prevention fails (split-brain), the losing suffix is kept as an
-**orphan branch** and can be turned into a fork. Results return to the
-computer only by publication and adoption, never by automatic state merge.
-There are no merge events, no vector clocks and no CRDT reducers.
+A computer keeps one identity (ComputerID, keys) and may hold several
+**branches**. Each branch is a linear hash chain from a common ancestor.
+Exactly one branch is **primary**, named by a ref: computer → branch. Three
+rules hold:
 
-```text
-P (computer, one chain)   e1─e2─e3─e4─e5─e6─e7        writer: lease epoch 7
-                                  │        └─ orphan o5'─o6' (epoch 6, Mac, demoted)
-                                  │              └─(owner act)→ fork F2
-F1 (fork, own ComputerID)        g1─f2─f3   genesis cites (P, seq 3, digest e3)
-F1 publishes object X ──► Autopaper graph ──► P adopts X (an ordinary event on P)
-```
+- **One writer per branch:** a writer lease per (computer, branch) with an
+  epoch.
+- **Switching primary is an owner act:** move the ref, fence the old
+  writer, re-realize.
+- **Branch contents never merge.** Combining work from two branches goes
+  through publication and adoption.
 
-## 1. The cases
-
-| Case | What it is | Handling |
-|---|---|---|
-| A. Accidental split-brain during a move | Two realizations of one ComputerID both append, briefly. Possible today: each host has its own `computer_event_heads` row, and `bundle import` refuses a non-chaining range (`internal/bundle/import.go:118-131`) but nothing stops the old side from serving | Prevented by the lease (§2.3). When it happens anyway, the side whose receipts carry the current epoch is the computer; the other suffix becomes an orphan branch (§5.2) |
-| B. Intentional replicas of one computer (Node B and the Mac) | One identity, one owner, two realizations running at once | **One writer, one or more followers.** The lease holder appends; a follower serves reads from bundle deltas and takes writes only after a handoff. Offline Mac: the Mac checks the lease out before going offline; the host follows. If both must write while apart, that is a fork (case C) by definition |
-| C. A fork on the host or locally | A sibling computer (ontology, 2026-10-01): new ComputerID, own chain, fresh identity, lineage to a parent checkpoint | Unchanged in doctrine. New here: the lineage record, prefix sharing by reference, and the snapshot key inheritance (§2.4) |
-| D. A speculative branch inside one computer | A self-development capsule producing a `CapsuleEffectBundle` | **Does not become a tape branch.** A capsule owns no event ordering (ontology, Self-Development Candidate Contract); its bundle returns by an accepted event. It already has the shape this design generalizes: a branch returns only through an artifact plus an authority act. Unify the rule, not the data structure |
-
-## 2. Data structures
-
-### 2.1 Events and heads: unchanged
-
-`computerevent.Event` keeps a single `PreviousHead` and a per-computer
-`Sequence`; `Reduce` keeps its `Sequence+1` and `PreviousHead ==
-CanonicalEventHead` check (`internal/computerevent/reducer.go:69`). No
-parent list, no replica id in the event body. Reasons:
-
-- `Event.CanonicalBytes` serializes every field, so a new field changes the
-  digest of every new event and needs `SchemaVersion` 2 and a second decode
-  root (`decode.go`). That cost buys nothing without merge events.
-- The reducer's desired/effective/pending state is a single register with
-  one pending transition (`reducer.go:79-140`). It cannot merge two pending
-  self-development transitions; a DAG would need a per-register lease
-  anyway.
-
-"The head" of a computer stays one value: the `canonical_event_head` whose
-receipt carries the current writer epoch.
-
-### 2.2 Who wrote it: the receipt, not the event
-
-The writer's identity is the pair (host signer key, writer epoch). Each host
-already signs an `EventHeadReceipt` per append with its `platform-control`
-key (`internal/platform/computer_events.go:257-262`). Add `writer_epoch` to
-`eventHeadReceiptFields` (`computer_events.go:352`). The fields are a map,
-so old receipts keep verifying. Two valid receipts for the same
-(computer_id, sequence) with different `event_digest` are then a signed
-**equivocation proof** that names both writers. That is the split-brain
-detector, and it costs one field.
-
-A realization ("replica") has no identity of its own beyond (host key id,
-epoch, realization id from vmctl). The computer's identity (ComputerID, the
-computer key, the DEK) stays one thing and travels with the lease (Keychain
-on a Mac, redesign §11).
-
-### 2.3 The writer lease
-
-One row per computer, in exactly one authority: the control database of the
-computer's home host (Node B for every computer today).
+Forks stay separate computers.
 
 ```text
-computer_writer_leases(computer_id PK, epoch BIGINT, holder_host_key_id,
-  holder_realization_id, state {held, handing_off, checked_out, revoked},
-  acquired_at, receipt_json)
+computer C   main: e1─e2─e3─e4─e5─e6        (Mac, lease main@4)
+                          └─ b7: h4─h5        (host, lease b7@1)   primary ──► b7
+owner act "make main primary": fence b7, primary := main, host re-realizes from
+snapshot ≤ e3 + replay main to e6. b7 stays as a retained, non-primary branch.
 ```
 
-- **Append check:** `compareAndSwapTx` reads the lease in the same
-  serializable transaction and refuses when the capability's epoch is not the
-  lease's epoch. The order from the frame stays: fence (bump the epoch), stop
-  the old writer, read the head, start the new one.
-- **Checkout, not expiry.** A Mac that goes offline holds a checked-out lease
-  with no timer. A timer would let the home host retake the lease while the
-  Mac still writes, which manufactures case A. The home host refuses to start
-  a writer for a checked-out computer.
-- **Revoke is an owner act.** If the Mac is lost, the owner revokes; the
-  epoch bumps; anything the Mac wrote after its last sync becomes an orphan
-  branch at the next contact. A revoke is a declared split, not a silent one.
-- **Followers** hold no lease. They import deltas (`choir-bundle export
-  --since`) and serve reads. A follower that receives a write either forwards
-  it to the holder or refuses it; it never appends.
-- A fork's chain gets its own lease row (it is a different computer).
+## 1. When does each side end up with activity?
 
-### 2.4 Lineage and prefix sharing
+The lease design (§2) assumes: the lease authority is the home host's
+control database (Node B); the Mac can **check out** a lease (no expiry);
+a follower never writes; a handoff fences first.
+
+| # | Circumstance | Lease holder | Mac activity | Host activity | Owner wants as primary | Prevented by the lease? | Likelihood |
+|---|---|---|---|---|---|---|---|
+| 1 | Mac offline with the lease checked out (plane, café); the owner opens choir.news on the phone and **chooses to work there** | Mac (main) | owner in Texture, the owner's desks and agents | phone edits, mail triage, scheduled jobs of the personal computer | **usually the Mac** (most of the work), sometimes the host; it depends on the day | yes, if the phone stays read-only. A split happens only if the owner picks "work here anyway", which opens a host branch | **high**, the main real case |
+| 2 | Lease revoked from the phone while the Mac sleeps or is offline (left at home, lost) | host after revoke (new branch); the Mac still believes it holds main | whatever ran before sleep; any work after waking offline | everything after the revoke | **usually the host** (a deliberate act); the Mac if it held unsynced Texture work the owner forgot | no: an offline Mac cannot learn of a revoke. Narrowed by revalidating the lease on wake whenever the network is up | medium-low |
+| 3 | Network partition during a move (handoff in flight) | nobody between the fence and the grant | none | none | n/a | yes: fence first, then grant; the cost is a short unavailability, not a split | medium, harmless |
+| 4 | Host restarts; a stale Mac follower thinks it is the writer | the host | none legitimately | normal | host | yes: a follower holds no lease and its host refuses appends. A handback counts only once the home host acknowledges it | low |
+| 5 | Clock or expiry mistakes | n/a | n/a | n/a | n/a | yes, because the lease has no timer. Adding one would bring this case back | none, by design |
+| 6 | A bug or an operator error: the home control database restored from an old backup (the epoch rolls back), a cold move done by hand, an import race | both write **the same branch** | some | some | whichever side carries the owner's work, usually decided by size | no. Detected by a signed equivocation proof (§3.3) | low, not zero |
+| 7 | Deliberate: "try a risky reorganization on the Mac while the host keeps running; keep it wholesale if it works" | host on main; the Mac on its own branch | the experiment | normal | the experiment, if it worked | n/a: this is a branch by choice | low today |
+| 8 | The paper and other `public_platform` and `critical_protected` computers | always the host | never checked out | 24/7 | host | yes: they never check out | ~none (only case 6) |
+
+**What justifies a cheap switch.**
+
+- Cases 1 and 2 are real. The owner's wish there is a judgment made after
+  the fact, so a switch must be cheap and must lose nothing.
+- Case 6 needs the same tool as a repair.
+- Case 7 is a bonus.
+- All of them are **personal computers, two branches, a tail of hours to
+  days, mostly owner and desk activity plus a few external effects**.
+  Always-busy computers never branch except by bug.
+
+**Scope that follows (simplicity first).**
+
+- Up to a few live branches per computer (a soft cap of 4), almost always
+  2.
+- Lineage depth is almost always 1.
+- Four operations: switch primary, retire a branch, publish from a branch,
+  fork from a branch.
+- No merge.
+- No concurrent writers on one branch.
+- No automatic primary choice beyond a fixed default (the branch the home
+  host serves, for route continuity), with the switch offered on the
+  owner's surface at once.
+
+## 2. Objects and invariants
+
+- **Computer**: ComputerID, owner, keys. Unchanged, and shared by all its
+  branches.
+- **Branch**: `(computer_id, branch_id)`, with a base `(base_branch_id,
+  base_sequence, base_digest)`. `main` has no base. Branch ids are UUIDv7,
+  minted by the host that opens the branch, so no coordination is needed.
+- **Primary ref**: `computer → branch_id`, with a generation. It routes the
+  computer and is the default branch for every reader.
+- **Writer lease**: `(computer_id, branch_id) → epoch, holder (host key id,
+  realization id), state {held, checked_out, frozen}`. Only the holder of
+  the current epoch appends to that branch.
+- **Realization**: a VM serving exactly one branch, as writer or follower.
+
+Invariants:
+
+- I-a: at most one writer per branch per epoch.
+- I-b: exactly one primary.
+- I-c: no content crosses branches except by publication and adoption.
+- I-d: **security-monotone facts are computer-wide, not per branch**: key
+  revocations (`credential_revocation_epoch`), tombstones and lease epochs.
+  A switch never un-revokes a key.
+
+## 3. Data structures
+
+### 3.1 Events: unchanged
+
+`computerevent.Event` keeps one `PreviousHead` and a `Sequence`. An event
+belongs to the branch whose chain it extends. Its `previous_head` already
+pins it to one position, so a captured event of one branch cannot be
+appended to another past the fork point. Adding a field would change every
+digest (`CanonicalBytes` serializes all fields) and buys nothing here.
+`Reduce` (`reducer.go:69`) is unchanged. Sequence is **per branch**: both
+branches carry sequence 5 after a fork at 3.
+
+The guest appender is unchanged too. `HeadCAS.Head(computerID)` and
+`EventsPage(computerID, after)` answer for the branch named by the
+realization's capability, so the guest never learns branch ids.
+
+### 3.2 Host tables
 
 ```text
-computer_lineage(child_computer_id PK, parent_computer_id,
-  parent_sequence, parent_head_digest, parent_snapshot_root,
-  kind {fork, orphan_fork}, created_by_receipt, created_at)
+computer_branches(computer_id, branch_id, base_branch_id, base_sequence,
+  base_digest, status {active, frozen, retired}, keep_set_bearing,
+  opened_by_receipt, created_at)                    PK (computer_id, branch_id)
+computer_primary_ref(computer_id PK, branch_id, generation, receipt_json)
+computer_writer_leases(computer_id, branch_id, epoch, holder_host_key_id,
+  holder_realization_id, state)                     PK (computer_id, branch_id)
+computer_event_heads            PK (computer_id) -> (computer_id, branch_id)
+computer_event_append_receipts  + branch_id DEFAULT 'main';
+  UNIQUE (computer_id, sequence)  -> (computer_id, branch_id, sequence)
+  PK (computer_id, idempotency_key) -> (computer_id, branch_id, idempotency_key)
+  UNIQUE (computer_id, event_digest) stays (digests differ after the fork)
 ```
 
-- A fork's genesis is an ordinary `genesis_imported` (sequence 1,
-  `previous_head = ZeroHead`), so `reduceGenesis` is unchanged. The lineage
-  rides in its payload and `InputArtifactRefs` (the parent snapshot root and
-  the parent head receipt). No schema change.
-- **Recovery** of a fork is its own snapshot plus its own tail. If the fork
-  has no snapshot, it is the parent's snapshot at or before
-  `parent_sequence`, plus the parent's tape to `parent_sequence`, plus the
-  fork's tape. So the parent's prefix must outlive the parent while a child
-  cites it: the tape sweep must read `computer_lineage`, replacing today's
-  `AcceptUnrecordedForkLineage` gate (`internal/platform/tape_sweep.go:141-189`,
-  "no fork-lineage store exists").
-- **Snapshot chunks.** `filecas.SealChunk(dek, computerID, data)`
-  (`internal/snapshot/snapshot.go:435`) binds every chunk digest to the DEK
-  and the ComputerID, so a re-keyed fork shares no ciphertext with its parent.
-  Without a change, each fork costs one full snapshot (about 25 GB for the
-  paper). The fix: a snapshot manifest entry may name `(key_ref, digest)`.
-  The fork receives a wrapped, read-only copy of the parent's DEK for the
-  roots it inherits, and new page ranges seal under its own DEK. The parent
-  rotates its DEK at the fork point, so the fork can never read the parent's
-  later chunks. The fork already held that plaintext, so it gains no access
-  it lacked. Its signing identity is still freshly minted.
+- **Shared prefix stored once.** A branch's rows are only those above
+  `base_sequence`. Its chain is its own rows plus its base branch's chain to
+  `base_sequence`. Pins, payloads and segment files are content-addressed,
+  so they are never duplicated.
+- **Idempotency is ancestry-aware.** A key counts as used on branch B if it
+  is in B's rows or in an ancestor's rows at or below the base.
+  `existingComputerEventReceipt` (`computer_events.go:314`) today keys on
+  `(computer_id, idempotency_key)`. Unchanged, it would hand branch B a
+  receipt from branch A for a deterministic key (`snapshot:<root>`), which
+  is a silent wrong answer.
+- The per-batch receipt table of redesign §5.4, not yet built, takes
+  `branch_id` in its keys from the start. The old receipts table gets only
+  the column now (in PostgreSQL, a constant default adds no rewrite). The
+  key changes wait until the first branch is opened, built `CONCURRENTLY`
+  (rule 5: do not rework the old system ahead of need).
 
-### 2.5 Sequences, idempotency, receipts, segments
+### 3.3 Receipts and signatures
 
-All stay per computer and linear. `computer_event_append_receipts` keeps
-`UNIQUE (computer_id, sequence)` and `PRIMARY KEY (computer_id,
-idempotency_key)`. Orphan branches never enter that table. They live in:
+`eventHeadReceiptFields` (`computer_events.go:352`) gains `branch_id` and
+`writer_epoch`. Each host signs with its own `platform-control` key,
+verified against a known host key set (one tape B2). Two valid receipts for
+the same `(computer_id, branch_id, sequence)` with different digests are a
+signed equivocation proof (case 6). A Mac opening a branch signs the branch
+record with its host key. The home accepts it from a host in the
+computer's key set, and opening a branch never changes the primary.
+
+### 3.4 Snapshots, witness, restore
+
+- `computer_snapshot_roots` gains `branch_id` and `head_digest`. The guest
+  record already carries `StoreHead` (`internal/snapshot/snapshot.go:89-91`).
+  Today `RecoveryBase` (`file_cas.go:80`) and the retention query
+  (`snapshot_roots.go:93,105`) order by `head_sequence` alone. **With two
+  branches, that would restore branch A's state into branch B.** A root is
+  usable for branch B only if `(head_sequence, head_digest)` lies on B's
+  chain, either B's own or an ancestor's at or below the base. Retention
+  counts per branch, and it keeps the newest root at or below each live
+  fork point.
+- The witness (`LiveStoreWitness`) is per branch, with no change: each
+  branch replays linearly, and both branches agree on the shared prefix.
+- Restore to a point means a point on a named branch (default: the
+  primary).
+
+## 4. Switching primary
+
+Preconditions:
+
+- an owner act receipt;
+- the target branch T is fully imported on the home host, with a verified
+  head;
+- no self-development apply in progress and no live engineering capsule on
+  the current primary P. These are correctness refusals, as in the restart
+  rules.
+
+The commit point is one serializable transaction in the home control
+database:
 
 ```text
-computer_tape_branches(computer_id, branch_id PK, fork_point_sequence,
-  fork_point_digest, head_sequence, head_digest, writer_epoch,
-  signer_key_id, bundle_ref, status {orphaned, forked, discarded},
-  keep_set_bearing BOOL, discovered_at)
+1  lease(P).epoch += 1, state = frozen          -- P's writer is fenced: its next CAS refuses
+2  UPDATE computer_primary_ref SET branch_id=T, generation=g+1
+       WHERE computer_id=C AND generation=g     -- CAS on the ref
+3  lease(T): keep its holder if T's realization lives (the Mac), else
+       epoch += 1, holder = the realization that will serve T
+4  append the switch record (from P@head, to T@head, owner act, effects digest §6)
 ```
 
-`bundle_ref` points to a sealed bundle of the suffix (format 2 objects
-pack). The working store, receipts table and segments of the computer stay
-single-chain, and so do every reader, replay and witness.
+After the commit:
 
-## 3. Merge, per projection kind
+- **The realization on T, if one lives, keeps running.** No restart.
+- **The realization that served P** is refused at its next append or
+  capability renewal (the stale epoch). That refusal is its signal. Its
+  open work belongs to P, so it closes with the fate "branch no longer
+  primary". Then it takes a **planned restart** with the marker `{reason:
+  primary_switch, branch: T}`.
+- **At boot it re-realizes on T:** the newest snapshot on T's chain (one at
+  or before the fork point always exists while T is live; §3.4), then
+  replay of T's chain to its head. Or it imports T's suffix from a bundle
+  if the snapshot is local.
+- **The marker resumes only T's own obligations,** and only those T's
+  writer left open by a planned stop. One resume per marker, as today.
+- **A crash anywhere after the commit** is a markerless boot. It closes
+  work, and the realization re-reads its branch from the ref.
+- **A crash before the commit** changes nothing.
+- **The route follows the ref,** so routing reads the primary, never a
+  realization's own claim.
 
-There is no automatic merge. Per kind, this is what crossing a branch means:
+The old primary P stays a frozen, non-primary branch. It can be switched
+back to, published from, forked from, or retired by an owner act. Switching
+back is the same operation.
 
-| State | Under the lease (B) | Across a fork or orphan (A, C) |
-|---|---|---|
-| Append-only logs, telemetry, run memory, traces | one writer, nothing to merge | stays on its branch as evidence; never copied |
-| Records keyed by content id (files, published objects) | n/a | a publication; the receiver adopts by digest (dedup is free) |
-| Cells, counters, leases, queues (`cell.set`, `queue.consume`) | n/a | never merged: two consumes would be two external effects |
-| Texture canonical revisions | one Texture desk writes, on the lease holder | a fork's Texture writes the fork's documents; they return as a published revision the parent's Texture adopts, so it stays the sole writer |
-| Desired/effective code state (reducer) | one pending transition at a time | never merged; a fork's code returns as a package or effect bundle that is accepted on the parent |
-| External effects already done by a loser (mail sent, paper published) | n/a | cannot be undone; listed on the orphan object from its tape |
+## 5. Opening branches, detecting splits, sync
 
-Desk authority is unchanged: management, engineering, research and app
-desks run only on the lease holder. A follower runs no desks, which also
-satisfies "a crash restart never resumes work" without a second rule.
+- **Opening by choice** (cases 1 and 7): the home host, or the Mac's own
+  host, opens a branch at the last head it holds and grants itself that
+  branch's lease. This is an explicit act ("work here anyway"). The primary
+  ref moves only when the act is made at the home host.
+- **The revoke** (case 2) is defined as "open a host branch at the last
+  synced main head, make it primary, freeze main at the home host". The
+  Mac keeps writing main locally. Nothing is ever relabeled.
+- **Sync** works by have/want per branch.
+  1. Each side sends `{branch_id: (head_sequence, head_digest)}`.
+  2. For each branch the receiver checks its own receipt at that sequence.
+     - **A match** gets a delta bundle (`choir-bundle export --since`,
+       paged by segment, imported in chunks with the head row advanced
+       last, one tape B4).
+     - **An unknown branch** gets its suffix from its base.
+     - **The same branch with another digest** is equivocation (case 6):
+       the receiving home host opens a new branch for the later-epoch
+       suffix (UUIDv7), keeps both receipt sets, and shows the owner the
+       proof.
+  3. Bundle manifests gain `branch_id` and `base`. `planImport`
+     (`internal/bundle/import.go:100-131`) returns a structured divergence
+     instead of a string refusal.
+- **Bounds:** memory is bounded by the page. The bytes are those of the
+  unique tails.
 
-**The evaluated, not recommended option: replicas merge automatically.**
-Events would name `parents[]`, carry a hybrid logical clock and a replica
-id, keep a per-replica sequence and a version vector per head, and replay
-in a deterministic topological order (Kahn, ties by digest). Logs and
-content-keyed sets would merge as CRDT unions. Cells would merge by
-last-writer-wins on the clock, Texture and the reducer by a per-desk or
-per-register lease, and queues not at all. Working it through, it falls
-back to per-kind leases for every kind that matters, and adds a merge
-witness, equivocation as a normal event, and silent merge bugs. It also
-contradicts settled doctrine (§4). Scores below.
+## 6. Desks and irreversible effects on a non-primary branch
 
-## 3a. The four S's, per mechanism
+- Desks run on a branch's writer only. Each branch's Texture is the sole
+  writer of that branch's canonical revisions.
+- After a switch, the losing branch's work is retained but not live:
+  - its Texture drafts and agent runs are visible from the branch view;
+  - anything wanted on the primary comes over by publication and adoption.
+- **Effects outside the computer cannot be undone:** mail sent, papers
+  published to the Autopaper graph, egress, payments, OAuth refresh-token
+  rotations.
 
-Each mechanism is scored in the owner's order (+ better, 0 neutral, − worse
-than today's linear chain):
+The surfacing:
+
+- At split detection and on the switch confirmation, the home host
+  computes the **effects digest** of each unique tail, from the tape: the
+  effect-bearing kinds (egress, mail send, publication, key events).
+- The switch screen states it plainly: "the branch you are leaving sent 3
+  emails and published 1 edition; they stay sent and stay recorded on that
+  branch."
+- The switch writes one ordinary event on the new primary, a **branch
+  notice** listing those effects by reference to the other branch's tape.
+  That is a record, not a merge: the new primary's Mail app knows a reply
+  went out without adopting the thread state.
+- External state that moved on the losing side (a rotated refresh token, a
+  publisher version counter on the Autopaper graph) is the unsafe residue
+  (§12).
+
+## 7. Retention and storage
+
+- The shared prefix is stored once.
+- A non-primary branch's unique tail is kept until an owner act retires
+  it. Retiring deletes that branch's rows above its base, its snapshot
+  roots, its lease, and the pins no live chain cites (pin references are
+  counted over the receipts that remain).
+- A branch that is the base of a live branch keeps its rows up to the
+  highest child base.
+- The primary cannot be retired.
+- The tape sweep (`internal/platform/tape_sweep.go:141-233`) reads
+  `computer_branches` and the fork lineage (§8) instead of the
+  `AcceptUnrecordedForkLineage` gate.
+- A tail marked `keep_set_bearing` (owner mail, Texture, precommitment
+  records, newspaper content) is listed, never auto-retired.
+- Growth equals the unique tails, measured in hours to days for the
+  realistic cases.
+
+## 8. Forks and capsules (cases C and D)
+
+- **A fork** is still a new computer: its own ComputerID, chain and
+  signing identity.
+  - Lineage: `computer_lineage(child, parent, parent_branch,
+    parent_sequence, parent_head_digest, parent_snapshot_root)`.
+  - Its genesis is an ordinary `genesis_imported`, citing the parent's
+    head receipt and snapshot root in its payload.
+  - "Fork from a branch" is the act that turns retained branch work into a
+    separate computer.
+  - Snapshot chunks: `filecas.SealChunk(dek, computerID, data)` binds
+    digests to the key and the ComputerID, so a re-keyed fork shares no
+    ciphertext. Chunk entries naming a `key_ref` are a later fix.
+  - Branches of one computer share the DEK and the ComputerID, so **their
+    snapshot chunks dedup today.** That is a storage reason to prefer a
+    branch over a fork for the split cases.
+- **A capsule** stays a capsule. It owns no event ordering. Its effect
+  bundle returns by an accepted event. It is not a tape branch.
+
+**Rejected: automatic merge of concurrent branches.** It would need parent
+lists, hybrid logical clocks, version vectors and per-kind CRDT rules, and
+it falls back to per-kind leases for everything that matters (Texture, the
+reducer's single pending transition, queues). It contradicts I-c.
+
+## 9. The four S's
+
+Each mechanism is scored in the owner's order (+ better, 0 neutral, −
+worse than today's single chain):
 
 | Mechanism | Security | Stability | Simplicity | Scalability |
 |---|---|---|---|---|
-| Writer lease (checkout, no expiry) | + one signer per epoch; equivocation provable | + split-brain prevented, not repaired | 0 one row, one check | 0 one home authority per computer |
-| Follower realization | 0 reads only; holds the key (Mac Keychain) | + warm handoff, an off-host copy | 0 reuses bundle deltas | + reads served locally |
-| Orphan branch on split | + losing writes kept as signed evidence | + no silent loss; the computer stays one chain | 0 one table, one bundle | 0 bounded by the split's length |
-| Fork with lineage and prefix reference | 0 fresh signing identity; inherited read only to the fork point | + recovery independent of the parent once snapshotted | 0 genesis unchanged | + no prefix copy; chunk reuse once keyed by `key_ref` |
-| Automatic replica merge (rejected) | − two signers per chain; a forged branch merges | − merge order and witness bugs, silent | − DAG, HLC, vectors, per-kind rules | + offline writes on both sides |
+| Writer lease per branch, no expiry | + one signer per epoch per branch; equivocation provable | + cases 3-5 prevented | 0 one row, one check | 0 |
+| Branches of one computer + primary ref | 0 same identity; I-d keeps revocations computer-wide | + nothing from a split is lost | − branch column, ancestry-aware lookups, snapshot chain check | 0 two tails of hours |
+| Switch as one transaction + planned restart | + owner act only | + one commit point; crash-safe by reusing the restart rules | 0 reuses snapshot, replay, marker | 0 |
+| Losing side becomes a fork (revision 1) | + fresh identity | 0 | − a re-key, a full snapshot (no dedup), and publication to get the work back | − |
+| Automatic merge (rejected) | − | − silent merge bugs | − − | + |
 
-## 4. Doctrine delta (needs owner ratification)
+## 10. Doctrine delta (needs owner ratification)
 
-Settled: a fork has its own ComputerID, chain and identity, records lineage,
-and "its results reach other computers only through publication and
-adoption" (`docs/computer-ontology.md`, forked computer).
+- **New:** a computer may have several branches and exactly one primary.
+  The ontology's "a user computer is identified by stable ComputerID and
+  its canonical event chain" becomes "...and its primary branch". The
+  other branches are retained history of the same computer, not forks.
+- **New:** switching primary is an owner act. It is distinct from
+  publication and adoption (which crosses computers or branches by
+  artifact), distinct from product restore (a forward event on one
+  branch), and distinct from platform deploy.
+- **New:** one writer per branch, fenced by a per-branch lease epoch. A
+  realization serves one branch, and a follower realization is read-only.
+- **Kept:** no merge of contents. Forks are separate computers with fresh
+  identity whose results return only by publication and adoption.
+  Capsules are unchanged.
+- **New rule I-d:** security-monotone facts (revocations, tombstones,
+  epochs) are computer-wide, so a switch never reverses them.
 
-- **Recommended, and consistent with that:** a replica is not a new object.
-  It is a **realization** of the one computer. The ontology already says
-  realizations are replaceable and "the user should not have to care which
-  realization serves the computer". Two realizations may run at once, but
-  only the lease holder writes.
-- **New, needing ratification:**
-  1. *Follower realizations*: a second, read-only realization serving at the
-     same time as the writer.
-  2. *Orphan branches, and forks made after the fact*: a demoted
-     realization's suffix, written under the parent's ComputerID, is
-     archived as evidence on the parent, and an owner act can make a fork
-     from it. The fork's identity is minted at conversion, not at
-     divergence. This is a second way forks come into being.
-  3. *Inherited read keys*: a fork holds a wrapped read-only parent DEK for
-     the chunks of roots it inherits, while its signing identity stays fresh.
-     This refines "freshly minted identity material".
-- **Rejected, and stated plainly:** automatic merge of concurrent replicas
-  is a direct merge between chains. It contradicts the settled rule. Taking
-  it would need the owner to retire that rule, and this design recommends
-  not doing so.
-
-## 5. Replay, restore, restart, sync, retention
-
-### 5.1 Replay and witness
-
-These stay linear. Replay order is sequence order; the content witness
-(`LiveStoreWitness`, `agentcore/restore_snapshot.go:212`) is unchanged. A
-fork's first state commitment is the parent snapshot's witness at the fork
-point, cited in its genesis. Restoring to a point on a branch means
-restoring to a point on that computer's chain: nearest snapshot at or below
-it, then replay. An orphan branch is never restored in place. It is
-materialized only as a fork, in a scratch directory, through the bundle
-import path (§6a2 of one tape).
-
-### 5.2 Sync and split detection
-
-1. The follower sends `have = (computer_id, epoch, head_sequence,
-   head_digest)`.
-2. The holder looks up its receipt at `head_sequence`. If the digest
-   matches, it answers with a delta bundle, paged by segment, with import
-   committed in chunks and the head advancing last (one tape B4). Memory is
-   bounded by the page, not the range.
-3. On a mismatch, or a receipt under a stale epoch, find the divergence
-   point by binary search over `(sequence, digest)`: O(log n) probes, no
-   full scan. Return `diverged{fork_point, ours, theirs}` instead of a bare
-   refusal.
-4. The stale-epoch side exports `(fork_point, its head]` as a bundle, the
-   home host records it in `computer_tape_branches`, and the stale side
-   rebases onto the holder's chain through stage-and-swap recovery.
-5. The owner sees one object: "N events written on <host> after <time> did
-   not reach the computer", with the external effects listed and two
-   actions: *make a fork* or *discard after retention*.
-
-### 5.3 Restart rules
-
-These hold per realization. A demoted writer closes its open obligations
-with the fate "interrupted: writer lease moved", the same mechanism as a
-crash. A handoff is planned, so it may carry the planned-restart marker to
-the new holder: one resume per handoff, no loop. A follower has no
-obligations to close.
-
-### 5.4 Retention and storage growth
-
-- The shared prefix is referenced, never copied. A fork costs its own tape
-  plus the chunks that differ, once chunks carry `key_ref` (§2.4).
-- An ephemeral fork is discarded by default (ontology). The sweep deletes its
-  tape only when no `computer_lineage` row cites it as a parent below a live
-  child's `parent_sequence`.
-- An orphan branch is kept 30 days, then discarded, unless
-  `keep_set_bearing` is set (it touches the owner's mail, Texture,
-  precommitment records or newspaper content). Those wait for an owner act.
-
-## 6. Do now (minimal), ranked by later pain avoided per unit of cost
+## 11. Do now (minimal), ranked by later pain avoided per unit of cost
 
 | # | Change | Files | Cost | Pain avoided |
 |---|---|---|---|---|
-| 1 | Build S7 (the writer epoch) as the **lease** of §2.3: a `computer_writer_leases` row with the checkout state, checked in `compareAndSwapTx`; and `writer_epoch` in `eventHeadReceiptFields` (check that `event_receipt.go`'s verifier tolerates the extra field) | `internal/platform/computer_events.go:227-262,352`, `internal/platform/lifecycle_control.go`, `internal/platform/credential_envelope.go` | medium (already planned) | the whole of case A, and the basis of B and of signed equivocation proofs |
-| 2 | `computer_lineage` table, written at fork creation; the tape sweep reads it instead of `AcceptUnrecordedForkLineage` | `internal/platform/tape_sweep.go:141-233`, new `internal/platform/computer_lineage.go` | small | deleting a prefix a fork's recovery needs (silent, irreversible) |
-| 3 | Bundle import returns a structured divergence (`fork_point`, both digests) instead of a string refusal | `internal/bundle/import.go:100-131` | small | a later sync rebuilding divergence detection; the bare refusal loses where the chains split |
+| 1 | Build S7 (the writer epoch) as `computer_writer_leases` keyed `(computer_id, branch_id='main')` with the checkout state and no expiry, checked in `compareAndSwapTx`. Put `branch_id` and `writer_epoch` in `eventHeadReceiptFields`, and check that `event_receipt.go`'s verifier tolerates the extra fields | `internal/platform/computer_events.go:227-262,352`, `lifecycle_control.go`, `credential_envelope.go` | medium (planned) | cases 3-6, and every receipt signed from now on names its branch |
+| 2 | Snapshot roots record `head_digest` (and `branch_id='main'`); `RecoveryBase` and retention choose roots whose `(sequence, digest)` is on the chain being recovered | `internal/platform/snapshot_roots.go:93,105`, `internal/platform/file_cas.go:80`, the registration in `internal/snapshot/snapshot.go:334` | small | the one silent wrong-state restore that branches (or any bad import) would cause |
+| 3 | `branch_id DEFAULT 'main'` column on `computer_event_heads` and `computer_event_append_receipts` (no key change yet), and `branch_id` in the keys of the new per-batch receipt table when it is built; `computer_branches` and `computer_primary_ref` tables created with the single `main` row | `internal/platform/computer_events.go:18-56` | small | a later 16 GB table rewrite, and receipts that cannot say their branch |
 
-Not now: a parent list or replica id in `Event` (a schema version, for a
-merge we do not do); `computer_tape_branches` (until the first split);
-`key_ref` chunks (until forks are routine).
+Later, when the first branch opens:
 
-## 7. Failure modes first
+- the key changes, built `CONCURRENTLY`;
+- ancestry-aware idempotency;
+- per-branch replay serving;
+- the switch transaction;
+- have/want sync;
+- the effects digest;
+- `computer_lineage` and the sweep, with forks.
 
-- **Lease.** The home host's control DB is lost, so a lease is lost: no
-  writer can start. That fails closed, and the owner reasserts the lease.
-  A lease checked out to a Mac that never returns: the owner revokes. Clock
-  skew does not matter (no expiry). A capability renewed across an epoch:
-  forbidden by the frame rule, and the test is a stale-epoch append refused
-  on staging.
-- **Equivocation detection.** Two hosts with copies of the same
-  `platform-control` key make the proof meaningless, so each host keeps its
-  own key, verified against a known host key set (one tape B2).
-- **Orphan branch.** It is captured after the stale side's disk is gone: the
-  suffix is lost, and only the receipts on the other side (if any) remain.
-  It holds an external effect the owner never learns about: the orphan object
-  must list the effect kinds from the suffix's tape. It is deleted while
-  keep-set-bearing: blocked by the flag.
-- **Fork lineage.** The parent is swept below a child's fork point: blocked
-  by do-now 2. A forged lineage in a genesis payload: the cited parent head
-  receipt must verify.
-- **Inherited keys.** The parent forgets to rotate its DEK at the fork, so
-  the fork can read the parent's future chunks. The fork act must rotate
-  first and refuse otherwise.
-- **Follower.** A follower serves a stale read as current: reads carry the
-  follower's head and lag. A follower takes a write: the append path refuses
-  for want of a lease.
+Not ever, under this design: a parent list or replica id in `Event`.
 
-## 8. Open questions
+## 12. Failure modes and what makes this unsafe
 
-1. Is the home authority always Node B, or can the lease authority itself
-   move (an enterprise host, a Mac-only computer)? A Mac-only computer
-   needs its own control DB as home.
-2. Should a follower run desks read-only (research on the Mac while
-   offline)? Research writes reports, so today that is a fork.
-3. Is an offline Mac that must write while the host also writes (both
-   needed at once) a real use, or is checkout enough? If it is real, it is
-   the case where the rejected merge option returns, and it should return as
-   per-kind leases plus content-keyed publication, not as a DAG.
-4. Can the paper (always busy, `public_platform`) ever check its lease
-   out? Probably never, since its schedules are standing intents on the
-   home host.
-5. Does the inherited read key (§4, item 3) satisfy "freshly minted
-   identity material", or must a fork re-encrypt its inherited chunks
-   (one full snapshot of cost)?
-6. Where does an orphan-made fork's ComputerID come from, and does it get a
-   route by default (ontology: an ephemeral fork has none)?
-7. Do capsules eventually want tape-backed transaction logs (case D)? If
-   so, they are chains with lineage like forks, not branches of the parent's
-   chain.
+- **Wrong-branch snapshot restore** (§3.4): silent, red. Do-now 2 closes
+  it before any branch exists.
+- **Wrong-branch idempotency hit** (§3.2): silent. It must be ancestry-aware
+  before a second branch accepts appends.
+- **Un-revoking by switch:** a key revoked on P is live again on T unless
+  revocations are computer-wide (I-d). The `credential_revocation_epoch` in
+  `computer_event_heads` is per head today, so it must become
+  `max(all branches)` or move to a computer row.
+- **Irreversible external drift:**
+  - a refresh token rotated on P leaves T's stored token dead, so T's mail
+    breaks until the owner re-authorizes;
+  - two editions published from two branches under one publisher identity
+    can collide in the Autopaper graph's version order. The graph must
+    order a publisher's versions by its own sequence, never by branch-local
+    state.
+  - This residue is why always-busy and publishing computers never branch.
+- **Lease authority loss:** the home control database is restored from an
+  old backup, so epochs roll back (case 6). Epochs must be anchored in the
+  receipts. On restore, the home takes `max(epoch)` seen in any receipt.
+- **A Mac branch nobody imports:** the Mac's disk dies with an unsynced
+  tail, and the work is lost. Mitigation: continuous delta sync whenever
+  online.
+- **Switch while P's writer is unreachable:** the fence holds at the home
+  host, but P's offline realization keeps writing P locally. That is
+  harmless: P is frozen at the home, and the extra tail imports as more of
+  P, or as an equivocation if P's lease epoch moved.
+- **Branch sprawl:** the soft cap of 4 live branches, and an owner surface
+  that lists tails, sizes and effects.
+
+## 13. Open questions
+
+1. Should the default primary after a case-1 reconnect be the lease holder
+   (the Mac), not the host branch the phone used? It is a policy on the
+   same mechanism. The default here is route continuity plus an immediate
+   offer.
+2. Does a case-1 phone session even need writes, or is read-only plus
+   "work here anyway" rare enough to make case 1 itself rare?
+3. Can the home authority move (a Mac-only computer, an enterprise host)?
+4. Should the branch notice (§6) let the owner pull specific Texture
+   documents over in one click, still as publication and adoption inside
+   one computer?
+5. Is branching also the cheaper form of "undo to a checkpoint" (open a
+   branch at the checkpoint, make it primary, keep the old tail), compared
+   with today's forward restore event?
