@@ -199,7 +199,7 @@ func TestOpenReadsTheReceiptThenWritesTheMarkerThenTheReceipt(t *testing.T) {
 	file := storeSourceFiles(t, func(name string) bool { return name == "open.go" })["open.go"]
 	var open *ast.FuncDecl
 	for _, decl := range file.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "Open" {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "openStore" {
 			open = fn
 		}
 	}

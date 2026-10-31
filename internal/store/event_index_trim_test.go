@@ -250,6 +250,9 @@ func TestOpenCatchesUpAnOldStoreAndFloorsIt(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
+	oldDelay := projectionBatchCatchUpDelay
+	projectionBatchCatchUpDelay = 0
+	defer func() { projectionBatchCatchUpDelay = oldDelay }()
 	s2, err := Open(path)
 	if err != nil {
 		t.Fatal(err)

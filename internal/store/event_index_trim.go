@@ -59,6 +59,9 @@ var (
 	// projectionBatchCatchUpBudget bounds one catch-up; what remains is
 	// finished by the next boot's catch-up.
 	projectionBatchCatchUpBudget = 6 * time.Hour
+	// projectionBatchCatchUpDelay keeps the catch-up out of boot: the
+	// computer becomes ready and starts its services first.
+	projectionBatchCatchUpDelay = 2 * time.Minute
 )
 
 // projectionBatchTrimBoundary is the highest sequence whose batch row the trim
@@ -194,6 +197,7 @@ func (s *Store) trimChunk(ctx context.Context, computerID string, boundary uint6
 func (s *Store) startProjectionBatchCatchUp() {
 	closing := s.leaseClosingChan()
 	ctx, cancel := context.WithTimeout(context.Background(), projectionBatchCatchUpBudget)
+	delay := projectionBatchCatchUpDelay
 	s.lease.workers.Add(1)
 	go func() {
 		defer s.lease.workers.Add(-1)
@@ -205,6 +209,11 @@ func (s *Store) startProjectionBatchCatchUp() {
 			case <-ctx.Done():
 			}
 		}()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
 		s.runProjectionBatchCatchUp(ctx)
 	}()
 }

@@ -148,7 +148,9 @@ func TestCompactSkipsOnTooLittleDiskOrTooMuchLive(t *testing.T) {
 // bounded chunks; a file that was not compacted is left alone.
 func TestReclaimFreePagesIsBoundedAndOnlyOnIncrementalFiles(t *testing.T) {
 	oldChunk, oldPause, oldMax := incrementalVacuumChunk, incrementalVacuumPause, incrementalVacuumMaxPages
-	defer func() { incrementalVacuumChunk, incrementalVacuumPause, incrementalVacuumMaxPages = oldChunk, oldPause, oldMax }()
+	defer func() {
+		incrementalVacuumChunk, incrementalVacuumPause, incrementalVacuumMaxPages = oldChunk, oldPause, oldMax
+	}()
 	incrementalVacuumChunk, incrementalVacuumPause, incrementalVacuumMaxPages = 50, 0, 120
 
 	path := compactTestFile(t, 100, 2000)
@@ -191,7 +193,7 @@ func TestReclaimFreePagesIsBoundedAndOnlyOnIncrementalFiles(t *testing.T) {
 }
 
 // An Open on a store whose file is mostly free compacts it and keeps its rows.
-func TestOpenCompactsAMostlyFreeStore(t *testing.T) {
+func TestOpenNeverCompacts(t *testing.T) {
 	s, path := trimTestOpen(t)
 	if _, err := s.db.Exec(`CREATE TABLE compact_probe (id INTEGER PRIMARY KEY, payload TEXT)`); err != nil {
 		t.Fatal(err)
@@ -217,14 +219,8 @@ func TestOpenCompactsAMostlyFreeStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	if after := fileSize(t, statePath); after*3 > before {
-		t.Fatalf("state file %d -> %d, Open did not compact", before, after)
-	}
-	var n, av int
-	if err := s2.db.QueryRow(`SELECT COUNT(*) FROM compact_probe`).Scan(&n); err != nil || n != 10 {
-		t.Fatalf("rows = %d, %v", n, err)
-	}
-	if err := s2.db.QueryRow(`PRAGMA auto_vacuum`).Scan(&av); err != nil || av != 2 {
-		t.Fatalf("auto_vacuum = %d, %v", av, err)
+	// Boot stays light: compaction is its own operation, never Open's.
+	if after := fileSize(t, statePath); after*3 <= before {
+		t.Fatalf("state file %d -> %d, Open compacted", before, after)
 	}
 }

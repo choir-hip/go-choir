@@ -224,14 +224,6 @@ func openStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	// Guarded compaction (compact.go): before any pool holds the file, so the
-	// swap needs no coordination. Bounded, logged, never fatal.
-	if !freshStore {
-		doneCompact := objectgraph.BootPhase("store: open", "compaction")
-		compactAtOpen(statePath)
-		doneCompact(nil)
-	}
-
 	doneOpen := objectgraph.BootPhase("store: open", "workspace-open")
 	sdb, err := dbx.OpenSQLite(statePath, dbx.SQLiteOptions{})
 	doneOpen(err)

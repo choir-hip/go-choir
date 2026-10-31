@@ -1,16 +1,19 @@
 package store
 
-// Guarded compaction of the state file at Open (L1 step 3 of
-// docs/definitions/choir-lean-system-2026-10-30.md). SQLite never shrinks the
+// Guarded compaction of the state file (L1 step 3 of
+// docs/definitions/choir-lean-system-2026-10-30.md). It is its own heavy
+// operation and never runs at boot (owner, 2026-10-31: "boot should be light,
+// as light as possible. then essential services. compaction is its own heavy
+// operation"); the paper's 11efa88c3 boot showed that Open comes before the
+// credential exchange, whose envelope lives at most 15 minutes. SQLite never shrinks the
 // file when rows are deleted: pages go to the freelist, and the snapshot
 // streams every page. VACUUM INTO writes a compact copy.
 //
-// The guard, in order. Each failed condition logs and skips; a skip never
-// fails Open.
+// The guard, in order. Each failed condition logs and skips.
 //
 //  1. freelist pages exceed compactFreelistFraction of page_count;
 //  2. the estimated live size (page_count - freelist) * page_size is at most
-//     compactMaxLiveBytes, so boot stays bounded;
+//     compactMaxLiveBytes;
 //  3. the filesystem has free space of at least compactSpaceFactor x the
 //     estimated live size for the copy;
 //  4. the WAL is folded into the main file (checkpoint TRUNCATE);
@@ -25,7 +28,7 @@ package store
 //  7. the original's -wal/-shm are removed (the WAL was truncated, nothing
 //     lives there) and the copy is renamed over the state file; the directory
 //     is fsynced. A crash before the rename leaves the original untouched and
-//     the leftover temp file is removed at the next Open.
+//     the leftover temp file is removed by the next attempt.
 
 import (
 	"context"
@@ -45,8 +48,8 @@ var (
 	// compactFreelistFraction is the freelist share of the file that triggers
 	// a compaction; compactFreelistBytes triggers it on a large file whose
 	// share is smaller (the paper's event index trim frees about 7 GB of 32).
-	compactFreelistFraction = 0.10
-	compactFreelistBytes int64 = 2 << 30
+	compactFreelistFraction       = 0.10
+	compactFreelistBytes    int64 = 2 << 30
 	// compactMaxLiveBytes is the largest live size boot will rewrite. Open
 	// runs before the guest's credential exchange, and the boot envelope
 	// lives at most 15 minutes from when vmctl mints it, before the VM starts
@@ -284,18 +287,6 @@ func verifyCompactCopy(ctx context.Context, orig *sql.Conn, path string) error {
 		}
 	}
 	return nil
-}
-
-// compactAtOpen runs compactStateFile for Open: bounded, logged, never fatal.
-func compactAtOpen(statePath string) {
-	start := time.Now()
-	compacted, err := compactStateFile(statePath)
-	switch {
-	case err != nil:
-		log.Printf("store: compaction not run (%s): %v", time.Since(start).Round(time.Millisecond), err)
-	case compacted:
-		log.Printf("store: compaction replaced the state file in %s", time.Since(start).Round(time.Millisecond))
-	}
 }
 
 // reclaimFreePages returns freelist pages to the filesystem with
