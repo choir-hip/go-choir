@@ -180,6 +180,11 @@ finish:
   landing: commit -> push origin main -> CI -> staging deploy identity -> deployed acceptance (L3 is docs-only and takes the docs truth checker instead).
 
 value:
+  mission_owner_2026_10_31: >-
+    "that's our mission, is to minimize storage growth while minimizing
+    memory spikes." Includes the four guest-release stages: dedupe on
+    install, retention by reference, stale jail cleanup, and the structural
+    fix (a deploy ships only what changed).
   better_means: >-
     Minimize stored bytes per unit of live user state (the paper's store,
     Node A, Node B) and the distance between docs/ and the running system,
