@@ -22,7 +22,8 @@ import (
 func main() {
 	installable := flag.String("installable", "", "flake app-layer installable, e.g. .#autoputer")
 	baseManifest := flag.String("base-manifest", "", "path to the deployed guest-image-manifest")
-	baseDisk := flag.String("base-storedisk", "", "path to the deployed storedisk.erofs")
+	baseDisk := flag.String("base-storedisk", "", "path to the deployed storedisk.erofs (a layered image's app layer)")
+	baseDiskBase := flag.String("base-storedisk-base", "", "a layered image's base layer (guest-bases/<id>/storedisk-base.erofs); empty for a single image")
 	out := flag.String("out", "/var/lib/go-choir/builder", "output dir for closure blob + receipt")
 	commit := flag.String("commit", "", "repo commit the installable was built from")
 	sourceDir := flag.String("source-dir", "", "git checkout the installable is evaluated against; code_commit is derived from it (S2-c)")
@@ -45,6 +46,7 @@ func main() {
 		SourcePatchBaseCommit: *sourcePatchBase,
 		BaseManifestPath:      *baseManifest,
 		BaseStoreDiskPath:     *baseDisk,
+		BaseStoreDiskBasePath: *baseDiskBase,
 		OutDir:                *out,
 		CodeCommit:            *commit,
 	})

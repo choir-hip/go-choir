@@ -203,6 +203,48 @@ for id in "${deleted[@]}"; do
 		rm -rf "$d" && log "deleted release $id"
 	fi
 done
+# --- layered bases (docs/design/layered-guest-image-2026-10-31.md) ----------------
+# A base (guest-bases/<base_id>/) stays while any release that stays names it in
+# its layers.json, vmctl's in_use answer names it, a live Firecracker's
+# fc-config.json holds it, or it is young (a base installed just before its
+# release, or while one materializes). Never by its own age. Fails closed: an
+# unreadable layers.json of a release that stays, or an unparsable answer,
+# deletes no base. Runs after the release deletions, so a base whose last
+# release just went is swept in the same run.
+bases_dir="${GO_CHOIR_GUEST_BASES_DIR:-$(dirname "$rel_dir")/guest-bases}"
+bases_deleted=0
+if [ -d "$bases_dir" ]; then
+	bases_ok=true
+	keep_bases="$(jq -r '.in_use[] | .base_id // empty' "$body" 2>/dev/null)" || bases_ok=false
+	for id in "${remaining[@]}"; do
+		lj="$rel_dir/$id/layers.json"
+		[ -e "$lj" ] || continue
+		b="$(jq -r '.base_id // empty' "$lj" 2>/dev/null)"
+		if printf '%s' "$b" | grep -Eq "$id_re"; then keep_bases="$keep_bases
+$b"; else bases_ok=false; fi
+	done
+	if [ -d "$state_dir" ]; then
+		for vmd in "$state_dir"/*/; do
+			for cfg in "$vmd/fc-config.json" "$vmd"/*/fc-config.json; do
+				[ -f "$cfg" ] || continue
+				for r in $(grep -o "guest-bases/[0-9a-df-np-sv-z]\{32\}" "$cfg" 2>/dev/null | cut -d/ -f2); do keep_bases="$keep_bases
+$r"; done
+			done
+		done
+	fi
+	if [ "$bases_ok" = true ] && [ "$tmp_active" = false ] && [ -z "$(find "$bases_dir" -maxdepth 1 -name '.tmp-*' -mmin -60 2>/dev/null | head -1)" ]; then
+		for bd in "$bases_dir"/*; do
+			[ -d "$bd" ] && [ ! -L "$bd" ] || continue
+			bid="$(basename "$bd")"
+			printf '%s' "$bid" | grep -Eq "$id_re" || continue
+			in_list "$bid" "$keep_bases" && continue
+			bt="$(stat -c %Y "$bd" 2>/dev/null || echo "$now")"
+			[ $((now - bt)) -lt "$young_s" ] && continue
+			chmod -R u+w "$bd" 2>/dev/null
+			rm -rf "$bd" && { log "deleted base $bid (no retained release names it)"; bases_deleted=$((bases_deleted + 1)); }
+		done
+	fi
+fi
 log "current=$current previous=${previous:-none} rollback=${rollback:-none} releases=${#ids[@]} deleted=${#deleted[@]} complete=$complete tmp_active=$tmp_active"
 
 # --- stale jails ------------------------------------------------------------------

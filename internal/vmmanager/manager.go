@@ -105,6 +105,13 @@ type VMConfig struct {
 	// read-only virtio-blk drive that the NixOS init mounts at /nix/store.
 	StoreDiskPath string
 
+	// BaseDiskPath is the layered guest image's read-only base layer
+	// (docs/design/layered-guest-image-2026-10-31.md). Set only from a
+	// layered release; StoreDiskPath is then that release's app layer. It is
+	// attached as the LAST drive: the data drive keeps its position
+	// (/dev/vdb). Empty for a single-image launch, which is unchanged.
+	BaseDiskPath string `json:"BaseDiskPath,omitempty"`
+
 	// Empty means use the manager default.
 	KernelParams string
 
@@ -309,6 +316,10 @@ type ManagerConfig struct {
 
 	// GuestReleasesDir is VM_GUEST_RELEASES_DIR, the release directories.
 	GuestReleasesDir string
+	// GuestBasesDir is VM_GUEST_BASES_DIR, the layered images' base layers
+	// (<id>/storedisk-base.erofs). Empty means guest-bases beside the
+	// releases directory.
+	GuestBasesDir string
 
 	// GuestReleaseSupportWindow is VM_GUEST_RELEASE_SUPPORT_WINDOW: how long a
 	// superseded release's snapshots may still resume (default 168h).
@@ -2007,6 +2018,7 @@ func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfi
 	// A refresh or a wake rebuild never carries a release forward: the
 	// current deploy (or the snapshot's own release) is chosen afresh.
 	cfg.GuestRelease = ""
+	cfg.BaseDiskPath = ""
 	if defaults.StoreDiskPath == "" {
 		return cfg
 	}
@@ -2080,6 +2092,17 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			"path_on_host":   cfg.credentialDiskPath,
 			"is_root_device": false,
 			"is_read_only":   false,
+		})
+	}
+	// A layered release's read-only base layer comes LAST, after data and
+	// credential: the guest finds the data volume by position (/dev/vdb) and
+	// both erofs layers by label (nix-base, nix-app).
+	if cfg.BaseDiskPath != "" && cfg.StoreDiskPath != "" {
+		drives = append(drives, map[string]interface{}{
+			"drive_id":       "base",
+			"path_on_host":   cfg.BaseDiskPath,
+			"is_root_device": false,
+			"is_read_only":   true,
 		})
 	}
 

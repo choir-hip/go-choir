@@ -219,6 +219,12 @@ def main():
         out["guest_procmem"] = pm
     if arg("--fincore", flag=True):
         fc = {"store_image": {"path": STORE_IMAGE, **fincore(STORE_IMAGE)}}
+        # A layered image has no storedisk.erofs: report its two layers (the
+        # base is shared by every VM and release that names it).
+        for layer in ("app", "base"):
+            lp = f"/var/lib/go-choir/guest/storedisk-{layer}.erofs"
+            if os.path.exists(lp):
+                fc[f"store_{layer}_layer"] = {"path": os.path.realpath(lp), **fincore(lp)}
         vms = list(out["firecracker"].keys())
         fc["data_images"] = {vm: fincore(f"{STATE_DIR}/{vm}/data.img") for vm in vms
                              if os.path.exists(f"{STATE_DIR}/{vm}/data.img")}

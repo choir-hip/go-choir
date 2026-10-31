@@ -493,7 +493,7 @@ func diskIdentity(path string) (SnapshotDiskIdentity, error) {
 func (m *Manager) snapshotBoundPaths(vmID string, cfg VMConfig) []string {
 	paths := []string{filepath.Join(m.vmStateDir(vmID), "data.img")}
 	seen := map[string]bool{paths[0]: true}
-	for _, path := range []string{cfg.credentialDiskPath, cfg.RootfsPath, cfg.StoreDiskPath, cfg.KernelImagePath, cfg.InitrdPath} {
+	for _, path := range []string{cfg.credentialDiskPath, cfg.RootfsPath, cfg.StoreDiskPath, cfg.KernelImagePath, cfg.InitrdPath, cfg.BaseDiskPath} {
 		if path == "" || seen[path] {
 			continue
 		}

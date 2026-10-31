@@ -66,11 +66,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool) {
 		return Config{}, false
 	}
 	cfg := Config{
-		SourceDir:         source,
-		StateDir:          get("CORPUSD_HOST_BUILD_STATE_DIR", "/var/lib/go-choir/host-build"),
-		BaseManifestPath:  get("CORPUSD_HOST_BUILD_BASE_MANIFEST", "/var/lib/go-choir/guest/guest-image-manifest"),
-		BaseStoreDiskPath: get("CORPUSD_HOST_BUILD_BASE_STOREDISK", "/var/lib/go-choir/guest/storedisk.erofs"),
-		Installable:       get("CORPUSD_HOST_BUILD_INSTALLABLE", ".#autoputer"),
+		SourceDir:             source,
+		StateDir:              get("CORPUSD_HOST_BUILD_STATE_DIR", "/var/lib/go-choir/host-build"),
+		BaseManifestPath:      get("CORPUSD_HOST_BUILD_BASE_MANIFEST", "/var/lib/go-choir/guest/guest-image-manifest"),
+		BaseStoreDiskPath:     get("CORPUSD_HOST_BUILD_BASE_STOREDISK", "/var/lib/go-choir/guest/storedisk.erofs"),
+		Installable:           get("CORPUSD_HOST_BUILD_INSTALLABLE", ".#autoputer"),
+		BaseStoreDiskBasePath: get("CORPUSD_HOST_BUILD_BASE_STOREDISK_BASE", ""),
 	}
 	if d, err := time.ParseDuration(get("CORPUSD_HOST_BUILD_TIMEOUT", "")); err == nil {
 		cfg.BuildTimeout = d
