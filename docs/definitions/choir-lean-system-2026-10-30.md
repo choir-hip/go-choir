@@ -246,13 +246,22 @@ now:
     privacy policy now says so. (2) Tool results leave the working store
     after seven days except those accepted evidence cites (built 13:15, deployed 13:17);
     restoration is for failed self-development, about a week back; long-term
-    history goes to the user's synced machine, on by default (Mac pull, S5a).
+    history goes to the user's synced machine, on by default, once the Mac
+    app runs computers under virtualization and syncs them with Node B (owner,
+    2026-10-31: the ad hoc Mac pull was removed).
     S5 landed on the paper 12:53 (planned restart of e7c099e6a): 32.4 GB to
     20.4 GB, 0 free pages, incremental auto_vacuum, replay of 9,673 events,
-    publishing. No off-host copy until the Mac pull or L5.
+    publishing. Off-host: the nightly restic backup (last ok 2026-10-31
+    ~03:55; +109 GB a night, mostly snapshot chunks).
   next_action: >-
-    The Mac pull over delta bundles as the default long-term
-    history (S5a); L5; L6's handoff. Small follow-ups in the ledger.
+    The owner's storage steps, in order: (2) delete the paper's
+    legacy loose tape once the census proves every file covered, (3) real
+    computer deletion over the destroyed tape sweep (segments, chunks, roots,
+    receipts rows, keys; no archive for test computers), (4) zstd before
+    sealing (chunks, payloads, segment records; three builders running).
+    Compaction rethink: snapshot by tape distance, measure chunk reuse at the
+    next snapshot, telemetry in time-partitioned files, snapshots out of the
+    nightly backup. Then L5, L6's handoff. Small follow-ups in the ledger.
 receipts:
   - id: build-superseded
     boundary: supersede

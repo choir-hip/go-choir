@@ -91,6 +91,11 @@ again (its ownership row is handed off). The warm handoff waits for the epoch.
 
 ## 4a. The Mac is the first off-host place
 
+Owner, 2026-10-31: not as an ad hoc pull. The Mac copy comes after the Mac
+app runs user computers under virtualization and keeps them in sync with
+Node B; the scripted pull built on 2026-10-31 was removed. Until then the
+off-host copy is the nightly restic backup.
+
 Owner, 2026-10-31: "getting vms running on my mac is a great way to get a
 form of off-host backup and recovery 'for free'. obv we need that for real as
 server infra, but i dont want to pay for that until the whole system is
