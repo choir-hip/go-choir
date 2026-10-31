@@ -8,10 +8,10 @@
 #
 # What stays, and why:
 # - System generations: nix's own `nix-env --delete-generations +N` rule, with
-#   N = NIX_RETENTION_KEEP_GENERATIONS (3): every generation newer than the
+#   N = NIX_RETENTION_KEEP_GENERATIONS (2): every generation newer than the
 #   current one, the current one and the N-1 below it (the previous one is
-#   the deploy rollback target in deploy-receipt-previous.json; one spare for
-#   a two-step rollback). After a rollback the generations below the
+#   the deploy rollback target in deploy-receipt-previous.json). Owner,
+#   2026-10-31: two, not three; each generation roots a 4.4 GB guest image. After a rollback the generations below the
 #   rolled-back current stay. The booted system is a GC root of its own
 #   (/run/booted-system).
 # - Builder releases under /var/lib/go-choir/builder/releases: out-links of
@@ -42,7 +42,7 @@ case "$mode" in
   *) echo "nix retention: unknown mode \"$mode\"; using observe"; mode=observe ;;
 esac
 profile="${NIX_RETENTION_PROFILE:-/nix/var/nix/profiles/system}"
-keep="${NIX_RETENTION_KEEP_GENERATIONS:-3}"
+keep="${NIX_RETENTION_KEEP_GENERATIONS:-2}"
 legacy_keep=4
 auto_dir="${NIX_RETENTION_GCROOTS_AUTO:-/nix/var/nix/gcroots/auto}"
 builder_root="${NIX_RETENTION_BUILDER_ROOT:-/var/lib/go-choir/builder/releases}"

@@ -190,7 +190,7 @@ let
   # docs/problems/node-b-nix-store-and-host-disk-policy-2026-10-22.md).
   # Called by go-choir-nix-gc, the disk-gc sweep and the deploy preflight;
   # each runs `nix store gc` after it. Enforce (owner, 2026-10-23) keeps the
-  # newest 3 system generations and unroots builder-release roots past the
+  # newest 2 system generations and unroots builder-release roots past the
   # newest 2 and 7 days; the observe mode (the legacy +4, logging only) is
   # the rollback.
   nixRetention = pkgs.writeShellScript "go-choir-nix-retention"
