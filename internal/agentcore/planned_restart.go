@@ -45,6 +45,13 @@ type PlannedRestart struct {
 	// sealed before the restart, so the resume's records say the trace may
 	// have a gap. Telemetry never blocks the restart.
 	TelemetryDrainFailed bool `json:"telemetry_drain_failed,omitempty"`
+	// RunMemoryWindowOpen records, at drain time, whether the run-memory window
+	// (tape.group_commit) was open, so a failed drain may have lost a run's
+	// newest messages. The next boot gates its crash-close on this, not on the
+	// setting it reads at boot, which the owner may have flipped or which
+	// defaulted off on a settings read error. nil is a marker written before
+	// the field existed: a failed drain there is treated as window-open.
+	RunMemoryWindowOpen *bool `json:"run_memory_window_open,omitempty"`
 }
 
 // plannedRestartMarkerPending reports whether a marker that could still plan a
@@ -437,8 +444,12 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 	// normally means the queue was empty when the restart began and the one
 	// resume starts on a tape with no telemetry gap. New telemetry takes the
 	// acknowledged path until then. A failed drain is recorded, not fatal.
+	wasOpen := rt != nil && rt.store != nil && rt.store.TapeGroupCommitOn()
 	drainFailed, restoreTelemetry := rt.drainTelemetryForRestart()
-	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target, TelemetryDrainFailed: drainFailed}); err != nil {
+	// A run damaged in this process is a failed drain for the boot: it must
+	// close runs, not park a damaged one as a seed.
+	drainFailed = drainFailed || (rt != nil && rt.store != nil && rt.store.AnyRunMemoryDamaged())
+	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target, TelemetryDrainFailed: drainFailed, RunMemoryWindowOpen: rt.runMemoryWindowStamp(wasOpen, drainFailed)}); err != nil {
 		// Without the marker the restart reads as a crash and pending work is
 		// interrupted, which is safe; the apply itself proceeds.
 		log.Printf("runtime: %v (restart will be treated as a crash)", err)

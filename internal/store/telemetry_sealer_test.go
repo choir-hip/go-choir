@@ -76,7 +76,9 @@ func TestTelemetryRecordIsUnforgeable(t *testing.T) {
 					}
 				}
 			case *ast.FuncDecl:
-				if d.Name.Name == "newTelemetryRecord" {
+				// The two constructors: trace events and run-memory messages
+				// (run_memory_batch.go); each refuses a kind outside its list.
+				if d.Name.Name == "newTelemetryRecord" || d.Name.Name == "newRunMemoryRecord" {
 					continue
 				}
 				ast.Inspect(d, func(n ast.Node) bool {
@@ -189,9 +191,11 @@ func TestSealTimeRecheckRefusesViolation(t *testing.T) {
 
 // ---- P1-F3/F4: barrier coverage and the exemption ---------------------------
 
-// design 3.4 closing paragraph / 4.3: exactly two callers may exempt a write
-// from the append barrier.
-func TestBarrierExemptionHasExactlyTwoCallSites(t *testing.T) {
+// design 3.4 closing paragraph / 4.3: exactly three callers may exempt a write
+// from the append barrier: the sealer, run memory, and the group-commit
+// leader, which seals the pending telemetry into its own event
+// (docs/design/tape-group-commit-2026-10-31.md).
+func TestBarrierExemptionHasExactlyThreeCallSites(t *testing.T) {
 	var sites []string
 	forEachNonTestGoFile(t, func(rel string, file *ast.File, _ *token.FileSet) {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -206,7 +210,7 @@ func TestBarrierExemptionHasExactlyTwoCallSites(t *testing.T) {
 		})
 	})
 	sort.Strings(sites)
-	want := []string{"internal/store/run_memory.go", "internal/store/telemetry_sealer.go"}
+	want := []string{"internal/store/run_memory.go", "internal/store/tape_group_commit.go", "internal/store/telemetry_sealer.go"}
 	if strings.Join(sites, ",") != strings.Join(want, ",") {
 		t.Fatalf("WithBarrierExemption call sites = %v, want exactly %v", sites, want)
 	}
@@ -734,7 +738,7 @@ func TestConsistentReadUnderStoreLocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.store.trajectoryMu.Lock()
-	h.store.runMemoryMu.Lock()
+	h.store.runMemoryLock("run-lk").Lock()
 	done := make(chan error, 1)
 	go func() {
 		_, err := h.store.ListEventsAfter(ctx, "run-lk", 0, 10)
@@ -748,7 +752,7 @@ func TestConsistentReadUnderStoreLocks(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("a Consistent read deadlocked against trajectoryMu/runMemoryMu")
 	}
-	h.store.runMemoryMu.Unlock()
+	h.store.runMemoryLock("run-lk").Unlock()
 	h.store.trajectoryMu.Unlock()
 }
 

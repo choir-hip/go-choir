@@ -84,11 +84,15 @@ func (rt *Runtime) writeRestoreRestartMarker(target string) error {
 		return errHibernateFenced
 	}
 	defer release()
-	return WritePlannedRestartMarker(rt.cfg.StorePath, PlannedRestart{Reason: PlannedRestartSelfDevelopmentRestore, Target: target})
+	// The host writer drains the telemetry queue, stamps the run-memory window
+	// and holds synchronous mode until the restart or the marker's clear, like
+	// every other planned-restart marker.
+	_, err := rt.writeHostPlannedRestartMarker(rt.cfg.StorePath, PlannedRestart{Reason: PlannedRestartSelfDevelopmentRestore, Target: target})
+	return err
 }
 
 func (rt *Runtime) clearRestoreRestartMarker() {
-	if err := ClearPlannedRestartMarker(rt.cfg.StorePath); err != nil {
+	if err := rt.clearHostPlannedRestartMarker(rt.cfg.StorePath); err != nil {
 		log.Printf("restore: clear planned restart marker: %v", err)
 	}
 }

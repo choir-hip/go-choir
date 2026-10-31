@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,81 +17,35 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// runMemoryStripes is the number of run-memory append locks.
+const runMemoryStripes = 64
+
+// runMemoryLock is the append lock of one run's memory log.
+func (s *Store) runMemoryLock(runID string) *sync.Mutex {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(runID))
+	return &s.runMemoryMu[h.Sum32()%runMemoryStripes]
+}
+
 // AppendRunMemoryEntry appends a durable context entry to a run's ordered
 // memory log. Sequence numbers and parent links are assigned transactionally.
 func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryEntry) (types.RunMemoryEntry, error) {
-	s.runMemoryMu.Lock()
-	defer s.runMemoryMu.Unlock()
-	if entry.RunID == "" {
-		return types.RunMemoryEntry{}, fmt.Errorf("append run memory: loop_id is required")
-	}
-	if entry.Kind == "" {
-		return types.RunMemoryEntry{}, fmt.Errorf("append run memory: kind is required")
-	}
-	if entry.EntryID == "" {
-		entry.EntryID = uuid.NewString()
-	}
-	if entry.CreatedAt.IsZero() {
-		entry.CreatedAt = time.Now().UTC()
-	}
-	if entry.Details == nil {
-		entry.Details = map[string]any{}
-	}
-	detailsJSON, err := marshalJSON(entry.Details)
+	mu := s.runMemoryLock(entry.RunID)
+	mu.Lock()
+	defer mu.Unlock()
+	item, err := normalizeRunMemoryEntry(entry)
 	if err != nil {
-		return types.RunMemoryEntry{}, fmt.Errorf("marshal run memory details: %w", err)
+		return types.RunMemoryEntry{}, err
 	}
-
-	messageJSON := ""
-	if len(entry.Message) > 0 {
-		messageJSON = sanitizeStoreText(string(entry.Message))
-	}
-	entry.Summary = sanitizeStoreText(entry.Summary)
-	entry.FirstKeptEntryID = sanitizeStoreText(entry.FirstKeptEntryID)
-	entry.Reason = sanitizeStoreText(entry.Reason)
-	entry.Model = sanitizeStoreText(entry.Model)
+	entry = item.entry
+	messageJSON, detailsJSON := item.messageJSON, item.detailsJSON
 
 	if s.projectionTape != nil {
-		if entry.Seq <= 0 {
-			if err := s.db.QueryRowContext(ctx,
-				`SELECT COALESCE(MAX(seq), 0) + 1 FROM run_memory_entries WHERE loop_id = ?`,
-				entry.RunID,
-			).Scan(&entry.Seq); err != nil {
-				return types.RunMemoryEntry{}, fmt.Errorf("allocate projected run memory seq: %w", err)
-			}
-		}
-		if entry.ParentEntryID == "" {
-			var parentID string
-			err := s.db.QueryRowContext(ctx,
-				`SELECT entry_id FROM run_memory_entries WHERE loop_id = ? ORDER BY seq DESC LIMIT 1`,
-				entry.RunID,
-			).Scan(&parentID)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return types.RunMemoryEntry{}, fmt.Errorf("load projected run memory parent: %w", err)
-			}
-			if err == nil {
-				entry.ParentEntryID = parentID
-			}
-		}
-		body, err := json.Marshal(computerevent.RunMemoryEntryProjection{
-			EntryID: entry.EntryID, RunID: entry.RunID, OwnerID: entry.OwnerID, AgentID: entry.AgentID,
-			ParentEntryID: entry.ParentEntryID, Seq: entry.Seq, Kind: string(entry.Kind), Role: entry.Role,
-			MessageJSON: messageJSON, Summary: entry.Summary, FirstKeptEntryID: entry.FirstKeptEntryID,
-			TokensBefore: entry.TokensBefore, Reason: entry.Reason, Model: entry.Model,
-			DetailsJSON: sanitizeStoreText(string(detailsJSON)), CreatedAt: entry.CreatedAt.UTC().Format(time.RFC3339Nano),
-		})
+		out, err := s.appendRunMemoryTapeLocked(ctx, entry.RunID, []normalizedRunMemory{item})
 		if err != nil {
-			return types.RunMemoryEntry{}, fmt.Errorf("marshal projected run memory entry: %w", err)
+			return types.RunMemoryEntry{}, err
 		}
-		// Run memory is not telemetry and is not ordered against it: it is the
-		// one exemption from the telemetry append barrier (design 4.3). A
-		// source-scan test allows exactly two WithBarrierExemption callers.
-		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), []computerevent.ProjectionOp{{
-			Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body,
-		}}); err != nil {
-			return types.RunMemoryEntry{}, fmt.Errorf("append projected run memory entry: %w", err)
-		}
-		return entry, nil
+		return out[0], nil
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -150,7 +106,7 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		entry.TokensBefore,
 		entry.Reason,
 		entry.Model,
-		sanitizeStoreText(string(detailsJSON)),
+		detailsJSON,
 		entry.CreatedAt.UTC(),
 	)
 	if err != nil {
@@ -160,6 +116,191 @@ func (s *Store) AppendRunMemoryEntry(ctx context.Context, entry types.RunMemoryE
 		return types.RunMemoryEntry{}, fmt.Errorf("commit run memory append: %w", err)
 	}
 	return entry, nil
+}
+
+// normalizedRunMemory is one entry with its defaults filled and its text
+// sanitized, and the two JSON columns as they are stored.
+type normalizedRunMemory struct {
+	entry       types.RunMemoryEntry
+	messageJSON string
+	detailsJSON string
+}
+
+func normalizeRunMemoryEntry(entry types.RunMemoryEntry) (normalizedRunMemory, error) {
+	if entry.RunID == "" {
+		return normalizedRunMemory{}, fmt.Errorf("append run memory: loop_id is required")
+	}
+	if entry.Kind == "" {
+		return normalizedRunMemory{}, fmt.Errorf("append run memory: kind is required")
+	}
+	if entry.EntryID == "" {
+		entry.EntryID = uuid.NewString()
+	}
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now().UTC()
+	}
+	if entry.Details == nil {
+		entry.Details = map[string]any{}
+	}
+	detailsJSON, err := marshalJSON(entry.Details)
+	if err != nil {
+		return normalizedRunMemory{}, fmt.Errorf("marshal run memory details: %w", err)
+	}
+	messageJSON := ""
+	if len(entry.Message) > 0 {
+		messageJSON = sanitizeStoreText(string(entry.Message))
+	}
+	entry.Summary = sanitizeStoreText(entry.Summary)
+	entry.FirstKeptEntryID = sanitizeStoreText(entry.FirstKeptEntryID)
+	entry.Reason = sanitizeStoreText(entry.Reason)
+	entry.Model = sanitizeStoreText(entry.Model)
+	return normalizedRunMemory{entry: entry, messageJSON: messageJSON, detailsJSON: sanitizeStoreText(string(detailsJSON))}, nil
+}
+
+// AppendRunMemoryEntries appends several entries of one run, in order, as one
+// tape write: the acknowledged ones share one tape event, and with
+// tape.group_commit on the message entries join the run-memory window
+// (run_memory_batch.go). It is the batched form of AppendRunMemoryEntry for a
+// run's opening and carried-over messages; an empty list does nothing.
+func (s *Store) AppendRunMemoryEntries(ctx context.Context, entries []types.RunMemoryEntry) ([]types.RunMemoryEntry, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	runID := entries[0].RunID
+	for _, e := range entries {
+		if e.RunID != runID {
+			return nil, fmt.Errorf("append run memory entries: every entry must belong to run %q", runID)
+		}
+	}
+	if s.projectionTape == nil {
+		out := make([]types.RunMemoryEntry, 0, len(entries))
+		for _, e := range entries {
+			got, err := s.AppendRunMemoryEntry(ctx, e)
+			if err != nil {
+				return out, err
+			}
+			out = append(out, got)
+		}
+		return out, nil
+	}
+	mu := s.runMemoryLock(runID)
+	mu.Lock()
+	defer mu.Unlock()
+	items := make([]normalizedRunMemory, 0, len(entries))
+	for _, e := range entries {
+		item, err := normalizeRunMemoryEntry(e)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return s.appendRunMemoryTapeLocked(ctx, runID, items)
+}
+
+// appendRunMemoryTapeLocked numbers and writes entries of one run, holding the
+// run's append lock. Seq and parent come from the run's last entry: from the
+// tail cache while tape.group_commit is on (queued entries are not in the
+// table yet), else from the table. Message entries go to the run-memory window
+// when it is open; every other kind, and every entry while it is closed, is
+// written acknowledged, all of those in one tape event.
+func (s *Store) appendRunMemoryTapeLocked(ctx context.Context, runID string, items []normalizedRunMemory) ([]types.RunMemoryEntry, error) {
+	if err := s.runMemoryDamagedErr(runID); err != nil {
+		return nil, err
+	}
+	sl := s.telemetry.Load()
+	group := sl != nil && s.TapeGroupCommitOn()
+	var tail runMemoryTail
+	haveTail := false
+	var acked []computerevent.ProjectionOp
+	out := make([]types.RunMemoryEntry, 0, len(items))
+	for _, item := range items {
+		entry := item.entry
+		if entry.Seq <= 0 || entry.ParentEntryID == "" {
+			if !haveTail {
+				t, err := s.runMemoryTailLocked(ctx, runID, group, sl)
+				if err != nil {
+					return nil, err
+				}
+				tail, haveTail = t, true
+			}
+			if entry.Seq <= 0 {
+				entry.Seq = tail.seq + 1
+			}
+			if entry.ParentEntryID == "" {
+				entry.ParentEntryID = tail.entryID
+			}
+		}
+		if !haveTail || entry.Seq >= tail.seq {
+			tail, haveTail = runMemoryTail{seq: entry.Seq, entryID: entry.EntryID}, true
+		}
+		proj := computerevent.RunMemoryEntryProjection{
+			EntryID: entry.EntryID, RunID: entry.RunID, OwnerID: entry.OwnerID, AgentID: entry.AgentID,
+			ParentEntryID: entry.ParentEntryID, Seq: entry.Seq, Kind: string(entry.Kind), Role: entry.Role,
+			MessageJSON: item.messageJSON, Summary: entry.Summary, FirstKeptEntryID: entry.FirstKeptEntryID,
+			TokensBefore: entry.TokensBefore, Reason: entry.Reason, Model: entry.Model,
+			DetailsJSON: item.detailsJSON, CreatedAt: entry.CreatedAt.UTC().Format(time.RFC3339Nano),
+		}
+		body, err := json.Marshal(proj)
+		if err != nil {
+			return nil, fmt.Errorf("marshal projected run memory entry: %w", err)
+		}
+		op := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpRunMemoryEntry, CanonicalID: entry.EntryID, Body: body}
+		if group && runMemoryKindBatched(entry.Kind) && sl.reserve() {
+			rec, err := newRunMemoryRecord(proj, op)
+			if err != nil {
+				sl.release()
+				return nil, err
+			}
+			reason, triggered := sl.enqueue(rec)
+			sl.afterEnqueue(reason, triggered)
+		} else {
+			acked = append(acked, op)
+		}
+		out = append(out, entry)
+	}
+	if len(acked) > 0 {
+		// Run memory is not telemetry and is not ordered against it: it is the
+		// one exemption from the telemetry append barrier (design 4.3). A
+		// source-scan test allows exactly three WithBarrierExemption callers.
+		if err := s.projectionTape.appendOps(computerevent.WithBarrierExemption(ctx), acked); err != nil {
+			if group {
+				s.forgetRunMemoryTail(runID)
+			}
+			return nil, fmt.Errorf("append projected run memory entry: %w", err)
+		}
+	}
+	if group {
+		s.putRunMemoryTail(runID, tail)
+	}
+	return out, nil
+}
+
+// runMemoryTailLocked is the run's last entry (seq 0 and no id for a new run).
+func (s *Store) runMemoryTailLocked(ctx context.Context, runID string, group bool, sl *telemetrySealer) (runMemoryTail, error) {
+	if group {
+		if t, ok := s.getRunMemoryTail(runID); ok {
+			return t, nil
+		}
+	}
+	if sl != nil && sl.holdsRunMemory(runID) {
+		// Queued entries are not in the table yet: seal them before reading it.
+		sl.barrier(sealRead)
+	}
+	var t runMemoryTail
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(seq), 0) FROM run_memory_entries WHERE loop_id = ?`,
+		runID,
+	).Scan(&t.seq); err != nil {
+		return runMemoryTail{}, fmt.Errorf("allocate projected run memory seq: %w", err)
+	}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT entry_id FROM run_memory_entries WHERE loop_id = ? ORDER BY seq DESC LIMIT 1`,
+		runID,
+	).Scan(&t.entryID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return runMemoryTail{}, fmt.Errorf("load projected run memory parent: %w", err)
+	}
+	return t, nil
 }
 
 // LatestActorRunMemoryEntries returns the most recent durable memory log for a
@@ -204,6 +345,10 @@ func (s *Store) LatestActorRunMemoryEntries(ctx context.Context, ownerID, comput
 		if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
 			continue
 		}
+		// A run whose queued entry was lost has a hole in its log: never a seed.
+		if s.RunMemoryDamaged(rec.RunID) {
+			continue
+		}
 		priority := rec.UpdatedAt
 		if rec.FinishedAt != nil {
 			priority = *rec.FinishedAt
@@ -235,6 +380,22 @@ func (s *Store) ListRunMemoryEntries(ctx context.Context, ownerID, runID string)
 	if runID == "" {
 		return nil, fmt.Errorf("list run memory: loop_id is required")
 	}
+	if err := s.runMemoryDamagedErr(runID); err != nil {
+		return nil, err
+	}
+	// The window's queued entries first, then the table (run_memory_batch.go).
+	pending, err := s.pendingRunMemoryEntries(ownerID, runID, "")
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.listRunMemoryEntriesTable(ctx, ownerID, runID)
+	if err != nil {
+		return nil, err
+	}
+	return mergeRunMemory(entries, pending), nil
+}
+
+func (s *Store) listRunMemoryEntriesTable(ctx context.Context, ownerID, runID string) ([]types.RunMemoryEntry, error) {
 	var (
 		rows *sql.Rows
 		err  error
@@ -316,6 +477,11 @@ func (s *Store) ListRunMemoryEntriesForAgent(ctx context.Context, ownerID, agent
 	s.runMemoryAgentList.calls.Add(1)
 	if agentID == "" {
 		return nil, fmt.Errorf("list run memory for agent: agent_id is required")
+	}
+	// A read across runs seals the window first (run_memory_batch.go), unless
+	// the kinds asked for can never wait in it: reads do not write.
+	if kindsMayBeWindowed(kinds) {
+		s.sealRunMemoryForRead(ctx)
 	}
 	query, args := runMemoryAgentListQuery(ownerID, agentID, kinds)
 	obs := runMemoryAgentListRead{site: runMemoryReadSite(ctx), agentID: agentID, kinds: len(kinds)}
@@ -471,6 +637,23 @@ func listRunMemoryEntryFingerprints(ctx context.Context, q interface {
 
 // LatestRunMemoryEntry returns the most recent memory entry for a run.
 func (s *Store) LatestRunMemoryEntry(ctx context.Context, runID string) (types.RunMemoryEntry, error) {
+	pending, err := s.pendingRunMemoryEntries("", runID, "")
+	if err != nil {
+		return types.RunMemoryEntry{}, err
+	}
+	latest, err := s.latestRunMemoryEntryTable(ctx, runID)
+	if err != nil && !(errors.Is(err, ErrNotFound) && len(pending) > 0) {
+		return types.RunMemoryEntry{}, err
+	}
+	for _, e := range pending {
+		if e.Seq > latest.Seq {
+			latest = e
+		}
+	}
+	return latest, nil
+}
+
+func (s *Store) latestRunMemoryEntryTable(ctx context.Context, runID string) (types.RunMemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT entry_id, loop_id, owner_id, agent_id, parent_entry_id, seq,
 		        kind, role, message_json, summary, first_kept_entry_id,
@@ -489,6 +672,11 @@ func (s *Store) LatestRunMemoryEntry(ctx context.Context, runID string) (types.R
 func (s *Store) GetRunMemoryEntry(ctx context.Context, ownerID, entryID string) (types.RunMemoryEntry, error) {
 	if entryID == "" {
 		return types.RunMemoryEntry{}, fmt.Errorf("get run memory: entry_id is required")
+	}
+	if pending, err := s.pendingRunMemoryEntries(ownerID, "", entryID); err != nil {
+		return types.RunMemoryEntry{}, err
+	} else if len(pending) > 0 {
+		return pending[0], nil
 	}
 	if ownerID == "" {
 		row := s.db.QueryRowContext(ctx,

@@ -202,10 +202,13 @@ func batchRefused(err error) error { return batchRefusedError{err: err} }
 type barrierExemptKey struct{}
 
 // WithBarrierExemption marks ctx so appends made under it skip the append
-// barrier. Exactly two callers may use it: the telemetry sealer's own flush,
-// which is what the barrier waits for, and the run-memory writer, which is
+// barrier. Exactly three callers may use it: the telemetry sealer's own flush,
+// which is what the barrier waits for; the run-memory writer, which is
 // deliberately not ordered against telemetry (design 4.3, "the one
-// exemption"). A source-scan test fails if a third appears.
+// exemption"); and the tape group-commit leader, which holds the sealer's
+// flush lock and writes the pending telemetry into its own event ahead of its
+// members (docs/design/tape-group-commit-2026-10-31.md). A source-scan test
+// fails if a fourth appears.
 func WithBarrierExemption(ctx context.Context) context.Context {
 	return context.WithValue(ctx, barrierExemptKey{}, true)
 }

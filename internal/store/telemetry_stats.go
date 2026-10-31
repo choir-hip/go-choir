@@ -52,10 +52,11 @@ const (
 	sealRead
 	sealShutdown
 	sealCapacity
+	sealRide // rode in an acknowledged write's event (tape_group_commit.go)
 	sealReasons
 )
 
-var sealReasonNames = [sealReasons]string{"deadline", "count", "bytes", "barrier", "read", "shutdown", "capacity"}
+var sealReasonNames = [sealReasons]string{"deadline", "count", "bytes", "barrier", "read", "shutdown", "capacity", "ride"}
 
 // telemetryCounters is the store's batching instrumentation: what the code
 // does today (phase 0: how much of the tape is batchable telemetry, how big
@@ -261,6 +262,9 @@ type TelemetryStats struct {
 	ReadsRelaxed    int64 `json:"reads_relaxed"`
 
 	Batching BatchingStats `json:"batching"`
+
+	// GroupCommit is tape.group_commit (tape_group_commit.go).
+	GroupCommit GroupCommitStats `json:"group_commit"`
 }
 
 func copyCounts(m map[string]int64) map[string]int64 {
@@ -346,5 +350,6 @@ func (s *Store) TelemetryStats() TelemetryStats {
 	b.SplitToSingles = c.splitToSingles.Load()
 	b.CapacityFlushes = c.capacityFlushes.Load()
 	b.BootWatermarks = c.watermarkWrites.Load()
+	out.GroupCommit = s.groupCommitStats()
 	return out
 }

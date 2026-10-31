@@ -2000,10 +2000,10 @@
      "bound": "no acknowledged write lost"
     }
    ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
+   "retire": "delete",
    "grandfathered_off_until": "2026-11-04",
    "probe": "kill -9 durability drill (deploy R procedure) on a throwaway test computer",
-   "note": "Resource win on the paper's write path."
+   "note": "Retired: the guest store has no history commit since the move to SQLite and nothing acts on the key (internal/store/computer_setting.go); it stays known so a stored value still reads. Retired 2026-10-31 to make room for tape_group_commit under the release cap."
   },
   {
    "id": "intake_events",
@@ -2254,6 +2254,36 @@
    "revert": {
     "mode": "one_way"
    }
+  },
+  {
+   "id": "tape_group_commit",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-31",
+   "settings": [
+    "tape.group_commit"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-28",
+   "ring": "R0",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and group always once the paper shows refused_splits and unknown_outcome at zero and replay equivalent",
+   "note": "Acknowledged unconditional projection writes share a tape event; pending telemetry and run-memory messages ride it (crash-lossy window, owner 2026-10-31; cursor, cell fate, compaction and receipts stay acknowledged); telemetry window 10 s; opening messages as one write (docs/design/tape-group-commit-2026-10-31.md). On for d@e by stored setting first; then the paper; then the default. Off is the live rollback; nothing new is written."
   },
   {
    "id": "store_trace_log",

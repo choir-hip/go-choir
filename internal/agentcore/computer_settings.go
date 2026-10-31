@@ -118,6 +118,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 				rt.applyEventTableSetting(value)
 			case store.SettingTelemetryPartitions:
 				rt.applyTelemetryPartitionsSetting(value)
+			case store.SettingTapeGroupCommit:
+				rt.applyTapeGroupCommitSetting(value)
 			case store.SettingSourceProjection:
 				rt.applySourceProjectionSetting(value)
 			case store.SettingSourceRebaseOffer, store.SettingTextureRootDesk:
@@ -144,6 +146,8 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 			rt.applyEventTableSetting(value)
 		case store.SettingTelemetryPartitions:
 			rt.applyTelemetryPartitionsSetting(value)
+		case store.SettingTapeGroupCommit:
+			rt.applyTapeGroupCommitSetting(value)
 		case store.SettingDispatchWideSlots:
 			rt.applyDispatchSlotsSetting(value)
 		}

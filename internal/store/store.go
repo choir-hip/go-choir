@@ -124,7 +124,10 @@ type Store struct {
 	// took them, so a signalled sweep reads them by key.
 	announcedWakes announcedActorWakes
 	workerUpdateMu sync.Mutex
-	runMemoryMu    sync.Mutex
+	// runMemoryMu serialises run-memory appends per run (striped by run id):
+	// one run's seq and parent come from its previous entry, and different
+	// runs' entries may share a grouped tape event (tape_group_commit.go).
+	runMemoryMu [runMemoryStripes]sync.Mutex
 	// runMemoryAgentList counts and observes ListRunMemoryEntriesForAgent
 	// (run_memory_observe.go).
 	runMemoryAgentList runMemoryAgentListObserver
@@ -195,6 +198,11 @@ type Store struct {
 	// on in this process (telemetry_sealer.go).
 	telemetryStats telemetryCounters
 	telemetry      atomic.Pointer[telemetrySealer]
+	// tapeGroup is tape.group_commit's state (tape_group_commit.go).
+	tapeGroup groupCommit
+	// runMem is the run-memory window's tail cache and damage set
+	// (run_memory_batch.go).
+	runMem runMemoryState
 	// eventTableWrites is store.event_table as the runtime applied it: the
 	// writer stamps the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool

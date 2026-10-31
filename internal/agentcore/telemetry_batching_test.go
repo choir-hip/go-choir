@@ -48,13 +48,24 @@ func (p telemetryTestPinner) PinNonPrivatePayload(_ context.Context, computerID 
 // to append projection batches.
 func telemetryRuntime(t *testing.T, computerID string) *Runtime {
 	t.Helper()
+	return telemetryRuntimeWithCAS(t, computerID, nil)
+}
+
+// telemetryRuntimeWithCAS is telemetryRuntime with the head CAS optionally
+// wrapped, so a test can fail an append with an unknown outcome.
+func telemetryRuntimeWithCAS(t *testing.T, computerID string, wrap func(computerevent.HeadCAS) computerevent.HeadCAS) *Runtime {
+	t.Helper()
 	rt := chainBootstrapRuntime(t, computerID)
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
 	key := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
-	appender, err := computerevent.NewComputerEventAppender(computerID, telemetryTestPinner{rollbackTestPinner{key}}, rt.store, rollbackTestCAS{key: key, projection: rt.store}, rollbackTestReceiptVerifier{})
+	var cas computerevent.HeadCAS = rollbackTestCAS{key: key, projection: rt.store}
+	if wrap != nil {
+		cas = wrap(cas)
+	}
+	appender, err := computerevent.NewComputerEventAppender(computerID, telemetryTestPinner{rollbackTestPinner{key}}, rt.store, cas, rollbackTestReceiptVerifier{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,10 +161,10 @@ func TestDrainFailureStillWritesMarkerAndFlagsResume(t *testing.T) {
 // P1-F16: the crash boot says what was lost when batching is on, and its
 // record is byte-for-byte what it was when batching is off.
 func TestCrashCloseRecordNamesTheMissingWindow(t *testing.T) {
-	if got := string(crashClosePayload(false)); got != `{"fate":"interrupted_by_restart"}` {
+	if got := string(crashClosePayload(false, false)); got != `{"fate":"interrupted_by_restart"}` {
 		t.Fatalf("flag-off crash-close payload changed: %s", got)
 	}
-	on := crashClosePayload(true)
+	on := crashClosePayload(true, false)
 	var decoded map[string]string
 	if err := json.Unmarshal(on, &decoded); err != nil {
 		t.Fatal(err)

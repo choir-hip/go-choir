@@ -22,6 +22,11 @@ import (
 // may be missing instead of inferring it from a sequence gap (design 5.2).
 const telemetryMissingWindowNote = "the last window of this run's trace may be missing"
 
+// runMemoryMissingWindowNote replaces it while tape.group_commit is on: the
+// run's newest memory messages waited in the same window
+// (internal/store/run_memory_batch.go).
+const runMemoryMissingWindowNote = "the last window of this run's trace and run memory may be missing"
+
 // defaultTelemetryDrainDeadline bounds the planned-restart drain, like the
 // shutdown deadline: the restart is never held up by telemetry.
 const defaultTelemetryDrainDeadline = 10 * time.Second
@@ -97,6 +102,9 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 		log.Printf("runtime: planned restart: telemetry drain failed (marker still written; the resume record will say the trace may have a gap): %v", err)
 		failed = true
 	}
+	if rt.restartDrainHook != nil {
+		rt.restartDrainHook() // test seam: what happens while the drain runs
+	}
 	var once sync.Once
 	return failed, func() {
 		once.Do(func() {
@@ -117,6 +125,7 @@ func (rt *Runtime) drainTelemetryForRestart() (failed bool, restore func()) {
 func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker PlannedRestart) (PlannedRestart, error) {
 	rt.hostRestartTelemetryMu.Lock()
 	defer rt.hostRestartTelemetryMu.Unlock()
+	wasOpen := rt.store != nil && rt.store.TapeGroupCommitOn() // before the drain
 	if rt.store != nil && rt.store.TelemetryBatchingOn() {
 		failed, restore := rt.drainTelemetryForRestart()
 		previous := rt.hostRestartTelemetryRestore
@@ -126,7 +135,16 @@ func (rt *Runtime) writeHostPlannedRestartMarker(storePath string, marker Planne
 			previous()
 		}
 	}
-	marker.TelemetryDrainFailed = rt.hostRestartTelemetryRestore != nil && rt.hostRestartDrainFailed
+	marker.TelemetryDrainFailed = (rt.hostRestartTelemetryRestore != nil && rt.hostRestartDrainFailed) ||
+		(rt.store != nil && rt.store.AnyRunMemoryDamaged())
+	marker.RunMemoryWindowOpen = rt.runMemoryWindowStamp(wasOpen, marker.TelemetryDrainFailed)
+	if marker.TelemetryDrainFailed && rt.hostRestartWindowWasOpen {
+		open := true // an earlier request's failed drain, under an open window
+		marker.RunMemoryWindowOpen = &open
+	}
+	if marker.TelemetryDrainFailed && markerWindowOpen(marker) {
+		rt.hostRestartWindowWasOpen = true
+	}
 	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
 		// The write can fail after the rename: only an empty marker path
 		// proves nothing will boot as planned on it.
@@ -170,7 +188,7 @@ func (rt *Runtime) releaseHostRestartTelemetryIfNoMarkerLocked(storePath string)
 
 func (rt *Runtime) releaseHostRestartTelemetryLocked() {
 	if restore := rt.hostRestartTelemetryRestore; restore != nil {
-		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed = nil, false
+		rt.hostRestartTelemetryRestore, rt.hostRestartDrainFailed, rt.hostRestartWindowWasOpen = nil, false, false
 		restore()
 	}
 }
@@ -178,14 +196,24 @@ func (rt *Runtime) releaseHostRestartTelemetryLocked() {
 // crashClosePayload is the event payload of a run closed by a crash boot. With
 // batching configured it also names the possible gap; without it the payload
 // is exactly what it was before batching existed.
-func crashClosePayload(telemetryBatching bool) json.RawMessage {
+func crashClosePayload(telemetryBatching, runMemoryWindow bool) json.RawMessage {
 	if !telemetryBatching {
 		return json.RawMessage(`{"fate":"interrupted_by_restart"}`)
 	}
-	raw, _ := json.Marshal(map[string]string{
+	note := telemetryMissingWindowNote
+	if runMemoryWindow {
+		note = runMemoryMissingWindowNote
+	}
+	fields := map[string]string{
 		"fate":      runFateInterruptedByRestart,
-		"telemetry": telemetryMissingWindowNote,
-	})
+		"telemetry": note,
+	}
+	if runMemoryWindow {
+		// Additive: a reader keying on "run_memory" finds the run-memory
+		// sentence; "telemetry" keeps its old reader (the note covers both).
+		fields["run_memory"] = note
+	}
+	raw, _ := json.Marshal(fields)
 	return raw
 }
 

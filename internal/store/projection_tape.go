@@ -26,6 +26,10 @@ type projectionTape struct {
 	// path pins it: AppendNewPrivatePayload, unlike AppendNewPayload, does not
 	// run the appender's dry run.
 	dryRun func(ctx context.Context, batch *computerevent.ProjectionBatch) error
+	// group is the store's group-commit state (tape_group_commit.go) and
+	// telemetryQueue its telemetry sealer, nil until batching is configured.
+	group          *groupCommit
+	telemetryQueue func() *telemetrySealer
 }
 
 // BindProjectionTape routes live desktop and OG mutations through append+project.
@@ -39,7 +43,8 @@ func (s *Store) BindProjectionTape(computerID string, appender *computerevent.Co
 	if computerID == "" {
 		return fmt.Errorf("store: projection tape requires computer_id")
 	}
-	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats}
+	tape := &projectionTape{computerID: computerID, appender: appender, stats: &s.telemetryStats, group: &s.tapeGroup}
+	tape.telemetryQueue = func() *telemetrySealer { return s.telemetry.Load() }
 	tape.dryRun = func(ctx context.Context, batch *computerevent.ProjectionBatch) error {
 		return s.DryRunProjectionBatch(ctx, computerID, batch)
 	}
@@ -143,7 +148,19 @@ func (t *projectionTape) appendOps(ctx context.Context, ops []computerevent.Proj
 	return t.appendOpsAs(ctx, ops, projectionAuthority)
 }
 
+// appendOpsAs writes ops as one acknowledged tape event, or, with
+// tape.group_commit on and every op an unconditional upsert, as a member of a
+// shared one (tape_group_commit.go). Either way it returns after the event is
+// durable.
 func (t *projectionTape) appendOpsAs(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
+	if t != nil && t.appender != nil && authority == projectionAuthority && t.group != nil && t.group.on.Load() && groupableOps(ops) {
+		return t.appendGrouped(ctx, ops)
+	}
+	return t.appendDirect(ctx, ops, authority)
+}
+
+// appendDirect writes ops as their own tape event.
+func (t *projectionTape) appendDirect(ctx context.Context, ops []computerevent.ProjectionOp, authority string) error {
 	if t == nil || t.appender == nil {
 		return fmt.Errorf("store: projection tape is not bound")
 	}

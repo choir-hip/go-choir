@@ -222,6 +222,19 @@ const SettingTelemetryRetire = "store.telemetry_retire"
 // by hand once no partition holds a row.
 const SettingTelemetryPartitions = "store.telemetry_partitions"
 
+// SettingTapeGroupCommit makes acknowledged projection writes of unconditional
+// upserts (objects, edges, run memory) share one tape event with the writes
+// that arrive while an earlier one commits, and makes pending telemetry ride
+// the next such event instead of being sealed as its own (window 10 s)
+// (docs/design/tape-group-commit-2026-10-31.md). Every such write is still
+// answered only after the shared event is durable. It also opens the
+// run-memory window: a run's message entries wait with the telemetry and a
+// crash may lose a run's newest ones (owner, 2026-10-31; the crash closes
+// that run); every other run-memory kind stays acknowledged. Rings from d@e (a stored setting),
+// then the paper, then the default. Off is the live rollback: every write
+// takes the direct path again.
+const SettingTapeGroupCommit = "tape.group_commit"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -251,6 +264,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,
+	SettingTapeGroupCommit:              false,
 }
 
 // ComputerSetting is one switch's value on one computer.
