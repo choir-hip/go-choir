@@ -114,16 +114,18 @@ func (f *fileObjects) key(ctx context.Context) ([]byte, error) {
 	return key, nil
 }
 
-// enabled reads the switch live. Anything but a stored true is off.
+// enabled reads the switch live. A never-stored switch reads its declared
+// default; any other read failure is off.
 func (f *fileObjects) enabled(ctx context.Context, ownerID string) bool {
 	if f == nil || strings.TrimSpace(ownerID) == "" || f.computerID == "" {
 		return false
 	}
 	setting, err := f.store.GetComputerSetting(ctx, ownerID, f.computerID, choirstore.SettingFilesObject)
 	if err != nil {
-		if !errors.Is(err, choirstore.ErrNotFound) {
-			log.Printf("file objects: read %s: %v; treating it as off", choirstore.SettingFilesObject, err)
+		if errors.Is(err, choirstore.ErrNotFound) {
+			return choirstore.KnownComputerSettings[choirstore.SettingFilesObject]
 		}
+		log.Printf("file objects: read %s: %v; treating it as off", choirstore.SettingFilesObject, err)
 		return false
 	}
 	return setting.Value

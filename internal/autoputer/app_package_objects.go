@@ -98,6 +98,9 @@ func (h *appPackageObjects) enabled(ctx context.Context, ownerID string) (on boo
 		}
 		return false, http.StatusNotFound
 	case errors.Is(err, store.ErrNotFound):
+		if store.KnownComputerSettings[store.SettingAppPackageObjects] {
+			return true, 0
+		}
 		return false, http.StatusNotFound
 	default:
 		log.Printf("app packages: read %s on %s: %v; the route stays closed", store.SettingAppPackageObjects, h.computerID, err)

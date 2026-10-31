@@ -113,16 +113,18 @@ func (rt *Handler) textureOwnerDirectionsOn(ctx context.Context, ownerID, comput
 	return rt.textureSettingOn(ctx, ownerID, computerID, store.SettingTextureOwnerDirections)
 }
 
-// textureSettingOn reads one computer setting; any read failure is off.
+// textureSettingOn reads one computer setting; a never-stored setting reads
+// its declared default, and any other read failure is off.
 func (rt *Handler) textureSettingOn(ctx context.Context, ownerID, computerID, key string) bool {
 	if rt == nil || rt.Store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
 	setting, err := rt.Store.GetComputerSetting(ctx, ownerID, computerID, key)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("texture api: read %s on %s: %v; treating it as off", key, computerID, err)
+		if errors.Is(err, store.ErrNotFound) {
+			return store.KnownComputerSettings[key]
 		}
+		log.Printf("texture api: read %s on %s: %v; treating it as off", key, computerID, err)
 		return false
 	}
 	return setting.Value
