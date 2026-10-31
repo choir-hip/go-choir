@@ -32,6 +32,12 @@ type edge struct {
 	// projection batch type, pinned for a computer that can name a segment
 	// directory, with a length a record can hold.
 	eligible bool
+	// private marks a payload receipt whose media type is the private
+	// envelope. The receipt cannot say whether the envelope holds a
+	// projection batch (the inner media type is in the envelope metadata), so
+	// eligible is provisional for it: decide opens the envelope metadata of
+	// the file itself and keeps the edge only for a batch of the same computer.
+	private bool
 }
 
 type receiptStatus int
@@ -81,7 +87,9 @@ func classifyReceipt(raw []byte) (e edge, st receiptStatus) {
 	case namespace == eventNamespace:
 		e.ns, e.eligible = tapestore.NSEvent, true
 	case namespace == payloadNamespace:
-		e.ns, e.eligible = tapestore.NSPayload, mediaType == computerevent.ProjectionBatchMediaType
+		e.ns = tapestore.NSPayload
+		e.private = mediaType == computerevent.PrivateArtifactMediaType
+		e.eligible = mediaType == computerevent.ProjectionBatchMediaType || e.private
 	default:
 		return e, receiptRejected
 	}
