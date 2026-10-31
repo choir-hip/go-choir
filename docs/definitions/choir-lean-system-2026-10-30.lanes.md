@@ -10,6 +10,8 @@ or is closed (name why). Update it every time a lane opens, lands or closes.
 autopaper, or psa, waits until after we get storage growth, memory spikes,
 and mac app/sync working well." Lanes on those subjects are parked, not
 landed, until then. SEC-12 is parked too ("Park it for after the Mac app").
+Also parked until after the Mac app: desk runs seeded from the previous
+run's memory (docs/problems/desk-runs-seeded-from-prior-run-2026-10-31.md).
 
 | lane | what it does | state (2026-10-31) | lands when | blocker |
 |---|---|---|---|---|
