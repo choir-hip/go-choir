@@ -56,9 +56,34 @@ var (
 	// compactCopyBudget bounds the copy's read transaction, which pins the
 	// WAL while it runs.
 	compactCopyBudget = 90 * time.Minute
-	// compactRebaseMaxTail is the most events the boot may replay onto a
-	// swapped-in copy; an older copy is dropped and the next one is fresher.
-	compactRebaseMaxTail uint64 = 50000
+	// compactRebaseMaxReplay is the longest the boot may spend replaying the
+	// tape onto a swapped-in copy, and compactReplayEventsPerSecond the
+	// replay rate it plans with (measured at 206 to 350 events a second on
+	// d@e; the low end is used). The bound is a time; the event count
+	// follows from it. Replay reads the tape in pages of 1,024 events, so its
+	// memory does not grow with the tail. A tail past the bound is dropped:
+	// the boot would be down longer than a planned restart should be.
+	compactRebaseMaxReplay              = 30 * time.Minute
+	compactReplayEventsPerSecond        = 250
+	compactRebaseMaxTail         uint64 = uint64(compactReplayEventsPerSecond) * uint64(compactRebaseMaxReplay/time.Second)
+	// A staged copy whose tail passed this share of the bound is replaced by
+	// a fresher one at the next run; a younger one is kept, so a copy is not
+	// rewritten daily for nothing.
+	compactRestageShare = 0.5
+	// compactLayoutMaxAge is how long a file may go without being rewritten
+	// compactly, and compactLayoutMinBytes the size below which it does not
+	// matter. A grown file spreads every B-tree across itself, so an hour of
+	// writes changes every snapshot chunk; a compact copy keeps most of them
+	// for a day (docs/design/paper-compaction-2026-10-31.md).
+	compactLayoutMaxAge         = 7 * 24 * time.Hour
+	compactLayoutMinBytes int64 = 1 << 30
+	// compactMinAvailableMemory is the memory the guest must have available
+	// to start the copy: the copy connection's cache, the Go heap and a
+	// margin. compactAvailableMemory reads it (false when unknown).
+	compactMinAvailableMemory int64 = 256 << 20
+	compactAvailableMemory          = readAvailableMemory
+	// compactCopyCacheKiB is the copy connection's page cache.
+	compactCopyCacheKiB = 16384
 	// incrementalVacuumChunk and incrementalVacuumPause pace reclaimFreePages.
 	incrementalVacuumChunk = 2000
 	incrementalVacuumPause = 100 * time.Millisecond
@@ -73,8 +98,76 @@ const (
 	compactStagedSuffix  = ".compact"
 	compactSidecarSuffix = ".compact.json"
 	precompactSuffix     = ".precompact"
+	layoutMarkerSuffix   = ".layout.json"
 	leaseMarkerRebase    = "compact-rebase"
 )
+
+// layoutMarker records when the file was last rewritten compactly, by a
+// rebase at a planned boot. No marker means never (or a restored file).
+type layoutMarker struct {
+	CompactedAt time.Time `json:"compacted_at"`
+	Sequence    uint64    `json:"sequence"`
+}
+
+func readLayoutMarker(statePath string) (layoutMarker, bool) {
+	raw, err := os.ReadFile(statePath + layoutMarkerSuffix)
+	if err != nil {
+		return layoutMarker{}, false
+	}
+	var m layoutMarker
+	if json.Unmarshal(raw, &m) != nil || m.CompactedAt.IsZero() {
+		return layoutMarker{}, false
+	}
+	return m, true
+}
+
+// writeLayoutMarker is best effort: a lost marker only makes the next
+// compaction due sooner.
+func writeLayoutMarker(statePath string, at time.Time, sequence uint64) {
+	raw, err := json.Marshal(layoutMarker{CompactedAt: at.UTC(), Sequence: sequence})
+	if err == nil {
+		err = writeFileDurable(statePath+layoutMarkerSuffix, raw)
+	}
+	if err != nil {
+		log.Printf("store: compact copy: layout marker: %v", err)
+	}
+}
+
+// readAvailableMemory reads MemAvailable from /proc/meminfo.
+func readAvailableMemory() (int64, bool) {
+	raw, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if rest, ok := strings.CutPrefix(line, "MemAvailable:"); ok {
+			var kb int64
+			if _, err := fmt.Sscanf(strings.TrimSpace(rest), "%d", &kb); err == nil {
+				return kb << 10, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// compactReason says why a copy is due: "freelist" when enough of the file is
+// free, "layout" when the file is big and has not been rewritten compactly
+// for compactLayoutMaxAge, "" when neither.
+func compactReason(statePath string, pageCount, freelist, pageSize int64, now time.Time) string {
+	if pageCount == 0 {
+		return ""
+	}
+	if float64(freelist) > compactFreelistFraction*float64(pageCount) || freelist*pageSize >= compactFreelistBytes {
+		return "freelist"
+	}
+	if pageCount*pageSize < compactLayoutMinBytes {
+		return ""
+	}
+	if m, ok := readLayoutMarker(statePath); !ok || now.Sub(m.CompactedAt) >= compactLayoutMaxAge {
+		return "layout"
+	}
+	return ""
+}
 
 // compactSidecar names what the staged copy holds.
 type compactSidecar struct {
@@ -113,54 +206,65 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 	removeSQLiteFiles(staging)
 
 	read := s.ReadDB()
+	// A staged copy still young enough is kept: rewriting it daily would be
+	// IO for nothing. One whose tail passed half the replay bound is replaced
+	// below when a copy is due; one the boot would drop anyway (off the
+	// chain, past the bound) is removed now.
+	stagedPath, sidecarPath := statePath+compactStagedSuffix, statePath+compactSidecarSuffix
+	if side, ok := readCompactSidecar(stagedPath, sidecarPath); ok {
+		tail, tailErr := compactTail(ctx, read, side)
+		if tailErr == nil && float64(tail) <= compactRestageShare*float64(compactRebaseMaxTail) {
+			log.Printf("store: compact copy: the staged copy at sequence %d is fresh (tail %d)", side.Sequence, tail)
+			return false, nil
+		}
+		if tailErr != nil || tail > compactRebaseMaxTail {
+			removeSQLiteFiles(stagedPath)
+			_ = os.Remove(sidecarPath)
+		}
+	}
 	var pageCount, freelist, pageSize int64
 	for q, dst := range map[string]*int64{"PRAGMA page_count": &pageCount, "PRAGMA freelist_count": &freelist, "PRAGMA page_size": &pageSize} {
 		if err := read.QueryRowContext(ctx, q).Scan(dst); err != nil {
 			return false, fmt.Errorf("%s: %w", q, err)
 		}
 	}
-	if pageCount == 0 || (float64(freelist) <= compactFreelistFraction*float64(pageCount) && freelist*pageSize < compactFreelistBytes) {
+	reason := compactReason(statePath, pageCount, freelist, pageSize, time.Now())
+	if reason == "" {
 		log.Printf("store: compact copy: not needed, %d of %d pages free", freelist, pageCount)
 		return false, nil
+	}
+	if avail, known := compactAvailableMemory(); known && avail < compactMinAvailableMemory {
+		return false, fmt.Errorf("skipped: %d bytes of memory available, %d needed", avail, compactMinAvailableMemory)
 	}
 	live := (pageCount - freelist) * pageSize
 	free, err := compactFreeBytes(filepath.Dir(statePath))
 	if err != nil {
 		return false, fmt.Errorf("skipped: free space unreadable: %w", err)
 	}
-	if float64(free) < compactSpaceFactor*float64(live) {
+	need := compactSpaceFactor * float64(live)
+	if _, statErr := os.Stat(stagedPath); float64(free) < need && statErr == nil {
+		// The stale staged copy is the disk the new one needs: the peak is
+		// the original and one copy, never the old copy as well.
+		removeSQLiteFiles(stagedPath)
+		_ = os.Remove(sidecarPath)
+		if free, err = compactFreeBytes(filepath.Dir(statePath)); err != nil {
+			return false, fmt.Errorf("skipped: free space unreadable: %w", err)
+		}
+	}
+	if float64(free) < need {
 		return false, fmt.Errorf("skipped: %d bytes free, %.1fx the %d-byte live size is needed", free, compactSpaceFactor, live)
 	}
-	log.Printf("store: compact copy: %d of %d pages free, live ~%d bytes, copying", freelist, pageCount, live)
+	log.Printf("store: compact copy: due by %s, %d of %d pages free, live ~%d bytes, copying", reason, freelist, pageCount, live)
 	started := time.Now()
 
-	// Its own connection: the read pool is query-only, and VACUUM INTO writes
-	// the target file.
-	db, err := sql.Open("sqlite", dbx.SQLiteDSN(statePath, dbx.SQLiteOptions{}, false))
-	if err != nil {
-		return false, err
-	}
-	db.SetMaxOpenConns(1)
-	defer db.Close()
 	copyCtx, cancel := context.WithTimeout(ctx, compactCopyBudget)
 	defer cancel()
-	conn, err := db.Conn(copyCtx)
-	if err != nil {
-		return false, err
-	}
-	defer conn.Close()
-	// The copy takes the connection's auto_vacuum, so later deletes can
-	// return pages with incremental_vacuum (reclaimFreePages).
-	if _, err := conn.ExecContext(copyCtx, `PRAGMA auto_vacuum=INCREMENTAL`); err != nil {
-		return false, fmt.Errorf("auto_vacuum: %w", err)
-	}
-	_, err = conn.ExecContext(copyCtx, `VACUUM INTO `+sqlQuote(staging))
-	_ = conn.Close()
+	err = vacuumIntoCopy(copyCtx, statePath, staging)
 	// The copy's read transaction pinned the WAL for its whole duration.
 	s.CheckpointAfterLongRead(ctx, "compact copy")
 	if err != nil {
 		removeSQLiteFiles(staging)
-		return false, fmt.Errorf("vacuum into: %w", err)
+		return false, err
 	}
 	side, err := checkCompactCopy(ctx, staging)
 	if err != nil {
@@ -176,6 +280,8 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 		removeSQLiteFiles(staging)
 		return false, err
 	}
+	// The copy is durable; its pages need not stay in the guest's page cache.
+	dropFileCache(staging)
 	info, err := os.Stat(staging)
 	if err != nil {
 		removeSQLiteFiles(staging)
@@ -198,6 +304,39 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 	}
 	log.Printf("store: compact copy: staged %d bytes at sequence %d in %s, for the next planned restart", side.Size, side.Sequence, time.Since(started).Round(time.Second))
 	return true, nil
+}
+
+// vacuumIntoCopy writes the compact copy of the file at statePath to staging
+// with VACUUM INTO: one read transaction of the source (writers never wait),
+// each B-tree written contiguously, a bounded page cache and no memory map.
+func vacuumIntoCopy(ctx context.Context, statePath, staging string) error {
+	// Its own connection: the read pool is query-only, and VACUUM INTO writes
+	// the target file.
+	db, err := sql.Open("sqlite", dbx.SQLiteDSN(statePath, dbx.SQLiteOptions{}, false))
+	if err != nil {
+		return err
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// The copy takes the connection's auto_vacuum, so later deletes can
+	// return pages with incremental_vacuum (reclaimFreePages).
+	if _, err := conn.ExecContext(ctx, `PRAGMA auto_vacuum=INCREMENTAL`); err != nil {
+		return fmt.Errorf("auto_vacuum: %w", err)
+	}
+	for _, pragma := range []string{fmt.Sprintf(`PRAGMA cache_size=-%d`, compactCopyCacheKiB), `PRAGMA mmap_size=0`} {
+		if _, err := conn.ExecContext(ctx, pragma); err != nil {
+			return fmt.Errorf("%s: %w", pragma, err)
+		}
+	}
+	if _, err := conn.ExecContext(ctx, `VACUUM INTO `+sqlQuote(staging)); err != nil {
+		return fmt.Errorf("vacuum into: %w", err)
+	}
+	return nil
 }
 
 // checkCompactCopy checks the copy's structure and reads the head it holds.
@@ -314,6 +453,7 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 			if err := finishSwap(dbPath, staged, sidecarPath, statePath); err != nil {
 				return "", err
 			}
+			writeLayoutMarker(statePath, time.Now(), stagedSide.Sequence)
 			return fmt.Sprintf("finished an interrupted rebase onto the copy at sequence %d", stagedSide.Sequence), nil
 		}
 		if err := undoSwap(statePath, pre); err != nil {
@@ -367,6 +507,7 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 	if err := finishSwap(dbPath, staged, sidecarPath, statePath); err != nil {
 		return "", errors.Join(err, undoSwap(statePath, pre))
 	}
+	writeLayoutMarker(statePath, time.Now(), stagedSide.Sequence)
 	return fmt.Sprintf("rebased onto the compact copy at sequence %d: %d -> %d bytes, %d events to replay", stagedSide.Sequence, before, stagedSide.Size, tail), nil
 }
 

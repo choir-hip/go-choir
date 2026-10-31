@@ -303,8 +303,10 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 			} else if freed > 0 {
 				log.Printf("store: incremental vacuum: %d pages returned", freed)
 			}
-			// A file the retirements left mostly free gets a compact copy,
-			// swapped in at the next planned restart (compact.go).
+			// A file the retirements left mostly free, or a big one not
+			// rewritten compactly for a week, gets a compact copy, swapped in
+			// at the next planned restart (compact.go,
+			// docs/design/paper-compaction-2026-10-31.md).
 			if _, cErr := s.PrepareCompactCopy(ctx); cErr != nil {
 				log.Printf("store: compact copy: %v", cErr)
 			}
