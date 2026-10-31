@@ -6,6 +6,11 @@ that don't land. We should keep track of them and understand when we can
 land them." A lane leaves this table when it lands on main (name the commit)
 or is closed (name why). Update it every time a lane opens, lands or closes.
 
+**Priority rule (owner, 2026-10-31):** "Anything which is about self-dev,
+autopaper, or psa, waits until after we get storage growth, memory spikes,
+and mac app/sync working well." Lanes on those subjects are parked, not
+landed, until then. SEC-12 is parked too ("Park it for after the Mac app").
+
 | lane | what it does | state (2026-10-31) | lands when | blocker |
 |---|---|---|---|---|
 | lane/backup-memory | weekly restic prune unit, prune-keygen | built, 1 commit | next deploy | none; missed the 2b2bc2c7d merge |
@@ -30,9 +35,9 @@ Seven older lanes remain, each waiting on a decision:
 
 | lane | what it holds | lands when |
 |---|---|---|
-| lane/fp3-cuts-on-main | ownerActMode observe to enforce in nix/node-b.nix (SEC-12: corpusd refuses an owner-mode write without the proxy's signed act). Red, auth | owner decision; then a deploy and a check of corpusd refusals |
+| lane/fp3-cuts-on-main | ownerActMode observe to enforce in nix/node-b.nix (SEC-12: corpusd refuses an owner-mode write without the proxy's signed act). Red, auth | parked until after the Mac app (owner, 2026-10-31). Then: one owner edit and one accepted effect on d@e, confirm valid acts and no \"would refuse\", flip, prove an owner edit works and an act-less write is refused. Node B since 2026-10-30: no \"would refuse\" line, but accepted acts are not logged |
 | lane/host-b4-b5, lane/host-b4-b5-on-main | the same enforce commit, plus host containment and proxy commits that triage matched to main by subject | delete with fp3-cuts-on-main once that one lands or closes |
 | lane/cite-promote | not a fix: a verbatim hand-promotion (2026-10-27) of b@c's self-development patch selfdev-5de7f406…, the citation toggle, which the owner reports did not work | parked (owner, 2026-10-31): the owner sees it running before any promotion; it waits until the data system, sync and the Mac app work, then returns with the PSA, self-development and Autopaper pivot |
-| lane/fp0-jobpark-wired | a test only (capsule_job_park_wired_test.go); the fix landed | land the test if the wired path is otherwise uncovered, else delete |
-| lane/fp0-apprewrite, lane/fp4-r4 | problem records not on main | land the records as docs |
-| lane/fp0-obligations | a design doc; merges cleanly | land as docs, or delete if superseded |
+| lane/fp0-jobpark-wired | a test only (capsule_job_park_wired_test.go); the fix landed | land the test if the wired path is otherwise uncovered, else delete; parked with self-development work (owner priority rule) |
+| lane/fp0-apprewrite, lane/fp4-r4 | problem records not on main | land the records as docs; parked with self-development work (owner priority rule) |
+| lane/fp0-obligations | a design doc; merges cleanly | land as docs, or delete if superseded; parked with self-development work (owner priority rule) |
