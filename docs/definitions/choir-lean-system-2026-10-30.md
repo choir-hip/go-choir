@@ -57,7 +57,7 @@ metamission:
         deletion is recorded with bytes freed.
     - id: L1
       title: the paper an order of magnitude smaller
-      status: working
+      status: working  # target relaxed by the owner, 2026-10-31: "if 3gb isnt realistic, then we we settle for what is"; the reviews estimate 8-10 GB live
       depends_on: []
       exit: >-
         The paper's state.db is at most 3 GB (from 31 GB), measured on the
@@ -69,7 +69,7 @@ metamission:
         VACUUM at a planned restart. d@e first, then the paper.
     - id: L2
       title: a crashed computer comes back, a crash loop does not
-      status: working
+      status: complete  # 2026-10-31 02:26-02:39, d@e drill PASS (ledger)
       depends_on: []
       exit: >-
         A crashed computer restarts by itself with its work closed (the
@@ -206,34 +206,50 @@ boundaries:
 now:
   status: working
   slice: >-
-    L0 mostly done on Node A; L0 Node B, L1 investigation, L2 build and L3
-    triage running in parallel.
-  source_ref: main 3b1930690
-  deploy_identity: 485d3726c
+    2026-10-31 ~06:30 UTC. L2 complete (d@e drill). L1 in flight: telemetry
+    retirement now really on fleet-wide (the settings-default fix), the
+    paper's first backlog clearing in kind-group passes (about 528,000
+    choir.event rows by 05:18; resumed at 05:47 after the 05:26 restart);
+    boot never compacts; the event index catch-up runs in the background,
+    paced. One-tape durability (docs/design/one-tape-durability-2026-10-31.md)
+    built to: R7 trace log deleted, telemetry batching on d@e, bundle export,
+    verify, import, format 2 packs, delta bundles. CI: test suite 2,109 s to
+    849 s measured on six packages; both shard sets weighted.
+  source_ref: main 435136164
+  deploy_identity: 435136164 (deployed 2026-10-31 06:18)
   conjecture: >-
     If the guest store keeps only the restore window's events plus live object
     state, and the host tape holds the rest sealed, then the paper's store
-    drops an order of magnitude with no reader losing an answer it needs.
-    TEST: the event-index investigation names every reader of old events;
-    d@e then the paper measured before and after. EDGE (missing_oracle): a
-    reader of old events nobody exercises in a drill. ΔO: the investigation's
-    reader map plus a replay-completeness run after windowing. Status: proposed.
+    drops by about a factor of three to four (32 GB to 8-10 GB live) with no
+    reader losing an answer it needs. TEST: state.db measured after the first
+    full retirement pass and a compact snapshot with a planned rebase (design
+    6b); replay-completeness green; the paper publishing. EDGE
+    (missing_oracle): acceptance re-synthesis reading tool.result older than
+    seven days (an owner decision, below). Status: testing.
   belief:
     believed_state: >-
-      Most of the paper's 31 GB is a local copy of history the host already
-      holds sealed.
+      Retirement removes the bulk of choir.event, but SQLite keeps the freed
+      pages, so the file shrinks only through a compact snapshot and a
+      planned rebase; boot must stay light.
     main_uncertainty: >-
-      Which readers need local events older than the window, and the exact
-      size split of state.db (computer_event_index versus og_objects versus
-      indexes).
-    next_observation: the event-index investigation's reader map and a read-only size breakdown of a fresh copy.
+      How much the og_meta secondary indexes hold after retirement, and the
+      rebase's restart cost on the paper.
+    next_observation: the paper's state.db page and freelist counts after the retirement backlog ends (read-only reflink copy).
   blocker_or_risk: >-
-    No off-host backup of the new data until L5 (owner-accepted). Node B has
-    90 GB free; a VACUUM of the paper needs about its result's size free.
+    Owner decisions pending (morning letter,
+    docs/reports/night-of-the-lean-system-2026-10-31.md): (1) whether the
+    privacy policy promises a deleted item leaves the tape (crypto-shred
+    path), (2) the seven-day tool.result window versus acceptance
+    re-synthesis. The paper's /health reports store_stalled intermittently
+    while the backlog clears (vmctl only records it). No off-host copy until
+    the Mac pull or L5.
   next_action: >-
-    Integrate L2 when its builder returns; apply the L3 triage; delete Node
-    B's dead data; design L1 from the reader map; then L4 and L5.
-
+    Measure the paper after its retirement backlog; then build S5 (compact
+    snapshot plus planned rebase) on d@e, then the paper; then the Mac pull
+    over delta bundles (S5a), L5, and L6's handoff. Small follow-ups in the
+    ledger: retireCleared durable across restarts, retire pacing by measured
+    writer wait, /health naming background maintenance, a re-hash on bundle
+    export resume.
 receipts:
   - id: build-superseded
     boundary: supersede
