@@ -419,9 +419,15 @@ func TestEventTableUnionReadsMatchSingleTable(t *testing.T) {
 // oldest limit by stream_seq.
 func TestEventTableTrajectoryWindowOverTenThousand(t *testing.T) {
 	if testing.Short() {
-		t.Skip("writes 10,050 events into three stores")
+		t.Skip("writes 1,050 events into three stores")
 	}
-	const n = 10050
+	// The window is the product's 10,000 in production; the test shrinks it to
+	// 1,000 (a test seam: eventTrajectoryWindow is a var) and writes 50 events
+	// past it, the same boundary at a tenth of the cost (156s under -race).
+	oldWindow := eventTrajectoryWindow
+	eventTrajectoryWindow = 1000
+	t.Cleanup(func() { eventTrajectoryWindow = oldWindow })
+	const n = 1050
 	script := make([]*types.EventRecord, 0, n)
 	for i := 1; i <= n; i++ {
 		kind := types.EventToolResult
@@ -463,7 +469,7 @@ func TestEventTableTrajectoryWindowOverTenThousand(t *testing.T) {
 		}{
 			{"off", off, func(int) bool { return false }},
 			{"on", on, func(int) bool { return true }},
-			{"toggled", toggled, func(i int) bool { return i >= 4000 && i < 8000 }},
+			{"toggled", toggled, func(i int) bool { return i >= 400 && i < 800 }},
 		} {
 			t.Run(f.name, func(t *testing.T) {
 				t.Parallel()

@@ -91,7 +91,7 @@ func TestOpenLogsEveryStoreStepWithItsDuration(t *testing.T) {
 // The boot must not scan or rewrite og_objects (the 2026-10-21 outage: an
 // ALTER that rewrote every row held the paper's boot for 50 minutes). A store
 // that already has many rows is closed and opened again, as a restart does:
-// og_objects must be byte-identical after Open (Dolt's table hash), the side
+// og_objects must be byte-identical after Open (its row digest), the side
 // table must be empty and every family unvalidated (the check is online,
 // after the listener), and Open must take about as long as it does empty.
 func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
@@ -102,7 +102,7 @@ func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const rows = 24000
+	const rows = 3000 // 24000 cost 37s under -race; a rewrite changes the table digest at any size (Open itself takes ~60ms)
 	tx, err := s.db.Begin()
 	if err != nil {
 		t.Fatal(err)

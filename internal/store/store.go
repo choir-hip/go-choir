@@ -1621,7 +1621,7 @@ func (s *Store) ListAcknowledgedEventsByChannel(ctx context.Context, ownerID, ch
 
 // eventTrajectoryWindow is the newest-events window ListEventsByTrajectory
 // reads before it filters and cuts.
-const eventTrajectoryWindow = 10000
+var eventTrajectoryWindow = 10000
 
 // ListEventsByTrajectory returns events for a specific user trajectory: of
 // the trajectory's newest 10,000 events by timestamp, the owner's, the

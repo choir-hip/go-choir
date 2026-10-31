@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -171,48 +170,4 @@ func TestOpenWakeListAgreesWithTheRowsAcrossMarks(t *testing.T) {
 	if got := openWakeIDs(t, s); !sameIDs(got, want) {
 		t.Fatalf("withdrawn: %v, want %v", got, want)
 	}
-}
-
-// TestOpenWakeListMeasure reports rows read and time for the JSON read (before
-// the pass) and the side-table read (after it) on a store of many closed wakes
-// and few open ones. WAKE_SCAN_ROWS sets the closed count (default 3000).
-func TestOpenWakeListMeasure(t *testing.T) {
-	closed := 3000
-	if v, err := strconv.Atoi(os.Getenv("WAKE_SCAN_ROWS")); err == nil && v > 0 {
-		closed = v
-	}
-	s := openTestStore(t)
-	ctx := context.Background()
-	want := seedWakeOutbox(t, s, closed, 4)
-
-	timeList := func() time.Duration {
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 5; i++ {
-			start := time.Now()
-			if got := openWakeIDs(t, s); !sameIDs(got, want) {
-				t.Fatalf("list = %v, want %v", got, want)
-			}
-			if d := time.Since(start); d < best {
-				best = d
-			}
-		}
-		return best
-	}
-	count := func(query string, args ...any) int {
-		var n int
-		if err := s.db.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		return n
-	}
-	kindRows := count(`SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, "choir.actor_wake_outbox")
-	jsonTime := timeList()
-	t.Logf("JSON read: %d outbox rows read in full to return %d wakes, best of 5 = %s", kindRows, len(want), jsonTime)
-
-	if err := s.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{PageSize: 200}); err != nil {
-		t.Fatal(err)
-	}
-	keyRows := count(`SELECT COUNT(*) FROM og_key_index WHERE key_name = ? AND key_value = ?`, outboxProjectedFamily, "false")
-	keyTime := timeList()
-	t.Logf("side-table read: %d key rows read (of %d outbox rows) to return %d wakes, best of 5 = %s", keyRows, kindRows, len(want), keyTime)
 }

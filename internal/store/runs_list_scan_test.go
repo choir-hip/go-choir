@@ -149,7 +149,10 @@ func runIDs(runs []types.RunRecord) string {
 func TestListRunsByOwnerEquivalentToTheFullKindScan(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
-	mix := scanMix(2400)
+	// 1200 runs: owner A has 320 legacy runs, more than the 256 page size
+	// below, so that page boundary still cuts the set; 2400 only doubled the
+	// seed and the full-scan oracle's cost.
+	mix := scanMix(1200)
 	scanPutRuns(t, s, mix)
 	// Another kind that shares owner and computer must not be returned.
 	for i := 0; i < 5; i++ {
@@ -170,7 +173,7 @@ func TestListRunsByOwnerEquivalentToTheFullKindScan(t *testing.T) {
 		}
 	}
 	for _, owner := range []string{scanOwnerA, scanOwnerB, "owner-nobody"} {
-		for _, limit := range []int{0, 1, 7, 100, 500, 5000} {
+		for _, limit := range []int{0, 1, 7, 100, 200, 5000} {
 			want, err := s.listRunsByOwnerOGReference(ctx, owner, limit)
 			if err != nil {
 				t.Fatal(err)
@@ -203,8 +206,8 @@ func TestListRunsByOwnerEquivalentToTheFullKindScan(t *testing.T) {
 		}
 		if owner != "owner-nobody" {
 			all, _ := s.ListRunsByOwnerOG(ctx, owner, 5000)
-			if len(all) != wantLegacy[owner] || len(all) < 100 {
-				t.Fatalf("owner %s: %d legacy runs, want %d (and at least 100 for the test to mean something)", owner, len(all), wantLegacy[owner])
+			if len(all) != wantLegacy[owner] || len(all) < 50 {
+				t.Fatalf("owner %s: %d legacy runs, want %d (and at least 50 for the test to mean something)", owner, len(all), wantLegacy[owner])
 			}
 		}
 	}
