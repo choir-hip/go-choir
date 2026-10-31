@@ -281,6 +281,37 @@ select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR, IMA
   [ "${#IMAGE_MISSING[@]}" = 0 ]
 }
 
+# ---- the shards of the flat tape directories ---------------------------
+# restic holds a directory's whole tree in memory, and again for the parent
+# snapshot's. Three directories under sha256/ are flat and huge (counted on
+# Node B 2026-10-31: pin-receipts 5.4M files, computer-event-payload 2.9M,
+# computer-event 2.5M, of the 11.1M the run walks): one restic process over
+# all of it peaked at 10 GB (MemoryPeak 10G on 2026-10-30 and -31; 7.2 GB
+# and a host OOM kill on 2026-10-30 03:08), and the restore drill measures
+# 8 GB for the same walk. So the run is several restic invocations: one for
+# everything else, then each flat directory in shards by the first character
+# of the file name, each shard 1.4M files or fewer. Every shard is its own
+# snapshot (tag shard-<dir>-<i>) and follows its own previous one as parent;
+# a shard with none yet follows the last full snapshot, which holds the same
+# paths. The last shard of a directory takes every name not in the earlier
+# classes, so a name that is not hex is never dropped.
+BIG_DIRS="${OFFHOST_BIG_DIRS:-pin-receipts:4 computer-event:2 computer-event-payload:2}"
+shard_class() { # $1 shards (2|4) $2 index: the first-character class
+  case "$1:$2" in
+    2:0) echo 0-7 ;; 2:1) echo 8-f ;;
+    4:0) echo 0-3 ;; 4:1) echo 4-7 ;; 4:2) echo 8-b ;; 4:3) echo c-f ;;
+  esac
+}
+shard_excludes() { # $1 directory $2 shards $3 index: one exclude pattern per line
+  local j
+  if [ "$3" -lt $(( $2 - 1 )) ]; then
+    echo "$1/[^$(shard_class "$2" "$3")]*"
+  else
+    for j in $(seq 0 $(( $2 - 2 ))); do echo "$1/[$(shard_class "$2" "$j")]*"; done
+  fi
+}
+big_dir_excludes() { local e; for e in $BIG_DIRS; do echo "$ART/sha256/${e%%:*}"; done; }
+
 # ---- the tunnel and restic environment ---------------------------------
 CTL=""
 tunnel_up() {
@@ -441,8 +472,16 @@ cmd_plan() {
   resolve_paths
   echo "would back up:"; printf '  %s\n' "${PATHS[@]}"
   select_images || rc=3
-  echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}" "${IMAGED_EXCLUDES[@]:-}"
+  echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}" "${IMAGED_EXCLUDES[@]:-}"; big_dir_excludes | sed 's/^/  /'
   echo "absent:";        printf '  %s\n' "${SKIPPED[@]:-}"
+  echo "shards (own restic runs and snapshots; the main run excludes these directories):"
+  local b d n i
+  for b in $BIG_DIRS; do
+    d="${b%%:*}"; n="${b##*:}"
+    for (( i = 0; i < n; i++ )); do
+      echo "  shard-$d-$i: $ART/sha256/$d"; shard_excludes "$ART/sha256/$d" "$n" "$i" | sed 's/^/    exclude /'
+    done
+  done
   echo "postgresql dumps (made before restic, removed after; ${PG_USER}@${PG_HOST}:${PG_PORT}):"
   for db in $PG_DATABASES; do printf '  %s -> %s/%s.dump\n' "$db" "$PG_DIR" "$db"; done
   echo "guest images: ${IMAGE_COMPUTERS:-every computer}"; printf '  %s\n' "${IMAGES[@]:-}"
@@ -476,8 +515,13 @@ cmd_backup() {
   [ "$REQUIRED_MISSING" = 0 ] || { err "a required path is absent: ${SKIPPED[*]}"; result=partial; }
   local args=()
   for ex in "${EXCLUDES[@]}" "${IMAGED_EXCLUDES[@]:-}"; do [ -n "$ex" ] && args+=(--exclude "$ex"); done
+  while read -r ex; do [ -n "$ex" ] && args+=(--exclude "$ex"); done < <(big_dir_excludes)
+  local full_parent; full_parent="$(jq -r '.last_snapshot_id // empty' "$STATUS" 2>/dev/null)"
+  # One restic process per group, so its tree memory is freed between them.
+  # Main first: it carries the PostgreSQL dumps and the sqlite copies.
+  local sum_added=0 shards_json='{}' b d n i parent part_args=() sid_i added_i
   # --no-scan: the scanner only feeds progress totals, and walks and
-  # lstats all 9.7M files a second time beside the backup's own walk.
+  # lstats all 11M files a second time beside the backup's own walk.
   R backup --host "$RESTIC_HOST_TAG" --tag daily --tag "run-$RUN_ID" --json --no-scan "${args[@]}" "${PATHS[@]}" \
     > "$STATE/run/backup.json" 2> "$STATE/run/backup.err"
   rc=$?
@@ -490,13 +534,41 @@ cmd_backup() {
   sid="$(jq -r 'select(.message_type=="summary") | .snapshot_id' "$STATE/run/backup.json" | tail -1)"
   added="$(jq -r 'select(.message_type=="summary") | .data_added' "$STATE/run/backup.json" | tail -1)"
   log "snapshot ${sid:-unknown} added ${added:-?} bytes"
+  sum_added="${added:-0}"
+  for b in $BIG_DIRS; do
+    d="${b%%:*}"; n="${b##*:}"
+    [ -d "$ART/sha256/$d" ] || continue
+    for (( i = 0; i < n; i++ )); do
+      parent="$(R snapshots --host "$RESTIC_HOST_TAG" --tag "shard-$d-$i" --json 2>/dev/null \
+        | jq -r '[.[].snapshots[]?] | sort_by(.time) | last | .id // empty' 2>/dev/null)"
+      [ -n "$parent" ] || parent="$full_parent"
+      part_args=()
+      while read -r ex; do part_args+=(--exclude "$ex"); done < <(shard_excludes "$ART/sha256/$d" "$n" "$i")
+      [ -z "$parent" ] || part_args+=(--parent "$parent")
+      R backup --host "$RESTIC_HOST_TAG" --tag daily --tag "run-$RUN_ID" --tag "shard-$d-$i" --json --no-scan \
+        "${part_args[@]}" "$ART/sha256/$d" > "$STATE/run/backup-$d-$i.json" 2> "$STATE/run/backup-$d-$i.err"
+      rc=$?
+      if [ "$rc" -eq 3 ]; then result=partial; err "restic shard $d-$i: some files were unreadable"
+      elif [ "$rc" -ne 0 ]; then
+        err "restic backup of shard $d-$i failed ($(exit_cause "$rc" restic)): $(tail -c 300 "$STATE/run/backup-$d-$i.err" | tr -d '\n')"
+        attempt_end failed "shard $d-$i: $(exit_cause "$rc" restic)"
+        return 1
+      fi
+      sid_i="$(jq -r 'select(.message_type=="summary") | .snapshot_id' "$STATE/run/backup-$d-$i.json" | tail -1)"
+      added_i="$(jq -r 'select(.message_type=="summary") | .data_added' "$STATE/run/backup-$d-$i.json" | tail -1)"
+      log "shard $d-$i snapshot ${sid_i:-unknown} added ${added_i:-?} bytes"
+      sum_added=$(( sum_added + ${added_i:-0} ))
+      shards_json="$(jq -c --arg k "$d-$i" --arg v "${sid_i:-}" '. + {($k): $v}' <<<"$shards_json")"
+    done
+  done
+  added="$sum_added"
   # No `restic check` here: walking every tree of a 9.7 million file
   # source runs past the unit's memory line for hours (problem doc section
   # 13 item 18). The weekly verify carries the structural check.
   local raw; raw="$(repo_pack_bytes daily)"
   local skipped_json; skipped_json="$(printf '%s\n' "${SKIPPED[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')"
   status_merge <<EOF
-{"last_attempt_result":"$result","last_attempt_cause":$(jq -nc --arg v "$cause" '$v'),"last_pg_entries":$(jq -nc --arg v "${PG_ENTRIES[*]:-}" '$v'),"last_snapshot_id":"${sid:-}","last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
+{"last_attempt_result":"$result","last_attempt_cause":$(jq -nc --arg v "$cause" '$v'),"last_pg_entries":$(jq -nc --arg v "${PG_ENTRIES[*]:-}" '$v'),"last_snapshot_id":"${sid:-}","last_shard_snapshots":$shards_json,"last_bytes_added":${added:-0},"repo_raw_bytes":${raw:-0},"skipped":$skipped_json,"duration_seconds":$(( $(now) - started ))}
 EOF
   if [ "$result" = ok ]; then
     local first; first="$(jq -r '.first_success_epoch // empty' "$STATUS" 2>/dev/null)"

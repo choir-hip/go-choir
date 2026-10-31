@@ -11,7 +11,11 @@
 # lines; never run it uncapped beside the guests. Everything lands under a scratch directory,
 # never a live path, and each piece deletes its restore before it exits.
 #   tape:  200 random tape files compared byte for byte with live, and the
-#          two sqlite stores' integrity checks.
+#          two sqlite stores' integrity checks. Since the backup split the
+#          flat sha256/ directories into shard snapshots (status.json
+#          last_shard_snapshots), a snapshot from after the split holds
+#          none of pin-receipts, computer-event or computer-event-payload:
+#          restore those from their shard snapshots, one drill per id.
 #   dolt:  the corpus Dolt backup (restore, `dolt backup restore`, query,
 #          head compared with the run's), and the platform Dolt backup
 #          directory compared byte for byte with live (no second copy: disk).
