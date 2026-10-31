@@ -470,8 +470,9 @@ func TestObjectRetireDryRunDeletesNothing(t *testing.T) {
 func withRetireKnobs(t *testing.T) {
 	t.Helper()
 	pause := telemetryRetireChunkPause
-	telemetryRetireChunkPause = time.Millisecond
-	t.Cleanup(func() { telemetryRetireChunkPause = pause })
+	rest := telemetryRetireRest
+	telemetryRetireChunkPause, telemetryRetireRest = time.Millisecond, 0
+	t.Cleanup(func() { telemetryRetireChunkPause, telemetryRetireRest = pause, rest })
 }
 
 // R5: the job applies the policy of section 11.6 and leaves tool.result, the

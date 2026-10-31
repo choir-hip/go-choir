@@ -31,6 +31,9 @@ var (
 	// telemetryRetireChunkPause lets the desks' appends through between
 	// chunks.
 	telemetryRetireChunkPause = 250 * time.Millisecond
+	// telemetryRetireRest is the least rest after an op, as a multiple of
+	// the op's own time.
+	telemetryRetireRest = 4.0
 	// telemetryRetireMaxSlices bounds the ops one group appends in one run
 	// (one per hour slice that has a row); the next run continues.
 	telemetryRetireMaxSlices = 2000
@@ -153,15 +156,21 @@ func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error)
 				if err != nil {
 					return appended, err
 				}
+				opStart := time.Now()
 				if err := s.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObjectRetire, Body: body}}); err != nil {
 					return appended, err
 				}
 				appended++
 				ops++
+				// Rest at least telemetryRetireRest times the op's own time, so
+				// the job holds the one writer at most about a fifth of the time
+				// whatever the disk (the paper's store stalled at 97% under the
+				// index catch-up, 2026-10-31).
+				rest := max(telemetryRetireChunkPause, time.Duration(telemetryRetireRest*float64(time.Since(opStart))))
 				select {
 				case <-ctx.Done():
 					return appended, ctx.Err()
-				case <-time.After(telemetryRetireChunkPause):
+				case <-time.After(rest):
 				}
 			}
 			t = end

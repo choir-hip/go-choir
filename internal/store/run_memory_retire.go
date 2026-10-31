@@ -197,8 +197,14 @@ func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) (
 	return out, nil
 }
 
+// runMemoryRetireRunsPerOp is the runs one op names when this store writes
+// it (at most computerevent.RunMemoryRetireMaxRuns): one op is one
+// transaction under the event lock, and a run of the paper's can hold
+// thousands of entries.
+var runMemoryRetireRunsPerOp = 10
+
 // RetireRunMemory appends the retire ops for the runs SelectRunMemoryRetirements
-// names, RunMemoryRetireMaxRuns to an op. It returns the ops appended. An
+// names, runMemoryRetireRunsPerOp to an op. It returns the ops appended. An
 // unbound store retires nothing.
 func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error) {
 	if s == nil || s.projectionTape == nil {
@@ -209,8 +215,8 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 		return 0, err
 	}
 	appended := 0
-	for start := 0; start < len(ids); start += computerevent.RunMemoryRetireMaxRuns {
-		chunk := ids[start:min(start+computerevent.RunMemoryRetireMaxRuns, len(ids))]
+	for start := 0; start < len(ids); start += runMemoryRetireRunsPerOp {
+		chunk := ids[start:min(start+runMemoryRetireRunsPerOp, len(ids))]
 		body, err := marshalJSON(computerevent.RunMemoryRetireProjection{
 			RunIDs: chunk, KeepKinds: runMemoryRetireKeepKinds, Reason: "run memory retirement: finished runs older than the window",
 		})
@@ -221,14 +227,17 @@ func (s *Store) RetireRunMemory(ctx context.Context, now time.Time) (int, error)
 		if err := s.ensureProjectionBatchTrimFloor(); err != nil {
 			return appended, err
 		}
+		opStart := time.Now()
 		if err := s.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpRunMemoryRetire, Body: body}}); err != nil {
 			return appended, err
 		}
 		appended++
+		// The same duty-cycle bound as the telemetry ops (telemetry_retire.go).
+		rest := max(telemetryRetireChunkPause, time.Duration(telemetryRetireRest*float64(time.Since(opStart))))
 		select {
 		case <-ctx.Done():
 			return appended, ctx.Err()
-		case <-time.After(telemetryRetireChunkPause):
+		case <-time.After(rest):
 		}
 	}
 	if appended > 0 {
