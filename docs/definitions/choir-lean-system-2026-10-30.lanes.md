@@ -13,6 +13,11 @@ landed, until then. SEC-12 is parked too ("Park it for after the Mac app").
 Also parked until after the Mac app: desk runs seeded from the previous
 run's memory (docs/problems/desk-runs-seeded-from-prior-run-2026-10-31.md).
 
+**First work after the Mac app (owner, 2026-10-31):** a subagent fixes all
+nine old critical-path findings in docs/problems/old-agent-critical-path-2026-10-31.md,
+the seed included. Order: make the REPL lookup of earlier runs real for every
+desk first, then remove the seed and the redundant injections.
+
 | lane | what it does | state (2026-10-31) | lands when | blocker |
 |---|---|---|---|---|
 | lane/backup-memory | weekly restic prune unit, prune-keygen | built, 1 commit | next deploy | none; missed the 2b2bc2c7d merge |
