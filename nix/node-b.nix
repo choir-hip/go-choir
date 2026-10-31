@@ -13,7 +13,7 @@
 # - Auth persists sessions in SQLite, so sessions survive auth restarts
 # - Auth reuses the same signing key file across restarts, so existing
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
-{ config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, choirGo, guestImage ? null, guestImageLayered ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
   # Host fetch route (SDC NET-01; internal/hostfetch,
   # docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md). One
@@ -38,6 +38,14 @@ let
   # measurement, not a safety gate; it continues as a record
   # (docs/evidence/density-d2-floor-share-2026-10-26.md). Rollback: false.
   snapshotReleaseRetain = true;
+  # The layered guest image ring (docs/design/layered-guest-image-2026-10-31.md
+  # S2; progressive delivery R0). ComputerIDs only. These computers cold boot
+  # the layered image (a slow erofs base reused across deploys plus a small app
+  # layer per deploy); every other computer keeps the single image. ON for the
+  # proof computer d@e as shipped. A ring computer whose layered release or
+  # base is missing launches the single image. Rollback: remove the id (the
+  # computer is single at its next cold boot); widen ring by ring.
+  guestLayeredComputers = [ "computer-59c902c5d46caecc0a180a8557164e72" ];
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
   # commit's copy of scripts/check-guest-security-epoch over deployed..target,
@@ -1339,7 +1347,7 @@ in
       # vm-state). Read-only here means a VMM escape cannot replace corpusd's
       # binary or the kernel every later cold boot runs. auth/ stays readable
       # for the retention sweep (VMCTL_RETENTION_AUTH_DB_PATH).
-      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" ];
+      ReadOnlyPaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/services" "/var/lib/go-choir/guest" "-/var/lib/go-choir/guest-releases" "-/var/lib/go-choir/guest-bases" "-/var/lib/go-choir/guest-layered" ];
       LoadCredential = internalTokenCredential ++ issuerTokenCredential ++ pgClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
@@ -1433,6 +1441,10 @@ in
         "VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"
         "VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases"
         "VM_GUEST_RELEASE_SUPPORT_WINDOW=168h"
+        # Layered ring: the layered release's link and the computers that
+        # launch it (internal/vmmanager/layered_ring.go).
+        "VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"
+        "VM_GUEST_LAYERED_COMPUTERS=${lib.concatStringsSep "," guestLayeredComputers}"
         # D2 S4: how long a user must be away before a computer that woke from
         # a snapshot onto an older release is updated (the planned,
         # marker-backed deploy refresh).
@@ -2575,6 +2587,24 @@ in
   system.activationScripts.go-choir-guest-release = lib.optionalString (guestImage != null && snapshotReleaseRetain) ''
     ${guestReleaseMaterialize} "${guestImage}" /var/lib/go-choir/guest-releases || true
   '';
+
+  # The layered image is a second release, installed by the same materialize
+  # step, and a second link. It is never the fleet's current: the guest link
+  # below names the single image. The link moves only once the layered
+  # release directory exists, so vmctl never reads a half-installed one (it
+  # also checks the release itself and falls back to the single image).
+  system.activationScripts.go-choir-guest-release-layered = {
+    deps = [ "go-choir-guest-release" ];
+    text = lib.optionalString (guestImageLayered != null && snapshotReleaseRetain) ''
+    ${guestReleaseMaterialize} "${guestImageLayered}" /var/lib/go-choir/guest-releases || true
+    lid=$(basename "${guestImageLayered}" | cut -c1-32)
+    if [ -d "/var/lib/go-choir/guest-releases/$lid" ]; then
+      rm -f /var/lib/go-choir/.guest-layered-next || true
+      ln -s "${guestImageLayered}" /var/lib/go-choir/.guest-layered-next \
+        && mv -T /var/lib/go-choir/.guest-layered-next /var/lib/go-choir/guest-layered || true
+    fi
+  '';
+  };
 
   system.activationScripts.go-choir-guest-image = {
     deps = [ "go-choir-guest-release" ];

@@ -412,6 +412,37 @@ expect_gone "$d" "single-image" $OOS
 [ $fail -eq $f0 ] && ok "bases: a single-image fleet (no guest-bases) retains exactly as before"
 stop_stub
 
+# The layered ring's second release (design step 3/4): the layered link's target
+# stays; a layered release is outside the previous/rollback choice and the
+# "newer than current" keep, so installing one never displaces a single image's
+# rollback target nor lingers as a pending switch.
+LAYA=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; LAYB=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+f0=$fail
+d="$root/b6"; fixture "$d"; answer true
+mkrelease "$d/rel" $LAYA 3; layer "$d" $LAYA $BC     # newer than current, not young, not the ring's current
+mkrelease "$d/rel" $LAYB 400; layer "$d" $LAYB $BX   # the ring's current, long out of support
+mkbase "$d" $BC 100; mkbase "$d" $BX 100
+ln -s "/nix/store/${LAYB}-go-choir-guest-image-layered" "$d/guest-layered"
+start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL" GO_CHOIR_GUEST_LAYERED_LINK="$d/guest-layered"; rc=$?
+[ $rc -eq 0 ] || bad "layered ring: exit $rc"
+expect_kept "$d" "layered ring" $CUR $YOUNG $MID $USED $OOSRUN $OLD $LAYB
+expect_gone "$d" "layered ring" $OOS $LAYA
+base_exists "$d" $BX || bad "layered ring: the ring current's base was deleted"
+base_exists "$d" $BC && bad "layered ring: a deleted layered release's base was kept"
+[ $fail -eq $f0 ] && ok "retention: the layered ring's current release (and its base) stays; other layered releases follow the normal rules and do not displace previous/rollback"
+stop_stub
+
+f0=$fail
+d="$root/b7"; fixture "$d"; answer true
+mkrelease "$d/rel" $LAYB 400; layer "$d" $LAYB $BX; mkbase "$d" $BX 100
+ln -s "/nix/store/${LAYB}-go-choir-guest-image-layered" "$d/guest-layered"
+start_stub 200 "$root/answer.json"
+run_retention "$d" "$URL" GO_CHOIR_GUEST_LAYERED_LINK="$d/no-such-link"
+exists "$d" $LAYB && bad "layered ring: without the link the stale layered release was kept"
+[ $fail -eq $f0 ] && ok "retention: an unreadable layered link keeps nothing extra (the ring falls back to single at launch)"
+stop_stub
+
 # --- materialize ------------------------------------------------------------------
 # These cases need GNU cp (--reflink) and stat (-c), as Node B has; elsewhere
 # they are skipped, not failed (review 331 Devin 2).
@@ -539,6 +570,10 @@ grep -q 'guestReleaseRetention' "$nix" && grep -c 'guestReleaseRetention' "$nix"
 grep -q 'VM_SNAPSHOT_RELEASE_RETAIN=${if snapshotReleaseRetain then "on" else "off"}' "$nix" && grep -q 'VM_GUEST_RELEASES_DIR=/var/lib/go-choir/guest-releases' "$nix" && grep -q 'VM_GUEST_RELEASE_SUPPORT_WINDOW=168h' "$nix" && grep -q 'VM_GUEST_RELEASE_LINK=/var/lib/go-choir/guest"' "$nix" && ok "nix: vmctl's four release variables follow the one switch" || bad "nix: the vmctl release env lines are missing"
 
 grep -E 'ReadOnlyPaths' "$nix" | grep -q 'guest-bases' && grep -q 'd /var/lib/go-choir/guest-bases 0755 root root -' "$nix" && ok "nix: guest-bases exists (tmpfiles) and vmctl reads it read-only" || bad "nix: guest-bases is not wired for vmctl"
+
+grep -q 'VM_GUEST_LAYERED_COMPUTERS=' "$nix" && grep -q 'VM_GUEST_LAYERED_RELEASE_LINK=/var/lib/go-choir/guest-layered"' "$nix" && grep -qE '^\s*guestLayeredComputers = \[ "computer-59c902c5d46caecc0a180a8557164e72" \];' "$nix" && ok "nix: the layered ring selector is on for d@e (ComputerIDs only)" || bad "nix: the layered ring selector is missing or not set to d@e"
+grep -q 'system.activationScripts.go-choir-guest-release-layered' "$nix" && grep -q 'guestImageLayered' "$nix" && ok "nix: the layered image is a second release and a second link, never the guest link" || bad "nix: the layered release activation is missing"
+awk '/system.activationScripts.go-choir-guest-image = \{/{f=1} f&&/src="\$\{guestImage\}"/{print "single"; exit}' "$nix" | grep -q single && ok "nix: the guest link still names the single image" || bad "nix: the guest link no longer names guestImage"
 
 echo "node-b-guest-release-retention tests: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -804,7 +804,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	snap.WakeToHealthyMS = tl.FirstHealthyOffsetMS
 	if meta.GuestRelease != "" {
 		snap.GuestRelease = meta.GuestRelease
-		snap.CurrentRelease = m.currentReleaseID()
+		snap.CurrentRelease = m.currentReleaseIDFor(meta.ComputerID)
 		snap.Behind = snap.CurrentRelease != "" && snap.CurrentRelease != meta.GuestRelease
 		m.mu.Lock()
 		inst.Behind = snap.Behind

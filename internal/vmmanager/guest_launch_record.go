@@ -81,6 +81,12 @@ func (m *Manager) launchRecordPath(vmID string) string {
 // is made of. The link is read once.
 func (m *Manager) writeLaunchRecord(cfg VMConfig) error {
 	target, ok := m.guestImageTarget()
+	if cfg.BaseDiskPath != "" {
+		// A layered launch names the layered link's target.
+		if t, lok := m.layeredImageTarget(); lok {
+			target, ok = t, true
+		}
+	}
 	if !ok && strings.TrimSpace(m.cfg.GuestReleaseLink) != "" {
 		// A configured link that cannot be read at launch: record that, so a
 		// snapshot of this guest refuses at wake instead of turning the guard
