@@ -215,9 +215,11 @@ func TestCatchUpIsChunkedAndReleasesTheWriter(t *testing.T) {
 	s, _ := trimTestOpen(t)
 	trimTestFill(t, s, 30000)
 	trimTestHead(t, s, 30000)
-	oldChunk, oldPause := projectionBatchCatchUpChunk, projectionBatchCatchUpPause
-	projectionBatchCatchUpChunk, projectionBatchCatchUpPause = 1000, 0
-	defer func() { projectionBatchCatchUpChunk, projectionBatchCatchUpPause = oldChunk, oldPause }()
+	oldChunk, oldPause, oldRest := projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest
+	projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest = 1000, 0, 0
+	defer func() {
+		projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest = oldChunk, oldPause, oldRest
+	}()
 	n, err := s.CatchUpProjectionBatchTrim(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -250,9 +252,11 @@ func TestOpenCatchesUpAnOldStoreAndFloorsIt(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	oldDelay := projectionBatchCatchUpDelay
-	projectionBatchCatchUpDelay = 0
-	defer func() { projectionBatchCatchUpDelay = oldDelay }()
+	oldDelay, oldPause, oldRest := projectionBatchCatchUpDelay, projectionBatchCatchUpPause, projectionBatchCatchUpRest
+	projectionBatchCatchUpDelay, projectionBatchCatchUpPause, projectionBatchCatchUpRest = 0, 0, 0
+	defer func() {
+		projectionBatchCatchUpDelay, projectionBatchCatchUpPause, projectionBatchCatchUpRest = oldDelay, oldPause, oldRest
+	}()
 	s2, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +264,7 @@ func TestOpenCatchesUpAnOldStoreAndFloorsIt(t *testing.T) {
 	defer s2.Close()
 	// The catch-up runs in the background after Open returns.
 	want := 30000 - 20000 + 1 + 4
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(2 * time.Minute)
 	got := len(trimTestRows(t, s2))
 	for got != want && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)

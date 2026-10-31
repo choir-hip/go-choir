@@ -51,11 +51,16 @@ const _ = storeschema.Version - projectionBatchTrimFloorEpoch
 
 var (
 	// projectionBatchCatchUpChunk is the rows one catch-up transaction
-	// deletes. Each chunk holds the event lock, so it is small enough that a
-	// live append waits well under a second.
-	projectionBatchCatchUpChunk = 5000
-	// projectionBatchCatchUpPause yields the single writer between chunks.
-	projectionBatchCatchUpPause = 100 * time.Millisecond
+	// deletes. Each chunk holds the event lock and the one write connection
+	// through its commit fsync, so it is small.
+	projectionBatchCatchUpChunk = 500
+	// projectionBatchCatchUpPause is the least rest between chunks; the rest
+	// is also at least projectionBatchCatchUpRest times the chunk's own time,
+	// so the catch-up holds the writer at most about a fifth of the time
+	// whatever the disk. At 5,000 rows and 100 ms the paper's store reported
+	// store_stalled (2026-10-31 02:31: write pool 155 waits, 68 s).
+	projectionBatchCatchUpPause = time.Second
+	projectionBatchCatchUpRest  = 4.0
 	// projectionBatchCatchUpBudget bounds one catch-up; what remains is
 	// finished by the next boot's catch-up.
 	projectionBatchCatchUpBudget = 6 * time.Hour
@@ -97,8 +102,12 @@ func (s *Store) trimProjectionBatchIndexTx(ctx context.Context, tx *sql.Tx, comp
 	if err := s.ensureProjectionBatchTrimFloor(); err != nil {
 		return fmt.Errorf("computer event projection: trim: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM computer_event_index WHERE computer_id=? AND event_kind=? AND status='finalized' AND sequence<=?`,
-		computerID, string(computerevent.EventProjectionBatchRecorded), boundary); err != nil {
+	// One interval only: the rows this trim point newly passed. A store that
+	// predates the window keeps its older backlog until the paced catch-up
+	// deletes it; an unbounded delete here would do the whole backlog under
+	// the event lock in the append path (DeepSeek review, 2026-10-31).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM computer_event_index WHERE computer_id=? AND event_kind=? AND status='finalized' AND sequence>? AND sequence<=?`,
+		computerID, string(computerevent.EventProjectionBatchRecorded), boundary-min(boundary, projectionBatchTrimInterval), boundary); err != nil {
 		return fmt.Errorf("computer event projection: trim batch rows: %w", err)
 	}
 	return nil
@@ -145,6 +154,7 @@ func (s *Store) CatchUpProjectionBatchTrim(ctx context.Context) (int64, error) {
 			if err := ctx.Err(); err != nil {
 				return total, err
 			}
+			chunkStart := time.Now()
 			n, err := s.trimChunk(ctx, h.id, boundary)
 			if err != nil {
 				return total, err
@@ -153,10 +163,11 @@ func (s *Store) CatchUpProjectionBatchTrim(ctx context.Context) (int64, error) {
 			if n < int64(projectionBatchCatchUpChunk) {
 				break
 			}
+			rest := max(projectionBatchCatchUpPause, time.Duration(projectionBatchCatchUpRest*float64(time.Since(chunkStart))))
 			select {
 			case <-ctx.Done():
 				return total, ctx.Err()
-			case <-time.After(projectionBatchCatchUpPause):
+			case <-time.After(rest):
 			}
 		}
 	}
