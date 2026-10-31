@@ -22,7 +22,7 @@ efficiency must not come at the cost of CPU and memory."
 
 ## 0. The answer in one paragraph
 
-Choir pays for small data four times: (1) **one file per object** on btrfs,
+Choir pays for small data five times: (0) **append-and-fsync on btrfs**: each append copies the segment's partly filled tail block, so the tape segment store holds 28 GB in 47 GB [M]; (1) **one file per object** on btrfs,
 where every file under 2 KiB is inlined into metadata that is DUP on top of an
 md RAID1, so a 900-byte receipt occupies about 2.4 KB of filesystem and about
 4.8 KB of NVMe; (2) **compression one record at a time** (btrfs per file,
@@ -33,7 +33,7 @@ of `og_objects`, a random UUIDv4 for `run_memory_entries`), so the guest
 store spends 1.65 KB of index per object and every insert dirties random
 pages across the whole 21 GB file; (4) **random page churn defeats chunk
 dedup**, so every snapshot (4 MiB page-range chunks) and every nightly
-restic run re-sends most of the file. One rule fixes all four: **nothing
+restic run re-sends most of the file. One rule fixes all five: **nothing
 small is stored alone, and nothing is written where it was not already
 going to be appended.** Immutable content-addressed objects go into
 append-only packs in the tapestore segment format (one pack format for the
@@ -207,7 +207,7 @@ blocks and distinct 1 MiB regions per hour.)
 | Image: `capsule-artifacts/` subject workspace of 10-22 | 0.19 GB | historical | capsule teardown residue; delete with its receipt |
 | Host: paper's superseded snapshot chunks of 10-30 | ~25 GB | historical (one-off), GC-eligible ~11-06 | GC grace |
 | Host: retained pre-compaction snapshot (31 GB file) | 31.3 GB | historical; replaced by a ~21 GB snapshot at the next tape distance | snapshot retention |
-| Host: legacy one-file tape pins (`sha256/pin-receipts`, `computer-event`, `computer-event-payload`) | 24.2 GB apparent, ~10.8 M files | **both.** Events stopped (2,849 new event files in 24 h), but **388,399 pin receipts and 385,623 payload files were written in the last 24 h** (14,152 and 13,456 in the last hour) [M, `find -newermt`; an mtime count, so re-pins are included]: sealed (private) projection-batch payloads and their receipts still go loose until 529ae0d0c deploys | 529ae0d0c (in flight) stops most of it; taperepack census then delete; packs for all kinds (rule A) |
+| Host: legacy one-file tape pins (`sha256/pin-receipts`, `computer-event`, `computer-event-payload`) | 24.2 GB apparent, ~10.8 M files | **both.** Events stopped (2,849 new event files in 24 h), but **388,399 pin receipts and 385,623 payload files were written in the last 24 h** (14,152 and 13,456 in the last hour), 0.35 GB and 2.30 GB apparent [M, `find -newermt`; an mtime count, so re-pins are included]: sealed (private) projection-batch payloads and their receipts still go loose until 529ae0d0c deploys | 529ae0d0c (in flight) stops most of it; taperepack census then delete; packs for all kinds (rule A) |
 | Host: PostgreSQL `computer_event_append_receipts` | 18.7 GB, 6.17 M rows | **ongoing**, ~290-350 k rows/day | compact codec (in flight), then B3 |
 | Guest: semantic og kinds + run memory | ~420 MB/day logical | **ongoing user/machine state** | B2 layout; compression |
 | Guest: telemetry window | ~290 MB/day in, retired at 7/14 d | ongoing, bounded | partitions + F-c (built) |
@@ -224,19 +224,31 @@ less are stored inline in metadata (btrfs `max_inline` default).
 
 | Store | Objects | Logical bytes | Stored | Ratio | Notes |
 |---|---:|---:|---:|---:|---|
-| `sha256/pin-receipts` | 5,418,195 files, all <= 2 KiB, mean 896 B | 4.86 GB | inline, zstd 65% [M sample]: ~3.2 GB data + ~0.6 KB items/file in metadata, x2 DUP: **~12.8 GB fs, ~25.6 GB NVMe** [E] | 2.6x fs | st_blocks reports 22.2 GB [M] |
-| `sha256/computer-event` | 2,468,633 files, all <= 2 KiB, mean 1,513 B | 3.73 GB | inline, zstd 45% [M sample]: **~6.3 GB fs** [E] | 1.7x | |
-| `sha256/computer-event-payload` | 2,950,689 files; 1.29 M <= 2 KiB, 0.98 M 2-4 KiB, 0.57 M 4-16 KiB | 15.61 GB | see appendix (compsize) | | sealed private payloads do not compress |
-| `capture-bodies` | 168,697 files; 93 k <= 2 KiB | 9.59 GB | see appendix | | |
-| `sha256/og` | 23,117 files | 0.50 GB | see appendix | | |
+| `sha256/pin-receipts` | 5,421,404 files, all inline, mean 896 B | 4.86 GB | compsize: 2.9 GB zstd (65%) inline [M]; plus ~0.6 KB of inode, ref, dir item and dir index per file [E], all in DUP metadata: **~12 GB fs, ~24 GB NVMe** [E] | 2.5x fs | st_blocks reports 22.2 GB [M] |
+| `sha256/computer-event` | 2,468,665 files, all inline, mean 1,513 B | 3.73 GB | compsize: 1.5 GB zstd (45%) inline [M] + items, DUP: **~6 GB fs** [E] | 1.6x | |
+| `sha256/computer-event-payload` | 2,953,043 files; 2.07 M inline, 0.90 M extents | 15.61 GB | compsize: 8.3 GB (51%; 1.1 GB incompressible) [M] + 1.8 GB items, inline part DUP: **~11 GB fs** [E] | 0.7x | the older plaintext payloads compress; sealed private ones (2.3 GB/day now) do not |
+| `capture-bodies` | 168,711 files; 104,534 inline | 9.59 GB | compsize: 3.1 GB (34%) [M] | 0.35x | text compresses 4x even per file; per block more |
+| `sha256/og` | 23,119 files | 0.51 GB | compsize: 134 MB (26%) [M] | 0.26x | |
 | `sha256/file-cas-chunks` | 512,176 files; 79,644 inline; 17,993 full 4 MiB chunks | 86.5 GB | 81 GB, 100% uncompressed (encrypted) [M compsize] | 1.0x | the big files are snapshot chunks; small ones are Files-tree files, one chunk each |
 | `sha256/file-cas-roots` | 1,957 manifests, 0.46-0.64 MB each | 1.02 GB | | | full manifest per sync, every 15 min when anything changed (`autoputer/file_sync.go:27`); the paper writes ~35 MB/day of them |
-| `tape-seg` (all computers) | 1,676 files (segments + idx); paper 1,093 | 30.1 GB | 30.1 GB | 1.0x on disk; 5.4x available [M, tape window sizing] | segments seal at every boot, not only at 64 MiB/50 k |
+| `tape-seg` (all computers) | 1,676 files (segments + idx); paper 1,093 | 28 GB referenced | **compsize: 47 GB on disk for 28 GB referenced, 99% uncompressed, 5,156,807 extents** [M] | **1.68x** | see below: one wasted 4 KiB block per fsynced append; files carry the btrfs no-compress flag (`lsattr` m); 5.4x available by block compression [M, tape window sizing]; segments seal at every boot |
 | PostgreSQL `computer_event_append_receipts` | 6,173,492 rows | ~1.5 KB receipt JSON + 9 columns | heap 13.64 GB, indexes 5.03 GB (5 indexes, 815 B/row), total 18.67 GB = **3.0 KB per row** [M] | ~2x | rows under the TOAST threshold are not compressed |
 | PostgreSQL graph `og_objects`, `proj_capture_terms` | 0.67 M, 0.83 M rows | | 1.0 GB, 0.67 GB (pkey 0.41 GB for 0.24 GB heap) | | |
 | Guest `og_objects` (paper) | 3.34 M rows, 2.2 KB logical | 7.9 GB | 16.05 GB pages | 2.0x (7-10x vs block zstd) | section 1 |
 | Guest `run_memory_entries` (paper) | 1.82 M rows | 3.0 GB | 4.46 GB | 1.5x | |
 | Guest `computer_event_index` | 68 k rows (windowed) | | 0.09 GB | | already fixed |
+
+**The segment store wastes 40% of its disk** [M]. A sealed 64 MiB paper
+segment occupies 105-108 MB (seg 27: 10,624 extents; seg 463: 11,413); the
+open segment 547 holds 19 MB in 39 MB. Cause [C + M]: the appender writes
+each group of records and fdatasyncs (`tapestore/appender.go:349`); the next
+append rewrites the partly filled last 4 KiB block, btrfs copies it on
+write, and the old extent stays whole while any part is referenced
+(extent bookending). 5.16 M extents x one 4 KiB block is about 21 GB, the
+measured 19 GB gap. The first write of a segment is incompressible (a sealed
+payload), so btrfs marks the inode no-compress and never compresses it.
+The paper's `data.img` shows the same effect smaller: 27 GB on disk for
+23 GB referenced [M, compsize], from guest 4 KiB writes copied on write.
 
 The two numbers that matter: **about 10.8 M loose files hold 24 GB of tape
 data in about 30-35 GB of filesystem (60-70 GB of NVMe)**, and **the guest
@@ -440,12 +452,40 @@ is a black-class change to the host's filesystem; rank it after A, and
 decide it with the owner once the loose files are gone (when the saving is a
 few GB, keep DUP).
 
+### Rule F. Append-only files never rewrite their tail on btrfs
+
+The segment store loses 19 GB of 47 GB to copy-on-write of partial tail
+blocks (section 2). Three fixes, cheapest first:
+
+1. **Now, for sealed segments: rewrite once.** `btrfs filesystem defragment`
+   of each sealed segment file (or a copy to a fresh file, fsync, rename,
+   as the seal already does for the index) writes it as a few large
+   extents and frees the bookended blocks: about 19 GB back [E from M],
+   bytes unchanged, verifiable by the segment's own SHA-256 and the index.
+   Cost: one sequential read and write of 28 GB, idle IO, paced; memory
+   negligible. Risk: low (content identical; skip the open segment, skip
+   any file a backup run has reflinked, recheck its digest after).
+2. **At seal, from now on:** the appender's seal step copies the segment to
+   a fresh file before the rename (64 MiB sequential, about 0.1 s of IO per
+   seal at the paper's ~40 seals a day). With rule A's block compression
+   the copy is also where small plaintext records are compressed.
+3. **Or NOCOW segment directories** (`chattr +C` on `tape-seg/<computer>`
+   before the first segment): appends are written in place, no bookends,
+   no btrfs checksums (tapestore checks a CRC and SHA-256 on every read, so
+   integrity does not depend on them), no btrfs compression (rule A does
+   its own). Simpler at run time, but it changes the integrity story of
+   the host's copy of the tape: decide with the review of build 1.
+
+The same mechanism costs the paper's `data.img` 4 GB (27 GB on disk for 23
+GB); that is the VM image path's to decide (vmctl, red), noted not proposed.
+
 ## 5. Ranking: bytes saved per unit of risk
 
 | # | Proposal | Bytes saved | Bytes/day avoided | Risk | CPU / memory | Status |
 |---|---|---|---|---|---|---|
+| 0 | Rewrite sealed tape segments once (F1); copy at seal (F2) | **~19 GB now** [E from M] | ~40% of new segment bytes | low | sequential IO, no memory | new, small |
 | 1 | Telemetry partitions + F-c table on the paper (B1) | 3-5 GB of the store [E] | the telemetry share of churn; retirement becomes O(1) | low (built, on d@e, red class) | none extra | built, widen ring |
-| 2 | Deploy 529ae0d0c (sealed payloads to segments), then delete legacy loose tape covered by segments (taperepack) | 24 GB apparent, ~30-35 GB fs, ~60 GB NVMe [E] | ~775 k files/day (~1.5-2 GB/day of fs) [M count, E bytes] | medium (F1), gated by census + keep-digests | idle IO, MBs | built; census running |
+| 2 | Deploy 529ae0d0c (sealed payloads to segments), then delete legacy loose tape covered by segments (taperepack) | 24 GB apparent, ~30-35 GB fs, ~60 GB NVMe [E] | ~772 k files/day, 2.65 GB/day apparent [M], ~3.2 GB/day of fs [E: payloads sealed, incompressible; receipts ~2.4 KB each] | medium (F1), gated by census + keep-digests | idle IO, MBs | built; census running |
 | 3 | Intern table + WITHOUT ROWID + index diet (B2-B4) | 5-7 GB of the store [E] | most of ~13 GB/day snapshot chunk churn [E]; restic re-send | medium-high (F2, F3; store schema) | one probe per write | new (build 2) |
 | 4 | Tapestore as the one pack format: namespaces, block records, no boot seal (A) | 5x on all new tape bytes; captures and og blobs to packs | ~2.2 of 2.7 GB/day of segments [E from M] | medium (F4, F5, F9) | < 0.01 core, < 10 MB | new (build 1) |
 | 5 | Receipts: compact codec, bytea, fold sealed ranges into segments (D) | 6 GB now (codec), ~15 GB at phase 2 [E] | ~0.9 GB/day [E: 300 k rows x 3 KB] | medium (reader inventory) | paced backfill | codec in flight; phase 2 new |
