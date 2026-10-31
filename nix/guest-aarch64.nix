@@ -23,6 +23,25 @@
 {
   boot.kernelParams = [ "console=hvc0" ];
 
+  # pdfplumber's test inputs (pandas-stubs, pyreadstat, narwhals, duckdb, ...)
+  # are in its derivation, so building pdfplumber on aarch64 compiled duckdb
+  # from source (no aarch64 cache hit at the pinned nixpkgs; 760 C++ units).
+  # None of them is a runtime dependency: nixpkgs' own pdfplumber lists them
+  # under nativeCheckInputs. Skip the check here. The guest's python still has
+  # the same runtime closure; the x86_64 guest keeps its cached, checked build.
+  nixpkgs.overlays = [
+    (final: prev: {
+      pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+        (pyFinal: pyPrev: {
+          pdfplumber = pyPrev.pdfplumber.overridePythonAttrs (_: {
+            doCheck = false;
+            nativeCheckInputs = [ ];
+          });
+        })
+      ];
+    })
+  ];
+
   # microvm.nix builds rootfs.ext4 with libguestfs, which exists only for
   # x86. The disk is never read by the guest (the root is a tmpfs, the store
   # is the erofs layers); the host still attaches it first, so the data drive
