@@ -246,8 +246,15 @@ resolve_paths() {
 IMAGES=()
 IMAGE_MISSING=()
 IMAGE_ERR=""
-select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR
-  IMAGES=(); IMAGE_MISSING=(); IMAGE_ERR=""
+# A computer whose data.img is in the run needs no copy of its snapshot
+# chunks: the image is the newer whole state. file-cas-chunks/<computer>
+# holds that computer's snapshots and its synced Files, both on the image.
+# The paper's snapshots added most of the 109 GB the run took on 2026-10-31
+# (owner, 2026-10-31: keep snapshots out of the nightly backup). A named
+# computer whose image is missing keeps its chunks in the run.
+IMAGED_EXCLUDES=()
+select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR, IMAGED_EXCLUDES
+  IMAGES=(); IMAGE_MISSING=(); IMAGE_ERR=""; IMAGED_EXCLUDES=()
   local src c vm found vms
   if [ -z "$IMAGE_COMPUTERS" ]; then
     for src in "$VM_STATE"/*/data.img; do [ -f "$src" ] && IMAGES+=("$src"); done
@@ -265,7 +272,11 @@ select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR
       case "$vm" in ""|*/*|.*) continue ;; esac
       [ -f "$VM_STATE/$vm/data.img" ] && { IMAGES+=("$VM_STATE/$vm/data.img"); found=1; }
     done <<<"$vms"
-    [ "$found" = 1 ] || IMAGE_MISSING+=("$c")
+    if [ "$found" = 1 ]; then
+      IMAGED_EXCLUDES+=("$ART/sha256/file-cas-chunks/$c")
+    else
+      IMAGE_MISSING+=("$c")
+    fi
   done
   [ "${#IMAGE_MISSING[@]}" = 0 ]
 }
@@ -429,11 +440,11 @@ cmd_plan() {
   local rc=0 db
   resolve_paths
   echo "would back up:"; printf '  %s\n' "${PATHS[@]}"
-  echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}"
+  select_images || rc=3
+  echo "excluded:";      printf '  %s\n' "${EXCLUDES[@]}" "${IMAGED_EXCLUDES[@]:-}"
   echo "absent:";        printf '  %s\n' "${SKIPPED[@]:-}"
   echo "postgresql dumps (made before restic, removed after; ${PG_USER}@${PG_HOST}:${PG_PORT}):"
   for db in $PG_DATABASES; do printf '  %s -> %s/%s.dump\n' "$db" "$PG_DIR" "$db"; done
-  select_images || rc=3
   echo "guest images: ${IMAGE_COMPUTERS:-every computer}"; printf '  %s\n' "${IMAGES[@]:-}"
   echo "missing images:"; printf '  %s\n' "${IMAGE_MISSING[@]:-}"
   [ -z "$IMAGE_ERR" ] || echo "$IMAGE_ERR"
@@ -464,7 +475,7 @@ cmd_backup() {
   resolve_paths
   [ "$REQUIRED_MISSING" = 0 ] || { err "a required path is absent: ${SKIPPED[*]}"; result=partial; }
   local args=()
-  for ex in "${EXCLUDES[@]}"; do args+=(--exclude "$ex"); done
+  for ex in "${EXCLUDES[@]}" "${IMAGED_EXCLUDES[@]:-}"; do [ -n "$ex" ] && args+=(--exclude "$ex"); done
   # --no-scan: the scanner only feeds progress totals, and walks and
   # lstats all 9.7M files a second time beside the backup's own walk.
   R backup --host "$RESTIC_HOST_TAG" --tag daily --tag "run-$RUN_ID" --json --no-scan "${args[@]}" "${PATHS[@]}" \

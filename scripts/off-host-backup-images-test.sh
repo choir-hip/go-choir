@@ -14,6 +14,9 @@
 #  4. Unset, the selection changes: never; every image, as before.
 #  5. ownerships.json is unreadable while the list is set: never silent;
 #     no image is selected and the run names the cause.
+#  6. A computer's snapshot chunks leave the run while its image is not in
+#     it (its snapshots were the only copy off host): never; only a
+#     computer whose image was selected has file-cas-chunks/<c> excluded.
 #
 # Run: bash scripts/off-host-backup-images-test.sh
 set -u
@@ -56,14 +59,20 @@ check() { if [ "$2" = 0 ]; then echo "ok   $1"; else echo "FAIL $1"; echo "     
 plan named "computer-paper,computer-owner"
 check "only the named computers' images" "$([ "$(images)" = "vm-state/candidate-owner vm-state/vm-owner vm-state/vm-paper " ]; echo $?)"
 
+# 6
+excl() { printf '%s\n' "$OUT" | sed -n '/^excluded:/,/^absent:/p' | grep -o 'file-cas-chunks/[^ ]*' | sort | tr '\n' ' '; }
+check "imaged computers' snapshot chunks are excluded" "$([ "$(excl)" = "file-cas-chunks/computer-owner file-cas-chunks/computer-paper " ]; echo $?)"
+
 # 4
 plan unset -
+check "unset excludes no snapshot chunks" "$([ -z "$(excl)" ]; echo $?)"
 check "unset selects every image" "$([ "$(images)" = "vm-state/candidate-owner vm-state/vm-owner vm-state/vm-paper vm-state/vm-test1 vm-state/vm-test2 " ]; echo $?)"
 
 # 2: a named computer with no ownership
 plan missing "computer-paper computer-gone"
 check "a named computer with no image is reported" "$(printf '%s' "$OUT" | grep -q 'computer-gone'; echo $?)"
 check "a named computer with no image fails the plan" "$([ "$RC" = 3 ]; echo $?)"
+check "a named computer with no image keeps its snapshot chunks" "$([ "$(excl)" = "file-cas-chunks/computer-paper " ]; echo $?)"
 
 # 2: an ownership whose image file is absent
 plan noimg "computer-paper"

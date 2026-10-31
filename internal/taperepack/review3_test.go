@@ -9,6 +9,8 @@ package taperepack
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,10 +29,20 @@ func corruptSegmentBytes(t *testing.T, root, computer string, segno uint64, raw 
 		t.Fatal(err)
 	}
 	i := bytes.Index(seg, raw)
-	if i < 0 {
-		t.Fatalf("record not found in %s", p)
+	if i >= 0 {
+		seg[i+len(raw)/2] ^= 0xff
+	} else {
+		// The record is stored zstd-compressed: find it by its digest (record
+		// header offset 6) and flip a byte in the middle of the stored body.
+		d := sha256.Sum256(raw)
+		j := bytes.Index(seg, d[:])
+		if j < 0 {
+			t.Fatalf("record not found in %s", p)
+		}
+		start := j - 6 + 46
+		stored := int(binary.BigEndian.Uint32(seg[j+32 : j+36]))
+		seg[start+stored/2] ^= 0xff
 	}
-	seg[i+len(raw)/2] ^= 0xff
 	if err := os.WriteFile(p, seg, 0o640); err != nil {
 		t.Fatal(err)
 	}

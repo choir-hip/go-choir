@@ -1,7 +1,6 @@
 package tapestore
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -302,7 +301,7 @@ func (a *Appender) appendLocked(l *computerLog, id string, items []Item, build f
 		if _, dup := pending[key]; dup {
 			continue
 		}
-		rec := encodeRecord(it.NS, digest, it.Body)
+		rec := packRecord(it.NS, digest, it.Body)
 		var n int
 		var werr error
 		if a.writeAt != nil {
@@ -467,8 +466,8 @@ func (a *Appender) sealUnowned(dir, id string, segno uint64) error {
 			if err := readFull(f, body, end+recHeaderSize); err != nil {
 				return fmt.Errorf("tapestore: read %s: %w", label, err)
 			}
-			if sha256.Sum256(body) != h.digest {
-				return corruptf("%s: record at %d does not hash to its digest", label, end)
+			if _, derr := decodeBody(h.version, body, h.digest); derr != nil {
+				return corruptf("%s: record at %d: %v", label, end, derr)
 			}
 			k := openKey{h.ns, h.digest}
 			if _, dup := entries[k]; !dup {

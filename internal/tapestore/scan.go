@@ -2,7 +2,6 @@ package tapestore
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,9 +76,9 @@ func (r *Reader) Scan(computerID string, fn func(Record) error) error {
 				}
 				break // torn tail of the last unsealed segment
 			}
-			body := raw[pos+recHeaderSize : next]
-			if sha256.Sum256(body) != h.digest {
-				return corruptf("%s: record at %d does not hash to its digest", label, pos)
+			body, derr := decodeBody(h.version, raw[pos+recHeaderSize:next], h.digest)
+			if derr != nil {
+				return corruptf("%s: record at %d: %v", label, pos, derr)
 			}
 			if f.hasIdx {
 				e, ok := idx[openKey{h.ns, h.digest}]

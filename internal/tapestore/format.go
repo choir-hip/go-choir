@@ -109,7 +109,8 @@ const (
 	segHeaderSize  = 32
 	segVersion     = 1
 	recHeaderSize  = 46
-	recVersion     = 1
+	recVersion     = 1    // body stored as is
+	recVersionZstd = 2    // body stored as one zstd frame; the digest is over the decompressed bytes
 	idxFixedSize   = 1064 // header 40 + fanout 256*4
 	idxEntrySize   = 45
 	idxTrailerSize = 4
@@ -248,9 +249,14 @@ func checkSegHeader(b []byte, segno uint64, computerID string) error {
 // --- records -----------------------------------------------------------------
 
 func encodeRecord(ns NS, digest [32]byte, body []byte) []byte {
+	return encodeRecordVer(recVersion, ns, digest, body)
+}
+
+// encodeRecordVer frames body (the bytes that go on disk) under version.
+func encodeRecordVer(version byte, ns NS, digest [32]byte, body []byte) []byte {
 	b := make([]byte, recHeaderSize+len(body))
 	copy(b[0:4], recMagic[:])
-	b[4] = recVersion
+	b[4] = version
 	b[5] = byte(ns)
 	copy(b[6:38], digest[:])
 	binary.BigEndian.PutUint32(b[38:42], uint32(len(body)))
@@ -267,10 +273,11 @@ func recordCRC(header []byte, body []byte) uint32 {
 }
 
 type recHeader struct {
-	ns     NS
-	digest [32]byte
-	length uint32
-	crc    uint32
+	version byte
+	ns      NS
+	digest  [32]byte
+	length  uint32
+	crc     uint32
 }
 
 // parseRecHeader checks magic, version, namespace and length bound. It does
@@ -280,7 +287,7 @@ func parseRecHeader(b []byte) (recHeader, error) {
 	if err != nil {
 		return h, err
 	}
-	if b[4] != recVersion {
+	if b[4] != recVersion && b[4] != recVersionZstd {
 		return h, fmt.Errorf("%w: record version %d", ErrUnsupportedVersion, b[4])
 	}
 	if !h.ns.valid() {
@@ -300,6 +307,7 @@ func parseRecHeaderLoose(b []byte) (recHeader, error) {
 	if [4]byte(b[0:4]) != recMagic {
 		return h, errors.New("bad record magic")
 	}
+	h.version = b[4]
 	h.ns = NS(b[5])
 	copy(h.digest[:], b[6:38])
 	h.length = binary.BigEndian.Uint32(b[38:42])

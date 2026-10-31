@@ -322,10 +322,11 @@ func readRecordAt(f io.ReaderAt, segLabel string, off int64, limit int64, ns NS,
 	if recordCRC(head[4:42], body) != h.crc {
 		return nil, corruptf("%s: record at %d fails its crc", segLabel, off)
 	}
-	if sha256.Sum256(body) != want {
-		return nil, corruptf("%s: record at %d does not hash to its digest %x", segLabel, off, want)
+	out, err := decodeBody(h.version, body, want)
+	if err != nil {
+		return nil, corruptf("%s: record at %d: %v", segLabel, off, err)
 	}
-	return body, nil
+	return out, nil
 }
 
 // --- sealed segments ---------------------------------------------------------
@@ -670,7 +671,7 @@ func scanRecord(f io.ReaderAt, pos, size int64) (h recHeader, next int64, bad st
 	}
 	// The record is whole and intact, so it is not a torn write. If this
 	// reader does not understand it, fail closed rather than skip it.
-	if head[4] != recVersion || !h.ns.valid() {
+	if (head[4] != recVersion && head[4] != recVersionZstd) || !h.ns.valid() {
 		return h, 0, "", unsupportedf("record at %d is intact but unsupported (version %d, namespace %d)", pos, head[4], head[5])
 	}
 	return h, next, "", nil

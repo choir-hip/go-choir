@@ -65,11 +65,11 @@ func (w *SegmentWriter) Append(ns NS, body []byte) (string, error) {
 	if _, dup := w.entries[key]; dup {
 		return hexDigest(digest), nil
 	}
-	rec := encodeRecord(ns, digest, body)
+	rec := packRecord(ns, digest, body)
 	if _, err := w.f.Write(rec); err != nil {
 		return "", fmt.Errorf("tapestore: append record: %w", err)
 	}
-	w.entries[key] = idxEntry{digest: digest, ns: ns, off: uint64(w.off), length: uint32(len(body))}
+	w.entries[key] = idxEntry{digest: digest, ns: ns, off: uint64(w.off), length: uint32(len(rec) - recHeaderSize)}
 	w.off += int64(len(rec))
 	return hexDigest(digest), nil
 }
