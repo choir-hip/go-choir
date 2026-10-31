@@ -244,7 +244,7 @@ now:
     deleted; whole-computer deletion (destroy the computer key) comes later,
     behind several confirmations, after sync to the owner's machine. The
     privacy policy now says so. (2) Tool results leave the working store
-    after seven days except those accepted evidence cites (built 13:40);
+    after seven days except those accepted evidence cites (built 13:15, deployed 13:17);
     restoration is for failed self-development, about a week back; long-term
     history goes to the user's synced machine, on by default (Mac pull, S5a).
     S5 landed on the paper 12:53 (planned restart of e7c099e6a): 32.4 GB to
