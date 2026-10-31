@@ -247,13 +247,11 @@ now:
     after seven days except those accepted evidence cites (to build);
     restoration is for failed self-development, about a week back; long-term
     history goes to the user's synced machine, on by default (Mac pull, S5a).
-    S5 is live on the paper: its copy staged 12:42 (20.1 GB of a 32.4 GB
-    file), the swap waits on the drill's row-count check. No off-host copy
-    until the Mac pull or L5.
+    S5 landed on the paper 12:53 (planned restart of e7c099e6a): 32.4 GB to
+    20.4 GB, 0 free pages, incremental auto_vacuum, replay of 9,673 events,
+    publishing. No off-host copy until the Mac pull or L5.
   next_action: >-
-    Drill counts agree -> push the skip-log commit, whose deploy is the
-    paper's planned restart -> verify the swap, replay to head, publishing,
-    and the file size. Then: keep tool.results cited by accepted evidence in
+    Keep tool.results cited by accepted evidence in
     retirement; the Mac pull over delta bundles as the default long-term
     history (S5a); L5; L6's handoff. Small follow-ups in the ledger.
 receipts:
