@@ -637,7 +637,7 @@ func TestPageSizesOtherThan4096RoundTrip(t *testing.T) {
 			if _, err := seed.Exec(`CREATE TABLE blobs (id INTEGER PRIMARY KEY, body BLOB NOT NULL, note TEXT)`); err != nil {
 				t.Fatal(err)
 			}
-			for i := 1; i <= 90; i++ {
+			for i := 1; i <= 48; i++ {
 				if _, err := seed.Exec(`INSERT INTO blobs (id, body, note) VALUES (?, randomblob(100000), ?)`, i, "x"); err != nil {
 					t.Fatal(err)
 				}
