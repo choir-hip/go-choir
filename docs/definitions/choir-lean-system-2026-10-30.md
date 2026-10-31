@@ -234,7 +234,10 @@ now:
     main_uncertainty: >-
       How much the og_meta secondary indexes hold after retirement, and the
       rebase's restart cost on the paper.
-    next_observation: the paper's state.db page and freelist counts after the retirement backlog ends (read-only reflink copy).
+    next_observation: >-
+      Measured 06:20: 32.4 GB file, 8.7 GB free pages, about 23.6 GB live,
+      1.96M choir.event rows. Next: the same counts after S5's compact
+      snapshot and planned rebase on d@e, then the paper.
   blocker_or_risk: >-
     Owner decisions pending (morning letter,
     docs/reports/night-of-the-lean-system-2026-10-31.md): (1) whether the
