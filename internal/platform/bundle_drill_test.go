@@ -660,3 +660,81 @@ func TestBundleRestoreDrill(t *testing.T) {
 		t.Fatalf("import into a target past the bundle = %+v, %v", past, err)
 	}
 }
+
+// TestBundleDelta: a delta bundle carries only the events after a previous
+// bundle's head and no snapshot chunks, and imports only onto a target at
+// that head. Failure modes: a delta that imports onto an empty target, a
+// gap or a fork; a delta that carries chunks or old events; --since across
+// computers; a source whose event at the base differs from the previous
+// bundle's head.
+func TestBundleDelta(t *testing.T) {
+	ctx := context.Background()
+	const id = "computer-bundle-delta"
+	src := newDrillComputer(t, id)
+	src.appendEvent(computerevent.EventGenesisImported, "", nil)
+	src.appendMixed(3, "pre")
+	src.snapshot(3)
+	src.appendEvent(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record"))
+	src.appendMixed(4, "post")
+	full := filepath.Join(t.TempDir(), "full")
+	base := mustExport(t, src, full)
+
+	dst := newDrillComputer(t, id)
+	if _, err := bundle.Import(ctx, full, dst.store.db, dst.root); err != nil {
+		t.Fatalf("import the full bundle: %v", err)
+	}
+
+	src.appendMixed(3, "later")
+	delta := filepath.Join(t.TempDir(), "delta")
+	d, err := bundle.ExportDelta(ctx, src.store.db, src.root, full, bundle.ExportOptions{ComputerID: id, Out: delta, Producer: bundle.Producer{Host: "drill", Tool: "test"}})
+	if err != nil {
+		t.Fatalf("delta export: %v", err)
+	}
+	// D1: only the new events, no snapshot root or chunks.
+	if !d.Delta || d.SnapshotRoot != nil || d.Counts.Chunks != 0 || d.Tape.StartSeq != base.Tape.HeadSeq || d.Tape.StartHead != base.Tape.HeadDigest || d.Counts.Events != 3 {
+		t.Fatalf("delta manifest = delta %v root %v start %d/%s counts %+v; want the 3 events after %d", d.Delta, d.SnapshotRoot, d.Tape.StartSeq, d.Tape.StartHead, d.Counts, base.Tape.HeadSeq)
+	}
+	if _, err := os.Stat(filepath.Join(delta, bundle.ChunksDir)); !os.IsNotExist(err) {
+		t.Fatal("the delta holds a chunks directory")
+	}
+	if _, err := bundle.Verify(delta); err != nil {
+		t.Fatalf("verify the delta: %v", err)
+	}
+	// D2: it extends a target at its base.
+	res, err := bundle.Import(ctx, delta, dst.store.db, dst.root)
+	if err != nil {
+		t.Fatalf("import the delta: %v", err)
+	}
+	if res.HeadBefore != base.Tape.HeadSeq || res.HeadAfter != d.Tape.HeadSeq || res.ReceiptsInserted != 3 {
+		t.Fatalf("delta import = %+v", res)
+	}
+	assertSameComputer(t, src, dst, base.Tape.HeadSeq)
+
+	// D3: an empty target, a gap and a fork refuse it.
+	empty := newDrillComputer(t, id)
+	if _, err := bundle.Import(ctx, delta, empty.store.db, empty.root); !errors.Is(err, bundle.ErrRefused) {
+		t.Fatalf("delta into an empty target: import = %v, want a refusal", err)
+	}
+	if head, err := empty.cas.Head(ctx, empty.id); err != nil || head != nil {
+		t.Fatalf("a refused delta gave an empty target a head: %v, %v", head, err)
+	}
+	gap := newDrillComputer(t, id)
+	gap.appendEvent(computerevent.EventGenesisImported, "", nil)
+	mustRefuse(t, "delta onto a gap", delta, gap)
+	fork := newDrillComputer(t, id)
+	fork.appendEvent(computerevent.EventGenesisImported, "", nil)
+	fork.appendMixed(int(base.Tape.HeadSeq)-1, "fork")
+	mustRefuse(t, "delta onto a fork", delta, fork)
+
+	// D4: --since a bundle of another computer, or of a forked history of
+	// this one, is refused at export.
+	other := newDrillComputer(t, "computer-bundle-delta-other")
+	other.appendEvent(computerevent.EventGenesisImported, "", nil)
+	other.appendMixed(9, "other")
+	if _, err := bundle.ExportDelta(ctx, other.store.db, other.root, full, bundle.ExportOptions{ComputerID: other.id, Out: filepath.Join(t.TempDir(), "x")}); err == nil {
+		t.Fatal("a delta since another computer's bundle exported")
+	}
+	if _, err := bundle.ExportDelta(ctx, fork.store.db, fork.root, full, bundle.ExportOptions{ComputerID: id, Out: filepath.Join(t.TempDir(), "y")}); err == nil {
+		t.Fatal("a delta since a bundle the source does not hold exported")
+	}
+}

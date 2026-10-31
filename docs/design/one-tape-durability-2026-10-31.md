@@ -211,8 +211,11 @@ It is not yet recovery on another machine. Accepted, as slices:
   events, payloads and pin receipts in one append-only objects.pack with a
   line-per-object objects.idx; an interrupted export keeps the indexed part
   and truncates the rest. d@e: 33,641 files to 19, 258 MB to 172 MB on disk,
-  export 78 s to 11 s; format 1 still verifies. Incremental pulls (the last
-  pulled sequence) and the 25 GB root remain.
+  export 78 s to 11 s; format 1 still verifies. Incremental pulls landed the
+  same day: choir-bundle export --since <previous bundle> writes a delta (the
+  events after that bundle's head, no snapshot), refused when the source
+  does not hold the previous head, and imported only onto a target at it.
+  The 25 GB root remains (compact snapshots, 6b).
 
 Fixed at once: the vmctl remove_stale_route override took any route error
 and any non-running state; it now needs the definite does-not-join refusal,

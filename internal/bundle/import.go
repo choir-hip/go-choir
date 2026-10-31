@@ -107,6 +107,9 @@ func planImport(ctx context.Context, db *sql.DB, dir string, m Manifest, head *c
 		if n > 0 {
 			return importPlan{}, refusef("target holds %d receipts of %s but no head", n, m.ComputerID)
 		}
+		if m.Delta && start > 0 {
+			return importPlan{}, refusef("a delta from %d needs a target at that head; the target has no tape", start)
+		}
 		if m.SnapshotRoot != nil && start > m.SnapshotRoot.HeadSequence {
 			return importPlan{}, refusef("range starts at %d, after its snapshot at %d: an empty target has nothing to chain it to", start, m.SnapshotRoot.HeadSequence)
 		}

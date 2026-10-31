@@ -102,14 +102,18 @@ type Manifest struct {
 	// OwnerID is given by the caller: the host's control database does not
 	// hold the owner of a computer (vmctl's registry does).
 	OwnerID string `json:"owner_id,omitempty"`
-	// SnapshotRoot is nil only for a bundle exported with an explicit start
-	// and no snapshot root (a whole-tape bundle from genesis).
+	// SnapshotRoot is nil for a whole-tape bundle from genesis and for a
+	// delta.
 	SnapshotRoot *SnapshotRoot `json:"snapshot_root"`
-	Tape         Tape          `json:"tape"`
-	Counts       Totals        `json:"counts"`
-	Bytes        Totals        `json:"bytes"`
-	Producer     Producer      `json:"producer"`
-	CreatedAt    time.Time     `json:"created_at"`
+	// Delta marks a bundle that carries only the events after a previous
+	// bundle's head (Tape.StartSeq, Tape.StartHead) and no snapshot: it
+	// imports only onto a target already at that head (ExportDelta).
+	Delta     bool      `json:"delta,omitempty"`
+	Tape      Tape      `json:"tape"`
+	Counts    Totals    `json:"counts"`
+	Bytes     Totals    `json:"bytes"`
+	Producer  Producer  `json:"producer"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ReceiptRow is one computer_event_append_receipts row, one line of

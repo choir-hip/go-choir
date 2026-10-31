@@ -37,8 +37,11 @@ func ReadManifest(dir string) (Manifest, error) {
 		if s.ComputerID != m.ComputerID || !validDigest(s.Root) || s.HeadSequence < 0 || s.HeadSequence > m.Tape.HeadSeq || len(s.Chunks) == 0 {
 			return Manifest{}, fmt.Errorf("bundle: manifest snapshot root is malformed")
 		}
-	} else if m.Tape.StartSeq != 0 {
-		return Manifest{}, fmt.Errorf("bundle: a bundle without a snapshot root must start at genesis")
+	} else if m.Tape.StartSeq != 0 && !m.Delta {
+		return Manifest{}, fmt.Errorf("bundle: a bundle without a snapshot root must start at genesis or be a delta")
+	}
+	if m.Delta && m.SnapshotRoot != nil {
+		return Manifest{}, fmt.Errorf("bundle: a delta carries no snapshot root")
 	}
 	return m, nil
 }

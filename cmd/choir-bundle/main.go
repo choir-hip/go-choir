@@ -95,6 +95,7 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 	out := fs.String("out", "", "bundle directory")
 	fromSeq := fs.Int64("from-seq", -1, "start the range at this sequence instead of the snapshot head")
 	root := fs.String("root", "", "snapshot root to export (default: the newest)")
+	since := fs.String("since", "", "previous bundle directory: export only the events after its head, with no snapshot (a delta)")
 	owner := fs.String("owner", "", "owner id to record in the manifest")
 	artifacts := fs.String("artifacts-root", envOr("CORPUSD_ARTIFACTS_ROOT", platform.DefaultArtifactsRoot), "platform artifacts root")
 	dsn := fs.String("dsn", envOr(platform.EnvPGControlDSN, platform.DefaultPGControlDSN), "platform control database DSN")
@@ -111,10 +112,16 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 	}
 	defer db.Close()
 	host, _ := os.Hostname()
-	m, err := bundle.Export(context.Background(), db, *artifacts, bundle.ExportOptions{
+	opts := bundle.ExportOptions{
 		ComputerID: *computer, Out: *out, FromSeq: *fromSeq, Root: *root, OwnerID: *owner,
 		Producer: bundle.Producer{Host: host, Tool: "choir-bundle"},
-	})
+	}
+	var m bundle.Manifest
+	if *since != "" {
+		m, err = bundle.ExportDelta(context.Background(), db, *artifacts, *since, opts)
+	} else {
+		m, err = bundle.Export(context.Background(), db, *artifacts, opts)
+	}
 	if err != nil {
 		return fail(stderr, err)
 	}
@@ -187,6 +194,9 @@ func summary(m bundle.Manifest) map[string]any {
 	out := map[string]any{
 		"computer_id": m.ComputerID, "start_seq": m.Tape.StartSeq, "head_seq": m.Tape.HeadSeq,
 		"head_digest": m.Tape.HeadDigest, "counts": m.Counts, "bytes": m.Bytes,
+	}
+	if m.Delta {
+		out["delta"] = true
 	}
 	if m.SnapshotRoot != nil {
 		out["snapshot_root"] = m.SnapshotRoot.Root

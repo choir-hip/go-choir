@@ -25,10 +25,14 @@ type ExportOptions struct {
 	// (0 exports the whole tape from genesis).
 	FromSeq int64
 	// Root names a snapshot root; "" takes the newest.
-	Root     string
-	OwnerID  string
-	Producer Producer
-	Now      func() time.Time
+	Root string
+	// delta and sinceHead are set by ExportDelta: no snapshot root, and the
+	// source's event at FromSeq must be sinceHead.
+	delta     bool
+	sinceHead string
+	OwnerID   string
+	Producer  Producer
+	Now       func() time.Time
 }
 
 const receiptPage = 1024
@@ -54,11 +58,14 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	} else if dead {
 		return Manifest{}, fmt.Errorf("bundle: computer %s tape is tombstoned", id)
 	}
-	snap, err := readSnapshotRoot(ctx, db, id, opts.Root)
-	if err != nil {
-		return Manifest{}, err
+	var snap *SnapshotRoot
+	if !opts.delta {
+		var err error
+		if snap, err = readSnapshotRoot(ctx, db, id, opts.Root); err != nil {
+			return Manifest{}, err
+		}
 	}
-	if snap == nil && (opts.Root != "" || opts.FromSeq < 0) {
+	if snap == nil && !opts.delta && (opts.Root != "" || opts.FromSeq < 0) {
 		return Manifest{}, fmt.Errorf("bundle: computer %s has no snapshot root (pass --from-seq 0 for the whole tape)", id)
 	}
 	// The head is read before the receipts: every receipt up to it is
@@ -79,7 +86,7 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 		return Manifest{}, fmt.Errorf("bundle: range start %d is past the head %d", start, headSeq)
 	}
 	m := Manifest{
-		FormatVersion: FormatVersion, ComputerID: id, OwnerID: opts.OwnerID, SnapshotRoot: snap,
+		FormatVersion: FormatVersion, ComputerID: id, OwnerID: opts.OwnerID, SnapshotRoot: snap, Delta: opts.delta,
 		Tape:     Tape{StartSeq: start, HeadSeq: headSeq, HeadDigest: head.CanonicalEventHead, Head: *head},
 		Producer: opts.Producer,
 	}
@@ -92,6 +99,9 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 		if m.Tape.StartHead, err = receiptDigestAt(ctx, db, id, start); err != nil {
 			return Manifest{}, err
 		}
+	}
+	if opts.delta && m.Tape.StartHead != opts.sinceHead {
+		return Manifest{}, fmt.Errorf("bundle: the source's event at %d is %q, the previous bundle's head is %s (a fork or another history)", start, m.Tape.StartHead, opts.sinceHead)
 	}
 	if err := os.MkdirAll(opts.Out, 0o750); err != nil {
 		return Manifest{}, err
@@ -308,4 +318,21 @@ func exportChunk(root, computerID, out, digest string) (int64, error) {
 		return 0, fmt.Errorf("bundle: snapshot chunk %s: %w", digest, err)
 	}
 	return n, nil
+}
+
+// ExportDelta writes a delta bundle of opts.ComputerID to opts.Out: the
+// events after the head of the bundle in sinceDir, with no snapshot root or
+// chunks. The source must hold the previous bundle's head at its sequence;
+// opts.FromSeq and opts.Root are ignored.
+func ExportDelta(ctx context.Context, db *sql.DB, artifactsRoot, sinceDir string, opts ExportOptions) (Manifest, error) {
+	prev, err := ReadManifest(sinceDir)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("bundle: previous bundle: %w", err)
+	}
+	if prev.ComputerID != opts.ComputerID {
+		return Manifest{}, fmt.Errorf("bundle: the previous bundle is of %s, not %s", prev.ComputerID, opts.ComputerID)
+	}
+	opts.FromSeq, opts.Root = prev.Tape.HeadSeq, ""
+	opts.delta, opts.sinceHead = true, prev.Tape.HeadDigest
+	return Export(ctx, db, artifactsRoot, opts)
 }
