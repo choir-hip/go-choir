@@ -141,7 +141,8 @@ commitment records) are about 140 MB a day of body that nothing retires
 
 ### 1.1 Churn: what is rewritten and why
 
-Measured: see section 1.2 (extent-map comparison an hour apart).
+Measured (section 1.2): at least 4.6 GB of distinct 4 KiB blocks an hour,
+touching two thirds of the image's 1 MiB regions in 50 minutes.
 
 From the code, every write path into this image is a random-page writer:
 
@@ -179,7 +180,7 @@ Consequences, not just bytes: the guest store's 4 MiB snapshot chunks
 any one of its pages changed. With four random index pages per insert and
 about 250 k inserts a day, more than a million page writes land uniformly
 over 5.1 M pages a day, so essentially **every chunk changes between two
-snapshots** [E]. Snapshots come every 540,000 tape events, about 1.6 days on
+snapshots** [E; section 1.2 measures 67% of 1 MiB regions changed in 50 minutes]. Snapshots come every 540,000 tape events, about 1.6 days on
 the paper (ledger 2026-10-31 14:40), and superseded chunks wait out the
 168 h artifact GC grace (`nix/node-b.nix:1082`). The paper's
 `file-cas-chunks` directory shows it: 18,736 chunks, 54.3 GB, of which the
@@ -195,8 +196,33 @@ most of it).
 
 ### 1.2 Churn measurement
 
-(Filled in from the extent-map comparison when it lands: rewritten 4 KiB
-blocks and distinct 1 MiB regions per hour.)
+Two physical extent maps of the live `data.img` (logical block, physical
+block, length), taken at 16:46:01 and 17:36:28 UTC (50.5 minutes) by the
+companion measurement, compared block by block (a logical block whose
+physical block moved was written by the guest; btrfs copies every write)
+[M]:
+
+| | 50.5 min | per hour |
+|---|---:|---:|
+| allocated 4 KiB blocks at t1 | 5,971,485 (24.5 GB) | |
+| blocks unchanged | 5,019,279 (84%) | |
+| blocks rewritten in place (new physical) | 823,662 | ~979 k |
+| blocks newly allocated | 128,544 | ~153 k |
+| **bytes written, distinct blocks** | **3.90 GB (16% of the image)** | **~4.6 GB** |
+| **distinct 1 MiB regions touched** | **14,288 of 21,215 allocated (67%)** | saturating |
+
+A block written twice counts once, so the guest writes at least 4.6 GB an
+hour, about 110 GB a day (the superblock's lifetime average is 88 GB a
+day). The writes are not confined to the WAL (584 MB) or the journal
+(128 MB): 3.9 GB of distinct blocks in 50 minutes means checkpoints land all
+over the 21 GB `state.db`, which is what the random-key analysis above
+predicts. Two thirds of all 1 MiB regions change within an hour, so
+**every 4 MiB snapshot chunk and essentially every restic chunk of the image
+changes between two snapshots or two nightly runs** [M for the region
+fraction, E for the chunk consequence]. Attributing the rewritten blocks to
+guest files (state.db vs WAL vs state-actor.db) needs an ext4 block-to-inode
+map of a clone (`debugfs icheck`); that is the next measurement, not done
+here.
 
 ### 1.3 Historical residue vs ongoing writes
 
@@ -298,7 +324,7 @@ section 5 names which it must test.
   backup rule. Check: one format, versioned; this note adds namespaces and a
   block record type to tapestore, nothing else.
 
-## 4. The design: four rules
+## 4. The design: six rules
 
 ### Rule A. Immutable small objects go into packs, never into files
 
@@ -539,7 +565,9 @@ rate (about 140 MB a day of body before rule B6), snapshot held ratio >= 80%.
 
 ## 8. First three builds
 
-1. **Tapestore block records and namespaces** (rule A).
+1. **Tapestore: rewrite-on-seal, block records, namespaces** (rules F and A).
+   First, alone and smallest: the one-time rewrite of sealed segments and
+   the copy at seal (`appender.go:573` `seal`), about 19 GB back.
    `internal/tapestore/format.go` (NS, record version 3, index entry for
    block offset), `compress.go` (block frame), `appender.go` (buffer up to
    64 KiB of small records per open segment, flush at group commit; reopen
