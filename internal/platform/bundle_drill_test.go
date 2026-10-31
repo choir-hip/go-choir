@@ -42,6 +42,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -51,6 +52,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/bundle"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
@@ -350,5 +352,222 @@ func TestBundleExportVerify(t *testing.T) {
 	}
 	if _, err := bundle.Verify(t.TempDir()); err == nil {
 		t.Error("verify accepted a directory without a manifest")
+	}
+}
+
+func drillReceipts(t *testing.T, c *drillComputer, after int64) []bundle.ReceiptRow {
+	t.Helper()
+	rows, err := c.store.db.Query(`SELECT computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest, event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at FROM computer_event_append_receipts WHERE computer_id=? AND sequence>? ORDER BY sequence`, c.id, after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []bundle.ReceiptRow
+	for rows.Next() {
+		var r bundle.ReceiptRow
+		if err := rows.Scan(&r.ComputerID, &r.IdempotencyKey, &r.RequestCommitment, &r.Sequence, &r.EventKind, &r.EventDigest, &r.EventPinReceiptDigest, &r.EventHeadReceiptID, &r.EventHeadReceiptJSON, &r.CreatedAt); err != nil {
+			t.Fatal(err)
+		}
+		r.CreatedAt = r.CreatedAt.UTC()
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// drillChunkSet is the computer's file CAS chunk directory, each chunk
+// checked against its name.
+func drillChunkSet(t *testing.T, c *drillComputer) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	dir := filepath.Join(c.root, "sha256", "file-cas-chunks", c.id)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return out
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil || computerevent.DigestBytes(raw) != e.Name() {
+			t.Fatalf("chunk %s does not hash to its name (%v)", e.Name(), err)
+		}
+		out[e.Name()] = true
+	}
+	return out
+}
+
+func drillPlan(t *testing.T, c *drillComputer) (recoveryplan.RecoveryPlan, string) {
+	t.Helper()
+	seq, root, err := c.store.RecoveryBase(context.Background(), c.id)
+	if err != nil {
+		t.Fatalf("recovery base: %v", err)
+	}
+	plan, err := recoveryplan.PlanRecovery(true, 0, true, uint64(seq), c.head().Sequence)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	return plan, root
+}
+
+func liveRoots(t *testing.T, c *drillComputer) []SnapshotRootRecord {
+	t.Helper()
+	roots, err := c.store.LiveSnapshotRoots(context.Background(), c.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range roots {
+		roots[i].CreatedAt = roots[i].CreatedAt.UTC()
+	}
+	return roots
+}
+
+// assertSameComputer is I1 and I2: the target answers like the source.
+func assertSameComputer(t *testing.T, src, dst *drillComputer, after int64) {
+	t.Helper()
+	if s, d := src.head(), dst.head(); !reflect.DeepEqual(s, d) {
+		t.Fatalf("heads differ:\nsource %+v\ntarget %+v", s, d)
+	}
+	srcRows, dstRows := drillReceipts(t, src, after), drillReceipts(t, dst, after)
+	if len(srcRows) == 0 || !reflect.DeepEqual(srcRows, dstRows) {
+		t.Fatalf("append receipts after %d differ: source %d rows, target %d rows", after, len(srcRows), len(dstRows))
+	}
+	if s, d := liveRoots(t, src), liveRoots(t, dst); !reflect.DeepEqual(s, d) {
+		t.Fatalf("snapshot roots differ:\nsource %+v\ntarget %+v", s, d)
+	}
+	if s, d := drillChunkSet(t, src), drillChunkSet(t, dst); !reflect.DeepEqual(s, d) || len(s) == 0 {
+		t.Fatalf("chunk sets differ: source %d target %d", len(s), len(d))
+	}
+	reader := dst.service.tapeReader()
+	for _, row := range dstRows {
+		raw, _, err := reader.Read(dst.id, tapestore.NSEvent, row.EventDigest)
+		if err != nil {
+			t.Fatalf("target cannot read event %d: %v", row.Sequence, err)
+		}
+		var receipt computerevent.Receipt
+		if err := receipt.UnmarshalJSON([]byte(row.EventHeadReceiptJSON)); err != nil {
+			t.Fatal(err)
+		}
+		for _, pin := range receipt.KindFields["pin_receipt_digests"].([]any) {
+			if _, _, err := reader.Read(dst.id, tapestore.NSReceipt, pin.(string)); err != nil {
+				t.Fatalf("target cannot read pin receipt of event %d: %v", row.Sequence, err)
+			}
+		}
+		event, err := computerevent.DecodeHistoricEvent(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ref := range event.OutputArtifactRefs {
+			digest, _ := eventArtifactDigestFromRef(ref)
+			want, err := src.artifacts.FetchPayload(src.id, digest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := dst.artifacts.FetchPayload(dst.id, digest)
+			if err != nil || !bytes.Equal(got, want) {
+				t.Fatalf("target payload %s of event %d: %v", digest, row.Sequence, err)
+			}
+		}
+	}
+	srcPlan, srcRoot := drillPlan(t, src)
+	dstPlan, dstRoot := drillPlan(t, dst)
+	if !reflect.DeepEqual(srcPlan, dstPlan) || srcRoot != dstRoot || dstPlan.Action != recoveryplan.RecoveryInstall {
+		t.Fatalf("recovery plans differ:\nsource %+v %s\ntarget %+v %s", srcPlan, srcRoot, dstPlan, dstRoot)
+	}
+}
+
+func mustRefuse(t *testing.T, what, dir string, c *drillComputer) {
+	t.Helper()
+	before := c.head()
+	_, err := bundle.Import(context.Background(), dir, c.store.db, c.root)
+	if !errors.Is(err, bundle.ErrRefused) {
+		t.Fatalf("%s: import = %v, want a refusal", what, err)
+	}
+	t.Logf("%s: %v", what, err)
+	if after := c.head(); !reflect.DeepEqual(before, after) {
+		t.Fatalf("%s: a refused import moved the head", what)
+	}
+	if len(liveRoots(t, c)) != 0 || len(drillChunkSet(t, c)) != 0 {
+		t.Fatalf("%s: a refused import wrote the snapshot root or its chunks", what)
+	}
+}
+
+// TestBundleRestoreDrill is the restore drill: a computer's tape and snapshot
+// in one scratch platform store and PostgreSQL, exported, verified and
+// imported into a second, which then answers like the first.
+func TestBundleRestoreDrill(t *testing.T) {
+	ctx := context.Background()
+	const id = "computer-bundle-drill"
+	src := newDrillComputer(t, id)
+	src.appendEvent(computerevent.EventGenesisImported, "", nil)
+	src.appendMixed(3, "pre")
+	snap := src.snapshot(3)
+	src.appendEvent(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record"))
+	src.appendMixed(5, "post")
+	out := filepath.Join(t.TempDir(), "bundle")
+	m := mustExport(t, src, out)
+	if _, err := bundle.Verify(out); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	dst := newDrillComputer(t, id)
+	res, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if res.HeadBefore != -1 || res.HeadAfter != m.Tape.HeadSeq || res.ReceiptsInserted != m.Counts.Receipts || !res.SnapshotRootInserted || res.FilesWritten == 0 {
+		t.Fatalf("import result = %+v", res)
+	}
+	assertSameComputer(t, src, dst, snap.HeadSequence)
+
+	// I3: idempotent.
+	again, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if again.ReceiptsInserted != 0 || again.FilesWritten != 0 || again.SnapshotRootInserted || again.HeadAfter != m.Tape.HeadSeq {
+		t.Fatalf("second import changed the target: %+v", again)
+	}
+	assertSameComputer(t, src, dst, snap.HeadSequence)
+
+	// I5: the source advances; an incremental export extends the target.
+	src.appendMixed(2, "later")
+	m2 := mustExport(t, src, out)
+	res2, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	if err != nil {
+		t.Fatalf("incremental import: %v", err)
+	}
+	if res2.HeadBefore != m.Tape.HeadSeq || res2.HeadAfter != m2.Tape.HeadSeq || res2.ReceiptsInserted != 2 {
+		t.Fatalf("incremental import result = %+v", res2)
+	}
+	assertSameComputer(t, src, dst, snap.HeadSequence)
+
+	// I4: a fork at the start, a fork inside the range, and a gap.
+	fork := newDrillComputer(t, id)
+	fork.appendEvent(computerevent.EventGenesisImported, "", nil)
+	fork.appendMixed(3, "fork")
+	if fork.head().Sequence != uint64(snap.HeadSequence) {
+		t.Fatalf("fork head %d, want the snapshot head %d", fork.head().Sequence, snap.HeadSequence)
+	}
+	mustRefuse(t, "fork at the start", out, fork)
+	fork.appendMixed(2, "fork more")
+	mustRefuse(t, "fork inside the range", out, fork)
+	gap := newDrillComputer(t, id)
+	gap.appendEvent(computerevent.EventGenesisImported, "", nil)
+	mustRefuse(t, "gap", out, gap)
+
+	// I6: the target continues the tape through its own CAS.
+	dst.appendEvent(computerevent.EventToolInvoked, "", nil)
+	if got := dst.head().Sequence; got != uint64(m2.Tape.HeadSeq)+1 {
+		t.Fatalf("target head after its own append = %d", got)
+	}
+	// A target past the bundle's head that holds the bundle's head imports
+	// as a no-op.
+	past, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	if err != nil || past.ReceiptsInserted != 0 || past.HeadAfter != m2.Tape.HeadSeq+1 {
+		t.Fatalf("import into a target past the bundle = %+v, %v", past, err)
 	}
 }
