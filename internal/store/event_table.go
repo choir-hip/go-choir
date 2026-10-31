@@ -412,8 +412,7 @@ func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 // Deploy 2: the writer (event-table design 2.2, 4.2). The runtime applies
 // store.event_table (the owner's setting and the host's grant, both required)
 // through SetEventTableWrites. With it on, AppendEvent stamps the op of every
-// event whose kind is EventTableEligible (the event-table class, and the
-// trace-log kinds until the log writes), on both paths: the acknowledged write
+// event whose kind is EventTableEligible (the event-table class), on both paths: the acknowledged write
 // (W1, appendStampedEvent) and the sealer (W2, newTelemetryRecord). The
 // lifecycle fold (W3) never stamps. Off, the tape is byte for byte deploy 1's.
 //

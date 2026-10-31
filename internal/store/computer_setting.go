@@ -93,11 +93,10 @@ const SettingSourceProjection = "source.projection"
 // admits no rebase Cast, and is the rollback.
 const SettingSourceRebaseOffer = "source.rebase_offer"
 
-// SettingTraceLog will move the nine trace kinds off the tape into the
-// guest-local trace segment log (docs/design/trace-segment-log-2026-10-22.md
-// section 8). Registered by slice S2 and not acted on: the writer is S4's, and
-// until then nothing reads the value. Off by default; off will be the live
-// rollback. No env override ships for production computers.
+// SettingTraceLog is retired: the R7 trace segment log was deleted 2026-10-31
+// and traces stay on the single tape
+// (docs/design/one-tape-durability-2026-10-31.md). Nothing acts on the key;
+// it stays known so a stored value still reads.
 const SettingTraceLog = "store.trace_log"
 
 // SettingEngineeringProgressToTexture makes each engineering progress Report

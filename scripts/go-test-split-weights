@@ -33,8 +33,6 @@
 20 internal/store:TestEventTableUnionReadsMatchSingleTable
 20 internal/store:TestEventTableOnlyEventObjectOpStamps
 20 internal/store:TestBackpressureAtCapacityDoesNotDeadlock
-19 internal/store:TestTraceLogEmptyLogIsByteIdenticalToOriginMain
-18 internal/store:TestTraceLogSplitEqualsTheAllDoltOracle
 17 internal/platform:TestRelatedLivePageGivesNoVote
 17 internal/store:TestEventTableStampGuardCatchesEveryForm
 16 internal/store:TestSnapshotResidueRuntimeKeepsRunMemoryOrderAcrossManyRuns

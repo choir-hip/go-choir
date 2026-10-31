@@ -99,8 +99,8 @@ type telemetryCounters struct {
 // eventSink is where an event the store accepted was written (R7 S0,
 // docs/design/trace-segment-log-2026-10-22.md section 9). Today every event
 // goes to the tape, whether as its own acknowledged tape event or as a record
-// the sealer queues for one. The trace log is S4's; the dropped sink is the
-// log's drop at disk-critical, also S4's. Both read zero until then.
+// the sealer queues for one. The trace log was deleted 2026-10-31; its sink
+// and the dropped sink stay in the wire shape and read zero.
 type eventSink int
 
 const (

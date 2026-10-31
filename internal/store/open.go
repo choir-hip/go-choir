@@ -301,7 +301,6 @@ func openStore(dbPath string) (*Store, error) {
 	doneEpoch(nil)
 
 	s.initLeaseObs()
-	s.openTraceLogIfPresent()
 
 	return s, nil
 }
@@ -422,9 +421,6 @@ func (s *Store) Reopen(path string) error {
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
-	// The trace log lives outside the swapped store: the scratch store
-	// reopened it, and it moves to s before the scratch store is zeroed.
-	s.adoptTraceLog(live)
 	*live = Store{}
 	s.closedOK = false
 	// The lease state (ready or unseeded, the reserved block, the counters)
@@ -438,10 +434,6 @@ func (s *Store) Reopen(path string) error {
 	s.refreshLeaseWorkspace()
 	s.resumeLeaseWork()
 	s.kickLeaseRowOntoTape()
-	// The store was swapped under the trace log (a restore, a base install):
-	// record where, so a reader can tell lines of an abandoned branch from the
-	// restored one (trace-log design 7.3).
-	s.writeTraceLogRestoreBoundary()
 	// The event index window's catch-up (event_index_trim.go) for the
 	// adopted store.
 	s.startProjectionBatchCatchUp()
@@ -486,9 +478,6 @@ func (s *Store) Close() error {
 		pinned = conn
 	}
 	s.closedOK = true
-	// The trace log fsyncs, seals and releases its directory with the store
-	// (design 4.1). It cannot fail Close.
-	s.closeTraceLog()
 	var err error
 	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
 		err = closeErr

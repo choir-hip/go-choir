@@ -2212,9 +2212,8 @@
      "bound": "== 0"
     }
    ],
-   "retire": "delete if R7 supersedes",
-   "blocked_by": "R7 S4 reader (no reader exists)",
-   "grandfathered_off_until": "2026-11-25"
+   "retire": "delete",
+   "note": "Retired 2026-10-31: the R7 trace segment log was deleted and traces stay on the single tape (docs/design/one-tape-durability-2026-10-31.md). Nothing acts on the key; it stays known so a stored value still reads."
   },
   {
    "id": "telemetry_batch",

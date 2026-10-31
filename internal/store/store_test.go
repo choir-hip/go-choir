@@ -37,9 +37,7 @@ func storeTestDir() string {
 }
 
 // TestMain removes this process's (by then empty) store test directory, so
-// a long-lived runner does not collect one per run. The trace log is the store
-// marker's sibling (trace-log design 3.1), so a test that reopens a store
-// leaves one beside every test path; it goes first.
+// a long-lived runner does not collect one per run.
 func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(storeTestDir())
