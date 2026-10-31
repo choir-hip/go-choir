@@ -99,6 +99,10 @@ func TestStreamSeqSeedDoesNotListTheEventKind(t *testing.T) {
 // Failure 2. Other kinds written after the last event push it out of the
 // first window; the seed must still find it.
 func TestStreamSeqSeedFindsAnEventBehindOtherKinds(t *testing.T) {
+	// Windows shrunk (production: 2000, 50000) so 250 later objects, more than
+	// the widest window of 200, push the events out of every window; 2,600
+	// objects cost 30s under -race for the same boundary.
+	shrinkSeedWindows(t, 20, 200)
 	s, path := openSeedStore(t)
 	old := time.Now().UTC().Add(-time.Hour)
 	var lastStored int64
@@ -106,12 +110,12 @@ func TestStreamSeqSeedFindsAnEventBehindOtherKinds(t *testing.T) {
 		lastStored = appendSeedEvent(t, s, fmt.Sprintf("e-%d", i), "run-a", old.Add(time.Duration(i)*time.Second)).StreamSeq
 	}
 	row, _ := readLeaseQuiet(s)
-	seedWakeOutbox(t, s, 2600, 0)
+	seedWakeOutbox(t, s, 250, 0)
 	s = reopenAt(t, s, path)
 
 	rec := appendSeedEvent(t, s, "after", "run-b", time.Now().UTC())
 	if rec.StreamSeq <= lastStored || rec.StreamSeq != row.Reserved+1 {
-		t.Fatalf("stream_seq after 2,600 later objects of another kind = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, lastStored)
+		t.Fatalf("stream_seq after 250 later objects of another kind = %d, want the lease's R + 1 = %d (above %d)", rec.StreamSeq, row.Reserved+1, lastStored)
 	}
 }
 

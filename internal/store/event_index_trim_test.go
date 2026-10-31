@@ -32,15 +32,6 @@ import (
 
 const trimTestComputer = "computer-trim"
 
-func trimTestInsert(t *testing.T, s *Store, seq uint64, kind, status string) {
-	t.Helper()
-	_, err := s.db.Exec(`INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, prepared_at) VALUES (?, ?, ?, 'p', ?, 'a', 'b', '[]', 'r', ?, ?, 'd', 'e', 'c', 'f', 1, 0, ?)`,
-		fmt.Sprintf("digest-%d-%s", seq, kind), trimTestComputer, seq, kind, fmt.Sprintf("key-%d", seq), status, time.Now().UTC())
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func trimTestHead(t *testing.T, s *Store, seq uint64) {
 	t.Helper()
 	_, err := s.db.Exec(`INSERT INTO computer_event_projection_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch, updated_at) VALUES (?, ?, 'h', 'd', 'e', 'c', 'f', 1, 0, ?) ON CONFLICT(computer_id) DO UPDATE SET sequence=excluded.sequence`, trimTestComputer, seq, time.Now().UTC())
@@ -62,19 +53,54 @@ func trimTestOpen(t *testing.T) (*Store, string) {
 	return s, path
 }
 
-// trimTestFill seeds batch rows 1..n, with a genesis at 1 and a restore-ish
-// kind every 5000 so the keep-set is exercised.
+// The trim is a pure function of sequence numbers (boundary arithmetic and a
+// range delete), so the fixtures are sparse: every 50th sequence plus the
+// sequences straddling each trim interval (interval-2..interval+2), the
+// genesis at 1, and a restore-ish kind at every multiple of 5000 so the
+// keep-set is exercised. Dense 47,000-row fills cost minutes under -race
+// (SQLite compiled to Go with checkptr) and cross no extra boundary.
+func trimTestSeeded(seq uint64) bool {
+	return seq == 1 || seq%50 == 0 || (seq+2)%projectionBatchTrimInterval < 5
+}
+
+func trimTestKind(seq uint64) string {
+	switch {
+	case seq == 1:
+		return string(computerevent.EventGenesisImported)
+	case seq%5000 == 0:
+		return "other_kind_kept"
+	}
+	return string(computerevent.EventProjectionBatchRecorded)
+}
+
+// trimTestCount counts the seeded sequences in (lo, hi] that satisfy keep.
+func trimTestCount(lo, hi uint64, keep func(seq uint64) bool) int {
+	n := 0
+	for seq := lo + 1; seq <= hi; seq++ {
+		if trimTestSeeded(seq) && keep(seq) {
+			n++
+		}
+	}
+	return n
+}
+
+func trimTestIsBatch(seq uint64) bool {
+	return trimTestKind(seq) == string(computerevent.EventProjectionBatchRecorded)
+}
+
+// trimTestFill seeds finalized rows 1..n that trimTestSeeded selects, in one
+// INSERT..SELECT over a recursive sequence.
 func trimTestFill(t *testing.T, s *Store, n uint64) {
 	t.Helper()
-	for seq := uint64(1); seq <= n; seq++ {
-		kind := string(computerevent.EventProjectionBatchRecorded)
-		switch {
-		case seq == 1:
-			kind = string(computerevent.EventGenesisImported)
-		case seq%5000 == 0:
-			kind = "other_kind_kept"
-		}
-		trimTestInsert(t, s, seq, kind, "finalized")
+	_, err := s.db.Exec(`WITH RECURSIVE seqs(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seqs WHERE n < ?)
+INSERT INTO computer_event_index (event_digest, computer_id, sequence, previous_head, event_kind, event_artifact_digest, event_pin_receipt_digest, payload_pin_receipt_digests_json, request_commitment, idempotency_key, status, next_desired_event_head, next_effective_event_head, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch, prepared_at)
+SELECT 'digest-' || n, ?, n, 'p',
+  CASE WHEN n = 1 THEN ? WHEN n % 5000 = 0 THEN 'other_kind_kept' ELSE ? END,
+  'a', 'b', '[]', 'r', 'key-' || n, 'finalized', 'd', 'e', 'c', 'f', 1, 0, ? FROM seqs
+WHERE n = 1 OR n % 50 = 0 OR (n + 2) % ? < 5`,
+		n, trimTestComputer, string(computerevent.EventGenesisImported), string(computerevent.EventProjectionBatchRecorded), time.Now().UTC(), projectionBatchTrimInterval)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -137,7 +163,7 @@ func TestTrimStaysInsideTheWindow(t *testing.T) {
 	// Everything above the boundary (10000) is intact: 25000-10000 rows, less
 	// none (kept kinds sit among them).
 	rows := trimTestRows(t, s)
-	wantAbove := 25000 - 10000
+	wantAbove := trimTestCount(10000, 25000, func(uint64) bool { return true })
 	above := 0
 	for _, r := range rows {
 		var seq uint64
@@ -155,7 +181,7 @@ func TestTrimKeepsPreparedAndOtherKinds(t *testing.T) {
 	s, _ := trimTestOpen(t)
 	trimTestFill(t, s, 12000)
 	// A prepared batch row far below the boundary must stay.
-	if _, err := s.db.Exec(`UPDATE computer_event_index SET status='prepared' WHERE sequence=3`); err != nil {
+	if _, err := s.db.Exec(`UPDATE computer_event_index SET status='prepared' WHERE sequence=50`); err != nil {
 		t.Fatal(err)
 	}
 	trimTestHead(t, s, 30000)
@@ -166,12 +192,12 @@ func TestTrimKeepsPreparedAndOtherKinds(t *testing.T) {
 	for _, r := range trimTestRows(t, s) {
 		kept[r] = true
 	}
-	for _, want := range []string{"1/" + string(computerevent.EventGenesisImported) + "/finalized", "5000/other_kind_kept/finalized", "10000/other_kind_kept/finalized", "3/" + string(computerevent.EventProjectionBatchRecorded) + "/prepared"} {
+	for _, want := range []string{"1/" + string(computerevent.EventGenesisImported) + "/finalized", "5000/other_kind_kept/finalized", "10000/other_kind_kept/finalized", "50/" + string(computerevent.EventProjectionBatchRecorded) + "/prepared"} {
 		if !kept[want] {
 			t.Fatalf("row %s was deleted", want)
 		}
 	}
-	if kept["4/"+string(computerevent.EventProjectionBatchRecorded)+"/finalized"] {
+	if kept["100/"+string(computerevent.EventProjectionBatchRecorded)+"/finalized"] {
 		t.Fatalf("a finalized batch row below the boundary survived")
 	}
 }
@@ -216,7 +242,7 @@ func TestCatchUpIsChunkedAndReleasesTheWriter(t *testing.T) {
 	trimTestFill(t, s, 30000)
 	trimTestHead(t, s, 30000)
 	oldChunk, oldPause, oldRest := projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest
-	projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest = 1000, 0, 0
+	projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest = 50, 0, 0
 	defer func() {
 		projectionBatchCatchUpChunk, projectionBatchCatchUpPause, projectionBatchCatchUpRest = oldChunk, oldPause, oldRest
 	}()
@@ -224,14 +250,19 @@ func TestCatchUpIsChunkedAndReleasesTheWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// boundary 20000: rows 2..20000 are batch except the multiples of 5000.
-	if want := int64(20000 - 1 - 4); n != want {
+	// boundary 20000: the seeded batch rows at or below it. More than four
+	// chunks of 50, so the loop pauses and re-enters at least four times.
+	want := int64(trimTestCount(0, 20000, trimTestIsBatch))
+	if want <= 4*50 {
+		t.Fatalf("fixture: %d deletable rows do not span several chunks", want)
+	}
+	if n != want {
 		t.Fatalf("deleted %d, want %d", n, want)
 	}
 	// The event lock and the writer are free after it.
 	s.eventMu.Lock()
 	s.eventMu.Unlock()
-	if _, err := s.db.Exec(`UPDATE computer_event_index SET prepared_at=prepared_at WHERE sequence=29999`); err != nil {
+	if _, err := s.db.Exec(`UPDATE computer_event_index SET prepared_at=prepared_at WHERE sequence=29998`); err != nil {
 		t.Fatal(err)
 	}
 	again, err := s.CatchUpProjectionBatchTrim(context.Background())
@@ -263,7 +294,7 @@ func TestOpenCatchesUpAnOldStoreAndFloorsIt(t *testing.T) {
 	}
 	defer s2.Close()
 	// The catch-up runs in the background after Open returns.
-	want := 30000 - 20000 + 1 + 4
+	want := trimTestCount(0, 30000, func(seq uint64) bool { return seq > 20000 || !trimTestIsBatch(seq) })
 	deadline := time.Now().Add(2 * time.Minute)
 	got := len(trimTestRows(t, s2))
 	for got != want && time.Now().Before(deadline) {

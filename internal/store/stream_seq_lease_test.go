@@ -618,7 +618,7 @@ func TestExactSeedFindsAHighNumberBehindNewerEventsAndObjects(t *testing.T) {
 	s, path := openSeedStore(t)
 	base := time.Now().UTC().Add(-time.Hour)
 	putStoredEvent(t, s, "high", "run-h", 9000, base)
-	for i := 1; i <= 520; i++ { // more than the old newest-500 read
+	for i := 1; i <= 220; i++ { // more than the widest (shrunk) window, 200
 		putStoredEvent(t, s, fmt.Sprintf("low-%d", i), "run-l", int64(i), base.Add(time.Duration(i)*time.Second))
 	}
 	seedWakeOutbox(t, s, 250, 0) // behind both scaled windows
