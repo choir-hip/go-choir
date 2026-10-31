@@ -203,6 +203,28 @@ leaf that would push it past the owner's limits, such as "never more than 4
 cores and 8 GB while I am typing; anything when idle on power". A refusal
 is an answer, not an error, and the desk places the leaf elsewhere.
 
+**Site access control (owner, 2026-10-31, on proposal 1).** "An organization
+with many human team members is in general not going to let employee A's VM
+run on employee B's workstation. So we need to have the right level of access
+controls in place to make sites work." Trust is therefore not only a property
+of the site; it is a relation between the site's principal and the work's
+owner, checked by the site's admission before anything else:
+
+- A personal workstation's principal is the person who enrolled it. By default
+  it admits only work owned by that person's computers: their writer, their
+  leaves, their capability leases. Default deny for everyone else.
+- Another person's work, even inside the same organization, is admitted only
+  under an explicit grant that names the site, the other person's computer and
+  the work class, signed by the site's principal and allowed by the org's
+  policy. No org policy alone can place employee A's computer on employee B's
+  workstation.
+- Org-owned sites (spare machines, the cluster) have the org as principal and
+  run org-owned work under the org's RBAC. An org-owned, non-confidential leaf
+  may run on an employee's workstation only if that employee's site grants the
+  org that work class (§3.2).
+- Grants are site-record state, signed, revocable by either signer, and every
+  admission and refusal is recorded on the placed computer's tape.
+
 ### 1.3 Reachable from any device
 
 A computer is reachable at its permalink whichever site runs it:
@@ -1195,6 +1217,8 @@ These come before most of the builds, and need almost nothing new:
 1. The fabric model: sites with signed site records, placement by trust,
    locality, availability, capacity and cost, owned by the management desk
    and enforced by each site's admission.
+   **Accepted** (owner, 2026-10-31), with site access control as a
+   condition: default deny across people, explicit signed grants (§1.2).
 2. A home per computer, with routing through the home and the workstation's
    outbound session.
 3. The writer lease has no expiry. Failover is an automatic host branch that
