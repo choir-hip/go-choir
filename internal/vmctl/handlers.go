@@ -3,6 +3,7 @@ package vmctl
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -798,13 +799,11 @@ func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
 	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
-		running := own != nil && (own.State == VMStateActive || own.State == VMStateDegraded)
-		if !req.RemoveStaleRoute || own == nil || running {
+		if !req.RemoveStaleRoute || !staleRouteRemovable(err, h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID), time.Now()) {
 			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 			return
 		}
-		log.Printf("vmctl: remove: dropping %s/%s (%s, state %s) whose route does not join it: %v", req.UserID, req.DesktopID, own.VMID, own.State, err)
+		log.Printf("vmctl: remove: dropping %s/%s, an old idle ownership whose route does not join it: %v", req.UserID, req.DesktopID, err)
 	}
 
 	if h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID) == nil {
@@ -817,6 +816,27 @@ func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+// staleRouteRemovable is the remove_stale_route override's test: the route
+// refusal is the definite "does not join" (never a transient resolve error),
+// the ownership is idle (hibernated, stopped or failed), it is not a
+// protected, platform or always-on computer, and it has been idle for 30
+// days (owner, 2026-10-31: "anything old is removable by default").
+func staleRouteRemovable(routeErr error, own *VMOwnership, now time.Time) bool {
+	if own == nil || !errors.Is(routeErr, errRouteDoesNotJoin) {
+		return false
+	}
+	switch own.State {
+	case VMStateHibernated, VMStateStopped, VMStateFailed:
+	default:
+		return false
+	}
+	switch own.WarmnessClass {
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform, WarmnessClassPremiumAlwaysOn:
+		return false
+	}
+	return !own.LastActiveAt.IsZero() && now.Sub(own.LastActiveAt) > 30*24*time.Hour
 }
 
 // HandleMaintenanceServe boots a held, route-bound computer under the

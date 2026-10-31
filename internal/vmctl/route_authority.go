@@ -329,6 +329,10 @@ func (h *Handler) resolveComputerVersionRoute(ctx context.Context, userID, deskt
 	return resolution, true, nil
 }
 
+// errRouteDoesNotJoin is the refusal of an ownership that its immutable
+// ComputerVersion route does not join.
+var errRouteDoesNotJoin = errors.New("vmctl: immutable ComputerVersion route does not join realized ownership")
+
 func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
 	resolution, known, err := h.resolveComputerVersionRoute(ctx, userID, desktopID)
 	if err != nil || !known || resolution.RouteAbsent {
@@ -340,10 +344,10 @@ func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, deskt
 	}
 	_, _, constructed, err := h.routeAuthority.constructedOwnershipIdentity(ctx, userID, desktopID, ownership.VMID)
 	if err != nil {
-		return fmt.Errorf("vmctl: immutable ComputerVersion route does not join realized ownership: %w", err)
+		return fmt.Errorf("%w: %w", errRouteDoesNotJoin, err)
 	}
 	if !constructed {
-		return fmt.Errorf("vmctl: immutable ComputerVersion route does not join realized ownership")
+		return errRouteDoesNotJoin
 	}
 	return nil
 }
