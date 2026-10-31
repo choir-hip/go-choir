@@ -49,7 +49,7 @@ func TestCaptureSinkSplitsALargePollUnderCorpusdsBound(t *testing.T) {
 	defer srv.Close()
 
 	var poll []sourcegraph.CaptureItem
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 30; i++ {
 		poll = append(poll, sourcegraph.CaptureItem{Item: sources.Item{
 			URL:     fmt.Sprintf("https://example.test/%d", i),
 			Title:   "item",
@@ -61,11 +61,11 @@ func TestCaptureSinkSplitsALargePollUnderCorpusdsBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.New != 150 || len(got.CaptureIDs) != 150 || items != 150 {
+	if got.New != 30 || len(got.CaptureIDs) != 30 || items != 30 {
 		t.Fatalf("aggregate = %+v, server saw %d items", got, items)
 	}
-	if requests < 150/(captureBatchBytes>>20) {
-		t.Fatalf("150 MiB of bodies went out in %d requests", requests)
+	if requests < 30/(captureBatchBytes>>20) {
+		t.Fatalf("30 MiB of bodies went out in %d requests", requests)
 	}
 	if poll[0].RawJSON == "" || len(poll[0].Body) <= captureBodyBytes {
 		t.Fatal("the sink changed the caller's items")

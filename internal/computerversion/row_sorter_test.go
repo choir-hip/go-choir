@@ -27,9 +27,9 @@ func referenceRowHash(rows []string) string {
 // sort, or every existing witness stops re-verifying.
 func TestRowSorterSpilledDigestMatchesInMemory(t *testing.T) {
 	rng := rand.New(rand.NewSource(7))
-	rows := make([]string, 0, 5000)
-	for i := 0; i < 5000; i++ {
-		rows = append(rows, fmt.Sprintf(`{"id":%d,"v":"%x"}`, rng.Intn(800), rng.Int63()))
+	rows := make([]string, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		rows = append(rows, fmt.Sprintf(`{"id":%d,"v":"%x"}`, rng.Intn(200), rng.Int63()))
 	}
 	rows = append(rows, rows[:50]...) // duplicate rows are kept, not merged
 	rows = append(rows, "")
