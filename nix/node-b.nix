@@ -1850,6 +1850,20 @@ in
     };
   };
 
+  # Each deploy is a system generation that roots its own 3.7 GB guest image,
+  # and deploys come faster than the 4-hour timer: on 2026-10-31 eleven
+  # generations (1636-1646) rooted eleven images, about 40 GB, and one GC
+  # freed 52 GiB of store. So every activation schedules the same retention
+  # ten minutes later (after the deploy's own health checks). A pending
+  # schedule from a deploy minutes earlier makes systemd-run fail, which is
+  # fine: that one runs. Rollback: remove this script (the timer remains).
+  system.activationScripts.go-choir-nix-gc-after-deploy = ''
+    ${pkgs.systemd}/bin/systemd-run --no-block --on-active=10min \
+      --unit=go-choir-nix-gc-after-deploy \
+      ${pkgs.systemd}/bin/systemctl start --no-block go-choir-nix-gc.service \
+      >/dev/null 2>&1 || true
+  '';
+
   systemd.timers.go-choir-nix-gc = {
     description = "go-choir Nix generation and store retention every 4 hours";
     wantedBy = [ "timers.target" ];
