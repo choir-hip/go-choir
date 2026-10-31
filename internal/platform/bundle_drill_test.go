@@ -88,6 +88,27 @@ func newDrillComputer(t *testing.T, id string) *drillComputer {
 // appendEvent pins the payload (if any) and the event through the production
 // pin entry points and appends it through the head CAS.
 func (c *drillComputer) appendEvent(kind computerevent.EventKind, mediaType string, payload []byte) string {
+	return c.appendEventKey(kind, mediaType, payload, "")
+}
+
+// appendSnapshotRecorded appends the snapshot_recorded event that names
+// root, as internal/snapshot Take does (idempotency key "snapshot:<root>").
+func (c *drillComputer) appendSnapshotRecorded(root string) string {
+	return c.appendEventKey(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record "+root), "snapshot:"+root)
+}
+
+// trust is the trust set of this computer's platform key: what an importing
+// host provisions out of band for the bundles this host signs.
+func (c *drillComputer) trust() *bundle.TrustSet {
+	c.t.Helper()
+	set, err := bundle.NewTrustSet(bundle.TrustEntry(c.service.signingKey.Public, c.id))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return set
+}
+
+func (c *drillComputer) appendEventKey(kind computerevent.EventKind, mediaType string, payload []byte, idempotencyKey string) string {
 	t := c.t
 	t.Helper()
 	ctx := context.Background()
@@ -119,6 +140,9 @@ func (c *drillComputer) appendEvent(kind computerevent.EventKind, mediaType stri
 		event.ExpectedDesiredStateCommitment, event.ExpectedEffectiveStateCommitment = head.DesiredStateCommitment, head.EffectiveStateCommitment
 	}
 	event.OccurredAt = time.Date(2026, 10, 30, 12, 0, int(event.Sequence), 0, time.UTC).Format(time.RFC3339Nano)
+	if idempotencyKey != "" {
+		event.IdempotencyKey = idempotencyKey
+	}
 	if payload != nil {
 		digest := computerevent.DigestBytes(payload)
 		event.OutputArtifactRefs = []string{"artifact:sha256:" + digest}
@@ -302,7 +326,7 @@ func TestBundleExportVerify(t *testing.T) {
 	src.appendEvent(computerevent.EventGenesisImported, "", nil)
 	src.appendMixed(3, "pre")
 	snap := src.snapshot(3)
-	src.appendEvent(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record"))
+	src.appendSnapshotRecorded(snap.Root)
 	src.appendMixed(5, "post")
 	head := src.head()
 
@@ -327,7 +351,7 @@ func TestBundleExportVerify(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(out, tapestore.SegDirName)); !os.IsNotExist(err) {
 		t.Fatal("the bundle holds host segment files")
 	}
-	if _, err := bundle.Verify(out); err != nil {
+	if _, err := bundle.Verify(out, src.trust()); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
 	// E6: the tape objects are packed, not one file each.
@@ -359,7 +383,7 @@ func TestBundleExportVerify(t *testing.T) {
 	if mi := mustExport(t, src, interrupted); mi.Counts != m.Counts {
 		t.Fatalf("resumed export counts = %+v, want %+v", mi.Counts, m.Counts)
 	}
-	if _, err := bundle.Verify(interrupted); err != nil {
+	if _, err := bundle.Verify(interrupted, src.trust()); err != nil {
 		t.Fatalf("verify after a resumed export: %v", err)
 	}
 	if got := len(packEntries(t, interrupted)); got != len(packEntries(t, out)) {
@@ -380,7 +404,7 @@ func TestBundleExportVerify(t *testing.T) {
 	if m2.Tape.HeadSeq != m.Tape.HeadSeq+2 {
 		t.Fatalf("re-export head = %d, want %d", m2.Tape.HeadSeq, m.Tape.HeadSeq+2)
 	}
-	if _, err := bundle.Verify(out); err != nil {
+	if _, err := bundle.Verify(out, src.trust()); err != nil {
 		t.Fatalf("verify after re-export: %v", err)
 	}
 
@@ -435,11 +459,11 @@ func TestBundleExportVerify(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "damaged")
 		copyTree(t, out, dir)
 		damage[name](dir)
-		if _, err := bundle.Verify(dir); err == nil {
+		if _, err := bundle.Verify(dir, src.trust()); err == nil {
 			t.Errorf("verify accepted a bundle with damaged %s", name)
 		}
 	}
-	if _, err := bundle.Verify(t.TempDir()); err == nil {
+	if _, err := bundle.Verify(t.TempDir(), src.trust()); err == nil {
 		t.Error("verify accepted a directory without a manifest")
 	}
 }
@@ -568,10 +592,10 @@ func assertSameComputer(t *testing.T, src, dst *drillComputer, after int64) {
 	}
 }
 
-func mustRefuse(t *testing.T, what, dir string, c *drillComputer) {
+func mustRefuse(t *testing.T, what, dir string, c *drillComputer, trust *bundle.TrustSet) {
 	t.Helper()
 	before := c.head()
-	_, err := bundle.Import(context.Background(), dir, c.store.db, c.root)
+	_, err := bundle.Import(context.Background(), dir, c.store.db, c.root, trust)
 	if !errors.Is(err, bundle.ErrRefused) {
 		t.Fatalf("%s: import = %v, want a refusal", what, err)
 	}
@@ -594,16 +618,16 @@ func TestBundleRestoreDrill(t *testing.T) {
 	src.appendEvent(computerevent.EventGenesisImported, "", nil)
 	src.appendMixed(3, "pre")
 	snap := src.snapshot(3)
-	src.appendEvent(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record"))
+	src.appendSnapshotRecorded(snap.Root)
 	src.appendMixed(5, "post")
 	out := filepath.Join(t.TempDir(), "bundle")
 	m := mustExport(t, src, out)
-	if _, err := bundle.Verify(out); err != nil {
+	if _, err := bundle.Verify(out, src.trust()); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
 
 	dst := newDrillComputer(t, id)
-	res, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	res, err := bundle.Import(ctx, out, dst.store.db, dst.root, src.trust())
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -613,7 +637,7 @@ func TestBundleRestoreDrill(t *testing.T) {
 	assertSameComputer(t, src, dst, snap.HeadSequence)
 
 	// I3: idempotent.
-	again, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	again, err := bundle.Import(ctx, out, dst.store.db, dst.root, src.trust())
 	if err != nil {
 		t.Fatalf("second import: %v", err)
 	}
@@ -625,7 +649,7 @@ func TestBundleRestoreDrill(t *testing.T) {
 	// I5: the source advances; an incremental export extends the target.
 	src.appendMixed(2, "later")
 	m2 := mustExport(t, src, out)
-	res2, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	res2, err := bundle.Import(ctx, out, dst.store.db, dst.root, src.trust())
 	if err != nil {
 		t.Fatalf("incremental import: %v", err)
 	}
@@ -641,12 +665,12 @@ func TestBundleRestoreDrill(t *testing.T) {
 	if fork.head().Sequence != uint64(snap.HeadSequence) {
 		t.Fatalf("fork head %d, want the snapshot head %d", fork.head().Sequence, snap.HeadSequence)
 	}
-	mustRefuse(t, "fork at the start", out, fork)
+	mustRefuse(t, "fork at the start", out, fork, src.trust())
 	fork.appendMixed(2, "fork more")
-	mustRefuse(t, "fork inside the range", out, fork)
+	mustRefuse(t, "fork inside the range", out, fork, src.trust())
 	gap := newDrillComputer(t, id)
 	gap.appendEvent(computerevent.EventGenesisImported, "", nil)
-	mustRefuse(t, "gap", out, gap)
+	mustRefuse(t, "gap", out, gap, src.trust())
 
 	// I6: the target continues the tape through its own CAS.
 	dst.appendEvent(computerevent.EventToolInvoked, "", nil)
@@ -655,7 +679,7 @@ func TestBundleRestoreDrill(t *testing.T) {
 	}
 	// A target past the bundle's head that holds the bundle's head imports
 	// as a no-op.
-	past, err := bundle.Import(ctx, out, dst.store.db, dst.root)
+	past, err := bundle.Import(ctx, out, dst.store.db, dst.root, src.trust())
 	if err != nil || past.ReceiptsInserted != 0 || past.HeadAfter != m2.Tape.HeadSeq+1 {
 		t.Fatalf("import into a target past the bundle = %+v, %v", past, err)
 	}
@@ -673,14 +697,14 @@ func TestBundleDelta(t *testing.T) {
 	src := newDrillComputer(t, id)
 	src.appendEvent(computerevent.EventGenesisImported, "", nil)
 	src.appendMixed(3, "pre")
-	src.snapshot(3)
-	src.appendEvent(computerevent.EventSnapshotRecorded, "text/plain", []byte("sealed snapshot record"))
+	snap := src.snapshot(3)
+	src.appendSnapshotRecorded(snap.Root)
 	src.appendMixed(4, "post")
 	full := filepath.Join(t.TempDir(), "full")
 	base := mustExport(t, src, full)
 
 	dst := newDrillComputer(t, id)
-	if _, err := bundle.Import(ctx, full, dst.store.db, dst.root); err != nil {
+	if _, err := bundle.Import(ctx, full, dst.store.db, dst.root, src.trust()); err != nil {
 		t.Fatalf("import the full bundle: %v", err)
 	}
 
@@ -697,11 +721,11 @@ func TestBundleDelta(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(delta, bundle.ChunksDir)); !os.IsNotExist(err) {
 		t.Fatal("the delta holds a chunks directory")
 	}
-	if _, err := bundle.Verify(delta); err != nil {
+	if _, err := bundle.Verify(delta, src.trust()); err != nil {
 		t.Fatalf("verify the delta: %v", err)
 	}
 	// D2: it extends a target at its base.
-	res, err := bundle.Import(ctx, delta, dst.store.db, dst.root)
+	res, err := bundle.Import(ctx, delta, dst.store.db, dst.root, src.trust())
 	if err != nil {
 		t.Fatalf("import the delta: %v", err)
 	}
@@ -712,7 +736,7 @@ func TestBundleDelta(t *testing.T) {
 
 	// D3: an empty target, a gap and a fork refuse it.
 	empty := newDrillComputer(t, id)
-	if _, err := bundle.Import(ctx, delta, empty.store.db, empty.root); !errors.Is(err, bundle.ErrRefused) {
+	if _, err := bundle.Import(ctx, delta, empty.store.db, empty.root, src.trust()); !errors.Is(err, bundle.ErrRefused) {
 		t.Fatalf("delta into an empty target: import = %v, want a refusal", err)
 	}
 	if head, err := empty.cas.Head(ctx, empty.id); err != nil || head != nil {
@@ -720,11 +744,11 @@ func TestBundleDelta(t *testing.T) {
 	}
 	gap := newDrillComputer(t, id)
 	gap.appendEvent(computerevent.EventGenesisImported, "", nil)
-	mustRefuse(t, "delta onto a gap", delta, gap)
+	mustRefuse(t, "delta onto a gap", delta, gap, src.trust())
 	fork := newDrillComputer(t, id)
 	fork.appendEvent(computerevent.EventGenesisImported, "", nil)
 	fork.appendMixed(int(base.Tape.HeadSeq)-1, "fork")
-	mustRefuse(t, "delta onto a fork", delta, fork)
+	mustRefuse(t, "delta onto a fork", delta, fork, src.trust())
 
 	// D4: --since a bundle of another computer, or of a forked history of
 	// this one, is refused at export.

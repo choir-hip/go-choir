@@ -50,6 +50,11 @@ type objects interface {
 	put(sub, digest string, raw []byte) error
 	// digests lists the held objects of sub.
 	digests(sub string) ([]string, error)
+	// slot is a dense position of the held object, for a caller's seen
+	// bitset; -1 when the layout has none (format 1, the writer).
+	slot(sub, digest string) (int, bool)
+	// slots is the number of positions slot can return.
+	slots() int
 	// close makes what was put durable.
 	close() error
 }
@@ -59,6 +64,9 @@ func openObjects(dir string, format int, write bool) (objects, error) {
 	case 1:
 		return looseObjects{dir: dir}, nil
 	case 2:
+		if !write {
+			return openPackIndex(dir)
+		}
 		return openPack(dir, write)
 	}
 	return nil, fmt.Errorf("bundle: format version %d has no object layout", format)
@@ -108,6 +116,13 @@ func (l looseObjects) digests(sub string) ([]string, error) {
 }
 
 func (looseObjects) close() error { return nil }
+
+func (l looseObjects) slot(sub, digest string) (int, bool) {
+	_, ok := l.size(sub, digest)
+	return -1, ok
+}
+
+func (looseObjects) slots() int { return 0 }
 
 // packObjects is format 2.
 type packObjects struct {
@@ -253,6 +268,13 @@ func (p *packObjects) put(sub, digest string, raw []byte) error {
 	p.order[sub] = append(p.order[sub], digest)
 	return nil
 }
+
+func (p *packObjects) slot(sub, digest string) (int, bool) {
+	_, ok := p.entries[sub+"/"+digest]
+	return -1, ok
+}
+
+func (p *packObjects) slots() int { return 0 }
 
 func (p *packObjects) digests(sub string) ([]string, error) {
 	return append([]string(nil), p.order[sub]...), nil

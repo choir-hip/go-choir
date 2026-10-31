@@ -20,8 +20,15 @@ What the app adds natively:
   bridge" below.
 - **A credential boundary.** Session cookies live in a process-local Go jar.
   The renderer can use them through the proxy but cannot read or set them.
+- **Sync (slice 1): a verified local copy of your computer.** While signed in,
+  a background syncer (`sync.go`, `internal/tapefollow`) pulls your
+  computer's tape and newest snapshot from the server, in bounded pages,
+  verifies each one, and keeps them under
+  `~/Library/Application Support/Choir/<computer-id>/`. The menu bar item shows
+  "Synced to event N, <time>" or the error, with "Sync now" and "Show local
+  copy in Finder". See "Sync" below.
 
-It runs nothing locally. The server-less desktop (computers running as VMs on
+It runs no VM locally. The server-less desktop (computers running as VMs on
 this Mac), the synced folder, and Windows/Linux builds are designed in
 [desktop-sync-and-local-vms-2026-10-14.md](../../docs/reports/desktop-sync-and-local-vms-2026-10-14.md).
 The old `CHOIR_MODE=local` ran services as host processes; it could not work
@@ -78,6 +85,36 @@ The bridge script is what tells `frontend/src/lib/auth.js` to route passkey
 ceremonies through the native app. If the server is unreachable, page loads
 get a small offline page and API calls get JSON 502.
 
+## Sync
+
+The syncer is a follower: it reads, it never writes. Its one request is
+`GET /api/computers/<id>/tape/bundle?branch=main&have_seq=<n>&have_head=<sha256>`
+(the owner's own session; corpusd `internal/platform/tape_follow.go` has the
+shape), and nothing in the app appends to the computer's tape
+(`internal/tapefollow/readonly_test.go` checks the source).
+
+The local store is a chain of verified bundles, the same format
+`choir-bundle verify` and `choir-bundle import` take:
+
+```
+~/Library/Application Support/Choir/<computer-id>/
+  follow.json                the commit point: the chain, the synced head and time
+  bundles/<start>-<head>/    one verified bundle per pull, files read-only
+  staging/                   a pull in progress (cleared at launch)
+  lock                       one syncer per store
+```
+
+A pull lands in `staging/`, is verified (every object against its digest, the
+chain, and every receipt's signature against the repository-pinned platform
+key: the trust set never comes from the server,
+[bundle authenticity](../../docs/design/bundle-authenticity-2026-10-31.md)),
+is renamed into `bundles/`, and only then named in `follow.json`, so a crash or a lost network at any point leaves
+the previous verified copy; the next pull resumes from it. Private payloads
+are stored as the encrypted envelopes the server holds; their keys are not
+on the Mac yet (later: the computer key in the Keychain). The same syncer runs
+from the terminal with an API key: `choir-bundle follow --computer <id>
+--header-file <(printf 'Authorization: Bearer %s\n' "$KEY")`.
+
 ### Known gaps
 
 - **WebSockets.** The frontend opens `ws://${location.host}/api/ws` (live
@@ -86,7 +123,11 @@ get a small offline page and API calls get JSON 502.
   not work in the app yet; see the design report for the fix. (The terminal's
   `/api/super-console/ws` was removed with zot on 2026-10-22.)
 - **Session lifetime.** The cookie jar lasts only for the process: relaunching
-  requires signing in again.
+  requires signing in again, and sync waits until then. The syncer does not
+  refresh the session itself; when the access cookie lapses with no window
+  activity it shows the 401 and retries.
+- **Snapshot refresh.** Sync bootstraps from the newest snapshot and then
+  follows the tape; a newer snapshot on the server is not fetched yet.
 
 ## Authentication bridge
 

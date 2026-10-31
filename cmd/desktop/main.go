@@ -10,7 +10,8 @@
 // The app's own job is the native session: passkey ceremonies run in
 // ASWebAuthenticationSession (WKWebView has no platform authenticator), and
 // the resulting cookies live in a process-local Go jar that the renderer can
-// use through the proxy but never read (desktop_auth.go).
+// use through the proxy but never read (desktop_auth.go). While signed in it
+// also keeps a verified, read-only local copy of the owner's computer (sync.go).
 //
 // A server-less mode that runs computers on this Mac is designed in
 // docs/reports/desktop-sync-and-local-vms-2026-10-14.md; the earlier
@@ -115,6 +116,11 @@ func main() {
 		}
 		time.AfterFunc(delay, func() { snapshotWindow(window, path) })
 	}
+
+	// The background syncer: a verified, read-only local copy of the
+	// signed-in owner's computer (sync.go), with its status in the menu bar.
+	stopSync := installSyncTray(app, newDesktopSync(desktopSession))
+	defer stopSync()
 
 	if err := app.Run(); err != nil {
 		log.Fatal(fmt.Errorf("Choir exited with error: %w", err))

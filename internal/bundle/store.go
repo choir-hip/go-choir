@@ -80,11 +80,27 @@ func receiptDigestAt(ctx context.Context, q dbx.Queryer, computerID string, seq 
 // readSnapshotRoot returns the named root, or the newest one when root is ""
 // (RecoveryBase's order). nil when there is none.
 func readSnapshotRoot(ctx context.Context, q dbx.Queryer, computerID, root string) (*SnapshotRoot, error) {
-	query := `SELECT computer_id, root, head_sequence, chunks, created_at FROM computer_snapshot_roots WHERE computer_id=?`
+	return querySnapshotRoot(ctx, q, computerID, root, false)
+}
+
+// readNamedSnapshotRoot is readSnapshotRoot restricted to roots the tape
+// names: a snapshot_recorded event with idempotency key "snapshot:<root>"
+// after the snapshot's head (internal/snapshot Take registers the root,
+// then appends that event). A root whose event never landed (a crash
+// between the two) is not a restore base a verifier can authenticate.
+func readNamedSnapshotRoot(ctx context.Context, q dbx.Queryer, computerID, root string) (*SnapshotRoot, error) {
+	return querySnapshotRoot(ctx, q, computerID, root, true)
+}
+
+func querySnapshotRoot(ctx context.Context, q dbx.Queryer, computerID, root string, named bool) (*SnapshotRoot, error) {
+	query := `SELECT computer_id, root, head_sequence, chunks, created_at FROM computer_snapshot_roots r WHERE computer_id=?`
 	args := []any{computerID}
 	if root != "" {
 		query += ` AND root=?`
 		args = append(args, root)
+	}
+	if named {
+		query += ` AND EXISTS (SELECT 1 FROM computer_event_append_receipts a WHERE a.computer_id=r.computer_id AND a.idempotency_key='snapshot:' || r.root AND a.event_kind='snapshot_recorded' AND a.sequence>r.head_sequence)`
 	}
 	query += ` ORDER BY head_sequence DESC, created_at DESC, root DESC LIMIT 1`
 	var rec SnapshotRoot

@@ -608,6 +608,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/events/append", h.HandleComputerEventAppend)
 	s.HandleFunc("/internal/computers/events/payload", h.HandleComputerEventPayload)
 	s.HandleFunc("/internal/computers/events/replay", h.HandleComputerEventReplay)
+	s.HandleFunc(tapeFollowRoute, h.HandleTapeFollowBundle)
 	s.HandleFunc("/internal/computers/checkpoints", h.HandleComputerCheckpoint)
 	s.HandleFunc("/internal/computers/checkpoints/verdict", h.HandleCheckpointVerdict)
 	s.HandleFunc("/internal/computers/checkpoints/list", h.HandleCheckpointList)

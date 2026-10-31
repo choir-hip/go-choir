@@ -26,6 +26,18 @@ type ExportOptions struct {
 	FromSeq int64
 	// Root names a snapshot root; "" takes the newest.
 	Root string
+	// MaxEvents, when > 0, ends the range at most MaxEvents events after its
+	// start instead of at the head, so a follower pulls a long tape in
+	// bounded pages. A range that ends before the head carries a head row
+	// projected from its last append receipt (the fields the receipt binds,
+	// the event's reducer version and the current head's revocation epoch),
+	// which is what Verify checks.
+	MaxEvents int64
+	// ChunksByReference leaves the snapshot's chunks out of Out: the
+	// manifest counts them from the host's sealed files, and WriteTar
+	// streams them from there (internal/bundle follow.go), so a streamed
+	// export needs no temporary copy of the snapshot.
+	ChunksByReference bool
 	// delta and sinceHead are set by ExportDelta: no snapshot root, and the
 	// source's event at FromSeq must be sinceHead.
 	delta     bool
@@ -61,8 +73,15 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	var snap *SnapshotRoot
 	if !opts.delta {
 		var err error
-		if snap, err = readSnapshotRoot(ctx, db, id, opts.Root); err != nil {
+		if snap, err = readNamedSnapshotRoot(ctx, db, id, opts.Root); err != nil {
 			return Manifest{}, err
+		}
+		if snap == nil && opts.Root != "" {
+			if unnamed, err := readSnapshotRoot(ctx, db, id, opts.Root); err != nil {
+				return Manifest{}, err
+			} else if unnamed != nil {
+				return Manifest{}, fmt.Errorf("bundle: snapshot root %s is not named by a snapshot_recorded event of the tape; a verifier could not authenticate it", opts.Root)
+			}
 		}
 	}
 	if snap == nil && !opts.delta && (opts.Root != "" || opts.FromSeq < 0) {
@@ -85,10 +104,33 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	if start > headSeq {
 		return Manifest{}, fmt.Errorf("bundle: range start %d is past the head %d", start, headSeq)
 	}
+	if snap == nil && !opts.delta && start > 0 {
+		return Manifest{}, fmt.Errorf("bundle: a bundle without a snapshot root must start at genesis or be a delta (range start %d); verify would refuse it", start)
+	}
+	if snap != nil && start > snap.HeadSequence {
+		return Manifest{}, fmt.Errorf("bundle: range start %d is after the snapshot at %d: the events between would be missing; verify would refuse it", start, snap.HeadSequence)
+	}
+	if opts.MaxEvents > 0 && headSeq-start > opts.MaxEvents {
+		headSeq = start + opts.MaxEvents
+		// A bootstrap page reaches at least the snapshot_recorded event
+		// that names its root: without it the root does not verify.
+		if snap != nil {
+			named, err := snapshotNamedSeq(ctx, db, id, snap)
+			if err != nil {
+				return Manifest{}, err
+			}
+			if named > headSeq {
+				headSeq = named
+			}
+		}
+	}
 	m := Manifest{
 		FormatVersion: FormatVersion, ComputerID: id, OwnerID: opts.OwnerID, SnapshotRoot: snap, Delta: opts.delta,
 		Tape:     Tape{StartSeq: start, HeadSeq: headSeq, HeadDigest: head.CanonicalEventHead, Head: *head},
 		Producer: opts.Producer,
+	}
+	if m.Genesis, err = receiptDigestAt(ctx, db, id, 1); err != nil {
+		return Manifest{}, err
 	}
 	switch {
 	case start == 0:
@@ -101,7 +143,7 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 		}
 	}
 	if opts.delta && m.Tape.StartHead != opts.sinceHead {
-		return Manifest{}, fmt.Errorf("bundle: the source's event at %d is %q, the previous bundle's head is %s (a fork or another history)", start, m.Tape.StartHead, opts.sinceHead)
+		return Manifest{}, fmt.Errorf("%w: the source's event at %d is %q, the previous bundle's head is %s (a fork or another history)", ErrHistoryMismatch, start, m.Tape.StartHead, opts.sinceHead)
 	}
 	if err := os.MkdirAll(opts.Out, 0o750); err != nil {
 		return Manifest{}, err
@@ -118,6 +160,8 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	reader := tapestore.NewReader(artifactsRoot)
 	x := exporter{reader: reader, objs: objs, id: id, out: opts.Out, seenPayload: map[string]bool{}, seenPin: map[string]bool{}}
 	prev := m.Tape.StartHead
+	var lastRow ReceiptRow
+	var lastEvent computerevent.Event
 	err = writeAtomicFrom(filepath.Join(opts.Out, ReceiptsName), 0o640, func(w io.Writer) error {
 		bw := bufio.NewWriter(w)
 		enc := json.NewEncoder(bw)
@@ -157,6 +201,7 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 				m.Counts.Receipts++
 				prev = row.EventDigest
 				after = row.Sequence
+				lastRow, lastEvent = row, event
 			}
 		}
 		return bw.Flush()
@@ -167,8 +212,15 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 	if m.Tape.StartHead == "" { // empty range from an imported start
 		m.Tape.StartHead = head.CanonicalEventHead
 	}
-	if prev != "" && prev != head.CanonicalEventHead {
-		return Manifest{}, fmt.Errorf("bundle: the range ends at %s, not the head %s", prev, head.CanonicalEventHead)
+	if headSeq < int64(head.Sequence) {
+		projected, err := projectHead(*head, lastRow, lastEvent)
+		if err != nil {
+			return Manifest{}, err
+		}
+		m.Tape.HeadSeq, m.Tape.HeadDigest, m.Tape.Head = headSeq, projected.CanonicalEventHead, projected
+	}
+	if prev != "" && prev != m.Tape.HeadDigest {
+		return Manifest{}, fmt.Errorf("bundle: the range ends at %s, not the head %s", prev, m.Tape.HeadDigest)
 	}
 	m.Counts.Events, m.Bytes.Events = x.counts.Events, x.bytes.Events
 	m.Counts.Payloads, m.Bytes.Payloads = x.counts.Payloads, x.bytes.Payloads
@@ -183,7 +235,13 @@ func Export(ctx context.Context, db *sql.DB, artifactsRoot string, opts ExportOp
 			if !validDigest(digest) {
 				return Manifest{}, fmt.Errorf("bundle: snapshot root names an invalid chunk digest")
 			}
-			n, err := exportChunk(artifactsRoot, id, opts.Out, digest)
+			var n int64
+			var err error
+			if opts.ChunksByReference {
+				n, err = hostChunkSize(artifactsRoot, id, digest)
+			} else {
+				n, err = exportChunk(artifactsRoot, id, opts.Out, digest)
+			}
 			if err != nil {
 				return Manifest{}, err
 			}

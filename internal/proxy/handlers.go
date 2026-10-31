@@ -901,6 +901,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerImportResidueSnapshotPath(path):
 		h.HandleComputerWorkspaceReplace(w, r)
 		return
+	case isTapeFollowPath(path):
+		h.HandleTapeFollow(w, r)
+		return
 	case isComputerProducerReportsPath(path):
 		h.HandleComputerProducerReports(w, r)
 		return

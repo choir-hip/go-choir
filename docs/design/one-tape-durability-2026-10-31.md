@@ -112,6 +112,12 @@ A stays the second copy for the server fleet (S6) because it is already paid
 for. Paid off-host infrastructure waits until the system is functional and
 stable.
 
+Built 2026-10-31 (sync slice 1, lane/mac-follow): the owner-authenticated
+host route `GET /api/computers/<id>/tape/bundle` (bootstrap, then bounded
+deltas by head digest, streamed as a tar) and the follower
+(`internal/tapefollow`) that the Mac app and `choir-bundle follow` run. The
+Mac store is a chain of verified bundles; no VM on the Mac yet.
+
 ## 5. The Mac and the hypervisor
 
 The bundle is hypervisor-neutral (a SQLite file and sealed artifacts, never a
@@ -210,7 +216,9 @@ It is not yet recovery on another machine. Accepted, as slices:
   snapshot root derives from its chunks, nor the receipts' signatures; an
   imported root with a high head_sequence would be preferred by
   RecoveryBase. Verify must check signatures against a known host key set,
-  and import must refuse a root the tape does not name.
+  and import must refuse a root the tape does not name. Built on
+  lane/bundle-authenticity: docs/design/bundle-authenticity-2026-10-31.md
+  (failure list, trust roots, verify cost).
 - B3 host state: ownership, route, file-CAS roots and tombstones are not in
   the bundle.
 - B4 import transaction: the whole range in one serializable transaction

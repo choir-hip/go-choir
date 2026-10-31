@@ -108,7 +108,13 @@ type Manifest struct {
 	// Delta marks a bundle that carries only the events after a previous
 	// bundle's head (Tape.StartSeq, Tape.StartHead) and no snapshot: it
 	// imports only onto a target already at that head (ExportDelta).
-	Delta     bool      `json:"delta,omitempty"`
+	Delta bool `json:"delta,omitempty"`
+	// Genesis is the digest of the computer's event 1 when the source holds
+	// it ("" for a source that was itself imported from a snapshot). It is
+	// the computer's identity on the tape: verify checks it against the
+	// tape when the range starts at genesis, and import refuses a target
+	// whose event 1 differs. Unsigned otherwise, so it only ever refuses.
+	Genesis   string    `json:"genesis,omitempty"`
 	Tape      Tape      `json:"tape"`
 	Counts    Totals    `json:"counts"`
 	Bytes     Totals    `json:"bytes"`
@@ -274,12 +280,10 @@ func decodeEvent(raw []byte, digest string) (computerevent.Event, error) {
 	if err != nil {
 		return computerevent.Event{}, fmt.Errorf("bundle: event %s: %w", digest, err)
 	}
+	// The bytes are canonical and hash to digest, so the event's digest
+	// (sha256 of its canonical bytes) is digest.
 	if string(canonical) != string(raw) {
 		return computerevent.Event{}, fmt.Errorf("bundle: event %s is not canonical", digest)
-	}
-	computed, err := event.Digest()
-	if err != nil || computed != digest {
-		return computerevent.Event{}, fmt.Errorf("bundle: event %s digest does not recompute", digest)
 	}
 	return event, nil
 }
