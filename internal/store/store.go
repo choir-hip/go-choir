@@ -210,6 +210,8 @@ type Store struct {
 	// it; partitions is the open partition set (telemetry_partition.go).
 	partitionWrites atomic.Bool
 	partitions      *telemetryPartitions
+	// walBound is the WAL bound's checkpoint record (wal_bound.go).
+	walBound walBoundState
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex

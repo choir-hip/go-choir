@@ -326,6 +326,9 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 			return !rt.bootInProgress.Load() && !rt.maintenanceHeld()
 		},
 		Take: func(ctx context.Context, maxDuration time.Duration) (snapshot.Ref, error) {
+			// The capture's read transaction pinned the WAL for its whole
+			// stream; the bound backfills it as soon as the read ends.
+			defer store.CheckpointAfterLongRead(ctx, "snapshot capture")
 			return snapshot.TakeSnapshot(ctx, snapshot.Config{
 				ComputerID: computerID,
 				DB:         store.ReadDB(),

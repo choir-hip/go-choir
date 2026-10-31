@@ -865,6 +865,9 @@ type guestObservabilityResponse struct {
 	// TelemetryPartitions is the per-day telemetry files
 	// (store.telemetry_partitions), when any is open or the writer is on.
 	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
+	// WAL is the state file's WAL size and the WAL bound's checkpoints
+	// (store/wal_bound.go).
+	WAL *store.WALStats `json:"wal,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -990,6 +993,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		}
 		if st := h.rt.store.TelemetryPartitionStats(); st.Writing || len(st.Live) > 0 || st.Retired > 0 {
 			resp.TelemetryPartitions = &st
+		}
+		if st := h.rt.store.WALStats(); st.Checkpoints > 0 || st.WALBytes > 0 {
+			resp.WAL = &st
 		}
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
 			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

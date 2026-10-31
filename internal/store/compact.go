@@ -154,11 +154,14 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 	if _, err := conn.ExecContext(copyCtx, `PRAGMA auto_vacuum=INCREMENTAL`); err != nil {
 		return false, fmt.Errorf("auto_vacuum: %w", err)
 	}
-	if _, err := conn.ExecContext(copyCtx, `VACUUM INTO `+sqlQuote(staging)); err != nil {
+	_, err = conn.ExecContext(copyCtx, `VACUUM INTO `+sqlQuote(staging))
+	_ = conn.Close()
+	// The copy's read transaction pinned the WAL for its whole duration.
+	s.CheckpointAfterLongRead(ctx, "compact copy")
+	if err != nil {
 		removeSQLiteFiles(staging)
 		return false, fmt.Errorf("vacuum into: %w", err)
 	}
-	_ = conn.Close()
 	side, err := checkCompactCopy(ctx, staging)
 	if err != nil {
 		removeSQLiteFiles(staging)
