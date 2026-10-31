@@ -572,7 +572,7 @@ func TestTapeSweepArchivesBeforeDelete(t *testing.T) {
 				t.Fatal(err)
 			}
 			body, _ := io.ReadAll(tr)
-			if hdr.Name == tapeArchiveManifestName {
+			if hdr.Name == tapeArchiveManifestName || strings.HasPrefix(hdr.Name, "rows/") {
 				continue
 			}
 			if string(original[hdr.Name]) != string(body) {

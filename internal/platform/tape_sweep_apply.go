@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
 // tapeSweepLogRecord is the GC deletion-log record (artifactGCLogRecord's
@@ -166,6 +167,10 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 		return report, fmt.Errorf("tape sweep: manifest %s header invalid", p.runID)
 	}
 	report.Sweeps = run.header.Sweeps
+	report.NoArchive = run.header.NoArchive
+	if run.header.NoArchive != p.noArchive {
+		return report, fmt.Errorf("tape sweep: the manifest was made with no_archive=%v; apply must repeat it exactly; nothing deleted", run.header.NoArchive)
+	}
 	if run.header.AcceptUnrecordedForkLineage && !p.forkAck {
 		return report, errors.New("tape sweep: the manifest lists destroyed computers under accept_unrecorded_fork_lineage; apply must repeat it; nothing deleted")
 	}
@@ -229,12 +234,14 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 	// Stream the manifest: one destroyed computer at a time, then orphans.
 	var proof *TapeSweepComputerProof
 	var group, orphans []tapeSweepItem
+	var groupDirs []string
+	var groupRows map[string]int64
 	flushGroup := func() error {
 		if proof == nil {
 			return nil
 		}
-		err := s.applyDestroyedComputer(ctx, jobID, run, *proof, group)
-		proof, group = nil, nil
+		err := s.applyDestroyedComputer(ctx, jobID, run, *proof, group, groupDirs, groupRows)
+		proof, group, groupDirs, groupRows = nil, nil, nil, nil
 		return err
 	}
 	for {
@@ -261,6 +268,19 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 				return report, fmt.Errorf("tape sweep: manifest computer invalid: %w", err)
 			}
 			proof = &c.Proof
+			groupRows = map[string]int64{}
+		case "dir":
+			var d tapeSweepDirLine
+			if err := json.Unmarshal(line, &d); err != nil || proof == nil || proof.ComputerID != d.Computer || !validPurgeDir(d.Computer, d.Path) {
+				return report, fmt.Errorf("tape sweep: manifest dir line invalid")
+			}
+			groupDirs = append(groupDirs, d.Path)
+		case "rows":
+			var r tapeSweepRowsLine
+			if err := json.Unmarshal(line, &r); err != nil || proof == nil || proof.ComputerID != r.Computer || !tapePurgeTableKnown(r.Table) || r.Count <= 0 {
+				return report, fmt.Errorf("tape sweep: manifest rows line invalid")
+			}
+			groupRows[r.Table] = r.Count
 		case "item":
 			var it tapeSweepItem
 			if err := json.Unmarshal(line, &it); err != nil {
@@ -308,6 +328,9 @@ func (s *Service) tapeSweepApply(ctx context.Context, jobID string, p tapeSweepP
 }
 
 func validTapeSweepItem(it tapeSweepItem) bool {
+	if isPurgeNamespace(it.Namespace) {
+		return validPurgeItem(it)
+	}
 	ok := false
 	for _, ns := range tapeNamespaces {
 		ok = ok || it.Namespace == ns
@@ -370,6 +393,9 @@ func (s *Service) tapeSweepSkipComputer(run *tapeSweepApplyRun, proof TapeSweepC
 // reproveDestroyed re-checks the destroyed proof at delete time.
 func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, proof TapeSweepComputerProof) string {
 	id := proof.ComputerID
+	if err := tapeSweepProtected(id); err != nil {
+		return "protected computer: hard refusal list"
+	}
 	if run.destroyErr != "" {
 		return run.destroyErr
 	}
@@ -397,17 +423,17 @@ func (s *Service) reproveDestroyed(ctx context.Context, run *tapeSweepApplyRun, 
 	if run.started.Sub(now.UpdatedAt) < run.quiet {
 		return "head moved within the quiet window"
 	}
-	if has, err := s.tapeReader().HasSegments(id); err != nil {
-		return "segments unreadable: " + err.Error()
-	} else if has {
-		return "computer has tape segments"
+	if reason, err := s.tapePurgeReferencedElsewhere(ctx, id); err != nil {
+		return "cross-reference check failed: " + err.Error()
+	} else if reason != "" {
+		return reason
 	}
 	return ""
 }
 
 // applyDestroyedComputer re-proves, tombstones, archives and deletes one
 // destroyed computer's tape.
-func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem) error {
+func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run *tapeSweepApplyRun, proof TapeSweepComputerProof, items []tapeSweepItem, dirs []string, rows map[string]int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -460,21 +486,31 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	}
 	run.log.record(tapeSweepLogRecord{Op: "tombstone", Sweep: TapeSweepDestroyed, Computer: id, Reason: tomb.Status, Count: len(items)})
 
-	// Archive before any unlink.
-	archive, err := s.ensureTapeArchive(run, id, items)
-	if err != nil {
-		run.counts.Errors++
-		dropTomb()
-		run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "archive: " + err.Error()})
-		_ = run.log.flush()
-		log.Printf("tape sweep: computer=%s archive failed, nothing deleted: %v", id, err)
-		return nil
+	// Archive before any unlink (unless the request said no_archive).
+	archivePath := "none (no_archive)"
+	if !run.p.noArchive {
+		extras, err := s.tapePurgeRowsDump(ctx, id)
+		var archive TapeArchiveSidecar
+		if err == nil {
+			archive, err = s.ensureTapeArchive(run, id, items, extras...)
+		}
+		if err != nil {
+			run.counts.Errors++
+			dropTomb()
+			run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "archive: " + err.Error()})
+			_ = run.log.flush()
+			log.Printf("tape sweep: computer=%s archive failed, nothing deleted: %v", id, err)
+			return nil
+		}
+		run.counts.Archives = append(run.counts.Archives, archive.Archive)
+		archivePath = archive.Archive
+		tomb.ArchivePath, tomb.ArchiveSHA256, tomb.ArchiveManifestSHA256 = archive.Archive, archive.ArchiveSHA256, archive.ManifestSHA256
+	} else if tomb.ArchivePath == "" {
+		tomb.ArchivePath = archivePath
 	}
-	run.counts.Archives = append(run.counts.Archives, archive.Archive)
 	if tomb.Status == tapeTombstoneArchiving {
 		tomb.Status = tapeTombstoneArchived
 	}
-	tomb.ArchivePath, tomb.ArchiveSHA256, tomb.ArchiveManifestSHA256 = archive.Archive, archive.ArchiveSHA256, archive.ManifestSHA256
 	if err := s.store.putTapeTombstone(ctx, tomb); err != nil {
 		return err
 	}
@@ -482,6 +518,29 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	deleted, bytesDeleted, complete, err := s.deleteTapeItems(ctx, run, items)
 	tomb.FilesDeleted += int64(deleted)
 	tomb.BytesDeleted += bytesDeleted
+	// Directories, then every row (escrow last, in the same transaction):
+	// only when every listed file is gone.
+	if complete && err == nil {
+		if !s.removePurgeDirs(run, id, dirs) {
+			complete = false
+		}
+	}
+	if complete && err == nil {
+		removed, rerr := s.purgeComputerRows(ctx, run, id, rows)
+		if rerr != nil {
+			run.counts.Errors++
+			complete = false
+			run.log.record(tapeSweepLogRecord{Op: "error", Sweep: TapeSweepDestroyed, Computer: id, Error: "rows: " + rerr.Error()})
+			_ = run.log.flush()
+			log.Printf("tape sweep: computer=%s rows not purged: %v", id, rerr)
+		} else {
+			for table, n := range removed {
+				run.counts.Classes = addClass(run.counts.Classes, "rows:"+table, 0, 0, n)
+				run.log.record(tapeSweepLogRecord{Op: "deleted_rows", Sweep: TapeSweepDestroyed, Computer: id, Namespace: table, Count: int(n)})
+			}
+			_ = run.log.flush()
+		}
+	}
 	if complete {
 		tomb.Status = tapeTombstoneDeleted
 		run.counts.ComputersDeleted++
@@ -489,7 +548,7 @@ func (s *Service) applyDestroyedComputer(ctx context.Context, jobID string, run 
 	if perr := s.store.putTapeTombstone(context.WithoutCancel(ctx), tomb); perr != nil && err == nil {
 		err = perr
 	}
-	log.Printf("tape sweep: computer=%s deleted=%d bytes=%d complete=%v archive=%s", id, deleted, bytesDeleted, complete, archive.Archive)
+	log.Printf("tape sweep: computer=%s deleted=%d bytes=%d complete=%v archive=%s", id, deleted, bytesDeleted, complete, archivePath)
 	return err
 }
 
@@ -544,7 +603,7 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 		end := min(len(items), start+run.p.batch)
 		var batch []tapeSweepItem
 		for _, it := range items[start:end] {
-			if run.delta[it.Digest] {
+			if !isPurgeNamespace(it.Namespace) && run.delta[it.Digest] {
 				run.counts.KeptReferenced++
 				run.log.item("kept_referenced", it, it.Size, "")
 				continue
@@ -580,6 +639,7 @@ func (s *Service) deleteTapeItems(ctx context.Context, run *tapeSweepApplyRun, i
 				bytesDeleted += size
 				run.counts.Deleted++
 				run.counts.BytesDeleted += size
+				run.counts.Classes = addClass(run.counts.Classes, it.Namespace, 1, size, 0)
 			case "gone":
 				run.counts.Gone++
 			case "kept_refreshed":
@@ -631,7 +691,7 @@ const tapeArchiveManifestName = "MANIFEST.jsonl"
 
 // ensureTapeArchive returns a verified archive of the items present on disk,
 // reusing this run's archive when its sidecar verifies (a resumed apply).
-func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items []tapeSweepItem) (TapeArchiveSidecar, error) {
+func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items []tapeSweepItem, extras ...tapeArchiveExtra) (TapeArchiveSidecar, error) {
 	if err := os.MkdirAll(run.archiveDir, 0o700); err != nil {
 		return TapeArchiveSidecar{}, err
 	}
@@ -644,7 +704,7 @@ func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items 
 			}
 		}
 	}
-	sc, err := s.writeTapeArchive(path, scope, run, items)
+	sc, err := s.writeTapeArchive(path, scope, run, items, extras)
 	if err != nil {
 		_ = os.Remove(path + ".tmp")
 		return TapeArchiveSidecar{}, err
@@ -659,7 +719,7 @@ func (s *Service) ensureTapeArchive(run *tapeSweepApplyRun, scope string, items 
 	return sc, run.log.flush()
 }
 
-func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, items []tapeSweepItem) (TapeArchiveSidecar, error) {
+func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, items []tapeSweepItem, extras []tapeArchiveExtra) (TapeArchiveSidecar, error) {
 	tmp := path + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -698,6 +758,19 @@ func (s *Service) writeTapeArchive(path, scope string, run *tapeSweepApplyRun, i
 		manifest.Write(append(line, '\n'))
 		sc.Entries++
 		sc.Bytes += int64(len(raw))
+	}
+	for _, ex := range extras {
+		if err := tw.WriteHeader(&tar.Header{Name: ex.Name, Mode: 0o600, Size: int64(len(ex.Body)), ModTime: time.Now(), Typeflag: tar.TypeReg}); err != nil {
+			return sc, err
+		}
+		if _, err := tw.Write(ex.Body); err != nil {
+			return sc, err
+		}
+		sum := sha256.Sum256(ex.Body)
+		line, _ := json.Marshal(tapeArchiveEntry{Path: ex.Name, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(ex.Body))})
+		manifest.Write(append(line, '\n'))
+		sc.Entries++
+		sc.Bytes += int64(len(ex.Body))
 	}
 	manifestSum := sha256.Sum256(manifest.Bytes())
 	sc.ManifestSHA256 = hex.EncodeToString(manifestSum[:])
@@ -766,12 +839,26 @@ func verifyTapeArchive(path string, sc TapeArchiveSidecar) error {
 		sum := sha256.Sum256(raw)
 		got := hex.EncodeToString(sum[:])
 		parts := strings.Split(hdr.Name, "/")
-		if len(parts) != 3 || parts[0] != "sha256" {
-			return fmt.Errorf("archive %s: unexpected entry %q", path, hdr.Name)
-		}
-		name, ok := tapeSweepFileName(parts[1], parts[2])
-		if !ok || name != got {
-			return fmt.Errorf("archive %s: entry %s does not hash to its name", path, hdr.Name)
+		switch {
+		case len(parts) == 4 && parts[0] == "sha256" && parts[1] == tapeNSFileCASChunks:
+			// A sealed chunk is addressed by the hash of its bytes.
+			if parts[3] != got {
+				return fmt.Errorf("archive %s: entry %s does not hash to its name", path, hdr.Name)
+			}
+		case len(parts) == 4 && parts[0] == "sha256" && parts[1] == tapeNSFileCASRoots:
+			// verified by the embedded manifest hash
+		case len(parts) >= 3 && parts[0] == tapestore.SegDirName:
+			// verified by the embedded manifest hash
+		case len(parts) == 2 && parts[0] == "rows":
+			// verified by the embedded manifest hash
+		default:
+			if len(parts) != 3 || parts[0] != "sha256" {
+				return fmt.Errorf("archive %s: unexpected entry %q", path, hdr.Name)
+			}
+			name, ok := tapeSweepFileName(parts[1], parts[2])
+			if !ok || name != got {
+				return fmt.Errorf("archive %s: entry %s does not hash to its name", path, hdr.Name)
+			}
 		}
 		seen[hdr.Name] = got
 	}

@@ -583,9 +583,11 @@ func (f *tapeFixture) allExistExceptEvents(c *tapeChain) {
 	}
 }
 
-// FM18: the destroyed-computer sweep does not know how to archive and delete
-// segments (A2), so it refuses a computer that has any, and deletes nothing.
-func TestTapeSweepDestroyedRefusesComputersWithSegments(t *testing.T) {
+// FM18: the destroyed-computer sweep archives and deletes a computer's
+// segments with the rest of its tape (it used to refuse such a computer; see
+// tape_purge_test.go). A segment written inside the grace window is a writer
+// still at work: the computer is refused until it has been quiet.
+func TestTapeSweepDestroyedDeletesComputersWithSegments(t *testing.T) {
 	f := newTapeFixture(t)
 	dead := f.chain("dead-1", 2, tapeAged)
 	var events []segItem
@@ -593,36 +595,21 @@ func TestTapeSweepDestroyedRefusesComputersWithSegments(t *testing.T) {
 		events = append(events, segItem{tapestore.NSEvent, s.event})
 	}
 	segmentize(t, f.root, "dead-1", 1, true, false, events...)
-	plain := f.chain("dead-2", 1, tapeAged) // a destroyed computer without segments is still swept
+	plain := f.chain("dead-2", 1, tapeAged)
 
 	dry := f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
-	var seen bool
 	for _, p := range dry.DestroyedProofs {
-		if p.ComputerID == "dead-1" {
-			seen = true
-			if p.Deletable || !strings.Contains(p.Reason, "segment") {
-				t.Fatalf("dead-1 proof = %+v, want not deletable because of segments", p)
-			}
+		if p.ComputerID == "dead-1" && (p.Deletable || !strings.Contains(p.Reason, "grace window")) {
+			t.Fatalf("dead-1 proof = %+v, want refused for a fresh segment", p)
 		}
 	}
-	if !seen {
-		t.Fatal("dead-1 has no proof")
-	}
-	listed := listedDigests(f.manifestItems(dry), TapeSweepDestroyed)
-	for _, s := range dead.seqs {
-		if listed[s.payload] || listed[s.eventPin] || listed[s.payloadPin] {
-			t.Fatal("files of a computer with segments were listed for deletion")
-		}
-	}
-	if !listed[plain.seqs[0].payload] {
-		t.Fatal("a destroyed computer without segments was no longer swept")
-	}
+	f.ageTree("dead-1", tapeAged)
+	dry = f.dryRun(TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}})
 	if _, err := f.apply(dry, TapeSweepRequest{AcceptUnrecordedForkLineage: true, Sweeps: []string{TapeSweepDestroyed}}); err != nil {
 		t.Fatal(err)
 	}
-	f.allExistExceptEvents(dead)
-	if segmentFilesExist(t, f.root, "dead-1") != 2 {
-		t.Fatal("segment files changed")
+	if segmentFilesExist(t, f.root, "dead-1") != 0 {
+		t.Fatal("segment files survived apply")
 	}
 	if f.exists(tapeNSPayload, plain.seqs[0].payload) {
 		t.Fatal("the segment-free destroyed computer survived apply")

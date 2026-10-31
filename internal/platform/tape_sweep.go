@@ -141,15 +141,19 @@ type TapeSweepRequest struct {
 	// AcceptUnrecordedForkLineage acknowledges that no fork-lineage record
 	// exists to check. Without it on both dry-run and apply, no destroyed
 	// computer's file is listed or deleted.
-	AcceptUnrecordedForkLineage bool   `json:"accept_unrecorded_fork_lineage,omitempty"`
-	RunID                       string `json:"run_id,omitempty"`
-	ManifestSHA256              string `json:"manifest_sha256,omitempty"`
-	MaxDeletes                  int    `json:"max_deletes,omitempty"`
-	MaxBytes                    int64  `json:"max_bytes,omitempty"`
-	BatchSize                   int    `json:"batch_size,omitempty"`
-	Pause                       string `json:"pause,omitempty"`
-	ComputerID                  string `json:"computer_id,omitempty"`
-	OlderThan                   string `json:"older_than,omitempty"`
+	AcceptUnrecordedForkLineage bool `json:"accept_unrecorded_fork_lineage,omitempty"`
+	// NoArchive skips the archive of a destroyed computer's files and rows
+	// (test computers). The default is to archive. The dry-run records it in
+	// the manifest and apply must repeat it exactly.
+	NoArchive      bool   `json:"no_archive,omitempty"`
+	RunID          string `json:"run_id,omitempty"`
+	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+	MaxDeletes     int    `json:"max_deletes,omitempty"`
+	MaxBytes       int64  `json:"max_bytes,omitempty"`
+	BatchSize      int    `json:"batch_size,omitempty"`
+	Pause          string `json:"pause,omitempty"`
+	ComputerID     string `json:"computer_id,omitempty"`
+	OlderThan      string `json:"older_than,omitempty"`
 }
 
 type tapeSweepParams struct {
@@ -159,6 +163,7 @@ type tapeSweepParams struct {
 	grace       time.Duration
 	quiet       time.Duration
 	forkAck     bool
+	noArchive   bool
 	runID       string
 	manifestSHA string
 	maxDeletes  int
@@ -189,6 +194,9 @@ type TapeSweepComputerProof struct {
 	Files                       int    `json:"files"`
 	Bytes                       int64  `json:"bytes"`
 	SharedPayloadsKept          int    `json:"shared_payloads_kept,omitempty"`
+	// Rows is the computer's rows apply removes from the per-computer tables.
+	Rows      int64 `json:"rows,omitempty"`
+	NoArchive bool  `json:"no_archive,omitempty"`
 }
 
 // TapeSweepNamespaceCounts is one namespace's orphan classification.
@@ -226,6 +234,9 @@ type TapeSweepReport struct {
 	DestroyedListed             int                                 `json:"destroyed_listed"`
 	DestroyedFiles              int                                 `json:"destroyed_files"`
 	DestroyedBytes              int64                               `json:"destroyed_bytes"`
+	DestroyedRows               int64                               `json:"destroyed_rows"`
+	DestroyedClasses            map[string]TapeSweepClassCounts     `json:"destroyed_classes,omitempty"`
+	NoArchive                   bool                                `json:"no_archive,omitempty"`
 	DestroyedProofs             []TapeSweepComputerProof            `json:"destroyed_proofs,omitempty"`
 	Apply                       *TapeSweepApplyCounts               `json:"apply,omitempty"`
 	Warnings                    []string                            `json:"warnings,omitempty"`
@@ -249,6 +260,8 @@ type TapeSweepApplyCounts struct {
 	ComputersSkipped    int      `json:"computers_skipped"`
 	Archives            []string `json:"archives,omitempty"`
 	ArchivesPruned      int      `json:"archives_pruned,omitempty"`
+	// Classes is what apply deleted, by class (see TapeSweepClassCounts).
+	Classes map[string]TapeSweepClassCounts `json:"classes,omitempty"`
 }
 
 // TapeSweepJob is the asynchronous run state GET returns.
@@ -279,6 +292,9 @@ type tapeSweepState struct {
 	// afterReferences is a test hook run after the dry-run's chain walk and
 	// before the append-receipt check, to simulate live appends during the walk.
 	afterReferences func()
+	// beforeRowsDelete is a test hook run before a computer's rows
+	// transaction; an error stands in for a crash between files and rows.
+	beforeRowsDelete func(computerID string) error
 	// extraRefsMax caps the unique digests the extra-refs route holds and
 	// answers; 0 means defaultTapeExtraRefsMax. Test-only: set before the
 	// route is called and never written in production, so it is read without
@@ -343,7 +359,7 @@ func parseTapeSweepDuration(raw string, def time.Duration) (time.Duration, error
 // active mode; apply needs a run id and manifest hash.
 func (s *Service) clampTapeSweepRequest(req TapeSweepRequest) (tapeSweepParams, error) {
 	policy, _ := s.tapeSweepPolicy()
-	p := tapeSweepParams{action: strings.TrimSpace(req.Action), forkAck: req.AcceptUnrecordedForkLineage}
+	p := tapeSweepParams{action: strings.TrimSpace(req.Action), forkAck: req.AcceptUnrecordedForkLineage, noArchive: req.NoArchive}
 	if p.action == "" {
 		p.action = TapeSweepActionDryRun
 	}
@@ -843,6 +859,7 @@ type tapeSweepManifestHeader struct {
 	Quiet                       string              `json:"quiet"`
 	Sweeps                      []string            `json:"sweeps"`
 	AcceptUnrecordedForkLineage bool                `json:"accept_unrecorded_fork_lineage"`
+	NoArchive                   bool                `json:"no_archive,omitempty"`
 	Heads                       map[string]tapeHead `json:"heads"`
 }
 
@@ -943,7 +960,7 @@ func writeJSONFileSync(path string, v any) error {
 func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweepParams) (TapeSweepReport, error) {
 	started := time.Now()
 	policy, registry := s.tapeSweepPolicy()
-	report := TapeSweepReport{RunID: jobID, Action: p.action, Mode: policy.Mode, Grace: p.grace.String(), Quiet: p.quiet.String(), AcceptUnrecordedForkLineage: p.forkAck, Orphans: map[string]TapeSweepNamespaceCounts{}, StartedAt: started.UTC()}
+	report := TapeSweepReport{RunID: jobID, Action: p.action, Mode: policy.Mode, Grace: p.grace.String(), Quiet: p.quiet.String(), AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, Orphans: map[string]TapeSweepNamespaceCounts{}, StartedAt: started.UTC()}
 	if p.orphans {
 		report.Sweeps = append(report.Sweeps, TapeSweepOrphans)
 	}
@@ -1005,11 +1022,20 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 		// A tombstoned computer's event files may be gone: its payload refs
 		// are unknown, so an unfinished one refuses the payload sweep.
 		readEvents := !hasTomb
+		purged := false
 		if hasTomb {
 			tombstoned++
-			if tomb.Status != tapeTombstoneDeleted && !deletable(id) {
+			if purged, err = s.tapeChainPurged(ctx, id); err != nil {
+				return report, err
+			}
+			if tomb.Status != tapeTombstoneDeleted && !deletable(id) && !purged {
 				orphansIncomplete = fmt.Sprintf("computer %s has an unfinished tape deletion (tombstone %s)", id, tomb.Status)
 			}
+		}
+		if purged {
+			// Its append receipts were purged with it: there is no chain to
+			// walk and nothing of it to reference (not a gap).
+			continue
 		}
 		err = s.walkTapeChain(ctx, id, 0, h.Sequence, readEvents || deletable(id), func(row tapeChainRow) error {
 			walkedRows[id]++
@@ -1066,7 +1092,7 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 	if err != nil {
 		return report, fmt.Errorf("tape sweep: manifest: %w", err)
 	}
-	header := tapeSweepManifestHeader{Kind: "header", RunID: jobID, CreatedAt: started.UTC().Format(time.RFC3339Nano), Grace: p.grace.String(), Quiet: p.quiet.String(), Sweeps: report.Sweeps, AcceptUnrecordedForkLineage: p.forkAck, Heads: heads}
+	header := tapeSweepManifestHeader{Kind: "header", RunID: jobID, CreatedAt: started.UTC().Format(time.RFC3339Nano), Grace: p.grace.String(), Quiet: p.quiet.String(), Sweeps: report.Sweeps, AcceptUnrecordedForkLineage: p.forkAck, NoArchive: p.noArchive, Heads: heads}
 	if err := mw.line(header); err != nil {
 		mw.close()
 		return report, err
@@ -1096,11 +1122,31 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 				report.Warnings = append(report.Warnings, err.Error())
 				continue
 			}
+			purgeItems, purgeDirs, purgeRows, err := s.tapePurgeListing(ctx, id, cutoff)
+			if err != nil {
+				pr.Deletable, pr.Reason = false, err.Error()
+				report.Warnings = append(report.Warnings, err.Error())
+				continue
+			}
+			items = append(items, purgeItems...)
+			if len(items) == 0 && len(purgeRows) == 0 && pr.Tombstone == tapeTombstoneDeleted {
+				pr.Deletable, pr.Reason = false, "already deleted"
+				continue
+			}
 			pr.SharedPayloadsKept = shared
+			pr.NoArchive = p.noArchive
 			for _, it := range items {
 				pr.Files++
 				pr.Bytes += it.Size
+				report.DestroyedClasses = addClass(report.DestroyedClasses, it.Namespace, 1, it.Size, 0)
 			}
+			tables := make([]string, 0, len(purgeRows))
+			for table, n := range purgeRows {
+				pr.Rows += n
+				tables = append(tables, table)
+				report.DestroyedClasses = addClass(report.DestroyedClasses, "rows:"+table, 0, 0, n)
+			}
+			sort.Strings(tables)
 			if err := mw.line(tapeSweepManifestComputer{Kind: "computer", Proof: *pr}); err != nil {
 				mw.close()
 				return report, err
@@ -1111,9 +1157,22 @@ func (s *Service) tapeSweepDryRun(ctx context.Context, jobID string, p tapeSweep
 					return report, err
 				}
 			}
+			for _, d := range purgeDirs {
+				if err := mw.line(tapeSweepDirLine{Kind: "dir", Computer: id, Path: d}); err != nil {
+					mw.close()
+					return report, err
+				}
+			}
+			for _, table := range tables {
+				if err := mw.line(tapeSweepRowsLine{Kind: "rows", Computer: id, Table: table, Count: purgeRows[table]}); err != nil {
+					mw.close()
+					return report, err
+				}
+			}
 			report.DestroyedListed++
 			report.DestroyedFiles += pr.Files
 			report.DestroyedBytes += pr.Bytes
+			report.DestroyedRows += pr.Rows
 		}
 		for _, id := range ids {
 			if pr := proofs[id]; pr != nil && pr.Destroyed {
@@ -1198,6 +1257,9 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 		}
 		out[id] = pr
 		switch {
+		case tapeSweepProtected(id) != nil:
+			pr.Reason = "protected computer: hard refusal list"
+			continue
 		case pr.InRegistryList:
 			pr.Reason = "in registry list"
 			continue
@@ -1218,26 +1280,18 @@ func (s *Service) tapeDestroyedProofs(ctx context.Context, registry ComputerRegi
 			pr.Reason = "head moved within the quiet window"
 			continue
 		}
-		if pr.Tombstone == tapeTombstoneDeleted {
-			pr.Destroyed, pr.Reason = true, "already deleted"
-			continue
-		}
 		pr.Destroyed = true
 		if !p.forkAck {
 			pr.Reason = "fork lineage unrecorded; not acknowledged"
+			if pr.Tombstone == tapeTombstoneDeleted {
+				pr.Reason = "already deleted"
+			}
 			continue
 		}
-		// The destroyed sweep archives and unlinks legacy files only. It has
-		// no way to archive or delete a segment, so a computer with any is
-		// left whole (A2 teaches the sweep segments).
-		hasSegments, err := s.tapeReader().HasSegments(id)
-		if err != nil {
-			return nil, fmt.Errorf("segments of %s: %w", id, err)
-		}
-		if hasSegments {
-			pr.Reason = "computer has tape segments; the destroyed sweep cannot archive or delete segments yet"
-			continue
-		}
+		// A tombstone in status deleted may still have rows or directories
+		// to purge (a computer deleted before the purge existed): the
+		// listing stage decides, and reports "already deleted" when nothing
+		// remains.
 		pr.Deletable, pr.Reason = true, "destroyed: no ownership, not listed, no route, quiet; fork lineage unrecorded (acknowledged)"
 	}
 	return out, nil
@@ -1268,6 +1322,11 @@ func (s *Service) tapeRoutedComputers(ctx context.Context) (map[string]bool, err
 // tapeDestroyedItems lists one deletable computer's tape files, payloads
 // first. A payload any live record names is kept (shared).
 func (s *Service) tapeDestroyedItems(ctx context.Context, id string, h tapeHead, live *digestPrefixSet, listedPayloads map[string]bool, cutoff time.Time) ([]tapeSweepItem, int, error) {
+	if purged, err := s.tapeChainPurged(ctx, id); err != nil {
+		return nil, 0, err
+	} else if purged {
+		return nil, 0, nil // receipts purged: no chain, no loose files named
+	}
 	var payloads, receipts, events []tapeSweepItem
 	shared := 0
 	seen := map[string]bool{}
