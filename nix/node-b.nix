@@ -275,13 +275,14 @@ let
     restUser = "nodeb";
     quotaGiB = 450; # must match the node-a module's quotaGiB
     uploadLimitKiB = 25000; # about 200 Mbit/s; 0 = unlimited
-    # Disk guard. The staging area holds the PostgreSQL dumps (about 3 GB at
-    # 2026-10-30, growing with the data; dumps are removed after each run) and
-    # the reflink image clones, which pin copy-on-write extents while the run
-    # lasts. 20 GiB is about three times the dumps' size at the cutover plus
-    # room for the restic cache and the pinned extents; the Dolt copies that
-    # needed 40 are gone. Raise it as the dumps grow.
-    minFreeGiB = 20;
+    # Disk guard. The staging area holds the PostgreSQL dumps and the
+    # reflink image clones, which pin copy-on-write extents while the run
+    # lasts. The dumps are uncompressed now (-Z 0, so restic deduplicates
+    # them across nights): about 12-17 GB at 2026-10-31 (estimate from the
+    # 18.7 GB and 2.5 GB databases), growing; removed after each run. 45 GiB
+    # is about twice that plus the restic cache (2 GB) and pinned extents,
+    # against 164 GiB free. Raise it as the dumps grow.
+    minFreeGiB = 45;
     # Guest data.img images in the nightly run: the paper and the owner
     # computer only. A computer rebuilds from its tape by design; an image
     # is a recovery-time hedge, and the tracers' test computers need none

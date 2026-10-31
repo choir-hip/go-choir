@@ -36,13 +36,18 @@ STATE="${OFFHOST_STATE_DIR:-$ROOT/offhost-backup}"
 SECRETS_DIR="${OFFHOST_SECRETS_DIR:-$ROOT/secrets/offhost-backup}"
 # PostgreSQL (data system cutover, phase 2 item I7): one pg_dump per database
 # into $STAGING/pg before restic runs. The role and databases are those of
-# nix/postgresql.nix. The dump level is gzip inside the custom format; 0 would
-# let restic deduplicate across nights at the price of a larger staging area.
+# nix/postgresql.nix. The dump level is gzip inside the custom format. It is
+# 0: a gzip stream differs from the first changed byte on, so the 2.5 GB
+# control dump re-uploaded whole every night (108 GB added on 2026-10-31).
+# Uncompressed, restic's content-defined chunks match night to night and the
+# repository (format v2, RESTIC_COMPRESSION=auto) compresses what is new.
+# Price: staging holds the raw dumps, about 12-17 GB for control (18.7 GB
+# database) and graph (2.5 GB) at 2026-10-31, an estimate; MIN_FREE_GIB covers it.
 PG_DATABASES="${OFFHOST_PG_DATABASES:-control graph}"; PG_DATABASES="${PG_DATABASES//,/ }"
 PG_HOST="${OFFHOST_PG_HOST:-127.0.0.1}"
 PG_PORT="${OFFHOST_PG_PORT:-5432}"
 PG_USER="${OFFHOST_PG_USER:-choir}"
-PG_COMPRESS="${OFFHOST_PG_COMPRESS:-6}"
+PG_COMPRESS="${OFFHOST_PG_COMPRESS:-0}"
 PG_PW_FILE="${OFFHOST_PG_PASSWORD_FILE:-$ROOT/secrets/pg-app-password}"
 ART="$ROOT/platform-artifacts"
 VM_STATE="$ROOT/vm-state"
