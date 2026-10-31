@@ -51,6 +51,18 @@ func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, 
 	if mediaType == "" || privacyClass == "" {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: media type and privacy class are required")
 	}
+	// Only a projection batch payload is segment-eligible (section 4.2). A
+	// plaintext batch says so in its media type. A sealed batch arrives as a
+	// private envelope (media type PrivateArtifactMediaType) whose inner media
+	// type is in the envelope metadata, which is authenticated as the AEAD
+	// associated data and checked here against the computer. The host cannot
+	// open the envelope; the metadata is the whole signal. A guest that holds
+	// its own key can label any envelope of its own computer a batch, as it
+	// could already pin any bytes under ProjectionBatchMediaType: the result
+	// is a record in that computer's own segment, bounded by MaxRecordBytes,
+	// read back by digest like a loose file, so the label buys nothing a
+	// guest does not already have.
+	segmentable := mediaType == computerevent.ProjectionBatchMediaType
 	if privacyClass == "private" {
 		if mediaType != computerevent.PrivateArtifactMediaType {
 			return computerevent.PinResult{}, fmt.Errorf("event artifact service: private payload must use the encrypted envelope media type")
@@ -59,9 +71,8 @@ func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, 
 		if err != nil || metadata.ComputerID != computerID {
 			return computerevent.PinResult{}, fmt.Errorf("event artifact service: invalid private artifact envelope")
 		}
+		segmentable = metadata.MediaType == computerevent.ProjectionBatchMediaType
 	}
-	// Only a projection batch payload is segment-eligible (section 4.2).
-	segmentable := mediaType == computerevent.ProjectionBatchMediaType
 	return s.pin(computerID, payload, mediaType, "computer-event-payload", privacyClass, "pin_intent_commitment", requestCommitment, segmentable)
 }
 

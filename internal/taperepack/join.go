@@ -33,6 +33,7 @@ type edgeVal struct {
 	eligible bool
 	rejected bool // a PinReceipt the shape guard rejected: names the file, attributes nothing
 	ref      bool // an event body in a segment names the digest
+	private  bool // a private-envelope payload receipt: the file's envelope metadata decides eligibility
 }
 
 // compIdx is one computer's segment records of the current bucket.
@@ -110,6 +111,7 @@ func (e *engine) readEdges(b int) (map[locKey][]edgeVal, error) {
 			eligible: rec[41]&edgeEligible != 0,
 			rejected: rec[41]&edgeRejected != 0,
 			ref:      rec[41]&edgeRef != 0,
+			private:  rec[41]&edgePrivate != 0,
 		})
 	}
 	return out, nil
@@ -282,6 +284,21 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) (counts []compute
 				continue
 			}
 			name := e.table.names[ed.computer]
+			if ed.private {
+				// A sealed projection batch is eligible, as at the pin
+				// (internal/platform event_artifacts.go pinPayload); any
+				// other envelope stays a loose file. The metadata is the
+				// AEAD associated data: the host reads it, never the body.
+				if v.ns != tapestore.NSPayload {
+					dropped = true
+					continue
+				}
+				meta, err := computerevent.InspectPrivateArtifactEnvelope(raw)
+				if err != nil || meta.ComputerID != name || meta.MediaType != computerevent.ProjectionBatchMediaType {
+					dropped = true
+					continue
+				}
+			}
 			if v.ns == tapestore.NSEvent {
 				if !eventTried {
 					eventTried = true
