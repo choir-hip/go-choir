@@ -126,6 +126,7 @@ func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error)
 		return 0, nil
 	}
 	appended := 0
+	capped := map[string]bool{}
 	for _, g := range telemetryRetireGroups {
 		cutoff := now.Add(-g.window()).UTC()
 		var start time.Time
@@ -182,6 +183,64 @@ func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error)
 		}
 		// Everything before t is retired for this group.
 		retireCleared.Store(s.retireClearedKey(g), t)
+		// Capped: the next run continues the rows, then the days.
+		capped[g.name] = t.Before(cutoff)
+	}
+	for _, g := range telemetryRetireGroups {
+		if capped[g.name] {
+			continue
+		}
+		days, err := s.retirePartitionDays(ctx, g, now.Add(-g.window()).UTC())
+		appended += days
+		if err != nil {
+			return appended, err
+		}
+	}
+	return appended, nil
+}
+
+// retirePartitionDays appends one whole-day retire op for each live
+// telemetry partition of the group's classes whose day ended before cutoff
+// (telemetry_partition.go): the op retires the file, so a day costs one op
+// and no row delete. The hourly walk above covers the rows in og_objects and
+// choir_events only; a partition's rows wait for their whole day, so a row
+// stays at least the window and less than a day past it.
+func (s *Store) retirePartitionDays(ctx context.Context, g telemetryRetireGroup, cutoff time.Time) (int, error) {
+	if g.phase != computerevent.ObjectRetirePhaseAny {
+		return 0, nil
+	}
+	named := map[string]bool{}
+	for _, k := range g.kinds {
+		named[string(k)] = true
+	}
+	appended := 0
+	for _, p := range s.partitions.live() {
+		covered := true
+		for _, k := range telemetryPartitionClassKinds(p.class) {
+			covered = covered && named[k]
+		}
+		end := p.day.Add(telemetryPartitionDay)
+		if !covered || end.After(cutoff) {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return appended, err
+		}
+		body, err := json.Marshal(g.projection(p.day, end))
+		if err != nil {
+			return appended, err
+		}
+		opStart := time.Now()
+		if err := s.AppendProjectionOps(ctx, []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObjectRetire, Body: body}}); err != nil {
+			return appended, err
+		}
+		appended++
+		rest := max(telemetryRetireChunkPause, time.Duration(telemetryRetireRest*float64(time.Since(opStart))))
+		select {
+		case <-ctx.Done():
+			return appended, ctx.Err()
+		case <-time.After(rest):
+		}
 	}
 	return appended, nil
 }
@@ -233,6 +292,10 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 				continue
 			}
 			log.Printf("store: run memory retirement: %d ops in %s", memOps, time.Since(memStart).Round(time.Millisecond))
+			// The files of the partitions the ops retired (telemetry_partition.go).
+			if _, gcErr := s.GCTelemetryPartitions(ctx); gcErr != nil {
+				log.Printf("store: telemetry partitions: delete retired files: %v", gcErr)
+			}
 			// Pages the retirements freed go back to the filesystem, bounded
 			// (compact.go; only a compacted file has incremental auto_vacuum).
 			if freed, vacErr := s.reclaimFreePages(ctx); vacErr != nil {

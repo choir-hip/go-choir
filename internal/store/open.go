@@ -300,6 +300,19 @@ func openStore(dbPath string) (*Store, error) {
 	}
 	doneEpoch(nil)
 
+	// The telemetry partitions: a directory listing and one indexed delete
+	// per file (rows above the head), then the floor if any file exists.
+	doneParts := objectgraph.BootPhase("store: open", "telemetry-partitions")
+	parts, err := openTelemetryPartitions(context.Background(), s.db, sidecar)
+	if err == nil {
+		s.partitions = parts
+		err = s.ensureTelemetryPartitionFloor()
+	}
+	doneParts(err)
+	if err != nil {
+		return nil, s.closeFailedOpen(err)
+	}
+
 	s.initLeaseObs()
 
 	return s, nil
@@ -421,6 +434,14 @@ func (s *Store) Reopen(path string) error {
 	s.og = live.og
 	s.ogStore = live.ogStore
 	s.ogReadStore = live.ogReadStore
+	// The adopted store's partitions; this store's were closed by Close.
+	s.partitions = live.partitions
+	if s.partitionWrites.Load() {
+		if err := writeTelemetryPartitionFloorAt(live.texturePath); err != nil {
+			s.partitionWrites.Store(false)
+			log.Printf("runtime store: reopen: telemetry partition writer off: %v", err)
+		}
+	}
 	*live = Store{}
 	s.closedOK = false
 	// The lease state (ready or unseeded, the reserved block, the counters)
@@ -485,6 +506,7 @@ func (s *Store) Close() error {
 	if pinned != nil {
 		_ = pinned.Close()
 	}
+	s.partitions.close()
 	if s.sqlite != nil {
 		if closeErr := s.sqlite.Close(); closeErr != nil && err == nil {
 			err = closeErr

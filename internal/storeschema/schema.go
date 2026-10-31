@@ -61,7 +61,15 @@ import (
 //     is raised to 4 before the first delete and an older binary refuses to
 //     open the store. An older snapshot restored under this binary is
 //     re-derived at Open (the catch-up trim), logged, not refused.
-const Version uint64 = 4
+//   - 5: telemetry partitions (internal/store/telemetry_partition.go,
+//     docs/design/one-tape-durability-2026-10-31.md section 6c). Ops stamped
+//     "telemetry_partition" land in per-day SQLite files in the workspace's
+//     telemetry directory, and a retire op covering a day retires the file.
+//     An older binary projects a stamped op into og_objects, reads no
+//     partition and retires none, so its replay and reads disagree with this
+//     one: the floor is raised to 5 before the writer first stamps, and an
+//     older binary refuses to open the store.
+const Version uint64 = 5
 
 // File is the receipt filename inside the store's sidecar directory
 // (deriveTextureWorkspacePath(StorePath)).

@@ -190,6 +190,8 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	record, err := snapshot.Install(ctx, snapshot.RestoreConfig{
 		ComputerID: computerID, DestPath: statePath, Source: events, Chunks: chunks, Cipher: cipher,
 		MaxSequence: targetSeq,
+		// The store's partitions: emptied, then the snapshot's installed.
+		PartitionDir: choirstore.TelemetryPartitionDir(storePath),
 		// The chunks are authenticated by their seal; this checks that the
 		// pages agree with the witness the producer recorded. A snapshot that
 		// fails falls back to the next older one.

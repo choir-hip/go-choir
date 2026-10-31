@@ -144,6 +144,7 @@ disk image), so the hypervisor work is independent of it:
 | S9 | Tape retention: what of the tape, receipts and payloads may be dropped or cold-stored after a snapshot covers it, and on the Mac | red (tape, evidence) | design first; owner decides what is kept forever |
 | S10 | Recovery inside its authority and time: replay takes a renewing capability source and renewal starts at the exchange; the bound restated in ops/bytes; the snapshot cadence stated against it | red (boot path, credentials) | a d@e recovery whose replay outlives one capability lifetime succeeds |
 | S8 | Hypervisor seam, then vfkit on a Mac with a bundle import: workstation mode | red | a computer moved Node B to a Mac and back |
+| S11 | Telemetry in per-day partition files, tool.result first (6c) | red (store schema, epoch 5) | d@e: partition writing; two snapshots hold a closed day's chunks; a whole-day retire deletes a file |
 
 ## 6a. Review of 2026-10-31 (Sonnet and Devin seats; DeepSeek pending)
 
@@ -257,6 +258,148 @@ rebase onto them), and option 1 follows for telemetry. An in-place VACUUM of
 a live computer is the old frame. Check first: the snapshot's content witness
 is computed over a read transaction of the live file, so a compact snapshot
 must give the same witness (it covers rows, not page layout).
+
+## 6c. Telemetry in time-partitioned files (option 1, 2026-10-31)
+
+Owner, 2026-10-31: "We need to reconsider how we do compaction if our current
+plan has us rewriting gbs every day." Retirement by row delete (tool results
+after 7 days, the trace kinds after 14) frees pages all over the 20 GB file,
+so every snapshot's 4 MiB page ranges differ and nothing dedups. Option 1:
+telemetry lives in small per-day files, and retiring a day is deleting one.
+Built in internal/store/telemetry_partition.go; mutation class red (store
+schema, projection, snapshot).
+
+**Failure modes first** (each has a test; T in the store's
+telemetry_partition_test.go, S in snapshot_partitions_test.go):
+
+1. Replay puts a row in another file than the live apply did (the partition
+   read from the wall clock or the binary's class table) (T1).
+2. A reader answers differently over partitions (a missed file, a cut
+   before the merge, a cursor that skips one); a seed misses the partitions
+   and hands out a sequence or stream number twice (T2, T11).
+3. Retirement keeps or drops other rows than the row delete did, the
+   keep_cited rows in particular (T3).
+4. A crash between the partition commit and the state commit leaves a
+   phantom row, or loses a row (T4).
+5. A crash mid-retire: a retired file is read again; a cut-short deletion
+   leaves a WAL; a deletion runs while a compact copy whose head is below
+   the retirement is staged, so the rebase replays a retire op whose file
+   is gone and loses the cited rows (T5).
+6. A late row of a retired day is invisible (T6). The dry run writes (T7).
+7. The job retires before the window or never, or appends on an idle run
+   (T8).
+8. A snapshot misses a partition, a closed partition does not dedup, a
+   restore keeps a stale partition of another lineage or loses the
+   partitions silently, a partition path escapes its directory, the host
+   sweeps partition chunks (S1-S6); a file is deleted under a capture (T9).
+9. An older binary opens a store with partitions it cannot read or retire
+   (T10).
+
+**Decisions.**
+
+- *Granularity and naming:* one file per class per UTC day,
+  `<workspace>/telemetry/<class>-YYYYMMDD.db`, in the store's sidecar
+  workspace so every path that moves the workspace (rematerialize's flip,
+  quarantine) moves the files. A day, not a week: the retire op's longest
+  slice is 24 hours, so one op retires one file; a week of tool results is
+  eight files. First class: `tool_result` (tool.result), the largest
+  retired kind and the only one with keep_cited. The trace kinds and
+  loop.progress are the next classes (below).
+- *The tape decides:* the writer stamps the op
+  (`ProjectionOp.Table = "telemetry_partition"`, next to F-c's
+  `choir_events`), and the projector routes on the stamp; the file is the
+  class of the event kind and the UTC day of the object's own updated_at in
+  the op body. A kind this binary does not partition, or a row whose day is
+  already retired, lands in choir_events. Unstamped history replays as it
+  did (og_objects).
+- *Commit order, not attached databases:* SQLite commits attached WAL
+  databases one file at a time, so a crash between them is possible either
+  way. The partitions commit first (synchronous=FULL), then the state file,
+  so a head implies its rows. Open deletes rows above the state file's head
+  in every partition (one indexed delete per file); a restore, a compaction
+  rebase and a crash all reduce to this, and the replay writes the rows
+  again (an upsert on the tape position). This is not a resumer: it removes
+  effects the state file never committed, and no work is reopened.
+- *Readers fan out per query:* each choir_events half of a union reader,
+  and each seed, runs its own SQL on choir_events and on every live
+  partition, and the reader merges as it already merges the two tables. No
+  ATTACH (per-connection state across a read pool, and a 10-database cap).
+- *Retirement stays one tape op with the old semantics.* A retire op that
+  covers a partition's whole day (every phase, all its kinds) retires it: in
+  the state transaction, the rows a stored run acceptance cites are copied
+  into choir_events and the partition is recorded in
+  `telemetry_partitions_retired` (name, class, day, tape_seq). An op that
+  covers part of a day deletes the matching uncited rows inside the
+  partition, which is exactly the old row delete, in a file that is going
+  away. The job walks the hours of og_objects and choir_events as before
+  (the rows that predate partitions), then appends one whole-day op per
+  partition whose day ended before the cutoff: a tool result stays at least
+  7 days and less than 8.
+- *The file deletion is not state.* `GCTelemetryPartitions` runs after the
+  daily retirement and deletes the files the state file calls retired. It
+  waits for a snapshot capture (the capture holds it from before its read
+  transaction) and does nothing while a compact copy is staged.
+- *Snapshot:* the record carries `partitions` (path, geometry, chunks),
+  outside the manifest so an older reader installs the state file alone.
+  Each partition streams from its own read transaction, begun after the
+  state file's; rows above the head are dropped at the restore's Open. A
+  closed partition's pages never change, so its chunks are the same digests
+  in every snapshot and are never uploaded twice: that is the point. The
+  root registration declares the partition chunks. Restore empties the
+  partition directory, installs the snapshot's partitions, then the state
+  file; a snapshot with partitions and no directory named is refused.
+- *Content witness:* witness v3 covers the state file, including the
+  retired set and the cited rows moved into choir_events; the partition
+  rows are covered by their sealed, digest-addressed chunks, and by the
+  replay-completeness fingerprints, not by the witness.
+- *Floor:* store epoch 5. The writer writes floor 5 before it stamps, and
+  the first partition file of a fresh workspace (a replay, a restore)
+  writes it too.
+- *Switch:* `store.telemetry_partitions`, a stored owner setting, default
+  off for the ring walk (R0 d@e, then the paper, then the default), stamping
+  only once the stream_seq lease is ready, like F-c.
+
+**Migration.** None by copy. Rows already in og_objects stay there and age
+out through the hourly row delete within 7 days of the switch (the paper's
+retirement is already running); the cited ones stay in og_objects. Their
+freed pages go with the compaction rebase (6b). From the switch on, every
+new tool result lands in a partition.
+
+**Rollback.** The setting off is the live rollback: new tool results go to
+og_objects; the partitions stay readable and are retired by day as before.
+A binary below epoch 5 refuses a floored store; going below it needs every
+partition retired and deleted, then the floor lowered by hand. A git revert
+of the build without the floor would leave tool results of the last week
+unread by the older binary (telemetry only, never semantic state).
+
+**What landed, what remains.** Landed: the tool_result class end to end
+(writer stamp on both write paths, projector, dry run, readers and seeds,
+fingerprints, retirement and keep_cited, the job's day ops, the file
+deletion, Open's cleanup, the floor, snapshot capture and restore on both
+install paths, observability). Remains, named:
+
+- the next classes: desk.cell and desk.egress (14 days), phased and
+  phaseless loop.progress (a phase filter splits a class: the class must be
+  the retire group, kind and phase), tool.invoked and Texture progress
+  (retired at once: they could simply not be written), run.delta and the
+  other batched kinds the policy keeps (a forever class needs no file per
+  day);
+- the vocabulary fences do not read partitions (only epoch-5 V2 binaries
+  stamp them; noted at the fence);
+- a restore to a point below a later partial retire keeps that retire's
+  effect inside the partition (the replay to the head converges; telemetry
+  only);
+- a partition witness (a digest of the rows at or below the head), if a
+  replay comparison ever needs it.
+
+**Rollout.** d@e: deploy, set `store.telemetry_partitions` on through
+/api/computer-settings, run a turn, and check `telemetry_partitions` in
+/api/runtime/observability (writing, today's file live), a snapshot whose
+record lists the partition, and the next day's job appending one whole-day
+op per closed file once the window passes. The paper: the same setting
+after d@e shows it, then watch two consecutive snapshots: the closed days'
+chunks must be held (not uploaded); the state file's churn falls as the
+legacy tool results age out and the compaction rebase reclaims them.
 
 ## 7. What can go wrong
 

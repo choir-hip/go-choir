@@ -54,8 +54,30 @@ const choirEventsTable = "choir_events"
 // The write is an upsert on the tape position, so re-projecting the same
 // event (finalize after RecoverPrepared) is idempotent.
 func projectChoirEvent(ctx context.Context, tx *sql.Tx, body json.RawMessage, pos uint64, opIndex int) error {
-	refuse := func(format string, args ...any) error {
-		return fmt.Errorf("%w: %s: %s", computerevent.ErrProjectionBatchInvalid, choirEventsTable, fmt.Sprintf(format, args...))
+	row, err := decodeChoirEventRow(body, pos, opIndex)
+	if err != nil {
+		return err
+	}
+	return insertChoirEventRow(ctx, tx, pos, opIndex, row, false)
+}
+
+// choirEventRow is the columns of one choir_events row (or a telemetry
+// partition's, which has the same table), every one a function of the op.
+type choirEventRow struct {
+	canonicalID, objectKind, ownerID, computerID, versionID, contentHash string
+	body                                                                 []byte
+	metadata                                                             string
+	createdAt, updatedAt                                                 time.Time
+	runID                                                                string
+	seq, streamSeq                                                       int64
+	trajectoryID, eventKind                                              string
+}
+
+// decodeChoirEventRow refuses only shapes the table cannot hold (see
+// projectChoirEvent).
+func decodeChoirEventRow(body json.RawMessage, pos uint64, opIndex int) (choirEventRow, error) {
+	refuse := func(format string, args ...any) (choirEventRow, error) {
+		return choirEventRow{}, fmt.Errorf("%w: %s: %s", computerevent.ErrProjectionBatchInvalid, choirEventsTable, fmt.Sprintf(format, args...))
 	}
 	if pos == 0 || opIndex < 0 {
 		return refuse("a stamped op needs a tape position")
@@ -114,11 +136,25 @@ func projectChoirEvent(ctx context.Context, tx *sql.Tx, body json.RawMessage, po
 			return refuse("%s is %d characters, the column holds %d", col.name, n, col.max)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO choir_events
-		(tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata,
-		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, '', ?, ?, ?, ?, ?)
-		ON CONFLICT (tape_seq, op_index) DO UPDATE SET
+	return choirEventRow{
+		canonicalID: obj.CanonicalID, objectKind: string(obj.ObjectKind), ownerID: obj.OwnerID, computerID: obj.ComputerID,
+		versionID: obj.VersionID, contentHash: obj.ContentHash, body: []byte(obj.Body), metadata: metadata,
+		createdAt: obj.CreatedAt.UTC(), updatedAt: obj.UpdatedAt.UTC(),
+		runID: meta.RunID, seq: meta.Seq, streamSeq: meta.StreamSeq, trajectoryID: meta.TrajectoryID, eventKind: meta.Kind,
+	}, nil
+}
+
+// execer is a transaction of the main store or of a partition.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// insertChoirEventRow writes row at tape position (pos, opIndex). The write
+// is an upsert on the position, so re-projecting the same event (finalize
+// after RecoverPrepared) is idempotent; keepExisting leaves a row already at
+// the position as it is (a cited row a retired partition hands over).
+func insertChoirEventRow(ctx context.Context, tx execer, pos uint64, opIndex int, row choirEventRow, keepExisting bool) error {
+	conflict := `ON CONFLICT (tape_seq, op_index) DO UPDATE SET
 			canonical_id = excluded.canonical_id,
 			object_kind = excluded.object_kind,
 			owner_id = excluded.owner_id,
@@ -133,10 +169,18 @@ func projectChoirEvent(ctx context.Context, tx *sql.Tx, body json.RawMessage, po
 			seq = excluded.seq,
 			stream_seq = excluded.stream_seq,
 			trajectory_id = excluded.trajectory_id,
-			event_kind = excluded.event_kind`,
-		pos, opIndex, obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID, obj.VersionID, obj.ContentHash,
-		[]byte(obj.Body), metadata, obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(),
-		meta.RunID, meta.Seq, meta.StreamSeq, meta.TrajectoryID, meta.Kind); err != nil {
+			event_kind = excluded.event_kind`
+	if keepExisting {
+		conflict = `ON CONFLICT (tape_seq, op_index) DO NOTHING`
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO choir_events
+		(tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata,
+		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, '', ?, ?, ?, ?, ?)
+		`+conflict,
+		pos, opIndex, row.canonicalID, row.objectKind, row.ownerID, row.computerID, row.versionID, row.contentHash,
+		row.body, row.metadata, row.createdAt.UTC(), row.updatedAt.UTC(),
+		row.runID, row.seq, row.streamSeq, row.trajectoryID, row.eventKind); err != nil {
 		return fmt.Errorf("project %s: %w", choirEventsTable, err)
 	}
 	return nil
@@ -248,7 +292,24 @@ func (s *Store) eventTableDB(op string, fn func(db *sql.DB) error) error {
 	return nil
 }
 
-// readEventTable runs one choir_events half. It scans the rows' bytes
+// eventTableReads runs fn on the read pool of choir_events, then on the
+// read pool of every live telemetry partition (telemetry_partition.go): the
+// partitions hold the same table, so each half's SQL runs on each file and
+// the reader merges what they return, as it merges the two tables.
+func (s *Store) eventTableReads(op string, fn func(db *sql.DB) error) error {
+	if err := s.eventTableDB(op, fn); err != nil {
+		return err
+	}
+	for _, p := range s.partitions.live() {
+		if _, err := p.withRead(fn); err != nil {
+			return fmt.Errorf("%s: telemetry partition %s: %w", op, p.name, err)
+		}
+	}
+	return nil
+}
+
+// readEventTable runs one choir_events half, on the table and on every live
+// telemetry partition. It scans the rows' bytes
 // under the engine mutex and decodes them after releasing it: a 10,000-row
 // read must not hold every object-graph query for its JSON decode (review
 // findings B and F on deploy 1; Sonnet measured 228 of 281 ms of a 4,000-row
@@ -260,7 +321,7 @@ func (s *Store) readEventTable(ctx context.Context, op, query string, args []any
 		body        []byte
 	}
 	var raw []rawRow
-	err := s.eventTableDB(op, func(db *sql.DB) error {
+	err := s.eventTableReads(op, func(db *sql.DB) error {
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
@@ -370,12 +431,13 @@ func eventRecords(entries []eventTableEntry, limit int) []types.EventRecord {
 func (s *Store) eventTableRunMaxSeq(ctx context.Context, runID string) (int64, error) {
 	query, args := eventTableRunMaxSeqSQL(runID)
 	var seq int64
-	err := s.eventTableDB("store.event_table.seed_run_seq", func(db *sql.DB) error {
-		err := db.QueryRowContext(ctx, query, args...).Scan(&seq)
+	err := s.eventTableReads("store.event_table.seed_run_seq", func(db *sql.DB) error {
+		var v int64
+		err := db.QueryRowContext(ctx, query, args...).Scan(&v)
 		if errors.Is(err, sql.ErrNoRows) {
-			seq = 0
 			return nil
 		}
+		seq = max(seq, v)
 		return err
 	})
 	if err != nil {
@@ -388,7 +450,7 @@ func (s *Store) eventTableRunMaxSeq(ctx context.Context, runID string) (int64, e
 func (s *Store) eventTableNewestStreamSeq(ctx context.Context) (int64, error) {
 	query, args := eventTableNewestStreamSQL()
 	var newest int64
-	err := s.eventTableDB("store.event_table.seed_stream_seq", func(db *sql.DB) error {
+	err := s.eventTableReads("store.event_table.seed_stream_seq", func(db *sql.DB) error {
 		rows, err := db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return err
@@ -554,16 +616,33 @@ func (s *Store) stampsEventTable(kind types.EventKind) bool {
 // eventObjectOp is the object_recorded op of one choir.event object, stamped
 // for choir_events when stamped is set. It is the only production code that
 // sets ProjectionOp.Table (event_table_guard_test.go).
-func eventObjectOp(obj objectgraph.Object, stamped bool) (computerevent.ProjectionOp, error) {
+//
+// table is the stamp: "" (og_objects), choirEventsTable, or
+// telemetryPartitionStamp.
+func eventObjectOp(obj objectgraph.Object, table string) (computerevent.ProjectionOp, error) {
 	body, err := json.Marshal(obj)
 	if err != nil {
 		return computerevent.ProjectionOp{}, fmt.Errorf("marshal event object: %w", err)
 	}
 	op := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: obj.CanonicalID, Body: body}
-	if stamped {
-		op.Table = choirEventsTable
+	switch table {
+	case choirEventsTable, telemetryPartitionStamp:
+		op.Table = table
 	}
 	return op, nil
+}
+
+// eventStamp is the stamp of an event of kind: a partition when the
+// partition writer stamps the kind, else choir_events when the event-table
+// writer stamps it, else none. The caller holds eventMu.
+func (s *Store) eventStamp(kind types.EventKind) string {
+	switch {
+	case s.stampsTelemetryPartition(kind):
+		return telemetryPartitionStamp
+	case s.stampsEventTable(kind):
+		return choirEventsTable
+	}
+	return ""
 }
 
 // appendStampedEvent is the acknowledged write (W1) of one storage-class
@@ -571,7 +650,7 @@ func eventObjectOp(obj objectgraph.Object, stamped bool) (computerevent.Projecti
 // the refusals are the ones PutObject applies before its interceptor
 // (PreflightWrite), and the op goes onto the tape as its own projection
 // batch, as the interceptor would put it. Only the Table differs.
-func (s *Store) appendStampedEvent(ctx context.Context, rec *types.EventRecord) error {
+func (s *Store) appendStampedEvent(ctx context.Context, rec *types.EventRecord, table string) error {
 	if s.projectionTape == nil || s.ogStore == nil {
 		return fmt.Errorf("store: a stamped event needs the projection tape")
 	}
@@ -586,7 +665,7 @@ func (s *Store) appendStampedEvent(ctx context.Context, rec *types.EventRecord) 
 	if err := s.ogStore.PreflightWrite(ctx, []objectgraph.Object{obj}, nil); err != nil {
 		return fmt.Errorf("store: create object: %w", err)
 	}
-	op, err := eventObjectOp(obj, true)
+	op, err := eventObjectOp(obj, table)
 	if err != nil {
 		return fmt.Errorf("store: %w", err)
 	}

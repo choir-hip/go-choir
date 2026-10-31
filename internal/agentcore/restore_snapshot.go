@@ -134,6 +134,8 @@ func (rt *Runtime) openStagedStore(ctx context.Context, tape restoreTape, stagin
 		Cipher:      rt.privateArtifactCipher,
 		MaxSequence: plan.sequence,
 		Verify:      VerifySnapshotFile,
+		// The staged workspace's partitions: the flip moves them with it.
+		PartitionDir: choirstore.TelemetryPartitionDir(marker),
 	}, plan.candidates)
 	if err != nil {
 		return nil, snapshot.Record{}, fmt.Errorf("%w: install snapshot: %v", recoveryplan.ErrBaseRefused, err)
@@ -143,6 +145,25 @@ func (rt *Runtime) openStagedStore(ctx context.Context, tape restoreTape, stagin
 		return nil, snapshot.Record{}, fmt.Errorf("rematerialize: open staged snapshot: %w", err)
 	}
 	return staged, record, nil
+}
+
+// telemetryPartitionSource is the store's telemetry partitions as the
+// snapshot capture takes them (internal/store/telemetry_partition.go).
+func telemetryPartitionSource(store *choirstore.Store) *snapshot.PartitionSource {
+	return &snapshot.PartitionSource{
+		Hold: store.HoldTelemetryPartitions,
+		List: func(ctx context.Context, tx *sql.Tx) ([]snapshot.PartitionFile, error) {
+			files, err := store.TelemetrySnapshotFiles(ctx, tx)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]snapshot.PartitionFile, 0, len(files))
+			for _, f := range files {
+				out = append(out, snapshot.PartitionFile{Path: f.Path, DB: f.DB})
+			}
+			return out, nil
+		},
+	}
 }
 
 // VerifySnapshotFile checks the unsealed file against the witness the

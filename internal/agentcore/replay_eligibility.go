@@ -93,13 +93,16 @@ var replayAirworthinessEntries = map[string]ReplayObservationClass{
 	"og_edges":                        ReplayEventProjection,
 	"og_objects":                      ReplayEventProjection,
 	"choir_events":                    ReplayEventProjectionOptional,
-	"solitaire_games":                 ReplayRetiredAbsent,
-	"solitaire_moves":                 ReplayRetiredAbsent,
-	"app_adoptions":                   ReplayRetiredAbsent,
-	"app_change_packages":             ReplayRetiredAbsent,
-	"candidate_package_intakes":       ReplayRetiredAbsent,
-	"computer_source_lineages":        ReplayRetiredAbsent,
-	"computer_supervision_commands":   ReplayRetiredAbsent,
+	// The retired telemetry partitions (store/telemetry_partition.go): a
+	// function of the retire ops on the tape, created with the schema.
+	"telemetry_partitions_retired":  ReplayEventProjection,
+	"solitaire_games":               ReplayRetiredAbsent,
+	"solitaire_moves":               ReplayRetiredAbsent,
+	"app_adoptions":                 ReplayRetiredAbsent,
+	"app_change_packages":           ReplayRetiredAbsent,
+	"candidate_package_intakes":     ReplayRetiredAbsent,
+	"computer_source_lineages":      ReplayRetiredAbsent,
+	"computer_supervision_commands": ReplayRetiredAbsent,
 }
 
 // CurrentReplayAirworthinessManifest returns the immutable policy snapshot for

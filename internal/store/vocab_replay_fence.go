@@ -121,6 +121,11 @@ func (s *Store) noteVocabReplayDeposit(batch *computerevent.ProjectionBatch, seq
 		case computerevent.ProjectionOpObject:
 			if strings.TrimSpace(op.Table) == choirEventsTable {
 				t.stamped[eventTablePosition{tapeSeq: sequence, opIndex: i}] = struct{}{}
+			} else if strings.TrimSpace(op.Table) == telemetryPartitionStamp {
+				// A partition row is not an object-row table's row: only an
+				// epoch-5 binary (V2, write guard on) stamps one, so it is
+				// never V1 (the choir_events argument, objectRowTables). The
+				// fences do not read partitions (section 6c, residual).
 			} else if err := json.Unmarshal(op.Body, &ids); err != nil || ids.CanonicalID == "" {
 				t.overflow = true
 			} else {

@@ -431,4 +431,16 @@ CREATE TABLE IF NOT EXISTS choir_events (
 CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
+
+-- telemetry_partitions_retired names the telemetry partitions a retire op
+-- retired (telemetry_partition.go): main-store state, so the head, the
+-- readers, the snapshot and replay agree on it. Every column is a function of
+-- the op and its tape position.
+CREATE TABLE IF NOT EXISTS telemetry_partitions_retired (
+	name TEXT NOT NULL PRIMARY KEY,
+	class TEXT NOT NULL,
+	day TEXT NOT NULL,
+	tape_seq INTEGER NOT NULL,
+	cited_moved INTEGER NOT NULL DEFAULT 0
+);
 `

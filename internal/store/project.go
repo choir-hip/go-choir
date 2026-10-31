@@ -41,15 +41,18 @@ type projectedSessionIdentity struct {
 // The replay path passes nil: a replayed workspace is checked and filled
 // online after boot (objectgraph.ValidateDerivedKeys), off the boot path, and
 // the caller withdraws the families.
-func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived, stmts)
+//
+// pb collects the batch's telemetry partition writes (telemetry_partition.go);
+// the caller flushes it before it commits tx.
+func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys, stmts *projectStmts, pb *partitionBatch) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived, stmts, pb)
 }
 
-func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, stmts *projectStmts) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil, stmts)
+func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, stmts *projectStmts, pb *partitionBatch) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil, stmts, pb)
 }
 
-func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
+func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts, pb *partitionBatch) error {
 	if tx == nil {
 		return fmt.Errorf("computer event projection: missing transaction")
 	}
@@ -61,14 +64,14 @@ func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, bat
 		computerID = replayComputerID
 	}
 	for i, op := range batch.Ops {
-		if err := projectOp(ctx, tx, op, pos, i, allowReplayTextureBootstrap, replayComputerID, computerID, derived, stmts); err != nil {
+		if err := projectOp(ctx, tx, op, pos, i, allowReplayTextureBootstrap, replayComputerID, computerID, derived, stmts, pb); err != nil {
 			return fmt.Errorf("computer event projection: op %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, pos uint64, opIndex int, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
+func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, pos uint64, opIndex int, allowReplayTextureBootstrap bool, replayComputerID, computerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts, pb *partitionBatch) error {
 	switch strings.TrimSpace(op.Kind) {
 	case computerevent.ProjectionOpDesktopState:
 		return projectDesktopState(ctx, tx, op.Body, computerID)
@@ -76,8 +79,11 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 		// The stamp on the tape decides the table (event-table design 2.2).
 		// Any other Table value keeps today's route: a stricter projector
 		// could refuse a historical tape on replay.
-		if strings.TrimSpace(op.Table) == choirEventsTable {
+		switch strings.TrimSpace(op.Table) {
+		case choirEventsTable:
 			return projectChoirEvent(ctx, tx, op.Body, pos, opIndex)
+		case telemetryPartitionStamp:
+			return projectTelemetryPartitionEvent(ctx, tx, op.Body, pos, opIndex, pb)
 		}
 		return projectObject(ctx, tx, op.Body, derived, stmts)
 	case computerevent.ProjectionOpObjectEdge:
@@ -103,7 +109,7 @@ func projectOp(ctx context.Context, tx *sql.Tx, op computerevent.ProjectionOp, p
 	case computerevent.ProjectionOpUserPreference:
 		return projectUserPreference(ctx, tx, op.Body)
 	case computerevent.ProjectionOpObjectRetire:
-		_, err := projectObjectRetire(ctx, tx, op.Body, derived)
+		_, err := projectObjectRetire(ctx, tx, op.Body, derived, pos, pb)
 		return err
 	case computerevent.ProjectionOpRunMemoryRetire:
 		return projectRunMemoryRetire(ctx, tx, op.Body)

@@ -118,7 +118,11 @@ func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.
 // step (nil on replay, which withdraws the families and lets the online pass
 // fill them; a choir.event has no derived-key family today, so there is
 // nothing to drop, but the drop is written for the day it has one).
-func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *objectgraph.DerivedKeys) (int64, error) {
+//
+// The op reaches the telemetry partitions too (retirePartitions): a day it
+// covers whole is retired at pos, a day it covers in part loses the matching
+// rows, through pb.
+func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *objectgraph.DerivedKeys, pos uint64, pb *partitionBatch) (int64, error) {
 	p, err := computerevent.DecodeObjectRetire(body)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", computerevent.ErrProjectionBatchInvalid, err)
@@ -166,6 +170,11 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 	}
 	n, _ := res.RowsAffected()
 	removed += n
+	parts, err := retirePartitions(ctx, tx, p, from, before, pos, pb)
+	if err != nil {
+		return 0, fmt.Errorf("object retire: %w", err)
+	}
+	removed += parts
 	if removed > 0 {
 		log.Printf("store: object retire: removed %d %s rows (kinds=%v slice=[%s,%s) phase=%q reason=%q)",
 			removed, p.ObjectKind, p.EventKinds, p.UpdatedFrom, p.UpdatedBefore, p.Phase, p.Reason)

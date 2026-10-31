@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 )
@@ -66,7 +67,45 @@ func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphF
 	if err != nil {
 		return nil, err
 	}
-	return append(out, events...), nil
+	out = append(out, events...)
+	parts, err := s.telemetryPartitionFingerprints(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, parts...), nil
+}
+
+// telemetryPartitionFingerprints are the rows of the live telemetry
+// partitions, keyed by tape position like choir_events' (a position is in
+// one table only).
+func (s *Store) telemetryPartitionFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
+	var out []ObjectGraphFingerprint
+	for _, p := range s.partitions.live() {
+		if _, err := p.withRead(func(db *sql.DB) error {
+			rows, err := readStoredRows(ctx, db, "")
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				bodySum := sha256.Sum256(r.row.body)
+				metaSum := sha256.Sum256([]byte(r.row.metadata))
+				out = append(out, ObjectGraphFingerprint{
+					Table:          telemetryPartitionStamp,
+					CanonicalID:    fmt.Sprintf("%s/%d/%d", telemetryPartitionStamp, r.pos, r.index),
+					ObjectKind:     r.row.objectKind,
+					VersionID:      r.row.versionID,
+					ContentHash:    r.row.contentHash,
+					BodyDigest:     hex.EncodeToString(bodySum[:]),
+					MetadataDigest: hex.EncodeToString(metaSum[:]),
+					UpdatedAt:      fmt.Sprint(r.row.updatedAt),
+				})
+			}
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("fingerprints of telemetry partition %s: %w", p.name, err)
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {

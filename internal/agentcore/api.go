@@ -862,6 +862,9 @@ type guestObservabilityResponse struct {
 	// grant, the owner's setting, and whether the writer stamps. Absent on a
 	// computer with neither, so the response is unchanged there.
 	EventTable *EventTableStatus `json:"event_table,omitempty"`
+	// TelemetryPartitions is the per-day telemetry files
+	// (store.telemetry_partitions), when any is open or the writer is on.
+	TelemetryPartitions *store.TelemetryPartitionStats `json:"telemetry_partitions,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -984,6 +987,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		resp.StreamSeqLease = &lease
 		if st := h.rt.eventTableStatus(); st.HostGranted || st.Setting || st.StoreFloor > 0 {
 			resp.EventTable = &st
+		}
+		if st := h.rt.store.TelemetryPartitionStats(); st.Writing || len(st.Live) > 0 || st.Retired > 0 {
+			resp.TelemetryPartitions = &st
 		}
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
 			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

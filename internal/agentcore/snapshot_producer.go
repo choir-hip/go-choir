@@ -338,6 +338,7 @@ func (rt *Runtime) snapshotDepsForRuntime() (snapshotDeps, bool) {
 				Witness: func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error) {
 					return LiveStoreWitnessTx(ctx, tx)
 				},
+				Partitions:  telemetryPartitionSource(store),
 				Cipher:      rt.privateArtifactCipher,
 				Chunks:      chunks,
 				Appender:    rt.eventAppender,

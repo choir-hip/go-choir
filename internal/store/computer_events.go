@@ -204,7 +204,7 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	if len(dry.Ops) == 0 {
 		return nil
 	}
-	return projectBatch(ctx, tx, dry, pos, nil, stmts)
+	return projectBatch(ctx, tx, dry, pos, nil, stmts, s.newPartitionBatch(true))
 }
 
 func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch, allowLegacyTextureBootstrap bool) error {
@@ -306,6 +306,7 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			return fmt.Errorf("computer event projection: %w", err)
 		}
 	}
+	pb := s.newPartitionBatch(false)
 	if batch != nil {
 		var projectErr error
 		if allowLegacyTextureBootstrap {
@@ -313,12 +314,12 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			// families (a replayed row would otherwise read as missing) and
 			// let the online pass fill it.
 			s.derivedKeys().InvalidateAll("replay projection")
-			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence, stmts)
+			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence, stmts, pb)
 			// Again before the commit, so a pass that published while the
 			// batch was written cannot leave a family readable.
 			s.derivedKeys().InvalidateAll("replay projection")
 		} else {
-			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys(), stmts)
+			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys(), stmts, pb)
 		}
 		if projectErr != nil {
 			return projectErr
@@ -327,9 +328,21 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if err := s.trimProjectionBatchIndexTx(ctx, tx, computerID, sequence); err != nil {
 		return err
 	}
+	// The partitions commit first: a head in the state file implies its
+	// rows in the partitions (telemetry_partition.go). A crash here leaves
+	// rows above the head, which Open drops and the replay writes again.
+	if err := pb.flush(ctx); err != nil {
+		return fmt.Errorf("computer event projection: %w", err)
+	}
+	if hook := partitionFlushedHook; hook != nil {
+		if err := hook(sequence); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	pb.committed()
 	// The guest keeps no event bodies once an event is final (build sheet
 	// decision 8): remember this one for the lookups that follow, and let the
 	// tape serve it after that.

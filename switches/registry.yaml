@@ -2186,6 +2186,39 @@
    "note": "ON for d@e first (2026-10-30 20:07, 0 ops in 140 ms); default ON for every computer from 2026-10-30 (lean system L1). The paper's first run removes about 2 GB of rows in hour slices of at most 2000 ops per group."
   },
   {
+   "id": "store_telemetry_partitions",
+   "kind": "setting",
+   "life": "release",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-31",
+   "settings": [
+    "store.telemetry_partitions"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R4",
+   "expires": "2026-11-28",
+   "ring": "R0",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    },
+    {
+     "metric": "settings_apply_errors",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "delete the key and stamp tool.result always once every computer runs epoch 5",
+   "note": "tool.result in per-day partition files (docs/design/one-tape-durability-2026-10-31.md section 6c). On for d@e by stored setting first; then the paper; then the default. Turning it on writes store floor 5.",
+   "revert": {
+    "mode": "one_way"
+   }
+  },
+  {
    "id": "store_trace_log",
    "kind": "setting",
    "life": "release",

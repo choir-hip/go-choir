@@ -81,6 +81,7 @@ var ogKindEventFunctions = map[string]string{
 	"ListEventsByTrajectory":          "union",
 	"ListAcknowledgedEventsByChannel": "og_objects only: acknowledged kinds never leave it (F10)",
 	"projectChoirEvent":               "the projector",
+	"decodeChoirEventRow":             "the projector (choir_events and the telemetry partitions)",
 }
 
 func TestEventTableReadersAreUnionAware(t *testing.T) {

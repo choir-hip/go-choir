@@ -822,11 +822,25 @@ func (s *Store) exactOGStreamSeqMax(ctx context.Context) (int64, error) {
 
 // exactTableStreamSeqMax is the exact maximum over choir_events by one reverse
 // seek per owner, owners listed by skip-seeks on the same index.
+//
+// It runs on choir_events and on every live telemetry partition.
 func (s *Store) exactTableStreamSeqMax(ctx context.Context) (int64, error) {
 	var maxSeq int64
+	err := s.eventTableReads("store.event_table.seed_tables", func(db *sql.DB) error {
+		v, err := s.exactTableStreamSeqMaxOn(ctx, db)
+		maxSeq = max(maxSeq, v)
+		return err
+	})
+	return maxSeq, err
+}
+
+// exactTableStreamSeqMaxOn is the exact scan on one table.
+func (s *Store) exactTableStreamSeqMaxOn(ctx context.Context, target *sql.DB) (int64, error) {
+	var maxSeq int64
+	on := func(_ string, fn func(db *sql.DB) error) error { return fn(target) }
 	ownerMax := func(owner string) error {
 		query, args := eventTableOwnerMaxStreamSQL(owner)
-		return s.eventTableDB("store.event_table.seed_owner_max", func(db *sql.DB) error {
+		return on("store.event_table.seed_owner_max", func(db *sql.DB) error {
 			rows, err := db.QueryContext(ctx, query, args...)
 			if err != nil {
 				return err
@@ -846,7 +860,7 @@ func (s *Store) exactTableStreamSeqMax(ctx context.Context) (int64, error) {
 		query, args := eventTableNextOwnerSQL(after)
 		var owner string
 		found := false
-		err := s.eventTableDB("store.event_table.seed_next_owner", func(db *sql.DB) error {
+		err := on("store.event_table.seed_next_owner", func(db *sql.DB) error {
 			rows, err := db.QueryContext(ctx, query, args...)
 			if err != nil {
 				return err

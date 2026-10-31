@@ -198,6 +198,10 @@ type Store struct {
 	// eventTableWrites is store.event_table as the runtime applied it: the
 	// writer stamps the storage class's ops for choir_events (event_table.go).
 	eventTableWrites atomic.Bool
+	// partitionWrites is store.telemetry_partitions as the runtime applied
+	// it; partitions is the open partition set (telemetry_partition.go).
+	partitionWrites atomic.Bool
+	partitions      *telemetryPartitions
 	// searchIdx caches tokenized head text for SearchDocuments
 	// (search_index.go).
 	searchIdx searchIndex
@@ -1370,7 +1374,7 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 
 	// The event-table stamp (store.event_table) is decided once, here, with
 	// the numbers: the tape then says which table the event lands in.
-	stamp := s.stampsEventTable(rec.Kind)
+	stamp := s.eventStamp(rec.Kind)
 
 	if batched {
 		queued, err := newTelemetryRecord(rec, stamp)
@@ -1396,8 +1400,8 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		unlocked = true
 	}
 	appendOne := s.AppendEventOG
-	if stamp {
-		appendOne = s.appendStampedEvent
+	if stamp != "" {
+		appendOne = func(ctx context.Context, rec *types.EventRecord) error { return s.appendStampedEvent(ctx, rec, stamp) }
 	}
 	if err := appendOne(ctx, rec); err != nil {
 		// The sequence was not written: forget the mark so the run's next

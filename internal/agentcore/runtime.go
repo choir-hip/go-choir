@@ -971,6 +971,8 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// So is the event-table writer (store.event_table): the host grant and
 	// the owner's setting, read once here.
 	rt.configureEventTable(ctx)
+	// And the telemetry partition writer (store.telemetry_partitions).
+	rt.configureTelemetryPartitions(ctx)
 	if rt.maintenanceHeld() {
 		log.Printf("runtime: maintenance hold active (RUNTIME_MAINTENANCE_HOLD=1); refusing run admission + agent rewake while held")
 		return

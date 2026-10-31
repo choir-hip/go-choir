@@ -111,7 +111,7 @@ type telemetryRecord struct {
 // the event's numbers (store.event_table): a record queued with the setting
 // on is sealed stamped even if the setting goes off before its seal, and the
 // reverse.
-func newTelemetryRecord(rec *types.EventRecord, stamped bool) (telemetryRecord, error) {
+func newTelemetryRecord(rec *types.EventRecord, stamp string) (telemetryRecord, error) {
 	if rec == nil || !rec.Kind.Batchable() {
 		kind := types.EventKind("")
 		if rec != nil {
@@ -127,7 +127,7 @@ func newTelemetryRecord(rec *types.EventRecord, stamped bool) (telemetryRecord, 
 	if err != nil {
 		return telemetryRecord{}, err
 	}
-	op, err := eventObjectOp(obj, stamped)
+	op, err := eventObjectOp(obj, stamp)
 	if err != nil {
 		return telemetryRecord{}, fmt.Errorf("telemetry: %w", err)
 	}
@@ -532,10 +532,10 @@ func recheckTelemetryOp(op computerevent.ProjectionOp) error {
 	if op.Kind != computerevent.ProjectionOpObject {
 		return fmt.Errorf("op kind %q is not an object", op.Kind)
 	}
-	if op.Table != "" && op.Table != choirEventsTable {
+	if op.Table != "" && op.Table != choirEventsTable && op.Table != telemetryPartitionStamp {
 		// A sealed op lands in og_objects or, stamped, in choir_events
-		// (event-table design 2.2); nothing else.
-		return fmt.Errorf("op table %q is not %q", op.Table, choirEventsTable)
+		// (event-table design 2.2) or a telemetry partition; nothing else.
+		return fmt.Errorf("op table %q is neither %q nor %q", op.Table, choirEventsTable, telemetryPartitionStamp)
 	}
 	var obj objectgraph.Object
 	if err := json.Unmarshal(op.Body, &obj); err != nil {

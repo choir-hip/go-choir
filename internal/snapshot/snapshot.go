@@ -110,6 +110,52 @@ type Record struct {
 	// Manifest addresses the sealed chunks of the file (one entry,
 	// StateFileName).
 	Manifest filecas.Manifest `json:"manifest"`
+	// Partitions are the store's telemetry partition files at the snapshot
+	// (internal/store/telemetry_partition.go), each streamed like the state
+	// file from its own read transaction. They are outside the manifest, so a
+	// reader that does not know them installs the state file alone (and its
+	// replay lacks the partitions' rows below the head: telemetry, never
+	// semantic state). A closed partition's chunks are the same bytes in
+	// every snapshot, so a repeat snapshot uploads none of them.
+	Partitions []PartitionEntry `json:"partitions,omitempty"`
+}
+
+// PartitionEntry is one partition file of a snapshot.
+type PartitionEntry struct {
+	// Path is the file's path under the store workspace,
+	// "telemetry/<name>.db".
+	Path          string   `json:"path"`
+	Size          int64    `json:"size"`
+	PageSize      int      `json:"page_size"`
+	PageCount     int64    `json:"page_count"`
+	PagesPerChunk int      `json:"pages_per_chunk"`
+	Chunks        []string `json:"chunks"`
+}
+
+// PartitionDirName is the directory every PartitionEntry.Path is in.
+const PartitionDirName = "telemetry"
+
+// PartitionFile is one partition the store hands the capture: its snapshot
+// path and a read pool on it.
+type PartitionFile struct {
+	Path string
+	DB   *sql.DB
+}
+
+// PartitionSource is the store's partition set as the capture sees it. Hold
+// is called before the read transaction begins and its release after the last
+// partition is read, so no file the head calls live is deleted under the
+// stream; List runs inside the read transaction.
+type PartitionSource struct {
+	Hold func() (release func())
+	List func(ctx context.Context, tx *sql.Tx) ([]PartitionFile, error)
+}
+
+// validPartitionPath reports whether path names a file directly inside
+// PartitionDirName.
+func validPartitionPath(path string) bool {
+	name, ok := strings.CutPrefix(path, PartitionDirName+"/")
+	return ok && name != "" && !strings.ContainsAny(name, `/\`) && name != "." && name != ".." && strings.HasSuffix(name, ".db")
 }
 
 // Stats is what one capture did, for the producer's log.
@@ -127,6 +173,9 @@ type Stats struct {
 	// uploaded instead.
 	ProbeErrors   int
 	BytesUploaded int64
+	// PartitionFiles is the telemetry partitions streamed; their pages and
+	// chunks are in the counts above.
+	PartitionFiles int
 	// StreamTime is the time to read every page, WitnessTime the time to
 	// compute the witness, ReadTxTime how long the read transaction (and so
 	// the WAL pin) lasted.
@@ -193,9 +242,11 @@ type Config struct {
 	Witness func(ctx context.Context, tx *sql.Tx) (selfdevprotocol.VMLocalContentWitness, error)
 	// FileTreeRoot optionally names the Files tree root to record.
 	FileTreeRoot func(ctx context.Context) (string, error)
-	Cipher       *computerevent.PrivateArtifactCipher
-	Chunks       ChunkStore
-	Appender     Appender
+	// Partitions, when set, adds the store's telemetry partitions.
+	Partitions *PartitionSource
+	Cipher     *computerevent.PrivateArtifactCipher
+	Chunks     ChunkStore
+	Appender   Appender
 	// MaxDuration, when positive, bounds the read transaction and the chunk
 	// uploads (a long read pins the WAL). The stream aborts with
 	// ErrTimeBudget, which leaves no root and no event.
@@ -262,6 +313,7 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		WitnessRoot:   got.witness.ContentRoot,
 		SchemaHash:    got.witness.SchemaHash,
 		Manifest:      *manifest,
+		Partitions:    got.partitions,
 	}
 	if got.head != nil {
 		record.StoreHeadSequence = got.head.Sequence
@@ -275,7 +327,11 @@ func TakeSnapshot(ctx context.Context, cfg Config) (Ref, error) {
 		record.FileTreeRoot = root
 	}
 	if registrar, ok := cfg.Chunks.(RootRegistrar); ok {
-		if err := registrar.RegisterSnapshotRoot(ctx, manifest.Root, record.StoreHeadSequence, manifest.Files[0].Chunks); err != nil {
+		chunks := append([]string(nil), manifest.Files[0].Chunks...)
+		for _, part := range got.partitions {
+			chunks = append(chunks, part.Chunks...)
+		}
+		if err := registrar.RegisterSnapshotRoot(ctx, manifest.Root, record.StoreHeadSequence, chunks); err != nil {
 			return Ref{}, fmt.Errorf("snapshot: register snapshot root: %w", err)
 		}
 	}
@@ -314,6 +370,7 @@ type captured struct {
 	pageSize      int
 	pageCount     int64
 	pagesPerChunk int
+	partitions    []PartitionEntry
 	stats         Stats
 }
 
@@ -434,6 +491,12 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		return err
 	}
 
+	// The partitions stay in place from before the read transaction until the
+	// last one is read.
+	if cfg.Partitions != nil && cfg.Partitions.Hold != nil {
+		release := cfg.Partitions.Hold()
+		defer release()
+	}
 	started := time.Now()
 	tx, err := cfg.DB.BeginTx(runCtx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -454,38 +517,108 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 	if out.head, err = cfg.Head(runCtx, tx); err != nil {
 		return out, fmt.Errorf("snapshot: read head: %w", cause(err))
 	}
-	var pageSize int
-	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&pageSize); err != nil {
-		return out, fmt.Errorf("snapshot: page size: %w", cause(err))
-	}
-	if err := tx.QueryRowContext(runCtx, `PRAGMA page_count`).Scan(&out.pageCount); err != nil {
-		return out, fmt.Errorf("snapshot: page count: %w", cause(err))
-	}
-	if pageSize <= 0 || pageSize > ChunkSize || ChunkSize%pageSize != 0 || out.pageCount <= 0 {
-		return out, fmt.Errorf("snapshot: unusable store geometry: %d pages of %d bytes", out.pageCount, pageSize)
-	}
-	out.pageSize = pageSize
-	out.pagesPerChunk = ChunkSize / pageSize
-	chunkCount := int((out.pageCount + int64(out.pagesPerChunk) - 1) / int64(out.pagesPerChunk))
-
-	up := newChunkUploader(cfg, dek, ChunkSize, chunkCount, cancel)
-	up.start(runCtx)
-	defer func() {
-		// A failed capture stops the workers before it waits for them.
-		if retErr != nil {
-			cancel(retErr)
+	var parts []PartitionFile
+	if cfg.Partitions != nil && cfg.Partitions.List != nil {
+		if parts, err = cfg.Partitions.List(runCtx, tx); err != nil {
+			return out, fmt.Errorf("snapshot: list telemetry partitions: %w", cause(err))
 		}
+		for _, part := range parts {
+			if !validPartitionPath(part.Path) || part.DB == nil {
+				return out, fmt.Errorf("snapshot: unusable telemetry partition %q", part.Path)
+			}
+		}
+	}
+
+	streamStart := time.Now()
+	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, tx, cfg.pageHook)
+	if err != nil {
+		return out, err
+	}
+	out.stats.StreamTime = time.Since(streamStart)
+
+	// The witness is computed in the same transaction while the workers drain
+	// the last chunks.
+	witnessStart := time.Now()
+	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
+		cancel(err)
+		fs.up.finish()
+		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
+	}
+	out.stats.WitnessTime = time.Since(witnessStart)
+	rollback()
+
+	if err := fs.finish(runCtx); err != nil {
+		return out, err
+	}
+	out.pageSize, out.pageCount, out.pagesPerChunk = fs.pageSize, fs.pageCount, fs.pagesPerChunk
+	out.entry = filecas.FileEntry{Path: StateFileName, Mode: 0o600, Size: int64(fs.pageSize) * fs.pageCount, Chunks: fs.up.digests}
+	out.stats.Pages = fs.pageCount
+	out.stats.PageSize = fs.pageSize
+	fs.addStats(&out.stats)
+
+	// The partitions, each from its own read transaction, begun after the
+	// state file's: a partition commits before the state file does, so each
+	// holds every row at or below the head (and maybe rows above it, which
+	// Open drops at the restore and the replay writes again).
+	for _, part := range parts {
+		entry, err := capturePartition(runCtx, cfg, dek, cancel, cause, part)
+		if err != nil {
+			return out, err
+		}
+		out.partitions = append(out.partitions, entry.entry)
+		entry.stream.addStats(&out.stats)
+		out.stats.Pages += entry.stream.pageCount
+		out.stats.PartitionFiles++
+	}
+	return out, nil
+}
+
+// fileStream is one SQLite file's page stream: its geometry and the uploader
+// sealing its chunks.
+type fileStream struct {
+	up            *chunkUploader
+	pageSize      int
+	pageCount     int64
+	pagesPerChunk int
+	chunkCount    int
+	cut           int
+}
+
+// streamFile reads every page of tx's database snapshot into chunks handed to
+// a new uploader. On an error it stops and drains the uploader itself; on
+// success the caller finishes it (fileStream.finish).
+func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, tx *sql.Tx, hook func(int64)) (*fileStream, error) {
+	fs := &fileStream{}
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_size`).Scan(&fs.pageSize); err != nil {
+		return nil, fmt.Errorf("snapshot: page size: %w", cause(err))
+	}
+	if err := tx.QueryRowContext(runCtx, `PRAGMA page_count`).Scan(&fs.pageCount); err != nil {
+		return nil, fmt.Errorf("snapshot: page count: %w", cause(err))
+	}
+	pageSize := fs.pageSize
+	if pageSize <= 0 || pageSize > ChunkSize || ChunkSize%pageSize != 0 || fs.pageCount <= 0 {
+		return nil, fmt.Errorf("snapshot: unusable store geometry: %d pages of %d bytes", fs.pageCount, pageSize)
+	}
+	fs.pagesPerChunk = ChunkSize / pageSize
+	fs.chunkCount = int((fs.pageCount + int64(fs.pagesPerChunk) - 1) / int64(fs.pagesPerChunk))
+
+	up := newChunkUploader(cfg, dek, ChunkSize, fs.chunkCount, cancel)
+	up.start(runCtx)
+	fs.up = up
+	fail := func(err error) (*fileStream, error) {
+		cancel(err)
 		up.finish()
-	}()
+		return nil, err
+	}
 
 	streamStart := time.Now()
 	var pages int64
 	progress := func(err error) error {
-		return fmt.Errorf("%w (%d of %d pages read, %s into the stream)", cause(err), pages, out.pageCount, time.Since(streamStart).Round(time.Second))
+		return fmt.Errorf("%w (%d of %d pages read, %s into the stream)", cause(err), pages, fs.pageCount, time.Since(streamStart).Round(time.Second))
 	}
 	rows, err := tx.QueryContext(runCtx, `SELECT pgno, data FROM sqlite_dbpage`)
 	if err != nil {
-		return out, fmt.Errorf("snapshot: read pages: %w", progress(err))
+		return fail(fmt.Errorf("snapshot: read pages: %w", progress(err)))
 	}
 	buf := <-up.free
 	chunkIndex := 0
@@ -508,65 +641,97 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 		var data sql.RawBytes
 		if err := rows.Scan(&pgno, &data); err != nil {
 			_ = rows.Close()
-			return out, fmt.Errorf("snapshot: scan page: %w", progress(err))
+			return fail(fmt.Errorf("snapshot: scan page: %w", progress(err)))
 		}
 		if pgno != pages+1 || len(data) != pageSize {
 			_ = rows.Close()
-			return out, fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize)
+			return fail(fmt.Errorf("snapshot: page stream out of order or short: got page %d of %d bytes after %d pages (page size %d)", pgno, len(data), pages, pageSize))
 		}
-		if cfg.pageHook != nil {
-			cfg.pageHook(pgno)
+		if hook != nil {
+			hook(pgno)
 		}
 		buf = append(buf, data...)
 		pages++
-		if len(buf) == out.pagesPerChunk*pageSize {
+		if len(buf) == fs.pagesPerChunk*pageSize {
 			if err := flush(); err != nil {
 				_ = rows.Close()
-				return out, fmt.Errorf("snapshot: %w", progress(err))
+				return fail(fmt.Errorf("snapshot: %w", progress(err)))
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return out, fmt.Errorf("snapshot: read pages: %w", progress(err))
+		return fail(fmt.Errorf("snapshot: read pages: %w", progress(err)))
 	}
 	_ = rows.Close()
-	if pages != out.pageCount {
-		return out, fmt.Errorf("snapshot: the page stream held %d pages, the snapshot has %d", pages, out.pageCount)
+	if pages != fs.pageCount {
+		return fail(fmt.Errorf("snapshot: the page stream held %d pages, the snapshot has %d", pages, fs.pageCount))
 	}
 	if len(buf) > 0 {
 		if err := flush(); err != nil {
-			return out, fmt.Errorf("snapshot: %w", progress(err))
+			return fail(fmt.Errorf("snapshot: %w", progress(err)))
 		}
 	}
-	out.stats.StreamTime = time.Since(streamStart)
+	fs.cut = chunkIndex
+	return fs, nil
+}
 
-	// The witness is computed in the same transaction while the workers drain
-	// the last chunks.
-	witnessStart := time.Now()
-	if out.witness, err = cfg.Witness(runCtx, tx); err != nil {
-		return out, fmt.Errorf("snapshot: witness of the snapshot: %w", cause(err))
-	}
-	out.stats.WitnessTime = time.Since(witnessStart)
-	rollback()
-
-	up.finish()
+// finish waits for the uploader and checks the cut.
+func (fs *fileStream) finish(runCtx context.Context) error {
+	fs.up.finish()
 	if err := runCtx.Err(); err != nil {
-		return out, fmt.Errorf("snapshot: %w", progress(err))
+		if c := context.Cause(runCtx); c != nil {
+			err = c
+		}
+		return fmt.Errorf("snapshot: %w (after %d of %d chunks)", err, fs.cut, fs.chunkCount)
 	}
-	if chunkIndex != chunkCount {
-		return out, fmt.Errorf("snapshot: cut %d chunks, expected %d", chunkIndex, chunkCount)
+	if fs.cut != fs.chunkCount {
+		return fmt.Errorf("snapshot: cut %d chunks, expected %d", fs.cut, fs.chunkCount)
 	}
-	out.entry = filecas.FileEntry{Path: StateFileName, Mode: 0o600, Size: int64(pageSize) * out.pageCount, Chunks: up.digests}
-	out.stats.Pages = pages
-	out.stats.PageSize = pageSize
-	out.stats.Chunks = chunkCount
-	out.stats.ChunksUploaded = int(up.uploaded.Load())
-	out.stats.ChunksHeld = int(up.held.Load())
-	out.stats.ChunksRepeated = int(up.repeated.Load())
-	out.stats.ProbeErrors = int(up.probeErrs.Load())
-	out.stats.BytesUploaded = up.bytesUploaded.Load()
-	return out, nil
+	return nil
+}
+
+func (fs *fileStream) addStats(st *Stats) {
+	st.Chunks += fs.chunkCount
+	st.ChunksUploaded += int(fs.up.uploaded.Load())
+	st.ChunksHeld += int(fs.up.held.Load())
+	st.ChunksRepeated += int(fs.up.repeated.Load())
+	st.ProbeErrors += int(fs.up.probeErrs.Load())
+	st.BytesUploaded += fs.up.bytesUploaded.Load()
+}
+
+type capturedPartition struct {
+	entry  PartitionEntry
+	stream *fileStream
+}
+
+// capturePartition streams one partition from its own read transaction.
+func capturePartition(runCtx context.Context, cfg Config, dek []byte, cancel context.CancelCauseFunc, cause func(error) error, part PartitionFile) (capturedPartition, error) {
+	ptx, err := part.DB.BeginTx(runCtx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return capturedPartition{}, fmt.Errorf("snapshot: begin read of %s: %w", part.Path, cause(err))
+	}
+	// The first statement fixes the partition's read snapshot.
+	var one int
+	if err := ptx.QueryRowContext(runCtx, `SELECT 1`).Scan(&one); err != nil {
+		_ = ptx.Rollback()
+		return capturedPartition{}, fmt.Errorf("snapshot: read %s: %w", part.Path, cause(err))
+	}
+	fs, err := streamFile(runCtx, cfg, dek, cancel, cause, ptx, nil)
+	_ = ptx.Rollback()
+	if err != nil {
+		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)
+	}
+	if err := fs.finish(runCtx); err != nil {
+		return capturedPartition{}, fmt.Errorf("%s: %w", part.Path, err)
+	}
+	return capturedPartition{
+		entry: PartitionEntry{
+			Path: part.Path, Size: int64(fs.pageSize) * fs.pageCount, PageSize: fs.pageSize, PageCount: fs.pageCount,
+			PagesPerChunk: fs.pagesPerChunk, Chunks: fs.up.digests,
+		},
+		stream: fs,
+	}, nil
 }
 
 // Source is the tape access Restore needs; *computerevent.HTTPClient
@@ -591,6 +756,12 @@ type RestoreConfig struct {
 	// Verify optionally checks the unsealed file (for example its witness
 	// against Record.WitnessRoot) before it is installed.
 	Verify func(ctx context.Context, record Record, path string) error
+	// PartitionDir is the store's telemetry partition directory
+	// (store.TelemetryPartitionDir). When set, whatever it holds is removed
+	// and the snapshot's partitions are installed there before the state
+	// file. A snapshot with partitions and no PartitionDir is refused: its
+	// telemetry below the head would be lost without a word.
+	PartitionDir string
 }
 
 // Candidate is a snapshot_recorded event seen on the tape.
@@ -730,6 +901,18 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 	}
 	defer clear(dek)
 
+	if len(record.Partitions) > 0 && strings.TrimSpace(cfg.PartitionDir) == "" {
+		return Record{}, errors.New("the snapshot holds telemetry partitions and the restore names no partition directory")
+	}
+	for _, part := range record.Partitions {
+		if !validPartitionPath(part.Path) || part.PageSize <= 0 || part.PageCount <= 0 || part.PagesPerChunk <= 0 ||
+			int64(part.PageSize)*part.PageCount != part.Size ||
+			int64(part.PageSize)*int64(part.PagesPerChunk) > 2*ChunkSize ||
+			int64(len(part.Chunks)) != (part.PageCount+int64(part.PagesPerChunk)-1)/int64(part.PagesPerChunk) {
+			return Record{}, fmt.Errorf("partition %q geometry does not describe its chunks", part.Path)
+		}
+	}
+
 	dir := filepath.Dir(cfg.DestPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return Record{}, fmt.Errorf("create state directory: %w", err)
@@ -746,48 +929,20 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 			_ = os.Remove(tempPath)
 		}
 	}()
-	var written int64
-	for i, digest := range entry.Chunks {
-		if err := ctx.Err(); err != nil {
-			return Record{}, err
-		}
-		sealed, err := cfg.Chunks.GetChunk(ctx, digest)
-		if err != nil {
-			return Record{}, fmt.Errorf("fetch chunk %s: %w", digest, err)
-		}
-		plain, err := filecas.OpenChunk(dek, cfg.ComputerID, digest, sealed)
-		if err != nil {
-			return Record{}, fmt.Errorf("open chunk %s: %w", digest, err)
-		}
-		// Every chunk but the last is a whole range; the last is the rest.
-		last := i == len(entry.Chunks)-1
-		if int64(len(plain)) > chunkBytes || (!last && int64(len(plain)) != chunkBytes) {
-			return Record{}, fmt.Errorf("chunk %d has %d bytes, the cut is %d", i, len(plain), chunkBytes)
-		}
-		if record.PageSize != 0 && len(plain)%record.PageSize != 0 {
-			return Record{}, fmt.Errorf("chunk %d has %d bytes, not a whole number of %d-byte pages", i, len(plain), record.PageSize)
-		}
-		n, err := temp.Write(plain)
-		written += int64(n)
-		if err != nil {
-			return Record{}, fmt.Errorf("write state file: %w", err)
-		}
-	}
-	if written != entry.Size {
-		return Record{}, fmt.Errorf("restored %d bytes, the manifest has %d", written, entry.Size)
-	}
-	if err := temp.Chmod(0o600); err != nil {
-		return Record{}, err
-	}
-	if err := temp.Sync(); err != nil {
-		return Record{}, err
-	}
-	if err := temp.Close(); err != nil {
+	if err := assemble(ctx, cfg, dek, entry.Chunks, entry.Size, chunkBytes, record.PageSize, temp); err != nil {
 		return Record{}, err
 	}
 	if cfg.Verify != nil {
 		if err := cfg.Verify(ctx, record, tempPath); err != nil {
 			return Record{}, fmt.Errorf("verify: %w", err)
+		}
+	}
+	// The partitions go in before the state file: the state file's presence
+	// is the restore's completion, and a stale partition of another lineage
+	// never survives a restore.
+	if strings.TrimSpace(cfg.PartitionDir) != "" {
+		if err := installPartitions(ctx, cfg, dek, record.Partitions); err != nil {
+			return Record{}, fmt.Errorf("install telemetry partitions: %w", err)
 		}
 	}
 	// A stale WAL beside the destination would be applied to the new file.
@@ -802,4 +957,82 @@ func restoreOne(ctx context.Context, cfg RestoreConfig, f Candidate) (Record, er
 		_ = d.Close()
 	}
 	return record, nil
+}
+
+// assemble fetches, opens and writes the chunks of one file to w, checking
+// the cut, and syncs and closes w.
+func assemble(ctx context.Context, cfg RestoreConfig, dek []byte, chunks []string, size, chunkBytes int64, pageSize int, w *os.File) error {
+	var written int64
+	for i, digest := range chunks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		sealed, err := cfg.Chunks.GetChunk(ctx, digest)
+		if err != nil {
+			return fmt.Errorf("fetch chunk %s: %w", digest, err)
+		}
+		plain, err := filecas.OpenChunk(dek, cfg.ComputerID, digest, sealed)
+		if err != nil {
+			return fmt.Errorf("open chunk %s: %w", digest, err)
+		}
+		// Every chunk but the last is a whole range; the last is the rest.
+		last := i == len(chunks)-1
+		if int64(len(plain)) > chunkBytes || (!last && int64(len(plain)) != chunkBytes) {
+			return fmt.Errorf("chunk %d has %d bytes, the cut is %d", i, len(plain), chunkBytes)
+		}
+		if pageSize != 0 && len(plain)%pageSize != 0 {
+			return fmt.Errorf("chunk %d has %d bytes, not a whole number of %d-byte pages", i, len(plain), pageSize)
+		}
+		n, err := w.Write(plain)
+		written += int64(n)
+		if err != nil {
+			return fmt.Errorf("write %s: %w", w.Name(), err)
+		}
+	}
+	if written != size {
+		return fmt.Errorf("restored %d bytes, the manifest has %d", written, size)
+	}
+	if err := w.Chmod(0o600); err != nil {
+		return err
+	}
+	if err := w.Sync(); err != nil {
+		return err
+	}
+	return w.Close()
+}
+
+// installPartitions empties cfg.PartitionDir and writes the snapshot's
+// partitions into it.
+func installPartitions(ctx context.Context, cfg RestoreConfig, dek []byte, parts []PartitionEntry) error {
+	dir := cfg.PartitionDir
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, part := range parts {
+		name := strings.TrimPrefix(part.Path, PartitionDirName+"/")
+		temp, err := os.CreateTemp(dir, ".partition-restore-*")
+		if err != nil {
+			return err
+		}
+		if err := assemble(ctx, cfg, dek, part.Chunks, part.Size, int64(part.PageSize)*int64(part.PagesPerChunk), part.PageSize, temp); err != nil {
+			_ = temp.Close()
+			_ = os.Remove(temp.Name())
+			return fmt.Errorf("%s: %w", part.Path, err)
+		}
+		if err := os.Rename(temp.Name(), filepath.Join(dir, name)); err != nil {
+			_ = os.Remove(temp.Name())
+			return err
+		}
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }

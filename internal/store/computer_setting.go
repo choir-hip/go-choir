@@ -211,6 +211,17 @@ const SettingDispatchWideSlots = "dispatch.wide_slots"
 // Off is the rollback: no further retire ops are appended.
 const SettingTelemetryRetire = "store.telemetry_retire"
 
+// SettingTelemetryPartitions moves tool.result telemetry into per-day
+// partition files (telemetry_partition.go,
+// docs/design/one-tape-durability-2026-10-31.md section 6c): the writer
+// stamps the op, so the tape decides where the row lands, and retiring a day
+// is deleting a file. Rings from d@e (a stored setting), then the default.
+// Turning it on writes the store floor 5 first. Off is the live rollback: new
+// tool results go to og_objects, and the rows already in partitions stay
+// readable and are retired as before; below epoch 5 needs the floor lifted
+// by hand once no partition holds a row.
+const SettingTelemetryPartitions = "store.telemetry_partitions"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -239,6 +250,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingPackagesShare:                false,
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
+	SettingTelemetryPartitions:          false,
 }
 
 // ComputerSetting is one switch's value on one computer.
