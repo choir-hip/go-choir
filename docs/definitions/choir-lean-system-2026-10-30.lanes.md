@@ -14,10 +14,10 @@ or is closed (name why). Update it every time a lane opens, lands or closes.
 | lane/chaos-harness | d@e-only crash drills, scenarios 1-3 | built, selftest 111 pass | with or after tape-group-commit | needs group commit on d@e to be useful |
 | lane/tape-group-commit | groups acknowledged tape writes; telemetry rides the next write | 3 commits, tier-2 review running | after review accepts | guest security epoch 23 conflicts with tool-layers |
 | lane/tool-layers | erofs layer per tool (office, browser, toolchain, delegate) | 2 commits, unbooted | its own deploy, after group commit | epoch 23 conflict; needs a boot proof |
-| lane/mac-arm-guest | aarch64 guest image in Nix | 2 commits (DuckDB test input dropped on aarch64 only); image build running | after a vfkit boot proof | moves the x86 floor digest: one cold boot of hibernated snapshots; ship with snapshot-sweep |
-| lane/bundle-authenticity | receipt signature checks; refuse a snapshot root the tape does not name | WIP | when its builder reports | in progress |
+| lane/mac-arm-guest | aarch64 guest image in Nix | f157c2f7a: builds; boots to a login prompt under Apple Virtualization (vfkit), 2026-10-31; services not started (no boot params) | with snapshot-sweep, in a deploy that restarts computers anyway | moves the x86 floor digest: one cold boot of hibernated snapshots |
+| lane/bundle-authenticity | receipt signatures against a host-held trust set; genesis bound; unnamed snapshot roots refused | 9528836d5; tier-2 review running | after review accepts | red: evidence and import trust |
 | lane/store-churn | paper SQLite churn (clustered keys) | 1 commit, benchmark running | after benchmark and a d@e proof | in progress |
-| lane/mac-follow | Mac app follows a computer through bundles (sync slice 1) | builder running | after host API deploy and the d@e follow E2E | in progress |
+| lane/mac-follow | owner-only tape bundle endpoint; the Mac app keeps a verified local copy (sync slice 1) | 6c7e87848 + d1d3b3f04; local tests pass; staging E2E written, not run | together with bundle-authenticity; then the d@e follow E2E | carries bundle-authenticity at dcb2b01c4 |
 
 ## Older lanes, after the 2026-10-31 cleanup
 
