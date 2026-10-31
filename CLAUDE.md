@@ -126,8 +126,8 @@ existing corpus is written in. The earlier generations of the lineage
 kept for reference only under `docs/archive/skills/` (mirrored in the
 `choir-hip/skills` repo under `archived/`) — do not author new `/goal` files
 with them; existing goal files remain valid. The
-mission roadmap from here to World Wire live is
-[docs/ACTIVE.md](docs/ACTIVE.md);
+roadmap to launch is [docs/roadmap-2026-10-31.md](docs/roadmap-2026-10-31.md)
+(owner, 2026-10-31), and the live station is in [docs/ACTIVE.md](docs/ACTIVE.md);
 the product mechanism is precommitment records
 (`docs/precommitment-records.md`). For multi-agent review
 panels used at definition or phase gates (code review is risk-tiered; see

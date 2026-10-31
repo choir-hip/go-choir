@@ -2,9 +2,12 @@
 
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
-Sequencing lives here and in
-[`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md)
-(the 2026-09-22 R-series stack is superseded); the mission format is
+Sequencing: the owner's roadmap,
+[`roadmap-2026-10-31.md`](roadmap-2026-10-31.md) (data system, Mac app and
+sync, PSA/self-development/Autopaper, voice and Autoradio, the four S's,
+agentic red teaming, economics, launch); this file names the live station in
+it. The 2026-10-14 sequencing and the 2026-09-22 R-series stack are
+superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
