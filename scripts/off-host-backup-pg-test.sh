@@ -102,7 +102,7 @@ check() { if [ "$2" = 0 ]; then echo "ok   $1"; else echo "FAIL $1"; echo "     
 setup ok; run backup
 check "a clean run exits 0" "$([ "$RC" = 0 ]; echo $?)"
 check "pg_dump ran once per database, custom format, level 6, over loopback as choir" \
-  "$([ "$(grep -c '^pg_dump -w ' "$R/log/argv")" = 2 ] && grep -q '^pg_dump -w -h 127.0.0.1 -p 5432 -U choir -d control -Fc -Z 6 -f .*/staging/pg/control.dump$' "$R/log/argv" && grep -q -- '-d graph -Fc' "$R/log/argv"; echo $?)"
+  "$([ "$(grep -c '^pg_dump -w ' "$R/log/argv")" = 2 ] && grep -q '^pg_dump -w -h 127.0.0.1 -p 5432 -U choir -d control -Fc -Z 0 -f .*/staging/pg/control.dump$' "$R/log/argv" && grep -q -- '-d graph -Fc' "$R/log/argv"; echo $?)"
 check "pg_restore --list ran on each dump" "$([ "$(grep -c '^pg_restore --list ' "$R/log/argv")" = 2 ]; echo $?)"
 check "both dumps were in staging when restic ran" "$(grep -q control.dump "$R/log/staged-at-backup" && grep -q graph.dump "$R/log/staged-at-backup"; echo $?)"
 check "restic was given the staging directory (which holds the dumps)" "$(grep '^restic .* backup ' "$R/log/argv" | grep -q "$STAGE"; echo $?)"

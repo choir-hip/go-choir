@@ -278,13 +278,14 @@ let
     restUser = "nodeb";
     quotaGiB = 450; # must match the node-a module's quotaGiB
     uploadLimitKiB = 25000; # about 200 Mbit/s; 0 = unlimited
-    # Disk guard. The staging area holds the PostgreSQL dumps (about 3 GB at
-    # 2026-10-30, growing with the data; dumps are removed after each run) and
-    # the reflink image clones, which pin copy-on-write extents while the run
-    # lasts. 20 GiB is about three times the dumps' size at the cutover plus
-    # room for the restic cache and the pinned extents; the Dolt copies that
-    # needed 40 are gone. Raise it as the dumps grow.
-    minFreeGiB = 20;
+    # Disk guard. The staging area holds the PostgreSQL dumps and the
+    # reflink image clones, which pin copy-on-write extents while the run
+    # lasts. The dumps are uncompressed now (-Z 0, so restic deduplicates
+    # them across nights): about 12-17 GB at 2026-10-31 (estimate from the
+    # 18.7 GB and 2.5 GB databases), growing; removed after each run. 45 GiB
+    # is about twice that plus the restic cache (2 GB) and pinned extents,
+    # against 164 GiB free. Raise it as the dumps grow.
+    minFreeGiB = 45;
     # Guest data.img images in the nightly run: the paper and the owner
     # computer only. A computer rebuilds from its tape by design; an image
     # is a recovery-time hedge, and the tracers' test computers need none
@@ -2089,6 +2090,18 @@ in
       # only with nix-daemon builds, checkpointd and front-importance, and
       # outscores them by size.
       OOMScoreAdjust = 1000;
+      # The daily run is several restic processes, each over at most about
+      # 1.4M files (scripts/off-host-backup.sh, "the shards"), so restic's
+      # tree memory is a fraction of the 10 GB one process needed for the
+      # 11M-file tape (MemoryPeak 10G on 2026-10-30 and -31, a host OOM kill
+      # at 7.2 GB on 2026-10-30). Lines for that: reclaim pressure at 4G
+      # (the cache of the 100 GB+ images counts here and is reclaimable),
+      # Go heap soft limit 1 GiB under it, a cgroup kill at 6G, well before
+      # the host runs short beside ~8 GB of paper guest. Verify keeps the
+      # shared 10G/12G: `restic check` reads trees of old, unsplit snapshots.
+      MemoryHigh = "4G";
+      MemoryMax = "6G";
+      Environment = offHostBackupEnv ++ [ "GOMEMLIMIT=3GiB" ]; # later wins over the shared 8GiB
       # pg_dump's password (the application role) goes to the daily run only,
       # from the file the services' credential also names.
       LoadCredential = offHostBackupCredentials ++ [ "pg-app-password:${pgPasswordFile}" ];
