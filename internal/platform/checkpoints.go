@@ -59,13 +59,12 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err != nil || head.PendingTransitionRef != "" || head.CanonicalEventHead != request.AcceptedEventHead || head.EffectiveEventHead != request.EffectiveEventHead || head.EffectiveStateCommitment != request.EffectiveStateCommitment || head.ReducerVersion != request.ReducerVersion {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: current accepted/effective head does not match request")
 	}
-	var storedReceipt string
-	err = a.cas.store.db.QueryRowContext(ctx, `SELECT event_head_receipt_json FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID).Scan(&storedReceipt)
+	_, storedReceipt, err := scanExpandedAppendReceipt(a.cas.store.db.QueryRowContext(ctx, `SELECT `+appendReceiptRowColumns+` FROM computer_event_append_receipts WHERE computer_id=? AND event_head_receipt_id=?`, request.ComputerID, request.EventHeadReceiptID))
 	if err != nil {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: accepted event receipt is unavailable: %w", err)
 	}
 	var eventReceipt computerevent.Receipt
-	if json.Unmarshal([]byte(storedReceipt), &eventReceipt) != nil || eventReceipt.ReceiptID != request.EventHeadReceiptID {
+	if json.Unmarshal(storedReceipt, &eventReceipt) != nil || eventReceipt.ReceiptID != request.EventHeadReceiptID {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: accepted event receipt binding failed")
 	}
 	if request.OwnerRecovery || request.PlatformFollow {

@@ -281,7 +281,14 @@ func (c *ComputerEventCAS) compareAndSwapTx(ctx context.Context, request compute
 	}
 	// The receipt JSON is stored once: previous head, the next heads and
 	// commitments and the pin digests are all fields of the signed receipt.
-	_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest, event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment, request.Event.Sequence, request.Event.EventKind, request.EventDigest, request.EventPinReceiptDigest, receipt.ReceiptID, string(receiptJSON), now)
+	// An active compaction computer stores it in the lossless compact form
+	// (receipt_compaction.go).
+	stored := c.store.storedAppendReceipt(computerevent.HeadReceiptRow{
+		ComputerID: request.Event.ComputerID, Sequence: request.Event.Sequence, EventKind: string(request.Event.EventKind),
+		EventDigest: request.EventDigest, RequestCommitment: request.Event.RequestCommitment,
+		EventPinReceiptDigest: request.EventPinReceiptDigest, ReceiptID: receipt.ReceiptID,
+	}, receiptJSON)
+	_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, event_kind, event_digest, event_pin_receipt_digest, event_head_receipt_id, event_head_receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment, request.Event.Sequence, request.Event.EventKind, request.EventDigest, request.EventPinReceiptDigest, receipt.ReceiptID, stored, now)
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: insert receipt: %w", err)
 	}
@@ -305,19 +312,18 @@ func (c *ComputerEventCAS) compareAndSwapTx(ctx context.Context, request compute
 }
 
 func existingComputerEventReceipt(ctx context.Context, db queryRower, computerID, idempotencyKey, requestCommitment string) (computerevent.Receipt, bool, error) {
-	var storedCommitment, receiptJSON string
-	err := db.QueryRowContext(ctx, `SELECT request_commitment, event_head_receipt_json FROM computer_event_append_receipts WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&storedCommitment, &receiptJSON)
+	row, receiptJSON, err := scanExpandedAppendReceipt(db.QueryRowContext(ctx, `SELECT `+appendReceiptRowColumns+` FROM computer_event_append_receipts WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey))
 	if errors.Is(err, sql.ErrNoRows) {
 		return computerevent.Receipt{}, false, nil
 	}
 	if err != nil {
 		return computerevent.Receipt{}, false, err
 	}
-	if storedCommitment != requestCommitment {
+	if row.RequestCommitment != requestCommitment {
 		return computerevent.Receipt{}, true, fmt.Errorf("%w: idempotency commitment changed", ErrComputerEventCASConflict)
 	}
 	var receipt computerevent.Receipt
-	if err := json.Unmarshal([]byte(receiptJSON), &receipt); err != nil {
+	if err := json.Unmarshal(receiptJSON, &receipt); err != nil {
 		return computerevent.Receipt{}, true, fmt.Errorf("computer event CAS: decode durable receipt: %w", err)
 	}
 	return receipt, true, nil

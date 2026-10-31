@@ -967,6 +967,43 @@
    "retire": "keep: the rollback is the previous mode; review_by only"
   },
   {
+   "id": "platform_receipt_compact",
+   "kind": "host_selector",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-10-31",
+   "nix": [
+    "PLATFORM_RECEIPT_COMPACT_COMPUTERS"
+   ],
+   "ladder": [
+    "dry-run",
+    "active"
+   ],
+   "target_ring": "R5",
+   "ring": "R0,ids:2",
+   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=dry-run,computer-03335285269bdba4f94377e56879f9e6=dry-run",
+   "promote": [
+    {
+     "metric": "receipt_compaction_rows_kept_full_ratio",
+     "bound": "<= 0.001 in dry-run on the target"
+    },
+    {
+     "metric": "replay_and_restore_on_compacted_computer",
+     "bound": "ok"
+    }
+   ],
+   "retire": "keep until every computer is active, then delete the selector; compact becomes the only write form (readers already expand both). The rollback is expand.",
+   "revert": {
+    "mode": "ring_state",
+    "effect": "expand mode rewrites compact rows back to full JSON before a binary revert"
+   },
+   "note": "Lossless: no row deleted. The paper (R5) widens only by a human act after its dry-run counts.",
+   "review_by": "2027-01-20",
+   "confirm": "human"
+  },
+  {
    "id": "proxy_object_graph_internal_auth",
    "kind": "host_env",
    "life": "release",

@@ -101,6 +101,19 @@ func main() {
 	// read path is segment first, legacy second whatever this says.
 	svc.SetTapeSegmentsMode(cfg.TapeSegments)
 	log.Printf("corpusd: tape segments: %s", svc.TapeSegmentsMode())
+	// Append-receipt compaction (docs/design/append-receipt-trim-2026-10-31.md):
+	// the named computers' receipt bodies are stored in the lossless compact
+	// form, at the append and by a paced backfill; dry-run only counts and
+	// expand writes them back to full JSON (the rollback). A malformed value
+	// compacts nothing and says so; corpusd still starts.
+	receiptPolicy, err := platform.ParseReceiptCompactComputers(os.Getenv(platform.EnvReceiptCompactComputers))
+	if err != nil {
+		log.Printf("corpusd: receipt compaction disabled: %v", err)
+		receiptPolicy = platform.ReceiptCompactionPolicy{}
+	}
+	store.SetReceiptCompaction(receiptPolicy)
+	log.Printf("corpusd: receipt compaction: %s", receiptPolicy)
+	platform.NewReceiptCompactor(store).Start(context.Background())
 	handler := platform.NewHandler(svc)
 	// Library S1: release reads are owner-scoped unless CHOIR_RELEASE_READS=open
 	// (a missing or unknown value is owner); read once, here.

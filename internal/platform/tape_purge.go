@@ -76,6 +76,7 @@ type tapePurgeTable struct {
 // order is the delete order (approvals read requests, so they go first).
 var tapePurgeTables = []tapePurgeTable{
 	{name: "computer_event_append_receipts", where: "computer_id=?"},
+	{name: "computer_event_receipt_compaction", where: "computer_id=?"},
 	{name: "control_key_history", where: "computer_id=?"},
 	{name: "computer_self_development_modes", where: "computer_id=?"},
 	{name: "computer_lifecycle_operations", where: "computer_id=?"},

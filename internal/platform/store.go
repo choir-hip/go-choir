@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/dbcred"
@@ -38,6 +39,9 @@ type Store struct {
 	// tombstones caches computer_tape_tombstones: a tombstoned computer's
 	// tape reads and appends fail closed (tape_tombstone.go).
 	tombstones tapeTombstoneCache
+	// receiptCompaction is the append-receipt compaction policy
+	// (receipt_compaction.go); nil compacts nothing.
+	receiptCompaction atomic.Pointer[ReceiptCompactionPolicy]
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
@@ -226,6 +230,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, computerEventSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap computer event schema: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, receiptCompactionDDL); err != nil {
+		return fmt.Errorf("platform store: bootstrap receipt compaction schema: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, ownerActSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap owner-act schema: %w", err)

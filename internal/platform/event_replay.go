@@ -46,7 +46,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		args = append(args, sequence)
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(args)-1), ",")
-	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_pin_receipt_digest, event_head_receipt_json FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
+	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT `+appendReceiptRowColumns+` FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("event replay: query chain: %w", err)
 	}
@@ -55,11 +55,12 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	expected := afterSequence + 1
 	for rows.Next() {
 		var record computerevent.DurableEvent
-		var sequence uint64
-		var rawReceipt string
-		if err := rows.Scan(&sequence, &record.Request.EventDigest, &record.Request.EventPinReceiptDigest, &rawReceipt); err != nil {
-			return nil, err
+		row, rawReceipt, err := scanExpandedAppendReceipt(rows)
+		if err != nil {
+			return nil, fmt.Errorf("event replay: receipt after sequence %d: %w", expected-1, err)
 		}
+		sequence := row.Sequence
+		record.Request.EventDigest, record.Request.EventPinReceiptDigest = row.EventDigest, row.EventPinReceiptDigest
 		if sequence != expected {
 			return nil, fmt.Errorf("event replay: chain gap at sequence %d below head %d", expected, head.Sequence)
 		}
@@ -79,7 +80,7 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		if record.Request.Event.Sequence != sequence || record.Request.Event.ComputerID != computerID {
 			return nil, fmt.Errorf("event replay: event index mismatch at sequence %d", sequence)
 		}
-		if err := json.Unmarshal([]byte(rawReceipt), &record.Receipt); err != nil {
+		if err := json.Unmarshal(rawReceipt, &record.Receipt); err != nil {
 			return nil, fmt.Errorf("event replay: decode receipt sequence %d: %w", sequence, err)
 		}
 		fields := record.Receipt.KindFields

@@ -1098,6 +1098,15 @@ in
         # Rollback: set back to off; new pins go legacy again and segments
         # stay readable (docs/archive/definitions/choir-tape-segments-a2-repack-2026-10-21.md).
         "PLATFORM_TAPE_SEGMENTS=write"
+        # Append-receipt compaction: the named computers' receipt bodies in
+        # computer_event_append_receipts are stored in the lossless compact
+        # form (about a third of the bytes), at the append and by a paced
+        # backfill (docs/design/append-receipt-trim-2026-10-31.md). active on
+        # d@e; dry-run (counts and round-trip proof only, no write) on the
+        # paper and the owner computer. Widen: change =dry-run to =active.
+        # Rollback: set the computer to =expand and wait for the backfill to
+        # report done before reverting the binary.
+        "PLATFORM_RECEIPT_COMPACT_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=dry-run,computer-03335285269bdba4f94377e56879f9e6=dry-run"
         # P5 host build service. The checkout is the deploy's /opt/go-choir
         # (read only: its objects, never its worktree); the base is the
         # deployed guest image a computer must have booted.
