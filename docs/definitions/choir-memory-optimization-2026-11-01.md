@@ -68,11 +68,26 @@ boundaries:
 now:
   status: working
   slice: >-
-    Census running; segment change ae299a3cc in review (Devin, DeepSeek);
-    admission wake 9c924fdc1 local; busy_cold lane/d6-s5-busy-cold gaining a
-    periodic pass.
+    Landed and deployed: busy_cold, admission wake and the seed deletion
+    (dd84b1f6c, 06:41Z); every pin but a public non-batch payload segmented,
+    with taperepack on the same rule (16f7b5d01, 07:09Z; two seats accept);
+    the paper's busy_cold entry =active (88654a665). A new-rule census is
+    running on Node B. Tonight's backup is still on its shards under the
+    runtime 7G/8G cap.
+  belief: >-
+    believed_state: no new loose tape files after 07:09Z except public
+    non-batch payloads; the paper returns up to 1 GiB of cold cache per
+    10-minute pass. main_uncertainty: whether the paper's host RSS falls with
+    the guest's reclaim (free page reporting) and whether state.db refaults
+    stay under the guard. next_observation: the paper's first active act line
+    (rss before and after, refaults).
+  accepted_edge: >-
+    d@e cannot prove a busy_cold act (266 MiB inactive file, under the 512 MiB
+    keep), so the paper's first watched acts are the proof; rollback is its
+    entry back to =observe.
   next_action: >-
-    Land the segment change with admission wake, deploy, then taperepack copy
-    --apply per computer.
+    Read the paper's first acts; after the census, taperepack copy --apply for
+    every computer it names; then census, keep-digests export and delete
+    --apply; then drop the backup's BIG_DIRS sharding and the runtime cap.
 receipts: []
 ```
