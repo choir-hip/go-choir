@@ -687,6 +687,9 @@ func Run() {
 	// docs/problems/guest-proof-steps-have-no-route-2026-10-23.md).
 	s.HandleFunc("/internal/diag/dns", handleDiagDNS)
 	s.HandleFunc("/internal/diag/gateway-body-cap", handleDiagGatewayBodyCap)
+	// The isolation drill load (diag_drill.go): host peer only, bounded, run
+	// on d@e for the guest isolation drills.
+	s.Handle("/internal/diag/drill", newDiagDrill(drillScratchDir))
 	// runtimeServing flips once rt.Start has returned; the heal route answers
 	// 503 until then.
 	var runtimeServing atomic.Bool
