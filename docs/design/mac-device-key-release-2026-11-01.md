@@ -1,180 +1,248 @@
 # Releasing a computer's key to the owner's Mac (stage 2, S1)
 
-Date: 2026-11-01. Status: design for review (red; the build is tier 2).
+Date: 2026-11-01. Status: design v2 for review (red; the build is tier 2).
+v1 (c153b24f8) was sent back by Devin and DeepSeek; every finding is taken
+here, and "Review v1" at the end maps them.
 Goal file: `definitions/choir-mac-sync-stage2-2026-11-01.md`, slice S1.
-End state: `design/resource-fabric-2026-10-31.md` (keys and passkeys row:
-Keychain and Secure Enclave on the Mac).
+End state: `design/resource-fabric-2026-10-31.md` (keys and passkeys row).
 
 ## The problem
 
 The Mac holds a verified copy of its computer's tape and snapshot
-(`internal/tapefollow`), but the private parts are sealed under the
-computer's private-artifact key (the DEK, `computerevent/privacy.go`). That
-key exists in the guest and, wrapped, in two-approval host escrow. To read
-offline, the Mac needs the DEK. The release must be:
+(`internal/tapefollow`). The private parts are sealed under the computer's
+private-artifact key (the DEK, `computerevent/privacy.go`), which exists in
+the guest and, wrapped, in two-approval host escrow. To read offline, the
+Mac needs the DEK. The release must be:
 
-- **owner-approved, for this device**: an owner passkey assertion whose
-  challenge commits to the device's public key, the computer and a fresh
-  nonce;
+- **for the owner's own computer**: the computer is joined to the signed-in
+  user by vmctl, and the guest checks the owner itself;
+- **owner-approved for this device**: a user-verified passkey assertion
+  whose challenge commits to the device key, the computer and a nonce;
+- **started and finished by native code only**: the webview in the app
+  cannot start, finish or redeem a release;
 - **wrapped end to end**: the guest wraps the DEK to the device key; the
-  host relays ciphertext only;
-- **recorded**: every release is on the computer's tape and visible to the
-  owner;
-- **not over-granted**: an email session cannot release a key.
+  host relays ciphertext;
+- **recorded before the key leaves**, on the computer's tape, and visible;
+- **never by an email session**.
 
-What the DEK opens, stated once: sealed payload envelopes, sealed snapshot
-chunks (`snapshot.go:290`), and the file CAS digest key derived from it
-(`autoputer/run.go:483`). The local reader needs all three.
+What the DEK opens: sealed payload envelopes, sealed snapshot chunks
+(`filecas.SealChunk(u.dek, ...)`, `snapshot/snapshot.go:435`), and the file
+CAS digest key (`filecas.FileDigestKey`, `autoputer/run.go:488`). The reader
+needs all three.
 
 ## Decisions
 
-### D1. The device key: Secure Enclave P-256, a software P-256 key for tests
+### D1. The device key
 
-The device key is a P-256 key-agreement key created in the Mac's Secure
-Enclave (CryptoKit `SecureEnclave.P256.KeyAgreement.PrivateKey`), never
-exportable, access control `.privateKeyUsage` with
-`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, not synchronizable. A Mac
-without a Secure Enclave (none of the supported Apple Silicon Macs) refuses
-release rather than falling back to a software key. Headless tests use a
-software P-256 key through the same wrap code.
+A P-256 key-agreement key in the Mac's Secure Enclave
+(`SecureEnclave.P256.KeyAgreement.PrivateKey`), not exportable, not
+synchronizable, access control `.privateKeyUsage` plus `.userPresence`
+(Touch ID or the login password). The app asks once per launch and reuses
+the authentication context (`LAContext.touchIDAuthenticationAllowableReuseDuration`)
+for that session, so a stolen unlocked Mac cannot open the local copy after
+a relaunch without the owner's presence. A Mac without a Secure Enclave
+refuses release; no software fallback. Tests use a software P-256 key with
+the same wrap.
 
-Considered: X25519 in the Keychain, reusing `keyescrow.SealDEK`. Rejected:
-the private key would be extractable by anything that can read the
-Keychain item under the user's session; the Secure Enclave key cannot leave
-the hardware. The cost is a P-256 wrap beside the X25519 escrow wrap, about
-sixty lines on Go's `crypto/ecdh`.
-
-The device id is the SHA-256 of the device public key (SEC1 uncompressed),
-hex. The device name is the Mac's computer name, display only.
+Encodings, pinned: the device public key is SEC1 uncompressed (65 bytes),
+carried as lowercase hex; the device id is lowercase hex SHA-256 of those
+65 bytes. The server and the guest both reject anything else. The device
+name is the Mac's computer name, trimmed, at most 64 characters, display
+only, and every surface escapes it.
 
 ### D2. The wrap
 
 `devicekey.SealDEK(devicePub, computerID, deviceID, keyVersionDigest, dek)`:
-an ephemeral P-256 key, ECDH with the device key, HKDF-SHA256 with info
-`choir/devicekey/v1 || computerID || deviceID || keyVersionDigest`,
-XChaCha20-Poly1305 over the DEK with the same string as associated data.
-The record carries the ephemeral public key, nonce, ciphertext, key version
-digest and device id. It is not secret: it is stored next to the local copy
-and it rides the release response. Opening needs the Secure Enclave key.
-Tests name the failure modes first (wrong device, wrong computer, wrong key
-version, tampered field: each fails to open).
+an ephemeral P-256 key; ECDH with the device key; HKDF-SHA256 with an
+**empty salt** and info `choir/devicekey/v1` `0x00` computerID `0x00`
+deviceID `0x00` keyVersionDigest; XChaCha20-Poly1305 over the DEK with the
+same info as associated data. The record (ephemeral public key SEC1
+uncompressed, nonce, ciphertext, key version digest, device id, computer id)
+is not secret. A fixed test vector is checked in Go and in the app's Swift
+CryptoKit code, so a mismatch fails in CI, not on the owner's Mac. Failure
+modes tested first: wrong device, computer or version, any tampered field.
 
-### D3. The ceremony: auth binds the challenge
+### D3. The ceremony, in auth
 
-Auth already runs WebAuthn with go-webauthn v0.16.4, which takes a caller
-challenge (`webauthn.WithChallenge`). A release attempt is a new auth
-ceremony type, `device_release`:
+A new table `device_release_attempts` (migration; the existing
+`challenge_state.type` check admits only registration and login): id
+(32 random bytes, hex), user id, computer id, device pub, device id, name,
+nonce, WebAuthn session data, state (`begun`, `approved`, `redeemed`),
+created and expiry (five minutes), grant id.
 
-1. **Begin** (`POST /auth/device-release/begin`, from the app with its
-   session): refused unless the session's method is passkey (the access
-   JWT's `am`; email sessions are refused here as on the credential and ROOT
-   routes). Body: computer id, device public key, device name. Auth checks
-   the computer is the caller's, makes a 32-byte nonce, and sets the
-   challenge to `SHA-256("choir/device-release/v1" || computerID ||
-   devicePub || nonce)`. The attempt (id, user, computer, device pub, name,
-   nonce, session data, five-minute expiry) is stored with the existing
-   challenge state.
-2. **Approve**: the app opens the system browser (the existing
-   `ASWebAuthenticationSession` path) at `/devices/approve?attempt=<id>`.
-   The page shows the device name and the first 16 hex of its id, which the
-   app also shows in its own window, so the owner sees the same device in
-   both places, then runs the assertion.
-3. **Finish** (`POST /auth/device-release/finish`): auth recomputes the
-   challenge from the stored attempt (never from the request), verifies the
-   assertion with the stored session data (user verification required), and
-   consumes the attempt once. A challenge naming any other device, computer
-   or nonce fails here, because the authenticator signed the stored one.
+1. **Begin** `POST /auth/device-release/begin`, native app only. Refused
+   unless `AUTH_DEVICE_RELEASE` is on and the session's method (`am`) is
+   passkey. Validates the encodings (D1) and the point (on curve, not
+   identity). The computer is not checked here (auth has no ownership data);
+   it is checked at redeem by vmctl and by the guest. The challenge is
+   `SHA-256("choir/device-release/v1" 0x00 computerID 0x00 devicePub 0x00
+   nonce)`, passed with `webauthn.WithChallenge` and
+   `webauthn.WithUserVerification(protocol.VerificationRequired)`.
+   `WithChallenge` is marked experimental in go-webauthn v0.16.4: the
+   module is pinned and a ceremony test fails if a caller challenge is not
+   what the authenticator signs.
+2. **Approve**: the app opens `ASWebAuthenticationSession` at
+   `https://choir.news/devices/approve?attempt=<id>`, served by auth on the
+   RP origin. The page renders only stored attempt fields (computer, device
+   name escaped, first 16 hex of the device id), with
+   `frame-ancestors 'none'`, a strict CSP, and no query-derived content. At
+   the same moment the app shows the same triple in a **native** dialog
+   (AppKit, not the webview), so the owner compares two displays the server
+   script cannot both paint.
+3. **Finish** `POST /auth/device-release/finish` from that page: same-origin
+   (`Origin` and `Sec-Fetch-Site` checked), the attempt must be `begun` and
+   unexpired. Auth recomputes the challenge from the stored attempt, verifies
+   the assertion with the stored session data (UV required), and moves the
+   attempt to `approved` with one conditional update (`WHERE state='begun'`),
+   so a concurrent double finish approves once. The browser gets only "done,
+   return to the app"; no key, grant or record goes to the browser.
+4. **Collect** `GET /auth/device-release/grant?attempt=<id>`, native app
+   only, its own session, same user: when the attempt is `approved`, auth
+   returns a grant: a hostauth-signed statement {grant id, user id, computer
+   id, device pub, device id, name, attempt id, assertion digest, expiry
+   two minutes}. Collecting does not consume; redeem does.
 
-The owner's passkey is the authority. Auth is the only verifier: the
-credential registry lives only in `internal/auth`, and the guest has no
-trusted copy of the owner's credentials.
+### D4. Redeem, through the proxy and vmctl, then the guest
 
-### D4. The relay and the guest's release
+`POST /api/computer/device-release` with the grant, native app only, its own
+session. The proxy:
 
-On a verified finish, auth hands the release to the host's computer route
-(the same host-to-guest path the proxy uses for owner requests, admitted by
-`GuestHostCaller`), carrying the release id, device id, device pub and name,
-and the assertion's digest. The guest:
+1. checks the grant's signature, expiry, and that its user is the session's
+   user;
+2. joins user to computer through vmctl (`LookupComputerContext`), refusing
+   a computer that is not the user's, and asks vmctl whether it is running
+   (a stopped computer: "start the computer and retry"; nothing is queued);
+3. forwards to the guest's release route over the existing owner path, with
+   `X-Authenticated-User`.
 
-1. refuses unless the computer's key is loaded (the VM is running: a stopped
-   computer answers "start the computer and retry", the release is not
-   queued);
-2. validates the device pub (on curve, not the identity), recomputes the
-   device id;
-3. appends a projection batch with one op, `device_key_released` (table
-   `device_key_releases`: release id, device id, device pub, name, key
-   version digest, released at, assertion digest), its `authority_ref`
-   `device-release:<release id>`;
-4. only after the append is durable, wraps the DEK (D2) and returns the
-   record.
+The guest:
 
-Release is recorded before the key leaves. A crash between append and
-return leaves a recorded release with no key delivered; the app retries
-with a new attempt, and the devices list shows both.
+1. refuses unless `AuthenticatedOwner(r)` equals its `CHOIR_OWNER_ID` and
+   the computer id is its own;
+2. refuses with "the computer's key is not loaded yet; retry in a moment"
+   while booting;
+3. validates the device pub and recomputes the device id;
+4. if a release with this grant id is already recorded, returns the same
+   wrap (redeem is idempotent, so a lost response retries without a new
+   ceremony);
+5. else appends a projection batch with one op `device_key_released` on
+   table `device_key_releases` (grant id primary key, device id, device pub,
+   name, key version digest, released_at from the op body, attempt id,
+   assertion digest); the enclosing `projection_batch_recorded` event's
+   `authority_ref` is `device-release:<grant id>`. The apply is an
+   idempotent insert keyed by grant id, so replay and rebuild agree;
+6. only after the append is durable, wraps the DEK (D2) and returns it.
 
-The record is a projection op on the tape, not a new canonical event kind:
-it is guest state, replayed like every other row; corpusd validates every
-event kind (`event_artifacts.go:34-41`) and a new kind is a host schema
-change for no gain; `key_rotated` and `key_revoked` are the guest credential
-lifecycle and are not reused. An older reader meets the op through the
-existing "unknown op in a known batch" rule (recoverable changes SR7): the
-batch declares it skippable with its table, which no older manifest has.
+The proxy marks the grant redeemed in auth only after the guest answers
+with a wrap; until then it can be redeemed again within its two minutes.
 
-### D5. The Mac side
+### D5. Native-only routes in the app
+
+The desktop proxy forwards renderer requests with the native cookie jar
+(`cmd/desktop/desktop_auth.go:219-237`). `/auth/device-release/*` and
+`/api/computer/device-release` join `blockedDesktopAuthRoutes`, so the
+webview cannot reach them; the native code calls them with its own client.
+The approve page opens in the system browser, never in the webview.
+
+### D6. Compatibility: two releases, refuse class
+
+There is no skip rule today: an unknown op fails replay
+(`ProjectionBatch.Validate`, `store/project.go:116-117`), and SR7 (design
+only) says key and security records are never skippable. So:
+
+- **Release N** ships the reader: the op kind, its apply, the table, and a
+  store epoch bump with the guest release floor raised, so no binary older
+  than N runs a store that may hold the op. `AUTH_DEVICE_RELEASE` stays off
+  everywhere in N (a correctness sequence, not an off-by-default switch).
+- **Release N+1**, once N is the floor across the fleet, turns
+  `AUTH_DEVICE_RELEASE` on for d@e, then the owner's computer.
+
+The record is a projection op, not a canonical event kind: it is guest
+state, and a new kind would need a reducer case on the host
+(`computerevent/reducer.go:142-145`) for no gain. `key_rotated` and
+`key_revoked` are the guest credential lifecycle and are not reused. This
+deviates from the goal file's "new key-domain tape event"; the goal file is
+updated with this design.
+
+Rollback fence: after the first release, a revert must keep the reader
+(op, apply, table), because the tape now holds the op; only the routes and
+the app flow may be reverted.
+
+### D7. The Mac side and the devices surface
 
 The app stores the release record beside the local copy
 (`~/Library/Application Support/Choir/<computer-id>/device-key.json`). To
-open, it asks the Secure Enclave for the ECDH secret with the record's
-ephemeral key, derives the wrap key, opens the DEK into memory, and uses it
-only in-process; the DEK is never written to disk or the Keychain. Sign-out
-keeps the device key (no ceremony per sign-in); "Remove this Mac" in the
-menu deletes the Secure Enclave key and the record.
+open, it asks the Secure Enclave for the ECDH secret (user presence, once a
+launch), derives the wrap key, and holds the DEK in memory only. Sign-out
+keeps the device key. "Remove this Mac" deletes the Secure Enclave key and
+the record.
 
-### D6. The devices surface
+The guest serves `device_key_releases` to its owner (`GET /api/devices`).
+The app's menu lists every released device with its release time, from the
+tape; the surface has a devices page. Until S3 both say a released Mac can
+read everything sealed under the current key and that revocation needs S3.
+While the computer is stopped the list is unavailable (S1 limit; a host-side
+read of the tape is later).
 
-The guest serves its `device_key_releases` rows to the owner's session
-(`GET /api/devices`); the app's menu shows "This Mac can read offline since
-<time>", and a devices page lists every release. Until S3 the page says
-plainly that a released Mac can read everything sealed under the current
-key, and that revoking needs S3.
+### D8. Kill switch
+
+`AUTH_DEVICE_RELEASE` off refuses begin, finish, collect, and the proxy's
+redeem; registered in `switches/registry.yaml`. The guest route has no
+switch of its own: it acts only on a redeemed grant, and the reader must stay.
 
 ## Threats
 
-| Actor | What it can do | What stops it |
+| Actor | Attempt | Stopped by |
 |---|---|---|
-| Renderer script in the app window (server-delivered JS) | Ask for a release naming its own key | The begin call comes from native code with the device's own key; the renderer has no route to begin with another key, and the approve page shows the device id the native app also shows |
-| Network attacker | Replay an assertion | The challenge is single use and bound to the stored attempt |
-| Email-session thief | Release a key | Begin refuses an email session |
-| Compromised host | Release to its own key; read any DEK | Already true through key delivery (`platform/key_delivery.go`); this adds no host power. Named, not prevented |
-| Compromised guest | Exfiltrate the DEK without a record | Holds the DEK anyway; the tape record is detection for honest guests only. Named residual |
-| Stolen unlocked Mac | Read the local copy | The same as the live app on that Mac; "Remove this Mac" plus S3 rotation |
+| Another user with a passkey | Name your computer | vmctl's join at redeem and the guest's owner check |
+| Script in the app's webview | Begin, finish, collect or redeem with its key | The routes are blocked in the desktop proxy (D5) |
+| Script on the server's pages | Show a false device on the approve page | The native dialog shows the stored triple independently |
+| Network attacker | Replay an assertion or a grant | Single-use attempt states; grants signed, short, idempotent by id |
+| Email-session holder | Release | Begin refuses `am` other than passkey |
+| Presence-only authenticator | Release without UV | UV required at begin and verified at finish |
+| Compromised host | Release to its own key | Already reaches any DEK through key delivery (`platform/key_delivery.go`); named, not prevented |
+| Compromised guest | Exfiltrate without a record | Holds the DEK anyway; the record detects honest guests only; named |
+| Stolen unlocked Mac | Open the local copy | Secure Enclave key use needs user presence once a launch |
 
-## Build order and proof
+## Proof
 
-1. `internal/devicekey`: the wrap, with its failure-mode tests first.
-2. Auth ceremony `device_release` (begin, approve page, finish), email
-   session refused.
-3. Guest route and the `device_key_released` op, its table, the compat
-   declaration, `GET /api/devices`.
-4. The relay from auth to the guest.
-5. The app: Secure Enclave key, release flow, record storage, open.
+Staging, no person: a test account with a pre-minted software passkey and a
+software device key.
 
-Proof (staging, no person): a test account with a pre-minted software
-passkey (resource fabric: tests enroll with a passkey session) and a
-software device key: release succeeds and the devices list shows it; the
-wrap opens with the device key; an email session's begin is refused; an
-assertion over another device's challenge is refused; a stopped computer
-refuses with its stated cause. The Mac's Secure Enclave path is proved on
-the owner's Mac when the owner is home.
+- Positive: release succeeds; the devices list shows it; the wrap opens with
+  the device key and decrypts a sealed payload from the local copy.
+- Refused: an email session's begin; another user's computer at redeem; an
+  assertion over another device's challenge; a presence-only assertion; a
+  concurrent double finish (one approval); a second redeem returns the same
+  wrap; a stopped computer with its stated cause; a booting guest with its
+  stated cause; the switch off at each of begin, finish, collect, redeem.
+- In the app's own test: the webview's requests to the blocked routes are
+  refused.
+- The Go/Swift wrap vector in CI. The Secure Enclave and Touch ID path is
+  proved on the owner's Mac when the owner is home.
 
-Rollback: an auth switch `AUTH_DEVICE_RELEASE` off refuses begin; revert
-removes the routes. A released key cannot be un-released; revocation is
-S3's rotation.
+## Build order
 
-## Open for review
+1. `internal/devicekey` and the test vector.
+2. Release N: the op, its apply, the table, the store epoch and floor.
+3. Auth: the attempts table, begin, approve page, finish, collect; the switch.
+4. The proxy redeem and the guest route.
+5. The app: Secure Enclave key, native dialog, blocked routes, open.
+6. Release N+1: the switch on for d@e.
 
-- Whether auth should call the guest directly or through vmctl (the
-  existing owner-request relay is the proxy; auth calling the guest is a new
-  edge).
-- Whether the approve page needs its own origin check beyond the existing
-  WebAuthn RP id.
+## Review v1, mapped
+
+Devin 1 and DeepSeek 2 (ownership): D4. Devin 2 and DeepSeek 3 (compat): D6.
+Devin 3 and DeepSeek 1 (renderer): D5 and the native dialog. DeepSeek 4
+(UV): D3. DeepSeek 5 and Devin 6 (return path): collect and redeem by the
+native app. DeepSeek 6 (attempt storage, atomic consume): D3 table and
+conditional update. Devin 5 and DeepSeek 7 (authority_ref): D4 step 5.
+DeepSeek 8 (encodings, salt, vector): D1, D2. DeepSeek 9 (stolen Mac): D1
+user presence. DeepSeek 10 (citations): fixed. Devin 4 and DeepSeek 11
+(deviation): D6 and the goal file. DeepSeek 12 (experimental API): D3.
+DeepSeek 13 (proof negatives): Proof. DeepSeek 14 (kill switch): D8.
+DeepSeek 15 (name): D1, D3 page. DeepSeek 16 (booting): D4 step 2. Devin 7
+(idempotent apply, released_at): D4 step 5. Devin 8 (stopped computer list):
+D7. Devin 9 (consume order): redeem marks after the guest answers. Devin 10
+(begin validation, registry): D3, D8. Open questions: through the proxy and
+vmctl (D4); the page is on the RP origin with framing and CSRF checks (D3).
