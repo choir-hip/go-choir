@@ -66,7 +66,8 @@ boundaries:
     - production reads are metadata only
     - no content is read
 now:
-  status: checkpoint_incomplete
+  status: superseded
+  superseded_by: docs/definitions/choir-guest-isolation-2026-11-01.md (owner, 2026-11-01: "We should make this the next mission actually ... I'll drop the current goal"); its open items (the paper under the elastic ceiling, the closing numbers report) are station I0 there
   slice: >-
     Backup done. 10,858,631 loose tape files copied into segments, verified
     and deleted (24.3 GB freed; 3,850 left by rule). The backup runs unsharded

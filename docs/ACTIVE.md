@@ -11,7 +11,20 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-10-30): the lean system
+## Active goal (2026-11-01): guest isolation
+
+**Goal:** [`definitions/choir-guest-isolation-2026-11-01.md`](definitions/choir-guest-isolation-2026-11-01.md)
+(`readiness: executable` on the owner's word). Run it with
+`/goal docs/definitions/choir-guest-isolation-2026-11-01.md`.
+
+Owner, 2026-11-01: "a thrashing guest shouldn't obstruct other guests";
+"We should make this the next mission actually. Make a throughline."
+Stations: I0 close the memory mission with numbers; I1 per-VM pressure in
+the memory meter; I2 jail the paper; I3 disk I/O isolation; I4 disk space;
+I5 network; I6 CPU and memory backstops. It supersedes the memory mission
+([`definitions/choir-memory-optimization-2026-11-01.md`](definitions/choir-memory-optimization-2026-11-01.md)).
+
+## Paused (2026-11-01): the lean system
 
 **Goal:** [`definitions/choir-lean-system-2026-10-30.md`](definitions/choir-lean-system-2026-10-30.md)
 (`readiness: executable` on the owner's word). Run it with
