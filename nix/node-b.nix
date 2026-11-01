@@ -2100,6 +2100,39 @@ in
     };
   };
 
+  # Memory meter (scripts/node-b-growth-meter --memory; same test): one short
+  # line a minute, so the report has stable state (p50) and spikes (p95, max
+  # and when) the hourly reading misses (the paper's ten-minute telemetry
+  # surge to 8.1 GiB on 2026-11-01). Host meminfo and memory pressure, and per
+  # Firecracker process RssAnon, RssFile and read_bytes, mapped to its
+  # computer by id; no external tool, no content, no guest contact. About
+  # 36 MB a month in /var/lib/go-choir/growth-meter/mem-YYYY-MM.jsonl. Owner,
+  # 2026-11-01: "the key deliverable ... is numbers ... And ongoing
+  # observability". Rollback: remove this service and timer.
+  systemd.services.go-choir-memory-meter = {
+    description = "go-choir memory meter (every minute, metadata only)";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      CPUWeight = 1;
+      MemoryMax = "64M";
+      TimeoutStartSec = "50s";
+      Environment = [ "GROWTH_DIR=/var/lib/go-choir/growth-meter" ];
+      ExecStart = "${pkgs.python3}/bin/python3 -I ${../scripts/node-b-growth-meter} --memory";
+    };
+  };
+
+  systemd.timers.go-choir-memory-meter = {
+    description = "go-choir memory meter every minute";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "minutely";
+      AccuracySec = "5s";
+      Persistent = false;
+    };
+  };
+
   # Autopaper daily digest (docs/reports/autopaper-daily-digest-design-2026-10-20.md,
   # docs/problems/autopaper-daily-digest-phase1-2026-10-20.md). A deterministic
   # host job: this oneshot makes one call to maild's host-internal run route,

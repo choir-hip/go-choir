@@ -10,6 +10,18 @@ report.
     node-b-growth-meter            take one reading, append it to the ledger
     node-b-growth-meter --report   print day-over-day deltas and flags
     node-b-growth-meter --stdout   take one reading, print it, write nothing
+    node-b-growth-meter --memory   take one memory reading (every minute)
+
+Memory readings (owner, 2026-11-01: "the key deliverable to close out the
+memory and storage work ... is numbers. Current stable state and spike data,
+and storage growth. And ongoing observability"): the hourly reading misses a
+ten-minute surge, so a separate per-minute reading appends one short line to
+GROWTH_DIR/mem-YYYY-MM.jsonl (about 0.8 KB, about 36 MB a month): host
+/proc/meminfo (anon, cache, shmem, slab, swap, MemAvailable), memory pressure
+(/proc/pressure/memory), and per Firecracker process (named by its --id, and
+mapped to its computer through vm-state/ownerships.json, ids and state only)
+its RssAnon, RssFile and read_bytes. No external tool. The report turns them
+into stable state (p50), spikes (p95, max and when) and disk reads per day.
 
 What a reading holds (every number is a size, a count or a cgroup counter;
 no file is opened for content, no SQL touches a content column):
@@ -497,6 +509,178 @@ def kernel_oom(since, errors):
     return len([ln for ln in (out or "").splitlines() if ln.strip()])
 
 
+# ---- memory readings (every minute) ---------------------------------------
+
+MEM_FIELDS = ("MemTotal", "MemAvailable", "AnonPages", "Cached", "Shmem", "SReclaimable",
+              "SUnreclaim", "SwapTotal", "SwapFree")
+PRESSURE = ENV("GROWTH_PRESSURE", "/proc/pressure/memory")
+
+
+def meminfo():
+    out = {}
+    try:
+        for line in open(MEMINFO):
+            name, _, rest = line.partition(":")
+            if name in MEM_FIELDS:
+                out[name] = int(rest.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return out
+
+
+def host_pressure():
+    """some/full avg10 and the cumulative stall totals (microseconds)."""
+    out = {}
+    try:
+        for line in open(PRESSURE):
+            f = line.split()
+            for kv in f[1:]:
+                k, _, v = kv.partition("=")
+                if k in ("avg10", "total"):
+                    out[f"{f[0]}_{k}"] = float(v) if k == "avg10" else int(v)
+    except (OSError, ValueError, IndexError):
+        pass
+    return out
+
+
+def vm_computers():
+    """vm id -> (computer id, state), from vmctl's ownership file: ids only."""
+    try:
+        with open(f"{STATE_ROOT}/vm-state/ownerships.json") as f:
+            owns = json.load(f).get("ownerships") or []
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return {o.get("vm_id"): (o.get("computer_id"), o.get("state")) for o in owns if isinstance(o, dict)}
+
+
+def firecrackers():
+    """Every Firecracker process: name (its --id) -> anon, file, read_bytes."""
+    vms = {}
+    try:
+        pids = [p for p in os.listdir(PROC) if p.isdigit()]
+    except OSError:
+        return vms
+    for pid in pids:
+        try:
+            with open(f"{PROC}/{pid}/comm") as f:
+                if f.read().strip() != "firecracker":
+                    continue
+            with open(f"{PROC}/{pid}/cmdline", "rb") as f:
+                argv = f.read().split(b"\0")
+            name = None
+            for i, a in enumerate(argv[:-1]):
+                if a == b"--id":
+                    name = argv[i + 1].decode(errors="replace")
+            if not name:
+                continue
+            v = {}
+            for line in open(f"{PROC}/{pid}/status"):
+                if line.startswith(("RssAnon:", "RssFile:")):
+                    v["anon" if line.startswith("RssAnon") else "file"] = int(line.split()[1]) * 1024
+            try:
+                for line in open(f"{PROC}/{pid}/io"):
+                    if line.startswith("read_bytes:"):
+                        v["read_bytes"] = int(line.split()[1])
+            except OSError:
+                pass
+            vms[name] = v
+        except (OSError, ValueError):
+            continue
+    return vms
+
+
+def take_memory_reading():
+    owners = vm_computers()
+    vms = firecrackers()
+    for name, v in vms.items():
+        comp, st = owners.get(name, (None, None))
+        if comp:
+            v["computer"] = comp
+        if st:
+            v["state"] = st
+    return {"ts": iso(NOW), "host": meminfo(), "pressure": host_pressure(), "vms": vms}
+
+
+def append_memory(reading):
+    os.makedirs(GROWTH_DIR, exist_ok=True)
+    path = os.path.join(GROWTH_DIR, "mem-" + reading["ts"][:7] + ".jsonl")
+    line = json.dumps(reading, separators=(",", ":"), sort_keys=True) + "\n"
+    if os.path.exists(path) and os.path.getsize(path) + len(line) > MAX_FILE:
+        print(f"growth-meter: {path} is at the {MAX_FILE} byte cap; not appending", file=sys.stderr)
+        return 1
+    with open(path, "a") as f:
+        f.write(line)
+    return 0
+
+
+def read_memory_ledger(since):
+    rows = []
+    try:
+        names = sorted(n for n in os.listdir(GROWTH_DIR) if re.match(r"mem-\d{4}-\d{2}\.jsonl$", n))
+    except OSError:
+        return rows
+    for n in names[-2:]:
+        with open(os.path.join(GROWTH_DIR, n)) as f:
+            for ln in f:
+                try:
+                    r = json.loads(ln)
+                except ValueError:
+                    continue
+                if parse_iso(r["ts"]) >= since:
+                    rows.append(r)
+    return rows
+
+
+def pct(vals, q):
+    vals = sorted(vals)
+    return vals[min(len(vals) - 1, int(q * len(vals)))] if vals else None
+
+
+def memory_report(tcur):
+    """Stable state (p50), spikes (p95, max and when) and disk reads, last 24 h."""
+    rows = read_memory_ledger(tcur - 86400)
+    if len(rows) < 2:
+        print("  memory, last 24 h: fewer than two per-minute readings")
+        return []
+    flags = []
+    span_h = (parse_iso(rows[-1]["ts"]) - parse_iso(rows[0]["ts"])) / 3600
+    print(f"  memory, last 24 h ({len(rows)} per-minute readings over {span_h:.1f} h): p50 = stable state, p95 and max = spikes")
+    g = lambda n: f"{n / GIB:.2f}" if n is not None else "-"
+
+    def series(f):
+        return [v for v in (f(r) for r in rows) if v is not None]
+
+    host = {
+        "anon": series(lambda r: r["host"].get("AnonPages")),
+        "cache": series(lambda r: r["host"].get("Cached")),
+        "available": series(lambda r: r["host"].get("MemAvailable")),
+        "swap used": series(lambda r: r["host"]["SwapTotal"] - r["host"]["SwapFree"] if "SwapFree" in r["host"] else None),
+    }
+    total = rows[-1]["host"].get("MemTotal")
+    print(f"    host (GiB of {g(total)}):  {'p50':>7} {'p95':>7} {'max':>7} {'min':>7}")
+    for k, v in host.items():
+        print(f"      {k:<16}  {g(pct(v, .5)):>7} {g(pct(v, .95)):>7} {g(max(v) if v else None):>7} {g(min(v) if v else None):>7}")
+    psi = series(lambda r: r["pressure"].get("some_avg10"))
+    if psi:
+        print(f"      pressure some avg10 max {max(psi):.2f}%")
+        if max(psi) > PRESSURE_FLAG:
+            flags.append(f"host memory pressure some avg10 {max(psi):.2f}% in the last 24 h")
+    names = sorted({n for r in rows for n in r.get("vms", {})})
+    print(f"    computers, RSS (anon+file) GiB: {'p50':>7} {'p95':>7} {'max':>7}  max at       disk read/day")
+    for n in names:
+        pts = [(r["ts"], r["vms"][n]) for r in rows if n in r.get("vms", {})]
+        rss = [v.get("anon", 0) + v.get("file", 0) for _, v in pts]
+        mx = max(range(len(rss)), key=rss.__getitem__)
+        rb = [v["read_bytes"] for _, v in pts if "read_bytes" in v]
+        hours = (parse_iso(pts[-1][0]) - parse_iso(pts[0][0])) / 3600
+        # read_bytes is per process: a lower value is a restart, so sum the rises.
+        read = sum(b - a for a, b in zip(rb, rb[1:]) if b >= a)
+        per_day = f"{read / GIB * 24 / hours:.1f} GiB" if hours >= 1 else "-"
+        comp = pts[-1][1].get("computer") or n
+        print(f"      {comp:<44} {g(pct(rss, .5)):>7} {g(pct(rss, .95)):>7} {g(rss[mx]):>7}  {pts[mx][0][11:16]}Z  {per_day:>9}")
+    return flags
+
+
 # ---- state, ledger ---------------------------------------------------------
 
 def state_path():
@@ -610,6 +794,10 @@ def report():
     rows = read_ledger()
     if len(rows) < 2:
         print("growth-meter report: need at least two readings in the ledger")
+        mflags = memory_report(NOW)
+        print("FLAGS:" if mflags else "FLAGS: none")
+        for f in mflags:
+            print(f"  ! {f}")
         return 0
     cur = rows[-1]
     tcur = parse_iso(cur["ts"])
@@ -703,6 +891,7 @@ def report():
         print("  firecracker RSS: " + ", ".join(f"{k}={v / GIB:.2f}GiB" for k, v in sorted(cur["vm_rss"].items())))
     if cur.get("mem_available") is not None:
         print(f"  MemAvailable: {cur['mem_available'] / GIB:.2f} GiB")
+    flags += memory_report(NOW)
     print("FLAGS:" if flags else "FLAGS: none")
     for f in flags:
         print(f"  ! {f}")
@@ -712,6 +901,8 @@ def report():
 def main(argv):
     if "--report" in argv:
         return report()
+    if "--memory" in argv:
+        return append_memory(take_memory_reading())
     reading, state = take_reading()
     if "--stdout" in argv:
         print(json.dumps(reading, indent=1, sort_keys=True))

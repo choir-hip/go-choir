@@ -22,6 +22,14 @@
 #   G8  a failing tool aborts the whole reading instead of recording an error
 #   G9  the unit lacks MemoryMax, a timeout, idle nice/ionice, or is not wired
 #       to an hourly timer
+#   M1  a memory reading misses a Firecracker process (a jailed one has no
+#       vm-state pid file), names it by anything but its --id, maps it to the
+#       wrong computer, or counts a process that is not Firecracker
+#   M2  the memory report shows no stable state or spike for a computer,
+#       puts the spike at the wrong minute, or counts a restart's falling
+#       read_bytes as negative reads
+#   M3  the memory unit is not wired to a per-minute timer, or lacks
+#       MemoryMax or idle priority
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/node-b-growth-meter"
@@ -279,6 +287,58 @@ check "G9 MemoryMax set" "grep -q 'MemoryMax = \"256M\"' <<<'$unit'"
 check "G9 timeout set" "grep -q 'TimeoutStartSec' <<<'$unit'"
 check "G9 nice 19 and idle IO" "grep -q 'Nice = 19' <<<'$unit' && grep -q 'IOSchedulingClass = \"idle\"' <<<'$unit'"
 check "G9 hourly timer" "grep -A8 'systemd.timers.go-choir-growth-meter' '$nixfile' | grep -q 'OnCalendar = \"hourly\"'"
+
+# ---- M1-M3 per-minute memory readings ---------------------------------------
+fc() { # pid id anon_kb file_kb read_bytes [comm]
+  local d="$w/proc/$1"; mkdir -p "$d"
+  printf '%s\n' "${6:-firecracker}" >"$d/comm"
+  printf '/firecracker\0--id\0%s\0--api-sock\0/run/fc.sock\0' "$2" >"$d/cmdline"
+  printf 'Name:\tfirecracker\nRssAnon:\t %s kB\nRssFile:\t %s kB\n' "$3" "$4" >"$d/status"
+  printf 'rchar: 1\nread_bytes: %s\n' "$5" >"$d/io"
+}
+mkdir -p "$w/state/vm-state"
+printf '{"ownerships":[{"vm_id":"vm-paper","computer_id":"computer-paper","state":"active","user_id":"u"},{"vm_id":"candidate-fleet-x","computer_id":"computer-fleet","state":"active"}]}' >"$w/state/vm-state/ownerships.json"
+printf 'MemTotal: 33554432 kB\nMemAvailable: 26214400 kB\nAnonPages: 4194304 kB\nCached: 20971520 kB\nShmem: 1048576 kB\nSReclaimable: 1048576 kB\nSUnreclaim: 524288 kB\nSwapTotal: 16777216 kB\nSwapFree: 16515072 kB\n' >"$w/meminfo2"
+printf 'some avg10=0.50 avg60=0.10 avg300=0.00 total=100\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=50\n' >"$w/pressure"
+rm -rf "$root/ledger"
+mem_meter() { # now
+  run_meter env GROWTH_NOW="$1" GROWTH_MEMINFO="$w/meminfo2" GROWTH_PRESSURE="$w/pressure" python3 "$script" --memory
+}
+fc 501 vm-paper 3145728 5120 0
+fc 502 candidate-fleet-x 1048576 1024 0
+fc 503 vm-other 1 1 0 bash
+mem_meter $t0 >"$root/mout1" 2>&1
+mledger="$root/ledger/mem-2026-10.jsonl"
+check "M1 memory reading lands with host, pressure and named VMs" "python3 -c \"
+import json
+ls=open('$mledger').read().splitlines()
+assert len(ls)==1
+r=json.loads(ls[0])
+assert r['host']['MemAvailable']==26214400*1024 and r['host']['AnonPages']==4194304*1024, r['host']
+assert r['pressure']['some_avg10']==0.5, r['pressure']
+v=r['vms']
+assert set(v)=={'vm-paper','candidate-fleet-x'}, v
+assert v['vm-paper']=={'anon':3145728*1024,'file':5120*1024,'read_bytes':0,'computer':'computer-paper','state':'active'}, v['vm-paper']
+assert v['candidate-fleet-x']['computer']=='computer-fleet'
+assert 'user_id' not in ls[0]
+\""
+# A spike at +60 min (8 GiB) and a restart at +120 min (read_bytes falls).
+fc 501 vm-paper 8388608 5120 $((10 << 30))
+mem_meter $((t0 + 3600)) >/dev/null 2>&1
+fc 501 vm-paper 3145728 5120 $((1 << 30))
+mem_meter $((t0 + 7200)) >/dev/null 2>&1
+fc 501 vm-paper 3145728 5120 $((2 << 30))
+mem_meter $((t0 + 10800)) >/dev/null 2>&1
+METER_ARGS=--report meter $((t0 + 10800)) >"$root/mreport" 2>&1
+check "M2 report prints host stable state and spikes" "grep -q 'p50 = stable state' '$root/mreport' && grep -Eq 'anon +4.00 +4.00 +4.00' '$root/mreport' && grep -Eq 'swap used +0.25' '$root/mreport'"
+spike_min="$(python3 -c "import time;print(time.strftime('%H:%M',time.gmtime($t0+3600)))")"
+check "M2 report shows the computer's p50, max and the spike's minute" "grep -Eq 'computer-paper +3.00 +8.00 +8.00  ${spike_min}Z' '$root/mreport'"
+check "M2 a restart's falling read_bytes is not negative (10 + 1 GiB over 3 h is 88 GiB a day)" "grep -Eq 'computer-paper .* 88.0 GiB' '$root/mreport'"
+check "M2 host pressure over the flag is not flagged at 0.5%" "! grep -q 'host memory pressure' '$root/mreport'"
+
+munit="$(awk '/systemd.services.go-choir-memory-meter = \{/,/^  \};/' "$nixfile")"
+check "M3 memory unit runs --memory under MemoryMax at idle priority" "grep -q -- '--memory' <<<'$munit' && grep -q 'MemoryMax' <<<'$munit' && grep -q 'Nice = 19' <<<'$munit'"
+check "M3 per-minute timer" "grep -A8 'systemd.timers.go-choir-memory-meter' '$nixfile' | grep -q 'OnCalendar = \"minutely\"'"
 
 echo "growth meter: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
