@@ -2158,11 +2158,11 @@ in
       # only with nix-daemon builds, checkpointd and front-importance, and
       # outscores them by size.
       OOMScoreAdjust = 1000;
-      # The daily run is several restic processes, each over at most about
-      # 1.4M files (scripts/off-host-backup.sh, "the shards"), so restic's
-      # tree memory is a fraction of the 10 GB one process needed for the
-      # 11M-file tape (MemoryPeak 10G on 2026-10-30 and -31, a host OOM kill
-      # at 7.2 GB on 2026-10-30). Lines for that: reclaim pressure at 4G
+      # The daily run is one restic process again: the 11M loose tape files
+      # it once had to shard (MemoryPeak 10G on 2026-10-30 and -31, a host
+      # OOM kill at 7.2 GB on 2026-10-30; the shard parents thrashed at 4G on
+      # 2026-11-01) were moved into tape segments and deleted on 2026-11-01,
+      # so the walk is about 0.25M files (11.1M on 2026-10-31 less the 10.86M). Lines for that: reclaim pressure at 4G
       # (the cache of the 100 GB+ images counts here and is reclaimable),
       # Go heap soft limit 1 GiB under it, a cgroup kill at 6G, well before
       # the host runs short beside ~8 GB of paper guest. Verify keeps the

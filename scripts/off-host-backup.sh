@@ -317,7 +317,16 @@ select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR, IMA
 # a shard with none yet follows the last full snapshot, which holds the same
 # paths. The last shard of a directory takes every name not in the earlier
 # classes, so a name that is not hex is never dropped.
-BIG_DIRS="${OFFHOST_BIG_DIRS:-pin-receipts:4 computer-event:2 computer-event-payload:2}"
+#
+# Since 2026-11-01 there is nothing to shard: taperepack copied the 10.86M
+# loose tape files into the per-computer segments and deleted them
+# (docs/definitions/choir-memory-optimization-2026-11-01.ledger.md), and new
+# pins write segments. The default is no shards; one restic run walks
+# everything. OFFHOST_BIG_DIRS still takes "dir:n ..." if a flat directory
+# grows back. The first sharded night (2026-11-01, eight shard snapshots) is
+# an incomplete set to prune_select with no shards configured: it is kept
+# while newer than the cutoff and forgotten whole after, like a failed run.
+BIG_DIRS="${OFFHOST_BIG_DIRS-}"
 shard_class() { # $1 shards (2|4) $2 index: the first-character class
   case "$1:$2" in
     2:0) echo 0-7 ;; 2:1) echo 8-f ;;

@@ -19,6 +19,8 @@ set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/off-host-backup.sh"
+# The shard mechanism, as it ran on 2026-11-01; the default is no shards now.
+export OFFHOST_BIG_DIRS="pin-receipts:4 computer-event:2 computer-event-payload:2"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 fails=0
