@@ -15,7 +15,7 @@ the Keychain, section on native capabilities).
 
 ```yaml
 definition_version: throughline/1
-readiness: drafted
+readiness: reviewed
 readiness_authority: >-
   Owner, 2026-10-31, roadmap stage 2: "The Mac app with sync"; "Anything
   which is about self-dev, autopaper, or psa, waits until after we get
@@ -25,9 +25,9 @@ readiness_authority: >-
   security boundary, so this file is reviewed (Devin) before it executes.
 review:
   reviewer: Devin (one seat on this file; the key release build is tier 2)
-  frozen_ref: d61726726
-  verdict: send_back (13 findings, all taken into this revision)
-  evidence_ref: scratchpad review-stage2/devin.out, 2026-11-01
+  frozen_ref: 7d463c3fc (round 2; round 1 send_back on d61726726, 13 findings taken)
+  verdict: accept (three doc nits applied in this commit)
+  evidence_ref: scratchpad review-stage2/devin.out and devin2.out, 2026-11-01
 start:
   observed_at: 2026-11-01
   canonical_ref: origin/main at e4f4b256a
@@ -61,7 +61,7 @@ finish:
       assertion (the credential registry is only in internal/auth) and relays
       to the guest; the guest wraps its private-artifact key to that device
       key and appends a new key-domain tape event (device_key_released,
-      naming device and key version), never key_rotated or key_revoked,
+      naming device and key version, its authority_ref naming the verified release ceremony), never key_rotated or key_revoked,
       which are the guest credential lifecycle; the new kind lands with the
       reader-compat marker so older followers skip it."
     - "Grant scope, stated: the released key opens sealed payload envelopes,
@@ -77,7 +77,7 @@ finish:
       read-only to the app's surface when the backend is unreachable."
     - "S3 revocation, its own slice after S2: a multi-version keyring
       (resolve by KeyVersionDigest), escrow holding every version,
-      InstallGuestPrivacyKey accepting a next version, and a rotation event
+      InstallGuestPrivacyKey accepting a next version, key delivery serving a version by digest, and a rotation event
       that re-wraps the new key to every device not revoked (the set is the
       fold of release and revoke events). Until S3, a released Mac reads
       what it was released for; that limit is stated to the owner at
@@ -95,7 +95,7 @@ finish:
     second released device. A repeatable artifact records each step.
   rollback: >-
     The key release route behind a host switch (off refuses releases); the
-    Mac deletes its Keychain item on revoke or sign-out; revert removes the
+    Mac deletes its device key on device removal or revoke; revert removes the
     reader. A released key cannot be un-released: revocation is rotation.
   landing: commit, push main, CI, staging deploy identity, the E2E above.
 value:
@@ -140,8 +140,8 @@ boundaries:
     - the Mac as a writer, bursting, workstation sites (resource fabric, later);
     - File Provider, voice, computer use (later stations).
 now:
-  status: drafted
-  slice: S0, review this revision
+  status: reviewed
+  slice: S1, key release design
   believed_state: >-
     Sync and status work; the only gap to offline reading is the key and a
     reader. The guest already exports its key for escrow, so the release is a
@@ -154,6 +154,9 @@ now:
     Read ExportKeyForEscrow and the escrow path, and the desktop session's
     passkey flow, to confirm the guest can verify the owner's assertion (or
     trust the host's verification) before wrapping.
-  next_action: one Devin seat re-reviews this revision; then S1 design.
+  next_action: >-
+    S1 design note (device key algorithm, challenge binding through auth's
+    WebAuthn ceremony, the device_key_released event and its compat marker);
+    executable once the owner points at it or the lean-system watch settles.
 receipts: []
 ```
