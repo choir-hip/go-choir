@@ -1457,7 +1457,13 @@ in
         # refresh, not at the unattended 04:00 compaction. Rollback:
         # VMCTL_JAILER_ONLY=class:test,class:primary.
         "VMCTL_JAILER=on"
-        "VMCTL_JAILER_ONLY=class:test,class:primary,class:premium_always_on"
+        # Wave 2b (guest isolation I2, 2026-11-01; owner: "Should paper be
+        # jailed?", the mission docs/definitions/choir-guest-isolation-
+        # 2026-11-01.md): the paper, by its computer id, at the planned
+        # refresh of this deploy, watched. public_platform computers and "*"
+        # stay for later. Rollback: drop the id (the paper cold boots
+        # direct at its next launch).
+        "VMCTL_JAILER_ONLY=class:test,class:primary,class:premium_always_on,computer-1355b83bced1613eb048ee28d66688a8"
         "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
         # The jailer copies its exec file into the jail, which holds no
         # loader: the glibc build above cannot exec there ("Failed to exec
