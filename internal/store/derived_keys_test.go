@@ -26,7 +26,8 @@ import (
 //     and a behavioural test of the production writer, the projector.
 //  2. The three reads still scan after validation, or leave the JSON path
 //     before it (TestHotReadsLeaveTheJSONScansOnceValidated).
-//  3. A replayed workspace reads stale keys (TestReplayProjectionWithdrawsTheFamilies).
+//  3. A replayed workspace reads stale keys: replay maintains the table
+//     (derived_key_marks_test.go, TestReplayMaintainsTheTableAndTheMarks).
 //  4. A family with a malformed row stays on the JSON path after the row is
 //     repaired, because the background loop never runs another pass
 //     (TestRepairedMalformedRowRestoresTheSideRead).
@@ -234,56 +235,5 @@ func TestProjectorKeepsDerivedKeysInItsTransaction(t *testing.T) {
 		computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: runID, Body: object(runID, "choir.run", map[string]any{"agent_id": "texture:b"}, `{}`, now.Add(time.Minute))})
 	if got := key(runID, objectgraph.KeyRunAgentID); got != "texture:b" {
 		t.Fatalf("an update through the projector left run key %q, want texture:b", got)
-	}
-}
-
-// A replay writes og_objects through projectBatchForReplay, which does not
-// maintain the side table: the families must leave the table's reads at once
-// and the online pass must put the rows back.
-func TestReplayProjectionWithdrawsTheFamilies(t *testing.T) {
-	ctx := context.Background()
-	productStore := openProjectStore(t)
-	computerID := "computer-derived-replay"
-	prepareGenesis(t, productStore, computerID, "genesis-derived-replay")
-	head, err := productStore.Head(ctx, computerID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := productStore.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{}); err != nil {
-		t.Fatal(err)
-	}
-	d := productStore.derivedKeys()
-	if !d.Validated(objectgraph.KeyRunAgentID) {
-		t.Fatal("test premise: an empty store validates")
-	}
-	now := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	runID, _ := objectgraph.BuildCanonicalID(objectgraph.ObjectKind("choir.run"), "owner-1", "run-replayed")
-	meta, _ := json.Marshal(map[string]any{"agent_id": "texture:r"})
-	body, _ := json.Marshal(objectgraph.Object{CanonicalID: runID, ObjectKind: "choir.run", OwnerID: "owner-1", ComputerID: computerID, VersionID: "v",
-		ContentHash: objectgraph.ContentHash("choir.run", []byte(`{}`), meta), Body: []byte(`{}`), Metadata: meta, CreatedAt: now, UpdatedAt: now})
-	eventID, err := computerevent.NewEventID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	event, digest := prepareProjectionEvent(t, productStore, *head, eventID, "replayed-1")
-	batch := computerevent.ProjectionBatch{Version: computerevent.ProjectionBatchV1, ProjectorVersion: computerevent.ProjectorVersionV1,
-		ComputerID: computerID, EventID: event.EventID, EventDigest: digest,
-		Ops: []computerevent.ProjectionOp{{Kind: computerevent.ProjectionOpObject, CanonicalID: runID, Body: body}}}
-	if err := productStore.FinalizeReplayBatch(ctx, computerID, digest, signedReceipt(t, computerID, digest, event.Sequence), &batch); err != nil {
-		t.Fatal(err)
-	}
-	if d.Validated(objectgraph.KeyRunAgentID) {
-		t.Fatal("a replayed object left the run family validated")
-	}
-	var n int
-	if err := productStore.db.QueryRow(`SELECT COUNT(*) FROM og_key_index`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("replay maintained the side table (%d rows, %v); it is filled online after boot", n, err)
-	}
-	if err := productStore.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{}); err != nil {
-		t.Fatal(err)
-	}
-	objs, err := productStore.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.run"), "agent_id", "texture:r")
-	if err != nil || len(objs) != 1 || !d.Validated(objectgraph.KeyRunAgentID) {
-		t.Fatalf("after the pass: %d objects, %v, validated %t", len(objs), err, d.Validated(objectgraph.KeyRunAgentID))
 	}
 }

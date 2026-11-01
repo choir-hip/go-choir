@@ -21,16 +21,27 @@ import (
 // docs/archive/problems/store-hot-reads-need-a-rollback-safe-side-table-2026-10-21.md.
 //
 // In short. The table is created empty at open (nothing scales with
-// og_objects). Every writer of og_objects derives the object's keys into the
-// table in the same transaction (Maintain, Drop). A family of keys is read
-// from the table only while the process knows it is complete and current: it
-// is unvalidated at every open, never persisted as valid (an older binary
-// would leave that lying), and becomes validated only when an online pass
+// og_objects). Every writer of og_objects, the replay included, derives the
+// object's keys into the table in the same transaction (Maintain, Drop). A
+// family of keys is read from the table only while the process knows it is
+// complete and current: it becomes validated when an online pass
 // (ValidateDerivedKeys, started after the listener is up) has compared the
-// table with og_objects page by page. A read checks what it fetched against
-// what the table promised and, on any difference, answers from the JSON path
-// and withdraws the family. Anything this code cannot answer exactly keeps
-// the JSON path.
+// table with og_objects page by page, or at open when the family's mark says
+// so (below). A read checks what it fetched against what the table promised
+// and, on any difference, answers from the JSON path and withdraws the
+// family. Anything this code cannot answer exactly keeps the JSON path.
+//
+// The marks (docs/design/derived-key-marks-2026-11-01.md). Each family has one
+// sentinel row in the table (canonical_id '', key_value NULL) bound to the
+// store's projection head. Every transaction that moves the head stamps the
+// marks of the families readable in memory with the new head and deletes the
+// others (StampMarks). Open trusts a mark only when it names this binary's
+// mark generation and family definition and the store's current head
+// (TrustDerivedKeyMarks). Every binary that can open the SQLite store
+// maintains the table on its live writes; the writer that did not (an older
+// binary's replay) moves the head without stamping, so its writes distrust
+// the marks. A valid flag held only in memory, as before, would make every
+// boot pay a pass that reads every keyed row.
 
 // DerivedKeysTable is the name of the side table. The replay and witness
 // extractors skip it: a derived index is not state.
@@ -79,6 +90,12 @@ type derivedFamily struct {
 	Kind ObjectKind
 	// expr yields the untruncated value; the table holds substr(expr, 1, 255).
 	expr string
+	// ordered is true for a family read newest first through updated_at (the
+	// addressee read): its key rows' updated_at is part of an answer, so the
+	// validator and the tripwire compare it. The other families page by
+	// canonical_id and compare only columns that precede body in og_objects,
+	// so their pass never walks a body's overflow chain.
+	ordered bool
 }
 
 // The outbox family is first: a pass validates the families in this order,
@@ -87,7 +104,7 @@ type derivedFamily struct {
 var derivedFamilies = []derivedFamily{
 	{Name: KeyActorWakeOutboxProjected, Kind: ActorWakeOutboxKind, expr: jsonTextSQL(`metadata`, `'$.projected'`)},
 	{Name: KeyRunAgentID, Kind: "choir.run", expr: jsonTextSQL(`metadata`, `'$.agent_id'`)},
-	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: jsonTextSQL(bodyTextSQL, `'$.addressee'`)},
+	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: jsonTextSQL(bodyTextSQL, `'$.addressee'`), ordered: true},
 	{Name: KeySourceRefDocID, Kind: "choir.source_ref", expr: jsonTextSQL(`metadata`, `'$.doc_id'`)},
 }
 
@@ -167,6 +184,9 @@ type DerivedKeys struct {
 	sideReads        atomic.Uint64
 	passPages        atomic.Uint64
 	maxPageHoldNanos atomic.Int64
+	// markHead reads the head fingerprint the marks are bound to
+	// (derived_key_marks.go); nil keeps every mark untrusted and unstamped.
+	markHead atomic.Pointer[DerivedKeyMarkHead]
 	// Test seams, nil in production: beforeRead runs as a side-table read
 	// starts, beforePublish as a pass is about to check and publish. The interleaving tests put a writer at each.
 	beforeRead, beforePublish func(name string)
@@ -341,8 +361,12 @@ func (d *DerivedKeys) deriveOne(ctx context.Context, x DerivedKeyExecer, fam *de
 	}
 	if _, err := x.ExecContext(ctx, deriveSQL(fam, `canonical_id = ?`, false), fam.Name, string(fam.Kind), canonicalID); err != nil {
 		d.Invalidate(fam.Name, fmt.Sprintf("maintain %s: %v", canonicalID, err))
+		// The mark goes with the write: a head-neutral writer (no StampMarks
+		// after it) must not leave the family vouched for.
+		d.dropMark(ctx, x, fam.Name)
 		return
 	}
+	d.dropMark(ctx, x, fam.Name)
 	d.pubMu.Lock()
 	d.badWrites[fam.Name].Add(1)
 	marked := d.bad[fam.Name].CompareAndSwap(false, true)
@@ -362,6 +386,9 @@ func (d *DerivedKeys) Drop(ctx context.Context, x DerivedKeyExecer, canonicalID 
 	}
 	if _, err := x.ExecContext(ctx, `DELETE FROM `+DerivedKeysTable+` WHERE canonical_id = ?`, canonicalID); err != nil {
 		d.InvalidateAll(fmt.Sprintf("drop %s: %v", canonicalID, err))
+		for _, fam := range derivedFamilies {
+			d.dropMark(ctx, x, fam.Name)
+		}
 		return
 	}
 	// The dropped row may have been a family's malformed one.
@@ -445,8 +472,8 @@ type derivedIDRow struct {
 
 // readDerived runs an ids query and fetches the objects by primary key in
 // one read-only transaction, so both see one commit. Every fetched row is
-// checked against the row the table promised (kind, owner, updated_at,
-// content_hash); a difference, or a promised row that is gone, is a stale
+// checked against the row the table promised (kind, owner, content_hash, and
+// updated_at for an ordered family); a difference, or a promised row that is gone, is a stale
 // table: the family is withdrawn and ok is false, and the caller answers
 // from the JSON path. The family's readability is checked again once the
 // transaction's snapshot is taken: a writer withdraws before it commits,
@@ -501,7 +528,10 @@ func (s *SQLStore) readDerived(ctx context.Context, fam *derivedFamily, query st
 	out := make([]Object, 0, len(promised))
 	for _, r := range promised {
 		o, present := byID[r.id]
-		if !present || o.ObjectKind != fam.Kind || o.OwnerID != r.owner || o.ContentHash != r.hash || !o.UpdatedAt.Equal(r.updatedAt.UTC()) {
+		// updated_at is compared only where it orders the answer (the
+		// validator compares the same columns, so a row it accepts never
+		// trips here).
+		if !present || o.ObjectKind != fam.Kind || o.OwnerID != r.owner || o.ContentHash != r.hash || (fam.ordered && !o.UpdatedAt.Equal(r.updatedAt.UTC())) {
 			s.derived.mismatches[fam.Name].Add(1)
 			s.derived.Invalidate(fam.Name, fmt.Sprintf("read found %s different from its key row", r.id))
 			return nil, false, nil
@@ -542,6 +572,11 @@ type DerivedKeyValidation struct {
 	// taken only to repair the ids that differ: a busy writer then delays a
 	// repair, not the whole pass. Nil compares on the write connection.
 	ReadDB *sql.DB
+	// OnlyNeeded skips a family that is validated and has no repair pending
+	// (a family trusted from its mark at open, or one an earlier pass
+	// validated): the background loop's pass for one withdrawn family does
+	// not re-read the others.
+	OnlyNeeded bool
 }
 
 // derivedKeyRange bounds the canonical ids of a kind: every id built by
@@ -560,10 +595,22 @@ func derivedKeyRange(kind ObjectKind) (lo, hi string) {
 // index on object_kind and sorts the whole kind for every page (the
 // plan-shape test EXPLAINs this text). The caller drops a row of another
 // kind.
-func ogHeadPageSQL(after, before string, limit int) (string, []any) {
-	return `SELECT canonical_id, owner_id, updated_at, content_hash, object_kind FROM og_objects
+//
+// ordered adds updated_at, which follows body and metadata in the row: reading
+// it walks the body's overflow chain. Only a family whose reads are ordered by
+// updated_at needs it (derivedFamily.ordered); the other columns precede body.
+func ogHeadPageSQL(after, before string, limit int, ordered bool) (string, []any) {
+	return `SELECT ` + headColumns(ordered) + ` FROM og_objects
 		WHERE canonical_id > ? AND canonical_id < ?
 		ORDER BY canonical_id ASC LIMIT ?`, []any{after, before, limit}
+}
+
+// headColumns are the og_objects columns a validation reads for a family.
+func headColumns(ordered bool) string {
+	if ordered {
+		return `canonical_id, owner_id, content_hash, object_kind, updated_at`
+	}
+	return `canonical_id, owner_id, content_hash, object_kind`
 }
 
 type derivedSideRow struct {
@@ -592,7 +639,11 @@ func (s *SQLStore) ValidateDerivedKeys(ctx context.Context, opt DerivedKeyValida
 	d.passMu.Lock()
 	defer d.passMu.Unlock()
 	for i := range derivedFamilies {
-		if err := s.validateFamily(ctx, &derivedFamilies[i], opt); err != nil {
+		fam := &derivedFamilies[i]
+		if opt.OnlyNeeded && d.Validated(fam.Name) && !d.RepairPending(fam.Name) {
+			continue
+		}
+		if err := s.validateFamily(ctx, fam, opt); err != nil {
 			return err
 		}
 	}
@@ -658,10 +709,14 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 	startInvalidations := d.invalidations[fam.Name].Load()
 	startBadWrites := d.badWrites[fam.Name].Load()
 	startWrites := d.writes[fam.Name].Load()
-
 	readDB := s.db
 	if opt.ReadDB != nil {
 		readDB = opt.ReadDB
+	}
+	// The family is not vouched for while it is checked: a crash in the pass
+	// leaves no mark, and the next open validates again.
+	if err := s.deleteFamilyMark(ctx, readDB, fam); err != nil {
+		return fmt.Errorf("objectgraph sql: validate %s: delete mark: %w", fam.Name, err)
 	}
 	err := readDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, string(fam.Kind)).Scan(&p.total)
 	if err != nil {
@@ -731,15 +786,24 @@ func (s *SQLStore) validateFamily(ctx context.Context, fam *derivedFamily, opt D
 		return nil
 	}
 	p.logf("derived keys %s: validated %d rows in %s (%d re-derived, %d orphans dropped, malformed rows %t)", fam.Name, p.checked, elapsed, p.rederived, p.orphan, bad)
+	// Durable: the next open trusts the family while nothing has moved the
+	// head since without stamping it.
+	if err := s.stampFamilyMark(ctx, fam); err != nil {
+		p.logf("derived keys %s: stamp mark: %v (the next open validates again)", fam.Name, err)
+	}
 	return nil
 }
 
-func scanHeads(rows *sql.Rows) ([]derivedSideRow, error) {
+func scanHeads(rows *sql.Rows, ordered bool) ([]derivedSideRow, error) {
 	defer rows.Close()
 	var out []derivedSideRow
 	for rows.Next() {
 		var h derivedSideRow
-		if err := rows.Scan(&h.id, &h.owner, &h.updatedAt, &h.hash, &h.kind); err != nil {
+		dest := []any{&h.id, &h.owner, &h.hash, &h.kind}
+		if ordered {
+			dest = append(dest, &h.updatedAt)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		out = append(out, h)
@@ -808,7 +872,7 @@ func (s *SQLStore) validatePageOnReadPool(ctx context.Context, readDB *sql.DB, f
 	if err != nil {
 		return 0, cursor, false, 0, 0, false, err
 	}
-	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	redo, orphans, bad := diffSide(fam, heads, side, sideOrder)
 	ids := append(redo, orphans...)
 	sort.Strings(ids)
 	for start := 0; start < len(ids); start += pageSize {
@@ -829,12 +893,12 @@ func (s *SQLStore) validatePageOnReadPool(ctx context.Context, readDB *sql.DB, f
 // and the family's key rows over the same ids, inside tx: raw is every header
 // read, heads only the family's kind.
 func readValidationPage(ctx context.Context, tx *sql.Tx, fam *derivedFamily, cursor, before string, pageSize int) (raw, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string, err error) {
-	headQuery, headArgs := ogHeadPageSQL(cursor, before, pageSize)
+	headQuery, headArgs := ogHeadPageSQL(cursor, before, pageSize, fam.ordered)
 	rows, err := tx.QueryContext(ctx, headQuery, headArgs...)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	raw, err = scanHeads(rows)
+	raw, err = scanHeads(rows, fam.ordered)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -865,7 +929,7 @@ func readValidationPage(ctx context.Context, tx *sql.Tx, fam *derivedFamily, cur
 // og_objects rows, side the key rows (in sideOrder) over the same ids. The
 // caller holds the transaction.
 func (s *SQLStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (fixed, dropped int, bad bool, err error) {
-	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	redo, orphans, bad := diffSide(fam, heads, side, sideOrder)
 	for _, id := range orphans {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+DerivedKeysTable+` WHERE canonical_id = ? AND key_name = ?`, id, fam.Name); err != nil {
 			return 0, 0, false, err
@@ -885,8 +949,9 @@ func (s *SQLStore) reconcile(ctx context.Context, tx *sql.Tx, fam *derivedFamily
 
 // diffSide compares heads (og_objects rows) with the key rows over the same
 // ids: redo are heads with a missing or stale key row, orphans key rows with
-// no head, and bad reports a key row marked malformed.
-func diffSide(heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (redo, orphans []string, bad bool) {
+// no head, and bad reports a key row marked malformed. updated_at is compared
+// only for an ordered family (the heads of the others do not carry it).
+func diffSide(fam *derivedFamily, heads []derivedSideRow, side map[string]derivedSideRow, sideOrder []string) (redo, orphans []string, bad bool) {
 	present := make(map[string]bool, len(heads))
 	for _, h := range heads {
 		present[h.id] = true
@@ -894,7 +959,7 @@ func diffSide(heads []derivedSideRow, side map[string]derivedSideRow, sideOrder 
 		if have && !r.ok {
 			bad = true
 		}
-		if !have || r.owner != h.owner || r.hash != h.hash || !r.updatedAt.Equal(h.updatedAt) {
+		if !have || r.owner != h.owner || r.hash != h.hash || (fam.ordered && !r.updatedAt.Equal(h.updatedAt)) {
 			redo = append(redo, h.id)
 		}
 	}
@@ -915,7 +980,7 @@ func derivedStrayIDs(ctx context.Context, db *sql.DB, fam *derivedFamily, lo, hi
 		args  []any
 	}{
 		{`SELECT canonical_id FROM og_objects WHERE object_kind = ? AND (canonical_id <= ? OR canonical_id >= ?)`, []any{string(fam.Kind), lo, hi}},
-		{`SELECT canonical_id FROM ` + DerivedKeysTable + ` WHERE key_name = ? AND (canonical_id <= ? OR canonical_id >= ?)`, []any{fam.Name, lo, hi}},
+		{`SELECT canonical_id FROM ` + DerivedKeysTable + ` WHERE key_name = ? AND canonical_id <> '' AND (canonical_id <= ? OR canonical_id >= ?)`, []any{fam.Name, lo, hi}},
 	} {
 		rows, err := db.QueryContext(ctx, q.query, q.args...)
 		if err != nil {
@@ -977,7 +1042,7 @@ func (s *SQLStore) validateIDsOnReadPool(ctx context.Context, readDB *sql.DB, fa
 	if err != nil {
 		return 0, 0, 0, false, err
 	}
-	redo, orphans, bad := diffSide(heads, side, sideOrder)
+	redo, orphans, bad := diffSide(fam, heads, side, sideOrder)
 	if diff := append(redo, orphans...); len(diff) > 0 {
 		sort.Strings(diff)
 		_, f, d, b, err := s.validateIDs(ctx, fam, diff)
@@ -997,12 +1062,12 @@ func readValidationIDs(ctx context.Context, tx *sql.Tx, fam *derivedFamily, ids 
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT canonical_id, owner_id, updated_at, content_hash, object_kind FROM og_objects
+	rows, err := tx.QueryContext(ctx, `SELECT `+headColumns(fam.ordered)+` FROM og_objects
 		WHERE object_kind = '`+string(fam.Kind)+`' AND canonical_id IN (`+marks+`) ORDER BY canonical_id ASC`, args...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	heads, err = scanHeads(rows)
+	heads, err = scanHeads(rows, fam.ordered)
 	if err != nil {
 		return nil, nil, nil, err
 	}

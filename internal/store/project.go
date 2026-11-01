@@ -38,9 +38,8 @@ type projectedSessionIdentity struct {
 // batch's projection_batch_recorded event; a stamped object op is keyed by it
 // in choir_events (event_table.go). derived, when set, keeps the og_key_index
 // side table in step with every object it writes, in the same transaction.
-// The replay path passes nil: a replayed workspace is checked and filled
-// online after boot (objectgraph.ValidateDerivedKeys), off the boot path, and
-// the caller withdraws the families.
+// The replay path passes it too (docs/design/derived-key-marks-2026-11-01.md);
+// only the dry run passes nil, and it never commits.
 //
 // pb collects the batch's telemetry partition writes (telemetry_partition.go);
 // the caller flushes it before it commits tx.
@@ -48,8 +47,8 @@ func projectBatch(ctx context.Context, tx *sql.Tx, batch computerevent.Projectio
 	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, false, strings.TrimSpace(batch.ComputerID), derived, stmts, pb)
 }
 
-func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, stmts *projectStmts, pb *partitionBatch) error {
-	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), nil, stmts, pb)
+func projectBatchForReplay(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, derived *objectgraph.DerivedKeys, stmts *projectStmts, pb *partitionBatch) error {
+	return projectBatchWithReplayTextureBootstrap(ctx, tx, batch, pos, true, strings.TrimSpace(batch.ComputerID), derived, stmts, pb)
 }
 
 func projectBatchWithReplayTextureBootstrap(ctx context.Context, tx *sql.Tx, batch computerevent.ProjectionBatch, pos uint64, allowReplayTextureBootstrap bool, replayComputerID string, derived *objectgraph.DerivedKeys, stmts *projectStmts, pb *partitionBatch) error {

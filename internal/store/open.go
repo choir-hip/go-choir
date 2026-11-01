@@ -269,6 +269,11 @@ func openStore(dbPath string) (*Store, error) {
 		// pool uses the same index paths.
 		s.ogReadStore.ShareDerivedKeys(ogWriteStore)
 	}
+	// The derived-key marks: bound to the projection head, read here before
+	// any writer runs. A family whose mark matches the store's head needs no
+	// validation pass (docs/design/derived-key-marks-2026-11-01.md).
+	ogWriteStore.DerivedKeys().BindMarkHead(projectionHeadFingerprint)
+	ogWriteStore.TrustDerivedKeyMarks(context.Background())
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogWriteStore,
 	})

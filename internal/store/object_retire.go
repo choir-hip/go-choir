@@ -115,9 +115,9 @@ func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.
 
 // projectObjectRetire applies a retire op in the batch transaction and
 // returns the rows it removed. derived keeps the og_key_index side table in
-// step (nil on replay, which withdraws the families and lets the online pass
-// fill them; a choir.event has no derived-key family today, so there is
-// nothing to drop, but the drop is written for the day it has one).
+// step, live and on replay (nil only on the dry run; a choir.event has no
+// derived-key family today, so there is nothing to drop, but the drop is
+// written for the day it has one).
 //
 // The op reaches the telemetry partitions too (retirePartitions): a day it
 // covers whole is retired at pos, a day it covers in part loses the matching

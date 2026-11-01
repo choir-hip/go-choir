@@ -1,6 +1,9 @@
 # The derived-key validation re-reads og_objects bodies at every boot, for hours
 
-Date: 2026-11-01. Status: recorded; no fix yet.
+Date: 2026-11-01. Status: fix built (derived-key marks bound to the projection
+head, replay maintains the table, the three metadata families validate without
+reading body overflow): [docs/design/derived-key-marks-2026-11-01.md](../design/derived-key-marks-2026-11-01.md).
+Deployed proof pending.
 
 ## Problem
 

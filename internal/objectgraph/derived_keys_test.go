@@ -166,7 +166,9 @@ func assertSideMatchesTruth(t *testing.T, db *sql.DB) {
 		switch {
 		case !ok:
 			diffs = append(diffs, "missing "+k)
-		case g.Value != w.Value || g.Owner != w.Owner || g.Hash != w.Hash || !g.UpdatedAt.Equal(w.UpdatedAt) || g.OK != w.OK:
+		// updated_at is part of the contract only for an ordered family
+		// (derivedFamily.ordered); the validator compares nothing else.
+		case g.Value != w.Value || g.Owner != w.Owner || g.Hash != w.Hash || (derivedFamilyByName(w.Key).ordered && !g.UpdatedAt.Equal(w.UpdatedAt)) || g.OK != w.OK:
 			diffs = append(diffs, fmt.Sprintf("differs %s: have %+v want %+v", k, g, w))
 		}
 	}
@@ -543,7 +545,7 @@ func TestRollbackThenForwardRepairsTheTable(t *testing.T) {
 	recChanged.body = mustJSON(map[string]any{"addressee": "moved"})
 	recChanged.at = at.Add(3 * time.Hour)
 	rawOldBinaryPut(t, db, recChanged.object(t))
-	touched := all[2] // same content, newer updated_at: only the signature columns differ
+	touched := all[2] // same content, newer updated_at: a source_ref, whose updated_at is not an answer (derivedFamily.ordered)
 	touched.at = at.Add(4 * time.Hour)
 	rawOldBinaryPut(t, db, touched.object(t))
 	if _, err := db.Exec(`DELETE FROM og_objects WHERE canonical_id = ?`, "ref-03"); err != nil {
@@ -808,7 +810,7 @@ func TestDerivedKeyPlansUseTheirIndexes(t *testing.T) {
 	// The validator's page of og_objects headers is a primary-key range, not
 	// a sort of the whole kind per page.
 	lo, hi := derivedKeyRange(commitmentRecordKind)
-	headQuery, headArgs := ogHeadPageSQL(lo, hi, 200)
+	headQuery, headArgs := ogHeadPageSQL(lo, hi, 200, true)
 	plan = explainPlan(t, db, headQuery, headArgs...)
 	if strings.Contains(plan, "TEMP B-TREE") || strings.Contains(plan, "SCAN og_objects") && !strings.Contains(plan, "USING") {
 		t.Fatalf("the validator's head page sorts or scans the kind on every page:\n%s", plan)

@@ -310,14 +310,11 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	if batch != nil {
 		var projectErr error
 		if allowLegacyTextureBootstrap {
-			// Replay writes og_objects without the side table: withdraw the
-			// families (a replayed row would otherwise read as missing) and
-			// let the online pass fill it.
-			s.derivedKeys().InvalidateAll("replay projection")
-			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence, stmts, pb)
-			// Again before the commit, so a pass that published while the
-			// batch was written cannot leave a family readable.
-			s.derivedKeys().InvalidateAll("replay projection")
+			// Replay keeps the side table in step in its transaction, as the
+			// live projector does, so a replayed tail (a compact rebase, a
+			// snapshot restore, a crash between a pin and its finalize)
+			// leaves no family stale (docs/design/derived-key-marks-2026-11-01.md).
+			projectErr = projectBatchForReplay(ctx, tx, *batch, sequence, s.derivedKeys(), stmts, pb)
 		} else {
 			projectErr = projectBatch(ctx, tx, *batch, sequence, s.derivedKeys(), stmts, pb)
 		}
@@ -325,6 +322,9 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 			return projectErr
 		}
 	}
+	// This transaction moved the head: the derived-key marks follow it, for
+	// the families readable now, in the same commit.
+	s.derivedKeys().StampMarks(ctx, tx)
 	if err := s.trimProjectionBatchIndexTx(ctx, tx, computerID, sequence); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"time"
@@ -10,10 +11,30 @@ import (
 )
 
 // The og_key_index side table (internal/objectgraph/derived_keys.go) as the
-// Store drives it: its writers are the projector (project.go), the
-// vocabulary migration and revert (vocab_migrate_og.go), and the direct
-// object-graph writers; its online validation pass is started here, after the
-// listener is up.
+// Store drives it: its writers are the projector, live and replay
+// (project.go), the vocabulary migration and revert (vocab_migrate_og.go),
+// and the direct object-graph writers; its online validation pass is started
+// here, after the listener is up, for the families Open did not trust from
+// their marks (docs/design/derived-key-marks-2026-11-01.md).
+
+// projectionHeadFingerprint is what the derived-key marks are bound to: the
+// store's one projection head, as computer_id|sequence|canonical_event_head.
+// finalizeBatch is the only writer of computer_event_projection_heads, and
+// every og_objects write that does not maintain the side table (an older
+// binary's replay) goes through it. A store with no head row, or more than
+// one, has no fingerprint: its marks are never trusted.
+func projectionHeadFingerprint(ctx context.Context, q objectgraph.DerivedKeyTx) (string, error) {
+	var n int
+	var computerID, head sql.NullString
+	var sequence sql.NullInt64
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*), MIN(computer_id), MIN(sequence), MIN(canonical_event_head) FROM computer_event_projection_heads`).Scan(&n, &computerID, &sequence, &head); err != nil {
+		return "", err
+	}
+	if n != 1 || !computerID.Valid || !sequence.Valid || !head.Valid {
+		return "", nil
+	}
+	return fmt.Sprintf("%s|%d|%s", computerID.String, sequence.Int64, head.String), nil
+}
 
 var (
 	// derivedKeyRecheckEvery is how often the background loop looks for a
@@ -78,9 +99,10 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 			if !allFamiliesValidated(d) || (anyRepairPending(d) && time.Since(lastPass) >= repairGap) {
 				start := time.Now()
 				err := s.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{
-					PageSize:  derivedKeyPageSize,
-					DutyCycle: derivedKeyDutyCycle,
-					ReadDB:    s.readDB,
+					PageSize:   derivedKeyPageSize,
+					DutyCycle:  derivedKeyDutyCycle,
+					ReadDB:     s.readDB,
+					OnlyNeeded: true,
 				})
 				lastPass = time.Now()
 				if err != nil && ctx.Err() == nil {
