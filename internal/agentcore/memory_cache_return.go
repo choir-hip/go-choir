@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -110,6 +113,8 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 		// An always-busy computer while it works (S5; owner decision
 		// 2026-11-01). Runs may be running; nothing unsafe may be in flight.
 		if refusal := h.rt.cacheReturnBusyColdRefusal(r.Context()); refusal != nil {
+			h.rt.cacheReturnLogf("agentcore: cache return mode=busy_cold scope=%s dry_run=%t outcome=%s reason=%s detail=%q",
+				body.Scope, body.DryRun, refusal.Outcome, refusal.Reason, refusal.Error)
 			writeAPIJSON(w, http.StatusConflict, refusal)
 			return
 		}
@@ -136,9 +141,12 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 	if !body.DryRun || body.Mode == guestmem.ModeBusyCold {
 		// busy_cold logs its dry runs too: the paper's console log is where
 		// its observe ring is read.
-		log.Printf("agentcore: cache return mode=%s scope=%s dry_run=%t outcome=%s method=%s target_mib=%d reclaimed_mib=%d steps=%d ms=%d%s detail=%q",
+		h.rt.cacheReturnLogf("agentcore: cache return mode=%s scope=%s dry_run=%t outcome=%s method=%s target_mib=%d reclaimed_mib=%d steps=%d ms=%d%s detail=%q",
 			report.Mode, report.Scope, report.DryRun, report.Outcome, report.Method, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS,
 			cacheReturnRefaultLog(report), report.Detail)
+	}
+	if body.Mode == guestmem.ModeBusyCold && !body.DryRun && report.Steps > 0 {
+		go h.rt.cacheReturnPostReading()
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
@@ -223,8 +231,54 @@ func (rt *Runtime) cacheReturnBusyColdRefusal(ctx context.Context) *cacheReturnR
 		return &cacheReturnRefusal{Outcome: "busy", Reason: "selfdev_active", Error: "a self-development operation is active"}
 	case got.work.LiveCapsules > 0:
 		return &cacheReturnRefusal{Outcome: "busy", Reason: "live_capsules", Error: "a capsule is live"}
+	case got.work.SnapshotInFlight:
+		// A snapshot streams the whole store through the cache; reclaiming
+		// under it only makes it read again (review of S5, Devin #3).
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "snapshot_in_flight", Error: "a store snapshot is streaming"}
 	}
 	return nil
+}
+
+// cacheReturnPostDelay is when busy_cold's post-act reading is taken.
+const cacheReturnPostDelay = 60 * time.Second
+
+func (rt *Runtime) cacheReturnLogf(format string, args ...any) {
+	if rt.cacheReturnLog != nil {
+		rt.cacheReturnLog(fmt.Sprintf(format, args...))
+		return
+	}
+	log.Printf(format, args...)
+}
+
+// cacheReturnPostReading takes one reading about 60 s after a busy_cold act
+// that wrote and logs the refault rate since the act's end
+// (refault_rate_post): the price of the act, read after the working set has
+// had time to come back. One read of /proc/vmstat; nothing else reads it.
+func (rt *Runtime) cacheReturnPostReading() {
+	delay := rt.cacheReturnPostDelay
+	if delay <= 0 {
+		delay = cacheReturnPostDelay
+	}
+	time.Sleep(delay)
+	root := rt.cacheReturn.ProcRoot
+	if root == "" {
+		root = "/proc"
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "vmstat"))
+	if err != nil {
+		return
+	}
+	current := guestmem.VmstatField(string(raw), "workingset_refault_file")
+	if current == nil {
+		return
+	}
+	rate, ok := rt.cacheReturnRefaults.PostRate(*current)
+	shown := "unknown"
+	if ok {
+		shown = strconv.FormatFloat(rate, 'f', 1, 64)
+	}
+	rt.cacheReturnLogf("agentcore: cache return post mode=busy_cold refaults_post=%d refault_rate_post=%s refault_limit=%.0f after_s=%.0f",
+		*current, shown, guestmem.RefaultLimitPerSecond, delay.Seconds())
 }
 
 // cacheReturnRefaultLog is the refault part of the act's log line: the

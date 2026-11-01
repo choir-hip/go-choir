@@ -410,6 +410,10 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 		if rate, ok := req.Refaults.Rate(*rep.After.WorkingsetRefaultFile); ok {
 			rep.RefaultRateAfter = &rate
 		}
+		if rep.Steps > 0 {
+			// The next act's guard reads from here.
+			req.Refaults.MarkActEnd(req.Refaults.now(), *rep.After.WorkingsetRefaultFile)
+		}
 	}
 	if rep.Before.File != nil && rep.After.File != nil && *rep.Before.File > *rep.After.File {
 		rep.ReclaimedBytes = *rep.Before.File - *rep.After.File

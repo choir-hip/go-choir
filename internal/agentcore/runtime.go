@@ -244,6 +244,10 @@ type Runtime struct {
 	// always-busy read (tests).
 	cacheReturnRefaults     guestmem.RefaultWindow
 	cacheReturnBusyColdWork func(ctx context.Context) (plannedRestartWork, error)
+	// cacheReturnPostDelay and cacheReturnLog override busy_cold's post-act
+	// reading delay (60 s) and the act's log sink (tests).
+	cacheReturnPostDelay time.Duration
+	cacheReturnLog       func(line string)
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()

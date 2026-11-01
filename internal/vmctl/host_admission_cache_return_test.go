@@ -41,6 +41,8 @@ type mrGuest struct {
 	order  *crOrder
 	name   string
 	bodies []string
+	// status, when set, is the answer's HTTP status (200 otherwise).
+	status int
 }
 
 type crOrder struct {
@@ -68,7 +70,7 @@ func newMRGuest(t *testing.T, name string, order *crOrder) *mrGuest {
 		raw, _ := io.ReadAll(r.Body)
 		g.mu.Lock()
 		g.bodies = append(g.bodies, string(raw))
-		delay, effect, report := g.delay, g.effect, g.report
+		delay, effect, report, status := g.delay, g.effect, g.report, g.status
 		g.mu.Unlock()
 		if g.order != nil {
 			g.order.add(g.name)
@@ -84,6 +86,9 @@ func newMRGuest(t *testing.T, name string, order *crOrder) *mrGuest {
 			effect()
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if status != 0 {
+			w.WriteHeader(status)
+		}
 		_, _ = io.WriteString(w, report)
 	}))
 	t.Cleanup(g.srv.Close)

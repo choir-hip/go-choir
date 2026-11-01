@@ -30,9 +30,10 @@ red). Evidence:
 - **Revision 4** (2026-11-01): the owner decision S5 waited for is
   recorded (section 12); the DAMON reading (R5) was never taken, so S5
   takes the conservative branch of section 5.5 item 1: `busy_cold` through
-  the route, pressure trigger only, refault guard enforced, never with a
-  live capsule or a self-development operation in flight. S5's failure
-  list, sizing, guard threshold and rings are in section 9 S5.
+  the route, refault guard enforced, never with a live capsule or a
+  self-development operation in flight. Revision 4 built the pressure
+  trigger; revision 5 adds the periodic one. S5's failure list, sizing,
+  guard threshold and rings are in section 9 S5.
 - **Revision 5** (2026-11-01): S5 gains a periodic trigger beside the
   pressure one, on the owner's goal for the night (/goal 2026-11-01):
   "optimize memory usage for backup and the paper computer and in general
@@ -40,6 +41,12 @@ red). Evidence:
   is not the solution." Pressure alone left the paper at its ~7.8 GiB peak
   until a start was already refused, then returned 1 GiB per 5 minutes: too
   late for admission. Section 5.5 and section 9 S5 say so.
+- **Revision 6** (2026-11-01), after the S5 two-seat review (Devin,
+  DeepSeek v4.1 flash; both accept): the refault guard's window reaches
+  back to the previous act's end; a post-act reading; a store snapshot in
+  flight refuses; a 400 is unsupported for that mode this boot; the
+  refusal reason is journaled; the periodic pass asks the oldest last act
+  first. Section 9 S5.
 - **Mutation class of this document:** green. Build slices: S0 green, S1
   orange, S2 red, S3 and S4 red, S5 red.
 - **Review tier:** this design was reviewed at tier 2 (320). S1 tier 1
@@ -896,8 +903,9 @@ host.
 - Busy rule: the planned-restart refusal's own read
   (`plannedRestartBusy(ctx, countCapsules=true)`): a live engineering
   capsule, or a self-development operation in `executing`, `accepted`,
-  `materializing` or `rollback_pending`, is 409 `busy`
-  (`live_capsules`, `selfdev_active`). Fail closed: an error, an
+  `materializing` or `rollback_pending`, or a store snapshot streaming
+  (revision 6: reclaiming under it only makes it read again), is 409
+  `busy` (`live_capsules`, `selfdev_active`, `snapshot_in_flight`). Fail closed: an error, an
   uncountable capsule list (no computer id or store) or a read that has not
   answered within 1 s is 409 `busy` `store_unanswered`. A closed hibernate
   fence is 409 `busy` `hibernating`, and a fence that closes mid-act stops
@@ -907,7 +915,21 @@ host.
   `workingset_refault_file` every 10 s (a ring of two minutes, started at
   runtime start). The rate is from the newest sample at least 60 s old to
   now, per second: read before the first write and between steps, so it
-  covers the act and the 60 s before it. **Limit 32 refaults/s** (128 KiB/s,
+  covers the act and the 60 s before it. Revision 6 (review, Devin #2): an
+  act's own evictions are re-read in the seconds and minutes after it, and
+  by the next act (at least five minutes later) the ring's minute has
+  rolled them into its baseline. So a busy_cold act that wrote marks its
+  end (time and counter), and the next act's rate is from that mark when
+  it is 60 s to 30 minutes old: the window covers every refault since the
+  previous act, and one whose evictions came back stops the next act
+  (`refault_stop`, then the host's back-off). The 60 s minimum stays, and
+  after boot a mark is never a baseline without a ring sample. The guest
+  also takes one reading about 60 s after each act that wrote and logs it
+  (`agentcore: cache return post mode=busy_cold refaults_post=
+  refault_rate_post= refault_limit= after_s=60`). The counter is not blind
+  to pread: `workingset_refault_file` counts a refault when a page is
+  inserted into the page cache over a shadow entry LRU eviction left,
+  whatever the access path (read, pread or mmap). **Limit 32 refaults/s** (128 KiB/s,
   about 7.5 MiB of evicted cache read back per minute): a guest with
   gigabytes available evicts nothing on its own, so its baseline is near
   zero and sustained refaulting means the working set is coming back. Over
@@ -922,7 +944,8 @@ host.
   existing `before`/`after` `workingset_refault_file`. The guest logs every
   act, dry runs included: `agentcore: cache return mode=busy_cold ...
   target_mib= reclaimed_mib= ... refaults_before= refaults_after=
-  refault_rate_before= refault_rate_after= refault_limit=`.
+  refault_rate_before= refault_rate_after= refault_limit=`. A refused
+  act is logged too, with its reason (`outcome=busy reason=`).
 
 **Host (vmctl).**
 - Triggers (revision 5): **pressure**, inside make-room's step 0 (§4.4),
@@ -936,7 +959,9 @@ host.
   rule: a computer is asked at most once per five minutes, and a
   `refault_stop` keeps it out of both for three intervals (three default
   intervals when the pass is disabled). The idle loop never calls
-  `busy_cold`. A pressure dry run takes no admission sample. The authority
+  `busy_cold`. A pressure dry run takes no admission sample. The periodic
+  pass asks the oldest last act first (never asked first), so under the
+  in-flight limit a third named computer does not starve. The authority
   for the periodic trigger is the owner's goal quoted in §5.5.
 - Selector: `VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS`, `id=observe`
   or `id=active` pairs (computer or VM id; any other word, a bare id or a
@@ -946,12 +971,16 @@ host.
   ring. Class does not select here; only an explicit entry does.
 - Candidate rule: named; running and active; not held; a `ComputerURL`;
   no lifecycle claim and not the starter; not in flight; not
-  `unsupported` at this boot; D4's settled RSS captured. No idle floor, no
+  `unsupported` at this boot (a 404 for the route, or a 400 for
+  `busy_cold`: an older guest answers "unsupported mode"; the 400 marks
+  only that mode, so the guest's idle acts go on); D4's settled RSS
+  captured. No idle floor, no
   host busy probe (the guest decides, failing closed), and no excess floor:
   an always-busy computer's settled RSS is taken after its cache has grown,
   so the excess says nothing about its cold cache (it only orders).
-- Record: `CacheReturnRecord` gains `guest_refaults_before/after` and the
-  guard's rates and limit; the journal line names `mode=busy_cold`.
+- Record: `CacheReturnRecord` gains `guest_refaults_before/after`, the
+  guard's rates and limit, and the guest's refusal `reason` on a 409; the
+  journal line names `mode=busy_cold` and `reason=`.
 - Rings (the proof order above): d@e (`computer-59c902c5…`) `=active` (R0);
   the paper (`computer-1355b83b…`) `=observe` (R5: dry runs, so its console
   shows the sizing and the guard's reading under real pressure, nothing
@@ -1085,9 +1114,9 @@ into the paper computer ... look at its memory usage ... optimize that.
 Increasing memory is not the solution." That is the decision §5.5 item 2
 requires: reclaim on the paper (critical_protected, always busy) while it
 works. The DAMON reading (§5.5 item 1, R5) was never taken, so the shape is
-its conservative branch: `busy_cold` through the route, pressure trigger
-only, refault guard enforced, never during a self-development apply or a
-live capsule (§9 S5). Revision 5 adds a periodic trigger on the owner's
+its conservative branch: `busy_cold` through the route, refault guard
+enforced, never during a self-development apply or a live capsule (§9
+S5). Revision 4 built its pressure trigger; revision 5 adds a periodic trigger on the owner's
 goal of the same night, "optimize memory usage for backup and the paper
 computer and in general without major cost in compute or storage" (§5.5),
 bounded at 1 GiB of clean cold cache per 10 minutes per computer.

@@ -30,6 +30,11 @@ const (
 	// refaultMaxBaseAge: a baseline older than this is a stalled sampler,
 	// not "the 60 s before"; the guard then refuses.
 	refaultMaxBaseAge = 2 * time.Minute
+	// refaultActMarkMaxAge: the previous busy_cold act's end is a baseline
+	// for this long. Refaults an act causes come in the seconds and minutes
+	// after it; the ring's minute alone would have rolled them into its
+	// baseline by the next act (review of S5, Devin #2).
+	refaultActMarkMaxAge = 30 * time.Minute
 
 	// RefaultLimitPerSecond is the refault guard's limit: workingset file
 	// refaults per second, over the act and the 60 s before it, above which
@@ -56,6 +61,39 @@ type RefaultWindow struct {
 
 	mu      sync.Mutex
 	samples []refaultSample
+	// actEnd is the end of the last busy_cold act that wrote (the counter
+	// then); zero when none.
+	actEnd refaultSample
+}
+
+// MarkActEnd records the end of a busy_cold act that wrote: the next act's
+// guard reads its rate from here (within 30 minutes), so refaults this act
+// causes are seen by the next one.
+func (w *RefaultWindow) MarkActEnd(at time.Time, count int64) {
+	w.mu.Lock()
+	w.actEnd = refaultSample{at, count}
+	w.mu.Unlock()
+}
+
+// ActEnd is the last act end marked.
+func (w *RefaultWindow) ActEnd() (time.Time, int64, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.actEnd.at, w.actEnd.count, !w.actEnd.at.IsZero()
+}
+
+// PostRate is the refaults per second from the last act's end to current,
+// read now: the post-act reading the guest logs as refault_rate_post.
+func (w *RefaultWindow) PostRate(current int64) (float64, bool) {
+	at, count, ok := w.ActEnd()
+	if !ok {
+		return 0, false
+	}
+	age := w.now().Sub(at)
+	if age <= 0 || current < count {
+		return 0, false
+	}
+	return float64(current-count) / age.Seconds(), true
 }
 
 func (w *RefaultWindow) now() time.Time {
@@ -99,6 +137,11 @@ func (w *RefaultWindow) Sample() {
 	}
 }
 
+// VmstatField reads one counter from /proc/vmstat text; nil when absent.
+func VmstatField(vmstat, name string) *int64 {
+	return statFields(vmstat)[name]
+}
+
 // Observe records one reading and prunes what the guard can no longer use.
 func (w *RefaultWindow) Observe(at time.Time, count int64) {
 	w.mu.Lock()
@@ -119,10 +162,13 @@ func (w *RefaultWindow) sampleCount() int {
 	return len(w.samples)
 }
 
-// Rate is the refaults per second from the newest sample at least 60 s old
-// to current, read now. ok is false, and the guard refuses, when there is no
-// such sample, when it is older than two minutes (the sampler stalled), or
-// when the counter went backwards.
+// Rate is the refaults per second to current, read now, from the older of
+// two baselines: the newest ring sample at least 60 s old, and the last
+// act's end when it is 60 s to 30 minutes old (so the window covers every
+// refault since the previous act). ok is false, and the guard refuses, when
+// the ring has no such sample (after boot, or a sampler stalled past two
+// minutes: a mark alone is never enough), or when the counter went
+// backwards.
 func (w *RefaultWindow) Rate(current int64) (float64, bool) {
 	if w == nil {
 		return 0, false
@@ -130,16 +176,31 @@ func (w *RefaultWindow) Rate(current int64) (float64, bool) {
 	now := w.now()
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	var base refaultSample
+	found := false
 	for i := len(w.samples) - 1; i >= 0; i-- {
 		s := w.samples[i]
 		age := now.Sub(s.at)
 		if age < refaultLookback {
 			continue
 		}
-		if age > refaultMaxBaseAge || current < s.count {
+		if age > refaultMaxBaseAge {
 			return 0, false
 		}
-		return float64(current-s.count) / age.Seconds(), true
+		base, found = s, true
+		break
 	}
-	return 0, false
+	if !found {
+		return 0, false
+	}
+	if mark := w.actEnd; !mark.at.IsZero() {
+		age := now.Sub(mark.at)
+		if age >= refaultLookback && age <= refaultActMarkMaxAge && mark.at.Before(base.at) {
+			base = mark
+		}
+	}
+	if current < base.count {
+		return 0, false
+	}
+	return float64(current-base.count) / now.Sub(base.at).Seconds(), true
 }

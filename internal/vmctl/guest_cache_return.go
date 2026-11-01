@@ -538,7 +538,10 @@ type CacheReturnRecord struct {
 	// Outcome: the guest's word on a 200, else busy, in_progress,
 	// not_fenced, unsupported, host_timeout, error, bad_report or http_NNN.
 	Outcome string `json:"outcome"`
-	Method  string `json:"method,omitempty"`
+	// Reason is the guest's refusal reason on a 409 (selfdev_active,
+	// live_capsules, snapshot_in_flight, hibernating, store_unanswered, ...).
+	Reason string `json:"reason,omitempty"`
+	Method string `json:"method,omitempty"`
 	// Path and Detail are the guest's: the file written (or the absent
 	// memory.reclaim) and why an act stopped or fell back. SwappinessKey,
 	// ReportingNegotiated and the reportable blocks are what the staging
@@ -590,9 +593,9 @@ func (r CacheReturnRecord) JournalLine() string {
 		}
 		return strconv.FormatFloat(*p, 'f', 1, 64)
 	}
-	extra := fmt.Sprintf(" method=%s path=%s swappiness_key=%s reporting_negotiated=%s reportable_kib_before=%d reportable_kib_after=%d"+
+	extra := fmt.Sprintf(" reason=%s method=%s path=%s swappiness_key=%s reporting_negotiated=%s reportable_kib_before=%d reportable_kib_after=%d"+
 		" guest_refaults_before=%d guest_refaults_after=%d guest_refault_rate_before=%s guest_refault_rate_after=%s guest_refault_limit=%s detail=%q",
-		r.Method, r.Path, say(r.SwappinessKey), say(r.ReportingNegotiated), r.ReportableKiBBefore, r.ReportableKiBAfter,
+		r.Reason, r.Method, r.Path, say(r.SwappinessKey), say(r.ReportingNegotiated), r.ReportableKiBBefore, r.ReportableKiBAfter,
 		r.GuestRefaultsBefore, r.GuestRefaultsAfter, rate(r.GuestRefaultRateBefore), rate(r.GuestRefaultRateAfter),
 		strconv.FormatFloat(r.GuestRefaultLimit, 'f', 0, 64), r.Detail)
 	return fmt.Sprintf("guest cache return VM %s trigger=%s mode=%s scope=%s outcome=%s dry_run=%t "+
@@ -776,8 +779,15 @@ func (r *OwnershipRegistry) runBusyColdPass(ctx context.Context) int {
 		Uncaptured:  r.cacheReturnUncaptured(now, snap.acfg),
 		InFlight:    st.isInFlight,
 		LastAct:     st.lastActAt,
-		Unsupported: st.isUnsupported,
+		Unsupported: st.busyColdUnsupported,
 		BackedOff:   st.backedOff(now),
+		// The oldest last act first (never asked first), so under the
+		// in-flight limit no named computer starves (review, DeepSeek #4).
+		Order: func(a, b *VMOwnership) bool {
+			la, _ := st.lastActAt(a.VMID)
+			lb, _ := st.lastActAt(b.VMID)
+			return la.Before(lb)
+		},
 	})
 	started := 0
 	for _, own := range picks {
@@ -795,6 +805,22 @@ func (r *OwnershipRegistry) runBusyColdPass(ctx context.Context) int {
 		}(own)
 	}
 	return started
+}
+
+// cacheReturnUnsupportedKey is the unsupported map's key for a mode: the VM
+// id for idle (and for a 404, which is the whole route), the VM id and the
+// mode otherwise.
+func cacheReturnUnsupportedKey(vmID, mode string) string {
+	if mode == "" || mode == "idle" {
+		return vmID
+	}
+	return vmID + "#" + mode
+}
+
+// busyColdUnsupported: the route is absent (404), or busy_cold was refused
+// with a 400, at this boot.
+func (s *guestCacheReturnState) busyColdUnsupported(vmID string, epoch int64) bool {
+	return s.isUnsupported(vmID, epoch) || s.isUnsupported(cacheReturnUnsupportedKey(vmID, "busy_cold"), epoch)
 }
 
 func (s *guestCacheReturnState) lastActAt(vmID string) (time.Time, bool) {
@@ -1055,8 +1081,14 @@ func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwner
 		// An old guest without the route: not again until it boots.
 		st.markUnsupported(own.VMID, own.Epoch)
 		rec.Outcome = "unsupported"
+	case status == http.StatusBadRequest:
+		// The guest has the route but not this mode (an older guest answers
+		// busy_cold "unsupported mode"): not again in this mode until it
+		// boots; the other modes it serves are untouched.
+		st.markUnsupported(cacheReturnUnsupportedKey(own.VMID, mode), own.Epoch)
+		rec.Outcome = "unsupported"
 	case status == http.StatusConflict:
-		rec.Outcome = report.Outcome
+		rec.Outcome, rec.Reason = report.Outcome, report.Reason
 		if rec.Outcome == "" {
 			rec.Outcome = "conflict"
 		}
@@ -1137,6 +1169,7 @@ func (rec *CacheReturnRecord) setRSSAfter(v cacheReturnRSS) {
 // It is a claim: nothing reads it to decide.
 type cacheReturnGuestReport struct {
 	Outcome        string `json:"outcome"`
+	Reason         string `json:"reason"`
 	Method         string `json:"method"`
 	Path           string `json:"path"`
 	Detail         string `json:"detail"`

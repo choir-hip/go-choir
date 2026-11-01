@@ -116,6 +116,7 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		// sizes the act; the excess only orders the candidates.
 		in.Extra = nil
 		in.BackedOff = st.backedOff(now)
+		in.Unsupported = st.busyColdUnsupported
 		for _, own := range busyColdCandidates(in) {
 			picks = append(picks, pick{own, "busy_cold", busyColdModeFor(gcfg, own) == GuestCacheReturnObserve})
 		}
