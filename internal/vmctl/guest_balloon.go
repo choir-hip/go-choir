@@ -13,8 +13,9 @@ import (
 // less memory usage", then "reduce real memory usage while maximizing
 // flexibility for bursts/spikes"):
 //
-//	VMCTL_GUEST_MEMORY_CAP_COMPUTERS  "id=MiB,..." (VM or computer id): the
-//	                                  guest's elastic ceiling
+//	VMCTL_GUEST_MEMORY_CAP_COMPUTERS  "id=MiB,..." (VM id, computer id, or
+//	                                  class:<warmness class>): the guest's
+//	                                  elastic ceiling; an id wins over a class
 //	VMCTL_GUEST_MEMORY_CAP_INTERVAL   reconcile interval, default 1m; 0 stops
 //
 // Every pass asks each named active computer for a ceiling act (guestmem
@@ -64,7 +65,7 @@ func ParseGuestMemoryCaps(raw string) (map[string]int, []string) {
 		id, v, ok := strings.Cut(tok, "=")
 		id = strings.TrimSpace(id)
 		n, err := strconv.Atoi(strings.TrimSpace(v))
-		if !ok || id == "" || err != nil || n < GuestMemoryCapFloorMiB {
+		if !ok || id == "" || id == guestMemoryCapClassPrefix || err != nil || n < GuestMemoryCapFloorMiB {
 			bad = append(bad, tok)
 			continue
 		}
@@ -76,13 +77,23 @@ func ParseGuestMemoryCaps(raw string) (map[string]int, []string) {
 	return out, bad
 }
 
-// guestMemoryCapFor is the computer's cap (by VM id, then computer id), or 0.
-func guestMemoryCapFor(caps map[string]int, own *VMOwnership) int {
+// guestMemoryCapClassPrefix names a warmness class in an entry
+// ("class:primary=3072"), so the ceiling widens ring by ring.
+const guestMemoryCapClassPrefix = "class:"
+
+// guestMemoryCapFor is the computer's cap (by VM id, then computer id, then
+// its class), or 0.
+func guestMemoryCapFor(caps map[string]int, own *VMOwnership, class WarmnessClass) int {
 	if n, ok := caps[own.VMID]; ok {
 		return n
 	}
 	if own.ComputerID != "" {
-		return caps[own.ComputerID]
+		if n, ok := caps[own.ComputerID]; ok {
+			return n
+		}
+	}
+	if class != "" {
+		return caps[guestMemoryCapClassPrefix+string(class)]
 	}
 	return 0
 }
@@ -147,7 +158,7 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(ctx context.Context, caps m
 					own.ComputerID, own.VMID, res.BeforeMiB, res.AfterMiB)
 			}
 		}
-		ceilingMiB := guestMemoryCapFor(caps, own)
+		ceilingMiB := guestMemoryCapFor(caps, own, r.WarmnessClassForOwnership(own))
 		if ceilingMiB == 0 || cfg.Mode == GuestCacheReturnOff || strings.TrimSpace(own.ComputerURL) == "" || ctx.Err() != nil {
 			continue
 		}

@@ -49,6 +49,34 @@ func TestParseGuestMemoryCaps(t *testing.T) {
 	}
 }
 
+// Class entries (the ceiling on every computer, widened ring by ring). Ways
+// it can fail, written first:
+//   - a class entry overrides a computer's own entry (the paper's 3072 must
+//     win over any class it is in);
+//   - a computer of another class, or of none, gets the class's ceiling;
+//   - "class:" with no name, or an unknown spelling, selects every computer.
+func TestGuestMemoryCapForClass(t *testing.T) {
+	caps, bad := ParseGuestMemoryCaps("class:primary=3072,computer-a=4096,class:=2048")
+	if want := []string{"class:=2048"}; !reflect.DeepEqual(bad, want) {
+		t.Fatalf("bad = %v, want %v", bad, want)
+	}
+	for _, tc := range []struct {
+		name  string
+		own   *VMOwnership
+		class WarmnessClass
+		want  int
+	}{
+		{"own entry wins over its class", &VMOwnership{VMID: "vm-a", ComputerID: "computer-a"}, WarmnessClassPrimary, 4096},
+		{"class entry", &VMOwnership{VMID: "vm-b", ComputerID: "computer-b"}, WarmnessClassPrimary, 3072},
+		{"another class", &VMOwnership{VMID: "vm-c", ComputerID: "computer-c"}, WarmnessClassTest, 0},
+		{"no class", &VMOwnership{VMID: "vm-d"}, "", 0},
+	} {
+		if got := guestMemoryCapFor(caps, tc.own, tc.class); got != tc.want {
+			t.Errorf("%s: cap = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestReconcileGuestMemoryCaps(t *testing.T) {
 	mgr := &fakeCapManager{rssVMManager: newRSSVMManager(), calls: map[string]int{}, errs: map[string]error{}}
 	reg, _ := hostCapacityRegistry(t, mgr)

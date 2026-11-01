@@ -1829,7 +1829,11 @@ in
         # bend at 508 MiB/min): the paper 3072, d@e (R0) 2048. Follows
         # VMCTL_GUEST_CACHE_RETURN (off stops it). Rollback: drop the entry,
         # or the variable.
-        "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=2048,computer-1355b83bced1613eb048ee28d66688a8=3072"
+        # Ring 2 (2026-11-01; owner: "Let's do everything that is a win that
+        # we can"): every test, primary and premium computer by class, 3072
+        # of an 8 GiB guest as the paper; a computer's own entry wins.
+        # Rollback: drop the class entries.
+        "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=2048,computer-1355b83bced1613eb048ee28d66688a8=3072,class:test=2048,class:primary=3072,class:premium_always_on=3072"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
