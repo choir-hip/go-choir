@@ -23,10 +23,10 @@ definition_version: throughline/1
 readiness: executable
 readiness_authority: owner, 2026-11-01 (quoted above)
 review:
-  reviewer: none yet (Devin seat requested at authoring)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: Devin (swe-2-max), one seat; the I2 diff itself had Devin and DeepSeek (tier 2)
+  frozen_ref: 0ac3dd57050118a1
+  verdict: accept (nine non-blocking findings, adjudicated in the ledger)
+  evidence_ref: ledger 2026-11-01 review entry
 start:
   observed_at: 2026-11-01T19:45Z
   deployed: 03c8dbf12 (elastic guest memory ceiling, telemetry cited ids once per run, snapshot and compaction cache drops, per-minute memory meter, security epoch 29), live at 19:32Z; the paper rebooted 19:31:40Z
@@ -67,18 +67,21 @@ finish:
   artifacts:
     - "I0: the memory mission closed with numbers: the paper's p50, p95 and max RSS under the elastic ceiling through a telemetry run, host stable state, disk reads per day, storage growth per day, in a published report"
     - "I1: per-VM memory, io and cpu pressure (cgroup *.pressure) in the memory meter and its report, with flags"
-    - "I2: the paper jailed (SEC-04, the last wave), at a watched planned refresh, confinement verified"
-    - "I3: disk I/O isolation that bites under scheduler none: iocost on the NVMe members with io delegated to the VM slice and a per-VM io.weight; io.max or a Firecracker drive rate_limiter only if the drill shows weights are not enough"
+    - "I2: the paper jailed (SEC-04, the last wave), at a watched planned refresh, confinement verified; public_platform computers jailed by class at their next launch, so SEC-04's residual closes"
+    - "I3: disk I/O isolation that bites under scheduler none: iocost on the NVMe members with io delegated to the VM slice and a per-VM io.weight, and the VM slice weighted below the host services so the host keeps its share; io.max or a Firecracker drive rate_limiter only if the drill shows weights are not enough"
     - "I4: disk space: a host reserve floor that acts (refuses starts and image growth below it) and a per-guest data image size policy"
-    - "I5: network: a per-VM bandwidth limit (tap qdisc or Firecracker net rate_limiter) and a per-source conntrack limit"
-    - "I6: per-VM cpu.max (about the vCPU count) and a per-VM memory backstop (memory.high above guest size plus VMM overhead)"
+    - "I5: network: a per-VM bandwidth limit (tap qdisc or Firecracker net rate_limiter) a per-source conntrack limit, and per-tap anti-spoof (a guest sends only from its own MAC and address and cannot reach a sibling over the bridge)"
+    - "I6: per-VM cpu.max (the vCPU count plus headroom for the VMM's own threads) and a per-VM memory backstop (memory.high above guest size plus VMM overhead)"
   acceptance:
     - action: "drill on d@e only: d@e thrashes its disk (a whole-store read loop past its RAM) while an observer guest (a test computer, never the paper or the owner's) runs a fixed read workload"
       proves: the observer's io pressure and read latency stay within a stated bound of its solo baseline, and the host's pressure stays under the meter's flag
       evidence_class: deployed drill, memory meter ledger and report
     - action: "the same drill shape for disk space (d@e grows its image toward the floor), network (d@e floods egress) and CPU (d@e spins every vCPU)"
       proves: each limit acts on d@e and leaves the observer and the host within bound
-      evidence_class: deployed drill
+      evidence_class: deployed drill; each drill has an abort bound (the disk drill stops 20 GB above the floor, the network drill runs 60 s at most)
+    - action: "the paper jailed after the planned refresh"
+      proves: scripts/vmm_confinement_verify.py passes for the paper, its health answers, its ceiling acts and its meter row reads its own cgroup
+      evidence_class: deployed observation
     - action: "d@e alone on an idle host runs the same loads"
       proves: no limit binds when nothing else needs the resource (bursts are free)
       evidence_class: deployed drill
