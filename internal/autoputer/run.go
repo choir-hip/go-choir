@@ -206,6 +206,16 @@ func Run() {
 	}
 	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
 	db, err := store.Open(rtCfg.StorePath)
+	if err != nil && rebased != "" {
+		// A swapped-in compact copy that will not open must not loop the
+		// boot: put the pre-rebase original back and open that.
+		log.Printf("autoputer: open runtime store after the compact rebase: %v", err)
+		if restored, restoreErr := store.RestorePrecompact(rtCfg.StorePath); restored {
+			db, err = store.Open(rtCfg.StorePath)
+		} else if restoreErr != nil {
+			log.Printf("autoputer: restore the pre-rebase original: %v", restoreErr)
+		}
+	}
 	doneStoreOpen(err)
 	if err != nil {
 		boot.fatalf("autoputer: open runtime store: %v", err)

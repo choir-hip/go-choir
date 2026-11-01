@@ -127,3 +127,21 @@ Copy cost (`vacuumIntoCopy`, the production path, one run):
   SQLite's working set. It does not grow with the file (the copy streams each
   B-tree).
 - disk: the original plus one copy (3.09 GB beside 3.22 GB).
+
+## Residuals (review round 1, 2026-10-31)
+
+Fixed in the review round: B1 (the chain proof no longer depends on the
+windowed event index: the sidecar anchors the copy to the identity of the state
+file it was made from), B2 (the swap carries `co_super_slots` and
+`agent_evidence` from the original), N1 (header check before the swap, the
+original restored when the swapped file will not open), N2 (only verdicts delete
+a staged copy), N3 (integrity check under the copy budget), N4 (free-space
+floor during and after the copy). Left open, one line each:
+
+- Partition GC starvation: `GCTelemetryPartitions` returns 0 while a staged copy exists (telemetry_partition.go), so with `store.telemetry_partitions` on, a computer that never restarts never deletes retired partition files; compare the copy's head with the retire op's sequence instead.
+- Sibling-file lifecycle: `.compact`, `.compact.json`, `.layout.json` and `.precompact` are not moved or cleaned by rematerialize or snapshot install, so a restored file can inherit a fresh layout marker (up to 7 days of suppressed compaction) or a stale staged copy (the anchor and the chain check refuse it, but the 20 GB stays on disk).
+- Page cache: `dropFileCache` drops only the copy's pages; the source pages streamed by `VACUUM INTO` still evict the guest's working set, and the `MemAvailable` floor cannot see page cache.
+- Marker asymmetry: `plannedRestartMarkerPending` counts an unparseable marker by mtime (and `true` when the stat fails), while `ConsumePlannedRestartMarker` treats it as a crash boot; safe in outcome, inconsistent in classification.
+- Comment arithmetic: the replay-rate comment says the low end of 206 to 350 events a second is used, but 250 is planned with (a 450,000-event tail is 36 minutes at 206); the epoch in this doc reads 25 to 26 while the release policy goes 25 to 27.
+- The anchor assumes a state file is replaced, never rewritten in place, by a restore; inode reuse after a delete-then-create on the same filesystem could in theory match. Restore and rematerialize write a new file beside the old and rename over it, so the old inode is still held.
+- The carried tables are copied at the swap, so a crash between the carry and the rename leaves a staged copy already carrying them (idempotent: the next boot deletes and reinserts).

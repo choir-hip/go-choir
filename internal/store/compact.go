@@ -27,9 +27,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -56,6 +58,11 @@ var (
 	// compactCopyBudget bounds the copy's read transaction, which pins the
 	// WAL while it runs.
 	compactCopyBudget = 90 * time.Minute
+	// compactFreeFloorBytes is the free space the copy must leave on the
+	// disk, read every compactFreeCheckEvery during the copy and after it:
+	// headroom for the WAL the copy's read transaction pins.
+	compactFreeFloorBytes int64 = 2 << 30
+	compactFreeCheckEvery       = 10 * time.Second
 	// compactRebaseMaxReplay is the longest the boot may spend replaying the
 	// tape onto a swapped-in copy, and compactReplayEventsPerSecond the
 	// replay rate it plans with (measured at 206 to 350 events a second on
@@ -176,6 +183,38 @@ type compactSidecar struct {
 	Head       string    `json:"head"`
 	Size       int64     `json:"size"`
 	CreatedAt  time.Time `json:"created_at"`
+	// StateFile is the identity (device and inode) of the live state file the
+	// copy was made from. See compactTail.
+	StateFile string `json:"state_file,omitempty"`
+}
+
+// compactVerdict is a ruling that the staged copy does not fit the store (off
+// its chain, past it, another computer). Any other error from the checks is
+// transient (a cancelled context, a busy pool): the copy is kept and the
+// check retried, because a copy is ~20 GB of work.
+type compactVerdict struct{ msg string }
+
+func (e *compactVerdict) Error() string { return e.msg }
+
+func verdictf(format string, args ...any) error {
+	return &compactVerdict{msg: fmt.Sprintf(format, args...)}
+}
+
+func isCompactVerdict(err error) bool {
+	var v *compactVerdict
+	return errors.As(err, &v)
+}
+
+// fileIdentity names the file at path by device and inode ("" when unknown).
+func fileIdentity(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		return fmt.Sprintf("%d:%d", uint64(st.Dev), uint64(st.Ino))
+	}
+	return ""
 }
 
 func filesystemFreeBytes(dir string) (int64, error) {
@@ -212,7 +251,11 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 	// chain, past the bound) is removed now.
 	stagedPath, sidecarPath := statePath+compactStagedSuffix, statePath+compactSidecarSuffix
 	if side, ok := readCompactSidecar(stagedPath, sidecarPath); ok {
-		tail, tailErr := compactTail(ctx, read, side)
+		tail, tailErr := compactTail(ctx, read, statePath, side)
+		if tailErr != nil && !isCompactVerdict(tailErr) {
+			// Transient: keep the copy, try again at the next run.
+			return false, fmt.Errorf("skipped: could not check the staged copy: %w", tailErr)
+		}
 		if tailErr == nil && float64(tail) <= compactRestageShare*float64(compactRebaseMaxTail) {
 			log.Printf("store: compact copy: the staged copy at sequence %d is fresh (tail %d)", side.Sequence, tail)
 			return false, nil
@@ -271,8 +314,9 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 		removeSQLiteFiles(staging)
 		return false, fmt.Errorf("copy refused: %w", err)
 	}
+	side.StateFile = fileIdentity(statePath)
 	// The copy must be on this store's chain now; the boot checks again.
-	if err := compactOnChain(ctx, read, side); err != nil {
+	if err := compactOnChain(ctx, read, statePath, side); err != nil {
 		removeSQLiteFiles(staging)
 		return false, fmt.Errorf("copy refused: %w", err)
 	}
@@ -333,14 +377,67 @@ func vacuumIntoCopy(ctx context.Context, statePath, staging string) error {
 			return fmt.Errorf("%s: %w", pragma, err)
 		}
 	}
-	if _, err := conn.ExecContext(ctx, `VACUUM INTO `+sqlQuote(staging)); err != nil {
+	// The disk was checked once before the copy, but the copy pins the WAL
+	// and the live writer keeps growing it: stop the copy, and leave no
+	// partial file, when free space falls under the floor.
+	dir := filepath.Dir(statePath)
+	lowSpace := make(chan error, 1)
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	copyCtx, cancelCopy := context.WithCancel(watchCtx)
+	defer cancelCopy()
+	go func() {
+		t := time.NewTicker(compactFreeCheckEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-watchCtx.Done():
+				return
+			case <-t.C:
+				if err := checkCompactFloor(dir); err != nil {
+					lowSpace <- err
+					cancelCopy()
+					return
+				}
+			}
+		}
+	}()
+	_, err = conn.ExecContext(copyCtx, `VACUUM INTO `+sqlQuote(staging))
+	select {
+	case low := <-lowSpace:
+		removeSQLiteFiles(staging)
+		return low
+	default:
+	}
+	if err != nil {
 		return fmt.Errorf("vacuum into: %w", err)
+	}
+	// The final reading: free space after the copy, WAL growth included.
+	if low := checkCompactFloor(dir); low != nil {
+		removeSQLiteFiles(staging)
+		return low
+	}
+	return nil
+}
+
+// checkCompactFloor refuses when the disk beside the store has fewer than
+// compactFreeFloorBytes free.
+func checkCompactFloor(dir string) error {
+	free, err := compactFreeBytes(dir)
+	if err != nil {
+		return nil // unreadable now: the initial check passed; do not abort on a blip
+	}
+	if free < compactFreeFloorBytes {
+		return fmt.Errorf("copy aborted: %d bytes free, under the %d-byte floor (the pinned WAL grows while the copy runs)", free, compactFreeFloorBytes)
 	}
 	return nil
 }
 
 // checkCompactCopy checks the copy's structure and reads the head it holds.
 func checkCompactCopy(ctx context.Context, path string) (compactSidecar, error) {
+	// The full-file integrity pass is as heavy as the copy: same deadline.
+	ctx, cancel := context.WithTimeout(ctx, compactCopyBudget)
+	defer cancel()
 	db, err := sql.Open("sqlite", dbx.SQLiteDSN(path, dbx.SQLiteOptions{}, false))
 	if err != nil {
 		return compactSidecar{}, err
@@ -396,37 +493,57 @@ func compactHead(ctx context.Context, db *sql.DB) (compactSidecar, error) {
 
 // compactOnChain checks that side's head is on db's chain: db is at that head,
 // or db's event after it follows it. It returns the tail between them.
-func compactOnChain(ctx context.Context, db *sql.DB, side compactSidecar) error {
-	_, err := compactTail(ctx, db, side)
+func compactOnChain(ctx context.Context, db *sql.DB, statePath string, side compactSidecar) error {
+	_, err := compactTail(ctx, db, statePath, side)
 	return err
 }
 
-func compactTail(ctx context.Context, db *sql.DB, side compactSidecar) (uint64, error) {
+// compactTail proves the copy's head is an ancestor of the store's head and
+// returns the events between them. Errors that are rulings are compactVerdicts.
+//
+// The proof has two forms. The index row after the copy's head names the
+// copy's head as its previous head (the strong form), but the event index is
+// windowed: the trim deletes the finalized projection_batch_recorded rows
+// below ~10k-20k sequences under the head (event_index_trim.go), which are
+// 99.3% of the rows, so a copy older than about an hour has no row after it.
+// Then the anchor stands in: the sidecar records the identity of the state
+// file the copy was made from, by VACUUM INTO from that very file, so the
+// copy's head was on that file's chain when it was made, and a file only
+// grows by appending to its chain. If the file at statePath is still that
+// file, the head is still an ancestor. A restore or rematerialize writes a
+// new file, which voids the anchor (a copy of an older history is then
+// refused unless the strong form holds). The trim cannot be taught to keep
+// an anchor row instead: the content witness hashes every row of the index,
+// so a kept row would differ from a replay's.
+func compactTail(ctx context.Context, db *sql.DB, statePath string, side compactSidecar) (uint64, error) {
 	cur, err := compactHead(ctx, db)
 	if err != nil {
 		return 0, err
 	}
 	switch {
 	case cur.ComputerID != side.ComputerID:
-		return 0, fmt.Errorf("copy is of %s, the store of %s", side.ComputerID, cur.ComputerID)
+		return 0, verdictf("copy is of %s, the store of %s", side.ComputerID, cur.ComputerID)
 	case cur.Sequence < side.Sequence:
-		return 0, fmt.Errorf("copy at sequence %d is past the store at %d", side.Sequence, cur.Sequence)
+		return 0, verdictf("copy at sequence %d is past the store at %d", side.Sequence, cur.Sequence)
 	case cur.Sequence == side.Sequence:
 		if cur.Head != side.Head {
-			return 0, errors.New("copy and store differ at the same sequence")
+			return 0, verdictf("copy and store differ at the same sequence")
 		}
 		return 0, nil
 	}
 	var previous string
 	err = db.QueryRowContext(ctx, `SELECT previous_head FROM computer_event_index WHERE computer_id=? AND sequence=? AND status='finalized'`, side.ComputerID, side.Sequence+1).Scan(&previous)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, fmt.Errorf("the store holds no finalized event %d after the copy", side.Sequence+1)
+		if id := fileIdentity(statePath); id != "" && id == side.StateFile {
+			return cur.Sequence - side.Sequence, nil
+		}
+		return 0, verdictf("the store holds no finalized event %d after the copy, and it is not the file the copy was made from", side.Sequence+1)
 	}
 	if err != nil {
 		return 0, err
 	}
 	if previous != side.Head {
-		return 0, fmt.Errorf("the store's event %d does not follow the copy's head", side.Sequence+1)
+		return 0, verdictf("the store's event %d does not follow the copy's head", side.Sequence+1)
 	}
 	return cur.Sequence - side.Sequence, nil
 }
@@ -483,9 +600,36 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 		}
 		db.SetMaxOpenConns(1)
 		defer db.Close()
-		return compactTail(context.Background(), db, stagedSide)
+		return compactTail(context.Background(), db, statePath, stagedSide)
 	}()
 	if err != nil {
+		if !isCompactVerdict(err) {
+			// Transient: the copy waits for the next planned boot.
+			return "kept the staged compact copy: could not check it: " + err.Error(), nil
+		}
+		return discard(err.Error())
+	}
+	if err := checkStagedHeader(staged); err != nil {
+		return discard(err.Error())
+	}
+	// Rows the tape does not hold are carried from the original into the
+	// copy, then the sidecar names the copy's new size.
+	if err := carryDirectTables(statePath, staged); err != nil {
+		return "", fmt.Errorf("carry direct-SQL tables into the staged copy: %w", err)
+	}
+	if info, err := os.Stat(staged); err == nil {
+		stagedSide.Size = info.Size()
+		if raw, err := json.Marshal(stagedSide); err == nil {
+			err = writeFileDurable(sidecarPath, raw)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	// A copy damaged on disk since it was staged is not installed: the boot
+	// would have no state file it can open (a full check is the stage-time
+	// integrity_check; this one is cheap enough for the boot).
+	if err := checkStagedHeader(staged); err != nil {
 		return discard(err.Error())
 	}
 	if tail > compactRebaseMaxTail {
@@ -509,6 +653,158 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 	}
 	writeLayoutMarker(statePath, time.Now(), stagedSide.Sequence)
 	return fmt.Sprintf("rebased onto the compact copy at sequence %d: %d -> %d bytes, %d events to replay", stagedSide.Sequence, before, stagedSide.Size, tail), nil
+}
+
+// compactCarriedTables are the tables written by direct SQL with no op on the
+// tape, so a copy plus the tape's tail would lose what was written after the
+// copy (and bring back what was deleted). The swap carries their contents from
+// the original into the copy. Unconditional, whatever their graph switches
+// say: the original's table is the truth either way (switched on, the rows
+// moved to the graph and the table is empty, which is what the copy must hold
+// too; an import's deletes are not on the tape).
+//
+//   - co_super_slots: engineering slot claims, updates and releases
+//     (store.go) while engineering.slots_graph is off, the default;
+//   - agent_evidence: research evidence (texture.go) while evidence.graph is
+//     off, the default.
+//
+// The other tables of the schema are projections of the tape or have no
+// writer (replay_eligibility.go; the grep for INSERT/UPDATE/DELETE over the
+// store finds no other direct writer).
+var compactCarriedTables = []string{"co_super_slots", "agent_evidence"}
+
+// carryDirectTables replaces the contents of compactCarriedTables in the copy
+// with the original's, in one transaction, and checks the row counts.
+func carryDirectTables(originalPath, copyPath string) error {
+	db, err := sql.Open("sqlite", dbx.SQLiteDSN(copyPath, dbx.SQLiteOptions{}, false))
+	if err != nil {
+		return err
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `ATTACH DATABASE `+sqlQuote(originalPath)+` AS orig`); err != nil {
+		return fmt.Errorf("attach the original: %w", err)
+	}
+	defer conn.ExecContext(ctx, `DETACH DATABASE orig`)
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return err
+	}
+	rollback := func(err error) error {
+		_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+		return err
+	}
+	for _, table := range compactCarriedTables {
+		var origHas int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM orig.sqlite_master WHERE type='table' AND name=?`, table).Scan(&origHas); err != nil {
+			return rollback(err)
+		}
+		if _, err := conn.ExecContext(ctx, `DELETE FROM main.`+table); err != nil {
+			return rollback(fmt.Errorf("%s: %w", table, err))
+		}
+		if origHas == 0 {
+			continue
+		}
+		cols, err := tableColumns(ctx, conn, table)
+		if err != nil {
+			return rollback(err)
+		}
+		list := strings.Join(cols, ", ")
+		if _, err := conn.ExecContext(ctx, `INSERT INTO main.`+table+` (`+list+`) SELECT `+list+` FROM orig.`+table); err != nil {
+			return rollback(fmt.Errorf("%s: %w", table, err))
+		}
+		var want, got int64
+		if err := conn.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM orig.`+table+`), (SELECT COUNT(*) FROM main.`+table+`)`).Scan(&want, &got); err != nil {
+			return rollback(err)
+		}
+		if want != got {
+			return rollback(fmt.Errorf("%s: carried %d rows of %d", table, got, want))
+		}
+	}
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return rollback(err)
+	}
+	// One file again: a checkpointed, closed database leaves no WAL.
+	if _, err := conn.ExecContext(ctx, `PRAGMA journal_mode=DELETE`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func tableColumns(ctx context.Context, conn *sql.Conn, table string) ([]string, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT name FROM pragma_table_info(?, 'main')`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cols []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		cols = append(cols, `"`+c+`"`)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return nil, fmt.Errorf("%s: no columns in the copy", table)
+	}
+	return cols, nil
+}
+
+// checkStagedHeader is the cheap check of the staged file at the boot: the
+// SQLite magic, and a header page count that matches the file size.
+func checkStagedHeader(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	hdr := make([]byte, 100)
+	if _, err := io.ReadFull(f, hdr); err != nil {
+		return fmt.Errorf("the staged copy has no SQLite header: %w", err)
+	}
+	if string(hdr[:16]) != "SQLite format 3\x00" {
+		return errors.New("the staged copy has no SQLite header")
+	}
+	pageSize := int64(binary.BigEndian.Uint16(hdr[16:18]))
+	if pageSize == 1 {
+		pageSize = 65536
+	}
+	pages := int64(binary.BigEndian.Uint32(hdr[28:32]))
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if pages == 0 || pageSize == 0 || pages*pageSize != info.Size() {
+		return fmt.Errorf("the staged copy's header says %d pages of %d bytes, the file is %d bytes", pages, pageSize, info.Size())
+	}
+	return nil
+}
+
+// RestorePrecompact puts the rollback copy back as the state file when the
+// swapped-in file would not open, so the boot does not loop on it. It reports
+// whether it restored one.
+func RestorePrecompact(dbPath string) (bool, error) {
+	statePath := StateDBPath(dbPath)
+	pre := statePath + precompactSuffix
+	if _, err := os.Stat(pre); err != nil {
+		return false, nil
+	}
+	removeSQLiteFiles(statePath)
+	_ = os.Remove(statePath + layoutMarkerSuffix)
+	if err := undoSwap(statePath, pre); err != nil {
+		return false, err
+	}
+	log.Printf("store: compact copy: the swapped-in file would not open; restored the pre-rebase original")
+	return true, nil
 }
 
 func readCompactSidecar(staged, sidecarPath string) (compactSidecar, bool) {
