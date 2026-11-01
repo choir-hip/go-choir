@@ -276,6 +276,21 @@ func main() {
 		registry.StartGuestCacheReturnBusyColdLoop(context.Background(), cacheReturn.BusyColdInterval)
 		log.Printf("vmctl: guest cache return busy_cold loop interval set to %s", cacheReturn.BusyColdInterval)
 	}
+	// D6 S6: guest memory caps through the balloon (internal/vmctl/guest_balloon.go).
+	{
+		caps, bad := vmctl.ParseGuestMemoryCaps(os.Getenv("VMCTL_GUEST_MEMORY_CAP_COMPUTERS"))
+		for _, b := range bad {
+			log.Printf("vmctl: guest memory cap entry %q ignored (want id=MiB)", b)
+		}
+		interval := vmctl.DefaultGuestMemoryCapInterval
+		if v := strings.TrimSpace(os.Getenv("VMCTL_GUEST_MEMORY_CAP_INTERVAL")); v != "" {
+			if d, err := time.ParseDuration(v); err == nil && d >= 0 {
+				interval = d
+			}
+		}
+		registry.StartGuestMemoryCapLoop(context.Background(), interval, caps)
+		log.Printf("vmctl: guest memory cap loop interval %s, %d computer(s) capped", interval, len(caps))
+	}
 	// Deferred deploy refreshes are retried until each computer takes the
 	// update (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
 	// The pending set lives beside the ownership state so a vmctl restart
@@ -499,6 +514,12 @@ func (a *vmManagerAdapter) SetVMOOMScoreAdj(vmID string, adj int) error {
 
 // VMResidentBytes implements vmctl's VM memory reader (measured admission).
 func (a *vmManagerAdapter) VMResidentBytes() map[string]uint64 { return a.mgr.VMResidentBytes() }
+
+// SetGuestMemoryCap serves vmctl's guest memory cap loop (D6 S6).
+func (a *vmManagerAdapter) SetGuestMemoryCap(vmID string, capMiB int) (vmctl.GuestMemoryCapResult, error) {
+	res, err := a.mgr.SetGuestMemoryCap(vmID, capMiB)
+	return vmctl.GuestMemoryCapResult{BaseMiB: res.BaseMiB, BeforeMiB: res.BeforeMiB, AfterMiB: res.AfterMiB, Changed: res.Changed}, err
+}
 
 // GuestMemoryStats serves vmctl's read-only balloon statistics route
 // (internal/vmctl/balloon_stats.go).
