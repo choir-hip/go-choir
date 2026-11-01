@@ -191,7 +191,9 @@ now:
       cache-heavy guest write (DeepSeek I6 #2).
     next_observation: the meter's day of per-VM memory, reads and pressure under ordinary load with every bound live
   blocker_or_risk: >-
-    Residuals: every vmctl deploy reboots all guests (deploy-impact
+    Time gate: I0 needs the meter's first full day (until 2026-11-02T19:32Z);
+    guest deploys are held until the closing report so the day is not cut by
+    reboots. Residuals: every vmctl deploy reboots all guests (deploy-impact
     classification); TestManagementDelegatesIntakeToTasks flakes in CI
     (asynchronous session release); no test pins the restore shape (I6 #4).
   next_action: collect a day of meter data (from 2026-11-01), then write and publish the closing numbers report; in the meantime the write-storm residual and the remaining whole-kind reads
