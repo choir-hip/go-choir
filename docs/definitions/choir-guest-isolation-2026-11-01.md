@@ -213,3 +213,12 @@ Each station lands through the landing loop and is proved by its drill on
 d@e, read through I1's numbers. Code review is risk-tiered (CLAUDE.md):
 tier 1 (Devin) for the additive, switched limits; tier 2 (Devin and
 DeepSeek) for the paper's jail and anything on the boot or lifecycle path.
+
+## Successor
+
+Owner, 2026-11-01: "Once we finish this mission, get all our wins and much
+needed isolation, then we should go to self-dev, and see how much we can do
+concurrently. That's the load test." The next mission is a self-development
+concurrency load test: as many concurrent self-development capsules as Node B
+carries, read through this mission's per-VM pressure numbers. It is authored
+at this mission's terminal receipt.
