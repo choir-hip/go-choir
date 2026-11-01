@@ -10,3 +10,4 @@
 - d@e holds 266 MiB inactive file, under the 512 MiB keep: it cannot prove a busy_cold act. Edge accepted; the paper flipped to active (88654a665) with per-act watch.
 - Old-rule census stopped at 70 min (superseded); new-rule census started at idle IO.
 - 07:34Z paper's first active act: guest reclaimed 1031 MiB, host RSS 7748 -> 7574 (17%), refaults 0. Guest free 160 MiB minutes later (refilled; kswapd steal 1.84 GiB and file refaults 791 MiB since boot). Outcome B; the paper back to observe (docs/problems/paper-busy-cold-freed-cache-refills-2026-11-01.md).
+- 07:5xZ paper's state.db stream traced: the derived-key validation restarts at every boot (05:30, 06:41, 07:09, 07:24Z), hours per pass, reading og_objects bodies; no snapshot ran (docs/problems/derived-key-validation-rereads-og-objects-every-boot-2026-11-01.md). Backup finished 07:10:55Z: 4h40m, peak 5.6 GB, 26.8 CPU-hours.
