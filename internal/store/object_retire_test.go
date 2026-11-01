@@ -389,9 +389,10 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 }
 
 // R9: the event table's delete, probe and oldest-row query read the slice
-// through idx_choir_events_updated, in the store and in a telemetry
-// partition, and never scan the table: each scanned row's updated_at sits
-// past its body blob, so a scan reads every body (the paper read about 8.5 GB
+// by kind and slice through idx_choir_events_kind_updated (the oldest-row
+// query through idx_choir_events_updated), in the store and in a telemetry
+// partition, and never scan the table: event_kind and updated_at sit past
+// the body blob, so each row tested reads its body (the paper read about 8.5 GB
 // in four minutes for a retire pass that removed some 300 rows, 2026-11-01).
 func TestObjectRetireEventTablePlanUsesTheUpdatedIndex(t *testing.T) {
 	s, _ := vocabUpcastOpenStore(t, "retire-plan-events")
@@ -433,8 +434,12 @@ func TestObjectRetireEventTablePlanUsesTheUpdatedIndex(t *testing.T) {
 			}
 			rows.Close()
 			text := strings.Join(plan, " | ")
-			if !strings.Contains(text, "idx_choir_events_updated") {
-				t.Errorf("%s: the plan does not use idx_choir_events_updated: %s", name, text)
+			want := "idx_choir_events_kind_updated (event_kind=? AND updated_at>? AND updated_at<?)"
+			if strings.HasPrefix(q.sql, "SELECT MIN") {
+				want = "idx_choir_events_updated"
+			}
+			if !strings.Contains(text, want) {
+				t.Errorf("%s: the plan does not use %s: %s", name, want, text)
 			}
 		}
 	}

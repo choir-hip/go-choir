@@ -433,6 +433,7 @@ CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq)
 CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
+CREATE INDEX IF NOT EXISTS idx_choir_events_kind_updated ON choir_events(event_kind, updated_at);
 
 -- telemetry_partitions_retired names the telemetry partitions a retire op
 -- retired (telemetry_partition.go): main-store state, so the head, the
