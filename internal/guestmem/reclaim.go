@@ -30,8 +30,8 @@ import (
 
 // Modes. idle: a quiet computer, cold pages less a keep. hibernate: the
 // guest is fenced and about to be snapshotted, so all cold pages go.
-// busy_cold: reserved for always-busy computers (S5); sized here, not
-// reachable through the route.
+// busy_cold: an always-busy computer while it works (S5): a capped share of
+// the cold pages above a keep, under the refault guard (refault_window.go).
 const (
 	ModeIdle      = "idle"
 	ModeHibernate = "hibernate"
@@ -52,6 +52,9 @@ const (
 	OutcomeNothingToReturn = "nothing_to_return"
 	OutcomeUnsupported     = "unsupported"
 	OutcomeSwapPresent     = "swap_present"
+	// OutcomeRefaultStop: busy_cold's refault guard refused or stopped the
+	// act (refaults over the limit, or no baseline to read them against).
+	OutcomeRefaultStop = "refault_stop"
 	// OutcomeDryRun: sized and reported, nothing written.
 	OutcomeDryRun = "dry_run"
 )
@@ -91,6 +94,9 @@ type ReclaimRequest struct {
 	// Reporting reads free page reporting's state, once before and once
 	// after the writes.
 	Reporting func() Reporting
+	// Refaults is busy_cold's refault guard window. busy_cold without one
+	// refuses (refault_stop); the other modes record refaults only.
+	Refaults *RefaultWindow
 }
 
 // Snapshot is what the act reads before and after. A field the kernel did
@@ -140,6 +146,13 @@ type ReclaimReport struct {
 	// EINVAL: that kernel rejects the key).
 	SwappinessKey       bool  `json:"swappiness_key"`
 	ReportingNegotiated *bool `json:"reporting_negotiated,omitempty"`
+	// The refault guard (busy_cold only): the limit, and the
+	// workingset_refault_file rate per second from the window's baseline (at
+	// least 60 s before) to the start of the writes and to their end. nil is
+	// "not read" (no baseline, or another mode).
+	RefaultLimitPerSec float64  `json:"refault_limit_per_s,omitempty"`
+	RefaultRateBefore  *float64 `json:"refault_rate_before_per_s,omitempty"`
+	RefaultRateAfter   *float64 `json:"refault_rate_after_per_s,omitempty"`
 	// Detail names why an act did not run or stopped: the missing path, the
 	// stop reason, the write error.
 	Detail string   `json:"detail,omitempty"`
@@ -361,6 +374,14 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 			return finish(OutcomeNothingToReturn, "")
 		}
 	}
+	if req.Mode == ModeBusyCold {
+		// The refault guard, before any write. A dry run reports what the
+		// guard would say.
+		rep.RefaultLimitPerSec = RefaultLimitPerSecond
+		if why := r.refaultGuard(req.Refaults, rep.Before.WorkingsetRefaultFile, &rep.RefaultRateBefore); why != "" {
+			return finish(OutcomeRefaultStop, why)
+		}
+	}
 	if req.DryRun {
 		return finish(OutcomeDryRun, "")
 	}
@@ -384,6 +405,11 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 	rep.After = r.snapshot(cgroup)
 	if req.Reporting != nil {
 		rep.After.ReportableKiB = req.Reporting().ReportableKiB
+	}
+	if req.Mode == ModeBusyCold && req.Refaults != nil && rep.After.WorkingsetRefaultFile != nil {
+		if rate, ok := req.Refaults.Rate(*rep.After.WorkingsetRefaultFile); ok {
+			rep.RefaultRateAfter = &rate
+		}
 	}
 	if rep.Before.File != nil && rep.After.File != nil && *rep.Before.File > *rep.After.File {
 		rep.ReclaimedBytes = *rep.Before.File - *rep.After.File
@@ -417,6 +443,17 @@ func (r *Reclaimer) act(ctx context.Context, req ReclaimRequest, method, reclaim
 				return OutcomeStoppedBusy, reason
 			}
 		}
+		if req.Mode == ModeBusyCold && rep.Steps > 0 {
+			// Re-read between steps: the rate over the act so far and the
+			// 60 s before it.
+			var current *int64
+			if raw, err := os.ReadFile(filepath.Join(r.procRoot(), "vmstat")); err == nil {
+				current = statFields(string(raw))["workingset_refault_file"]
+			}
+			if why := r.refaultGuard(req.Refaults, current, &rep.RefaultRateAfter); why != "" {
+				return OutcomeRefaultStop, why
+			}
+		}
 		step := int64(reclaimStepBytes)
 		if remaining < step {
 			step = remaining
@@ -439,6 +476,27 @@ func (r *Reclaimer) act(ctx context.Context, req ReclaimRequest, method, reclaim
 		remaining -= step
 	}
 	return OutcomeReturned, ""
+}
+
+// refaultGuard is busy_cold's refault rule. It stores the rate it read in
+// *rate and returns why the act must not (go on) writing, or "". It fails
+// closed: no window, an unreported counter and no usable baseline all stop.
+func (r *Reclaimer) refaultGuard(w *RefaultWindow, current *int64, rate **float64) string {
+	if w == nil {
+		return "no refault window"
+	}
+	if current == nil {
+		return "workingset_refault_file unreported"
+	}
+	got, ok := w.Rate(*current)
+	if !ok {
+		return "no refault baseline 60 s to 2 min old (or the counter went backwards)"
+	}
+	*rate = &got
+	if got > RefaultLimitPerSecond {
+		return fmt.Sprintf("refaults %.1f/s over the limit %.0f/s", got, RefaultLimitPerSecond)
+	}
+	return ""
 }
 
 func stepValue(bytes int64, keyed bool) string {

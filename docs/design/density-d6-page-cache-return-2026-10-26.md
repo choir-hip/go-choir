@@ -27,6 +27,12 @@ red). Evidence:
   skips the act past a 60 s fence budget (D6-M26); one status code for
   unanswered store reads; S4 names mode `idle`; the report's `method` and
   `path`. Adjudicated in §13.1.
+- **Revision 4** (2026-11-01): the owner decision S5 waited for is
+  recorded (section 12); the DAMON reading (R5) was never taken, so S5
+  takes the conservative branch of section 5.5 item 1: `busy_cold` through
+  the route, pressure trigger only, refault guard enforced, never with a
+  live capsule or a self-development operation in flight. S5's failure
+  list, sizing, guard threshold and rings are in section 9 S5.
 - **Mutation class of this document:** green. Build slices: S0 green, S1
   orange, S2 red, S3 and S4 red, S5 red.
 - **Review tier:** this design was reviewed at tier 2 (320). S1 tier 1
@@ -107,8 +113,7 @@ and no prepare-body byte changes, so no snapshot is voided and no computer
 cold boots, either way.
 
 **Owner decision needed:** none for S0 to S4. One for S5: a reclaim on the
-paper (critical_protected) while it works. The conservative default is
-that S5 does not ship without it (§12).
+paper (critical_protected) while it works. Recorded 2026-11-01 (§12): yes.
 
 ## 1. What exists today
 
@@ -556,9 +561,14 @@ Excluded from S2 to S4 by class. S5 is gated:
    during an apply or a live capsule. "Planned refresh" is operator
    sequencing (FP0 schedules it), not code.
 2. **A recorded owner decision**, because either shape reclaims on the
-   paper while it works.
+   paper while it works. **Recorded 2026-11-01** (§12).
 Proof order: a test computer kept busy by a loop, then d@e, then the paper,
 with the paper's poll latency and refaults read before and after.
+
+**Taken (2026-11-01):** the DAMON reading was never taken, so S5 builds the
+conservative branch of item 1: `busy_cold` through the route, pressure
+trigger only, refault guard on, never during an apply or a live capsule.
+No DAMON boot argument, no cold boot, no launch-config byte.
 
 ### 5.6 Restart rules
 
@@ -837,12 +847,110 @@ Failure list and tests:
 Evidence (FP0): §10 step 4. Rollback: remove `pressure` from the trigger
 list, or `off`.
 
-### S5: always-busy computers (red, tier 2; gated)
+### S5: always-busy computers (red, tier 2)
 
-Gates: the DAMON reading (R5) and a recorded owner decision (§12). Then
-either a nix change (the paper into `VM_GUEST_RECLAIM_ONLY`, at a planned
-refresh) or `busy_cold` with the refault guard (threshold set from S2's
-readings), with its own failure list written then. The paper last.
+Gates: the DAMON reading (R5) and a recorded owner decision (§12). The
+owner decision is recorded (2026-11-01). R5 was never taken; the branch
+built is the one section 5.5 names for "DAMON does not": `busy_cold`
+through the route, the pressure trigger only. The paper last.
+
+The paper's reading that motivates it (2026-11-01 05:5x UTC, 18 minutes
+after boot, guest 8 GiB): AnonPages 1.13 GiB (autoputer 1.04 GiB RSS, desk
+workers 0.32 GiB), Cached 6.14 GiB, Inactive(file) 6.08 GiB, Active(file)
+27 MB, MemAvailable 6.67 GiB; the daemon's cgroup (`go-choir-autoputer.
+service`) current 7.11 GiB, file 6.05 GiB, anon 1.0 GiB; `state.db` (21.1
+GB) resident 4.83 GiB. Host RSS of its Firecracker 7.8 GiB, free page
+reporting on, balloon at 0. The guest's cold cache is the whole cost to the
+host.
+
+**Guest (route mode `busy_cold`).**
+- Size: `min(1 GiB, cold − max(512 MiB, active_file))` from the daemon
+  cgroup's `memory.stat` (§4.1); under 128 MiB `nothing_to_return`. On the
+  reading above, 1 GiB per act.
+- 64 MiB steps, 1 s budget, nice-19 locked thread, ` swappiness=0`, the
+  `/proc/swaps` guard, one act at a time: as S1.
+- Busy rule: the planned-restart refusal's own read
+  (`plannedRestartBusy(ctx, countCapsules=true)`): a live engineering
+  capsule, or a self-development operation in `executing`, `accepted`,
+  `materializing` or `rollback_pending`, is 409 `busy`
+  (`live_capsules`, `selfdev_active`). Fail closed: an error, an
+  uncountable capsule list (no computer id or store) or a read that has not
+  answered within 1 s is 409 `busy` `store_unanswered`. A closed hibernate
+  fence is 409 `busy` `hibernating`, and a fence that closes mid-act stops
+  it (`stopped_busy`). A running run is not busy: the mode exists for
+  computers that always run.
+- **Refault guard, enforced.** The guest samples
+  `workingset_refault_file` every 10 s (a ring of two minutes, started at
+  runtime start). The rate is from the newest sample at least 60 s old to
+  now, per second: read before the first write and between steps, so it
+  covers the act and the 60 s before it. **Limit 32 refaults/s** (128 KiB/s,
+  about 7.5 MiB of evicted cache read back per minute): a guest with
+  gigabytes available evicts nothing on its own, so its baseline is near
+  zero and sustained refaulting means the working set is coming back. Over
+  the limit before the act: `refault_stop`, nothing written; over it
+  between steps: `refault_stop` after the steps already made. Fail closed:
+  no window, no baseline 60 s to 2 min old, an unreported counter or a
+  counter that went backwards is `refault_stop` with nothing written. The
+  limit is a guest constant; the host cannot raise it. S2's or the paper's
+  refault readings may revise it.
+- Report and log: the report adds `refault_limit_per_s`,
+  `refault_rate_before_per_s` and `refault_rate_after_per_s` beside the
+  existing `before`/`after` `workingset_refault_file`. The guest logs every
+  act, dry runs included: `agentcore: cache return mode=busy_cold ...
+  target_mib= reclaimed_mib= ... refaults_before= refaults_after=
+  refault_rate_before= refault_rate_after= refault_limit=`.
+
+**Host (vmctl).**
+- Trigger: **pressure only**, inside make-room's step 0 (§4.4), after
+  every idle candidate (the less intrusive act first), within the same
+  12 s deadline and the same limit of three computers. Section 5.5 names
+  the pressure trigger only, so there is no periodic act and the idle loop
+  never calls `busy_cold`. A computer is asked at most once per five
+  minutes. A dry run takes no admission sample.
+- Selector: `VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS`, `id=observe`
+  or `id=active` pairs (computer or VM id; any other word, a bare id or a
+  capital is dropped). Capped by `VMCTL_GUEST_CACHE_RETURN` (off stops it;
+  observe makes it a dry run). It needs neither `_ONLY` nor the `pressure`
+  trigger, so turning it on for the paper does not turn S4 on for the idle
+  ring. Class does not select here; only an explicit entry does.
+- Candidate rule: named; running and active; not held; a `ComputerURL`;
+  no lifecycle claim and not the starter; not in flight; not
+  `unsupported` at this boot; D4's settled RSS captured. No idle floor, no
+  host busy probe (the guest decides, failing closed), and no excess floor:
+  an always-busy computer's settled RSS is taken after its cache has grown,
+  so the excess says nothing about its cold cache (it only orders).
+- Record: `CacheReturnRecord` gains `guest_refaults_before/after` and the
+  guard's rates and limit; the journal line names `mode=busy_cold`.
+- Rings (the proof order above): d@e (`computer-59c902c5…`) `=active` (R0);
+  the paper (`computer-1355b83b…`) `=observe` (R5: dry runs, so its console
+  shows the sizing and the guard's reading under real pressure, nothing
+  written). After d@e's act is proven (§10 step 2's pass rule, plus the
+  guard's rates), the orchestrator flips the paper's entry to `=active` in
+  `nix/node-b.nix` and deploys: a human act per the paper ring rule.
+  Switch registry: folded into `vmctl_guest_cache_return` (one D6 switch,
+  §0; the release cap is 64), raised to red, target R5, `confirm: human`.
+
+Failure list and tests (written first):
+- guest (`internal/guestmem/reclaim_busy_cold_test.go`): the formula's
+  edges (active_file larger than 512 MiB, dirty and writeback, the cap, a
+  keep larger than cold, the paper's reading); under 128 MiB writes
+  nothing; a quiet baseline acts; a hot baseline refuses; refaults climbing
+  mid-act stop it; fail-closed guard cases; the window's baseline choice
+  and pruning; swap present refuses; one act at a time; the 1 s budget.
+- route (`internal/agentcore/memory_cache_return_busy_cold_test.go`): acts
+  while runs run; refuses a live capsule, a self-development operation,
+  an erroring or uncountable read; a hung read is 409 within budget; the
+  production read with and without a computer id; the fence; the guard is
+  wired; dry run.
+- host (`internal/vmctl/guest_cache_return_busy_cold_test.go`): exact-word
+  parse; the global cap; the named paper is asked with `busy_cold` and
+  recorded with refaults; a computer outside the switch never is (unnamed
+  paper, idle-selector-only computer, switch off); the idle loop never is;
+  observe is a dry run; the five-minute repeat; the candidate rule.
+
+Rollback: drop the computer's entry (or set it `=observe`), or
+`VMCTL_GUEST_CACHE_RETURN=off` for every trigger; then revert. Nothing is
+in the launch config, a snapshot or the prepare body.
 
 ### S6: balloon inflation (red, tier 2; conditional, not planned)
 
@@ -934,6 +1042,15 @@ and a one-act rollback? Default until answered: no; S5 does not ship. The
 balloon-versus-reclaim choice is a design branch, taken by the
 conservative option (no new device, no new state) and stated, per "No
 Blocking Asks".
+
+**Owner decision, recorded 2026-11-01: yes.** The owner asked to "drill
+into the paper computer ... look at its memory usage ... optimize that.
+Increasing memory is not the solution." That is the decision §5.5 item 2
+requires: reclaim on the paper (critical_protected, always busy) while it
+works. The DAMON reading (§5.5 item 1, R5) was never taken, so the shape is
+its conservative branch: `busy_cold` through the route, pressure trigger
+only, refault guard enforced, never during a self-development apply or a
+live capsule (§9 S5).
 
 ## 13. Review 320 adjudication
 

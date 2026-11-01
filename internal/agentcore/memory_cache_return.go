@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/guestmem"
@@ -105,9 +106,21 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 			}
 			return ""
 		}
+	case guestmem.ModeBusyCold:
+		// An always-busy computer while it works (S5; owner decision
+		// 2026-11-01). Runs may be running; nothing unsafe may be in flight.
+		if refusal := h.rt.cacheReturnBusyColdRefusal(r.Context()); refusal != nil {
+			writeAPIJSON(w, http.StatusConflict, refusal)
+			return
+		}
+		req.Stop = func() string {
+			if h.rt.hibernate.closed() {
+				return "hibernate_started"
+			}
+			return ""
+		}
+		req.Refaults = &h.rt.cacheReturnRefaults
 	default:
-		// busy_cold (always-busy computers) is S5's, behind an owner decision;
-		// it is not reachable before it exists.
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsupported mode"})
 		return
 	}
@@ -120,9 +133,12 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	if !body.DryRun {
-		log.Printf("agentcore: cache return mode=%s scope=%s outcome=%s method=%s target_mib=%d reclaimed_mib=%d steps=%d ms=%d detail=%q",
-			report.Mode, report.Scope, report.Outcome, report.Method, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS, report.Detail)
+	if !body.DryRun || body.Mode == guestmem.ModeBusyCold {
+		// busy_cold logs its dry runs too: the paper's console log is where
+		// its observe ring is read.
+		log.Printf("agentcore: cache return mode=%s scope=%s dry_run=%t outcome=%s method=%s target_mib=%d reclaimed_mib=%d steps=%d ms=%d%s detail=%q",
+			report.Mode, report.Scope, report.DryRun, report.Outcome, report.Method, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS,
+			cacheReturnRefaultLog(report), report.Detail)
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
@@ -157,6 +173,81 @@ func (rt *Runtime) cacheReturnIdleRefusal(ctx context.Context) *cacheReturnRefus
 		return &cacheReturnRefusal{Outcome: "busy", Reason: "live_capsules", Error: "a capsule is live"}
 	}
 	return nil
+}
+
+// cacheReturnBusyColdBudget bounds busy_cold's always-busy read.
+const cacheReturnBusyColdBudget = time.Second
+
+// cacheReturnBusyColdRefusal is busy_cold's busy rule: the CLAUDE.md
+// always-busy exclusion, the same read a planned restart refuses on. A
+// running run is not busy here (the mode exists for computers that always
+// run); a live engineering capsule or a self-development operation in
+// executing, accepted, materializing or rollback_pending is, and so is a
+// closed hibernate fence. It fails closed: an error, an uncountable capsule
+// list or a read that has not answered within a second is 409 busy
+// store_unanswered. nil means the act may run.
+func (rt *Runtime) cacheReturnBusyColdRefusal(ctx context.Context) *cacheReturnRefusal {
+	if rt.hibernate.closed() {
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "hibernating", Error: "a hibernate is in progress"}
+	}
+	read := rt.cacheReturnBusyColdWork
+	if read == nil {
+		read = func(ctx context.Context) (plannedRestartWork, error) {
+			if !rt.liveCapsulesCountable() {
+				return plannedRestartWork{}, errLiveCapsulesUncountable
+			}
+			return rt.plannedRestartBusy(ctx, true)
+		}
+	}
+	rctx, cancel := context.WithTimeout(ctx, cacheReturnBusyColdBudget)
+	defer cancel()
+	type answer struct {
+		work plannedRestartWork
+		err  error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		work, err := read(rctx)
+		done <- answer{work, err}
+	}()
+	var got answer
+	select {
+	case got = <-done:
+	case <-rctx.Done():
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "store_unanswered", Error: "the always-busy read did not answer", Unanswered: []string{"selfdev_active_operations", "live_capsules"}}
+	}
+	switch {
+	case got.err != nil:
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "store_unanswered", Error: got.err.Error(), Unanswered: []string{"selfdev_active_operations", "live_capsules"}}
+	case got.work.SelfdevActive > 0:
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "selfdev_active", Error: "a self-development operation is active"}
+	case got.work.LiveCapsules > 0:
+		return &cacheReturnRefusal{Outcome: "busy", Reason: "live_capsules", Error: "a capsule is live"}
+	}
+	return nil
+}
+
+// cacheReturnRefaultLog is the refault part of the act's log line: the
+// counter before and after, the guard's rates and limit (busy_cold).
+func cacheReturnRefaultLog(report guestmem.ReclaimReport) string {
+	num := func(p *int64) string {
+		if p == nil {
+			return "unknown"
+		}
+		return strconv.FormatInt(*p, 10)
+	}
+	rate := func(p *float64) string {
+		if p == nil {
+			return "unknown"
+		}
+		return strconv.FormatFloat(*p, 'f', 1, 64)
+	}
+	out := " refaults_before=" + num(report.Before.WorkingsetRefaultFile) + " refaults_after=" + num(report.After.WorkingsetRefaultFile)
+	if report.Mode == guestmem.ModeBusyCold {
+		out += " refault_rate_before=" + rate(report.RefaultRateBefore) + " refault_rate_after=" + rate(report.RefaultRateAfter) +
+			" refault_limit=" + strconv.FormatFloat(report.RefaultLimitPerSec, 'f', 0, 64)
+	}
+	return out
 }
 
 // cacheReturnIdleStop is asked between steps: a run starting shows in

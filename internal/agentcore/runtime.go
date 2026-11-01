@@ -239,6 +239,11 @@ type Runtime struct {
 	// reads for its busy rule (tests).
 	cacheReturn      guestmem.Reclaimer
 	cacheReturnReads func(ctx context.Context, budget time.Duration) healthStoreReads
+	// cacheReturnRefaults is busy_cold's refault guard window, sampled from
+	// Start (D6 S5); cacheReturnBusyColdWork overrides busy_cold's
+	// always-busy read (tests).
+	cacheReturnRefaults     guestmem.RefaultWindow
+	cacheReturnBusyColdWork func(ctx context.Context) (plannedRestartWork, error)
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
@@ -971,6 +976,11 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// every root is stale; even a maintenance hold must not keep them
 	// (docs/problems/apply-checkpoint-replay-fills-guest-tmp-2026-10-26.md).
 	rt.removeStaleReplayScratch()
+	// D6 S5: busy_cold's refault guard reads a rate over the minute before an
+	// act, which the kernel keeps no history of; one /proc/vmstat read every
+	// 10 s keeps it. Started before the maintenance hold return: it reads
+	// only, and an act on a held guest still needs its guard.
+	go rt.cacheReturnRefaults.Run(ctx, guestmem.RefaultSampleInterval)
 	// Telemetry batching is decided before the first event of this process, so
 	// the sequence reseed gap applies to every number seeded after a crash.
 	rt.configureTelemetryBatching(ctx)

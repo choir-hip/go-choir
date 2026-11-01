@@ -34,8 +34,8 @@ import (
 //     already proved the guest idle;
 //   - one act at a time: a second call while one is writing waits, or runs;
 //   - a guest process (not the host peer) can trigger the act;
-//   - an unknown body field or mode is accepted; busy_cold (the always-busy
-//     mode, S5) is reachable before it exists;
+//   - an unknown body field or mode is accepted (busy_cold, S5, has its
+//     own cases in memory_cache_return_busy_cold_test.go);
 //   - dry_run writes;
 //   - a stalled store makes the route hang instead of answering 409 busy.
 
@@ -347,7 +347,6 @@ func TestCacheReturnRejectsBadBodies(t *testing.T) {
 		"missing mode":         `{"scope":"daemon"}`,
 		"unknown mode":         `{"mode":"aggressive","scope":"daemon"}`,
 		"unknown scope":        `{"mode":"idle","scope":"cgroup"}`,
-		"busy_cold not yet":    `{"mode":"busy_cold","scope":"daemon"}`,
 		"not json":             `idle`,
 		"trailing second body": `{"mode":"idle","scope":"daemon"}{"mode":"idle"}`,
 		"empty":                ``,
