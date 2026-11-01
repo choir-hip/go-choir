@@ -1759,7 +1759,13 @@ in
         # settled RSS is recorded in both modes, so flip to wake after staging
         # shows `need_source` settled in admission.recent for a woken
         # computer and the host floor held. Rollback: peak.
-        "VMCTL_ADMISSION_NEED=peak"
+        # 2026-11-01: wake. The settled RSS is recorded (b@c 1269 MiB settled
+        # against a 7358 MiB peak, d@e 1308, f1daccdb 1087), and peak charging
+        # refused b@c's wake at 9.8 GiB available, 3.4 GiB short, for memory
+        # it would not have used (owner goal 2026-11-01: optimize memory use;
+        # "increasing memory is not the solution"). Growth past the settled
+        # size is pressure reclaim's to answer, as before.
+        "VMCTL_ADMISSION_NEED=wake"
         # Density D6: idle guests return cold page cache to the host
         # (docs/design/density-d6-page-cache-return-2026-10-26.md). Step 1 of
         # its staging proof (§10): observe (every act a dry run) on the idle

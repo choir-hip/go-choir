@@ -438,7 +438,7 @@
    "target_ring": "R4",
    "expires": "2026-11-11",
    "ring": "all",
-   "nix_value": "peak",
+   "nix_value": "wake",
    "promote": [
     {
      "metric": "admission_need_source",
