@@ -1830,10 +1830,14 @@ in
         # VMCTL_GUEST_CACHE_RETURN (off stops it). Rollback: drop the entry,
         # or the variable.
         # Ring 2 (2026-11-01; owner: "Let's do everything that is a win that
-        # we can"): every test, primary and premium computer by class, 3072
-        # of an 8 GiB guest as the paper; a computer's own entry wins.
-        # Rollback: drop the class entries.
-        "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=2048,computer-1355b83bced1613eb048ee28d66688a8=3072,class:test=2048,class:primary=3072,class:premium_always_on=3072"
+        # we can"): every test, primary and premium computer by class; a
+        # computer's own entry wins. All at the 1024 floor (owner, the same
+        # evening: "Can it be done in like extremely low memory because it's
+        # just data? ... we can wait for an NVMe read"): the guest's own
+        # processes are about 0.5 GB, the rest is page cache of data already
+        # on disk, and 500 MiB/min of rereads is 8.5 MB/s against an NVMe.
+        # Rollback: the paper 3072, d@e 2048, the classes dropped.
+        "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=1024,computer-1355b83bced1613eb048ee28d66688a8=1024,class:test=1024,class:primary=1024,class:premium_always_on=1024"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
