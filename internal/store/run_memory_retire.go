@@ -105,6 +105,19 @@ func parseStoreTime(v any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// runMemoryRetireGroupQuery is the per-run summary the selection reads. It
+// is served by idx_run_memory_entries_loop_retire alone: every column it
+// names is in that index, so it never reads a row, whose created_at and kind
+// sit after message_json (a table scan read the whole 3.8 GB table).
+func runMemoryRetireGroupQuery() (string, []any) {
+	keepMarks := make([]string, len(runMemoryRetireKeepKinds))
+	args := make([]any, len(runMemoryRetireKeepKinds))
+	for i, k := range runMemoryRetireKeepKinds {
+		keepMarks[i], args[i] = "?", k
+	}
+	return `SELECT loop_id, owner_id, agent_id, MAX(created_at), SUM(CASE WHEN kind NOT IN (` + strings.Join(keepMarks, ",") + `) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, args
+}
+
 // SelectRunMemoryRetirements returns the loop ids whose entries may leave the
 // working store at now. It reads only (read pool); the caller appends the op.
 func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) ([]string, error) {
@@ -113,12 +126,8 @@ func (s *Store) SelectRunMemoryRetirements(ctx context.Context, now time.Time) (
 		return nil, nil
 	}
 	cutoff := now.Add(-runMemoryRetireWindow).UTC()
-	keepMarks := make([]string, len(runMemoryRetireKeepKinds))
-	args := make([]any, len(runMemoryRetireKeepKinds))
-	for i, k := range runMemoryRetireKeepKinds {
-		keepMarks[i], args[i] = "?", k
-	}
-	rows, err := db.QueryContext(ctx, `SELECT loop_id, owner_id, agent_id, MAX(created_at), SUM(CASE WHEN kind NOT IN (`+strings.Join(keepMarks, ",")+`) THEN 1 ELSE 0 END) FROM run_memory_entries GROUP BY loop_id`, args...)
+	query, args := runMemoryRetireGroupQuery()
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("run memory retire: group: %w", err)
 	}

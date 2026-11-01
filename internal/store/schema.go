@@ -300,6 +300,7 @@ CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_win
 CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_kind ON run_memory_entries(owner_id, agent_id, kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_retire ON run_memory_entries(loop_id, kind, created_at, owner_id, agent_id);
 
 CREATE TABLE IF NOT EXISTS texture_revisions (
 	revision_id TEXT PRIMARY KEY,
@@ -431,6 +432,7 @@ CREATE TABLE IF NOT EXISTS choir_events (
 CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
+CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
 
 -- telemetry_partitions_retired names the telemetry partitions a retire op
 -- retired (telemetry_partition.go): main-store state, so the head, the

@@ -29,9 +29,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -380,6 +382,58 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 	}
 	if text := strings.Join(all, " | "); !strings.Contains(text, "idx_og_objects_choir_event_updated") {
 		t.Errorf("the oldest-row plan does not use the partial index: %s", text)
+	}
+}
+
+// R9: the event table's delete, probe and oldest-row query read the slice
+// through idx_choir_events_updated, in the store and in a telemetry
+// partition, and never scan the table: each scanned row's updated_at sits
+// past its body blob, so a scan reads every body (the paper read about 8.5 GB
+// in four minutes for a retire pass that removed some 300 rows, 2026-11-01).
+func TestObjectRetireEventTablePlanUsesTheUpdatedIndex(t *testing.T) {
+	s, _ := vocabUpcastOpenStore(t, "retire-plan-events")
+	part, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "part.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer part.Close()
+	if _, err := part.Exec(telemetryPartitionDDL); err != nil {
+		t.Fatal(err)
+	}
+	p := retireP([]string{"tool.invoked", "desk.cell"}, retireBase, retireBase.Add(time.Hour), computerevent.ObjectRetirePhaseNone)
+	from, before, err := p.Slice()
+	if err != nil {
+		t.Fatal(err)
+	}
+	where, args := retireTableWhere(p, from, before, nil)
+	for name, db := range map[string]*sql.DB{"store": s.db, "partition": part} {
+		for _, q := range []struct {
+			sql  string
+			args []any
+		}{
+			{`DELETE FROM ` + choirEventsTable + ` WHERE ` + where, args},
+			{`SELECT 1 FROM ` + choirEventsTable + ` WHERE ` + where + ` LIMIT 1`, args},
+			{`SELECT MIN(updated_at) FROM ` + choirEventsTable + ` WHERE updated_at < ?`, []any{retireBase}},
+		} {
+			rows, err := db.Query(`EXPLAIN QUERY PLAN `+q.sql, q.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var plan []string
+			for rows.Next() {
+				var id, parent, unused int
+				var detail string
+				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+					t.Fatal(err)
+				}
+				plan = append(plan, detail)
+			}
+			rows.Close()
+			text := strings.Join(plan, " | ")
+			if !strings.Contains(text, "idx_choir_events_updated") {
+				t.Errorf("%s: the plan does not use idx_choir_events_updated: %s", name, text)
+			}
+		}
 	}
 }
 

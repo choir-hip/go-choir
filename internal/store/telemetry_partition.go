@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS choir_events (
 CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
 CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
+CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
 `
 
 // telemetryPartition is one open partition file.

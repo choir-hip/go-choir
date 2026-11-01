@@ -11,12 +11,14 @@ package store
 //   - M4: live apply and replay disagree about what was removed;
 //   - M5: an invalid body (no runs, over the cap, padded ids) is accepted;
 //   - M6: an unbound store retires, which replay would not see;
-//   - M7: the dry run applies the delete.
+//   - M7: the dry run applies the delete;
+//   - M8: the selection scans the table, reading every message body.
 
 import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,5 +165,32 @@ func TestRunMemoryRetireUnboundStoreRetiresNothing(t *testing.T) {
 	s, _ := vocabUpcastOpenStore(t, "memretire-unbound")
 	if n, err := s.RetireRunMemory(context.Background(), time.Now()); err != nil || n != 0 {
 		t.Fatalf("unbound = %d, %v", n, err)
+	}
+}
+
+// M8: the per-run summary reads only the covering index.
+func TestRunMemoryRetireGroupReadsOnlyTheIndex(t *testing.T) {
+	h := newTapeHarness(t)
+	query, args := runMemoryRetireGroupQuery()
+	rows, err := h.store.db.Query(`EXPLAIN QUERY PLAN `+query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	text := strings.Join(plan, " | ")
+	if !strings.Contains(text, "COVERING INDEX idx_run_memory_entries_loop_retire") {
+		t.Errorf("the selection does not read only the covering index: %s", text)
+	}
+	if strings.Contains(strings.ToUpper(text), "TEMP B-TREE") {
+		t.Errorf("the selection sorts: %s", text)
 	}
 }
