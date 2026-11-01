@@ -168,8 +168,8 @@ now:
     edge: missing_oracle
     delta_o: I1, per-VM pressure in the meter, before any I/O control lands
     scope_if_supported: Node B's disk layout (md RAID1 over NVMe, btrfs); another host's layout is re-tested
-    status: supported (synthetic rung; d@e end to end next)
-    evidence_refs: [ledger 2026-11-01 21:00Z I3 synthetic drill]
+    status: supported (synthetic rung, and end to end on d@e for reads and CPU; a write storm halves a co-reader, residual)
+    evidence_refs: [ledger 2026-11-01 21:00Z I3 synthetic drill, ledger d@e end-to-end drill results-20261101T234609Z]
   decision:
     what: >-
       Order: observe (I0, I1) before controlling; jail the paper before
@@ -189,12 +189,12 @@ now:
       Whether the bounds hold end to end with a real guest as the noisy
       neighbour (d@e), and what the 1 GiB leaf headroom does to a
       cache-heavy guest write (DeepSeek I6 #2).
-    next_observation: a d@e-generated disk, network and CPU load read through the paper's per-VM pressure and the meter
+    next_observation: the meter's day of per-VM memory, reads and pressure under ordinary load with every bound live
   blocker_or_risk: >-
     Residuals: every vmctl deploy reboots all guests (deploy-impact
     classification); TestManagementDelegatesIntakeToTasks flakes in CI
     (asynchronous session release); no test pins the restore shape (I6 #4).
-  next_action: design the d@e load generator (through its API, key never printed), then run the drills
+  next_action: collect a day of meter data (from 2026-11-01), then write and publish the closing numbers report; in the meantime the write-storm residual and the remaining whole-kind reads
 receipts: []
 ```
 
