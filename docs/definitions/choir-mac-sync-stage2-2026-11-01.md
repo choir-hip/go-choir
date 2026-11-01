@@ -28,6 +28,10 @@ review:
   frozen_ref: 7d463c3fc (round 2; round 1 send_back on d61726726, 13 findings taken)
   verdict: accept (three doc nits applied in this commit)
   evidence_ref: scratchpad review-stage2/devin.out and devin2.out, 2026-11-01
+  s1_design: docs/design/mac-device-key-release-2026-11-01.md v3, Devin accept
+    on 17ad01f18 (round 3; v1 send_back by Devin and DeepSeek, v2 by Devin);
+    eight non-blocking findings applied after; the build is tier 2 (Devin and
+    DeepSeek on the landed candidate)
 start:
   observed_at: 2026-11-01
   canonical_ref: origin/main at e4f4b256a

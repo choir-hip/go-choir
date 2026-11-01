@@ -1,6 +1,6 @@
 # Releasing a computer's key to the owner's Mac (stage 2, S1)
 
-Date: 2026-11-01. Status: design v3 for review (red; the build is tier 2).
+Date: 2026-11-01. Status: design v3, accepted by Devin round 3 (red; the build is tier 2).
 v1 (c153b24f8) was sent back by Devin and DeepSeek, v2 (aef02845a) by Devin;
 every finding is taken here, and "Review v2" and "Review v1" at the end map
 them.
@@ -106,7 +106,9 @@ id however often it is collected).
    so a concurrent double finish approves once. The browser gets only "done,
    return to the app"; no key, grant or record goes to the browser.
 4. **Collect** `GET /auth/device-release/grant?attempt=<id>`, native app
-   only, its own session, same user: when the attempt is `approved`, auth
+   only, its own session, same user, `am` passkey (as at begin, so an email
+   session never carries a release past approve): when the attempt is
+   `approved` and neither it nor its grant has expired, auth
    returns a grant: a compact JWT signed with auth's existing Ed25519 session
    signing key (`h.signer`, `internal/auth/handlers.go`; the proxy already
    verifies it with `AuthPublicKeyPath`), `typ` `choir-device-release+jwt`
@@ -114,14 +116,15 @@ id however often it is collected).
    claims {grant id, user id, computer id, device pub, device id, name,
    attempt id, assertion digest, exp two minutes after approve}. A repeat
    collect returns the same grant id and expiry; an approved attempt past
-   its grant expiry is refused and needs a new ceremony. Collecting does not
+   its grant expiry is refused and needs a new ceremony; so does a redeem
+   that fails past the grant's expiry, even transiently. Collecting does not
    consume. Not hostauth: that is a shared bearer token every host unit
    holds, and it signs nothing.
 
 ### D4. Redeem, through the proxy and vmctl, then the guest
 
 `POST /api/computers/<id>/device-release`, the body is the grant and
-nothing else, native app only, its own session. The plural path is
+nothing else, its own session with `am` passkey. The plural path is
 deliberate: a proxy older than this release answers it 404 under the
 existing `/api/computers/` carve-out (`internal/proxy/handlers.go`), so
 there is no skew window in which the generic `/api/` forward (which injects
@@ -132,7 +135,9 @@ The proxy, in a dedicated case:
    session's user, and that the path id equals the grant's computer id;
    every later step uses the signed fields, never client fields;
 2. joins user to computer through vmctl (`LookupComputerContext`, which
-   returns the computer URL and state), refusing a computer that is not the
+   returns the computer URL and state), with the echo checks of
+   `tape_follow.go` copied: the returned user and computer equal the
+   grant's and the kind is interactive; refusing a computer that is not the
    user's, and a stopped one ("start the computer and retry"; nothing is
    queued);
 3. forwards the grant to the guest's `POST /internal/device-release` at that
@@ -148,14 +153,17 @@ reaches it. The guest:
 1. refuses unless `server.HostPeerCaller(r)`; then verifies the grant
    itself: the signature with auth's public key (delivered as a kernel
    parameter `choir.auth_pub=` beside `choir.owner_id=`,
-   `nix/autoputer-vm.nix`), `typ`, `aud`, expiry, that its user is its
+   `nix/autoputer-vm.nix`, as the raw 32-byte key in unpadded base64url,
+   never the authorized_keys line, whose spaces `kernelParamValue` rewrites;
+   vmmanager reads it from auth's public key file at launch), `typ`, `aud`, expiry, that its user is its
    `CHOIR_OWNER_ID` and its computer id is its own. A guest that holds no
    auth key refuses every release;
 2. refuses with "the computer's key is not loaded yet; retry in a moment"
    while booting;
 3. validates the device pub and recomputes the device id;
-4. if a release with this grant id is already recorded, returns the
-   recorded wrap (redeem is idempotent, so a lost response retries without a
+4. under one guest lock per grant id (so two concurrent redeems cannot
+   both append), if a release with this grant id is already recorded,
+   returns the recorded wrap (redeem is idempotent, so a lost response retries without a
    new ceremony);
 5. else appends a projection batch with one op `device_key_released` on
    table `device_key_releases` (grant id primary key, device id, device pub,
@@ -172,8 +180,11 @@ reaches it. The guest:
    key and returns the recorded wrap.
 
 The proxy then marks the attempt redeemed through auth's
-`POST /internal/auth/device-release/redeemed` (host caller credential; auth's
-port 8081 joins hostauth's credential port set). The mark is bookkeeping for
+`POST /internal/auth/device-release/redeemed`: a new proxy env
+`AUTH_INTERNAL_URL` (the proxy has no auth base URL today), the host caller
+credential sent with `hostauth.MarkInternal`, auth's port 8081 joined to
+hostauth's credential port set, and an inbound `hostauth.Authorize` check on
+auth's `/internal/*`, which auth does not have today. The mark is bookkeeping for
 the devices surface, not the replay guard: the guest's grant check and its
 grant-id idempotency are, so a redeem the mark missed only repeats the same
 recorded wrap to the same device.
@@ -185,7 +196,10 @@ The desktop proxy forwards renderer requests with the native cookie jar
 and every `/api/computers/<id>/device-release` join the blocked routes
 (`blockedDesktopAuthRoutes` matches exact paths and subpaths, so the
 per-computer route needs a suffix match beside it), so the webview cannot
-reach them; the native code calls them with its own client.
+reach them; the native code calls them with its own client. This bounds the
+webview, not the wire: any holder of a passkey session can call the routes
+from elsewhere, and the gates there are `am` passkey, the ceremony and the
+grant.
 The approve page opens in the system browser, never in the webview.
 
 ### D6. Compatibility: two releases, refuse class
@@ -273,12 +287,23 @@ software device key.
 
 ## Build order
 
+0. Confirm `webauthn.WithChallenge` and `WithUserVerification` exist in the
+   pinned go-webauthn v0.16.4, so a wrong name fails in minutes.
 1. `internal/devicekey` and the test vector.
 2. Release N: the op, its apply, the table, the store epoch and floor.
 3. Auth: the attempts table, begin, approve page, finish, collect; the switch.
 4. The proxy redeem and the guest route.
 5. The app: Secure Enclave key, native dialog, blocked routes, open.
 6. Release N+1: the switch on for d@e.
+
+## Review v3
+
+Devin round 3: accept, eight non-blocking findings, all taken: `am` passkey
+at collect and redeem; a per-grant lock around check and append; the expiry
+interplay stated; the `choir.auth_pub` encoding named; the redeemed mark's
+env and inbound check named; tape_follow's echo checks at the join; "native
+only" restated as a webview bound; a first build step that confirms the
+go-webauthn symbols.
 
 ## Review v2, mapped
 
