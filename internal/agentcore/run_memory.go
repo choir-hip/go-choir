@@ -125,8 +125,8 @@ func (m *runMemoryManager) appendRunContextTurn(ctx context.Context, build func(
 // carryTexturePriorConversation is the only thing a new run inherits from an
 // earlier one: a Texture run with actor_rewarm_carry_conversation continues
 // its document's conversation. Every other desk starts from its system prompt
-// and REPL only (owner, 2026-11-01: "get rid of that seed"); choir.PriorRun
-// reads the previous run on demand (prior_run.go).
+// and REPL only (owner, 2026-11-01: "get rid of that seed"). Nothing
+// replaces the seed.
 func (m *runMemoryManager) carryTexturePriorConversation(ctx context.Context) error {
 	if m == nil || m.store == nil || m.rec == nil {
 		return nil

@@ -9,9 +9,10 @@ package store
 //
 // What reads run memory after a run finishes (checked at each caller):
 //   - LatestActorRunMemoryEntries (agentcore/run_memory.go:142, :207,
-//     texture_lifecycle_api.go:243): the newest completed or passivated run of
-//     an actor seeds its next run. The job keeps the newest runs of every
-//     owner/agent pair, so that read still finds its run.
+//     texture_lifecycle_api.go:243): a Texture run continuing the same
+//     document carries the newest completed or passivated run's conversation
+//     (no other desk inherits a prior run since 2026-11-01). The job keeps the
+//     newest runs of every owner/agent pair, so that read still finds its run.
 //   - ListRunMemoryEntriesForAgent(rlm_inbox_cursor) (rlm_reduce.go:525): the
 //     inbox cursor. Rows of that kind are never retired (KeepKinds).
 //   - ListRunMemoryEntries(run) of a live or just-finished run (management,
