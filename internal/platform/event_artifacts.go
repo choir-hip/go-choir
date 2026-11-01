@@ -42,27 +42,14 @@ func (s *EventArtifactService) PinEvent(_ context.Context, computerID string, ca
 	if event.ComputerID != computerID || event.RequestCommitment != requestCommitment {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: event scope mismatch")
 	}
-	// Only a projection_batch_recorded event is segment-eligible (section 4.2).
-	segmentable := event.EventKind == computerevent.EventProjectionBatchRecorded
-	return s.pin(computerID, canonicalEvent, "application/vnd.choir.computer-event+json", "computer-event", "private", "request_commitment", requestCommitment, segmentable)
+	// Which pins are segmented: computerevent.TapeSegmentEligible, in pin.
+	return s.pin(computerID, canonicalEvent, "application/vnd.choir.computer-event+json", computerevent.PinNamespaceEvent, "private", "request_commitment", requestCommitment)
 }
 
 func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, payload []byte, mediaType, privacyClass, requestCommitment string) (computerevent.PinResult, error) {
 	if mediaType == "" || privacyClass == "" {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: media type and privacy class are required")
 	}
-	// Only a projection batch payload is segment-eligible (section 4.2). A
-	// plaintext batch says so in its media type. A sealed batch arrives as a
-	// private envelope (media type PrivateArtifactMediaType) whose inner media
-	// type is in the envelope metadata, which is authenticated as the AEAD
-	// associated data and checked here against the computer. The host cannot
-	// open the envelope; the metadata is the whole signal. A guest that holds
-	// its own key can label any envelope of its own computer a batch, as it
-	// could already pin any bytes under ProjectionBatchMediaType: the result
-	// is a record in that computer's own segment, bounded by MaxRecordBytes,
-	// read back by digest like a loose file, so the label buys nothing a
-	// guest does not already have.
-	segmentable := mediaType == computerevent.ProjectionBatchMediaType
 	if privacyClass == "private" {
 		if mediaType != computerevent.PrivateArtifactMediaType {
 			return computerevent.PinResult{}, fmt.Errorf("event artifact service: private payload must use the encrypted envelope media type")
@@ -71,14 +58,15 @@ func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, 
 		if err != nil || metadata.ComputerID != computerID {
 			return computerevent.PinResult{}, fmt.Errorf("event artifact service: invalid private artifact envelope")
 		}
-		segmentable = metadata.MediaType == computerevent.ProjectionBatchMediaType
 	}
-	return s.pin(computerID, payload, mediaType, "computer-event-payload", privacyClass, "pin_intent_commitment", requestCommitment, segmentable)
+	// Which payloads are segmented (every one but a public non-batch
+	// payload): computerevent.TapeSegmentEligible, in pin.
+	return s.pin(computerID, payload, mediaType, computerevent.PinNamespacePayload, privacyClass, "pin_intent_commitment", requestCommitment)
 }
 
-// pin writes the artifact and its signed pin receipt. segmentable says the
-// caller's kind is eligible for the segment store; the artifact and its
-// receipt go to the computer's segment only when it is eligible, the flag is
+// pin writes the artifact and its signed pin receipt. The artifact and its
+// receipt go to the computer's segment when its kind is eligible
+// (computerevent.TapeSegmentEligible, the rule taperepack deletes by), the flag is
 // PLATFORM_TAPE_SEGMENTS=write and the computer id can name a segment
 // directory. Otherwise the legacy files are written exactly as before the
 // flag existed. A segment append that fails (a failed write or fsync poisons
@@ -86,11 +74,11 @@ func (s *EventArtifactService) pinPayload(_ context.Context, computerID string, 
 // back to the legacy files for this pin, so the event is still stored durably;
 // a refusal by the pin's own checks (a digest collision, an unreadable
 // segment) is an error, never a fallback.
-func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType, namespace, privacyClass, commitmentField, commitment string, segmentable bool) (computerevent.PinResult, error) {
+func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType, namespace, privacyClass, commitmentField, commitment string) (computerevent.PinResult, error) {
 	if computerID == "" || commitmentField == "" || !computerevent.IsSHA256(commitment) {
 		return computerevent.PinResult{}, fmt.Errorf("event artifact service: computer and request commitment are required")
 	}
-	segmented := segmentable && s.platform.tapeSegmentable(computerID)
+	segmented := computerevent.TapeSegmentEligible(namespace, mediaType, privacyClass) && s.platform.tapeSegmentable(computerID)
 	digest := computerevent.DigestBytes(payload)
 	storageRef := filepath.Join("sha256", namespace, digest)
 	if !segmented {
@@ -114,7 +102,7 @@ func (s *EventArtifactService) pin(computerID string, payload []byte, mediaType,
 	}
 	if segmented {
 		ns := tapestore.NSPayload
-		if namespace == "computer-event" {
+		if namespace == computerevent.PinNamespaceEvent {
 			ns = tapestore.NSEvent
 		}
 		appendErr, err := s.pinSegmented(computerID, ns, payload, receiptJSON)

@@ -19,11 +19,17 @@ import (
 // docs/reports/tape-volume-forward-fix-and-surgery-2026-10-19.md, section
 // 4.2). PLATFORM_TAPE_SEGMENTS=off|write, default off. With the flag off
 // nothing here runs on a pin and the legacy files are written exactly as
-// before. With the flag at write, only projection_batch_recorded events,
-// their ProjectionBatchMediaType payloads and the pin receipts of those two
-// pins are written to the computer's segment; every other pin is legacy. The
-// read path never depends on the flag: it is segment first, legacy second,
-// always (internal/tapestore).
+// before. With the flag at write, every pin of an eligible kind and its pin
+// receipt are written to the computer's segment. The kinds are
+// computerevent.TapeSegmentEligible, the one rule the pin and taperepack
+// share: every event and every payload but a public non-batch one (A2 began
+// with projection_batch_recorded alone; the scope widened on 2026-11-01). A
+// public non-batch payload is named by digest alone through artifact+sha256
+// URIs, whose reader opens the loose file, so it stays loose. A computer id
+// that cannot name a segment directory, a record over MaxRecordBytes and a
+// segment append that fails still take the legacy files. The read path never
+// depends on the flag: it is segment first, legacy second, always
+// (internal/tapestore).
 //
 // Dead weight (section 9.6 item 2). A legacy pin whose head CAS never lands
 // is an orphan file that the tape sweep unlinks after its grace; a re-pin

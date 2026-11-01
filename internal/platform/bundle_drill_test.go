@@ -71,8 +71,10 @@ func newDrillComputer(t *testing.T, id string) *drillComputer {
 	t.Helper()
 	store, root := openTestPlatformStore(t)
 	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
-	// Projection batches go to segments, other kinds to legacy files: the
-	// bundle must read both (E2).
+	// Every event and every non-public or batch payload goes to a segment;
+	// the drill pins its payloads public, so a non-batch one stays a legacy
+	// file (computerevent.TapeSegmentEligible): the bundle must read both
+	// (E2).
 	service.SetTapeSegmentsMode("write")
 	artifacts, err := NewEventArtifactService(service, platformTestKeyResolver{key: service.signingKey.Public})
 	if err != nil {

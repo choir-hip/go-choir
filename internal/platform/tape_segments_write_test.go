@@ -15,9 +15,13 @@ package platform
 //      ProjectionBatchMediaType payload and both receipts are records of one
 //      segment of the computer, and none of the four exists in the legacy
 //      layout.
-//  P3  Flag write, any other kind: an event of another kind, a payload of
-//      another media type, and their receipts stay legacy; a projection event
-//      with an ordinary payload splits exactly as the kinds say. A computer
+//  P3  Flag write, every kind computerevent.TapeSegmentEligible names (the
+//      rule taperepack deletes by; widened from projection batches alone on
+//      2026-11-01): an event of another kind and an owner-class or private
+//      payload of another media type, with their receipts, are segment
+//      records. A public payload of another media type and its receipt stay
+//      legacy (artifact+sha256 URIs name it by digest and vmctl's verifier
+//      opens the loose file); the event beside it is segmented. A computer
 //      id that cannot name a segment directory stays legacy too.
 //  P4  Flag write: the reader resolves every written digest from the segment
 //      with the written bytes, FetchPayload and the head CAS pin check
@@ -88,9 +92,15 @@ type pinnedChain struct {
 	payloadReceip []byte
 }
 
-// pinChain pins one payload (of mediaType) and then one event of eventKind,
-// through the production pin entry points.
+// pinChain pins one public payload (of mediaType) and then one event of
+// eventKind, through the production pin entry points. A public payload is
+// segmented only as a projection batch; pinChainClass names the class.
 func (f *writeFixture) pinChain(t *testing.T, computerID string, kind computerevent.EventKind, mediaType string, payload []byte) pinnedChain {
+	t.Helper()
+	return f.pinChainClass(t, computerID, kind, mediaType, "public", payload)
+}
+
+func (f *writeFixture) pinChainClass(t *testing.T, computerID string, kind computerevent.EventKind, mediaType, privacyClass string, payload []byte) pinnedChain {
 	t.Helper()
 	eventID, err := computerevent.NewEventID()
 	if err != nil {
@@ -102,7 +112,7 @@ func (f *writeFixture) pinChain(t *testing.T, computerID string, kind computerev
 		OccurredAt: time.Date(2026, 7, 18, 22, 0, 0, 0, time.UTC).Format(time.RFC3339Nano), IdempotencyKey: "k-" + eventID,
 		ActorProfile: "trusted-core", AuthorityRef: "authority:test",
 		InputArtifactRefs: []string{"artifact:sha256:" + computerevent.DigestBytes(payload)},
-		PayloadCommitment: platformTestDigest('a'), PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+		PayloadCommitment: platformTestDigest('a'), PrivacyClass: privacyClass, ReducerVersion: computerevent.ReducerVersionV1,
 		ExpectedDesiredEventHead: computerevent.ZeroHead, ExpectedEffectiveEventHead: computerevent.ZeroHead,
 		ExpectedDesiredStateCommitment: computerevent.ZeroHead, ExpectedEffectiveStateCommitment: computerevent.ZeroHead,
 		ResultingEffectiveCommitment: platformTestDigest('b'),
@@ -112,7 +122,7 @@ func (f *writeFixture) pinChain(t *testing.T, computerID string, kind computerev
 	if err != nil {
 		t.Fatal(err)
 	}
-	payloadPin, err := f.artifacts.pinPayload(context.Background(), computerID, payload, mediaType, "public", pinIntent)
+	payloadPin, err := f.artifacts.pinPayload(context.Background(), computerID, payload, mediaType, privacyClass, pinIntent)
 	if err != nil {
 		t.Fatalf("pin payload: %v", err)
 	}
@@ -302,45 +312,49 @@ func TestTapeSegmentsWriteRoutesProjectionBatchesToASegment(t *testing.T) {
 }
 
 // P3
-func TestTapeSegmentsWriteLeavesOtherKindsInLegacy(t *testing.T) {
+func TestTapeSegmentsWriteSegmentsEveryEligibleKind(t *testing.T) {
 	f := newWriteFixture(t, "write", true)
-	other := f.pinChain(t, "computer-other-kinds", computerevent.EventGenesisImported, "application/octet-stream", []byte("an ordinary payload"))
-	requireLegacyExactly(t, f.root, other.legacyFiles())
-	requireNoSegments(t, f.root)
-
-	// A projection event with a payload of another media type: the event and
-	// its receipt are segmented, the payload and its receipt are not.
-	const id = "computer-split"
-	split := f.pinChain(t, id, computerevent.EventProjectionBatchRecorded, "application/octet-stream", []byte("not a batch"))
+	// An event of another kind with an owner-class payload of another media
+	// type: the event, the payload and both receipts are segmented, nothing
+	// is loose.
+	const id = "computer-other-kinds"
+	other := f.pinChainClass(t, id, computerevent.EventGenesisImported, "application/octet-stream", "owner", []byte("an ordinary payload"))
+	if legacy := legacyTree(t, f.root); len(legacy) != 0 {
+		t.Fatalf("legacy files = %v, want none", treeKeys(legacy))
+	}
 	records := segmentRecords(t, f.root, id)
-	if len(records) != 2 || records[segItem{tapestore.NSEvent, split.request.EventDigest}] != 1 || records[segItem{tapestore.NSReceipt, split.request.EventPinReceiptDigest}] != 1 {
+	if len(records) != 4 || records[segItem{tapestore.NSEvent, other.request.EventDigest}] != 1 || records[segItem{tapestore.NSPayload, computerevent.DigestBytes(other.payload)}] != 1 {
+		t.Fatalf("segment records = %v, want the event, the payload and their receipts", records)
+	}
+	if err := f.artifacts.ValidateEventPins(context.Background(), other.request); err != nil {
+		t.Fatalf("a segmented chain of another kind failed the pin check: %v", err)
+	}
+	if got, err := f.artifacts.FetchPayload(id, computerevent.DigestBytes(other.payload)); err != nil || !bytes.Equal(got, other.payload) {
+		t.Fatalf("FetchPayload of a segmented ordinary payload: %v", err)
+	}
+
+	// A public payload of another media type stays loose with its receipt;
+	// the event beside it and the event's receipt are segmented.
+	const pubID = "computer-public-payload"
+	pub := f.pinChain(t, pubID, computerevent.EventGenesisImported, "application/vnd.choir.capsule-effect+json", []byte(`{"bundle":"p3"}`))
+	pubPayloadKey := "sha256/computer-event-payload/" + computerevent.DigestBytes(pub.payload)
+	pubReceiptKey := "sha256/pin-receipts/" + pub.request.PayloadPinReceiptDigests[0] + ".json"
+	legacy := legacyTree(t, f.root)
+	if len(legacy) != 2 || !bytes.Equal(legacy[pubPayloadKey], pub.payload) || legacy[pubReceiptKey] == nil {
+		t.Fatalf("legacy files = %v, want only the public payload and its receipt", treeKeys(legacy))
+	}
+	records = segmentRecords(t, f.root, pubID)
+	if len(records) != 2 || records[segItem{tapestore.NSEvent, pub.request.EventDigest}] != 1 || records[segItem{tapestore.NSReceipt, pub.request.EventPinReceiptDigest}] != 1 {
 		t.Fatalf("segment records = %v, want only the event and its receipt", records)
 	}
-	legacy := legacyTree(t, f.root)
-	for k := range split.legacyFiles() {
-		_, inLegacy := legacy[k]
-		isEventSide := strings.Contains(k, "computer-event/") || strings.Contains(k, split.request.EventPinReceiptDigest)
-		if inLegacy == isEventSide {
-			t.Fatalf("%s: inLegacy=%v but the event side is %v", k, inLegacy, isEventSide)
-		}
-	}
-	if err := f.artifacts.ValidateEventPins(context.Background(), split.request); err != nil {
-		t.Fatalf("a split chain failed the pin check: %v", err)
-	}
-
-	// A payload of the batch media type under a non-projection event: the payload and its receipt are segmented.
-	const id2 = "computer-batch-payload-only"
-	odd := f.pinChain(t, id2, computerevent.EventGenesisImported, computerevent.ProjectionBatchMediaType, projectionPayload("odd"))
-	records = segmentRecords(t, f.root, id2)
-	if len(records) != 2 || records[segItem{tapestore.NSPayload, computerevent.DigestBytes(odd.payload)}] != 1 {
-		t.Fatalf("segment records = %v, want the payload and its receipt", records)
+	if err := f.artifacts.ValidateEventPins(context.Background(), pub.request); err != nil {
+		t.Fatalf("a chain with a loose public payload failed the pin check: %v", err)
 	}
 
 	// An id that cannot name a segment directory is legacy, never an error.
-	before := len(legacyTree(t, f.root))
 	f.pinChain(t, "computer/with/slashes", computerevent.EventProjectionBatchRecorded, computerevent.ProjectionBatchMediaType, projectionPayload("bad id"))
-	if after := len(legacyTree(t, f.root)); after != before+4 {
-		t.Fatalf("an id that cannot name a segment wrote %d legacy files, want 4", after-before)
+	if n := len(legacyTree(t, f.root)); n != 2+4 {
+		t.Fatalf("an id that cannot name a segment wrote %d legacy files, want 4", n)
 	}
 	if _, err := os.Stat(filepath.Join(f.root, tapestore.SegDirName, "computer")); err == nil {
 		t.Fatal("a slash id escaped into a segment directory")

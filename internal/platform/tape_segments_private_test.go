@@ -15,12 +15,14 @@ package platform
 //      which opens the envelope metadata) accept the chain, the stored bytes
 //      are the envelope bytes unchanged, the receipt still says private, and
 //      the guest cipher still opens the segment-resident envelope.
-//  S2  An envelope of another inner media type stays loose (only batches are
-//      eligible, section 4.2).
+//  S2  An envelope of another inner media type is segmented too since
+//      2026-11-01 (computerevent.TapeSegmentEligible: every payload but a
+//      public non-batch one); it stayed loose while only batches were
+//      eligible (section 4.2).
 //  S3  Refusals are unchanged and write nothing: private class with a
 //      non-envelope media type, an envelope of another computer, a malformed
-//      envelope. An envelope under a non-private class is never inspected and
-//      never segment-eligible.
+//      envelope. An envelope under the owner class is never inspected and is
+//      segmented like any owner payload.
 //  S4  Collisions: the same envelope bytes already loose is a no-op for the
 //      payload (mtime refreshed, no segment copy); the same envelope pinned
 //      twice writes one payload record; different bytes under a loose digest
@@ -159,15 +161,16 @@ func TestSealedProjectionBatchPayloadIsSegmented(t *testing.T) {
 }
 
 // S2
-func TestSealedNonBatchEnvelopeStaysLoose(t *testing.T) {
+func TestSealedNonBatchEnvelopeIsSegmented(t *testing.T) {
 	f := newWriteFixture(t, "write", true)
 	const id = "computer-sealed-other"
 	chain := f.pinPrivateChain(t, id, "application/octet-stream", []byte("a sealed ordinary payload"))
-	legacy := legacyTree(t, f.root)
-	payloadKey := "sha256/computer-event-payload/" + computerevent.DigestBytes(chain.envelope)
-	receiptKey := "sha256/pin-receipts/" + chain.request.PayloadPinReceiptDigests[0] + ".json"
-	if len(legacy) != 2 || !bytes.Equal(legacy[payloadKey], chain.envelope) || legacy[receiptKey] == nil {
-		t.Fatalf("loose files = %v, want only the envelope and its receipt", treeKeys(legacy))
+	if legacy := legacyTree(t, f.root); len(legacy) != 0 {
+		t.Fatalf("loose files = %v, want none: every kind is segmented", treeKeys(legacy))
+	}
+	records := segmentRecords(t, f.root, id)
+	if records[segItem{tapestore.NSPayload, computerevent.DigestBytes(chain.envelope)}] != 1 {
+		t.Fatalf("segment records = %v, want the sealed envelope", records)
 	}
 	if err := f.artifacts.ValidateEventPins(context.Background(), chain.request); err != nil {
 		t.Fatal(err)
@@ -200,14 +203,16 @@ func TestSealedPinRefusalsWriteNothing(t *testing.T) {
 		t.Fatalf("a refusal wrote loose files: %v", treeKeys(got))
 	}
 	requireNoSegments(t, f.root)
-	// An envelope under a non-private class is not inspected and is never
-	// segment-eligible: it takes the legacy path.
+	// An envelope under a non-private class is not inspected; it is
+	// segmented like any other payload.
 	if err := pin(id, envelope, computerevent.PrivateArtifactMediaType, "owner"); err != nil {
 		t.Fatal(err)
 	}
-	requireNoSegments(t, f.root)
-	if n := len(legacyTree(t, f.root)); n != 2 {
-		t.Fatalf("an envelope under the owner class wrote %d loose files, want 2", n)
+	if n := len(legacyTree(t, f.root)); n != 0 {
+		t.Fatalf("an envelope under the owner class wrote %d loose files, want 0", n)
+	}
+	if records := segmentRecords(t, f.root, id); len(records) != 2 {
+		t.Fatalf("segment records = %v, want the envelope and its receipt", records)
 	}
 }
 
