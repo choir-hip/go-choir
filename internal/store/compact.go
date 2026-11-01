@@ -300,6 +300,9 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 	log.Printf("store: compact copy: due by %s, %d of %d pages free, live ~%d bytes, copying", reason, freelist, pageCount, live)
 	started := time.Now()
 
+	// The anchor must name the file the copy was read from: its identity is
+	// taken before the copy and must be unchanged after it.
+	identityBefore := fileIdentity(statePath)
 	copyCtx, cancel := context.WithTimeout(ctx, compactCopyBudget)
 	defer cancel()
 	err = vacuumIntoCopy(copyCtx, statePath, staging)
@@ -315,6 +318,10 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("copy refused: %w", err)
 	}
 	side.StateFile = fileIdentity(statePath)
+	if side.StateFile == "" || side.StateFile != identityBefore {
+		removeSQLiteFiles(staging)
+		return false, fmt.Errorf("copy refused: the state file changed during the copy")
+	}
 	// The copy must be on this store's chain now; the boot checks again.
 	if err := compactOnChain(ctx, read, statePath, side); err != nil {
 		removeSQLiteFiles(staging)
@@ -729,9 +736,16 @@ func carryDirectTables(originalPath, copyPath string) error {
 	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
 		return rollback(err)
 	}
-	// One file again: a checkpointed, closed database leaves no WAL.
-	if _, err := conn.ExecContext(ctx, `PRAGMA journal_mode=DELETE`); err != nil {
+	// One file again: a checkpointed, closed database leaves no WAL. The
+	// pragma names main so the attached original is not touched, and its
+	// answer is checked: a fold that did not happen would leave the carried
+	// rows in a WAL the rename orphans.
+	var mode string
+	if err := conn.QueryRowContext(ctx, `PRAGMA main.journal_mode=DELETE`).Scan(&mode); err != nil {
 		return err
+	}
+	if !strings.EqualFold(mode, "delete") {
+		return fmt.Errorf("carry: copy journal mode is %q after the fold, want delete", mode)
 	}
 	return nil
 }
