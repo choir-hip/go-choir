@@ -20,7 +20,11 @@ func TestRedactionKeepsJSONPayloadsJSON(t *testing.T) {
 		secret  string
 	}{
 		{"credential pair", `{"ops":[{"body":{"password":"hunter2abcdef","n":1}}]}`, "hunter2abcdef"},
-		{"numeric value after a token key", `{"ops":[{"body":{"auth_token":1234567890123,"x":"(y)"}}]}`, ""},
+		{"numeric value after a token key", `{"ops":[{"body":{"auth_token":1234567890123,"x":"(y)"}}]}`, "1234567890123"},
+		{"negative and float credentials", `{"password":-87654321,"api_key":1.2345678}`, "87654321"},
+		{"escaped newline inside a credential", `{"k":"password=abc\ndefgh"}`, "defgh"},
+		{"escaped comma inside a credential", `{"k":"token=ab\u002ccdefgh"}`, "cdefgh"},
+		{"handle-shaped credential value", `{"password":"secret-handle:v1:x:0123456789abcdef"}`, "0123456789abcdef"},
 		{"object value after a secret key", `{"secret":{"inner":"vvvvvvvvvvv"},"k":")"}`, ""},
 		{"bearer in a string", `{"msg":"Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456"}`, "abcdefghijklmnopqrstuvwxyz123456"},
 		{"escaped quote after a value", `{"note":"token=abcdefgh\\\"rest\" then"}`, ""},
