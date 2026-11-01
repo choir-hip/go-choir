@@ -91,3 +91,16 @@ is not part of; its size is unbounded in the number of messages.
 Drift: the stated target was rewarming a passivated actor (the same work,
 parked and woken). Including completed runs made every new activation of a
 desk inherit its last finished task.
+
+## Fixed (2026-11-01)
+
+The seed is deleted and nothing replaces it (owner, 2026-11-01: "get rid of
+that seed"; "we shouldn't try to reuse that system"). `runMemoryManager.initialize`
+no longer writes an `actor_rewarm` summary of the agent's previous run:
+management, research and every other desk start from the system prompt, the
+run-context turn and the prompt, and only the Go session continues. Texture's
+per-document carry (`actor_rewarm_carry_conversation`, `carryActorConversation`)
+is unchanged. The tests that asserted the seed now assert its absence, and the
+research prompt names saved evidence, not what "you learned earlier", as what
+carries over. A later calibration seed built from precommitment-record
+statistics is a separate design.

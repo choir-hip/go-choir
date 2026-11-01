@@ -42,8 +42,7 @@ const (
 	// actor whose memory a new run continues (written by textureowner).
 	runMetadataActorRewarmSource = "actor_rewarm_source_loop_id"
 	// runMetadataCarryActorConversation makes a Texture run continue that
-	// activation's conversation verbatim instead of the digest snapshot
-	// (texture.hold_trajectory, docs/design/texture-holds-the-trajectory-2026-10-25.md).
+	// activation's conversation verbatim (texture.hold_trajectory, docs/design/texture-holds-the-trajectory-2026-10-25.md).
 	runMetadataCarryActorConversation = "actor_rewarm_carry_conversation"
 )
 
@@ -93,7 +92,7 @@ func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []jso
 		return nil, err
 	}
 	if len(entries) == 0 {
-		if err := m.seedActorMemorySnapshot(ctx); err != nil {
+		if err := m.carryTexturePriorConversation(ctx); err != nil {
 			return nil, err
 		}
 		if err := m.appendMessages(ctx, initialMessages); err != nil {
@@ -123,7 +122,12 @@ func (m *runMemoryManager) appendRunContextTurn(ctx context.Context, build func(
 	return nil
 }
 
-func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
+// carryTexturePriorConversation is the only thing a new run inherits from an
+// earlier one: a Texture run with actor_rewarm_carry_conversation continues
+// its document's conversation. Every other desk starts from its system prompt
+// and REPL only (owner, 2026-11-01: "get rid of that seed"); choir.PriorRun
+// reads the previous run on demand (prior_run.go).
+func (m *runMemoryManager) carryTexturePriorConversation(ctx context.Context) error {
 	if m == nil || m.store == nil || m.rec == nil {
 		return nil
 	}
@@ -136,44 +140,6 @@ func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
 	}
 	if metadataBoolValue(m.rec.Metadata, runMetadataCarryActorConversation) && agentProfileForRun(m.rec) == agentprofile.Texture {
 		return m.carryActorConversation(ctx, ownerID, computerID, agentID, runID)
-	}
-	sourceRunID, priorEntries, err := m.store.LatestActorRunMemoryEntries(ctx, ownerID, computerID, agentID, runID)
-	if err != nil {
-		if errors.Is(err, runtimestore.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("load actor memory snapshot: %w", err)
-	}
-	if len(priorEntries) == 0 {
-		return nil
-	}
-	checkpoint, tail := latestRunMemoryCheckpointAndTail(priorEntries)
-	summary := summarizeRunMemoryMessages(checkpoint, tail, "actor_rewarm")
-	if strings.TrimSpace(summary) == "" {
-		return nil
-	}
-	sourceEntryIDs := make([]string, 0, len(priorEntries))
-	for _, entry := range priorEntries {
-		if id := strings.TrimSpace(entry.EntryID); id != "" {
-			sourceEntryIDs = append(sourceEntryIDs, id)
-		}
-	}
-	_, err = m.store.AppendRunMemoryEntry(ctx, types.RunMemoryEntry{
-		RunID:        runID,
-		OwnerID:      ownerID,
-		AgentID:      agentID,
-		Kind:         types.RunMemoryEntryCompaction,
-		Summary:      "Actor memory snapshot from prior activation " + sourceRunID + "\n\n" + summary,
-		TokensBefore: estimateRawMessagesTokens(buildRunMemoryContext(priorEntries)),
-		Reason:       "actor_rewarm",
-		Details: map[string]any{
-			"source_loop_id":    sourceRunID,
-			"source_entry_ids":  sourceEntryIDs,
-			"checkpoint_status": "deterministic_actor_snapshot",
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("append actor memory snapshot: %w", err)
 	}
 	return nil
 }

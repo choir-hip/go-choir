@@ -177,8 +177,9 @@ func TestTextureHoldTrajectoryCarriesTheEarlierConversationVerbatim(t *testing.T
 	}
 }
 
-// Failure mode 1: the flag off seeds the digest as before.
-func TestTextureHoldTrajectoryOffSeedsTheDigest(t *testing.T) {
+// Failure mode 1: the flag off carries nothing: the run starts from its own
+// turns (the digest seed is deleted, 2026-11-01).
+func TestTextureHoldTrajectoryOffCarriesNothing(t *testing.T) {
 	_, s := testRuntime(t)
 	now := time.Now().UTC()
 	prior := seedEarlierTextureRun(t, s, "texture-hold-off-prior", now)
@@ -187,16 +188,17 @@ func TestTextureHoldTrajectoryOffSeedsTheDigest(t *testing.T) {
 	})
 	current.State = types.RunPending
 	messages, entries := initializeHoldRun(t, s, current)
-	if entries[0].Kind != types.RunMemoryEntryCompaction || entries[0].Reason != "actor_rewarm" ||
-		!strings.Contains(entries[0].Summary, "Actor memory snapshot from prior activation "+prior.RunID) {
-		t.Fatalf("off did not seed the digest: %+v", entries[0])
+	for _, entry := range entries {
+		if entry.Kind == types.RunMemoryEntryCompaction || entry.Reason == "actor_rewarm" {
+			t.Fatalf("off seeded something: %+v", entry)
+		}
 	}
-	if strings.Contains(joinedMessages(messages), "END-OF-OWNER-WORDS") {
-		t.Fatal("off carried the cast verbatim")
+	if all := joinedMessages(messages); strings.Contains(all, "END-OF-OWNER-WORDS") || strings.Contains(all, "Actor memory snapshot") {
+		t.Fatalf("off carried the earlier run:\n%s", all)
 	}
 }
 
-// Failure mode 8: the flag is Texture's only.
+// Failure mode 8: the flag is Texture's only; no other desk is seeded.
 func TestTextureHoldTrajectoryFlagIgnoredOffTexture(t *testing.T) {
 	_, s := testRuntime(t)
 	now := time.Now().UTC()
@@ -207,9 +209,14 @@ func TestTextureHoldTrajectoryFlagIgnoredOffTexture(t *testing.T) {
 		"agent_profile": agentprofile.Research, runMetadataCarryActorConversation: true,
 	})
 	current.State = types.RunPending
-	_, entries := initializeHoldRun(t, s, current)
-	if entries[0].Kind != types.RunMemoryEntryCompaction || !strings.Contains(entries[0].Summary, "Actor memory snapshot") {
-		t.Fatalf("a research run with the flag did not seed the digest: %+v", entries[0])
+	messages, entries := initializeHoldRun(t, s, current)
+	for _, entry := range entries {
+		if entry.Kind == types.RunMemoryEntryCompaction || entry.Reason == "actor_rewarm" {
+			t.Fatalf("a research run with the flag was seeded: %+v", entry)
+		}
+	}
+	if strings.Contains(joinedMessages(messages), "research memory") {
+		t.Fatalf("a research run with the flag carried the earlier run")
 	}
 }
 

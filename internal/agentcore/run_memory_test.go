@@ -12,7 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
+func TestRunMemoryInitializeDoesNotSeedFromPriorRun(t *testing.T) {
 	_, s := testRuntime(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -159,38 +159,23 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initialize run memory: %v", err)
 	}
-	if len(messages) != 2 {
-		t.Fatalf("messages = %d, want actor snapshot + wake message: %+v", len(messages), messages)
+	if len(messages) != 1 || !strings.Contains(string(messages[0]), "new wake update") {
+		t.Fatalf("messages = %+v, want only the wake message", messages)
 	}
-	if !strings.Contains(string(messages[0]), "sentinel compacted actor memory") {
-		t.Fatalf("snapshot message missing prior memory: %s", messages[0])
-	}
-	if !strings.Contains(string(messages[0]), "remember sentinel actor memory") {
-		t.Fatalf("snapshot message missing raw message retained by prior checkpoint: %s", messages[0])
-	}
-	if strings.Contains(string(messages[0]), "older completed memory") ||
-		strings.Contains(string(messages[0]), "blocked memory") {
-		t.Fatalf("snapshot message crossed wrong prior activation: %s", messages[0])
-	}
-	if !strings.Contains(string(messages[1]), "new wake update") {
-		t.Fatalf("wake message missing: %s", messages[1])
+	for _, m := range messages {
+		for _, leak := range []string{"sentinel", "Actor memory snapshot", "continue the same run", "older completed memory", "blocked memory"} {
+			if strings.Contains(string(m), leak) {
+				t.Fatalf("a prior run leaked into the new run (%q): %s", leak, m)
+			}
+		}
 	}
 
 	entries, err := s.ListRunMemoryEntries(ctx, ownerID, current.RunID)
 	if err != nil {
 		t.Fatalf("list current entries: %v", err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("current entries = %+v, want snapshot + wake message", entries)
-	}
-	if entries[0].Kind != types.RunMemoryEntryCompaction || entries[0].Reason != "actor_rewarm" {
-		t.Fatalf("first entry = %+v, want actor_rewarm compaction", entries[0])
-	}
-	if entries[0].Details["source_loop_id"] != prior.RunID {
-		t.Fatalf("source_loop_id = %#v, want %s", entries[0].Details["source_loop_id"], prior.RunID)
-	}
-	if entries[1].Kind != types.RunMemoryEntryMessage {
-		t.Fatalf("second entry = %+v, want wake message", entries[1])
+	if len(entries) != 1 || entries[0].Kind != types.RunMemoryEntryMessage || entries[0].Reason == "actor_rewarm" {
+		t.Fatalf("current entries = %+v, want only the wake message", entries)
 	}
 }
 
