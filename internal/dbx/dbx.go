@@ -168,6 +168,10 @@ func OpenPostgres(dsn string, opts PGOptions) (*sql.DB, error) {
 	db.SetMaxOpenConns(maxOpen)
 	db.SetMaxIdleConns(maxIdle)
 	db.SetConnMaxLifetime(life)
+	// An idle connection closes after 5 minutes: its backend keeps the
+	// memory of its largest past query (219 MB private on one idle corpusd
+	// graph backend, 2026-11-01) until the connection goes.
+	db.SetConnMaxIdleTime(5 * time.Minute)
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("dbx: ping postgres: %w", redactDSNError(err))

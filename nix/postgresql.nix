@@ -30,7 +30,10 @@ in
       port = 5432;
       unix_socket_directories = "/run/postgresql";
       max_connections = 200;
-      shared_buffers = "1GB";
+      # 512 MB, not 1 GB (2026-11-01): shared buffers are pinned shmem that
+      # double-caches the OS page cache, which is reclaimable and already
+      # serves most reads of the 18 GB control database (89% buffer hits).
+      shared_buffers = "512MB";
       wal_compression = "on";
       # Durability first: a committed event survives a power cut.
       synchronous_commit = "on";
