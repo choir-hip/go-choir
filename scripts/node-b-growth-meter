@@ -20,8 +20,12 @@ GROWTH_DIR/mem-YYYY-MM.jsonl (about 0.8 KB, about 36 MB a month): host
 /proc/meminfo (anon, cache, shmem, slab, swap, MemAvailable), memory pressure
 (/proc/pressure/memory), and per Firecracker process (named by its --id, and
 mapped to its computer through vm-state/ownerships.json, ids and state only)
-its RssAnon, RssFile and read_bytes. No external tool. The report turns them
-into stable state (p50), spikes (p95, max and when) and disk reads per day.
+its RssAnon, RssFile and read_bytes, and the cumulative stall totals (some,
+microseconds) of the memory, io and cpu pressure of its cgroup. A jailed VM
+has a cgroup of its own; a direct VM shares the vmctl unit's (the reading
+marks it shared). No external tool. The report turns them into stable state
+(p50), spikes (p95, max and when), disk reads per day, and per-VM stall:
+the share of each minute a VM's tasks were stalled on memory, io or cpu.
 
 What a reading holds (every number is a size, a count or a cgroup counter;
 no file is opened for content, no SQL touches a content column):
@@ -514,6 +518,9 @@ def kernel_oom(since, errors):
 MEM_FIELDS = ("MemTotal", "MemAvailable", "AnonPages", "Cached", "Shmem", "SReclaimable",
               "SUnreclaim", "SwapTotal", "SwapFree")
 PRESSURE = ENV("GROWTH_PRESSURE", "/proc/pressure/memory")
+# A VM stalled on a resource for more than this share of its intervals (p95)
+# is flagged: the number isolation is judged by.
+VM_STALL_FLAG = float(ENV("GROWTH_VM_STALL_FLAG", "10.0"))
 
 
 def meminfo():
@@ -583,10 +590,41 @@ def firecrackers():
                         v["read_bytes"] = int(line.split()[1])
             except OSError:
                 pass
+            try:
+                with open(f"{PROC}/{pid}/cgroup") as f:
+                    rel = f.read().strip().split(":", 2)[-1]
+                v["cgroup"] = rel
+                for res in ("memory", "io", "cpu"):
+                    t = pressure_total(f"{CGROUP}{rel}/{res}.pressure")
+                    if t is not None:
+                        v[f"{res}_some_us"] = t
+            except OSError:
+                pass
             vms[name] = v
         except (OSError, ValueError):
             continue
+    shared = {}
+    for v in vms.values():
+        if "cgroup" in v:
+            shared[v["cgroup"]] = shared.get(v["cgroup"], 0) + 1
+    for v in vms.values():
+        if shared.get(v.get("cgroup"), 0) > 1 or v.get("cgroup", "").endswith("/supervisor"):
+            v["cgroup_shared"] = True
     return vms
+
+
+def pressure_total(path):
+    """The some line's total (microseconds stalled), or None."""
+    try:
+        with open(path) as f:
+            for line in f:
+                if line.startswith("some "):
+                    for kv in line.split()[1:]:
+                        if kv.startswith("total="):
+                            return int(kv[6:])
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def take_memory_reading():
@@ -666,6 +704,7 @@ def memory_report(tcur):
         if max(psi) > PRESSURE_FLAG:
             flags.append(f"host memory pressure some avg10 {max(psi):.2f}% in the last 24 h")
     names = sorted({n for r in rows for n in r.get("vms", {})})
+    stall = {}
     print(f"    computers, RSS (anon+file) GiB: {'p50':>7} {'p95':>7} {'max':>7}  max at       disk read/day")
     for n in names:
         pts = [(r["ts"], r["vms"][n]) for r in rows if n in r.get("vms", {})]
@@ -678,6 +717,27 @@ def memory_report(tcur):
         per_day = f"{read / GIB * 24 / hours:.1f} GiB" if hours >= 1 else "-"
         comp = pts[-1][1].get("computer") or n
         print(f"      {comp:<44} {g(pct(rss, .5)):>7} {g(pct(rss, .95)):>7} {g(rss[mx]):>7}  {pts[mx][0][11:16]}Z  {per_day:>9}")
+        # Stall: the share of each interval this VM's cgroup was stalled.
+        shares = {}
+        for res in ("memory", "io", "cpu"):
+            k = f"{res}_some_us"
+            vals = []
+            for (ta, a), (tb, b) in zip(pts, pts[1:]):
+                dt = (parse_iso(tb) - parse_iso(ta)) * 1e6
+                if k in a and k in b and b[k] >= a[k] and dt > 0 and a.get("cgroup") == b.get("cgroup"):
+                    vals.append(100.0 * (b[k] - a[k]) / dt)
+            if vals:
+                shares[res] = (pct(vals, .95), max(vals))
+        if shares:
+            stall[comp] = (shares, pts[-1][1].get("cgroup_shared", False))
+    if stall:
+        print(f"    computers, stall % of each interval (p95 / max):   {'memory':>13} {'io':>13} {'cpu':>13}")
+        for comp, (shares, sh) in sorted(stall.items()):
+            cell = lambda r: f"{shares[r][0]:5.1f} /{shares[r][1]:5.1f}" if r in shares else "-"
+            print(f"      {comp + (' (shared cgroup)' if sh else ''):<44} {cell('memory'):>13} {cell('io'):>13} {cell('cpu'):>13}")
+            for r, (p95, _) in shares.items():
+                if p95 > VM_STALL_FLAG and not sh:
+                    flags.append(f"{comp} {r} stall p95 {p95:.1f}% of each interval in the last 24 h")
     return flags
 
 

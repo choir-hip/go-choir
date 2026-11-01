@@ -30,6 +30,9 @@
 #       read_bytes as negative reads
 #   M3  the memory unit is not wired to a per-minute timer, or lacks
 #       MemoryMax or idle priority
+#   M4  per-VM stall is read from the wrong cgroup, is a 10 s snapshot
+#       instead of the interval's share, is computed across a cgroup change,
+#       or flags a VM in the shared direct cgroup as if the stall were its own
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 script="$here/node-b-growth-meter"
@@ -289,8 +292,9 @@ check "G9 nice 19 and idle IO" "grep -q 'Nice = 19' <<<'$unit' && grep -q 'IOSch
 check "G9 hourly timer" "grep -A8 'systemd.timers.go-choir-growth-meter' '$nixfile' | grep -q 'OnCalendar = \"hourly\"'"
 
 # ---- M1-M3 per-minute memory readings ---------------------------------------
-fc() { # pid id anon_kb file_kb read_bytes [comm]
+fc() { # pid id anon_kb file_kb read_bytes [comm] [cgroup]
   local d="$w/proc/$1"; mkdir -p "$d"
+  printf '0::%s\n' "${7:-/system.slice/system-choirvms.slice/vms/$2}" >"$d/cgroup"
   printf '%s\n' "${6:-firecracker}" >"$d/comm"
   printf '/firecracker\0--id\0%s\0--api-sock\0/run/fc.sock\0' "$2" >"$d/cmdline"
   printf 'Name:\tfirecracker\nRssAnon:\t %s kB\nRssFile:\t %s kB\n' "$3" "$4" >"$d/status"
@@ -307,6 +311,13 @@ mem_meter() { # now
 fc 501 vm-paper 3145728 5120 0
 fc 502 candidate-fleet-x 1048576 1024 0
 fc 503 vm-other 1 1 0 bash
+vmcg() { # cgroup io_total_us memory_total_us
+  mkdir -p "$w/cg$1"
+  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=%s\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' "$2" >"$w/cg$1/io.pressure"
+  printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=%s\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' "${3:-0}" >"$w/cg$1/memory.pressure"
+}
+vmcg /system.slice/system-choirvms.slice/vms/vm-paper 0
+vmcg /system.slice/system-choirvms.slice/vms/candidate-fleet-x 0
 mem_meter $t0 >"$root/mout1" 2>&1
 mledger="$root/ledger/mem-2026-10.jsonl"
 check "M1 memory reading lands with host, pressure and named VMs" "python3 -c \"
@@ -318,11 +329,15 @@ assert r['host']['MemAvailable']==26214400*1024 and r['host']['AnonPages']==4194
 assert r['pressure']['some_avg10']==0.5, r['pressure']
 v=r['vms']
 assert set(v)=={'vm-paper','candidate-fleet-x'}, v
-assert v['vm-paper']=={'anon':3145728*1024,'file':5120*1024,'read_bytes':0,'computer':'computer-paper','state':'active'}, v['vm-paper']
+assert {k: v['vm-paper'][k] for k in ('anon','file','read_bytes','computer','state')}=={'anon':3145728*1024,'file':5120*1024,'read_bytes':0,'computer':'computer-paper','state':'active'}, v['vm-paper']
 assert v['candidate-fleet-x']['computer']=='computer-fleet'
 assert 'user_id' not in ls[0]
+assert v['vm-paper']['io_some_us']==0 and v['vm-paper']['cgroup']=='/system.slice/system-choirvms.slice/vms/vm-paper'
+assert 'cgroup_shared' not in v['vm-paper']
 \""
 # A spike at +60 min (8 GiB) and a restart at +120 min (read_bytes falls).
+# The paper's io stall: 30% of the first hour (1080 s of 3600), then none.
+vmcg /system.slice/system-choirvms.slice/vms/vm-paper 1080000000
 fc 501 vm-paper 8388608 5120 $((10 << 30))
 mem_meter $((t0 + 3600)) >/dev/null 2>&1
 fc 501 vm-paper 3145728 5120 $((1 << 30))
@@ -335,6 +350,18 @@ spike_min="$(python3 -c "import time;print(time.strftime('%H:%M',time.gmtime($t0
 check "M2 report shows the computer's p50, max and the spike's minute" "grep -Eq 'computer-paper +3.00 +8.00 +8.00  ${spike_min}Z' '$root/mreport'"
 check "M2 a restart's falling read_bytes is not negative (10 + 1 GiB over 3 h is 88 GiB a day)" "grep -Eq 'computer-paper .* 88.0 GiB' '$root/mreport'"
 check "M2 host pressure over the flag is not flagged at 0.5%" "! grep -q 'host memory pressure' '$root/mreport'"
+check "M4 per-VM io stall is the interval's share (30% in the first hour)" "grep -Eq 'computer-paper +0.0 / +0.0 +30.0 / 30.0' '$root/mreport'"
+check "M4 a VM stalled past the flag is flagged" "grep -q 'computer-paper io stall p95 30.0%' '$root/mreport'"
+check "M4 a quiet VM is not flagged" "! grep -q 'computer-fleet io stall' '$root/mreport'"
+# A direct VM in the vmctl unit's cgroup is marked shared and never flagged.
+rm -rf "$root/ledger"
+vmcg /system.slice/go-choir-vmctl.service/supervisor 0
+fc 501 vm-paper 3145728 5120 0 firecracker /system.slice/go-choir-vmctl.service/supervisor
+mem_meter $t0 >/dev/null 2>&1
+vmcg /system.slice/go-choir-vmctl.service/supervisor 1800000000
+mem_meter $((t0 + 3600)) >/dev/null 2>&1
+METER_ARGS=--report meter $((t0 + 3600)) >"$root/mreport2" 2>&1
+check "M4 a direct VM reads as shared and is not flagged" "grep -q 'computer-paper (shared cgroup)' '$root/mreport2' && ! grep -q 'computer-paper io stall' '$root/mreport2'"
 
 munit="$(awk '/systemd.services.go-choir-memory-meter = \{/,/^  \};/' "$nixfile")"
 check "M3 memory unit runs --memory under MemoryMax at idle priority" "grep -q -- '--memory' <<<'$munit' && grep -q 'MemoryMax' <<<'$munit' && grep -q 'Nice = 19' <<<'$munit'"
