@@ -37,6 +37,7 @@ const (
 	DefaultJailerUIDCount  = 4096
 	DefaultJailerPidsMax   = 128
 	DefaultJailerCPUWeight = 100
+	DefaultJailerIOWeight  = 100
 	DefaultJailerNoFile    = 2048
 
 	jailBaseDirName     = ".jail"
@@ -125,9 +126,13 @@ type JailerConfig struct {
 	// <slice>/vms in a slice outside vmctl's unit; empty leaves the jailer
 	// unavailable (vmSliceRecord).
 	CgroupParent string
-	// PidsMax and CPUWeight are written into each VM's leaf; 0 omits them.
+	// PidsMax, CPUWeight and IOWeight are written into each VM's leaf; 0
+	// omits them. IOWeight is the VM's share of each disk under iocost
+	// (guest isolation I3): a thrashing guest's reads queue behind its own
+	// share, not every guest's; with the disk idle it takes all of it.
 	PidsMax   int
 	CPUWeight int
+	IOWeight  int
 	// NoFile is the VMM's RLIMIT_NOFILE; 0 leaves the jailer default.
 	NoFile int
 	// SpeculationDirect applies the speculation barriers to direct launches
@@ -207,6 +212,7 @@ func defaultJailerConfig() JailerConfig {
 		UIDCount:  DefaultJailerUIDCount,
 		PidsMax:   DefaultJailerPidsMax,
 		CPUWeight: DefaultJailerCPUWeight,
+		IOWeight:  DefaultJailerIOWeight,
 		NoFile:    DefaultJailerNoFile,
 	}
 }
@@ -365,6 +371,9 @@ func (m *Manager) jailerArgs(vmID string, uid int, firecrackerArgs []string) []s
 	}
 	if j.CPUWeight > 0 {
 		args = append(args, "--cgroup", "cpu.weight="+strconv.Itoa(j.CPUWeight))
+	}
+	if j.IOWeight > 0 {
+		args = append(args, "--cgroup", "io.weight="+strconv.Itoa(j.IOWeight))
 	}
 	if j.NoFile > 0 {
 		args = append(args, "--resource-limit", "no-file="+strconv.Itoa(j.NoFile))

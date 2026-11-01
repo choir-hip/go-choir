@@ -104,6 +104,7 @@ func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
 		CgroupParent: "system.slice/system-choirvms.slice/vms",
 		PidsMax:      DefaultJailerPidsMax,
 		CPUWeight:    DefaultJailerCPUWeight,
+		IOWeight:     DefaultJailerIOWeight,
 		NoFile:       DefaultJailerNoFile,
 	}
 	mgr := NewManager(cfg)
@@ -207,7 +208,7 @@ func TestJailerLaunchArgs(t *testing.T) {
 	got := mgr.jailerArgs("vm-a", 900123, jailFirecrackerLaunchArgs(true))
 	want := "--id vm-a --exec-file /nix/store/abc-firecracker-1.15.1/bin/firecracker --uid 900123 --gid 900123 " +
 		"--chroot-base-dir /var/lib/go-choir/vm-state/.jail --new-pid-ns --cgroup-version 2 " +
-		"--parent-cgroup system.slice/system-choirvms.slice/vms --cgroup pids.max=128 --cgroup cpu.weight=100 " +
+		"--parent-cgroup system.slice/system-choirvms.slice/vms --cgroup pids.max=128 --cgroup cpu.weight=100 --cgroup io.weight=100 " +
 		"--resource-limit no-file=2048 -- --api-sock /run/fc.sock --enable-pci --config-file /fc-config.json"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("jailer args =\n%s\nwant\n%s", strings.Join(got, " "), want)
@@ -230,6 +231,7 @@ func TestJailerLaunchArgs(t *testing.T) {
 	mgr.cfg.Jailer.CgroupParent = ""
 	mgr.cfg.Jailer.PidsMax = 0
 	mgr.cfg.Jailer.CPUWeight = 0
+	mgr.cfg.Jailer.IOWeight = 0
 	got = mgr.jailerArgs("vm-a", 900123, []string{"--version"})
 	if s := strings.Join(got, " "); strings.Contains(s, "--parent-cgroup") || strings.Contains(s, "--cgroup ") || !strings.Contains(s, "--cgroup-version 2") {
 		t.Fatalf("args without cgroup properties = %s", s)

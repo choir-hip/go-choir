@@ -263,6 +263,7 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 		"VMCTL_JAILER_UID_COUNT":  &j.UIDCount,
 		"VMCTL_JAILER_PIDS_MAX":   &j.PidsMax,
 		"VMCTL_JAILER_CPU_WEIGHT": &j.CPUWeight,
+		"VMCTL_JAILER_IO_WEIGHT":  &j.IOWeight,
 	} {
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n >= 0 {

@@ -1260,7 +1260,41 @@ in
       # protected only the host's cache of guest disk images (14 GiB of
       # inactive_file on 2026-11-01, guests' anon 4.4 GiB). It was 14G.
       MemoryLow = "0";
+      # Guest isolation I3 (2026-11-01; owner: "a thrashing guest shouldn't
+      # obstruct other guests"): under iocost (go-choir-iocost below) the
+      # VMs together weigh half a host service, so a guest storm leaves the
+      # host its disk; each VM's leaf carries its own io.weight
+      # (VMCTL_JAILER_IO_WEIGHT). Weights only bind when the disk is
+      # contended. Rollback: drop this line.
+      IOWeight = 50;
     };
+  };
+
+  # iocost on the NVMe members of md127 (guest isolation I3). The scheduler
+  # is none, so io.weight is inert without a controller; iocost is the one
+  # that works under none, and only on a request-based device, so it goes on
+  # nvme0n1 and nvme1n1, not on md127 (md's clones carry the bio's cgroup).
+  # The model is the kernel's auto (linear, from the device); qos ctrl=auto.
+  # Minor numbers are dynamic, so the unit reads them at boot. Rollback:
+  # drop the unit and write "MAJ:MIN enable=0" into io.cost.qos.
+  systemd.services.go-choir-iocost = {
+    description = "go-choir iocost on the NVMe members (guest isolation I3)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "local-fs.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -eu
+      for d in /sys/block/nvme*n1; do
+        [ -r "$d/dev" ] || continue
+        dev=$(cat "$d/dev")
+        echo "$dev enable=1 ctrl=auto" > /sys/fs/cgroup/io.cost.qos
+        echo "iocost on $(basename "$d") ($dev)"
+      done
+      cat /sys/fs/cgroup/io.cost.qos
+    '';
   };
 
   # Memory protection only reaches a cgroup through its parents: a child's

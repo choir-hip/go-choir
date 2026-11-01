@@ -98,6 +98,12 @@ finish:
     environment: staging (choir.news, Node B)
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
 value:
+  principle: >-
+    Memory is the bottleneck; NVMe reads are cheap (owner, 2026-11-01: "we
+    can wait for an NVMe read for something that we're not reading that
+    often"; "we do need to do the next optimization to make sure that we're
+    not doing any extra reads"). Guests keep little cache; the code must not
+    reread what it does not need.
   better_means: >-
     Minimize how much one guest's load (disk I/O, disk space, network, CPU,
     memory) raises other guests' pressure stalls and lowers the host's
