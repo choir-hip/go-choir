@@ -9,3 +9,4 @@
 - 07:09Z deployed 16f7b5d01 (segment rule).
 - d@e holds 266 MiB inactive file, under the 512 MiB keep: it cannot prove a busy_cold act. Edge accepted; the paper flipped to active (88654a665) with per-act watch.
 - Old-rule census stopped at 70 min (superseded); new-rule census started at idle IO.
+- 07:34Z paper's first active act: guest reclaimed 1031 MiB, host RSS 7748 -> 7574 (17%), refaults 0. Guest free 160 MiB minutes later (refilled; kswapd steal 1.84 GiB and file refaults 791 MiB since boot). Outcome B; the paper back to observe (docs/problems/paper-busy-cold-freed-cache-refills-2026-11-01.md).
