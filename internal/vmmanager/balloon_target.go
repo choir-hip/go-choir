@@ -54,18 +54,28 @@ func (m *Manager) SetGuestMemoryCap(vmID string, capMiB int) (BalloonTargetResul
 		return res, ErrBalloonBusy
 	}
 	defer unlock()
-	sock, base, err := m.runningAPISocket(vmID)
+	sock, _, err := m.runningAPISocket(vmID)
 	if err != nil {
 		return res, err
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), balloonTargetTimeout)
+	defer cancel()
+	api := newFCAPIClient(sock)
+	// The VMM's own size, not inst.Config: a VM reattached after a vmctl
+	// restart carries the manager default there (review, Devin #1).
+	mc, err := api.MachineConfig(ctx)
+	if err != nil {
+		return res, fmt.Errorf("read machine config: %w", err)
+	}
+	if mc.MemSizeMiB <= 0 {
+		return res, fmt.Errorf("machine config reports mem_size_mib %d", mc.MemSizeMiB)
+	}
+	base := mc.MemSizeMiB
 	res.BaseMiB = base
 	want := 0
 	if capMiB > 0 && base > capMiB {
 		want = base - capMiB
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), balloonTargetTimeout)
-	defer cancel()
-	api := newFCAPIClient(sock)
 	cur, err := api.Balloon(ctx)
 	if err != nil {
 		return res, fmt.Errorf("read balloon: %w", err)
@@ -79,6 +89,18 @@ func (m *Manager) SetGuestMemoryCap(vmID string, capMiB int) (BalloonTargetResul
 	}
 	res.AfterMiB, res.Changed = want, true
 	return res, nil
+}
+
+// fcMachineConfig is the part of GET /machine-config the cap needs.
+type fcMachineConfig struct {
+	MemSizeMiB int `json:"mem_size_mib"`
+}
+
+// MachineConfig reads GET /machine-config.
+func (c *fcAPIClient) MachineConfig(ctx context.Context) (fcMachineConfig, error) {
+	var out fcMachineConfig
+	err := c.doJSON(ctx, http.MethodGet, "/machine-config", nil, &out)
+	return out, err
 }
 
 // PatchBalloonAmount is PATCH /balloon (swagger BalloonUpdate).

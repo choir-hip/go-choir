@@ -696,6 +696,10 @@ type OwnershipRegistry struct {
 	// all VMs share the same autoputer URL. When set, the registry delegates
 	// VM lifecycle operations to this manager for real Firecracker VMs.
 	vmManager VMManager
+	// guestMemoryCapLastErr is each VM's last cap failure (guest_balloon.go),
+	// so a persistent one is logged once; guestMemoryCapMu serializes passes.
+	guestMemoryCapMu      sync.Mutex
+	guestMemoryCapLastErr map[string]string
 
 	// gatewayURL is the URL of the host-side gateway service. When set,
 	// the registry issues gateway tokens for VM autoputeres before booting

@@ -26,6 +26,8 @@ func (f *fakeBalloonTargetAPI) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/machine-config":
+		_ = json.NewEncoder(w).Encode(map[string]any{"vcpu_count": 2, "mem_size_mib": 8192})
 	case r.Method == http.MethodGet && r.URL.Path == "/balloon":
 		_ = json.NewEncoder(w).Encode(map[string]any{"amount_mib": f.amount, "deflate_on_oom": true, "free_page_reporting": true})
 	case r.Method == http.MethodPatch && r.URL.Path == "/balloon":
@@ -47,6 +49,8 @@ func (f *fakeBalloonTargetAPI) ServeHTTP(w http.ResponseWriter, r *http.Request)
 func TestSetGuestMemoryCap(t *testing.T) {
 	api := &fakeBalloonTargetAPI{}
 	mgr := runningBalloonVM(t, nil, nil)
+	// A reattached VM carries the manager default here; the VMM's 8192 wins.
+	mgr.vms["vm-b"].Config.MachineMemSizeMib = 512
 	serveUnix(t, mgr.apiSocketPath("vm-b"), api)
 
 	res, err := mgr.SetGuestMemoryCap("vm-b", 3072)

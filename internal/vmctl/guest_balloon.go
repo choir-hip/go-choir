@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -21,8 +22,16 @@ import (
 // next pass. The device's deflate_on_oom lets a guest that runs out of memory
 // take balloon pages back. Rollback: drop the entry, or the variable.
 
-// DefaultGuestMemoryCapInterval is the reconcile interval when unset.
-const DefaultGuestMemoryCapInterval = time.Minute
+// DefaultGuestMemoryCapInterval is the reconcile interval when unset;
+// MinGuestMemoryCapInterval is the floor a set interval is raised to.
+const (
+	DefaultGuestMemoryCapInterval = time.Minute
+	MinGuestMemoryCapInterval     = 10 * time.Second
+)
+
+// GuestMemoryCapFloorMiB mirrors vmmanager.GuestMemoryCapFloorMiB: a smaller
+// cap is a bad entry, named once at startup.
+const GuestMemoryCapFloorMiB = 1024
 
 // guestMemoryCapSetter is implemented by the Firecracker manager adapter.
 type guestMemoryCapSetter interface {
@@ -37,8 +46,8 @@ type GuestMemoryCapResult struct {
 	Changed   bool
 }
 
-// ParseGuestMemoryCaps reads "id=MiB,..."; malformed or non-positive entries
-// are dropped and named in the second result.
+// ParseGuestMemoryCaps reads "id=MiB,..."; malformed entries and caps under
+// the floor are dropped and named in the second result.
 func ParseGuestMemoryCaps(raw string) (map[string]int, []string) {
 	var out map[string]int
 	var bad []string
@@ -50,7 +59,7 @@ func ParseGuestMemoryCaps(raw string) (map[string]int, []string) {
 		id, v, ok := strings.Cut(tok, "=")
 		id = strings.TrimSpace(id)
 		n, err := strconv.Atoi(strings.TrimSpace(v))
-		if !ok || id == "" || err != nil || n <= 0 {
+		if !ok || id == "" || err != nil || n < GuestMemoryCapFloorMiB {
 			bad = append(bad, tok)
 			continue
 		}
@@ -78,6 +87,9 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 	if interval <= 0 {
 		return
 	}
+	if interval < MinGuestMemoryCapInterval {
+		interval = MinGuestMemoryCapInterval
+	}
 	go func() {
 		r.reconcileGuestMemoryCaps(caps)
 		ticker := time.NewTicker(interval)
@@ -93,9 +105,10 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 	}()
 }
 
-// reconcileGuestMemoryCaps sets each active computer's balloon to its cap
-// and logs each change and each failure on a named computer. It returns how
-// many balloons it changed.
+// reconcileGuestMemoryCaps sets each active computer's balloon to its cap.
+// It logs each change, and a failure only when it differs from that VM's
+// last one, so a persistent failure is one line and a failed deflate after
+// rollback is visible (review, Devin #3). It returns how many it changed.
 func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 	r.mu.RLock()
 	mgr := r.vmManager
@@ -103,6 +116,11 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 	setter, ok := mgr.(guestMemoryCapSetter)
 	if !ok || setter == nil {
 		return 0
+	}
+	r.guestMemoryCapMu.Lock()
+	defer r.guestMemoryCapMu.Unlock()
+	if r.guestMemoryCapLastErr == nil {
+		r.guestMemoryCapLastErr = map[string]string{}
 	}
 	changed := 0
 	seen := map[string]bool{}
@@ -114,11 +132,14 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 		capMiB := guestMemoryCapFor(caps, own)
 		res, err := setter.SetGuestMemoryCap(own.VMID, capMiB)
 		if err != nil {
-			if capMiB > 0 {
-				log.Printf("vmctl: guest memory cap computer=%s vm=%s cap_mib=%d skipped: %v", own.ComputerID, own.VMID, capMiB, err)
+			msg := fmt.Sprintf("cap_mib=%d: %v", capMiB, err)
+			if r.guestMemoryCapLastErr[own.VMID] != msg {
+				log.Printf("vmctl: guest memory cap computer=%s vm=%s skipped %s", own.ComputerID, own.VMID, msg)
 			}
+			r.guestMemoryCapLastErr[own.VMID] = msg
 			continue
 		}
+		delete(r.guestMemoryCapLastErr, own.VMID)
 		if res.Changed {
 			changed++
 			log.Printf("vmctl: guest memory cap computer=%s vm=%s cap_mib=%d base_mib=%d balloon_mib %d -> %d",

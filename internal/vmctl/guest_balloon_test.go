@@ -31,11 +31,11 @@ func (m *fakeCapManager) SetGuestMemoryCap(vmID string, capMiB int) (GuestMemory
 }
 
 func TestParseGuestMemoryCaps(t *testing.T) {
-	caps, bad := ParseGuestMemoryCaps(" computer-a=3072, vm-b=2048,junk,c=0,d=-1,e=x,=5,")
+	caps, bad := ParseGuestMemoryCaps(" computer-a=3072, vm-b=2048,junk,c=0,d=-1,e=x,=5,f=512,")
 	if want := map[string]int{"computer-a": 3072, "vm-b": 2048}; !reflect.DeepEqual(caps, want) {
 		t.Fatalf("caps = %v, want %v", caps, want)
 	}
-	if want := []string{"junk", "c=0", "d=-1", "e=x", "=5"}; !reflect.DeepEqual(bad, want) {
+	if want := []string{"junk", "c=0", "d=-1", "e=x", "=5", "f=512"}; !reflect.DeepEqual(bad, want) {
 		t.Fatalf("bad = %v, want %v", bad, want)
 	}
 	if caps, bad := ParseGuestMemoryCaps(""); caps != nil || bad != nil {
