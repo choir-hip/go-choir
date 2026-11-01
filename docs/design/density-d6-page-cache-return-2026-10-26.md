@@ -33,6 +33,13 @@ red). Evidence:
   the route, pressure trigger only, refault guard enforced, never with a
   live capsule or a self-development operation in flight. S5's failure
   list, sizing, guard threshold and rings are in section 9 S5.
+- **Revision 5** (2026-11-01): S5 gains a periodic trigger beside the
+  pressure one, on the owner's goal for the night (/goal 2026-11-01):
+  "optimize memory usage for backup and the paper computer and in general
+  without major cost in compute or storage", and earlier "Increasing memory
+  is not the solution." Pressure alone left the paper at its ~7.8 GiB peak
+  until a start was already refused, then returned 1 GiB per 5 minutes: too
+  late for admission. Section 5.5 and section 9 S5 say so.
 - **Mutation class of this document:** green. Build slices: S0 green, S1
   orange, S2 red, S3 and S4 red, S5 red.
 - **Review tier:** this design was reviewed at tier 2 (320). S1 tier 1
@@ -566,9 +573,24 @@ Proof order: a test computer kept busy by a loop, then d@e, then the paper,
 with the paper's poll latency and refaults read before and after.
 
 **Taken (2026-11-01):** the DAMON reading was never taken, so S5 builds the
-conservative branch of item 1: `busy_cold` through the route, pressure
-trigger only, refault guard on, never during an apply or a live capsule.
-No DAMON boot argument, no cold boot, no launch-config byte.
+conservative branch of item 1: `busy_cold` through the route, refault guard
+on, never during an apply or a live capsule. No DAMON boot argument, no
+cold boot, no launch-config byte.
+
+**Revision 5 (2026-11-01): pressure and periodic.** Item 1 named the
+pressure trigger only. The owner's goal for the night widens it: "optimize
+memory usage for backup and the paper computer and in general without
+major cost in compute or storage" (/goal 2026-11-01), after "Increasing
+memory is not the solution." Pressure alone returns nothing until a start
+is already refused, and then 1 GiB per 5 minutes, so the paper's RSS is
+still at its peak when admission needs the room. So vmctl also asks each
+computer named in the busy-cold switch every 10 minutes
+(`VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL`, 0 disables the pass), under
+the same target formula, refault guard, busy refusals and five-minute
+per-computer floor. **Cost bound:** at most 1 GiB of clean, cold cache per
+interval per computer, no dirty page and no anonymous page; a 1 s,
+nice-19 act; stopped by refaults over 32/s, after which that computer is
+backed off for three intervals.
 
 ### 5.6 Restart rules
 
@@ -852,7 +874,9 @@ list, or `off`.
 Gates: the DAMON reading (R5) and a recorded owner decision (§12). The
 owner decision is recorded (2026-11-01). R5 was never taken; the branch
 built is the one section 5.5 names for "DAMON does not": `busy_cold`
-through the route, the pressure trigger only. The paper last.
+through the route, the pressure trigger, and (revision 5, on the owner's
+goal of 2026-11-01 quoted in §5.5) a periodic pass every 10 minutes. The
+paper last.
 
 The paper's reading that motivates it (2026-11-01 05:5x UTC, 18 minutes
 after boot, guest 8 GiB): AnonPages 1.13 GiB (autoputer 1.04 GiB RSS, desk
@@ -901,12 +925,19 @@ host.
   refault_rate_before= refault_rate_after= refault_limit=`.
 
 **Host (vmctl).**
-- Trigger: **pressure only**, inside make-room's step 0 (§4.4), after
-  every idle candidate (the less intrusive act first), within the same
-  12 s deadline and the same limit of three computers. Section 5.5 names
-  the pressure trigger only, so there is no periodic act and the idle loop
-  never calls `busy_cold`. A computer is asked at most once per five
-  minutes. A dry run takes no admission sample.
+- Triggers (revision 5): **pressure**, inside make-room's step 0 (§4.4),
+  after every idle candidate (the less intrusive act first), within the
+  same 12 s deadline and the same limit of three computers; and
+  **periodic**, a loop of its own every
+  `VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL` (default 10m, clamped to
+  5m..1h; 0 disables it), which asks every named running computer (a dry
+  run for `=observe`) in the background within the host-wide in-flight
+  limit of two, trigger `periodic` in the record. Both share the candidate
+  rule: a computer is asked at most once per five minutes, and a
+  `refault_stop` keeps it out of both for three intervals (three default
+  intervals when the pass is disabled). The idle loop never calls
+  `busy_cold`. A pressure dry run takes no admission sample. The authority
+  for the periodic trigger is the owner's goal quoted in §5.5.
 - Selector: `VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS`, `id=observe`
   or `id=active` pairs (computer or VM id; any other word, a bare id or a
   capital is dropped). Capped by `VMCTL_GUEST_CACHE_RETURN` (off stops it;
@@ -946,7 +977,13 @@ Failure list and tests (written first):
   parse; the global cap; the named paper is asked with `busy_cold` and
   recorded with refaults; a computer outside the switch never is (unnamed
   paper, idle-selector-only computer, switch off); the idle loop never is;
-  observe is a dry run; the five-minute repeat; the candidate rule.
+  observe is a dry run; the five-minute repeat; the candidate rule;
+  no excess floor. Periodic
+  (`internal/vmctl/guest_cache_return_busy_cold_periodic_test.go`): only
+  named computers (=active writes, =observe dry runs); the floor shared
+  with the pressure path; never with the switch off or interval 0; the
+  loop ticks; a refault_stop backs off three intervals (pressure too);
+  the interval's parse and clamps.
 
 Rollback: drop the computer's entry (or set it `=observe`), or
 `VMCTL_GUEST_CACHE_RETURN=off` for every trigger; then revert. Nothing is
@@ -1050,7 +1087,10 @@ requires: reclaim on the paper (critical_protected, always busy) while it
 works. The DAMON reading (§5.5 item 1, R5) was never taken, so the shape is
 its conservative branch: `busy_cold` through the route, pressure trigger
 only, refault guard enforced, never during a self-development apply or a
-live capsule (§9 S5).
+live capsule (§9 S5). Revision 5 adds a periodic trigger on the owner's
+goal of the same night, "optimize memory usage for backup and the paper
+computer and in general without major cost in compute or storage" (§5.5),
+bounded at 1 GiB of clean cold cache per 10 minutes per computer.
 
 ## 13. Review 320 adjudication
 

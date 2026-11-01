@@ -17,8 +17,8 @@ import (
 //   - the host calls busy_cold on a computer the switch does not name (the
 //     paper by class, a premium computer by "*" in the idle selector, a
 //     computer named only in VMCTL_GUEST_CACHE_RETURN_ONLY);
-//   - the idle trigger (a periodic pass) calls busy_cold: the design allows
-//     the pressure trigger only;
+//   - the idle trigger's loop calls busy_cold (only the pressure path and
+//     the periodic busy_cold pass may);
 //   - the global switch off, or no busy-cold entries, still calls a guest;
 //   - a typo in an entry's mode ("on", "Active") turns it on;
 //   - observe (globally or per entry) writes: the body must carry dry_run;
@@ -196,8 +196,9 @@ func TestBusyColdNeverCallsAComputerOutsideTheSwitch(t *testing.T) {
 	}
 }
 
-// The idle loop (a periodic pass) never calls busy_cold: pressure only.
-func TestBusyColdIsNeverPeriodic(t *testing.T) {
+// The idle loop never calls busy_cold: only the pressure path and the
+// periodic busy_cold pass (guest_cache_return_busy_cold_periodic_test.go) do.
+func TestBusyColdIdleLoopNeverCallsIt(t *testing.T) {
 	f := busyColdCR(t, map[string]string{paperID: GuestCacheReturnActive})
 	f.reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnActive, Only: []string{"*"}, Triggers: []string{"idle", "hibernate", "pressure"},
 		Scope: "daemon", Idle: time.Minute, BusyCold: map[string]string{paperID: GuestCacheReturnActive}})
@@ -213,7 +214,7 @@ func TestBusyColdIsNeverPeriodic(t *testing.T) {
 		t.Fatal("acts did not finish")
 	}
 	if g.calls.Load() != 0 {
-		t.Fatalf("the idle loop called the paper %d times; busy_cold is pressure only", g.calls.Load())
+		t.Fatalf("the idle loop called the paper %d times", g.calls.Load())
 	}
 }
 

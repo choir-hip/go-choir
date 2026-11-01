@@ -123,9 +123,9 @@ func main() {
 		busyCold = append(busyCold, id+"="+mode)
 	}
 	sort.Strings(busyCold)
-	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s busy_cold=%s",
+	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s busy_cold=%s busy_cold_interval=%s",
 		cacheReturn.Mode, strings.Join(cacheReturn.Only, ","), strings.Join(cacheReturn.Triggers, ","), cacheReturn.Scope,
-		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget, strings.Join(busyCold, ","))
+		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget, strings.Join(busyCold, ","), cacheReturn.BusyColdInterval)
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -269,6 +269,12 @@ func main() {
 	if cacheReturn.NeedsIdleLoop() {
 		registry.StartGuestCacheReturnLoop(context.Background(), idleSweepInterval)
 		log.Printf("vmctl: guest cache return idle loop interval set to %s", idleSweepInterval)
+	}
+	// D6 S5 revision 5: the periodic busy_cold pass for the named always-busy
+	// computers (off, no entries or interval 0: not started).
+	if cacheReturn.NeedsBusyColdLoop() {
+		registry.StartGuestCacheReturnBusyColdLoop(context.Background(), cacheReturn.BusyColdInterval)
+		log.Printf("vmctl: guest cache return busy_cold loop interval set to %s", cacheReturn.BusyColdInterval)
 	}
 	// Deferred deploy refreshes are retried until each computer takes the
 	// update (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
@@ -792,6 +798,8 @@ func guestCacheReturnConfigFromEnv() vmctl.GuestCacheReturnConfig {
 		PressureIdle:   os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_IDLE"),
 		PressureBudget: os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET"),
 		BusyCold:       os.Getenv("VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS"),
+
+		BusyColdInterval: os.Getenv("VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL"),
 	})
 }
 

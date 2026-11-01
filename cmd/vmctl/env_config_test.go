@@ -205,6 +205,13 @@ func TestGuestCacheReturnEnv(t *testing.T) {
 	if len(cfg.BusyCold) != 2 || cfg.BusyCold["computer-de"] != vmctl.GuestCacheReturnActive || cfg.BusyCold["computer-paper"] != vmctl.GuestCacheReturnObserve {
 		t.Fatalf("busy-cold entries = %v, want de=active and paper=observe only", cfg.BusyCold)
 	}
+	if cfg.BusyColdInterval != 10*time.Minute {
+		t.Fatalf("busy_cold interval = %s with the variable unset, want 10m", cfg.BusyColdInterval)
+	}
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL", "0")
+	if got := guestCacheReturnConfigFromEnv().BusyColdInterval; got != 0 {
+		t.Fatalf("busy_cold interval 0 = %s, want disabled", got)
+	}
 	t.Setenv("VMCTL_GUEST_CACHE_RETURN_IDLE", "1h")
 	t.Setenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET", "1ms")
 	cfg = guestCacheReturnConfigFromEnv()

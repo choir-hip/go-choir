@@ -1779,9 +1779,13 @@ in
         # their cold page cache while they work (busy_cold: at most 1 GiB
         # per act, keep max(512 MiB, active_file), 1 s budget, refault guard
         # 32/s, never with a live capsule or a self-development operation in
-        # flight). Pressure trigger only: make-room's step 0 asks them after
-        # the idle computers, at most once per five minutes each; there is no
-        # periodic act (design 5.5). Its own selector, capped by
+        # flight). Two triggers: make-room's step 0 asks them after the idle
+        # computers, and a periodic pass asks each named computer every
+        # VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL (code default 10m; 0
+        # disables the pass); at most once per five minutes each, and a
+        # refault_stop backs that computer off for three intervals. Cost
+        # bound: at most 1 GiB of clean cold cache per interval per computer
+        # (design 5.5, revision 5, owner goal 2026-11-01). Its own selector, capped by
         # VMCTL_GUEST_CACHE_RETURN (off stops it; observe makes it a dry run);
         # it needs neither _ONLY nor the pressure trigger above. Owner
         # decision 2026-11-01 (design section 12). Rings, in the design's

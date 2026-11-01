@@ -75,6 +75,12 @@ const (
 	// a run of refused starts takes at most 1 GiB per five minutes from it,
 	// and its refault guard reads a full minute between acts.
 	cacheReturnBusyColdRepeat = 5 * time.Minute
+	// cacheReturnBusyColdInterval is the periodic busy_cold pass's default
+	// cadence (VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL; 0 disables it).
+	cacheReturnBusyColdInterval = 10 * time.Minute
+	// cacheReturnBusyColdBackoffIntervals: a refault_stop keeps that computer
+	// out of busy_cold (periodic and pressure) for this many intervals.
+	cacheReturnBusyColdBackoffIntervals = 3
 
 	cacheReturnPath = "/internal/runtime/memory/cache-return"
 )
@@ -103,6 +109,9 @@ type GuestCacheReturnConfig struct {
 	// neither Only nor the pressure trigger, so turning it on for the paper
 	// does not turn S4 on for the idle ring. Empty names nobody.
 	BusyCold map[string]string
+	// BusyColdInterval is the periodic busy_cold pass's cadence (revision 5,
+	// owner goal 2026-11-01); 0 leaves busy_cold to the pressure path only.
+	BusyColdInterval time.Duration
 }
 
 // DefaultGuestCacheReturnConfig is the code default: off.
@@ -114,7 +123,15 @@ func DefaultGuestCacheReturnConfig() GuestCacheReturnConfig {
 		Idle:           3 * time.Minute,
 		PressureIdle:   time.Minute,
 		PressureBudget: 12 * time.Second,
+
+		BusyColdInterval: cacheReturnBusyColdInterval,
 	}
+}
+
+// NeedsBusyColdLoop reports whether the periodic busy_cold pass has anything
+// to do: the switch on, an entry, a non-zero interval.
+func (c GuestCacheReturnConfig) NeedsBusyColdLoop() bool {
+	return NormalizeGuestCacheReturnMode(c.Mode) != GuestCacheReturnOff && len(c.BusyCold) > 0 && c.BusyColdInterval > 0
 }
 
 // NormalizeGuestCacheReturnMode turns the exact words observe and active
@@ -172,6 +189,8 @@ type GuestCacheReturnValues struct {
 	PressureBudget string
 	// BusyCold is "id=observe|active,..." (VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS).
 	BusyCold string
+	// BusyColdInterval is VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL.
+	BusyColdInterval string
 }
 
 // GuestCacheReturnConfigFromValues parses and clamps. Malformed values are
@@ -208,6 +227,19 @@ func GuestCacheReturnConfigFromValues(v GuestCacheReturnValues) GuestCacheReturn
 	clamp(v.PressureIdle, &cfg.PressureIdle, 0, 9*time.Minute)
 	clamp(v.PressureBudget, &cfg.PressureBudget, 2*time.Second, 30*time.Second)
 	cfg.BusyCold = parseBusyColdEntries(v.BusyCold)
+	// 0 disables the periodic pass; otherwise 5m to 1h (never under the
+	// per-computer floor).
+	if raw := strings.TrimSpace(v.BusyColdInterval); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil {
+			if d <= 0 {
+				cfg.BusyColdInterval = 0
+			} else {
+				cfg.BusyColdInterval = min(max(d, cacheReturnBusyColdRepeat), time.Hour)
+			}
+		} else if raw == "0" {
+			cfg.BusyColdInterval = 0
+		}
+	}
 	return cfg
 }
 
@@ -300,6 +332,8 @@ type cacheReturnCandidateInput struct {
 	InFlight    func(vmID string) bool
 	LastAct     func(vmID string) (time.Time, bool)
 	Unsupported func(vmID string, epoch int64) bool
+	// BackedOff (busy_cold only): a refault_stop's back-off is running.
+	BackedOff func(vmID string) bool
 	// Busy is the guest busy probe: the last rule, asked only of computers
 	// that passed every other one.
 	Busy func(*VMOwnership) bool
@@ -450,6 +484,9 @@ func busyColdCandidates(in cacheReturnCandidateInput) []*VMOwnership {
 		if last, acted := lastActOf(in, own.VMID); acted && in.Now.Sub(last) < cacheReturnBusyColdRepeat {
 			continue
 		}
+		if in.BackedOff != nil && in.BackedOff(own.VMID) {
+			continue
+		}
 		if in.Uncaptured != nil && in.Uncaptured(own.VMID) {
 			continue
 		}
@@ -588,9 +625,11 @@ type guestCacheReturnState struct {
 	inflight    map[string]bool
 	lastAct     map[string]time.Time
 	unsupported map[string]int64
-	ring        []CacheReturnRecord
-	lastAt      map[string]string
-	wg          sync.WaitGroup
+	// backoff: busy_cold refault_stop back-off, VM id to its end.
+	backoff map[string]time.Time
+	ring    []CacheReturnRecord
+	lastAt  map[string]string
+	wg      sync.WaitGroup
 
 	// Seams (tests). rss reads a VM's resident memory; avail the host's
 	// MemAvailable; sleep pauses the settle wait; httpTimeout bounds a call.
@@ -651,6 +690,111 @@ func (s *guestCacheReturnState) isUnsupported(vmID string, epoch int64) bool {
 	defer s.mu.Unlock()
 	e, ok := s.unsupported[vmID]
 	return ok && e == epoch
+}
+
+// backOff keeps vmID out of busy_cold until until.
+func (s *guestCacheReturnState) backOff(vmID string, until time.Time) {
+	s.mu.Lock()
+	if s.backoff == nil {
+		s.backoff = map[string]time.Time{}
+	}
+	s.backoff[vmID] = until
+	s.mu.Unlock()
+}
+
+// backedOff reports whether vmID's back-off runs at now.
+func (s *guestCacheReturnState) backedOff(now time.Time) func(vmID string) bool {
+	return func(vmID string) bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		until, ok := s.backoff[vmID]
+		return ok && now.Before(until)
+	}
+}
+
+// busyColdBackoff is how long a refault_stop keeps a computer out: three
+// periodic intervals (three default intervals when the pass is disabled).
+func busyColdBackoff(cfg GuestCacheReturnConfig) time.Duration {
+	interval := cfg.BusyColdInterval
+	if interval <= 0 {
+		interval = cacheReturnBusyColdInterval
+	}
+	return cacheReturnBusyColdBackoffIntervals * interval
+}
+
+// noteBusyColdOutcome starts a back-off after a busy_cold refault_stop.
+func (r *OwnershipRegistry) noteBusyColdOutcome(rec CacheReturnRecord, cfg GuestCacheReturnConfig) {
+	if rec.Mode == "busy_cold" && rec.Outcome == "refault_stop" {
+		until := r.now().Add(busyColdBackoff(cfg))
+		r.cacheReturn.backOff(rec.VMID, until)
+		log.Printf("vmctl: guest cache return VM %s busy_cold refault_stop; backed off until %s", rec.VMID, until.UTC().Format(time.RFC3339))
+	}
+}
+
+// StartGuestCacheReturnBusyColdLoop runs the periodic busy_cold pass
+// (revision 5) on its own ticker. The switch is read every tick, so off or
+// an emptied entry list needs no restart of the loop.
+func (r *OwnershipRegistry) StartGuestCacheReturnBusyColdLoop(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				r.runBusyColdPass(ctx)
+			}
+		}
+	}()
+}
+
+// runBusyColdPass asks each running computer the busy-cold switch names for
+// one busy_cold act (a dry run for =observe), in the background, within the
+// host-wide in-flight limit. It returns how many acts it started. Off, no
+// entries and an interval of 0 return before reading anything. The same
+// candidate rule as the pressure path: the five-minute floor, the
+// refault_stop back-off, D4's capture, no claim, not in flight.
+func (r *OwnershipRegistry) runBusyColdPass(ctx context.Context) int {
+	cfg := r.guestCacheReturnConfig()
+	if !cfg.NeedsBusyColdLoop() {
+		return 0
+	}
+	st := &r.cacheReturn
+	free := cacheReturnMaxInFlight - st.inFlightCount()
+	if free <= 0 {
+		return 0
+	}
+	now := r.now()
+	snap := r.cacheReturnSnapshot()
+	picks := busyColdCandidates(cacheReturnCandidateInput{
+		Now: now, Config: cfg, Policy: snap.policy, Ownerships: snap.owns, Limit: free,
+		Claimed:     func(own *VMOwnership) bool { return snap.claimed[own.VMID] },
+		Uncaptured:  r.cacheReturnUncaptured(now, snap.acfg),
+		InFlight:    st.isInFlight,
+		LastAct:     st.lastActAt,
+		Unsupported: st.isUnsupported,
+		BackedOff:   st.backedOff(now),
+	})
+	started := 0
+	for _, own := range picks {
+		if !st.begin(own.VMID, now) {
+			continue
+		}
+		started++
+		st.wg.Add(1)
+		dry := busyColdModeFor(cfg, own) == GuestCacheReturnObserve
+		go func(own *VMOwnership) {
+			defer st.wg.Done()
+			defer st.end(own.VMID)
+			rec, _ := r.doGuestCacheReturn(ctx, own, "periodic", "busy_cold", dry, cfg.Scope, time.Time{})
+			r.noteBusyColdOutcome(rec, cfg)
+		}(own)
+	}
+	return started
 }
 
 func (s *guestCacheReturnState) lastActAt(vmID string) (time.Time, bool) {
