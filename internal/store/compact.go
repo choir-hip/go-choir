@@ -159,13 +159,17 @@ func readAvailableMemory() (int64, bool) {
 
 // compactReason says why a copy is due: "freelist" when enough of the file is
 // free, "layout" when the file is big and has not been rewritten compactly
-// for compactLayoutMaxAge, "" when neither.
-func compactReason(statePath string, pageCount, freelist, pageSize int64, now time.Time) string {
+// for compactLayoutMaxAge, "forced" when the store.compact_force setting is
+// on, "" when none.
+func compactReason(statePath string, pageCount, freelist, pageSize int64, now time.Time, force bool) string {
 	if pageCount == 0 {
 		return ""
 	}
 	if float64(freelist) > compactFreelistFraction*float64(pageCount) || freelist*pageSize >= compactFreelistBytes {
 		return "freelist"
+	}
+	if force {
+		return "forced"
 	}
 	if pageCount*pageSize < compactLayoutMinBytes {
 		return ""
@@ -236,6 +240,13 @@ func removeSQLiteFiles(path string) {
 // reports whether it staged one; an error is a skip, logged by the caller. A
 // staged copy from an earlier run is replaced.
 func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
+	return s.prepareCompactCopy(ctx, false)
+}
+
+// prepareCompactCopy is PrepareCompactCopy; force makes the copy due whatever
+// the file's size and age (SettingCompactForce). A fresh staged copy is still
+// kept: force picks the trigger, not the cadence.
+func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error) {
 	if s == nil || s.statePath == "" || s.ReadDB() == nil {
 		return false, nil
 	}
@@ -271,7 +282,7 @@ func (s *Store) PrepareCompactCopy(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("%s: %w", q, err)
 		}
 	}
-	reason := compactReason(statePath, pageCount, freelist, pageSize, time.Now())
+	reason := compactReason(statePath, pageCount, freelist, pageSize, time.Now(), force)
 	if reason == "" {
 		log.Printf("store: compact copy: not needed, %d of %d pages free", freelist, pageCount)
 		return false, nil

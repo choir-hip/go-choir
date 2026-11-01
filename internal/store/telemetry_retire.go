@@ -255,8 +255,9 @@ func (s *Store) retireClearedKey(g telemetryRetireGroup) string {
 // and the runtime is up. ready, when set, gates each run: a computer whose
 // file-tree hydration is pending, or whose store.telemetry_retire setting is
 // off, skips the run and looks again ten minutes later. It never fails the
-// process.
-func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool) {
+// process. forceCompact, when set, is read at each run: on, the compact copy
+// is due whatever the file's size and age (SettingCompactForce).
+func (s *Store) StartTelemetryRetirement(ctx context.Context, ready, forceCompact func() bool) {
 	if s == nil {
 		return
 	}
@@ -307,7 +308,7 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 			// rewritten compactly for a week, gets a compact copy, swapped in
 			// at the next planned restart (compact.go,
 			// docs/design/paper-compaction-2026-10-31.md).
-			if _, cErr := s.PrepareCompactCopy(ctx); cErr != nil {
+			if _, cErr := s.prepareCompactCopy(ctx, forceCompact != nil && forceCompact()); cErr != nil {
 				log.Printf("store: compact copy: %v", cErr)
 			}
 		}
@@ -318,4 +319,10 @@ func (s *Store) StartTelemetryRetirement(ctx context.Context, ready func() bool)
 // for this computer. It is read at each run; off on any read failure.
 func (s *Store) TelemetryRetireOn(ctx context.Context, ownerID string) bool {
 	return s.graphHomeOn(ctx, ownerID, SettingTelemetryRetire)
+}
+
+// CompactForceOn reports whether the store.compact_force setting is on for
+// this computer; off on any read failure.
+func (s *Store) CompactForceOn(ctx context.Context, ownerID string) bool {
+	return s.graphHomeOn(ctx, ownerID, SettingCompactForce)
 }

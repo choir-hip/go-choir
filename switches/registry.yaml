@@ -2495,6 +2495,33 @@
    "retire": "keep: the off position is the rollback and the incident kill switch (it ends every email session); review_by only",
    "note": "Email sign-in (docs/design/email-sign-in-2026-10-31.md). On for staging. Off (a service restart) makes begin answer as if every address were unknown, makes verify refuse, and deletes every unconsumed attempt and every email_* refresh session at boot. Needs AUTH_EMAIL_CODE_KEY_FILE; the service refuses to start with the switch on and no key.",
    "review_by": "2027-01-20"
+  },
+  {
+   "id": "store_compact_force",
+   "kind": "setting",
+   "life": "ops",
+   "owner": "store",
+   "class": "red",
+   "surface": "store",
+   "introduced": "2026-11-01",
+   "settings": [
+    "store.compact_force"
+   ],
+   "ladder": [
+    "on"
+   ],
+   "target_ring": "R0",
+   "review_by": "2027-01-20",
+   "ring": "R0",
+   "promote": [
+    {
+     "metric": "unplanned_crash_closures",
+     "bound": "== 0"
+    }
+   ],
+   "retire": "keep: a proof lever for the compact copy on a store under the 1 GiB layout trigger; review_by only",
+   "off_ok": "off is the normal state: the freelist and layout triggers decide; on is a proof lever for d@e",
+   "note": "Makes the daily compact copy due whatever the store's size and age, so the copy and its swap at a planned restart are proved on d@e before the paper (internal/store/compact.go, docs/design/paper-compaction-2026-10-31.md). A fresh staged copy is still kept. Off is the rollback."
   }
  ]
 }

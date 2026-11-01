@@ -732,7 +732,7 @@ func Run() {
 			db.StartDerivedKeyValidation(ctx)
 			db.StartTelemetryRetirement(ctx, func() bool {
 				return (fileSyncService == nil || fileSyncService.HydrationSettled()) && db.TelemetryRetireOn(ctx, os.Getenv("CHOIR_OWNER_ID"))
-			})
+			}, func() bool { return db.CompactForceOn(ctx, os.Getenv("CHOIR_OWNER_ID")) })
 			StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 			StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 			return nil
@@ -761,7 +761,7 @@ func Run() {
 		db.StartDerivedKeyValidation(ctx)
 		db.StartTelemetryRetirement(ctx, func() bool {
 			return (fileSyncService == nil || fileSyncService.HydrationSettled()) && db.TelemetryRetireOn(ctx, os.Getenv("CHOIR_OWNER_ID"))
-		})
+		}, func() bool { return db.CompactForceOn(ctx, os.Getenv("CHOIR_OWNER_ID")) })
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 		StartPeriodicFileObjectReconcile(ctx, fileObjectRecorder, fileObjectIntervalFromEnv())
 	}

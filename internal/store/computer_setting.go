@@ -235,6 +235,15 @@ const SettingTelemetryPartitions = "store.telemetry_partitions"
 // takes the direct path again.
 const SettingTapeGroupCommit = "tape.group_commit"
 
+// SettingCompactForce makes the daily compact copy due whatever the store
+// file's size and age (compact.go), so the copy and its swap at a planned
+// restart can be proved on a computer under the 1 GiB layout trigger (d@e,
+// docs/design/paper-compaction-2026-10-31.md) before they run on the paper.
+// A fresh staged copy is still kept. Off by default and for every computer
+// but the proof ring; off is the rollback: the size and age triggers decide
+// again.
+const SettingCompactForce = "store.compact_force"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
@@ -265,6 +274,7 @@ var KnownComputerSettings = map[string]bool{
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,
 	SettingTapeGroupCommit:              false,
+	SettingCompactForce:                 false,
 }
 
 // ComputerSetting is one switch's value on one computer.
