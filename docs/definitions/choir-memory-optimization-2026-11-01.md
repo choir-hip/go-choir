@@ -66,28 +66,33 @@ boundaries:
     - production reads are metadata only
     - no content is read
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: >-
-    Landed and deployed: busy_cold, admission wake and the seed deletion
-    (dd84b1f6c, 06:41Z); every pin but a public non-batch payload segmented,
-    with taperepack on the same rule (16f7b5d01, 07:09Z; two seats accept);
-    the paper's busy_cold entry =active (88654a665). A new-rule census is
-    running on Node B. Tonight's backup is still on its shards under the
-    runtime 7G/8G cap.
+    Backup done. 10,858,631 loose tape files copied into segments, verified
+    and deleted (24.3 GB freed; 3,850 left by rule). The backup runs unsharded
+    (06731745d, deployed 15:46Z) under its own 4G/6G cap; the runtime raise is
+    reverted. Proof run 15:46-15:58Z: 11m40s (was 4h40m), 24 CPU-minutes (was
+    26.8 CPU-hours), memory.max 0, anon 6 MB at the 4G line (the rest is
+    reclaimable pg_dump cache), 45.5 GB added (the segments, once). Repo
+    138 GB of 450 GiB. The paper's derived-key validation runs once and then
+    trusts its marks (c99e5ce3c); its first pass ended 11:40Z.
   belief: >-
-    believed_state: no new loose tape files after 07:09Z except public
-    non-batch payloads; the paper returns up to 1 GiB of cold cache per
-    10-minute pass. main_uncertainty: whether the paper's host RSS falls with
-    the guest's reclaim (free page reporting) and whether state.db refaults
-    stay under the guard. next_observation: the paper's first active act line
-    (rss before and after, refaults).
+    believed_state: the backup is bounded and cheap; Node B uses 12 GB of 31.9
+    with 19.8 GB available; the paper holds 7.6 GiB, nearly all guest file
+    cache that free page reporting cannot return while state.db streams.
+    main_uncertainty: whether the paper's next boot logs its families trusted
+    from their marks with no pass (no guest boot since c99e5ce3c's first
+    pass). next_observation: the paper's console log at its next boot.
   accepted_edge: >-
-    d@e cannot prove a busy_cold act (266 MiB inactive file, under the 512 MiB
-    keep), so the paper's first watched acts are the proof; rollback is its
-    entry back to =observe.
+    The weekly prune of 2026-11-01 missed node-a's 05:00-07:00 window because
+    the 4h40m backup ran until 07:10; with an 11-minute backup the 11-08 prune
+    fits. restic's own anon peak is not separated from the cgroup's cache peak.
+  owner_decision: >-
+    Bounding the paper guest's cache (S6: a guest cgroup memory.high on the
+    runtime, or a balloon) is the remaining memory lever and is the owner's
+    call; increasing memory is excluded.
   next_action: >-
-    Read the paper's first acts; after the census, taperepack copy --apply for
-    every computer it names; then census, keep-digests export and delete
-    --apply; then drop the backup's BIG_DIRS sharding and the runtime cap.
+    At the paper's next boot, read the derived-key lines; after 11-08, confirm
+    the prune ran and the sharded set was forgotten.
 receipts: []
 ```
