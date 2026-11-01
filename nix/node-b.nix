@@ -1240,8 +1240,8 @@ in
 
   # Jailed Firecracker VMs' cgroups: system.slice/system-choirvms.slice/vms/<vm>
   # (docs/problems/vmctl-restart-fails-while-a-jailed-vm-runs-2026-10-24.md,
-  # "Design: the VM slice"). The jailer writes +cpu +pids into every
-  # ancestor of a VM leaf; inside vmctl's unit that made systemd refuse to
+  # "Design: the VM slice"). The jailer writes +cpu +io +memory +pids into
+  # every ancestor of a VM leaf; inside vmctl's unit that made systemd refuse to
   # spawn ExecStartPre (EBUSY) and wedged every vmctl restart while a jailed
   # VM ran. The dash makes this a child of system.slice, a sibling of the
   # vmctl unit, so the VMs keep their CPU and memory position. No Delegate=:

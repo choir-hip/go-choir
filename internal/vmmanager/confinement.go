@@ -369,10 +369,10 @@ func jailFirecrackerRestoreArgs() []string {
 	return []string{"--api-sock", jailAPISocket, "--enable-pci"}
 }
 
-// jailerArgs is the jailer's command line (without argv[0]).
 // jailShape is the guest's size, for the leaf's backstops; zero omits them.
 type jailShape struct{ MemMiB, VCPUs int }
 
+// jailerArgs is the jailer's command line (without argv[0]).
 func (m *Manager) jailerArgs(vmID string, uid int, shape jailShape, firecrackerArgs []string) []string {
 	j := m.cfg.Jailer
 	bin := m.launchedVMM(vmID).JailedFirecracker
@@ -937,9 +937,9 @@ func cgroupWithin(p, base string) bool {
 
 // prepareJailerCgroups checks the VMs' parent cgroup (VMCTL_JAILER_CGROUP_
 // PARENT, normally <slice>/vms in a slice beside vmctl's unit) and creates
-// it. The jailer writes +cpu +pids into every ancestor of a VM leaf, and
-// systemd cannot spawn into a unit whose cgroup has them, so the parent must
-// lie outside vmctl's own unit (failure items 1, 5). The parent's parent is
+// it. The jailer writes +cpu +io +memory +pids into every ancestor of a VM
+// leaf, and systemd cannot spawn into a unit whose cgroup has them, so the
+// parent must lie outside vmctl's own unit (failure items 1, 5). The parent's parent is
 // systemd's slice: it must exist (vmctl never creates a systemd-owned
 // cgroup) and, like the parent, hold no process (the jailer's write would
 // fail EBUSY). vmctl moves no process and writes no subtree_control here.

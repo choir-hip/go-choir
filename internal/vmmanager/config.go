@@ -236,6 +236,10 @@ func LoadConfigFromEnv() ManagerConfig {
 //	VMCTL_JAILER_CGROUP_PARENT      VMs' parent cgroup, outside vmctl's unit (required)
 //	VMCTL_JAILER_PIDS_MAX           pids.max per VM (default 128; 0 omits)
 //	VMCTL_JAILER_CPU_WEIGHT         cpu.weight per VM (default 100; 0 omits)
+//	VMCTL_JAILER_IO_WEIGHT          io.weight per VM (default 100; 0 omits)
+//	VMCTL_JAILER_MEMORY_HIGH_HEADROOM_MIB  memory.high above the guest size, with
+//	                                memory.swap.max 0 (default 1024; 0 omits both)
+//	VMCTL_JAILER_CPU_MAX_HEADROOM   cpu.max above the vCPU count (default 1; 0 omits)
 //	VMCTL_VMM_SPECULATION_BARRIERS  also force barriers on direct launches
 func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 	j := defaultJailerConfig()
