@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -57,7 +58,10 @@ import (
 // ip6tables counterpart. If guests ever get v6, mirror this in ip6tables.
 
 const (
-	guestForwardChain   = "CHOIR-GUEST-FWD"
+	guestForwardChain = "CHOIR-GUEST-FWD"
+	// guestConnLimit is the open flows one guest may hold: about 3% of the
+	// host's nf_conntrack_max (262144) each, ample for research fetches.
+	guestConnLimit      = 8192
 	guestTapsChain      = "CHOIR-GUEST-TAPS"
 	guestReplyChain     = "CHOIR-GUEST-RET"
 	guestBaseComment    = "go-choir-guest"
@@ -126,6 +130,12 @@ func guestForwardChainSpecs(pool []string) [][]string {
 		specs = append(specs, []string{"-d", cidr, "-m", "comment", "--comment", guestBaseComment, "-j", "DROP"})
 	}
 	specs = append(specs,
+		// At most guestConnLimit new flows open per guest source address
+		// (guest isolation I5): one guest cannot fill the host's conntrack
+		// table, which NAT for every guest and the host shares. Written as
+		// iptables -S lists it (with --connlimit-saddr), so ensureBase sees
+		// it unchanged.
+		[]string{"-m", "conntrack", "--ctstate", "NEW", "-m", "connlimit", "--connlimit-above", strconv.Itoa(guestConnLimit), "--connlimit-mask", "32", "--connlimit-saddr", "-m", "comment", "--comment", guestBaseComment, "-j", "DROP"},
 		[]string{"-m", "comment", "--comment", guestBaseComment, "-j", guestTapsChain},
 		[]string{"-m", "comment", "--comment", guestBaseComment, "-j", "DROP"},
 	)

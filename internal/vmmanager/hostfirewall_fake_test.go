@@ -126,12 +126,17 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 		val string
 		set bool
 	}
-	var s, d, in, out, proto, dport, ctstate, uidOwner, comment, target, toDest opt
+	var s, d, in, out, proto, dport, ctstate, uidOwner, comment, target, toDest, connAbove, connMask opt
+	connSaddr := false
 	neg := false
 	for i := 0; i < len(spec); i++ {
 		tok := spec[i]
 		if tok == "!" {
 			neg = true
+			continue
+		}
+		if tok == "--connlimit-saddr" { // the one option without a value
+			connSaddr = true
 			continue
 		}
 		if i+1 >= len(spec) {
@@ -162,8 +167,12 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 			dst = &target
 		case "--to-destination":
 			dst = &toDest
+		case "--connlimit-above":
+			dst = &connAbove
+		case "--connlimit-mask":
+			dst = &connMask
 		case "-m":
-			if val != "tcp" && val != "udp" && val != "comment" && val != "owner" && val != "conntrack" {
+			if val != "tcp" && val != "udp" && val != "comment" && val != "owner" && val != "conntrack" && val != "connlimit" {
 				return nil, false
 			}
 			i++
@@ -205,6 +214,14 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 	if ctstate.set {
 		outFields = append(outFields, "-m", "conntrack")
 		add(ctstate, "--ctstate")
+	}
+	if connAbove.set {
+		outFields = append(outFields, "-m", "connlimit")
+		add(connAbove, "--connlimit-above")
+		add(connMask, "--connlimit-mask")
+		if connSaddr {
+			outFields = append(outFields, "--connlimit-saddr")
+		}
 	}
 	if uidOwner.set {
 		outFields = append(outFields, "-m", "owner")
@@ -541,6 +558,9 @@ func fakeMatches(fields []string, p fakePacket) bool {
 			ok = p.proto == val
 		case "--dport":
 			ok = p.dport == val
+		case "--connlimit-above":
+			// The fake opens no flows, so no source is ever over a bound.
+			ok = false
 		case "--ctstate":
 			state := p.state
 			if state == "" {

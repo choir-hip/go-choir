@@ -360,6 +360,7 @@ func TestEnsureBaseRebuildIsFailClosed(t *testing.T) {
 	want := []string{
 		"-A CHOIR-GUEST-FWD -d 10.200.0.0/13 -m comment --comment go-choir-guest -j DROP",
 		"-A CHOIR-GUEST-FWD -d 10.208.0.0/13 -m comment --comment go-choir-guest -j DROP",
+		"-A CHOIR-GUEST-FWD -m conntrack --ctstate NEW -m connlimit --connlimit-above 8192 --connlimit-mask 32 --connlimit-saddr -m comment --comment go-choir-guest -j DROP",
 		"-A CHOIR-GUEST-FWD -m comment --comment go-choir-guest -j CHOIR-GUEST-TAPS",
 		"-A CHOIR-GUEST-FWD -m comment --comment go-choir-guest -j DROP",
 	}
@@ -610,4 +611,29 @@ func TestFirecrackerExitTearsDownOnlyItsOwnNetwork(t *testing.T) {
 			t.Fatal("exit after a vmctl kill tore down the network a second time")
 		}
 	})
+}
+
+// The per-guest connection bound (guest isolation I5). Ways it can fail,
+// written first:
+//   - one guest opens enough flows to fill the host's conntrack table
+//     (262144), so NAT fails for every guest and the host;
+//   - the rule's spec differs from iptables' own listing (it adds
+//     --connlimit-saddr), so ensureBase sees a changed chain and rebuilds it
+//     behind its DROP guard on every call;
+//   - the bound sits after the per-tap ACCEPT and never applies.
+func TestGuestConnectionBoundMatchesItsListing(t *testing.T) {
+	listed := strings.Fields("-m conntrack --ctstate NEW -m connlimit --connlimit-above 8192 --connlimit-mask 32 --connlimit-saddr -m comment --comment go-choir-guest -j DROP")
+	specs := guestForwardChainSpecs([]string{"10.200.0.0/13"})
+	at, taps := -1, -1
+	for i, sp := range specs {
+		if ruleKey(sp) == ruleKey(listed) {
+			at = i
+		}
+		if len(sp) > 0 && sp[len(sp)-1] == guestTapsChain {
+			taps = i
+		}
+	}
+	if at < 0 || taps < 0 || at > taps {
+		t.Fatalf("connection bound at %d, taps jump at %d: %v", at, taps, specs)
+	}
 }
