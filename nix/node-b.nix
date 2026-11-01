@@ -1795,12 +1795,15 @@ in
         # VMCTL_GUEST_CACHE_RETURN (off stops it; observe makes it a dry run);
         # it needs neither _ONLY nor the pressure trigger above. Owner
         # decision 2026-11-01 (design section 12). Rings, in the design's
-        # proof order: d@e active (R0); the paper observe (dry runs: sizing
-        # and refault readings in its console, nothing written) until d@e's
-        # act is proven, then flip its entry to =active (a human act, R5).
+        # proof order: d@e active (R0); the paper active (R5) since
+        # 2026-11-01. d@e holds no daemon cold cache (266 MiB inactive file,
+        # under the 512 MiB keep), so it can only show the refusal; the
+        # paper's first acts are the proof, watched per act and rolled back
+        # on a host RSS fall under 30% or a refault_stop (owner goal
+        # 2026-11-01: "drill into the paper ... optimize").
         # Rollback: drop the computer's entry (or =observe), or
         # VMCTL_GUEST_CACHE_RETURN=off for every trigger.
-        "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=observe"
+        "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=active"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
