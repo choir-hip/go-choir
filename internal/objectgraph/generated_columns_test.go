@@ -340,3 +340,18 @@ func TestRecordColumnsAcceptMalformedRecords(t *testing.T) {
 		t.Fatalf("records by seq = %v ok=%v err=%v", inRange, ok, err)
 	}
 }
+
+// The newest-first reads of one kind for one owner walk an index in
+// updated_at order, so a LIMIT bounds the rows read (and the bodies, which
+// sit before metadata and updated_at); a sort read every row of the kind.
+func TestKindOwnerNewestReadsWalkTheIndex(t *testing.T) {
+	db := openTestDB(t)
+	store := NewSQLStore(db)
+	if err := store.EnsureSchema(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	query, args := refsByKindOwnerSQL("choir.run", "owner", 50)
+	assertIndexedPlan(t, explainPlan(t, db, query, args...), "idx_og_objects_kind_owner_updated", true)
+	query = `SELECT canonical_id, computer_id` + jsonBodyFieldsFromSQL
+	assertIndexedPlan(t, explainPlan(t, db, query, "choir.worker_update", "owner", 50), "idx_og_objects_kind_owner_updated", true)
+}

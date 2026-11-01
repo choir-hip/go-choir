@@ -143,6 +143,7 @@ func objectIndexes() []string {
 		"idx_og_objects_kind_id ON og_objects(object_kind, canonical_id)",
 		"idx_og_objects_owner_computer_kind ON og_objects(owner_id, computer_id, object_kind, canonical_id)",
 		"idx_og_objects_kind_owner_computer ON og_objects(object_kind, owner_id, computer_id, canonical_id)",
+		"idx_og_objects_kind_owner_updated ON og_objects(object_kind, owner_id, updated_at)",
 	}
 	for _, mc := range metadataIndexColumns {
 		indexes = append(indexes, fmt.Sprintf("%s ON og_objects(object_kind, %s, canonical_id) WHERE %s IS NOT NULL", mc.indexName(), mc.Column, mc.Column))
@@ -1236,9 +1237,20 @@ type ObjectRef struct {
 	Tombstone   bool
 }
 
+// refsByKindOwnerSQL is the newest refs of one kind for one owner, read in
+// idx_og_objects_kind_owner_updated order so only the first limit rows are
+// read: metadata sits after body, so each row read reads its body, and a
+// sort read every row of the kind first.
+func refsByKindOwnerSQL(kind, ownerID string, limit int) (string, []any) {
+	return `SELECT canonical_id, computer_id, metadata, updated_at, tombstone
+		 FROM og_objects
+		 WHERE object_kind = ? AND owner_id = ?
+		 ORDER BY updated_at DESC LIMIT ?`, []any{kind, ownerID, NormalizedLimit(limit)}
+}
+
 // ListObjectRefsByKindOwner returns the newest objects of one kind for one
-// owner using idx_og_objects_kind_owner_computer. It does not json_extract metadata
-// and does not load body.
+// owner (refsByKindOwnerSQL). It does not return the body, but a row read
+// reads it.
 func (s *SQLStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID string, limit int) ([]ObjectRef, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
@@ -1247,12 +1259,8 @@ func (s *SQLStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID 
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph sql: owner_id is required")
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, computer_id, metadata, updated_at, tombstone
-		 FROM og_objects
-		 WHERE object_kind = ? AND owner_id = ?
-		 ORDER BY updated_at DESC LIMIT ?`,
-		kind, ownerID, NormalizedLimit(limit))
+	query, args := refsByKindOwnerSQL(kind, ownerID, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: list refs by kind owner: %w", err)
 	}
@@ -1314,6 +1322,10 @@ type JSONBodyFieldRow struct {
 	Fields      []string
 }
 
+// jsonBodyFieldsFromSQL is ListJSONBodyFieldsByKindOwner's FROM clause, read
+// in idx_og_objects_kind_owner_updated order (see refsByKindOwnerSQL).
+const jsonBodyFieldsFromSQL = ` FROM og_objects WHERE object_kind = ? AND owner_id = ? ORDER BY updated_at DESC LIMIT ?`
+
 // ListJSONBodyFieldsByKindOwner extracts JSON body fields for one kind+owner
 // using idx_og_objects_kind_owner. It does not SELECT body.
 func (s *SQLStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, ownerID string, jsonPaths []string, limit int) ([]JSONBodyFieldRow, error) {
@@ -1336,7 +1348,7 @@ func (s *SQLStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, owne
 		query += `, ` + jsonTextSQL(bodyTextSQL, `?`)
 		args = append(args, jsonTextArgs(path)...)
 	}
-	query += ` FROM og_objects WHERE object_kind = ? AND owner_id = ? ORDER BY updated_at DESC LIMIT ?`
+	query += jsonBodyFieldsFromSQL
 	args = append(args, kind, ownerID, NormalizedLimit(limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
