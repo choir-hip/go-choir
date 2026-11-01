@@ -142,19 +142,21 @@ boundaries:
 now:
   status: working
   slice: >-
-    I0 and I2. 8ab7b2da5 deployed 20:13Z: the paper booted jailed (uid
-    900376, its own cgroup vms/vm-1669...; vmm_confinement_verify ok) at a
-    planned refresh that resumed; Postgres at 512 MB shared buffers; the
-    ceiling compacts after an act. Next: the ceiling on every class (ring 2),
-    then a day of meter data and the closing numbers report; then I3.
-  source_ref: 8ab7b2da5
-  deploy_identity: 8ab7b2da506cc9db747c984de2967674af667dd5
+    I1, I2, I3 (synthetic), I4, I5 and I6 deployed; the reread fixes
+    landed. f7a560fb3 live 23:05Z: per-VM memory.high (size + 1 GiB),
+    memory.swap.max 0, cpu.max (vCPUs + 1), io.weight 100 on every jailed
+    leaf; iocost latency qos; disk admission floor; connlimit 8192 per
+    guest; cake on the uplink; the retirement pass reads 0.47 GB in 24 s
+    (was about 8.5 GB). Next: the d@e end-to-end drills (disk, network,
+    CPU, lone-guest burst), a day of meter data, the closing report.
+  source_ref: f7a560fb3
+  deploy_identity: f7a560fb381af8637a8c245fd924182757550d2a
   candidate:
-    id: held-batch
-    state: ready
-    ref: lane/backup-unshard
-    base: 03c8dbf12
-    scope: [nix/node-b.nix, internal/store/compact.go, docs/]
+    id: none-held
+    state: landed
+    ref: main
+    base: f7a560fb3
+    scope: []
   conjecture:
     id: C1
     claim: >-
@@ -178,16 +180,21 @@ now:
     owner_ratification_ref: owner 2026-11-01 "Ok, good plan"
   belief:
     believed_state: >-
-      Guest RAM is already isolated (bounded, never swapped); disk I/O,
-      disk space, network and CPU are not; the paper is the one running
-      direct VM.
+      Every running guest is jailed with memory, swap, CPU and I/O bounds on
+      its own leaf; disk admission and network sharing are live; a
+      synthetic noisy cgroup no longer starves an observer (513 MB/s, p99
+      8.6 ms, against 143 MB/s under auto qos). The paper's steady host RSS
+      is about 1.4 GB; its reads are megabytes a minute between passes.
     main_uncertainty: >-
-      Whether iocost's weights reach through md RAID1 and btrfs to the NVMe
-      queues (md clones carry the bio's cgroup; unverified here), or io.max
-      on the md device or a drive rate_limiter is the working control.
-    next_observation: the 20:00Z paper reading, then I1's per-VM io.pressure for the paper and the owner's computer under ordinary load
-  blocker_or_risk: none
-  next_action: read the 20:00Z waiter output; push the held batch; start I1
+      Whether the bounds hold end to end with a real guest as the noisy
+      neighbour (d@e), and what the 1 GiB leaf headroom does to a
+      cache-heavy guest write (DeepSeek I6 #2).
+    next_observation: a d@e-generated disk, network and CPU load read through the paper's per-VM pressure and the meter
+  blocker_or_risk: >-
+    Residuals: every vmctl deploy reboots all guests (deploy-impact
+    classification); TestManagementDelegatesIntakeToTasks flakes in CI
+    (asynchronous session release); no test pins the restore shape (I6 #4).
+  next_action: design the d@e load generator (through its API, key never printed), then run the drills
 receipts: []
 ```
 
