@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // SegLoc locates one record of one segment of a computer.
@@ -90,6 +91,40 @@ func (v *SegmentView) Bucket(b byte) ([]SegLoc, error) {
 		}
 		out = append(out, locs...)
 	}
+	return out, nil
+}
+
+// SegmentLocs returns the location of every record of segment i (0-based, in
+// the order of Segments), sorted by file offset, so a caller can read the
+// segment front to back instead of jumping by digest. It holds one segment's
+// locations only. Error semantics are those of Bucket: any error is returned.
+func (v *SegmentView) SegmentLocs(i int) ([]SegLoc, error) {
+	if i < 0 || i >= len(v.segs) {
+		return nil, fmt.Errorf("tapestore: segment index %d out of range (%d segments)", i, len(v.segs))
+	}
+	f := v.segs[i]
+	var out []SegLoc
+	if f.hasIdx {
+		s := v.sealed[f.segno]
+		for b := 0; b < 256; b++ {
+			locs, err := s.bucket(byte(b))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, locs...)
+		}
+	} else {
+		path := filepath.Join(v.dir, SegmentFileName(f.segno))
+		o := v.r.openFor(path, f.segno)
+		for b := 0; b < 256; b++ {
+			locs, err := o.bucket(v.computer, i == len(v.segs)-1, byte(b))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, locs...)
+		}
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].Off < out[b].Off })
 	return out, nil
 }
 

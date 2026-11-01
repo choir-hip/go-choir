@@ -381,8 +381,12 @@ func (e *engine) listComputerSegments(es *spill, computer string) error {
 		e.attrError(computer, err.Error())
 		return nil
 	}
-	for b := 0; b < buckets; b++ {
-		locs, err := view.Bucket(byte(b))
+	// Segment by segment, each in file-offset order: every compressed extent
+	// is read once. The spill files and the join are independent of the order
+	// edges are spilled in (edges are appended to per-artifact-byte files and
+	// grouped by key at join time; computers are sorted before use).
+	for i := 0; i < view.Segments(); i++ {
+		locs, err := view.SegmentLocs(i)
 		if err != nil {
 			e.attrError(computer, err.Error())
 			return nil
