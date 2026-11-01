@@ -156,3 +156,71 @@ func TestApplyWorker_SixteenthOfGuest(t *testing.T) {
 		t.Fatalf("worker limit = %d (runtime %d), want %d", d.LimitBytes, rec.current, want)
 	}
 }
+
+// Failure modes for CHOIR_GOMEMLIMIT_FRACTION:
+//   - a bad value (0, negative, >1, NaN, text) silently producing a tiny or
+//     no limit: it must fall back to 0.5 and say so in the decision;
+//   - the default changing: unset must equal the old RAM/2;
+//   - a small fraction pushing the limit under the 512 MiB floor (GC thrash);
+//   - the fraction affecting desk workers or overriding GOMEMLIMIT.
+
+func TestParseFraction(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want float64
+		note bool
+	}{
+		{"", 0.5, false}, {"0.25", 0.25, false}, {" 1 ", 1, false}, {"1.0", 1, false},
+		{"0", 0.5, true}, {"-0.3", 0.5, true}, {"1.5", 0.5, true}, {"NaN", 0.5, true},
+		{"Inf", 0.5, true}, {"half", 0.5, true},
+	} {
+		got, note := ParseFraction(tc.in)
+		if got != tc.want || (note != "") != tc.note {
+			t.Fatalf("ParseFraction(%q) = %v, %q; want %v note=%v", tc.in, got, note, tc.want, tc.note)
+		}
+	}
+}
+
+func TestDaemonLimitForFloorAndCap(t *testing.T) {
+	total := int64(8131820 * 1024)
+	if got := DaemonLimitFor(total, 0.5); got != total/2 {
+		t.Fatalf("default = %d", got)
+	}
+	if got := DaemonLimitFor(total, 0.25); got != int64(float64(total)*0.25) {
+		t.Fatalf("quarter = %d", got)
+	}
+	if got := DaemonLimitFor(total, 0.01); got != daemonFloor {
+		t.Fatalf("floor = %d, want %d", got, int64(daemonFloor))
+	}
+	if got := DaemonLimitFor(total, 1); got != total {
+		t.Fatalf("full = %d", got)
+	}
+	if got := DaemonLimitFor(256*mib, 0.5); got != 256*mib {
+		t.Fatalf("floor capped to machine = %d", got)
+	}
+}
+
+func TestApplyDaemonFractionEnv(t *testing.T) {
+	total := int64(8131820 * 1024)
+	for _, tc := range []struct {
+		env  string
+		want int64
+		note bool
+	}{{"", total / 2, false}, {"0.25", int64(float64(total) * 0.25), false}, {"2", total / 2, true}} {
+		rec := &limitRecorder{current: math.MaxInt64}
+		d := apply(RoleDaemon, fakeEnv(map[string]string{FractionEnv: tc.env}), fakeReadFile(meminfo8GiB, nil), rec.set)
+		if d.LimitBytes != tc.want || rec.current != tc.want || (d.FractionNote != "") != tc.note {
+			t.Fatalf("env %q: %+v runtime %d, want %d", tc.env, d, rec.current, tc.want)
+		}
+	}
+	rec := &limitRecorder{current: math.MaxInt64}
+	d := apply(RoleDeskWorker, fakeEnv(map[string]string{FractionEnv: "0.1"}), fakeReadFile(meminfo8GiB, nil), rec.set)
+	if d.LimitBytes != LimitFor(RoleDeskWorker, total) {
+		t.Fatalf("worker affected: %+v", d)
+	}
+	rec = &limitRecorder{current: math.MaxInt64}
+	apply(RoleDaemon, fakeEnv(map[string]string{FractionEnv: "0.1", "GOMEMLIMIT": "3GiB"}), fakeReadFile(meminfo8GiB, nil), rec.set)
+	if rec.current != math.MaxInt64 {
+		t.Fatalf("GOMEMLIMIT overridden")
+	}
+}

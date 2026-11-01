@@ -57,6 +57,13 @@ const (
 	// the runtime and makes the GC run without pause.
 	workerOverrideMin = 64 * mib
 
+	// FractionEnv sets the daemon's share of guest RAM (a float in (0,1]).
+	// Default 0.5 (daemonDivisor). A bad value is ignored and logged. A ring
+	// lowers it through the guest env file (/run/go-choir-autoputer.env,
+	// written by go-choir-extract-cmdline in nix/autoputer-vm.nix from the
+	// kernel cmdline vmctl builds); nothing sets it today.
+	FractionEnv = "CHOIR_GOMEMLIMIT_FRACTION"
+
 	meminfoPath = "/proc/meminfo"
 )
 
@@ -67,6 +74,8 @@ type Decision struct {
 	LimitBytes       int64 // the soft limit applied; 0 when none was applied
 	WorkerLimitBytes int64 // daemon only: the limit each desk worker computes
 	Skipped          string
+	Fraction         float64 // daemon only: the share of RAM applied
+	FractionNote     string  // set when FractionEnv was present but rejected
 }
 
 func (d Decision) String() string {
@@ -76,6 +85,12 @@ func (d Decision) String() string {
 		fmt.Fprintf(&b, " limit=none reason=%q", d.Skipped)
 	} else {
 		fmt.Fprintf(&b, " limit_mib=%d", d.LimitBytes/mib)
+	}
+	if d.Fraction > 0 {
+		fmt.Fprintf(&b, " fraction=%g", d.Fraction)
+	}
+	if d.FractionNote != "" {
+		fmt.Fprintf(&b, " fraction_note=%q", d.FractionNote)
 	}
 	if d.WorkerLimitBytes > 0 {
 		fmt.Fprintf(&b, " desk_worker_limit_mib=%d", d.WorkerLimitBytes/mib)
@@ -137,6 +152,39 @@ func LimitFor(role Role, memTotal int64) int64 {
 	return limit
 }
 
+// ParseFraction parses FractionEnv's value. Empty means the default (ok, 0.5,
+// no note); anything not a finite float in (0,1] yields the default and a note.
+func ParseFraction(v string) (fraction float64, note string) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 1.0 / daemonDivisor, ""
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 || f > 1 {
+		return 1.0 / daemonDivisor, fmt.Sprintf("%s=%q is not a float in (0,1]; using default", FractionEnv, v)
+	}
+	return f, ""
+}
+
+// DaemonLimitFor is the daemon's soft limit at the given share of RAM, with
+// the same floor and machine cap as LimitFor.
+func DaemonLimitFor(memTotal int64, fraction float64) int64 {
+	if memTotal <= 0 {
+		return 0
+	}
+	if fraction == 1.0/daemonDivisor {
+		return LimitFor(RoleDaemon, memTotal)
+	}
+	limit := int64(float64(memTotal) * fraction)
+	if limit < daemonFloor {
+		limit = daemonFloor
+	}
+	if limit > memTotal {
+		limit = memTotal
+	}
+	return limit
+}
+
 // ValidGOMEMLIMIT reports whether the Go runtime accepts v as GOMEMLIMIT. A
 // value it does not accept makes the runtime refuse to start.
 func ValidGOMEMLIMIT(v string) bool {
@@ -164,6 +212,10 @@ func apply(role Role, getenv func(string) string, readFile func(string) ([]byte,
 	}
 	if d.Skipped == "" {
 		d.LimitBytes = LimitFor(role, d.MemTotalBytes)
+		if role == RoleDaemon {
+			d.Fraction, d.FractionNote = ParseFraction(getenv(FractionEnv))
+			d.LimitBytes = DaemonLimitFor(d.MemTotalBytes, d.Fraction)
+		}
 	}
 	if role == RoleDaemon {
 		d.WorkerLimitBytes = LimitFor(RoleDeskWorker, d.MemTotalBytes)
