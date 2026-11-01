@@ -1274,6 +1274,45 @@ in
     };
   };
 
+  # The uplink shared per guest (guest isolation I5, 2026-11-01). eno1 is
+  # 1 Gbit and was idle (under 1 Mbit/s each way); fq_codel shared it per
+  # flow, so a guest with many flows took the most. cake shares it per host
+  # first, and with nat it sees each guest's own address behind the
+  # masquerade: out by source (dual-srchost), in through ifb4eno1 by
+  # destination (dual-dsthost, ingress). 900 Mbit keeps the queue in cake,
+  # not the NIC. No guest is capped: a guest alone gets all of it. Trial
+  # 2026-11-01 21:50Z (each side under a timed revert): the site answered
+  # 0.19 s, ssh held. Rollback: stop the unit (ExecStop removes both).
+  # (ifb's numifbs=0 is in boot.extraModprobeConfig below, so the module
+  # makes no ifb0/ifb1 of its own.)
+  boot.kernelModules = [ "sch_cake" "ifb" ];
+  systemd.services.go-choir-uplink-cake = {
+    description = "go-choir uplink shared per guest with cake (guest isolation I5)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    path = [ pkgs.iproute2 pkgs.kmod ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStop = "${pkgs.bash}/bin/bash -c '${pkgs.iproute2}/bin/tc qdisc del dev eno1 root; ${pkgs.iproute2}/bin/tc qdisc del dev eno1 ingress; ${pkgs.iproute2}/bin/ip link del ifb4eno1; true'";
+    };
+    script = ''
+      set -eu
+      modprobe sch_cake
+      modprobe ifb numifbs=0
+      tc qdisc replace dev eno1 root cake bandwidth 900mbit besteffort dual-srchost nat
+      ip link show ifb4eno1 >/dev/null 2>&1 || ip link add ifb4eno1 type ifb
+      ip link set ifb4eno1 up
+      tc qdisc replace dev ifb4eno1 root cake bandwidth 900mbit besteffort dual-dsthost nat ingress
+      tc qdisc del dev eno1 ingress 2>/dev/null || true
+      tc qdisc add dev eno1 handle ffff: ingress
+      tc filter add dev eno1 parent ffff: matchall action mirred egress redirect dev ifb4eno1
+      tc qdisc show dev eno1 | head -1
+      tc qdisc show dev ifb4eno1
+    '';
+  };
+
   # iocost on the NVMe members of md127 (guest isolation I3). The scheduler
   # is none, so io.weight is inert without a controller; iocost is the one
   # that works under none, and only on a request-based device, so it goes on
@@ -3211,6 +3250,7 @@ in
   # Rollback: delete this line and reboot.
   boot.extraModprobeConfig = ''
     options kvm_intel nested=0
+    options ifb numifbs=0
   '';
 
   # The udev half of the /dev/kvm mode (tmpfiles above sets the live node).
