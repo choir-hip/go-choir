@@ -166,8 +166,8 @@ now:
     edge: missing_oracle
     delta_o: I1, per-VM pressure in the meter, before any I/O control lands
     scope_if_supported: Node B's disk layout (md RAID1 over NVMe, btrfs); another host's layout is re-tested
-    status: proposed
-    evidence_refs: []
+    status: supported (synthetic rung; d@e end to end next)
+    evidence_refs: [ledger 2026-11-01 21:00Z I3 synthetic drill]
   decision:
     what: >-
       Order: observe (I0, I1) before controlling; jail the paper before

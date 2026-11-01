@@ -1278,7 +1278,13 @@ in
   # is none, so io.weight is inert without a controller; iocost is the one
   # that works under none, and only on a request-based device, so it goes on
   # nvme0n1 and nvme1n1, not on md127 (md's clones carry the bio's cgroup).
-  # The model is the kernel's auto (linear, from the device); qos ctrl=auto.
+  # The model is the kernel's auto (linear, from the device). The qos is not
+  # auto: auto has no latency target (rpct=0), so iocost never saw the disk
+  # saturated and never applied a weight. The drill (2026-11-01, an O_DIRECT
+  # observer against one cgroup of 16 readers, 20 s): auto, the observer got
+  # 143 MB/s (p50 7.6 ms), the same as iocost off; p95 reads within 3 ms and
+  # writes within 10 ms, 513 MB/s (p50 1.6 ms, p99 8.6 ms), while a lone
+  # reader still got 1.48 GB/s against 1.37 with iocost off.
   # Minor numbers are dynamic, so the unit reads them at boot. Rollback, on
   # the running host: write "MAJ:MIN enable=0" into io.cost.qos for each
   # member (dropping the unit only stops the next boot's enable).
@@ -1298,7 +1304,7 @@ in
         d=$(dirname "$(readlink -f "/sys/class/block/$(basename "$s")")")
         [ -r "$d/dev" ] || continue
         dev=$(cat "$d/dev")
-        echo "$dev enable=1 ctrl=auto" > /sys/fs/cgroup/io.cost.qos
+        echo "$dev enable=1 ctrl=user rpct=95 rlat=3000 wpct=95 wlat=10000 min=25 max=10000" > /sys/fs/cgroup/io.cost.qos
         echo "iocost on $(basename "$d") ($dev)"
       done
       cat /sys/fs/cgroup/io.cost.qos
