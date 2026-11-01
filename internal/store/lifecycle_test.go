@@ -4142,3 +4142,63 @@ func TestListLifecycleRunsByChannelPrefiltersWithoutLosingRuns(t *testing.T) {
 		t.Fatalf("limit 1 returned %d runs", len(limited))
 	}
 }
+
+// A trajectory's runs and events are read through the trajectory index, not
+// from a snapshot of the whole computer: another trajectory's bodies are never
+// read (here they are unreadable, and the reads still answer). The computer
+// snapshot read every body on the computer on each drain (2026-11-01).
+func TestTrajectoryRunsAndEventsReadOnlyTheirTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := func(n string) types.StartLifecycleRequest {
+		req := lifecycleStartFixture()
+		req.CommandID = "command-start-" + n
+		req.TrajectoryID = "trajectory-lifecycle-" + n
+		doc := "document-lifecycle-" + n
+		req.SubjectRefs = map[string]string{"artifact": "texture://artifact/" + n, "doc_id": doc}
+		req.InitialWork.WorkItemID = "work-lifecycle-" + n
+		req.InitialDocument.DocID = doc
+		req.InitialRevision.RevisionID = "revision-lifecycle-" + n
+		req.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(doc, req.InitialRevision.RevisionID, "Initial artifact")
+		req.Agent = types.AgentRecord{AgentID: "texture:" + doc, Profile: "texture", Role: "texture", ChannelID: doc}
+		req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+		if _, err := s.StartLifecycle(ctx, req); err != nil {
+			t.Fatalf("start lifecycle %s: %v", n, err)
+		}
+		run := lifecycleRunFixture(req, "run-"+n, types.RunRunning)
+		project := types.ReplaceLifecycleActivationRequest{
+			OwnerID: req.OwnerID, ComputerID: req.ComputerID,
+			CommandID:    "project:" + req.TrajectoryID,
+			TrajectoryID: req.TrajectoryID, AgentID: req.Agent.AgentID, Run: run,
+		}
+		project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+		if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+			t.Fatalf("project activation %s: %v", n, err)
+		}
+		return req
+	}
+	a := start("a")
+	b := start("b")
+	if _, err := s.db.ExecContext(ctx, `UPDATE og_objects SET body = '{' WHERE og_meta_trajectory_id = ?`, b.TrajectoryID); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := s.ListLifecycleRunsByTrajectory(ctx, a.OwnerID, a.ComputerID, a.TrajectoryID, 0)
+	if err != nil {
+		t.Fatalf("runs: %v", err)
+	}
+	if len(runs) != 1 || runs[0].RunID != "run-a" {
+		t.Fatalf("runs = %+v, want run-a alone", runs)
+	}
+	events, err := s.ListLifecycleEvents(ctx, a.OwnerID, a.ComputerID, a.TrajectoryID)
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if len(events) == 0 {
+		t.Fatal("no events for trajectory a")
+	}
+	for _, ev := range events {
+		if ev.TrajectoryID != a.TrajectoryID {
+			t.Fatalf("event of another trajectory: %+v", ev)
+		}
+	}
+}

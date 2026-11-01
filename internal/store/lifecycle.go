@@ -1740,7 +1740,7 @@ func (s *Store) ListLifecycleTrajectoriesByOwner(ctx context.Context, ownerID, c
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle trajectories: object graph not initialized")
 	}
-	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	objs, err := graph.ReadObjectSnapshotFiltered(ctx, ownerID, computerID, []objectgraph.ObjectKind{ogKindTrajectory}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1858,7 +1858,7 @@ func (s *Store) ListLifecycleRunsByTrajectory(ctx context.Context, ownerID, comp
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle runs: object graph not initialized")
 	}
-	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	objs, err := readTrajectoryKind(ctx, graph, ownerID, computerID, trajectoryID, ogKindRun)
 	if err != nil {
 		return nil, err
 	}
@@ -1966,7 +1966,7 @@ func (s *Store) ListLifecycleEvents(ctx context.Context, ownerID, computerID, tr
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle events: object graph not initialized")
 	}
-	objs, err := graph.ReadObjectSnapshot(ctx, ownerID, computerID)
+	objs, err := readTrajectoryKind(ctx, graph, ownerID, computerID, trajectoryID, ogKindLifecycleEvent)
 	if err != nil {
 		return nil, err
 	}
@@ -2349,6 +2349,21 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 
 // lifecycleTrajectoryKinds are the snapshot's kinds whose rows carry the
 // trajectory in their metadata.
+// readTrajectoryKind reads one kind's objects of one trajectory through the
+// (object_kind, og_meta_trajectory_id) index, the way the lifecycle snapshot
+// reads them. A read of the computer's whole snapshot, then a filter, read
+// every body on the computer to return a few (2026-11-01).
+func readTrajectoryKind(ctx context.Context, graph *objectgraph.SQLStore, ownerID, computerID, trajectoryID string, kind objectgraph.ObjectKind) ([]objectgraph.Object, error) {
+	keep := func(_ objectgraph.ObjectKind, metadata json.RawMessage) bool {
+		var meta struct {
+			TrajectoryID string `json:"trajectory_id"`
+		}
+		return json.Unmarshal(metadata, &meta) == nil && meta.TrajectoryID == trajectoryID
+	}
+	objs, _, err := graph.ReadTrajectorySnapshot(ctx, ownerID, computerID, trajectoryID, []objectgraph.ObjectKind{kind}, keep, nil)
+	return objs, err
+}
+
 var lifecycleTrajectoryKinds = []objectgraph.ObjectKind{
 	ogKindTrajectory, ogKindWorkItem, ogKindRun, ogKindAgent, ogKindWorkerUpdate,
 	ogKindEngineeringAssignment, ogKindLifecycleEvent,
