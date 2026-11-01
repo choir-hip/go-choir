@@ -45,7 +45,29 @@ var (
 	// been repaired): a family whose malformed row stays costs one pass in
 	// that time, not one per write.
 	derivedKeyRepairRecheckEvery = 2 * time.Minute
+	// derivedKeyFullPassEvery bounds how long a family trusted from its mark
+	// goes uncompared: a pass over every family runs at most this long after
+	// the last one that compared them all. The clock is a row in the side
+	// table (objectgraph LastFullPass), so a restart does not reset it.
+	// derivedKeyFullPassDelay keeps it off the boot: it waits this long after
+	// the loop starts.
+	derivedKeyFullPassEvery = 7 * 24 * time.Hour
+	derivedKeyFullPassDelay = 30 * time.Minute
 )
+
+// fullPassDue reports whether the periodic full pass is due. An unreadable
+// clock is not due (logged): the next recheck reads it again.
+func (s *Store) fullPassDue(ctx context.Context, every time.Duration) bool {
+	if s == nil || s.ogStore == nil {
+		return false
+	}
+	last, ok, err := s.ogStore.LastFullPass(ctx)
+	if err != nil {
+		log.Printf("store: derived keys: read the full-pass clock: %v", err)
+		return false
+	}
+	return !ok || time.Since(last) >= every
+}
 
 const (
 	// derivedKeyPageSize is the number of og_objects rows one validation
@@ -88,9 +110,12 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	repairGap := derivedKeyRepairRecheckEvery
+	// The timings are read once, here: a test may set them before the call.
+	repairGap, recheck := derivedKeyRepairRecheckEvery, derivedKeyRecheckEvery
+	fullEvery, fullDelay := derivedKeyFullPassEvery, derivedKeyFullPassDelay
 	go func() {
 		var lastPass time.Time
+		loopStart := time.Now()
 		for ctx.Err() == nil {
 			d := s.derivedKeys()
 			if d == nil {
@@ -108,6 +133,21 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 				if err != nil && ctx.Err() == nil {
 					log.Printf("store: derived keys validation pass failed after %s, will retry: %v", time.Since(start).Round(time.Millisecond), err)
 				}
+			} else if time.Since(loopStart) >= fullDelay && s.fullPassDue(ctx, fullEvery) {
+				// Every family is validated, some perhaps only by its mark:
+				// at most derivedKeyFullPassEvery after the last pass that
+				// compared them all, compare them all again.
+				start := time.Now()
+				log.Printf("store: derived keys: the periodic full pass starts")
+				err := s.ValidateDerivedKeys(ctx, objectgraph.DerivedKeyValidation{
+					PageSize:  derivedKeyPageSize,
+					DutyCycle: derivedKeyDutyCycle,
+					ReadDB:    s.readDB,
+				})
+				lastPass = time.Now()
+				if err != nil && ctx.Err() == nil {
+					log.Printf("store: derived keys full pass failed after %s, will retry: %v", time.Since(start).Round(time.Millisecond), err)
+				}
 			}
 			if !allFamiliesValidated(d) {
 				// A pass that ended with a family withdrawn waits before the
@@ -115,7 +155,7 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 				select {
 				case <-ctx.Done():
 					return
-				case <-time.After(derivedKeyRecheckEvery):
+				case <-time.After(recheck):
 				}
 				continue
 			}
@@ -133,7 +173,7 @@ func (s *Store) StartDerivedKeyValidation(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-d.Wake():
-			case <-time.After(derivedKeyRecheckEvery):
+			case <-time.After(recheck):
 			}
 		}
 	}()

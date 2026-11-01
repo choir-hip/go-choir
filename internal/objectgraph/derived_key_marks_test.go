@@ -280,3 +280,64 @@ func TestTripwireComparesUpdatedAtOnlyForTheOrderedFamily(t *testing.T) {
 		t.Fatalf("OnlyNeeded re-ran a validated family:\n%s", joined)
 	}
 }
+
+// Case 15 (the probe's half): the open's malformed-row probe reads the
+// partial index of malformed rows only, whatever the family's size.
+func TestBadRowProbeUsesThePartialIndex(t *testing.T) {
+	db, store := openDerivedStore(t)
+	seedEveryFamily(t, store, 50, func(ObjectKind, int) string { return `{"addressee":"a"}` })
+	plan := explainPlan(t, db, derivedKeyBadProbeSQL, KeyRunAgentID)
+	if !strings.Contains(plan, derivedKeyBadIndex) || strings.Contains(plan, "SCAN") && !strings.Contains(plan, "INDEX") {
+		t.Fatalf("the probe does not search the partial index:\n%s", plan)
+	}
+	var one int
+	if err := db.QueryRow(derivedKeyBadProbeSQL, KeyRunAgentID).Scan(&one); err != sql.ErrNoRows {
+		t.Fatalf("a clean family's probe = %d, %v", one, err)
+	}
+	if err := store.PutObject(context.Background(), keyedObj{id: "run-bad", kind: testRunKind, meta: map[string]any{}, body: `{}`, at: time.Now()}.object(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE ` + DerivedKeysTable + ` SET derive_ok = 0 WHERE canonical_id = 'run-bad'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(derivedKeyBadProbeSQL, KeyRunAgentID).Scan(&one); err != nil {
+		t.Fatalf("the probe missed a malformed row: %v", err)
+	}
+}
+
+// Case 14 (the failure half): when the tripwire's durable delete fails, the
+// family stays withdrawn in memory and the read still answers.
+func TestTripwireWhoseMarkDeleteFailsStaysWithdrawn(t *testing.T) {
+	ctx := context.Background()
+	db, store := openDerivedStore(t)
+	head := "head-1"
+	bindTestHead(store, &head)
+	at := time.Date(2026, 11, 1, 1, 0, 0, 0, time.UTC)
+	k := keyedObj{id: "run-1", kind: testRunKind, meta: map[string]any{"agent_id": "a"}, body: `{}`, at: at}
+	if err := store.PutObject(ctx, k.object(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{}); err != nil {
+		t.Fatal(err)
+	}
+	k.meta = map[string]any{"agent_id": "b"}
+	rawOldBinaryPut(t, db, k.object(t))
+	broken, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = broken.Close()
+	store.derived.markDB.Store(broken)
+	// The stale key row answers "a"; its object now says "b": the tripwire
+	// fires and the JSON path answers (nothing).
+	ids, err := pageIDs(t, store, testRunKind, "agent_id", "a", 10)
+	if err != nil || len(ids) != 0 {
+		t.Fatalf("the read after the tripwire = %v, %v", ids, err)
+	}
+	if store.derived.Mismatches(KeyRunAgentID) == 0 {
+		t.Fatal("premise: the tripwire did not fire")
+	}
+	if store.derived.Validated(KeyRunAgentID) {
+		t.Fatal("a failed mark delete left the family validated")
+	}
+}

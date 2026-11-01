@@ -30,7 +30,15 @@ fingerprint** (`computer_id|sequence|canonical_event_head` of the one row of
 - **Invalidate.** A maintenance failure or a malformed row deletes the mark in
   the writer's own transaction. Every withdrawal is also undone durably by the
   next head-moving transaction (it deletes the mark of an unreadable family)
-  and by the next pass (it deletes the mark first).
+  and by the next pass (it deletes the mark first). A read tripwire also
+  deletes the mark at once, through the write handle, after its read
+  transaction ends (hardening 1, below).
+- **Self-check at open.** Before trusting a mark, Open probes the family for
+  a malformed key row through a partial index of malformed rows only
+  (`idx_og_key_index_bad ... WHERE derive_ok = 0`); a hit distrusts and
+  deletes the mark (hardening 2).
+- **Bounded trust.** About weekly, a full pass over every family runs even
+  when all are trusted (hardening 3).
 - **Replay maintains the table.** `projectBatchForReplay` now keeps
   `og_key_index` in step in its transaction, exactly as the live projector
   does, and stamps the marks. A replayed tail (after a compact rebase, a
@@ -158,12 +166,45 @@ Tests are in `internal/store/derived_key_marks_test.go` (the real `Open`,
     tripwire no longer compares it for those families; the addressee family
     still does (`TestTripwireComparesUpdatedAtOnlyForTheOrderedFamily`).
 
+## Hardenings after review (Devin, non-blocking, on 6b30bcd67)
+
+Three more ways it could fail, each with its test:
+
+14. **A tripwire withdrawal is in memory only**: a crash before the next
+    finalize re-trusts a family known stale, and `OnlyNeeded` then skips it.
+    The tripwire now deletes the mark durably on the write handle, after its
+    read transaction ends, so a read on the write store does not hold the one
+    connection the delete needs. If the delete fails, the family stays
+    withdrawn in memory and the failure is logged
+    (`TestTripwireDeletesTheMarkDurably`, through the read store with no
+    finalize after it; `TestTripwireWhoseMarkDeleteFailsStaysWithdrawn`).
+15. **A mark sits over a malformed row** (the open sets `bad` false): the open
+    probes `SELECT 1 ... INDEXED BY idx_og_key_index_bad WHERE key_name = ?
+    AND derive_ok = 0 AND canonical_id <> '' LIMIT 1`. The partial index holds
+    only malformed rows, so the probe does not scale with the family; the
+    index is built once on an existing store by reading og_key_index, never
+    og_objects (`TestTrustRejectsAMarkOverAMalformedRow`,
+    `TestBadRowProbeUsesThePartialIndex`, which EXPLAINs it). The witness
+    skips the index with its table (the extractor filters `sqlite_master` by
+    `tbl_name`).
+16. **A trusted family is never compared again**: a pass over every family
+    runs at most `derivedKeyFullPassEvery` (7 days) after the last pass that
+    compared all four. The clock is a row in the side table
+    (`canonical_id ''`, `key_name 'og_key_index/full_pass'`, its `updated_at`),
+    so a restart does not reset it, and it goes with the table through a copy
+    or a restore. Any pass that compared and published all four restarts it,
+    so the first deploy's catch-up pass counts. The loop waits
+    `derivedKeyFullPassDelay` (30 minutes) after it starts, which is after the
+    listener is up, and uses the 25% duty cycle
+    (`TestFullPassRunsWhenDueAndItsClockSurvivesARestart`).
+
 ## The background loop
 
 The loop now passes `OnlyNeeded`: a pass runs only the families that are not
 validated (or have a repair pending). Before, one withdrawn family re-ran all
 four. Each family is stamped when its own pass publishes, so a deploy that
-interrupts a pass keeps the families already done.
+interrupts a pass keeps the families already done. When all are validated,
+the loop runs the periodic full pass once it is due.
 
 ## Deployed proof (orchestrator)
 
@@ -185,18 +226,30 @@ interrupts a pass keeps the families already done.
 `git revert` of the commit. The marks stay in `og_key_index` as four rows the
 reverted binary never reads (NULL key), and its first pass drops them as
 orphan strays. Its replay moves the head without stamping, so a later forward
-deploy distrusts any mark left over. No schema change, no epoch change, no
-trigger.
+deploy distrusts any mark left over. The full-pass row stays too (no family's
+key_name, so nothing reads it), and so does `idx_og_key_index_bad`, a partial
+index the reverted binary never names; both are on a table the witness skips.
+No og_objects schema change, no epoch change, no trigger.
 
 ## Residuals
 
 - A head-neutral writer whose `Maintain` fails and whose in-transaction mark
   delete also fails, followed by a crash before the next finalize or pass,
   would leave a trusted mark over a stale row. Both statements failing while
-  the transaction commits needs an engine fault; the read tripwire still
-  catches a changed row.
+  the transaction commits needs an engine fault.
+- **The tripwire sees only rows the table returns.** It catches a key row
+  whose object changed (kind, owner, hash, and `updated_at` for the
+  addressee family) or is gone. It cannot catch an absent one: an object with
+  no key row, or whose key row still names its old value, is missing from the
+  answer for its current value, and nothing in the read says so (measured in
+  `TestTripwireWhoseMarkDeleteFailsStaysWithdrawn`: the read for the new value
+  returns nothing until a read for the old one trips). Under a trusted mark
+  that can only follow a defect in the stamping invariant (the cases above).
+  The residual: such a defect answers incompletely, silently, until the next
+  full pass, at most `derivedKeyFullPassEvery` (7 days) away, or until a read
+  of the old value trips the family.
 - A hand edit of og_objects with no head move (an operator with sqlite3) is
-  not detected. No code path does it.
+  not detected before the next full pass. No code path does it.
 - The addressee family still reads the body chain when a pass runs. A pass
   now runs only after a rollback, a definition change, a malformed row, or a
   withdrawal.

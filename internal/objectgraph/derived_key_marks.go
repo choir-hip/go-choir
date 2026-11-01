@@ -200,7 +200,19 @@ func (s *SQLStore) trustDerivedKeyMarks(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return trusted, err
 		}
-		if head == "" || identity != fam.markIdentity() || markHead != head {
+		hasBad := false
+		if head != "" && identity == fam.markIdentity() && markHead == head {
+			// The mark is never stamped over a malformed row, so one here
+			// means the mark is wrong: check, through the partial index.
+			var one int
+			switch err := s.db.QueryRowContext(ctx, derivedKeyBadProbeSQL, fam.Name).Scan(&one); {
+			case err == nil:
+				hasBad = true
+			case !errors.Is(err, sql.ErrNoRows):
+				return trusted, err
+			}
+		}
+		if head == "" || identity != fam.markIdentity() || markHead != head || hasBad {
 			untrusted = append(untrusted, fam.Name)
 			if _, err := s.db.ExecContext(ctx, markDeleteSQL, fam.Name); err != nil {
 				return trusted, err
@@ -217,4 +229,65 @@ func (s *SQLStore) trustDerivedKeyMarks(ctx context.Context) ([]string, error) {
 	log.Printf("objectgraph sql: derived keys: %d families trusted from their marks at the store's head (%s), no validation pass for them; %d marks distrusted and deleted (%s)",
 		len(trusted), strings.Join(trusted, ","), len(untrusted), strings.Join(untrusted, ","))
 	return trusted, nil
+}
+
+// derivedKeyBadProbeSQL finds one malformed key row of a family through
+// derivedKeyBadIndex: it reads only malformed rows, never the family's others.
+// The plan-shape test EXPLAINs this text.
+const derivedKeyBadProbeSQL = `SELECT 1 FROM ` + DerivedKeysTable + ` INDEXED BY ` + derivedKeyBadIndex + ` WHERE key_name = ? AND derive_ok = 0 AND canonical_id <> '' LIMIT 1`
+
+// dropMarkDurably deletes a family's mark outside any transaction, through
+// the write handle: the read tripwire's withdrawal, made to survive a crash.
+// The caller holds no transaction on the write handle. A failure is logged;
+// the family stays withdrawn in memory, and the next head-moving transaction
+// or pass deletes the mark.
+func (d *DerivedKeys) dropMarkDurably(ctx context.Context, name string) {
+	db := d.markDB.Load()
+	if db == nil {
+		return
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if _, err := db.ExecContext(cctx, markDeleteSQL, name); err != nil {
+		log.Printf("objectgraph sql: derived keys %s: delete mark after a tripwire: %v (the family stays withdrawn)", name, err)
+	}
+}
+
+// derivedKeyFullPassName is the key_name of the row whose updated_at is the
+// end of the last pass that compared every family (canonical_id ”, like the
+// marks; no family's reads or strays name it).
+const derivedKeyFullPassName = "og_key_index/full_pass"
+
+// recordFullPass stamps the end of a pass over every family. Like the marks,
+// it needs a head binding (a store that never trusts marks needs no clock).
+func (s *SQLStore) recordFullPass(ctx context.Context) error {
+	if fn := s.derived.markHead.Load(); fn == nil || *fn == nil {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, markUpsertSQL, derivedKeyMarkID, derivedKeyFullPassName, "", time.Now().UTC(), "")
+	return err
+}
+
+// LastFullPass is when a pass last compared every family, from the store, so
+// a restart does not reset it. ok is false when none is recorded.
+func (s *SQLStore) LastFullPass(ctx context.Context) (at time.Time, ok bool, err error) {
+	if s == nil || s.derived == nil || !s.derived.tableReady.Load() {
+		return time.Time{}, false, nil
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT updated_at FROM `+DerivedKeysTable+` WHERE canonical_id = '' AND key_name = ?`, derivedKeyFullPassName).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return at, true, nil
+}
+
+// PassPages counts the validator's pages in this process.
+func (d *DerivedKeys) PassPages() uint64 {
+	if d == nil {
+		return 0
+	}
+	return d.passPages.Load()
 }

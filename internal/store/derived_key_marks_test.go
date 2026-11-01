@@ -180,7 +180,7 @@ func except(v bool, names ...string) map[string]bool {
 
 func (h *marksHarness) marks() map[string]string {
 	h.t.Helper()
-	rows, err := h.s.db.Query(`SELECT key_name, content_hash FROM og_key_index WHERE canonical_id = ''`)
+	rows, err := h.s.db.Query(`SELECT key_name, content_hash FROM og_key_index WHERE canonical_id = '' AND key_name <> 'og_key_index/full_pass'`)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -478,7 +478,7 @@ func TestNoHeadNeverTrusts(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM og_key_index WHERE canonical_id = ''`).Scan(&n); err != nil || n != 0 {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM og_key_index WHERE canonical_id = '' AND key_name <> 'og_key_index/full_pass'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("a store with no head stamped %d marks (%v)", n, err)
 	}
 	_ = s.Close()
@@ -515,4 +515,109 @@ func TestReplayOntoAnUnvalidatedStoreFillsTheTable(t *testing.T) {
 		t.Fatalf("the replay left %d key rows (%v), want 4", n, err)
 	}
 	h.wantCurrent("after a replay onto an unvalidated store")
+}
+
+// Case 14: the read tripwire's withdrawal is durable. A key row that no
+// longer matches its object is caught by a read through the read store; the
+// mark is deleted at once, with no finalize after it, so a crash then does
+// not re-trust the family.
+func TestTripwireDeletesTheMarkDurably(t *testing.T) {
+	h := trustedHarness(t)
+	runID, _ := objectgraph.BuildCanonicalID("choir.run", "owner-1", "run-a")
+	if _, err := h.s.db.Exec(`UPDATE og_key_index SET content_hash = 'stale' WHERE canonical_id = ? AND key_name = ?`, runID, objectgraph.KeyRunAgentID); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.agentRuns("agent-a"); len(got) != 1 {
+		t.Fatalf("the read after the tripwire answers %v, want the JSON answer", got)
+	}
+	if h.s.derivedKeys().Mismatches(objectgraph.KeyRunAgentID) == 0 {
+		t.Fatal("premise: the tripwire did not fire")
+	}
+	if _, ok := h.marks()[objectgraph.KeyRunAgentID]; ok {
+		t.Fatal("the tripwire left the run mark in the database")
+	}
+	// A crash now: no finalize, no pass.
+	h.reopen()
+	h.wantValidated("after a tripwire and a crash", except(true, objectgraph.KeyRunAgentID))
+}
+
+// Case 15: a mark is checked against the table at open: a malformed key row
+// under a mark (which is never stamped over one) distrusts it.
+func TestTrustRejectsAMarkOverAMalformedRow(t *testing.T) {
+	h := trustedHarness(t)
+	recID, _ := objectgraph.BuildCanonicalID("choir.commitment_record", "owner-1", "rec-a")
+	if _, err := h.s.db.Exec(`UPDATE og_key_index SET derive_ok = 0, key_value = NULL WHERE canonical_id = ? AND key_name = ?`, recID, objectgraph.KeyCommitmentAddressee); err != nil {
+		t.Fatal(err)
+	}
+	h.reopen()
+	h.wantValidated("with a malformed row under the mark", except(true, objectgraph.KeyCommitmentAddressee))
+	if _, ok := h.marks()[objectgraph.KeyCommitmentAddressee]; ok {
+		t.Fatal("Open kept the mark over a malformed row")
+	}
+}
+
+func lastFullPass(t *testing.T, s *Store) (time.Time, bool) {
+	t.Helper()
+	at, ok, err := s.ogStore.LastFullPass(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return at, ok
+}
+
+// Case 16: a family trusted from its mark is compared again at most
+// derivedKeyFullPassEvery after the last full pass; the clock is in the store
+// and survives a restart; the loop never runs it before its delay.
+func TestFullPassRunsWhenDueAndItsClockSurvivesARestart(t *testing.T) {
+	h := trustedHarness(t)
+	first, ok := lastFullPass(t, h.s)
+	if !ok {
+		t.Fatal("the pass over every family recorded no full-pass time")
+	}
+	h.reopen()
+	if again, ok := lastFullPass(t, h.s); !ok || !again.Equal(first) {
+		t.Fatalf("the clock after a restart is %v (%t), want %v", again, ok, first)
+	}
+	h.wantValidated("trusted", every(true))
+	old := time.Now().UTC().Add(-8 * 24 * time.Hour)
+	if _, err := h.s.db.Exec(`UPDATE og_key_index SET updated_at = ? WHERE canonical_id = '' AND key_name = 'og_key_index/full_pass'`, old); err != nil {
+		t.Fatal(err)
+	}
+
+	saved := []time.Duration{derivedKeyRecheckEvery, derivedKeyFullPassEvery, derivedKeyFullPassDelay}
+	t.Cleanup(func() {
+		derivedKeyRecheckEvery, derivedKeyFullPassEvery, derivedKeyFullPassDelay = saved[0], saved[1], saved[2]
+	})
+	derivedKeyRecheckEvery = 20 * time.Millisecond
+
+	// Due, but inside its delay after the loop starts: no pass.
+	derivedKeyFullPassDelay = time.Hour
+	ctx, cancel := context.WithCancel(context.Background())
+	h.s.StartDerivedKeyValidation(ctx)
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+	if n := h.s.derivedKeys().PassPages(); n != 0 {
+		t.Fatalf("the full pass ran inside its delay (%d pages)", n)
+	}
+
+	// Past its delay: it runs over every family and restarts the clock.
+	derivedKeyFullPassDelay = 0
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	t.Cleanup(cancel2)
+	h.s.StartDerivedKeyValidation(ctx2)
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		if at, ok := lastFullPass(t, h.s); ok && at.After(old.Add(time.Hour)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the due full pass did not run")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel2()
+	if n := h.s.derivedKeys().PassPages(); n == 0 {
+		t.Fatal("the clock moved with no pass")
+	}
+	h.wantValidated("after the full pass", every(true))
 }

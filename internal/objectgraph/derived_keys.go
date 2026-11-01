@@ -81,7 +81,14 @@ const derivedKeysDDL = `CREATE TABLE IF NOT EXISTS ` + DerivedKeysTable + ` (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_og_key_index_lookup ON ` + DerivedKeysTable + `(key_name, key_value, canonical_id);
 CREATE INDEX IF NOT EXISTS idx_og_key_index_recent ON ` + DerivedKeysTable + `(key_name, key_value, owner_id, updated_at, canonical_id);
+CREATE INDEX IF NOT EXISTS ` + derivedKeyBadIndex + ` ON ` + DerivedKeysTable + `(key_name) WHERE derive_ok = 0;
 `
+
+// derivedKeyBadIndex holds only the malformed key rows (derive_ok = 0), so
+// the open's check that a trusted family has none is a point probe
+// (derivedKeyBadProbeSQL). Its build on an existing store reads og_key_index
+// once, never og_objects.
+const derivedKeyBadIndex = "idx_og_key_index_bad"
 
 // derivedFamily is one family of keys: the kind it covers and the SQL
 // expression over an og_objects row that the JSON read evaluated.
@@ -187,6 +194,9 @@ type DerivedKeys struct {
 	// markHead reads the head fingerprint the marks are bound to
 	// (derived_key_marks.go); nil keeps every mark untrusted and unstamped.
 	markHead atomic.Pointer[DerivedKeyMarkHead]
+	// markDB is the write handle (set by the store that created the table),
+	// for the tripwire's durable mark delete from a read store.
+	markDB atomic.Pointer[sql.DB]
 	// Test seams, nil in production: beforeRead runs as a side-table read
 	// starts, beforePublish as a pass is about to check and publish. The interleaving tests put a writer at each.
 	beforeRead, beforePublish func(name string)
@@ -411,6 +421,8 @@ func (s *SQLStore) ensureDerivedKeysTable(ctx context.Context) {
 		return
 	}
 	s.derived.tableReady.Store(true)
+	// The write handle: a read store's tripwire deletes a mark through it.
+	s.derived.markDB.Store(s.db)
 }
 
 // --- reads ----------------------------------------------------------------
@@ -534,6 +546,12 @@ func (s *SQLStore) readDerived(ctx context.Context, fam *derivedFamily, query st
 		if !present || o.ObjectKind != fam.Kind || o.OwnerID != r.owner || o.ContentHash != r.hash || (fam.ordered && !o.UpdatedAt.Equal(r.updatedAt.UTC())) {
 			s.derived.mismatches[fam.Name].Add(1)
 			s.derived.Invalidate(fam.Name, fmt.Sprintf("read found %s different from its key row", r.id))
+			// Durable too: a crash before the next finalize or pass must not
+			// re-trust a family known stale. The read transaction is ended
+			// first, so a read on the write store does not hold the one
+			// connection the delete needs.
+			_ = tx.Rollback()
+			s.derived.dropMarkDurably(ctx, fam.Name)
 			return nil, false, nil
 		}
 		out = append(out, o)
@@ -638,13 +656,25 @@ func (s *SQLStore) ValidateDerivedKeys(ctx context.Context, opt DerivedKeyValida
 	}
 	d.passMu.Lock()
 	defer d.passMu.Unlock()
+	full := true
 	for i := range derivedFamilies {
 		fam := &derivedFamilies[i]
 		if opt.OnlyNeeded && d.Validated(fam.Name) && !d.RepairPending(fam.Name) {
+			full = false
 			continue
 		}
 		if err := s.validateFamily(ctx, fam, opt); err != nil {
 			return err
+		}
+		if !d.Validated(fam.Name) {
+			full = false // withdrawn during its pass
+		}
+	}
+	if full {
+		// Every family compared and published in this call: the full-pass
+		// clock restarts (derived_key_marks.go).
+		if err := s.recordFullPass(ctx); err != nil {
+			log.Printf("objectgraph sql: derived keys: record the full pass: %v", err)
 		}
 	}
 	return nil
