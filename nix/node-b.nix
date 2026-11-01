@@ -353,6 +353,9 @@ let
       Environment = offHostBackupEnv;
       Nice = 19;
       IOSchedulingClass = "idle";
+      # The idle class is inert under scheduler none; under iocost (guest
+      # isolation I3) this weight is what yields the disk to the guests.
+      IOWeight = 10;
       CPUWeight = 10;
       # restic holds the tree of a 9.5M-file tape in memory: about 13 GB
       # with no GOMEMLIMIT (docs/problems/no-off-host-backup-2026-10-20.md
@@ -1262,11 +1265,12 @@ in
       MemoryLow = "0";
       # Guest isolation I3 (2026-11-01; owner: "a thrashing guest shouldn't
       # obstruct other guests"): under iocost (go-choir-iocost below) the
-      # VMs together weigh half a host service, so a guest storm leaves the
-      # host its disk; each VM's leaf carries its own io.weight
+      # VMs together weigh one host service, not half (review, Devin #5: at
+      # half, a multi-service storm would starve them); the backup, the
+      # known storm, weighs 10. Each VM's leaf carries its own io.weight
       # (VMCTL_JAILER_IO_WEIGHT). Weights only bind when the disk is
       # contended. Rollback: drop this line.
-      IOWeight = 50;
+      IOWeight = 100;
     };
   };
 
@@ -1275,8 +1279,9 @@ in
   # that works under none, and only on a request-based device, so it goes on
   # nvme0n1 and nvme1n1, not on md127 (md's clones carry the bio's cgroup).
   # The model is the kernel's auto (linear, from the device); qos ctrl=auto.
-  # Minor numbers are dynamic, so the unit reads them at boot. Rollback:
-  # drop the unit and write "MAJ:MIN enable=0" into io.cost.qos.
+  # Minor numbers are dynamic, so the unit reads them at boot. Rollback, on
+  # the running host: write "MAJ:MIN enable=0" into io.cost.qos for each
+  # member (dropping the unit only stops the next boot's enable).
   systemd.services.go-choir-iocost = {
     description = "go-choir iocost on the NVMe members (guest isolation I3)";
     wantedBy = [ "multi-user.target" ];
@@ -1287,7 +1292,10 @@ in
     };
     script = ''
       set -eu
-      for d in /sys/block/nvme*n1; do
+      # md127's members only (review, Devin #2), each as its whole disk:
+      # a member is a partition, and iocost sits on the disk's queue.
+      for s in /sys/block/md127/slaves/*; do
+        d=$(dirname "$(readlink -f "/sys/class/block/$(basename "$s")")")
         [ -r "$d/dev" ] || continue
         dev=$(cat "$d/dev")
         echo "$dev enable=1 ctrl=auto" > /sys/fs/cgroup/io.cost.qos

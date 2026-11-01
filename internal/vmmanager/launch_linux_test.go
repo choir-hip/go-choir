@@ -192,7 +192,7 @@ func TestRealJailerLaunch(t *testing.T) {
 	cfg.Jailer.FirecrackerBinPath = os.Getenv("CHOIR_JAILER_IT_JAILED_FIRECRACKER")
 	cfg.Jailer.CgroupParent = os.Getenv("CHOIR_JAILER_IT_CGROUP_PARENT")
 	if cfg.Jailer.CgroupParent == "" {
-		cfg.Jailer.PidsMax, cfg.Jailer.CPUWeight = 0, 0
+		cfg.Jailer.PidsMax, cfg.Jailer.CPUWeight, cfg.Jailer.IOWeight = 0, 0, 0
 	}
 	mgr := NewManager(cfg)
 	mgr.jailerHostErr = nil
