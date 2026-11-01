@@ -573,6 +573,42 @@ func capture(ctx context.Context, cfg Config, dek []byte) (out captured, retErr 
 	return out, nil
 }
 
+// sourceDropBytes is how much of the page stream is read between drops of the
+// source file's page cache.
+const sourceDropBytes = 64 << 20
+
+// dropSourceCache drops the clean page cache of the source database file's
+// byte range [off, off+n); n 0 is the whole file, and then its WAL too. A var
+// so a test can see the calls. Mid-stream it drops only the range just read
+// (the stream reads in page order), so the daemon's hot pages elsewhere stay
+// until the end; tradeoff: DONTNEED drops hot pages in the range too, which
+// the daemon refaults from disk; the owner chose more disk reads over held
+// cache ("More disk reads, less memory usage"). Best effort.
+var dropSourceCache = func(path string, off, n int64) {
+	adviseDropFileCache(path, off, n)
+	if n == 0 {
+		adviseDropFileCache(path+"-wal", 0, 0)
+	}
+}
+
+// sourcePath is the main database file behind tx ("" when unknown, e.g. an
+// in-memory database).
+func sourcePath(ctx context.Context, tx *sql.Tx) string {
+	rows, err := tx.QueryContext(ctx, `PRAGMA database_list`)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int
+		var name, file string
+		if rows.Scan(&seq, &name, &file) == nil && name == "main" {
+			return file
+		}
+	}
+	return ""
+}
+
 // fileStream is one SQLite file's page stream: its geometry and the uploader
 // sealing its chunks.
 type fileStream struct {
@@ -616,6 +652,13 @@ func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.C
 	progress := func(err error) error {
 		return fmt.Errorf("%w (%d of %d pages read, %s into the stream)", cause(err), pages, fs.pageCount, time.Since(streamStart).Round(time.Second))
 	}
+	src := sourcePath(runCtx, tx)
+	var dropFrom int64
+	defer func() { // the end, and every failure path
+		if src != "" {
+			dropSourceCache(src, 0, 0)
+		}
+	}()
 	rows, err := tx.QueryContext(runCtx, `SELECT pgno, data FROM sqlite_dbpage`)
 	if err != nil {
 		return fail(fmt.Errorf("snapshot: read pages: %w", progress(err)))
@@ -652,6 +695,10 @@ func streamFile(runCtx context.Context, cfg Config, dek []byte, cancel context.C
 		}
 		buf = append(buf, data...)
 		pages++
+		if read := pages * int64(pageSize); src != "" && read-dropFrom >= sourceDropBytes {
+			dropSourceCache(src, dropFrom, read-dropFrom)
+			dropFrom = read
+		}
 		if len(buf) == fs.pagesPerChunk*pageSize {
 			if err := flush(); err != nil {
 				_ = rows.Close()

@@ -405,3 +405,23 @@ func TestOpenNeverCompacts(t *testing.T) {
 		t.Fatalf("state file %d -> %d, Open compacted", before, after)
 	}
 }
+
+// Failure modes (written before the code):
+//   - The copy reads the whole source and leaves it cached: dropSourceCache
+//     must be called for the source state file, not only the staging copy.
+//   - The drop names the staging file or a stale path: assert it is statePath.
+//   - The helper failure fails the compaction: it returns nothing.
+func TestCompactCopyDropsTheSourceCache(t *testing.T) {
+	s, _ := compactTestStore(t, 5, 10, 3000)
+	var got []string
+	old := dropSourceCache
+	dropSourceCache = func(p string) { got = append(got, p) }
+	t.Cleanup(func() { dropSourceCache = old })
+	done, err := s.PrepareCompactCopy(context.Background())
+	if err != nil || !done {
+		t.Fatalf("PrepareCompactCopy = %v, %v", done, err)
+	}
+	if len(got) != 1 || got[0] != s.statePath {
+		t.Fatalf("source cache drops = %v, want [%s]", got, s.statePath)
+	}
+}
