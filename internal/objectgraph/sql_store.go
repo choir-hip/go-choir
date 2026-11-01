@@ -81,6 +81,31 @@ const ChoirEventKindUpdatedIndex = "idx_og_objects_choir_event_kind_updated"
 // ChoirEventKindUpdatedIndexDDL creates it; idempotent.
 const ChoirEventKindUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventKindUpdatedIndex + ` ON og_objects((` + ChoirEventKindSQL + `), updated_at) WHERE object_kind = 'choir.event'`
 
+// ChoirEventPhaseSQLFor is the phase of the event whose body is body and
+// whose metadata is meta: the payload's phase, else the metadata's, else empty.
+// A body or metadata that is not JSON reads as phaseless rather than failing
+// the whole statement (a projection that errors on one row would wedge
+// replay). The store's retire predicate and ChoirEventPhaseUpdatedIndex use
+// this one text, so the planner matches them.
+func ChoirEventPhaseSQLFor(body, meta string) string {
+	return `COALESCE(
+		CASE WHEN json_valid(CAST(` + body + ` AS TEXT)) THEN NULLIF(CAST(json_extract(CAST(` + body + ` AS TEXT), '$.payload.phase') AS TEXT), '') END,
+		CASE WHEN json_valid(` + meta + `) THEN NULLIF(CAST(json_extract(` + meta + `, '$.phase') AS TEXT), '') END,
+		'')`
+}
+
+// ChoirEventPhaseSQL is a choir.event row's phase in og_objects.
+var ChoirEventPhaseSQL = ChoirEventPhaseSQLFor("body", "metadata")
+
+// ChoirEventPhaseUpdatedIndex is the partial index a phaseless retire slice
+// reads: (kind, phase, updated_at) of the choir.event rows, so the phase
+// test reads no body (the phase is in the payload). Its build reads every
+// choir.event body once.
+const ChoirEventPhaseUpdatedIndex = "idx_og_objects_choir_event_phase_updated"
+
+// ChoirEventPhaseUpdatedIndexDDL creates it; idempotent.
+var ChoirEventPhaseUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventPhaseUpdatedIndex + ` ON og_objects((` + ChoirEventKindSQL + `), (` + ChoirEventPhaseSQL + `), updated_at) WHERE object_kind = 'choir.event'`
+
 // bodyTextSQL is the body as text. The body column is a BLOB, and SQLite
 // reads a BLOB argument of its JSON functions as JSONB, so a body is always
 // cast before it meets one.
@@ -302,6 +327,12 @@ func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 	doneKindIdx := BootPhase("store: open", "objectgraph-schema/choir-event-kind-updated-index")
 	_, err = s.db.ExecContext(ctx, ChoirEventKindUpdatedIndexDDL)
 	doneKindIdx(err)
+	if err != nil {
+		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
+	}
+	donePhaseIdx := BootPhase("store: open", "objectgraph-schema/choir-event-phase-updated-index")
+	_, err = s.db.ExecContext(ctx, ChoirEventPhaseUpdatedIndexDDL)
+	donePhaseIdx(err)
 	if err != nil {
 		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
 	}

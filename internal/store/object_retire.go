@@ -54,15 +54,22 @@ const retireDropBatch = 500
 // slice reads only its kinds' rows (objectgraph.ChoirEventKindUpdatedIndex).
 const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventKindUpdatedIndex
 
+// retireOGTableFor is the table clause of p's slice statements: a phaseless
+// slice reads the (kind, phase, updated_at) index, so its phase test reads no
+// body; any other reads the (kind, updated_at) index.
+func retireOGTableFor(p computerevent.ObjectRetireProjection) string {
+	if p.Phase == computerevent.ObjectRetirePhaseNone {
+		return `og_objects INDEXED BY ` + objectgraph.ChoirEventPhaseUpdatedIndex
+	}
+	return retireOGTable
+}
+
 // retireEventPhaseSQL is the phase of the event whose body is body and whose
 // metadata is meta: the payload's phase, else the metadata's, else ”. A body
 // or metadata that is not JSON reads as phaseless rather than failing the
 // whole statement (a projection that errors on one row would wedge replay).
 func retireEventPhaseSQL(body, meta string) string {
-	return `COALESCE(
-		CASE WHEN json_valid(CAST(` + body + ` AS TEXT)) THEN NULLIF(CAST(json_extract(CAST(` + body + ` AS TEXT), '$.payload.phase') AS TEXT), '') END,
-		CASE WHEN json_valid(` + meta + `) THEN NULLIF(CAST(json_extract(` + meta + `, '$.phase') AS TEXT), '') END,
-		'')`
+	return objectgraph.ChoirEventPhaseSQLFor(body, meta)
 }
 
 func retirePhasePredicate(p computerevent.ObjectRetireProjection, body, meta string) string {
@@ -153,7 +160,7 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 
 	where, args := retireOGWhere(p, from, before, cited)
 	if derived.Keyed(objectgraph.ObjectKind(p.ObjectKind)) {
-		ids, err := retireSelectIDs(ctx, tx, `SELECT canonical_id FROM `+retireOGTable+` WHERE `+where, args)
+		ids, err := retireSelectIDs(ctx, tx, `SELECT canonical_id FROM `+retireOGTableFor(p)+` WHERE `+where, args)
 		if err != nil {
 			return 0, fmt.Errorf("object retire: select: %w", err)
 		}
@@ -173,7 +180,7 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 			removed += n
 		}
 	} else {
-		res, err := tx.ExecContext(ctx, `DELETE FROM `+retireOGTable+` WHERE `+where, args...)
+		res, err := tx.ExecContext(ctx, `DELETE FROM `+retireOGTableFor(p)+` WHERE `+where, args...)
 		if err != nil {
 			return 0, fmt.Errorf("object retire: delete: %w", err)
 		}
@@ -228,7 +235,7 @@ func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRet
 	cited := s.retireCited.Load()
 	where, args := retireOGWhere(p, from, before, cited)
 	var one int
-	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+retireOGTable+` WHERE `+where+` LIMIT 1`, args...).Scan(&one)
+	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+retireOGTableFor(p)+` WHERE `+where+` LIMIT 1`, args...).Scan(&one)
 	if err == nil {
 		return true, nil
 	}

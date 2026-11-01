@@ -388,6 +388,49 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 	}
 }
 
+// R9: a phaseless slice reads og_objects by kind, phase and slice through
+// the phase index, so the phase test reads no body: with the kind index, the
+// phaseless loop.progress walk read the body of every kept phased line (about
+// 4.9 GB per pass on the paper, 2026-11-01). The index's phase expression is
+// the predicate's, byte for byte.
+func TestObjectRetirePhaselessSliceReadsThePhaseIndex(t *testing.T) {
+	if got := retireEventPhaseSQL("body", "metadata"); got != objectgraph.ChoirEventPhaseSQL {
+		t.Fatalf("the predicate's phase expression drifted from the index's:\n%s\n%s", got, objectgraph.ChoirEventPhaseSQL)
+	}
+	s, _ := vocabUpcastOpenStore(t, "retire-phase-plan")
+	p := retireP([]string{"loop.progress"}, retireBase, retireBase.Add(time.Hour), computerevent.ObjectRetirePhaseNone)
+	from, before, err := p.Slice()
+	if err != nil {
+		t.Fatal(err)
+	}
+	where, args := retireOGWhere(p, from, before, nil)
+	table := retireOGTableFor(p)
+	for _, q := range []string{
+		`SELECT canonical_id FROM ` + table + ` WHERE ` + where,
+		`SELECT 1 FROM ` + table + ` WHERE ` + where + ` LIMIT 1`,
+		`DELETE FROM ` + table + ` WHERE ` + where,
+	} {
+		rows, err := s.db.Query(`EXPLAIN QUERY PLAN `+q, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		text := strings.Join(plan, " | ")
+		if !strings.Contains(text, objectgraph.ChoirEventPhaseUpdatedIndex+" (<expr>=? AND <expr>=? AND updated_at>? AND updated_at<?)") {
+			t.Errorf("the phaseless slice does not search the phase index: %s", text)
+		}
+	}
+}
+
 // R9: the event table's delete, probe and oldest-row query read the slice
 // by kind and slice through idx_choir_events_kind_updated (the oldest-row
 // query through idx_choir_events_updated), in the store and in a telemetry
