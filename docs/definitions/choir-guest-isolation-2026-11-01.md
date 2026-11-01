@@ -136,11 +136,13 @@ boundaries:
 now:
   status: working
   slice: >-
-    I0. Read the paper through its first telemetry run under the elastic
-    ceiling (booted 19:31:40Z, the run about 19:41Z; reading at 20:00Z),
-    then push the held commits.
-  source_ref: 03c8dbf12
-  deploy_identity: 03c8dbf126d48add2270ff42b0c0671e3aeb6361
+    I0 and I2. 8ab7b2da5 deployed 20:13Z: the paper booted jailed (uid
+    900376, its own cgroup vms/vm-1669...; vmm_confinement_verify ok) at a
+    planned refresh that resumed; Postgres at 512 MB shared buffers; the
+    ceiling compacts after an act. Next: the ceiling on every class (ring 2),
+    then a day of meter data and the closing numbers report; then I3.
+  source_ref: 8ab7b2da5
+  deploy_identity: 8ab7b2da506cc9db747c984de2967674af667dd5
   candidate:
     id: held-batch
     state: ready
