@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -509,6 +512,11 @@ func (r *OwnershipRegistry) admitHostMemoryWith(own *VMOwnership, class Warmness
 	if sampler == nil {
 		sampler = sampleHostPressure
 	}
+	if !protectedWarmnessClass(class) {
+		if refusal := hostDiskRefusal(own, class, cfg, sampler(cfg)); refusal != nil {
+			return nil, refusal
+		}
+	}
 	if acfg.Mode == HostAdmissionModeGuestSize {
 		return nil, r.admitGuestSize(own, class, cfg, sampler)
 	}
@@ -612,6 +620,62 @@ func hostMemoryRefusal(d HostAdmissionDecision, detail string) *RecoveryRefusal 
 		Reason:            reason,
 		RetryAfterSeconds: hostMemoryRetryAfterSeconds,
 	}
+}
+
+// hostDiskRefusal is the disk floor (guest isolation I4): a start is refused
+// while the state disk is under its floor, or when the computer's own sparse
+// data image could still grow far enough to take the disk under it, so no
+// one guest can fill the host. A computer with no image yet passes (its
+// image is made at its size later, and the floor check catches the host).
+func hostDiskRefusal(own *VMOwnership, class WarmnessClass, cfg PressureReclaimConfig, s HostPressureSample) *RecoveryRefusal {
+	computerID, reason := "", ""
+	if own != nil {
+		computerID = own.ComputerID
+	}
+	switch {
+	case s.StateDirPressure:
+		reason = fmt.Sprintf("host state disk %d MiB available, under its floor (%s)", s.StateDirAvailableBytes>>20, s.StateDirAvailableThresholdText)
+	case own != nil && cfg.MinStateDirAvailableBytes > 0 && s.StateDirAvailableBytes > 0:
+		growth, ok := dataImageGrowthBytes(cfg.StateDir, own.VMID)
+		if !ok || growth == 0 {
+			return nil
+		}
+		if s.StateDirAvailableBytes >= cfg.MinStateDirAvailableBytes+growth {
+			return nil
+		}
+		reason = fmt.Sprintf("its data image may still grow %d MiB; the host state disk has %d MiB, %d MiB above its floor",
+			growth>>20, s.StateDirAvailableBytes>>20, int64(s.StateDirAvailableBytes>>20)-int64(cfg.MinStateDirAvailableBytes>>20))
+	default:
+		return nil
+	}
+	log.Printf("vmctl: host admission refused computer=%s class=%s: %s", computerID, class, reason)
+	return &RecoveryRefusal{
+		ComputerID:        computerID,
+		Kind:              RecoveryRefusalHostDiskPressure,
+		Reason:            reason,
+		RetryAfterSeconds: hostMemoryRetryAfterSeconds,
+	}
+}
+
+// dataImageGrowthBytes is how far the VM's sparse data image may still
+// grow: its size less its allocated blocks.
+func dataImageGrowthBytes(stateDir, vmID string) (uint64, bool) {
+	if _, ok := LookupDataImageStats(stateDir, vmID); !ok {
+		return 0, false
+	}
+	info, err := os.Stat(filepath.Join(filepath.Clean(stateDir), strings.TrimSpace(vmID), dataImageFileName))
+	if err != nil {
+		return 0, false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, false
+	}
+	size, used := uint64(info.Size()), uint64(st.Blocks)*512
+	if used >= size {
+		return 0, true
+	}
+	return size - used, true
 }
 
 // admitGuestSize is the rule before 2026-10-14, kept as the rollback: one

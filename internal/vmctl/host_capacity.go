@@ -21,6 +21,12 @@ const (
 	// to a host already below its memory floor. It is transient: never
 	// recorded as a durable recovery condition.
 	RecoveryRefusalHostMemoryPressure RecoveryRefusalKind = "host_memory_pressure"
+	// RecoveryRefusalHostDiskPressure refuses a start while the state
+	// disk is under its floor (VMCTL_PRESSURE_MIN_STATE_DIR_AVAILABLE_*):
+	// the guests' sparse data images grow into it. Transient, and not a
+	// memory refusal, so make-room does not hibernate computers that free
+	// no disk (guest isolation I4).
+	RecoveryRefusalHostDiskPressure RecoveryRefusalKind = "host_disk_pressure"
 	// RecoveryRefusalGuestReattachPending: a live guest vmctl is not tracking
 	// did not answer reattach; resolve waits instead of rebooting it.
 	RecoveryRefusalGuestReattachPending RecoveryRefusalKind = "guest_reattach_pending"

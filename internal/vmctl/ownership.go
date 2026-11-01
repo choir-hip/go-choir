@@ -4276,7 +4276,7 @@ func transientStartRefusal(err error) bool {
 		return false
 	}
 	switch refusal.Kind {
-	case RecoveryRefusalHostMemoryPressure, RecoveryRefusalGuestReattachPending, RecoveryRefusalGuestWorking:
+	case RecoveryRefusalHostMemoryPressure, RecoveryRefusalHostDiskPressure, RecoveryRefusalGuestReattachPending, RecoveryRefusalGuestWorking:
 		return true
 	}
 	return false

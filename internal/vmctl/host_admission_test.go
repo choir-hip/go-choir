@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -437,4 +438,84 @@ func TestPressureMonitorAfterRestartResumesNothing(t *testing.T) {
 	if s := second.reg.HostAdmissionSummary(); len(s.Reservations) != 0 {
 		t.Fatalf("ledger survived the restart: %+v", s.Reservations)
 	}
+}
+
+// The disk floor (guest isolation I4). Ways it can fail, written first:
+//   - a start below the state disk's floor is admitted (the guests' sparse
+//     data images grow into the host disk; a new start adds a writer);
+//   - the paper or another protected computer is refused (it must boot);
+//   - the refusal reads as host memory pressure, so make-room hibernates
+//     idle computers that free no disk;
+//   - the refusal is durable instead of retried.
+func TestAdmissionRefusesBelowTheDiskFloor(t *testing.T) {
+	f := newAdmissionFixture(t, measuredAdmission())
+	f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: 16 * gib, MemoryAvailablePercent: 50,
+			StateDirAvailableBytes: 10 * gib, StateDirPressure: true}
+	})
+	_, err := f.reg.admitHostMemory(hibernated("u1", "vm-1", 1*gib), WarmnessClassPrimary)
+	refusal := RecoveryRefusalFrom(err)
+	if refusal == nil || refusal.Kind != RecoveryRefusalHostDiskPressure {
+		t.Fatalf("primary below the disk floor: %v, want a host_disk_pressure refusal", err)
+	}
+	if makeRoomRefusal(err) || !transientStartRefusal(err) {
+		t.Fatalf("disk refusal: make-room %v, transient %v; want false, true", makeRoomRefusal(err), transientStartRefusal(err))
+	}
+	ticket, err := f.reg.admitHostMemory(hibernated("u2", "vm-2", 1*gib), WarmnessClassCriticalProtected)
+	if err != nil {
+		t.Fatalf("protected computer below the disk floor refused: %v", err)
+	}
+	ticket.finish(false)
+}
+
+// One guest cannot take the host under its disk floor (guest isolation I4).
+// Ways it can fail, written first:
+//   - a computer whose sparse data image could still grow past the host's
+//     free space above the floor is started;
+//   - a computer with room is refused, or one with no image yet;
+//   - a protected computer is refused.
+func TestAdmissionRefusesAnImageThatCouldTakeTheFloor(t *testing.T) {
+	f := newAdmissionFixture(t, measuredAdmission())
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "vm-big"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	img, err := os.Create(filepath.Join(dir, "vm-big", "data.img"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := img.Truncate(64 * int64(gib)); err != nil { // sparse: 64 GiB that may still be written
+		t.Fatal(err)
+	}
+	img.Close()
+	f.reg.mu.Lock()
+	f.reg.pressureReclaim.StateDir, f.reg.pressureReclaim.MinStateDirAvailableBytes = dir, 32*gib
+	f.reg.mu.Unlock()
+	f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: 16 * gib, MemoryAvailablePercent: 50,
+			StateDirAvailableBytes: 80 * gib}
+	})
+	_, err = f.reg.admitHostMemory(hibernated("u1", "vm-big", 1*gib), WarmnessClassPrimary)
+	if r := RecoveryRefusalFrom(err); r == nil || r.Kind != RecoveryRefusalHostDiskPressure {
+		t.Fatalf("64 GiB of growth against 80 GiB free and a 32 GiB floor: %v, want a disk refusal", err)
+	}
+	for _, tc := range []struct {
+		vm    string
+		class WarmnessClass
+	}{{"vm-none", WarmnessClassPrimary}, {"vm-big", WarmnessClassCriticalProtected}} {
+		ticket, err := f.reg.admitHostMemory(hibernated("u-"+tc.vm, tc.vm, 1*gib), tc.class)
+		if err != nil {
+			t.Fatalf("%s (%s) refused: %v", tc.vm, tc.class, err)
+		}
+		ticket.finish(false)
+	}
+	f.reg.setPressureSamplerForTest(func(PressureReclaimConfig) HostPressureSample {
+		return HostPressureSample{MemoryTotalBytes: 32 * gib, MemoryAvailableBytes: 16 * gib, MemoryAvailablePercent: 50,
+			StateDirAvailableBytes: 200 * gib}
+	})
+	ticket, err := f.reg.admitHostMemory(hibernated("u1", "vm-big", 1*gib), WarmnessClassPrimary)
+	if err != nil {
+		t.Fatalf("64 GiB of growth against 200 GiB free refused: %v", err)
+	}
+	ticket.finish(false)
 }
