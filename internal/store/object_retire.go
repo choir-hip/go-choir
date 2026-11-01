@@ -28,6 +28,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -75,14 +76,22 @@ func retirePhasePredicate(p computerevent.ObjectRetireProjection, body, meta str
 // cites in its evidence_refs. A body or metadata that is not JSON neither
 // cites nor is cited (a statement that errors on one row would wedge replay),
 // and the cited set excludes NULL, which would make NOT IN match nothing.
-func retireKeepCitedPredicate(p computerevent.ObjectRetireProjection, meta string) string {
+//
+// cited, when set, is the run's snapshot of the cited ids (Store.retireCited):
+// the predicate then tests against that JSON array bound as one parameter and
+// reads no run acceptance. Without it the predicate reads them itself (replay,
+// and any apply outside a telemetry run), so the same rows go either way.
+func retireKeepCitedPredicate(p computerevent.ObjectRetireProjection, meta string, cited *string) (string, []any) {
 	if p.KeepCited != computerevent.ObjectRetireKeepRunAcceptance {
-		return ""
+		return "", nil
+	}
+	if cited != nil {
+		return ` AND COALESCE(CASE WHEN json_valid(` + meta + `) THEN CAST(json_extract(` + meta + `, '$.event_id') AS TEXT) END, '') NOT IN (SELECT value FROM json_each(?))`, []any{*cited}
 	}
 	return ` AND COALESCE(CASE WHEN json_valid(` + meta + `) THEN CAST(json_extract(` + meta + `, '$.event_id') AS TEXT) END, '') NOT IN (
 		SELECT CAST(json_extract(e.value, '$.event_id') AS TEXT)
 		FROM og_objects ra, json_each(CASE WHEN json_valid(CAST(ra.body AS TEXT)) THEN CAST(ra.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
-		WHERE ra.object_kind = '` + string(ogKindRunAccept) + `' AND json_extract(e.value, '$.event_id') IS NOT NULL)`
+		WHERE ra.object_kind = '` + string(ogKindRunAccept) + `' AND json_extract(e.value, '$.event_id') IS NOT NULL)`, nil
 }
 
 func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []any) {
@@ -97,19 +106,21 @@ func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []a
 // retireOGWhere is the og_objects selection of a retire op, with its args.
 // The object kind is the literal 'choir.event', never a parameter, so the
 // planner can use the partial index (Validate admits no other kind).
-func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
+func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited *string) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
+	keep, keepArgs := retireKeepCitedPredicate(p, "metadata", cited)
 	where := `object_kind = 'choir.event' AND updated_at >= ? AND updated_at < ? AND json_valid(metadata) AND json_extract(metadata, '$.kind') IN (` + marks + `)` +
-		retirePhasePredicate(p, "body", "metadata") + retireKeepCitedPredicate(p, "metadata")
-	args := append([]any{from, before}, kindArgs...)
+		retirePhasePredicate(p, "body", "metadata") + keep
+	args := append(append([]any{from, before}, kindArgs...), keepArgs...)
 	return where, args
 }
 
 // retireTableWhere is the choir_events selection of a retire op.
-func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.Time) (string, []any) {
+func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited *string) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
-	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata") + retireKeepCitedPredicate(p, "metadata")
-	args := append([]any{from, before}, kindArgs...)
+	keep, keepArgs := retireKeepCitedPredicate(p, "metadata", cited)
+	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata") + keep
+	args := append(append([]any{from, before}, kindArgs...), keepArgs...)
 	return where, args
 }
 
@@ -123,6 +134,10 @@ func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.
 // covers whole is retired at pos, a day it covers in part loses the matching
 // rows, through pb.
 func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *objectgraph.DerivedKeys, pos uint64, pb *partitionBatch) (int64, error) {
+	var cited *string
+	if pb != nil {
+		cited = pb.cited
+	}
 	p, err := computerevent.DecodeObjectRetire(body)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", computerevent.ErrProjectionBatchInvalid, err)
@@ -133,7 +148,7 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 	}
 	var removed int64
 
-	where, args := retireOGWhere(p, from, before)
+	where, args := retireOGWhere(p, from, before, cited)
 	if derived.Keyed(objectgraph.ObjectKind(p.ObjectKind)) {
 		ids, err := retireSelectIDs(ctx, tx, `SELECT canonical_id FROM `+retireOGTable+` WHERE `+where, args)
 		if err != nil {
@@ -163,7 +178,7 @@ func projectObjectRetire(ctx context.Context, tx *sql.Tx, body []byte, derived *
 		removed += n
 	}
 
-	twhere, targs := retireTableWhere(p, from, before)
+	twhere, targs := retireTableWhere(p, from, before, cited)
 	res, err := tx.ExecContext(ctx, `DELETE FROM `+choirEventsTable+` WHERE `+twhere, targs...)
 	if err != nil {
 		return 0, fmt.Errorf("object retire: delete %s: %w", choirEventsTable, err)
@@ -207,7 +222,8 @@ func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRet
 	if err != nil {
 		return false, err
 	}
-	where, args := retireOGWhere(p, from, before)
+	cited := s.retireCited.Load()
+	where, args := retireOGWhere(p, from, before, cited)
 	var one int
 	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+retireOGTable+` WHERE `+where+` LIMIT 1`, args...).Scan(&one)
 	if err == nil {
@@ -216,7 +232,7 @@ func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRet
 	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	twhere, targs := retireTableWhere(p, from, before)
+	twhere, targs := retireTableWhere(p, from, before, cited)
 	err = s.retireReader().QueryRowContext(ctx, `SELECT 1 FROM `+choirEventsTable+` WHERE `+twhere+` LIMIT 1`, targs...).Scan(&one)
 	if err == nil {
 		return true, nil
@@ -279,4 +295,23 @@ func retireParseTime(raw any) (time.Time, error) {
 		return retireParseTime(string(v))
 	}
 	return time.Time{}, fmt.Errorf("store: unreadable updated_at of type %T", raw)
+}
+
+// citedEventIDsJSON reads the event ids the stored run acceptances cite, once,
+// as the JSON array the retire predicate binds: the json_each pass over every
+// acceptance body that each statement used to repeat (about 600 MB read per op
+// on the paper, docs/problems/telemetry-retirement-reads-14gb-per-run-2026-11-01.md).
+func citedEventIDsJSON(ctx context.Context, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}) (*string, error) {
+	ids, err := citedEventIDs(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(append([]string{}, ids...))
+	if err != nil {
+		return nil, err
+	}
+	out := string(raw)
+	return &out, nil
 }

@@ -334,7 +334,7 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	where, args := retireOGWhere(p, from, before)
+	where, args := retireOGWhere(p, from, before, nil)
 	for _, q := range []string{
 		`SELECT canonical_id FROM ` + retireOGTable + ` WHERE ` + where,
 		`SELECT 1 FROM ` + retireOGTable + ` WHERE ` + where + ` LIMIT 1`,
@@ -624,5 +624,62 @@ func TestObjectRetireKeepsToolResultsAcceptanceCites(t *testing.T) {
 	bad.KeepCited = "everything"
 	if err := bad.Validate(); err == nil {
 		t.Fatal("an unknown keep_cited was accepted")
+	}
+}
+
+// R10: a telemetry run reads the cited ids once and binds them; the
+// statements it builds carry no run-acceptance subquery, and the run keeps
+// the cited results and retires the rest, in both tables, over many slices.
+func TestRetireTelemetryReadsTheCitedIDsOncePerRun(t *testing.T) {
+	ctx := context.Background()
+	withRetireKnobs(t)
+	p := retireP([]string{"tool.result"}, retireBase, retireBase.Add(time.Hour), "")
+	p.KeepCited = computerevent.ObjectRetireKeepRunAcceptance
+	snap := `["a"]`
+	for _, cited := range []*string{nil, &snap} {
+		og, _ := retireOGWhere(p, retireBase, retireBase.Add(time.Hour), cited)
+		tb, _ := retireTableWhere(p, retireBase, retireBase.Add(time.Hour), cited)
+		if has := strings.Contains(og, string(ogKindRunAccept)) || strings.Contains(tb, string(ogKindRunAccept)); has != (cited == nil) {
+			t.Fatalf("cited=%v: statement reads the acceptances: %v", cited != nil, has)
+		}
+	}
+	h := newTapeHarness(t)
+	now := retireBase.Add(30 * 24 * time.Hour)
+	// The watermark is keyed by store address, which a freed store's successor can reuse.
+	for _, g := range telemetryRetireGroups {
+		retireCleared.Delete(h.store.retireClearedKey(g))
+	}
+	var script []retireEvent
+	var refs []types.RunAcceptanceEvidenceRef
+	for i := 0; i < 6; i++ {
+		at := retireBase.Add(time.Duration(i) * 3 * time.Hour)
+		for _, stamped := range []bool{false, true} {
+			id := fmt.Sprintf("res-%d-%v", i, stamped)
+			script = append(script, retireEvent{id: id, kind: types.EventToolResult, at: at, stamped: stamped})
+			if i%2 == 0 {
+				refs = append(refs, types.RunAcceptanceEvidenceRef{RefID: "event:" + id, Kind: "tool.result", EventID: id})
+			}
+		}
+	}
+	retireSeed(t, h, script)
+	if _, err := h.store.UpsertRunAcceptance(ctx, types.RunAcceptanceRecord{
+		OwnerID: "owner-1", TargetMissionID: "mission-1", TrajectoryID: "traj-1", EvidenceRefs: refs,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := h.store.RetireTelemetry(ctx, now)
+	if err != nil || ops < 3 {
+		t.Fatalf("ops=%d err=%v", ops, err)
+	}
+	if h.store.retireCited.Load() != nil {
+		t.Fatal("the run left its cited snapshot bound")
+	}
+	var want []string
+	for _, r := range refs {
+		want = append(want, r.EventID)
+	}
+	sort.Strings(want)
+	if got := retireIDs(t, h.store); !reflect.DeepEqual(got, want) {
+		t.Fatalf("remaining\n got %v\nwant %v", got, want)
 	}
 }

@@ -398,7 +398,11 @@ var partitionFlushedHook func(sequence uint64) error
 type partitionBatch struct {
 	set *telemetryPartitions
 	// dry: validate, write nothing (the dry run).
-	dry     bool
+	dry bool
+	// cited, when set, is the telemetry run's snapshot of the cited event ids
+	// (Store.retireCited), a JSON array; the retire ops read it instead of
+	// the run acceptances.
+	cited   *string
 	actions []partitionAction
 	retired []string
 }
@@ -415,7 +419,7 @@ type partitionAction struct {
 
 // newPartitionBatch returns the collector for one projection batch.
 func (s *Store) newPartitionBatch(dry bool) *partitionBatch {
-	return &partitionBatch{set: s.partitions, dry: dry}
+	return &partitionBatch{set: s.partitions, dry: dry, cited: s.retireCited.Load()}
 }
 
 // flush commits the collected writes, one transaction per partition, in op
@@ -561,7 +565,13 @@ func projectTelemetryPartitionEvent(ctx context.Context, tx *sql.Tx, body json.R
 
 // citedEventIDsTx is the event ids a stored run acceptance cites.
 func citedEventIDsTx(ctx context.Context, tx *sql.Tx) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT CAST(json_extract(e.value, '$.event_id') AS TEXT)
+	return citedEventIDs(ctx, tx)
+}
+
+func citedEventIDs(ctx context.Context, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT CAST(json_extract(e.value, '$.event_id') AS TEXT)
 		FROM og_objects ra, json_each(CASE WHEN json_valid(CAST(ra.body AS TEXT)) THEN CAST(ra.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
 		WHERE ra.object_kind = '`+string(ogKindRunAccept)+`' AND json_extract(e.value, '$.event_id') IS NOT NULL`)
 	if err != nil {
@@ -642,6 +652,12 @@ func retirePartitions(ctx context.Context, tx *sql.Tx, p computerevent.ObjectRet
 			}
 			if retired {
 				continue
+			}
+			if p.KeepCited == computerevent.ObjectRetireKeepRunAcceptance && !citedRead && pb.cited != nil {
+				if err := json.Unmarshal([]byte(*pb.cited), &cited); err != nil {
+					return removed, fmt.Errorf("telemetry partitions: read the cited snapshot: %w", err)
+				}
+				citedRead = true
 			}
 			if p.KeepCited == computerevent.ObjectRetireKeepRunAcceptance && !citedRead {
 				if cited, err = citedEventIDsTx(ctx, tx); err != nil {

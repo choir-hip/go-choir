@@ -35,3 +35,19 @@ several times per op.
 
 Until then, a guest memory cap turns this into a daily disk read on the host
 instead of 5 GiB of held guest cache.
+
+## Fix
+
+`RetireTelemetry` reads the cited run.acceptance event ids once per run
+(`citedEventIDsJSON`, one json_each pass) and holds them as a JSON array in
+`Store.retireCited` until the run ends. The existence probes, the og_objects
+and choir_events deletes and the partition pass bind that array
+(`NOT IN (SELECT value FROM json_each(?))`) instead of re-running the
+acceptance subquery; the batch's `partitionBatch` carries the snapshot to the
+apply. Replay and any apply outside a run still use the subquery, so the same
+rows are kept and deleted. A TEMP table was not used: the probes run on the
+read pool and the applies on the batch transaction, which are different
+connections. Semantic note: an acceptance recorded mid-run is seen by the
+next run. Test: `TestRetireTelemetryReadsTheCitedIDsOncePerRun`. The query
+plan was not measured; the 14.5 GB figure is still to be re-read on the paper
+after deploy.

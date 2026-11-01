@@ -125,6 +125,21 @@ func (s *Store) RetireTelemetry(ctx context.Context, now time.Time) (int, error)
 	if s == nil || s.projectionTape == nil {
 		return 0, nil
 	}
+	// The ids the run acceptances cite are read once for the run: every probe
+	// and apply below binds the snapshot, where each statement used to run its
+	// own json_each over every acceptance body (about 14.5 GB read per run on
+	// the paper). A temp table would not do: the probes run on the read pool
+	// and the applies on the batch transaction, different connections. An
+	// acceptance recorded mid-run is seen by the next run; the rows in
+	// question are past their window, its evidence is recent.
+	if telemetryRetireKeepsCited() {
+		cited, err := citedEventIDsJSON(ctx, s.retireReader())
+		if err != nil {
+			return 0, fmt.Errorf("telemetry retirement: read the cited events: %w", err)
+		}
+		s.retireCited.Store(cited)
+		defer s.retireCited.Store(nil)
+	}
 	appended := 0
 	capped := map[string]bool{}
 	for _, g := range telemetryRetireGroups {
@@ -325,4 +340,14 @@ func (s *Store) TelemetryRetireOn(ctx context.Context, ownerID string) bool {
 // this computer; off on any read failure.
 func (s *Store) CompactForceOn(ctx context.Context, ownerID string) bool {
 	return s.graphHomeOn(ctx, ownerID, SettingCompactForce)
+}
+
+// telemetryRetireKeepsCited reports whether any group keeps the cited rows.
+func telemetryRetireKeepsCited() bool {
+	for _, g := range telemetryRetireGroups {
+		if g.keepCited == computerevent.ObjectRetireKeepRunAcceptance {
+			return true
+		}
+	}
+	return false
 }
