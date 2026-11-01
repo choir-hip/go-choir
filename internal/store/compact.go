@@ -58,6 +58,13 @@ var (
 	// compactCopyBudget bounds the copy's read transaction, which pins the
 	// WAL while it runs.
 	compactCopyBudget = 90 * time.Minute
+	// compactCheckBudget bounds the check of the staged copy. The check reads
+	// only the private staged file, after the copy's read transaction has
+	// ended, so it pins nothing on the live store and gets its own, longer
+	// deadline. On the paper (2026-11-01) integrity_check took 58 minutes of
+	// a 66-minute run on a 20.66 GB copy; quick_check skips the per-index
+	// cross-check that made it the cost of a second copy.
+	compactCheckBudget = 4 * time.Hour
 	// compactFreeFloorBytes is the free space the copy must leave on the
 	// disk, read every compactFreeCheckEvery during the copy and after it:
 	// headroom for the WAL the copy's read transaction pins.
@@ -323,6 +330,7 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 		removeSQLiteFiles(staging)
 		return false, err
 	}
+	copied := time.Since(started)
 	side, err := checkCompactCopy(ctx, staging)
 	if err != nil {
 		removeSQLiteFiles(staging)
@@ -364,7 +372,7 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 	if err := writeFileDurable(statePath+compactSidecarSuffix, raw); err != nil {
 		return false, err
 	}
-	log.Printf("store: compact copy: staged %d bytes at sequence %d in %s, for the next planned restart", side.Size, side.Sequence, time.Since(started).Round(time.Second))
+	log.Printf("store: compact copy: staged %d bytes at sequence %d in %s (copy %s), for the next planned restart", side.Size, side.Sequence, time.Since(started).Round(time.Second), copied.Round(time.Second))
 	return true, nil
 }
 
@@ -453,8 +461,7 @@ func checkCompactFloor(dir string) error {
 
 // checkCompactCopy checks the copy's structure and reads the head it holds.
 func checkCompactCopy(ctx context.Context, path string) (compactSidecar, error) {
-	// The full-file integrity pass is as heavy as the copy: same deadline.
-	ctx, cancel := context.WithTimeout(ctx, compactCopyBudget)
+	ctx, cancel := context.WithTimeout(ctx, compactCheckBudget)
 	defer cancel()
 	db, err := sql.Open("sqlite", dbx.SQLiteDSN(path, dbx.SQLiteOptions{}, false))
 	if err != nil {
@@ -463,11 +470,11 @@ func checkCompactCopy(ctx context.Context, path string) (compactSidecar, error) 
 	db.SetMaxOpenConns(1)
 	defer db.Close()
 	var verdict string
-	if err := db.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&verdict); err != nil {
-		return compactSidecar{}, fmt.Errorf("integrity_check: %w", err)
+	if err := db.QueryRowContext(ctx, `PRAGMA quick_check`).Scan(&verdict); err != nil {
+		return compactSidecar{}, fmt.Errorf("quick_check: %w", err)
 	}
 	if verdict != "ok" {
-		return compactSidecar{}, fmt.Errorf("integrity_check: %s", verdict)
+		return compactSidecar{}, fmt.Errorf("quick_check: %s", verdict)
 	}
 	var av int
 	if err := db.QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&av); err != nil || av != 2 {
@@ -646,7 +653,7 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 	}
 	// A copy damaged on disk since it was staged is not installed: the boot
 	// would have no state file it can open (a full check is the stage-time
-	// integrity_check; this one is cheap enough for the boot).
+	// quick_check; this one is cheap enough for the boot).
 	if err := checkStagedHeader(staged); err != nil {
 		return discard(err.Error())
 	}

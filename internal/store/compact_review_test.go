@@ -87,15 +87,15 @@ func TestCompactTransientCheckErrorKeepsTheCopy(t *testing.T) {
 	}
 }
 
-// N3: the integrity check is under the copy's deadline.
+// N3: the check of the staged copy is under its own deadline.
 func TestCompactIntegrityCheckHasTheCopyBudget(t *testing.T) {
 	s, _ := compactTestStore(t, 5, 10, 3000)
 	if done, err := s.PrepareCompactCopy(context.Background()); err != nil || !done {
 		t.Fatalf("PrepareCompactCopy = %v, %v", done, err)
 	}
-	old := compactCopyBudget
-	compactCopyBudget = time.Nanosecond
-	defer func() { compactCopyBudget = old }()
+	old := compactCheckBudget
+	compactCheckBudget = time.Nanosecond
+	defer func() { compactCheckBudget = old }()
 	time.Sleep(time.Millisecond)
 	if _, err := checkCompactCopy(context.Background(), s.statePath+compactStagedSuffix); err == nil {
 		t.Fatal("checkCompactCopy ignored the budget")
