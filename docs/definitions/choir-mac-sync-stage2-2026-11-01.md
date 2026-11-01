@@ -58,12 +58,15 @@ finish:
       reusing keyescrow.SealDEK, or Secure Enclave P-256 with its own wrap);
       the owner approves with a passkey whose WebAuthn challenge commits to
       {device public key, computer id, release nonce}; the host verifies the
-      assertion (the credential registry is only in internal/auth) and relays
-      to the guest; the guest wraps its private-artifact key to that device
-      key and appends a projection op device_key_released (design D6: a projection op, not a canonical event kind; shipped as a reader one release before the switch turns on) (device_key_released,
-      naming device and key version, its authority_ref naming the verified release ceremony), never key_rotated or key_revoked,
-      which are the guest credential lifecycle; the new kind lands with the
-      reader-compat marker so older followers skip it."
+      assertion (the credential registry is only in internal/auth) and mints
+      a signed grant; the proxy relays it to the guest's internal route; the
+      guest verifies the grant itself, wraps its private-artifact key to that
+      device key and appends a projection op device_key_released (design D4
+      and D6: a projection op, not a canonical event kind, naming device and
+      key version, its authority_ref naming the verified release ceremony),
+      never key_rotated or key_revoked, which are the guest credential
+      lifecycle; the op ships as a reader one release before the switch
+      turns on, because an unknown op fails replay and no skip rule exists."
     - "Grant scope, stated: the released key opens sealed payload envelopes,
       sealed snapshot chunks, and the file CAS digest key; all three are what
       the reader needs."
