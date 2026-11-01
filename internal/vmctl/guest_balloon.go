@@ -96,7 +96,7 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 		interval = MinGuestMemoryCapInterval
 	}
 	go func() {
-		r.reconcileGuestMemoryCaps(caps)
+		r.reconcileGuestMemoryCaps(ctx, caps)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -104,7 +104,7 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				r.reconcileGuestMemoryCaps(caps)
+				r.reconcileGuestMemoryCaps(ctx, caps)
 			}
 		}
 	}()
@@ -115,7 +115,7 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 // that wrote, and a failure only when it differs from that VM's last one, so
 // a persistent failure is one line (review, Devin #3). It returns how many
 // ceiling acts wrote.
-func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
+func (r *OwnershipRegistry) reconcileGuestMemoryCaps(ctx context.Context, caps map[string]int) int {
 	r.mu.RLock()
 	mgr := r.vmManager
 	r.mu.RUnlock()
@@ -136,21 +136,26 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 		if setter != nil {
 			res, err := setter.SetGuestMemoryCap(own.VMID, 0)
 			if err != nil {
+				// No ceiling act over a balloon that may still be inflated:
+				// the guest counts balloon pages as used, and the act would
+				// squeeze cache it can never bring under the ceiling
+				// (review, Devin #2).
 				r.noteGuestMemoryCapErr(own, "balloon", err.Error())
+				continue
 			} else if res.Changed {
 				log.Printf("vmctl: guest memory cap computer=%s vm=%s balloon_mib %d -> %d (deflated)",
 					own.ComputerID, own.VMID, res.BeforeMiB, res.AfterMiB)
 			}
 		}
 		ceilingMiB := guestMemoryCapFor(caps, own)
-		if ceilingMiB == 0 || cfg.Mode == GuestCacheReturnOff || strings.TrimSpace(own.ComputerURL) == "" {
+		if ceilingMiB == 0 || cfg.Mode == GuestCacheReturnOff || strings.TrimSpace(own.ComputerURL) == "" || ctx.Err() != nil {
 			continue
 		}
 		key := cacheReturnUnsupportedKey(own.VMID, guestCeilingMode)
 		if r.cacheReturn.isUnsupported(key, own.Epoch) {
 			continue
 		}
-		status, report, err := r.cacheReturn.callBody(context.Background(), own, map[string]any{
+		status, report, err := r.cacheReturn.callBody(ctx, own, map[string]any{
 			"mode": guestCeilingMode, "scope": "root", "dry_run": cfg.Mode == GuestCacheReturnObserve, "ceiling_mib": ceilingMiB,
 		})
 		switch {
@@ -166,9 +171,13 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 			delete(r.guestMemoryCapLastErr, own.VMID)
 		case status != http.StatusOK:
 			r.noteGuestMemoryCapErr(own, "ceiling", "http_"+strconv.Itoa(status))
+		case report.Outcome == "unsupported" || report.Outcome == "swap_present":
+			// The guest cannot act (no memory.reclaim, a swap device): one
+			// line, not a silent retry every minute (review, Devin #1).
+			r.noteGuestMemoryCapErr(own, "ceiling", report.Outcome+": "+report.Detail)
 		default:
 			delete(r.guestMemoryCapLastErr, own.VMID)
-			if report.Steps > 0 {
+			if report.Steps > 0 || report.Outcome == "dry_run" {
 				changed++
 				log.Printf("vmctl: guest memory ceiling computer=%s vm=%s ceiling_mib=%d used_mib=%d outcome=%s target_mib=%d reclaimed_mib=%d ms=%d",
 					own.ComputerID, own.VMID, ceilingMiB, report.UsedBytes>>20, report.Outcome, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.MS)

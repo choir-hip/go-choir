@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -79,7 +80,7 @@ func TestReconcileGuestMemoryCaps(t *testing.T) {
 	}
 	mgr.errs["vm-x"] = errors.New("vm operation in progress")
 	caps := map[string]int{"computer-a": 3072, "vm-b": 2048, "computer-h": 2048}
-	if n := reg.reconcileGuestMemoryCaps(caps); n != 1 {
+	if n := reg.reconcileGuestMemoryCaps(context.Background(), caps); n != 1 {
 		t.Fatalf("acts that wrote = %d, want 1", n)
 	}
 	// Every active balloon goes to 0: the ceiling never holds memory.
@@ -100,7 +101,7 @@ func TestReconcileGuestMemoryCaps(t *testing.T) {
 
 	// observe makes the acts dry runs; off stops them.
 	reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnObserve, Scope: "daemon"})
-	reg.reconcileGuestMemoryCaps(caps)
+	reg.reconcileGuestMemoryCaps(context.Background(), caps)
 	mu.Lock()
 	if asked["a"]["dry_run"] != true {
 		t.Fatalf("observe asked %v", asked["a"])
@@ -108,7 +109,7 @@ func TestReconcileGuestMemoryCaps(t *testing.T) {
 	asked = map[string]map[string]any{}
 	mu.Unlock()
 	reg.SetGuestCacheReturnConfig(GuestCacheReturnConfig{Mode: GuestCacheReturnOff, Scope: "daemon"})
-	reg.reconcileGuestMemoryCaps(caps)
+	reg.reconcileGuestMemoryCaps(context.Background(), caps)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(asked) != 0 {
@@ -131,8 +132,8 @@ func TestReconcileGuestMemoryCapsOldGuestIsAskedOncePerBoot(t *testing.T) {
 	t.Cleanup(srv.Close)
 	addOwnership(reg, &VMOwnership{VMID: "vm-a", ComputerID: "computer-a", UserID: "qa-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, ComputerURL: srv.URL, Epoch: 1})
 	caps := map[string]int{"computer-a": 3072}
-	reg.reconcileGuestMemoryCaps(caps)
-	reg.reconcileGuestMemoryCaps(caps)
+	reg.reconcileGuestMemoryCaps(context.Background(), caps)
+	reg.reconcileGuestMemoryCaps(context.Background(), caps)
 	mu.Lock()
 	defer mu.Unlock()
 	if n != 1 {

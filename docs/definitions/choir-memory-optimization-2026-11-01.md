@@ -77,22 +77,33 @@ now:
     138 GB of 450 GiB. The paper's derived-key validation runs once and then
     trusts its marks (c99e5ce3c); its first pass ended 11:40Z.
   belief: >-
-    believed_state: the backup is bounded and cheap; Node B uses 12 GB of 31.9
-    with 19.8 GB available; the paper holds 7.6 GiB, nearly all guest file
-    cache that free page reporting cannot return while state.db streams.
-    main_uncertainty: whether the paper's next boot logs its families trusted
-    from their marks with no pass (no guest boot since c99e5ce3c's first
-    pass). next_observation: the paper's console log at its next boot.
+    believed_state: the backup is bounded and cheap. The paper's derived-key
+    marks are trusted at boot (16:11Z). The balloon cap (2f11b9bf0, 17:43Z)
+    held the paper at 3.0 GiB through telemetry retirement (no OOM; 9 GB of
+    disk reads in 12 min), but a fixed ceiling serves a burst only through
+    deflate_on_oom. Candidate 54a12aa40 makes the cap elastic (clean page
+    cache only, balloon 0) and 2ebd1152c reads retirement's cited ids once
+    per run instead of once per statement per op.
+    main_uncertainty: whether the ceiling act holds the paper near 3 GiB
+    (the cgroup v2 root's memory.reclaim on the guest kernel, free page
+    reporting returning the dropped pages) and how far retirement's reads
+    fall. next_observation: the paper's host RSS, guest cached and anon,
+    disk reads, and its ceiling log lines after the deploy, through its
+    first retirement run 10 minutes after boot.
   accepted_edge: >-
     The weekly prune of 2026-11-01 missed node-a's 05:00-07:00 window because
     the 4h40m backup ran until 07:10; with an 11-minute backup the 11-08 prune
     fits. restic's own anon peak is not separated from the cgroup's cache peak.
+    The burst behaviour of the elastic ceiling is argued from the mechanism
+    (anonymous memory is never asked for), not driven by a load test.
   owner_decision: >-
-    Bounding the paper guest's cache (S6: a guest cgroup memory.high on the
-    runtime, or a balloon) is the remaining memory lever and is the owner's
-    call; increasing memory is excluded.
+    Owner 2026-11-01: "More disk reads, less memory usage", then "reduce real
+    memory usage while maximizing flexibility for bursts/spikes"; desks (the
+    paper first) will scale in concurrent agents. Increasing memory is
+    excluded.
   next_action: >-
-    At the paper's next boot, read the derived-key lines; after 11-08, confirm
-    the prune ran and the sharded set was forgotten.
+    Devin review (tier 1) of 2ebd1152c and 54a12aa40; push, CI, deploy; read
+    the paper through its first retirement; widen to d@e when it wakes; then
+    the closing report. After 11-08, confirm the prune ran.
 receipts: []
 ```

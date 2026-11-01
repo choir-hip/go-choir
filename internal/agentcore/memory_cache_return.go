@@ -156,9 +156,10 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 		return
 	}
 	if body.Mode == guestmem.ModeCeiling {
-		// Asked every minute: only an act that wrote, or one that could not
-		// run, is a line.
-		if report.Steps > 0 || report.Outcome == guestmem.OutcomeUnsupported || report.Outcome == guestmem.OutcomeSwapPresent {
+		// Asked every minute: only an act that wrote, a dry run (the observe
+		// ring is read here, as busy_cold's) or one that could not run is a
+		// line.
+		if report.Steps > 0 || report.DryRun || report.Outcome == guestmem.OutcomeUnsupported || report.Outcome == guestmem.OutcomeSwapPresent {
 			h.rt.cacheReturnLogf("agentcore: cache return mode=ceiling scope=%s dry_run=%t outcome=%s ceiling_mib=%d used_mib=%d target_mib=%d reclaimed_mib=%d steps=%d ms=%d detail=%q",
 				report.Scope, report.DryRun, report.Outcome, report.CeilingBytes>>20, report.UsedBytes>>20, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS, report.Detail)
 		}
