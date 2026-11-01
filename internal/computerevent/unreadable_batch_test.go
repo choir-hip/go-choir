@@ -3,7 +3,10 @@ package computerevent
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -82,5 +85,59 @@ func (p *unreadableProbe) FinalizeReplayBatch(_ context.Context, _ string, _ str
 		return err
 	}
 	p.batch = batch
+	return nil
+}
+
+// The dry run that guards a sealed batch reads the envelope, not the bytes
+// handed in: a batch redaction changed is judged as finalize will read it.
+func TestPrivateBatchDryRunReadsTheSealedBytes(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	runner := &sealedDryRunner{memoryProjection: &memoryProjection{}}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, runner, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	if _, err := appender.AppendNew(context.Background(), genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := newPrivateArtifactCipher(testComputerID, base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x66}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := testEvent(t, nil, EventProjectionBatchRecorded)
+	batch := ProjectionBatch{Version: ProjectionBatchV2, ProjectorVersion: ProjectorVersionV2, ComputerID: testComputerID, EventID: event.EventID,
+		Ops: []ProjectionOp{{Kind: ProjectionOpDesktopState, Body: json.RawMessage(`{"auth_token":"abcdefghijklmnop"}`)}}}
+	payload, err := json.Marshal(batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = appender.AppendNewPrivatePayload(context.Background(), event, TransitionInput{}, payload, ProjectionBatchMediaType, cipher)
+	if !errors.Is(err, ErrBatchRefused) {
+		t.Fatalf("append = %v, want the sealed batch refused", err)
+	}
+	if !runner.sawHandle || len(cas.records) != 1 {
+		t.Fatalf("dry run saw a handle=%v, records=%d; want the sealed bytes judged and nothing appended", runner.sawHandle, len(cas.records))
+	}
+}
+
+type sealedDryRunner struct {
+	*memoryProjection
+	sawHandle bool
+}
+
+func (r *sealedDryRunner) DryRunProjectionBatch(_ context.Context, _ string, batch *ProjectionBatch) error {
+	for _, op := range batch.Ops {
+		if bytes.Contains(op.Body, []byte("secret-handle:")) {
+			r.sawHandle = true
+			return errors.New("op body changed by redaction")
+		}
+	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -143,23 +144,32 @@ type secretMatch struct {
 }
 
 // redactPrivatePayload replaces each secret with a typed handle. A JSON
-// payload is redacted inside its string values only, so it stays JSON: the
-// text patterns run over raw bytes matched across a key and its value and
-// the splice ate quotes and braces, which sealed a projection batch that no
-// longer parsed and bricked the paper at boot (2026-10-31, sequence 5647041;
+// payload stays JSON: the text patterns run over its raw bytes as they always
+// did, and every whole token a match touches is replaced, never part of one.
+// Splicing a match into the raw bytes ate quotes and braces when a match ran
+// across a key and its value, which sealed a projection batch that no longer
+// parsed and bricked the paper at boot (2026-10-31, sequence 5647041;
 // docs/problems/redaction-breaks-sealed-projection-batch-2026-10-31.md).
 //
 // Ways the JSON path could fail, written before the code:
 //
-//	J1. a redacted payload is not JSON: only whole string literals are
-//	    replaced, each by a json-encoded string, and the result is checked;
-//	J2. a secret survives: every string is scanned with the text patterns
-//	    after unescaping, and a value under a credential-named key, string or
-//	    scalar, is redacted whole when the pair pattern would take it;
-//	J3. an escape inside a string ends a match early or late: strings are
-//	    unescaped before matching and re-encoded after, and a kind only the
-//	    escaped form shows takes the whole string;
+//	J1. a redacted payload is not JSON: only whole string literals and
+//	    scalars are replaced, each by a json-encoded string, and the result
+//	    is checked;
+//	J2. a secret the byte pass removed survives: the byte pass's matches are
+//	    computed on the same raw bytes, and every value token one overlaps is
+//	    replaced, so the removed bytes cover the byte pass's (two review
+//	    rounds found leaks in a token-by-token rebuild of the patterns; this
+//	    is coverage by construction instead);
+//	J3. a structural key is lost: a key is replaced only when a match lies
+//	    wholly inside it, so a credential pair keeps its key and loses its
+//	    value;
 //	J4. a payload with no secret changes: it is returned byte for byte.
+//
+// A string a match lies wholly inside keeps its text around the handle, as
+// the byte pass did; any other touched token becomes one handle. The appender
+// dry-runs the sealed batch after this, so a redaction that breaks a batch's
+// meaning is refused before it reaches the tape.
 func redactPrivatePayload(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
 	if len(key) != chachaKeySize {
 		return nil, nil, fmt.Errorf("secret redaction: invalid key")
@@ -170,21 +180,25 @@ func redactPrivatePayload(key []byte, payload []byte) ([]byte, []SecretHandle, e
 	return redactText(key, payload)
 }
 
-// credentialKey is the key half of credential_assignment, anchored at the
-// key's end as the pair pattern was.
-var credentialKey = regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password)$`)
-
-// credentialValue is the value half: what the pair pattern took after the
-// separator.
-var credentialValue = regexp.MustCompile(`^[^\s,;\"']{8,}`)
-
 func redactJSONPayload(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
+	matches := findSecretMatches(payload)
+	if len(matches) == 0 {
+		return append([]byte(nil), payload...), []SecretHandle{}, nil
+	}
 	var out []byte
 	handles := []SecretHandle{}
 	cursor := 0
-	lastKey := ""
-	afterColon := false
-	splice := func(from, to int, replacement string, found []SecretHandle) error {
+	// overlap returns the first match overlapping [from, to) and whether it
+	// lies wholly inside it.
+	overlap := func(from, to int) (secretMatch, bool, bool) {
+		for _, m := range matches {
+			if m.start < to && m.end > from {
+				return m, m.start >= from && m.end <= to, true
+			}
+		}
+		return secretMatch{}, false, false
+	}
+	replace := func(from, to int, replacement string, found []SecretHandle) error {
 		encoded, err := encodeJSONString(replacement)
 		if err != nil {
 			return err
@@ -192,39 +206,34 @@ func redactJSONPayload(key []byte, payload []byte) ([]byte, []SecretHandle, erro
 		out = append(out, payload[cursor:from]...)
 		out = append(out, encoded...)
 		cursor = to
-		handles = append(handles, found...)
+		// One match spanning several tokens names its handle once.
+		for _, h := range found {
+			if !slices.Contains(handles, h) {
+				handles = append(handles, h)
+			}
+		}
 		return nil
 	}
-	whole := func(kind string, secret []byte) (string, []SecretHandle) {
-		handle := secretHandle(key, kind, secret)
-		return string(handle), []SecretHandle{{Kind: kind, Handle: string(handle)}}
+	whole := func(m secretMatch) (string, []SecretHandle) {
+		handle := string(secretHandle(key, m.kind, payload[m.start:m.end]))
+		return handle, []SecretHandle{{Kind: m.kind, Handle: handle}}
 	}
 	for i := 0; i < len(payload); i++ {
-		c := payload[i]
-		switch {
-		case c == ':':
-			afterColon = true
-			continue
-		case c == ',' || c == '{' || c == '[' || c == '}' || c == ']':
-			afterColon = false
-			continue
-		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+		switch c := payload[i]; {
+		case c == ':' || c == ',' || c == '{' || c == '[' || c == '}' || c == ']' || c == ' ' || c == '\t' || c == '\n' || c == '\r':
 			continue
 		case c != '"':
-			// A number, true, false or null. Under a credential-named key a
-			// scalar of the pair pattern's length is a credential (J2): it
-			// becomes the handle, as a string.
+			// A number, true, false or null.
 			end := i
-			for end < len(payload) && !bytes.ContainsRune([]byte(",}] \t\n\r"), rune(payload[end])) {
+			for end < len(payload) && !bytes.ContainsRune([]byte(":,{}[] \t\n\r"), rune(payload[end])) {
 				end++
 			}
-			if afterColon && credentialKey.MatchString(lastKey) && end-i >= 8 {
-				handle, found := whole("credential_assignment", payload[i:end])
-				if err := splice(i, end, handle, found); err != nil {
+			if m, _, ok := overlap(i, end); ok {
+				handle, found := whole(m)
+				if err := replace(i, end, handle, found); err != nil {
 					return nil, nil, err
 				}
 			}
-			afterColon = false
 			i = end - 1
 			continue
 		}
@@ -232,48 +241,36 @@ func redactJSONPayload(key []byte, payload []byte) ([]byte, []SecretHandle, erro
 		if end < 0 {
 			return nil, nil, fmt.Errorf("secret redaction: unterminated JSON string")
 		}
-		literal := payload[i : end+1]
-		raw := literal[1 : len(literal)-1]
-		isValue := afterColon
-		afterColon = false
-		var text string
-		if err := json.Unmarshal(literal, &text); err != nil {
-			return nil, nil, fmt.Errorf("secret redaction: JSON string: %w", err)
-		}
-		isKey := !isValue && nextNonSpace(payload, end+1) == ':'
-		var replacement string
-		var found []SecretHandle
+		m, inside, ok := overlap(i, end+1)
+		isKey := nextNonSpace(payload, end+1) == ':'
 		switch {
-		case isValue && credentialKey.MatchString(lastKey) && (credentialValue.MatchString(text) || credentialValue.Match(raw)):
-			// The value under a credential-named key, judged on its decoded
-			// and its escaped form, whatever it starts with (J2).
-			replacement, found = whole("credential_assignment", []byte(text))
-		default:
-			redacted, matched, err := redactText(key, []byte(text))
+		case !ok || (isKey && !inside):
+		case inside:
+			// Wholly inside one string: redact its decoded text, keeping the
+			// rest, as the byte pass did; if the decoded pass misses what the
+			// raw bytes showed (an escape cut the match), the string goes whole.
+			var text string
+			if err := json.Unmarshal(payload[i:end+1], &text); err != nil {
+				return nil, nil, fmt.Errorf("secret redaction: JSON string: %w", err)
+			}
+			redacted, found, err := redactText(key, []byte(text))
 			if err != nil {
 				return nil, nil, err
 			}
-			replacement, found = string(redacted), matched
-			// An escape counted as value bytes by the raw pattern can decode
-			// to a delimiter that cuts the match short (J3): a kind the
-			// escaped form shows and the decoded pass missed takes the
-			// whole string.
-			if kind := missedKind(raw, matched); kind != "" {
-				replacement, found = whole(kind, []byte(text))
+			replacement := string(redacted)
+			if !hasKind(found, m.kind) {
+				replacement, found = whole(m)
 			}
-		}
-		if isKey {
-			lastKey = text
-		}
-		if len(found) > 0 {
-			if err := splice(i, end+1, replacement, found); err != nil {
+			if err := replace(i, end+1, replacement, found); err != nil {
+				return nil, nil, err
+			}
+		default:
+			handle, found := whole(m)
+			if err := replace(i, end+1, handle, found); err != nil {
 				return nil, nil, err
 			}
 		}
 		i = end
-	}
-	if len(handles) == 0 {
-		return append([]byte(nil), payload...), handles, nil
 	}
 	out = append(out, payload[cursor:]...)
 	if !json.Valid(out) {
@@ -282,21 +279,13 @@ func redactJSONPayload(key []byte, payload []byte) ([]byte, []SecretHandle, erro
 	return out, handles, nil
 }
 
-// missedKind is a secret kind the escaped string shows that found lacks.
-func missedKind(raw []byte, found []SecretHandle) string {
-	if !bytes.ContainsRune(raw, '\\') {
-		return ""
-	}
-	have := map[string]bool{}
+func hasKind(found []SecretHandle, kind string) bool {
 	for _, h := range found {
-		have[h.Kind] = true
-	}
-	for _, kind := range DetectPrivateSecrets(raw) {
-		if !have[kind] {
-			return kind
+		if h.Kind == kind {
+			return true
 		}
 	}
-	return ""
+	return false
 }
 
 // jsonStringEnd returns the index of the quote closing the string literal
@@ -334,17 +323,14 @@ func encodeJSONString(s string) ([]byte, error) {
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
-// redactText is the byte-pattern redaction for a payload that is not JSON,
-// and for each unescaped string of one that is.
-func redactText(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
+// findSecretMatches is every pattern match in payload, by start, longest
+// first.
+func findSecretMatches(payload []byte) []secretMatch {
 	matches := make([]secretMatch, 0)
 	for _, pattern := range privateSecretPatterns {
 		for _, location := range pattern.expression.FindAllIndex(payload, -1) {
 			matches = append(matches, secretMatch{start: location[0], end: location[1], kind: pattern.kind})
 		}
-	}
-	if len(matches) == 0 {
-		return append([]byte(nil), payload...), []SecretHandle{}, nil
 	}
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].start != matches[j].start {
@@ -352,6 +338,16 @@ func redactText(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
 		}
 		return matches[i].end > matches[j].end
 	})
+	return matches
+}
+
+// redactText is the byte-pattern redaction for a payload that is not JSON,
+// and for each unescaped string of one that is.
+func redactText(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
+	matches := findSecretMatches(payload)
+	if len(matches) == 0 {
+		return append([]byte(nil), payload...), []SecretHandle{}, nil
+	}
 	redacted := make([]byte, 0, len(payload))
 	handles := make([]SecretHandle, 0, len(matches))
 	cursor := 0

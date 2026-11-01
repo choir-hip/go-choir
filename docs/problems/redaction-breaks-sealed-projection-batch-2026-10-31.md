@@ -55,6 +55,25 @@ and sizes are the evidence.
    bricking the computer. A public payload, or a batch that parses and fails
    validation, still fails closed.
 
+## Review and the second design (2026-11-01)
+
+Two Devin rounds sent the first JSON redaction back: rebuilding the patterns
+token by token (string values only, then scalars and escapes) kept leaking
+shapes the byte pass had removed: a scalar or array under a credential-named
+key, a credential cut short by an escape, a private key split across
+strings. After the third round on one mechanism the design changed instead
+of the case list:
+
+1. Coverage by construction. The byte patterns run over the raw payload as
+   before; every whole string or scalar a match touches is replaced (a key
+   only when a match lies wholly inside it, so a credential pair keeps its
+   key). Whatever the byte pass removed is removed, and the result is JSON.
+2. Verify what is sealed. When redaction changed a projection batch (the
+   envelope names handles), the appender opens the envelope and dry-runs the
+   sealed batch; a batch that does not survive its own sealing is refused to
+   the caller and never reaches the tape. The no-change stand-in remains for
+   events sealed before this.
+
 ## Residuals
 
 - The writes in 5647041 are lost (a telemetry seal or a run update; their

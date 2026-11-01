@@ -528,9 +528,30 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
 		return Receipt{}, "", err
 	}
-	envelope, _, err := pinner.PreparePrivatePayload(ctx, cipher, a.computerID, event.EventID, mediaType, plaintext)
+	envelope, sealedMeta, err := pinner.PreparePrivatePayload(ctx, cipher, a.computerID, event.EventID, mediaType, plaintext)
 	if err != nil {
 		return Receipt{}, "", fmt.Errorf("computer event appender: encrypt private payload: %w", err)
+	}
+	if strings.TrimSpace(mediaType) == ProjectionBatchMediaType && len(sealedMeta.SecretHandles) > 0 {
+		// The caller dry-ran the batch before sealing; redaction changed it
+		// (it named handles; with none the sealed bytes are the caller's).
+		// What finalize and every replay will read is this envelope, so it
+		// is opened and dry-run here, and a batch that does not survive its
+		// own sealing is refused, never canonical
+		// (docs/problems/redaction-breaks-sealed-projection-batch-2026-10-31.md).
+		sealed, _, err := cipher.Decrypt(ctx, envelope, a.computerID, event.EventID)
+		if err != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: open sealed batch: %w", err))
+		}
+		batch, err := DecodeProjectionBatch(sealed)
+		if err != nil {
+			return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: sealed batch decode: %w", err))
+		}
+		if runner, ok := a.projection.(BatchDryRunner); ok {
+			if err := runner.DryRunProjectionBatch(ctx, a.computerID, &batch); err != nil {
+				return Receipt{}, "", batchRefused(fmt.Errorf("computer event appender: projection dry-run refused sealed batch: %w", err))
+			}
+		}
 	}
 	payloadDigest := DigestBytes(envelope)
 	artifactRef, err := ArtifactRefFromDigest(payloadDigest)
