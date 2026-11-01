@@ -140,7 +140,7 @@ boundaries:
     - the internet egress policy (NET-01, NET-04)
   protected_surfaces: [vmctl launch and jailer args, host cgroup tree, block device io.cost, guest network taps, the paper's lifecycle]
 now:
-  status: working
+  status: checkpoint_incomplete
   slice: >-
     I1, I2, I3 (synthetic), I4, I5 and I6 deployed; the reread fixes
     landed. f7a560fb3 live 23:05Z: per-VM memory.high (size + 1 GiB),
