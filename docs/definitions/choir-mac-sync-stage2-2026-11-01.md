@@ -24,10 +24,10 @@ readiness_authority: >-
   Readiness is drafted: placing a computer key on a second device is a
   security boundary, so this file is reviewed (Devin) before it executes.
 review:
-  reviewer: pending (one Devin seat on this file; the key transfer build is tier 2)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: Devin (one seat on this file; the key release build is tier 2)
+  frozen_ref: d61726726
+  verdict: send_back (13 findings, all taken into this revision)
+  evidence_ref: scratchpad review-stage2/devin.out, 2026-11-01
 start:
   observed_at: 2026-11-01
   canonical_ref: origin/main at e4f4b256a
@@ -54,22 +54,45 @@ finish:
     on the Mac with a key that sits in the macOS Keychain and was released
     by the owner's passkey.
   artifact:
-    - a key release route: the guest exports its private-artifact key wrapped
-      to a Mac device key, only on an owner passkey assertion, recorded on the
-      tape as a key-release event naming the device;
-    - the Mac stores the wrapped key in the Keychain (device-only, no iCloud
-      sync), and revocation (owner act) rotates the computer key so later
-      payloads are unreadable on a revoked Mac;
-    - a local reader: replay of the local tape into a Mac-side SQLite
-      projection (the guest's projector code, no VM), served to the app's
-      surface when the backend is unreachable, read-only;
+    - "S1 key release: the Mac makes a device key pair (S1 decides X25519,
+      reusing keyescrow.SealDEK, or Secure Enclave P-256 with its own wrap);
+      the owner approves with a passkey whose WebAuthn challenge commits to
+      {device public key, computer id, release nonce}; the host verifies the
+      assertion (the credential registry is only in internal/auth) and relays
+      to the guest; the guest wraps its private-artifact key to that device
+      key and appends a new key-domain tape event (device_key_released,
+      naming device and key version), never key_rotated or key_revoked,
+      which are the guest credential lifecycle; the new kind lands with the
+      reader-compat marker so older followers skip it."
+    - "Grant scope, stated: the released key opens sealed payload envelopes,
+      sealed snapshot chunks, and the file CAS digest key; all three are what
+      the reader needs."
+    - "Keychain: the device private key is the secret (this-device-only, not
+      synchronizable); the wrapped key blob is not. Sign-out keeps the device
+      key (no new ceremony per sign-in); removing the device deletes it."
+    - "A devices surface: the menu bar and the surface list each released
+      device with its release time, from the tape."
+    - "S2 local reader: replay of the local tape into a Mac-side SQLite
+      projection (ReconstructInto with the guest's projector, no VM), served
+      read-only to the app's surface when the backend is unreachable."
+    - "S3 revocation, its own slice after S2: a multi-version keyring
+      (resolve by KeyVersionDigest), escrow holding every version,
+      InstallGuestPrivacyKey accepting a next version, and a rotation event
+      that re-wraps the new key to every device not revoked (the set is the
+      fold of release and revoke events). Until S3, a released Mac reads
+      what it was released for; that limit is stated to the owner at
+      release."
     - lane/mac-arm-guest landed once release churn is quiet.
   acceptance: >-
-    Staging E2E, no person (email sign-in test account): sign in, sync,
-    release the key, cut the network (backend unreachable), open a document
-    the test account wrote and read its text from the local copy; revoke,
-    write a new document online, sync, and the new payload does not decrypt
-    on the Mac. A repeatable artifact records each step.
+    Staging E2E, no person, with a pre-minted test passkey credential
+    (resource fabric: enrollment needs a passkey session): sign in, sync,
+    release the key, cut the network, open a document the test account wrote
+    and read its text from the local copy; the devices surface lists the
+    Mac. Negative steps: an email session's release is refused; an assertion
+    whose challenge names another device key is refused; a release while the
+    computer is down fails with a stated cause. S3 adds: revoke, write online,
+    sync, the new payload does not open on the revoked Mac and does on a
+    second released device. A repeatable artifact records each step.
   rollback: >-
     The key release route behind a host switch (off refuses releases); the
     Mac deletes its Keychain item on revoke or sign-out; revert removes the
@@ -92,29 +115,45 @@ boundaries:
   mutation_class: red (key material, auth, a new route on the guest and host)
   invariants:
     - a computer key leaves the guest only wrapped to a device key, only on an
-      owner passkey assertion, and every release is a tape event;
-    - the Mac copy stays read-only: no write path from the Mac to the computer
-      in this station;
+      owner passkey assertion whose challenge commits to that device key, the
+      computer and a fresh nonce, and every release is a tape event;
+    - the Mac never writes the tape or the computer's state; it submits owner
+      ceremonies (release, later revoke) that the guest executes and records;
+    - release needs the computer's VM running (the key exists only in the
+      guest and in two-approval escrow); offline reading needs only a key
+      already released;
     - the local reader never runs model calls or effects;
     - adversarial drills on d@e only; never the paper or the owner's computer.
+  trust_model: >-
+    The host verifies the passkey; the guest trusts the host's verified
+    request; the tape records the release. A compromised host already reaches
+    any key through key delivery (platform/key_delivery.go), so this adds no
+    new host power. A compromised guest holds the key anyway and writes its
+    own tape: for it, the tape event is detection for honest guests, not
+    prevention (a named residual).
+  why_not_root_prf: >-
+    The owner ROOT (keyescrow.SealRoot, DerivePRFWrapKey, the unwrap_root
+    login path) already delivers a PRF-protected owner secret to the client.
+    A per-device key is chosen instead: least privilege per device, revocable
+    per device in S3, and the resource fabric's site-key model.
   exclusions:
     - the Mac as a writer, bursting, workstation sites (resource fabric, later);
     - File Provider, voice, computer use (later stations).
 now:
   status: drafted
-  slice: S0, review this file
+  slice: S0, review this revision
   believed_state: >-
     Sync and status work; the only gap to offline reading is the key and a
     reader. The guest already exports its key for escrow, so the release is a
     new authorization, not a new export mechanism.
   main_uncertainty: >-
-    Whether a passkey assertion the host verifies can authorize a guest-held
-    key release without the host ever seeing the key (the guest wraps it to
-    the Mac's public key; the host relays).
+    Whether auth's WebAuthn ceremony can carry the device-key binding in its
+    challenge from the Mac app (ASWebAuthenticationSession to the system
+    browser) and from a headless test credential alike.
   next_observation: >-
     Read ExportKeyForEscrow and the escrow path, and the desktop session's
     passkey flow, to confirm the guest can verify the owner's assertion (or
     trust the host's verification) before wrapping.
-  next_action: one Devin seat reviews this file; then S1, the key release design.
+  next_action: one Devin seat re-reviews this revision; then S1 design.
 receipts: []
 ```
