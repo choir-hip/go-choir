@@ -89,7 +89,9 @@ func searchTokens(text string) []string {
 
 func searchTermCounts(text string) (map[string]int, int) {
 	tokens := searchTokens(text)
-	counts := make(map[string]int, len(tokens))
+	// Unsized: a map sized for every token occurrence, not every distinct
+	// term, kept about 2.2x the heap per cached entry (measured 2026-11-01).
+	counts := make(map[string]int)
 	for _, t := range tokens {
 		counts[t]++
 	}
