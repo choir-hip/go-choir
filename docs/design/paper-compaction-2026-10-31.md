@@ -145,3 +145,25 @@ floor during and after the copy). Left open, one line each:
 - Comment arithmetic: the replay-rate comment says the low end of 206 to 350 events a second is used, but 250 is planned with (a 450,000-event tail is 36 minutes at 206); the epoch in this doc reads 25 to 26 while the release policy goes 25 to 27.
 - The anchor assumes a state file is replaced, never rewritten in place, by a restore; inode reuse after a delete-then-create on the same filesystem could in theory match. Restore and rematerialize write a new file beside the old and rename over it, so the old inode is still held.
 - The carried tables are copied at the swap, so a crash between the carry and the rename leaves a staged copy already carrying them (idempotent: the next boot deletes and reinserts).
+
+## Proof on d@e (2026-11-01)
+
+d@e's store (115 MB) is under the layout trigger, so the proof used the
+`store.compact_force` setting (2bd51d7a2), on for d@e only from 02:35Z to
+03:08Z, then off. Each swap was a planned restart that vmctl's
+`deploy-refresh` asked for, targeting d@e's user only:
+
+- 02:45Z staged 91,930,624 bytes at sequence 21463 in 2 s; 02:46Z swap
+  114,909,184 -> 91,930,624 bytes, 0 events to replay, health 200, the
+  pre-rebase rollback copy removed after the replay.
+- 02:56Z staged at 21466; 02:57Z swap, 0 events (the five setting writes in
+  between did not change the value, so the handler wrote nothing).
+- 03:07Z staged at 21469; four value-changing setting writes; 03:07:40Z swap
+  with **4 events to replay**. After the swap the setting reads the last
+  write (updated_at 03:07:28.028Z), so the tail replay carried every event
+  after the copy. No "repair required" line, and no carry refusal.
+
+Not proved here: a copy at paper size (about 20 GB, the synthetic measure
+above is 43 s per 3.2 GB) and a tail near the 450,000-event bound. The paper
+gets the layout trigger with this release: its first retirement run after a
+boot stages the copy, and the following planned restart swaps it in.
