@@ -384,7 +384,8 @@
    "nix": [
     "VMCTL_GUEST_CACHE_RETURN_ONLY",
     "VMCTL_GUEST_CACHE_RETURN",
-    "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS"
+    "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS",
+    "VMCTL_GUEST_MEMORY_CAP_COMPUTERS"
    ],
    "ladder": [
     "observe",
@@ -418,7 +419,7 @@
     }
    ],
    "retire": "delete VMCTL_GUEST_CACHE_RETURN_ONLY; the return is the code default",
-   "note": "D6 design section 10. Never names the DAMON pair. One switch for D6 (design section 0): VMCTL_GUEST_CACHE_RETURN caps every trigger. S5 (2026-11-01, owner decision in design section 12) adds VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS, its own id=mode selector for always-busy computers, asked by make-room step 0 and (revision 5, owner goal 2026-11-01) a periodic pass every VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL (default 10m, 0 disables): R0 d@e =active; the paper (R5) =active again after its stream stopped: its first act (2026-11-01 07:34Z) was outcome B, 1031 MiB freed in the guest and 174 MiB returned, because the boot-time derived-key validation refilled the cache; that validation now trusts its marks (c99e5ce3c), so the second trial is the proof (docs/problems/paper-busy-cold-freed-cache-refills-2026-11-01.md). Folded here rather than a new entry: the release cap is 64 and the design names one switch. class raised to red and target R5 for S5."
+   "note": "D6 design section 10. Never names the DAMON pair. One switch for D6 (design section 0): VMCTL_GUEST_CACHE_RETURN caps every trigger. S5 (2026-11-01, owner decision in design section 12) adds VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS, its own id=mode selector for always-busy computers, asked by make-room step 0 and (revision 5, owner goal 2026-11-01) a periodic pass every VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_INTERVAL (default 10m, 0 disables): R0 d@e =active; the paper (R5) =active again after its stream stopped: its first act (2026-11-01 07:34Z) was outcome B, 1031 MiB freed in the guest and 174 MiB returned, because the boot-time derived-key validation refilled the cache; that validation now trusts its marks (c99e5ce3c), so the second trial is the proof (docs/problems/paper-busy-cold-freed-cache-refills-2026-11-01.md). S6 (2026-11-01, owner decision: \"More disk reads, less memory usage\") adds VMCTL_GUEST_MEMORY_CAP_COMPUTERS, id=MiB guest memory caps held by the balloon and reconciled every minute (internal/vmctl/guest_balloon.go): d@e 2048, the paper 3072 after its ladder (8.1 GiB uncapped to 3.0 GiB at 6 MiB/min guest reads); rollback drops the entry. Folded here rather than a new entry: the release cap is 64 and the design names one switch. class raised to red and target R5 for S5."
   },
   {
    "id": "vmctl_admission_need",
