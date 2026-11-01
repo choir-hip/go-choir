@@ -730,7 +730,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		m.mu.Lock()
 		m.recordConfinementLocked(vmID, receipt)
 		if err = m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, receipt.UID); err == nil {
-			err = m.startJailedFirecracker(vmID, receipt, jailShape{MemMiB: max(cfg.MachineMemSizeMib, meta.MemSizeMiB), VCPUs: cfg.MachineCPUCount}, jailFirecrackerRestoreArgs())
+			err = m.startJailedFirecracker(vmID, receipt, jailShape{MemMiB: max(cfg.MachineMemSizeMib, meta.MemSizeMiB), VCPUs: max(cfg.MachineCPUCount, meta.VCPUCount)}, jailFirecrackerRestoreArgs())
 		}
 		m.mu.Unlock()
 	} else {

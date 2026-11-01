@@ -44,7 +44,10 @@ const (
 	// DefaultJailerCPUMaxHeadroom is cpu.max's headroom above the vCPUs.
 	DefaultJailerCPUMaxHeadroom = 1
 	cpuMaxPeriodUS              = 100000
-	DefaultJailerNoFile         = 2048
+	// The env headrooms are capped here.
+	maxJailerMemoryHighHeadroomMiB = 16384
+	maxJailerCPUMaxHeadroom        = 8
+	DefaultJailerNoFile            = 2048
 
 	jailBaseDirName     = ".jail"
 	vmmUIDFileName      = "vmm-uid"
@@ -140,11 +143,14 @@ type JailerConfig struct {
 	CPUWeight int
 	IOWeight  int
 	// MemoryHighHeadroomMiB puts memory.high on the leaf at the guest's
-	// size plus this, and memory.swap.max at 0; 0 omits both (guest
-	// isolation I6). The guest's RAM is bounded by its size and cannot be
-	// reclaimed, so what the bound acts on is the host page cache and
-	// writeback the guest's disk I/O charges to its own leaf: a guest that
-	// floods its disk recycles its own cache, not every guest's.
+	// size plus this, and memory.swap.max at 0; 0 omits both (the slice's
+	// MemorySwapMax=0 still bounds swap) (guest isolation I6). A cold-booted
+	// guest's RAM is anonymous and never swaps, so what the bound acts on is
+	// the host page cache and writeback the guest's disk I/O charges to its
+	// own leaf: a guest that floods its disk recycles its own cache, not
+	// every guest's. A snapshot-restored guest's RAM is a private mapping of
+	// its memory file, so its clean, untouched pages are file pages the
+	// bound may also drop and refault (review, Devin #2).
 	MemoryHighHeadroomMiB int
 	// CPUMaxHeadroom puts cpu.max on the leaf at the guest's vCPUs plus
 	// this many CPUs; 0 omits it (guest isolation I6).
@@ -403,8 +409,10 @@ func (m *Manager) jailerArgs(vmID string, uid int, shape jailShape, firecrackerA
 	}
 	if j.CPUMaxHeadroom > 0 && shape.VCPUs > 0 {
 		// The guest's vCPUs plus headroom for the VMM's own threads (virtio
-		// I/O, the API): a guest never uses more than its vCPUs, so the cap
-		// binds only on the VMM's emulation work (guest isolation I6).
+		// I/O, the API). The quota is the leaf's: when a full-vCPU guest and
+		// heavy virtio work together pass it, every thread of the VMM waits
+		// for the next period, the vCPUs too (review, Devin #3), so one
+		// guest's emulation cannot take another's CPU (guest isolation I6).
 		args = append(args, "--cgroup", "cpu.max="+strconv.Itoa((shape.VCPUs+j.CPUMaxHeadroom)*cpuMaxPeriodUS)+" "+strconv.Itoa(cpuMaxPeriodUS))
 	}
 	if j.NoFile > 0 {

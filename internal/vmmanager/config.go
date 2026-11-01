@@ -273,6 +273,10 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 			}
 		}
 	}
+	// A bound so loose it is no bound is a typo, not a choice (review,
+	// Devin #8).
+	j.MemoryHighHeadroomMiB = min(j.MemoryHighHeadroomMiB, maxJailerMemoryHighHeadroomMiB)
+	j.CPUMaxHeadroom = min(j.CPUMaxHeadroom, maxJailerCPUMaxHeadroom)
 	j.SpeculationDirect = envFlagOn("VMCTL_VMM_SPECULATION_BARRIERS")
 	return j
 }

@@ -216,7 +216,7 @@ func TestRealJailerLaunch(t *testing.T) {
 	inst := &VMInstance{Config: VMConfig{VMID: vmID}, State: StatePending, done: make(chan struct{})}
 	mgr.mu.Lock()
 	mgr.vms[vmID] = inst
-	err = mgr.startJailedFirecracker(vmID, receipt, []string{"--api-sock", jailAPISocket})
+	err = mgr.startJailedFirecracker(vmID, receipt, jailShape{}, []string{"--api-sock", jailAPISocket})
 	mgr.mu.Unlock()
 	if err != nil {
 		t.Fatalf("startJailedFirecracker: %v", err)

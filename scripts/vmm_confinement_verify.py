@@ -163,7 +163,7 @@ def collect(state_dir):
                                       for tid in listdir("/proc/%d/task" % pid)}),
             "ns": {ns: readlink("/proc/%d/ns/%s" % (pid, ns)) for ns in ("mnt", "pid", "net")},
             "cgroup": cgroup,
-            "cgroup_limits": {k: read(os.path.join(leaf, k)).strip() for k in ("pids.max", "cpu.weight", "memory.max", "memory.swap.max")},
+            "cgroup_limits": {k: read(os.path.join(leaf, k)).strip() for k in ("pids.max", "cpu.weight", "cpu.max", "io.weight", "memory.high", "memory.max", "memory.swap.max")},
             # Count only: values may hold secrets and are never read out.
             "environ_entries": None if environ is None else len([e for e in environ.split("\0") if e]),
             "confinement_record": confinement,
