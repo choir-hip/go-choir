@@ -167,3 +167,23 @@ Not proved here: a copy at paper size (about 20 GB, the synthetic measure
 above is 43 s per 3.2 GB) and a tail near the 450,000-event bound. The paper
 gets the layout trigger with this release: its first retirement run after a
 boot stages the copy, and the following planned restart swaps it in.
+
+## The paper's first copy (2026-11-01)
+
+With 2bd51d7a2 the paper took the layout trigger at its first retirement run:
+03:07:28Z "due by layout, 0 of 5236911 pages free, live ~21.45 GB"; the
+`VACUUM INTO` ended by 03:15Z (about 8 min, the WAL checkpoint after it 1.5 s);
+04:13:46Z staged 20,655,800,320 bytes at sequence 5666639 in 1h6m18s. The
+paper served throughout (health 200). It swaps at the paper's next planned
+restart; at its tape rate (about 4,000 events an hour that night) the tail
+stays far under the 450,000-event bound for days.
+
+Found: the long pole is `PRAGMA integrity_check` on the copy, about 58 of the
+66 minutes, under its own 90-minute budget (`checkCompactCopy`). The paper's
+store grows, so that check will cross the budget, and a copy cut short is
+deleted and redone the next day: a full copy of IO for nothing, daily. Not
+yet acted on. Candidates: `PRAGMA quick_check` (linear, skips the index
+cross-checks; the copy is a fresh `VACUUM INTO`, so index-content drift is
+the least likely corruption), or a budget sized from the measured rate.
+The size win is small (21.45 -> 20.66 GB, 4%); the point of the copy is
+snapshot chunk churn, which is measured after the swap.
