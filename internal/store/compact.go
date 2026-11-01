@@ -326,12 +326,13 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 	err = vacuumIntoCopy(copyCtx, statePath, staging)
 	// The copy's read transaction pinned the WAL for its whole duration.
 	s.CheckpointAfterLongRead(ctx, "compact copy")
-	// The copy read the whole source; its pages need not stay cached either.
-	dropSourceCache(statePath)
 	if err != nil {
 		removeSQLiteFiles(staging)
 		return false, err
 	}
+	// The copy read the whole source; its pages need not stay cached either.
+	// Only after a copy that ran: a failed one read little (review, Devin #3).
+	dropSourceCache(statePath)
 	copied := time.Since(started)
 	side, err := checkCompactCopy(ctx, staging)
 	if err != nil {
