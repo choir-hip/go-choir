@@ -2,25 +2,30 @@ package vmctl
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Guest memory caps (density D6 S6; owner, 2026-11-01: "More disk reads,
-// less memory usage ... this should significantly increase density"):
+// Guest memory ceilings (density D6 S6; owner, 2026-11-01: "More disk reads,
+// less memory usage", then "reduce real memory usage while maximizing
+// flexibility for bursts/spikes"):
 //
 //	VMCTL_GUEST_MEMORY_CAP_COMPUTERS  "id=MiB,..." (VM or computer id): the
-//	                                  guest keeps MiB of its base memory and
-//	                                  the balloon holds the rest
+//	                                  guest's elastic ceiling
 //	VMCTL_GUEST_MEMORY_CAP_INTERVAL   reconcile interval, default 1m; 0 stops
 //
-// Every pass reconciles every active computer: a named one to its cap, any
-// other to no cap (amount 0), so dropping an entry deflates that guest at the
-// next pass. The device's deflate_on_oom lets a guest that runs out of memory
-// take balloon pages back. Rollback: drop the entry, or the variable.
+// Every pass asks each named active computer for a ceiling act (guestmem
+// ModeCeiling): while its used memory is over the ceiling, the guest drops
+// clean page cache, never anonymous memory, so a burst grows to the guest's
+// full size at once and gives the memory back through free page reporting
+// when it ends. The first version held the cap with the balloon, a fixed
+// ceiling a burst could only escape through deflate_on_oom; every pass now
+// sets every active computer's balloon to 0, deflating what it left. The
+// acts follow VMCTL_GUEST_CACHE_RETURN (off stops them, observe makes them
+// dry runs). Rollback: drop the entry, or the variable.
 
 // DefaultGuestMemoryCapInterval is the reconcile interval when unset;
 // MinGuestMemoryCapInterval is the floor a set interval is raised to.
@@ -105,18 +110,17 @@ func (r *OwnershipRegistry) StartGuestMemoryCapLoop(ctx context.Context, interva
 	}()
 }
 
-// reconcileGuestMemoryCaps sets each active computer's balloon to its cap.
-// It logs each change, and a failure only when it differs from that VM's
-// last one, so a persistent failure is one line and a failed deflate after
-// rollback is visible (review, Devin #3). It returns how many it changed.
+// reconcileGuestMemoryCaps deflates each active computer's balloon and asks
+// each named one for a ceiling act. It logs each balloon change and each act
+// that wrote, and a failure only when it differs from that VM's last one, so
+// a persistent failure is one line (review, Devin #3). It returns how many
+// ceiling acts wrote.
 func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 	r.mu.RLock()
 	mgr := r.vmManager
 	r.mu.RUnlock()
-	setter, ok := mgr.(guestMemoryCapSetter)
-	if !ok || setter == nil {
-		return 0
-	}
+	setter, _ := mgr.(guestMemoryCapSetter)
+	cfg := r.guestCacheReturnConfig()
 	r.guestMemoryCapMu.Lock()
 	defer r.guestMemoryCapMu.Unlock()
 	if r.guestMemoryCapLastErr == nil {
@@ -129,22 +133,60 @@ func (r *OwnershipRegistry) reconcileGuestMemoryCaps(caps map[string]int) int {
 			continue
 		}
 		seen[own.VMID] = true
-		capMiB := guestMemoryCapFor(caps, own)
-		res, err := setter.SetGuestMemoryCap(own.VMID, capMiB)
-		if err != nil {
-			msg := fmt.Sprintf("cap_mib=%d: %v", capMiB, err)
-			if r.guestMemoryCapLastErr[own.VMID] != msg {
-				log.Printf("vmctl: guest memory cap computer=%s vm=%s skipped %s", own.ComputerID, own.VMID, msg)
+		if setter != nil {
+			res, err := setter.SetGuestMemoryCap(own.VMID, 0)
+			if err != nil {
+				r.noteGuestMemoryCapErr(own, "balloon", err.Error())
+			} else if res.Changed {
+				log.Printf("vmctl: guest memory cap computer=%s vm=%s balloon_mib %d -> %d (deflated)",
+					own.ComputerID, own.VMID, res.BeforeMiB, res.AfterMiB)
 			}
-			r.guestMemoryCapLastErr[own.VMID] = msg
+		}
+		ceilingMiB := guestMemoryCapFor(caps, own)
+		if ceilingMiB == 0 || cfg.Mode == GuestCacheReturnOff || strings.TrimSpace(own.ComputerURL) == "" {
 			continue
 		}
-		delete(r.guestMemoryCapLastErr, own.VMID)
-		if res.Changed {
-			changed++
-			log.Printf("vmctl: guest memory cap computer=%s vm=%s cap_mib=%d base_mib=%d balloon_mib %d -> %d",
-				own.ComputerID, own.VMID, capMiB, res.BaseMiB, res.BeforeMiB, res.AfterMiB)
+		key := cacheReturnUnsupportedKey(own.VMID, guestCeilingMode)
+		if r.cacheReturn.isUnsupported(key, own.Epoch) {
+			continue
+		}
+		status, report, err := r.cacheReturn.callBody(context.Background(), own, map[string]any{
+			"mode": guestCeilingMode, "scope": "root", "dry_run": cfg.Mode == GuestCacheReturnObserve, "ceiling_mib": ceilingMiB,
+		})
+		switch {
+		case err != nil:
+			r.noteGuestMemoryCapErr(own, "ceiling", err.Error())
+		case status == http.StatusNotFound || status == http.StatusBadRequest:
+			// A guest without ceiling mode: not again until it boots.
+			r.cacheReturn.markUnsupported(key, own.Epoch)
+			log.Printf("vmctl: guest memory ceiling computer=%s vm=%s unsupported (http %d) until it boots", own.ComputerID, own.VMID, status)
+		case status == http.StatusConflict:
+			// Busy (a live capsule, a self-development operation, a
+			// hibernate) or another act in flight: the ceiling stands aside.
+			delete(r.guestMemoryCapLastErr, own.VMID)
+		case status != http.StatusOK:
+			r.noteGuestMemoryCapErr(own, "ceiling", "http_"+strconv.Itoa(status))
+		default:
+			delete(r.guestMemoryCapLastErr, own.VMID)
+			if report.Steps > 0 {
+				changed++
+				log.Printf("vmctl: guest memory ceiling computer=%s vm=%s ceiling_mib=%d used_mib=%d outcome=%s target_mib=%d reclaimed_mib=%d ms=%d",
+					own.ComputerID, own.VMID, ceilingMiB, report.UsedBytes>>20, report.Outcome, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.MS)
+			}
 		}
 	}
 	return changed
+}
+
+// guestCeilingMode is guestmem.ModeCeiling (vmctl does not import guestmem).
+const guestCeilingMode = "ceiling"
+
+// noteGuestMemoryCapErr logs a failure when it differs from the VM's last.
+// The caller holds guestMemoryCapMu.
+func (r *OwnershipRegistry) noteGuestMemoryCapErr(own *VMOwnership, what, msg string) {
+	msg = what + ": " + msg
+	if r.guestMemoryCapLastErr[own.VMID] != msg {
+		log.Printf("vmctl: guest memory cap computer=%s vm=%s skipped %s", own.ComputerID, own.VMID, msg)
+	}
+	r.guestMemoryCapLastErr[own.VMID] = msg
 }

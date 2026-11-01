@@ -36,6 +36,8 @@ type cacheReturnBody struct {
 	Mode   string `json:"mode"`
 	Scope  string `json:"scope"`
 	DryRun bool   `json:"dry_run"`
+	// CeilingMiB is ceiling mode's ceiling.
+	CeilingMiB int64 `json:"ceiling_mib,omitempty"`
 }
 
 // cacheReturnRefusal is the answer when the act did not run.
@@ -125,6 +127,21 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 			return ""
 		}
 		req.Refaults = &h.rt.cacheReturnRefaults
+	case guestmem.ModeCeiling:
+		// The elastic cap (S6), asked every minute. busy_cold's busy rule:
+		// while a capsule or a self-development operation is live the
+		// ceiling stands aside and the guest grows as it needs.
+		if refusal := h.rt.cacheReturnBusyColdRefusal(r.Context()); refusal != nil {
+			writeAPIJSON(w, http.StatusConflict, refusal)
+			return
+		}
+		req.CeilingBytes = body.CeilingMiB << 20
+		req.Stop = func() string {
+			if h.rt.hibernate.closed() {
+				return "hibernate_started"
+			}
+			return ""
+		}
 	default:
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unsupported mode"})
 		return
@@ -138,7 +155,14 @@ func (h *APIHandler) HandleInternalMemoryCacheReturn(w http.ResponseWriter, r *h
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	if !body.DryRun || body.Mode == guestmem.ModeBusyCold {
+	if body.Mode == guestmem.ModeCeiling {
+		// Asked every minute: only an act that wrote, or one that could not
+		// run, is a line.
+		if report.Steps > 0 || report.Outcome == guestmem.OutcomeUnsupported || report.Outcome == guestmem.OutcomeSwapPresent {
+			h.rt.cacheReturnLogf("agentcore: cache return mode=ceiling scope=%s dry_run=%t outcome=%s ceiling_mib=%d used_mib=%d target_mib=%d reclaimed_mib=%d steps=%d ms=%d detail=%q",
+				report.Scope, report.DryRun, report.Outcome, report.CeilingBytes>>20, report.UsedBytes>>20, report.TargetBytes>>20, report.ReclaimedBytes>>20, report.Steps, report.MS, report.Detail)
+		}
+	} else if !body.DryRun || body.Mode == guestmem.ModeBusyCold {
 		// busy_cold logs its dry runs too: the paper's console log is where
 		// its observe ring is read.
 		h.rt.cacheReturnLogf("agentcore: cache return mode=%s scope=%s dry_run=%t outcome=%s method=%s target_mib=%d reclaimed_mib=%d steps=%d ms=%d%s detail=%q",

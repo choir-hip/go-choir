@@ -1175,6 +1175,7 @@ type cacheReturnGuestReport struct {
 	Detail         string `json:"detail"`
 	TargetBytes    uint64 `json:"target_bytes"`
 	ReclaimedBytes uint64 `json:"reclaimed_bytes"`
+	UsedBytes      uint64 `json:"used_bytes"`
 	Steps          int    `json:"steps"`
 	MS             int64  `json:"ms"`
 	// Pointers: a report that does not say is not a report of false.
@@ -1197,8 +1198,13 @@ type cacheReturnGuestReport struct {
 // hostauth.MarkInternal sends none to a guest address. The error is the
 // recorded outcome word.
 func (s *guestCacheReturnState) call(ctx context.Context, own *VMOwnership, mode, scope string, dryRun bool) (int, cacheReturnGuestReport, error) {
+	return s.callBody(ctx, own, map[string]any{"mode": mode, "scope": scope, "dry_run": dryRun})
+}
+
+// callBody posts one act with the given request body.
+func (s *guestCacheReturnState) callBody(ctx context.Context, own *VMOwnership, fields map[string]any) (int, cacheReturnGuestReport, error) {
 	var report cacheReturnGuestReport
-	body, _ := json.Marshal(map[string]any{"mode": mode, "scope": scope, "dry_run": dryRun})
+	body, _ := json.Marshal(fields)
 	timeout := s.httpTimeout
 	if timeout <= 0 {
 		timeout = cacheReturnHTTPTimeout

@@ -1804,14 +1804,20 @@ in
         # Rollback: drop the computer's entry (or =observe), or
         # VMCTL_GUEST_CACHE_RETURN=off for every trigger.
         "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=active"
-        # D6 S6 guest memory caps (internal/vmctl/guest_balloon.go; owner
-        # 2026-11-01: "More disk reads, less memory usage"): the balloon
-        # holds all but the cap. Paper ladder 2026-11-01: uncapped 8.1 GiB
-        # host RSS; 3072 -> 3.0 GiB at 6 MiB/min guest reads; 2560 -> 2.5 at
-        # 5; 2048 -> 2.0 at 508 MiB/min (the bend); 1536 -> 1.5 at 1.1 GiB/min.
-        # The paper takes 3072 for the telemetry job's surges and its 1.5 GB
-        # anon peak; d@e (R0) 2048. Rollback: drop the entry (the next pass
-        # deflates it), or the variable.
+        # D6 S6 guest memory ceilings (internal/vmctl/guest_balloon.go; owner
+        # 2026-11-01: "More disk reads, less memory usage", then "reduce real
+        # memory usage while maximizing flexibility for bursts/spikes").
+        # Elastic: every minute a named guest over its ceiling drops clean
+        # page cache, never anonymous memory, so a burst (more agents, a
+        # capsule build) grows to the guest's full size at once; the act
+        # stands aside while a capsule or self-development is live. The
+        # first version held the cap with the balloon, a fixed ceiling a
+        # burst escaped only through deflate_on_oom; the balloon now stays
+        # at 0. Numbers from the balloon ladder 2026-11-01 (paper uncapped
+        # 8.1 GiB host RSS; 3072 -> 3.0 GiB at 6 MiB/min guest reads; 2048 the
+        # bend at 508 MiB/min): the paper 3072, d@e (R0) 2048. Follows
+        # VMCTL_GUEST_CACHE_RETURN (off stops it). Rollback: drop the entry,
+        # or the variable.
         "VMCTL_GUEST_MEMORY_CAP_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=2048,computer-1355b83bced1613eb048ee28d66688a8=3072"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.

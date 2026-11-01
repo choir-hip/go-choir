@@ -32,10 +32,17 @@ import (
 // guest is fenced and about to be snapshotted, so all cold pages go.
 // busy_cold: an always-busy computer while it works (S5): a capped share of
 // the cold pages above a keep, under the refault guard (refault_window.go).
+// ceiling: an elastic memory cap (D6 S6, owner 2026-11-01: "reduce real
+// memory usage while maximizing flexibility for bursts"): while the guest's
+// used memory (MemTotal less MemFree) is over the ceiling, the clean file
+// pages above a keep go, active ones too. Anonymous memory is never asked
+// for, so a burst grows past the ceiling at once and the cache gives way;
+// no refault guard, since the owner chose disk reads over held cache.
 const (
 	ModeIdle      = "idle"
 	ModeHibernate = "hibernate"
 	ModeBusyCold  = "busy_cold"
+	ModeCeiling   = "ceiling"
 )
 
 // Scopes: the cgroup whose memory.reclaim is written.
@@ -73,10 +80,13 @@ const (
 	idleKeepBytes     = 256 << 20
 	busyColdMinKeep   = 512 << 20
 	busyColdCapBytes  = 1 << 30
+	ceilingKeepBytes  = 256 << 20
+	ceilingCapBytes   = 4 << 30
 
 	idleBudget      = 2 * time.Second
 	hibernateBudget = 3 * time.Second
 	busyColdBudget  = 1 * time.Second
+	ceilingBudget   = 2 * time.Second
 )
 
 // ErrInProgress: another act is already running in this guest.
@@ -97,7 +107,13 @@ type ReclaimRequest struct {
 	// Refaults is busy_cold's refault guard window. busy_cold without one
 	// refuses (refault_stop); the other modes record refaults only.
 	Refaults *RefaultWindow
+	// CeilingBytes is ceiling mode's ceiling; ceiling mode refuses under
+	// CeilingFloorBytes.
+	CeilingBytes int64
 }
+
+// CeilingFloorBytes is the smallest ceiling honored.
+const CeilingFloorBytes = 1 << 30
 
 // Snapshot is what the act reads before and after. A field the kernel did
 // not report is nil, never zero.
@@ -146,6 +162,10 @@ type ReclaimReport struct {
 	// EINVAL: that kernel rejects the key).
 	SwappinessKey       bool  `json:"swappiness_key"`
 	ReportingNegotiated *bool `json:"reporting_negotiated,omitempty"`
+	// CeilingBytes and UsedBytes: ceiling mode's ceiling and the guest's
+	// MemTotal less MemFree before the act.
+	CeilingBytes int64 `json:"ceiling_bytes,omitempty"`
+	UsedBytes    int64 `json:"used_bytes,omitempty"`
 	// The refault guard (busy_cold only): the limit, and the
 	// workingset_refault_file rate per second from the window's baseline (at
 	// least 60 s before) to the start of the writes and to their end. nil is
@@ -224,6 +244,24 @@ func ParseMemoryStat(data string) MemoryStat {
 	return st
 }
 
+// CeilingTarget is ceiling mode's ask: the guest's used memory over the
+// ceiling, clamped to the clean, non-shared file pages less a keep and to a
+// per-act cap. Anonymous memory over the ceiling yields nothing to ask for.
+func CeilingTarget(st MemoryStat, usedBytes, ceilingBytes int64) int64 {
+	clean := st.File - st.Shmem - st.FileDirty - st.FileWriteback - ceilingKeepBytes
+	target := usedBytes - ceilingBytes
+	if clean < target {
+		target = clean
+	}
+	if target > ceilingCapBytes {
+		target = ceilingCapBytes
+	}
+	if target < 0 {
+		return 0
+	}
+	return target
+}
+
 // ReclaimTarget is the bytes to ask for. The cold set is the inactive file
 // pages, clamped to the file pages that are not shared memory (shmem lives
 // on the anonymous LRU, but the clamp is right either way), less the dirty
@@ -290,6 +328,8 @@ func (r *Reclaimer) budget(mode string) time.Duration {
 		return hibernateBudget
 	case ModeBusyCold:
 		return busyColdBudget
+	case ModeCeiling:
+		return ceilingBudget
 	}
 	return idleBudget
 }
@@ -300,6 +340,10 @@ func (r *Reclaimer) budget(mode string) time.Duration {
 func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimReport, error) {
 	switch req.Mode {
 	case ModeIdle, ModeHibernate, ModeBusyCold:
+	case ModeCeiling:
+		if req.CeilingBytes < CeilingFloorBytes {
+			return ReclaimReport{}, fmt.Errorf("ceiling %d MiB under the %d MiB floor", req.CeilingBytes>>20, CeilingFloorBytes>>20)
+		}
 	default:
 		return ReclaimReport{}, fmt.Errorf("unknown cache return mode %q", req.Mode)
 	}
@@ -368,7 +412,16 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 		if err != nil {
 			return finish(OutcomeUnsupported, "memory.stat unreadable: "+filepath.Join(cgroup, "memory.stat"))
 		}
-		rep.TargetBytes = ReclaimTarget(req.Mode, ParseMemoryStat(string(raw)))
+		if req.Mode == ModeCeiling {
+			used, ok := usedBytes(r.procRoot())
+			if !ok {
+				return finish(OutcomeUnsupported, "meminfo unreadable: MemTotal and MemFree")
+			}
+			rep.CeilingBytes, rep.UsedBytes = req.CeilingBytes, used
+			rep.TargetBytes = CeilingTarget(ParseMemoryStat(string(raw)), used, req.CeilingBytes)
+		} else {
+			rep.TargetBytes = ReclaimTarget(req.Mode, ParseMemoryStat(string(raw)))
+		}
 		if rep.TargetBytes < reclaimFloorBytes {
 			rep.TargetBytes = 0
 			return finish(OutcomeNothingToReturn, "")
@@ -555,6 +608,22 @@ func (r *Reclaimer) scopeDir(scope string) (dir, unsupported string) {
 		return "", "the daemon runs in the root cgroup; ask for scope root explicitly"
 	}
 	return filepath.Join(root, rel), ""
+}
+
+// usedBytes is the guest's MemTotal less MemFree: what the host holds for it
+// once free page reporting has handed the free blocks back.
+func usedBytes(procRoot string) (int64, bool) {
+	raw, err := os.ReadFile(filepath.Join(procRoot, "meminfo"))
+	if err != nil {
+		return 0, false
+	}
+	mem := Meminfo(string(raw))
+	total, okT := mem["MemTotal"]
+	free, okF := mem["MemFree"]
+	if !okT || !okF || free > total {
+		return 0, false
+	}
+	return int64(total - free), true
 }
 
 // snapshot reads what it can; every field is best effort.
