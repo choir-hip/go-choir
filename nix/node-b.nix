@@ -1008,6 +1008,10 @@ in
         # authserv-id (first token) of a real inbound message's
         # Authentication-Results header, read in the Mail app, after checking
         # that the provider strips sender-supplied copies of that header.
+        # amazonses.com: Resend receives on Amazon SES, read from a real
+        # inbound message 2026-10-31; owner approved trusting it 2026-11-01.
+        # Rollback: drop the line (replies and trusted senders fail closed).
+        "MAILD_TRUSTED_AUTHSERV_IDS=amazonses.com"
         internalAuthEnv
       ];
     };
