@@ -86,9 +86,14 @@ func TestD2ApplyWithoutADigestDoesNothing(t *testing.T) {
 
 // D3: only covered files go. Uncovered (B was not copied), ineligible and
 // unreceipted files stay even though the census was clean for what it covers.
+// Since the scope widened (2026-11-01) an event of another kind is eligible:
+// it is copied, covered and deleted with its receipt. A public non-batch
+// payload is still ineligible (computerevent.TapeSegmentEligible) and stays,
+// with its receipt.
 func TestD3OnlyCoveredFilesAreUnlinked(t *testing.T) {
 	w := newWorld(t)
-	otherKind, _ := w.f.pin(compA, "computer-event", "application/vnd.choir.computer-event+json", eventBody(compA, "run_started", "x"))
+	otherKind, otherKindReceipt := w.f.pin(compA, "computer-event", "application/vnd.choir.computer-event+json", eventBody(compA, "run_started", "x"))
+	public, publicReceipt := w.f.pinClass(compA, "computer-event-payload", "application/vnd.choir.capsule-effect+json", "public", []byte(`{"bundle":"d3"}`))
 	orphan := eventBody(compA, string(computerevent.EventProjectionBatchRecorded), "orphan")
 	orphanDigest := hexSum(orphan)
 	w.f.write("sha256/computer-event/"+orphanDigest, orphan)
@@ -113,15 +118,17 @@ func TestD3OnlyCoveredFilesAreUnlinked(t *testing.T) {
 			}
 		}
 	}
-	if !w.legacyExists(tapestore.NSEvent, otherKind) || !w.legacyExists(tapestore.NSEvent, orphanDigest) {
-		t.Fatal("D3: an ineligible or an unreceipted file was deleted")
+	if w.legacyExists(tapestore.NSEvent, otherKind) || w.legacyExists(tapestore.NSReceipt, otherKindReceipt) {
+		t.Fatal("D3: the other-kind event, now eligible and covered, was not deleted")
 	}
-	// A's 12 plus the receipt of the other-kind event, which the copy writes
-	// to the segments too (residual 1 of the plan) and which is then covered.
-	if rep.Deleted != int64(w.eligibleA)+1 || rep.Mode != "delete-apply" {
+	if !w.legacyExists(tapestore.NSPayload, public) || !w.legacyExists(tapestore.NSReceipt, publicReceipt) || !w.legacyExists(tapestore.NSEvent, orphanDigest) {
+		t.Fatal("D3: an ineligible (public non-batch) or an unreceipted file was deleted")
+	}
+	// A's 12 plus the other-kind event and its receipt.
+	if rep.Deleted != int64(w.eligibleA)+2 || rep.Mode != "delete-apply" {
 		t.Fatalf("D3: %+v", rep)
 	}
-	if rep.Refused["uncovered"] != 4 || rep.Refused["unreceipted"] != 1 || rep.Refused["ineligible"] < 1 {
+	if rep.Refused["uncovered"] != 4 || rep.Refused["unreceipted"] != 1 || rep.Refused["ineligible"] != 2 {
 		t.Fatalf("D3: refused %+v", rep.Refused)
 	}
 }

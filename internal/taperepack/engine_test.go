@@ -364,10 +364,17 @@ func TestP5APayloadIsAttributedByItsReceipt(t *testing.T) {
 func TestP6P7P17IneligibleAndBadFilesAreNeverCopied(t *testing.T) {
 	w := newWorld(t)
 	f := w.f
-	// P7: an event of another kind; a payload of another media type; an event
-	// whose computer differs from its receipt's.
+	// P7, still ineligible: a public payload of another media type than a
+	// projection batch (computerevent.TapeSegmentEligible keeps it loose); a
+	// payload pinned for a computer id that cannot name a segment directory;
+	// an event whose computer differs from its receipt's.
+	publicMedia, _ := f.pinClass(compA, "computer-event-payload", "application/json", "public", []byte(`{"other":1}`))
+	badID, _ := f.pin("computer/with/slashes", "computer-event-payload", "application/json", []byte(`{"bad":"id"}`))
+	// P7, eligible since the scope widened on 2026-11-01: an event of
+	// another kind and an owner-class payload of another media type are
+	// copied and covered.
 	otherKind, _ := f.pin(compA, "computer-event", "application/vnd.choir.computer-event+json", eventBody(compA, "run_started", "x"))
-	otherMedia, _ := f.pin(compA, "computer-event-payload", "application/json", []byte(`{"other":1}`))
+	otherMedia, _ := f.pin(compA, "computer-event-payload", "application/json", []byte(`{"owner":1}`))
 	mixed, _ := f.pin(compA, "computer-event", "application/vnd.choir.computer-event+json", eventBody(compB, string(computerevent.EventProjectionBatchRecorded), "mixed"))
 	// P6: bytes that no longer hash to the name, with a receipt for the name.
 	good := []byte(`{"batch":"bad"}`)
@@ -382,7 +389,8 @@ func TestP6P7P17IneligibleAndBadFilesAreNeverCopied(t *testing.T) {
 
 	rep, vs := verdicts(t, w.opts(t))
 	for name, want := range map[string]string{
-		"event/" + otherKind: "ineligible", "payload/" + otherMedia: "ineligible", "event/" + mixed: "ineligible",
+		"payload/" + publicMedia: "ineligible", "payload/" + badID: "ineligible", "event/" + mixed: "ineligible",
+		"event/" + otherKind: "uncovered", "payload/" + otherMedia: "uncovered",
 		"payload/" + badDigest: "legacy_bad", "payload/" + forgedDigest: "unreceipted",
 	} {
 		if v := vs[name]; v.Class() != want || v.Deletable() {
@@ -394,11 +402,33 @@ func TestP6P7P17IneligibleAndBadFilesAreNeverCopied(t *testing.T) {
 	for _, c := range []struct {
 		ns tapestore.NS
 		d  string
-	}{{tapestore.NSEvent, otherKind}, {tapestore.NSPayload, otherMedia}, {tapestore.NSEvent, mixed}, {tapestore.NSPayload, badDigest}, {tapestore.NSPayload, forgedDigest}} {
+	}{{tapestore.NSPayload, publicMedia}, {tapestore.NSPayload, badID}, {tapestore.NSEvent, mixed}, {tapestore.NSPayload, badDigest}, {tapestore.NSPayload, forgedDigest}} {
 		for _, comp := range []string{compA, compB} {
 			if _, found, _ := rd.ReadSegment(comp, c.ns, c.d); found {
 				t.Fatalf("copied %s %s under %s", c.ns, c.d, comp)
 			}
+		}
+	}
+	for _, c := range []struct {
+		ns tapestore.NS
+		d  string
+	}{{tapestore.NSEvent, otherKind}, {tapestore.NSPayload, otherMedia}} {
+		if _, found, _ := rd.ReadSegment(compA, c.ns, c.d); !found {
+			t.Fatalf("an eligible %s %s was not copied", c.ns, c.d)
+		}
+	}
+	// The forged receipt (P17) leaves attribution broken, so nothing here is
+	// deletable even after the copy (covered reads as blocked); the clean
+	// case is segment_rule_test.go.
+	_, after := verdicts(t, w.opts(t))
+	for k, v := range after {
+		if v.Deletable() {
+			t.Fatalf("%s: deletable (%q) with attribution broken", k, v.Class())
+		}
+	}
+	for _, k := range []string{"payload/" + publicMedia, "payload/" + badID, "event/" + mixed} {
+		if after[k].Class() != "ineligible" {
+			t.Fatalf("%s: class %q after the copy, want ineligible", k, after[k].Class())
 		}
 	}
 	if rep.Global["payload"].LegacyBad != 1 {

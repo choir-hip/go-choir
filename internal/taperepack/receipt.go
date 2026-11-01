@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	eventNamespace   = "computer-event"
-	payloadNamespace = "computer-event-payload"
+	eventNamespace   = computerevent.PinNamespaceEvent
+	payloadNamespace = computerevent.PinNamespacePayload
 	receiptNamespace = "pin-receipts"
 
 	// maxReceiptBytes bounds a pin receipt read; receipts are about 1 KiB.
@@ -27,16 +27,16 @@ type edge struct {
 	ns       tapestore.NS // NSEvent or NSPayload
 	artifact [32]byte
 	length   int64
-	// eligible follows the production pin path (internal/platform
-	// event_artifacts.go): an event, or a payload whose media type is the
-	// projection batch type, pinned for a computer that can name a segment
-	// directory, with a length a record can hold.
+	// eligible is the pin path's own rule, computerevent.TapeSegmentEligible
+	// (every event; every payload but a public non-batch one), for a
+	// computer that can name a segment directory, with a length a record can
+	// hold. A public non-batch payload stays loose: artifact+sha256 URIs name
+	// it by digest alone and their reader opens the loose file.
 	eligible bool
 	// private marks a payload receipt whose media type is the private
-	// envelope. The receipt cannot say whether the envelope holds a
-	// projection batch (the inner media type is in the envelope metadata), so
-	// eligible is provisional for it: decide opens the envelope metadata of
-	// the file itself and keeps the edge only for a batch of the same computer.
+	// envelope. eligible is provisional for it: decide opens the envelope
+	// metadata of the file itself and keeps the edge only for an envelope of
+	// the same computer.
 	private bool
 }
 
@@ -84,19 +84,18 @@ func classifyReceipt(raw []byte) (e edge, st receiptStatus) {
 	if receipt.Issuer != "corpusd" || len(receipt.SignatureSet) == 0 || receipt.ReceiptVersion != computerevent.ReceiptVersionV1 || lengthErr != nil {
 		return e, receiptRejected
 	}
-	switch {
-	case namespace == eventNamespace:
-		e.ns, e.eligible = tapestore.NSEvent, true
-	case namespace == payloadNamespace:
+	switch namespace {
+	case eventNamespace:
+		e.ns = tapestore.NSEvent
+	case payloadNamespace:
 		e.ns = tapestore.NSPayload
-		// The pin path segments an envelope only under the private class
-		// (event_artifacts.go pinPayload); an envelope pinned under another
-		// class stays loose there, so it stays loose here too.
+		// An envelope under the private class is checked against its
+		// computer in decide, as the pin checks it.
 		e.private = mediaType == computerevent.PrivateArtifactMediaType && privacyClass == "private"
-		e.eligible = mediaType == computerevent.ProjectionBatchMediaType || e.private
 	default:
 		return e, receiptRejected
 	}
+	e.eligible = computerevent.TapeSegmentEligible(namespace, mediaType, privacyClass)
 	if !tapestore.ValidComputerID(computer) || length <= 0 || length > tapestore.MaxRecordBytes {
 		e.eligible = false
 	}

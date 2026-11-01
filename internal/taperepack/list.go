@@ -29,7 +29,7 @@ const (
 	edgeEligible = 1 // the receipt is eligible for the copy
 	edgeRejected = 2 // a PinReceipt the shape guard rejected: it names the file but attributes nothing
 	edgeRef      = 4 // an event body in a segment names the digest: guards, never copies
-	edgePrivate  = 8 // a private-envelope payload receipt: eligible only if the envelope holds a projection batch
+	edgePrivate  = 8 // a private-envelope payload receipt: eligible only if the envelope names the same computer
 )
 
 // computerTable interns computer ids for the edge spill.

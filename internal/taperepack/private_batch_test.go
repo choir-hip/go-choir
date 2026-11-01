@@ -14,19 +14,20 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/tapestore"
 )
 
-// The one-off migration of the sealed projection batch payloads that the
-// pre-fix host wrote as loose files (docs: internal/platform
-// tape_segments_private_test.go). A pin receipt for a private envelope cannot
-// say whether the envelope holds a projection batch, so the engine opens the
-// envelope metadata of the file itself.
+// The one-off migration of the sealed payloads that the pre-fix host wrote
+// as loose files (docs: internal/platform tape_segments_private_test.go). A
+// pin receipt for a private envelope cannot say which computer the envelope
+// was sealed for, so the engine opens the envelope metadata of the file
+// itself.
 //
 //	M1  A sealed batch envelope, with its receipt, is copied, covered and
 //	    deletable; the segment bytes equal the loose bytes.
-//	M2  A sealed envelope of another inner media type stays a loose file
-//	    (ineligible, never copied).
-//	M3  An envelope sealed for another computer than its receipt names, and a
-//	    file that is not an envelope under a private media type, are
-//	    ineligible and never copied.
+//	M2  A sealed envelope of another inner media type was ineligible until
+//	    2026-11-01; it is now eligible (computerevent.TapeSegmentEligible),
+//	    copied, covered and deletable, like M1.
+//	M3  Still ineligible and never copied: an envelope sealed for another
+//	    computer than its receipt names, and a file that is not an envelope
+//	    under a private media type.
 func TestSealedBatchEnvelopesAreMigrated(t *testing.T) {
 	f := newFixture(t)
 	seal := func(computer, event, mediaType, body string) []byte {
@@ -61,7 +62,7 @@ func TestSealedBatchEnvelopesAreMigrated(t *testing.T) {
 		t.Fatal(err)
 	}
 	rd := tapestore.NewReader(f.root)
-	for _, d := range []string{batch, plain} {
+	for _, d := range []string{batch, plain, other} {
 		v := vs["payload/"+d]
 		if !v.Deletable() {
 			t.Fatalf("M1: %s is %s, want covered", d, v.Class())
@@ -72,7 +73,7 @@ func TestSealedBatchEnvelopesAreMigrated(t *testing.T) {
 			t.Fatalf("M1: segment copy of %s: found=%v err=%v", d, found, err)
 		}
 	}
-	for name, d := range map[string]string{"other media": other, "other computer": foreign, "not an envelope": notEnvelope} {
+	for name, d := range map[string]string{"other computer": foreign, "not an envelope": notEnvelope} {
 		if v := vs["payload/"+d]; v.Deletable() || v.Class() != "ineligible" {
 			t.Fatalf("M2/M3 %s: class %q, want ineligible", name, v.Class())
 		}
@@ -84,10 +85,12 @@ func TestSealedBatchEnvelopesAreMigrated(t *testing.T) {
 	}
 }
 
-// An envelope the host pinned under a class other than private stays loose
-// on the pin path (event_artifacts.go pinPayload), so the repack keeps it
-// loose too (review 2026-10-31, both seats).
-func TestOwnerClassEnvelopeIsNotMigrated(t *testing.T) {
+// An envelope the host pinned under a class other than private is not
+// inspected on the pin path; since 2026-11-01 it is segmented there like any
+// non-public payload (computerevent.TapeSegmentEligible), so the repack
+// copies it too, with no envelope check (it was loose before: review
+// 2026-10-31, both seats).
+func TestOwnerClassEnvelopeIsMigrated(t *testing.T) {
 	f := newFixture(t)
 	fields := map[string]any{
 		"computer_id": compA, "artifact_digest": strings.Repeat("b", 64), "media_type": computerevent.PrivateArtifactMediaType,
@@ -103,7 +106,7 @@ func TestOwnerClassEnvelopeIsNotMigrated(t *testing.T) {
 		t.Fatal(err)
 	}
 	e, st := classifyReceipt(raw)
-	if st != receiptOK || e.private || e.eligible {
-		t.Fatalf("owner-class envelope: status %v private %v eligible %v, want ok, not private, not eligible", st, e.private, e.eligible)
+	if st != receiptOK || e.private || !e.eligible {
+		t.Fatalf("owner-class envelope: status %v private %v eligible %v, want ok, not private, eligible", st, e.private, e.eligible)
 	}
 }

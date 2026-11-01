@@ -59,22 +59,46 @@ func (f *fixture) pin(computer, namespace, mediaType string, body []byte) (strin
 	return digest, f.receipt(computer, namespace, mediaType, digest, len(body))
 }
 
+// pinClass is pin with the receipt's privacy class named.
+func (f *fixture) pinClass(computer, namespace, mediaType, class string, body []byte) (string, string) {
+	f.t.Helper()
+	digest := hexSum(body)
+	f.write("sha256/"+namespace+"/"+digest, body)
+	return digest, f.receiptClass(computer, namespace, mediaType, class, digest, len(body))
+}
+
 func (f *fixture) receipt(computer, namespace, mediaType, digest string, length int) string {
 	f.t.Helper()
-	raw := f.receiptRaw(computer, namespace, mediaType, digest, length)
+	return f.receiptClass(computer, namespace, mediaType, defaultClass(mediaType), digest, length)
+}
+
+func (f *fixture) receiptClass(computer, namespace, mediaType, class, digest string, length int) string {
+	f.t.Helper()
+	raw := f.receiptRawClass(computer, namespace, mediaType, class, digest, length)
 	rd := hexSum(raw)
 	f.write("sha256/pin-receipts/"+rd+".json", raw)
 	return rd
 }
 
+// defaultClass: the private class for an encrypted envelope (the host pins
+// one only under it), the owner class otherwise. Both are segment-eligible
+// (computerevent.TapeSegmentEligible); a test that needs a public payload,
+// which stays loose, names the class.
+func defaultClass(mediaType string) string {
+	if mediaType == computerevent.PrivateArtifactMediaType {
+		return "private"
+	}
+	return "owner"
+}
+
 // receiptRaw is the signed receipt's bytes, written nowhere.
 func (f *fixture) receiptRaw(computer, namespace, mediaType, digest string, length int) []byte {
 	f.t.Helper()
-	// The host pins an encrypted envelope only under the private class.
-	class := "owner"
-	if mediaType == computerevent.PrivateArtifactMediaType {
-		class = "private"
-	}
+	return f.receiptRawClass(computer, namespace, mediaType, defaultClass(mediaType), digest, length)
+}
+
+func (f *fixture) receiptRawClass(computer, namespace, mediaType, class, digest string, length int) []byte {
+	f.t.Helper()
 	fields := map[string]any{
 		"computer_id": computer, "artifact_digest": digest, "media_type": mediaType,
 		"length": length, "privacy_class": class, "pin_namespace": namespace,

@@ -150,7 +150,9 @@ func TestR3ARejectedReceiptRefusesTheFileItNames(t *testing.T) {
 func TestR3ASkippedEdgeBesideAKeptEdgeRefusesTheFile(t *testing.T) {
 	w := newWorld(t)
 	x, _ := w.f.batchPayload(compA, "mixed")
-	w.f.receipt(compB, "computer-event-payload", "text/plain", x, len(`{"batch":"mixed"}`))
+	// B's receipt is skipped: a public payload of another media type is
+	// ineligible (computerevent.TapeSegmentEligible).
+	w.f.receiptClass(compB, "computer-event-payload", "text/plain", "public", x, len(`{"batch":"mixed"}`))
 	mustRun(t, w.copyOpts(t, compA))
 	rep, vs := verdicts(t, w.opts(t))
 	if v := vs["payload/"+x]; v.Deletable() {

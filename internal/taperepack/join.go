@@ -285,16 +285,16 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) (counts []compute
 			}
 			name := e.table.names[ed.computer]
 			if ed.private {
-				// A sealed projection batch is eligible, as at the pin
-				// (internal/platform event_artifacts.go pinPayload); any
-				// other envelope stays a loose file. The metadata is the
-				// AEAD associated data: the host reads it, never the body.
+				// A sealed payload of this computer is eligible, as at the
+				// pin (internal/platform event_artifacts.go pinPayload). The
+				// metadata is the AEAD associated data: the host reads it,
+				// never the body.
 				if v.ns != tapestore.NSPayload {
 					dropped = true
 					continue
 				}
 				meta, err := computerevent.InspectPrivateArtifactEnvelope(raw)
-				if err != nil || meta.ComputerID != name || meta.MediaType != computerevent.ProjectionBatchMediaType {
+				if err != nil || meta.ComputerID != name {
 					dropped = true
 					continue
 				}
@@ -302,7 +302,7 @@ func (e *engine) decide(bc *bucketCtx, v *Verdict, raw []byte) (counts []compute
 			if v.ns == tapestore.NSEvent {
 				if !eventTried {
 					eventTried = true
-					if ev, err := computerevent.DecodeHistoricEvent(raw); err == nil && ev.EventKind == computerevent.EventProjectionBatchRecorded {
+					if ev, err := computerevent.DecodeHistoricEvent(raw); err == nil {
 						event = &ev
 					}
 				}
