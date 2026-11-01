@@ -390,6 +390,26 @@ All changes are in `internal/platform/event_artifacts.go`.
 - Writes are serialized per computer by a lock in `tapestore`. The guest
   appender already serializes pins, but the host must not trust that.
 
+**Scope widened, 2026-11-01.** The projection-batch-only rule above left
+every other event, payload and receipt as one loose file each, which is
+how `sha256/` reached 11M files that the off-host backup thrashed on
+(`docs/problems/offhost-backup-shard-thrashes-at-4g-2026-11-01.md`). The
+rule is now `computerevent.TapeSegmentEligible`
+(`internal/computerevent/tape_segment_rule.go`), one predicate used by the
+pin path and by `internal/taperepack`'s copy and delete: every event;
+every payload whose class is not public, or that is a projection batch; a
+private payload only as a private envelope of the same computer; a receipt
+follows its artifact. A public non-batch payload stays loose, because
+`artifact+sha256` URIs name it by digest alone (the capsule effect bundle
+a self-development route applies) and their reader, vmctl's
+`LocalArtifactContentVerifier`, opens the loose file. A computer id that
+cannot name a segment directory, and a record over `MaxRecordBytes`, stay
+loose too. Section 2 point 6's reasoning for keeping non-projection
+payloads loose still holds for that public kind only: the two-seat review
+of the widening found the other readers it names (checkpoints, platform
+update) fetch through the segment-first reader with the pinning
+computer's id.
+
 ### 4.3 Read path (A1), the same library everywhere
 
 `tapestore.Get(computerID, ns, digest)` falls back to the legacy file. It

@@ -16,6 +16,12 @@
 #          last_shard_snapshots), a snapshot from after the split holds
 #          none of pin-receipts, computer-event or computer-event-payload:
 #          restore those from their shard snapshots, one drill per id.
+#          Since every event and most payloads go to tape segments
+#          (2026-11-01), it also restores up to 10 sealed segments of
+#          tape-seg/ (a .seg with its .idx, sealed before the snapshot was
+#          taken) and compares each pair byte for byte with live: a sealed
+#          segment does not change (compact rewrites the identical bytes),
+#          so an identical pair proves every record in it restored.
 #   dolt:  the corpus Dolt backup (restore, `dolt backup restore`, query,
 #          head compared with the run's), and the platform Dolt backup
 #          directory compared byte for byte with live (no second copy: disk).
@@ -67,7 +73,13 @@ tape)
   t0=$(date +%s)
   find "$A/computer-event" "$A/computer-event-payload" "$A/pin-receipts" "$A/file-cas-roots" "$A/file-cas-chunks" \
     -type f ! -newermt "2026-10-20 20:20" 2>/dev/null | shuf -n 200 > "$D/sample.txt"
-  { cat "$D/sample.txt"
+  # Sealed tape segments: an .idx is written at the seal, so one older than
+  # the snapshot's start names a segment sealed before the backup read it.
+  snap_time="$(restic --no-lock snapshots --json "$SNAP" | jq -r '.[0].time // empty')"
+  [ -n "$snap_time" ] || { echo "snapshot $SNAP has no time"; exit 1; }
+  find "${A%/sha256}/tape-seg" -name 'seg-*.idx' -type f ! -newermt "$snap_time" 2>/dev/null | shuf -n 10 \
+    | while read -r i; do [ -f "${i%.idx}.seg" ] && printf '%s\n%s\n' "${i%.idx}.seg" "$i"; done > "$D/segsample.txt"
+  { cat "$D/sample.txt" "$D/segsample.txt"
     echo /var/lib/go-choir/offhost-backup/staging/sqlite/auth.db
     echo /var/lib/go-choir/offhost-backup/staging/sqlite/mail.db; } > "$D/include.txt"
   t1=$(date +%s)
@@ -75,13 +87,17 @@ tape)
     || { echo "restore failed: $(tail -c 400 "$D/restore.log")"; exit 1; }
   t2=$(date +%s)
 
-  same=0; diff=0; missing=0
-  while read -r f; do
-    if [ ! -f "$D/r$f" ]; then missing=$((missing + 1))
-    elif cmp -s "$D/r$f" "$f"; then same=$((same + 1))
-    else diff=$((diff + 1)); fi
-  done < "$D/sample.txt"
-  echo "sample: $(wc -l < "$D/sample.txt") files; identical=$same different=$diff missing=$missing"
+  compare() { # list of live paths; prints identical= different= missing=
+    local same=0 diff=0 missing=0 f
+    while read -r f; do
+      if [ ! -f "$D/r$f" ]; then missing=$((missing + 1))
+      elif cmp -s "$D/r$f" "$f"; then same=$((same + 1))
+      else diff=$((diff + 1)); fi
+    done < "$1"
+    echo "identical=$same different=$diff missing=$missing"
+  }
+  echo "sample: $(wc -l < "$D/sample.txt") files; $(compare "$D/sample.txt")"
+  echo "tape-seg sample: $(( $(wc -l < "$D/segsample.txt") / 2 )) sealed segments ($(wc -l < "$D/segsample.txt") files, $(xargs -r du -cb < "$D/segsample.txt" | tail -1 | cut -f1) bytes); $(compare "$D/segsample.txt")"
   echo "sample by kind: $(sed -E 's#.*/sha256/([^/]+)/.*#\1#' "$D/sample.txt" | sort | uniq -c | tr '\n' ' ')"
   for db in auth mail; do
     f="$D/r/var/lib/go-choir/offhost-backup/staging/sqlite/$db.db"
