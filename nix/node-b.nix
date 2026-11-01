@@ -1795,14 +1795,15 @@ in
         # VMCTL_GUEST_CACHE_RETURN (off stops it; observe makes it a dry run);
         # it needs neither _ONLY nor the pressure trigger above. Owner
         # decision 2026-11-01 (design section 12). Rings, in the design's
-        # proof order: d@e active (R0); the paper observe. Its first active
+        # proof order: d@e active (R0); the paper active again. Its first
         # act (2026-11-01 07:34Z) freed 1031 MiB in the guest and the host
-        # got 174 MiB: outcome B, the guest refills freed cache at once
+        # got 174 MiB, because the derived-key validation streamed state.db
+        # and refilled the cache at once. That stream is gone (c99e5ce3c;
+        # refaults about 1/s since 11:40Z), so the second trial is the proof
         # (docs/problems/paper-busy-cold-freed-cache-refills-2026-11-01.md).
-        # Back to observe until S6's gate.
         # Rollback: drop the computer's entry (or =observe), or
         # VMCTL_GUEST_CACHE_RETURN=off for every trigger.
-        "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=observe"
+        "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=active"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"

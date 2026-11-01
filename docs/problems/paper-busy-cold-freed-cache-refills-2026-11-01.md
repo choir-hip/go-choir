@@ -35,3 +35,16 @@ Hypothesis, not yet confirmed: the host caches the paper's data.img too
 - Find what reads state.db as a stream (the paper's queries) and stop the scan.
 - The double cache: O_DIRECT for data.img, or host-side drop of the image's
   pages, weighed against read latency.
+
+## The stream found, second trial (2026-11-01 16:10Z)
+
+The stream was the boot-time derived-key validation
+(derived-key-validation-rereads-og-objects-every-boot-2026-11-01.md), which
+reread og_objects for hours after every boot. Its fix (c99e5ce3c) ran its last
+full pass to 11:40Z. Since then the paper's busy_cold dry runs show a refault
+rate of about one per second (one burst at 15:03Z, stopped by the guard), and
+the guest holds 458 MiB anon with 6.5 GiB cache. Host data.img caching was
+measured at 770 MiB, so the double cache is small. The paper goes back to
+=active for a second trial. Proof: a later act's host RSS fall of at least 30%
+of what the guest freed, with no refault_stop. Rollback: =observe again, then
+S6 (bound the guest cache).
