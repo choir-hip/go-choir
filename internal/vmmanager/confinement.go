@@ -38,7 +38,13 @@ const (
 	DefaultJailerPidsMax   = 128
 	DefaultJailerCPUWeight = 100
 	DefaultJailerIOWeight  = 100
-	DefaultJailerNoFile    = 2048
+	// DefaultJailerMemoryHighHeadroomMiB is the memory backstop above the
+	// guest's own size (guest isolation I6).
+	DefaultJailerMemoryHighHeadroomMiB = 1024
+	// DefaultJailerCPUMaxHeadroom is cpu.max's headroom above the vCPUs.
+	DefaultJailerCPUMaxHeadroom = 1
+	cpuMaxPeriodUS              = 100000
+	DefaultJailerNoFile         = 2048
 
 	jailBaseDirName     = ".jail"
 	vmmUIDFileName      = "vmm-uid"
@@ -133,6 +139,16 @@ type JailerConfig struct {
 	PidsMax   int
 	CPUWeight int
 	IOWeight  int
+	// MemoryHighHeadroomMiB puts memory.high on the leaf at the guest's
+	// size plus this, and memory.swap.max at 0; 0 omits both (guest
+	// isolation I6). The guest's RAM is bounded by its size and cannot be
+	// reclaimed, so what the bound acts on is the host page cache and
+	// writeback the guest's disk I/O charges to its own leaf: a guest that
+	// floods its disk recycles its own cache, not every guest's.
+	MemoryHighHeadroomMiB int
+	// CPUMaxHeadroom puts cpu.max on the leaf at the guest's vCPUs plus
+	// this many CPUs; 0 omits it (guest isolation I6).
+	CPUMaxHeadroom int
 	// NoFile is the VMM's RLIMIT_NOFILE; 0 leaves the jailer default.
 	NoFile int
 	// SpeculationDirect applies the speculation barriers to direct launches
@@ -214,6 +230,9 @@ func defaultJailerConfig() JailerConfig {
 		CPUWeight: DefaultJailerCPUWeight,
 		IOWeight:  DefaultJailerIOWeight,
 		NoFile:    DefaultJailerNoFile,
+
+		MemoryHighHeadroomMiB: DefaultJailerMemoryHighHeadroomMiB,
+		CPUMaxHeadroom:        DefaultJailerCPUMaxHeadroom,
 	}
 }
 
@@ -345,7 +364,10 @@ func jailFirecrackerRestoreArgs() []string {
 }
 
 // jailerArgs is the jailer's command line (without argv[0]).
-func (m *Manager) jailerArgs(vmID string, uid int, firecrackerArgs []string) []string {
+// jailShape is the guest's size, for the leaf's backstops; zero omits them.
+type jailShape struct{ MemMiB, VCPUs int }
+
+func (m *Manager) jailerArgs(vmID string, uid int, shape jailShape, firecrackerArgs []string) []string {
 	j := m.cfg.Jailer
 	bin := m.launchedVMM(vmID).JailedFirecracker
 	if bin == "" {
@@ -374,6 +396,16 @@ func (m *Manager) jailerArgs(vmID string, uid int, firecrackerArgs []string) []s
 	}
 	if j.IOWeight > 0 {
 		args = append(args, "--cgroup", "io.weight="+strconv.Itoa(j.IOWeight))
+	}
+	if j.MemoryHighHeadroomMiB > 0 && shape.MemMiB > 0 {
+		high := int64(shape.MemMiB+j.MemoryHighHeadroomMiB) << 20
+		args = append(args, "--cgroup", "memory.high="+strconv.FormatInt(high, 10), "--cgroup", "memory.swap.max=0")
+	}
+	if j.CPUMaxHeadroom > 0 && shape.VCPUs > 0 {
+		// The guest's vCPUs plus headroom for the VMM's own threads (virtio
+		// I/O, the API): a guest never uses more than its vCPUs, so the cap
+		// binds only on the VMM's emulation work (guest isolation I6).
+		args = append(args, "--cgroup", "cpu.max="+strconv.Itoa((shape.VCPUs+j.CPUMaxHeadroom)*cpuMaxPeriodUS)+" "+strconv.Itoa(cpuMaxPeriodUS))
 	}
 	if j.NoFile > 0 {
 		args = append(args, "--resource-limit", "no-file="+strconv.Itoa(j.NoFile))
@@ -1093,8 +1125,8 @@ func (m *Manager) jailedExec() string {
 
 // startJailedFirecracker runs the jailer for vmID and tracks the Firecracker
 // it leaves behind in its own PID namespace. Callers hold m.mu.
-func (m *Manager) startJailedFirecracker(vmID string, receipt *ConfinementReceipt, firecrackerArgs []string) error {
-	args := m.jailerArgs(vmID, receipt.UID, firecrackerArgs)
+func (m *Manager) startJailedFirecracker(vmID string, receipt *ConfinementReceipt, shape jailShape, firecrackerArgs []string) error {
+	args := m.jailerArgs(vmID, receipt.UID, shape, firecrackerArgs)
 	if m.firecrackerStarter != nil {
 		return m.firecrackerStarter(vmID, args)
 	}

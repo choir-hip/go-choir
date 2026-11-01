@@ -164,7 +164,7 @@ func TestPrepareJailerHostRefusesDynamicExecFile(t *testing.T) {
 func TestJailerArgsUseTheJailedExecFile(t *testing.T) {
 	mgr, _ := jailedManager(t, "/var/lib/go-choir/vm-state")
 	mgr.cfg.Jailer.FirecrackerBinPath = "/nix/store/def-firecracker-static-x86_64-unknown-linux-musl-1.17.0/bin/firecracker"
-	got := strings.Join(mgr.jailerArgs("vm-a", 900123, jailFirecrackerLaunchArgs(true)), " ")
+	got := strings.Join(mgr.jailerArgs("vm-a", 900123, jailShape{}, jailFirecrackerLaunchArgs(true)), " ")
 	if !strings.Contains(got, "--exec-file /nix/store/def-firecracker-static-x86_64-unknown-linux-musl-1.17.0/bin/firecracker ") {
 		t.Fatalf("jailer args = %s, want the static exec file", got)
 	}
@@ -200,7 +200,7 @@ func TestNextBuildJailsOnlyWhenStatic(t *testing.T) {
 		t.Fatalf("a pinned computer must still jail: %s", mode)
 	}
 	mgr.recordLaunchedVMM(primary.VMID, mgr.vmmFor(primary))
-	if got := strings.Join(mgr.jailerArgs(primary.VMID, 900001, nil), " "); !strings.Contains(got, "--exec-file "+mgr.cfg.Jailer.FirecrackerBinPath+" ") {
+	if got := strings.Join(mgr.jailerArgs(primary.VMID, 900001, jailShape{}, nil), " "); !strings.Contains(got, "--exec-file "+mgr.cfg.Jailer.FirecrackerBinPath+" ") {
 		t.Fatalf("pinned jailer args = %s", got)
 	}
 
@@ -209,7 +209,7 @@ func TestNextBuildJailsOnlyWhenStatic(t *testing.T) {
 		t.Fatalf("next build with a static binary = %s %s, want jailed", mode, reason)
 	}
 	mgr.recordLaunchedVMM(test.VMID, mgr.vmmFor(test))
-	if got := strings.Join(mgr.jailerArgs(test.VMID, 900002, nil), " "); !strings.Contains(got, "--exec-file "+mgr.cfg.FirecrackerNext.BinPath+" ") {
+	if got := strings.Join(mgr.jailerArgs(test.VMID, 900002, jailShape{}, nil), " "); !strings.Contains(got, "--exec-file "+mgr.cfg.FirecrackerNext.BinPath+" ") {
 		t.Fatalf("next jailer args = %s, want the next binary", got)
 	}
 }

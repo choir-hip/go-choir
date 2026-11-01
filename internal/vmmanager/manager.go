@@ -2493,7 +2493,7 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 		if err = m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, receipt.UID); err != nil {
 			return err
 		}
-		err = m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.hibernateMode() == HibernateModeSnapshot))
+		err = m.startJailedFirecracker(vmID, receipt, jailShape{MemMiB: cfg.MachineMemSizeMib, VCPUs: cfg.MachineCPUCount}, jailFirecrackerLaunchArgs(m.hibernateMode() == HibernateModeSnapshot))
 		return err
 	}
 

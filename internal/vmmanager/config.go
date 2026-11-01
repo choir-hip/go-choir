@@ -259,11 +259,13 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 		j.CgroupParent = filepath.Clean(v)
 	}
 	for name, dst := range map[string]*int{
-		"VMCTL_JAILER_UID_BASE":   &j.UIDBase,
-		"VMCTL_JAILER_UID_COUNT":  &j.UIDCount,
-		"VMCTL_JAILER_PIDS_MAX":   &j.PidsMax,
-		"VMCTL_JAILER_CPU_WEIGHT": &j.CPUWeight,
-		"VMCTL_JAILER_IO_WEIGHT":  &j.IOWeight,
+		"VMCTL_JAILER_UID_BASE":                 &j.UIDBase,
+		"VMCTL_JAILER_UID_COUNT":                &j.UIDCount,
+		"VMCTL_JAILER_PIDS_MAX":                 &j.PidsMax,
+		"VMCTL_JAILER_CPU_WEIGHT":               &j.CPUWeight,
+		"VMCTL_JAILER_IO_WEIGHT":                &j.IOWeight,
+		"VMCTL_JAILER_MEMORY_HIGH_HEADROOM_MIB": &j.MemoryHighHeadroomMiB,
+		"VMCTL_JAILER_CPU_MAX_HEADROOM":         &j.CPUMaxHeadroom,
 	} {
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n >= 0 {

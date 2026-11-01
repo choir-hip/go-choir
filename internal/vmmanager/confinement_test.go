@@ -97,15 +97,17 @@ func jailedManager(t *testing.T, stateDir string) (*Manager, *chownRecorder) {
 	cfg.StateDir = stateDir
 	cfg.FirecrackerBinPath = "/nix/store/abc-firecracker-1.15.1/bin/firecracker"
 	cfg.Jailer = JailerConfig{
-		Enabled:      true,
-		BinPath:      "/nix/store/abc-firecracker-1.15.1/bin/jailer",
-		UIDBase:      DefaultJailerUIDBase,
-		UIDCount:     DefaultJailerUIDCount,
-		CgroupParent: "system.slice/system-choirvms.slice/vms",
-		PidsMax:      DefaultJailerPidsMax,
-		CPUWeight:    DefaultJailerCPUWeight,
-		IOWeight:     DefaultJailerIOWeight,
-		NoFile:       DefaultJailerNoFile,
+		Enabled:               true,
+		BinPath:               "/nix/store/abc-firecracker-1.15.1/bin/jailer",
+		UIDBase:               DefaultJailerUIDBase,
+		UIDCount:              DefaultJailerUIDCount,
+		CgroupParent:          "system.slice/system-choirvms.slice/vms",
+		PidsMax:               DefaultJailerPidsMax,
+		CPUWeight:             DefaultJailerCPUWeight,
+		IOWeight:              DefaultJailerIOWeight,
+		MemoryHighHeadroomMiB: DefaultJailerMemoryHighHeadroomMiB,
+		CPUMaxHeadroom:        DefaultJailerCPUMaxHeadroom,
+		NoFile:                DefaultJailerNoFile,
 	}
 	mgr := NewManager(cfg)
 	withVMSlice(t, mgr)
@@ -205,11 +207,11 @@ func TestRewriteFirecrackerConfigForJail(t *testing.T) {
 // after "--" without a second --id.
 func TestJailerLaunchArgs(t *testing.T) {
 	mgr, _ := jailedManager(t, "/var/lib/go-choir/vm-state")
-	got := mgr.jailerArgs("vm-a", 900123, jailFirecrackerLaunchArgs(true))
+	got := mgr.jailerArgs("vm-a", 900123, jailShape{MemMiB: 2048, VCPUs: 4}, jailFirecrackerLaunchArgs(true))
 	want := "--id vm-a --exec-file /nix/store/abc-firecracker-1.15.1/bin/firecracker --uid 900123 --gid 900123 " +
 		"--chroot-base-dir /var/lib/go-choir/vm-state/.jail --new-pid-ns --cgroup-version 2 " +
 		"--parent-cgroup system.slice/system-choirvms.slice/vms --cgroup pids.max=128 --cgroup cpu.weight=100 --cgroup io.weight=100 " +
-		"--resource-limit no-file=2048 -- --api-sock /run/fc.sock --enable-pci --config-file /fc-config.json"
+		"--cgroup memory.high=3221225472 --cgroup memory.swap.max=0 --cgroup cpu.max=500000 100000 --resource-limit no-file=2048 -- --api-sock /run/fc.sock --enable-pci --config-file /fc-config.json"
 	if strings.Join(got, " ") != want {
 		t.Fatalf("jailer args =\n%s\nwant\n%s", strings.Join(got, " "), want)
 	}
@@ -232,9 +234,32 @@ func TestJailerLaunchArgs(t *testing.T) {
 	mgr.cfg.Jailer.PidsMax = 0
 	mgr.cfg.Jailer.CPUWeight = 0
 	mgr.cfg.Jailer.IOWeight = 0
-	got = mgr.jailerArgs("vm-a", 900123, []string{"--version"})
+	got = mgr.jailerArgs("vm-a", 900123, jailShape{}, []string{"--version"})
 	if s := strings.Join(got, " "); strings.Contains(s, "--parent-cgroup") || strings.Contains(s, "--cgroup ") || !strings.Contains(s, "--cgroup-version 2") {
 		t.Fatalf("args without cgroup properties = %s", s)
+	}
+}
+
+// The memory backstop (guest isolation I6). Ways it can fail, written first:
+//   - memory.high at or under the guest's own size, so a guest that touches
+//     all its RAM is throttled (Firecracker's guest memory cannot swap or be
+//     reclaimed, only its cache can);
+//   - a backstop for a guest whose size is unknown (0), sized from nothing;
+//   - memory.max (an OOM kill) instead of memory.high (reclaim of the
+//     guest's own host cache, then throttling);
+//   - the leaf left able to swap once it has a memory controller.
+func TestJailerMemoryBackstop(t *testing.T) {
+	mgr, _ := jailedManager(t, "/var/lib/go-choir/vm-state")
+	s := strings.Join(mgr.jailerArgs("vm-a", 900123, jailShape{MemMiB: 8192}, []string{"--version"}), " ")
+	if !strings.Contains(s, "--cgroup memory.high=9663676416 --cgroup memory.swap.max=0") || strings.Contains(s, "memory.max=") {
+		t.Fatalf("8 GiB guest: %s", s)
+	}
+	if s := strings.Join(mgr.jailerArgs("vm-a", 900123, jailShape{}, []string{"--version"}), " "); strings.Contains(s, "memory.") {
+		t.Fatalf("unknown size: %s", s)
+	}
+	mgr.cfg.Jailer.MemoryHighHeadroomMiB = 0
+	if s := strings.Join(mgr.jailerArgs("vm-a", 900123, jailShape{MemMiB: 8192}, []string{"--version"}), " "); strings.Contains(s, "memory.") {
+		t.Fatalf("headroom 0 must omit the backstop: %s", s)
 	}
 }
 
@@ -242,7 +267,7 @@ func TestJailerLaunchArgs(t *testing.T) {
 // carries --id, but only a process whose argv[0] is firecracker is the VM.
 func TestCmdlineMatcherIgnoresJailerProcess(t *testing.T) {
 	mgr, _ := jailedManager(t, "/var/lib/go-choir/vm-state")
-	jailer := append([]string{mgr.cfg.Jailer.BinPath}, mgr.jailerArgs("vm-a", 900001, jailFirecrackerLaunchArgs(true))...)
+	jailer := append([]string{mgr.cfg.Jailer.BinPath}, mgr.jailerArgs("vm-a", 900001, jailShape{}, jailFirecrackerLaunchArgs(true))...)
 	if firecrackerCmdlineBytesMatchVM([]byte(strings.Join(jailer, "\x00")), "vm-a") {
 		t.Fatal("the jailer process must not count as the VM's Firecracker")
 	}
