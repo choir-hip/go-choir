@@ -1775,6 +1775,22 @@ in
         "VMCTL_GUEST_CACHE_RETURN=active"
         "VMCTL_GUEST_CACHE_RETURN_ONLY=computer-59c902c5d46caecc0a180a8557164e72,computer-734d0344e9d5d7e51eef11df61f58a5b"
         "VMCTL_GUEST_CACHE_RETURN_TRIGGERS=idle"
+        # Density D6 S5: always-busy computers return a capped share of
+        # their cold page cache while they work (busy_cold: at most 1 GiB
+        # per act, keep max(512 MiB, active_file), 1 s budget, refault guard
+        # 32/s, never with a live capsule or a self-development operation in
+        # flight). Pressure trigger only: make-room's step 0 asks them after
+        # the idle computers, at most once per five minutes each; there is no
+        # periodic act (design 5.5). Its own selector, capped by
+        # VMCTL_GUEST_CACHE_RETURN (off stops it; observe makes it a dry run);
+        # it needs neither _ONLY nor the pressure trigger above. Owner
+        # decision 2026-11-01 (design section 12). Rings, in the design's
+        # proof order: d@e active (R0); the paper observe (dry runs: sizing
+        # and refault readings in its console, nothing written) until d@e's
+        # act is proven, then flip its entry to =active (a human act, R5).
+        # Rollback: drop the computer's entry (or =observe), or
+        # VMCTL_GUEST_CACHE_RETURN=off for every trigger.
+        "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72=active,computer-1355b83bced1613eb048ee28d66688a8=observe"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"

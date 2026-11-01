@@ -70,6 +70,11 @@ const (
 	cacheReturnPressureMinExcess = 256 << 20
 	// cacheReturnPressureMaxCandidates bounds the computers one start asks.
 	cacheReturnPressureMaxCandidates = 3
+	// cacheReturnBusyColdRepeat: an always-busy computer is asked for
+	// busy_cold at most this often (S5). Each act returns at most 1 GiB, so
+	// a run of refused starts takes at most 1 GiB per five minutes from it,
+	// and its refault guard reads a full minute between acts.
+	cacheReturnBusyColdRepeat = 5 * time.Minute
 
 	cacheReturnPath = "/internal/runtime/memory/cache-return"
 )
@@ -91,6 +96,13 @@ type GuestCacheReturnConfig struct {
 	Idle           time.Duration
 	PressureIdle   time.Duration
 	PressureBudget time.Duration
+	// BusyCold names the always-busy computers (by computer or VM id) asked
+	// for busy_cold under host pressure (S5), each with its own mode,
+	// observe or active; Mode caps it (off stops every entry, observe makes
+	// every entry a dry run). Its own selector and its own trigger: it needs
+	// neither Only nor the pressure trigger, so turning it on for the paper
+	// does not turn S4 on for the idle ring. Empty names nobody.
+	BusyCold map[string]string
 }
 
 // DefaultGuestCacheReturnConfig is the code default: off.
@@ -158,6 +170,8 @@ type GuestCacheReturnValues struct {
 	Idle           string
 	PressureIdle   string
 	PressureBudget string
+	// BusyCold is "id=observe|active,..." (VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS).
+	BusyCold string
 }
 
 // GuestCacheReturnConfigFromValues parses and clamps. Malformed values are
@@ -193,7 +207,50 @@ func GuestCacheReturnConfigFromValues(v GuestCacheReturnValues) GuestCacheReturn
 	clamp(v.Idle, &cfg.Idle, time.Minute, 9*time.Minute)
 	clamp(v.PressureIdle, &cfg.PressureIdle, 0, 9*time.Minute)
 	clamp(v.PressureBudget, &cfg.PressureBudget, 2*time.Second, 30*time.Second)
+	cfg.BusyCold = parseBusyColdEntries(v.BusyCold)
 	return cfg
+}
+
+// parseBusyColdEntries reads "id=mode" pairs. Only the exact words observe
+// and active enter; a bare id, an empty id, another word or a capital is
+// dropped (fails closed: D6-M16).
+func parseBusyColdEntries(raw string) map[string]string {
+	var out map[string]string
+	for _, tok := range strings.Split(raw, ",") {
+		id, mode, ok := strings.Cut(strings.TrimSpace(tok), "=")
+		id, mode = strings.TrimSpace(id), strings.TrimSpace(mode)
+		if !ok || id == "" || (mode != GuestCacheReturnObserve && mode != GuestCacheReturnActive) {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[id] = mode
+	}
+	return out
+}
+
+// busyColdModeFor is the computer's busy_cold mode: its entry (by VM id,
+// then computer id) capped by the global switch. off means never asked.
+func busyColdModeFor(cfg GuestCacheReturnConfig, own *VMOwnership) string {
+	if own == nil {
+		return GuestCacheReturnOff
+	}
+	global := NormalizeGuestCacheReturnMode(cfg.Mode)
+	if global == GuestCacheReturnOff {
+		return GuestCacheReturnOff
+	}
+	mode, ok := cfg.BusyCold[own.VMID]
+	if !ok && own.ComputerID != "" {
+		mode, ok = cfg.BusyCold[own.ComputerID]
+	}
+	if !ok || (mode != GuestCacheReturnObserve && mode != GuestCacheReturnActive) {
+		return GuestCacheReturnOff
+	}
+	if global == GuestCacheReturnObserve {
+		return GuestCacheReturnObserve
+	}
+	return mode
 }
 
 // SetGuestCacheReturnConfig configures the trigger.
@@ -356,6 +413,65 @@ func cacheReturnCandidates(in cacheReturnCandidateInput) []*VMOwnership {
 	return out
 }
 
+// busyColdCandidates are the always-busy computers make-room's step 0 asks
+// for busy_cold (S5), in Order (then by VM id). A computer is a candidate
+// when every rule holds: the busy-cold switch names it (busyColdModeFor not
+// off); running and active; not held; has a ComputerURL; under no
+// lifecycle claim (the starter included); not in flight; not unsupported at
+// this boot; D4 has captured its settled RSS; Extra holds; and it was not
+// asked in the last five minutes. There is no idle floor and no busy probe:
+// the computer always works, and the guest itself refuses when a capsule is
+// live, a self-development operation is in flight, or refaults climb. Class
+// does not matter here: only an explicit entry selects.
+func busyColdCandidates(in cacheReturnCandidateInput) []*VMOwnership {
+	var out []*VMOwnership
+	for _, own := range in.Ownerships {
+		if own == nil || own.State != VMStateActive || own.IsHeld() {
+			continue
+		}
+		if busyColdModeFor(in.Config, own) == GuestCacheReturnOff {
+			continue
+		}
+		if strings.TrimSpace(own.ComputerURL) == "" {
+			continue
+		}
+		if in.Claimed != nil && in.Claimed(own) {
+			continue
+		}
+		if in.InFlight != nil && in.InFlight(own.VMID) {
+			continue
+		}
+		if in.Unsupported != nil && in.Unsupported(own.VMID, own.Epoch) {
+			continue
+		}
+		if in.Extra != nil && !in.Extra(own) {
+			continue
+		}
+		if last, acted := lastActOf(in, own.VMID); acted && in.Now.Sub(last) < cacheReturnBusyColdRepeat {
+			continue
+		}
+		if in.Uncaptured != nil && in.Uncaptured(own.VMID) {
+			continue
+		}
+		out = append(out, own)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if in.Order != nil {
+			if in.Order(out[i], out[j]) {
+				return true
+			}
+			if in.Order(out[j], out[i]) {
+				return false
+			}
+		}
+		return out[i].VMID < out[j].VMID
+	})
+	if in.Limit > 0 && len(out) > in.Limit {
+		out = out[:in.Limit]
+	}
+	return out
+}
+
 func lastActOf(in cacheReturnCandidateInput, vmID string) (time.Time, bool) {
 	if in.LastAct == nil {
 		return time.Time{}, false
@@ -401,6 +517,14 @@ type CacheReturnRecord struct {
 	GuestReclaimedMiB uint64 `json:"guest_reclaimed_mib"`
 	GuestSteps        int    `json:"guest_steps,omitempty"`
 	GuestMS           int64  `json:"guest_ms,omitempty"`
+	// The guest's refault readings: workingset_refault_file before and after
+	// the act, and (busy_cold) its guard's rates per second and limit. nil
+	// rates are "the guest did not say".
+	GuestRefaultsBefore    int64    `json:"guest_refaults_before,omitempty"`
+	GuestRefaultsAfter     int64    `json:"guest_refaults_after,omitempty"`
+	GuestRefaultRateBefore *float64 `json:"guest_refault_rate_before_per_s,omitempty"`
+	GuestRefaultRateAfter  *float64 `json:"guest_refault_rate_after_per_s,omitempty"`
+	GuestRefaultLimit      float64  `json:"guest_refault_limit_per_s,omitempty"`
 
 	RSSBeforeMiB       uint64 `json:"rss_before_mib"`
 	RSSAfterMiB        uint64 `json:"rss_after_mib"`
@@ -423,8 +547,17 @@ func (r CacheReturnRecord) JournalLine() string {
 		}
 		return strconv.FormatBool(*b)
 	}
-	extra := fmt.Sprintf(" method=%s path=%s swappiness_key=%s reporting_negotiated=%s reportable_kib_before=%d reportable_kib_after=%d detail=%q",
-		r.Method, r.Path, say(r.SwappinessKey), say(r.ReportingNegotiated), r.ReportableKiBBefore, r.ReportableKiBAfter, r.Detail)
+	rate := func(p *float64) string {
+		if p == nil {
+			return "unknown"
+		}
+		return strconv.FormatFloat(*p, 'f', 1, 64)
+	}
+	extra := fmt.Sprintf(" method=%s path=%s swappiness_key=%s reporting_negotiated=%s reportable_kib_before=%d reportable_kib_after=%d"+
+		" guest_refaults_before=%d guest_refaults_after=%d guest_refault_rate_before=%s guest_refault_rate_after=%s guest_refault_limit=%s detail=%q",
+		r.Method, r.Path, say(r.SwappinessKey), say(r.ReportingNegotiated), r.ReportableKiBBefore, r.ReportableKiBAfter,
+		r.GuestRefaultsBefore, r.GuestRefaultsAfter, rate(r.GuestRefaultRateBefore), rate(r.GuestRefaultRateAfter),
+		strconv.FormatFloat(r.GuestRefaultLimit, 'f', 0, 64), r.Detail)
 	return fmt.Sprintf("guest cache return VM %s trigger=%s mode=%s scope=%s outcome=%s dry_run=%t "+
 		"guest_target_mib=%d guest_reclaimed_mib=%d rss_before_mib=%d rss_after_mib=%d "+
 		"rss_anon_before_mib=%d rss_anon_after_mib=%d rss_file_before_mib=%d rss_file_after_mib=%d "+
@@ -438,10 +571,12 @@ func (r CacheReturnRecord) JournalLine() string {
 // GuestCacheReturnSummary is the health view: the switch and the recent
 // acts. Memory only; it never probes a guest.
 type GuestCacheReturnSummary struct {
-	Mode     string              `json:"mode"`
-	Only     []string            `json:"only,omitempty"`
-	Triggers []string            `json:"triggers,omitempty"`
-	Scope    string              `json:"scope"`
+	Mode     string   `json:"mode"`
+	Only     []string `json:"only,omitempty"`
+	Triggers []string `json:"triggers,omitempty"`
+	Scope    string   `json:"scope"`
+	// BusyCold is the busy-cold switch's entries (S5).
+	BusyCold map[string]string   `json:"busy_cold,omitempty"`
 	Recent   []CacheReturnRecord `json:"recent,omitempty"`
 	// LastAt is each computer's last act (last_cache_return_at).
 	LastAt map[string]string `json:"last_cache_return_at,omitempty"`
@@ -549,6 +684,12 @@ func (r *OwnershipRegistry) GuestCacheReturnSummary() GuestCacheReturnSummary {
 	s := &r.cacheReturn
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(cfg.BusyCold) > 0 {
+		out.BusyCold = make(map[string]string, len(cfg.BusyCold))
+		for k, v := range cfg.BusyCold {
+			out.BusyCold[k] = v
+		}
+	}
 	out.Recent = append([]CacheReturnRecord(nil), s.ring...)
 	if len(s.lastAt) > 0 {
 		out.LastAt = make(map[string]string, len(s.lastAt))
@@ -739,21 +880,21 @@ func (r *OwnershipRegistry) guestCacheReturnAct(ctx context.Context, own *VMOwne
 	st := &r.cacheReturn
 	defer st.wg.Done()
 	defer st.end(own.VMID)
-	r.doGuestCacheReturn(ctx, own, trigger, cfg, time.Time{})
+	r.doGuestCacheReturn(ctx, own, trigger, "idle", cfg.Mode == GuestCacheReturnObserve, cfg.Scope, time.Time{})
 }
 
-// doGuestCacheReturn runs one act and records it: the call (bounded by ctx
-// and the 10 s call bound), then the wait for the host to see the fall (at
-// most settleCap), then the host's readings. It returns the record and the
-// bytes the Firecracker RSS fell by, as the host measured them.
-func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwnership, trigger string, cfg GuestCacheReturnConfig, deadline time.Time) (CacheReturnRecord, uint64) {
+// doGuestCacheReturn runs one act in mode (idle, or busy_cold for an
+// always-busy computer) and records it: the call (bounded by ctx and the
+// 10 s call bound), then the wait for the host to see the fall (at most
+// settleCap), then the host's readings. It returns the record and the bytes
+// the Firecracker RSS fell by, as the host measured them.
+func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwnership, trigger, mode string, dry bool, scope string, deadline time.Time) (CacheReturnRecord, uint64) {
 	st := &r.cacheReturn
 
 	started := time.Now()
-	dry := cfg.Mode == GuestCacheReturnObserve
 	rec := CacheReturnRecord{
 		At: r.now().UTC().Format(time.RFC3339), VMID: own.VMID, ComputerID: own.ComputerID,
-		Trigger: trigger, Mode: "idle", Scope: cfg.Scope, DryRun: dry,
+		Trigger: trigger, Mode: mode, Scope: scope, DryRun: dry,
 	}
 	read := r.cacheReturnRSSReader(own.VMID)
 	before, haveBefore := read()
@@ -762,7 +903,7 @@ func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwner
 	}
 	rec.HostAvailBeforeMiB = st.hostAvail() >> 20
 
-	status, report, err := st.call(ctx, own, cfg.Scope, dry)
+	status, report, err := st.call(ctx, own, mode, scope, dry)
 	switch {
 	case err != nil:
 		rec.Outcome = err.Error()
@@ -791,6 +932,14 @@ func (r *OwnershipRegistry) doGuestCacheReturn(ctx context.Context, own *VMOwner
 		}
 		rec.GuestTargetMiB, rec.GuestReclaimedMiB = report.TargetBytes>>20, report.ReclaimedBytes>>20
 		rec.GuestSteps, rec.GuestMS = report.Steps, report.MS
+		if report.Before.WorkingsetRefaultFile != nil {
+			rec.GuestRefaultsBefore = *report.Before.WorkingsetRefaultFile
+		}
+		if report.After.WorkingsetRefaultFile != nil {
+			rec.GuestRefaultsAfter = *report.After.WorkingsetRefaultFile
+		}
+		rec.GuestRefaultRateBefore, rec.GuestRefaultRateAfter = report.RefaultRateBefore, report.RefaultRateAfter
+		rec.GuestRefaultLimit = report.RefaultLimit
 	}
 
 	// What the host sees afterwards. The guest's reclaimed bytes only size
@@ -852,22 +1001,27 @@ type cacheReturnGuestReport struct {
 	Steps          int    `json:"steps"`
 	MS             int64  `json:"ms"`
 	// Pointers: a report that does not say is not a report of false.
-	SwappinessKey       *bool `json:"swappiness_key"`
-	ReportingNegotiated *bool `json:"reporting_negotiated"`
+	SwappinessKey       *bool    `json:"swappiness_key"`
+	ReportingNegotiated *bool    `json:"reporting_negotiated"`
+	RefaultLimit        float64  `json:"refault_limit_per_s"`
+	RefaultRateBefore   *float64 `json:"refault_rate_before_per_s"`
+	RefaultRateAfter    *float64 `json:"refault_rate_after_per_s"`
 	Before              struct {
-		ReportableKiB *int64 `json:"reportable_kib"`
+		ReportableKiB         *int64 `json:"reportable_kib"`
+		WorkingsetRefaultFile *int64 `json:"workingset_refault_file"`
 	} `json:"before"`
 	After struct {
-		ReportableKiB *int64 `json:"reportable_kib"`
+		ReportableKiB         *int64 `json:"reportable_kib"`
+		WorkingsetRefaultFile *int64 `json:"workingset_refault_file"`
 	} `json:"after"`
 }
 
 // call posts one act to the guest. The request carries no host credential:
 // hostauth.MarkInternal sends none to a guest address. The error is the
 // recorded outcome word.
-func (s *guestCacheReturnState) call(ctx context.Context, own *VMOwnership, scope string, dryRun bool) (int, cacheReturnGuestReport, error) {
+func (s *guestCacheReturnState) call(ctx context.Context, own *VMOwnership, mode, scope string, dryRun bool) (int, cacheReturnGuestReport, error) {
 	var report cacheReturnGuestReport
-	body, _ := json.Marshal(map[string]any{"mode": "idle", "scope": scope, "dry_run": dryRun})
+	body, _ := json.Marshal(map[string]any{"mode": mode, "scope": scope, "dry_run": dryRun})
 	timeout := s.httpTimeout
 	if timeout <= 0 {
 		timeout = cacheReturnHTTPTimeout

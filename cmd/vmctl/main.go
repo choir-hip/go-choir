@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -117,9 +118,14 @@ func main() {
 	// maintenance sweep (review 333).
 	cacheReturn := guestCacheReturnConfigFromEnv()
 	registry.SetGuestCacheReturnConfig(cacheReturn)
-	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s",
+	busyCold := make([]string, 0, len(cacheReturn.BusyCold))
+	for id, mode := range cacheReturn.BusyCold {
+		busyCold = append(busyCold, id+"="+mode)
+	}
+	sort.Strings(busyCold)
+	log.Printf("vmctl: guest cache return mode=%s only=%s triggers=%s scope=%s idle=%s pressure_idle=%s pressure_budget=%s busy_cold=%s",
 		cacheReturn.Mode, strings.Join(cacheReturn.Only, ","), strings.Join(cacheReturn.Triggers, ","), cacheReturn.Scope,
-		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget)
+		cacheReturn.Idle, cacheReturn.PressureIdle, cacheReturn.PressureBudget, strings.Join(busyCold, ","))
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -785,6 +791,7 @@ func guestCacheReturnConfigFromEnv() vmctl.GuestCacheReturnConfig {
 		Idle:           os.Getenv("VMCTL_GUEST_CACHE_RETURN_IDLE"),
 		PressureIdle:   os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_IDLE"),
 		PressureBudget: os.Getenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET"),
+		BusyCold:       os.Getenv("VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS"),
 	})
 }
 

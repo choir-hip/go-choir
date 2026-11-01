@@ -378,18 +378,20 @@
    "kind": "host_selector",
    "life": "release",
    "owner": "density",
-   "class": "orange",
+   "class": "red",
    "surface": "memory",
    "introduced": "2026-10-28",
    "nix": [
     "VMCTL_GUEST_CACHE_RETURN_ONLY",
-    "VMCTL_GUEST_CACHE_RETURN"
+    "VMCTL_GUEST_CACHE_RETURN",
+    "VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS"
    ],
    "ladder": [
     "observe",
     "active"
    ],
-   "target_ring": "R4",
+   "target_ring": "R5",
+   "confirm": "human",
    "expires": "2026-11-11",
    "ring": "R0,ids:1",
    "nix_value": "computer-59c902c5d46caecc0a180a8557164e72,computer-734d0344e9d5d7e51eef11df61f58a5b",
@@ -405,10 +407,18 @@
     {
      "metric": "refaults",
      "bound": "<= 2 x before"
+    },
+    {
+     "metric": "busy_cold_guest_refault_rate_after_per_s",
+     "bound": "<= 32 and <= 2 x before"
+    },
+    {
+     "metric": "paper_poll_latency_p95",
+     "bound": "<= 1.2 x own 24h baseline"
     }
    ],
    "retire": "delete VMCTL_GUEST_CACHE_RETURN_ONLY; the return is the code default",
-   "note": "D6 design section 10. Never names the DAMON pair."
+   "note": "D6 design section 10. Never names the DAMON pair. One switch for D6 (design section 0): VMCTL_GUEST_CACHE_RETURN caps every trigger. S5 (2026-11-01, owner decision in design section 12) adds VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS, its own id=mode selector for always-busy computers, pressure trigger only (make-room step 0): R0 d@e =active; the paper (R5) =observe until d@e's busy_cold act is proven, then its entry flips to =active by a human act. Folded here rather than a new entry: the release cap is 64 and the design names one switch. class raised to red and target R5 for S5."
   },
   {
    "id": "vmctl_admission_need",

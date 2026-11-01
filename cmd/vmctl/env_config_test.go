@@ -195,6 +195,16 @@ func TestGuestCacheReturnEnv(t *testing.T) {
 		cfg.Idle != 5*time.Minute || cfg.PressureIdle != 30*time.Second || cfg.PressureBudget != 20*time.Second {
 		t.Fatalf("overrides = %+v", cfg)
 	}
+	// D6 S5: the busy-cold entries are their own variable; only id=observe
+	// and id=active enter, and nothing is named by default.
+	if len(cfg.BusyCold) != 0 {
+		t.Fatalf("busy-cold entries %v with the variable unset, want none", cfg.BusyCold)
+	}
+	t.Setenv("VMCTL_GUEST_CACHE_RETURN_BUSY_COLD_COMPUTERS", "computer-de=active,computer-paper=observe,computer-x=on,computer-y")
+	cfg = guestCacheReturnConfigFromEnv()
+	if len(cfg.BusyCold) != 2 || cfg.BusyCold["computer-de"] != vmctl.GuestCacheReturnActive || cfg.BusyCold["computer-paper"] != vmctl.GuestCacheReturnObserve {
+		t.Fatalf("busy-cold entries = %v, want de=active and paper=observe only", cfg.BusyCold)
+	}
 	t.Setenv("VMCTL_GUEST_CACHE_RETURN_IDLE", "1h")
 	t.Setenv("VMCTL_GUEST_CACHE_RETURN_PRESSURE_BUDGET", "1ms")
 	cfg = guestCacheReturnConfigFromEnv()

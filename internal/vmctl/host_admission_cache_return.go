@@ -35,7 +35,13 @@ type CacheReturnedVM struct {
 // start whose context ends stops it at once.
 func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VMOwnership, class WarmnessClass, cfg PressureReclaimConfig, acfg HostAdmissionConfig, sampler hostPressureSampler, gcfg GuestCacheReturnConfig) (*admissionTicket, HostAdmissionDecision, bool, []CacheReturnedVM) {
 	var last HostAdmissionDecision
-	if gcfg.Mode != GuestCacheReturnActive || len(gcfg.Only) == 0 || !gcfg.TriggerOn("pressure") {
+	// Two kinds of candidate. Idle computers (S4): the switch active, the
+	// idle selector, the pressure trigger. Always-busy computers (S5): the
+	// busy-cold switch's own entries, capped by the global switch, asked
+	// after every idle candidate (the less intrusive act first).
+	idleOn := gcfg.Mode == GuestCacheReturnActive && len(gcfg.Only) > 0 && gcfg.TriggerOn("pressure")
+	busyOn := gcfg.Mode != GuestCacheReturnOff && len(gcfg.BusyCold) > 0
+	if !idleOn && !busyOn {
 		return nil, last, false, nil
 	}
 	budget := gcfg.PressureBudget
@@ -67,7 +73,7 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		}
 		return excess, true
 	}
-	picks := cacheReturnCandidates(cacheReturnCandidateInput{
+	in := cacheReturnCandidateInput{
 		Now: now, Config: gcfg, Policy: snap.policy, SweepHibernates: snap.sweepHibernates,
 		Ownerships: snap.owns, IdleFloor: gcfg.PressureIdle, Limit: cacheReturnPressureMaxCandidates, Pressure: true,
 		Claimed: func(own *VMOwnership) bool {
@@ -90,11 +96,34 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 			}
 			return ea > eb
 		},
-	})
+	}
+	type pick struct {
+		own  *VMOwnership
+		mode string
+		dry  bool
+	}
+	var picks []pick
+	if idleOn {
+		for _, own := range cacheReturnCandidates(in) {
+			picks = append(picks, pick{own, "idle", false})
+		}
+	}
+	if busyOn && len(picks) < cacheReturnPressureMaxCandidates {
+		in.Limit = cacheReturnPressureMaxCandidates - len(picks)
+		// No excess floor: an always-busy computer's D4 settled RSS was taken
+		// after its cache had grown (the paper's is near its peak), so the
+		// host-measured excess says nothing about its cold cache. The guest
+		// sizes the act; the excess only orders the candidates.
+		in.Extra = nil
+		for _, own := range busyColdCandidates(in) {
+			picks = append(picks, pick{own, "busy_cold", busyColdModeFor(gcfg, own) == GuestCacheReturnObserve})
+		}
+	}
 
 	var acted []CacheReturnedVM
 	attempted := false
-	for _, own := range picks {
+	for _, p := range picks {
+		own := p.own
 		remaining := time.Until(deadline)
 		// An act with a quarter of the budget or less left would be cut off
 		// before the host could see its fall.
@@ -104,9 +133,12 @@ func (r *OwnershipRegistry) makeRoomCacheReturn(ctx context.Context, starter *VM
 		if !st.begin(own.VMID, r.now()) {
 			continue
 		}
-		_, fall := r.doGuestCacheReturn(stepCtx, own, "pressure", gcfg, deadline)
+		_, fall := r.doGuestCacheReturn(stepCtx, own, "pressure", p.mode, p.dry, gcfg.Scope, deadline)
 		st.end(own.VMID)
 		acted = append(acted, CacheReturnedVM{VMID: own.VMID, RSSFallMiB: fall >> 20})
+		if p.dry {
+			continue // a dry run frees nothing: no sample to take
+		}
 		if ctx.Err() != nil {
 			break // the start went away: admit nobody, hibernate nobody
 		}
