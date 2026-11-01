@@ -1253,14 +1253,13 @@ in
       # Guests never swap; snapshot_diff.go's guestMemoryCannotSwap reads
       # this as the jailed leaf's bound (else diffs are refused).
       MemorySwapMax = "0";
-      # The same 14G the vmctl unit asks for its direct guests: as computers
-      # move here (SEC-04 waves) the protection follows them. system.slice
-      # below caps the two together at 18G; the kernel shares it between
-      # them by protected usage, and under memory_recursiveprot (Node B's
-      # cgroup2 mount) any of the 18G they do not claim goes to the other
-      # services by usage, so the guests' effective share can be below 18G.
-      # memory.low protects usage only.
-      MemoryLow = "14G";
+      # No memory.low (owner, 2026-11-01: "obv I don't want to protect file
+      # cache. The point is that the host shouldn't thrash, neither should
+      # the guests"). Guest memory is Firecracker anon and this slice never
+      # swaps, so the kernel cannot reclaim it anyway; memory.low here
+      # protected only the host's cache of guest disk images (14 GiB of
+      # inactive_file on 2026-11-01, guests' anon 4.4 GiB). It was 14G.
+      MemoryLow = "0";
     };
   };
 
@@ -1278,9 +1277,12 @@ in
   # the removal path and stop system.slice with everything under it.
   # X-StopOnRemoval=false forbids that (bunch 192). Rollback: MemoryLow = "0"
   # here, or live: systemctl set-property --runtime system.slice MemoryLow=0.
+  # 2026-11-01: 0, was 18G. The guests below never swap, so protection kept
+  # only file cache (see the VM slice); the owner wants no file cache
+  # protected.
   systemd.slices.system = {
     unitConfig."X-StopOnRemoval" = false;
-    sliceConfig.MemoryLow = "18G";
+    sliceConfig.MemoryLow = "0";
   };
 
   systemd.services.go-choir-vmctl = {
@@ -1343,7 +1345,10 @@ in
       # 14G for them against reclaim by everything else (3 always-on 4 GiB
       # guests plus slack), never swap them, and keep them last in OOM order.
       # Guest count admission against this reservation is vmctl's job.
-      MemoryLow = "14G";
+      # 2026-11-01: MemoryLow 0, was 14G. MemorySwapMax=0 already keeps the
+      # guests' anon from reclaim; the 14G protected only the host's cache of
+      # their disk images (owner: no file cache protected).
+      MemoryLow = "0";
       MemorySwapMax = "0";
       # vmctl must outlive every VM under global OOM. Firecracker children
       # set their own priority at launch (+500, lowered to -400 for
