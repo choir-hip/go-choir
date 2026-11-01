@@ -195,7 +195,31 @@ now:
     classification); TestManagementDelegatesIntakeToTasks flakes in CI
     (asynchronous session release); no test pins the restore shape (I6 #4).
   next_action: collect a day of meter data (from 2026-11-01), then write and publish the closing numbers report; in the meantime the write-storm residual and the remaining whole-kind reads
-receipts: []
+receipts:
+  - station: I1
+    status: landed
+    ref: per-VM memory, io and cpu pressure in the meter (mem-2026-11.jsonl, from 2026-11-01T19:32Z)
+  - station: I2
+    status: landed
+    ref: 8ab7b2da5; the paper jailed (vmm_confinement_verify --expect jailer ok)
+  - station: I3
+    status: landed
+    ref: a30787be5, 54ee9cfc3; synthetic drill and d@e end-to-end drill (ledger; results-20261101T234609Z)
+  - station: I4
+    status: landed (not drilled)
+    ref: e8307302f in 43c070756
+  - station: I5
+    status: landed (observed, not drilled)
+    ref: d32e6c2c3, c4f19e126 in 43c070756
+  - station: I6
+    status: landed
+    ref: 6a9941f3e, 5d6fd3100 in 43c070756; Devin and DeepSeek accept
+  - station: reread
+    status: landed
+    ref: 8092c9dbf, 37790f91d, e1ef09abd, 93237523b, f7a560fb3; retirement pass 0.47 GB in 24 s (was about 8.5 GB)
+  - station: I0
+    status: checkpoint
+    ref: docs/reports/guest-isolation-checkpoint-2026-11-01.md; the closing report after the meter's first day (2026-11-02T19:32Z)
 ```
 
 ## Stations
