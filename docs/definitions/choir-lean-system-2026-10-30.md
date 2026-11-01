@@ -223,7 +223,15 @@ boundaries:
     nothing.
 
 now:
-  status: working
+  status: checkpoint_incomplete
+  observing: >-
+    2026-11-01 ~02:30 UTC. Build work done and deployed (receipt compaction
+    active on d@e, the paper and the owner's computer; the meter fixed; the
+    redaction brick fixed, 86768d8b4). The goal was cleared by the owner while
+    the stop condition waits only on the multi-day watch: PG and Node B bytes
+    flat day over day, every job inside its memory line, no OOM. Settle it from
+    the daily readings in the ledger after two flat days; reopen with /goal if
+    a reading grows or breaches.
   slice: >-
     2026-10-31 ~06:30 UTC. L2 complete (d@e drill). L1 in flight: telemetry
     retirement now really on fleet-wide (the settings-default fix), the
