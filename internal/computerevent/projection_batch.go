@@ -48,8 +48,12 @@ const (
 var (
 	ErrProjectionBatchInvalid = errors.New("computer event projection batch: invalid")
 	ErrProjectionPoison       = errors.New("computer event projection: poison event cannot wedge the computer")
-	ErrSQLDuringResolve       = errors.New("computer event projection: SQL executor used during payload resolve")
-	ErrProjectionPresence     = errors.New("computer event projection: session presence is not a tape payload")
+	// ErrProjectionBatchUnreadable: a sealed batch on the tape does not parse
+	// (the redaction splice, redaction.go). Its event advanced the head with
+	// no state change; replay and recovery go on, a live writer is told.
+	ErrProjectionBatchUnreadable = errors.New("computer event projection batch: sealed payload does not parse; applied as no change")
+	ErrSQLDuringResolve          = errors.New("computer event projection: SQL executor used during payload resolve")
+	ErrProjectionPresence        = errors.New("computer event projection: session presence is not a tape payload")
 )
 
 var projectionOpKinds = map[string]struct{}{
@@ -188,6 +192,9 @@ type ProjectionBatch struct {
 	EventID          string         `json:"event_id"`
 	EventDigest      string         `json:"event_digest"`
 	Ops              []ProjectionOp `json:"ops"`
+	// Unreadable marks the stand-in for a sealed payload that does not
+	// parse: no ops, never encoded, never on the tape.
+	Unreadable bool `json:"-"`
 }
 
 // ObjectRetireKindEvent is the only object kind a retirement may name for
@@ -359,7 +366,7 @@ func (b ProjectionBatch) Validate() error {
 	if digest := strings.TrimSpace(b.EventDigest); digest != "" && !IsSHA256(digest) {
 		return fmt.Errorf("%w: event digest", ErrProjectionBatchInvalid)
 	}
-	if len(b.Ops) == 0 {
+	if len(b.Ops) == 0 && !b.Unreadable {
 		return fmt.Errorf("%w: empty batch", ErrProjectionBatchInvalid)
 	}
 	for i, op := range b.Ops {
@@ -399,7 +406,7 @@ func (b ProjectionBatch) Validate() error {
 func DecodeProjectionBatch(plaintext []byte) (ProjectionBatch, error) {
 	var batch ProjectionBatch
 	if err := json.Unmarshal(plaintext, &batch); err != nil {
-		return ProjectionBatch{}, fmt.Errorf("%w: decode: %v", ErrProjectionBatchInvalid, err)
+		return ProjectionBatch{}, fmt.Errorf("%w: decode: %w", ErrProjectionBatchInvalid, err)
 	}
 	if err := batch.Validate(); err != nil {
 		return ProjectionBatch{}, err

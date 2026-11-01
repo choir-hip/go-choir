@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -807,6 +808,9 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 		return Receipt{}, fmt.Errorf("computer event appender: verify head receipt: %w", err)
 	}
 	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
+		if errors.Is(err, ErrProjectionBatchUnreadable) {
+			return Receipt{}, fmt.Errorf("computer event appender: sequence %d: %w", event.Sequence, err)
+		}
 		return Receipt{}, fmt.Errorf("%w: finalize embedded projection: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 	}
 	if observer := a.postCommitObserver.Load(); observer != nil {
@@ -854,7 +858,7 @@ func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
 			if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
 				return fmt.Errorf("computer event appender: verify recovery receipt: %w", err)
 			}
-			if err := a.finalizeProjection(ctx, request.Event, request.EventDigest, receipt); err != nil {
+			if err := a.finalizeProjection(ctx, request.Event, request.EventDigest, receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
 				return fmt.Errorf("%w: finalize recovery: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 			}
 			continue
@@ -974,7 +978,7 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 		}
 		finalizeStarted := time.Now()
 		replayPrepare += finalizeStarted.Sub(prepareStarted)
-		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil {
+		if err := a.finalizeProjection(ctx, record.Request.Event, record.Request.EventDigest, record.Receipt); err != nil && !errors.Is(err, ErrProjectionBatchUnreadable) {
 			return fmt.Errorf("computer event appender: replay finalize sequence %d: %w", record.Request.Event.Sequence, err)
 		}
 		replayFinalize += time.Since(finalizeStarted)
@@ -1161,6 +1165,16 @@ func (a *ComputerEventAppender) finalizeProjection(ctx context.Context, event Ev
 	if err != nil {
 		return err
 	}
+	if err := a.applyProjection(ctx, digest, receipt, batch); err != nil {
+		return err
+	}
+	if batch != nil && batch.Unreadable {
+		return ErrProjectionBatchUnreadable
+	}
+	return nil
+}
+
+func (a *ComputerEventAppender) applyProjection(ctx context.Context, digest string, receipt Receipt, batch *ProjectionBatch) error {
 	if a.replayProjection {
 		if applier, ok := a.projection.(ReplayBatchProjectionStore); ok {
 			return applier.FinalizeReplayBatch(ctx, a.computerID, digest, receipt, batch)
@@ -1180,6 +1194,7 @@ func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, even
 		return nil, nil
 	}
 	plaintext, ok := a.livePayloads[event.PayloadCommitment]
+	sealed := false
 	if !ok {
 		if a.reader == nil {
 			return nil, ErrPayloadResolverRequired
@@ -1209,8 +1224,19 @@ func (a *ComputerEventAppender) resolveProjectionBatch(ctx context.Context, even
 			return nil, fmt.Errorf("computer event projection: one projection batch payload is required")
 		}
 		plaintext = resolved[0].Plaintext
+		sealed = privacy == "private"
 	}
 	batch, err := DecodeProjectionBatch(plaintext)
+	var syntax *json.SyntaxError
+	if err != nil && sealed && errors.As(err, &syntax) {
+		// The envelope's digest matched and it authenticated, so these are the
+		// bytes the guest sealed, and the redaction splice broke them; the
+		// unredacted batch is gone. The live append that sealed it failed its
+		// finalize, so no live state ever held it: no change is the state
+		// replay must reach (docs/problems/redaction-breaks-sealed-projection-batch-2026-10-31.md).
+		log.Printf("computer event appender: sequence %d event %s: %v at byte %d of %d; applied as no change", event.Sequence, event.EventID, err, syntax.Offset, len(plaintext))
+		return &ProjectionBatch{Version: ProjectionBatchV2, ProjectorVersion: ProjectorVersionV2, ComputerID: event.ComputerID, EventID: event.EventID, EventDigest: digest, Unreadable: true}, nil
+	}
 	if err != nil {
 		return nil, err
 	}

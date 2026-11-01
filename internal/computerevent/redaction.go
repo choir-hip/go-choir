@@ -1,9 +1,11 @@
 package computerevent
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -140,10 +142,144 @@ type secretMatch struct {
 	kind  string
 }
 
+// redactPrivatePayload replaces each secret with a typed handle. A JSON
+// payload is redacted inside its string values only, so it stays JSON: the
+// text patterns run over raw bytes matched across a key and its value and
+// the splice ate quotes and braces, which sealed a projection batch that no
+// longer parsed and bricked the paper at boot (2026-10-31, sequence 5647041;
+// docs/problems/redaction-breaks-sealed-projection-batch-2026-10-31.md).
+//
+// Ways the JSON path could fail, written before the code:
+//
+//	J1. a redacted payload is not JSON: only whole string literals are
+//	    replaced, each by a json-encoded string, and the result is checked;
+//	J2. a secret survives: every string value is scanned with the text
+//	    patterns after unescaping, and a value under a credential-named key
+//	    is redacted whole, the case the pair pattern meant to catch;
+//	J3. an escape inside a string ends a match early or late: strings are
+//	    unescaped before matching and re-encoded after;
+//	J4. a payload with no secret changes: it is returned byte for byte.
 func redactPrivatePayload(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
 	if len(key) != chachaKeySize {
 		return nil, nil, fmt.Errorf("secret redaction: invalid key")
 	}
+	if json.Valid(payload) {
+		return redactJSONPayload(key, payload)
+	}
+	return redactText(key, payload)
+}
+
+// credentialKey is the key half of credential_assignment, anchored at the
+// key's end as the pair pattern was.
+var credentialKey = regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password)$`)
+
+// credentialValue is the value half: what the pair pattern took after the
+// separator.
+var credentialValue = regexp.MustCompile(`^[^\s,;\"']{8,}`)
+
+func redactJSONPayload(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
+	var out []byte
+	handles := []SecretHandle{}
+	cursor := 0
+	lastKey := ""
+	afterColon := false
+	for i := 0; i < len(payload); i++ {
+		c := payload[i]
+		if c == ':' {
+			afterColon = true
+			continue
+		}
+		if c != '"' {
+			if c == ',' || c == '{' || c == '[' || c == '}' || c == ']' {
+				afterColon = false
+			}
+			continue
+		}
+		end := jsonStringEnd(payload, i)
+		if end < 0 {
+			return nil, nil, fmt.Errorf("secret redaction: unterminated JSON string")
+		}
+		literal := payload[i : end+1]
+		isValue := afterColon
+		afterColon = false
+		var text string
+		if err := json.Unmarshal(literal, &text); err != nil {
+			return nil, nil, fmt.Errorf("secret redaction: JSON string: %w", err)
+		}
+		isKey := !isValue && nextNonSpace(payload, end+1) == ':'
+		redacted, found, err := redactText(key, []byte(text))
+		if err != nil {
+			return nil, nil, err
+		}
+		if isKey {
+			lastKey = text
+		} else if isValue && credentialKey.MatchString(lastKey) {
+			if loc := credentialValue.FindIndex(redacted); loc != nil && !bytes.HasPrefix(redacted, []byte("secret-handle:")) {
+				handle := secretHandle(key, "credential_assignment", redacted[loc[0]:loc[1]])
+				found = append(found, SecretHandle{Kind: "credential_assignment", Handle: string(handle)})
+				redacted = append(append([]byte(nil), handle...), redacted[loc[1]:]...)
+			}
+		}
+		if len(found) > 0 {
+			encoded, err := encodeJSONString(string(redacted))
+			if err != nil {
+				return nil, nil, err
+			}
+			out = append(out, payload[cursor:i]...)
+			out = append(out, encoded...)
+			cursor = end + 1
+			handles = append(handles, found...)
+		}
+		i = end
+	}
+	if len(handles) == 0 {
+		return append([]byte(nil), payload...), handles, nil
+	}
+	out = append(out, payload[cursor:]...)
+	if !json.Valid(out) {
+		return nil, nil, fmt.Errorf("secret redaction: redacted JSON payload does not parse")
+	}
+	return out, handles, nil
+}
+
+// jsonStringEnd returns the index of the quote closing the string literal
+// that opens at start, or -1.
+func jsonStringEnd(b []byte, start int) int {
+	for j := start + 1; j < len(b); j++ {
+		switch b[j] {
+		case '\\':
+			j++
+		case '"':
+			return j
+		}
+	}
+	return -1
+}
+
+func nextNonSpace(b []byte, from int) byte {
+	for j := from; j < len(b); j++ {
+		switch b[j] {
+		case ' ', '\t', '\n', '\r':
+			continue
+		}
+		return b[j]
+	}
+	return 0
+}
+
+func encodeJSONString(s string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
+}
+
+// redactText is the byte-pattern redaction for a payload that is not JSON,
+// and for each unescaped string of one that is.
+func redactText(key []byte, payload []byte) ([]byte, []SecretHandle, error) {
 	matches := make([]secretMatch, 0)
 	for _, pattern := range privateSecretPatterns {
 		for _, location := range pattern.expression.FindAllIndex(payload, -1) {
