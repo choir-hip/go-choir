@@ -166,6 +166,9 @@ type ReclaimReport struct {
 	// MemTotal less MemFree before the act.
 	CeilingBytes int64 `json:"ceiling_bytes,omitempty"`
 	UsedBytes    int64 `json:"used_bytes,omitempty"`
+	// Compacted: a ceiling act that wrote compacted the guest's memory
+	// after, so the freed pages join blocks free page reporting hands back.
+	Compacted bool `json:"compacted,omitempty"`
 	// The refault guard (busy_cold only): the limit, and the
 	// workingset_refault_file rate per second from the window's baseline (at
 	// least 60 s before) to the start of the writes and to their end. nil is
@@ -450,6 +453,14 @@ func (r *Reclaimer) Reclaim(ctx context.Context, req ReclaimRequest) (ReclaimRep
 		runtime.LockOSThread()
 		quiet()
 		outcome, detail := r.act(ctx, req, method, reclaimPath, rep.TargetBytes, &rep)
+		if req.Mode == ModeCeiling && rep.Steps > 0 {
+			// Reclaimed cache is freed page by page, scattered: on the paper
+			// (2026-11-01) 4.9 GB was free in the guest and 1.6 GB of it in
+			// blocks of reporting's order (9, 2 MiB), so the host kept 6.8 GB.
+			// Compaction joins the free pages into such blocks. A failure
+			// leaves the act as it was.
+			rep.Compacted = r.write(filepath.Join(r.procRoot(), "sys", "vm", "compact_memory"), "1") == nil
+		}
 		done <- result{outcome, detail}
 	}()
 	got := <-done

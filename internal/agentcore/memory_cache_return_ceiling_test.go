@@ -43,8 +43,8 @@ func TestCacheReturnCeilingActsWhileRunsRun(t *testing.T) {
 	if code != http.StatusOK || body["outcome"] != guestmem.OutcomeReturned || body["mode"] != "ceiling" || body["scope"] != "root" {
 		t.Fatalf("ceiling on a working computer: %d %v, want 200 returned", code, body)
 	}
-	if body["target_bytes"] != float64(1024<<20) || body["used_bytes"] != float64(4096<<20) || f.writeCount() != 16 {
-		t.Fatalf("target %v used %v with %d writes, want 1024 MiB of 4096 in 16 steps", body["target_bytes"], body["used_bytes"], f.writeCount())
+	if body["target_bytes"] != float64(1024<<20) || body["used_bytes"] != float64(4096<<20) || f.writeCount() != 17 || body["compacted"] != true {
+		t.Fatalf("target %v used %v with %d writes (compacted %v), want 1024 MiB of 4096 in 16 steps and one compaction", body["target_bytes"], body["used_bytes"], f.writeCount(), body["compacted"])
 	}
 }
 

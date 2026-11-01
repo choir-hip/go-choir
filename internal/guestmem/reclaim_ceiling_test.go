@@ -93,3 +93,46 @@ func TestReclaimCeilingUnderTheFloorIsRefused(t *testing.T) {
 		t.Fatalf("writes = %d", f.writeCount())
 	}
 }
+
+// Compaction after a ceiling act. Ways it can fail, written first:
+//   - the freed cache stays in blocks under free page reporting's order, so
+//     the host keeps it (the paper, 2026-11-01: 4.9 GB free in the guest,
+//     1.6 GB reportable, host RSS 6.8 GB);
+//   - a compaction runs when nothing was reclaimed, on a dry run, or in
+//     another mode (a cost with nothing to gain);
+//   - a compaction that fails turns a good act into an error.
+
+func TestReclaimCeilingCompactsAfterAnAct(t *testing.T) {
+	f := newReclaimFixture(t)
+	compact := filepath.Join(f.proc, "sys", "vm", "compact_memory")
+	f.writeFile(compact, "")
+	rep, err := f.reclaimer().Reclaim(context.Background(), ceilingRequest(3072))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.writesTo(compact); len(got) != 1 || got[0] != "1" || !rep.Compacted {
+		t.Fatalf("compaction writes = %+v, compacted = %v", got, rep.Compacted)
+	}
+}
+
+func TestReclaimCeilingCompactsOnlyAfterWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		req  ReclaimRequest
+	}{
+		{"under the ceiling", ceilingRequest(4096)},
+		{"dry run", func() ReclaimRequest { r := ceilingRequest(3072); r.DryRun = true; return r }()},
+		{"idle mode", ReclaimRequest{Mode: ModeIdle, Scope: ScopeDaemon}},
+	} {
+		f := newReclaimFixture(t)
+		compact := filepath.Join(f.proc, "sys", "vm", "compact_memory")
+		f.writeFile(compact, "")
+		rep, err := f.reclaimer().Reclaim(context.Background(), tc.req)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if n := len(f.writesTo(compact)); n != 0 || rep.Compacted {
+			t.Fatalf("%s: compaction writes = %d, compacted = %v", tc.name, n, rep.Compacted)
+		}
+	}
+}
