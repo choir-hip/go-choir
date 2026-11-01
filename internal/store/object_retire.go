@@ -49,7 +49,10 @@ const retireDropBatch = 500
 // exists whenever the store is open (objectgraph EnsureSchema creates it), and
 // every statement that names it carries the literal object_kind predicate the
 // index requires.
-const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventUpdatedIndex
+//
+// The index is (kind, updated_at): the kind filter is the index key, so a
+// slice reads only its kinds' rows (objectgraph.ChoirEventKindUpdatedIndex).
+const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventKindUpdatedIndex
 
 // retireEventPhaseSQL is the phase of the event whose body is body and whose
 // metadata is meta: the payload's phase, else the metadata's, else ”. A body
@@ -109,9 +112,9 @@ func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []a
 func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited *string) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
 	keep, keepArgs := retireKeepCitedPredicate(p, "metadata", cited)
-	where := `object_kind = 'choir.event' AND updated_at >= ? AND updated_at < ? AND json_valid(metadata) AND json_extract(metadata, '$.kind') IN (` + marks + `)` +
+	where := `object_kind = 'choir.event' AND (` + objectgraph.ChoirEventKindSQL + `) IN (` + marks + `) AND updated_at >= ? AND updated_at < ?` +
 		retirePhasePredicate(p, "body", "metadata") + keep
-	args := append(append([]any{from, before}, kindArgs...), keepArgs...)
+	args := append(append(kindArgs, from, before), keepArgs...)
 	return where, args
 }
 
@@ -249,7 +252,7 @@ func (s *Store) retireMatchExists(ctx context.Context, p computerevent.ObjectRet
 func (s *Store) retireOldest(ctx context.Context, cutoff time.Time) (time.Time, error) {
 	var oldest time.Time
 	for _, q := range []string{
-		`SELECT MIN(updated_at) FROM ` + retireOGTable + ` WHERE object_kind = 'choir.event' AND updated_at < ?`,
+		`SELECT MIN(updated_at) FROM og_objects INDEXED BY ` + objectgraph.ChoirEventUpdatedIndex + ` WHERE object_kind = 'choir.event' AND updated_at < ?`,
 		`SELECT MIN(updated_at) FROM ` + choirEventsTable + ` WHERE updated_at < ?`,
 	} {
 		var raw any

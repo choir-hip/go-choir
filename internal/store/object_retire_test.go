@@ -328,7 +328,8 @@ func TestObjectRetireSliceIsHalfOpen(t *testing.T) {
 	}
 }
 
-// R9: the select of a slice reads through the partial index and sorts nothing.
+// R9: the select of a slice reads through the (kind, updated_at) partial
+// index, by kind and slice, and sorts nothing.
 func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 	s, _ := vocabUpcastOpenStore(t, "retire-plan")
 	p := retireP([]string{"tool.invoked", "desk.cell"}, retireBase, retireBase.Add(time.Hour), computerevent.ObjectRetirePhaseNone)
@@ -358,15 +359,17 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 		rows.Close()
 		text := strings.Join(plan, " | ")
 		t.Logf("plan: %s", text)
-		if !strings.Contains(text, "idx_og_objects_choir_event_updated") {
-			t.Errorf("the plan does not use the partial index: %s", text)
+		// The kind is in the index key, so only the slice's own kinds are
+		// read: the search names the kind and the bounds.
+		if !strings.Contains(text, objectgraph.ChoirEventKindUpdatedIndex+" (<expr>=? AND updated_at>? AND updated_at<?)") {
+			t.Errorf("the plan does not search the kind index by kind and slice: %s", text)
 		}
 		if strings.Contains(strings.ToUpper(text), "TEMP B-TREE") {
 			t.Errorf("the plan sorts: %s", text)
 		}
 	}
 	// The emitter's oldest-row query reads the index too.
-	rows, err := s.db.Query(`EXPLAIN QUERY PLAN SELECT MIN(updated_at) FROM `+retireOGTable+` WHERE object_kind = 'choir.event' AND updated_at < ?`, retireBase)
+	rows, err := s.db.Query(`EXPLAIN QUERY PLAN SELECT MIN(updated_at) FROM og_objects INDEXED BY `+objectgraph.ChoirEventUpdatedIndex+` WHERE object_kind = 'choir.event' AND updated_at < ?`, retireBase)
 	if err != nil {
 		t.Fatal(err)
 	}

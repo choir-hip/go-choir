@@ -66,6 +66,21 @@ const ChoirEventUpdatedIndex = "idx_og_objects_choir_event_updated"
 // ChoirEventUpdatedIndexDDL creates it; idempotent.
 const ChoirEventUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventUpdatedIndex + ` ON og_objects(updated_at) WHERE object_kind = 'choir.event'`
 
+// ChoirEventKindSQL is a choir.event row's kind (metadata "kind"), or NULL
+// when the metadata is not JSON. A retire slice filters on this exact
+// expression so the planner reads ChoirEventKindUpdatedIndex.
+const ChoirEventKindSQL = `CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.kind') END`
+
+// ChoirEventKindUpdatedIndex is the partial index a telemetry retire slice
+// reads: (kind, updated_at) of the choir.event rows, so a slice reads only
+// the rows of its kinds. With updated_at alone each row in the slice was
+// read to test its kind, and metadata sits after body: the paper read about
+// 19 GB of event bodies in the retirement pass after a boot (2026-11-01).
+const ChoirEventKindUpdatedIndex = "idx_og_objects_choir_event_kind_updated"
+
+// ChoirEventKindUpdatedIndexDDL creates it; idempotent.
+const ChoirEventKindUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventKindUpdatedIndex + ` ON og_objects((` + ChoirEventKindSQL + `), updated_at) WHERE object_kind = 'choir.event'`
+
 // bodyTextSQL is the body as text. The body column is a BLOB, and SQLite
 // reads a BLOB argument of its JSON functions as JSONB, so a body is always
 // cast before it meets one.
@@ -281,6 +296,12 @@ func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 	doneIdx := BootPhase("store: open", "objectgraph-schema/choir-event-updated-index")
 	_, err = s.db.ExecContext(ctx, ChoirEventUpdatedIndexDDL)
 	doneIdx(err)
+	if err != nil {
+		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
+	}
+	doneKindIdx := BootPhase("store: open", "objectgraph-schema/choir-event-kind-updated-index")
+	_, err = s.db.ExecContext(ctx, ChoirEventKindUpdatedIndexDDL)
+	doneKindIdx(err)
 	if err != nil {
 		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
 	}
