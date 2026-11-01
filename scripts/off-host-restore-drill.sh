@@ -77,8 +77,14 @@ tape)
   # the snapshot's start names a segment sealed before the backup read it.
   snap_time="$(restic --no-lock snapshots --json "$SNAP" | jq -r '.[0].time // empty')"
   [ -n "$snap_time" ] || { echo "snapshot $SNAP has no time"; exit 1; }
-  find "${A%/sha256}/tape-seg" -name 'seg-*.idx' -type f ! -newermt "$snap_time" 2>/dev/null | shuf -n 10 \
-    | while read -r i; do [ -f "${i%.idx}.seg" ] && printf '%s\n%s\n' "${i%.idx}.seg" "$i"; done > "$D/segsample.txt"
+  seg_root="${A%/sha256}/tape-seg"
+  [ -d "$seg_root" ] || { echo "no tape-seg directory at $seg_root"; exit 1; }
+  find "$seg_root" -name 'seg-*.idx' -type f ! -newermt "$snap_time" > "$D/segidx.txt" \
+    || { echo "find over $seg_root failed"; exit 1; }
+  shuf -n 10 "$D/segidx.txt" \
+    | while read -r i; do if [ -f "${i%.idx}.seg" ]; then printf '%s\n%s\n' "${i%.idx}.seg" "$i"; fi; done > "$D/segsample.txt"
+  # An empty sample proves nothing; fail rather than report green.
+  [ -s "$D/segsample.txt" ] || { echo "no sealed tape segment older than $snap_time under $seg_root"; exit 1; }
   { cat "$D/sample.txt" "$D/segsample.txt"
     echo /var/lib/go-choir/offhost-backup/staging/sqlite/auth.db
     echo /var/lib/go-choir/offhost-backup/staging/sqlite/mail.db; } > "$D/include.txt"
