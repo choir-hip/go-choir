@@ -465,6 +465,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 
 	transientAttempts := 0
 	nextFallback := 0
+	// skippedRetryRounds counts the pool members that failed over without
+	// their rate-limit backoff; the last member owes them its retries.
+	skippedRetryRounds := 0
 	baseConversationID := options.conversationID
 	baseCacheKey := cacheKey
 	for i := 0; ; i++ {
@@ -558,7 +561,15 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		} else if options.providerCallTimeout > 0 {
 			providerCtx, cancelProviderCall = context.WithTimeout(ctx, options.providerCallTimeout)
 		}
-		resp, err := CallToolLoopProviderWithRetries(providerCtx, provider, req, emit)
+		// Autoroute (docs/design/model-pool-autoroute-2026-11-02.md): while
+		// the pool has a member left, a failover-class error moves the run
+		// now instead of after the same-model rate-limit backoff; the
+		// gateway's per-model cooldown answers a cooling member with a fast
+		// "circuit open". On the last member the backoff runs as before,
+		// once more for every member that skipped it, so a pool that is
+		// down everywhere waits at least as long as it did.
+		hasFallback := nextFallback < len(options.fallbackLLMConfigs)
+		resp, err := callToolLoopProviderWithPoolRetries(providerCtx, provider, req, emit, hasFallback, 1+skippedRetryRounds)
 		providerCallErr := providerCtx.Err()
 		if cancelProviderCall != nil {
 			cancelProviderCall()
@@ -625,6 +636,11 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				from := activeLLMConfig
 				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[nextFallback], from)
 				nextFallback++
+				// Only an error the backoff would have waited on owes the
+				// last member a round: a 5xx or an open circuit never had one.
+				if IsProviderRateLimitError(err) && failsOverWithoutRetry(err) {
+					skippedRetryRounds++
+				}
 				if baseConversationID != "" {
 					options.conversationID = baseConversationID + "#failover"
 					if nextFallback > 1 {
@@ -1415,6 +1431,19 @@ func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
 }
 
 func CallToolLoopProviderWithRetries(ctx context.Context, provider provideriface.ToolLoopProvider, req provideriface.ToolLoopRequest, emit provideriface.EventEmitFunc) (*provideriface.ToolLoopResponse, error) {
+	return callToolLoopProviderWithPoolRetries(ctx, provider, req, emit, false, 1)
+}
+
+// callToolLoopProviderWithPoolRetries is CallToolLoopProviderWithRetries
+// for a pool member. With a member left (hasFallback), an error that a
+// failover answers better than a wait (failsOverWithoutRetry) returns at
+// once. Without one, the rate-limit backoff runs rounds times; when earlier
+// members skipped theirs (rounds > 1) an open circuit is waited on too,
+// since the cooldown may end and the gateway let a probe through.
+func callToolLoopProviderWithPoolRetries(ctx context.Context, provider provideriface.ToolLoopProvider, req provideriface.ToolLoopRequest, emit provideriface.EventEmitFunc, hasFallback bool, rounds int) (*provideriface.ToolLoopResponse, error) {
+	if rounds < 1 {
+		rounds = 1
+	}
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		resp, err := provider.CallWithTools(ctx, req)
@@ -1422,10 +1451,14 @@ func CallToolLoopProviderWithRetries(ctx context.Context, provider provideriface
 			return resp, nil
 		}
 		lastErr = err
-		if !IsProviderRateLimitError(err) || attempt >= len(providerRateLimitRetryDelays) {
+		if hasFallback && failsOverWithoutRetry(err) {
 			return nil, lastErr
 		}
-		delay := providerRateLimitRetryDelays[attempt]
+		retryable := IsProviderRateLimitError(err) || (!hasFallback && rounds > 1 && isCircuitOpenError(err))
+		if !retryable || len(providerRateLimitRetryDelays) == 0 || attempt >= len(providerRateLimitRetryDelays)*rounds {
+			return nil, lastErr
+		}
+		delay := providerRateLimitRetryDelays[attempt%len(providerRateLimitRetryDelays)]
 		payload, _ := json.Marshal(map[string]any{
 			"reason":   "provider_rate_limit",
 			"attempt":  attempt + 1,
@@ -1439,6 +1472,34 @@ func CallToolLoopProviderWithRetries(ctx context.Context, provider provideriface
 			return nil, err
 		}
 	}
+}
+
+// failsOverWithoutRetry reports whether a pool member's error should move
+// the run to the next member without the same-model backoff: every
+// failover class except the two 429s that clear in seconds and are not the
+// member's fault. A Synthetic concurrency 429 ("concurrency limit") is the
+// account's in-flight ceiling; the gateway demotes the model itself after a
+// streak. The gateway's own per-computer limits ("for autoputer", "for this
+// autoputer") refuse every member alike.
+func failsOverWithoutRetry(err error) bool {
+	if !IsModelFailoverError(err) {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	for _, marker := range []string{"concurrency limit", "too many concurrent", "for autoputer", "for this autoputer"} {
+		if strings.Contains(text, marker) {
+			return false
+		}
+	}
+	return true
+}
+
+func isCircuitOpenError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "circuit open") || strings.Contains(text, "breaker open")
 }
 
 func IsProviderRateLimitError(err error) bool {

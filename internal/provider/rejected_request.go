@@ -16,13 +16,18 @@ var rejectedReasonSecrets = regexp.MustCompile(`(?i)(sk-[a-z0-9_-]{8,}|bearer\s+
 // redacted, truncated, never returned to the caller. Without it a rejected
 // request leaves no cause anywhere
 // (problems/inference-breaker-trips-on-client-errors-2026-10-10.md).
-func logRejectedRequest(providerName string, resp *http.Response) {
+// It returns the redacted reason (empty for a non-4xx) so a caller can
+// classify a 429: an exhausted quota is not a concurrency limit
+// (docs/design/model-pool-autoroute-2026-11-02.md).
+func logRejectedRequest(providerName string, resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode < 400 || resp.StatusCode >= 500 {
-		return
+		return ""
 	}
-	log.Printf("provider: %s rejected request status=%d reason=%q", providerName, resp.StatusCode, rejectedReason(body))
+	reason := rejectedReason(body)
+	log.Printf("provider: %s rejected request status=%d reason=%q", providerName, resp.StatusCode, reason)
+	return reason
 }
 
 func rejectedReason(body []byte) string {

@@ -51,8 +51,11 @@ var ErrUpstreamConcurrencyLimit = errors.New("upstream concurrency limit")
 // matches ErrUpstreamConcurrencyLimit.
 type upstreamConcurrencyError struct{ status string }
 
+// The "concurrency limit" words tell the guest this 429 clears in seconds:
+// it retries the same model instead of failing the run over
+// (docs/design/model-pool-autoroute-2026-11-02.md).
 func (e *upstreamConcurrencyError) Error() string {
-	return fmt.Sprintf("synthetic: status %s (sanitized)", e.status)
+	return fmt.Sprintf("synthetic: status %s (concurrency limit, sanitized)", e.status)
 }
 
 func (e *upstreamConcurrencyError) Is(target error) bool {

@@ -936,9 +936,15 @@ func (p *SyntheticProvider) call(ctx context.Context, req LLMRequest, onChunk fu
 		log.Printf("provider: synthetic quota %s", summary)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		// Synthetic's 429 is its account concurrency limit, not model
-		// ill-health: typed so the gateway breaker does not count it.
-		logRejectedRequest("synthetic", resp)
+		// Synthetic's 429 is either its account concurrency limit, which is
+		// not model ill-health (typed so the gateway breaker counts it only
+		// in a long streak), or an exhausted subscription quota, which puts
+		// the model in cooldown at once
+		// (docs/design/model-pool-autoroute-2026-11-02.md).
+		reason := logRejectedRequest("synthetic", resp)
+		if syntheticRateLimitIsQuota(reason, resp.Header) {
+			return nil, &upstreamQuotaError{provider: "synthetic", status: resp.Status}
+		}
 		return nil, &upstreamConcurrencyError{status: resp.Status}
 	}
 	if !req.Stream {
@@ -1130,9 +1136,7 @@ func (p *ChatGPTProvider) doStreamRequestWithAuthRetry(ctx context.Context, body
 	}
 	if resp.StatusCode != http.StatusUnauthorized {
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			_, _ = io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			return nil, fmt.Errorf("chatgpt: status %s (sanitized)", resp.Status)
+			return nil, chatGPTStatusError(resp, "")
 		}
 		return resp, nil
 	}
@@ -1147,9 +1151,7 @@ func (p *ChatGPTProvider) doStreamRequestWithAuthRetry(ctx context.Context, body
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("chatgpt: status %s after auth refresh (sanitized)", resp.Status)
+		return nil, chatGPTStatusError(resp, "after auth refresh")
 	}
 	return resp, nil
 }

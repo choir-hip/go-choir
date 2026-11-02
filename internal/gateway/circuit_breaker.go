@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -35,25 +38,104 @@ import (
 // upstream's Retry-After does not survive the provider's sanitized errors,
 // so it is not read here.
 //
+// The model breaker is each pool member's health, mirroring the search
+// plane's per-provider cooldowns (docs/design/model-pool-autoroute-2026-11-02.md):
+// the open duration doubles on each failed probe and resets on a success; an
+// exhausted quota (provider.ErrUpstreamQuotaExhausted) opens it on the first
+// one, for a longer cooldown; a Synthetic concurrency 429 opens it only after
+// ConcurrencyStreakBeforeCooldown in a row with no success between. The
+// guest fails over at once on "circuit open", so a cooling member costs a
+// run one fast refusal, not an 85 s same-model retry.
+//
 // The decorator is transparent when the upstream is healthy: a closed breaker
 // forwards every call and records the outcome.
 type CircuitBreakingProvider struct {
 	inner   provider.Provider
 	cfg     health.BreakerConfig
 	breaker *health.CircuitBreaker
+	// quotaCooldown is the open duration for an exhausted quota's trips-th
+	// open in a row.
+	quotaCooldown func(trips int) time.Duration
 
 	mu     sync.Mutex
 	models map[string]*health.CircuitBreaker
+	// concurrencyStreak counts each model's concurrency 429s since its last
+	// success.
+	concurrencyStreak map[string]int
 }
 
-// NewCircuitBreakingProvider wraps p with circuit breakers using cfg.
+// ConcurrencyStreakBeforeCooldown is how many concurrency 429s in a row, with
+// no success between them, put a model in cooldown. One burst is the
+// account's in-flight ceiling, not model ill-health, and must not demote a
+// healthy member (docs/problems/synthetic-provider-onboarding-2026-10-22.md);
+// a streak this long means calls are not getting through at all. The search
+// plane's EmptyStreakBeforeCooldown is the same rule.
+const ConcurrencyStreakBeforeCooldown = 10
+
+const (
+	// defaultModelCooldownMax bounds the doubling cooldown of a model that
+	// keeps failing (5xx, timeouts, rate limits): a probe every ten minutes.
+	defaultModelCooldownMax = 10 * time.Minute
+	// Quota exhaustion does not clear in seconds, but an owner reset or a
+	// window rollover should be seen the same hour: 5 min doubling to 1 h.
+	// CHOIR_MODEL_QUOTA_COOLDOWN_BASE / _MAX (Go durations) override.
+	defaultQuotaCooldownBase = 5 * time.Minute
+	defaultQuotaCooldownMax  = time.Hour
+)
+
+// NewCircuitBreakingProvider wraps p with circuit breakers using cfg. Unless
+// cfg names its own Backoff, an open breaker stays open cfg.OpenTimeout on
+// its first trip, doubling on each failed probe up to ten minutes (or
+// OpenTimeout when that is longer).
 func NewCircuitBreakingProvider(p provider.Provider, cfg health.BreakerConfig) *CircuitBreakingProvider {
-	return &CircuitBreakingProvider{
-		inner:   p,
-		cfg:     cfg,
-		breaker: health.NewCircuitBreaker(cfg),
-		models:  make(map[string]*health.CircuitBreaker),
+	if cfg.Backoff == nil {
+		base := cfg.OpenTimeout
+		if base <= 0 {
+			base = 30 * time.Second
+		}
+		limit := defaultModelCooldownMax
+		if base > limit {
+			limit = base
+		}
+		cfg.Backoff = doublingCooldown(base, limit)
 	}
+	qBase := envDuration("CHOIR_MODEL_QUOTA_COOLDOWN_BASE", defaultQuotaCooldownBase)
+	qMax := envDuration("CHOIR_MODEL_QUOTA_COOLDOWN_MAX", defaultQuotaCooldownMax)
+	if qMax < qBase {
+		qMax = qBase
+	}
+	return &CircuitBreakingProvider{
+		inner:             p,
+		cfg:               cfg,
+		breaker:           health.NewCircuitBreaker(cfg),
+		quotaCooldown:     doublingCooldown(qBase, qMax),
+		models:            make(map[string]*health.CircuitBreaker),
+		concurrencyStreak: make(map[string]int),
+	}
+}
+
+// doublingCooldown returns base on the first trip, doubling on each trip in
+// a row, never above limit.
+func doublingCooldown(base, limit time.Duration) func(trips int) time.Duration {
+	return func(trips int) time.Duration {
+		d := base
+		for i := 1; i < trips && d < limit; i++ {
+			d *= 2
+		}
+		if d > limit {
+			d = limit
+		}
+		return d
+	}
+}
+
+func envDuration(name string, def time.Duration) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return def
 }
 
 // Breaker returns the provider-wide breaker (failures to reach the
@@ -131,9 +213,18 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn 
 	modelBreaker := c.ModelBreaker(model)
 	modelOpen := false
 	err := c.breaker.ExecuteClassified(func() error {
-		innerErr := modelBreaker.ExecuteClassified(fn, func(err error) bool { return providerFailureCounts(ctx, err) })
-		if innerErr == health.ErrCircuitOpen {
+		ran := false
+		var callErr error
+		innerErr := modelBreaker.ExecuteClassified(func() error {
+			ran = true
+			callErr = fn()
+			return callErr
+		}, func(err error) bool { return providerFailureCounts(ctx, err) })
+		if innerErr == health.ErrCircuitOpen && !ran {
 			modelOpen = true
+		}
+		if ran {
+			c.observeModelOutcome(ctx, model, modelBreaker, callErr)
 		}
 		return innerErr
 	}, func(err error) bool { return providerUnreachable(ctx, err) })
@@ -147,6 +238,47 @@ func (c *CircuitBreakingProvider) execute(ctx context.Context, model string, fn 
 		return fmt.Errorf("provider %s: circuit open (upstream unhealthy)", c.inner.Name())
 	}
 	return err
+}
+
+// observeModelOutcome applies the outcomes the breaker's failure count does
+// not: an exhausted quota opens the model at once, and a concurrency 429
+// opens it only at the end of a streak. A success ends the streak.
+func (c *CircuitBreakingProvider) observeModelOutcome(ctx context.Context, model string, b *health.CircuitBreaker, err error) {
+	key := strings.TrimSpace(model)
+	switch {
+	case err == nil:
+		c.mu.Lock()
+		delete(c.concurrencyStreak, key)
+		c.mu.Unlock()
+	case ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled):
+		// The caller went away: no evidence either way.
+	case provider.IsQuotaExhausted(err):
+		if b.Trip(c.quotaCooldown) {
+			snap := b.Snapshot()
+			log.Printf("gateway: model %s/%s cooling down (quota exhausted, trip %d, until %s)",
+				c.inner.Name(), modelLabel(model), snap.Trips, formatUntil(snap.OpenUntil))
+		}
+	case errors.Is(err, provider.ErrUpstreamConcurrencyLimit):
+		c.mu.Lock()
+		c.concurrencyStreak[key]++
+		streak := c.concurrencyStreak[key]
+		if streak >= ConcurrencyStreakBeforeCooldown {
+			delete(c.concurrencyStreak, key)
+		}
+		c.mu.Unlock()
+		if streak >= ConcurrencyStreakBeforeCooldown && b.Trip(nil) {
+			snap := b.Snapshot()
+			log.Printf("gateway: model %s/%s cooling down (%d concurrency 429s in a row, trip %d, until %s)",
+				c.inner.Name(), modelLabel(model), streak, snap.Trips, formatUntil(snap.OpenUntil))
+		}
+	}
+}
+
+func formatUntil(t *time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	return t.UTC().Format(time.RFC3339)
 }
 
 // modelLabel names a model in errors and breaker keys; the empty model is
@@ -192,6 +324,11 @@ func providerFailureCounts(ctx context.Context, err error) bool {
 	// "Staging: concurrency 429s and the circuit breaker"). Other providers'
 	// 429s still count: that is the designed per-model backoff.
 	if errors.Is(err, provider.ErrUpstreamConcurrencyLimit) || errors.Is(err, provider.ErrConcurrencyGateWait) {
+		return false
+	}
+	// An exhausted quota opens the breaker at once with its own cooldown
+	// (observeModelOutcome); counting it too would stack a second trip.
+	if provider.IsQuotaExhausted(err) {
 		return false
 	}
 	if m := providerStatusPattern.FindStringSubmatch(err.Error()); m != nil {
