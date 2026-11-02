@@ -43,6 +43,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/dbx"
@@ -172,7 +173,21 @@ func MigrateHeaderBodySplit(dbPath string, progress func(uint64)) error {
 
 // HeaderBodySplitNeeded reports whether MigrateHeaderBodySplit has work at
 // dbPath: an old-layout state file, or a swap to finish or undo.
+//
+// A telemetry partition file still in the old layout is work too: the state
+// file may be split already while a partition's rewrite did not finish (it
+// runs after the swap and a boot cut short leaves it), and the retry boot
+// must bind the gate again.
 func HeaderBodySplitNeeded(dbPath string) (bool, error) {
+	needed, err := stateSplitNeeded(dbPath)
+	if err != nil || needed {
+		return needed, err
+	}
+	parts, err := oldLayoutPartitions(dbPath)
+	return len(parts) > 0, err
+}
+
+func stateSplitNeeded(dbPath string) (bool, error) {
 	statePath := StateDBPath(dbPath)
 	if _, err := os.Stat(statePath); errors.Is(err, os.ErrNotExist) {
 		_, preErr := os.Stat(statePath + presplitSuffix)
@@ -185,15 +200,40 @@ func HeaderBodySplitNeeded(dbPath string) (bool, error) {
 
 func migrateHeaderBodySplitIfNeeded(dbPath string, progress func(uint64)) error {
 	statePath := StateDBPath(dbPath)
-	// A pass that discards a staged copy whose source moved redoes once; a
-	// second move in one process is not looped on.
-	for pass := 0; pass < 2; pass++ {
-		redo, err := headerBodySplitPass(dbPath, statePath, progress)
-		if err != nil || !redo {
-			return err
+	// The state phase reports rows copied; the partition phase continues the
+	// same monotone counter from where it ended, so the gate's progress never
+	// stalls between the two.
+	var base atomic.Uint64
+	stateProgress := progress
+	if progress != nil {
+		stateProgress = func(n uint64) {
+			for {
+				cur := base.Load()
+				if n <= cur || base.CompareAndSwap(cur, n) {
+					break
+				}
+			}
+			progress(n)
 		}
 	}
-	return fmt.Errorf("store: header-body-split: the source moved twice during one boot")
+	// A pass that discards a staged copy whose source moved redoes once; a
+	// second move in one process is not looped on.
+	done := false
+	for pass := 0; pass < 2 && !done; pass++ {
+		redo, err := headerBodySplitPass(dbPath, statePath, stateProgress)
+		if err != nil {
+			return err
+		}
+		done = !redo
+	}
+	if !done {
+		return fmt.Errorf("store: header-body-split: the source moved twice during one boot")
+	}
+	return migrateTelemetryPartitionFiles(dbPath, func(n uint64) {
+		if progress != nil {
+			progress(base.Load() + n)
+		}
+	})
 }
 
 // headerBodySplitPass runs one pass of the crash matrix. redo asks for another.
@@ -277,7 +317,7 @@ func statePresplitLayout(path string) (bool, error) {
 // splitPreflight discards the old-layout compaction files, checks the disk
 // and the attempt counter, and counts this attempt. A refusal leaves the
 // store as it was.
-func splitPreflight(statePath string) (live int64, err error) {
+func splitPreflight(statePath string, partitionPeak int64) (live int64, err error) {
 	removeSQLiteFiles(statePath + compactStagingSuffix)
 	removeSQLiteFiles(statePath + compactStagedSuffix)
 	_ = os.Remove(statePath + compactSidecarSuffix)
@@ -306,6 +346,9 @@ func splitPreflight(statePath string) (live int64, err error) {
 		return live, &HeaderBodySplitRefusal{Reason: "free space unreadable: " + err.Error(), Live: live}
 	}
 	need := int64(float64(live)*headerBodySplitSpaceFactor) + headerBodySplitSortTempBytes + compactFreeFloorBytes
+	// The partitions are rewritten after the swap, while the rollback copy
+	// still holds its space: the largest one's peak is counted now.
+	need += partitionPeak
 	attempts := readSplitAttempts(statePath)
 	log.Printf("store: header-body-split: preflight live=%d free=%d need=%d attempts=%d/%d", live, free, need, attempts, headerBodySplitMaxAttempts)
 	if free < need {
@@ -354,7 +397,8 @@ func runHeaderBodySplit(dbPath, statePath string, progress func(uint64)) (bool, 
 	started := time.Now()
 	side := &HeaderBodySplitSummary{Rows: map[string]int64{}, StepMillis: map[string]int64{}}
 	if err := splitStep(side, "preflight", func() error {
-		_, err := splitPreflight(statePath)
+		parts, _ := oldLayoutPartitions(dbPath)
+		_, err := splitPreflight(statePath, partitionRewritePeak(largestPartition(parts)))
 		return err
 	}); err != nil {
 		return false, err

@@ -539,3 +539,13 @@ Details in section 8.
 12. **The rollback script** is `scripts/rollback/header-body-split-rollback.sh check|apply STATE_DIR`. It runs on the guest volume with the runtime stopped. It keeps the split file as `state.db.split-rolled-back` and rewrites `store-floor.json` to 5.
 13. **The UNIQUE autoindex on `og_objects.canonical_id`** is built during the copy, not after it. It is part of the table, so inserts in rowid order land in random places in that index. The fixture rate below includes that cost. At the paper's 3.3M rows it is one more thing S3 measures.
 14. **Fixture rate (this Mac, APFS, `go test`):** 9,648 rows (5,648 objects and 4,000 events, 109 MB of bodies with about one 200 KB body in seventy) migrated in 1.05 s, including verify and swap. That is about 9,200 rows/s and 109 MB/s of old file. Large bodies dominate the bytes and small rows dominate the row count, so the paper's number has to come from S3.
+
+## Deviations (review fix, partitions)
+
+A DeepSeek tier 2 finding: the telemetry partition rewrite ran inside `store.Open`, after the boot gate stopped ticking, and only the state file decided whether the gate was bound.
+
+1. **The partition phase is part of the migration.** `migrateHeaderBodySplitIfNeeded` (so `MigrateHeaderBodySplit` and `Open` alike) rewrites every old-layout partition file after the state phase, via `migrateTelemetryPartitionFiles`. It runs under the gate, and `Open`'s per-file migration stays as a safety net that finds nothing to do.
+2. **`HeaderBodySplitNeeded` reports partition work.** A live partition file whose `choir_events` still has a `body` column counts (a read-only `pragma_table_info` check per file). A retry boot after a cut-short partition phase binds the gate again, instead of getting the 20 s `BootReadyTimeout` for the whole `Run`.
+3. **Progress.** `migratePartitionSplitProgress` copies headers and bodies in rowid batches (50,000 rows, still one transaction, so a failure still rolls the file back) and reports rows copied. The partition counter continues the state phase's monotone counter, so the gate's progress moves through the whole phase. The gate stops ticking only after `MigrateHeaderBodySplit` returns.
+4. **Space.** The state preflight adds 3x the largest old-layout partition (original, copy, WAL/VACUUM temp) to `need`. Each partition is checked again before it is touched (3x its size plus 64 MiB), and a file that would not fit refuses with the typed `HeaderBodySplitRefusal` and stays old, instead of ENOSPC mid-copy.
+5. Guest security epoch 34 -> 35 (`internal/autoputer` changed). Tests: `split_partition_phase_test.go` (P1-P5) and `TestSplitGateBoundForPartitionOnlyWork`.
