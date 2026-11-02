@@ -830,6 +830,11 @@ func (rt *Runtime) readHealthStore(parent context.Context, budget time.Duration)
 // guestObservabilityResponse is the product-API surface for the running
 // guest's build identity and recent boot/reconcile log. It intentionally
 // exposes no provider secrets, capability handles, or raw capsule material.
+// guestStoreObservability is store.* in /api/runtime/observability.
+type guestStoreObservability struct {
+	Split *store.HeaderBodySplitStats `json:"split,omitempty"`
+}
+
 type guestObservabilityResponse struct {
 	Service    string         `json:"service"`
 	ComputerID string         `json:"computer_id"`
@@ -868,6 +873,10 @@ type guestObservabilityResponse struct {
 	// WAL is the state file's WAL size and the WAL bound's checkpoints
 	// (store/wal_bound.go).
 	WAL *store.WALStats `json:"wal,omitempty"`
+	// Store is store-level state; Store.Split is the header/body split's
+	// summary and its rollback copy (store/header_body_split.go). Absent on
+	// a store that never migrated.
+	Store *guestStoreObservability `json:"store,omitempty"`
 	// ClaudeDelegate is the Claude delegate's availability on this computer
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
@@ -996,6 +1005,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		}
 		if st := h.rt.store.WALStats(); st.Checkpoints > 0 || st.WALBytes > 0 {
 			resp.WAL = &st
+		}
+		if split := h.rt.store.HeaderBodySplitStats(); split != nil {
+			resp.Store = &guestStoreObservability{Split: split}
 		}
 		if tasks, ok := boundedObservabilityRead(observabilityReadBudget, func() *managementTaskObservability {
 			return h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

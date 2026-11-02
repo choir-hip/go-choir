@@ -69,7 +69,17 @@ import (
 //     partition and retires none, so its replay and reads disagree with this
 //     one: the floor is raised to 5 before the writer first stamps, and an
 //     older binary refuses to open the store.
-const Version uint64 = 5
+//   - 6: the header/body split (docs/design/store-header-body-split-2026-11-01.md).
+//     og_objects and choir_events keep only their header columns; the bodies
+//     live in og_bodies and choir_event_bodies, keyed by the header's
+//     explicit rowid alias. The boot migrates an old-layout file into a new
+//     file and swaps it in (internal/store/header_body_split.go), keeping the
+//     old file as state.db.presplit until split-finalize. After the swap the
+//     floor is raised to 6, and the file's store_meta.schema_version is 2, so
+//     an older binary refuses the split store twice over. The rollback is a
+//     manual recipe (scripts/rollback/header-body-split-rollback.sh): the
+//     presplit file back, the floor rewritten to 5, the prior release.
+const Version uint64 = 6
 
 // File is the receipt filename inside the store's sidecar directory
 // (deriveTextureWorkspacePath(StorePath)).

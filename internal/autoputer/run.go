@@ -204,6 +204,18 @@ func Run() {
 	} else if rebased != "" {
 		log.Printf("autoputer: compact rebase: %s", rebased)
 	}
+	// The store header/body split (store_split_gate.go): an old-layout store
+	// is migrated before it opens, under the early health gate, so the host
+	// sees progress instead of a silent 20-45 minute boot.
+	doneSplit := objectgraph.BootPhase("autoputer: startup", "store-header-body-split")
+	splitRefusal := runStoreSplitUnderGate(s, cfg.ComputerID, rtCfg.StorePath)
+	if splitRefusal != nil {
+		doneSplit(splitRefusal)
+		log.Printf("autoputer: store header-body split refused: %s", splitRefusal.Reason)
+		boot.refuse(splitRefusal)
+	} else {
+		doneSplit(nil)
+	}
 	doneStoreOpen := objectgraph.BootPhase("autoputer: startup", "runtime-store-open")
 	db, err := store.Open(rtCfg.StorePath)
 	if err != nil && rebased != "" {
@@ -690,6 +702,9 @@ func Run() {
 	// The isolation drill load (diag_drill.go): host peer only, bounded, run
 	// on d@e for the guest isolation drills.
 	s.Handle("/internal/diag/drill", newDiagDrill(drillScratchDir))
+	// The store header/body split's rollback copy is removed by the ring
+	// tooling once the differential is green (host peer only).
+	s.HandleFunc("/internal/store/split-finalize", splitFinalizeHandler(rtCfg.StorePath))
 	// runtimeServing flips once rt.Start has returned; the heal route answers
 	// 503 until then.
 	var runtimeServing atomic.Bool

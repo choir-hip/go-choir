@@ -258,6 +258,12 @@ func (s *Store) prepareCompactCopy(ctx context.Context, force bool) (bool, error
 		return false, nil
 	}
 	statePath := s.statePath
+	// The header/body split's rollback copy is kept until split-finalize
+	// (header_body_split.go): a compact copy beside it would be a third file
+	// of the store's size. Under the free-space floor it is dropped instead.
+	if !dropPresplitIfLow(statePath) && presplitHeld(statePath) {
+		return false, fmt.Errorf("skipped: the header/body split rollback copy %s is kept until split-finalize", filepath.Base(statePath+presplitSuffix))
+	}
 	staging := statePath + compactStagingSuffix
 	// A copy from a crashed earlier attempt is never trusted.
 	removeSQLiteFiles(staging)
@@ -620,6 +626,14 @@ func RebaseOntoCompactCopy(dbPath string, planned bool) (string, error) {
 	}
 	if !stagedOK {
 		return discard("its sidecar is missing, torn, or names another size")
+	}
+	// A copy staged by a binary before the header/body split is in the old
+	// layout: swapping it in would only make the boot migrate it again.
+	if old, err := statePresplitLayout(staged); err != nil || old {
+		if err != nil {
+			return discard("its layout cannot be read: " + err.Error())
+		}
+		return discard("it is in the pre-split layout")
 	}
 	tail, err := func() (uint64, error) {
 		db, err := sql.Open("sqlite", dbx.SQLiteDSN(statePath, dbx.SQLiteOptions{}, false))

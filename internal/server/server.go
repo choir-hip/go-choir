@@ -50,7 +50,12 @@ type Server struct {
 	healthHandler http.HandlerFunc
 	// onListen, when set, runs once after the TCP listener is bound and
 	// published (S0a boot observer: marks the exact listen-ready boundary).
-	onListen        func()
+	onListen func()
+	// listenerSource, when set, supplies the TCP listener Start serves on
+	// instead of binding the address itself: a boot step that held the
+	// address before Start (the autoputer's early health gate during the
+	// store header/body split) hands its socket over with no unbound gap.
+	listenerSource  func() (net.Listener, error)
 	shutdownTimeout time.Duration
 	// shutdownHooks run in order during Shutdown, after the HTTP server has
 	// stopped accepting and in-flight requests finished, each bounded by the
@@ -206,6 +211,17 @@ func (s *Server) SetOnListen(fn func()) {
 	s.onListen = fn
 }
 
+// SetListenerSource makes Start take its TCP listener from fn instead of
+// binding ListenAddress itself. Must be called before Start.
+func (s *Server) SetListenerSource(fn func() (net.Listener, error)) {
+	s.listenerSource = fn
+}
+
+// ListenAddress is the "host:port" Start binds (configured, not bound).
+func (s *Server) ListenAddress() string {
+	return s.addr
+}
+
 // HandleFunc registers a handler for the given pattern on the server's mux.
 // This must be called before Start.
 func (s *Server) HandleFunc(pattern string, handler http.HandlerFunc) {
@@ -298,7 +314,13 @@ func (s *Server) Start() {
 
 	log.Printf("%s: starting server on %s", s.serviceName, s.addr)
 
-	ln, err := net.Listen("tcp", s.addr)
+	var ln net.Listener
+	var err error
+	if s.listenerSource != nil {
+		ln, err = s.listenerSource()
+	} else {
+		ln, err = net.Listen("tcp", s.addr)
+	}
 	if err != nil {
 		log.Fatalf("%s: failed to listen on %s: %v", s.serviceName, s.addr, err)
 	}

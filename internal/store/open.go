@@ -223,6 +223,13 @@ func openStore(dbPath string) (*Store, error) {
 	if err := storeschema.CheckFloor(sidecar); err != nil {
 		return nil, err
 	}
+	// The header/body split (header_body_split.go): an old-layout file is
+	// migrated, and a swap a crash interrupted is finished or undone, before
+	// anything opens the file. Open, Reopen (a restore or base install of an
+	// older snapshot) and every boot pass here; a split file is a cheap check.
+	if err := migrateHeaderBodySplitIfNeeded(dbPath, nil); err != nil {
+		return nil, err
+	}
 
 	doneOpen := objectgraph.BootPhase("store: open", "workspace-open")
 	sdb, err := dbx.OpenSQLite(statePath, dbx.SQLiteOptions{})
