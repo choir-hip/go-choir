@@ -35,6 +35,9 @@ func TestEngineeringOverlayTeachesVisualCaptureOnlyWhenGranted(t *testing.T) {
 		"/auth/session answers as a signed-out session", "signed-out desktop",
 		// Problem 7: an extensionless route is index.html; the warning.
 		"by its file", "visual_warnings",
+		// Package captures: the app's screenshot set is this job, not a
+		// hand-built harness (selfdev-visual-capture-misses-the-changed-app).
+		"--package <name>", "London Salmon", "390px", `"minutes": 15`, "Do not build your own screenshot harness", "visual_notes",
 	} {
 		if !strings.Contains(granted, want) {
 			t.Errorf("granted overlay lacks %q", want)
@@ -67,6 +70,9 @@ func TestManagementOverlayTeachesVisualReviewOnlyWhenGranted(t *testing.T) {
 		"one vision call",
 		// The owner's review is in Texture; the desk does not build a view.
 		"Texture",
+		// An app candidate is judged on its package captures, against the
+		// design bar's points.
+		"packages_touched", "packages_uncaptured", "app-design-bar-2026-10-26.md", "theme tokens", "16px", "4.5:1", "at most 6 per candidate",
 	} {
 		if !strings.Contains(granted, want) {
 			t.Errorf("granted management overlay lacks %q", want)

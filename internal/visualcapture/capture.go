@@ -38,6 +38,13 @@ type Options struct {
 	ShotDeadline time.Duration
 	// Now stamps captures; nil means time.Now.
 	Now func() time.Time
+	// Packages are the app packages to render in the shell (packages.go),
+	// from manifests under SourceRoot (default SourceRoot).
+	Packages   []string
+	SourceRoot string
+	// PackageBudget bounds the package captures' wall time; zero means
+	// PackageBudget.
+	PackageBudget time.Duration
 }
 
 // Normalize fills the defaults and checks the bounds (V10).
@@ -62,6 +69,22 @@ func (o Options) Normalize() (Options, error) {
 		}
 		seen[clean] = true
 		o.Routes[i] = clean
+	}
+	pkgs := map[string]bool{}
+	for _, name := range o.Packages {
+		if !ValidPackageName(name) {
+			return o, fmt.Errorf("package %q is not a package name under %s (lowercase letters, digits and dashes)", name, PackagesDir)
+		}
+		if pkgs[name] {
+			return o, fmt.Errorf("package %s is named twice", name)
+		}
+		pkgs[name] = true
+	}
+	if o.SourceRoot == "" {
+		o.SourceRoot = SourceRoot
+	}
+	if o.PackageBudget <= 0 {
+		o.PackageBudget = PackageBudget
 	}
 	if o.Width == 0 {
 		o.Width = DefaultWidth
@@ -144,7 +167,8 @@ func captureRoutes(ctx context.Context, opts Options) (Manifest, *AssetRecorder,
 		return Manifest{}, nil, fmt.Errorf("serve the frontend on loopback: %w (capture needs the capsule's loopback network: a capsule with the ecosystem network)", err)
 	}
 	recorder := NewAssetRecorder()
-	srv := &http.Server{Handler: recorder.Wrap(Server(opts.ServeRoot)), ReadHeaderTimeout: 10 * time.Second}
+	scenes := newCaptureServer(opts.ServeRoot)
+	srv := &http.Server{Handler: recorder.Wrap(scenes), ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(listener) }()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -199,6 +223,12 @@ func captureRoutes(ctx context.Context, opts Options) (Manifest, *AssetRecorder,
 			TakenAt: opts.Now().UTC().Format(time.RFC3339),
 		})
 	}
+	if len(opts.Packages) > 0 {
+		total = capturePackages(ctx, opts, scenes, base, scratch, total, &m)
+	}
+	if len(m.Notes) > MaxNotes {
+		m.Notes = append(m.Notes[:MaxNotes-1], note("%d more notes were dropped", len(m.Notes)-MaxNotes+1))
+	}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return Manifest{}, recorder, err
@@ -207,6 +237,104 @@ func captureRoutes(ctx context.Context, opts Options) (Manifest, *AssetRecorder,
 		return Manifest{}, recorder, err
 	}
 	return m, recorder, nil
+}
+
+// capturePackages renders each package's planned scenes after the routes.
+// A scene that fails, and every scene past the time budget or the byte
+// bound, is a note for the judge, never a failed run. It returns the bytes
+// captured so far.
+func capturePackages(ctx context.Context, opts Options, scenes *captureServer, base, scratch string, total int64, m *Manifest) int64 {
+	defer scenes.setScene(nil, nil)
+	var targets []PackageTarget
+	for _, name := range opts.Packages {
+		t, notes := LoadPackageTarget(opts.SourceRoot, name)
+		m.Notes = append(m.Notes, notes...)
+		if t.Name != "" {
+			targets = append(targets, t)
+		}
+	}
+	plan, notes := PlanPackages(targets)
+	m.Notes = append(m.Notes, notes...)
+	kinds := map[string][]Fixture{}
+	for _, t := range targets {
+		kinds[t.Name] = t.Kinds
+	}
+	start := time.Now()
+	failed := 0
+	for i, sc := range plan {
+		if ctx.Err() != nil || time.Since(start) >= opts.PackageBudget {
+			m.Notes = append(m.Notes, note("the package capture time budget (%s) ran out after %d of %d scenes; not captured from %s on", opts.PackageBudget, i, len(plan), sc.Route()))
+			break
+		}
+		width, height := sc.Size()
+		scenes.setScene(&sc, kinds[sc.Package])
+		scenes.setHold(time.Duration(opts.WaitMS) * time.Millisecond)
+		shot := filepath.Join(scratch, fmt.Sprintf("scene-%d.png", i))
+		profile := filepath.Join(scratch, fmt.Sprintf("scene-profile-%d", i))
+		data, err := sceneShot(ctx, opts, base+sc.Route(), shot, profile, width, height)
+		if err != nil {
+			failed++
+			m.Notes = append(m.Notes, note("scene %s did not capture: %v", sc.Route(), err))
+			continue
+		}
+		blank, _ := CheckPNG(data, width, height)
+		if total+int64(len(data)) > MaxTotalBytes {
+			m.Notes = append(m.Notes, note("captures reached the %d byte bound after %d of %d scenes; not captured from %s on", MaxTotalBytes, i, len(plan), sc.Route()))
+			break
+		}
+		total += int64(len(data))
+		digest := sha256Hex(data)
+		name := digest + ".png"
+		if err := writeAtomic(filepath.Join(opts.OutputDir, name), data); err != nil {
+			m.Notes = append(m.Notes, note("scene %s did not save: %v", sc.Route(), err))
+			continue
+		}
+		scene := sc
+		m.Captures = append(m.Captures, Capture{
+			Artifact: ArtifactRef(digest), File: name, MediaType: MediaTypePNG, Bytes: int64(len(data)),
+			Route: sc.Route(), Width: width, Height: height, ReducedMotion: true, Blank: blank,
+			TakenAt: opts.Now().UTC().Format(time.RFC3339), Scene: &scene,
+		})
+	}
+	if failed > 0 {
+		m.Notes = append(m.Notes, note("%d of %d package scenes failed", failed, len(plan)))
+	}
+	return total
+}
+
+// sceneShot runs one Chromium screenshot and checks the PNG.
+func sceneShot(ctx context.Context, opts Options, url, shot, profile string, width, height int) ([]byte, error) {
+	if err := os.MkdirAll(profile, 0o700); err != nil {
+		return nil, err
+	}
+	if err := runShot(ctx, opts, SceneBrowserArgs(url, shot, profile, width, height, opts.WaitMS), profile, shot); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(shot)
+	if err != nil {
+		return nil, fmt.Errorf("Chromium wrote no screenshot")
+	}
+	if _, err := CheckPNG(data, width, height); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// SceneBrowserArgs is BrowserArgs for a package scene, waiting in wall
+// time instead of virtual time: a package that parses its document in a
+// Web Worker (pdf.js) does that work outside virtual time, so a virtual
+// budget shoots the page while it still says "Opening" (measured on
+// Slides-next, 2026-11-02). Chromium shoots at the load event, which the
+// scene's page holds for waitMS (sceneHoldPath); --timeout caps the wait
+// if the hold never ends.
+func SceneBrowserArgs(url, out, profile string, width, height, waitMS int) []string {
+	args := BrowserArgs(url, out, profile, width, height, waitMS)
+	for i, a := range args {
+		if strings.HasPrefix(a, "--virtual-time-budget=") {
+			args[i] = fmt.Sprintf("--timeout=%d", waitMS+sceneTimeoutSlackMS)
+		}
+	}
+	return args
 }
 
 // BrowserArgs is one headless Chromium screenshot run: new headless, no
@@ -355,7 +483,11 @@ func browserVersion(ctx context.Context, opts Options) string {
 	return v
 }
 
-// Server serves a built frontend: files under root, index.html for any
+// Server serves a built frontend (staticServer) and, during a package
+// capture, that capture's scene (scene_server.go).
+func Server(root string) http.Handler { return newCaptureServer(root) }
+
+// staticServer serves a built frontend: files under root, index.html for any
 // other path without an extension (an SPA route), 404 for a missing asset,
 // and a signed-out backend at once (V16): /auth/session answers 200
 // {"authenticated":false}, as the auth service does for a request with no
@@ -366,7 +498,7 @@ func browserVersion(ctx context.Context, opts Options) string {
 // show the signed-out desktop and its public-preview apps (problem 6,
 // docs/evidence/selfdev-trace-reviews-2026-10-25.md). Nothing outside root
 // is served: paths are cleaned and symlinks are not followed out.
-func Server(root string) http.Handler {
+func staticServer(root string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

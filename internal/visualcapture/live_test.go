@@ -112,3 +112,65 @@ func TestLiveCaptureOfTheBuiltFrontendRendersPastLoading(t *testing.T) {
 		t.Fatalf("the signed-out desktop did not render: %.400s", dom)
 	}
 }
+
+// TestLivePackageCapture renders a package's scenes from a built frontend
+// (CHOIR_CAPTURE_LIVE_FRONTEND) and its source tree
+// (CHOIR_CAPTURE_LIVE_SOURCE) with a real Chromium, and keeps the evidence
+// in CHOIR_CAPTURE_LIVE_OUT when set. CHOIR_CAPTURE_LIVE_PACKAGE names the
+// package. It proves the scene server opens the window in the real shell;
+// the capsule itself only a staging run proves.
+func TestLivePackageCapture(t *testing.T) {
+	browser := os.Getenv("CHOIR_CAPTURE_LIVE_BROWSER")
+	frontend := os.Getenv("CHOIR_CAPTURE_LIVE_FRONTEND")
+	source := os.Getenv("CHOIR_CAPTURE_LIVE_SOURCE")
+	pkg := os.Getenv("CHOIR_CAPTURE_LIVE_PACKAGE")
+	if browser == "" || frontend == "" || source == "" || pkg == "" {
+		t.Skip("set CHOIR_CAPTURE_LIVE_BROWSER, CHOIR_CAPTURE_LIVE_FRONTEND, CHOIR_CAPTURE_LIVE_SOURCE and CHOIR_CAPTURE_LIVE_PACKAGE")
+	}
+	if runtime.GOOS == "darwin" {
+		prev := testBrowserEnv
+		testBrowserEnv = []string{"HOME=" + os.Getenv("HOME")}
+		t.Cleanup(func() { testBrowserEnv = prev })
+	}
+	out := os.Getenv("CHOIR_CAPTURE_LIVE_OUT")
+	if out == "" {
+		out = t.TempDir()
+	}
+	started := time.Now()
+	res, err := RunReport(context.Background(), Options{
+		Routes: []string{"/"}, Browser: browser, ServeRoot: frontend, OutputDir: out,
+		Packages: []string{pkg}, SourceRoot: source,
+	})
+	if err != nil {
+		t.Fatalf("live package capture: %v", err)
+	}
+	m := res.Manifest
+	scenes := 0
+	for _, c := range m.Captures {
+		if c.Scene != nil {
+			scenes++
+		}
+		t.Logf("%s %dx%d %d bytes blank=%v %s", c.Route, c.Width, c.Height, c.Bytes, c.Blank, c.File)
+	}
+	for _, n := range m.Notes {
+		t.Logf("note: %s", n)
+	}
+	for _, f := range res.AssetFailures {
+		t.Logf("asset failure: %+v", f)
+	}
+	t.Logf("%d package captures in %s", scenes, time.Since(started).Round(time.Second))
+	if scenes == 0 {
+		t.Fatal("no package capture")
+	}
+	raw, err := os.ReadFile(filepath.Join(out, ManifestFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := digestTree(frontend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ValidateEvidence(raw, evidenceFiles(t, out), FrontendDigest(tree)); err != nil {
+		t.Fatalf("live package evidence does not validate: %v", err)
+	}
+}

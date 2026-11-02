@@ -381,7 +381,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	}
 	// Visual evidence: file the captures in the asset store, tell the cell
 	// what resolved, and leave the runtime's observation for the rule pass.
-	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, out)
+	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, capsuleSourcePaths(changes), out)
 	return out, nil
 }
 
