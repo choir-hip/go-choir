@@ -85,12 +85,15 @@ func retireEventPhaseSQL(body, meta string) string {
 	return objectgraph.ChoirEventPhaseSQLFor(body, meta)
 }
 
-func retirePhasePredicate(p computerevent.ObjectRetireProjection, body, meta string) string {
+// retirePhasePredicate is the choir_events phase test of p, on the typed
+// header column event_phase (insertChoirEventRow computes it with
+// retireEventPhaseSQL over the body and metadata it writes).
+func retirePhasePredicate(p computerevent.ObjectRetireProjection) string {
 	switch p.Phase {
 	case computerevent.ObjectRetirePhaseNone:
-		return ` AND ` + retireEventPhaseSQL(body, meta) + ` = ''`
+		return ` AND event_phase = ''`
 	case computerevent.ObjectRetirePhaseSome:
-		return ` AND ` + retireEventPhaseSQL(body, meta) + ` <> ''`
+		return ` AND event_phase <> ''`
 	}
 	return ""
 }
@@ -142,7 +145,7 @@ func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Tim
 func retireTableWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited *string) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
 	keep, keepArgs := retireKeepCitedPredicate(p, "metadata", cited)
-	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata") + keep
+	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p) + keep
 	args := append(append([]any{from, before}, kindArgs...), keepArgs...)
 	return where, args
 }

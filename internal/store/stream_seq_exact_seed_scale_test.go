@@ -102,11 +102,7 @@ func TestExactStreamSeqSeedScale(t *testing.T) {
 				if i == tableRows-1 {
 					stream = maxStream + 5
 				}
-				if _, err := tx.ExecContext(ctx, `INSERT INTO choir_events (tape_seq, op_index, canonical_id, object_kind, owner_id, content_hash, body, metadata, created_at, updated_at, stream_seq)
-					VALUES (?, 0, ?, 'choir.event', ?, 'h', '{}', '{}', ?, ?, ?)`,
-					uint64(i+1), fmt.Sprintf("obj:choir.event:o:%d", i), fmt.Sprintf("owner-%02d", i%20), base, base, stream); err != nil {
-					t.Fatal(err)
-				}
+				rawEventRow(t, tx, uint64(i+1), 0, fmt.Sprintf("obj:choir.event:o:%d", i), fmt.Sprintf("owner-%02d", i%20), `{}`, `{}`, base, stream)
 			}
 			if err := tx.Commit(); err != nil {
 				t.Fatal(err)

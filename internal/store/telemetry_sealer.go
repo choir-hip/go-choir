@@ -550,10 +550,10 @@ func recheckTelemetryOp(op computerevent.ProjectionOp) error {
 	if op.Kind != computerevent.ProjectionOpObject {
 		return fmt.Errorf("op kind %q is not an object", op.Kind)
 	}
-	if op.Table != "" && op.Table != choirEventsTable && op.Table != telemetryPartitionStamp {
+	if op.Table != "" && op.Table != choirEventsStamp && op.Table != telemetryPartitionStamp {
 		// A sealed op lands in og_objects or, stamped, in choir_events
 		// (event-table design 2.2) or a telemetry partition; nothing else.
-		return fmt.Errorf("op table %q is neither %q nor %q", op.Table, choirEventsTable, telemetryPartitionStamp)
+		return fmt.Errorf("op table %q is neither %q nor %q", op.Table, choirEventsStamp, telemetryPartitionStamp)
 	}
 	var obj objectgraph.Object
 	if err := json.Unmarshal(op.Body, &obj); err != nil {

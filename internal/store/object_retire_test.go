@@ -474,7 +474,7 @@ func TestObjectRetireEventTablePlanUsesTheUpdatedIndex(t *testing.T) {
 			}
 			rows.Close()
 			text := strings.Join(plan, " | ")
-			want := "idx_choir_events_kind_updated (event_kind=? AND updated_at>? AND updated_at<?)"
+			want := "idx_choir_events_kind_updated_phase (event_kind=? AND updated_at>? AND updated_at<?)"
 			if strings.HasPrefix(q.sql, "SELECT MIN") {
 				want = "idx_choir_events_updated"
 			}

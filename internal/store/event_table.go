@@ -33,7 +33,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// choirEventsTable is the stamp value and the table's name.
+// choirEventsStamp is the tape stamp (ProjectionOp.Table). It is part of the
+// tape format and never changes. choirEventsTable is the SQL table's name; the
+// header keeps the name, so the two are equal, but they are different things.
+const choirEventsStamp = "choir_events"
+
+// choirEventsTable is the header table's name in SQL.
 const choirEventsTable = "choir_events"
 
 // The choir_events table is created with the rest of the schema (schema.go).
@@ -153,7 +158,7 @@ type execer interface {
 // is an upsert on the position, so re-projecting the same event (finalize
 // after RecoverPrepared) is idempotent; keepExisting leaves a row already at
 // the position as it is (a cited row a retired partition hands over).
-func insertChoirEventRow(ctx context.Context, tx execer, pos uint64, opIndex int, row choirEventRow, keepExisting bool) error {
+func insertChoirEventRow(ctx context.Context, tx choirEventWriter, pos uint64, opIndex int, row choirEventRow, keepExisting bool) error {
 	conflict := `ON CONFLICT (tape_seq, op_index) DO UPDATE SET
 			canonical_id = excluded.canonical_id,
 			object_kind = excluded.object_kind,
@@ -161,7 +166,6 @@ func insertChoirEventRow(ctx context.Context, tx execer, pos uint64, opIndex int
 			computer_id = excluded.computer_id,
 			version_id = excluded.version_id,
 			content_hash = excluded.content_hash,
-			body = excluded.body,
 			metadata = excluded.metadata,
 			created_at = excluded.created_at,
 			updated_at = excluded.updated_at,
@@ -169,21 +173,40 @@ func insertChoirEventRow(ctx context.Context, tx execer, pos uint64, opIndex int
 			seq = excluded.seq,
 			stream_seq = excluded.stream_seq,
 			trajectory_id = excluded.trajectory_id,
-			event_kind = excluded.event_kind`
+			event_kind = excluded.event_kind,
+			event_phase = excluded.event_phase`
 	if keepExisting {
 		conflict = `ON CONFLICT (tape_seq, op_index) DO NOTHING`
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO choir_events
-		(tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata,
-		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, '', ?, ?, ?, ?, ?)
-		`+conflict,
+	// ?9 is the body, bound for the phase expression only: it is stored in
+	// choir_event_bodies, never in the header.
+	var evID int64
+	err := tx.QueryRowContext(ctx, `INSERT INTO choir_events
+		(tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata,
+		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind, event_phase)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, FALSE, '', ?13, ?14, ?15, ?16, ?17, `+objectgraph.ChoirEventPhaseSQLFor("?9", "?10")+`)
+		`+conflict+` RETURNING ev_id`,
 		pos, opIndex, row.canonicalID, row.objectKind, row.ownerID, row.computerID, row.versionID, row.contentHash,
 		row.body, row.metadata, row.createdAt.UTC(), row.updatedAt.UTC(),
-		row.runID, row.seq, row.streamSeq, row.trajectoryID, row.eventKind); err != nil {
+		row.runID, row.seq, row.streamSeq, row.trajectoryID, row.eventKind).Scan(&evID)
+	if errors.Is(err, sql.ErrNoRows) && keepExisting {
+		// DO NOTHING: the row is already there, with its body.
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("project %s: %w", choirEventsTable, err)
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO choir_event_bodies (ev_id, body) VALUES (?, ?)
+		ON CONFLICT (ev_id) DO UPDATE SET body = excluded.body`, evID, row.body); err != nil {
+		return fmt.Errorf("project %s body: %w", choirEventsTable, err)
+	}
 	return nil
+}
+
+// choirEventWriter is the statement surface of a header+body event write.
+type choirEventWriter interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 // rowQuerier is the one method the dry-run position read needs, so a
@@ -218,22 +241,22 @@ func dryRunTapePosition(ctx context.Context, q rowQuerier, computerID string) (u
 // index in order, with no TopN, only then (measured on the plan test).
 
 func eventTableRunAfterSQL(runID string, afterSeq int64, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE run_id = ? AND seq > ? ORDER BY run_id ASC, seq ASC LIMIT ?`,
+	return `SELECT h.canonical_id, h.updated_at, b.body FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id WHERE h.run_id = ? AND h.seq > ? ORDER BY h.run_id ASC, h.seq ASC LIMIT ?`,
 		[]any{runID, afterSeq, limit}
 }
 
 func eventTableOwnerAfterSQL(ownerID string, afterStreamSeq int64, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? AND stream_seq > ? ORDER BY owner_id ASC, stream_seq ASC LIMIT ?`,
+	return `SELECT h.canonical_id, h.updated_at, b.body FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id WHERE h.owner_id = ? AND h.stream_seq > ? ORDER BY h.owner_id ASC, h.stream_seq ASC LIMIT ?`,
 		[]any{ownerID, afterStreamSeq, limit}
 }
 
 func eventTableOwnerNewestSQL(ownerID string, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE owner_id = ? ORDER BY owner_id DESC, stream_seq DESC LIMIT ?`,
+	return `SELECT h.canonical_id, h.updated_at, b.body FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id WHERE h.owner_id = ? ORDER BY h.owner_id DESC, h.stream_seq DESC LIMIT ?`,
 		[]any{ownerID, limit}
 }
 
 func eventTableTrajectoryNewestSQL(trajectoryID string, limit int) (string, []any) {
-	return `SELECT canonical_id, updated_at, body FROM choir_events WHERE trajectory_id = ? ORDER BY trajectory_id DESC, stream_seq DESC LIMIT ?`,
+	return `SELECT h.canonical_id, h.updated_at, b.body FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id WHERE h.trajectory_id = ? ORDER BY h.trajectory_id DESC, h.stream_seq DESC LIMIT ?`,
 		[]any{trajectoryID, limit}
 }
 
@@ -617,7 +640,7 @@ func (s *Store) stampsEventTable(kind types.EventKind) bool {
 // for choir_events when stamped is set. It is the only production code that
 // sets ProjectionOp.Table (event_table_guard_test.go).
 //
-// table is the stamp: "" (og_objects), choirEventsTable, or
+// table is the stamp: "" (og_objects), choirEventsStamp, or
 // telemetryPartitionStamp.
 func eventObjectOp(obj objectgraph.Object, table string) (computerevent.ProjectionOp, error) {
 	body, err := json.Marshal(obj)
@@ -626,7 +649,7 @@ func eventObjectOp(obj objectgraph.Object, table string) (computerevent.Projecti
 	}
 	op := computerevent.ProjectionOp{Kind: computerevent.ProjectionOpObject, CanonicalID: obj.CanonicalID, Body: body}
 	switch table {
-	case choirEventsTable, telemetryPartitionStamp:
+	case choirEventsStamp, telemetryPartitionStamp:
 		op.Table = table
 	}
 	return op, nil
@@ -640,7 +663,7 @@ func (s *Store) eventStamp(kind types.EventKind) string {
 	case s.stampsTelemetryPartition(kind):
 		return telemetryPartitionStamp
 	case s.stampsEventTable(kind):
-		return choirEventsTable
+		return choirEventsStamp
 	}
 	return ""
 }

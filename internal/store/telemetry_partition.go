@@ -132,37 +132,10 @@ func TelemetryPartitionDir(storePath string) string {
 	return filepath.Join(deriveTextureWorkspacePath(storePath), TelemetryPartitionDirName)
 }
 
-// telemetryPartitionDDL is a partition's schema: choir_events' columns and
-// indexes, so every choir_events reader runs unchanged on a partition.
-const telemetryPartitionDDL = `
-CREATE TABLE IF NOT EXISTS choir_events (
-	tape_seq INTEGER NOT NULL,
-	op_index INTEGER NOT NULL,
-	canonical_id TEXT NOT NULL,
-	object_kind TEXT NOT NULL,
-	owner_id TEXT NOT NULL,
-	computer_id TEXT NOT NULL DEFAULT '',
-	version_id TEXT NOT NULL DEFAULT '',
-	content_hash TEXT NOT NULL,
-	body          BLOB NOT NULL,
-	metadata TEXT NOT NULL,
-	created_at    DATETIME NOT NULL,
-	updated_at    DATETIME NOT NULL,
-	tombstone INTEGER NOT NULL DEFAULT 0,
-	superseded_by TEXT NOT NULL DEFAULT '',
-	run_id TEXT NOT NULL DEFAULT '',
-	seq INTEGER NOT NULL DEFAULT 0,
-	stream_seq INTEGER NOT NULL DEFAULT 0,
-	trajectory_id TEXT NOT NULL DEFAULT '',
-	event_kind TEXT NOT NULL DEFAULT '',
-	PRIMARY KEY (tape_seq, op_index)
-);
-CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
-CREATE INDEX IF NOT EXISTS idx_choir_events_kind_updated ON choir_events(event_kind, updated_at);
-`
+// telemetryPartitionDDL is a partition's schema: the same choirEventsDDL as the
+// main store (header, body table, drop trigger, indexes), so every
+// choir_events reader runs unchanged on a partition.
+const telemetryPartitionDDL = choirEventsDDL
 
 // telemetryPartition is one open partition file.
 type telemetryPartition struct {
@@ -291,6 +264,12 @@ func (set *telemetryPartitions) openFile(ctx context.Context, name, class string
 	db, err := dbx.OpenSQLite(path, dbx.SQLiteOptions{ReadConns: 2})
 	if err != nil {
 		return nil, fmt.Errorf("telemetry partitions: open %s: %w", name, err)
+	}
+	// A pre-split file is migrated in one transaction before the DDL: the DDL
+	// would otherwise find the old choir_events and skip the new one.
+	if err := migratePartitionSplit(ctx, db.Write); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("telemetry partitions: split migration of %s: %w", name, err)
 	}
 	if _, err := db.Write.ExecContext(ctx, telemetryPartitionDDL); err != nil {
 		_ = db.Close()
@@ -570,12 +549,16 @@ func citedEventIDsTx(ctx context.Context, tx *sql.Tx) ([]string, error) {
 	return citedEventIDs(ctx, tx)
 }
 
+// citedEventIDsSQL reads the acceptances' bodies through og_bodies, one rowid
+// seek per acceptance, with og_objects as the outer loop.
+const citedEventIDsSQL = `SELECT DISTINCT CAST(json_extract(e.value, '$.event_id') AS TEXT)
+		FROM og_objects ra JOIN og_bodies rb ON rb.obj_id = ra.obj_id, json_each(CASE WHEN json_valid(CAST(rb.body AS TEXT)) THEN CAST(rb.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
+		WHERE ra.object_kind = '` + string(ogKindRunAccept) + `' AND json_extract(e.value, '$.event_id') IS NOT NULL`
+
 func citedEventIDs(ctx context.Context, q interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }) ([]string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT DISTINCT CAST(json_extract(e.value, '$.event_id') AS TEXT)
-		FROM og_objects ra, json_each(CASE WHEN json_valid(CAST(ra.body AS TEXT)) THEN CAST(ra.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
-		WHERE ra.object_kind = '`+string(ogKindRunAccept)+`' AND json_extract(e.value, '$.event_id') IS NOT NULL`)
+	rows, err := q.QueryContext(ctx, citedEventIDsSQL)
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +579,7 @@ func citedEventIDs(ctx context.Context, q interface {
 // has no og_objects to read it from).
 func partitionRetireWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited []string) (string, []any, error) {
 	marks, kindArgs := retireKindPlaceholders(p)
-	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p, "body", "metadata")
+	where := `updated_at >= ? AND updated_at < ? AND event_kind IN (` + marks + `)` + retirePhasePredicate(p)
 	args := append([]any{from, before}, kindArgs...)
 	if p.KeepCited == computerevent.ObjectRetireKeepRunAcceptance {
 		raw, err := json.Marshal(append([]string{}, cited...))
@@ -736,9 +719,16 @@ type choirEventStoredRow struct {
 	row   choirEventRow
 }
 
+func readStoredRowsSQL(where string) string {
+	return `SELECT tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, b.body, metadata,
+		created_at, updated_at, run_id, seq, stream_seq, trajectory_id, event_kind
+		FROM choir_events LEFT JOIN choir_event_bodies b ON b.ev_id = choir_events.ev_id ` + where + ` ORDER BY tape_seq, op_index`
+}
+
 func readStoredRows(ctx context.Context, db *sql.DB, where string, args ...any) ([]choirEventStoredRow, error) {
-	rows, err := db.QueryContext(ctx, `SELECT tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata,
-		created_at, updated_at, run_id, seq, stream_seq, trajectory_id, event_kind FROM choir_events `+where+` ORDER BY tape_seq, op_index`, args...)
+	// where names header columns unqualified; the header is the outer table
+	// and each body is one rowid seek.
+	rows, err := db.QueryContext(ctx, readStoredRowsSQL(where), args...)
 	if err != nil {
 		return nil, err
 	}
