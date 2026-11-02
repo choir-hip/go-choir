@@ -75,6 +75,27 @@ type SQLiteStateExtractor struct {
 	// may release the lock: the scan that follows still reads that state.
 	// A hook error fails the extraction.
 	SnapshotHook func(ctx context.Context, tx *sql.Tx) error
+
+	// LogicalTables digests a table that the store keeps split over several
+	// physical tables (a header and a body table) as the one table it was:
+	// keyed by the logical table's name (the observation key), each entry's
+	// Query returns the logical rows in the logical primary-key order. When
+	// every member exists the logical digest runs Query and the members are
+	// left out of Tables and TableSchemas; their schema entries still enter
+	// the schema hash and the logical table's schema digest. A file without
+	// the members (the pre-split layout) takes the generic path.
+	// (store header/body split, docs/design/store-header-body-split-2026-11-01.md
+	// section 5; the extractor side lands in slice E.)
+	LogicalTables map[string]LogicalTable
+}
+
+// LogicalTable is one logical table of SQLiteStateExtractor.LogicalTables.
+type LogicalTable struct {
+	// Query selects the logical table's stored columns in their pre-split
+	// declaration order, ordered by its pre-split primary key.
+	Query string
+	// Members are the physical tables the logical table is read from.
+	Members []string
 }
 
 var _ Extractor = SQLiteStateExtractor{}

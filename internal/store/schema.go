@@ -12,8 +12,59 @@ package store
 // (og_objects, og_edges, og_key_index) are created by internal/objectgraph.
 
 // storeSchemaVersion is the schema version row in store_meta. A database
-// written by a newer version is refused.
-const storeSchemaVersion = 1
+// written by a newer version is refused. Version 2 is the header/body split
+// (og_objects + og_bodies, choir_events + choir_event_bodies;
+// docs/design/store-header-body-split-2026-11-01.md): a version 1 binary
+// refuses a split store.
+const storeSchemaVersion = 2
+
+// choirEventsDDL is the choir_events header table, its body table, the
+// trigger that drops a body with its header, and the header's indexes: one
+// text for the main store (schemaDDL) and every telemetry partition file.
+//
+// ev_id is the explicit rowid alias and the key of choir_event_bodies: a
+// physical address inside one file, never state (the witness reads the
+// logical table, WitnessLogicalTables). It cannot be a function of the tape
+// position: a projection batch has no op-count bound. event_phase is
+// body-derived and written by the writer in the header statement
+// (objectgraph.ChoirEventPhaseSQLFor). The table name "choir_events" is also
+// the tape stamp (choirEventsStamp) and does not change.
+const choirEventsDDL = `
+CREATE TABLE IF NOT EXISTS choir_events (
+	ev_id INTEGER PRIMARY KEY,
+	tape_seq INTEGER NOT NULL,
+	op_index INTEGER NOT NULL,
+	canonical_id TEXT NOT NULL,
+	object_kind TEXT NOT NULL,
+	owner_id TEXT NOT NULL,
+	computer_id TEXT NOT NULL DEFAULT '',
+	version_id TEXT NOT NULL DEFAULT '',
+	content_hash TEXT NOT NULL,
+	metadata TEXT NOT NULL,
+	created_at    DATETIME NOT NULL,
+	updated_at    DATETIME NOT NULL,
+	tombstone INTEGER NOT NULL DEFAULT 0,
+	superseded_by TEXT NOT NULL DEFAULT '',
+	run_id TEXT NOT NULL DEFAULT '',
+	seq INTEGER NOT NULL DEFAULT 0,
+	stream_seq INTEGER NOT NULL DEFAULT 0,
+	trajectory_id TEXT NOT NULL DEFAULT '',
+	event_kind TEXT NOT NULL DEFAULT '',
+	event_phase TEXT NOT NULL DEFAULT '',
+	UNIQUE (tape_seq, op_index)
+);
+CREATE TABLE IF NOT EXISTS choir_event_bodies (
+	ev_id INTEGER PRIMARY KEY,
+	body  BLOB NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS choir_events_drop_body AFTER DELETE ON choir_events
+BEGIN DELETE FROM choir_event_bodies WHERE ev_id = OLD.ev_id; END;
+CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
+CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
+CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
+CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
+CREATE INDEX IF NOT EXISTS idx_choir_events_kind_updated_phase ON choir_events(event_kind, updated_at, event_phase);
+`
 
 const storeMetaDDL = `
 CREATE TABLE IF NOT EXISTS store_meta (
@@ -407,34 +458,7 @@ CREATE INDEX IF NOT EXISTS idx_texture_mutations_scope ON texture_agent_mutation
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number);
 CREATE INDEX IF NOT EXISTS idx_texture_aliases_doc ON texture_document_aliases(owner_id, computer_id, doc_id);
 
-CREATE TABLE IF NOT EXISTS choir_events (
-	tape_seq INTEGER NOT NULL,
-	op_index INTEGER NOT NULL,
-	canonical_id TEXT NOT NULL,
-	object_kind TEXT NOT NULL,
-	owner_id TEXT NOT NULL,
-	computer_id TEXT NOT NULL DEFAULT '',
-	version_id TEXT NOT NULL DEFAULT '',
-	content_hash TEXT NOT NULL,
-	body          BLOB NOT NULL,
-	metadata TEXT NOT NULL,
-	created_at    DATETIME NOT NULL,
-	updated_at    DATETIME NOT NULL,
-	tombstone INTEGER NOT NULL DEFAULT 0,
-	superseded_by TEXT NOT NULL DEFAULT '',
-	run_id TEXT NOT NULL DEFAULT '',
-	seq INTEGER NOT NULL DEFAULT 0,
-	stream_seq INTEGER NOT NULL DEFAULT 0,
-	trajectory_id TEXT NOT NULL DEFAULT '',
-	event_kind TEXT NOT NULL DEFAULT '',
-	PRIMARY KEY (tape_seq, op_index)
-);
-CREATE INDEX IF NOT EXISTS idx_choir_events_run_seq ON choir_events(run_id, seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_owner_stream ON choir_events(owner_id, stream_seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_trajectory_stream ON choir_events(trajectory_id, stream_seq);
-CREATE INDEX IF NOT EXISTS idx_choir_events_updated ON choir_events(updated_at);
-CREATE INDEX IF NOT EXISTS idx_choir_events_kind_updated ON choir_events(event_kind, updated_at);
-
+` + choirEventsDDL + `
 -- telemetry_partitions_retired names the telemetry partitions a retire op
 -- retired (telemetry_partition.go): main-store state, so the head, the
 -- readers, the snapshot and replay agree on it. Every column is a function of
