@@ -102,7 +102,16 @@ func migratePartitionSplitProgress(ctx context.Context, db *sql.DB, progress fun
 			if hi >= maxRow.Int64 {
 				break
 			}
-			lo = hi + 1
+			// Jump to the next rowid that exists: a sparse file does not
+			// walk its empty windows.
+			var next sql.NullInt64
+			if err := tx.QueryRowContext(ctx, `SELECT MIN(rowid) FROM choir_events_presplit WHERE rowid > ?`, hi).Scan(&next); err != nil {
+				return fmt.Errorf("partition split: %s: next rowid: %w", name, err)
+			}
+			if !next.Valid {
+				break
+			}
+			lo = next.Int64
 		}
 		return step(name, "")
 	}
