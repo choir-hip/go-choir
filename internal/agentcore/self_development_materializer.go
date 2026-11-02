@@ -788,6 +788,13 @@ func rollbackDroppedClaimNote(pinned updater.ReleaseManifest) string {
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
 	if err != nil {
+		if operation.State == selfdev.StateDegraded && errors.Is(err, updater.ErrPinnedReleaseUnavailable) {
+			// The re-drive of a degraded rollback can never succeed once its
+			// pinned release is gone, and the operation is open, holding every
+			// engineering admission. Settle it; a transient read error (not
+			// this class) stays a retry.
+			return rt.settleDegradedRollbackPinnedReleaseUnavailable(ctx, operation)
+		}
 		return fmt.Errorf("materializer: rollback release unavailable: %w", err)
 	}
 	version := computerversion.ComputerVersion{CodeRef: computerversion.CodeRef(operation.CodeRef), ArtifactProgramRef: computerversion.ArtifactProgramRef(operation.ArtifactProgramRef)}

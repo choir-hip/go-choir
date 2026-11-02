@@ -825,11 +825,27 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 	}
 	releaseDir := filepath.Join(filepath.Clean(root), "releases", releaseDigest)
 	manifest, err := readReleaseManifest(releaseDir)
-	if err != nil || manifest.ContentDigest != releaseDigest {
-		return ReleaseManifest{}, "", fmt.Errorf("updater: pinned release unavailable")
+	if err != nil {
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) && !errors.Is(err, fs.ErrNotExist) {
+			// An I/O or permission error says nothing about whether the
+			// release exists: it may pass. Only the unavailable class is
+			// permanent.
+			return ReleaseManifest{}, "", fmt.Errorf("updater: pinned release unreadable: %w", err)
+		}
+		return ReleaseManifest{}, "", ErrPinnedReleaseUnavailable
+	}
+	if manifest.ContentDigest != releaseDigest {
+		return ReleaseManifest{}, "", ErrPinnedReleaseUnavailable
 	}
 	return manifest, releaseDir, nil
 }
+
+// ErrPinnedReleaseUnavailable is the permanent class of a pinned-release read
+// failure: the release is not on disk, or what is there is not the release
+// the digest names. A read that failed for another reason (an I/O or
+// permission error) is a different, transient error and does not match.
+var ErrPinnedReleaseUnavailable = errors.New("updater: pinned release unavailable")
 
 // RestagePinnedRelease swaps `current` onto an already-pinned release without
 // Apply, restorePrior, or a service restart. Tape restore uses this to restage

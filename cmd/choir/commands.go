@@ -661,6 +661,22 @@ func buildRegistry() []*command {
 			cliOnly: ownerActReason,
 		},
 		{
+			path:    []string{"self-dev", "abandon"},
+			summary: "Owner's abandon: close an open operation that will not settle to failed, with your reason (--operation, --reason)",
+			desc:    "Move an open self-development operation that installed nothing (requested, executing, frozen, verified, awaiting_approval, accepted) or a degraded one to failed, with the owner's reason recorded on the tape as an owner decision. An open operation holds every engineering admission on its computer, so one that will not settle (a candidate nobody approves, a degraded rollback) is cleared this way. materializing and rollback_pending operations are in flight with the updater and are refused with a 409. The same key and reason replay a landed abandon. An owner act: the key needs owner:acts, which admin does not imply.",
+			params: []param{
+				computerParam().orSay(selfDevUsage),
+				pStr("operation", "Operation ID to abandon").req(),
+				idempotencyParam("Abandon idempotency key (default derives from the operation)"),
+				pStr("reason", "Why the operation is abandoned").req(),
+			},
+			usage:       "--operation is required and so is --reason",
+			scopes:      []string{"computer:self_development:read", "computer:self_development:approve", ownerActsScope},
+			destructive: true, idempotent: true,
+			handler: selfDevAbandon,
+			cliOnly: ownerActReason,
+		},
+		{
 			path: []string{"self-dev", "mode", "get"}, summary: "Read the explicit computer mode",
 			params: []param{computerParam()},
 			usage:  selfDevUsage, scopes: selfDevRead, readOnly: true,
@@ -1132,6 +1148,23 @@ func selfDevDecide(x *call, decision string) (any, error) {
 		body["reason"] = x.trim("reason")
 	}
 	return sendRaw(x, http.MethodPost, selfDevPath(computerID, "operations/"+url.PathEscape(id)+"/decision"), body)
+}
+
+// selfDevAbandon posts the owner's abandon act. The guest checks the state and
+// answers its refusal (409 for an operation in flight) unchanged.
+func selfDevAbandon(x *call) (any, error) {
+	computerID, id := x.trim("computer"), x.trim("operation")
+	reason := x.trim("reason")
+	if id == "" || reason == "" {
+		return nil, errors.New("--operation and --reason are required")
+	}
+	key := x.trim("idempotency_key")
+	if key == "" {
+		key = "cli-abandon:" + id
+	}
+	return sendRaw(x, http.MethodPost, selfDevPath(computerID, "abandonments"), map[string]any{
+		"operation_id": id, "reason": reason, "idempotency_key": key,
+	})
 }
 
 func selfDevModeSet(x *call) (any, error) {

@@ -85,6 +85,12 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 			body += " The reason, verbatim:\n\n" + reason
 		}
 		return body
+	case types.OwnerActAbandon:
+		body := fmt.Sprintf("%s abandoned self-development candidate %s. It is closed as failed and will not be applied.", who, id)
+		if reason = strings.TrimSpace(reason); reason != "" {
+			body += " The reason, verbatim:\n\n" + reason
+		}
+		return body
 	}
 	return ""
 }

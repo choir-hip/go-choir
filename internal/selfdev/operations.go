@@ -696,8 +696,11 @@ func allowedTransition(from, to string) bool {
 	case StateDegraded:
 		// Not terminal: a journaled terminal outcome repairs it forward to
 		// applied/rolled_back, or to failed when the updater journal recorded
-		// a recovery-verified failure. The materializer only re-drives
-		// degraded operations; nothing else writes these edges.
+		// a recovery-verified failure, when the pinned release a rollback
+		// would re-drive from is gone, or when the owner abandons it. The
+		// materializer re-drives degraded operations; the two settling
+		// writers of the failed edge are that materializer and the owner's
+		// abandon act (agentcore settleSelfDevelopmentOperationFailed).
 		return to == StateApplied || to == StateRolledBack || to == StateFailed
 	default:
 		return false

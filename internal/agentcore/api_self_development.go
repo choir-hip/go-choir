@@ -207,6 +207,13 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.startSelfDevelopmentRollback(w, r, ownerID, computerID)
+	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "abandonments":
+		// The owner closes an open operation that will not settle.
+		if r.Method != http.MethodPost {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.abandonSelfDevelopmentOperation(w, r, ownerID, computerID)
 	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "decision":
 		if r.Method != http.MethodPost {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
