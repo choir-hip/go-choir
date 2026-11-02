@@ -34,9 +34,9 @@ func engineeringHoldSettlingActs(operationID, state string) string {
 	case "awaiting_approval":
 		return "It waits for the owner's decision; the owner acts that settle it are " + reject + " (withdraw it) and " + abandon + " (close it as failed)."
 	case "degraded":
-		return "It was applied with an unsettled tail the materializer could not finish; the installed release stays live. The owner act that closes it is " + abandon + "."
+		return "It was applied with an unsettled tail (checkpoint, route) the materializer could not finish; the installed release stays live. The owner act that closes it is " + abandon + ", which records it applied (or rolled back) without the tail."
 	case "materializing", "rollback_pending":
-		return "It is in flight with the updater and settles by itself or when its pinned release is found unusable; if it is parked, " + abandon + " settles it when the updater journal shows nothing applied."
+		return "It is with the updater and settles by itself when the updater finishes. " + abandon + " settles it by the updater journal: failed if nothing was installed, applied (or rolled back) without the tail if the release was installed; it is refused while an apply is running, and resumes one interrupted after it moved the current release."
 	}
 	return "It installed nothing; the owner act that closes it is " + abandon + "."
 }

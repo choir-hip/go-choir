@@ -700,7 +700,7 @@ func allowedTransition(from, to string) bool {
 		// would re-drive from is gone, or when the owner abandons it. The
 		// materializer re-drives degraded operations; the two settling
 		// writers of the failed edge are that materializer and the owner's
-		// abandon act (agentcore settleSelfDevelopmentOperationFailed).
+		// abandon act (agentcore settleSelfDevelopmentOperation).
 		return to == StateApplied || to == StateRolledBack || to == StateFailed
 	default:
 		return false

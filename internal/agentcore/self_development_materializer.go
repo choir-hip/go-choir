@@ -119,6 +119,10 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 // records for a decided operation the updater never started.
 const selfdevApplyInterruptedByRestart = "interrupted_by_restart"
 
+// errSelfDevJournalMidFlight holds a crash-interrupted operation whose apply
+// journal is not terminal: an apply still running settles on a later pass from
+// the journal it finishes; a dead one past its pointer swap is held until the
+// owner's abandon act re-admits it for the updater's resume.
 var errSelfDevJournalMidFlight = errors.New("updater journal is mid-flight; effective state unknown")
 
 // errSelfDevSettlementStateMismatch holds a settlement whose journal and
@@ -173,24 +177,43 @@ func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx contex
 
 // settleSelfDevelopmentOperationAfterCrash closes an interrupted operation
 // with what the updater journal says happened, without calling the updater:
-// no journal means nothing changed (failed, interrupted by a restart); a
-// terminal journal is recorded through the normal path; a mid-flight journal
-// holds the operation, visible, for an owner act.
+// no journal, or a dead one that never swapped, means nothing changed (fenced,
+// then failed, interrupted by a restart); a terminal journal is recorded
+// through the normal path; a live apply settles on a later pass; a dead one
+// past its swap holds the operation, visible, for the owner's abandon act.
 func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context, operation selfdev.Operation, rollback bool) error {
 	key := "selfdev-apply-" + operation.DecisionEvent
 	if rollback {
 		key = "selfdev-rollback-apply-" + operation.DecisionEvent
 	}
 	journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, key)
-	switch {
-	case err != nil:
+	if err != nil {
 		return fmt.Errorf("updater journal unreadable: %w", err)
-	case !found && operation.State == selfdev.StateDegraded:
-		return nil // closed degraded already (the settlement crashed twice): an owner act decides
-	case !found:
-		return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
-	case !journaled.Terminal:
-		return errSelfDevJournalMidFlight
+	}
+	if !found || !journaled.Terminal {
+		// No journal, or a non-terminal one: the key's lock tells a live
+		// apply (an updater that outlived the runtime's crash) from a dead
+		// one, and a dead one that never swapped is fenced
+		// (updater.FenceApply).
+		fence, fenceErr := updater.FenceApply(rt.selfdevUpdaterRoot, key, selfdevInterruptedByRestart+" before the updater installed anything")
+		switch {
+		case fenceErr != nil:
+			return fmt.Errorf("updater journal unreadable: %w", fenceErr)
+		case fence.State == updater.FenceInFlight:
+			// The updater is still applying: a later pass settles from the
+			// terminal journal it writes.
+			return errSelfDevJournalMidFlight
+		case fence.State == updater.FenceInterrupted:
+			// Dead past the pointer swap: only the updater's resume says
+			// what is installed. Held; the owner's abandon act re-admits it
+			// for one resume (abandonSelfDevelopmentOperation).
+			return errSelfDevJournalMidFlight
+		case fence.Fenced && operation.State == selfdev.StateDegraded:
+			return nil // closed degraded already (the settlement crashed twice): an owner act decides
+		case fence.Fenced:
+			return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
+		}
+		journaled = fence.Outcome // the updater finished between the two reads
 	}
 	// Only an `applied` journal has a tail: a checkpoint bind and a route
 	// promotion, the work that can crash the computer. Any other terminal
@@ -362,6 +385,7 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 	if err != nil {
 		return
 	}
+	rt.dischargeOrphanedPendingTransition(ctx, operations)
 	for _, operation := range operations {
 		if operation.State == selfdev.StateAwaitingApproval {
 			recovered, found, recoveryErr := rt.recoverSelfDevelopmentDecision(ctx, operation)
@@ -785,57 +809,93 @@ func rollbackDroppedClaimNote(pinned updater.ReleaseManifest) string {
 	return "rolled back to a plain release; its base claim dropped by design (base commit " + pinned.BaseCommit + " is not joined to the booted base)"
 }
 
+// journalTerminalError is the apply error a terminal journal states: nil for
+// applied, a typed refusal for a pre-mutation refusal (its type settles the
+// operation failed; losing it left operations open, review 311), and the
+// journal's cause otherwise.
+func journalTerminalError(journaled updater.JournalOutcome) error {
+	switch journaled.Result.Outcome {
+	case "applied":
+		return nil
+	case "refused":
+		return fmt.Errorf("%w: %s", updater.ErrApplyRefused, journalFailureCause(journaled.Failure, journaled.Result.Outcome))
+	default:
+		return errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome))
+	}
+}
+
+// pinnedReleaseUnusable reports a pinned-release read failure that retrying
+// cannot change: the release is gone or fails verification.
+func pinnedReleaseUnusable(err error) bool {
+	return errors.Is(err, updater.ErrPinnedReleaseUnavailable) || errors.Is(err, updater.ErrPinnedReleaseCorrupt)
+}
+
+// rollbackSelfDevelopmentOperation drives a rollback journal first
+// (docs/problems/selfdev-stale-open-operations-block-engineering-2026-11-02.md,
+// "Journal-first settlement"): a terminal journal is recorded without reading
+// the pinned release, which only the apply request needs. So an applied
+// rollback whose pinned release is later gone or corrupt still records
+// forward, and one whose installed release is unusable settles forward
+// without the tail; neither retries forever.
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
-	manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
-	if err != nil {
-		if (operation.State == selfdev.StateDegraded || operation.State == selfdev.StateRollbackPending) &&
-			(errors.Is(err, updater.ErrPinnedReleaseUnavailable) || errors.Is(err, updater.ErrPinnedReleaseCorrupt)) {
-			// The rollback can never be driven once its pinned release is gone
-			// or fails verification, and the operation is open, holding every
-			// engineering admission. Settle it; a transient read error (neither
-			// class) stays a retry.
-			return rt.settleRollbackPinnedReleaseUnusable(ctx, operation, err)
+	journalKey := "selfdev-rollback-apply-" + operation.DecisionEvent
+	journaled, journalFound, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, journalKey)
+	if journalErr != nil {
+		return fmt.Errorf("materializer: rollback journal unreadable: %w", journalErr)
+	}
+	var (
+		result       updater.ApplyResult
+		applyErr     error
+		terminalNote string
+	)
+	if journalFound && journaled.Terminal {
+		result, applyErr = journaled.Result, journalTerminalError(journaled)
+		// Only the dropped-claim note reads the pinned release; without it the
+		// note is left off.
+		if manifest, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest); err == nil && rollbackDropsBaseClaim(manifest) {
+			terminalNote = rollbackDroppedClaimNote(manifest)
 		}
-		return fmt.Errorf("materializer: rollback release unavailable: %w", err)
-	}
-	version := computerversion.ComputerVersion{CodeRef: computerversion.CodeRef(operation.CodeRef), ArtifactProgramRef: computerversion.ArtifactProgramRef(operation.ArtifactProgramRef)}
-	inputs, err := rt.selfdevRoute.ResolveComputerVersionInputs(ctx, version)
-	if err != nil {
-		return fmt.Errorf("materializer: rollback immutable inputs unavailable: %w", err)
-	}
-	closure, program := inputs.CodeClosure, inputs.ArtifactProgram
-	terminalNote := ""
-	if rollbackDropsBaseClaim(manifest) {
-		terminalNote = rollbackDroppedClaimNote(manifest)
-	}
-	manifest, err = rollbackApplyManifest(manifest, operation.DecisionEvent)
-	if err != nil {
-		return err
-	}
-	applyRequest := updater.ApplyRequest{
-		ComputerID: operation.ComputerID, RealizationID: rt.selfdevRealizationID, OperationID: operation.OperationID,
-		IdempotencyKey: "selfdev-rollback-apply-" + operation.DecisionEvent, AcceptedEventHead: operation.DecisionEvent,
-		SourceDir: releaseDir, Manifest: manifest,
-	}
-	applyRequest.RequestCommitment, err = updater.ComputeApplyRequestCommitment(applyRequest)
-	if err != nil {
-		return err
-	}
-	result, applyErr, err := rt.applyOrReadJournal(ctx, applyRequest, "self_development_rollback", operation.OperationID, journalOnly)
-	if err != nil {
-		return err
-	}
-	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
-		result, applyErr = journaled.Result, nil
-		switch journaled.Result.Outcome {
-		case "applied":
-		case "refused":
-			// Keep the refusal's type, as the apply path does: replacing it
-			// with a plain error left the rollback pending, re-arming a retry
-			// wake every 60 s and holding every deploy (review 311).
-			applyErr = fmt.Errorf("%w: %s", updater.ErrApplyRefused, journalFailureCause(journaled.Failure, journaled.Result.Outcome))
-		default:
-			applyErr = errors.New(journalFailureCause(journaled.Failure, journaled.Result.Outcome))
+	} else {
+		manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
+		if err != nil {
+			if (operation.State == selfdev.StateDegraded || operation.State == selfdev.StateRollbackPending) && pinnedReleaseUnusable(err) {
+				// The rollback can never be driven once its pinned release is
+				// gone or fails verification, and the operation is open,
+				// holding every engineering admission. Settle it by its
+				// journal; a transient read error (neither class) stays a
+				// retry.
+				return rt.settleRollbackPinnedReleaseUnusable(ctx, operation, err)
+			}
+			return fmt.Errorf("materializer: rollback release unavailable: %w", err)
+		}
+		// The tail's inputs must resolve before anything is installed.
+		version := computerversion.ComputerVersion{CodeRef: computerversion.CodeRef(operation.CodeRef), ArtifactProgramRef: computerversion.ArtifactProgramRef(operation.ArtifactProgramRef)}
+		if _, err := rt.selfdevRoute.ResolveComputerVersionInputs(ctx, version); err != nil {
+			return fmt.Errorf("materializer: rollback immutable inputs unavailable: %w", err)
+		}
+		if rollbackDropsBaseClaim(manifest) {
+			terminalNote = rollbackDroppedClaimNote(manifest)
+		}
+		manifest, err = rollbackApplyManifest(manifest, operation.DecisionEvent)
+		if err != nil {
+			return err
+		}
+		applyRequest := updater.ApplyRequest{
+			ComputerID: operation.ComputerID, RealizationID: rt.selfdevRealizationID, OperationID: operation.OperationID,
+			IdempotencyKey: journalKey, AcceptedEventHead: operation.DecisionEvent,
+			SourceDir: releaseDir, Manifest: manifest,
+		}
+		applyRequest.RequestCommitment, err = updater.ComputeApplyRequestCommitment(applyRequest)
+		if err != nil {
+			return err
+		}
+		result, applyErr, err = rt.applyOrReadJournal(ctx, applyRequest, "self_development_rollback", operation.OperationID, journalOnly)
+		if err != nil {
+			return err
+		}
+		if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, journalKey); journalErr == nil && found && journaled.Terminal {
+			// The journal supersedes whatever the live Apply returned.
+			result, applyErr = journaled.Result, journalTerminalError(journaled)
 		}
 	}
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)
@@ -847,7 +907,18 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 		if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 			return fmt.Errorf("materializer: invalid rollback receipts")
 		}
-		return rt.recordMaterializationApplied(ctx, operation, result, closure, program, computerevent.EventRollbackApplied, operation.State, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback", terminalNote)
+		// The tail binds a checkpoint over the release the rollback
+		// installed. When that release is unusable the tail can never run:
+		// settle forward without it.
+		if _, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest); err != nil && pinnedReleaseUnusable(err) {
+			return rt.settleRollbackPinnedReleaseUnusable(ctx, operation, err)
+		}
+		version := computerversion.ComputerVersion{CodeRef: computerversion.CodeRef(operation.CodeRef), ArtifactProgramRef: computerversion.ArtifactProgramRef(operation.ArtifactProgramRef)}
+		inputs, err := rt.selfdevRoute.ResolveComputerVersionInputs(ctx, version)
+		if err != nil {
+			return fmt.Errorf("materializer: rollback immutable inputs unavailable: %w", err)
+		}
+		return rt.recordMaterializationApplied(ctx, operation, result, inputs.CodeClosure, inputs.ArtifactProgram, computerevent.EventRollbackApplied, operation.State, selfdev.StateRolledBack, routeledger.TransitionRollback, "computer:self_development:rollback", terminalNote)
 	}
 	if result.RecoveryReceipt != nil && result.RecoveryReceipt.Verify(resolver) == nil {
 		return rt.recordMaterializationFailed(ctx, operation, result, applyErr, operation.State)
@@ -1236,22 +1307,60 @@ func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.O
 	return selfdevVerificationEvidence{OperationID: payload.OperationID, VerifiedBundleDigest: payload.BundleDigest, Refs: payload.VerifierRefs}, nil
 }
 
+// recordMaterializationFailed settles an operation failed whose apply
+// installed nothing (docs/problems/
+// selfdev-stale-open-operations-block-engineering-2026-11-02.md,
+// "Journal-first settlement"):
+//   - the updater journal is asked first and fenced (requireNothingInstalled):
+//     an apply in flight, applied, or interrupted past its swap is refused, so
+//     the discharge below never claims a prior release that is not running,
+//     and no later Apply for the decision installs anything;
+//   - the row moves first, under its expected-state CAS; a lost CAS (a decide
+//     or a materializer pass won the row) discharges nothing;
+//   - then the pending transition is discharged, only if it is this
+//     operation's decision (dischargeSettledPending reads the head again).
+//
+// A discharge that fails after the row moved is repaired by the reconciler's
+// orphan sweep (dischargeOrphanedPendingTransition).
 func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, applyErr error, expectedState string) error {
-	recoveryDigest, err := rt.appendMaterializationFailedEvent(ctx, operation, result)
-	if err != nil {
+	if _, err := rt.requireNothingInstalled(operation, applyErr.Error()); err != nil {
 		return err
+	}
+	recoveryDigest := ""
+	if result.RecoveryReceipt != nil {
+		recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
+		if err != nil {
+			return err
+		}
+		recoveryDigest = computerevent.DigestBytes(recoveryBytes)
 	}
 	head, err := rt.store.Head(ctx, operation.ComputerID)
 	if err != nil || head == nil {
 		return fmt.Errorf("materializer: recovery projection unavailable")
 	}
-	_, err = rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, expectedState, selfdev.StateFailed, func(next *selfdev.Operation) error {
+	owned, err := rt.pendingDecisionOf(ctx, operation, head.PendingTransitionRef)
+	if err != nil {
+		return err
+	}
+	settled, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, expectedState, selfdev.StateFailed, func(next *selfdev.Operation) error {
 		next.MaterializationReceipt = recoveryDigest
+		// The discharge below returns desired to effective.
 		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
+		if owned != "" {
+			next.DesiredHead = head.EffectiveEventHead
+		}
 		next.TerminalError = applyErr.Error()
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// The row may have been read before a decision it now carries; the
+	// discharge names the operation as it was asked to settle.
+	if settled.DecisionEvent == "" {
+		settled.DecisionEvent = operation.DecisionEvent
+	}
+	return rt.dischargeSettledPending(ctx, settled, result)
 }
 
 // appendMaterializationFailedEvent appends (idempotently, on the operation's

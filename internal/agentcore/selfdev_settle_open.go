@@ -18,18 +18,18 @@ import (
 )
 
 // Settling an open self-development operation that will not settle by itself
-// (docs/problems/selfdev-stale-open-operations-block-engineering-2026-11-02.md).
-// Any operation in selfdev.OpenStates holds every engineering admission on its
-// computer, so an operation with no terminal path is a computer-wide hold.
-// Two settle it to `failed`, both through settleSelfDevelopmentOperationFailed:
-//   - the materializer, for a rollback (degraded or rollback_pending) whose
-//     pinned release is gone or fails verification (a fact, not a decision);
-//   - the owner's `abandon` act, for an open operation that installed nothing,
-//     a degraded one, or a materializing/rollback_pending one whose updater
-//     journal shows no applied or mid-flight apply (a decision, with the
-//     owner's reason).
-// Both put the settlement on the tape first, as a recovery_recorded event, so
-// the state row is never the only record.
+// (docs/problems/selfdev-stale-open-operations-block-engineering-2026-11-02.md,
+// "Journal-first settlement"). Any operation in selfdev.OpenStates holds every
+// engineering admission on its computer, so an operation with no terminal path
+// is a computer-wide hold. Two acts settle one, both through
+// settleSelfDevelopmentOperation, and both under selfdevMaterializeMu:
+//   - the materializer, for a rollback whose pinned release (or the release
+//     it installed) is gone or fails verification: a fact, not a decision;
+//   - the owner's `abandon` act: a decision, with the owner's reason.
+// The updater journal decides what a settle may do: an apply in flight is
+// refused, one that installed nothing is fenced and settles failed, one
+// journaled applied settles forward (applied / rolled_back), and one
+// interrupted past its pointer swap is left to the updater's resume.
 
 const (
 	selfdevSettlementMediaType = "application/vnd.choir.selfdev-operation-settlement+json"
@@ -40,13 +40,23 @@ const (
 	selfdevSettleActAbandon           = "abandon"
 
 	// selfdevPinnedReleaseUnavailableCause is the terminal error of a rollback
-	// whose pinned release is gone.
+	// whose pinned release is gone before it installed anything.
 	selfdevPinnedReleaseUnavailableCause = "pinned release unavailable; the computer stays on its current release"
+
+	// selfdevSettledForwardTail is said of an operation settled forward without
+	// its tail.
+	selfdevSettledForwardTail = "the release it installed stays effective and is recorded on the tape; its checkpoint and route promotion are not"
 )
 
-// errSelfdevSettleConflict marks a settle refused because the operation's
-// state or the updater's work changed under it: a state conflict (HTTP 409).
-var errSelfdevSettleConflict = errors.New("self-development settle conflict")
+var (
+	// errSelfdevSettleConflict marks a settle refused because the operation's
+	// state or the updater's work changed under it: a state conflict (HTTP 409).
+	errSelfdevSettleConflict = errors.New("self-development settle conflict")
+	// errSelfdevSettleInterrupted marks a settle refused because the apply's
+	// journal is dead past its pointer swap: only the updater's resume can
+	// say what is installed.
+	errSelfdevSettleInterrupted = errors.New("the updater apply was interrupted after it moved the current release")
+)
 
 type selfdevOperationSettlement struct {
 	Schema         string `json:"schema"`
@@ -59,44 +69,68 @@ type selfdevOperationSettlement struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
+// selfdevSettleSpec is one settle. TerminalError is the row's cause when it
+// settles failed; ForwardNote when the journal shows the release installed
+// and it settles forward.
 type selfdevSettleSpec struct {
-	Act, Actor, Authority, Reason, Key, TerminalError string
+	Act, Actor, Authority, Reason, Key, TerminalError, ForwardNote string
 }
 
 func selfdevSettleIdempotency(act, computerID, operationID, key string) string {
 	return "selfdev-settle-" + act + "-" + computerevent.DigestBytes([]byte(computerID+"\x00"+operationID+"\x00"+key))
 }
 
+// selfdevOperationIsRollback reports whether the operation is a rollback. A
+// rollback opens rollback_pending under a "rollback-" id; a degraded one keeps
+// the route receipt it copied from its target. The id survives the row
+// leaving its open state.
+func selfdevOperationIsRollback(operation selfdev.Operation) bool {
+	return strings.HasPrefix(operation.OperationID, "rollback-") ||
+		operation.State == selfdev.StateRollbackPending ||
+		(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "")
+}
+
 // selfdevApplyJournalKey is the updater journal key of the operation's apply
 // (or, for a rollback, its rollback apply).
 func selfdevApplyJournalKey(operation selfdev.Operation) string {
-	if operation.State == selfdev.StateRollbackPending || (operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "") {
+	if selfdevOperationIsRollback(operation) {
 		return "selfdev-rollback-apply-" + operation.DecisionEvent
 	}
 	return "selfdev-apply-" + operation.DecisionEvent
 }
 
-// refuseSettleIfApplyLive refuses (a conflict) when the updater journal shows
-// the operation's apply mid-flight or applied: a release may be installed or
-// about to be, and the materializer, not a settle, records that. A missing
-// journal (nothing started) and a terminal non-applied outcome pass.
-func (rt *Runtime) refuseSettleIfApplyLive(operation selfdev.Operation) error {
-	if strings.TrimSpace(operation.DecisionEvent) == "" || rt.selfdevUpdaterRoot == "" {
-		return nil
+// fenceSelfDevelopmentApply asks the updater journal what the operation's
+// apply did, fencing it when it installed nothing (updater.FenceApply). An
+// operation with no decision has no apply to ask about.
+func (rt *Runtime) fenceSelfDevelopmentApply(operation selfdev.Operation, reason string) (updater.FenceResult, error) {
+	if strings.TrimSpace(operation.DecisionEvent) == "" || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		return updater.FenceResult{State: updater.FenceNothingInstalled}, nil
 	}
-	journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, selfdevApplyJournalKey(operation))
+	fence, err := updater.FenceApply(rt.selfdevUpdaterRoot, selfdevApplyJournalKey(operation),
+		fmt.Sprintf("self-development operation %s settled before the updater installed anything: %s", operation.OperationID, reason))
 	if err != nil {
-		return fmt.Errorf("updater journal unreadable: %w", err)
+		return updater.FenceResult{}, fmt.Errorf("updater journal unreadable: %w", err)
 	}
-	switch {
-	case !found:
-		return nil
-	case !journaled.Terminal:
-		return fmt.Errorf("%w: operation %s has an apply mid-flight with the updater", errSelfdevSettleConflict, operation.OperationID)
-	case journaled.Result.Outcome == "applied":
-		return fmt.Errorf("%w: operation %s has an applied release; the materializer records it", errSelfdevSettleConflict, operation.OperationID)
+	return fence, nil
+}
+
+// requireNothingInstalled refuses (a conflict) unless the updater journal
+// proves the operation's apply installed nothing and is not running.
+func (rt *Runtime) requireNothingInstalled(operation selfdev.Operation, reason string) (updater.FenceResult, error) {
+	fence, err := rt.fenceSelfDevelopmentApply(operation, reason)
+	if err != nil {
+		return fence, err
 	}
-	return nil
+	switch fence.State {
+	case updater.FenceNothingInstalled:
+		return fence, nil
+	case updater.FenceInFlight:
+		return fence, fmt.Errorf("%w: operation %s has an apply in flight with the updater", errSelfdevSettleConflict, operation.OperationID)
+	case updater.FenceApplied:
+		return fence, fmt.Errorf("%w: operation %s has an applied release; it settles forward, never failed", errSelfdevSettleConflict, operation.OperationID)
+	default:
+		return fence, fmt.Errorf("%w: %w: operation %s", errSelfdevSettleConflict, errSelfdevSettleInterrupted, operation.OperationID)
+	}
 }
 
 // pendingDecisionOf answers the head's pending transition ref when it is this
@@ -119,122 +153,186 @@ func (rt *Runtime) pendingDecisionOf(ctx context.Context, operation selfdev.Oper
 	return "", nil
 }
 
-// settleSelfDevelopmentOperationFailed moves an open operation to failed,
-// recording the settlement on the tape first. It never leaves the head's
-// pending transition bound to a failed operation:
-//   - if the pending transition is this operation's decision, it is discharged
-//     with the same materialization_failed every failed materialization uses,
-//     which also returns desired to effective, and the operation moves in the
-//     same call (RestoredPriorEffective is honest there because the journal
-//     guard above shows no applied release for the decision: the prior
-//     effective release is the one still running);
-//   - otherwise the row moves, and the head is read again afterwards: a
-//     decision that landed between the caller's checks and the transition is
-//     discharged then, so the head cannot stay wedged on a failed operation.
-func (rt *Runtime) settleSelfDevelopmentOperationFailed(ctx context.Context, operation selfdev.Operation, spec selfdevSettleSpec) (selfdev.Operation, error) {
-	if operation.State == selfdev.StateMaterializing || operation.State == selfdev.StateRollbackPending {
-		if err := rt.refuseSettleIfApplyLive(operation); err != nil {
-			return selfdev.Operation{}, err
-		}
+// dischargeSettledPending discharges the head's pending transition when it is
+// the decision of an operation whose row has already left its open state, so
+// pending is never left bound to a settled operation. It reads the head again
+// (a decision may have landed after the row moved) and fences that decision's
+// apply first: materialization_failed claims the prior effective release is
+// the one running, which only the journal can prove.
+func (rt *Runtime) dischargeSettledPending(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult) error {
+	head, err := rt.store.Head(ctx, operation.ComputerID)
+	if err != nil || head == nil {
+		return fmt.Errorf("settle: event head unavailable")
 	}
-	payload, err := computerevent.CanonicalJSON(selfdevOperationSettlement{
-		Schema: selfdevSettlementSchema, OperationID: operation.OperationID, FromState: operation.State, ToState: selfdev.StateFailed,
-		Act: spec.Act, Actor: spec.Actor, Reason: spec.Reason, IdempotencyKey: spec.Key,
-	})
+	owned, err := rt.pendingDecisionOf(ctx, operation, head.PendingTransitionRef)
+	if err != nil || owned == "" {
+		return err
+	}
+	decided := operation
+	decided.DecisionEvent = owned
+	if _, err := rt.requireNothingInstalled(decided, "its operation settled"); err != nil {
+		return err
+	}
+	_, err = rt.appendMaterializationFailedEvent(ctx, decided, result)
+	return err
+}
+
+// settleSelfDevelopmentOperation settles an open operation by its updater
+// journal. The caller holds selfdevMaterializeMu, so no materializer pass
+// moves the row under it; a decide can still, and loses to (or beats) the
+// row's expected-state CAS cleanly:
+//   - apply in flight, or interrupted past its swap: refused (a conflict);
+//   - journaled applied: settled forward with spec.ForwardNote
+//     (settleSelfDevelopmentOperationForward);
+//   - nothing installed (now fenced): the row moves to failed first, then the
+//     pending transition is discharged if it is this operation's
+//     (recordMaterializationFailed).
+//
+// The settlement goes on the tape as a recovery_recorded event after the row
+// moved, so it never claims a settle that did not land.
+func (rt *Runtime) settleSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, spec selfdevSettleSpec) (selfdev.Operation, error) {
+	fence, err := rt.fenceSelfDevelopmentApply(operation, spec.Reason)
 	if err != nil {
 		return selfdev.Operation{}, err
 	}
-	idempotency := selfdevSettleIdempotency(spec.Act, operation.ComputerID, operation.OperationID, spec.Key)
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
-		return selfdev.Operation{}, lookupErr
-	} else if !found {
-		eventID, eventErr := computerevent.NewEventID()
-		if eventErr != nil {
-			return selfdev.Operation{}, eventErr
+	var settled selfdev.Operation
+	switch fence.State {
+	case updater.FenceInFlight:
+		return selfdev.Operation{}, fmt.Errorf("%w: operation %s has an apply in flight with the updater; it settles when the updater finishes", errSelfdevSettleConflict, operation.OperationID)
+	case updater.FenceInterrupted:
+		return selfdev.Operation{}, fmt.Errorf("%w: %w: operation %s", errSelfdevSettleConflict, errSelfdevSettleInterrupted, operation.OperationID)
+	case updater.FenceApplied:
+		settled, err = rt.settleSelfDevelopmentOperationForward(ctx, operation, fence.Outcome.Result, spec.ForwardNote)
+		if err != nil {
+			return selfdev.Operation{}, settleConflict(err)
 		}
-		event := computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
-			EventKind: computerevent.EventRecoveryRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ParentEventID: operation.OperationID,
-			ActorProfile:  agentprofile.Management, AuthorityRef: spec.Authority, PrivacyClass: "owner",
-			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
-			ReducerVersion: computerevent.ReducerVersionV1,
+	default:
+		result := updater.ApplyResult{Outcome: spec.Act}
+		if fence.Outcome.Terminal && !fence.Fenced {
+			// A terminal non-applied outcome the updater wrote: the
+			// discharge carries its result (and recovery receipt).
+			result = fence.Outcome.Result
 		}
-		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, selfdevSettlementMediaType, "owner"); eventErr != nil {
-			return selfdev.Operation{}, eventErr
+		if err := rt.recordMaterializationFailed(ctx, operation, result, errors.New(spec.TerminalError), operation.State); err != nil {
+			return selfdev.Operation{}, settleConflict(err)
 		}
+		if settled, err = rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID); err != nil {
+			return selfdev.Operation{}, err
+		}
+	}
+	if err := rt.appendSettlementEvent(ctx, operation, operation.State, settled.State, spec); err != nil {
+		return settled, err
+	}
+	return settled, nil
+}
+
+// settleSelfDevelopmentOperationForward records an operation whose updater
+// journal is terminal applied: the release is installed, so the operation is
+// applied (or rolled back), never failed. The applied event is recorded from
+// the journal's signed receipts when it is not on the tape yet (it discharges
+// the pending transition), and the row moves forward with the journal's
+// release and receipt. The tail (checkpoint and route promotion) is not run:
+// note says so on the row.
+func (rt *Runtime) settleSelfDevelopmentOperationForward(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, note string) (selfdev.Operation, error) {
+	switch operation.State {
+	case selfdev.StateMaterializing, selfdev.StateRollbackPending, selfdev.StateDegraded:
+	default:
+		return selfdev.Operation{}, fmt.Errorf("%w: the journal is applied but the operation is %s", errSelfDevSettlementStateMismatch, operation.State)
+	}
+	rollback := selfdevOperationIsRollback(operation)
+	if err := rt.recordSettlementApplied(ctx, operation, result, rollback); err != nil {
+		return selfdev.Operation{}, err
+	}
+	receiptBytes, err := result.MaterializationReceipt.CanonicalBytes()
+	if err != nil {
+		return selfdev.Operation{}, err
 	}
 	head, err := rt.store.Head(ctx, operation.ComputerID)
 	if err != nil || head == nil {
 		return selfdev.Operation{}, fmt.Errorf("settle: event head unavailable")
 	}
-	owned, err := rt.pendingDecisionOf(ctx, operation, head.PendingTransitionRef)
-	if err != nil {
-		return selfdev.Operation{}, err
+	next := selfdev.StateApplied
+	if rollback {
+		next = selfdev.StateRolledBack
 	}
-	if owned != "" {
-		decided := operation
-		decided.DecisionEvent = owned
-		if err := rt.refuseSettleIfApplyLive(decided); err != nil {
-			return selfdev.Operation{}, err
-		}
-		if err := rt.recordMaterializationFailed(ctx, decided, updater.ApplyResult{Outcome: spec.Act}, errors.New(spec.TerminalError), operation.State); err != nil {
-			return selfdev.Operation{}, settleConflict(err)
-		}
-		return rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
-	}
-	settled, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
-		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
-		next.TerminalError = spec.TerminalError
+	return rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, operation.State, next, func(row *selfdev.Operation) error {
+		row.DesiredHead, row.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
+		row.MaterializationReceipt = computerevent.DigestBytes(receiptBytes)
+		row.ReleaseDigest = result.ReleaseDigest
+		row.TerminalError = note
 		return nil
 	})
+}
+
+// appendSettlementEvent puts the settlement on the tape, idempotently on its
+// act and key.
+func (rt *Runtime) appendSettlementEvent(ctx context.Context, operation selfdev.Operation, from, to string, spec selfdevSettleSpec) error {
+	idempotency := selfdevSettleIdempotency(spec.Act, operation.ComputerID, operation.OperationID, spec.Key)
+	if _, found, err := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); err != nil || found {
+		return err
+	}
+	payload, err := computerevent.CanonicalJSON(selfdevOperationSettlement{
+		Schema: selfdevSettlementSchema, OperationID: operation.OperationID, FromState: from, ToState: to,
+		Act: spec.Act, Actor: spec.Actor, Reason: spec.Reason, IdempotencyKey: spec.Key,
+	})
 	if err != nil {
-		return selfdev.Operation{}, settleConflict(err)
+		return err
 	}
-	// A decision may have landed between the checks above and the transition
-	// (the decision path appends its event, then moves the row; this move won
-	// the row). Its pending transition now belongs to a failed operation.
-	after, err := rt.store.Head(ctx, operation.ComputerID)
-	if err != nil || after == nil {
-		return settled, fmt.Errorf("settle: event head unavailable after the transition")
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		return err
 	}
-	if late, lateErr := rt.pendingDecisionOf(ctx, settled, after.PendingTransitionRef); lateErr != nil {
-		return settled, lateErr
-	} else if late != "" {
-		decided := operation
-		decided.DecisionEvent = late
-		if _, err := rt.appendMaterializationFailedEvent(ctx, decided, updater.ApplyResult{Outcome: spec.Act}); err != nil {
-			return settled, err
-		}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
+		EventKind: computerevent.EventRecoveryRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+		ParentEventID: operation.OperationID,
+		ActorProfile:  agentprofile.Management, AuthorityRef: spec.Authority, PrivacyClass: "owner",
+		ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
+		ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	return settled, nil
+	_, _, err = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, selfdevSettlementMediaType, "owner")
+	return err
 }
 
 func settleConflict(err error) error {
-	if errors.Is(err, selfdev.ErrConflict) || errors.Is(err, selfdev.ErrInvalidTransition) {
-		return fmt.Errorf("%w: %v", errSelfdevSettleConflict, err)
+	if errors.Is(err, errSelfdevSettleConflict) {
+		return err
+	}
+	if errors.Is(err, selfdev.ErrConflict) || errors.Is(err, selfdev.ErrInvalidTransition) ||
+		errors.Is(err, computerevent.ErrInvalidTransition) || errors.Is(err, computerevent.ErrProjectionMismatch) ||
+		errors.Is(err, computerevent.ErrPendingTransition) || errors.Is(err, errSelfDevSettlementStateMismatch) {
+		return fmt.Errorf("%w: %w", errSelfdevSettleConflict, err)
 	}
 	return err
 }
 
-// settleRollbackPinnedReleaseUnusable closes a rollback (degraded or
-// rollback_pending) whose pinned release is gone or fails verification: the
-// re-drive can never succeed, and the computer keeps the release it runs.
-// The tape tells the two causes apart by the settlement's act.
+// settleRollbackPinnedReleaseUnusable settles a rollback (degraded or
+// rollback_pending) whose pinned release, or the release it installed, is
+// gone or fails verification: the re-drive can never succeed. The journal
+// decides how: nothing installed settles failed and the computer keeps the
+// release it runs; an applied rollback settles forward without its tail. The
+// tape tells the two causes apart by the settlement's act. The caller is the
+// materializer pass, which holds selfdevMaterializeMu.
 func (rt *Runtime) settleRollbackPinnedReleaseUnusable(ctx context.Context, operation selfdev.Operation, readErr error) error {
 	spec := selfdevSettleSpec{
 		Act: selfdevSettleActPinnedUnavailable, Actor: "guest-core:choir-updater", Authority: "guest-core:choir-updater",
 		Key: "pinned-release-unavailable", TerminalError: selfdevPinnedReleaseUnavailableCause,
 	}
+	cause := "release unavailable"
 	if errors.Is(readErr, updater.ErrPinnedReleaseCorrupt) {
 		spec.Act, spec.Key = selfdevSettleActPinnedCorrupt, "pinned-release-failed-verification"
 		spec.TerminalError = strings.TrimPrefix(readErr.Error(), "updater: ")
+		cause = spec.TerminalError
 	}
 	spec.Reason = spec.TerminalError
-	log.Printf("selfdev materializer: operation %s is %s and its pinned release is unusable (%s); settled failed", operation.OperationID, operation.State, spec.Act)
-	_, err := rt.settleSelfDevelopmentOperationFailed(ctx, operation, spec)
-	return err
+	spec.ForwardNote = "the rollback is installed (" + cause + "): " + selfdevSettledForwardTail
+	settled, err := rt.settleSelfDevelopmentOperation(ctx, operation, spec)
+	if err != nil {
+		return err
+	}
+	log.Printf("selfdev materializer: operation %s was %s and a release it needs is unusable (%s); settled %s", operation.OperationID, operation.State, spec.Act, settled.State)
+	return nil
 }
 
 // selfDevelopmentAbandonRequest is the owner's abandon act.
@@ -244,17 +342,14 @@ type selfDevelopmentAbandonRequest struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// abandonableSelfDevelopmentState reports the open states an owner can
-// abandon: every one that installed nothing, degraded (applied with an
-// unsettled tail the materializer can no longer finish), and the two in-flight
-// states, which abandon settles only when the updater journal shows nothing
-// applied or mid-flight (refuseSettleIfApplyLive).
+// abandonableSelfDevelopmentState reports the states an owner can abandon:
+// every open state. What abandon does is the journal's call
+// (settleSelfDevelopmentOperation).
 func abandonableSelfDevelopmentState(state string) bool {
-	switch state {
-	case selfdev.StateRequested, selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified,
-		selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateDegraded,
-		selfdev.StateMaterializing, selfdev.StateRollbackPending:
-		return true
+	for _, open := range selfdev.OpenStates {
+		if state == open {
+			return true
+		}
 	}
 	return false
 }
@@ -263,9 +358,17 @@ func selfDevelopmentAbandonTerminalError(reason string) string {
 	return "abandoned by the owner: " + reason
 }
 
+func selfDevelopmentAbandonForwardNote(reason string) string {
+	return selfDevelopmentAbandonTerminalError(reason) + "; " + selfdevSettledForwardTail
+}
+
+// selfdevAbandonWait is how long abandon waits for a materializer pass to
+// finish before it answers 409.
+const selfdevAbandonWait = 3 * time.Second
+
 // abandonSelfDevelopmentOperation is the owner's act: close an open operation
-// to failed with the owner's reason, recorded on the tape as an owner
-// decision. It answers an HTTP status like decideSelfDevelopment.
+// with the owner's reason, recorded on the tape as an owner decision. It
+// answers an HTTP status like decideSelfDevelopment.
 func (rt *Runtime) abandonSelfDevelopmentOperation(ctx context.Context, ownerID, computerID string, request selfDevelopmentAbandonRequest) (selfdev.Operation, int, error) {
 	request.OperationID, request.Reason, request.IdempotencyKey = strings.TrimSpace(request.OperationID), strings.TrimSpace(request.Reason), strings.TrimSpace(request.IdempotencyKey)
 	if request.OperationID == "" || request.Reason == "" || request.IdempotencyKey == "" {
@@ -274,59 +377,60 @@ func (rt *Runtime) abandonSelfDevelopmentOperation(ctx context.Context, ownerID,
 	if rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil {
 		return selfdev.Operation{}, http.StatusServiceUnavailable, errors.New("abandon authority unavailable")
 	}
+	spec := selfdevSettleSpec{
+		Act: selfdevSettleActAbandon, Actor: "owner:" + ownerID, Authority: selfDevelopmentDecisionAuthority(ownerID, ""),
+		Reason: request.Reason, Key: request.IdempotencyKey,
+		TerminalError: selfDevelopmentAbandonTerminalError(request.Reason), ForwardNote: selfDevelopmentAbandonForwardNote(request.Reason),
+	}
+	if _, err := rt.selfdevOperations.Get(ctx, computerID, request.OperationID); err != nil {
+		return selfdev.Operation{}, http.StatusNotFound, errors.New("self-development operation not found")
+	}
+	// Every settle runs under the materializer's mutex, so no pass moves the
+	// row under it. A pass that only retries a failed read is short, so wait
+	// a moment for it; one inside a long apply outlasts the wait and is
+	// refused.
+	locked := false
+	for deadline := time.Now().Add(selfdevAbandonWait); !locked && time.Now().Before(deadline) && ctx.Err() == nil; {
+		if locked = rt.selfdevMaterializeMu.TryLock(); !locked {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !locked {
+		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s: the materializer is working; try again when it is idle", request.OperationID)
+	}
+	readmitted := false
+	defer func() {
+		rt.selfdevMaterializeMu.Unlock()
+		if readmitted {
+			rt.triggerSelfDevelopmentReconcile()
+		}
+	}()
 	operation, err := rt.selfdevOperations.Get(ctx, computerID, request.OperationID)
 	if err != nil {
 		return selfdev.Operation{}, http.StatusNotFound, errors.New("self-development operation not found")
 	}
-	terminalError := selfDevelopmentAbandonTerminalError(request.Reason)
-	idempotency := selfdevSettleIdempotency(selfdevSettleActAbandon, computerID, request.OperationID, request.IdempotencyKey)
-	if _, spent, lookupErr := rt.store.EventByIdempotency(ctx, computerID, idempotency); lookupErr != nil {
-		return selfdev.Operation{}, http.StatusInternalServerError, errors.New("abandon event lookup failed")
-	} else if spent && operation.State == selfdev.StateFailed {
-		if operation.TerminalError == terminalError {
-			return operation, http.StatusOK, nil
-		}
-		return selfdev.Operation{}, http.StatusConflict, errors.New("this idempotency key is already spent on an abandon with a different reason")
-	}
 	if !abandonableSelfDevelopmentState(operation.State) {
-		return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s is %s, not open; there is nothing to abandon", operation.OperationID, operation.State)
-	}
-	if operation.State == selfdev.StateMaterializing || operation.State == selfdev.StateRollbackPending {
-		// In flight is decided by the updater's journal, not the row, and a
-		// materializer pass holds this mutex across its whole apply: if it
-		// is busy, an apply may be mid-flight, so refuse rather than race it.
-		// A pass that only retries a failed read is short, so wait a moment
-		// for it; one inside a long apply outlasts the wait and is refused.
-		locked := false
-		for deadline := time.Now().Add(3 * time.Second); !locked && time.Now().Before(deadline) && ctx.Err() == nil; {
-			if locked = rt.selfdevMaterializeMu.TryLock(); !locked {
-				time.Sleep(20 * time.Millisecond)
-			}
-		}
-		if !locked {
-			return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s is %s and the materializer is working; try again when it is idle", operation.OperationID, operation.State)
-		}
-		defer rt.selfdevMaterializeMu.Unlock()
-		// Re-read under the lock: the pass that just finished may have settled it.
-		if operation, err = rt.selfdevOperations.Get(ctx, computerID, request.OperationID); err != nil {
-			return selfdev.Operation{}, http.StatusNotFound, errors.New("self-development operation not found")
-		}
-		if !abandonableSelfDevelopmentState(operation.State) {
-			return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s is %s, not open; there is nothing to abandon", operation.OperationID, operation.State)
-		}
+		return rt.replayAbandon(ctx, operation, spec)
 	}
 	if operation.State == selfdev.StateAwaitingApproval {
 		// A decision already on the tape is settling; abandoning would fight it.
 		if _, decided, decisionErr := rt.store.FinalizedDecisionForOperation(ctx, computerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID); decisionErr != nil {
 			return selfdev.Operation{}, http.StatusInternalServerError, errors.New("decision lookup failed")
 		} else if decided {
-			return selfdev.Operation{}, http.StatusConflict, errors.New("a decision is already recorded for this operation; let it settle")
+			return selfdev.Operation{}, http.StatusConflict, errors.New("a decision is already recorded for this operation; the materializer settles it")
 		}
 	}
-	settled, err := rt.settleSelfDevelopmentOperationFailed(ctx, operation, selfdevSettleSpec{
-		Act: selfdevSettleActAbandon, Actor: "owner:" + ownerID, Authority: selfDevelopmentDecisionAuthority(ownerID, ""),
-		Reason: request.Reason, Key: request.IdempotencyKey, TerminalError: terminalError,
-	})
+	settled, err := rt.settleSelfDevelopmentOperation(ctx, operation, spec)
+	if errors.Is(err, errSelfdevSettleInterrupted) && rt.selfdevCrashInterrupted[operation.OperationID] {
+		// A crash boot holds an apply interrupted past its swap: what is
+		// installed is unknown until the updater's own resume finishes it.
+		// The owner's act re-admits the operation for one materializer pass,
+		// which calls the updater and records the outcome its journal reaches
+		// (not a boot-time resume: AGENTS.md "Restarts End Work").
+		delete(rt.selfdevCrashInterrupted, operation.OperationID)
+		readmitted = true
+		return operation, http.StatusAccepted, nil
+	}
 	if err != nil {
 		if errors.Is(err, errSelfdevSettleConflict) {
 			return selfdev.Operation{}, http.StatusConflict, err
@@ -335,6 +439,86 @@ func (rt *Runtime) abandonSelfDevelopmentOperation(ctx context.Context, ownerID,
 	}
 	rt.notifyTextureOfOwnerAct(ctx, ownerID, settled, types.OwnerActAbandon, request.Reason)
 	return settled, http.StatusOK, nil
+}
+
+// replayAbandon answers an abandon of an operation that is no longer open. A
+// replay of the abandon that settled it (same reason) finishes what that
+// settle may not have: the settlement event and the discharge of a pending
+// transition still bound to its decision. Anything else is a conflict.
+func (rt *Runtime) replayAbandon(ctx context.Context, operation selfdev.Operation, spec selfdevSettleSpec) (selfdev.Operation, int, error) {
+	if operation.TerminalError == spec.TerminalError || operation.TerminalError == spec.ForwardNote {
+		if err := rt.appendSettlementEvent(ctx, operation, "", operation.State, spec); err != nil {
+			return selfdev.Operation{}, http.StatusInternalServerError, err
+		}
+		if operation.State == selfdev.StateFailed {
+			if err := rt.dischargeSettledPending(ctx, operation, updater.ApplyResult{Outcome: spec.Act}); err != nil {
+				if errors.Is(settleConflict(err), errSelfdevSettleConflict) {
+					return selfdev.Operation{}, http.StatusConflict, err
+				}
+				return selfdev.Operation{}, http.StatusInternalServerError, err
+			}
+		}
+		return operation, http.StatusOK, nil
+	}
+	idempotency := selfdevSettleIdempotency(spec.Act, operation.ComputerID, operation.OperationID, spec.Key)
+	if _, spent, err := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); err != nil {
+		return selfdev.Operation{}, http.StatusInternalServerError, errors.New("abandon event lookup failed")
+	} else if spent {
+		return selfdev.Operation{}, http.StatusConflict, errors.New("this idempotency key is already spent on an abandon with a different reason")
+	}
+	return selfdev.Operation{}, http.StatusConflict, fmt.Errorf("self-development operation %s is %s, not open; there is nothing to abandon", operation.OperationID, operation.State)
+}
+
+// dischargeOrphanedPendingTransition is the reconciler's repair for a pending
+// transition bound to the decision of an operation that is no longer open: a
+// decide whose event landed after a settle moved the row, or a settle whose
+// discharge failed after its row move. Without it every later decision and
+// rollback is refused (the reducer's pending check). The caller holds
+// selfdevMaterializeMu; open lists the open operations it read.
+func (rt *Runtime) dischargeOrphanedPendingTransition(ctx context.Context, open []selfdev.Operation) {
+	head, err := rt.store.Head(ctx, rt.selfdevComputerID)
+	if err != nil || head == nil || head.PendingTransitionRef == "" {
+		return
+	}
+	pending := head.PendingTransitionRef
+	for _, operation := range open {
+		if operation.DecisionEvent == pending {
+			return
+		}
+	}
+	event, found, err := rt.store.EventByDigest(ctx, rt.selfdevComputerID, pending)
+	if err != nil || !found {
+		return
+	}
+	var owner selfdev.Operation
+	located := false
+	if event.EventKind == computerevent.EventEffectAccepted && strings.TrimSpace(event.ParentEventID) != "" {
+		if operation, getErr := rt.selfdevOperations.Get(ctx, rt.selfdevComputerID, event.ParentEventID); getErr == nil {
+			owner, located = operation, true
+		}
+	}
+	if !located && event.EventKind == computerevent.EventRollbackRequested {
+		// A rollback's request event names no operation; the rollback row
+		// carries the event as its decision.
+		failed, listErr := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateFailed)
+		if listErr != nil {
+			return
+		}
+		for _, operation := range failed {
+			if operation.DecisionEvent == pending {
+				owner, located = operation, true
+				break
+			}
+		}
+	}
+	if !located || owner.State != selfdev.StateFailed {
+		return // an open operation's decision (a decide or rollback start still landing), or not ours
+	}
+	if err := rt.dischargeSettledPending(ctx, owner, updater.ApplyResult{Outcome: "settled"}); err != nil {
+		log.Printf("selfdev materializer: pending transition %s belongs to failed operation %s and stays bound: %v", pending, owner.OperationID, err)
+		return
+	}
+	log.Printf("selfdev materializer: discharged pending transition %s of failed operation %s", pending, owner.OperationID)
 }
 
 // abandonSelfDevelopmentOperation is the guest route's handler.

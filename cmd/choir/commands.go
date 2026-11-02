@@ -662,8 +662,8 @@ func buildRegistry() []*command {
 		},
 		{
 			path:    []string{"self-dev", "abandon"},
-			summary: "Owner's abandon: close an open operation that will not settle to failed, with your reason (--operation, --reason)",
-			desc:    "Move an open self-development operation that installed nothing (requested, executing, frozen, verified, awaiting_approval, accepted) or a degraded one to failed, with the owner's reason recorded on the tape as an owner decision. An open operation holds every engineering admission on its computer, so one that will not settle (a candidate nobody approves, a degraded rollback) is cleared this way. materializing and rollback_pending operations are in flight with the updater and are refused with a 409. The same key and reason replay a landed abandon. An owner act: the key needs owner:acts, which admin does not imply.",
+			summary: "Owner's abandon: close an open operation that will not settle, with your reason (--operation, --reason)",
+			desc:    "Close an open self-development operation with the owner's reason recorded on the tape as an owner decision. An open operation holds every engineering admission on its computer, so one that will not settle (a candidate nobody approves, a degraded rollback) is cleared this way. The updater journal decides the outcome: an operation that installed nothing becomes failed; one whose release the updater installed becomes applied (or rolled back) without its checkpoint and route promotion; one with an apply running is refused with a 409; one interrupted after it moved the current release is handed back to the updater to finish (202). The same key and reason replay a landed abandon. An owner act: the key needs owner:acts, which admin does not imply.",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
 				pStr("operation", "Operation ID to abandon").req(),

@@ -195,6 +195,15 @@ func newUpdater(root, computerID, realizationID string, service ServiceManager, 
 func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	// The key's lock is held from before the journal read until Apply
+	// returns: a settle that takes it without waiting knows no apply for the
+	// key is running, and one that fenced the key is seen by the read below
+	// (journal_fence.go).
+	unlockKey, _, err := lockApplyKey(u.root, request.IdempotencyKey, true)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("updater: apply key lock: %w", err)
+	}
+	defer unlockKey()
 	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
 	journal, found, err := readJournal(journalPath)
 	if err != nil {
@@ -858,6 +867,11 @@ var (
 func classifyPinnedReadError(err error) error {
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		return ErrPinnedReleaseUnavailable
+	}
+	if errors.Is(err, syscall.EISDIR) || errors.Is(err, syscall.ELOOP) {
+		// A directory or a symlink loop where a release file belongs is the
+		// release's own shape, not a passing I/O error: retrying cannot fix it.
+		return fmt.Errorf("%w: %s", ErrPinnedReleaseCorrupt, strings.TrimPrefix(err.Error(), "updater: "))
 	}
 	var pathErr *fs.PathError
 	if errors.As(err, &pathErr) {

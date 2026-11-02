@@ -33,6 +33,15 @@ import (
 //  6. a decision landing during a settle leaves pending bound to a failed
 //     operation;
 //  7. the engineering admission hold stays console-only.
+// Round 3 ("Journal-first settlement"), also written before the code:
+//  8. a settle discharges pending before its row CAS, and a decide or the
+//     materializer that wins the row is left live with no pending;
+//  9. "no journal" is read as "nothing in flight" while an apply is staging,
+//     and a late apply installs under a failed row;
+// 10. a terminal applied journal behind an unusable pinned release retries
+//     forever, or settles failed while the tape says applied;
+// 11. a pending transition is left bound to a failed operation (a decision
+//     that lands after the row moved) with nothing to discharge it.
 
 func removePinnedRelease(t *testing.T, releaseDir string) {
 	t.Helper()
@@ -109,7 +118,10 @@ func degradedRollbackProductionShape(t *testing.T, name string, damage func(t *t
 	return fx, got
 }
 
-func TestDegradedRollbackWithUnavailablePinnedReleaseSettlesFailed(t *testing.T) {
+// The rollback's journal is applied and the release it installed is gone: the
+// tail (a checkpoint over that release) can never run. It settles forward from
+// the journal, never failed under a tape that says rolled back.
+func TestDegradedRollbackWhoseInstalledReleaseIsGoneSettlesForward(t *testing.T) {
 	fx, rollback := degradedRollbackProductionShape(t, "stale-gone", removePinnedRelease)
 	ctx := context.Background()
 	headBefore, _ := fx.store.Head(ctx, fx.computerID)
@@ -120,15 +132,15 @@ func TestDegradedRollbackWithUnavailablePinnedReleaseSettlesFailed(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != selfdev.StateFailed {
-		t.Fatalf("state = %s (%q), want failed: a degraded rollback whose pinned release is gone must settle", got.State, got.TerminalError)
+	if got.State != selfdev.StateRolledBack {
+		t.Fatalf("state = %s (%q), want rolled_back: the journal says the rollback is installed", got.State, got.TerminalError)
 	}
-	if want := "pinned release unavailable; the computer stays on its current release"; got.TerminalError != want {
-		t.Fatalf("terminal error = %q, want %q", got.TerminalError, want)
+	if !strings.Contains(got.TerminalError, "release unavailable") || !strings.Contains(got.TerminalError, "checkpoint and route promotion are not") {
+		t.Fatalf("terminal note = %q; want the cause and the skipped tail", got.TerminalError)
 	}
 	kinds := fx.countEventKinds()
-	if kinds[computerevent.EventRecoveryRecorded] != 1 || kinds[computerevent.EventMaterializationFailed] != 0 {
-		t.Fatalf("events = %v; want the settlement recorded once and no pending to discharge", kinds)
+	if kinds[computerevent.EventRecoveryRecorded] != 1 || kinds[computerevent.EventMaterializationFailed] != 0 || kinds[computerevent.EventRollbackApplied] != 1 {
+		t.Fatalf("events = %v; want the settlement once, no discharge, the one rollback_applied", kinds)
 	}
 	headAfter, _ := fx.store.Head(ctx, fx.computerID)
 	if headAfter.PendingTransitionRef != "" || headAfter.EffectiveEventHead != headBefore.EffectiveEventHead || headAfter.EffectiveStateCommitment != headBefore.EffectiveStateCommitment {
@@ -176,6 +188,10 @@ func TestRollbackPendingWithUnavailablePinnedReleaseSettlesFailed(t *testing.T) 
 	if err != nil || head == nil || head.PendingTransitionRef != "" || head.DesiredEventHead != head.EffectiveEventHead {
 		t.Fatalf("head = %+v (%v); pending must be discharged and desired returned to effective", head, err)
 	}
+	// Nothing was installed, and nothing will be: the key is fenced.
+	if journaled, found, err := updater.ReadJournalOutcome(fx.updaterRoot, "selfdev-rollback-apply-"+got.DecisionEvent); err != nil || !found || !journaled.Terminal || journaled.Result.Outcome != "refused" {
+		t.Fatalf("rollback journal = %+v found=%v err=%v; want the terminal fence", journaled, found, err)
+	}
 	requireReducerReplay(t, fx)
 }
 
@@ -183,10 +199,10 @@ func TestDegradedRollbackWithACorruptPinnedReleaseSettlesWithItsOwnCause(t *test
 	fx, rollback := degradedRollbackProductionShape(t, "stale-corrupt", corruptPinnedManifest)
 	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	got, err := fx.operations.Get(context.Background(), fx.computerID, rollback.OperationID)
-	if err != nil || got.State != selfdev.StateFailed {
-		t.Fatalf("operation = %+v (%v); want failed", got, err)
+	if err != nil || got.State != selfdev.StateRolledBack {
+		t.Fatalf("operation = %+v (%v); want rolled_back (the journal says installed)", got, err)
 	}
-	if !strings.HasPrefix(got.TerminalError, "pinned release failed verification: ") || strings.Contains(got.TerminalError, "unavailable") {
+	if !strings.Contains(got.TerminalError, "pinned release failed verification: ") || strings.Contains(got.TerminalError, "unavailable") {
 		t.Fatalf("terminal error = %q; a corrupt release must not be called retention", got.TerminalError)
 	}
 	// The tape tells the two causes apart by the settlement's act.
@@ -327,19 +343,31 @@ func TestAbandonSettlesARollbackPendingWithNothingApplied(t *testing.T) {
 	requireReducerReplay(t, fx)
 }
 
-// An apply that the updater journaled applied is a release that is live: a
-// settle must not close the row under it.
-func TestAbandonRefusesAMaterializingOperationWhoseApplyIsJournaledApplied(t *testing.T) {
+// An apply the updater journaled applied is a release that is live: abandon
+// settles it forward (applied, without its tail), never failed, and the applied
+// event discharges the pending transition.
+func TestAbandonSettlesForwardAMaterializingOperationJournaledApplied(t *testing.T) {
 	fx := newDerivableSelfDevFixture(t, "computer-abandon-applied")
 	operation := fx.parkAppliedButUnrecorded(t, "op-abandon-applied")
-	rec := postAbandon(fx, abandonRequestBody(operation.OperationID, "no", "abandon-applied"))
-	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "applied release") {
-		t.Fatalf("status=%d body=%s; want 409 naming the applied release", rec.Code, rec.Body.String())
+	rec := postAbandon(fx, abandonRequestBody(operation.OperationID, "tail will not finish", "abandon-applied"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	got, _ := fx.operations.Get(context.Background(), fx.computerID, operation.OperationID)
-	if got.State != selfdev.StateMaterializing {
-		t.Fatalf("state = %s, want it untouched", got.State)
+	if got.State != selfdev.StateApplied || got.TerminalError != selfDevelopmentAbandonForwardNote("tail will not finish") || got.MaterializationReceipt == "" {
+		t.Fatalf("operation = %+v; want applied with the abandon note and the journal's receipt", got)
 	}
+	kinds := fx.countEventKinds()
+	if kinds[computerevent.EventMaterializationApplied] != 1 || kinds[computerevent.EventMaterializationFailed] != 0 {
+		t.Fatalf("events = %v", kinds)
+	}
+	if pending := fx.pendingTransition(t); pending != "" {
+		t.Fatalf("pending %s still bound", pending)
+	}
+	if again := postAbandon(fx, abandonRequestBody(operation.OperationID, "tail will not finish", "abandon-applied")); again.Code != http.StatusOK {
+		t.Fatalf("replay status=%d body=%s", again.Code, again.Body.String())
+	}
+	requireReducerReplay(t, fx)
 }
 
 func TestAbandonRefusesWhileTheMaterializerIsWorking(t *testing.T) {
@@ -360,7 +388,7 @@ func TestAbandonClosesADegradedOperation(t *testing.T) {
 		t.Fatalf("abandon of a degraded operation status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	got, _ := fx.operations.Get(context.Background(), fx.computerID, rollback.OperationID)
-	if got.State != selfdev.StateFailed || !strings.Contains(got.TerminalError, "owner gave up on it") {
+	if got.State != selfdev.StateRolledBack || got.TerminalError != selfDevelopmentAbandonForwardNote("owner gave up on it") {
 		t.Fatalf("operation = %+v", got)
 	}
 	requireReducerReplay(t, fx)
@@ -381,7 +409,7 @@ func TestSettleDischargesADecisionThatLandedUnderIt(t *testing.T) {
 		t.Fatal("fixture: the decision did not bind a pending transition")
 	}
 
-	got, err := fx.rt.settleSelfDevelopmentOperationFailed(ctx, row, selfdevSettleSpec{
+	got, err := fx.rt.settleSelfDevelopmentOperation(ctx, row, selfdevSettleSpec{
 		Act: selfdevSettleActAbandon, Actor: "owner:owner", Authority: "external-owner:owner", Reason: "raced", Key: "toctou", TerminalError: "abandoned by the owner: raced",
 	})
 	if err != nil || got.State != selfdev.StateFailed {

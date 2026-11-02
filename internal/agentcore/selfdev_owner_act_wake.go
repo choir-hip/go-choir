@@ -89,7 +89,7 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 		// Abandon is only ever the owner's act. A degraded candidate had
 		// installed a release: that release stays live, and only the
 		// unsettled tail is closed.
-		body := fmt.Sprintf("The owner abandoned self-development candidate %s and closed it as failed. Nothing further is applied from it; a release it had already installed, if any, stays live.", id)
+		body := fmt.Sprintf("The owner abandoned self-development candidate %s; it is now %s. Nothing further is applied from it; a release it had already installed stays live.", id, operation.State)
 		if reason = strings.TrimSpace(reason); reason != "" {
 			body += " The reason, verbatim:\n\n" + reason
 		}
