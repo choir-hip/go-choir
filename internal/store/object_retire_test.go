@@ -361,7 +361,7 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 		t.Logf("plan: %s", text)
 		// The kind is in the index key, so only the slice's own kinds are
 		// read: the search names the kind and the bounds.
-		if !strings.Contains(text, objectgraph.ChoirEventKindUpdatedIndex+" (<expr>=? AND updated_at>? AND updated_at<?)") {
+		if !strings.Contains(text, objectgraph.ChoirEventRetireIndex+" (event_kind=? AND updated_at>? AND updated_at<?)") {
 			t.Errorf("the plan does not search the kind index by kind and slice: %s", text)
 		}
 		if strings.Contains(strings.ToUpper(text), "TEMP B-TREE") {
@@ -388,15 +388,12 @@ func TestObjectRetireSlicePlanUsesThePartialIndex(t *testing.T) {
 	}
 }
 
-// R9: a phaseless slice reads og_objects by kind, phase and slice through
-// the phase index, so the phase test reads no body: with the kind index, the
-// phaseless loop.progress walk read the body of every kept phased line (about
-// 4.9 GB per pass on the paper, 2026-11-01). The index's phase expression is
-// the predicate's, byte for byte.
+// R9: a phaseless slice reads og_objects by kind and slice through the
+// retire index and tests the typed event_phase on the index entry, so it
+// reads no body: with the kind index, the phaseless loop.progress walk read
+// the body of every kept phased line (about 4.9 GB per pass on the paper,
+// 2026-11-01).
 func TestObjectRetirePhaselessSliceReadsThePhaseIndex(t *testing.T) {
-	if got := retireEventPhaseSQL("body", "metadata"); got != objectgraph.ChoirEventPhaseSQL {
-		t.Fatalf("the predicate's phase expression drifted from the index's:\n%s\n%s", got, objectgraph.ChoirEventPhaseSQL)
-	}
 	s, _ := vocabUpcastOpenStore(t, "retire-phase-plan")
 	p := retireP([]string{"loop.progress"}, retireBase, retireBase.Add(time.Hour), computerevent.ObjectRetirePhaseNone)
 	from, before, err := p.Slice()
@@ -425,7 +422,7 @@ func TestObjectRetirePhaselessSliceReadsThePhaseIndex(t *testing.T) {
 		}
 		rows.Close()
 		text := strings.Join(plan, " | ")
-		if !strings.Contains(text, objectgraph.ChoirEventPhaseUpdatedIndex+" (<expr>=? AND <expr>=? AND updated_at>? AND updated_at<?)") {
+		if !strings.Contains(text, objectgraph.ChoirEventRetireIndex+" (event_kind=? AND updated_at>? AND updated_at<?)") || strings.Contains(text, "og_bodies") {
 			t.Errorf("the phaseless slice does not search the phase index: %s", text)
 		}
 	}

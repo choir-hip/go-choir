@@ -100,9 +100,12 @@ type derivedFamily struct {
 	// ordered is true for a family read newest first through updated_at (the
 	// addressee read): its key rows' updated_at is part of an answer, so the
 	// validator and the tripwire compare it. The other families page by
-	// canonical_id and compare only columns that precede body in og_objects,
-	// so their pass never walks a body's overflow chain.
+	// canonical_id and compare only header columns.
 	ordered bool
+	// needsBody is true for a family whose expr reads the body: its derive
+	// joins og_bodies (deriveSQL). Not part of markIdentity: the split moved
+	// the body, not the expression.
+	needsBody bool
 }
 
 // The outbox family is first: a pass validates the families in this order,
@@ -111,7 +114,7 @@ type derivedFamily struct {
 var derivedFamilies = []derivedFamily{
 	{Name: KeyActorWakeOutboxProjected, Kind: ActorWakeOutboxKind, expr: jsonTextSQL(`metadata`, `'$.projected'`)},
 	{Name: KeyRunAgentID, Kind: "choir.run", expr: jsonTextSQL(`metadata`, `'$.agent_id'`)},
-	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: jsonTextSQL(bodyTextSQL, `'$.addressee'`), ordered: true},
+	{Name: KeyCommitmentAddressee, Kind: commitmentRecordKind, expr: jsonTextSQL(bodyTextSQL, `'$.addressee'`), ordered: true, needsBody: true},
 	{Name: KeySourceRefDocID, Kind: "choir.source_ref", expr: jsonTextSQL(`metadata`, `'$.doc_id'`)},
 }
 
@@ -328,15 +331,23 @@ func (d *DerivedKeys) InvalidateAll(reason string) {
 // row, with the same expression the JSON read evaluates,
 // it. ok selects the success form; the failure form stores no key and
 // derive_ok = false, for a row whose expression errors (a body that is not
-// JSON).
+// JSON). A family over the body reads og_objects joined with og_bodies by
+// obj_id, so fam.expr's "body" is og_bodies.body and its text (part of the
+// mark identity) is the pre-split text; the other families read the header
+// only. The success form of a body family that fails to derive is the
+// failure form, so the join is in both.
 func deriveSQL(fam *derivedFamily, where string, ok bool) string {
 	value, flag := `substr(`+fam.expr+`, 1, 255)`, `1`
 	if !ok {
 		value, flag = `NULL`, `0`
 	}
+	from := `og_objects`
+	if fam.needsBody {
+		from = `og_objects JOIN og_bodies USING (obj_id)`
+	}
 	return `INSERT INTO ` + DerivedKeysTable + ` (canonical_id, key_name, key_value, owner_id, updated_at, content_hash, derive_ok)
 		SELECT canonical_id, ?, ` + value + `, owner_id, updated_at, content_hash, ` + flag + `
-		FROM og_objects WHERE object_kind = ? AND ` + where + `
+		FROM ` + from + ` WHERE object_kind = ? AND ` + where + `
 		ON CONFLICT (canonical_id, key_name) DO UPDATE SET
 			key_value = excluded.key_value,
 			owner_id = excluded.owner_id,
@@ -608,15 +619,15 @@ func derivedKeyRange(kind ObjectKind) (lo, hi string) {
 
 // ogHeadPageSQL is the validator's page of og_objects headers inside the
 // id range (after, before), in canonical_id order, with no body and no
-// metadata: a primary-key range walk that stops after limit rows. The kind is
-// not in the predicate on purpose: with it the planner takes a secondary
-// index on object_kind and sorts the whole kind for every page (the
-// plan-shape test EXPLAINs this text). The caller drops a row of another
-// kind.
+// metadata: a canonical_id range walk of the unique index that stops after
+// limit rows, each a header lookup. The kind is not in the predicate on
+// purpose: with it the planner takes a secondary index on object_kind and
+// sorts the whole kind for every page (the plan-shape test EXPLAINs this
+// text). The caller drops a row of another kind.
 //
-// ordered adds updated_at, which follows body and metadata in the row: reading
-// it walks the body's overflow chain. Only a family whose reads are ordered by
-// updated_at needs it (derivedFamily.ordered); the other columns precede body.
+// ordered adds updated_at; only a family whose reads are ordered by
+// updated_at needs it (derivedFamily.ordered). Every column is a header
+// column.
 func ogHeadPageSQL(after, before string, limit int, ordered bool) (string, []any) {
 	return `SELECT ` + headColumns(ordered) + ` FROM og_objects
 		WHERE canonical_id > ? AND canonical_id < ?

@@ -350,8 +350,8 @@ func TestKindOwnerNewestReadsWalkTheIndex(t *testing.T) {
 	if err := store.EnsureSchema(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	query, args := refsByKindOwnerSQL("choir.run", "owner", 50)
+	query, args := headersByKindOwnerSQL("choir.run", "owner", 50)
 	assertIndexedPlan(t, explainPlan(t, db, query, args...), "idx_og_objects_kind_owner_updated", true)
-	query = `SELECT canonical_id, computer_id` + jsonBodyFieldsFromSQL
+	query = `SELECT h.canonical_id, h.computer_id` + jsonBodyFieldsFromSQL
 	assertIndexedPlan(t, explainPlan(t, db, query, "choir.worker_update", "owner", 50), "idx_og_objects_kind_owner_updated", true)
 }

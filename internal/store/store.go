@@ -1182,30 +1182,25 @@ func (s *Store) latestLifecycleRunByAgent(ctx context.Context, ownerID, computer
 	if graph == nil {
 		return types.RunRecord{}, fmt.Errorf("lifecycle runs: object graph not initialized")
 	}
-	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, latestRunByAgentScanCap)
-	if err != nil {
-		return types.RunRecord{}, err
-	}
-	for _, ref := range refs {
+	objs, err := graph.ListObjectsByKindOwnerWhere(ctx, string(ogKindRun), ownerID, latestRunByAgentScanCap, func(ref objectgraph.HeaderRow) (bool, error) {
 		if ref.Tombstone {
-			continue
+			return false, nil
 		}
 		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
-			continue
+			return false, nil
 		}
 		meta := map[string]any{}
 		if len(ref.Metadata) > 0 {
 			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
-				return types.RunRecord{}, fmt.Errorf("latest lifecycle run: decode metadata %s: %w", ref.CanonicalID, err)
+				return false, fmt.Errorf("latest lifecycle run: decode metadata %s: %w", ref.CanonicalID, err)
 			}
 		}
-		if ogMetadataText(meta, "agent_id") != agentID {
-			continue
-		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if err != nil {
-			return types.RunRecord{}, fmt.Errorf("latest lifecycle run: get %s: %w", ref.CanonicalID, err)
-		}
+		return ogMetadataText(meta, "agent_id") == agentID, nil
+	})
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	for _, obj := range objs {
 		rec, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
 		if decodeErr != nil {
 			return types.RunRecord{}, decodeErr

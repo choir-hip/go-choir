@@ -485,3 +485,17 @@ Details in section 8.
 - /Users/wiz/Dev/go-choir/.claude/worktrees/agent-a68a1d96eb5bf63ea/internal/store/object_retire.go
 - /Users/wiz/Dev/go-choir/.claude/worktrees/agent-a68a1d96eb5bf63ea/internal/computerversion/sqlite_state_extractor.go
 - /Users/wiz/Dev/go-choir/.claude/worktrees/agent-a68a1d96eb5bf63ea/internal/store/open.go (plus the new internal/store/header_body_split.go and internal/autoputer/run.go for the boot gate)
+---
+
+## Deviations (S2 slice 0 and slice A, as built)
+
+1. **`ListObjectsByKindOwnerWhere`'s `keep` returns `(bool, error)`**, not `bool`. Every caller decoded metadata and returned the decode error; a keep error ends the read with it.
+2. **Header upsert numbering.** `ObjectHeaderUpsertArgs` binds `?1..?11` in header declaration order (canonical_id, kind, owner, computer, version, hash, metadata, created, updated, tombstone, superseded_by) and `?12` = body. The derived expressions are `BodyDerivedSQL("?2", "?12", "?7")`. `ObjectHeaderUpsertSQL` is a `var` (built from `BodyDerivedSQL`).
+3. **Extra exports** beyond section 7: `ObjectHeaderUpsertArgs`, `ObjectBodyUpsertArgs`, the `ObjectWriteTx` interface, `WriteObjectStmts` (the projector's prepared-statement form), `ObjectHeaderTableDDL()`, `ObjectBodyTableDDL`, `ObjectIndexDDL()` (for the migration's create-then-index order), `ErrMissingBody`, `ObjectsWitnessQuery`.
+4. **`ListObjectsByEdgeTo` uses `CROSS JOIN`.** With `canonical_id` no longer the primary key, the planner read the whole kind through `idx_og_objects_kind_id` and probed edges per row. `og_edges e CROSS JOIN og_objects h` keeps the edge seek outer; a test pins it.
+5. **`object_retire.go` og side landed in slice A** (forced by deleting the expression indexes): `retireOGTable` is `INDEXED BY idx_og_objects_choir_event_retire`, `retireOGWhere` tests `event_kind IN (…)` and the new `retireOGPhasePredicate(p)` on `event_phase`, the keep-cited fallback joins `og_bodies`. `retirePhasePredicate(p, body, meta)` is left for the choir_events side (slice B), as is `telemetry_partition.go` (its DDL is still the old text; `migratePartitionSplit(ctx, *sql.DB)` is a stub nobody calls yet).
+6. **Store callers switched in slice A** (mechanical, to keep the tree compiling): `graph_store.go` (three run lists), `store.go` `latestLifecycleRunByAgent`, `inbox.go` `openConversationHeads`. `latestLifecycleRunByAgent` now fetches the bodies of every agent-id match within its scan cap instead of stopping at the first.
+7. **`ChoirEventKindSQL` is kept**: it is the `event_kind` expression. `ChoirEventUpdatedIndexDDL` is deleted (the index is in `objectIndexes()`).
+8. **Frozen DDL** is the whole `sqlite_master` of a fresh store at 95ea10801 (`testdata/presplit/schema.sql`), plus `partition.sql` (old `telemetryPartitionDDL`).
+9. **Non-JSON metadata is refused by both layouts** (the indexed `og_meta_*` generated columns error on insert), so the derived-value corpus uses JSON metadata only; bodies cover NULL, empty, non-JSON, JSONB, text-typed, numeric and null fields.
+10. **`dbxplan.HeaderOnly(t, db, wantIndex, query, args...)`** takes the expected index ("" for none); `AssertHeaderOnly`/`AssertBodyByRowid` take a plan already read. A LEFT JOIN body seek reads `SEARCH b USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN`.

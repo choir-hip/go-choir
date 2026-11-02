@@ -50,18 +50,31 @@ const retireDropBatch = 500
 // every statement that names it carries the literal object_kind predicate the
 // index requires.
 //
-// The index is (kind, updated_at): the kind filter is the index key, so a
-// slice reads only its kinds' rows (objectgraph.ChoirEventKindUpdatedIndex).
-const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventKindUpdatedIndex
+// The index is (event_kind, updated_at, event_phase) over header columns:
+// the kind filter is the index key and the phase is tested on the index
+// entry, so a slice reads only its own rows' headers and never a body
+// (objectgraph.ChoirEventRetireIndex).
+const retireOGTable = `og_objects INDEXED BY ` + objectgraph.ChoirEventRetireIndex
 
-// retireOGTableFor is the table clause of p's slice statements: a phaseless
-// slice reads the (kind, phase, updated_at) index, so its phase test reads no
-// body; any other reads the (kind, updated_at) index.
+// retireOGTableFor is the table clause of p's slice statements: one index
+// serves every phase mode.
 func retireOGTableFor(p computerevent.ObjectRetireProjection) string {
-	if p.Phase == computerevent.ObjectRetirePhaseNone {
-		return `og_objects INDEXED BY ` + objectgraph.ChoirEventPhaseUpdatedIndex
-	}
+	_ = p
 	return retireOGTable
+}
+
+// retireOGPhasePredicate is the og_objects phase test of p, on the typed
+// header column event_phase (the writers compute it with
+// objectgraph.BodyDerivedSQL, the expression retireEventPhaseSQL evaluated
+// over the body on the pre-split layout).
+func retireOGPhasePredicate(p computerevent.ObjectRetireProjection) string {
+	switch p.Phase {
+	case computerevent.ObjectRetirePhaseNone:
+		return ` AND event_phase = ''`
+	case computerevent.ObjectRetirePhaseSome:
+		return ` AND event_phase <> ''`
+	}
+	return ""
 }
 
 // retireEventPhaseSQL is the phase of the event whose body is body and whose
@@ -100,7 +113,7 @@ func retireKeepCitedPredicate(p computerevent.ObjectRetireProjection, meta strin
 	}
 	return ` AND COALESCE(CASE WHEN json_valid(` + meta + `) THEN CAST(json_extract(` + meta + `, '$.event_id') AS TEXT) END, '') NOT IN (
 		SELECT CAST(json_extract(e.value, '$.event_id') AS TEXT)
-		FROM og_objects ra, json_each(CASE WHEN json_valid(CAST(ra.body AS TEXT)) THEN CAST(ra.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
+		FROM og_objects ra JOIN og_bodies rb ON rb.obj_id = ra.obj_id, json_each(CASE WHEN json_valid(CAST(rb.body AS TEXT)) THEN CAST(rb.body AS TEXT) ELSE '{}' END, '$.evidence_refs') e
 		WHERE ra.object_kind = '` + string(ogKindRunAccept) + `' AND json_extract(e.value, '$.event_id') IS NOT NULL)`, nil
 }
 
@@ -119,8 +132,8 @@ func retireKindPlaceholders(p computerevent.ObjectRetireProjection) (string, []a
 func retireOGWhere(p computerevent.ObjectRetireProjection, from, before time.Time, cited *string) (string, []any) {
 	marks, kindArgs := retireKindPlaceholders(p)
 	keep, keepArgs := retireKeepCitedPredicate(p, "metadata", cited)
-	where := `object_kind = 'choir.event' AND (` + objectgraph.ChoirEventKindSQL + `) IN (` + marks + `) AND updated_at >= ? AND updated_at < ?` +
-		retirePhasePredicate(p, "body", "metadata") + keep
+	where := `object_kind = 'choir.event' AND event_kind IN (` + marks + `) AND updated_at >= ? AND updated_at < ?` +
+		retireOGPhasePredicate(p) + keep
 	args := append(append(kindArgs, from, before), keepArgs...)
 	return where, args
 }

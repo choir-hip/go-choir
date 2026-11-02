@@ -1067,28 +1067,23 @@ func (s *Store) openConversationHeads(ctx context.Context, ownerID, computerID s
 	if graph == nil {
 		return nil, fmt.Errorf("open rounds: object graph not initialized")
 	}
-	refs, err := graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindConversationHead), ownerID)
-	if err != nil {
-		return nil, err
-	}
-	var open []types.ConversationHead
-	for _, ref := range refs {
+	objs, err := graph.ListObjectsByKindOwnerWhere(ctx, string(ogKindConversationHead), ownerID, -1, func(ref objectgraph.HeaderRow) (bool, error) {
 		if ref.Tombstone || ref.ComputerID != computerID {
-			continue
+			return false, nil
 		}
 		var meta struct {
 			ConversationID string `json:"conversation_id"`
 		}
 		if wanted != nil && json.Unmarshal(ref.Metadata, &meta) == nil && meta.ConversationID != "" && !wanted(meta.ConversationID) {
-			continue
+			return false, nil
 		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if errors.Is(err, objectgraph.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var open []types.ConversationHead
+	for _, obj := range objs {
 		if obj.Tombstone {
 			continue
 		}

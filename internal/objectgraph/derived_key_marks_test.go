@@ -173,10 +173,10 @@ func TestOlderPassDropsTheMarkAsAnOrphan(t *testing.T) {
 	}
 }
 
-// overflowPages lists og_objects' overflow pages.
+// overflowPages lists og_bodies' overflow pages.
 func overflowPages(t *testing.T, db *sql.DB) []int64 {
 	t.Helper()
-	rows, err := db.Query(`SELECT pageno FROM dbstat WHERE name = 'og_objects' AND pagetype = 'overflow'`)
+	rows, err := db.Query(`SELECT pageno FROM dbstat WHERE name = 'og_bodies' AND pagetype = 'overflow'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,9 +194,10 @@ func overflowPages(t *testing.T, db *sql.DB) []int64 {
 
 // Case 12: the three metadata families validate without reading any body
 // overflow page. Every metadata-family row has a body that overflows, and
-// every overflow page is then zeroed: a pass that read one would fail with
-// "database disk image is malformed". The commitment records have small
-// bodies: their family still compares updated_at, which follows the body.
+// every og_bodies overflow page is then zeroed: a pass that read one would
+// fail with "database disk image is malformed". The commitment records have
+// small bodies (their family derives from the body). With the header/body
+// split every header column reads with the bodies' overflow zeroed.
 func TestMetadataFamiliesValidateWithoutReadingBodyOverflow(t *testing.T) {
 	ctx := context.Background()
 	db, store := openDerivedStore(t)
@@ -222,8 +223,8 @@ func TestMetadataFamiliesValidateWithoutReadingBodyOverflow(t *testing.T) {
 	}
 	runID, _ := BuildCanonicalID(testRunKind, "o1", "k-0000")
 	var updated string
-	if err := db.QueryRow(`SELECT updated_at FROM og_objects WHERE canonical_id = ?`, runID).Scan(&updated); err == nil {
-		t.Fatal("premise: a column after the body still reads with its overflow zeroed")
+	if err := db.QueryRow(`SELECT updated_at FROM og_objects WHERE canonical_id = ?`, runID).Scan(&updated); err != nil {
+		t.Fatalf("a header column does not read with the body overflow zeroed: %v", err)
 	}
 	if err := store.ValidateDerivedKeys(ctx, DerivedKeyValidation{PageSize: 7}); err != nil {
 		t.Fatalf("a pass read a body overflow page: %v", err)

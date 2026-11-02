@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 )
 
 // commitmentRecordKind is the object kind of the addressed-record ledger
@@ -58,35 +57,29 @@ const (
 	recordClaimIndex  = "idx_og_objects_rec_claim"
 )
 
-// ChoirEventUpdatedIndex is the partial index a telemetry retire slice reads
-// (store/object_retire.go): the slice's select must carry the literal
-// predicate object_kind = 'choir.event' for the planner to use it.
+// ChoirEventUpdatedIndex is the partial index retireOldest reads
+// (store/object_retire.go): the select must carry the literal predicate
+// object_kind = 'choir.event' for the planner to use it. It is in
+// objectIndexes.
 const ChoirEventUpdatedIndex = "idx_og_objects_choir_event_updated"
 
-// ChoirEventUpdatedIndexDDL creates it; idempotent.
-const ChoirEventUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventUpdatedIndex + ` ON og_objects(updated_at) WHERE object_kind = 'choir.event'`
+// ChoirEventRetireIndex is the partial index a telemetry retire slice reads:
+// (event_kind, updated_at, event_phase) of the choir.event rows. The kind is
+// the index key and the phase is tested on the index entry, so a slice reads
+// only the headers of its own rows and never a body.
+const ChoirEventRetireIndex = "idx_og_objects_choir_event_retire"
 
 // ChoirEventKindSQL is a choir.event row's kind (metadata "kind"), or NULL
-// when the metadata is not JSON. A retire slice filters on this exact
-// expression so the planner reads ChoirEventKindUpdatedIndex.
+// when the metadata is not JSON: the expression of og_objects.event_kind.
 const ChoirEventKindSQL = `CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.kind') END`
-
-// ChoirEventKindUpdatedIndex is the partial index a telemetry retire slice
-// reads: (kind, updated_at) of the choir.event rows, so a slice reads only
-// the rows of its kinds. With updated_at alone each row in the slice was
-// read to test its kind, and metadata sits after body: the paper read about
-// 19 GB of event bodies in the retirement pass after a boot (2026-11-01).
-const ChoirEventKindUpdatedIndex = "idx_og_objects_choir_event_kind_updated"
-
-// ChoirEventKindUpdatedIndexDDL creates it; idempotent.
-const ChoirEventKindUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventKindUpdatedIndex + ` ON og_objects((` + ChoirEventKindSQL + `), updated_at) WHERE object_kind = 'choir.event'`
 
 // ChoirEventPhaseSQLFor is the phase of the event whose body is body and
 // whose metadata is meta: the payload's phase, else the metadata's, else empty.
 // A body or metadata that is not JSON reads as phaseless rather than failing
 // the whole statement (a projection that errors on one row would wedge
-// replay). The store's retire predicate and ChoirEventPhaseUpdatedIndex use
-// this one text, so the planner matches them.
+// replay). It is the only phase definition: every writer of event_phase (the
+// object upsert, the event table, the vocabulary rewrite, the split
+// migration) evaluates this text.
 func ChoirEventPhaseSQLFor(body, meta string) string {
 	return `COALESCE(
 		CASE WHEN json_valid(CAST(` + body + ` AS TEXT)) THEN NULLIF(CAST(json_extract(CAST(` + body + ` AS TEXT), '$.payload.phase') AS TEXT), '') END,
@@ -94,21 +87,32 @@ func ChoirEventPhaseSQLFor(body, meta string) string {
 		'')`
 }
 
-// ChoirEventPhaseSQL is a choir.event row's phase in og_objects.
-var ChoirEventPhaseSQL = ChoirEventPhaseSQLFor("body", "metadata")
-
-// ChoirEventPhaseUpdatedIndex is the partial index a phaseless retire slice
-// reads: (kind, phase, updated_at) of the choir.event rows, so the phase
-// test reads no body (the phase is in the payload). Its build reads every
-// choir.event body once.
-const ChoirEventPhaseUpdatedIndex = "idx_og_objects_choir_event_phase_updated"
-
-// ChoirEventPhaseUpdatedIndexDDL creates it; idempotent.
-var ChoirEventPhaseUpdatedIndexDDL = `CREATE INDEX IF NOT EXISTS ` + ChoirEventPhaseUpdatedIndex + ` ON og_objects((` + ChoirEventKindSQL + `), (` + ChoirEventPhaseSQL + `), updated_at) WHERE object_kind = 'choir.event'`
+// BodyDerivedSQL returns the SQL expressions of the two body-derived header
+// columns of og_objects, over the given references to the row's kind, body
+// and metadata (column references, or numbered parameters a writer binds):
+//
+//   - claim (og_rec_claim): for a commitment record whose body is NULL or
+//     JSON, 1 when the body has no directive (missing or empty), else 0;
+//     NULL for every other kind and for a non-JSON body.
+//   - phase (event_phase): for a choir.event, ChoirEventPhaseSQLFor; NULL
+//     for every other kind.
+//
+// They are the expressions the pre-split generated column og_rec_claim and
+// the expression index idx_og_objects_choir_event_phase_updated evaluated,
+// so a header written by any path (live, replay, vocabulary rewrite, split
+// migration) holds the value the old layout computed.
+func BodyDerivedSQL(kind, body, meta string) (claim, phase string) {
+	bodyText := `CAST(` + body + ` AS TEXT)`
+	claim = `CASE WHEN ` + kind + ` = '` + string(commitmentRecordKind) + `' THEN CASE WHEN ` + body + ` IS NULL OR json_valid(` + bodyText + `) THEN ` + recordClaimPredicateFor(bodyText) + ` END END`
+	phase = `CASE WHEN ` + kind + ` = 'choir.event' THEN ` + ChoirEventPhaseSQLFor(body, meta) + ` END`
+	return claim, phase
+}
 
 // bodyTextSQL is the body as text. The body column is a BLOB, and SQLite
 // reads a BLOB argument of its JSON functions as JSONB, so a body is always
-// cast before it meets one.
+// cast before it meets one. In a query over og_objects joined with
+// og_bodies, "body" is og_bodies.body. The text is part of the derived-key
+// mark identity (derived_key_marks.go): changing it untrusts every mark.
 const bodyTextSQL = `CAST(body AS TEXT)`
 
 // jsonTextSQL is the text of the JSON scalar at path in src, as MySQL's
@@ -122,17 +126,23 @@ func jsonTextSQL(src, path string) string {
 // jsonTextArgs binds the path of a jsonTextSQL whose path is a placeholder.
 func jsonTextArgs(path string) []any { return []any{path, path} }
 
-// recordClaimPredicate is the body predicate the claim pack filters with:
-// ListObjectsByOwnerAndBody with "$.directive" missing or empty. The claim
-// column holds exactly it.
-const recordClaimPredicate = `(json_extract(` + bodyTextSQL + `, '$.directive') IS NULL OR CAST(json_extract(` + bodyTextSQL + `, '$.directive') AS TEXT) = '')`
+// recordClaimPredicateFor is the body predicate the claim pack filters with,
+// over the body text bodyText: ListObjectsByOwnerAndBody with "$.directive"
+// missing or empty. og_rec_claim holds exactly it.
+func recordClaimPredicateFor(bodyText string) string {
+	return `(json_extract(` + bodyText + `, '$.directive') IS NULL OR CAST(json_extract(` + bodyText + `, '$.directive') AS TEXT) = '')`
+}
 
-// generatedColumn is one VIRTUAL generated column of og_objects.
+// generatedColumn is one VIRTUAL generated column of og_objects. An empty
+// Type declares no type, so the column has no affinity.
 type generatedColumn struct {
 	Name, Type, Expr string
 }
 
 func (g generatedColumn) ddl() string {
+	if g.Type == "" {
+		return g.Name + ` GENERATED ALWAYS AS (` + g.Expr + `) VIRTUAL`
+	}
 	return g.Name + ` ` + g.Type + ` GENERATED ALWAYS AS (` + g.Expr + `) VIRTUAL`
 }
 
@@ -148,35 +158,39 @@ func (mc metadataIndexColumn) indexName() string { return "idx_og_objects_" + mc
 
 func (mc metadataIndexColumn) recencyIndexName() string { return mc.indexName() + "_recent" }
 
-// recordColumns are the record-scoped columns beyond the equality lookups.
-// The claim column guards with json_valid: a body that is not JSON makes
-// json_extract fail, and a generated column that fails refuses the insert of
-// the record (the unindexed predicate fails the whole query on such a row).
+// recordColumns are the header-only record-scoped columns beyond the
+// equality lookups. og_rec_claim reads the body, so it is a plain column the
+// writers fill (BodyDerivedSQL), not a generated one.
 var recordColumns = []generatedColumn{
 	{Name: recordInboxSeqColumn, Type: "INTEGER", Expr: fmt.Sprintf(
 		`CASE WHEN object_kind = '%s' THEN CAST(json_extract(metadata, '$.inbox_seq') AS INTEGER) END`,
 		string(commitmentRecordKind))},
-	{Name: recordClaimColumn, Type: "INTEGER", Expr: fmt.Sprintf(
-		`CASE WHEN object_kind = '%s' THEN CASE WHEN body IS NULL OR json_valid(%s) THEN %s END END`,
-		string(commitmentRecordKind), bodyTextSQL, recordClaimPredicate)},
 }
 
-// derivedColumns are the generated columns of og_objects.
+// eventKindColumn is a choir.event row's kind. It declares no type, so it
+// has no affinity and `event_kind IN (?)` compares exactly as the pre-split
+// expression index on ChoirEventKindSQL did.
+var eventKindColumn = generatedColumn{Name: "event_kind", Expr: `CASE WHEN object_kind = 'choir.event' THEN ` + ChoirEventKindSQL + ` END`}
+
+// derivedColumns are the generated columns of og_objects; every one reads
+// only header columns.
 func derivedColumns() []generatedColumn {
-	columns := make([]generatedColumn, 0, len(metadataIndexColumns)+len(recordColumns))
+	columns := make([]generatedColumn, 0, len(metadataIndexColumns)+len(recordColumns)+1)
 	for _, mc := range metadataIndexColumns {
 		columns = append(columns, mc.generatedColumn())
 	}
-	return append(columns, recordColumns...)
+	columns = append(columns, recordColumns...)
+	return append(columns, eventKindColumn)
 }
 
-// objectIndexes are the indexes of og_objects beyond its primary key, as
+// objectIndexes are the indexes of og_objects beyond its keys, as
 // "name ON og_objects(columns)[ WHERE ...]". SQLite secondary indexes carry
-// the rowid, not canonical_id, so every index that serves a keyset page
-// names canonical_id. The generated-column indexes are partial: most rows
-// hold NULL there, and an equality lookup implies NOT NULL. The snapshot
-// phase 1 filters on (owner_id, computer_id[, object_kind]); ListObjects
-// filters on object_kind + owner_id + computer_id.
+// the rowid (obj_id), not canonical_id, so every index that serves a keyset
+// page names canonical_id. The generated-column indexes are partial: most
+// rows hold NULL there, and an equality lookup implies NOT NULL. The
+// snapshot phase 1 filters on (owner_id, computer_id[, object_kind]);
+// ListObjects filters on object_kind + owner_id + computer_id. Every index is
+// over header columns, so an index build reads no body.
 func objectIndexes() []string {
 	indexes := []string{
 		"idx_og_objects_updated ON og_objects(updated_at)",
@@ -194,34 +208,81 @@ func objectIndexes() []string {
 	return append(indexes,
 		fmt.Sprintf("%s ON og_objects(object_kind, og_rec_inbox, %s) WHERE %s IS NOT NULL", recordInboxSeqIndex, recordInboxSeqColumn, recordInboxSeqColumn),
 		fmt.Sprintf("%s ON og_objects(object_kind, owner_id, %s, updated_at, canonical_id) WHERE %s IS NOT NULL", recordClaimIndex, recordClaimColumn, recordClaimColumn),
+		ChoirEventUpdatedIndex+" ON og_objects(updated_at) WHERE object_kind = 'choir.event'",
+		ChoirEventRetireIndex+" ON og_objects(event_kind, updated_at, event_phase) WHERE object_kind = 'choir.event'",
 	)
 }
 
-// buildSchemaDDL is the og_objects and og_edges DDL: the current schema,
-// written once, with the generated columns in the CREATE TABLE (SQLite adds
-// no STORED generated column afterwards, and a fresh database needs none).
-func buildSchemaDDL() string {
+// ObjectHeaderTableDDL is the og_objects header table without its secondary
+// indexes (ObjectIndexDDL): the split migration creates the table, copies
+// the rows, then builds the indexes one at a time.
+//
+// obj_id is the explicit rowid alias: a physical address inside one file,
+// the key of og_bodies. An ON CONFLICT DO UPDATE and a rename of
+// canonical_id keep it, and so does VACUUM INTO (an implicit rowid may be
+// renumbered). It is never state: not in the witness, the fingerprints or
+// the tape. og_rec_claim and event_phase are body-derived and written by the
+// writer in the header statement (BodyDerivedSQL); every other derived
+// column is VIRTUAL over header columns.
+func ObjectHeaderTableDDL() string {
 	var b strings.Builder
 	b.WriteString(`
 CREATE TABLE IF NOT EXISTS og_objects (
-	canonical_id  TEXT NOT NULL PRIMARY KEY,
+	obj_id        INTEGER PRIMARY KEY,
+	canonical_id  TEXT NOT NULL UNIQUE,
 	object_kind   TEXT NOT NULL,
 	owner_id      TEXT NOT NULL,
 	computer_id   TEXT NOT NULL DEFAULT '',
 	version_id    TEXT NOT NULL DEFAULT '',
 	content_hash  TEXT NOT NULL,
-	body          BLOB,
 	metadata      TEXT NOT NULL,
 	created_at    DATETIME NOT NULL,
 	updated_at    DATETIME NOT NULL,
 	tombstone     INTEGER NOT NULL DEFAULT 0,
-	superseded_by TEXT NOT NULL DEFAULT ''`)
+	superseded_by TEXT NOT NULL DEFAULT '',
+	og_rec_claim  INTEGER,
+	event_phase   TEXT`)
 	for _, column := range derivedColumns() {
 		b.WriteString(",\n\t" + column.ddl())
 	}
 	b.WriteString("\n);\n")
-	for _, index := range objectIndexes() {
-		b.WriteString("CREATE INDEX IF NOT EXISTS " + index + ";\n")
+	return b.String()
+}
+
+// ObjectBodyTableDDL is og_bodies (one row per og_objects row, keyed by its
+// obj_id; a NULL body is a row whose body is NULL) and the trigger that
+// drops a body with its header, on every delete path and independent of the
+// connection's foreign_keys pragma.
+const ObjectBodyTableDDL = `
+CREATE TABLE IF NOT EXISTS og_bodies (
+	obj_id INTEGER PRIMARY KEY,
+	body   BLOB
+);
+CREATE TRIGGER IF NOT EXISTS og_objects_drop_body AFTER DELETE ON og_objects
+BEGIN DELETE FROM og_bodies WHERE obj_id = OLD.obj_id; END;
+`
+
+// ObjectIndexDDL is one CREATE INDEX statement per og_objects secondary
+// index, in build order.
+func ObjectIndexDDL() []string {
+	indexes := objectIndexes()
+	out := make([]string, 0, len(indexes))
+	for _, index := range indexes {
+		out = append(out, "CREATE INDEX IF NOT EXISTS "+index)
+	}
+	return out
+}
+
+// buildSchemaDDL is the og_objects, og_bodies and og_edges DDL: the current
+// schema, written once, with the generated columns in the CREATE TABLE
+// (SQLite adds no STORED generated column afterwards, and a fresh database
+// needs none).
+func buildSchemaDDL() string {
+	var b strings.Builder
+	b.WriteString(ObjectHeaderTableDDL())
+	b.WriteString(ObjectBodyTableDDL)
+	for _, index := range ObjectIndexDDL() {
+		b.WriteString(index + ";\n")
 	}
 	b.WriteString(`
 CREATE TABLE IF NOT EXISTS og_edges (
@@ -301,8 +362,10 @@ func NewSQLStore(db *sql.DB) *SQLStore {
 	return &SQLStore{db: db, derived: newDerivedKeys()}
 }
 
-// EnsureSchema creates the og_objects and og_edges tables if they do
-// not already exist. Safe to call multiple times.
+// EnsureSchema creates the og_objects, og_bodies and og_edges tables if they
+// do not already exist. Safe to call multiple times. A store in the pre-split
+// layout (og_objects with a body column) is migrated before this runs
+// (store/header_body_split.go); the DDL here fails on one.
 func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph sql: nil store")
@@ -310,29 +373,6 @@ func (s *SQLStore) EnsureSchema(ctx context.Context) error {
 	doneDDL := BootPhase("store: open", "objectgraph-schema/schema-ddl")
 	_, err := s.db.ExecContext(ctx, SchemaDDL)
 	doneDDL(err)
-	if err != nil {
-		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
-	}
-	// The partial index a telemetry retire slice reads through. It is its own
-	// step, not in objectIndexes, so its duration shows in the boot log: on
-	// an existing store the build reads every choir.event row (updated_at
-	// follows the body in the row), about 30 s for 2.5 million rows on the
-	// paper's copy. Not inside any batch transaction.
-	doneIdx := BootPhase("store: open", "objectgraph-schema/choir-event-updated-index")
-	_, err = s.db.ExecContext(ctx, ChoirEventUpdatedIndexDDL)
-	doneIdx(err)
-	if err != nil {
-		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
-	}
-	doneKindIdx := BootPhase("store: open", "objectgraph-schema/choir-event-kind-updated-index")
-	_, err = s.db.ExecContext(ctx, ChoirEventKindUpdatedIndexDDL)
-	doneKindIdx(err)
-	if err != nil {
-		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
-	}
-	donePhaseIdx := BootPhase("store: open", "objectgraph-schema/choir-event-phase-updated-index")
-	_, err = s.db.ExecContext(ctx, ChoirEventPhaseUpdatedIndexDDL)
-	donePhaseIdx(err)
 	if err != nil {
 		return fmt.Errorf("objectgraph sql: ensure schema: %w", err)
 	}
@@ -400,83 +440,147 @@ func (s *SQLStore) PutObject(ctx context.Context, obj Object) error {
 	if s.intercept != nil {
 		return s.intercept(ctx, []Object{obj}, nil)
 	}
-	if s.derived.keyed(obj.ObjectKind) {
-		// A kind with derived keys is written with them in one transaction.
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("objectgraph sql: put object: begin: %w", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-		if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
-			return fmt.Errorf("objectgraph sql: put object: %w", err)
-		}
-		s.derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("objectgraph sql: put object: commit: %w", err)
-		}
-		return nil
-	}
-	_, err := s.db.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...)
+	// The header and the body are two statements, so every write is a
+	// transaction; a kind with derived keys is written with them in it.
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("objectgraph sql: put object: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := WriteObjectTx(ctx, tx, obj); err != nil {
 		return fmt.Errorf("objectgraph sql: put object: %w", err)
+	}
+	s.derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("objectgraph sql: put object: commit: %w", err)
 	}
 	return nil
 }
 
-// upsertObjectSQL is the og_objects upsert every direct writer shares.
-const upsertObjectSQL = `INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+// ObjectHeaderUpsertSQL is the og_objects header upsert every writer shares
+// (PutObject, putBatchTx, the store's projector): ObjectHeaderUpsertArgs
+// binds ?1..?11 to the header columns and ?12 to the body, which is read only
+// to compute og_rec_claim and event_phase (BodyDerivedSQL) and is never
+// stored in the header. It returns the row's obj_id: an existing row keeps
+// its obj_id (ON CONFLICT DO UPDATE never deletes the row; REPLACE would,
+// and is forbidden on og_objects).
+var ObjectHeaderUpsertSQL = func() string {
+	claim, phase := BodyDerivedSQL(`?2`, `?12`, `?7`)
+	return `INSERT INTO og_objects
+		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata, created_at, updated_at, tombstone, superseded_by, og_rec_claim, event_phase)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ` + claim + `, ` + phase + `)
 		ON CONFLICT (canonical_id) DO UPDATE SET
 			object_kind = excluded.object_kind,
 			owner_id = excluded.owner_id,
 			computer_id = excluded.computer_id,
 			version_id = excluded.version_id,
 			content_hash = excluded.content_hash,
-			body = excluded.body,
 			metadata = excluded.metadata,
 			updated_at = excluded.updated_at,
 			tombstone = excluded.tombstone,
-			superseded_by = excluded.superseded_by`
+			superseded_by = excluded.superseded_by,
+			og_rec_claim = excluded.og_rec_claim,
+			event_phase = excluded.event_phase
+		RETURNING obj_id`
+}()
 
-func upsertObjectArgs(obj Object) []any {
+// ObjectBodyUpsertSQL writes the body of the header whose obj_id is ?1:
+// ObjectBodyUpsertArgs binds it.
+const ObjectBodyUpsertSQL = `INSERT INTO og_bodies (obj_id, body) VALUES (?1, ?2)
+		ON CONFLICT (obj_id) DO UPDATE SET body = excluded.body`
+
+// ObjectHeaderUpsertArgs binds ObjectHeaderUpsertSQL for obj, as given (the
+// projector normalizes metadata and timestamps before it calls this).
+func ObjectHeaderUpsertArgs(obj Object) []any {
 	return []any{obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-		obj.VersionID, obj.ContentHash, obj.Body, string(obj.Metadata),
+		obj.VersionID, obj.ContentHash, string(obj.Metadata),
 		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
-		obj.SupersededBy}
+		obj.SupersededBy, obj.Body}
 }
+
+// ObjectBodyUpsertArgs binds ObjectBodyUpsertSQL for obj's body under objID.
+func ObjectBodyUpsertArgs(objID int64, obj Object) []any {
+	return []any{objID, obj.Body}
+}
+
+// ObjectWriteTx is what WriteObjectTx writes through: a *sql.Tx (or the
+// write handle's single connection inside a transaction).
+type ObjectWriteTx interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// WriteObjectTx writes obj's header and body inside the caller's
+// transaction and returns its obj_id. The caller runs derived-key upkeep
+// (DerivedKeys.Maintain) after it, in the same transaction.
+func WriteObjectTx(ctx context.Context, x ObjectWriteTx, obj Object) (int64, error) {
+	var objID int64
+	if err := x.QueryRowContext(ctx, ObjectHeaderUpsertSQL, ObjectHeaderUpsertArgs(obj)...).Scan(&objID); err != nil {
+		return 0, fmt.Errorf("write object header %s: %w", obj.CanonicalID, err)
+	}
+	if _, err := x.ExecContext(ctx, ObjectBodyUpsertSQL, ObjectBodyUpsertArgs(objID, obj)...); err != nil {
+		return 0, fmt.Errorf("write object body %s: %w", obj.CanonicalID, err)
+	}
+	return objID, nil
+}
+
+// WriteObjectStmts is WriteObjectTx through prepared statements of
+// ObjectHeaderUpsertSQL and ObjectBodyUpsertSQL, already bound to the
+// caller's transaction (tx.StmtContext): the replay projector's form.
+func WriteObjectStmts(ctx context.Context, header, body *sql.Stmt, obj Object) (int64, error) {
+	var objID int64
+	if err := header.QueryRowContext(ctx, ObjectHeaderUpsertArgs(obj)...).Scan(&objID); err != nil {
+		return 0, fmt.Errorf("write object header %s: %w", obj.CanonicalID, err)
+	}
+	if _, err := body.ExecContext(ctx, ObjectBodyUpsertArgs(objID, obj)...); err != nil {
+		return 0, fmt.Errorf("write object body %s: %w", obj.CanonicalID, err)
+	}
+	return objID, nil
+}
+
+// objectColumnsSQL is the select list of every full-object read: the header
+// h and the body b of `og_objects h LEFT JOIN og_bodies b ON b.obj_id =
+// h.obj_id` (objectFromSQL), scanned by scanObject. The LEFT JOIN keeps the
+// header the outer loop, so the planner never scans bodies first; b.obj_id
+// is NULL for a header without a body row, which scanObject refuses.
+const objectColumnsSQL = `h.canonical_id, h.object_kind, h.owner_id, h.computer_id, h.version_id, h.content_hash, b.obj_id, b.body, h.metadata, h.created_at, h.updated_at, h.tombstone, h.superseded_by`
+
+// objectFromSQL is the FROM clause of every full-object read.
+const objectFromSQL = ` FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id`
+
+// objectSelectSQL is SELECT objectColumnsSQL objectFromSQL.
+const objectSelectSQL = `SELECT ` + objectColumnsSQL + objectFromSQL
 
 func (s *SQLStore) GetObject(ctx context.Context, id string) (Object, error) {
 	if s == nil || s.db == nil {
 		return Object{}, fmt.Errorf("objectgraph sql: nil store")
 	}
-	return scanObject(s.db.QueryRowContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+	return scanObject(s.db.QueryRowContext(ctx, objectSelectSQL+` WHERE h.canonical_id = ?`, id))
 }
 
 func (s *SQLStore) ListObjects(ctx context.Context, filter ListFilter) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
-	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
+	query := objectSelectSQL + ` WHERE 1=1`
 	var args []any
 	if filter.Kind != "" {
-		query += ` AND object_kind = ?`
+		query += ` AND h.object_kind = ?`
 		args = append(args, string(filter.Kind))
 	}
 	if filter.OwnerID != "" {
-		query += ` AND owner_id = ?`
+		query += ` AND h.owner_id = ?`
 		args = append(args, filter.OwnerID)
 	}
 	if filter.ComputerID != "" {
-		query += ` AND computer_id = ?`
+		query += ` AND h.computer_id = ?`
 		args = append(args, filter.ComputerID)
 	}
 	if filter.Tombstone != nil {
-		query += ` AND tombstone = ?`
+		query += ` AND h.tombstone = ?`
 		args = append(args, *filter.Tombstone)
 	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
+	query += ` ORDER BY h.updated_at DESC LIMIT ?`
 	args = append(args, NormalizedLimit(filter.Limit))
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -513,8 +617,7 @@ func (s *SQLStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID s
 		return nil, fmt.Errorf("objectgraph sql: begin snapshot tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		FROM og_objects WHERE owner_id = ? AND computer_id = ? ORDER BY canonical_id`, ownerID, computerID)
+	rows, err := tx.QueryContext(ctx, objectSelectSQL+` WHERE h.owner_id = ? AND h.computer_id = ? ORDER BY h.canonical_id`, ownerID, computerID)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: query snapshot: %w", err)
 	}
@@ -536,15 +639,28 @@ func (s *SQLStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID s
 	return objects, nil
 }
 
+// snapshotFetchBatch bounds each phase-2 IN list (attachBodies,
+// snapshotFetchByID).
+const snapshotFetchBatch = 256
+
+// snapshotHeadersSQL is ReadObjectSnapshotFiltered's phase 1: the headers of
+// the scope's objects of the given kinds (all kinds when nKinds is 0), in
+// canonical_id order, with no body.
+func snapshotHeadersSQL(nKinds int) string {
+	query := `SELECT ` + headerColumnsSQL + ` FROM og_objects WHERE owner_id = ? AND computer_id = ?`
+	if nKinds > 0 {
+		query += ` AND object_kind IN (` + strings.TrimSuffix(strings.Repeat("?,", nKinds), ",") + `)`
+	}
+	return query + ` ORDER BY canonical_id`
+}
+
 // ReadObjectSnapshotFiltered is the scoped variant of ReadObjectSnapshot for
 // hot paths that need only a subset of the computer's objects. It runs both
 // phases inside one serializable read-only transaction so the result is
-// consistent: phase one scans ref columns (no body blob materialization)
-// for the requested kinds, applies keep(kind, metadata) to decide membership,
-// and phase two fetches full rows by primary key for survivors only.
+// consistent: phase one reads the headers (no body) of the requested kinds
+// and applies keep(kind, metadata) to decide membership, and phase two reads
+// the survivors' bodies from og_bodies by obj_id.
 // Returned objects are sorted by canonical_id, matching ReadObjectSnapshot.
-// snapshotFetchBatch bounds each phase-2 IN list in ReadObjectSnapshotFiltered.
-const snapshotFetchBatch = 256
 
 func (s *SQLStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, computerID string, kinds []ObjectKind, keep func(kind ObjectKind, metadata json.RawMessage) bool) ([]Object, error) {
 	if s == nil || s.db == nil {
@@ -560,50 +676,40 @@ func (s *SQLStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, comp
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Phase 1: refs only for the requested kinds.
-	refsQuery := `SELECT canonical_id, object_kind, metadata FROM og_objects WHERE owner_id = ? AND computer_id = ?`
+	// Phase 1: headers only for the requested kinds.
 	args := []any{ownerID, computerID}
-	if len(kinds) > 0 {
-		refsQuery += ` AND object_kind IN (`
-		for i, k := range kinds {
-			if i > 0 {
-				refsQuery += `,`
-			}
-			refsQuery += `?`
-			args = append(args, string(k))
-		}
-		refsQuery += `)`
+	for _, k := range kinds {
+		args = append(args, string(k))
 	}
-	refsQuery += ` ORDER BY canonical_id`
-	rows, err := tx.QueryContext(ctx, refsQuery, args...)
+	rows, err := tx.QueryContext(ctx, snapshotHeadersSQL(len(kinds)), args...)
 	if err != nil {
-		return nil, fmt.Errorf("objectgraph sql: snapshot refs: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: snapshot headers: %w", err)
 	}
-	var ids []string
+	var kept []HeaderRow
 	for rows.Next() {
-		var id, kindStr, metadata string
-		if err := rows.Scan(&id, &kindStr, &metadata); err != nil {
+		h, err := scanHeader(rows)
+		if err != nil {
 			rows.Close()
-			return nil, fmt.Errorf("objectgraph sql: scan ref: %w", err)
+			return nil, err
 		}
-		if keep == nil || keep(ObjectKind(kindStr), json.RawMessage(metadata)) {
-			ids = append(ids, id)
+		if keep == nil || keep(h.ObjectKind, h.Metadata) {
+			kept = append(kept, h)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, fmt.Errorf("objectgraph sql: iterate snapshot refs: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: iterate snapshot headers: %w", err)
 	}
 	rows.Close()
-	if len(ids) == 0 {
+	if len(kept) == 0 {
 		if err := tx.Commit(); err != nil {
 			return nil, fmt.Errorf("objectgraph sql: snapshot commit: %w", err)
 		}
 		return nil, nil
 	}
 
-	// Phase 2: PK-fetch bodies for survivors, preserving canonical_id order.
-	objects, err := snapshotFetchByID(ctx, tx, ids)
+	// Phase 2: the survivors' bodies by obj_id, in phase 1's order.
+	objects, err := attachBodies(ctx, tx, kept)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +725,7 @@ func (s *SQLStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, comp
 // takes the (object_kind, owner_id, computer_id) index and reads every row
 // of the kind, the scan this replaces.
 func trajectoryRefsSQL(kind ObjectKind, trajectoryID string) (string, []any) {
-	return `SELECT canonical_id, object_kind, owner_id, computer_id, metadata FROM og_objects
+	return `SELECT ` + headerColumnsSQL + ` FROM og_objects
 WHERE object_kind = ? AND og_meta_trajectory_id = ?`,
 		[]any{string(kind), trajectoryID}
 }
@@ -657,7 +763,7 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var ids []string
+	var kept []HeaderRow
 	for _, kind := range kinds {
 		query, args := trajectoryRefsSQL(kind, trajectoryID)
 		rows, err := tx.QueryContext(ctx, query, args...)
@@ -665,16 +771,16 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 			return nil, false, fmt.Errorf("objectgraph sql: trajectory refs: %w", err)
 		}
 		for rows.Next() {
-			var id, kindStr, owner, computer, metadata string
-			if err := rows.Scan(&id, &kindStr, &owner, &computer, &metadata); err != nil {
+			h, err := scanHeader(rows)
+			if err != nil {
 				rows.Close()
-				return nil, false, fmt.Errorf("objectgraph sql: scan trajectory ref: %w", err)
+				return nil, false, err
 			}
-			if owner != ownerID || computer != computerID {
+			if h.OwnerID != ownerID || h.ComputerID != computerID {
 				continue
 			}
-			if keep == nil || keep(ObjectKind(kindStr), json.RawMessage(metadata)) {
-				ids = append(ids, id)
+			if keep == nil || keep(h.ObjectKind, h.Metadata) {
+				kept = append(kept, h)
 			}
 		}
 		if err := rows.Err(); err != nil {
@@ -683,8 +789,8 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 		}
 		rows.Close()
 	}
-	sort.Strings(ids)
-	objects, err := snapshotFetchByID(ctx, tx, ids)
+	sort.Slice(kept, func(i, j int) bool { return kept[i].CanonicalID < kept[j].CanonicalID })
+	objects, err := attachBodies(ctx, tx, kept)
 	if err != nil {
 		return nil, false, err
 	}
@@ -721,6 +827,12 @@ func (s *SQLStore) ReadTrajectorySnapshot(ctx context.Context, ownerID, computer
 	return objects, true, nil
 }
 
+// snapshotFetchByIDSQL is snapshotFetchByID's statement for n ids: a join by
+// canonical_id, header outer.
+func snapshotFetchByIDSQL(n int) string {
+	return objectSelectSQL + ` WHERE h.canonical_id IN (` + strings.TrimSuffix(strings.Repeat("?,", n), ",") + `) ORDER BY h.canonical_id`
+}
+
 // snapshotFetchByID fetches objects by canonical id inside tx, in id order.
 // Fixed-size IN batches: a short list keeps the statement cheap
 // in the IN list, and one list of every survivor cost 42% of guest CPU on a
@@ -729,8 +841,7 @@ func snapshotFetchByID(ctx context.Context, tx *sql.Tx, ids []string) ([]Object,
 	objects := make([]Object, 0, len(ids))
 	for start := 0; start < len(ids); start += snapshotFetchBatch {
 		batch := ids[start:min(start+snapshotFetchBatch, len(ids))]
-		objectsQuery := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		FROM og_objects WHERE canonical_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",") + `) ORDER BY canonical_id`
+		objectsQuery := snapshotFetchByIDSQL(len(batch))
 		objArgs := make([]any, len(batch))
 		for i, id := range batch {
 			objArgs[i] = id
@@ -882,7 +993,7 @@ func (s *SQLStore) putBatch(ctx context.Context, conditions []ObjectCondition, b
 
 func putBatchTx(ctx context.Context, tx *sql.Tx, batch Batch, derived *DerivedKeys) error {
 	for _, obj := range batch.Objects {
-		if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
+		if _, err := WriteObjectTx(ctx, tx, obj); err != nil {
 			return fmt.Errorf("objectgraph sql: batch put object %s: %w", obj.CanonicalID, err)
 		}
 		derived.Maintain(ctx, tx, obj.CanonicalID, obj.ObjectKind)
@@ -913,22 +1024,19 @@ func (s *SQLStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, valu
 		return Object{}, fmt.Errorf("objectgraph sql: nil store")
 	}
 	return scanObject(s.db.QueryRowContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE object_kind = ? AND `+jsonTextSQL(`metadata`, `?`)+` = ?
+		objectSelectSQL+`
+		 WHERE h.object_kind = ? AND `+jsonTextSQL(`h.metadata`, `?`)+` = ?
 		 LIMIT 1`, append(append([]any{kind}, jsonTextArgs(jsonPath)...), value)...))
 }
-
-const objectColumnsSQL = `canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by`
 
 // metadataListSQL is ListObjectsByMetadata's query: the indexed generated
 // column when one covers (kind, field), json_extract otherwise.
 // The plan-shape tests EXPLAIN exactly this text.
 func metadataListSQL(kind, jsonPath, value string, limit int) (string, []any) {
 	if mc, ok := metadataColumnFor(kind, jsonPath); ok {
-		return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND ` + mc.Column + ` = ?
-		 ORDER BY updated_at DESC LIMIT ?`, []any{kind, value, NormalizedLimit(limit)}
+		return objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.` + mc.Column + ` = ?
+		 ORDER BY h.updated_at DESC LIMIT ?`, []any{kind, value, NormalizedLimit(limit)}
 	}
 	return metadataListJSONSQL(kind, jsonPath, value, limit)
 }
@@ -936,9 +1044,9 @@ func metadataListSQL(kind, jsonPath, value string, limit int) (string, []any) {
 // metadataListJSONSQL is the list read on the JSON path, which the generated
 // columns answer identically.
 func metadataListJSONSQL(kind, jsonPath, value string, limit int) (string, []any) {
-	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND ` + jsonTextSQL(`metadata`, `?`) + ` = ?
-		 ORDER BY updated_at DESC LIMIT ?`, append(append([]any{kind}, jsonTextArgs(jsonPath)...), value, NormalizedLimit(limit))
+	return objectSelectSQL + `
+		 WHERE h.object_kind = ? AND ` + jsonTextSQL(`h.metadata`, `?`) + ` = ?
+		 ORDER BY h.updated_at DESC LIMIT ?`, append(append([]any{kind}, jsonTextArgs(jsonPath)...), value, NormalizedLimit(limit))
 }
 
 // metadataPageSQL is ListObjectsByMetadataPage's query. With a keyset index
@@ -949,9 +1057,9 @@ func metadataListJSONSQL(kind, jsonPath, value string, limit int) (string, []any
 // range).
 func metadataPageSQL(kind, jsonPath, value, afterCanonicalID string, limit int) (string, []any) {
 	if mc, ok := metadataColumnFor(kind, jsonPath); ok {
-		order := `object_kind ASC, ` + mc.Column + ` ASC, canonical_id ASC`
-		return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND ` + mc.Column + ` = ? AND canonical_id > ?
+		order := `h.object_kind ASC, h.` + mc.Column + ` ASC, h.canonical_id ASC`
+		return objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.` + mc.Column + ` = ? AND h.canonical_id > ?
 		 ORDER BY ` + order + ` LIMIT ?`, []any{kind, value, afterCanonicalID, NormalizedLimit(limit)}
 	}
 	return metadataPageJSONSQL(kind, jsonPath, value, afterCanonicalID, limit)
@@ -959,9 +1067,9 @@ func metadataPageSQL(kind, jsonPath, value, afterCanonicalID string, limit int) 
 
 // metadataPageJSONSQL is the page read on the JSON path.
 func metadataPageJSONSQL(kind, jsonPath, value, afterCanonicalID string, limit int) (string, []any) {
-	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND ` + jsonTextSQL(`metadata`, `?`) + ` = ? AND canonical_id > ?
-		 ORDER BY canonical_id ASC LIMIT ?`, append(append([]any{kind}, jsonTextArgs(jsonPath)...), value, afterCanonicalID, NormalizedLimit(limit))
+	return objectSelectSQL + `
+		 WHERE h.object_kind = ? AND ` + jsonTextSQL(`h.metadata`, `?`) + ` = ? AND h.canonical_id > ?
+		 ORDER BY h.canonical_id ASC LIMIT ?`, append(append([]any{kind}, jsonTextArgs(jsonPath)...), value, afterCanonicalID, NormalizedLimit(limit))
 }
 
 // ListObjectsByMetadata finds objects by kind + a metadata JSON path
@@ -987,6 +1095,11 @@ func (s *SQLStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, va
 	return out, rows.Err()
 }
 
+// objectsPageSQL is ListObjectsPage's query.
+const objectsPageSQL = objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.canonical_id > ?
+		 ORDER BY h.canonical_id ASC LIMIT ?`
+
 // ListObjectsPage scans one object kind in stable canonical-ID order. The
 // exclusive cursor makes full-table maintenance and recovery scans bounded
 // without imposing a correctness-limiting fixed window.
@@ -994,12 +1107,7 @@ func (s *SQLStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID s
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE object_kind = ? AND canonical_id > ?
-		 ORDER BY canonical_id ASC LIMIT ?`,
-		kind, afterCanonicalID, NormalizedLimit(limit))
+	rows, err := s.db.QueryContext(ctx, objectsPageSQL, kind, afterCanonicalID, NormalizedLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: list objects page: %w", err)
 	}
@@ -1023,10 +1131,9 @@ func (s *SQLStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID s
 // plan for the same cursor reads every remaining row of the kind into a TopN.
 // A store without that index (a populated store never migrated) answers the
 // same rows through idx_og_objects_kind_owner, which every store has.
-const ObjectsByKindOwnerComputerPageSQL = `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-	 FROM og_objects
-	 WHERE object_kind = ? AND owner_id = ? AND computer_id = ? AND canonical_id > ?
-	 ORDER BY canonical_id ASC LIMIT ?`
+const ObjectsByKindOwnerComputerPageSQL = objectSelectSQL + `
+	 WHERE h.object_kind = ? AND h.owner_id = ? AND h.computer_id = ? AND h.canonical_id > ?
+	 ORDER BY h.canonical_id ASC LIMIT ?`
 
 // ListObjectsByKindOwnerComputerPage pages the objects of one kind, owner and
 // computer_id in canonical-ID order, strictly after afterCanonicalID. Use it
@@ -1090,6 +1197,18 @@ func (s *SQLStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPath
 	return out, rows.Err()
 }
 
+// objectsByEdgeToSQL is ListObjectsByEdgeTo's query: the edge lookup, the
+// header by canonical_id, the body by obj_id. CROSS JOIN keeps the edges
+// outer: canonical_id is no longer the primary key, and without it the
+// planner reads the whole kind through idx_og_objects_kind_id and probes
+// edges per row.
+const objectsByEdgeToSQL = `SELECT ` + objectColumnsSQL + `
+		 FROM og_edges e
+		 CROSS JOIN og_objects h ON h.canonical_id = e.from_id
+		 LEFT JOIN og_bodies b ON b.obj_id = h.obj_id
+		 WHERE e.to_id = ? AND e.kind = ? AND h.object_kind = ? AND e.tombstone = 0
+		 ORDER BY h.canonical_id ASC`
+
 // ListObjectsByEdgeTo returns objects of one kind that hold a live edge of
 // edgeKind pointing at toID. The join rides the indexed og_edges.to_id lookup
 // plus the og_objects primary key — no metadata JSON scan.
@@ -1097,13 +1216,7 @@ func (s *SQLStore) ListObjectsByEdgeTo(ctx context.Context, toID string, edgeKin
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT o.canonical_id, o.object_kind, o.owner_id, o.computer_id, o.version_id, o.content_hash, o.body, o.metadata, o.created_at, o.updated_at, o.tombstone, o.superseded_by
-		 FROM og_objects o
-		 JOIN og_edges e ON e.from_id = o.canonical_id
-		 WHERE e.to_id = ? AND e.kind = ? AND o.object_kind = ? AND e.tombstone = 0
-		 ORDER BY o.canonical_id ASC`,
-		toID, string(edgeKind), objKind)
+	rows, err := s.db.QueryContext(ctx, objectsByEdgeToSQL, toID, string(edgeKind), objKind)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: list objects by edge to: %w", err)
 	}
@@ -1119,6 +1232,13 @@ func (s *SQLStore) ListObjectsByEdgeTo(ctx context.Context, toID string, edgeKin
 	return out, rows.Err()
 }
 
+// countObjectsByEdgeToSQL is CountObjectsByEdgeTo's query: header-only.
+const countObjectsByEdgeToSQL = `SELECT COUNT(*),
+				COALESCE(MAX(CAST(json_extract(o.metadata, '$.version_number') AS INTEGER)), -1)
+		 FROM og_objects o
+		 JOIN og_edges e ON e.from_id = o.canonical_id
+		 WHERE e.to_id = ? AND e.kind = ? AND o.object_kind = ? AND e.tombstone = 0 AND o.tombstone = 0`
+
 // CountObjectsByEdgeTo returns the count of objects of one kind holding a live
 // edge of edgeKind to toID, plus the maximum version_number lifted from object
 // metadata — the indexed edge join without decoding a single body. Used by the
@@ -1128,12 +1248,7 @@ func (s *SQLStore) CountObjectsByEdgeTo(ctx context.Context, toID string, edgeKi
 		return 0, -1, fmt.Errorf("objectgraph sql: nil store")
 	}
 	maxVersion = -1
-	err = s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*),
-				COALESCE(MAX(CAST(json_extract(o.metadata, '$.version_number') AS INTEGER)), -1)
-		 FROM og_objects o
-		 JOIN og_edges e ON e.from_id = o.canonical_id
-		 WHERE e.to_id = ? AND e.kind = ? AND o.object_kind = ? AND e.tombstone = 0 AND o.tombstone = 0`,
+	err = s.db.QueryRowContext(ctx, countObjectsByEdgeToSQL,
 		toID, string(edgeKind), objKind).Scan(&count, &maxVersion)
 	if err != nil {
 		return 0, -1, fmt.Errorf("objectgraph sql: count objects by edge to: %w", err)
@@ -1158,31 +1273,10 @@ func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID 
 			return objs, nil
 		}
 	}
-	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE object_kind = ? AND owner_id = ?`
-	args := []any{kind, ownerID}
-	for _, match := range matches {
-		if match.JSONPath == "" {
-			return nil, fmt.Errorf("objectgraph sql: body JSON path is required")
-		}
-		if match.MissingMatchesEmpty {
-			if match.Value != "" {
-				return nil, fmt.Errorf("objectgraph sql: missing body field can only match an empty value")
-			}
-			query += ` AND (json_extract(` + bodyTextSQL + `, ?) IS NULL OR ` + jsonTextSQL(bodyTextSQL, `?`) + ` = ?)`
-			args = append(args, match.JSONPath)
-			args = append(args, jsonTextArgs(match.JSONPath)...)
-			args = append(args, match.Value)
-			continue
-		}
-		query += ` AND ` + jsonTextSQL(bodyTextSQL, `?`) + ` = ?`
-		args = append(args, jsonTextArgs(match.JSONPath)...)
-		args = append(args, match.Value)
+	query, args, err := ownerBodySQL(kind, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
 	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, NormalizedLimit(limit))
-
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph sql: list by owner and body: %w", err)
@@ -1199,18 +1293,48 @@ func (s *SQLStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID 
 	return out, rows.Err()
 }
 
+// ownerBodySQL is ListObjectsByOwnerAndBody's scan: the owner's headers of
+// the kind newest first, each body by obj_id, the body predicates on b.body
+// ("body" in bodyTextSQL: only og_bodies has a body column).
+func ownerBodySQL(kind, ownerID string, matches []JSONFieldMatch, limit int) (string, []any, error) {
+	query := objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.owner_id = ?`
+	args := []any{kind, ownerID}
+	for _, match := range matches {
+		if match.JSONPath == "" {
+			return "", nil, fmt.Errorf("objectgraph sql: body JSON path is required")
+		}
+		if match.MissingMatchesEmpty {
+			if match.Value != "" {
+				return "", nil, fmt.Errorf("objectgraph sql: missing body field can only match an empty value")
+			}
+			query += ` AND (json_extract(` + bodyTextSQL + `, ?) IS NULL OR ` + jsonTextSQL(bodyTextSQL, `?`) + ` = ?)`
+			args = append(args, match.JSONPath)
+			args = append(args, jsonTextArgs(match.JSONPath)...)
+			args = append(args, match.Value)
+			continue
+		}
+		query += ` AND ` + jsonTextSQL(bodyTextSQL, `?`) + ` = ?`
+		args = append(args, jsonTextArgs(match.JSONPath)...)
+		args = append(args, match.Value)
+	}
+	query += ` ORDER BY h.updated_at DESC LIMIT ?`
+	args = append(args, NormalizedLimit(limit))
+	return query, args, nil
+}
+
 // recordsByInboxSeqSQL is ListRecordsByInboxSeq's query: an index range on
 // (object_kind, inbox, inbox_seq), ordered by every index column so the
 // engine reads it in index order. The plan-shape tests EXPLAIN this text.
 func recordsByInboxSeqSQL(inbox string, afterSeq, throughSeq int64) (string, []any) {
-	query := `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND og_rec_inbox = ? AND ` + recordInboxSeqColumn + ` > ?`
+	query := objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.og_rec_inbox = ? AND h.` + recordInboxSeqColumn + ` > ?`
 	args := []any{string(commitmentRecordKind), inbox, afterSeq}
 	if throughSeq > 0 {
-		query += ` AND ` + recordInboxSeqColumn + ` <= ?`
+		query += ` AND h.` + recordInboxSeqColumn + ` <= ?`
 		args = append(args, throughSeq)
 	}
-	query += ` ORDER BY object_kind ASC, og_rec_inbox ASC, ` + recordInboxSeqColumn + ` ASC`
+	query += ` ORDER BY h.object_kind ASC, h.og_rec_inbox ASC, h.` + recordInboxSeqColumn + ` ASC`
 	return query, args
 }
 
@@ -1236,9 +1360,9 @@ func (s *SQLStore) ListRecordsByInboxSeq(ctx context.Context, inbox string, afte
 // (object_kind, owner_id, og_rec_claim, updated_at, canonical_id), ordered
 // by every index column descending so the engine stops after limit rows.
 func commitmentClaimSQL(ownerID string, limit int) (string, []any) {
-	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
-		 WHERE object_kind = ? AND owner_id = ? AND ` + recordClaimColumn + ` = 1
-		 ORDER BY object_kind DESC, owner_id DESC, ` + recordClaimColumn + ` DESC, updated_at DESC, canonical_id DESC LIMIT ?`,
+	return objectSelectSQL + `
+		 WHERE h.object_kind = ? AND h.owner_id = ? AND h.` + recordClaimColumn + ` = 1
+		 ORDER BY h.object_kind DESC, h.owner_id DESC, h.` + recordClaimColumn + ` DESC, h.updated_at DESC, h.canonical_id DESC LIMIT ?`,
 		[]any{string(commitmentRecordKind), ownerID, NormalizedLimit(limit)}
 }
 
@@ -1278,32 +1402,111 @@ func (s *SQLStore) queryObjects(ctx context.Context, query string, args ...any) 
 	return out, rows.Err()
 }
 
-// ObjectRef is an og_objects row without the body payload. Boot and other
-// bounded owner scans use it so json_extract + blob materialization of
-// every choir.run cannot OOM the guest.
-type ObjectRef struct {
-	CanonicalID string
-	ComputerID  string
-	Metadata    json.RawMessage
-	UpdatedAt   time.Time
-	Tombstone   bool
+// HeaderRow is one og_objects header: the object without its body (Body is
+// nil) and the row's obj_id, the key of its og_bodies row inside the read
+// transaction that read it. It is never marshalled and never leaves the
+// transaction's caller as state.
+type HeaderRow struct {
+	ObjID int64
+	Object
 }
 
-// refsByKindOwnerSQL is the newest refs of one kind for one owner, read in
-// idx_og_objects_kind_owner_updated order so only the first limit rows are
-// read: metadata sits after body, so each row read reads its body, and a
-// sort read every row of the kind first.
-func refsByKindOwnerSQL(kind, ownerID string, limit int) (string, []any) {
-	return `SELECT canonical_id, computer_id, metadata, updated_at, tombstone
-		 FROM og_objects
+// headerColumnsSQL is the select list of a header read, scanned by
+// scanHeader.
+const headerColumnsSQL = `obj_id, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata, created_at, updated_at, tombstone, superseded_by`
+
+// scanHeader scans one headerColumnsSQL row.
+func scanHeader(row rowScanner) (HeaderRow, error) {
+	var h HeaderRow
+	var metadata string
+	if err := row.Scan(&h.ObjID, &h.CanonicalID, &h.ObjectKind, &h.OwnerID, &h.ComputerID,
+		&h.VersionID, &h.ContentHash, &metadata, &h.CreatedAt, &h.UpdatedAt, &h.Tombstone, &h.SupersededBy); err != nil {
+		return HeaderRow{}, fmt.Errorf("objectgraph sql: scan header: %w", err)
+	}
+	h.Metadata = json.RawMessage(metadata)
+	h.CreatedAt = h.CreatedAt.UTC()
+	h.UpdatedAt = h.UpdatedAt.UTC()
+	return h, nil
+}
+
+// headersByKindOwnerSQL is ListObjectsByKindOwnerWhere's phase 1: the newest
+// headers of one kind for one owner, read in idx_og_objects_kind_owner_updated
+// order, so a limited read stops after limit index entries. limit < 0 reads
+// every header with no LIMIT (the engine sizes a LIMIT's top-N buffer up
+// front, so a huge limit is not the same thing).
+func headersByKindOwnerSQL(kind, ownerID string, limit int) (string, []any) {
+	query := `SELECT ` + headerColumnsSQL + ` FROM og_objects
 		 WHERE object_kind = ? AND owner_id = ?
-		 ORDER BY updated_at DESC LIMIT ?`, []any{kind, ownerID, NormalizedLimit(limit)}
+		 ORDER BY updated_at DESC`
+	args := []any{kind, ownerID}
+	if limit >= 0 {
+		query += ` LIMIT ?`
+		args = append(args, NormalizedLimit(limit))
+	}
+	return query, args
 }
 
-// ListObjectRefsByKindOwner returns the newest objects of one kind for one
-// owner (refsByKindOwnerSQL). It does not return the body, but a row read
-// reads it.
-func (s *SQLStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID string, limit int) ([]ObjectRef, error) {
+// bodiesByIDSQL is a body-only fetch of n obj_ids: each one a rowid seek of
+// og_bodies.
+func bodiesByIDSQL(n int) string {
+	return `SELECT obj_id, body FROM og_bodies WHERE obj_id IN (` + strings.TrimSuffix(strings.Repeat("?,", n), ",") + `)`
+}
+
+// attachBodies fills each header's body from og_bodies inside tx, in
+// snapshotFetchBatch-sized batches. A header without a body row is
+// ErrMissingBody. The obj_ids are only meaningful inside tx: a deleted row's
+// obj_id can be reused by a later insert.
+func attachBodies(ctx context.Context, tx *sql.Tx, headers []HeaderRow) ([]Object, error) {
+	out := make([]Object, len(headers))
+	at := make(map[int64]int, len(headers))
+	for i, h := range headers {
+		out[i] = h.Object
+		at[h.ObjID] = i
+	}
+	found := make([]bool, len(headers))
+	for start := 0; start < len(headers); start += snapshotFetchBatch {
+		batch := headers[start:min(start+snapshotFetchBatch, len(headers))]
+		args := make([]any, len(batch))
+		for i, h := range batch {
+			args[i] = h.ObjID
+		}
+		rows, err := tx.QueryContext(ctx, bodiesByIDSQL(len(batch)), args...)
+		if err != nil {
+			return nil, fmt.Errorf("objectgraph sql: fetch bodies: %w", err)
+		}
+		for rows.Next() {
+			var id int64
+			var body []byte
+			if err := rows.Scan(&id, &body); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("objectgraph sql: scan body: %w", err)
+			}
+			if i, ok := at[id]; ok {
+				out[i].Body = body
+				found[i] = true
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("objectgraph sql: iterate bodies: %w", err)
+		}
+		rows.Close()
+	}
+	for i, ok := range found {
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrMissingBody, out[i].CanonicalID)
+		}
+	}
+	return out, nil
+}
+
+// ListObjectsByKindOwnerWhere returns the objects of one kind for one owner
+// whose header keep accepts, newest first, in one read-only transaction:
+// phase 1 reads the headers (headersByKindOwnerSQL: the newest limit, or all
+// when limit < 0) and runs keep on each, which sees no body; phase 2 reads
+// the bodies of the kept rows only, from og_bodies by obj_id. A keep error
+// ends the read with that error. A nil keep keeps every row.
+func (s *SQLStore) ListObjectsByKindOwnerWhere(ctx context.Context, kind, ownerID string, limit int, keep func(HeaderRow) (bool, error)) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph sql: nil store")
 	}
@@ -1311,58 +1514,48 @@ func (s *SQLStore) ListObjectRefsByKindOwner(ctx context.Context, kind, ownerID 
 	if ownerID == "" {
 		return nil, fmt.Errorf("objectgraph sql: owner_id is required")
 	}
-	query, args := refsByKindOwnerSQL(kind, ownerID, limit)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, fmt.Errorf("objectgraph sql: list refs by kind owner: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: begin kind owner tx: %w", err)
 	}
-	defer rows.Close()
-	var out []ObjectRef
-	for rows.Next() {
-		var ref ObjectRef
-		var metadata string
-		if scanErr := rows.Scan(&ref.CanonicalID, &ref.ComputerID, &metadata, &ref.UpdatedAt, &ref.Tombstone); scanErr != nil {
-			return nil, scanErr
-		}
-		ref.Metadata = json.RawMessage(metadata)
-		out = append(out, ref)
-	}
-	return out, rows.Err()
-}
-
-// ListAllObjectRefsByKindOwner returns every object header of one kind for one
-// owner using idx_og_objects_kind_owner, without LIMIT and without body.
-// Prefer it over ReadObjectSnapshot when the caller filters or sorts after
-// decoding: run-kind rows are a small fraction of the object graph.
-func (s *SQLStore) ListAllObjectRefsByKindOwner(ctx context.Context, kind, ownerID string) ([]ObjectRef, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("objectgraph sql: nil store")
-	}
-	ownerID = strings.TrimSpace(ownerID)
-	if ownerID == "" {
-		return nil, fmt.Errorf("objectgraph sql: owner_id is required")
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, computer_id, metadata, updated_at, tombstone
-		 FROM og_objects
-		 WHERE object_kind = ? AND owner_id = ?
-		 ORDER BY updated_at DESC`,
-		kind, ownerID)
+	defer func() { _ = tx.Rollback() }()
+	query, args := headersByKindOwnerSQL(kind, ownerID, limit)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("objectgraph sql: list all refs by kind owner: %w", err)
+		return nil, fmt.Errorf("objectgraph sql: list headers by kind owner: %w", err)
 	}
-	defer rows.Close()
-	var out []ObjectRef
+	var kept []HeaderRow
 	for rows.Next() {
-		var ref ObjectRef
-		var metadata string
-		if scanErr := rows.Scan(&ref.CanonicalID, &ref.ComputerID, &metadata, &ref.UpdatedAt, &ref.Tombstone); scanErr != nil {
-			return nil, scanErr
+		h, err := scanHeader(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
 		}
-		ref.Metadata = json.RawMessage(metadata)
-		out = append(out, ref)
+		if keep != nil {
+			ok, err := keep(h)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+		}
+		kept = append(kept, h)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("objectgraph sql: iterate headers by kind owner: %w", err)
+	}
+	rows.Close()
+	objects, err := attachBodies(ctx, tx, kept)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("objectgraph sql: kind owner commit: %w", err)
+	}
+	return objects, nil
 }
 
 // JSONBodyFieldRow is extracted JSON body fields plus computer_id. Management
@@ -1374,9 +1567,10 @@ type JSONBodyFieldRow struct {
 	Fields      []string
 }
 
-// jsonBodyFieldsFromSQL is ListJSONBodyFieldsByKindOwner's FROM clause, read
-// in idx_og_objects_kind_owner_updated order (see refsByKindOwnerSQL).
-const jsonBodyFieldsFromSQL = ` FROM og_objects WHERE object_kind = ? AND owner_id = ? ORDER BY updated_at DESC LIMIT ?`
+// jsonBodyFieldsFromSQL is ListJSONBodyFieldsByKindOwner's FROM clause: the
+// headers in idx_og_objects_kind_owner_updated order (the first limit index
+// entries), each body by obj_id.
+const jsonBodyFieldsFromSQL = objectFromSQL + ` WHERE h.object_kind = ? AND h.owner_id = ? ORDER BY h.updated_at DESC LIMIT ?`
 
 // ListJSONBodyFieldsByKindOwner extracts JSON body fields for one kind+owner
 // using idx_og_objects_kind_owner. It does not SELECT body.
@@ -1391,7 +1585,7 @@ func (s *SQLStore) ListJSONBodyFieldsByKindOwner(ctx context.Context, kind, owne
 	if len(jsonPaths) == 0 {
 		return nil, fmt.Errorf("objectgraph sql: json path is required")
 	}
-	query := `SELECT canonical_id, computer_id`
+	query := `SELECT h.canonical_id, h.computer_id`
 	args := make([]any, 0, len(jsonPaths)+3)
 	for _, path := range jsonPaths {
 		if strings.TrimSpace(path) == "" {
@@ -1551,8 +1745,7 @@ func (s *SQLStore) DeleteObject(ctx context.Context, id string) error {
 	if s.intercept != nil {
 		// Read the object, then append the tombstone through the interceptor
 		// (a host round-trip) with no connection held.
-		obj, err := scanObject(s.db.QueryRowContext(ctx,
-			`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE canonical_id = ?`, id))
+		obj, err := scanObject(s.db.QueryRowContext(ctx, objectSelectSQL+` WHERE h.canonical_id = ?`, id))
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return nil
@@ -1592,18 +1785,28 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+// ErrMissingBody is a header whose og_bodies row is missing: a broken
+// invariant (every header has exactly one body row), reported instead of
+// reading as a NULL body.
+var ErrMissingBody = errors.New("objectgraph sql: object header has no body row")
+
+// scanObject scans one objectColumnsSQL row.
 func scanObject(row rowScanner) (Object, error) {
 	var obj Object
 	var metadata string
+	var bodyID sql.NullInt64
 	if err := row.Scan(
 		&obj.CanonicalID, &obj.ObjectKind, &obj.OwnerID, &obj.ComputerID,
-		&obj.VersionID, &obj.ContentHash, &obj.Body, &metadata,
+		&obj.VersionID, &obj.ContentHash, &bodyID, &obj.Body, &metadata,
 		&obj.CreatedAt, &obj.UpdatedAt, &obj.Tombstone, &obj.SupersededBy,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return Object{}, ErrNotFound
 		}
 		return Object{}, fmt.Errorf("objectgraph sql: scan object: %w", err)
+	}
+	if !bodyID.Valid {
+		return Object{}, fmt.Errorf("%w: %s", ErrMissingBody, obj.CanonicalID)
 	}
 	obj.Metadata = json.RawMessage(metadata)
 	obj.CreatedAt = obj.CreatedAt.UTC()

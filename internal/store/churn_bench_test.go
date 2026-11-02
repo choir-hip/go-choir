@@ -485,7 +485,7 @@ func runChurnLayout(t *testing.T, dir string, layout churnLayout, ogRows int) ch
 	if layout.clustered {
 		ogDDL = clusteredOGDDL()
 	}
-	for _, ddl := range []string{storeMetaDDL, schemaDDL, ogDDL, objectgraph.ChoirEventUpdatedIndexDDL} {
+	for _, ddl := range []string{storeMetaDDL, schemaDDL, ogDDL} {
 		if _, err := db.Exec(ddl); err != nil {
 			t.Fatalf("%s: ddl: %v", layout.name, err)
 		}

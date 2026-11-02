@@ -934,35 +934,30 @@ func (s *Store) ListRecentRunsByOwner(ctx context.Context, ownerID, computerID s
 	if graph == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
-	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
-	if err != nil {
-		return nil, err
-	}
-	runs := make([]types.RunRecord, 0, len(refs))
-	for _, ref := range refs {
+	objs, err := graph.ListObjectsByKindOwnerWhere(ctx, string(ogKindRun), ownerID, limit, func(ref objectgraph.HeaderRow) (bool, error) {
 		if ref.Tombstone {
-			continue
+			return false, nil
 		}
 		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
-			continue
+			return false, nil
 		}
 		meta := map[string]any{}
 		if len(ref.Metadata) > 0 {
 			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
-				return nil, fmt.Errorf("list recent runs: decode metadata %s: %w", ref.CanonicalID, err)
+				return false, fmt.Errorf("list recent runs: decode metadata %s: %w", ref.CanonicalID, err)
 			}
 		}
 		state := ogMetadataText(meta, "state")
 		if state != string(types.RunCompleted) && state != string(types.RunFailed) && state != string(types.RunCancelled) {
-			continue
+			return false, nil
 		}
-		if ogMetadataText(meta, "requested_by_run_id") == "" {
-			continue
-		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if err != nil {
-			return nil, fmt.Errorf("list recent runs: get %s: %w", ref.CanonicalID, err)
-		}
+		return ogMetadataText(meta, "requested_by_run_id") != "", nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
@@ -995,42 +990,34 @@ func (s *Store) ListPassivatedPersistentManagementControlRunsByOwner(ctx context
 	if graph == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
-	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
-	if err != nil {
-		return nil, err
-	}
-	runs := make([]types.RunRecord, 0)
-	for _, ref := range refs {
+	objs, err := graph.ListObjectsByKindOwnerWhere(ctx, string(ogKindRun), ownerID, limit, func(ref objectgraph.HeaderRow) (bool, error) {
 		if ref.Tombstone {
-			continue
+			return false, nil
 		}
 		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
-			continue
+			return false, nil
 		}
 		meta := map[string]any{}
 		if len(ref.Metadata) > 0 {
 			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
-				return nil, fmt.Errorf("list passivated super runs: decode metadata %s: %w", ref.CanonicalID, err)
+				return false, fmt.Errorf("list passivated super runs: decode metadata %s: %w", ref.CanonicalID, err)
 			}
 		}
 		if ogMetadataText(meta, "state") != string(types.RunPassivated) {
-			continue
+			return false, nil
 		}
 		headerAgentID := ogMetadataText(meta, "agent_id")
 		if agentID != "" {
-			if headerAgentID != agentID {
-				continue
-			}
-		} else {
-			profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
-			if profile != agentprofile.Management && !strings.HasPrefix(headerAgentID, agentprofile.Management+":") {
-				continue
-			}
+			return headerAgentID == agentID, nil
 		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if err != nil {
-			return nil, fmt.Errorf("list passivated super runs: get %s: %w", ref.CanonicalID, err)
-		}
+		profile := strings.ToLower(ogMetadataText(meta, "agent_profile"))
+		return profile == agentprofile.Management || strings.HasPrefix(headerAgentID, agentprofile.Management+":"), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, obj := range objs {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
@@ -1082,39 +1069,29 @@ func (s *Store) ListRunsByOwnerStates(ctx context.Context, ownerID, computerID s
 	if graph == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
-	var refs []objectgraph.ObjectRef
-	var err error
-	if limit == ListAllRunHeaders {
-		// Every header, with no LIMIT: the engine sizes a LIMIT's top-N
-		// buffer up front, so a huge limit exhausts memory (Cut 1 B2).
-		refs, err = graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID)
-	} else {
-		refs, err = graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
-	}
-	if err != nil {
-		return nil, err
-	}
-	runs := make([]types.RunRecord, 0)
-	for _, ref := range refs {
+	// ListAllRunHeaders (-1) reads every header with no LIMIT: the engine
+	// sizes a LIMIT's top-N buffer up front, so a huge limit exhausts memory
+	// (Cut 1 B2).
+	objs, err := graph.ListObjectsByKindOwnerWhere(ctx, string(ogKindRun), ownerID, limit, func(ref objectgraph.HeaderRow) (bool, error) {
 		if ref.Tombstone {
-			continue
+			return false, nil
 		}
 		if computerID != "" && strings.TrimSpace(ref.ComputerID) != "" && strings.TrimSpace(ref.ComputerID) != computerID {
-			continue
+			return false, nil
 		}
 		meta := map[string]any{}
 		if len(ref.Metadata) > 0 {
 			if err := json.Unmarshal(ref.Metadata, &meta); err != nil {
-				return nil, fmt.Errorf("list runs by owner states: decode metadata %s: %w", ref.CanonicalID, err)
+				return false, fmt.Errorf("list runs by owner states: decode metadata %s: %w", ref.CanonicalID, err)
 			}
 		}
-		if !wanted[ogMetadataText(meta, "state")] {
-			continue
-		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if err != nil {
-			return nil, fmt.Errorf("list runs by owner states: get %s: %w", ref.CanonicalID, err)
-		}
+		return wanted[ogMetadataText(meta, "state")], nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0)
+	for _, obj := range objs {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err

@@ -91,7 +91,7 @@ func openDerivedStore(t *testing.T) (*sql.DB, *SQLStore) {
 // derived-key maintenance, as a writer that predates the side table would.
 func rawOldBinaryPut(t *testing.T, db *sql.DB, obj Object) {
 	t.Helper()
-	if _, err := db.Exec(upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
+	if _, err := WriteObjectTx(context.Background(), db, obj); err != nil {
 		t.Fatalf("raw put %s: %v", obj.CanonicalID, err)
 	}
 }
@@ -148,7 +148,7 @@ func truthSideRows(t *testing.T, db *sql.DB) map[string]sideRow {
 		for _, h := range heads {
 			var v sql.NullString
 			ok := true
-			if err := db.QueryRow(`SELECT substr(`+fam.expr+`, 1, 255) FROM og_objects WHERE canonical_id = ?`, h.id).Scan(&v); err != nil {
+			if err := db.QueryRow(`SELECT substr(`+fam.expr+`, 1, 255) FROM og_objects LEFT JOIN og_bodies USING (obj_id) WHERE canonical_id = ?`, h.id).Scan(&v); err != nil {
 				v, ok = sql.NullString{}, false
 			}
 			out[h.id+"|"+fam.Name] = sideRow{Key: fam.Name, Owner: h.owner, Hash: h.hash, Value: v, UpdatedAt: h.at, OK: ok}
@@ -377,20 +377,12 @@ func TestOpenDoesNotTouchOgObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	for start := 0; start < rows; start += 500 {
-		var sb strings.Builder
-		var args []any
-		sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
-		for i := start; i < start+500; i++ {
-			if i > start {
-				sb.WriteString(",")
-			}
-			sb.WriteString("(?,?,?,?,?,?,?,?,?,?,?,?)")
-			kind := []ObjectKind{testRunKind, commitmentRecordKind, testSourceRefKind, "choir.agent"}[i%4]
-			args = append(args, fmt.Sprintf("row-%06d", i), string(kind), "o1", "c1", "v", fmt.Sprintf("h-%d", i),
-				fmt.Sprintf(`{"addressee":"a%d"}`, i%50), fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90), at, at, false, "")
-		}
-		if _, err := tx.Exec(sb.String(), args...); err != nil {
+	for i := 0; i < rows; i++ {
+		kind := []ObjectKind{testRunKind, commitmentRecordKind, testSourceRefKind, "choir.agent"}[i%4]
+		obj := Object{CanonicalID: fmt.Sprintf("row-%06d", i), ObjectKind: kind, OwnerID: "o1", ComputerID: "c1", VersionID: "v",
+			ContentHash: fmt.Sprintf("h-%d", i), Body: []byte(fmt.Sprintf(`{"addressee":"a%d"}`, i%50)),
+			Metadata: []byte(fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90)), CreatedAt: at, UpdatedAt: at}
+		if _, err := WriteObjectTx(ctx, tx, obj); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -872,23 +864,16 @@ func TestValidatorFirstPassAndRepeatPassOnManyRows(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for start := 0; start < perKind; start += 400 {
-			var sb strings.Builder
-			var args []any
-			sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
-			for i := start; i < start+400; i++ {
-				if i > start {
-					sb.WriteString(",")
-				}
-				sb.WriteString("(?,?,?,?,?,?,?,?,?,?,?,?)")
-				id, err := BuildCanonicalID(kind, "o1", fmt.Sprintf("key-%06d", i))
-				if err != nil {
-					t.Fatal(err)
-				}
-				meta, body := make(i)
-				args = append(args, id, string(kind), "o1", "c1", "v", ContentHash(kind, []byte(body), []byte(meta)), body, meta, at.Add(time.Duration(i)*time.Second), at.Add(time.Duration(i)*time.Second), false, "")
+		for i := 0; i < perKind; i++ {
+			id, err := BuildCanonicalID(kind, "o1", fmt.Sprintf("key-%06d", i))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if _, err := tx.Exec(sb.String(), args...); err != nil {
+			meta, body := make(i)
+			ts := at.Add(time.Duration(i) * time.Second)
+			obj := Object{CanonicalID: id, ObjectKind: kind, OwnerID: "o1", ComputerID: "c1", VersionID: "v",
+				ContentHash: ContentHash(kind, []byte(body), []byte(meta)), Body: []byte(body), Metadata: []byte(meta), CreatedAt: ts, UpdatedAt: ts}
+			if _, err := WriteObjectTx(ctx, tx, obj); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -951,7 +936,7 @@ func assertSideMatchesTruthSample(t *testing.T, db *sql.DB) {
 		t.Fatalf("%d key rows for %d keyed objects", len(got), n)
 	}
 	for _, fam := range derivedFamilies {
-		rows, err := db.Query(`SELECT canonical_id, substr(`+fam.expr+`, 1, 255) FROM og_objects WHERE object_kind = ? ORDER BY canonical_id LIMIT 300`, string(fam.Kind))
+		rows, err := db.Query(`SELECT canonical_id, substr(`+fam.expr+`, 1, 255) FROM og_objects LEFT JOIN og_bodies USING (obj_id) WHERE object_kind = ? ORDER BY canonical_id LIMIT 300`, string(fam.Kind))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -981,7 +966,7 @@ func projectorPut(t *testing.T, db *sql.DB, d *DerivedKeys, obj Object, failMain
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, upsertObjectSQL, upsertObjectArgs(obj)...); err != nil {
+	if _, err := WriteObjectTx(ctx, tx, obj); err != nil {
 		t.Fatalf("projector put %s: %v", obj.CanonicalID, err)
 	}
 	if failMaintain {
