@@ -3296,7 +3296,6 @@ in
     jq
     nodejs
     python3
-    pkg-config
     goChoirPackages.maildctl
     # PostgreSQL client tools for operators (psql, pg_dump).
     postgresql_17

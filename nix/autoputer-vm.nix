@@ -378,6 +378,24 @@ in
     # ephemeral runner.
     storeDiskErofsFlags = [ "-zlz4" ];
 
+    # microvm.nix builds rootfs.ext4 (an ESP with a systemd-boot entry, for
+    # hypervisors that cannot load a kernel directly) with libguestfs, which
+    # nixpkgs now marks broken. The disk is never read by the guest: the root
+    # is microvm.nix's default tmpfs, Firecracker loads the kernel and initrd
+    # itself, and the store is the erofs disk. The host still attaches it
+    # first, so the data drive keeps its /dev/vdb position, and releases still
+    # carry the file. A GPT disk with an empty FAT ESP of the same shape,
+    # 16 MiB, stands in for it (the aarch64 guest did this already).
+    bootDisk = lib.mkForce (pkgs.runCommand "microvm-bootdisk.img" {
+      nativeBuildInputs = [ pkgs.buildPackages.gptfdisk pkgs.buildPackages.dosfstools ];
+    } ''
+      truncate -s 16M $out
+      sgdisk --new=1:2048:0 --typecode=1:EF00 --change-name=1:ESP $out >/dev/null
+      truncate -s 14M esp.img
+      mkfs.vfat -n ESP esp.img >/dev/null
+      dd if=esp.img of=$out bs=512 seek=2048 conv=notrunc status=none
+    '');
+
     # No virtiofs or 9p shares. With shares = [], microvm.nix
     # automatically generates an erofs disk for the nix store closure.
     # This is more efficient than virtiofs for our use case because:
@@ -1060,7 +1078,6 @@ EOF
         nodejs
         toolPkgs.gcc
         toolPkgs.binutils
-        pkg-config
         gnutar
         systemd
         procps
@@ -1086,7 +1103,7 @@ EOF
       # dependencies remain). The capsule executor appends these bin dirs to
       # every capsule workload's PATH
       # (docs/archive/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
-      CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath [ toolPkgs.gcc toolPkgs.binutils pkgs.pkg-config ];
+      CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath [ toolPkgs.gcc toolPkgs.binutils ];
       # The frontend's locked dependencies, carried to capsule workloads like
       # the toolchain above, so a frontend build whose package files match
       # needs no package registry (docs/design/delegate-one-round-build-2026-10-21.md).
@@ -1183,7 +1200,6 @@ EOF
     gnused
     nodejs
     perl
-    pkg-config
     procps
     iproute2
     documentPython

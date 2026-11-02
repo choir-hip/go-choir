@@ -152,6 +152,12 @@ jobs:
             "searxng|nixosConfigurations.go-choir-b.pkgs.searxng"
             "python3|nixosConfigurations.go-choir-b.pkgs.python3"
             "nodejs|nixosConfigurations.go-choir-b.pkgs.nodejs"
+            "postgresql_17|nixosConfigurations.go-choir-b.pkgs.postgresql_17"
+            "sqlite|nixosConfigurations.go-choir-b.pkgs.sqlite"
+            "restic|nixosConfigurations.go-choir-b.pkgs.restic"
+            "chromium (guest)|nixosConfigurations.go-choir-b.pkgs.chromium"
+            "claude-code (guest)|nixosConfigurations.go-choir-b.pkgs.claude-code"
+            "libreoffice (guest)|nixosConfigurations.go-choir-b.pkgs.libreoffice"
           )
           ver() { nix eval --raw "$1#$2.version" 2>/dev/null || echo "?"; }
           git worktree add -q "$RUNNER_TEMP/main" origin/main
