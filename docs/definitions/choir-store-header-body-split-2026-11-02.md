@@ -105,8 +105,8 @@ now:
     edge: missing_oracle
     delta_o: a per-query bytes-read figure on the guest (SQLite page reads per statement)
     scope_if_supported: the guest SQLite store
-    status: testing
-    evidence_refs: [docs/definitions/choir-guest-isolation-2026-11-01.ledger.md (2026-11-01 reread entries)]
+    status: supported  # synthetic rung (S0): split reads 3-40x less than today and than body-last on every header read; body reads unchanged
+    evidence_refs: [docs/evidence/store-layout-reads-2026-11-01.md, docs/definitions/choir-guest-isolation-2026-11-01.ledger.md (2026-11-01 reread entries)]
   decision:
     what: split og_objects and choir_events into header and body tables (direction ratified; body-last is measured as the control in S0)
     kind: architecture
@@ -122,9 +122,10 @@ now:
       whether a cheaper column reorder (body last) gets most of the win.
     next_observation: S0 page reads per statement, three layouts; the baseline is the paper's memory meter from 2026-11-01T19:32Z (guest isolation checkpoint numbers)
   blocker_or_risk: the migration of the paper's store (2.5M events, multi-GB) under the boot and restart rules; every guest deploy reboots every guest
-  next_action: build the S0 harness (a Go test or tool under internal/store that counts SQLite page reads per statement via sqlite3_stmt_status / dbstat) and run the three layouts
+  next_action: S1 design the header/body tables, the writer and reader cutover, the derived-key and replay fingerprints, and the at-boot migration of a store (planned, marker-backed), from the 46 files that name og_objects or choir_events
 
-receipts: []
+receipts:
+  - S0 2026-11-01: split chosen over body-last; docs/evidence/store-layout-reads-2026-11-01.md
 ---
 
 # Store Header/Body Split
