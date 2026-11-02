@@ -54,6 +54,8 @@ type replayHealthGate struct {
 	pending  bool
 	appender *computerevent.ComputerEventAppender
 	base     http.HandlerFunc
+	// wedge, when set, replaces the appender's WedgeStatus (tests).
+	wedge func() computerevent.WedgeStatus
 	// progress ticks during post-replay work (vocabulary migration, fence
 	// verification) so the host stall detector sees liveness while the
 	// applied sequence is stationary.
@@ -122,7 +124,11 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recorder := &statusRecorder{ResponseWriter: w}
-	base(recorder, r)
+	if wedge := g.wedgeStatus(app); wedge.Persistent {
+		serveDegradedHealth(recorder, r, base, wedge)
+	} else {
+		base(recorder, r)
+	}
 	if recorder.status == http.StatusOK {
 		g.mu.Lock()
 		g.readyServed = true

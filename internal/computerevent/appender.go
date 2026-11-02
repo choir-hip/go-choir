@@ -170,6 +170,8 @@ type ComputerEventAppender struct {
 	// recoveryFailedAt bounds a recovery that keeps failing (a poison
 	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
 	recoveryFailedAt   time.Time
+	wedge              wedgeState
+	wedgeNow           func() time.Time // test clock; nil is time.Now
 	replaySeq          uint64
 	replayCommittedSeq uint64
 	replayAppliedRows  uint64 // rows applied during this Reconstruct call
@@ -755,6 +757,12 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 }
 
 func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
+	receipt, err := a.appendLockedInner(ctx, event, input, payloadPinReceiptDigests)
+	a.noteAppendResult(err)
+	return receipt, err
+}
+
+func (a *ComputerEventAppender) appendLockedInner(ctx context.Context, event Event, input TransitionInput, payloadPinReceiptDigests []string) (Receipt, error) {
 	if event.ComputerID != a.computerID {
 		return Receipt{}, fmt.Errorf("computer event appender: wrong computer")
 	}
@@ -786,6 +794,7 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 	if err != nil {
 		return Receipt{}, fmt.Errorf("computer event appender: resolve embedded head: %w", err)
 	}
+	a.noteHeads(headSeq(embeddedHead), headSeq(platformHead))
 	if !sameHead(platformHead, embeddedHead) {
 		// A prepared row a failed earlier append left behind (a post-CAS
 		// finalize, or a discard that never ran) wedged the running computer
@@ -796,7 +805,7 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 			return Receipt{}, err
 		}
 		if !sameHead(platformHead, embeddedHead) {
-			return Receipt{}, ErrNeedsProjectionRepair
+			return Receipt{}, &wedgeError{kind: "heads differ after in-place recovery", err: ErrNeedsProjectionRepair}
 		}
 	}
 	next, err := Reduce(platformHead, event, input)
@@ -837,10 +846,10 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 		// An orphaned prepared row at this sequence fails the insert on the
 		// index's (computer_id, sequence) key; clear it and retry once.
 		if _, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error()); rerr != nil {
-			return Receipt{}, fmt.Errorf("computer event appender: prepare embedded projection: %w (recovery: %v)", err, rerr)
+			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w (recovery: %v)", err, rerr)}
 		}
 		if err := a.projection.Prepare(ctx, request); err != nil {
-			return Receipt{}, fmt.Errorf("computer event appender: prepare embedded projection: %w", err)
+			return Receipt{}, &wedgeError{kind: prepareKind(err), err: fmt.Errorf("computer event appender: prepare embedded projection: %w", err)}
 		}
 	}
 	receipt, err := a.cas.CompareAndSwap(ctx, request)
