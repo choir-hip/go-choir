@@ -50,6 +50,14 @@ type BreakerConfig struct {
 	// OpenTimeout is how long the breaker stays open before transitioning to
 	// half-open. Default 30s.
 	OpenTimeout time.Duration
+	// Backoff, when set, gives the open duration for the trips-th open in a
+	// row (1 on the first open; a failed half-open probe opens again with
+	// trips+1; a successful probe closes the breaker and resets trips). It
+	// lets a cooldown grow on successive failures and reset on success, the
+	// search plane's per-provider backoff
+	// (docs/design/model-pool-autoroute-2026-11-02.md). Nil keeps the fixed
+	// OpenTimeout.
+	Backoff func(trips int) time.Duration
 	// HalfOpenMaxProbes is the number of probe calls permitted in half-open
 	// state. A probe success closes the breaker immediately; a probe failure
 	// reopens it. Default 1.
@@ -94,6 +102,8 @@ type CircuitBreaker struct {
 	consecutiveFails int
 	consecutiveWins  int
 	openedAt         time.Time
+	openFor          time.Duration
+	trips            int
 	probesInflight   int
 }
 
@@ -187,9 +197,44 @@ func (b *CircuitBreaker) recordFailureLocked() {
 }
 
 func (b *CircuitBreaker) openLocked() {
+	b.trips++
 	b.state = StateOpen
 	b.openedAt = b.cfg.Now()
+	b.openFor = b.backoffLocked(b.trips)
 	b.probesInflight = 0
+}
+
+// backoffLocked returns the open duration for the trips-th open in a row.
+func (b *CircuitBreaker) backoffLocked(trips int) time.Duration {
+	if b.cfg.Backoff != nil {
+		if d := b.cfg.Backoff(trips); d > 0 {
+			return d
+		}
+	}
+	return b.cfg.OpenTimeout
+}
+
+// Trip opens the breaker now, whatever its failure count: the caller has
+// evidence that one failure is enough (an exhausted quota). cooldown gives
+// the open duration for this trip's number in a row; the breaker stays open
+// for the longer of it and its own backoff. A breaker already open keeps
+// its deadline: calls that were in flight when it opened must not stack
+// trips. It reports whether this call opened the breaker.
+func (b *CircuitBreaker) Trip(cooldown func(trips int) time.Duration) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.maybeHalfOpenLocked()
+	if b.state == StateOpen {
+		return false
+	}
+	b.consecutiveWins = 0
+	b.openLocked()
+	if cooldown != nil {
+		if d := cooldown(b.trips); d > b.openFor {
+			b.openFor = d
+		}
+	}
+	return true
 }
 
 func (b *CircuitBreaker) closeLocked() {
@@ -197,6 +242,8 @@ func (b *CircuitBreaker) closeLocked() {
 	b.consecutiveFails = 0
 	b.consecutiveWins = 0
 	b.probesInflight = 0
+	b.trips = 0
+	b.openFor = 0
 }
 
 // maybeHalfOpenLocked transitions an open breaker to half-open once the open
@@ -205,7 +252,11 @@ func (b *CircuitBreaker) maybeHalfOpenLocked() {
 	if b.state != StateOpen {
 		return
 	}
-	if b.cfg.Now().Sub(b.openedAt) >= b.cfg.OpenTimeout {
+	openFor := b.openFor
+	if openFor <= 0 {
+		openFor = b.cfg.OpenTimeout
+	}
+	if b.cfg.Now().Sub(b.openedAt) >= openFor {
 		b.state = StateHalfOpen
 		b.consecutiveWins = 0
 		b.probesInflight = 0
@@ -288,6 +339,10 @@ type Snapshot struct {
 	ConsecutiveFails int        `json:"consecutive_failures"`
 	ConsecutiveWins  int        `json:"consecutive_successes"`
 	OpenedAt         *time.Time `json:"opened_at,omitempty"`
+	// OpenUntil is when an open breaker lets its next probe through.
+	OpenUntil *time.Time `json:"open_until,omitempty"`
+	// Trips counts the opens in a row since the breaker last closed.
+	Trips int `json:"trips,omitempty"`
 }
 
 // Snapshot returns a point-in-time view of the breaker state.
@@ -299,10 +354,17 @@ func (b *CircuitBreaker) Snapshot() Snapshot {
 		State:            b.state,
 		ConsecutiveFails: b.consecutiveFails,
 		ConsecutiveWins:  b.consecutiveWins,
+		Trips:            b.trips,
 	}
 	if b.state == StateOpen && !b.openedAt.IsZero() {
 		t := b.openedAt
 		s.OpenedAt = &t
+		openFor := b.openFor
+		if openFor <= 0 {
+			openFor = b.cfg.OpenTimeout
+		}
+		until := t.Add(openFor)
+		s.OpenUntil = &until
 	}
 	return s
 }
