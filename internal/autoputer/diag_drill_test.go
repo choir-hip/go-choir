@@ -3,10 +3,13 @@ package autoputer
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -62,6 +65,124 @@ func TestDrillRefusesUnboundedOrUnknown(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("D2: %q got %d, want 400", q, rec.Code)
 		}
+	}
+}
+
+// Network kinds (guest isolation I5). Ways they can fail, written first:
+//
+//  N1. a target outside 10.99.0.0/24 (a third party, a hostname, loopback,
+//      IPv6, port 0) is dialled;
+//  N2. seconds, count or streams exceed their bounds;
+//  N3. net-conns does not hold the connections it opened, or does not report
+//      how many opened and how many were refused;
+//  N4. net-flood reports no bytes, or runs past its seconds.
+
+func TestDrillNetRefusesOutsideTargetsAndBounds(t *testing.T) {
+	d := newDiagDrill(t.TempDir())
+	for _, q := range []string{
+		"kind=net-conns&seconds=5&count=10",
+		"kind=net-conns&seconds=5&count=10&target=8.8.8.8:53",
+		"kind=net-conns&seconds=5&count=10&target=127.0.0.1:80",
+		"kind=net-conns&seconds=5&count=10&target=10.99.1.1:80",
+		"kind=net-conns&seconds=5&count=10&target=10.98.0.1:80",
+		"kind=net-conns&seconds=5&count=10&target=example.com:80",
+		"kind=net-conns&seconds=5&count=10&target=[::1]:80",
+		"kind=net-conns&seconds=5&count=10&target=10.99.0.2:0",
+		"kind=net-flood&seconds=5&target=169.254.169.254:80",
+		"kind=net-conns&seconds=61&count=10&target=10.99.0.2:80",
+		"kind=net-flood&seconds=61&target=10.99.0.2:80",
+		"kind=net-conns&seconds=5&count=0&target=10.99.0.2:80",
+		"kind=net-conns&seconds=5&count=12001&target=10.99.0.2:80",
+		"kind=net-flood&seconds=5&streams=17&target=10.99.0.2:80",
+		"kind=net-flood&seconds=5&streams=0&target=10.99.0.2:80",
+	} {
+		rec := httptest.NewRecorder()
+		d.ServeHTTP(rec, drillRequest(http.MethodPost, q))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("N1/N2: %q got %d, want 400", q, rec.Code)
+		}
+	}
+	if d.busy() {
+		t.Fatal("a refused drill left the drill marked running")
+	}
+}
+
+func TestDrillNetParseTarget(t *testing.T) {
+	for _, ok := range []string{"10.99.0.2:9000", "10.99.0.255:1"} {
+		if got, err := parseDrillTarget(ok); err != nil || got != ok {
+			t.Fatalf("allowed target %q refused: %q %v", ok, got, err)
+		}
+	}
+}
+
+// The allowlist block is not routable on a developer host, so the run tests
+// call the load functions on a loopback listener, past the target check that
+// the test above pins.
+func TestDrillNetConnsHoldsAndReports(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer ln.Close()
+	var live, peak atomic.Int64
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			n := live.Add(1)
+			for {
+				p := peak.Load()
+				if n <= p || peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			go func() { _, _ = io.Copy(io.Discard, c); live.Add(-1); c.Close() }()
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rep := drillNetConns(ctx, ln.Addr().String(), 300)
+	if rep.Opened != 300 || rep.Failed != 0 {
+		t.Fatalf("N3: report %+v", rep)
+	}
+	if peak.Load() != 300 {
+		t.Errorf("N3: listener saw %d held at once, want 300", peak.Load())
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for live.Load() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if live.Load() != 0 {
+		t.Errorf("N3: %d connections left open after the drill", live.Load())
+	}
+}
+
+func TestDrillNetFloodMovesBytesAndStops(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(io.Discard, c); c.Close() }()
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	start := time.Now()
+	rep := drillNetFlood(ctx, ln.Addr().String(), 2)
+	if rep.Bytes <= 0 || rep.Opened != 2 {
+		t.Errorf("N4: report %+v", rep)
+	}
+	if time.Since(start) > 4*time.Second {
+		t.Errorf("N4: flood ran %s past a 1 s window", time.Since(start))
 	}
 }
 

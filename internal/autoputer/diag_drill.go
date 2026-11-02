@@ -47,6 +47,8 @@ type drillReport struct {
 	Seconds   float64 `json:"seconds"`
 	Bytes     int64   `json:"bytes"`
 	Ops       int64   `json:"ops"`
+	Opened    int64   `json:"opened,omitempty"`
+	Failed    int64   `json:"failed,omitempty"`
 	P50Micros int64   `json:"p50_us"`
 	P99Micros int64   `json:"p99_us"`
 	MaxMicros int64   `json:"max_us"`
@@ -88,8 +90,20 @@ func (d *diagDrill) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("seconds must be 1..%d", drillMaxSeconds), http.StatusBadRequest)
 		return
 	}
-	var mib, threads int
+	var mib, threads, netN int
+	var netTarget string
 	switch kind {
+	case "net-conns", "net-flood":
+		if seconds > drillNetMaxSeconds {
+			http.Error(w, fmt.Sprintf("seconds must be 1..%d for %s", drillNetMaxSeconds, kind), http.StatusBadRequest)
+			return
+		}
+		var msg string
+		netTarget, netN, msg = drillNetParams(kind, q)
+		if msg != "" {
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
 	case "io-write", "io-read":
 		mib, err = strconv.Atoi(q.Get("mib"))
 		if err != nil || mib < 1 || mib > drillMaxMiB {
@@ -106,7 +120,7 @@ func (d *diagDrill) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	default:
-		http.Error(w, "kind must be io-write, io-read or cpu", http.StatusBadRequest)
+		http.Error(w, "kind must be io-write, io-read, cpu, net-conns or net-flood", http.StatusBadRequest)
 		return
 	}
 	if !d.running.CompareAndSwap(false, true) {
@@ -119,9 +133,14 @@ func (d *diagDrill) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Duration(seconds)*time.Second + time.Minute))
 	var rep drillReport
-	if kind == "cpu" {
+	switch kind {
+	case "cpu":
 		rep = drillCPU(ctx, threads)
-	} else {
+	case "net-conns":
+		rep = drillNetConns(ctx, netTarget, netN)
+	case "net-flood":
+		rep = drillNetFlood(ctx, netTarget, netN)
+	default:
 		if err := os.MkdirAll(d.dir, 0o700); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
