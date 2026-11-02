@@ -224,7 +224,7 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		return nil
 	}
 	retry := wake.Retry + 1
-	if retry >= engineeringHoldRecordAfter && busy.Why == "operation_open" && busy.OperationID != "" {
+	if retry == engineeringHoldRecordAfter && busy.Why == "operation_open" && busy.OperationID != "" {
 		// The hold has outlasted a few retries: it is not a passing wait. Put
 		// the blocker where management and Texture read, once (the record id
 		// is deterministic), and keep retrying as before.

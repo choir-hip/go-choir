@@ -86,7 +86,10 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 		}
 		return body
 	case types.OwnerActAbandon:
-		body := fmt.Sprintf("%s abandoned self-development candidate %s. It is closed as failed and will not be applied.", who, id)
+		// Abandon is only ever the owner's act. A degraded candidate had
+		// installed a release: that release stays live, and only the
+		// unsettled tail is closed.
+		body := fmt.Sprintf("The owner abandoned self-development candidate %s and closed it as failed. Nothing further is applied from it; a release it had already installed, if any, stays live.", id)
 		if reason = strings.TrimSpace(reason); reason != "" {
 			body += " The reason, verbatim:\n\n" + reason
 		}

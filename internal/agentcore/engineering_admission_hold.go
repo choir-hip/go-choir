@@ -19,8 +19,26 @@ const engineeringHoldObserverAgentID = "engineering-admission"
 
 // engineeringHoldRecordID is the deterministic id of the one hold record of
 // one assignment behind one operation, so a later deferral records nothing.
-func engineeringHoldRecordID(operationID, assignmentID string) string {
-	return fmt.Sprintf("selfdev-observation:%s:blocks-engineering:%s", operationID, assignmentID)
+// The state is part of the id: the same operation blocking from a new state is
+// a new fact.
+func engineeringHoldRecordID(operationID, state, assignmentID string) string {
+	return fmt.Sprintf("selfdev-observation:%s:blocks-engineering:%s:%s", operationID, state, assignmentID)
+}
+
+// engineeringHoldSettlingActs says which owner acts settle an operation in
+// the given state.
+func engineeringHoldSettlingActs(operationID, state string) string {
+	abandon := fmt.Sprintf("`choir self-dev abandon --operation %s --reason ...`", operationID)
+	reject := fmt.Sprintf("`choir self-dev reject --operation %s --reason ...`", operationID)
+	switch state {
+	case "awaiting_approval":
+		return "It waits for the owner's decision; the owner acts that settle it are " + reject + " (withdraw it) and " + abandon + " (close it as failed)."
+	case "degraded":
+		return "It was applied with an unsettled tail the materializer could not finish; the installed release stays live. The owner act that closes it is " + abandon + "."
+	case "materializing", "rollback_pending":
+		return "It is in flight with the updater and settles by itself or when its pinned release is found unusable; if it is parked, " + abandon + " settles it when the updater journal shows nothing applied."
+	}
+	return "It installed nothing; the owner act that closes it is " + abandon + "."
 }
 
 // engineeringHoldRecord is the ledger record of an engineering request held by
@@ -37,11 +55,11 @@ func engineeringHoldRecord(assignment types.EngineeringAssignment, busy *enginee
 	stamp := now.UTC().Format(time.RFC3339Nano)
 	return types.CommitmentRecord{
 		SchemaID:    types.CommitmentRecordSchemaV1,
-		RecordID:    engineeringHoldRecordID(busy.OperationID, assignment.AssignmentID),
+		RecordID:    engineeringHoldRecordID(busy.OperationID, busy.OperationState, assignment.AssignmentID),
 		Discrepancy: types.DiscrepancyUnresolved,
 		Prediction: types.CommitmentPrediction{
-			Hypothesis: fmt.Sprintf("engineering assignment %s cannot start: self-development operation %s is %s (age %s) and every engineering admission on this computer waits for it. It will not settle by itself unless it is decided; the owner acts that settle it are `choir self-dev reject --operation %s --reason ...` (awaiting approval) and `choir self-dev abandon --operation %s --reason ...` (any open operation that installed nothing, or a degraded one).",
-				assignment.AssignmentID, busy.OperationID, busy.OperationState, age, busy.OperationID, busy.OperationID),
+			Hypothesis: fmt.Sprintf("engineering assignment %s cannot start: self-development operation %s is %s (age %s) and every engineering admission on this computer waits for it. %s",
+				assignment.AssignmentID, busy.OperationID, busy.OperationState, age, engineeringHoldSettlingActs(busy.OperationID, busy.OperationState)),
 			CommittedAt: stamp,
 		},
 		Observation: types.CommitmentObservation{

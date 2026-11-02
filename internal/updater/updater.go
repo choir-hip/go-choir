@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -680,11 +681,19 @@ func verifyManifest(root string, manifest ReleaseManifest) error {
 		}
 		path := filepath.Join(root, filepath.FromSlash(file.Path))
 		info, err := os.Stat(path)
-		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("updater: manifest file %q is unavailable or not regular", file.Path)
+		if err != nil {
+			// %w: ReadPinnedManifest tells a missing file from a transient
+			// I/O error by the wrapped cause.
+			return fmt.Errorf("updater: manifest file %q is unavailable: %w", file.Path, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("updater: manifest file %q is not regular", file.Path)
 		}
 		digest, err := fileSHA256(path)
-		if err != nil || digest != file.SHA256 {
+		if err != nil {
+			return fmt.Errorf("updater: manifest file %q is unreadable: %w", file.Path, err)
+		}
+		if digest != file.SHA256 {
 			return fmt.Errorf("updater: manifest digest mismatch for %q", file.Path)
 		}
 	}
@@ -826,26 +835,36 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 	releaseDir := filepath.Join(filepath.Clean(root), "releases", releaseDigest)
 	manifest, err := readReleaseManifest(releaseDir)
 	if err != nil {
-		var pathErr *fs.PathError
-		if errors.As(err, &pathErr) && !errors.Is(err, fs.ErrNotExist) {
-			// An I/O or permission error says nothing about whether the
-			// release exists: it may pass. Only the unavailable class is
-			// permanent.
-			return ReleaseManifest{}, "", fmt.Errorf("updater: pinned release unreadable: %w", err)
-		}
-		return ReleaseManifest{}, "", ErrPinnedReleaseUnavailable
+		return ReleaseManifest{}, "", classifyPinnedReadError(err)
 	}
 	if manifest.ContentDigest != releaseDigest {
-		return ReleaseManifest{}, "", ErrPinnedReleaseUnavailable
+		return ReleaseManifest{}, "", fmt.Errorf("%w: manifest content digest is not the pinned digest", ErrPinnedReleaseCorrupt)
 	}
 	return manifest, releaseDir, nil
 }
 
-// ErrPinnedReleaseUnavailable is the permanent class of a pinned-release read
-// failure: the release is not on disk, or what is there is not the release
-// the digest names. A read that failed for another reason (an I/O or
-// permission error) is a different, transient error and does not match.
-var ErrPinnedReleaseUnavailable = errors.New("updater: pinned release unavailable")
+// The three classes of a pinned-release read failure. Missing and corrupt are
+// permanent (retrying cannot change them); anything else is transient and
+// matches neither.
+var (
+	// ErrPinnedReleaseUnavailable: the release, its manifest or one of its
+	// files is not on disk (ENOENT, or ENOTDIR on a path component).
+	ErrPinnedReleaseUnavailable = errors.New("updater: pinned release unavailable")
+	// ErrPinnedReleaseCorrupt: the release is on disk but fails verification
+	// (an undecodable manifest, a digest mismatch, an unsafe or irregular file).
+	ErrPinnedReleaseCorrupt = errors.New("updater: pinned release failed verification")
+)
+
+func classifyPinnedReadError(err error) error {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return ErrPinnedReleaseUnavailable
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("updater: pinned release unreadable: %w", err)
+	}
+	return fmt.Errorf("%w: %s", ErrPinnedReleaseCorrupt, strings.TrimPrefix(err.Error(), "updater: "))
+}
 
 // RestagePinnedRelease swaps `current` onto an already-pinned release without
 // Apply, restorePrior, or a service restart. Tape restore uses this to restage

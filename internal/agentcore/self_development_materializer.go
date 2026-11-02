@@ -788,12 +788,13 @@ func rollbackDroppedClaimNote(pinned updater.ReleaseManifest) string {
 func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
 	if err != nil {
-		if operation.State == selfdev.StateDegraded && errors.Is(err, updater.ErrPinnedReleaseUnavailable) {
-			// The re-drive of a degraded rollback can never succeed once its
-			// pinned release is gone, and the operation is open, holding every
-			// engineering admission. Settle it; a transient read error (not
-			// this class) stays a retry.
-			return rt.settleDegradedRollbackPinnedReleaseUnavailable(ctx, operation)
+		if (operation.State == selfdev.StateDegraded || operation.State == selfdev.StateRollbackPending) &&
+			(errors.Is(err, updater.ErrPinnedReleaseUnavailable) || errors.Is(err, updater.ErrPinnedReleaseCorrupt)) {
+			// The rollback can never be driven once its pinned release is gone
+			// or fails verification, and the operation is open, holding every
+			// engineering admission. Settle it; a transient read error (neither
+			// class) stays a retry.
+			return rt.settleRollbackPinnedReleaseUnusable(ctx, operation, err)
 		}
 		return fmt.Errorf("materializer: rollback release unavailable: %w", err)
 	}
@@ -1236,39 +1237,9 @@ func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.O
 }
 
 func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, applyErr error, expectedState string) error {
-	payload, err := computerevent.CanonicalJSON(result)
+	recoveryDigest, err := rt.appendMaterializationFailedEvent(ctx, operation, result)
 	if err != nil {
 		return err
-	}
-	// A crash-boot settlement of an apply the updater never started has no
-	// recovery receipt: nothing changed, so nothing was restored.
-	recoveryDigest := ""
-	if result.RecoveryReceipt != nil {
-		recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
-		if err != nil {
-			return err
-		}
-		recoveryDigest = computerevent.DigestBytes(recoveryBytes)
-	}
-	idempotency := "selfdev-materialization-failed-" + operation.DecisionEvent
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
-		return lookupErr
-	} else if !found {
-		eventID, eventErr := computerevent.NewEventID()
-		if eventErr != nil {
-			return eventErr
-		}
-		event := computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
-			EventKind: computerevent.EventMaterializationFailed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
-			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
-			ReducerVersion: computerevent.ReducerVersionV1,
-		}
-		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
-			return eventErr
-		}
 	}
 	head, err := rt.store.Head(ctx, operation.ComputerID)
 	if err != nil || head == nil {
@@ -1281,6 +1252,48 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 		return nil
 	})
 	return err
+}
+
+// appendMaterializationFailedEvent appends (idempotently, on the operation's
+// decision event) the materialization_failed event that discharges the
+// pending transition and returns desired to effective, and answers the
+// recovery receipt's digest ("" when none).
+func (rt *Runtime) appendMaterializationFailedEvent(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult) (string, error) {
+	payload, err := computerevent.CanonicalJSON(result)
+	if err != nil {
+		return "", err
+	}
+	// A crash-boot settlement of an apply the updater never started has no
+	// recovery receipt: nothing changed, so nothing was restored.
+	recoveryDigest := ""
+	if result.RecoveryReceipt != nil {
+		recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
+		if err != nil {
+			return "", err
+		}
+		recoveryDigest = computerevent.DigestBytes(recoveryBytes)
+	}
+	idempotency := "selfdev-materialization-failed-" + operation.DecisionEvent
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
+		return "", lookupErr
+	} else if !found {
+		eventID, eventErr := computerevent.NewEventID()
+		if eventErr != nil {
+			return "", eventErr
+		}
+		event := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: operation.ComputerID,
+			EventKind: computerevent.EventMaterializationFailed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+			ActorProfile: agentprofile.Management, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
+			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
+			ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
+			return "", eventErr
+		}
+	}
+	return recoveryDigest, nil
 }
 
 // applyOrReadJournal runs the apply, announcing its planned restart, or with
