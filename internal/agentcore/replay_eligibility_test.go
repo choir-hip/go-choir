@@ -1,13 +1,54 @@
 package agentcore
 
 import (
+	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
+
+// A fresh split store (header and body tables) classifies eligible: the body
+// tables are logical members of og_objects and choir_events, so the replay
+// manifest sees the same table set as before the split.
+func TestReplayEligibilityOnSplitStore(t *testing.T) {
+	st, err := choirstore.OpenFresh(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	digests, err := replayStateExtractor(st.ReadDB()).Digests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range []string{"og_bodies", "choir_event_bodies"} {
+		if _, ok := digests.Tables[member]; ok {
+			t.Fatalf("body table %s is observed as a table of its own", member)
+		}
+	}
+	for _, table := range []string{"og_objects", "choir_events"} {
+		if digests.Tables[table] == "" {
+			t.Fatalf("logical table %s is not observed", table)
+		}
+	}
+	observations := computerversion.ObservationSet{}
+	for table, digest := range digests.Tables {
+		observations.Observations = append(observations.Observations,
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:schema:" + table, Value: "sha256:" + digests.TableSchemas[table]},
+			computerversion.Observation{Kind: computerversion.ObservationDoltHead, Key: "sqlite:texture:table:" + table, Value: "sha256:" + digest},
+		)
+	}
+	head := &computerevent.Head{ComputerID: "computer", Sequence: 1, CanonicalEventHead: "head"}
+	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}
+	eligibility := replayEligibility(head, head, observations, observations, result)
+	if !eligibility.Eligible {
+		t.Fatalf("split store is not eligible: %#v", eligibility)
+	}
+}
 
 func TestReplayEligibilityDefaultDeniesNilHeads(t *testing.T) {
 	result := computerversion.EquivalenceResult{Status: computerversion.EquivalenceEquivalent}

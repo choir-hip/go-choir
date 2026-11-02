@@ -192,12 +192,54 @@ func (e SQLiteStateExtractor) DigestsTx(ctx context.Context, tx *sql.Tx) (StateD
 		}
 	}
 	sort.Strings(tables)
+	present := make(map[string]struct{}, len(tables))
+	for _, table := range tables {
+		present[table] = struct{}{}
+	}
+	// A logical table whose members all exist is digested through its Query;
+	// its other members are not observed as tables of their own.
+	active := map[string]LogicalTable{}
+	skipped := map[string]struct{}{}
+	for name, lt := range e.LogicalTables {
+		if strings.TrimSpace(lt.Query) == "" || len(lt.Members) == 0 {
+			continue
+		}
+		if _, ok := present[name]; !ok {
+			continue
+		}
+		all := true
+		for _, m := range lt.Members {
+			if _, ok := present[m]; !ok {
+				all = false
+				break
+			}
+		}
+		if !all {
+			continue
+		}
+		active[name] = lt
+		for _, m := range lt.Members {
+			if m != name {
+				skipped[m] = struct{}{}
+			}
+		}
+	}
 	for _, table := range tables {
 		if err := ctx.Err(); err != nil {
 			return StateDigests{}, err
 		}
-		out.TableSchemas[table] = schemaDigest(entries, table)
-		digest, err := e.tableDigest(ctx, tx, table)
+		if _, skip := skipped[table]; skip {
+			continue
+		}
+		var digest string
+		var err error
+		if lt, ok := active[table]; ok {
+			out.TableSchemas[table] = schemaDigestOf(entries, append([]string{table}, lt.Members...))
+			digest, err = e.queryDigest(ctx, tx, table, lt.Query, nil, false)
+		} else {
+			out.TableSchemas[table] = schemaDigest(entries, table)
+			digest, err = e.tableDigest(ctx, tx, table)
+		}
 		if err != nil {
 			return StateDigests{}, fmt.Errorf("sqlite state extraction: content for %s: %w", table, err)
 		}
@@ -286,11 +328,26 @@ func (e SQLiteStateExtractor) schemaEntries(ctx context.Context, tx *sql.Tx) ([]
 // schemaDigest hashes the entries of one table (its own and its indexes and
 // triggers), or all of them when table is empty.
 func schemaDigest(entries []schemaEntry, table string) string {
+	if table == "" {
+		return schemaDigestOf(entries, nil)
+	}
+	return schemaDigestOf(entries, []string{table})
+}
+
+// schemaDigestOf hashes the entries of the named tables (a logical table and
+// its members), or all of them when tables is empty.
+func schemaDigestOf(entries []schemaEntry, tables []string) string {
+	want := make(map[string]struct{}, len(tables))
+	for _, t := range tables {
+		want[t] = struct{}{}
+	}
 	hasher := sha256.New()
 	hasher.Write([]byte(witnessV3Domain + "\nschema\n"))
 	for _, entry := range entries {
-		if table != "" && entry.table != table {
-			continue
+		if len(want) > 0 {
+			if _, ok := want[entry.table]; !ok {
+				continue
+			}
 		}
 		writeLP(hasher, entry.typ)
 		writeLP(hasher, entry.name)
@@ -346,7 +403,6 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 	if len(cols) == 0 {
 		return "", fmt.Errorf("table %s has no columns", table)
 	}
-	ignored := e.IgnoredContentColumns[table]
 	var pk []columnInfo
 	for _, c := range cols {
 		if c.pk > 0 {
@@ -367,21 +423,40 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 		}
 		query += " ORDER BY " + strings.Join(order, ", ")
 	}
+	colNames := make([]string, len(cols))
+	for i, c := range cols {
+		colNames[i] = c.name
+	}
+	return e.queryDigest(ctx, tx, table, query, colNames, len(pk) == 0)
+}
+
+// queryDigest digests the rows of query as table's rows. colNames names the
+// result columns for the ignored-column exclusions (nil reads them from the
+// result, for a logical table); needSort digests the sorted row encodings
+// (a table without a primary key) instead of the query order.
+func (e SQLiteStateExtractor) queryDigest(ctx context.Context, tx *sql.Tx, table, query string, colNames []string, needSort bool) (string, error) {
+	ignored := e.IgnoredContentColumns[table]
 	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return "", fmt.Errorf("select from %s: %w", table, err)
 	}
 	defer rows.Close()
+	if colNames == nil {
+		colNames, err = rows.Columns()
+		if err != nil {
+			return "", fmt.Errorf("columns of %s: %w", table, err)
+		}
+	}
 
 	hasher := sha256.New()
 	hasher.Write([]byte(witnessV3Domain + "\ntable " + table + "\n"))
 	var sorter *rowSorter
-	if len(pk) == 0 {
+	if needSort {
 		sorter = newRowSorter(os.Getenv(witnessSpillDirEnv), witnessSpillBytes)
 		defer sorter.Close()
 	}
-	values := make([]any, len(cols))
-	ptrs := make([]any, len(cols))
+	values := make([]any, len(colNames))
+	ptrs := make([]any, len(colNames))
 	for i := range values {
 		ptrs[i] = &values[i]
 	}
@@ -395,14 +470,14 @@ func (e SQLiteStateExtractor) tableDigest(ctx context.Context, tx *sql.Tx, table
 			return "", fmt.Errorf("scan row from %s: %w", table, err)
 		}
 		row = row[:0]
-		for i, c := range cols {
-			if _, skip := ignored[c.name]; skip {
+		for i, name := range colNames {
+			if _, skip := ignored[name]; skip {
 				continue
 			}
 			var encErr error
 			row, encErr = appendCanonicalValue(row, values[i])
 			if encErr != nil {
-				return "", fmt.Errorf("encode %s.%s: %w", table, c.name, encErr)
+				return "", fmt.Errorf("encode %s.%s: %w", table, name, encErr)
 			}
 		}
 		count++

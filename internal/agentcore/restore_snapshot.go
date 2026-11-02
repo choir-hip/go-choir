@@ -195,6 +195,10 @@ func replayStateExtractor(db *sql.DB) computerversion.SQLiteStateExtractor {
 		Database: "texture",
 		// A derived index is not state (objectgraph.DerivedKeysTable).
 		IgnoredTables: map[string]struct{}{objectgraph.DerivedKeysTable: {}},
+		// A split store digests og_objects and choir_events as the one table
+		// each was before the header/body split (store.WitnessLogicalTables
+		// includes the objectgraph one), so table digests do not change.
+		LogicalTables: choirstore.WitnessLogicalTables(),
 		IgnoredContentColumns: map[string]map[string]struct{}{
 			"computer_event_index": {
 				"prepared_at":  {},

@@ -498,6 +498,13 @@ Details in section 8.
 7. **`ChoirEventKindSQL` is kept**: it is the `event_kind` expression. `ChoirEventUpdatedIndexDDL` is deleted (the index is in `objectIndexes()`).
 8. **Frozen DDL** is the whole `sqlite_master` of a fresh store at 95ea10801 (`testdata/presplit/schema.sql`), plus `partition.sql` (old `telemetryPartitionDDL`).
 9. **Non-JSON metadata is refused by both layouts** (the indexed `og_meta_*` generated columns error on insert), so the derived-value corpus uses JSON metadata only; bodies cover NULL, empty, non-JSON, JSONB, text-typed, numeric and null fields.
+11. **Slice E (witness, differential), as built.**
+    - The logical table's column names come from the query's result (`rows.Columns()`), so `IgnoredContentColumns` applies to a logical table by result-column name. `queryDigest` is the one streaming digest for generic and logical tables.
+    - `agentcore.replayStateExtractor` sets `LogicalTables: choirstore.WitnessLogicalTables()`; that function already merges the objectgraph map, so no second merge is needed.
+    - New test-fixture package `internal/store/splitfixture` (raw SQL: the frozen old DDL with rows, and a split copy built the way the migration copies) is shared by the computerversion, `store-split-diff` and the other slices' tests; it uses no store writer.
+    - `store-split-diff` checks, beyond section 8: a `layouts` check (old has the body column and no bodies table, new the reverse), and the witness run ignores only `og_key_index` (checked separately, row-digest equal) and applies no ignored content columns, so it is stricter than the production witness (`updated_at`/`prepared_at` columns must also be equal after a verbatim copy). The `ValidateDerivedKeys` pass and the replay-into-OpenFresh comparison (section 8, items 3 and 4) are not in the tool: they need the store packages and a tape, and stay S3 steps.
+    - Retire equivalence groups by event kind inside one query per (day, phase mode, table) instead of one query per kind; the counts compared are the same. Windows are UTC days ending at `--as-of` (default now).
+    - `scripts/proofs/split-differential.sh` runs the keep-set snapshot only when `KEEPSET_BEFORE` names a pre-migration snapshot (the script reads the platform graph database, Node B only).
 10. **`dbxplan.HeaderOnly(t, db, wantIndex, query, args...)`** takes the expected index ("" for none); `AssertHeaderOnly`/`AssertBodyByRowid` take a plan already read. A LEFT JOIN body seek reads `SEARCH b USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN`.
 
 ## Deviations (S2 slice C, as built)
