@@ -121,10 +121,12 @@ now:
       The migration cost on the paper's store (2.5M events, multi-GB) and
       whether a cheaper column reorder (body last) gets most of the win.
     next_observation: S0 page reads per statement, three layouts; the baseline is the paper's memory meter from 2026-11-01T19:32Z (guest isolation checkpoint numbers)
-  blocker_or_risk: the migration of the paper's store (2.5M events, multi-GB) under the boot and restart rules; every guest deploy reboots every guest
-  next_action: land split/s2-integrate on main (GitHub CI runs the heavy -race shards); every guest migrates at its refresh boot, d@e checked first with scripts/proofs/split-differential.sh, then finalize per computer (S4/S5)
+  blocker_or_risk: the paper's post-split read rate is still about 30x its pre-split median after three cold boots (149 vs 4.9 MiB/min at 05:00Z), and its early read is confounded; hibernated computers migrate at their wake
+  next_action: S6, the meter day from 2026-11-02T05:00Z, judged at 2026-11-03T05:00Z against the 19:32Z baseline (read_bytes per minute, the retirement pass, the boot burst); then finalize the paper and the owner's computer, and settle with the tier 2 re-review of the partition fix (b80fe36bd)
 
 receipts:
+  - S5 2026-11-02 (running fleet): the paper (9m39s, 3.41M objects), the owner's computer (8.3s), d@e (2.7s) migrated on 1d33cafce..81f09e677; keep set grew only
+  - S4 2026-11-02: d@e copy rung 13/13 green, then d@e migrated and finalized (95.8 MB freed)
   - S3 2026-11-01: paper store copy migrated in 8m33s (22.30 -> 21.31 GB, 3.4M objects); differential green except the intended store_meta schema_version 1 -> 2 row (diff tool now exempts it); ledger 22:45 entry
   - S2 2026-11-01: split/s2-integrate f3e5f7d2b (slices 0, A-E, migrate command, epoch 33); CI mirror light set green
   - S1 2026-11-01: design docs/design/store-header-body-split-2026-11-01.md (header tables keep their names; bodies in og_bodies/choir_event_bodies keyed by an explicit INTEGER PRIMARY KEY; witness via logical tables so every table digest is unchanged; boot migration to a new file behind an early replaying gate; .presplit kept until the differential is green)
