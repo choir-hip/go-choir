@@ -137,6 +137,7 @@ boundaries:
     - owner 2026-10-25 "you approve the reader" (FP0 approves on b@c with standing authority)
     - owner 2026-10-26 design statements carried from T1a: content first, judicious screen use, DeepSeek with the right constraints
   must_preserve:
+    - upgrades never leave a computer stuck (owner 2026-11-02: "upgrading things should never leave a computer in a stuck state"): every open self-development operation has a terminal path an owner or the platform can reach, a hold is bounded and visible to the desks, and an apply refusal settles the operation instead of wedging the next one
     - every original app's static entry, component, id, routes, recents and data, until the owner deletes it
     - a -next package declares no `opens` and no `desk` until its switch; data stays on its existing kinds and stores
     - only engineering changes b@c's platform tree; FP0 never hand-edits a patch
