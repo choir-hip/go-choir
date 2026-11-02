@@ -70,7 +70,7 @@ func TestDrillRefusesUnboundedOrUnknown(t *testing.T) {
 
 // Network kinds (guest isolation I5). Ways they can fail, written first:
 //
-//  N1. a target outside 10.99.0.0/24 (a third party, a hostname, loopback,
+//  N1. a target outside 192.88.99.0/24 (a third party, a hostname, loopback,
 //      IPv6, port 0) is dialled;
 //  N2. seconds, count or streams exceed their bounds;
 //  N3. net-conns does not hold the connections it opened, or does not report
@@ -83,18 +83,20 @@ func TestDrillNetRefusesOutsideTargetsAndBounds(t *testing.T) {
 		"kind=net-conns&seconds=5&count=10",
 		"kind=net-conns&seconds=5&count=10&target=8.8.8.8:53",
 		"kind=net-conns&seconds=5&count=10&target=127.0.0.1:80",
-		"kind=net-conns&seconds=5&count=10&target=10.99.1.1:80",
+		"kind=net-conns&seconds=5&count=10&target=192.88.100.1:80",
 		"kind=net-conns&seconds=5&count=10&target=10.98.0.1:80",
+		"kind=net-conns&seconds=5&count=10&target=10.99.0.2:80",
+		"kind=net-conns&seconds=5&count=10&target=192.88.98.2:80",
 		"kind=net-conns&seconds=5&count=10&target=example.com:80",
 		"kind=net-conns&seconds=5&count=10&target=[::1]:80",
-		"kind=net-conns&seconds=5&count=10&target=10.99.0.2:0",
+		"kind=net-conns&seconds=5&count=10&target=192.88.99.2:0",
 		"kind=net-flood&seconds=5&target=169.254.169.254:80",
-		"kind=net-conns&seconds=61&count=10&target=10.99.0.2:80",
-		"kind=net-flood&seconds=61&target=10.99.0.2:80",
-		"kind=net-conns&seconds=5&count=0&target=10.99.0.2:80",
-		"kind=net-conns&seconds=5&count=12001&target=10.99.0.2:80",
-		"kind=net-flood&seconds=5&streams=17&target=10.99.0.2:80",
-		"kind=net-flood&seconds=5&streams=0&target=10.99.0.2:80",
+		"kind=net-conns&seconds=61&count=10&target=192.88.99.2:80",
+		"kind=net-flood&seconds=61&target=192.88.99.2:80",
+		"kind=net-conns&seconds=5&count=0&target=192.88.99.2:80",
+		"kind=net-conns&seconds=5&count=12001&target=192.88.99.2:80",
+		"kind=net-flood&seconds=5&streams=17&target=192.88.99.2:80",
+		"kind=net-flood&seconds=5&streams=0&target=192.88.99.2:80",
 	} {
 		rec := httptest.NewRecorder()
 		d.ServeHTTP(rec, drillRequest(http.MethodPost, q))
@@ -108,7 +110,7 @@ func TestDrillNetRefusesOutsideTargetsAndBounds(t *testing.T) {
 }
 
 func TestDrillNetParseTarget(t *testing.T) {
-	for _, ok := range []string{"10.99.0.2:9000", "10.99.0.255:1"} {
+	for _, ok := range []string{"192.88.99.2:9000", "192.88.99.255:1"} {
 		if got, err := parseDrillTarget(ok); err != nil || got != ok {
 			t.Fatalf("allowed target %q refused: %q %v", ok, got, err)
 		}

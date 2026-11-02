@@ -2,9 +2,12 @@ package autoputer
 
 // The network kinds of the isolation drill (guest isolation I5): net-conns
 // holds many TCP connections open, net-flood pushes bytes down a few. Both
-// may only dial a literal IPv4 address inside drillNetAllow, a block that no
-// real network uses and that the operator creates on Node B as a network
-// namespace for the drill, so a drill can never load a third party. Seconds
+// may only dial a literal IPv4 address inside drillNetAllow: the deprecated
+// 6to4 relay block 192.88.99.0/24, which no network routes and which the
+// operator answers from a network namespace on Node B, so a drill never
+// loads a third party. It is not private space: Node B's CHOIR-GUEST-EGRESS
+// (mangle) drops a guest's packets to every RFC 1918 block, so a 10.x target
+// is unreachable by design (the first deployed drill, 2026-11-02). Seconds
 // are capped at drillNetMaxSeconds.
 
 import (
@@ -29,7 +32,7 @@ const (
 )
 
 // drillNetAllow is the only block a network drill may dial.
-var drillNetAllow = netip.MustParsePrefix("10.99.0.0/24")
+var drillNetAllow = netip.MustParsePrefix("192.88.99.0/24")
 
 // parseDrillTarget accepts only host:port with a literal IPv4 inside
 // drillNetAllow and a port of 1..65535. No name is ever resolved.

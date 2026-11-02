@@ -3,10 +3,13 @@
 # docs/definitions/choir-guest-isolation-2026-11-01.md (I5) and its ledger.
 #
 # Every target is ours: network namespaces on Node B, never an outside host.
-#   drill-t  the target, 10.99.0.2 (the only block d@e's drill route may dial)
+#   drill-t  the target, 192.88.99.2 (the only block d@e's drill route may dial: the
+#            unrouted 6to4 relay block 192.88.99.0/24; guests cannot reach any
+#            10.x address, CHOIR-GUEST-EGRESS drops RFC 1918, so the first
+#            deployed run on 10.99.0.0/24 never left the tap)
 #   drill-v  the victim guest stand-in, 10.98.0.2
 #   drill-f  the flooding guest stand-in, 10.98.0.6 (stand-in mode only)
-# Host side of each is a veth: dt-h 10.99.0.1, dv-h 10.98.0.1, df-h 10.98.0.5.
+# Host side of each is a veth: dt-h 192.88.99.1, dv-h 10.98.0.1, df-h 10.98.0.5.
 # The host masquerades 10.98.0.0/24 out dt-h, as it does a guest's /30.
 #
 #   setup               build the namespaces, the cake stand-in, the sinks
@@ -56,10 +59,17 @@ ipt_rules() { # add (-I/-A) or delete (-D)
       iptables -A CHOIR-DRILL-FWD -m comment --comment $TAG -j ACCEPT
     iptables -C FORWARD -i df-h -m comment --comment $TAG -j CHOIR-DRILL-FWD 2>/dev/null ||
       iptables -I FORWARD 1 -i df-h -m comment --comment $TAG -j CHOIR-DRILL-FWD
+    # Nothing for the target block may leave by another path (no leak to the
+    # real owner of the block if dt-h is gone): a blackhole route and a DROP.
+    ip route add blackhole 192.88.99.0/24 metric 9000 2>/dev/null || true
+    iptables -C FORWARD -d 192.88.99.0/24 ! -o dt-h -m comment --comment $TAG -j DROP 2>/dev/null ||
+      iptables -I FORWARD 1 -d 192.88.99.0/24 ! -o dt-h -m comment --comment $TAG -j DROP
     iptables -t nat -C POSTROUTING -s 10.98.0.0/24 -o dt-h -m comment --comment $TAG -j MASQUERADE 2>/dev/null ||
       iptables -t nat -A POSTROUTING -s 10.98.0.0/24 -o dt-h -m comment --comment $TAG -j MASQUERADE
   else
     iptables -D FORWARD -i df-h -m comment --comment $TAG -j CHOIR-DRILL-FWD 2>/dev/null || true
+    iptables -D FORWARD -d 192.88.99.0/24 ! -o dt-h -m comment --comment $TAG -j DROP 2>/dev/null || true
+    ip route del blackhole 192.88.99.0/24 metric 9000 2>/dev/null || true
     iptables -F CHOIR-DRILL-FWD 2>/dev/null || true
     iptables -X CHOIR-DRILL-FWD 2>/dev/null || true
     iptables -t nat -D POSTROUTING -s 10.98.0.0/24 -o dt-h -m comment --comment $TAG -j MASQUERADE 2>/dev/null || true
@@ -87,8 +97,8 @@ async def source(r, w):
         pass
     w.close()
 async def main():
-    s1 = await asyncio.start_server(sink, "10.99.0.2", 9000, backlog=16384)
-    s2 = await asyncio.start_server(source, "10.99.0.2", 9001, backlog=1024)
+    s1 = await asyncio.start_server(sink, "192.88.99.2", 9000, backlog=16384)
+    s2 = await asyncio.start_server(source, "192.88.99.2", 9001, backlog=1024)
     async with s1, s2:
         await asyncio.Event().wait()
 asyncio.run(main())
@@ -157,13 +167,13 @@ cmd_setup() {
   ip link add dt-h type veth peer name dt-n; ip link set dt-n netns drill-t
   ip link add dv-h type veth peer name dv-n; ip link set dv-n netns drill-v
   ip link add df-h type veth peer name df-n; ip link set df-n netns drill-f
-  ip addr add 10.99.0.1/30 dev dt-h; ip addr add 10.98.0.1/30 dev dv-h; ip addr add 10.98.0.5/30 dev df-h
+  ip addr add 192.88.99.1/30 dev dt-h; ip addr add 10.98.0.1/30 dev dv-h; ip addr add 10.98.0.5/30 dev df-h
   for d in dt-h dv-h df-h; do ip link set $d up; done
-  ip -n drill-t addr add 10.99.0.2/30 dev dt-n
+  ip -n drill-t addr add 192.88.99.2/30 dev dt-n
   ip -n drill-v addr add 10.98.0.2/30 dev dv-n
   ip -n drill-f addr add 10.98.0.6/30 dev df-n
   for n in t v f; do ip -n drill-$n link set lo up; ip -n drill-$n link set d$n-n up; done
-  ip -n drill-t route add default via 10.99.0.1
+  ip -n drill-t route add default via 192.88.99.1
   ip -n drill-v route add default via 10.98.0.1
   ip -n drill-f route add default via 10.98.0.5
   for n in t v f; do ip netns exec drill-$n sysctl -qw net.core.somaxconn=16384; done
@@ -211,8 +221,8 @@ conn_counters() {
 
 cmd_standin_conns() {
   conn_counters CHOIR-DRILL-FWD
-  log "netns F opens $CONNS flows over 30 s to 10.99.0.2:9000, holds 15 s"
-  ip netns exec drill-f python3 "$WORK/conns.py" 10.99.0.2:9000 "$CONNS" 30 15 &
+  log "netns F opens $CONNS flows over 30 s to 192.88.99.2:9000, holds 15 s"
+  ip netns exec drill-f python3 "$WORK/conns.py" 192.88.99.2:9000 "$CONNS" 30 15 &
   local p=$!
   sleep 40
   echo "--- mid-hold: flows from 10.98.0.6 in conntrack: $(grep -c "src=10.98.0.6 " /proc/net/nf_conntrack)"
@@ -220,7 +230,7 @@ cmd_standin_conns() {
   conn_counters CHOIR-DRILL-FWD
 }
 
-victim() { ip netns exec drill-v python3 "$WORK/bw.py" 10.99.0.2:$1 "$2" "$3"; }
+victim() { ip netns exec drill-v python3 "$WORK/bw.py" 192.88.99.2:$1 "$2" "$3"; }
 fport() { [ "$DIR" = down ] && echo 9001 || echo 9000; }
 
 cmd_standin_share() {
@@ -229,9 +239,9 @@ cmd_standin_share() {
   log "DIR=$DIR mode=$mode: victim alone (1 stream, 10 s)"
   victim "$(fport)" 1 10
   log "flooder alone (16 streams, 10 s)"
-  ip netns exec drill-f python3 "$WORK/bw.py" 10.99.0.2:"$(fport)" 16 10
+  ip netns exec drill-f python3 "$WORK/bw.py" 192.88.99.2:"$(fport)" 16 10
   log "both: flooder 16 streams for 20 s, victim 1 stream for 10 s from t+5"
-  ip netns exec drill-f python3 "$WORK/bw.py" 10.99.0.2:"$(fport)" 16 20 | sed 's/^/flooder /' &
+  ip netns exec drill-f python3 "$WORK/bw.py" 192.88.99.2:"$(fport)" 16 20 | sed 's/^/flooder /' &
   local p=$!
   sleep 5
   victim "$(fport)" 1 10 | sed 's/^/victim during flood /'
@@ -241,25 +251,25 @@ cmd_standin_share() {
 }
 
 # ---- d@e (the real CHOIR-GUEST-FWD path) ----
-dae_port() {
-  local d vm port comp
-  d=$(grep -l "$DAE" /var/lib/go-choir/vm-state/vm-*/fc-config.json | head -1 | xargs -r dirname | xargs -r basename)
-  [ -n "$d" ] || { echo "no VM state for d@e" >&2; exit 1; }
-  for comp in $PAPER $OWNER; do
-    [ "$DAE" != "$comp" ] || { echo "refusing the paper or the owner's computer" >&2; exit 1; }
+dae_addr() { # the guest's address, from its boot args (no secrets)
+  local f ip c
+  f=$(grep -l "$DAE" /var/lib/go-choir/vm-state/vm-*/fc-config.json | head -1)
+  [ -n "$f" ] || { echo "no VM state for d@e" >&2; exit 1; }
+  for c in $PAPER $OWNER; do
+    [ "$DAE" != "$c" ] || { echo "refusing the paper or the owner's computer" >&2; exit 1; }
   done
-  port=$(iptables -t nat -S OUTPUT | sed -n "s/.*--dport \([0-9]*\) .*go-choir-vm-$d .*/\1/p" | head -1)
-  [ -n "$port" ] || { echo "d@e ($d) has no host port: not running" >&2; exit 1; }
-  echo "$port"
+  ip=$(grep -o 'ip=[0-9.]*' "$f" | head -1 | cut -d= -f2)
+  [ -n "$ip" ] || { echo "no guest ip in $f" >&2; exit 1; }
+  echo "$ip"
 }
 dae_call() { # QUERY ; host->guest carries only X-Internal-Caller
-  curl -sS --max-time 120 -X POST -H 'X-Internal-Caller: true' "http://127.0.0.1:$(dae_port)/internal/diag/drill?$1"
+  curl -sS --max-time 120 -X POST -H 'X-Internal-Caller: true' "http://$(dae_addr):8085/internal/diag/drill?$1"
 }
 
 cmd_deployed_conns() {
   conn_counters CHOIR-GUEST-FWD
-  log "d@e net-conns count=$CONNS seconds=45 to 10.99.0.2:9000"
-  dae_call "kind=net-conns&target=10.99.0.2:9000&count=$CONNS&seconds=45" &
+  log "d@e net-conns count=$CONNS seconds=45 to 192.88.99.2:9000"
+  dae_call "kind=net-conns&target=192.88.99.2:9000&count=$CONNS&seconds=45" &
   local p=$!
   sleep 35
   echo "--- mid-hold: sink-side established flows: $(ip netns exec drill-t ss -Htn state established | wc -l)"
@@ -273,7 +283,7 @@ cmd_deployed_share() {
   log "DIR=$DIR mode=$mode: victim alone (1 stream, 10 s)"
   victim "$(fport)" 1 10
   log "d@e net-flood 16 streams 25 s; victim measures 10 s from t+8"
-  dae_call "kind=net-flood&target=10.99.0.2:$(fport)&streams=16&seconds=25" | sed 's/^/d@e report /' &
+  dae_call "kind=net-flood&target=192.88.99.2:$(fport)&streams=16&seconds=25" | sed 's/^/d@e report /' &
   local p=$!
   sleep 8
   victim "$(fport)" 1 10 | sed 's/^/victim during flood /'
