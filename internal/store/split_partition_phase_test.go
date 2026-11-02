@@ -136,8 +136,8 @@ func TestSplitPreflightCountsPartitionPeak(t *testing.T) {
 	}
 	base, _ := need(false)
 	with, size := need(true)
-	if with-base != 3*size || size == 0 {
-		t.Fatalf("need with a partition = %d, without = %d, partition size %d: want a difference of 3x the size", with, base, size)
+	if with-base != 4*size || size == 0 {
+		t.Fatalf("need with a partition = %d, without = %d, partition size %d: want a difference of 4x the size", with, base, size)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestSplitPartitionRefusesWhenItCannotFit(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := plantOldPartition(t, f.dbPath, 50)
-	splitTestDisk(t, 1<<20) // under 3x + headroom
+	splitTestDisk(t, 1<<20) // under 4x + headroom
 	var refusal *HeaderBodySplitRefusal
 	if err := MigrateHeaderBodySplit(f.dbPath, nil); !errors.As(err, &refusal) || refusal.Need <= refusal.Free {
 		t.Fatalf("err = %v, want a refusal with need > free", err)
@@ -159,5 +159,65 @@ func TestSplitPartitionRefusesWhenItCannotFit(t *testing.T) {
 	// Open refuses the same way rather than rewriting.
 	if _, err := Open(f.dbPath); !errors.As(err, &refusal) {
 		t.Fatalf("Open err = %v, want the refusal", err)
+	}
+}
+
+// P6: a retired old-layout partition is neither rewritten nor counted in the
+// preflight peak (review finding: oldLayoutPartitions ignored the retired set).
+func TestSplitPartitionRetiredIsSkipped(t *testing.T) {
+	f := newSplitFixture(t, 30, 10)
+	if err := MigrateHeaderBodySplit(f.dbPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	path := plantOldPartition(t, f.dbPath, 50)
+	sdb, err := sql.Open("sqlite", "file:"+StateDBPath(f.dbPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sdb.Exec(`INSERT INTO telemetry_partitions_retired (name, class, day, tape_seq) VALUES ('tool_result-20261030', 'tool_result', '20261030', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = sdb.Close()
+	parts, err := oldLayoutPartitions(f.dbPath)
+	if err != nil || len(parts) != 0 {
+		t.Fatalf("retired partition listed: %v err=%v", parts, err)
+	}
+	if needed, err := HeaderBodySplitNeeded(f.dbPath); err != nil || needed {
+		t.Fatalf("needed=%v err=%v for a retired partition only", needed, err)
+	}
+	if err := MigrateHeaderBodySplit(f.dbPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	if hasBody, h, _ := partitionRowCounts(t, path); !hasBody || h != 50 {
+		t.Fatalf("retired partition was rewritten: body col=%v rows=%d", hasBody, h)
+	}
+}
+
+// P7: rowids with gaps wider than a batch (and one near MaxInt64) all migrate.
+func TestSplitPartitionSparseRowids(t *testing.T) {
+	f := newSplitFixture(t, 30, 10)
+	if err := MigrateHeaderBodySplit(f.dbPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	prev := partitionSplitBatchRows
+	partitionSplitBatchRows = 7
+	t.Cleanup(func() { partitionSplitBatchRows = prev })
+	path := plantOldPartition(t, f.dbPath, 20)
+	pdb, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pdb.Exec(`UPDATE choir_events SET rowid = rowid * 50`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pdb.Exec(`UPDATE choir_events SET rowid = 9223372036854775807 WHERE tape_seq = 119`); err != nil {
+		t.Fatal(err)
+	}
+	_ = pdb.Close()
+	if err := MigrateHeaderBodySplit(f.dbPath, nil); err != nil {
+		t.Fatal(err)
+	}
+	if hasBody, h, b := partitionRowCounts(t, path); hasBody || h != 20 || b != 20 {
+		t.Fatalf("after: body col=%v headers=%d bodies=%d, want 20/20", hasBody, h, b)
 	}
 }
