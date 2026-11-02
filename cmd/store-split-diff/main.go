@@ -370,12 +370,24 @@ func checkWitness(ctx context.Context, r *Report, oldDB, newDB *sql.DB) {
 		}
 	}
 	sort.Slice(diffs, func(i, j int) bool { return diffs[i].Table < diffs[j].Table })
+	// The migration writes store_meta.schema_version 2 (design §2); that one
+	// row is the expected difference, and nothing else in store_meta may move.
+	bumpOnly := storeMetaBumpOnly(ctx, oldDB, newDB)
+	kept := diffs[:0]
+	for _, d := range diffs {
+		if d.Table == "store_meta" && bumpOnly {
+			continue
+		}
+		kept = append(kept, d)
+	}
+	diffs = kept
 	detail := map[string]any{
-		"tables":                  len(od.Tables),
-		"old_content_root":        od.ContentRoot,
-		"new_content_root":        nd.ContentRoot,
-		"schema_hash_changes":     od.SchemaHash != nd.SchemaHash,
-		"mismatched_table_digest": diffs,
+		"store_meta_schema_version_bump_only": bumpOnly,
+		"tables":                              len(od.Tables),
+		"old_content_root":                    od.ContentRoot,
+		"new_content_root":                    nd.ContentRoot,
+		"schema_hash_changes":                 od.SchemaHash != nd.SchemaHash,
+		"mismatched_table_digest":             diffs,
 	}
 	if len(diffs) == 0 {
 		r.add("witness.tables", true, detail)
@@ -390,6 +402,19 @@ func checkWitness(ctx context.Context, r *Report, oldDB, newDB *sql.DB) {
 		}
 	}
 	r.add("witness.tables", false, detail)
+}
+
+// storeMetaBumpOnly reports whether store_meta differs only in its
+// schema_version row, from 1 in the old store to 2 in the new one.
+func storeMetaBumpOnly(ctx context.Context, oldDB, newDB *sql.DB) bool {
+	const rest = `SELECT coalesce(group_concat(key || '=' || value, char(10)), '') FROM (SELECT key, value FROM store_meta WHERE key <> 'schema_version' ORDER BY key)`
+	const version = `SELECT value FROM store_meta WHERE key = 'schema_version'`
+	var oldRest, newRest, oldV, newV string
+	if oldDB.QueryRowContext(ctx, rest).Scan(&oldRest) != nil || newDB.QueryRowContext(ctx, rest).Scan(&newRest) != nil ||
+		oldDB.QueryRowContext(ctx, version).Scan(&oldV) != nil || newDB.QueryRowContext(ctx, version).Scan(&newV) != nil {
+		return false
+	}
+	return oldRest == newRest && oldV == "1" && newV == "2"
 }
 
 const oldObjectsQuery = `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects ORDER BY canonical_id`
