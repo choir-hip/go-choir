@@ -140,7 +140,7 @@ boundaries:
     - the internet egress policy (NET-01, NET-04)
   protected_surfaces: [vmctl launch and jailer args, host cgroup tree, block device io.cost, guest network taps, the paper's lifecycle]
 now:
-  status: checkpoint_incomplete
+  status: superseded  # owner 2026-11-01 "Make it a throughline now, superseding"; successor docs/definitions/choir-store-header-body-split-2026-11-02.md, which carries I0's numbers as its baseline
   slice: >-
     I1, I2, I3 (synthetic), I4, I5 and I6 deployed; the reread fixes
     landed. f7a560fb3 live 23:05Z: per-VM memory.high (size + 1 GiB),
@@ -196,7 +196,7 @@ now:
     reboots. Residuals: every vmctl deploy reboots all guests (deploy-impact
     classification); TestManagementDelegatesIntakeToTasks flakes in CI
     (asynchronous session release); no test pins the restore shape (I6 #4).
-  next_action: collect a day of meter data (from 2026-11-01), then write and publish the closing numbers report; in the meantime the write-storm residual and the remaining whole-kind reads
+  next_action: none here; the successor's S6 compares a meter day against this mission's baseline (meter from 2026-11-01T19:32Z)
 receipts:
   - station: I1
     status: landed

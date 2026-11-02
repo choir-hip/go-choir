@@ -11,11 +11,23 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-11-01): guest isolation
+## Active goal (2026-11-01): the store header/body split
 
-**Goal:** [`definitions/choir-guest-isolation-2026-11-01.md`](definitions/choir-guest-isolation-2026-11-01.md)
+**Goal:** [`definitions/choir-store-header-body-split-2026-11-02.md`](definitions/choir-store-header-body-split-2026-11-02.md)
 (`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-guest-isolation-2026-11-01.md`.
+`/goal docs/definitions/choir-store-header-body-split-2026-11-02.md`.
+
+Owner, 2026-11-01: "Make it a throughline now, superseding", after the
+data-oriented design inspiration (redesign rather than cache). Split
+`og_objects` and `choir_events` into header and body tables so header reads
+never read bodies; delete the workaround indexes. Stations: S0 measure
+three layouts; S1 design; S2 build; S3 differential on a store copy; S4
+d@e; S5 fleet; S6 a meter day against the guest isolation baseline.
+
+## Superseded (2026-11-01): guest isolation
+
+**Goal:** [`definitions/choir-guest-isolation-2026-11-01.md`](definitions/choir-guest-isolation-2026-11-01.md).
+I1 to I6 landed; I0's numbers are the header/body split's baseline.
 
 Owner, 2026-11-01: "a thrashing guest shouldn't obstruct other guests";
 "We should make this the next mission actually. Make a throughline."

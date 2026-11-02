@@ -45,3 +45,5 @@
 - 2026-11-01 18:59 EST — settled checkpoint_incomplete: I1–I6 and the reread fixes landed; I0 waits on its time gate (the meter's first full day ends 2026-11-02T19:32Z). Resume: read the day, write and publish the closing numbers report, set now.status working → complete.
 
 - 2026-11-01 19:35 EST — the session's /goal was dropped (stop condition "drop"); the scheduled I0 check-in (session cron) is cancelled. The file stays checkpoint_incomplete: I1–I6 and the reread fixes landed; I0's closing numbers report is not written. Resume by hand after 2026-11-02T19:32Z: read the meter's day (mem-2026-11.jsonl, 2026-11.jsonl, metadata only), write and publish the closing report, set complete.
+
+- 2026-11-01T19:37-0500 superseded (owner: "Make it a throughline now, superseding") by docs/definitions/choir-store-header-body-split-2026-11-02.md. I1-I6 landed; I0's closing report is not written, its meter day becomes the successor's baseline (S6).

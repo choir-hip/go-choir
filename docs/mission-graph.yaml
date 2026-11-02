@@ -1165,13 +1165,26 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-store-header-body-split-2026-11-02
+    title: Store header/body split — header reads never read bodies; the workaround indexes deleted
+    path: docs/definitions/choir-store-header-body-split-2026-11-02.md
+    ledger: docs/definitions/choir-store-header-body-split-2026-11-02.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-guest-isolation-2026-11-01]
+    enables: []
+    note: >-
+      Owner 2026-11-01: "Make it a throughline now, superseding". Carries the
+      guest isolation I0 numbers as its baseline.
   - id: choir-guest-isolation-2026-11-01
     title: Guest isolation — per-VM pressure, the paper jailed, disk I/O, disk space, network and CPU limits, so one guest cannot hurt another or the host
     path: docs/definitions/choir-guest-isolation-2026-11-01.md
     ledger: docs/definitions/choir-guest-isolation-2026-11-01.ledger.md
-    status: working
+    status: superseded  # 2026-11-01; successor choir-store-header-body-split-2026-11-02
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-memory-optimization-2026-11-01]
     enables: []
@@ -1192,7 +1205,7 @@ nodes:
     title: Lean system — shrink the paper, free the nodes, crash restart with a loop bound, docs made true, data system phase 2, streamlined backup
     path: docs/definitions/choir-lean-system-2026-10-30.md
     ledger: docs/definitions/choir-lean-system-2026-10-30.ledger.md
-    status: working  # its card: checkpoint_incomplete; paused while choir-guest-isolation-2026-11-01 is the entrypoint (2026-11-01)
+    status: working  # its card: checkpoint_incomplete; paused while choir-store-header-body-split-2026-11-02 is the entrypoint (2026-11-01)
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator

@@ -1,23 +1,23 @@
 ---
 definition_version: 4
-readiness: drafted
+readiness: executable  # owner 2026-11-01: "Make it a throughline now, superseding"
 
 review:
-  reviewer: none
+  reviewer: none  # executable on the owner's word; the build runs under the data system Operating Tempo (runtime checks verify); the landed candidate gets tier 2 (Devin + DeepSeek) before complete
   frozen_ref: none
   verdict: none
   evidence_ref: none
 
 start:
-  captured_at: 2026-11-01T19:00:00-05:00
+  captured_at: 2026-11-01T19:36:31-05:00  # promoted to executable; drafted 19:00 at 3529f400d
   source:
-    canonical_ref: main 3529f400d
+    canonical_ref: main 2ec066cdb
     deploy_identity: 61772f7417593eb40e3427b3a60f5fdd54711e07
   worktrees:
     - path: .claude/worktrees/agent-a68a1d96eb5bf63ea
       status: clean
       class: goal_candidate
-      owner: the guest isolation session
+      owner: this session (the guest isolation session, now this mission)
       touch: goal_owned
       recovery: leave in place
 
@@ -75,9 +75,17 @@ boundaries:
   protected_surfaces: [guest store schema, boot path, Texture canonical writes (bodies), replay]
 
 now:
-  status: checkpoint_incomplete
-  slice: drafted; waits on the guest isolation closing report and owner direction
-  source_ref: 3529f400d
+  status: working
+  slice: >-
+    S0 measure: on a synthetic SQLite store with the og_objects and
+    choir_events shapes and large bodies, count pages read per statement for
+    the hot header reads (retirement slices, lifecycle reads, kind/owner
+    newest, boot scans) under three layouts: today's (body mid-row), body
+    last, and header/body split. Then S1 design the split tables and the
+    migration; S2 build (readers, writers, migration, plan tests, index
+    deletions); S3 differential on a copy of the paper's store; S4 d@e;
+    S5 fleet; S6 a meter day against the baseline.
+  source_ref: 2ec066cdb
   deploy_identity: 61772f7417593eb40e3427b3a60f5fdd54711e07
   candidate:
     id: none
@@ -97,14 +105,14 @@ now:
     edge: missing_oracle
     delta_o: a per-query bytes-read figure on the guest (SQLite page reads per statement)
     scope_if_supported: the guest SQLite store
-    status: proposed
+    status: testing
     evidence_refs: [docs/definitions/choir-guest-isolation-2026-11-01.ledger.md (2026-11-01 reread entries)]
   decision:
-    what: none
+    what: split og_objects and choir_events into header and body tables (direction ratified; body-last is measured as the control in S0)
     kind: architecture
-    status: proposal
+    status: ratified
     evidence_ref: this file
-    owner_ratification_ref: required
+    owner_ratification_ref: owner 2026-11-01 "Make it a throughline now, superseding" (after the drafted file and the data-oriented design inspiration)
   belief:
     believed_state: >-
       Five reread fixes on 2026-11-01 were the same defect: a filter field
@@ -112,9 +120,9 @@ now:
     main_uncertainty: >-
       The migration cost on the paper's store (2.5M events, multi-GB) and
       whether a cheaper column reorder (body last) gets most of the win.
-    next_observation: the guest isolation closing numbers, then a page-read count per statement on a store copy
-  blocker_or_risk: owner ratification (architecture); the guest isolation mission closes first
-  next_action: after the closing report, measure body-last versus split on a synthetic store, then send this file to review
+    next_observation: S0 page reads per statement, three layouts; the baseline is the paper's memory meter from 2026-11-01T19:32Z (guest isolation checkpoint numbers)
+  blocker_or_risk: the migration of the paper's store (2.5M events, multi-GB) under the boot and restart rules; every guest deploy reboots every guest
+  next_action: build the S0 harness (a Go test or tool under internal/store that counts SQLite page reads per statement via sqlite3_stmt_status / dbstat) and run the three layouts
 
 receipts: []
 ---
@@ -138,3 +146,15 @@ Candidates to delete once headers stand alone: the expression indexes
 `idx_og_objects_choir_event_phase_updated`, the json generated columns that
 exist only to avoid body reads, and the two-phase snapshot reads whose first
 phase exists to avoid bodies.
+
+## Supersedes
+
+This mission supersedes the guest isolation goal
+([`choir-guest-isolation-2026-11-01.md`](choir-guest-isolation-2026-11-01.md)),
+owner 2026-11-01. Its stations I1 to I6 landed; its I0 closing report is
+folded in here as the baseline: the memory meter on the paper from
+2026-11-01T19:32Z, summarized in
+[`../reports/guest-isolation-checkpoint-2026-11-01.md`](../reports/guest-isolation-checkpoint-2026-11-01.md),
+is the before for S6. Its residuals (the write-storm neighbour cost, the
+undrilled network limits, every guest deploy rebooting every guest) stay
+named there and do not block this mission.
