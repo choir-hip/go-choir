@@ -237,6 +237,10 @@ func LoadConfigFromEnv() ManagerConfig {
 //	VMCTL_JAILER_PIDS_MAX           pids.max per VM (default 128; 0 omits)
 //	VMCTL_JAILER_CPU_WEIGHT         cpu.weight per VM (default 100; 0 omits)
 //	VMCTL_JAILER_IO_WEIGHT          io.weight per VM (default 100; 0 omits)
+//	VMCTL_JAILER_IO_WRITE_MIBPS     io.max wbps per VM on the state disk, MiB/s
+//	                                (default 400; 0 omits)
+//	VMCTL_JAILER_IO_MAX_DEVICE      MAJ:MIN for that bound (default: the state
+//	                                dir's backing block device)
 //	VMCTL_JAILER_MEMORY_HIGH_HEADROOM_MIB  memory.high above the guest size, with
 //	                                memory.swap.max 0 (default 1024; 0 omits both)
 //	VMCTL_JAILER_CPU_MAX_HEADROOM   cpu.max above the vCPU count (default 1; 0 omits)
@@ -268,6 +272,7 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 		"VMCTL_JAILER_PIDS_MAX":                 &j.PidsMax,
 		"VMCTL_JAILER_CPU_WEIGHT":               &j.CPUWeight,
 		"VMCTL_JAILER_IO_WEIGHT":                &j.IOWeight,
+		"VMCTL_JAILER_IO_WRITE_MIBPS":           &j.IOWriteMiBps,
 		"VMCTL_JAILER_MEMORY_HIGH_HEADROOM_MIB": &j.MemoryHighHeadroomMiB,
 		"VMCTL_JAILER_CPU_MAX_HEADROOM":         &j.CPUMaxHeadroom,
 	} {
@@ -281,6 +286,10 @@ func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
 	// Devin #8).
 	j.MemoryHighHeadroomMiB = min(j.MemoryHighHeadroomMiB, maxJailerMemoryHighHeadroomMiB)
 	j.CPUMaxHeadroom = min(j.CPUMaxHeadroom, maxJailerCPUMaxHeadroom)
+	j.IOWriteMiBps = min(j.IOWriteMiBps, maxJailerIOWriteMiBps)
+	if v := strings.TrimSpace(os.Getenv("VMCTL_JAILER_IO_MAX_DEVICE")); ioMaxDevicePattern.MatchString(v) {
+		j.IOMaxDevice = v
+	}
 	j.SpeculationDirect = envFlagOn("VMCTL_VMM_SPECULATION_BARRIERS")
 	return j
 }

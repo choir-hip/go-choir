@@ -1269,7 +1269,11 @@ in
       # half, a multi-service storm would starve them); the backup, the
       # known storm, weighs 10. Each VM's leaf carries its own io.weight
       # (VMCTL_JAILER_IO_WEIGHT). Weights only bind when the disk is
-      # contended. Rollback: drop this line.
+      # contended. Writes are bounded per leaf too (io.max wbps on each NVMe
+      # member, VMCTL_JAILER_IO_WRITE_MIBPS, default 400; 0 omits): weights
+      # cannot protect a latency-bound reader from a write storm
+      # (internal/vmmanager/io_write_cap.go). Rollback: drop this line; the
+      # bound alone: VMCTL_JAILER_IO_WRITE_MIBPS=0 in vmctl's environment.
       IOWeight = 100;
     };
   };

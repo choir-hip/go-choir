@@ -155,6 +155,12 @@ type JailerConfig struct {
 	// CPUMaxHeadroom puts cpu.max on the leaf at the guest's vCPUs plus
 	// this many CPUs; 0 omits it (guest isolation I6).
 	CPUMaxHeadroom int
+	// IOWriteMiBps bounds the leaf's sustained writes to the state disk
+	// (io.max wbps, MiB/s per device; 0 omits it). See io_write_cap.go.
+	IOWriteMiBps int
+	// IOMaxDevice is the "MAJ:MIN" the bound names; empty resolves the
+	// state dir's backing block device (VMCTL_JAILER_IO_MAX_DEVICE).
+	IOMaxDevice string
 	// NoFile is the VMM's RLIMIT_NOFILE; 0 leaves the jailer default.
 	NoFile int
 	// SpeculationDirect applies the speculation barriers to direct launches
@@ -236,6 +242,8 @@ func defaultJailerConfig() JailerConfig {
 		CPUWeight: DefaultJailerCPUWeight,
 		IOWeight:  DefaultJailerIOWeight,
 		NoFile:    DefaultJailerNoFile,
+
+		IOWriteMiBps: DefaultJailerIOWriteMiBps,
 
 		MemoryHighHeadroomMiB: DefaultJailerMemoryHighHeadroomMiB,
 		CPUMaxHeadroom:        DefaultJailerCPUMaxHeadroom,
@@ -1181,6 +1189,7 @@ func (m *Manager) startJailedFirecracker(vmID string, receipt *ConfinementReceip
 	}
 	receipt.PID = pid
 	applyLaunchOOMScoreAdj(vmID, pid)
+	m.applyLeafWriteCap(vmID)
 	exited := make(chan struct{})
 	go watchConsoleLog(vmID, pid, consolePath, exited)
 

@@ -601,6 +601,8 @@ type Manager struct {
 	launchedMu   sync.Mutex
 	launchedVMMs map[string]vmmBuild
 	cgroupRoot   string
+	ioMaxOnce    sync.Once
+	ioMaxDevs    []string
 	// procRoot is /proc unless a test replaces it (snapshot_diff.go).
 	procRoot string
 	// chownFn and fileOwnerFn are chown(2) and the owner lookup; tests that
