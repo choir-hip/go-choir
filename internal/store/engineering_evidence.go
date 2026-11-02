@@ -99,6 +99,9 @@ type EngineeringEvidenceReport struct {
 	CandidateID              string                                `json:"candidate_id,omitempty"`
 	ReducerSeq               int64                                 `json:"reducer_seq"`
 	CreatedAt                time.Time                             `json:"created_at"`
+	// DelegateUse: patch produced and delegate calls (absent when the delegate
+	// was unavailable or the report predates the field).
+	DelegateUse *types.EngineeringDelegateUse `json:"delegate_use,omitempty"`
 }
 
 type EngineeringEvidenceCandidate struct {
@@ -594,7 +597,7 @@ func (s *Store) GetEngineeringCapsuleEvidence(ctx context.Context, ownerID, comp
 	}
 	for _, j := range joinedReports {
 		r := j.r
-		pr := EngineeringEvidenceReport{ReportID: r.ReportID, AssignmentID: r.AssignmentID, Attempt: r.Attempt, RunID: r.RunID, AssignedAgentID: r.AssignedAgentID, Result: r.Result, Verdict: r.Verdict, ObservedSubjectDigest: r.ObservedSubjectDigest, Commands: []EngineeringEvidenceCommand{}, Outputs: []EngineeringEvidenceOutput{}, Mutations: []EngineeringEvidenceMutation{}, Late: r.Late, CertifiesOriginalSubject: r.CertifiesOriginalSubject, CandidateSubjectDigest: r.CandidateSubjectDigest, CandidateID: r.CandidateID, ReducerSeq: j.event.ReducerSeq, CreatedAt: r.CreatedAt}
+		pr := EngineeringEvidenceReport{ReportID: r.ReportID, AssignmentID: r.AssignmentID, Attempt: r.Attempt, RunID: r.RunID, AssignedAgentID: r.AssignedAgentID, Result: r.Result, Verdict: r.Verdict, ObservedSubjectDigest: r.ObservedSubjectDigest, Commands: []EngineeringEvidenceCommand{}, Outputs: []EngineeringEvidenceOutput{}, Mutations: []EngineeringEvidenceMutation{}, Late: r.Late, CertifiesOriginalSubject: r.CertifiesOriginalSubject, CandidateSubjectDigest: r.CandidateSubjectDigest, CandidateID: r.CandidateID, ReducerSeq: j.event.ReducerSeq, CreatedAt: r.CreatedAt, DelegateUse: r.DelegateUse}
 		for _, v := range r.Commands {
 			pr.Commands = append(pr.Commands, EngineeringEvidenceCommand{v.CommandID, v.CommandDigest, v.ExitCode})
 		}

@@ -426,3 +426,21 @@ func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 		}
 	}
 }
+
+// Delegate-first (owner, 2026-11-02): source edits go to the delegate when
+// it is available; work that changes no source stays with the engineer.
+func TestRLMEngineeringOverlayDelegateFirstRuleOnlyWithTheDelegate(t *testing.T) {
+	claude := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true, ClaudeDelegate: true})
+	for _, want := range []string{
+		"Delegate first:", "any work that edits source", "hand it to the delegate",
+		"trivial fixup after a delegate pass", "does not change source", "do not call the delegate",
+	} {
+		if !strings.Contains(claude, want) {
+			t.Errorf("claude overlay lacks %q", want)
+		}
+	}
+	plain := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+	if strings.Contains(plain, "Delegate first") || strings.Contains(plain, "hand it to the delegate") {
+		t.Fatal("plain overlay carries the delegate-first rule")
+	}
+}

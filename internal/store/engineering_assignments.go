@@ -179,6 +179,7 @@ func normalizeEngineeringReportForDigest(report types.EngineeringAssignmentRepor
 	report.Summary = ""
 	report.CandidateArtifactRef = ""
 	report.PropositionDigest, report.RecordCommandID = "", ""
+	report.DelegateUse = nil
 	return report
 }
 

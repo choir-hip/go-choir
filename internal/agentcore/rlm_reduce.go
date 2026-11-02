@@ -1834,6 +1834,15 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	}
 	report := types.EngineeringAssignmentReport{Result: result, Verdict: verdict, Summary: summary,
 		EvidenceRefs: evidenceRefs, Commands: recordedCommandsFromReceipts(receipts), Outputs: recordedOutputsFromReceipts(receipts)}
+	// Delegate use is observability only (the delegate-first rule): derived
+	// from this attempt's cells, nil where the delegate is unavailable.
+	if drt := r.rt(); drt != nil && metadataStringValue(r.rec.Metadata, "capsule_network_mode") == types.EngineeringCapsuleNetworkClaude {
+		id, att := metadataStringValue(r.rec.Metadata, "assignment_id"), uint64(metadataIntValue(r.rec.Metadata, "assignment_attempt"))
+		// A freeze earlier in this same cell is not yet folded in (the cell
+		// is noted after its reduction).
+		drt.noteDelegateCell(id, att, "", "", len(r.freezeResult) > 0)
+		report.DelegateUse = drt.delegateUseFor(id, att, true)
+	}
 	// Content-derived identity: a replayed cell (same intent content) replays
 	// the same report instead of minting a second one.
 	intentIdentity := "rlm-complete:" + r.scope.RunID + ":" + objectgraph.SHA256([]byte(strings.Join([]string{

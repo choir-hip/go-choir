@@ -964,6 +964,10 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				for _, in := range reduction.receipt.Intents {
 					result.StagedIntentIDs = append(result.StagedIntentIDs, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
 				}
+				if reduction.rec != nil && metadataStringValue(reduction.rec.Metadata, "capsule_network_mode") == types.EngineeringCapsuleNetworkClaude {
+					rt.noteDelegateCell(metadataStringValue(reduction.rec.Metadata, "assignment_id"), uint64(metadataIntValue(reduction.rec.Metadata, "assignment_attempt")),
+						input.Source, result.Stdout, len(reduction.freezeResult) > 0)
+				}
 				result.FateTerminal = reduction.fateTerminal
 				result.FreezeResult = reduction.freezeResult
 				result.VerifyResult = reduction.verifyResult
