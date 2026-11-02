@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -84,4 +85,41 @@ func TestStoreSplitDiffCatchesMissingBodyAndStaleDerived(t *testing.T) {
 			t.Errorf("report lacks %q:\n%s", want, out)
 		}
 	}
+}
+
+func TestStoreSplitDiffRetireCatchesFlippedPhaseClass(t *testing.T) {
+	oldPath, newPath, err := splitfixture.Build(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := splitfixture.OpenRW(newPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE og_objects SET event_phase = CASE WHEN event_phase = '' THEN 'flipped' ELSE '' END WHERE object_kind = 'choir.event'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	_, out := runDiff(t, oldPath, newPath)
+	var rep struct {
+		Checks []struct {
+			Name string `json:"name"`
+			OK   bool   `json:"ok"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal([]byte(out[:strings.LastIndex(out, "}")+1]), &rep); err != nil {
+		t.Fatalf("report: %v\n%s", err, out)
+	}
+	for _, c := range rep.Checks {
+		if c.Name == "derived.retire_equivalence" {
+			if c.OK {
+				t.Fatalf("retire equivalence passed with every og event's phase class flipped:\n%s", out)
+			}
+			return
+		}
+	}
+	t.Fatalf("report lacks derived.retire_equivalence:\n%s", out)
 }

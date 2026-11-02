@@ -601,56 +601,45 @@ func stringList(ctx context.Context, db *sql.DB, query string, args ...any) ([]s
 	return out, rows.Err()
 }
 
-// checkRetire compares the retire selections: for each of the last days
-// days, each event kind (grouped) and the three phase modes (any, phaseless,
-// phased), the old predicate's count on the old file equals the new
-// predicate's count on the new file, on og_objects and on choir_events.
+// checkRetire compares the retire selections: over the last days days, the
+// old predicate's counts on the old file equal the new predicate's counts on
+// the new file, per day, event kind and phase class (empty, set, NULL), on
+// og_objects and on choir_events. The three retire modes (any, phaseless,
+// phased) are sums of those classes. One grouped pass per side: the old
+// expressions read bodies, so a query per day and mode re-read the window's
+// bodies 90 times (S3, 2026-11-01: 84 minutes, 2.4 TB of logical reads).
 func checkRetire(ctx context.Context, r *Report, oldDB, newDB *sql.DB, asOf time.Time, days int) {
-	type mode struct{ name, oldPhase, oldEvPhase, newPhase string }
-	oldOGPhase := objectgraph.ChoirEventPhaseSQLFor("body", "metadata")
-	modes := []mode{
-		{"any", "", "", ""},
-		{"phaseless", " AND (" + oldOGPhase + ") = ''", " AND (" + oldOGPhase + ") = ''", " AND event_phase = ''"},
-		{"phased", " AND (" + oldOGPhase + ") <> ''", " AND (" + oldOGPhase + ") <> ''", " AND event_phase <> ''"},
-	}
-	day0 := asOf.Truncate(24 * time.Hour)
+	oldPhase := objectgraph.ChoirEventPhaseSQLFor("body", "metadata")
+	lo := asOf.Truncate(24*time.Hour).AddDate(0, 0, -(days - 1))
+	hi := asOf.Add(time.Nanosecond)
+	const day = `substr(updated_at, 1, 10)`
 	var bad []string
-	windows, compared := 0, int64(0)
-	for d := 0; d < days; d++ {
-		lo := day0.AddDate(0, 0, -d)
-		hi := lo.AddDate(0, 0, 1)
-		if d == 0 {
-			hi = asOf.Add(time.Nanosecond)
+	compared := int64(0)
+	for _, side := range []struct{ name, oldQ, newQ string }{
+		{"og_objects",
+			`SELECT ` + day + `, ` + objectgraph.ChoirEventKindSQL + `, (` + oldPhase + `) = '', count(*) FROM og_objects WHERE object_kind = 'choir.event' AND updated_at >= ?1 AND updated_at < ?2 GROUP BY 1, 2, 3`,
+			`SELECT ` + day + `, event_kind, event_phase = '', count(*) FROM og_objects WHERE object_kind = 'choir.event' AND updated_at >= ?1 AND updated_at < ?2 GROUP BY 1, 2, 3`},
+		{"choir_events",
+			`SELECT ` + day + `, event_kind, (` + oldPhase + `) = '', count(*) FROM choir_events WHERE updated_at >= ?1 AND updated_at < ?2 GROUP BY 1, 2, 3`,
+			`SELECT ` + day + `, event_kind, event_phase = '', count(*) FROM choir_events WHERE updated_at >= ?1 AND updated_at < ?2 GROUP BY 1, 2, 3`},
+	} {
+		a, err1 := groupCounts(ctx, oldDB, side.oldQ, lo, hi)
+		b, err2 := groupCounts(ctx, newDB, side.newQ, lo, hi)
+		if err := firstErr(err1, err2); err != nil {
+			bad = append(bad, fmt.Sprintf("%s: %v", side.name, err))
+			continue
 		}
-		for _, m := range modes {
-			windows++
-			for _, side := range []struct{ name, oldQ, newQ string }{
-				{"og_objects",
-					`SELECT ` + objectgraph.ChoirEventKindSQL + ` AS k, count(*) FROM og_objects WHERE object_kind = 'choir.event' AND updated_at >= ?1 AND updated_at < ?2` + m.oldPhase + ` GROUP BY 1`,
-					`SELECT event_kind, count(*) FROM og_objects WHERE object_kind = 'choir.event' AND updated_at >= ?1 AND updated_at < ?2` + m.newPhase + ` GROUP BY 1`},
-				{"choir_events",
-					`SELECT event_kind, count(*) FROM choir_events WHERE updated_at >= ?1 AND updated_at < ?2` + m.oldEvPhase + ` GROUP BY 1`,
-					`SELECT event_kind, count(*) FROM choir_events WHERE updated_at >= ?1 AND updated_at < ?2` + m.newPhase + ` GROUP BY 1`},
-			} {
-				a, err1 := groupCounts(ctx, oldDB, side.oldQ, lo, hi)
-				b, err2 := groupCounts(ctx, newDB, side.newQ, lo, hi)
-				if err := firstErr(err1, err2); err != nil {
-					bad = append(bad, fmt.Sprintf("%s %s %s: %v", side.name, lo.Format("2006-01-02"), m.name, err))
-					continue
-				}
-				for _, n := range a {
-					compared += n
-				}
-				if dd := diffCounts(a, b); len(dd) > 0 {
-					bad = append(bad, fmt.Sprintf("%s %s %s: %v", side.name, lo.Format("2006-01-02"), m.name, dd))
-				}
-			}
+		for _, n := range a {
+			compared += n
+		}
+		if dd := diffCounts(a, b); len(dd) > 0 {
+			bad = append(bad, fmt.Sprintf("%s: %v", side.name, dd))
 		}
 	}
 	if len(bad) > 50 {
 		bad = bad[:50]
 	}
-	r.add("derived.retire_equivalence", len(bad) == 0, map[string]any{"day_mode_windows": windows, "rows_compared": compared, "mismatches": bad})
+	r.add("derived.retire_equivalence", len(bad) == 0, map[string]any{"days": days, "rows_compared": compared, "mismatches": bad})
 }
 
 // ---- single-table equality ----
