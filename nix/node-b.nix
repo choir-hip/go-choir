@@ -1801,8 +1801,11 @@ in
         # 2026-10-25: b@c's test computer added by owner request ("We should
         # set it up on b@c.com as well"); same token, same expiry. It reads
         # the grant at its next cold boot.
+        # 2026-11-02: renewed two weeks by owner request ("make sure we have
+        # our Claude and Sonnet delegate working"); same computers, same
+        # token, still Sonnet (internal/claudedelegate/spec.go).
         "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d"
-        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-03T00:00:00Z"
+        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-17T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Density D3: idle computers give memory back in minutes (owner
         # 2026-10-26: "we should consider hibernating before 30 minutes. If
