@@ -21,6 +21,9 @@ const (
 	OwnerActApprove = "approve"
 	OwnerActApply   = "apply"
 	OwnerActReject  = "reject"
+	// OwnerActAbandon closes an open candidate that installed nothing (or a
+	// degraded one) to failed, with the owner's reason.
+	OwnerActAbandon = "abandon"
 
 	ownerActSenderDesk   = "selfdev"
 	ownerActRecordPrefix = "owner-act:"
@@ -41,7 +44,7 @@ func OwnerActRecordID(operationID, act string) string {
 // IsOwnerAct reports whether act is one an owner-act record may name.
 func IsOwnerAct(act string) bool {
 	switch act {
-	case OwnerActApprove, OwnerActApply, OwnerActReject:
+	case OwnerActApprove, OwnerActApply, OwnerActReject, OwnerActAbandon:
 		return true
 	}
 	return false

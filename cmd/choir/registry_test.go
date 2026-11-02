@@ -54,8 +54,8 @@ var wantCLIOnly = []string{
 	// sharing, withdrawing or reinstating it.
 	"package publish", "package reinstate", "package share", "package withdraw",
 	"precommit import-ledger",
-	// Owner acts (P7/P8): publishing and adopting a release.
-	"release adopt", "release publish", "self-dev approve",
+	// Owner acts (P7/P8): publishing and adopting a release; abandoning an open operation.
+	"release adopt", "release publish", "self-dev abandon", "self-dev approve",
 	// Owner act: rolling an applied operation back.
 	"self-dev mode set", "self-dev rollback", "self-dev wait", "texture watch", "trace export", "trace tail", "version",
 }

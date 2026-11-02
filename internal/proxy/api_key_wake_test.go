@@ -521,6 +521,7 @@ func TestOwnerActRoutesNeverWakeAComputer(t *testing.T) {
 		{http.MethodPost, base + "/lifecycle/resume-checkpoints", `{}`},
 		{http.MethodPost, base + "/self-development/rollbacks", `{}`},
 		{http.MethodPost, base + "/self-development/rebase-retry", `{}`},
+		{http.MethodPost, base + "/self-development/abandonments", `{}`},
 		{http.MethodPost, base + "/self-development/adoptions", `{}`},
 		{http.MethodPost, base + "/self-development/operations/op1/decision", `{}`},
 		{http.MethodPost, base + "/releases", `{"operation_id":"op1"}`},

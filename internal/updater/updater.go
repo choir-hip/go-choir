@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -188,12 +189,24 @@ func newUpdater(root, computerID, realizationID string, service ServiceManager, 
 			return nil, fmt.Errorf("updater: create state: %w", err)
 		}
 	}
+	if err := writeKeyLockMarker(root); err != nil {
+		return nil, fmt.Errorf("updater: key lock marker: %w", err)
+	}
 	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signer: signer, guestImageManifestPath: guestImageManifestPath, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	// The key's lock is held from before the journal read until Apply
+	// returns: a settle that takes it without waiting knows no apply for the
+	// key is running, and one that fenced the key is seen by the read below
+	// (journal_fence.go).
+	unlockKey, _, err := lockApplyKey(u.root, request.IdempotencyKey, true)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("updater: apply key lock: %w", err)
+	}
+	defer unlockKey()
 	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
 	journal, found, err := readJournal(journalPath)
 	if err != nil {
@@ -680,11 +693,19 @@ func verifyManifest(root string, manifest ReleaseManifest) error {
 		}
 		path := filepath.Join(root, filepath.FromSlash(file.Path))
 		info, err := os.Stat(path)
-		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("updater: manifest file %q is unavailable or not regular", file.Path)
+		if err != nil {
+			// %w: ReadPinnedManifest tells a missing file from a transient
+			// I/O error by the wrapped cause.
+			return fmt.Errorf("updater: manifest file %q is unavailable: %w", file.Path, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("updater: manifest file %q is not regular", file.Path)
 		}
 		digest, err := fileSHA256(path)
-		if err != nil || digest != file.SHA256 {
+		if err != nil {
+			return fmt.Errorf("updater: manifest file %q is unreadable: %w", file.Path, err)
+		}
+		if digest != file.SHA256 {
 			return fmt.Errorf("updater: manifest digest mismatch for %q", file.Path)
 		}
 	}
@@ -825,10 +846,41 @@ func ReadPinnedManifest(root, releaseDigest string) (ReleaseManifest, string, er
 	}
 	releaseDir := filepath.Join(filepath.Clean(root), "releases", releaseDigest)
 	manifest, err := readReleaseManifest(releaseDir)
-	if err != nil || manifest.ContentDigest != releaseDigest {
-		return ReleaseManifest{}, "", fmt.Errorf("updater: pinned release unavailable")
+	if err != nil {
+		return ReleaseManifest{}, "", classifyPinnedReadError(err)
+	}
+	if manifest.ContentDigest != releaseDigest {
+		return ReleaseManifest{}, "", fmt.Errorf("%w: manifest content digest is not the pinned digest", ErrPinnedReleaseCorrupt)
 	}
 	return manifest, releaseDir, nil
+}
+
+// The three classes of a pinned-release read failure. Missing and corrupt are
+// permanent (retrying cannot change them); anything else is transient and
+// matches neither.
+var (
+	// ErrPinnedReleaseUnavailable: the release, its manifest or one of its
+	// files is not on disk (ENOENT, or ENOTDIR on a path component).
+	ErrPinnedReleaseUnavailable = errors.New("updater: pinned release unavailable")
+	// ErrPinnedReleaseCorrupt: the release is on disk but fails verification
+	// (an undecodable manifest, a digest mismatch, an unsafe or irregular file).
+	ErrPinnedReleaseCorrupt = errors.New("updater: pinned release failed verification")
+)
+
+func classifyPinnedReadError(err error) error {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return ErrPinnedReleaseUnavailable
+	}
+	if errors.Is(err, syscall.EISDIR) || errors.Is(err, syscall.ELOOP) {
+		// A directory or a symlink loop where a release file belongs is the
+		// release's own shape, not a passing I/O error: retrying cannot fix it.
+		return fmt.Errorf("%w: %s", ErrPinnedReleaseCorrupt, strings.TrimPrefix(err.Error(), "updater: "))
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("updater: pinned release unreadable: %w", err)
+	}
+	return fmt.Errorf("%w: %s", ErrPinnedReleaseCorrupt, strings.TrimPrefix(err.Error(), "updater: "))
 }
 
 // RestagePinnedRelease swaps `current` onto an already-pinned release without
@@ -991,7 +1043,14 @@ func validateApplyRequest(request ApplyRequest) (string, error) {
 }
 
 func (u *Updater) currentRelease() (string, string, error) {
-	path := filepath.Join(u.root, "current")
+	return currentReleaseOf(u.root)
+}
+
+// currentReleaseOf reads root's `current` pointer: the release digest and its
+// directory ("" when there is no current release).
+func currentReleaseOf(root string) (string, string, error) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	path := filepath.Join(root, "current")
 	target, err := os.Readlink(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", "", nil
@@ -1001,9 +1060,9 @@ func (u *Updater) currentRelease() (string, string, error) {
 	}
 	absolute := target
 	if !filepath.IsAbs(absolute) {
-		absolute = filepath.Join(u.root, target)
+		absolute = filepath.Join(root, target)
 	}
-	relative, err := filepath.Rel(filepath.Join(u.root, "releases"), absolute)
+	relative, err := filepath.Rel(filepath.Join(root, "releases"), absolute)
 	if err != nil || relative == "." || strings.Contains(relative, string(os.PathSeparator)) || !computerevent.IsSHA256(relative) {
 		return "", "", fmt.Errorf("updater: current release pointer escapes release store")
 	}

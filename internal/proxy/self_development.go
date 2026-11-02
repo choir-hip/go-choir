@@ -54,6 +54,10 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		// P8: GET lists (read); POST adopts a published release (the
 		// owner's act). The method picks the action.
 		return strings.TrimSpace(decoded), "adoptions", true
+	case "abandonments":
+		// The owner closes an open operation that will not settle. POST only,
+		// and an owner act like an approval.
+		return strings.TrimSpace(decoded), "abandon", true
 	case "rebase-retry":
 		// U4 slice 8: the owner re-opens a spent rebase pair. POST only, and
 		// an owner act like an approval.
@@ -82,7 +86,7 @@ func isSelfDevelopmentGuestPath(path string) bool {
 
 func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 	switch action {
-	case "approve", "rollback", "rebase-retry":
+	case "approve", "rollback", "rebase-retry", "abandon":
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
@@ -458,7 +462,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	requiredScope := "computer:self_development:" + action
-	if action == "rebase-retry" {
+	if action == "rebase-retry" || action == "abandon" {
 		// An approval-class act: the approve scope plus the owner-act gate below.
 		requiredScope = "computer:self_development:approve"
 	}
@@ -497,6 +501,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		if !authorizeOwnerAct(w, authResult, "rebase retry") {
 			return
 		}
+	case "abandon":
+		if !authorizeOwnerAct(w, authResult, "self-development abandon") {
+			return
+		}
 	}
 
 	var target *resolvedComputerTarget
@@ -516,7 +524,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	var autoputerURL string
 	if authResult.AuthMethod == "api_key" {
 		// Reads wake the joined computer; approve, rollback, adopt and
-		// rebase-retry are owner acts and never do.
+		// rebase-retry and abandon are owner acts and never do.
 		if action == "read" {
 			autoputerURL, err = h.resolveComputerURLForComputerTarget(r.Context(), authResult, target, target.DesktopID)
 		} else {

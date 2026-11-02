@@ -61,6 +61,11 @@ type engineeringAdmissionBusy struct {
 	// is open, so a Freeze would be refused) or "carry_unreadable" (the
 	// carry's history or the operations could not be read).
 	Why string
+	// OperationID, OperationState and OperationCreatedAt name the blocking
+	// self-development operation when Why is "operation_open"; empty otherwise.
+	OperationID        string
+	OperationState     string
+	OperationCreatedAt string
 }
 
 func (e *engineeringAdmissionBusy) Error() string {
@@ -201,7 +206,7 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 	if open != nil {
 		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
 			BlockedBy: fmt.Sprintf("self-development operation %s (trajectory %s), still %s, which a Freeze on this computer waits for", open.OperationID, open.TrajectoryID, open.State),
-			Why:       "operation_open"}
+			Why:       "operation_open", OperationID: open.OperationID, OperationState: open.State, OperationCreatedAt: open.CreatedAt}
 	}
 	return nil
 }
@@ -219,6 +224,13 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		return nil
 	}
 	retry := wake.Retry + 1
+	if retry >= engineeringHoldRecordAfter && busy.Why == "operation_open" && busy.OperationID != "" {
+		// The hold has outlasted a few retries: it is not a passing wait. Put
+		// the blocker where management and Texture read. The record id names
+		// the operation's state, so the append is a no-op until the state
+		// changes, and a new state is recorded as the new fact it is.
+		rt.recordEngineeringAdmissionHold(ctx, assignment, busy)
+	}
 	if !rt.kernelMode || rt.scheduleActor == nil {
 		return fmt.Errorf("no wake available to retry the request: %w", busy)
 	}
