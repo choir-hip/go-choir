@@ -1,6 +1,6 @@
 # The paper wedged for two hours on a post-CAS projection failure (2026-11-02)
 
-Status: mitigated by a restart at 08:23Z; cause unknown; open.
+Status: recurred at 11:42Z with a readable cause; mitigated by restarts at 08:23Z and 12:04Z; fix on branch appender-inplace-prepared-recovery; open.
 
 ## What happened
 
@@ -62,3 +62,37 @@ wedge, so the deploy and liveness tooling see a ready computer.
    fails.
 4. Correlate the balloon target with SQLite errors on d@e. This is an
    adversarial drill, and it runs on d@e only.
+
+## Second wedge, 11:42Z: an orphaned prepared row
+
+- The paper made its last model call at 11:42Z. The watcher flagged it at
+  12:02Z. This time the error was readable while the process still ran:
+  `prepare embedded projection: … UNIQUE constraint failed:
+  computer_event_index.computer_id, computer_event_index.sequence`, 819
+  times. The platform head and the embedded head were both 5892981, so
+  this was not a head split: a `prepared` row already sat at 5892982.
+- Mechanism (from the code, `internal/computerevent/appender.go`): when the
+  head CAS fails, the cleanup is `_ = a.projection.DiscardPrepared(ctx, …)`.
+  It shares the CAS's ctx, and its error is dropped. If that ctx was
+  cancelled, or the discard failed, the prepared row outlives the append,
+  and every later Prepare at that sequence hits the unique key.
+- The morning wedge is the same family: a prepared row left behind (there,
+  after a CAS that succeeded and a finalize that failed). Only the boot's
+  `RecoverPrepared` clears either one.
+- A restart at 12:04Z cleared it (`recovery resume … local=5892981
+  H=5892981`), and the head moved again.
+- Observability: the deferral spam (one line every few seconds) fills the
+  roughly 500 KB console within minutes, so the first error of each wedge is
+  lost.
+
+## Fix (branch appender-inplace-prepared-recovery, 504d778b3)
+
+- appendLocked runs `RecoverPrepared` in place, under the appender mutex,
+  when the heads differ or a Prepare fails, then retries once. Because
+  appends are serialized, every prepared row it sees is an orphan.
+- It is skipped while a reconstruct or replay is active, because a
+  reconstruct prepares rows outside the mutex.
+- The discard after a failed CAS uses `context.WithoutCancel` with a
+  timeout, and logs failures.
+- Two regression tests, one per wedge, fail on the old code and pass with
+  the fix.
