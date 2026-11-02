@@ -963,6 +963,11 @@ func (fx *derivableSelfDevFixture) waitForState(t *testing.T, operationID string
 		}
 		t.Fatalf("operation %s state=%s, want one of %v (step error: %v)", operationID, operation.State, states, stepErr)
 	}
+	// A settle moves the row first and writes the tape (the discharge, the
+	// settlement) after it in the same materializer pass: wait for the pass
+	// to finish, so a caller that then reads the tape sees all of it.
+	fx.rt.selfdevMaterializeMu.Lock()
+	fx.rt.selfdevMaterializeMu.Unlock()
 	return operation
 }
 func (fx *derivableSelfDevFixture) countEventKinds() map[computerevent.EventKind]int {

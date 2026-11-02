@@ -189,6 +189,9 @@ func newUpdater(root, computerID, realizationID string, service ServiceManager, 
 			return nil, fmt.Errorf("updater: create state: %w", err)
 		}
 	}
+	if err := writeKeyLockMarker(root); err != nil {
+		return nil, fmt.Errorf("updater: key lock marker: %w", err)
+	}
 	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signer: signer, guestImageManifestPath: guestImageManifestPath, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
@@ -1040,7 +1043,14 @@ func validateApplyRequest(request ApplyRequest) (string, error) {
 }
 
 func (u *Updater) currentRelease() (string, string, error) {
-	path := filepath.Join(u.root, "current")
+	return currentReleaseOf(u.root)
+}
+
+// currentReleaseOf reads root's `current` pointer: the release digest and its
+// directory ("" when there is no current release).
+func currentReleaseOf(root string) (string, string, error) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	path := filepath.Join(root, "current")
 	target, err := os.Readlink(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", "", nil
@@ -1050,9 +1060,9 @@ func (u *Updater) currentRelease() (string, string, error) {
 	}
 	absolute := target
 	if !filepath.IsAbs(absolute) {
-		absolute = filepath.Join(u.root, target)
+		absolute = filepath.Join(root, target)
 	}
-	relative, err := filepath.Rel(filepath.Join(u.root, "releases"), absolute)
+	relative, err := filepath.Rel(filepath.Join(root, "releases"), absolute)
 	if err != nil || relative == "." || strings.Contains(relative, string(os.PathSeparator)) || !computerevent.IsSHA256(relative) {
 		return "", "", fmt.Errorf("updater: current release pointer escapes release store")
 	}

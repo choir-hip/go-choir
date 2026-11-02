@@ -250,6 +250,41 @@ func TestPinnedReleaseReadClasses(t *testing.T) {
 	if err := os.Remove(dir); err != nil {
 		t.Fatal(err)
 	}
+	// A directory where the release's manifest belongs is corrupt, not
+	// transient (EISDIR); so is a symlink loop (ELOOP).
+	if err := os.Rename(dir+".gone", dir); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(dir, "release-manifest.json")
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(manifestPath, manifestPath+".saved"); err != nil {
+		t.Fatal(err)
+	}
+	for _, shape := range []struct {
+		name string
+		make func() error
+	}{
+		{"directory", func() error { return os.Mkdir(manifestPath, 0o700) }},
+		{"symlink loop", func() error { return os.Symlink(manifestPath, manifestPath) }},
+	} {
+		if err := shape.make(); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := updater.ReadPinnedManifest(fx.updaterRoot, first.ReleaseDigest); !errors.Is(err, updater.ErrPinnedReleaseCorrupt) {
+			t.Fatalf("manifest that is a %s = %v; want corrupt", shape.name, err)
+		}
+		if err := os.Remove(manifestPath); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Rename(manifestPath+".saved", manifestPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(dir, dir+".gone"); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Rename(dir+".gone", dir); err != nil {
 		t.Fatal(err)
 	}

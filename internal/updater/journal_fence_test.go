@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +20,11 @@ import (
 //     installs under;
 //  2. an Apply that arrives after the settle (queued, or its client gave up)
 //     stages and swaps anyway;
-//  3. a dead journal that moved `current` is fenced, hiding an installed
-//     release; or a terminal applied one is reported as nothing installed.
+//  3. a dead journal is judged by its phase instead of by `current`, so a
+//     swapped-then-crashed apply is called nothing installed (or the reverse),
+//     or a terminal applied one is reported as nothing installed;
+//  4. an older daemon that takes no lock is trusted to hold it;
+//  5. a corrupt journal wedges every settle and Apply for its key.
 
 func fenceTestUpdater(t *testing.T) (*Updater, string, *fakeServiceManager) {
 	t.Helper()
@@ -37,22 +42,29 @@ func fenceTestUpdater(t *testing.T) (*Updater, string, *fakeServiceManager) {
 	return engine, root, service
 }
 
-func TestFenceRefusesWhileAnApplyHoldsTheKey(t *testing.T) {
+func holdOrFatal(t *testing.T, root, key string) *ApplyKeyHold {
+	t.Helper()
+	hold, err := HoldApplyKey(root, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hold
+}
+
+func TestHoldRefusesWhileAnApplyHoldsTheKey(t *testing.T) {
 	_, root, _ := fenceTestUpdater(t)
 	unlock, acquired, err := lockApplyKey(root, "idem-busy", true)
 	if err != nil || !acquired {
 		t.Fatalf("lock: acquired=%v err=%v", acquired, err)
 	}
-	fence, err := FenceApply(root, "idem-busy", "settled")
-	if err != nil || fence.State != FenceInFlight || fence.Fenced {
-		t.Fatalf("fence while an apply holds the key = %+v (%v); want in flight", fence, err)
-	}
-	if _, found, _ := ReadJournalOutcome(root, "idem-busy"); found {
-		t.Fatal("a fence was written under a running apply")
+	if hold := holdOrFatal(t, root, "idem-busy"); hold.Verdict != VerdictInFlight {
+		t.Fatalf("verdict while an apply holds the key = %s", hold.Verdict)
 	}
 	unlock()
-	if fence, err := FenceApply(root, "idem-busy", "settled"); err != nil || fence.State != FenceNothingInstalled || !fence.Fenced {
-		t.Fatalf("fence after the apply let go = %+v (%v)", fence, err)
+	hold := holdOrFatal(t, root, "idem-busy")
+	defer hold.Release()
+	if hold.Verdict != VerdictNothingInstalled || !hold.Dead() {
+		t.Fatalf("verdict after the apply let go = %+v", hold)
 	}
 }
 
@@ -64,10 +76,14 @@ func TestAnApplyAfterTheFenceReturnsItAndInstallsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	late := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-2", "idem-2", "late release")
-	fence, err := FenceApply(root, "idem-2", "operation settled before the updater started")
-	if err != nil || fence.State != FenceNothingInstalled || !fence.Fenced || !fence.Outcome.Terminal || fence.Outcome.Result.Outcome != "refused" {
-		t.Fatalf("fence = %+v (%v)", fence, err)
+	hold := holdOrFatal(t, root, "idem-2")
+	if hold.Verdict != VerdictNothingInstalled {
+		t.Fatalf("verdict = %+v", hold)
 	}
+	if err := hold.Fence("operation settled before the updater started"); err != nil {
+		t.Fatal(err)
+	}
+	hold.Release()
 	restarts := service.restarts
 	result, err := engine.Apply(context.Background(), late)
 	if err == nil || result.Outcome != "refused" {
@@ -77,42 +93,96 @@ func TestAnApplyAfterTheFenceReturnsItAndInstallsNothing(t *testing.T) {
 	if err != nil || current != first.Manifest.ContentDigest || service.restarts != restarts {
 		t.Fatalf("late apply moved current to %s (restarts %d -> %d, %v)", current, restarts, service.restarts, err)
 	}
-	// A second fence reads the terminal journal and writes nothing.
-	if again, err := FenceApply(root, "idem-2", "again"); err != nil || again.Fenced || again.State != FenceNothingInstalled || again.Outcome.Failure != "operation settled before the updater started" {
-		t.Fatalf("second fence = %+v (%v)", again, err)
+	again := holdOrFatal(t, root, "idem-2")
+	defer again.Release()
+	if again.Verdict != VerdictFailed || !strings.HasPrefix(again.Outcome.Failure, "operation settled before the updater started") {
+		t.Fatalf("after the fence = %+v", again)
 	}
 }
 
-// Failure 3: the journal's phase decides; only a dead journal that never moved
-// `current` is fenced.
-func TestFenceReadsTheJournalPhase(t *testing.T) {
+// Failure 3: a dead journal is arbitrated on `current`, whatever its phase.
+func TestDeadJournalIsArbitratedOnCurrent(t *testing.T) {
 	engine, root, _ := fenceTestUpdater(t)
-	applied := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-a", "idem-applied", "applied release")
-	if _, err := engine.Apply(context.Background(), applied); err != nil {
+	prior := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-p", "idem-prior", "prior release")
+	if _, err := engine.Apply(context.Background(), prior); err != nil {
 		t.Fatal(err)
 	}
-	if fence, err := FenceApply(root, "idem-applied", "x"); err != nil || fence.State != FenceApplied || fence.Fenced || fence.Outcome.Result.Outcome != "applied" {
-		t.Fatalf("applied journal fence = %+v (%v)", fence, err)
+	if hold := holdOrFatal(t, root, "idem-prior"); hold.Verdict != VerdictApplied {
+		t.Fatalf("applied journal verdict = %s", hold.Verdict)
+	} else {
+		hold.Release()
 	}
-	for phase, want := range map[string]FenceState{
-		"prepared":          FenceNothingInstalled,
-		"pointer_swapped":   FenceInterrupted,
-		"restart_requested": FenceInterrupted,
-		"recovering":        FenceInterrupted,
-	} {
-		key := "idem-" + phase
+	target := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-t", "idem-target", "target release")
+	targetDir := filepath.Join(root, "releases", target.Manifest.ContentDigest)
+	if err := engine.stageRelease(target.SourceDir, targetDir, target.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	priorDigest := prior.Manifest.ContentDigest
+	write := func(key, phase string) {
 		if err := writeJournal(filepath.Join(root, "operations", safeName(key)+".json"), operationJournal{
-			RequestCommitment: "c", Phase: phase, TargetReleaseDigest: "t", StartedAt: time.Now().UTC(),
+			RequestCommitment: "c", Phase: phase, PriorReleaseDigest: priorDigest, TargetReleaseDigest: target.Manifest.ContentDigest, StartedAt: time.Now().UTC(),
 		}); err != nil {
 			t.Fatal(err)
 		}
-		fence, err := FenceApply(root, key, "x")
-		if err != nil || fence.State != want || fence.Fenced != (want == FenceNothingInstalled) {
-			t.Fatalf("%s: fence = %+v (%v); want %s", phase, fence, err, want)
+	}
+	check := func(key string, want ApplyVerdict) {
+		t.Helper()
+		hold := holdOrFatal(t, root, key)
+		defer hold.Release()
+		if hold.Verdict != want || !hold.Dead() {
+			t.Fatalf("%s: verdict = %+v; want %s", key, hold, want)
 		}
-		outcome, _, _ := ReadJournalOutcome(root, key)
-		if outcome.Terminal != (want == FenceNothingInstalled) {
-			t.Fatalf("%s: journal terminal=%v after the fence", phase, outcome.Terminal)
+		if err := hold.Fence("settled"); err != nil {
+			t.Fatal(err)
 		}
+		if outcome, _, _ := ReadJournalOutcome(root, key); !outcome.Terminal || outcome.Result.Outcome != "refused" {
+			t.Fatalf("%s: journal after the fence = %+v", key, outcome)
+		}
+	}
+	// `current` is the prior: a swapped-phase journal still installed nothing.
+	write("idem-swapped-prior", "pointer_swapped")
+	check("idem-swapped-prior", VerdictNothingInstalled)
+	// `current` is the target: a prepared-phase journal is still installed.
+	if err := engine.swapCurrent(targetDir); err != nil {
+		t.Fatal(err)
+	}
+	write("idem-prepared-target", "prepared")
+	check("idem-prepared-target", VerdictInstalled)
+	write("idem-recovering-target", "recovering")
+	check("idem-recovering-target", VerdictInstalled)
+	// Neither: unknown, and still terminal after the fence.
+	if err := engine.swapCurrent(filepath.Join(root, "releases", priorDigest)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJournal(filepath.Join(root, "operations", safeName("idem-neither")+".json"), operationJournal{
+		RequestCommitment: "c", Phase: "restart_requested", PriorReleaseDigest: strings.Repeat("1", 64), TargetReleaseDigest: strings.Repeat("2", 64),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	check("idem-neither", VerdictUnknown)
+	// Failure 5: a corrupt journal is dead and unknown, and the fence repairs it.
+	if err := os.WriteFile(filepath.Join(root, "operations", safeName("idem-corrupt")+".json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	check("idem-corrupt", VerdictUnknown)
+}
+
+// Failure 4: an older daemon writes no marker and takes no lock.
+func TestAnUnprovenLockNeverCallsAJournalDead(t *testing.T) {
+	_, root, _ := fenceTestUpdater(t)
+	if err := os.Remove(filepath.Join(root, "operations", keyLockMarker)); err != nil {
+		t.Fatal(err)
+	}
+	if hold := holdOrFatal(t, root, "idem-old"); hold.Verdict != VerdictLockUnproven || hold.Dead() {
+		t.Fatalf("missing journal under an old daemon = %+v; want lock_unproven", hold)
+	}
+	if err := writeJournal(filepath.Join(root, "operations", safeName("idem-old-done")+".json"), operationJournal{Phase: "completed", Result: ApplyResult{Outcome: "applied"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A terminal journal needs no lock: it is still the authority.
+	hold := holdOrFatal(t, root, "idem-old-done")
+	defer hold.Release()
+	if hold.Verdict != VerdictApplied {
+		t.Fatalf("terminal journal under an old daemon = %+v", hold)
 	}
 }

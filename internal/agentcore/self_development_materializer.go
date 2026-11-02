@@ -120,9 +120,9 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 const selfdevApplyInterruptedByRestart = "interrupted_by_restart"
 
 // errSelfDevJournalMidFlight holds a crash-interrupted operation whose apply
-// journal is not terminal: an apply still running settles on a later pass from
-// the journal it finishes; a dead one past its pointer swap is held until the
-// owner's abandon act re-admits it for the updater's resume.
+// is still running with the updater: it settles on a later pass (a retry
+// wake is armed) from the journal the updater finishes. A dead journal is
+// never held: it is closed by the current pointer.
 var errSelfDevJournalMidFlight = errors.New("updater journal is mid-flight; effective state unknown")
 
 // errSelfDevSettlementStateMismatch holds a settlement whose journal and
@@ -176,44 +176,58 @@ func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx contex
 }
 
 // settleSelfDevelopmentOperationAfterCrash closes an interrupted operation
-// with what the updater journal says happened, without calling the updater:
-// no journal, or a dead one that never swapped, means nothing changed (fenced,
-// then failed, interrupted by a restart); a terminal journal is recorded
-// through the normal path; a live apply settles on a later pass; a dead one
-// past its swap holds the operation, visible, for the owner's abandon act.
+// with what the updater says happened, without calling the updater: a
+// terminal journal is recorded through the normal path; a dead (missing,
+// non-terminal or corrupt) one is closed by the current pointer (prior:
+// failed, interrupted by a restart; target: applied without the tail;
+// neither: failed with the effective release unknown); a running apply
+// settles on a later pass.
 func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context, operation selfdev.Operation, rollback bool) error {
 	key := "selfdev-apply-" + operation.DecisionEvent
 	if rollback {
 		key = "selfdev-rollback-apply-" + operation.DecisionEvent
 	}
 	journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, key)
-	if err != nil {
-		return fmt.Errorf("updater journal unreadable: %w", err)
-	}
-	if !found || !journaled.Terminal {
-		// No journal, or a non-terminal one: the key's lock tells a live
-		// apply (an updater that outlived the runtime's crash) from a dead
-		// one, and a dead one that never swapped is fenced
-		// (updater.FenceApply).
-		fence, fenceErr := updater.FenceApply(rt.selfdevUpdaterRoot, key, selfdevInterruptedByRestart+" before the updater installed anything")
-		switch {
-		case fenceErr != nil:
-			return fmt.Errorf("updater journal unreadable: %w", fenceErr)
-		case fence.State == updater.FenceInFlight:
-			// The updater is still applying: a later pass settles from the
-			// terminal journal it writes.
-			return errSelfDevJournalMidFlight
-		case fence.State == updater.FenceInterrupted:
-			// Dead past the pointer swap: only the updater's resume says
-			// what is installed. Held; the owner's abandon act re-admits it
-			// for one resume (abandonSelfDevelopmentOperation).
-			return errSelfDevJournalMidFlight
-		case fence.Fenced && operation.State == selfdev.StateDegraded:
-			return nil // closed degraded already (the settlement crashed twice): an owner act decides
-		case fence.Fenced:
-			return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
+	if err != nil || !found || !journaled.Terminal {
+		// No terminal journal: the one rule decides (selfdev_settle_open.go).
+		// A running apply (an updater that outlived the runtime's crash)
+		// settles on a later pass, which a retry wake guarantees; a dead
+		// journal is closed by the current pointer, never resumed.
+		hold, holdErr := updater.HoldApplyKey(rt.selfdevUpdaterRoot, key)
+		if holdErr != nil {
+			return fmt.Errorf("updater journal unreadable: %w", holdErr)
 		}
-		journaled = fence.Outcome // the updater finished between the two reads
+		defer hold.Release()
+		switch hold.Verdict {
+		case updater.VerdictInFlight:
+			return errSelfDevJournalMidFlight
+		case updater.VerdictLockUnproven:
+			// An older daemon: the behavior from before the lock.
+			if found {
+				return errSelfDevJournalMidFlight
+			}
+			hold.Release()
+			return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
+		case updater.VerdictApplied, updater.VerdictFailed:
+			journaled = hold.Outcome // the updater finished between the two reads
+			hold.Release()
+		case updater.VerdictInstalled:
+			if operation.State == selfdev.StateAwaitingApproval || operation.State == selfdev.StateAccepted {
+				return fmt.Errorf("%w: the current release is the apply's target but the operation is %s", errSelfDevSettlementStateMismatch, operation.State)
+			}
+			_, err := rt.settleSelfDevelopmentOperationForward(ctx, operation, hold, selfdevInterruptedByRestart+" after the updater moved the current release: "+selfdevSettledForwardTail+" (recorded from the updater's current pointer: "+hold.Cause+")")
+			return err
+		case updater.VerdictUnknown:
+			return rt.failSettledRow(ctx, operation, hold, updater.ApplyResult{Outcome: "unknown_effective", ReleaseDigest: hold.Target, PriorReleaseDigest: hold.Prior},
+				selfdevInterruptedByRestart+unknownEffectiveNote(hold), operation.State)
+		default: // nothing installed
+			if operation.State == selfdev.StateDegraded {
+				// Degraded already recorded its applied event; the owner's
+				// abandon closes it.
+				return nil
+			}
+			return rt.failSettledRow(ctx, operation, hold, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, selfdevInterruptedByRestart, operation.State)
+		}
 	}
 	// Only an `applied` journal has a tail: a checkpoint bind and a route
 	// promotion, the work that can crash the computer. Any other terminal
@@ -291,7 +305,7 @@ func selfdevSettlementUnfinished(last string, rollback bool) string {
 	if rollback {
 		recorded = "the rollback"
 	}
-	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): %s is recorded on the tape, its checkpoint and route promotion are not; an owner act (rollback, or a manual re-bind) decides", last, recorded)
+	return fmt.Sprintf("the settlement did not finish on two boots (last: %s): %s is recorded on the tape, its checkpoint and route promotion are not; the owner's abandon act closes it (or a rollback replaces it)", last, recorded)
 }
 
 // selfdevSettlementUnfinishedNothingInstalled is the cause on an operation
@@ -414,6 +428,11 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			if settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback); settleErr != nil {
 				log.Printf("selfdev materializer: operation %s in %s interrupted by a restart, held: %v",
 					operation.OperationID, operation.State, settleErr)
+				if errors.Is(settleErr, errSelfDevJournalMidFlight) {
+					// The updater is still applying: nothing else re-fires
+					// this pass when it finishes without a commit.
+					rt.armSelfDevelopmentRetry(operation.OperationID)
+				}
 			}
 			continue
 		}
@@ -441,15 +460,22 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			// which re-drives from the retained journal phase.
 			log.Printf("selfdev materializer: operation %s in %s needs retry: %v",
 				operation.OperationID, operation.State, operationErr)
-			if rt.scheduleActor != nil {
-				if armErr := rt.scheduleActor(context.Background(), rt.selfdevRouteOwnerID, rt.selfdevComputerID,
-					"management:"+rt.selfdevRouteOwnerID, selfdevMaterializationRetryKind,
-					operation.OperationID, "", "", time.Now().UTC().Add(60*time.Second)); armErr != nil {
-					log.Printf("selfdev materializer: retry wake for %s: %v", operation.OperationID, armErr)
-				}
-			}
+			rt.armSelfDevelopmentRetry(operation.OperationID)
 			continue
 		}
+	}
+}
+
+// armSelfDevelopmentRetry arms the durable retry wake that re-runs the
+// reconciler for an operation in 60 s.
+func (rt *Runtime) armSelfDevelopmentRetry(operationID string) {
+	if rt.scheduleActor == nil {
+		return
+	}
+	if err := rt.scheduleActor(context.Background(), rt.selfdevRouteOwnerID, rt.selfdevComputerID,
+		"management:"+rt.selfdevRouteOwnerID, selfdevMaterializationRetryKind,
+		operationID, "", "", time.Now().UTC().Add(60*time.Second)); err != nil {
+		log.Printf("selfdev materializer: retry wake for %s: %v", operationID, err)
 	}
 }
 
@@ -1307,60 +1333,28 @@ func (rt *Runtime) verificationEvidence(ctx context.Context, operation selfdev.O
 	return selfdevVerificationEvidence{OperationID: payload.OperationID, VerifiedBundleDigest: payload.BundleDigest, Refs: payload.VerifierRefs}, nil
 }
 
-// recordMaterializationFailed settles an operation failed whose apply
-// installed nothing (docs/problems/
-// selfdev-stale-open-operations-block-engineering-2026-11-02.md,
-// "Journal-first settlement"):
-//   - the updater journal is asked first and fenced (requireNothingInstalled):
-//     an apply in flight, applied, or interrupted past its swap is refused, so
-//     the discharge below never claims a prior release that is not running,
-//     and no later Apply for the decision installs anything;
-//   - the row moves first, under its expected-state CAS; a lost CAS (a decide
-//     or a materializer pass won the row) discharges nothing;
-//   - then the pending transition is discharged, only if it is this
-//     operation's decision (dischargeSettledPending reads the head again).
-//
-// A discharge that fails after the row moved is repaired by the reconciler's
-// orphan sweep (dischargeOrphanedPendingTransition).
+// recordMaterializationFailed is the materializer's failed settle, by the
+// rule in selfdev_settle_open.go: the apply key is held, and only a terminal
+// non-applied journal or a dead one with nothing installed may settle failed
+// (a running, applied, installed or unknown apply is refused; the materializer
+// retries, and the owner's abandon settles the unknown). Then failSettledRow:
+// the row first under its CAS, the discharge, the fence. An older daemon's
+// unproven lock keeps this path's behavior from before the lock (it ran on
+// the materializer's own pass, under its mutex).
 func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation selfdev.Operation, result updater.ApplyResult, applyErr error, expectedState string) error {
-	if _, err := rt.requireNothingInstalled(operation, applyErr.Error()); err != nil {
-		return err
-	}
-	recoveryDigest := ""
-	if result.RecoveryReceipt != nil {
-		recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
-		if err != nil {
-			return err
-		}
-		recoveryDigest = computerevent.DigestBytes(recoveryBytes)
-	}
-	head, err := rt.store.Head(ctx, operation.ComputerID)
-	if err != nil || head == nil {
-		return fmt.Errorf("materializer: recovery projection unavailable")
-	}
-	owned, err := rt.pendingDecisionOf(ctx, operation, head.PendingTransitionRef)
+	hold, err := rt.holdSelfDevelopmentApply(operation)
 	if err != nil {
 		return err
 	}
-	settled, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, expectedState, selfdev.StateFailed, func(next *selfdev.Operation) error {
-		next.MaterializationReceipt = recoveryDigest
-		// The discharge below returns desired to effective.
-		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
-		if owned != "" {
-			next.DesiredHead = head.EffectiveEventHead
-		}
-		next.TerminalError = applyErr.Error()
-		return nil
-	})
-	if err != nil {
-		return err
+	defer hold.Release()
+	switch hold.Verdict {
+	case updater.VerdictFailed, updater.VerdictNothingInstalled, updater.VerdictLockUnproven:
+	case updater.VerdictInFlight:
+		return refuseVerdict(operation, hold)
+	default:
+		return fmt.Errorf("%w: operation %s: the updater journal says %s (%s); it does not settle failed", errSelfdevSettleConflict, operation.OperationID, hold.Verdict, hold.Cause)
 	}
-	// The row may have been read before a decision it now carries; the
-	// discharge names the operation as it was asked to settle.
-	if settled.DecisionEvent == "" {
-		settled.DecisionEvent = operation.DecisionEvent
-	}
-	return rt.dischargeSettledPending(ctx, settled, result)
+	return rt.failSettledRow(ctx, operation, hold, result, applyErr.Error(), expectedState)
 }
 
 // appendMaterializationFailedEvent appends (idempotently, on the operation's

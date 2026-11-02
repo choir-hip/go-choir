@@ -103,10 +103,14 @@ func TestSettleThatLosesTheRowToTheMaterializerLeavesItLive(t *testing.T) {
 	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationFailed] != 0 {
 		t.Fatalf("a lost settle discharged pending: %v", kinds)
 	}
+	// The fence comes only after a won row CAS: the live apply is untouched.
+	if _, found, _ := updater.ReadJournalOutcome(fx.updaterRoot, "selfdev-apply-"+accepted.DecisionEvent); found {
+		t.Fatal("a settle that lost the row fenced the live operation's apply")
+	}
 	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)
-	got, _ := fx.operations.Get(ctx, fx.computerID, accepted.OperationID)
-	if got.State != selfdev.StateFailed && got.State != selfdev.StateApplied {
-		t.Fatalf("the live operation = %s; want it terminal after a pass", got.State)
+	got := fx.waitForState(t, accepted.OperationID, selfdev.StateApplied)
+	if got.State != selfdev.StateApplied {
+		t.Fatalf("the live operation = %s; want it applied", got.State)
 	}
 	if p := fx.pendingTransition(t); p != "" {
 		t.Fatalf("pending %s bound after the operation reached %s", p, got.State)
@@ -282,44 +286,173 @@ func TestOrphanedPendingOfAFailedOperationIsDischargedByTheSweep(t *testing.T) {
 	requireReducerReplay(t, fx)
 }
 
-// Dead past the swap on a crash boot: held, and the owner's abandon hands it
-// back to the materializer for the updater's resume (202), once.
-func TestAbandonReadmitsACrashInterruptedApplyDeadPastItsSwap(t *testing.T) {
-	fx := newDerivableSelfDevFixture(t, "computer-abandon-interrupted")
-	ctx := context.Background()
-	_, accepted := fx.acceptedWithoutApply(t, "interrupted")
-	if _, err := fx.operations.Transition(ctx, fx.computerID, accepted.OperationID, selfdev.StateAccepted, selfdev.StateMaterializing, nil); err != nil {
+// writeDeadJournal leaves the journal an apply that died mid-flight writes:
+// phase past the swap, prior and target named, no outcome.
+func (fx *derivableSelfDevFixture) writeDeadJournal(t *testing.T, key, phase, prior, target string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte(key))
+	body := `{"phase":"` + phase + `","request_commitment":"x","prior_release_digest":"` + prior + `","target_release_digest":"` + target + `","started_at":"2026-11-02T00:00:00Z","result":{}}`
+	if err := os.WriteFile(filepath.Join(fx.updaterRoot, "operations", hex.EncodeToString(sum[:])+".json"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	key := "selfdev-apply-" + accepted.DecisionEvent
-	sum := sha256.Sum256([]byte(key))
-	if err := os.WriteFile(filepath.Join(fx.updaterRoot, "operations", hex.EncodeToString(sum[:])+".json"),
-		[]byte(`{"phase":"pointer_swapped","request_commitment":"x","target_release_digest":"y","result":{}}`), 0o600); err != nil {
+}
+
+// materializingWithDeadJournal is an operation the materializer moved to
+// materializing whose apply died past its swap: current is whatever the test
+// makes it, the bundle and inputs are irrelevant (the rule needs none).
+func (fx *derivableSelfDevFixture) materializingWithDeadJournal(t *testing.T, key, phase string, prior, target string) selfdev.Operation {
+	t.Helper()
+	_, accepted := fx.acceptedWithoutApply(t, key)
+	operation, err := fx.operations.Transition(context.Background(), fx.computerID, accepted.OperationID, selfdev.StateAccepted, selfdev.StateMaterializing, nil)
+	if err != nil {
 		t.Fatal(err)
+	}
+	fx.writeDeadJournal(t, "selfdev-apply-"+accepted.DecisionEvent, phase, prior, target)
+	return operation
+}
+
+// The one rule, dead journal, current == prior: nothing installed. Abandon
+// (the owner act of a held operation: attempts spent, inputs gone) fences it
+// and settles failed, whatever the journal's phase.
+func TestAbandonOfADeadJournalPastItsSwapWithThePriorCurrentSettlesFailed(t *testing.T) {
+	fx := joinFixture(t, "arbitrate-prior", joinTestBaseA, joinTestBaseA)
+	fx.applyPlain(t, "op-arbitrate-prior-1")
+	ctx := context.Background()
+	prior := fx.currentManifest(t).ContentDigest
+	operation := fx.materializingWithDeadJournal(t, "arb-prior", "restart_requested", prior, strings.Repeat("b", 64))
+	rec := postAbandon(fx, abandonRequestBody(operation.OperationID, "attempts spent", "abandon-arb-prior"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	got, _ := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if got.State != selfdev.StateFailed || got.TerminalError != selfDevelopmentAbandonTerminalError("attempts spent") {
+		t.Fatalf("operation = %s (%q)", got.State, got.TerminalError)
+	}
+	if journaled, _, _ := updater.ReadJournalOutcome(fx.updaterRoot, "selfdev-apply-"+operation.DecisionEvent); !journaled.Terminal || journaled.Result.Outcome != "refused" {
+		t.Fatalf("journal = %+v; want the fence", journaled)
+	}
+	if p := fx.pendingTransition(t); p != "" {
+		t.Fatalf("pending %s still bound", p)
+	}
+	requireReducerReplay(t, fx)
+}
+
+// Dead journal, current == target: installed. A crash boot closes it forward
+// from the current pointer, never resuming the apply and never failing it.
+func TestCrashBootClosesADeadJournalWhoseTargetIsCurrentForward(t *testing.T) {
+	fx := joinFixture(t, "arbitrate-target", joinTestBaseA, joinTestBaseA)
+	fx.applyPlain(t, "op-arbitrate-target-1")
+	ctx := context.Background()
+	current := fx.currentManifest(t).ContentDigest
+	operation := fx.materializingWithDeadJournal(t, "arb-target", "pointer_swapped", strings.Repeat("a", 64), current)
+	calls := fx.applyCalls.Load()
+	fx.bootAfterCrash(t)
+	got, _ := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if got.State != selfdev.StateApplied || !strings.Contains(got.TerminalError, "current pointer") || got.ReleaseDigest != current {
+		t.Fatalf("operation = %s release=%s (%q); want applied from the current pointer", got.State, got.ReleaseDigest, got.TerminalError)
+	}
+	if fx.applyCalls.Load() != calls {
+		t.Fatal("the crash boot called the updater")
+	}
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 2 || kinds[computerevent.EventMaterializationFailed] != 0 {
+		t.Fatalf("events = %v; want the first apply and this one recorded applied", kinds)
+	}
+	if p := fx.pendingTransition(t); p != "" {
+		t.Fatalf("pending %s still bound", p)
+	}
+	requireReducerReplay(t, fx)
+}
+
+// Dead journal, current is neither: failed, terminal, the unknown named.
+func TestAbandonOfADeadJournalWithAnUnknownCurrentSettlesFailedNamingIt(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-arbitrate-unknown")
+	ctx := context.Background()
+	operation := fx.materializingWithDeadJournal(t, "arb-unknown", "recovering", strings.Repeat("a", 64), strings.Repeat("b", 64))
+	rec := postAbandon(fx, abandonRequestBody(operation.OperationID, "lost", "abandon-arb-unknown"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	got, _ := fx.operations.Get(ctx, fx.computerID, operation.OperationID)
+	if got.State != selfdev.StateFailed || !strings.Contains(got.TerminalError, "the effective release is unknown") {
+		t.Fatalf("operation = %s (%q)", got.State, got.TerminalError)
+	}
+	if _, found, _ := fx.operations.OpenOperation(ctx, fx.computerID); found {
+		t.Fatal("still open")
+	}
+	requireReducerReplay(t, fx)
+}
+
+// An older daemon (no key-lock marker): abandon refuses to call a missing
+// journal dead, saying why; a terminal journal (d@e's applied rollback) still
+// settles.
+func TestAnOlderUpdaterDaemonRefusesTheNothingInstalledConclusion(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-old-daemon")
+	_, accepted := fx.acceptedWithoutApply(t, "old-daemon")
+	if err := os.Remove(filepath.Join(fx.updaterRoot, "operations", ".key-lock-v1")); err != nil {
+		t.Fatal(err)
+	}
+	rec := postAbandon(fx, abandonRequestBody(accepted.OperationID, "x", "abandon-old"))
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "predates the per-key lock") {
+		t.Fatalf("status=%d body=%s; want 409 naming the old daemon", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAnOlderUpdaterDaemonStillSettlesDaeFromItsTerminalJournal(t *testing.T) {
+	fx, rollback := degradedRollbackProductionShape(t, "old-daemon-dae", removePinnedRelease)
+	if err := os.Remove(filepath.Join(fx.updaterRoot, "operations", ".key-lock-v1")); err != nil {
+		t.Fatal(err)
+	}
+	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	if got, _ := fx.operations.Get(context.Background(), fx.computerID, rollback.OperationID); got.State != selfdev.StateRolledBack {
+		t.Fatalf("operation = %s (%q)", got.State, got.TerminalError)
+	}
+	requireReducerReplay(t, fx)
+}
+
+// A crash-held apply the updater is still running arms a retry wake, so the
+// terminal journal it writes is read without waiting for another commit.
+func TestCrashHeldLiveApplyArmsARetry(t *testing.T) {
+	fx := newDerivableSelfDevFixture(t, "computer-crash-live")
+	_, accepted := fx.acceptedWithoutApply(t, "crash-live")
+	if _, err := fx.operations.Transition(context.Background(), fx.computerID, accepted.OperationID, selfdev.StateAccepted, selfdev.StateMaterializing, nil); err != nil {
+		t.Fatal(err)
+	}
+	release := holdApplyKey(t, fx.updaterRoot, "selfdev-apply-"+accepted.DecisionEvent)
+	defer release()
+	var armed []string
+	fx.rt.scheduleActor = func(_ context.Context, _, _, _, kind, target, _, _ string, _ time.Time) error {
+		armed = append(armed, kind+":"+target)
+		return nil
 	}
 	fx.bootAfterCrash(t)
-	if got, _ := fx.operations.Get(ctx, fx.computerID, accepted.OperationID); got.State != selfdev.StateMaterializing || !fx.rt.selfdevCrashInterrupted[accepted.OperationID] {
-		t.Fatalf("after the crash boot the operation is %s (interrupted=%v); want held", got.State, fx.rt.selfdevCrashInterrupted[accepted.OperationID])
+	if len(armed) != 1 || armed[0] != selfdevMaterializationRetryKind+":"+accepted.OperationID {
+		t.Fatalf("retry wakes armed = %v", armed)
 	}
-	rec := postAbandon(fx, abandonRequestBody(accepted.OperationID, "finish it", "abandon-interrupted"))
-	if rec.Code != http.StatusAccepted {
-		t.Fatalf("abandon of an interrupted apply status=%d body=%s; want 202", rec.Code, rec.Body.String())
+	if got, _ := fx.operations.Get(context.Background(), fx.computerID, accepted.OperationID); got.State != selfdev.StateMaterializing {
+		t.Fatalf("a live apply was settled: %s", got.State)
 	}
-	fx.rt.selfdevMaterializeMu.Lock()
-	still := fx.rt.selfdevCrashInterrupted[accepted.OperationID]
-	fx.rt.selfdevMaterializeMu.Unlock()
-	if still {
-		t.Fatal("the operation is still held as crash-interrupted")
+}
+
+// A legacy failed row whose release is installed (its dead journal's target is
+// current) and whose pending is still bound: the sweep records it forward (the
+// applied event), never as failed.
+func TestSweepRecordsAnInstalledOrphanForward(t *testing.T) {
+	fx := joinFixture(t, "orphan-installed", joinTestBaseA, joinTestBaseA)
+	fx.applyPlain(t, "op-orphan-installed-1")
+	current := fx.currentManifest(t).ContentDigest
+	operation := fx.materializingWithDeadJournal(t, "orphan-installed", "restart_requested", strings.Repeat("a", 64), current)
+	if pending := fx.pendingTransition(t); pending != operation.DecisionEvent {
+		t.Fatalf("fixture: pending %q, decision %q", pending, operation.DecisionEvent)
 	}
-	// The resume reaches a terminal journal (here the updater refuses the
-	// mismatched commitment) and the operation settles from it.
-	got := fx.waitForState(t, accepted.OperationID, selfdev.StateFailed, selfdev.StateApplied)
-	// The row moves first and the discharge follows it in the same pass.
-	fx.rt.selfdevMaterializeMu.Lock()
-	pending := fx.pendingTransition(t)
-	fx.rt.selfdevMaterializeMu.Unlock()
-	if pending != "" {
-		t.Fatalf("pending %s bound after the operation reached %s", pending, got.State)
+	if _, err := fx.store.DB().Exec(`UPDATE self_development_operations SET state = ? WHERE operation_id = ?`, selfdev.StateFailed, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	if p := fx.pendingTransition(t); p != "" {
+		t.Fatalf("pending %s still bound", p)
+	}
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationApplied] != 2 || kinds[computerevent.EventMaterializationFailed] != 0 {
+		t.Fatalf("events = %v", kinds)
 	}
 	requireReducerReplay(t, fx)
 }

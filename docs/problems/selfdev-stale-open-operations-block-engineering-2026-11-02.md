@@ -48,49 +48,57 @@ The state machine already allows the closing edges: awaiting_approval->failed, a
    blocker to the management/Texture commitment ledger, so it is not console-only.
 Do 1 now; 2 and 3 are the class fix. Retention never deleting a pinned release is not shown to be the cause.
 
-## Journal-first settlement (round 3 design, 2026-11-02)
-Review rounds 1-2 found three wedges in the settle paths themselves: a failed-settle discharged pending before its
-guarded row move (a lost race left a live row with no pending); "no journal" was read as "nothing in flight" though
-the updater writes its journal only after staging, and the client gives up after 2 min; and the rollback re-drive
-read the pinned manifest before the journal, so a terminal `applied` journal behind an unusable pinned release could
-never be recorded or abandoned.
+## Journal-first settlement (round 3 design, revised in round 4, 2026-11-02)
+Review rounds 1-2 found three wedges in the settle paths themselves (discharge before the row CAS; "no journal" read
+as "nothing in flight"; the rollback re-drive reading the pinned manifest before the journal). Round 3 fixed those with
+journal phases; round 4 found the phase-based cut still left holds (a dead journal past its swap whose bundle or pinned
+release was GC'd; an apply whose attempts are spent; a corrupt journal). The step back: one rule, grounded in the
+updater's `current` pointer, which is what is installed. No apply input is needed.
 
-Invariant:
-1. The updater journal is the authority for whether anything was installed. Every settle path reads it first.
-2. In flight is provable: `Apply` holds a per-key advisory lock (`operations/<key>.lock`, flock) from before it
-   reads the journal to its return. A settle takes that lock without waiting; held means in flight (refuse, 409).
-3. "Nothing installed" is made durable before a settle acts on it: under the lock, a missing journal, or a dead one
-   that never swapped `current` (phase `prepared`), is replaced by a terminal `refused` fence. A later `Apply` for
-   the key (a queued or timed-out request) returns the fence and never stages or swaps.
-4. Every settle runs under `selfdevMaterializeMu` (the materializer holds it per pass; abandon takes it for every
-   state), moves the row first with its expected-state CAS, and only then discharges pending, and only a pending
-   that is this operation's decision. A lost CAS discharges nothing.
-5. No settle path leaves pending bound to a non-open operation: a discharge that fails after the row move, or a
-   decision that lands after it, is discharged by the post-move re-read, the abandon replay, or the reconciler's
-   orphan sweep (pending whose decision belongs to a failed operation, after the same fence).
-6. A terminal `applied` journal settles forward, never failed: the applied event is recorded from the journal's
-   signed receipts, and the row moves to `applied`/`rolled_back`. Only the tail (checkpoint, route) may be skipped,
-   and then the row says so.
+The rule (updater.HoldApplyKey, agentcore settleSelfDevelopmentOperation / failSettledRow / dischargeSettledPending):
+1. Hold the apply key: take the per-key lock without waiting. `Apply` holds it from before its journal read to its
+   return. Held by another: **in flight**, refuse (409) and, on a crash boot, arm a retry wake.
+2. A terminal journal is the authority: `applied` settles forward from its signed receipts; any other outcome settles
+   failed with its result.
+3. A **dead** journal (lock free, and missing, non-terminal or corrupt) is arbitrated on `current`:
+   - no journal, or `current` == its prior release: nothing installed -> failed;
+   - `current` == its target: installed -> forward (applied / rolled_back), the note says "recorded from the current
+     pointer", the event payload says `arbitrated_on_current` (there are no receipts);
+   - neither (or corrupt journal, unreadable pointer): failed, with "the effective release is unknown: ..." in the cause.
+     materialization_failed is the reducer's only failed discharge; its payload says `unknown_effective`.
+4. An older updater daemon (no `operations/.key-lock-v1` marker, written by every updater of this build at start) takes
+   no lock, so a free lock proves nothing: a missing or non-terminal journal is **lock_unproven**. The owner's abandon
+   refuses it (409, saying the daemon predates the lock); the materializer's own paths keep their pre-lock behavior.
+   Terminal journals need no lock, so d@e's case (terminal applied rollback) settles under either daemon. The daemon
+   ships in the base image (`goChoirPackages.updater`); the guest core runs from the same base image unless a layered
+   release execs its own binary, which is bound to the base it was built on, so the two meet only in that layered case
+   or a base-image rollback that leaves the marker behind.
+5. Order, under selfdevMaterializeMu: failed = row CAS, then discharge pending (only this operation's decision), then
+   fence; forward = applied event (if pending is still this decision), row CAS, fence. A lost CAS changes nothing,
+   journal included. The fence is a terminal `refused` journal written under the held lock, so no queued or resumed
+   `Apply` acts on a settled key.
+6. Pending never stays bound to a settled operation: the reconciler's sweep applies the same rule to a pending decision
+   of a failed row (forward when its journal is applied or its target current, failed otherwise).
 
-Table (open state x journal x pending -> terminal path). "Fence" = rule 3; discharge = materialization_failed.
-| state | journal | pending | terminal path |
+Table (open state x verdict -> terminal path). Every verdict but in flight / lock_unproven is terminal.
+| state | verdict | pending | terminal path |
 |---|---|---|---|
-| requested..verified | (no decision, no key) | not theirs | abandon: row -> failed; crash boot closes them |
-| awaiting_approval, no decision on tape | none | empty | abandon: row -> failed; a decide that loses the row CAS leaves pending -> post-move re-read / orphan sweep: fence, discharge |
-| awaiting_approval, decision on tape | none | the decision | materializer recovers it to accepted (abandon 409: "let it settle") |
-| accepted | none | own decision | abandon: fence, row -> failed, discharge |
-| materializing / rollback_pending | lock held | own | 409; the updater finishes; the materializer records the terminal outcome |
-| " | none, or dead `prepared` | own | fence; materializer: failed + discharge (pinned unusable, refusal); abandon: same |
-| " | dead past the swap (`pointer_swapped`, `restart_requested`, `recovering`) | own | not crash-interrupted: the materializer's next `Apply` resumes the journal. Crash-interrupted: held; the owner's abandon re-admits it for one resume (an owner act, not a boot-time resume) |
-| " | terminal refused/failed | own | failed + discharge (the journal's result on the event) |
-| " | terminal applied, event unrecorded | own | materializer: applied event + tail; if the installed release is unusable, settle forward without the tail. Abandon: settle forward without the tail |
-| " | terminal applied, event recorded (tail stuck) | empty | same: tail retried; abandon settles forward |
-| degraded (applied, tail unfinished) | terminal applied | empty | rollback: journal-first tail (d@e); if the installed release is unusable, settle forward; abandon settles forward |
-| degraded | absent / non-applied | empty | abandon: row -> failed (nothing to discharge) |
-| failed (any) | any | its decision (orphan) | orphan sweep: fence, discharge; never when the journal is applied or in flight |
+| requested..verified | (no decision, no key) | not theirs | abandon: failed; crash boot closes them |
+| awaiting_approval, no decision on tape | no key | empty | abandon: failed; a late decide's pending -> sweep |
+| awaiting_approval, decision on tape | - | the decision | materializer recovers it (abandon 409) |
+| accepted | nothing installed | own | abandon / materializer: failed, discharge, fence |
+| any post-decision | in flight | own | 409; the updater finishes; crash-held ops arm a retry wake |
+| any post-decision | lock_unproven | own | abandon 409 (old daemon); materializer as before the lock |
+| materializing / rollback_pending / degraded | terminal applied | own or empty | materializer: event + tail (rollback: journal first, tail over the installed release, forward without it when that release is unusable); abandon: forward without the tail |
+| " | terminal other | own | failed + discharge with the journal's result |
+| " | dead, current = prior (or no journal) | own | failed + discharge + fence (abandon; pinned release unusable; crash boot) |
+| " | dead, current = target | own or empty | forward, arbitrated (abandon; pinned release unusable; crash boot). Attempts spent / bundle or pinned release GC'd: abandon applies this rule |
+| " | dead, current = neither / corrupt | own | failed, unknown effective named, + discharge + fence |
+| failed (orphan) | any but in flight | its decision | sweep: forward if applied/installed, else discharge failed |
 
-Out of scope (stated, not wedges this change creates): a corrupt (undecodable) journal file retries; a rollback whose
-journal is dead past the swap and whose pinned release is also gone needs the release to resume (only reachable by
-tampering with the updater store); a settle-forward row has no checkpoint or route receipt, so a later rollback *to*
-it is refused at start (a clean 409). The updater daemon ships in the base image: the fence and lock are complete once
-the base image carries this build; until then the fence still stops any `Apply` that reads the journal after it.
+Removed in round 4: the 202 re-admit of a crash-held apply (the rule closes it instead, so there is no owner act to
+record). Out of scope, stated: a pending bound to a rollback_requested event whose StartRollback never landed (the
+owner's replay of that rollback start finishes it); a materializer-settled operation whose settlement event append
+failed keeps the row's projection on the tape but not the recovery_recorded event; per-key `.lock` files are kept
+(removing one under a waiter would split the lock); a settle-forward row has no checkpoint or route receipt, so a later
+rollback *to* it is refused at start (a clean 409), and the source projection follows the next apply, not this one.

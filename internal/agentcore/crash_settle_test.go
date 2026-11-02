@@ -341,6 +341,8 @@ func TestCrashBootHoldsSelfDevelopmentOpWithMidFlightJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The updater is still running the apply (it holds the key): held.
+	release := holdApplyKey(t, fx.updaterRoot, "selfdev-apply-"+fx.decisionDigest(t, "op-midflight"))
 	fx.rt.closeSelfDevelopmentOperationsAfterCrash(ctx)
 	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)
 	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)
@@ -353,11 +355,23 @@ func TestCrashBootHoldsSelfDevelopmentOpWithMidFlightJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.State == selfdev.StateFailed || got.State == selfdev.StateApplied {
-		t.Fatalf("op settled as %s on a mid-flight journal; want it held", got.State)
+		t.Fatalf("op settled as %s on a live mid-flight journal; want it held", got.State)
 	}
 	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationFailed] != 0 || kinds[computerevent.EventMaterializationApplied] != 0 {
-		t.Fatalf("events = %v; a mid-flight journal settles nothing", kinds)
+		t.Fatalf("events = %v; a live mid-flight journal settles nothing", kinds)
 	}
+	// Once the updater lets go the journal is dead and the current pointer
+	// (no current release: the journal's empty prior) closes it, without
+	// calling the updater.
+	release()
+	fx.rt.reconcileSelfDevelopmentMaterialization(ctx)
+	if calls := fx.applyCalls.Load(); calls != 0 {
+		t.Fatalf("crash settlement called the updater %d times", calls)
+	}
+	if got, _ := fx.rt.selfdevOperations.Get(ctx, fx.computerID, operation.OperationID); got.State != selfdev.StateFailed {
+		t.Fatalf("a dead journal left the op %s; want it closed", got.State)
+	}
+	requireReducerReplay(t, fx)
 }
 
 func TestOpDecidedAfterCrashBootMaterializes(t *testing.T) {
