@@ -1841,7 +1841,7 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 		// A freeze earlier in this same cell is not yet folded in (the cell
 		// is noted after its reduction).
 		drt.noteDelegateCell(id, att, "", "", len(r.freezeResult) > 0)
-		report.DelegateUse = drt.delegateUseFor(id, att, true)
+		report.DelegateUse = drt.delegateUseFor(id, att, true, func() bool { return drt.isRebaseAssignment(ctx, r.rec.OwnerID, r.rec.ComputerID, id, att) })
 	}
 	// Content-derived identity: a replayed cell (same intent content) replays
 	// the same report instead of minting a second one.

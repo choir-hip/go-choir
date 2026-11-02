@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"log"
 	"regexp"
 	"strings"
@@ -80,9 +81,10 @@ func (rt *Runtime) noteDelegateCell(assignmentID string, attempt uint64, source,
 
 // delegateUseFor is the attempt's delegate use for its report, or nil where
 // the delegate was not available (other computers keep today's behavior). It
-// logs once when a patch was produced with the delegate available and unused.
+// logs once when a patch was produced with the delegate available and unused
+// (rebase assignments excluded).
 // It does not clear the tally: a partial report keeps the assignment open.
-func (rt *Runtime) delegateUseFor(assignmentID string, attempt uint64, available bool) *types.EngineeringDelegateUse {
+func (rt *Runtime) delegateUseFor(assignmentID string, attempt uint64, available bool, isRebase func() bool) *types.EngineeringDelegateUse {
 	if !available {
 		return nil
 	}
@@ -93,9 +95,27 @@ func (rt *Runtime) delegateUseFor(assignmentID string, attempt uint64, available
 	if t.calls > 0 || len(t.done) > 0 {
 		use.Model = claudedelegate.Model
 	}
-	if t.patch && t.calls == 0 && !t.loggedAt {
+	// A rebase assignment replays a carried patch onto the new base and never
+	// calls the delegate, so the line would be noise there; delegate_use is
+	// still recorded.
+	if t.patch && t.calls == 0 && !t.loggedAt && !(isRebase != nil && isRebase()) {
 		t.loggedAt = true
 		log.Printf("engineering: source patch without delegate assignment=%s attempt=%d", assignmentID, attempt)
 	}
 	return use
+}
+
+// isRebaseAssignment reports whether the assignment answers a U4 rebase
+// notice: its claim names it (rebaseLineage). Any lookup failure reads as not
+// a rebase, which only keeps the log line.
+func (rt *Runtime) isRebaseAssignment(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) bool {
+	if rt == nil || rt.store == nil || assignmentID == "" {
+		return false
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, attempt)
+	if err != nil {
+		return false
+	}
+	_, ok := rt.rebaseLineage(ctx, assignment)
+	return ok
 }

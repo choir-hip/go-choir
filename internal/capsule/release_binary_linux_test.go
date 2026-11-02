@@ -23,6 +23,9 @@ import (
 // replaced; a Go change ships the running binary; the error does not say the
 // desk must build.
 func TestStageGrantedReleaseReusesRunningBinaryForANonGoChange(t *testing.T) {
+	prevEpoch := FreezeStoreSchemaVersion
+	FreezeStoreSchemaVersion = func() uint64 { return 42 }
+	defer func() { FreezeStoreSchemaVersion = prevEpoch }()
 	runningPayload := []byte("\x7fELF running autoputer")
 	sum := sha256.Sum256(runningPayload)
 	runningSHA := hex.EncodeToString(sum[:])
@@ -104,7 +107,7 @@ func TestStageGrantedReleaseReusesRunningBinaryForANonGoChange(t *testing.T) {
 	if len(staged.Files) != 2 || staged.Files[0].Path != "bin/autoputer" || staged.Files[0].SHA256 != runningSHA || staged.Files[0].Mode != 0o555 {
 		t.Fatalf("staged files = %+v, want the running binary first", staged.Files)
 	}
-	if b := staged.Binary; b == nil || b.Origin != ReleaseBinaryReusedRunning || b.SHA256 != runningSHA || b.RunningCommit != commit || b.SourceBaseCommit != commit {
+	if b := staged.Binary; b == nil || b.Origin != ReleaseBinaryReusedRunning || b.SHA256 != runningSHA || b.RunningCommit != commit || b.SourceBaseCommit != commit || b.StoreSchemaVersion != 42 {
 		t.Fatalf("provenance = %+v", staged.Binary)
 	}
 	if content, err := os.ReadFile(filepath.Join(staged.TemporaryRoot, "bin/autoputer")); err != nil || string(content) != string(runningPayload) {

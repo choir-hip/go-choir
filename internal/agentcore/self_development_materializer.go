@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -620,6 +621,11 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		release = layeredSelfDevelopmentManifest(release, *hostBuilt)
 		sourceDir = hostBuilt.Dir
 	} else {
+		if checkErr := checkPlainReleaseBinaryStillRunning(bundle); checkErr != nil && !journalOnly {
+			// Nothing was minted: the operation settles failed.
+			return rt.settleSelfDevelopmentRefusal(ctx, operation, checkErr)
+		}
+		release.StoreSchemaVersion = plainReleaseStoreEpoch(bundle)
 		baseCommit, baseErr := rt.plainReleaseBaseCommit(operation, bundle)
 		switch {
 		case baseErr == nil:
@@ -753,6 +759,41 @@ func (rt *Runtime) plainReleaseBaseCommit(operation selfdev.Operation, bundle tr
 		return "", nil
 	}
 	return base, nil
+}
+
+// plainReleaseStoreEpoch is the store schema epoch a plain (not host-built)
+// release declares: the epoch Freeze recorded on the reused binary's
+// provenance (docs/problems/selfdev-release-declares-no-store-epoch-2026-11-02.md).
+// It is never the materializing process's own epoch, which a planned restart
+// between verify and mint may have changed. A bundle without the field
+// (frozen by an older binary) or with a capsule-built binary stays
+// undeclared, and the updater refuses it on a floored store.
+func plainReleaseStoreEpoch(bundle transaction.CapsuleEffectBundle) uint64 {
+	if bundle.ReleaseBinary != nil && bundle.ReleaseBinary.Origin == capsule.ReleaseBinaryReusedRunning {
+		return bundle.ReleaseBinary.StoreSchemaVersion
+	}
+	return 0
+}
+
+// selfdevRunningBinary identifies the materializing process's executable; a
+// variable so a test can simulate a restart onto another build.
+var selfdevRunningBinary = capsule.CurrentRunningBinary
+
+// checkPlainReleaseBinaryStillRunning re-runs the verify-time check at mint:
+// a reused binary that is no longer this computer's running build must not
+// be minted (a planned restart landed a different build after verify).
+func checkPlainReleaseBinaryStillRunning(bundle transaction.CapsuleEffectBundle) error {
+	if bundle.ReleaseBinary == nil || bundle.ReleaseBinary.Origin != capsule.ReleaseBinaryReusedRunning {
+		return nil
+	}
+	running, err := selfdevRunningBinary()
+	if err != nil {
+		return fmt.Errorf("%w: running build identity unavailable: %v", updater.ErrApplyRefused, err)
+	}
+	if err := capsule.CheckReusedBinaryIsRunning(bundle.ReleaseBinary, running); err != nil {
+		return fmt.Errorf("%w: %v", updater.ErrApplyRefused, err)
+	}
+	return nil
 }
 
 // rollbackApplyManifest is the manifest a rollback applies: the pinned prior

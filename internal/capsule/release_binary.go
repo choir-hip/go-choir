@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/storeschema"
 )
 
 // ReleaseBinaryPath is the release-tree path of the runtime executable.
@@ -48,7 +49,19 @@ type ReleaseBinaryProvenance struct {
 	// binary-input path differs between the two commits" (U1, section 4.6).
 	// Empty means the commits are equal.
 	ReuseProof string `json:"reuse_proof,omitempty"`
+	// StoreSchemaVersion is the store schema epoch compiled into the reused
+	// binary, recorded at Freeze (storeschema.Version of the running
+	// process) and bound into the bundle digest. The release manifest
+	// declares this value, never the materializing process's own. Zero on a
+	// bundle frozen by an older binary: the release then stays undeclared
+	// and the store floor refuses it.
+	StoreSchemaVersion uint64 `json:"store_schema_version,omitempty"`
 }
+
+// FreezeStoreSchemaVersion is the epoch Freeze records on a reused binary:
+// this process is the binary being staged, so its compiled epoch is the one.
+// A variable so a test can simulate a binary of another epoch.
+var FreezeStoreSchemaVersion = func() uint64 { return storeschema.Version }
 
 // ReuseProofBinaryInputsEqual is the proof of a reused binary whose running
 // commit differs from the capsule source commit.

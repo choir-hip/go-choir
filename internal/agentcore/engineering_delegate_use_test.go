@@ -44,7 +44,7 @@ func TestDelegateUseRecordsPatchAndLogsPatchWithoutDelegateOnce(t *testing.T) {
 	// Delegate available, a frozen patch, zero delegate calls.
 	rt.noteDelegateCell("a1", 1, `choir.Exec("go", []string{"test"})`, "", false)
 	rt.noteDelegateCell("a1", 1, "", "", true)
-	use := rt.delegateUseFor("a1", 1, true)
+	use := rt.delegateUseFor("a1", 1, true, nil)
 	if use == nil || !use.Available || !use.SourcePatch || use.Calls != 0 || use.Succeeded != 0 {
 		t.Fatalf("use = %+v", use)
 	}
@@ -57,7 +57,7 @@ func TestDelegateUseRecordsPatchAndLogsPatchWithoutDelegateOnce(t *testing.T) {
 	rt.noteDelegateCell("a2", 1, delegateStartCell, `{"ok": true}`, false)
 	rt.noteDelegateCell("a2", 1, `choir.Exec("choir-delegate", []string{"wait"})`, delegateDoneOut, false)
 	rt.noteDelegateCell("a2", 1, "", "", true)
-	use = rt.delegateUseFor("a2", 1, true)
+	use = rt.delegateUseFor("a2", 1, true, nil)
 	if use == nil || use.Calls != 1 || use.Succeeded != 1 || use.Model != "claude-sonnet-5-5" || !use.SourcePatch {
 		t.Fatalf("use = %+v", use)
 	}
@@ -67,11 +67,11 @@ func TestDelegateUseRecordsPatchAndLogsPatchWithoutDelegateOnce(t *testing.T) {
 
 	// No patch, no delegate call: nothing to log. Unavailable: no record at all.
 	rt.noteDelegateCell("a3", 1, `choir.Exec("curl", []string{"x"})`, "", false)
-	if use = rt.delegateUseFor("a3", 1, true); use == nil || use.SourcePatch || buf.Len() != 0 {
+	if use = rt.delegateUseFor("a3", 1, true, nil); use == nil || use.SourcePatch || buf.Len() != 0 {
 		t.Fatalf("api-call assignment: %+v %q", use, buf.String())
 	}
 	rt.noteDelegateCell("a4", 1, "", "", true)
-	if use = rt.delegateUseFor("a4", 1, false); use != nil || buf.Len() != 0 {
+	if use = rt.delegateUseFor("a4", 1, false, nil); use != nil || buf.Len() != 0 {
 		t.Fatalf("delegate unavailable must leave behavior unchanged: %+v %q", use, buf.String())
 	}
 }

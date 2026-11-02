@@ -2172,6 +2172,8 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 			RunningCommit:    strings.ToLower(strings.TrimSpace(running.Commit)),
 			SourceBaseCommit: SourceArtifactCommit(caps.Spec.SourceArtifactRef),
 			ReuseProof:       reuseProof,
+
+			StoreSchemaVersion: FreezeStoreSchemaVersion(),
 		}
 	}
 	// S2-f: source changes (workspace/platform, classified LedgerSource) are
