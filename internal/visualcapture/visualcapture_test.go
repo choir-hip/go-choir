@@ -392,6 +392,71 @@ func TestServerServesTheTreeWithAnSPAFallbackAndASignedOutBackend(t *testing.T) 
 	}
 }
 
+// The signed-out landing page (the Autopaper front) reads one public GET
+// route. A capture with no backend shows its error state, which an
+// independent judge rightly fails (selfdev-visual-capture-landing-needs-api).
+// The capture server answers that one route with a fixed fixture, so the
+// capture shows the real layout; every other /api/ route stays 503.
+func TestServerAnswersTheFrontListWithAFixtureAndNothingElseUnderAPI(t *testing.T) {
+	root := t.TempDir()
+	_ = os.WriteFile(filepath.Join(root, "index.html"), []byte("<html>index</html>"), 0o644)
+	srv := httptest.NewServer(Server(root))
+	defer srv.Close()
+	get := func(p string) (int, string, string) {
+		resp, err := http.Get(srv.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.Header.Get("Content-Type"), string(b)
+	}
+	code, ct, body := get("/api/platform/publications/front?limit=60")
+	if code != 200 || !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("front list = %d %q", code, ct)
+	}
+	var page struct {
+		Stories []struct {
+			PublicationID string `json:"publication_id"`
+			Title         string `json:"title"`
+			Dek           string `json:"dek"`
+			Route         struct {
+				Bare string `json:"bare"`
+			} `json:"route"`
+		} `json:"stories"`
+		NextCursor string `json:"next_cursor"`
+	}
+	if err := json.Unmarshal([]byte(body), &page); err != nil {
+		t.Fatalf("front list is not JSON: %v: %s", err, body)
+	}
+	if len(page.Stories) < 3 || page.NextCursor != "" {
+		t.Fatalf("front list has %d stories, cursor %q; want a few and no cursor", len(page.Stories), page.NextCursor)
+	}
+	for _, s := range page.Stories {
+		if s.PublicationID == "" || s.Title == "" || s.Dek == "" || s.Route.Bare == "" {
+			t.Fatalf("story %+v lacks a field the front page renders", s)
+		}
+	}
+	// A section page (Opinion) is empty, not an error.
+	if code, _, body := get("/api/platform/publications/front?section=opinion"); code != 200 || !strings.Contains(body, `"stories":[]`) {
+		t.Fatalf("section page = %d %s", code, body)
+	}
+	// Nothing else under /api/ is answered, and only by GET.
+	for _, p := range []string{"/api/platform/publications/resolve", "/api/platform/publications/front/x", "/api/state"} {
+		if code, _, _ := get(p); code != 503 {
+			t.Fatalf("GET %s = %d, want 503", p, code)
+		}
+	}
+	resp, err := http.Post(srv.URL+"/api/platform/publications/front", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("POST front = %d", resp.StatusCode)
+	}
+}
+
 func validManifest(t *testing.T, frontend string, captures ...[]byte) ([]byte, []EvidenceFile) {
 	t.Helper()
 	m := Manifest{Kind: ManifestKind, Subject: Subject{FrontendSHA256: frontend, FrontendFiles: 3}, Browser: Browser{Name: "chromium"}, WaitMS: 5000}
