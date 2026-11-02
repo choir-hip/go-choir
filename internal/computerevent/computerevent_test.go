@@ -391,6 +391,24 @@ func TestAppenderClearsOrphanPreparedRowOnPrepareConflict(t *testing.T) {
 	}
 }
 
+func TestAppenderInPlaceRecoveryRefusesDuringReconstruct(t *testing.T) {
+	appender, projection, _ := newRecoveryTestAppender(t, &memoryProjection{failFinalizeOnce: true})
+	event := testEvent(t, nil, EventGenesisImported)
+	event.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &event, genesisInput, nil)
+	if _, err := appender.Append(context.Background(), event, genesisInput, nil); !errors.Is(err, ErrNeedsProjectionRepair) {
+		t.Fatalf("append error = %v, want projection repair", err)
+	}
+	appender.reconstructing.Store(true)
+	if _, err := appender.AppendNew(context.Background(), testEvent(t, nil, EventTrajectoryStarted), TransitionInput{}, nil); !errors.Is(err, ErrNeedsProjectionRepair) {
+		t.Fatalf("append during reconstruct = %v, want projection repair", err)
+	}
+	if len(projection.prepared) != 1 {
+		t.Fatalf("recovery touched prepared rows during reconstruct: %d", len(projection.prepared))
+	}
+}
+
 func newRecoveryTestAppender(t *testing.T, projection *memoryProjection) (*ComputerEventAppender, *memoryProjection, *memoryCAS) {
 	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)

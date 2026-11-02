@@ -166,7 +166,10 @@ type ComputerEventAppender struct {
 	replayActive bool
 	// reconstructing is set for the whole of any reconstruct; in-place
 	// prepared recovery must not race a replay's own prepared rows.
-	reconstructing     atomic.Bool
+	reconstructing atomic.Bool
+	// recoveryFailedAt bounds a recovery that keeps failing (a poison
+	// finalize): appends refuse fast for inPlaceRecoveryCooldown after it.
+	recoveryFailedAt   time.Time
 	replaySeq          uint64
 	replayCommittedSeq uint64
 	replayAppliedRows  uint64 // rows applied during this Reconstruct call
@@ -872,19 +875,26 @@ func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context
 	if a.replayProjection || a.replayActive || a.reconstructing.Load() {
 		return nil, ErrNeedsProjectionRepair
 	}
+	if !a.recoveryFailedAt.IsZero() && time.Since(a.recoveryFailedAt) < inPlaceRecoveryCooldown {
+		return nil, ErrNeedsProjectionRepair
+	}
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 	defer cancel()
 	err := a.RecoverPrepared(rctx)
 	head, herr := a.projection.Head(rctx, a.computerID)
 	log.Printf("computer event appender: in-place prepared recovery (%s): err=%v embedded_seq=%d", why, err, headSeq(head))
 	if err != nil {
+		a.recoveryFailedAt = time.Now()
 		return nil, err
 	}
+	a.recoveryFailedAt = time.Time{}
 	if herr != nil {
 		return nil, fmt.Errorf("computer event appender: embedded head after recovery: %w", herr)
 	}
 	return head, nil
 }
+
+const inPlaceRecoveryCooldown = 30 * time.Second
 
 func headSeq(h *Head) uint64 {
 	if h == nil {
