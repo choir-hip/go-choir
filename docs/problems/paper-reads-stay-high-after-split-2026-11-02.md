@@ -39,3 +39,19 @@ Guest memory as the host sees it (anon) moved from about 1.5 GiB before the spli
 - The S6 meter day (2026-11-02T05:00Z to 2026-11-03T05:00Z), with read_bytes normalized by model calls per minute (gateway journal) so that work done is separated from reads per unit of work.
 - Then a cache trial on d@e first: PRAGMA cache_size and mmap_size on the read connections. It needs a guest deploy, so it waits for the meter day to end.
 - The guest's rchar against read_bytes, to separate page-cache hits from disk misses.
+
+## Update, 2026-11-02T05:45Z: the median was the wrong statistic
+
+Each window, with the paper's model calls per minute counted from the gateway journal (calls include those that failed on quota):
+
+| Window | Calls/min | Mean read MiB/min | Median read MiB/min | Read MiB per call |
+|---|---|---|---|---|
+| before A, 19:40 to 01:15 | 26.1 | 264.7 | 4.9 | 9.90 |
+| before B, 01:30 to 03:50 (calls failing on quota) | 26.8 | 17.7 | 2.2 | 0.66 |
+| after, 05:00 to 05:30 | 60.0 | 141.2 | 149.0 | 2.35 |
+
+- **Before the split, reads were bursty:** rare multi-GB bursts and a near-zero median. After it, they are steady.
+- **Total read volume** (the mean) fell from 265 to 141 MiB/min while the work per minute more than doubled. Reads per model call fell about 4x.
+- **Window B** is not comparable: its calls were failing 429s, so little work was done per call.
+- **Hypothesis 1 weakens** and becomes a question of shape. The steady read rate may be cache misses that used to be paid in bursts. Whether the steady 140 MiB/min can fall further is still open.
+- **S6 judges on mean reads and on reads per call over the full day**, not on the median.
