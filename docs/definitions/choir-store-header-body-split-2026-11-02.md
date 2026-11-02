@@ -75,7 +75,7 @@ boundaries:
   protected_surfaces: [guest store schema, boot path, Texture canonical writes (bodies), replay]
 
 now:
-  status: working
+  status: checkpoint_incomplete  # 2026-11-02T05:40Z: S0-S5 and the tier 2 review landed; S6 waits on its time gate (2026-11-03T05:00Z). Resume: judge the meter day, then finalize, merge store-split-partition-followups (a8c841b82), write the closing report
   slice: >-
     S0 measure: on a synthetic SQLite store with the og_objects and
     choir_events shapes and large bodies, count pages read per statement for
