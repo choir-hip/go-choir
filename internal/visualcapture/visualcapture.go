@@ -91,6 +91,8 @@ type Capture struct {
 	ReducedMotion bool   `json:"reduced_motion"`
 	Blank         bool   `json:"blank,omitempty"`
 	TakenAt       string `json:"taken_at"`
+	// Scene is a package capture's scene (packages.go); nil for a route.
+	Scene *Scene `json:"scene,omitempty"`
 }
 
 // Browser names what took the captures.
@@ -107,6 +109,9 @@ type Manifest struct {
 	Captures []Capture `json:"captures"`
 	Browser  Browser   `json:"browser"`
 	WaitMS   int       `json:"wait_ms"`
+	// Notes say what the package captures could not cover: a scene that
+	// failed, the cap or the time budget. They are evidence for the judge.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // FileDigest is one file of a frontend tree, by its path under the tree.
@@ -233,9 +238,18 @@ func ValidateEvidence(manifestRaw []byte, files []EvidenceFile, frontendSHA256 s
 	if m.Kind != ManifestKind {
 		return m, fmt.Errorf("%s kind is %q, not %q", ManifestFile, m.Kind, ManifestKind)
 	}
-	if len(m.Captures) == 0 || len(m.Captures) > MaxRoutes {
-		return m, fmt.Errorf("%s names %d captures; 1..%d are admitted", ManifestFile, len(m.Captures), MaxRoutes)
+	if len(m.Captures) == 0 || len(m.Captures) > MaxCaptures {
+		return m, fmt.Errorf("%s names %d captures; 1..%d are admitted", ManifestFile, len(m.Captures), MaxCaptures)
 	}
+	if len(m.Notes) > MaxNotes {
+		return m, fmt.Errorf("%s carries %d notes; at most %d", ManifestFile, len(m.Notes), MaxNotes)
+	}
+	for _, n := range m.Notes {
+		if err := validNote(n); err != nil {
+			return m, fmt.Errorf("%s: %w", ManifestFile, err)
+		}
+	}
+	routeCaptures, sceneCaptures := 0, 0
 	if !isHex64(m.Subject.FrontendSHA256) {
 		return m, fmt.Errorf("%s has no frontend digest", ManifestFile)
 	}
@@ -262,6 +276,20 @@ func ValidateEvidence(manifestRaw []byte, files []EvidenceFile, frontendSHA256 s
 		}
 		if routes[route] {
 			return m, fmt.Errorf("%s names route %s twice", ManifestFile, route)
+		}
+		if c.Scene == nil {
+			routeCaptures++
+		} else {
+			sceneCaptures++
+			if err := c.Scene.Validate(); err != nil {
+				return m, fmt.Errorf("%s capture %d: %w", ManifestFile, i, err)
+			}
+			if w, h := c.Scene.Size(); c.Route != c.Scene.Route() || c.Width != w || c.Height != h {
+				return m, fmt.Errorf("%s capture %d is not its scene's route and viewport", ManifestFile, i)
+			}
+		}
+		if routeCaptures > MaxRoutes || sceneCaptures > MaxPackageCaptures {
+			return m, fmt.Errorf("%s names more than %d route or %d package captures", ManifestFile, MaxRoutes, MaxPackageCaptures)
 		}
 		routes[route] = true
 		firstUse := !seen[c.File]

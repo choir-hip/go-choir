@@ -8,7 +8,18 @@
 // runs headless Chromium once per route, and writes each PNG (named by its
 // sha256) and visual-evidence.json into /var/lib/artifact/evidence/visual,
 // where Freeze finds them. It prints a JSON summary, which is the job's
-// tail. Exit: 0 captured; 1 a capture failed; 2 usage; 3 this computer's
+// tail.
+//
+// --package <name> (repeatable, at most 2) also renders that app package's
+// window in the real shell, at each theme preset and two widths, with a
+// fixture document for each kind its manifest opens, read from
+// /workspace/platform/frontend/src/packages/<name>/choir-package.json
+// (internal/visualcapture/packages.go). A scene that fails, or that the cap
+// or the time budget leaves out, is a note in the manifest, not a failure.
+//
+//	choir.Start([]string{"choir-capture", "--route", "/", "--package", "slides-next"}, map[string]any{"minutes": 15, "memory_mib": 768})
+//
+// Exit: 0 captured; 1 a capture failed; 2 usage; 3 this computer's
 // grant is off.
 package main
 
@@ -39,7 +50,9 @@ func run(args []string) int {
 	fs.Var(&routes, "route", "a route to capture, such as / (repeatable; default /; at most 6)")
 	width := fs.Int("width", visualcapture.DefaultWidth, "viewport width")
 	height := fs.Int("height", visualcapture.DefaultHeight, "viewport height")
-	wait := fs.Int("wait-ms", visualcapture.DefaultWaitMS, "virtual time Chromium lets the page run before the shot")
+	wait := fs.Int("wait-ms", visualcapture.DefaultWaitMS, "virtual time Chromium lets the page run before the shot (wall time for a package scene)")
+	var packages routeList
+	fs.Var(&packages, "package", "an app package under frontend/src/packages/ to render in the shell (repeatable; at most 2)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -48,7 +61,7 @@ func run(args []string) int {
 		return 2
 	}
 	res, err := visualcapture.RunReport(context.Background(), visualcapture.Options{
-		Routes: routes, Width: *width, Height: *height, WaitMS: *wait,
+		Routes: routes, Width: *width, Height: *height, WaitMS: *wait, Packages: packages,
 		Browser:    os.Getenv(visualcapture.BrowserEnv),
 		Fontconfig: os.Getenv(visualcapture.FontconfigEnv),
 	})

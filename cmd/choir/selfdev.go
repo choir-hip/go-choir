@@ -320,8 +320,10 @@ type selfDevVisualRow struct {
 	Blank      bool   `json:"blank"`
 	Resolvable bool   `json:"resolvable"`
 	AssetURL   string `json:"asset_url"`
-	File       string `json:"file,omitempty"`
-	Error      string `json:"error,omitempty"`
+	// Scene is a package capture's package, preset, width and state.
+	Scene json.RawMessage `json:"scene,omitempty"`
+	File  string          `json:"file,omitempty"`
+	Error string          `json:"error,omitempty"`
 }
 
 type selfDevVisualListing struct {
@@ -333,6 +335,11 @@ type selfDevVisualListing struct {
 	FrontendSHA256 string             `json:"frontend_sha256"`
 	CaptureReceipt string             `json:"capture_receipt,omitempty"`
 	Captures       []selfDevVisualRow `json:"captures"`
+	// The app packages the patch changes, those no capture shows, and the
+	// capture's notes (docs/problems/selfdev-visual-capture-misses-the-changed-app-2026-11-02.md).
+	PackagesTouched    []string `json:"packages_touched,omitempty"`
+	PackagesUncaptured []string `json:"packages_uncaptured,omitempty"`
+	Notes              []string `json:"notes,omitempty"`
 }
 
 type selfDevVisualManifest struct {
@@ -351,6 +358,8 @@ var (
 // alphanumerics joined by single dashes, never a path separator or dot.
 func selfDevRouteSlug(route string) string {
 	slug := strings.Trim(selfDevSlugRuns.ReplaceAllString(strings.ToLower(route), "-"), "-")
+	// A package capture's route is /?choir-capture=<package>/<preset>/<width>/<state>.
+	slug = strings.TrimPrefix(slug, "choir-capture-")
 	if len(slug) > 60 {
 		slug = strings.Trim(slug[:60], "-")
 	}

@@ -380,7 +380,7 @@ func TestStageEvidenceRefusesImagesThatAreNotTheViewportShot(t *testing.T) {
 func TestStageEvidenceBoundsAndScansWhatItStages(t *testing.T) {
 	t.Run("too many files", func(t *testing.T) {
 		var changes []FileChange
-		for i := 0; i < visualcapture.MaxRoutes+2; i++ {
+		for i := 0; i < visualcapture.MaxCaptures+2; i++ {
 			changes = append(changes, FileChange{Path: visualcapture.EvidencePrefix + strings.Repeat("a", 63) + string(rune('0'+i)) + ".png", Kind: ChangeAdded})
 		}
 		if _, err := visualEvidenceNames(changes); err == nil || !strings.Contains(err.Error(), "at most") {
