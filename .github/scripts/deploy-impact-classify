@@ -42,6 +42,33 @@ declare -a changed=()
 declare -a explanations=()
 declare -a host_services=()
 
+# Guest content gate (docs/problems/every-deploy-reboots-every-guest-2026-11-01.md).
+# A guest is refreshed when what it boots changed, not when the repo SHA did.
+# With the deploy base and head named, the guest content digest
+# (scripts/guest-content-digest: the Go packages the guest binaries import, the
+# frontend, skills, guest nix, go.mod/go.sum, flake, and the release policy
+# with its security epoch) is compared between them:
+#   same    -> no guest image refresh, and the autoputer package pointer stays;
+#   moved   -> the path rules below decide, as before;
+#   unknown -> no base or head, or the digest could not be computed: the path
+#              rules decide (the conservative answer is a refresh).
+guest_digest_state=unknown
+guest_digest_base=
+guest_digest_head=
+if [[ -n "${DEPLOY_IMPACT_BASE:-}" && -n "${DEPLOY_IMPACT_HEAD:-}" ]]; then
+  guest_digest_cmd="${GUEST_DIGEST_CMD:-$(dirname "${BASH_SOURCE[0]}")/../../scripts/guest-content-digest}"
+  if guest_digest_base="$("$guest_digest_cmd" "$DEPLOY_IMPACT_BASE" 2>/dev/null)" && guest_digest_head="$("$guest_digest_cmd" "$DEPLOY_IMPACT_HEAD" 2>/dev/null)" && [[ -n "$guest_digest_base" && -n "$guest_digest_head" ]]; then
+    if [[ "$guest_digest_base" == "$guest_digest_head" ]]; then
+      guest_digest_state=same
+    else
+      guest_digest_state=moved
+    fi
+  else
+    guest_digest_base=
+    guest_digest_head=
+  fi
+fi
+
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   changed+=("$path")
@@ -83,12 +110,16 @@ mark_vmctl_restart() {
 }
 
 mark_active_vm_refresh() {
+  [[ "$guest_digest_state" == "same" ]] && return
   deploy_active_vm_refresh=true
 }
 
 mark_guest_boot_contract() {
   deploy_needed=true
   deploy_host=true
+  # Digest unchanged: the deploy still ships what it ships, but no guest image
+  # is rebuilt for a refresh and no guest is restarted.
+  [[ "$guest_digest_state" == "same" ]] && return
   deploy_host_os=true
   deploy_vmctl_restart=true
   deploy_active_vm_refresh=true
@@ -155,7 +186,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
-    nix/guest-release-policy.md|nix/guest-security-surfaces.txt|scripts/check-guest-floor-paths|scripts/selftest-guest-floor-paths|scripts/test-guest-floor-commit-free|scripts/check-guest-security-epoch|scripts/selftest-guest-security-epoch)
+    nix/guest-release-policy.md|nix/guest-security-surfaces.txt|scripts/check-guest-floor-paths|scripts/selftest-guest-floor-paths|scripts/test-guest-floor-commit-free|scripts/check-guest-security-epoch|scripts/selftest-guest-security-epoch|scripts/guest-content-digest)
       add_explanation "$path -> ignored (guest release policy notes, the security-surface list read only by the CI epoch check, and CI tooling; not deployed to host or guest closures)"
       continue
       ;;
@@ -185,8 +216,12 @@ for path in "${changed[@]}"; do
       ;;
     cmd/vmctl/*|internal/vmmanager/*)
       add_host_service "vmctl"
+      # vmctl restarts without touching guests (KillMode=process; the new
+      # process reattaches running VMs). Host launch settings apply to a guest
+      # at its next boot; the guest refresh follows the guest content digest.
+      mark_vmctl_restart
       mark_guest_boot_contract
-      add_explanation "$path -> vmctl host service + canonical guest boot closure + active VM refresh"
+      add_explanation "$path -> vmctl host service + vmctl restart (guests refresh only if the guest content digest moved)"
       ;;
     internal/vmctl/*)
       add_host_service "gateway"
@@ -402,6 +437,25 @@ for path in "${changed[@]}"; do
     internal/*) add_host_service "checkpointd" ;;
   esac
 done
+
+# Guest content unchanged: the autoputer package pointer does not move. Guests
+# keep running the build they booted from, which is byte-identical in content;
+# only the commit stamp is older, as after an auth-only deploy. A rule above
+# may have added autoputer for a path outside the guest digest.
+if [[ "$guest_digest_state" == "same" ]]; then
+  declare -a kept_services=()
+  for service in "${host_services[@]}"; do
+    if [[ "$service" == "autoputer" ]]; then
+      add_explanation "guest content digest unchanged (${guest_digest_head}): autoputer package pointer and active VM refresh stay as deployed"
+      continue
+    fi
+    kept_services+=("$service")
+  done
+  host_services=(${kept_services[@]+"${kept_services[@]}"})
+fi
+if [[ "$guest_digest_state" == "moved" ]]; then
+  add_explanation "guest content digest moved ${guest_digest_base} -> ${guest_digest_head}"
+fi
 
 # A canonical guest boot refresh executes the autoputer package fetched from the
 # host pointer. Rebuild that package at the same deployment commit so refreshed

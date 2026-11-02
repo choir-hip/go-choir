@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# The guest content digest of a revision: a hash of everything a guest boots
+# from, with the commit stamp left out. Deploys compare it between the deployed
+# base and the new head and refresh guests only when it moved
+# (docs/problems/every-deploy-reboots-every-guest-2026-11-01.md).
+#
+#   scripts/guest-content-digest REV          prints sha256:<hex>
+#   scripts/guest-content-digest --list REV   prints the hashed "mode blob<TAB>path" lines
+#
+# What counts as guest content (over-approximate on purpose: a wrongly counted
+# change costs one planned refresh, a missed one leaves a guest on old code):
+#   - every Choir package the guest binaries import (GOOS=linux go list -deps
+#     over the guest commands, taken from the working tree's head), non-test
+#     files, testdata excluded;
+#   - go.mod, go.sum, flake.nix, flake.lock;
+#   - frontend/ (the guest surface embeds the bundle) minus test output, skills/;
+#   - nix/ minus the host-only files (nix/guest-release-policy.json is in, so a
+#     security_epoch, guest_abi or guest_abi_min change moves the digest);
+#   - the guest signer scripts.
+# Contents come from git objects of REV, so the digest is a function of the
+# tree, never of the commit id, the build date or the checkout.
+#
+# GUEST_DIGEST_DIRS (space separated repo-relative directories) replaces the
+# `go list` step; tests use it. Exit status is non-zero when the digest cannot
+# be computed; callers then keep the conservative path (refresh).
+set -euo pipefail
+
+list=false
+if [ "${1:-}" = "--list" ]; then
+	list=true
+	shift
+fi
+rev=${1:-}
+if [ -z "$rev" ]; then
+	echo "usage: $0 [--list] REV" >&2
+	exit 2
+fi
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+if ! git rev-parse --verify --quiet "$rev^{tree}" >/dev/null; then
+	echo "guest-content-digest: unknown revision $rev" >&2
+	exit 1
+fi
+
+guest_commands="./cmd/autoputer ./cmd/desk-worker ./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate ./cmd/choir-capture"
+
+if [ -n "${GUEST_DIGEST_DIRS:-}" ]; then
+	dirs=$GUEST_DIGEST_DIRS
+else
+	dirs=$(GOOS=linux CGO_ENABLED=0 go list -deps -f '{{if not .Standard}}{{.Dir}}{{end}}' $guest_commands | sed -n "s|^$root/||p" | sort -u)
+	if [ -z "$dirs" ]; then
+		echo "guest-content-digest: go list returned no Choir packages" >&2
+		exit 1
+	fi
+fi
+
+fixed="go.mod go.sum flake.nix flake.lock frontend skills nix scripts/guest-signer-state-migrate scripts/guest-signer-state-project"
+
+# Test files and testdata never reach a binary; frontend test output is not
+# the bundle; the host-only nix files are read by no guest closure (the
+# classifier calls these host OS only).
+excluded='(_test\.go$|(^|/)testdata/|^frontend/(tests|playwright-report|test-results|node_modules)/|^nix/(node-b\.nix|hardware\.nix|disks\.nix|node-a-choir-backup-target\.nix|postgresql\.nix|snapshot-vault\.nix|deploy-mail-creds\.sh|deploy-provider-creds\.sh|guest-release-policy\.md|guest-security-surfaces\.txt)$)'
+
+# shellcheck disable=SC2086
+lines=$(git ls-tree -r "$rev" -- $dirs $fixed | EXCLUDED="$excluded" awk -F'\t' '$2 ~ ENVIRON["EXCLUDED"] { next } { print }' | LC_ALL=C sort -t$'\t' -k2)
+if [ -z "$lines" ]; then
+	echo "guest-content-digest: no guest paths found at $rev" >&2
+	exit 1
+fi
+
+if $list; then
+	printf '%s\n' "$lines"
+	exit 0
+fi
+printf 'sha256:%s\n' "$(printf '%s\n' "$lines" | sed 's/^[0-9]* blob //' | shasum -a 256 | cut -d' ' -f1)"
