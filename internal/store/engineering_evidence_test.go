@@ -206,3 +206,40 @@ func TestEngineeringCapsuleEvidenceIsByteEqualAfterStoreReopen(t *testing.T) {
 		t.Fatalf("projection changed across reopen\nbefore=%s\nafter=%s", a, b)
 	}
 }
+
+// docs/design/delegate-first-for-source-changes-2026-11-02.md: a report's
+// delegate use (patch produced, delegate calls and successes, model) reaches
+// the capsule-evidence projection and stays out of the command digest.
+func TestEngineeringCapsuleEvidenceCarriesDelegateUse(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	open := engineeringOpenRequest(f, "assignment-evidence-delegate", "cap-evidence-delegate", "capsule-evidence-delegate")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	bind := bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-evidence-delegate")
+	bound, err := s.BindEngineeringAssignment(ctx, bind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := assignmentReportRequest(open, bound.Assignment.LifecycleVersion, "report-evidence-delegate", open.Binding.SubjectDigest, types.EngineeringResultFailed, types.EngineeringVerdictNone)
+	d1, _ := ComputeRecordEngineeringAssignmentReportDigest(report)
+	use := &types.EngineeringDelegateUse{Available: true, SourcePatch: true, Calls: 2, Succeeded: 1, Model: "claude-sonnet-5-5"}
+	report.Report.DelegateUse = use
+	d2, _ := ComputeRecordEngineeringAssignmentReportDigest(report)
+	if d1 != d2 {
+		t.Fatalf("delegate use entered the command digest")
+	}
+	report.CommandDigest = d2
+	if _, err := s.RecordEngineeringAssignmentReport(ctx, report); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := s.GetEngineeringCapsuleEvidence(ctx, f.ownerID, f.computerID, f.trajectoryID, open.AssignmentID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evidence.Reports) != 1 || evidence.Reports[0].DelegateUse == nil || *evidence.Reports[0].DelegateUse != *use {
+		t.Fatalf("evidence reports = %+v", evidence.Reports)
+	}
+}

@@ -485,6 +485,19 @@ type EngineeringRecordedMutation struct {
 	SubjectBytesChanged bool   `json:"subject_bytes_changed,omitempty"`
 }
 
+// EngineeringDelegateUse is what a Complete observed of the Claude delegate
+// during one assignment attempt, so a trace review sees "patch without
+// delegate" directly (docs/design/delegate-first-for-source-changes-2026-11-02.md).
+// It is derived from the run's cells, never identity input, and absent on a
+// computer whose delegate is unavailable.
+type EngineeringDelegateUse struct {
+	Available   bool   `json:"delegate_available"`
+	SourcePatch bool   `json:"source_patch"`
+	Calls       int    `json:"delegate_calls"`
+	Succeeded   int    `json:"delegate_succeeded"`
+	Model       string `json:"delegate_model,omitempty"`
+}
+
 type EngineeringAssignmentReport struct {
 	Schema                   string                            `json:"schema"`
 	ReportID                 string                            `json:"report_id"`
@@ -516,6 +529,8 @@ type EngineeringAssignmentReport struct {
 	// content plus the pinned pre-execution subject belief. It is derivation,
 	// never digest input; the store computes it authoritatively at record.
 	PropositionDigest string `json:"proposition_digest,omitempty"`
+	// DelegateUse: derivation, never identity input.
+	DelegateUse *EngineeringDelegateUse `json:"delegate_use,omitempty"`
 	// RecordCommandID is the lifecycle command that recorded this report
 	// (derivation, never identity input): same-digest replays resolve the
 	// original receipt through it.

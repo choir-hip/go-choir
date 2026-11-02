@@ -1355,6 +1355,7 @@ func assignmentSagaKey(assignmentID string, attempt uint64) string {
 func (rt *Runtime) releaseAssignmentSaga(assignmentID string, attempt uint64) {
 	key := assignmentSagaKey(assignmentID, attempt)
 	rt.fateRedriveFailures.Delete(key)
+	rt.delegateTallies.Delete(key)
 	value, ok := rt.assignmentSagas.Load(key)
 	if !ok {
 		return

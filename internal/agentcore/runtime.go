@@ -138,6 +138,9 @@ type Runtime struct {
 	// assignmentSagas holds one mutex per assignment attempt for its terminal
 	// report's drivers (assignmentSagaMutex).
 	assignmentSagas sync.Map
+	// delegateTallies holds one delegateTally per assignment attempt
+	// (engineering_delegate_use.go), dropped with the saga.
+	delegateTallies sync.Map
 	// fateRedriveFailures counts, per assignment attempt, the fate wake's
 	// failed re-drives since the last success in this process
 	// (resumeStrandedFateAssignmentIfPending).
