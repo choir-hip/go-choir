@@ -122,9 +122,10 @@ now:
       whether a cheaper column reorder (body last) gets most of the win.
     next_observation: S0 page reads per statement, three layouts; the baseline is the paper's memory meter from 2026-11-01T19:32Z (guest isolation checkpoint numbers)
   blocker_or_risk: the migration of the paper's store (2.5M events, multi-GB) under the boot and restart rules; every guest deploy reboots every guest
-  next_action: S1 design the header/body tables, the writer and reader cutover, the derived-key and replay fingerprints, and the at-boot migration of a store (planned, marker-backed), from the 46 files that name og_objects or choir_events
+  next_action: S2 slice 0 (the contract: frozen pre-split DDL fixture, new DDL, exported signatures, storeschema 6), then slices A-C and E in parallel worktrees, D last (docs/design/store-header-body-split-2026-11-01.md §7)
 
 receipts:
+  - S1 2026-11-01: design docs/design/store-header-body-split-2026-11-01.md (header tables keep their names; bodies in og_bodies/choir_event_bodies keyed by an explicit INTEGER PRIMARY KEY; witness via logical tables so every table digest is unchanged; boot migration to a new file behind an early replaying gate; .presplit kept until the differential is green)
   - S0 2026-11-01: split chosen over body-last; docs/evidence/store-layout-reads-2026-11-01.md
 ---
 
