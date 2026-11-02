@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -157,7 +158,6 @@ func TestCLIAPIKeyFileDashReadsStdin(t *testing.T) {
 		t.Fatalf("stdin key = %q, %v", key, err)
 	}
 }
-
 
 func TestIdentityVerifiesJoinedGuestAndPlatformAttestations(t *testing.T) {
 	guestPublic, guestPrivate, err := ed25519.GenerateKey(rand.Reader)
@@ -657,7 +657,6 @@ func TestTrajectoryGetCompatibility(t *testing.T) {
 	}
 }
 
-
 func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
 	const secret = "choir_sk_verifier_known_secret_must_not_render"
 	t.Setenv(apiKeyEnvVar, secret)
@@ -808,7 +807,6 @@ func TestRunStartRequiresIdempotencyKey(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, errOut.String())
 	}
 }
-
 
 func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 	var requests []struct {
@@ -1093,7 +1091,6 @@ func TestComputerBootstrapChainUsesProductPath(t *testing.T) {
 	}
 }
 
-
 // TestAPIKeyCreatePostsToAuthEndpoint asserts the api-key create command POSTs
 // to /auth/api-keys with label, scopes, and the required computer binding.
 func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
@@ -1210,7 +1207,6 @@ func TestAPIKeyCreateRejectsMalformedExpiry(t *testing.T) {
 		t.Fatalf("stderr = %q, want RFC 3339 error", errOut.String())
 	}
 }
-
 
 func TestSelfDevelopmentModeCLIQualifiedConsensusCASBody(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1359,5 +1355,42 @@ func TestClientSharesVerbOwnedComputerFlag(t *testing.T) {
 	}
 	if gotHeader != "computer-verb" {
 		t.Fatalf("X-Choir-Computer = %q, want computer-verb", gotHeader)
+	}
+}
+
+// The owner's verifier re-pin
+// (docs/problems/verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md):
+// CLI only, a POST carrying only the reason (the key is the one the guest
+// presents, never the caller's), and a read of the pin state beside it.
+func TestComputerRepinVerifierIsAnOwnerActPostOfTheReason(t *testing.T) {
+	var method, path, body string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		method, path, body = r.Method, r.URL.Path, string(raw)
+		_, _ = io.WriteString(w, `{"status":"repinned"}`)
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"computer", "repin-verifier", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code == 0 {
+		t.Fatalf("repin-verifier without --reason succeeded")
+	}
+	if code := run([]string{"computer", "repin-verifier", "--host=" + stub.URL, "--computer=computer-1", "--reason=lost disk"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer repin-verifier code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodPost || path != "/api/computers/computer-1/verifier-key/repin" || body != `{"reason":"lost disk"}` {
+		t.Fatalf("repin request = %s %s %s", method, path, body)
+	}
+	for _, cmd := range commands() {
+		if cmd.name() == "computer repin-verifier" {
+			if cmd.cliOnly == "" || !slices.Contains(cmd.scopes, ownerActsScope) {
+				t.Fatalf("repin-verifier is not an owner act: cliOnly=%q scopes=%v", cmd.cliOnly, cmd.scopes)
+			}
+		}
+	}
+	if code := run([]string{"computer", "verifier-key", "--host=" + stub.URL, "--computer=computer-1"}, &out, &errOut); code != 0 {
+		t.Fatalf("computer verifier-key code = %d, stderr=%s", code, errOut.String())
+	}
+	if method != http.MethodGet || path != "/api/computers/computer-1/self-development/verifier-key" {
+		t.Fatalf("verifier-key request = %s %s", method, path)
 	}
 }

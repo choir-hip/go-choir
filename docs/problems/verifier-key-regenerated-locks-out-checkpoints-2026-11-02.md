@@ -1,8 +1,8 @@
 # A lost data disk regenerates the verifier key and locks the computer out of every verifier checkpoint (2026-11-02)
 
-Status: documented; fix in flight on branch `verifier-key-repin`. Class:
-red (signing keys, checkpoint authority, self-development apply path).
-Review tier 2.
+Status: fix built on branch `verifier-key-repin` (not merged, not deployed;
+tier 2 review pending). Class: red (signing keys, checkpoint authority,
+self-development apply path). No re-pin has been run on any computer.
 
 Owner rule (2026-11-02): "upgrading things should never leave a computer in
 a stuck state."
@@ -115,3 +115,21 @@ its next verifier checkpoint (the first-use branch), so it is not latent.
    `key_rotated` event on the tape and wakes the reconciler once.
 4. CLI: `choir computer repin-verifier --computer X --reason R` (owner act)
    and `choir computer verifier-key --computer X` (read).
+
+## Where the fix lives
+
+- Signer provenance: `internal/receiptsigner/signing.go:79`
+  (`LoadOrCreateSigningKeyWithProvenance`), reported on `/v1/public-key`.
+- Preflight and re-pin: `internal/platform/verifier_key_pin.go:53`
+  (`VerifierKeyPreflight`), `:98` (`RepinVerifierKey`), `:233` (route),
+  `:276` (owner-act check, every rollout mode).
+- Proxy: `internal/proxy/verifier_repin.go:54`.
+- Guest hold and health: `internal/agentcore/selfdev_verifier_key.go:135`
+  (`verifierKeyHold`), `:184` (`/health` `verifier_key`); call sites
+  `internal/agentcore/self_development_materializer.go:1468` (before the
+  attempt), `:1145` (checkpoint refusal), `:446` (no retry wake).
+- CLI: `cmd/choir/commands.go:457` (`computer repin-verifier`) and
+  `computer verifier-key`.
+
+Fleet check once deployed: `choir computer verifier-key --computer X`, or
+the `verifier_key.pin` field of each guest's `/health`.

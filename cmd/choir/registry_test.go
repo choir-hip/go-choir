@@ -47,6 +47,8 @@ import (
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
+	// Owner act: re-pin a verifier key a lost data disk regenerated.
+	"computer repin-verifier",
 	"computer restore",
 	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
 	"computer resume-checkpoints", "help", "mcp",
@@ -489,6 +491,7 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"files_get":                        {cli: []string{"files", "get", "a/b.txt"}, mcp: `{"path":"a/b.txt"}`, reply: "plain bytes"},
 		"computer_status":                  {cli: []string{"computer", "status", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replay_completeness":     {cli: []string{"computer", "replay-completeness", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
+		"computer_verifier_key":            {cli: []string{"computer", "verifier-key", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replace_workspace":       {cli: []string{"computer", "replace-workspace", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_checkpoints":             {cli: []string{"computer", "checkpoints", "--computer", "c1", "--digest", "abc"}, mcp: `{"computer":"c1","digest":"abc"}`},
 		"computer_import_residue_snapshot": {cli: []string{"computer", "import-residue-snapshot", "--computer", "c1"}, mcp: `{"computer":"c1"}`},

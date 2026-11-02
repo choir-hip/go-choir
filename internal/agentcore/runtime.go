@@ -32,6 +32,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 
 	"github.com/google/uuid"
@@ -330,6 +331,12 @@ type Runtime struct {
 	// reads a queued or running host build (tests).
 	selfdevStandingPoll time.Duration
 	selfdevControl      *selfdev.GuestCredentials
+	// verifierKeyPin caches the host's answer for the presented verifier key
+	// (selfdev_verifier_key.go); the seams replace the signer and the host
+	// in tests.
+	verifierKeyPin         verifierKeyPinCache
+	verifierKeyPresenter   func(context.Context) (keyID, publicKey string, provenance receiptsigner.KeyProvenance, err error)
+	verifierKeyPreflighter func(ctx context.Context, keyID, publicKey string) (selfdevprotocol.VerifierKeyPin, error)
 	// selfdevHostBuilder overrides the corpusd host build client (P5);
 	// nil derives it from eventPayloadReader. Tests inject a fake.
 	selfdevHostBuilder selfdevHostBuilder
