@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Refuse a push to main that CI's guest security epoch gate would fail.
+# CI checks every commit from the live staging commit to the head, with both
+# the head's and the base's copy of scripts/check-guest-security-epoch, and a
+# pushed commit can never gain its trailers: one such push wedges every deploy
+# until main is rewritten (docs/problems/gate-wedge-third-time-2026-11-02.md).
+# This hook runs the same check before the commits leave the machine.
+set -uo pipefail
+
+root=$(git rev-parse --show-toplevel)
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+	[ "$remote_ref" = refs/heads/main ] || continue
+	[ "$local_sha" = "$zero" ] && continue
+	base=$(curl -fsS --max-time 10 https://choir.news/health 2>/dev/null | jq -r '.platform.deployed_commit // empty' 2>/dev/null)
+	if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+		git fetch -q origin main 2>/dev/null || true
+		git cat-file -e "$base^{commit}" 2>/dev/null || base=$remote_sha
+	fi
+	if [ -z "$base" ] || [ "$base" = "$zero" ]; then
+		echo "pre-push: no deployed base and no remote main; skipping the epoch gate" >&2
+		continue
+	fi
+	if ! "$root/scripts/check-guest-security-epoch" --base "$base" --head "$local_sha"; then
+		status=1
+	fi
+	base_copy=$(mktemp)
+	if git show "$base:scripts/check-guest-security-epoch" >"$base_copy" 2>/dev/null; then
+		if ! (cd "$root" && bash "$base_copy" --base "$base" --head "$local_sha" >/dev/null 2>&1); then
+			echo "pre-push: the deployed base's copy of the epoch gate fails $base..$local_sha" >&2
+			status=1
+		fi
+	fi
+	rm -f "$base_copy"
+done
+if [ "$status" -ne 0 ]; then
+	echo "pre-push: refused. CI would fail the guest security epoch gate and wedge main." >&2
+	echo "pre-push: amend the commit with its Security-Effect trailers (after review), or raise the epoch." >&2
+fi
+exit "$status"
