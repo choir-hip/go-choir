@@ -20,7 +20,7 @@ import (
 // a seed fixture carrying it, which would mask the first two.
 func requireServingVocabularyDeposits(t *testing.T, s *store.Store) {
 	t.Helper()
-	rows, err := s.DB().QueryContext(context.Background(), `SELECT canonical_id, object_kind, body, metadata FROM og_objects`)
+	rows, err := s.DB().QueryContext(context.Background(), `SELECT h.canonical_id, h.object_kind, b.body, h.metadata FROM og_objects h JOIN og_bodies b ON b.obj_id = h.obj_id`)
 	if err != nil {
 		t.Fatal(err)
 	}
