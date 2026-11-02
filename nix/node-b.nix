@@ -1757,7 +1757,9 @@ in
         # through `choir self-dev visual` (gap B). The grant lands at b@c's
         # next cold boot. 2026-10-26 (the switched-off audit): every test
         # computer, so any self-development proof computer can preview.
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,class:test"
+        # 2026-11-02: d@e by name, the DeepSeek arm of the two-arm
+        # comparison; it is not class:test, and its capsule had no browser.
+        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,computer-59c902c5d46caecc0a180a8557164e72,class:test"
         # store.event_table, the host half (F-c deploy 2,
         # docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
         # computer's guest writer may stamp its telemetry for choir_events;
