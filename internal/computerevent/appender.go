@@ -163,7 +163,10 @@ type ComputerEventAppender struct {
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
 	// probe without racing the replay goroutine.
-	replayActive       bool
+	replayActive bool
+	// reconstructing is set for the whole of any reconstruct; in-place
+	// prepared recovery must not race a replay's own prepared rows.
+	reconstructing     atomic.Bool
 	replaySeq          uint64
 	replayCommittedSeq uint64
 	replayAppliedRows  uint64 // rows applied during this Reconstruct call
@@ -781,7 +784,17 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 		return Receipt{}, fmt.Errorf("computer event appender: resolve embedded head: %w", err)
 	}
 	if !sameHead(platformHead, embeddedHead) {
-		return Receipt{}, ErrNeedsProjectionRepair
+		// A prepared row a failed earlier append left behind (a post-CAS
+		// finalize, or a discard that never ran) wedged the running computer
+		// until its next boot (2026-11-02, the paper, twice). Run the boot's
+		// own recovery in place; appends are serialized here, so every
+		// prepared row is an orphan.
+		if embeddedHead, err = a.recoverPreparedInPlaceLocked(ctx, "heads differ"); err != nil {
+			return Receipt{}, err
+		}
+		if !sameHead(platformHead, embeddedHead) {
+			return Receipt{}, ErrNeedsProjectionRepair
+		}
 	}
 	next, err := Reduce(platformHead, event, input)
 	if err != nil {
@@ -818,11 +831,24 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 		Input:                    input,
 	}
 	if err := a.projection.Prepare(ctx, request); err != nil {
-		return Receipt{}, fmt.Errorf("computer event appender: prepare embedded projection: %w", err)
+		// An orphaned prepared row at this sequence fails the insert on the
+		// index's (computer_id, sequence) key; clear it and retry once.
+		if _, rerr := a.recoverPreparedInPlaceLocked(ctx, "prepare failed: "+err.Error()); rerr != nil {
+			return Receipt{}, fmt.Errorf("computer event appender: prepare embedded projection: %w (recovery: %v)", err, rerr)
+		}
+		if err := a.projection.Prepare(ctx, request); err != nil {
+			return Receipt{}, fmt.Errorf("computer event appender: prepare embedded projection: %w", err)
+		}
 	}
 	receipt, err := a.cas.CompareAndSwap(ctx, request)
 	if err != nil {
-		_ = a.projection.DiscardPrepared(ctx, a.computerID, digest)
+		// The discard must not share a cancelled ctx with the CAS, or the
+		// prepared row outlives the failed append and blocks the next one.
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		if derr := a.projection.DiscardPrepared(dctx, a.computerID, digest); derr != nil {
+			log.Printf("computer event appender: discard prepared seq=%d after failed CAS: %v", event.Sequence, derr)
+		}
+		cancel()
 		return Receipt{}, fmt.Errorf("computer event appender: head CAS: %w", err)
 	}
 	if err := a.verifier.VerifyEventHeadReceipt(ctx, receipt, request); err != nil {
@@ -838,6 +864,33 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 		go (*observer)(event.EventKind)
 	}
 	return receipt, nil
+}
+
+// recoverPreparedInPlaceLocked runs RecoverPrepared on a running computer and
+// returns the embedded head after it. Callers hold a.mu.
+func (a *ComputerEventAppender) recoverPreparedInPlaceLocked(ctx context.Context, why string) (*Head, error) {
+	if a.replayProjection || a.replayActive || a.reconstructing.Load() {
+		return nil, ErrNeedsProjectionRepair
+	}
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
+	err := a.RecoverPrepared(rctx)
+	head, herr := a.projection.Head(rctx, a.computerID)
+	log.Printf("computer event appender: in-place prepared recovery (%s): err=%v embedded_seq=%d", why, err, headSeq(head))
+	if err != nil {
+		return nil, err
+	}
+	if herr != nil {
+		return nil, fmt.Errorf("computer event appender: embedded head after recovery: %w", herr)
+	}
+	return head, nil
+}
+
+func headSeq(h *Head) uint64 {
+	if h == nil {
+		return 0
+	}
+	return h.Sequence
 }
 
 func (a *ComputerEventAppender) RecoverPrepared(ctx context.Context) error {
@@ -915,6 +968,8 @@ func (a *ComputerEventAppender) reconstruct(ctx context.Context, source EventSou
 	if source == nil {
 		return fmt.Errorf("computer event appender: event source is required")
 	}
+	a.reconstructing.Store(true)
+	defer a.reconstructing.Store(false)
 	if a.replayProjection {
 		a.setReplayActive(true)
 		defer a.setReplayActive(false)

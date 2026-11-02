@@ -349,6 +349,63 @@ func TestAppenderRecoversCrashAfterCanonicalCAS(t *testing.T) {
 	}
 }
 
+// The paper, 2026-11-02 06:20Z: a post-CAS finalize failure left the
+// embedded head one behind the platform, and every later append failed with
+// ErrNeedsProjectionRepair until a reboot. The next append repairs in place.
+func TestAppenderRepairsPostCASFinalizeFailureOnNextAppend(t *testing.T) {
+	appender, projection, cas := newRecoveryTestAppender(t, &memoryProjection{failFinalizeOnce: true})
+	event := testEvent(t, nil, EventGenesisImported)
+	event.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &event, genesisInput, nil)
+	if _, err := appender.Append(context.Background(), event, genesisInput, nil); !errors.Is(err, ErrNeedsProjectionRepair) {
+		t.Fatalf("append error = %v, want projection repair", err)
+	}
+	if _, err := appender.AppendNew(context.Background(), testEvent(t, nil, EventTrajectoryStarted), TransitionInput{}, nil); err != nil {
+		t.Fatalf("next append did not repair in place: %v", err)
+	}
+	if !reflect.DeepEqual(cas.head, projection.head) || len(projection.prepared) != 0 || cas.head.Sequence != 2 {
+		t.Fatalf("not converged: cas=%+v projection=%+v prepared=%d", cas.head, projection.head, len(projection.prepared))
+	}
+}
+
+// The paper, 2026-11-02 11:42Z: a prepared row outlived its failed append at
+// the next sequence, and every later prepare failed the index's unique key.
+func TestAppenderClearsOrphanPreparedRowOnPrepareConflict(t *testing.T) {
+	appender, projection, cas := newRecoveryTestAppender(t, &memoryProjection{})
+	event := testEvent(t, nil, EventGenesisImported)
+	event.ResultingEffectiveCommitment = testDigestA
+	genesisInput := TransitionInput{TargetStateCommitment: testDigestA}
+	bindTestRequest(t, &event, genesisInput, nil)
+	if _, err := appender.Append(context.Background(), event, genesisInput, nil); err != nil {
+		t.Fatal(err)
+	}
+	orphan := CASRequest{EventDigest: testDigestB, Event: Event{ComputerID: testComputerID, Sequence: 2, PreviousHead: cas.head.CanonicalEventHead}}
+	projection.prepared = append(projection.prepared, orphan)
+	projection.uniqueSequence = true
+	if _, err := appender.AppendNew(context.Background(), testEvent(t, nil, EventTrajectoryStarted), TransitionInput{}, nil); err != nil {
+		t.Fatalf("append behind an orphan prepared row: %v", err)
+	}
+	if !reflect.DeepEqual(cas.head, projection.head) || len(projection.prepared) != 0 || cas.head.Sequence != 2 {
+		t.Fatalf("not converged: cas=%+v projection=%+v prepared=%d", cas.head, projection.head, len(projection.prepared))
+	}
+}
+
+func newRecoveryTestAppender(t *testing.T, projection *memoryProjection) (*ComputerEventAppender, *memoryProjection, *memoryCAS) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return appender, projection, cas
+}
+
 func TestAppenderPoisonFinalizeDoesNotSilentlyRetryTheSameCrash(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -627,12 +684,20 @@ type memoryProjection struct {
 	prepared           []CASRequest
 	failFinalizeOnce   bool
 	failFinalizeAlways error
+	uniqueSequence     bool
 }
 
 func (p *memoryProjection) Head(context.Context, string) (*Head, error) {
 	return cloneHead(p.head), nil
 }
 func (p *memoryProjection) Prepare(_ context.Context, request CASRequest) error {
+	if p.uniqueSequence {
+		for _, existing := range p.prepared {
+			if existing.Event.Sequence == request.Event.Sequence {
+				return errors.New("UNIQUE constraint failed: computer_event_index.computer_id, computer_event_index.sequence")
+			}
+		}
+	}
 	p.prepared = append(p.prepared, request)
 	return nil
 }
