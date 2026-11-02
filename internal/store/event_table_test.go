@@ -108,8 +108,8 @@ func allStoredEvents(t *testing.T, s *Store) []types.EventRecord {
 	t.Helper()
 	var out []types.EventRecord
 	for _, q := range []string{
-		`SELECT body FROM og_objects WHERE object_kind = 'choir.event'`,
-		`SELECT body FROM choir_events`,
+		`SELECT b.body FROM og_objects h JOIN og_bodies b ON b.obj_id = h.obj_id WHERE h.object_kind = 'choir.event'`,
+		`SELECT b.body FROM choir_events h JOIN choir_event_bodies b ON b.ev_id = h.ev_id`,
 	} {
 		rows, err := s.db.Query(q)
 		if err != nil {
@@ -806,7 +806,7 @@ func TestEventTableRowIsTheWholeObject(t *testing.T) {
 		seq, stream                                            int64
 		created, updated                                       time.Time
 	)
-	err = s.db.QueryRowContext(ctx, `SELECT tape_seq, op_index, canonical_id, object_kind, owner_id, content_hash, body, metadata, created_at, updated_at, run_id, seq, stream_seq, trajectory_id, event_kind FROM choir_events`).
+	err = s.db.QueryRowContext(ctx, `SELECT h.tape_seq, h.op_index, h.canonical_id, h.object_kind, h.owner_id, h.content_hash, b.body, h.metadata, h.created_at, h.updated_at, h.run_id, h.seq, h.stream_seq, h.trajectory_id, h.event_kind FROM choir_events h JOIN choir_event_bodies b ON b.ev_id = h.ev_id`).
 		Scan(&tapeSeq, &opIndex, &id, &objectKind, &owner, &contentHash, &body, &metadata, &created, &updated, &runID, &seq, &stream, &traj, &k)
 	if err != nil {
 		t.Fatal(err)
@@ -907,19 +907,13 @@ func TestEventTableBootLeavesObjectGraphAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for start := 0; start < rows; start += 500 {
-		var sb strings.Builder
-		var args []any
-		sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
-		for i := start; i < start+500; i++ {
-			if i > start {
-				sb.WriteString(",")
-			}
-			sb.WriteString("(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,'')")
-			args = append(args, fmt.Sprintf("obj:choir.event:o1:key-%06d", i), "choir.event", "o1", "", "", fmt.Sprintf("h-%d", i),
-				fmt.Sprintf(`{"run_id":"r%d","seq":%d}`, i%10, i), fmt.Sprintf(`{"run_id":"r%d","seq":%d,"stream_seq":%d}`, i%10, i, i))
-		}
-		if _, err := tx.Exec(sb.String(), args...); err != nil {
+	for i := 0; i < rows; i++ {
+		if _, err := objectgraph.WriteObjectTx(context.Background(), tx, objectgraph.Object{
+			CanonicalID: fmt.Sprintf("obj:choir.event:o1:key-%06d", i), ObjectKind: "choir.event", OwnerID: "o1",
+			ContentHash: fmt.Sprintf("h-%d", i), Body: []byte(fmt.Sprintf(`{"run_id":"r%d","seq":%d}`, i%10, i)),
+			Metadata: []byte(fmt.Sprintf(`{"run_id":"r%d","seq":%d,"stream_seq":%d}`, i%10, i, i)),
+			CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}

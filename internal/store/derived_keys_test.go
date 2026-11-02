@@ -75,6 +75,12 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 			if rel == "platform" || strings.HasPrefix(rel, "platform"+string(filepath.Separator)) {
 				return filepath.SkipDir
 			}
+			// store/splitfixture builds raw header/body layouts for tests and
+			// the store-split-diff drill; only _test.go files import it, so it
+			// never runs in production and has no derived keys to maintain.
+			if rel == filepath.Join("store", "splitfixture") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
