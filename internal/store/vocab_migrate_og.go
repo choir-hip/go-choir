@@ -35,6 +35,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -344,7 +345,7 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 	// retained. Loading every row's body+metadata at once OOMs the guest on
 	// real computers (observed: autoputer OOM-killed at ~3.7GB on staging).
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects`)
+		`SELECT h.canonical_id, h.object_kind, h.owner_id, h.computer_id, h.version_id, b.body, h.metadata, h.created_at, h.updated_at, h.tombstone, h.superseded_by FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id`)
 	if err != nil {
 		return nil, nil, fmt.Errorf("og migrate scan: %w", err)
 	}
@@ -659,7 +660,7 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 		var liveTomb int
 		var liveVer, liveSup string
 		err := s.db.QueryRowContext(ctx,
-			`SELECT body, metadata, tombstone, version_id, superseded_by FROM og_objects WHERE canonical_id = ?`,
+			`SELECT b.body, h.metadata, h.tombstone, h.version_id, h.superseded_by FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE h.canonical_id = ?`,
 			o.newID).Scan(&liveBody, &liveMeta, &liveTomb, &liveVer, &liveSup)
 		if err != nil {
 			return nil, nil, fmt.Errorf("og migrate: external convergence check %s → %s: %w", o.canonicalID, o.newID, err)
@@ -726,8 +727,8 @@ func (s *Store) ogResolveLiveCollision(ctx context.Context, rep *MigrationReport
 	var liveNotOlder bool
 	var origBody, origMeta []byte
 	var liveUpdated string
-	err := s.db.QueryRowContext(ctx, `SELECT live.updated_at >= old.updated_at, live.updated_at, old.body, old.metadata
-		FROM og_objects live, og_objects old WHERE live.canonical_id = ? AND old.canonical_id = ?`,
+	err := s.db.QueryRowContext(ctx, `SELECT live.updated_at >= old.updated_at, live.updated_at, ob.body, old.metadata
+		FROM og_objects live, og_objects old LEFT JOIN og_bodies ob ON ob.obj_id = old.obj_id WHERE live.canonical_id = ? AND old.canonical_id = ?`,
 		o.newID, o.canonicalID).Scan(&liveNotOlder, &liveUpdated, &origBody, &origMeta)
 	if err != nil {
 		return fmt.Errorf("og migrate: live collision check %s → %s: %w", o.canonicalID, o.newID, err)
@@ -774,9 +775,7 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 			s.derivedKeys().Drop(ctx, tx, o.canonicalID)
 			continue
 		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			o.newID, o.newHash, o.body, string(o.metadata), o.versionID, o.supersededBy, o.canonicalID); err != nil {
+		if err := updateObjectRow(ctx, tx, o.canonicalID, o.newID, o.newHash, o.body, string(o.metadata), o.versionID, o.supersededBy); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og migrate write %s: %w", o.canonicalID, err)
 		}
@@ -875,7 +874,32 @@ func ogRoleFieldsFromJSON(kind string, raw []byte, prefix string, out *[]vocabmi
 // be V1 (stamped ops exist only on V2 binaries with the write guard, and
 // replayed deposits are upcast before they are projected); the full fence
 // fails closed if that is ever false.
-var objectRowTables = []string{"og_objects", choirEventsTable}
+var objectRowTables = []objectRowTable{
+	{Header: "og_objects", Body: "og_bodies", Key: "obj_id"},
+	{Header: choirEventsTable, Body: "choir_event_bodies", Key: "ev_id"},
+}
+
+// objectRowTable is one header/body pair of the split layout and the shared
+// key (the header's rowid alias) that joins them.
+type objectRowTable struct{ Header, Body, Key string }
+
+// updateObjectRow rewrites one og_objects row under a vocabulary migration or
+// its revert: the header UPDATE recomputes og_rec_claim and event_phase from
+// the new body (BodyDerivedSQL; in an UPDATE, object_kind is the row's own),
+// then the body table follows by obj_id. REPLACE is forbidden here: the row
+// keeps its obj_id.
+func updateObjectRow(ctx context.Context, tx *sql.Tx, oldID, newID, hash string, body []byte, meta, versionID, supersededBy string) error {
+	claim, phase := objectgraph.BodyDerivedSQL("object_kind", "?6", "?3")
+	var objID int64
+	err := tx.QueryRowContext(ctx,
+		`UPDATE og_objects SET canonical_id = ?1, content_hash = ?2, metadata = ?3, version_id = ?4, superseded_by = ?5, og_rec_claim = `+claim+`, event_phase = `+phase+` WHERE canonical_id = ?7 RETURNING obj_id`,
+		newID, hash, meta, versionID, supersededBy, body, oldID).Scan(&objID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE og_bodies SET body = ? WHERE obj_id = ?`, body, objID)
+	return err
+}
 
 // servingOGRoleFields collects every role-bearing leaf in the object-row
 // tables for the serving fence: declared role keys in metadata and body
@@ -891,9 +915,10 @@ func (s *Store) servingOGRoleFields(ctx context.Context, progress func()) ([]voc
 	return fields, nil
 }
 
-func (s *Store) servingRoleFieldsOf(ctx context.Context, table string, progress func(), fields *[]vocabmigrate.Field) error {
+func (s *Store) servingRoleFieldsOf(ctx context.Context, t objectRowTable, progress func(), fields *[]vocabmigrate.Field) error {
+	table := t.Header
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, body, metadata FROM `+table)
+		`SELECT h.canonical_id, h.object_kind, b.body, h.metadata FROM `+t.Header+` h LEFT JOIN `+t.Body+` b ON b.`+t.Key+` = h.`+t.Key)
 	if err != nil {
 		return fmt.Errorf("vocab fence %s scan: %w", table, err)
 	}
@@ -995,7 +1020,7 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 		var body, meta []byte
 		var tomb int
 		err := tx.QueryRowContext(ctx,
-			`SELECT object_kind, owner_id, computer_id, version_id, superseded_by, body, metadata, tombstone FROM og_objects WHERE canonical_id = ?`,
+			`SELECT h.object_kind, h.owner_id, h.computer_id, h.version_id, h.superseded_by, b.body, h.metadata, h.tombstone FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE h.canonical_id = ?`,
 			entry.NewCanonicalID).Scan(&kind, &ownerID, &computerID, &versionID, &supersededBy, &body, &meta, &tomb)
 		if err != nil {
 			_ = tx.Rollback()
@@ -1041,9 +1066,7 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 				return fmt.Errorf("og revert %s: restored content does not re-derive recorded ID", entry.NewCanonicalID)
 			}
 		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE og_objects SET canonical_id = ?, content_hash = ?, body = ?, metadata = ?, version_id = ?, superseded_by = ? WHERE canonical_id = ?`,
-			entry.OldCanonicalID, hash, newBody, string(newMeta), versionID, supersededBy, entry.NewCanonicalID); err != nil {
+		if err := updateObjectRow(ctx, tx, entry.NewCanonicalID, entry.OldCanonicalID, hash, newBody, string(newMeta), versionID, supersededBy); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("og revert write %s: %w", entry.NewCanonicalID, err)
 		}

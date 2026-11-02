@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"log"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 // projectStmts are the projection's hot statements, prepared once on the
@@ -14,14 +16,22 @@ import (
 // a set whose prepare failed) falls back to the plain ExecContext.
 type projectStmts struct {
 	db           *sql.DB
-	objectUpsert *sql.Stmt
+	objectHeader *sql.Stmt
+	objectBody   *sql.Stmt
 }
 
-func (p *projectStmts) objectUpsertStmt() *sql.Stmt {
+func (p *projectStmts) objectHeaderStmt() *sql.Stmt {
 	if p == nil {
 		return nil
 	}
-	return p.objectUpsert
+	return p.objectHeader
+}
+
+func (p *projectStmts) objectBodyStmt() *sql.Stmt {
+	if p == nil {
+		return nil
+	}
+	return p.objectBody
 }
 
 // projectionStmts prepares the set on first use. Call it before beginning a
@@ -41,14 +51,21 @@ func (s *Store) projectionStmts(ctx context.Context) *projectStmts {
 		return s.projectStmts
 	}
 	if s.projectStmts != nil {
-		_ = s.projectStmts.objectUpsert.Close()
+		_ = s.projectStmts.objectHeader.Close()
+		_ = s.projectStmts.objectBody.Close()
 		s.projectStmts = nil
 	}
-	stmt, err := s.db.PrepareContext(context.WithoutCancel(ctx), ogObjectUpsertSQL)
+	hdr, err := s.db.PrepareContext(context.WithoutCancel(ctx), objectgraph.ObjectHeaderUpsertSQL)
 	if err != nil {
 		log.Printf("store: prepare projection statements: %v; projecting without them", err)
 		return nil
 	}
-	s.projectStmts = &projectStmts{db: s.db, objectUpsert: stmt}
+	bdy, err := s.db.PrepareContext(context.WithoutCancel(ctx), objectgraph.ObjectBodyUpsertSQL)
+	if err != nil {
+		_ = hdr.Close()
+		log.Printf("store: prepare projection statements: %v; projecting without them", err)
+		return nil
+	}
+	s.projectStmts = &projectStmts{db: s.db, objectHeader: hdr, objectBody: bdy}
 	return s.projectStmts
 }

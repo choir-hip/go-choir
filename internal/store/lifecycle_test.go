@@ -4179,7 +4179,7 @@ func TestTrajectoryRunsAndEventsReadOnlyTheirTrajectory(t *testing.T) {
 	}
 	a := start("a")
 	b := start("b")
-	if _, err := s.db.ExecContext(ctx, `UPDATE og_objects SET body = '{' WHERE og_meta_trajectory_id = ?`, b.TrajectoryID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE og_bodies SET body = '{' WHERE obj_id IN (SELECT obj_id FROM og_objects WHERE og_meta_trajectory_id = ?)`, b.TrajectoryID); err != nil {
 		t.Fatal(err)
 	}
 	runs, err := s.ListLifecycleRunsByTrajectory(ctx, a.OwnerID, a.ComputerID, a.TrajectoryID, 0)

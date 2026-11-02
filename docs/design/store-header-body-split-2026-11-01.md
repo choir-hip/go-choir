@@ -499,3 +499,12 @@ Details in section 8.
 8. **Frozen DDL** is the whole `sqlite_master` of a fresh store at 95ea10801 (`testdata/presplit/schema.sql`), plus `partition.sql` (old `telemetryPartitionDDL`).
 9. **Non-JSON metadata is refused by both layouts** (the indexed `og_meta_*` generated columns error on insert), so the derived-value corpus uses JSON metadata only; bodies cover NULL, empty, non-JSON, JSONB, text-typed, numeric and null fields.
 10. **`dbxplan.HeaderOnly(t, db, wantIndex, query, args...)`** takes the expected index ("" for none); `AssertHeaderOnly`/`AssertBodyByRowid` take a plan already read. A LEFT JOIN body seek reads `SEARCH b USING INTEGER PRIMARY KEY (rowid=?) LEFT-JOIN`.
+
+## Deviations (S2 slice C, as built)
+
+1. **`projectObject` normalises, then writes through the primitive.** It defaults empty metadata to `{}` and zero timestamps as before, then calls `objectgraph.WriteObjectStmts(tx.StmtContext(header), tx.StmtContext(body))`; with no prepared set it falls back to `WriteObjectTx(tx)`. `projectStmts` holds `objectHeader` and `objectBody`.
+2. **`objectRowTables` is `[]objectRowTable{Header, Body, Key}`** (`og_objects/og_bodies/obj_id`, `choir_events/choir_event_bodies/ev_id`). The fence reads (`servingRoleFieldsOf`, the by-id and by-tape-position replay-fence reads) build their LEFT JOIN from it.
+3. **`updateObjectRow` (vocab_migrate_og.go)** is the one UPDATE for the migration and its revert: header UPDATE with `BodyDerivedSQL("object_kind", "?6", "?3")` and `RETURNING obj_id`, then `UPDATE og_bodies`. In an UPDATE, `object_kind` and `metadata` in the SET expressions read the old row; the kind never changes, and the new metadata is passed as `?3`.
+4. **The maintained-writer guard** lists `WriteObjectTx`/`WriteObjectStmts` and `updateObjectRow` as primitives whose callers run Maintain/Drop; `revertOGMigration` no longer holds an `og_objects` literal, so the known-writer list names `updateObjectRow` instead.
+5. **Test seeds** for the split layout go through `drillSeed`/`drillSeedErr` (split_testhelpers_test.go), which call `WriteObjectTx`.
+6. **Not covered by a new test:** the choir_events half of the fingerprints (needs slice B's event writer); the run-list and conversation-head readers are covered by the existing graph_store and inbox_open_rounds tests plus `TestRunListReadersMatchAFullRead`.

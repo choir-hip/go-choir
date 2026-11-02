@@ -227,7 +227,7 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 		}
 		var kind, versionID, supersededBy string
 		var body, metadata []byte
-		err := s.db.QueryRowContext(ctx, `SELECT object_kind, version_id, superseded_by, body, metadata FROM `+objectRowTables[0]+` WHERE canonical_id=?`, id).
+		err := s.db.QueryRowContext(ctx, `SELECT h.object_kind, h.version_id, h.superseded_by, b.body, h.metadata FROM `+objectRowTables[0].Header+` h LEFT JOIN `+objectRowTables[0].Body+` b ON b.`+objectRowTables[0].Key+` = h.`+objectRowTables[0].Key+` WHERE h.canonical_id=?`, id).
 			Scan(&kind, &versionID, &supersededBy, &body, &metadata)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
@@ -247,7 +247,7 @@ func (s *Store) vocabReplayStaysFenced(ctx context.Context, prior *MigrationRepo
 		}
 		var id, kind, versionID, supersededBy string
 		var body, metadata []byte
-		err := s.db.QueryRowContext(ctx, `SELECT canonical_id, object_kind, version_id, superseded_by, body, metadata FROM `+choirEventsTable+` WHERE tape_seq=? AND op_index=?`, pos.tapeSeq, pos.opIndex).
+		err := s.db.QueryRowContext(ctx, `SELECT h.canonical_id, h.object_kind, h.version_id, h.superseded_by, b.body, h.metadata FROM `+objectRowTables[1].Header+` h LEFT JOIN `+objectRowTables[1].Body+` b ON b.`+objectRowTables[1].Key+` = h.`+objectRowTables[1].Key+` WHERE h.tape_seq=? AND h.op_index=?`, pos.tapeSeq, pos.opIndex).
 			Scan(&id, &kind, &versionID, &supersededBy, &body, &metadata)
 		if errors.Is(err, sql.ErrNoRows) {
 			if retired {

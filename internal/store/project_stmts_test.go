@@ -18,7 +18,7 @@ func TestPreparedObjectUpsertWritesWhatThePlainOneWrites(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	stmts := s.projectionStmts(ctx)
-	if stmts.objectUpsertStmt() == nil {
+	if stmts.objectHeaderStmt() == nil || stmts.objectBodyStmt() == nil {
 		t.Fatal("the store prepared no upsert statement")
 	}
 	kind := objectgraph.ObjectKind("choir.event")

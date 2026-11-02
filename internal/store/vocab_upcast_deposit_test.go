@@ -524,7 +524,7 @@ func TestVocabDepositUpcastMonoIdentityAcrossCutover(t *testing.T) {
 	var agentID, agentBody, agentMeta, agentHash string
 	var tombstone int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT canonical_id, body, metadata, content_hash, tombstone FROM og_objects WHERE object_kind='choir.agent'`).
+		`SELECT canonical_id, b.body, metadata, content_hash, tombstone FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`).
 		Scan(&agentID, &agentBody, &agentMeta, &agentHash, &tombstone); err != nil {
 		t.Fatalf("read agent row: %v", err)
 	}
@@ -555,7 +555,7 @@ func TestVocabDepositUpcastMonoIdentityAcrossCutover(t *testing.T) {
 	// The V1 event object's embedded reference and actor profile converge.
 	var eventID, eventBody, eventMeta, eventHash string
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT canonical_id, body, metadata, content_hash FROM og_objects WHERE object_kind='choir.event'`).
+		`SELECT canonical_id, b.body, metadata, content_hash FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.event'`).
 		Scan(&eventID, &eventBody, &eventMeta, &eventHash); err != nil {
 		t.Fatalf("read event row: %v", err)
 	}
@@ -736,8 +736,7 @@ func TestVocabDepositUpcastRetainedV1StoreDefersToEndMigration(t *testing.T) {
 	// Seed the retained V1 row and a projection head so the store cannot be
 	// mistaken for a fresh reconstruction.
 	retained := vocabUpcastAgentObject(t, "super:root", "super", "a", false, base, base)
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+	if _, err := drillSeedErr(ctx, s,
 		retained.CanonicalID, string(retained.ObjectKind), retained.OwnerID, retained.ComputerID, retained.VersionID,
 		retained.ContentHash, retained.Body, string(retained.Metadata), base, base); err != nil {
 		t.Fatalf("seed retained agent: %v", err)
@@ -765,7 +764,7 @@ func TestVocabDepositUpcastRetainedV1StoreDefersToEndMigration(t *testing.T) {
 	})
 
 	var gotID, gotBody string
-	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.agent'`).Scan(&gotID, &gotBody); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`).Scan(&gotID, &gotBody); err != nil {
 		t.Fatal(err)
 	}
 	if gotID != agentV1 || !strings.Contains(gotBody, `"agent_id":"super:root"`) || !strings.Contains(gotBody, `"state":"b"`) {
@@ -793,7 +792,7 @@ func TestVocabDepositUpcastRetainedV1StoreDefersToEndMigration(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("agent rows after retained cutover = %d, want 1", count)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.agent'`).Scan(&gotID, &gotBody); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`).Scan(&gotID, &gotBody); err != nil {
 		t.Fatal(err)
 	}
 	if gotID != agentV2 || !strings.Contains(gotBody, `"agent_id":"management:root"`) {
@@ -901,7 +900,7 @@ func TestVocabDepositUpcastConvergentSpellingsFollowEventOrder(t *testing.T) {
 	}
 	var agentID, agentBody, createdAt string
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT canonical_id, body, created_at FROM og_objects WHERE object_kind='choir.agent'`).Scan(&agentID, &agentBody, &createdAt); err != nil {
+		`SELECT canonical_id, b.body, created_at FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`).Scan(&agentID, &agentBody, &createdAt); err != nil {
 		t.Fatal(err)
 	}
 	if agentID != v2ID {

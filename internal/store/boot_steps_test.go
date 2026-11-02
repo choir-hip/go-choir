@@ -2,6 +2,8 @@ package store
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"regexp"
@@ -107,20 +109,16 @@ func TestReopenWithManyRowsDoesNotTouchOgObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for start := 0; start < rows; start += 500 {
-		var sb strings.Builder
-		var args []any
-		sb.WriteString(`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES `)
-		for i := start; i < start+500; i++ {
-			if i > start {
-				sb.WriteString(",")
-			}
-			sb.WriteString("(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,'')")
-			kind := []string{"choir.run", "choir.commitment_record", "choir.source_ref", "choir.agent"}[i%4]
-			args = append(args, fmt.Sprintf("obj:%s:o1:key-%06d", kind, i), kind, "o1", "c1", "v", fmt.Sprintf("h-%d", i),
-				fmt.Sprintf(`{"addressee":"a%d"}`, i%50), fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90))
-		}
-		if _, err := tx.Exec(sb.String(), args...); err != nil {
+	for i := 0; i < rows; i++ {
+		kind := []string{"choir.run", "choir.commitment_record", "choir.source_ref", "choir.agent"}[i%4]
+		now := time.Now().UTC()
+		if _, err := objectgraph.WriteObjectTx(context.Background(), tx, objectgraph.Object{
+			CanonicalID: fmt.Sprintf("obj:%s:o1:key-%06d", kind, i), ObjectKind: objectgraph.ObjectKind(kind),
+			OwnerID: "o1", ComputerID: "c1", VersionID: "v", ContentHash: fmt.Sprintf("h-%d", i),
+			Body:      []byte(fmt.Sprintf(`{"addressee":"a%d"}`, i%50)),
+			Metadata:  json.RawMessage(fmt.Sprintf(`{"agent_id":"a%d","doc_id":"d%d"}`, i%50, i%90)),
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}

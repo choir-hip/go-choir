@@ -33,10 +33,10 @@ type ObjectGraphFingerprint struct {
 // the rows of either table.
 func (s *Store) ListObjectGraphFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT canonical_id, object_kind, version_id, content_hash, COALESCE(body, ''), metadata,
-		       updated_at, tombstone, superseded_by
-		  FROM og_objects
-		 ORDER BY canonical_id ASC`)
+		SELECT h.canonical_id, h.object_kind, h.version_id, h.content_hash, COALESCE(b.body, ''), h.metadata,
+		       h.updated_at, h.tombstone, h.superseded_by
+		  FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id
+		 ORDER BY h.canonical_id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query object graph fingerprints: %w", err)
 	}
@@ -110,10 +110,10 @@ func (s *Store) telemetryPartitionFingerprints(ctx context.Context) ([]ObjectGra
 
 func (s *Store) eventTableFingerprints(ctx context.Context) ([]ObjectGraphFingerprint, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT tape_seq, op_index, object_kind, version_id, content_hash, body, metadata,
-		       updated_at, tombstone, superseded_by
-		  FROM choir_events
-		 ORDER BY tape_seq ASC, op_index ASC`)
+		SELECT h.tape_seq, h.op_index, h.object_kind, h.version_id, h.content_hash, b.body, h.metadata,
+		       h.updated_at, h.tombstone, h.superseded_by
+		  FROM choir_events h LEFT JOIN choir_event_bodies b ON b.ev_id = h.ev_id
+		 ORDER BY h.tape_seq ASC, h.op_index ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query %s fingerprints: %w", choirEventsTable, err)
 	}

@@ -238,24 +238,6 @@ func projectDesktopState(ctx context.Context, tx *sql.Tx, body json.RawMessage, 
 	return nil
 }
 
-// ogObjectUpsertSQL writes one object op. Parsing and compiling it (its
-// conflict clause and every og_objects index) was most of a replayed
-// event's finalize, so the store prepares it once (projectStmts).
-const ogObjectUpsertSQL = `INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (canonical_id) DO UPDATE SET
-			object_kind = excluded.object_kind,
-			owner_id = excluded.owner_id,
-			computer_id = excluded.computer_id,
-			version_id = excluded.version_id,
-			content_hash = excluded.content_hash,
-			body = excluded.body,
-			metadata = excluded.metadata,
-			updated_at = excluded.updated_at,
-			tombstone = excluded.tombstone,
-			superseded_by = excluded.superseded_by`
-
 func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derived *objectgraph.DerivedKeys, stmts *projectStmts) error {
 	var obj objectgraph.Object
 	if err := json.Unmarshal(body, &obj); err != nil {
@@ -276,14 +258,14 @@ func projectObject(ctx context.Context, tx *sql.Tx, body json.RawMessage, derive
 	if updated.IsZero() {
 		updated = created
 	}
-	args := []any{obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-		obj.VersionID, obj.ContentHash, obj.Body, metadata,
-		created, updated, obj.Tombstone, obj.SupersededBy}
+	obj.Metadata = json.RawMessage(metadata)
+	obj.CreatedAt = created
+	obj.UpdatedAt = updated
 	var err error
-	if upsert := stmts.objectUpsertStmt(); upsert != nil {
-		_, err = tx.StmtContext(ctx, upsert).ExecContext(ctx, args...)
+	if hdr, bdy := stmts.objectHeaderStmt(), stmts.objectBodyStmt(); hdr != nil && bdy != nil {
+		_, err = objectgraph.WriteObjectStmts(ctx, tx.StmtContext(ctx, hdr), tx.StmtContext(ctx, bdy), obj)
 	} else {
-		_, err = tx.ExecContext(ctx, ogObjectUpsertSQL, args...)
+		_, err = objectgraph.WriteObjectTx(ctx, tx, obj)
 	}
 	if err != nil {
 		return fmt.Errorf("project object: %w", err)

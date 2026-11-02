@@ -262,13 +262,13 @@ func (s *Store) snapshotResidueSessionIdentities(ctx context.Context, ownerID, c
 }
 
 func (s *Store) snapshotResidueObjects(ctx context.Context, ownerID, computerID string) ([]objectgraph.Object, error) {
-	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects`
+	query := `SELECT h.canonical_id, h.object_kind, h.owner_id, h.computer_id, h.version_id, h.content_hash, b.body, h.metadata, h.created_at, h.updated_at, h.tombstone, h.superseded_by FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id`
 	args := []any{}
 	if strings.TrimSpace(ownerID) != "" {
-		query += ` WHERE owner_id = ? AND computer_id = ?`
+		query += ` WHERE h.owner_id = ? AND h.computer_id = ?`
 		args = append(args, strings.TrimSpace(ownerID), strings.TrimSpace(computerID))
 	}
-	query += ` ORDER BY canonical_id`
+	query += ` ORDER BY h.canonical_id`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: list residue objects: %w", err)

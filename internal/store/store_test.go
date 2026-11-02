@@ -252,7 +252,7 @@ func TestGetRunRespondsWhileWriteTransactionOpen(t *testing.T) {
 		t.Fatalf("begin tx: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE og_objects SET body = ? WHERE canonical_id = (SELECT canonical_id FROM (SELECT canonical_id FROM og_objects WHERE object_kind = 'choir.run' LIMIT 1) r)`, "{}"); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE og_bodies SET body = ? WHERE obj_id = (SELECT obj_id FROM (SELECT obj_id FROM og_objects WHERE object_kind = 'choir.run' LIMIT 1) r)`, "{}"); err != nil {
 		t.Fatalf("hold write tx: %v", err)
 	}
 

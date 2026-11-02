@@ -9,9 +9,13 @@ func TestListObjectGraphFingerprintsReadsRows(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO og_objects
-		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by)
-		VALUES ('obj:b', 'run', 'o', 'c', 'v1', 'h-b', 'body-b', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE, ''),
-		       ('obj:a', 'work_item', 'o', 'c', '', 'h-a', NULL, '{"k":1}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, 'obj:z')`); err != nil {
+		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata, created_at, updated_at, tombstone, superseded_by)
+		VALUES ('obj:b', 'run', 'o', 'c', 'v1', 'h-b', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE, ''),
+		       ('obj:a', 'work_item', 'o', 'c', '', 'h-a', '{"k":1}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, 'obj:z')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO og_bodies (obj_id, body)
+		SELECT obj_id, CASE canonical_id WHEN 'obj:b' THEN 'body-b' END FROM og_objects WHERE canonical_id IN ('obj:a','obj:b')`); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ListObjectGraphFingerprints(ctx)

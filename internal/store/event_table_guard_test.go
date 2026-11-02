@@ -168,7 +168,7 @@ func TestEventTableVocabFencesReadTheList(t *testing.T) {
 	if !sawFull || !sawNarrowed {
 		t.Fatalf("fence functions not found (full %t, narrowed %t)", sawFull, sawNarrowed)
 	}
-	if len(objectRowTables) != 2 || objectRowTables[0] != "og_objects" || objectRowTables[1] != choirEventsTable {
+	if len(objectRowTables) != 2 || objectRowTables[0].Header != "og_objects" || objectRowTables[1].Header != choirEventsTable {
 		t.Fatalf("objectRowTables = %v", objectRowTables)
 	}
 }

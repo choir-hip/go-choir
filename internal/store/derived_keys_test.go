@@ -39,8 +39,8 @@ var ogWriterStatement = regexp.MustCompile(`(?i)\b(INSERT(\s+IGNORE)?\s+INTO|REP
 // shared upsert from a function that does. A new writer fails this test until
 // it is added here with its maintenance.
 var maintainedOGWriters = map[string][]string{
-	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"},  // <package>: upsertObjectSQL, used by PutObject and putBatchTx
-	"store/project.go":          {"<package>", "projectObject"}, // <package>: ogObjectUpsertSQL, executed only by projectObject
+	"objectgraph/sql_store.go":  {"<package>", "DeleteObject"}, // <package>: upsertObjectSQL, used by PutObject and putBatchTx
+	"store/project.go":          {"projectObject"},             // writes through objectgraph.WriteObjectStmts / WriteObjectTx
 	"store/object_retire.go":    {"projectObjectRetire"},
 	"store/vocab_migrate_og.go": {"applyOGMigration", "revertOGMigration"},
 }
@@ -48,7 +48,13 @@ var maintainedOGWriters = map[string][]string{
 // ogStatementPreparers prepare a maintained writer's statement and never run
 // it; the writer that runs it calls Maintain.
 var ogStatementPreparers = map[string][]string{
-	"store/project_stmts.go": {"projectionStmts"}, // prepares ogObjectUpsertSQL for projectObject
+	"store/project_stmts.go": {"projectionStmts"}, // prepares the header/body upserts for projectObject
+	// WriteObjectTx/WriteObjectStmts are the two-statement write primitive;
+	// every caller (PutObject, putBatchTx, projectObject) runs Maintain after.
+	"objectgraph/sql_store.go": {"WriteObjectTx", "WriteObjectStmts"},
+	// updateObjectRow is the vocabulary migration's row rewrite; its only
+	// callers, applyOGMigration and revertOGMigration, run Drop and Maintain.
+	"store/vocab_migrate_og.go": {"updateObjectRow"},
 }
 
 func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
@@ -95,7 +101,7 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 					if v.Name == "Maintain" || v.Name == "Drop" {
 						maintains = true
 					}
-					if v.Name == "upsertObjectSQL" || v.Name == "ogObjectUpsertSQL" {
+					if v.Name == "upsertObjectSQL" || v.Name == "ObjectHeaderUpsertSQL" || v.Name == "WriteObjectTx" || v.Name == "WriteObjectStmts" {
 						usesUpsert = true
 					}
 				case *ast.SelectorExpr:
@@ -156,7 +162,7 @@ func TestOnlyMaintainedWritersTouchOgObjects(t *testing.T) {
 	for _, s := range found {
 		have[s.file+"|"+s.fn] = true
 	}
-	for _, want := range []string{"objectgraph/sql_store.go|<package>", "objectgraph/sql_store.go|PutObject", "objectgraph/sql_store.go|putBatchTx", "objectgraph/sql_store.go|DeleteObject", "store/project.go|projectObject", "store/vocab_migrate_og.go|applyOGMigration", "store/vocab_migrate_og.go|revertOGMigration"} {
+	for _, want := range []string{"objectgraph/sql_store.go|<package>", "objectgraph/sql_store.go|PutObject", "objectgraph/sql_store.go|putBatchTx", "objectgraph/sql_store.go|DeleteObject", "store/project.go|projectObject", "store/vocab_migrate_og.go|applyOGMigration", "store/vocab_migrate_og.go|updateObjectRow"} {
 		if !have[want] {
 			t.Errorf("the guard did not find the known writer %s (found %d sites)", want, len(found))
 		}

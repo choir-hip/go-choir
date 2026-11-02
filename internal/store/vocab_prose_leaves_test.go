@@ -98,7 +98,7 @@ func TestVocabDepositUpcastKeepsProseLeavesOfKindsWithoutFormula(t *testing.T) {
 		t.Fatalf("replay refused an event membership whose URL and title hold -super-: %v", err)
 	}
 	var gotID, gotBody string
-	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.event_membership'`).Scan(&gotID, &gotBody); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.event_membership'`).Scan(&gotID, &gotBody); err != nil {
 		t.Fatal(err)
 	}
 	if gotID != obj.CanonicalID {
@@ -114,8 +114,7 @@ func TestVocabBootRescanKeepsProseLeavesOfKindsWithoutFormula(t *testing.T) {
 	s := openTestStore(t)
 	base := time.Date(2026, 10, 16, 9, 5, 0, 0, time.UTC)
 	obj := vocabProseMembership(t, base)
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+	if _, err := drillSeedErr(ctx, s,
 		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID, obj.VersionID,
 		obj.ContentHash, obj.Body, string(obj.Metadata), base, base); err != nil {
 		t.Fatalf("seed membership: %v", err)
@@ -125,7 +124,7 @@ func TestVocabBootRescanKeepsProseLeavesOfKindsWithoutFormula(t *testing.T) {
 		t.Fatalf("boot rescan refused an event membership whose URL and title hold -super-: %v", err)
 	}
 	var gotID, gotBody string
-	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.event_membership'`).Scan(&gotID, &gotBody); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.event_membership'`).Scan(&gotID, &gotBody); err != nil {
 		t.Fatal(err)
 	}
 	if gotID != obj.CanonicalID || gotBody != string(obj.Body) {

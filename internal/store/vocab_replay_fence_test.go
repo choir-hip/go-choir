@@ -100,7 +100,7 @@ func vocabReplayFenceOnDisk(t *testing.T, s *Store) *MigrationReport {
 
 func vocabReplayFenceBodies(t *testing.T, s *Store) string {
 	t.Helper()
-	rows, err := s.db.QueryContext(context.Background(), `SELECT canonical_id, body FROM og_objects`)
+	rows, err := s.db.QueryContext(context.Background(), `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id`)
 	if err != nil {
 		t.Fatal(err)
 	}

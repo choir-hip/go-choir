@@ -46,13 +46,13 @@ func TestMigrateAndFenceRefusesUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	hash := objectgraph.ContentHash("choir.agent", body, metaNorm)
-	drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+	drillSeed(t, s,
 		id, "choir.agent", "owner", "computer", "v1", hash, body, string(metaNorm), now, now)
 	if _, err := s.MigrateAndFenceServingVocabulary(ctx, true, nil); err == nil {
 		t.Fatal("fence passed with unknown role token serving")
 	}
 	var got string
-	if err := s.db.QueryRowContext(ctx, `SELECT body FROM og_objects WHERE object_kind='choir.agent'`).Scan(&got); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(got, `"profile":"boss"`) {
@@ -84,7 +84,7 @@ func TestVocabDrillObjectGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentHash := objectgraph.ContentHash("choir.agent", agentBody, agentMetaNorm)
-	drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+	drillSeed(t, s,
 		agentID, "choir.agent", "owner", "computer", "v1", agentHash, agentBody, string(agentMetaNorm), now, now)
 
 	// Seed a V1 event embedding the agent's canonical ID plus a desk role.
@@ -100,7 +100,7 @@ func TestVocabDrillObjectGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+	drillSeed(t, s,
 		eventID, "choir.event", "owner", "computer", "v1", eventHash, eventBody, string(eventMetaNorm), now, now)
 
 	// Edge from agent to event.
@@ -166,7 +166,7 @@ func TestVocabDrillObjectGraph(t *testing.T) {
 
 	// Event re-derived from migrated content; embedded ref converged.
 	var evBody string
-	if err := s.db.QueryRowContext(ctx, `SELECT body FROM og_objects WHERE object_kind='choir.event'`).Scan(&evBody); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.event'`).Scan(&evBody); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(evBody, `"actor_profile":"engineering"`) || !strings.Contains(evBody, newAgentID) {
@@ -256,7 +256,7 @@ func TestVocabDrillOGConvergenceDedup(t *testing.T) {
 		{id1, "choir.agent", "owner", "computer", "v1", objectgraph.ContentHash("choir.agent", body1, m1), body1, string(m1)},
 		{id2, "choir.agent", "owner", "computer", "v1", objectgraph.ContentHash("choir.agent", body2, m2), body2, string(m2)},
 	} {
-		drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+		drillSeed(t, s,
 			args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], now.Add(time.Duration(i)*time.Second), now)
 	}
 
@@ -313,7 +313,7 @@ func seedOGAgentPair(t *testing.T, s *Store, v1Updated, v2Updated time.Time) (st
 		if err != nil {
 			t.Fatal(err)
 		}
-		drillExec(t, s, `INSERT INTO og_objects (canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')`,
+		drillSeed(t, s,
 			id, "choir.agent", "owner", "computer", "", objectgraph.ContentHash("choir.agent", body, meta), body, string(meta), created, updated)
 		return id
 	}
@@ -339,7 +339,7 @@ func TestVocabDrillOGStaleV1CollidesWithLaterV2(t *testing.T) {
 		t.Fatalf("og migrate with stale V1 collision: %v", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `SELECT canonical_id, body FROM og_objects WHERE object_kind='choir.agent'`)
+	rows, err := s.db.QueryContext(ctx, `SELECT canonical_id, b.body FROM og_objects h LEFT JOIN og_bodies b ON b.obj_id = h.obj_id WHERE object_kind='choir.agent'`)
 	if err != nil {
 		t.Fatal(err)
 	}
