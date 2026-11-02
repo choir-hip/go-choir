@@ -83,8 +83,13 @@ func migratePartitionSplitProgress(ctx context.Context, db *sql.DB, progress fun
 		if !minRow.Valid {
 			return step(name, "")
 		}
-		for lo := minRow.Int64; lo <= maxRow.Int64; lo += partitionSplitBatchRows {
-			hi := lo + partitionSplitBatchRows
+		// hi is clamped so neither it nor the cursor step can overflow near
+		// MaxInt64. The range is [lo, hi] inclusive.
+		for lo := minRow.Int64; ; {
+			hi := maxRow.Int64
+			if maxRow.Int64-lo >= partitionSplitBatchRows {
+				hi = lo + partitionSplitBatchRows - 1
+			}
 			res, err := tx.ExecContext(ctx, query, lo, hi)
 			if err != nil {
 				return fmt.Errorf("partition split: %s: %w", name, err)
@@ -94,6 +99,10 @@ func migratePartitionSplitProgress(ctx context.Context, db *sql.DB, progress fun
 			if progress != nil {
 				progress(copied)
 			}
+			if hi >= maxRow.Int64 {
+				break
+			}
+			lo = hi + 1
 		}
 		return step(name, "")
 	}
@@ -103,10 +112,10 @@ func migratePartitionSplitProgress(ctx context.Context, db *sql.DB, progress fun
 		SELECT rowid, tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata,
 		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind,
 		 `+objectgraph.ChoirEventPhaseSQLFor("body", "metadata")+`
-		FROM choir_events_presplit WHERE rowid >= ? AND rowid < ? ORDER BY rowid`); err != nil {
+		FROM choir_events_presplit WHERE rowid BETWEEN ? AND ? ORDER BY rowid`); err != nil {
 		return err
 	}
-	if err := batch("copy-bodies", `INSERT INTO choir_event_bodies (ev_id, body) SELECT rowid, body FROM choir_events_presplit WHERE rowid >= ? AND rowid < ? ORDER BY rowid`); err != nil {
+	if err := batch("copy-bodies", `INSERT INTO choir_event_bodies (ev_id, body) SELECT rowid, body FROM choir_events_presplit WHERE rowid BETWEEN ? AND ? ORDER BY rowid`); err != nil {
 		return err
 	}
 	var oldN, hdrN, bodyN int64
@@ -135,7 +144,10 @@ type oldPartitionFile struct {
 }
 
 // oldLayoutPartitions lists the partition files of the store at dbPath whose
-// choir_events still has a body column. Read-only: nothing in a file changes.
+// choir_events still has a body column. Retired partitions (the state file's
+// telemetry_partitions_retired) are skipped: they are never read or rewritten.
+// Nothing in a file changes here, though the files are opened with the
+// default (read-write) mode, not mode=ro.
 func oldLayoutPartitions(dbPath string) ([]oldPartitionFile, error) {
 	dir := TelemetryPartitionDir(dbPath)
 	entries, err := os.ReadDir(dir)
@@ -145,10 +157,17 @@ func oldLayoutPartitions(dbPath string) ([]oldPartitionFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("telemetry partitions: list %s: %w", dir, err)
 	}
+	retired, err := retiredPartitionNames(dbPath)
+	if err != nil {
+		return nil, err
+	}
 	var out []oldPartitionFile
 	for _, e := range entries {
 		name := e.Name()
 		if !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		if _, gone := retired[strings.TrimSuffix(name, ".db")]; gone {
 			continue
 		}
 		if _, _, ok := parseTelemetryPartitionName(strings.TrimSuffix(name, ".db")); !ok {
@@ -168,6 +187,46 @@ func oldLayoutPartitions(dbPath string) ([]oldPartitionFile, error) {
 		}
 	}
 	return out, nil
+}
+
+// retiredPartitionNames reads the retired set from the state file beside the
+// store (or its presplit copy mid-swap). A missing file or table is an empty
+// set.
+func retiredPartitionNames(dbPath string) (map[string]struct{}, error) {
+	out := map[string]struct{}{}
+	statePath := StateDBPath(dbPath)
+	if _, err := os.Stat(statePath); err != nil {
+		statePath += presplitSuffix
+		if _, err := os.Stat(statePath); err != nil {
+			return out, nil
+		}
+	}
+	db, err := sql.Open("sqlite", "file:"+statePath+"?mode=ro&_pragma=busy_timeout(30000)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	var has int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='telemetry_partitions_retired'`).Scan(&has); err != nil {
+		return nil, fmt.Errorf("telemetry partitions: read the retired set: %w", err)
+	}
+	if has == 0 {
+		return out, nil
+	}
+	rows, err := db.Query(`SELECT name FROM telemetry_partitions_retired`)
+	if err != nil {
+		return nil, fmt.Errorf("telemetry partitions: read the retired set: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out[n] = struct{}{}
+	}
+	return out, rows.Err()
 }
 
 func partitionFileOldLayout(path string) (bool, error) {
@@ -191,8 +250,9 @@ func largestPartition(parts []oldPartitionFile) int64 {
 }
 
 // partitionRewritePeak is the disk one file's rewrite peaks at: the original,
-// the copy, and the WAL or VACUUM temp beside them.
-func partitionRewritePeak(size int64) int64 { return 3 * size }
+// the copy, and in WAL mode the copy transaction's WAL, the checkpoint and the
+// VACUUM's rebuilt file can reach about 4x transiently.
+func partitionRewritePeak(size int64) int64 { return 4 * size }
 
 // partitionSplitHeadroomBytes is what a partition rewrite leaves free.
 const partitionSplitHeadroomBytes int64 = 64 << 20
@@ -217,8 +277,12 @@ func migrateTelemetryPartitionFiles(dbPath string, progress func(uint64)) error 
 		if free < need {
 			return &HeaderBodySplitRefusal{Reason: "too little free disk to rewrite telemetry partition " + filepath.Base(p.path), Live: p.size, Free: free, Need: need}
 		}
+		phase := objectgraph.BootPhase("store: open", "header-body-split/partition-rewrite/"+filepath.Base(p.path))
+		// The VACUUM's temp files go beside the store: the guest /tmp may be RAM.
+		_ = os.Setenv("SQLITE_TMPDIR", filepath.Dir(p.path))
 		db, err := dbx.OpenSQLite(p.path, dbx.SQLiteOptions{ReadConns: 1})
 		if err != nil {
+			phase(err)
 			return fmt.Errorf("telemetry partitions: open %s: %w", filepath.Base(p.path), err)
 		}
 		var fileRows uint64
@@ -229,13 +293,11 @@ func migrateTelemetryPartitionFiles(dbPath string, progress func(uint64)) error 
 			}
 		})
 		_ = db.Close()
+		phase(err)
 		if err != nil {
 			return fmt.Errorf("telemetry partitions: split migration of %s: %w", filepath.Base(p.path), err)
 		}
 		done += fileRows
-		if progress != nil {
-			progress(done + 1)
-		}
 	}
 	return nil
 }
