@@ -5,7 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/dbx"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -24,6 +28,16 @@ var partitionSplitHook func(step string) error
 // body. The old table is dropped in the same transaction, and the file is
 // vacuumed after the commit (best effort: the data is already migrated).
 func migratePartitionSplit(ctx context.Context, db *sql.DB) error {
+	return migratePartitionSplitProgress(ctx, db, nil)
+}
+
+// partitionSplitBatchRows is how many rows one copy statement moves, so the
+// progress reported to the boot gate advances during a large file's copy.
+var partitionSplitBatchRows int64 = 50000
+
+// migratePartitionSplitProgress is migratePartitionSplit reporting the rows
+// copied so far in this file (monotone, headers and bodies counted alike).
+func migratePartitionSplitProgress(ctx context.Context, db *sql.DB, progress func(rows uint64)) error {
 	var hasBody int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('choir_events') WHERE name = 'body'`).Scan(&hasBody); err != nil {
 		return fmt.Errorf("partition split: detect layout: %w", err)
@@ -60,16 +74,39 @@ func migratePartitionSplit(ctx context.Context, db *sql.DB) error {
 	if err := step("create", choirEventsDDL); err != nil {
 		return err
 	}
-	if err := step("copy-headers", `INSERT INTO choir_events
+	var minRow, maxRow sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MIN(rowid), MAX(rowid) FROM choir_events_presplit`).Scan(&minRow, &maxRow); err != nil {
+		return fmt.Errorf("partition split: rowid range: %w", err)
+	}
+	var copied uint64
+	batch := func(name, query string) error {
+		if !minRow.Valid {
+			return step(name, "")
+		}
+		for lo := minRow.Int64; lo <= maxRow.Int64; lo += partitionSplitBatchRows {
+			hi := lo + partitionSplitBatchRows
+			res, err := tx.ExecContext(ctx, query, lo, hi)
+			if err != nil {
+				return fmt.Errorf("partition split: %s: %w", name, err)
+			}
+			n, _ := res.RowsAffected()
+			copied += uint64(n)
+			if progress != nil {
+				progress(copied)
+			}
+		}
+		return step(name, "")
+	}
+	if err := batch("copy-headers", `INSERT INTO choir_events
 		(ev_id, tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata,
 		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind, event_phase)
 		SELECT rowid, tape_seq, op_index, canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, metadata,
 		 created_at, updated_at, tombstone, superseded_by, run_id, seq, stream_seq, trajectory_id, event_kind,
 		 `+objectgraph.ChoirEventPhaseSQLFor("body", "metadata")+`
-		FROM choir_events_presplit ORDER BY rowid`); err != nil {
+		FROM choir_events_presplit WHERE rowid >= ? AND rowid < ? ORDER BY rowid`); err != nil {
 		return err
 	}
-	if err := step("copy-bodies", `INSERT INTO choir_event_bodies (ev_id, body) SELECT rowid, body FROM choir_events_presplit ORDER BY rowid`); err != nil {
+	if err := batch("copy-bodies", `INSERT INTO choir_event_bodies (ev_id, body) SELECT rowid, body FROM choir_events_presplit WHERE rowid >= ? AND rowid < ? ORDER BY rowid`); err != nil {
 		return err
 	}
 	var oldN, hdrN, bodyN int64
@@ -87,6 +124,118 @@ func migratePartitionSplit(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, `VACUUM`); err != nil {
 		log.Printf("store: telemetry partition split: vacuum after migrating %d rows: %v", oldN, err)
+	}
+	return nil
+}
+
+// oldPartitionFile is a live telemetry partition file still in the old layout.
+type oldPartitionFile struct {
+	path string
+	size int64
+}
+
+// oldLayoutPartitions lists the partition files of the store at dbPath whose
+// choir_events still has a body column. Read-only: nothing in a file changes.
+func oldLayoutPartitions(dbPath string) ([]oldPartitionFile, error) {
+	dir := TelemetryPartitionDir(dbPath)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("telemetry partitions: list %s: %w", dir, err)
+	}
+	var out []oldPartitionFile
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		if _, _, ok := parseTelemetryPartitionName(strings.TrimSuffix(name, ".db")); !ok {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		old, err := partitionFileOldLayout(path)
+		if err != nil {
+			return nil, fmt.Errorf("telemetry partitions: detect layout of %s: %w", name, err)
+		}
+		if old {
+			out = append(out, oldPartitionFile{path: path, size: info.Size()})
+		}
+	}
+	return out, nil
+}
+
+func partitionFileOldLayout(path string) (bool, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(30000)")
+	if err != nil {
+		return false, err
+	}
+	db.SetMaxOpenConns(1)
+	defer db.Close()
+	return dbx.ColumnExists(context.Background(), db, dbx.SQLite, "choir_events", "body")
+}
+
+func largestPartition(parts []oldPartitionFile) int64 {
+	var m int64
+	for _, p := range parts {
+		if p.size > m {
+			m = p.size
+		}
+	}
+	return m
+}
+
+// partitionRewritePeak is the disk one file's rewrite peaks at: the original,
+// the copy, and the WAL or VACUUM temp beside them.
+func partitionRewritePeak(size int64) int64 { return 3 * size }
+
+// partitionSplitHeadroomBytes is what a partition rewrite leaves free.
+const partitionSplitHeadroomBytes int64 = 64 << 20
+
+// migrateTelemetryPartitionFiles rewrites every old-layout partition file of
+// the store at dbPath, one at a time, reporting rows copied so far across all
+// files. A file whose rewrite would not fit refuses with the typed refusal
+// before it is touched. Open's own per-file migration stays as the safety net
+// and finds nothing to do.
+func migrateTelemetryPartitionFiles(dbPath string, progress func(uint64)) error {
+	parts, err := oldLayoutPartitions(dbPath)
+	if err != nil || len(parts) == 0 {
+		return err
+	}
+	var done uint64
+	for _, p := range parts {
+		free, err := compactFreeBytes(filepath.Dir(p.path))
+		if err != nil {
+			return &HeaderBodySplitRefusal{Reason: "free space unreadable: " + err.Error(), Live: p.size}
+		}
+		need := partitionRewritePeak(p.size) + partitionSplitHeadroomBytes
+		if free < need {
+			return &HeaderBodySplitRefusal{Reason: "too little free disk to rewrite telemetry partition " + filepath.Base(p.path), Live: p.size, Free: free, Need: need}
+		}
+		db, err := dbx.OpenSQLite(p.path, dbx.SQLiteOptions{ReadConns: 1})
+		if err != nil {
+			return fmt.Errorf("telemetry partitions: open %s: %w", filepath.Base(p.path), err)
+		}
+		var fileRows uint64
+		err = migratePartitionSplitProgress(context.Background(), db.Write, func(n uint64) {
+			fileRows = n
+			if progress != nil {
+				progress(done + n)
+			}
+		})
+		_ = db.Close()
+		if err != nil {
+			return fmt.Errorf("telemetry partitions: split migration of %s: %w", filepath.Base(p.path), err)
+		}
+		done += fileRows
+		if progress != nil {
+			progress(done + 1)
+		}
 	}
 	return nil
 }

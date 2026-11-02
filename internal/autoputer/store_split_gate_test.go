@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -154,5 +155,50 @@ func TestSplitGateNotBoundWithoutWork(t *testing.T) {
 	s := server.NewServer("autoputer-split-test", "0")
 	if refusal := runStoreSplitUnderGate(s, "c", filepath.Join(t.TempDir(), "runtime.db")); refusal != nil {
 		t.Fatalf("refusal on an empty store: %+v", refusal)
+	}
+}
+
+// A store whose state file is split but whose telemetry partition is still
+// old layout is work: the gate is bound (the address stays held until the
+// server takes it) and the partition is rewritten under it. A retry boot after
+// a cut-short partition phase takes this path.
+func TestSplitGateBoundForPartitionOnlyWork(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	partDir := store.TelemetryPartitionDir(storePath)
+	if err := os.MkdirAll(partDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ddl, err := os.ReadFile(filepath.Join("..", "store", "testdata", "presplit", "partition.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pdb, err := sql.Open("sqlite", dbx.SQLiteDSN(filepath.Join(partDir, "tool_result-20261030.db"), dbx.SQLiteOptions{}, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pdb.Exec(string(ddl)); err != nil {
+		t.Fatal(err)
+	}
+	pdb.Close()
+	if needed, err := store.HeaderBodySplitNeeded(storePath); err != nil || !needed {
+		t.Fatalf("needed=%v err=%v for an old partition", needed, err)
+	}
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := net.SplitHostPort(probe.Addr().String())
+	_ = probe.Close()
+	t.Setenv("SERVER_HOST", "127.0.0.1")
+	s := server.NewServer("autoputer-split-test", port)
+	if refusal := runStoreSplitUnderGate(s, "c", storePath); refusal != nil {
+		t.Fatalf("refusal: %+v", refusal)
+	}
+	if ln, err := net.Listen("tcp", s.ListenAddress()); err == nil {
+		_ = ln.Close()
+		t.Fatal("the gate was not bound for partition-only work")
+	}
+	if needed, err := store.HeaderBodySplitNeeded(storePath); err != nil || needed {
+		t.Fatalf("after the run: needed=%v err=%v", needed, err)
 	}
 }
