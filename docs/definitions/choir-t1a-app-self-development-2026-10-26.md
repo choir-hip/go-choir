@@ -15,7 +15,7 @@ definition_version: 5
 # "we really need to be judicious using screen real estate ... it has to be
 # content everywhere"; propagation to every computer should be an internal
 # mechanism, not an external agent pushing main (station SR9, design).
-readiness: drafted
+readiness: drafted  # SUPERSEDED 2026-11-02 by choir-selfdev-apps-side-by-side-2026-11-02.md (rewrites as <app>-next beside the originals); do not execute
 
 review:
   reviewer: none yet (one Devin seat; the file authorizes orange frontend changes)

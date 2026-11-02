@@ -11,7 +11,21 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-11-01): the store header/body split
+## Active goal (2026-11-02): self-development, the apps rewritten beside their originals
+
+**Goal:** [`definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`](definitions/choir-selfdev-apps-side-by-side-2026-11-02.md)
+(`readiness: executable` on the owner's word). Run it with
+`/goal docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`.
+
+Owner, 2026-11-02: "get back to self-development"; the Claude (Sonnet)
+delegate working; "we have a bunch of different apps to rewrite. We should
+keep the originals as well while we rewrite them. We can delete them
+later." Each rewrite is a package `<app>-next` beside the untouched
+original; it supersedes the T1a draft. First slice: one deploy wave after
+the store split's meter day (2026-11-03T05:00Z), the delegate proof on
+b@c, then Slides-next.
+
+## Settling (2026-11-01): the store header/body split, on its meter day
 
 **Goal:** [`definitions/choir-store-header-body-split-2026-11-02.md`](definitions/choir-store-header-body-split-2026-11-02.md)
 (`readiness: executable` on the owner's word). Run it with
