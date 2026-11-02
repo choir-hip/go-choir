@@ -1,0 +1,514 @@
+.slides-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  color: var(--choir-text-primary);
+  background: var(--choir-surface-app);
+  font-family: var(--choir-font-ui);
+}
+
+.slides-shell:focus-visible {
+  outline: 2px solid var(--choir-accent);
+  outline-offset: -2px;
+}
+
+.slides-shell button:focus-visible {
+  outline: 2px solid var(--choir-accent);
+  outline-offset: -2px;
+}
+
+.slides-shell:fullscreen {
+  background: var(--choir-surface-media);
+}
+
+/* ---- Workspace grid ---- */
+
+.slides-shell .workspace {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 44px;
+  grid-template-areas:
+    "filmstrip stage"
+    "filmstrip bar";
+}
+
+/* ---- Filmstrip ---- */
+
+.slides-shell .filmstrip {
+  grid-area: filmstrip;
+  width: 168px;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--choir-surface-pane);
+  border-right: 1px solid var(--choir-border);
+}
+
+.slides-shell .filmstrip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slides-shell .filmstrip-item {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 4px;
+  color: var(--choir-text-primary);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.slides-shell .filmstrip-number {
+  color: var(--choir-text-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.slides-shell .filmstrip-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  box-sizing: border-box;
+  position: relative;
+  container-type: size;
+  background: var(--choir-surface-inset);
+  border: 1px solid var(--choir-border);
+  border-radius: var(--choir-radius-control-sm);
+}
+
+.slides-shell .filmstrip-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slides-shell .filmstrip-item.is-active .filmstrip-thumb {
+  outline: 2px solid var(--choir-accent);
+  outline-offset: 0;
+}
+
+/* ---- Stage ---- */
+
+/* A 16px gutter keeps the frame off the window edge; cq units resolve against
+   the padded content box, so the frame still fills the space inside it. */
+.slides-shell .stage {
+  grid-area: stage;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 16px;
+  background: var(--choir-surface-inset);
+  container-type: size;
+  cursor: default;
+}
+
+.slides-shell .slide-frame {
+  width: min(100%, calc(100cqh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  container-type: size;
+  overflow: hidden;
+  background: var(--choir-surface-paper);
+  border-radius: var(--choir-radius-control-sm);
+  box-shadow: var(--choir-shadow-soft);
+}
+
+.slides-shell .slide-page {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.slides-shell .slide-document {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 4cqw;
+  color: var(--choir-text-primary);
+  background: var(--choir-surface-document);
+  font-family: var(--choir-font-ui);
+  font-size: clamp(0.9rem, 2.6cqw, 1.6rem);
+  line-height: 1.4;
+}
+
+.slides-shell .slide-title {
+  margin: 0 0 0.5em;
+  font-family: var(--choir-font-display);
+  font-size: 2.2em;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.slides-shell .slide-body {
+  margin: 0.35em 0;
+  font-size: 1.1em;
+}
+
+.slides-shell .slide-document img {
+  display: block;
+  max-width: 100%;
+  max-height: 40%;
+  margin: 0 auto 0.75em;
+  object-fit: contain;
+}
+
+.slides-shell .slide-html h1,
+.slides-shell .slide-html h2,
+.slides-shell .slide-html h3 {
+  font-family: var(--choir-font-display);
+}
+
+.slides-shell .slide-html h1 {
+  font-size: 2.2em;
+}
+
+.slides-shell .slide-html h2 {
+  font-size: 1.6em;
+}
+
+.slides-shell .slide-html h3 {
+  font-size: 1.3em;
+}
+
+.slides-shell .slide-html img {
+  max-width: 100%;
+}
+
+.slides-shell .slide-html p {
+  margin: 0.4em 0;
+}
+
+/* A scaled miniature of the stage slide: sizes are cqw of the tile, so the
+   layout matches the stage at the same proportions. Declared after the stage
+   document rules, with higher specificity, so they override them. */
+.slides-shell .filmstrip-thumb .thumb-document {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 4cqw;
+  font-size: 2.6cqw;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.slides-shell .filmstrip-thumb .thumb-document .slide-title,
+.slides-shell .filmstrip-thumb .thumb-document .slide-body {
+  display: block;
+}
+
+/* ---- Player bar ---- */
+
+.slides-shell .player-bar {
+  grid-area: bar;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  background: var(--choir-surface-pane);
+  border-top: 1px solid var(--choir-border);
+}
+
+.slides-shell .slide-position {
+  justify-self: start;
+  color: var(--choir-text-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.slides-shell .player-controls {
+  display: flex;
+  justify-self: center;
+  gap: 8px;
+}
+
+.slides-shell .icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--choir-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--choir-radius-control-sm);
+  cursor: pointer;
+  transition: color var(--choir-duration-fast) var(--choir-ease),
+    background var(--choir-duration-fast) var(--choir-ease);
+}
+
+.slides-shell .icon-button:hover:not(:disabled) {
+  color: var(--choir-text-primary);
+  background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+}
+
+.slides-shell .icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.slides-shell .present-button {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px;
+  color: var(--choir-text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--choir-radius-control-sm);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--choir-duration-fast) var(--choir-ease);
+}
+
+.slides-shell .present-button:hover {
+  background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+}
+
+.slides-shell .glyph {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* ---- States ---- */
+
+.slides-shell .state-panel {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.slides-shell .state-line {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.slides-shell .state-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.slides-shell .state-reason {
+  margin: 0;
+  color: var(--choir-text-primary);
+  font-size: 1rem;
+}
+
+.slides-shell .state-detail {
+  margin: 0;
+  color: var(--choir-text-muted);
+  font-size: 0.78rem;
+}
+
+.slides-shell .state-copy {
+  margin: 0;
+  color: var(--choir-text-muted);
+  font-size: 1rem;
+}
+
+.slides-shell .text-button {
+  min-height: 36px;
+  padding: 0 8px;
+  color: var(--choir-accent);
+  background: transparent;
+  border: 0;
+  border-radius: var(--choir-radius-control-sm);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.slides-shell .empty-panel {
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  gap: 12px;
+}
+
+.slides-shell .recent-list {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slides-shell .recent-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  color: var(--choir-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--choir-radius-control-sm);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.slides-shell .recent-row:hover {
+  background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
+}
+
+.slides-shell .recent-name {
+  overflow: hidden;
+  color: var(--choir-text-primary);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slides-shell .recent-meta {
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--choir-text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Phone ---- */
+
+@media (max-width: 760px) {
+  .slides-shell .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 72px 44px;
+    grid-template-areas:
+      "stage"
+      "filmstrip"
+      "bar";
+  }
+
+  .slides-shell .filmstrip {
+    display: flex;
+    width: auto;
+    gap: 8px;
+    padding: 4px 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-top: 1px solid var(--choir-border);
+  }
+
+  .slides-shell .filmstrip-list {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .slides-shell .filmstrip-list li {
+    flex: 0 0 auto;
+    width: 96px;
+  }
+
+  .slides-shell .player-bar {
+    padding: 0 16px;
+  }
+
+  .slides-shell .icon-button,
+  .slides-shell .present-button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* ---- Fullscreen (after the phone rules so it wins) ---- */
+
+.slides-shell:fullscreen .workspace {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 44px;
+  grid-template-areas:
+    "stage"
+    "bar";
+}
+
+.slides-shell:fullscreen .filmstrip {
+  display: none;
+}
+
+.slides-shell:fullscreen .stage {
+  padding: 16px;
+  background: var(--choir-surface-media);
+}
+
+/* Present-mode chrome sits on black media, so it carries its own dark bar and
+   a light foreground that does not depend on the theme text colors. */
+.slides-shell:fullscreen .player-bar {
+  background: rgba(18, 16, 14, 0.82);
+  border-top: 1px solid rgba(245, 241, 236, 0.18);
+}
+
+.slides-shell:fullscreen .slide-position {
+  color: #f5f1ec !important;
+}
+
+.slides-shell:fullscreen .icon-button {
+  color: #f5f1ec !important;
+  background: rgba(245, 241, 236, 0.12) !important;
+  border: 1px solid rgba(245, 241, 236, 0.55) !important;
+}
+
+.slides-shell:fullscreen .icon-button:hover:not(:disabled) {
+  color: #ffffff;
+  background: rgba(245, 241, 236, 0.28);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.slides-shell:fullscreen .icon-button:disabled {
+  opacity: 0.55;
+}
+
+.slides-shell:fullscreen .present-button {
+  color: #f5f1ec !important;
+  background: rgba(245, 241, 236, 0.14) !important;
+}
+
+.slides-shell:fullscreen .present-button:hover {
+  color: #ffffff;
+  background: rgba(245, 241, 236, 0.28);
+}
