@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLASSIFIER="$ROOT/.github/scripts/deploy-impact-classify"
 
+# Without a named base and head the guest digest is not consulted; the temp-repo
+# tests below name refs in repos the repo's digest script cannot see, so they
+# keep the conservative path unless a test sets its own digest command.
+export GUEST_DIGEST_CMD=/bin/false
+
 run_classifier() {
   printf '%s\n' "$@" | "$CLASSIFIER"
 }
@@ -161,7 +166,7 @@ assert_contains "$vmmanager_boot_output" "deploy_host_os=true"
 assert_contains "$vmmanager_boot_output" "deploy_vmctl_restart=true"
 assert_contains "$vmmanager_boot_output" "deploy_active_vm_refresh=true"
 assert_contains "$vmmanager_boot_output" "host_services=vmctl"
-assert_contains "$vmmanager_boot_output" "internal/vmmanager/manager.go -> vmctl host service + canonical guest boot closure + active VM refresh"
+assert_contains "$vmmanager_boot_output" "internal/vmmanager/manager.go -> vmctl host service + vmctl restart (guests refresh only if the guest content digest moved)"
 
 vmctl_boot_output="$(run_classifier "internal/vmctl/ownership.go")"
 assert_contains "$vmctl_boot_output" "deploy_needed=true"
@@ -308,5 +313,131 @@ guest_release_scripts_output="$(run_classifier "scripts/node-b-guest-release-mat
 assert_contains "$guest_release_scripts_output" "deploy_host_os=true"
 assert_contains "$guest_release_scripts_output" "deploy_active_vm_refresh=false"
 assert_not_contains "$guest_release_scripts_output" "unknown deployed path"
+
+digest_tool_output="$(run_classifier "scripts/guest-content-digest")"
+assert_contains "$digest_tool_output" "deploy_needed=false"
+
+# Guest content gate (docs/problems/every-deploy-reboots-every-guest-2026-11-01.md).
+# Ways it could fail, written before the code:
+#  1. a vmctl-only or host-only change still refreshes every guest (the bug);
+#  2. the digest hides a real guest change (a package file, the frontend, the
+#     security epoch) and a guest keeps old code;
+#  3. a digest that cannot be computed skips the refresh instead of failing safe;
+#  4. an unchanged digest still moves the autoputer pointer, which the deploy
+#     script refuses without a guest refresh;
+#  5. the digest moves with the commit id, the date, a test file or a host-only
+#     nix file, so it never holds still.
+stub_dir="$(mktemp -d)"
+cat >"$stub_dir/digest" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  base|same) echo sha256:aaaa ;;
+  moved) echo sha256:bbbb ;;
+  *) exit 1 ;;
+esac
+STUB
+chmod +x "$stub_dir/digest"
+gate() { # head-ref then changed paths
+  local head="$1"; shift
+  printf '%s\n' "$@" | GUEST_DIGEST_CMD="$stub_dir/digest" DEPLOY_IMPACT_BASE=base DEPLOY_IMPACT_HEAD="$head" "$CLASSIFIER"
+}
+
+# 1 and 4: a vmctl and vmmanager change with an unchanged digest restarts vmctl
+# and nothing else: no guest refresh, no host OS rebuild, no autoputer pointer.
+gate_vmctl_output="$(gate same cmd/vmctl/main.go internal/vmmanager/confinement.go)"
+assert_contains "$gate_vmctl_output" "deploy_needed=true"
+assert_contains "$gate_vmctl_output" "deploy_vmctl_restart=true"
+assert_contains "$gate_vmctl_output" "deploy_active_vm_refresh=false"
+assert_contains "$gate_vmctl_output" "deploy_host_os=false"
+assert_contains "$gate_vmctl_output" "host_services=vmctl,checkpointd"
+
+# New SHA, same guest content, even through a conservative rule: no refresh,
+# the autoputer pointer stays.
+gate_same_output="$(gate same internal/gateway/handlers.go internal/store/schema.go)"
+assert_contains "$gate_same_output" "deploy_active_vm_refresh=false"
+assert_contains "$gate_same_output" "host_services=gateway,checkpointd"
+assert_contains "$gate_same_output" "guest content digest unchanged"
+
+# 2: changed guest content refreshes, with the autoputer package at the same commit.
+gate_moved_output="$(gate moved internal/store/schema.go)"
+assert_contains "$gate_moved_output" "deploy_active_vm_refresh=true"
+assert_contains "$gate_moved_output" "autoputer"
+assert_contains "$gate_moved_output" "guest content digest moved sha256:aaaa -> sha256:bbbb"
+
+# 3: a digest that cannot be computed keeps the conservative refresh.
+gate_unknown_output="$(gate broken internal/store/schema.go)"
+assert_contains "$gate_unknown_output" "deploy_active_vm_refresh=true"
+assert_not_contains "$gate_unknown_output" "guest content digest"
+rm -rf "$stub_dir"
+
+# 5 and 2 with the real digest script in a temp repo (GUEST_DIGEST_DIRS stands in
+# for the `go list` closure). Same tree content under a new commit must hold
+# still; a closure file, the frontend, or the security epoch must move it.
+digest_repo="$(mktemp -d)"
+trap 'rm -rf "$epoch_repo" "$digest_repo"' EXIT
+git_t() { git -c user.name=t -c user.email=t@t "$@"; }
+(
+  cd "$digest_repo"
+  git init -q
+  mkdir -p scripts internal/store internal/gateway nix frontend/src frontend/tests cmd/vmctl docs
+  cp "$ROOT/scripts/guest-content-digest" scripts/
+  echo 'package store' >internal/store/s.go
+  echo 'package gateway' >internal/gateway/g.go
+  echo 'package main' >cmd/vmctl/main.go
+  echo 'module x' >go.mod
+  : >go.sum
+  : >flake.nix
+  : >flake.lock
+  echo '{"security_epoch":1,"guest_abi":1,"guest_abi_min":1}' >nix/guest-release-policy.json
+  echo 'host' >nix/node-b.nix
+  echo 'ui' >frontend/src/a.js
+  echo 'e2e' >frontend/tests/a.spec.js
+  git add -A
+  git_t commit -q -m base
+  git tag base
+  # host-only commit: vmctl, a non-closure package, a host nix file, a test file, a frontend test, docs
+  echo 'package main // vmctl' >cmd/vmctl/main.go
+  echo 'package gateway // host only' >internal/gateway/g.go
+  echo 'host2' >nix/node-b.nix
+  echo 'package store' >internal/store/s_test.go
+  echo 'e2e2' >frontend/tests/a.spec.js
+  echo d >docs/x.md
+  git add -A
+  git_t commit -q -m host-only
+  git tag hostonly
+  echo 'package store // changed' >internal/store/s.go
+  git add -A
+  git_t commit -q -m guest-file
+  git tag guestfile
+  git checkout -q hostonly
+  echo 'ui2' >frontend/src/a.js
+  git add -A
+  git_t commit -q -m frontend
+  git tag frontend
+  git checkout -q hostonly
+  echo '{"security_epoch":2,"guest_abi":1,"guest_abi_min":1}' >nix/guest-release-policy.json
+  git add -A
+  git_t commit -q -m epoch
+  git tag epoch
+)
+real_digest() { (cd "$digest_repo" && GUEST_DIGEST_DIRS="internal/store" scripts/guest-content-digest "$1"); }
+test "$(real_digest base)" = "$(real_digest hostonly)" || { echo "guest digest moved on a host-only commit" >&2; exit 1; }
+test "$(real_digest base)" != "$(real_digest guestfile)" || { echo "guest digest held still on a closure file change" >&2; exit 1; }
+test "$(real_digest base)" != "$(real_digest frontend)" || { echo "guest digest held still on a frontend change" >&2; exit 1; }
+test "$(real_digest base)" != "$(real_digest epoch)" || { echo "guest digest held still on a security_epoch raise" >&2; exit 1; }
+real_gate() { # head-tag, changed paths
+  local head="$1"; shift
+  (cd "$digest_repo" && printf '%s\n' "$@" | GUEST_DIGEST_DIRS="internal/store" GUEST_DIGEST_CMD="$digest_repo/scripts/guest-content-digest" DEPLOY_IMPACT_BASE=base DEPLOY_IMPACT_HEAD="$head" "$CLASSIFIER")
+}
+real_host_only="$(real_gate hostonly cmd/vmctl/main.go internal/gateway/g.go nix/node-b.nix)"
+assert_contains "$real_host_only" "deploy_active_vm_refresh=false"
+assert_contains "$real_host_only" "deploy_vmctl_restart=true"
+real_guest_file="$(real_gate guestfile internal/store/s.go)"
+assert_contains "$real_guest_file" "deploy_active_vm_refresh=true"
+real_epoch="$(real_gate epoch nix/guest-release-policy.json)"
+assert_contains "$real_epoch" "deploy_active_vm_refresh=true"
+assert_contains "$real_epoch" "security epoch raised 1->2"
+real_frontend="$(real_gate frontend frontend/src/a.js)"
+assert_contains "$real_frontend" "deploy_active_vm_refresh=true"
 
 printf 'deploy-impact-classify-test: ok\n'
