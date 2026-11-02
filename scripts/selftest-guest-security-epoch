@@ -430,6 +430,58 @@ policy 1 >"$r/nix/guest-release-policy.json"; cp "$script" "$r/scripts/check-gue
 commit "$r" "$(msg 'adopt the gate' "$GATE_EFFECT" "$OK_REVIEW")"
 expect "first adoption (nothing at the base) passes with the gate trailers" 0 "$r" "$base" "$(rev "$r")"
 
+# --- rule 7: a later commit covers an earlier one by its sha -----------------
+cover() { printf 'Security-Effect-Covers: %s; %s; reviewed after it landed, see the review ref' "$1" "$2"; }
+
+r=$tmp/c1; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover it' "$(cover "$bad" none)" "$OK_REVIEW")"
+expect "a later commit naming the sha with a cover and a review covers a surface change" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c2; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover without review' "$(cover "$bad" none)" "Signed-off-by: t <t@t>")"
+expect "a cover without a Reviewed-By in its own message fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c3; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "narrow the list, no trailers"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover with none' "$(cover "$bad" none)" "$OK_REVIEW")"
+expect "a none-form cover of a gate-file change fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c4; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "narrow the list, no trailers"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover with gate change' "$(cover "$bad" 'gate change')" "$OK_REVIEW")"
+expect "a gate-change cover of a gate-file change passes" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c4b; new_repo "$r"; base=$(rev "$r")
+printf 'internal/server/\n' >"$r/nix/guest-security-surfaces.txt"; commit "$r" "narrow the list, no trailers"; bad=$(rev "$r")
+commit "$r" "$(msg 'wrong-kind cover' "$(cover "$bad" none)" "$OK_REVIEW")"
+commit "$r" "$(msg 'right-kind cover' "$(cover "$bad" 'gate change')" "$OK_REVIEW")"
+expect "a wrong-kind cover is fixed by a later right-kind cover" 0 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c5; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover a short sha' "$(cover "${bad:0:12}" none)" "$OK_REVIEW")"
+expect "a cover naming a short sha is malformed and fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c6; new_repo "$r"; base=$(rev "$r")
+commit "$r" "$(msg 'cover first' "$(cover 0123456789abcdef0123456789abcdef01234567 none)" "$OK_REVIEW")"
+touch_surface "$r"; commit "$r" "surface change, no trailer"
+expect "a cover of a sha that is not an earlier commit of the range fails" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c7; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"; bad=$(rev "$r")
+policy 0 >"$r/nix/guest-release-policy.json"
+commit "$r" "$(msg 'cover it and lower the epoch' "$(cover "$bad" none)" "$OK_REVIEW")"
+expect "a cover does not excuse a fall of the epoch" 1 "$r" "$base" "$(rev "$r")"
+
+r=$tmp/c8; new_repo "$r"; base=$(rev "$r")
+touch_surface "$r"; commit "$r" "surface change, no trailer"; bad=$(rev "$r")
+commit "$r" "$(msg 'cover it' "$(cover "$bad" none)" "$OK_REVIEW")"
+expect "a later range starting after the cover sees neither commit" 0 "$r" "$(rev "$r")" "$(rev "$r")"
+touch_surface "$r"; commit "$r" "another surface change, no trailer"
+expect "a cover reaches only the sha it names" 1 "$r" "$base" "$(rev "$r")"
+
 if [ "$fails" -ne 0 ]; then
 	echo "selftest-guest-security-epoch: $fails of $n FAILED" >&2
 	exit 1
