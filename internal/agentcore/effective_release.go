@@ -337,16 +337,32 @@ func (rt *Runtime) reportEffectiveReleaseAsync(reason string) {
 	if rt == nil || rt.selfdevRoute == nil || strings.TrimSpace(rt.cfg.ComputerID) == "" {
 		return
 	}
+	stop := rt.backgroundStop()
+	rt.wg.Add(1)
 	go func() {
+		defer rt.wg.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
+		go func() {
+			select {
+			case <-stop:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
 		var identity EffectiveRelease
 		for i := 0; i < 60; i++ {
 			identity = rt.EffectiveRelease(ctx)
-			if !identity.TreePending {
+			if !identity.TreePending || ctx.Err() != nil {
 				break
 			}
-			time.Sleep(2 * time.Second)
+			select {
+			case <-ctx.Done():
+			case <-time.After(2 * time.Second):
+			}
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		if !computerevent.IsSHA256(identity.ReleaseDigest) {
 			return
@@ -373,6 +389,12 @@ func (rt *Runtime) reportEffectiveReleaseAsync(reason string) {
 			}
 		}
 	}()
+}
+
+// backgroundStop is closed when the runtime stops.
+func (rt *Runtime) backgroundStop() chan struct{} {
+	rt.bgStopInit.Do(func() { rt.bgStop = make(chan struct{}) })
+	return rt.bgStop
 }
 
 func shortDigest(value string) string {

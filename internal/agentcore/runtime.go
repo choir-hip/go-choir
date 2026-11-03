@@ -156,8 +156,13 @@ type Runtime struct {
 	productAPISrv        http.Handler
 	productAPIComputerID string
 	wg                   sync.WaitGroup
-	toolRegistry         *toolregistry.ToolRegistry
-	toolProfiles         map[string]*toolregistry.ToolRegistry
+	// bgStop closes when Stop begins, so background helpers that are not runs
+	// (the effective release report) end with the runtime.
+	bgStopInit   sync.Once
+	bgStopOnce   sync.Once
+	bgStop       chan struct{}
+	toolRegistry *toolregistry.ToolRegistry
+	toolProfiles map[string]*toolregistry.ToolRegistry
 	// deskWorkers owns the host session workers for non-capsule desks on the
 	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
 	deskWorkers   *deskSessionWorkers
@@ -1112,6 +1117,7 @@ func (rt *Runtime) Stop() {
 	rt.stopProjector()
 	rt.stopSourceScheduleSweep()
 	rt.stopEventLayer()
+	rt.bgStopOnce.Do(func() { close(rt.backgroundStop()) })
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
