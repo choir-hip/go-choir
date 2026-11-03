@@ -48,6 +48,16 @@ grant of named owner paths (or a snapshot copy) mounted into the capsule,
 recorded on the tape; or the screenshots move after apply, taken on the live
 computer by the engineering desk outside the capsule.
 
+Interim answer (main, 2026-11-03): stand-ins are acceptable inside the
+capsule this round, but they are not the acceptance evidence. After a
+candidate is applied on its arm, FP0 takes the real-content screenshots on
+the live arm with a Playwright spec run from the Mac, signed in as the arm
+with its key, showing the arm's 16 seeded files in the bar's presets and
+sizes. FP0 decides on those, and they are the morning evidence. The red
+design (a read-only grant of named owner paths into the capsule) waits for a
+later decision. Problems 1 and 4: a builder is on branch
+selfdev-mode-at-admission; the arms keep their manual settings.
+
 ## Problem 3: the computer's source tree predates docs the request cites
 
 The capsule's tree is the computer's own `Source/platform`, written at its
