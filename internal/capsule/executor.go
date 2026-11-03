@@ -2642,10 +2642,11 @@ func removePrivateTree(root string) error {
 		if info == nil {
 			return nil
 		}
+		// Directories only: unlinking needs the directory's mode, never the
+		// file's. A file here may be a hardlink of a live owner file (the
+		// computer-state layer), and a chmod would change the live file.
 		if info.IsDir() {
 			_ = os.Chmod(path, 0o700)
-		} else if err == nil && info.Mode().IsRegular() {
-			_ = os.Chmod(path, 0o600)
 		}
 		return nil
 	})
