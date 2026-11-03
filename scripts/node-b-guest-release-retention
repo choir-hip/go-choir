@@ -108,7 +108,10 @@ case "$code" in
 		log "vmctl answered 200 with an unparsable body; deleting nothing"
 		exit 0
 	fi
-	running="$(jq -r '.in_use[] | select((.running // []) | length > 0) | .id' "$body")"
+	# A release the ring walk pins computers to (pinned_by) is kept like a
+	# running one: a pinned computer's next cold boot launches it
+	# (docs/design/ring-ordered-deploys-2026-11-03.md).
+	running="$(jq -r '.in_use[] | select(((.running // []) | length > 0) or ((.pinned_by // "") != "")) | .id' "$body")"
 	snapshots="$(jq -r '.in_use[] | select((.snapshots // []) | length > 0) | .id' "$body")"
 	[ "$(jq -r '.complete' "$body")" = "false" ] && complete=false
 	;;

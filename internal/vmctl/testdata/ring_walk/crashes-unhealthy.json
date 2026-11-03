@@ -1,0 +1,1 @@
+{"_source":"a running guest that latched unhealthy after its refresh (the mincore-filter class: d@e's first Diff hibernate left a guest that crashed on wake)","crashes":[{"at":"2026-11-03T03:20:00Z","epoch":42,"kind":"guest_unhealthy","cause":"the guest process exited (manager state failed)"}]}

@@ -1,0 +1,1 @@
+{"_source":"b@c's crash-loop at boot (design 9.2 fixture): boots that never became healthy, as vmctl records them (crash_loop.go)","crashes":[{"at":"2026-11-03T03:05:00Z","kind":"boot_failed","cause":"guest did not become healthy within 90s"},{"at":"2026-11-03T03:07:00Z","kind":"boot_failed","cause":"guest process exited before readiness"}]}

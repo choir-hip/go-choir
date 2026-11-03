@@ -445,7 +445,9 @@ func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
 		// switch may have moved it since validation), forget one that is not
 		// behind, and aim the refresh at the current release's commit.
 		if entry.Kind == deployRefreshKindWokeBehind && eligible {
-			currentID, commit := h.currentGuestRelease()
+			// The release this computer launches now: a computer the ring walk
+			// holds on an earlier release is not behind it (ring_walk.go).
+			currentID, commit := h.guestReleaseFor(stableComputerID(own.UserID, own.DesktopID, own.ComputerID))
 			if currentID != "" {
 				if running := h.instanceGuestRelease(own.VMID); running != "" && running == currentID {
 					log.Printf("vmctl: deploy refresh retry: %s runs the current release %s; forgotten", own.VMID, currentID)
@@ -493,6 +495,9 @@ func (h *Handler) StartDeployRefreshRetry(ctx context.Context, interval time.Dur
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				// The ring walk first: it enrolls the computers of a ring it
+				// opens, or a rollback's returns, and the sweep refreshes them.
+				h.TickRingWalk(ctx)
 				h.SweepDeployRefreshPending(ctx)
 			}
 		}

@@ -42,6 +42,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -543,12 +544,14 @@ func DefaultManagerConfig() ManagerConfig {
 // It provides thread-safe VM boot, stop, resume, and health-check
 // operations that vmctl delegates to.
 type Manager struct {
-	cfg      ManagerConfig
-	mu       sync.RWMutex
-	vms      map[string]*VMInstance // vmID → instance
-	nextPort int                    // next host port to assign
-	opMu     sync.Mutex
-	vmOps    map[string]*sync.Mutex // serializes lifecycle operations per VM identity
+	cfg ManagerConfig
+	mu  sync.RWMutex
+	// releasePinner is vmctl's ring walk (release_pin.go).
+	releasePinner atomic.Pointer[releasePinnerBox]
+	vms           map[string]*VMInstance // vmID → instance
+	nextPort      int                    // next host port to assign
+	opMu          sync.Mutex
+	vmOps         map[string]*sync.Mutex // serializes lifecycle operations per VM identity
 
 	healthCancel chan struct{}
 	sweepState   snapshotSweepState

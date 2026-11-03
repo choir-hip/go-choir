@@ -265,6 +265,12 @@ func (m *Manager) bindCurrentRelease(cfg *VMConfig) {
 	if !m.releaseRetainOn() || cfg.GuestRelease != "" || cfg.KernelImagePath != "" || cfg.StoreDiskPath != "" || cfg.BaseDiskPath != "" || len(cfg.ToolDisks) > 0 {
 		return
 	}
+	// The ring walk holds this computer on an earlier release (release_pin.go).
+	if rel, ok := m.pinnedRelease(cfg.ComputerID); ok {
+		m.setLaunchRelease(cfg, rel)
+		logToolProfile(*cfg)
+		return
+	}
 	if m.layeredSelected(cfg.ComputerID) {
 		if rel, ok := m.layeredCurrentRelease(); ok {
 			m.setLaunchRelease(cfg, rel)
@@ -428,6 +434,9 @@ type GuestReleaseInUse struct {
 	ToolIDs   []string `json:"tool_ids,omitempty"`
 	Running   []string `json:"running"`
 	Snapshots []string `json:"snapshots"`
+	// PinnedBy names what holds computers on this release ("ring-walk"):
+	// retention keeps it like a running release.
+	PinnedBy string `json:"pinned_by,omitempty"`
 }
 
 // GuestReleaseUsage is GET /internal/vmctl/guest-releases: what retention may
@@ -492,6 +501,13 @@ func (m *Manager) GuestReleaseUsage() GuestReleaseUsage {
 			e.Snapshots = append(e.Snapshots, de.Name())
 		}
 	}
+	// A release the ring walk pins computers to is kept like a running one:
+	// a pinned computer's next cold boot launches it.
+	for _, id := range m.pinnedReleaseIDs() {
+		if releaseIDPattern.MatchString(id) {
+			entry(id).PinnedBy = "ring-walk"
+		}
+	}
 	for _, e := range byID {
 		use.InUse = append(use.InUse, *e)
 	}
@@ -519,10 +535,9 @@ func (m *Manager) GuestReleaseHealth() (string, map[string]GuestReleaseVMState) 
 		if rel == "" || inst.State != StateRunning {
 			continue
 		}
-		cur := current
-		if m.layeredSelected(inst.Config.ComputerID) {
-			cur = m.currentReleaseIDFor(inst.Config.ComputerID)
-		}
+		// The release this computer would launch now: the pin and the
+		// layered ring included, so a pinned computer is not "behind".
+		cur := m.currentReleaseIDFor(inst.Config.ComputerID)
 		out[vmID] = GuestReleaseVMState{GuestRelease: rel, Behind: cur != "" && cur != rel}
 	}
 	return current, out

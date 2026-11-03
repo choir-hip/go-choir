@@ -186,6 +186,25 @@ func main() {
 		log.Fatal("vmctl: Firecracker is mandatory; host-process autoputer mode is forbidden")
 	}
 	handler := vmctl.NewHandler(registry)
+	// Ring-ordered deploys (docs/design/ring-ordered-deploys-2026-11-03.md):
+	// the walk's state and history live beside the ownership state; the
+	// manager asks it which release each computer launches, so it is installed
+	// before any boot or reattach.
+	{
+		stateDir := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
+		if ownershipPath := strings.TrimSpace(os.Getenv("VMCTL_OWNERSHIP_PATH")); ownershipPath != "" {
+			stateDir = filepath.Dir(ownershipPath)
+		}
+		if stateDir != "" {
+			if err := handler.SetRingWalkPath(filepath.Join(stateDir, "ring-walk.json"), filepath.Join(stateDir, "ring-walk-history.jsonl")); err != nil {
+				log.Printf("vmctl: ring walk state not loaded (starting from the current release): %v", err)
+			}
+		}
+		if mgr != nil {
+			mgr.SetReleasePinner(handler.RingWalkPinner())
+		}
+		handler.PrimeRingWalk()
+	}
 	handler.SetColdRecoveryStorage(mgr)
 	if corpusdURL := strings.TrimSpace(os.Getenv("VMCTL_CORPUSD_URL")); corpusdURL != "" {
 		handler.SetColdRecoveryHeadReader(vmctl.HTTPRecoveryHeadReader{BaseURL: corpusdURL})
@@ -608,6 +627,21 @@ func (a *vmManagerAdapter) GuestReleases() (json.RawMessage, error) {
 // CurrentGuestReleaseInfo implements the vmctl guestReleaseReader capability.
 func (a *vmManagerAdapter) CurrentGuestReleaseInfo() (string, string) {
 	return a.mgr.CurrentGuestReleaseInfo()
+}
+
+// LayeredGuestReleaseInfo implements the vmctl ringReleaseReader capability.
+func (a *vmManagerAdapter) LayeredGuestReleaseInfo() (string, string) {
+	return a.mgr.LayeredGuestReleaseInfo()
+}
+
+// GuestReleaseInfoFor implements the vmctl ringReleaseReader capability.
+func (a *vmManagerAdapter) GuestReleaseInfoFor(computerID string) (string, string) {
+	return a.mgr.GuestReleaseInfoFor(computerID)
+}
+
+// GuestLayeredComputer implements the vmctl ringReleaseReader capability.
+func (a *vmManagerAdapter) GuestLayeredComputer(computerID string) bool {
+	return a.mgr.GuestLayeredComputer(computerID)
 }
 
 func (a *vmManagerAdapter) GuestReleaseHealth() (string, map[string]vmctl.GuestReleaseVMStatus) {

@@ -87,9 +87,13 @@ func (m *Manager) layeredCurrentRelease() (guestRelease, bool) {
 }
 
 // currentReleaseFor is the release a cold boot of the computer launches from
-// now: the layered current for a ring computer whose layered release loads,
+// now: the ring walk's pin when it holds the computer (release_pin.go), else
+// the layered current for a ring computer whose layered release loads,
 // otherwise the single current.
 func (m *Manager) currentReleaseFor(computerID string) (guestRelease, bool) {
+	if rel, ok := m.pinnedRelease(computerID); ok {
+		return rel, true
+	}
 	if m.layeredSelected(computerID) {
 		if rel, ok := m.layeredCurrentRelease(); ok {
 			return rel, true

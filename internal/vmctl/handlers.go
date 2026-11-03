@@ -225,6 +225,11 @@ type Handler struct {
 	behindNow         func() time.Time
 	// guestServedCommit reads the build a guest serves (nil: its /health).
 	guestServedCommit func(context.Context, VMOwnership) string
+	// ringWalk is the ring-ordered deploy walk (ring_walk.go), built lazily
+	// under deployRefreshMu; ringHealthProbe reads a guest's /health for its
+	// guards (nil: HTTP).
+	ringWalk        *ringWalkRunner
+	ringHealthProbe func(context.Context, VMOwnership) ringHealth
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -1495,6 +1500,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 	s.HandleFunc("/internal/vmctl/guest-releases", h.HandleGuestReleases)
+	s.HandleFunc("/internal/vmctl/ring-walk", h.HandleRingWalk)
 	s.HandleFunc(HostBootStatePath, h.HandleHostBootState)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 	s.HandleFunc("/internal/vmctl/memory/balloon", h.HandleBalloonStats)

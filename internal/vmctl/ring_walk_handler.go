@@ -1,0 +1,254 @@
+package vmctl
+
+import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
+)
+
+// The ring walk's vmctl side (docs/design/ring-ordered-deploys-2026-11-03.md):
+// release observation, the per-tick reading of every computer, the guest
+// health guards, the pending-set actions, the manager's pin and the status
+// endpoint. The walk's own state machine is ring_walk.go.
+
+// ringReleaseReader is the manager's per-computer release view; a manager
+// without it walks the single image only.
+type ringReleaseReader interface {
+	LayeredGuestReleaseInfo() (id, commit string)
+	GuestReleaseInfoFor(computerID string) (id, commit string)
+	GuestLayeredComputer(computerID string) bool
+}
+
+// ringR0EnrollGrace: the CI deploy refreshes R0 itself right after the link
+// moves; the walk enrolls an R0 computer the deploy did not reach only after
+// this long, so d@e is not refreshed twice for one deploy.
+const ringR0EnrollGrace = 30 * time.Minute
+
+func (h *Handler) ringWalkRunner() *ringWalkRunner {
+	h.deployRefreshMu.Lock()
+	defer h.deployRefreshMu.Unlock()
+	if h.ringWalk == nil {
+		h.ringWalk = newRingWalkRunner()
+	}
+	return h.ringWalk
+}
+
+// SetRingWalkPath makes the walk durable at statePath and its history at
+// historyPath, loading what an earlier vmctl left.
+func (h *Handler) SetRingWalkPath(statePath, historyPath string) error {
+	return h.ringWalkRunner().load(statePath, historyPath)
+}
+
+// RingWalkPinner is the manager's release pinner (vmmanager.ReleasePinner).
+type RingWalkPinner struct{ r *ringWalkRunner }
+
+func (p RingWalkPinner) Pin(computerID string) (string, string) { return p.r.pin(computerID) }
+func (p RingWalkPinner) Pinned() []string                       { return p.r.pinnedReleases() }
+
+// RingWalkPinner returns the pinner to install on the manager.
+func (h *Handler) RingWalkPinner() RingWalkPinner { return RingWalkPinner{r: h.ringWalkRunner()} }
+
+func (h *Handler) ringReader() ringReleaseReader {
+	reader, _ := h.registry.VMManagerHandle().(ringReleaseReader)
+	return reader
+}
+
+// currentReleasePair is the current single and layered release.
+func (h *Handler) currentReleasePair() ringReleasePair {
+	var pair ringReleasePair
+	pair.Single, pair.SingleCommit = h.currentGuestRelease()
+	if reader := h.ringReader(); reader != nil {
+		pair.Layered, pair.LayeredCommit = reader.LayeredGuestReleaseInfo()
+	}
+	return pair
+}
+
+// syncRingWalk starts, supersedes or ends a walk when the current release
+// moved. Cheap: a readlink and a release read.
+func (h *Handler) syncRingWalk() {
+	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
+		return
+	}
+	h.ringWalkRunner().observe(h.currentReleasePair(), time.Now().UTC())
+}
+
+// guestReleaseFor is the release a cold boot of computerID launches now and
+// its commit; without the per-computer view, the current release.
+func (h *Handler) guestReleaseFor(computerID string) (id, commit string) {
+	if reader := h.ringReader(); reader != nil && computerID != "" {
+		return reader.GuestReleaseInfoFor(computerID)
+	}
+	return h.currentGuestRelease()
+}
+
+func (h *Handler) layeredComputer(computerID string) bool {
+	if reader := h.ringReader(); reader != nil {
+		return reader.GuestLayeredComputer(computerID)
+	}
+	return false
+}
+
+// ringGate answers "" when a deploy refresh of the active computer own to
+// target may run now, else why the ring walk holds it.
+func (h *Handler) ringGate(own *VMOwnership, target string) string {
+	id := stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
+	return h.ringWalkRunner().gate(id, h.registry.WarmnessClassForOwnership(own), target, h.layeredComputer(id))
+}
+
+// PrimeRingWalk reads the release and fills the ring cache before the first
+// boot (cmd/vmctl calls it before reattach).
+func (h *Handler) PrimeRingWalk() {
+	h.syncRingWalk()
+	obs := h.ringObservations(context.Background(), false)
+	r := h.ringWalkRunner()
+	r.mu.Lock()
+	for _, o := range obs {
+		r.rings[o.ComputerID] = o.Ring
+	}
+	r.mu.Unlock()
+}
+
+// ringObservations reads every interactive computer; with sample, the open
+// ring's members running the target have their /health read.
+func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMemberObs {
+	openRing, to, walking := h.ringWalkRunner().sampleTargets()
+	byVM := map[string]GuestReleaseVMStatus{}
+	if reader, ok := h.registry.VMManagerHandle().(guestReleaseReader); ok && reader != nil {
+		_, byVM = reader.GuestReleaseHealth()
+	}
+	var obs []ringMemberObs
+	for _, own := range h.registry.ListOwnerships() {
+		if own.Kind != "" && own.Kind != VMKindInteractive {
+			continue
+		}
+		id := stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
+		o := ringMemberObs{
+			ComputerID: id, UserID: own.UserID, DesktopID: normalizeDesktopID(own.DesktopID), VMID: own.VMID,
+			Ring:      ringForComputer(id, h.registry.WarmnessClassForOwnership(own)),
+			Active:    own.State == VMStateActive,
+			Held:      own.IsHeld(),
+			Divergent: own.DivergenceStatus == "divergent",
+			Layered:   h.layeredComputer(id),
+			Crashes:   append([]CrashRecord(nil), own.Crashes...),
+		}
+		if o.Active {
+			o.Release = byVM[own.VMID].GuestRelease
+		}
+		if sample && walking && o.Ring == openRing && o.Active && to.has(o.Release) {
+			health := h.probeRingHealth(ctx, *own)
+			o.Health = &health
+		}
+		obs = append(obs, o)
+	}
+	return obs
+}
+
+func (h *Handler) probeRingHealth(ctx context.Context, own VMOwnership) ringHealth {
+	if h.ringHealthProbe != nil {
+		return h.ringHealthProbe(ctx, own)
+	}
+	return httpRingHealth(ctx, own)
+}
+
+// httpRingHealth reads the guest's /health over the host-peer path (the same
+// call CI and httpGuestServedCommit make; MarkInternal never sends the
+// internal token to a guest port).
+func httpRingHealth(ctx context.Context, own VMOwnership) ringHealth {
+	base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")
+	if base == "" {
+		return ringHealth{Detail: "computer has no URL"}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/health", nil)
+	if err != nil {
+		return ringHealth{Detail: err.Error()}
+	}
+	hostauth.MarkInternal(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ringHealth{Detail: err.Error()}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	return parseRingHealth(resp.StatusCode, body)
+}
+
+// TickRingWalk runs one walk tick: observe the release, read every computer,
+// step the walk and apply its pending-set actions. The retry sweep that
+// follows performs the refreshes.
+func (h *Handler) TickRingWalk(ctx context.Context) {
+	if _, ok := h.registry.VMManagerHandle().(guestReleaseReader); !ok {
+		return
+	}
+	h.syncRingWalk()
+	obs := h.ringObservations(ctx, true)
+	now := time.Now().UTC()
+	actions := h.ringWalkRunner().stepWith(now, obs)
+	h.applyRingActions(now, actions)
+}
+
+func (h *Handler) applyRingActions(now time.Time, actions []ringAction) {
+	t := h.deployRefreshState()
+	for _, a := range actions {
+		switch a.Kind {
+		case ringActionEnroll:
+			t.ensure(deployRefreshPendingEntry{
+				UserID: a.UserID, DesktopID: a.DesktopID, VMID: a.VMID, ComputerID: a.ComputerID,
+				Target: a.Target, FirstDeferredAt: now, LastReason: a.Reason,
+			})
+		case ringActionForget:
+			t.forget(a.UserID, a.DesktopID)
+		}
+	}
+}
+
+// ensure puts entry in the pending set aimed at its target: a new entry, or a
+// known one moved to the target (its kind cleared and attempts reset, as for
+// a new deploy). An entry already aimed at the target is kept.
+func (t *deployRefreshTracker) ensure(entry deployRefreshPendingEntry) {
+	entry.DesktopID = normalizeDesktopID(entry.DesktopID)
+	key := ownershipKey(entry.UserID, entry.DesktopID)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if known, ok := t.pending[key]; ok && known.Target == entry.Target && known.Kind == "" {
+		return
+	}
+	t.pending[key] = entry
+	t.saveLocked()
+}
+
+// HandleRingWalk serves GET /internal/vmctl/ring-walk: the walk's state and
+// the last history lines (?tail=N, default 200).
+func (h *Handler) HandleRingWalk(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	tail := 200
+	if v := strings.TrimSpace(r.URL.Query().Get("tail")); v != "" {
+		var n int
+		for _, c := range v {
+			if c < '0' || c > '9' {
+				n = -1
+				break
+			}
+			n = n*10 + int(c-'0')
+			if n > 100000 {
+				break
+			}
+		}
+		if n > 0 {
+			tail = n
+		}
+	}
+	writeVMCTLJSON(w, http.StatusOK, h.ringWalkRunner().status(tail))
+}

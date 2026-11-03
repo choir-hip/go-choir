@@ -197,6 +197,10 @@ type deployRefreshCandidate struct {
 	// without the "already serves" shortcut, which an unreachable /health
 	// would satisfy by mistake.
 	Rescue bool `json:"rescue,omitempty"`
+	// RingCommit is the commit of the release the ring walk holds this
+	// computer on, when it is not the deploy's (ring_walk.go): a rescue boots
+	// that release, and CI verifies against it.
+	RingCommit string `json:"ring_commit,omitempty"`
 }
 
 type deployRefreshPlan struct {
@@ -204,6 +208,10 @@ type deployRefreshPlan struct {
 	Skipped    []deployRefreshCandidate `json:"skipped"`
 	// Pending lists the deferred computers the retry sweep is still asking.
 	Pending []deployRefreshPendingEntry `json:"pending"`
+	// RingWaiting lists the active computers whose ring has not opened: the
+	// ring walk refreshes each when its ring opens (ring_walk.go). CI does
+	// not refresh them.
+	RingWaiting []deployRefreshCandidate `json:"ring_waiting"`
 }
 
 // deployRefreshAllowsBusy is vmctl's policy for refreshing a computer whose
@@ -336,11 +344,15 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
 			return
 		}
-		plan := selectDeployRefresh(ownerships)
+		h.syncRingWalk()
+		plan := h.ringOrderPlan(selectDeployRefresh(ownerships))
 		plan.Pending = h.pendingDeployRefreshes()
 		writeVMCTLJSON(w, http.StatusOK, plan)
 		return
 	}
+	// The release may have moved since the last tick: a refresh is judged
+	// against the walk of the release it would boot.
+	h.syncRingWalk()
 
 	var req deployRefreshRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
@@ -408,6 +420,15 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 		if adopted := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID); adopted != nil {
 			own = *adopted
 			base.State, base.ComputerURL = string(own.State), own.ComputerURL
+		}
+	}
+	// The ring walk: an active computer whose ring has not opened, or any
+	// computer after a rollback, is refreshed only back onto the release it is
+	// held on. A rescue (above) is never held back: it boots the release its
+	// ring is pinned to. Offline maintenance is not a deploy.
+	if realDeploy {
+		if reason := h.ringGate(&own, req.Target); reason != "" {
+			return reply(deployRefreshSkipped, reason, http.StatusConflict)
 		}
 	}
 	switch {
@@ -597,4 +618,32 @@ func managedGuestMayLive(state string) bool {
 		return true
 	}
 	return false
+}
+
+// ringOrderPlan moves the candidates the ring walk holds back to
+// RingWaiting, and names the held release's commit on a rescue.
+func (h *Handler) ringOrderPlan(plan deployRefreshPlan) deployRefreshPlan {
+	plan.RingWaiting = []deployRefreshCandidate{}
+	kept := plan.Candidates[:0]
+	for _, c := range plan.Candidates {
+		id := c.ComputerID
+		if id == "" {
+			id = stableComputerID(c.UserID, c.DesktopID, "")
+		}
+		class := WarmnessClass(c.WarmnessClass)
+		layered := h.layeredComputer(id)
+		if c.Rescue {
+			c.RingCommit = h.ringWalkRunner().ringCommit(id, class, layered)
+			kept = append(kept, c)
+			continue
+		}
+		if reason := h.ringWalkRunner().gate(id, class, "", layered); reason != "" {
+			c.Reason = reason
+			plan.RingWaiting = append(plan.RingWaiting, c)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	plan.Candidates = kept
+	return plan
 }

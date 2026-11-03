@@ -596,8 +596,19 @@
         IFS=$'\t' read -r skipped_vm_id skipped_user_id skipped_desktop_id skipped_reason <<< "$record"
         echo "    Skipped ${skipped_vm_id} (user ${skipped_user_id} desktop ${skipped_desktop_id}): ${skipped_reason}"
       done
-      # Same placeholder rule; rescue is always "true" or "false".
-      mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r 'def f: if . == null or . == "" then "-" else . end; .candidates[] | [(.rescue // false), (.user_id|f), (.desktop_id|f), (.vm_id|f), (.computer_url|f), (.snapshot_kind|f), (.warmness_class|f)] | @tsv')
+      # Ring-ordered deploys (docs/design/ring-ordered-deploys-2026-11-03.md):
+      # vmctl lists only the open ring's computers as candidates; the others
+      # are ring_waiting, and vmctl's ring walk refreshes each when its ring
+      # opens, after the soak of the rings before it. CI never refreshes them.
+      mapfile -t ring_waiting < <(printf '%s' "$deploy_refresh_plan" | jq -r 'def f: if . == null or . == "" then "-" else . end; (.ring_waiting // [])[] | [(.vm_id|f), (.user_id|f), (.desktop_id|f), (.reason|f)] | @tsv')
+      for record in "${ring_waiting[@]}"; do
+        IFS=$'\t' read -r waiting_vm_id waiting_user_id waiting_desktop_id waiting_reason <<< "$record"
+        echo "    Ring waiting ${waiting_vm_id} (user ${waiting_user_id} desktop ${waiting_desktop_id}): ${waiting_reason}"
+      done
+      # Same placeholder rule; rescue is always "true" or "false". A rescue
+      # of a computer the ring walk holds back boots the release it is held
+      # on; ring_commit names that release's commit.
+      mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r 'def f: if . == null or . == "" then "-" else . end; .candidates[] | [(.rescue // false), (.user_id|f), (.desktop_id|f), (.vm_id|f), (.computer_url|f), (.snapshot_kind|f), (.warmness_class|f), (.ring_commit|f)] | @tsv')
       refresh_outcomes_dir=$(mktemp -d /tmp/go-choir-deploy-refresh.XXXXXX)
       if [ "${#active_interactive[@]}" -eq 0 ]; then
         echo "    No active interactive computers need refresh"
@@ -606,10 +617,11 @@
       refresh_status=0
       max_parallel_refresh=1
       for record in "${active_interactive[@]}"; do
-        IFS=$'\t' read -r refresh_rescue refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness <<< "$record"
+        IFS=$'\t' read -r refresh_rescue refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness refresh_ring_commit <<< "$record"
         if [ "$refresh_computer_url" = "-" ]; then refresh_computer_url=""; fi
         if [ "$refresh_snapshot_kind" = "-" ]; then refresh_snapshot_kind=""; fi
         if [ "$refresh_warmness" = "-" ]; then refresh_warmness=""; fi
+        if [ "${refresh_ring_commit:-}" = "-" ]; then refresh_ring_commit=""; fi
         (
           echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id} (snapshot=${refresh_snapshot_kind:-mutable} warmness=${refresh_warmness:-default} rescue=${refresh_rescue})"
           # A refreshed layered computer keeps serving its retained
@@ -724,7 +736,7 @@
               rescue_health=$(guest_health "${refresh_computer_url}")
               rescued_commit=$(printf '%s' "$rescue_health" | jq -r '.build.commit // empty' 2>/dev/null || true)
               rescued_layered=$(printf '%s' "$rescue_health" | jq -r '.effective_release.layered // false' 2>/dev/null || true)
-              if [ -n "$rescued_commit" ] && { [ "$rescued_commit" = "$autoputer_runtime_commit" ] || [ "$rescued_layered" = "true" ]; }; then
+              if [ -n "$rescued_commit" ] && { [ "$rescued_commit" = "$autoputer_runtime_commit" ] || [ "$rescued_layered" = "true" ] || { [ -n "${refresh_ring_commit:-}" ] && [ "$rescued_commit" = "$refresh_ring_commit" ]; }; }; then
                 rescue_verified=true
                 break
               fi
@@ -762,7 +774,7 @@
       mapfile -t deferred_vms < <(grep -lx 'deferred' "${refresh_outcomes_dir}"/* 2>/dev/null | xargs -r -n1 basename)
       rm -rf "$refresh_outcomes_dir"
       deferred_json=$(printf '%s\n' "${deferred_vms[@]}" | jq -R . | jq -sc 'map(select(length > 0))')
-      echo "    Deploy refresh summary: refreshed=${refreshed_count} already_current=${current_count} deferred=${#deferred_vms[@]} skipped=${#skipped_interactive[@]}"
+      echo "    Deploy refresh summary: refreshed=${refreshed_count} already_current=${current_count} deferred=${#deferred_vms[@]} skipped=${#skipped_interactive[@]} ring_waiting=${#ring_waiting[@]}"
       if [ "${#deferred_vms[@]}" -gt 0 ]; then
         echo "    Deferred computers are retried by vmctl's deploy refresh sweep until they update (GET /internal/vmctl/deploy-refresh lists them as pending): ${deferred_vms[*]}"
       fi
