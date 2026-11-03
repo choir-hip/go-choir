@@ -352,13 +352,26 @@ func TestRingWalkFullWalkPaperLast(t *testing.T) {
 	}
 }
 
-// R0 never skips for want of exposure: with d@e down the walk holds.
+// R0 never skips for want of exposure: with d@e down the walk wakes it once
+// after the deploy's grace and, while it stays down, holds.
 func TestRingR0HoldsWithoutExposure(t *testing.T) {
 	s := newWalkingState(t)
 	de := healthyObs(ringProofComputer, ringR0, "")
 	de.Active, de.Health = false, nil
+	var wakes []ringAction
 	for i := 1; i <= 120; i++ {
-		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+		_, acts := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+		for _, a := range acts {
+			if a.Kind == ringActionWake {
+				if i < int(ringR0EnrollGrace/time.Minute) {
+					t.Fatalf("d@e woken inside the deploy's grace (minute %d)", i)
+				}
+				wakes = append(wakes, a)
+			}
+		}
+	}
+	if len(wakes) != 1 || wakes[0].ComputerID != ringProofComputer {
+		t.Fatalf("a down d@e must be woken exactly once: %+v", wakes)
 	}
 	if s.Walk.Current != 0 || s.Walk.Status != ringWalkWalking {
 		t.Fatalf("R0 advanced without d@e seen on the release: %+v", s.Walk.Rings)
@@ -536,5 +549,27 @@ func TestRingTimeFloorHolds(t *testing.T) {
 	s.step(rwT0.Add(30*time.Minute), []ringMemberObs{de})
 	if s.Walk.Current == 0 {
 		t.Fatalf("R0 did not close at its floor")
+	}
+}
+
+// d@e seen healthy on the release and then idle-hibernated is exposure: R0
+// closes clean at its floor instead of holding.
+func TestRingR0ExposedThenHibernatedIsClean(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	for i := 1; i <= 12; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+	}
+	de.Active, de.Health, de.Release = false, nil, ""
+	for i := 13; i <= 31; i++ {
+		_, acts := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+		for _, a := range acts {
+			if a.Kind == ringActionWake {
+				t.Fatalf("an exposed d@e was woken again: %+v", a)
+			}
+		}
+	}
+	if s.Walk.Current == 0 || s.Walk.Rings[0].Outcome != ringOutcomeClean {
+		t.Fatalf("exposed then hibernated d@e must close R0 clean: %+v", s.Walk.Rings[0])
 	}
 }

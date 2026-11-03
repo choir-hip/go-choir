@@ -3,6 +3,7 @@ package vmctl
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -203,8 +204,31 @@ func (h *Handler) applyRingActions(now time.Time, actions []ringAction) {
 			})
 		case ringActionForget:
 			t.forget(a.UserID, a.DesktopID)
+		case ringActionWake:
+			h.ringWake(a)
 		}
 	}
+}
+
+// ringWake starts a down R0 computer the way a request for it would (route
+// check, then resolve of the existing computer). A refusal (held, crash loop,
+// host memory) is logged; R0 then holds and says why.
+func (h *Handler) ringWake(a ringAction) {
+	if h.ringWaker != nil {
+		h.ringWaker(a)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	if err := h.requireComputerVersionRoute(ctx, a.UserID, a.DesktopID); err != nil {
+		log.Printf("vmctl: ring walk: wake of %s refused by the route check: %v", a.ComputerID, err)
+		return
+	}
+	if _, err := h.registry.resolveExistingDesktopContext(ctx, a.UserID, a.DesktopID, ""); err != nil {
+		log.Printf("vmctl: ring walk: wake of %s failed: %v", a.ComputerID, err)
+		return
+	}
+	log.Printf("vmctl: ring walk: woke %s (%s)", a.ComputerID, a.Reason)
 }
 
 // ensure puts entry in the pending set aimed at its target: a new entry, or a

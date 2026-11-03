@@ -204,6 +204,7 @@ type ringMemberObs struct {
 type ringMember struct {
 	ComputerID    string    `json:"computer_id"`
 	Enrolled      bool      `json:"enrolled,omitempty"`
+	WakeRequested bool      `json:"wake_requested,omitempty"`
 	FirstOnTarget time.Time `json:"first_on_target,omitempty"`
 	ExposedAt     time.Time `json:"exposed_at,omitempty"`
 	Samples       int       `json:"samples"`
@@ -305,6 +306,7 @@ type ringEventSoak struct {
 const (
 	ringActionEnroll = "enroll"
 	ringActionForget = "forget"
+	ringActionWake   = "wake"
 )
 
 // ringAction is a pending-set change a step asks for.
@@ -497,6 +499,14 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 				m.Enrolled = true
 				actions = append(actions, ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: w.To.commitFor(o.Layered), Reason: "ring walk " + w.ID + " opened " + string(p.Ring)})
 			}
+			// The proof ring needs d@e seen on the release; d@e is usually
+			// hibernated between uses, so the walk wakes it once (a wake is
+			// what any request does: a snapshot resume or a cold boot onto
+			// the open ring's release, never a restart of running work).
+			if p.Ring == ringR0 && !graced && !o.Active && !o.Held && !m.WakeRequested && m.ExposedAt.IsZero() {
+				m.WakeRequested = true
+				actions = append(actions, ringAction{Kind: ringActionWake, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Reason: "ring walk " + w.ID + ": R0 needs d@e on the release"})
+			}
 			if onTarget && m.FirstOnTarget.IsZero() {
 				m.FirstOnTarget = now
 			}
@@ -534,7 +544,11 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 				missing = append(missing, o.ComputerID)
 			}
 		}
-		if required == 0 {
+		if required == 0 && exposed > 0 {
+			// Every member was seen healthy on the release and has since
+			// gone idle (hibernated): that is exposure.
+			events = append(events, w.closeRing(now, p, ringOutcomeClean, ""))
+		} else if required == 0 {
 			if p.Ring == ringR0 {
 				p.Waiting = "no active member: the proof ring holds until d@e runs the release and is seen healthy"
 				return events, actions

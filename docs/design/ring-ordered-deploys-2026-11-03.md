@@ -64,9 +64,13 @@ moves the guest release.
    floor has passed (R0 30m, R1 2h, R2 4h, R3 4h, R4 2h, R5 1h) and every
    active, non-held, non-divergent member has been seen healthy on the
    target release, at least min(floor count, members) of them (R1 needs 3,
-   R3 2, the rest 1). A ring with no members is skipped and recorded. A ring
-   whose members are all down is skipped after its floor and recorded,
-   except R0, which holds: no release passes the proof ring unseen.
+   R3 2, the rest 1). A member seen healthy on the release and since gone
+   idle (hibernated) counts as exposed. A ring with no members is skipped and
+   recorded. A ring whose members were all down for its floor is skipped and
+   recorded, except R0, which holds: no release passes the proof ring
+   unseen. d@e is usually hibernated between uses, so after the deploy's
+   30-minute grace the walk wakes a down d@e once per walk, the way a request
+   for it would (route check, then resolve of the existing computer).
    The next ring opens only on a clean ring. The paper opens last, after R4.
 7. **Guards** (P2), per member on the target release, every tick:
    - readiness: `/health` not 200 or no answer, 3 consecutive samples, after

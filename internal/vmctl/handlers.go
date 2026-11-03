@@ -230,6 +230,8 @@ type Handler struct {
 	// guards (nil: HTTP).
 	ringWalk        *ringWalkRunner
 	ringHealthProbe func(context.Context, VMOwnership) ringHealth
+	// ringWaker replaces the R0 wake in tests.
+	ringWaker func(ringAction)
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
