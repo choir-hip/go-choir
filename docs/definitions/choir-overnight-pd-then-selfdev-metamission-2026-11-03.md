@@ -16,6 +16,11 @@ definition_version: 5
 # calibration digest, and calibration in turn can weight how fast a change
 # walks. Progressive delivery is the settlement mechanism; self-development
 # is where the predictions come from.
+# And: "we can and likely will make changes in the self-dev mission which
+# then use the prog delivery rings." Platform changes that come out of
+# self-development (Sonnet monitors' fixes, promoted candidates) land on
+# main and reach the fleet through the rings like any release; their
+# precommitments are settled by the same ring walk.
 # Operating tempo (CLAUDE.md): no blocking asks; escalate on dead ends with
 # a shift of approach first; never wait idle on CI or a deploy.
 readiness: executable  # on the owner's word above
