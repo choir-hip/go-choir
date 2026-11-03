@@ -126,19 +126,20 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 043b78806 (problem 28: an assignment takes its base at bind).
-    In CI: 5ee5f39dd (problem 29 sibling packages and re-graft parent;
-    Texture Wait-after-Write no-op; choir-shot --open and contrast element
-    naming), then a79c26402 (the owner's words reach the engineer
-    verbatim; OwnerDirections ordered with a current mark). Building: the
-    delegate affordance pass (cluster 2, tier 2 round 2), screens reach the
-    judge, Texture and the CLI. Library: luna Slides, claude Files,
-    deepseek Files and Slides; pool Slides applied, publish waits on 29.
-    Owner rulings this hour: live tracing on every round (three live
-    tracers running); screenshots flow judge -> Texture -> lane C -> main;
-    the Library app pulled forward to next on every arm. Busy arms are
-    refreshed between rounds (the claude arm ran a stale build to 20:37Z).
-    Node B 7.4 GiB available, PSI under 1.
+    staging dbbceec5c (21:12Z): Freeze screens in the Report, emoji font in
+    capsules, the delegate brief carries shots/checks/owner_words with
+    build and Chromium env, choir-shot --help and a log file, a memory
+    wait names the running jobs. In CI: 6e86b4cdf (a job that declares
+    memory_mib waits for that much headroom; choir-shot verdict line).
+    In tier 2 review: published means public (owner), the OpenRouter
+    provider for stealth/crouton-alpha (owner: a fifth arm, every desk on
+    it), context menus, Open with and upload (tier 1 r2), the defaults
+    audit. Designed, not pushed: base image from the Library app
+    (c09383790, five owner questions). Owner rulings about 21:10-21:30Z:
+    published means public; installs optional (app store), base-image
+    pushes go everywhere; "Install" not "Adopt"; keep GPT as is. The
+    deepseek Calendar r1 lost 20+ min to host-memory waits at the 3 GiB
+    build claim and likely misses Freeze.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
