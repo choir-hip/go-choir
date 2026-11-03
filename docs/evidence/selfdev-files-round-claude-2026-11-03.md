@@ -84,6 +84,17 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Library publish blocked: package_change_not_confined (the candidate also edits app-sdk.ts). Main lands the
   re-exports on main (branch app-sdk-exports); the next round drops its own app-sdk edit, then publishes.
 
+- Full live set (scratch claude/live-final2, 05:58-06:02Z; 34 of 34 scenes): seven presets at 1100x750 (documents
+  and pictures grid each), aero and noir image preview and context menu, aero PDF, video and search, and 390px
+  Documents in aero, noir and salmon with no horizontal scroll (scrollWidth 390 = clientWidth 390). Every preset
+  applies. More defects: Space on Documents/Reports/Choir state and vision.pdf did not open the preview within 3 s
+  (the mp4 opened and played); the noir context menu is translucent and the preview's metadata reads through it;
+  a no-match search in this folder offers no "search everywhere" and keeps the empty preview pane open; Open with
+  for mandelbrot.jpg lists only Image (to check against the registry).
+- Round 4 revision written 06:05Z (scratch claude/revise-r4.md): the seven live defects, package-only scope with
+  "import these from app-sdk once it has them; do not edit app-sdk.ts", self-contained (Problem 5). It waits for a
+  build slot: deepseek r3 and luna r3 hold the two.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

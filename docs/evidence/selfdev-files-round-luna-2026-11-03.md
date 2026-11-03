@@ -61,6 +61,13 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - 05:51:15Z owner revision 5592b947: Chromium is in the Nix store (other arms used
   /nix/store/*-chromium-155.0.8059.79/bin/chromium), build the whole feature list, fix the manifest, do not edit
   app-sdk.ts.
+- 05:52:46Z Texture folded the revision into its document (revision 61ac46cf, appagent) and passivated without a
+  Cast: the turn's reason restates the owner's fixes, and no co_super_assignment followed (Problem 8 in the
+  problem doc).
+- 06:06:34Z resent as one self-contained revision 9ed2dcee (the round-3 points plus the whole request, with the
+  app-sdk scope replaced by "import these from app-sdk once it has them; do not edit app-sdk.ts", and an explicit
+  "forward this to management now"). 06:07:53Z Texture turn ("Round 3 resent ... for a new build"); 06:08:01Z
+  assignment opened, 06:08:03Z bound.
 
 #### Cycle time (UTC, minutes)
 

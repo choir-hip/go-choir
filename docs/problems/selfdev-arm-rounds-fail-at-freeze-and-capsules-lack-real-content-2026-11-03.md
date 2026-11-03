@@ -147,3 +147,14 @@ browser tool layer did not attach on luna's capsule (or its env did not export
 it); check vmctl's "tool layers:" line for luna's last launch. The engineer
 froze a 12-line stub and the judge failed it ("no browser behavior was
 exercised because Chromium was unavailable").
+
+## Problem 8: Texture can absorb an owner revision without forwarding it
+
+Luna arm, trajectory e998f5ca. The owner revision at 05:51:15Z (artifact_head_advanced) asked for a new build
+after two judge failures. Texture's turn at 05:52:46Z wrote revision 61ac46cf (appagent) restating the fixes
+("The owner fixed the browser path ... required the whole feature list before Freeze ...") and the activation
+passivated; no co_super_assignment followed for 14 minutes. A resent, self-contained revision at 06:06:34Z that
+said "forward this to management now" produced a Cast in 79 s (turn 06:07:53Z, assignment 06:08:01Z). Whether
+the first turn emitted no control or emitted one that was dropped is a hypothesis until its controls[] are read;
+the lifecycle events show only the turn and no assignment. Workaround: every FP0 revision names the forward
+explicitly and carries the whole request (which also answers Problem 5).

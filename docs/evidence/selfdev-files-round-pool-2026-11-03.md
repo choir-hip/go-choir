@@ -48,6 +48,15 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   packages.publish was off on all four arms; FP0 turned it on at 05:35Z.
 - Spend round 1: $1.24, 156 calls (04:38-05:30Z).
 
+- Full live set (scratch pool/live-final3, 06:04-06:08Z; every scene passed, after the 429 window cleared):
+  seven presets at 1100x750 and 390px in aero, noir and salmon with no horizontal scroll. Every preset applies.
+  The PDF preview renders its first page. More defects: the list has no column headers (kind, size and date run
+  together on one line); PDF and video grid tiles are generic icons; a typed search clips its own field and
+  collapses the breadcrumbs to "H... / V..."; at 390px the breadcrumbs clip to "H... / D..." and rows lose size
+  and date.
+- Round 2 revision written 06:10Z (scratch pool/revise-r2.md): nine defects, package-only scope with "import these
+  from app-sdk once it has them; do not edit app-sdk.ts", self-contained. It waits for a build slot.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
