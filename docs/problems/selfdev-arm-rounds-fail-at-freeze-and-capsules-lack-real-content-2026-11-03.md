@@ -466,7 +466,18 @@ Deepseek's Files restore round ran on trajectory 4dd9ea7e. Sequence:
 So an assignment opened on the old boot kept its old release base across the planned restart. It built and froze a
 candidate that could never apply, which wasted about 15 minutes of build and the judge's run. Possible fixes: re-base an
 assignment at bind time after a planned restart, or refuse to bind one whose base differs from the booted base, so a
-fresh open picks up the new base. Not yet checked: which component carried the 2cd70f60 base into the capsule.
+fresh open picks up the new base.
+
+Cause (builder, from the code at e8adf487a). The base is captured at the Cast, not at bind. planEngineeringCast
+(internal/agentcore/engineering_assignment_runtime.go) preflights the guest source HEAD and commits it into the open's
+binding as SourceArtifactRef (capsule-source-git:<commit>:sha256:<digest>) and SubjectDigest. The bind saga
+(resumeDelegatedCastAssignment, run by the spawn wake and by the planned boot's resume) re-preflights that committed ref,
+not HEAD, so the capsule spawns on the open-time commit. Freeze (capsule emitSourcePatch) reads the base commit from the
+capsule's SourceArtifactRef, the bundle records it as SourcePatchBaseCommit, the materializer writes it as the release's
+base_commit, and the updater refuses it against the booted base. Problem 22's hold (3f32a6ee4) covers frozen, verified and
+awaiting operations, not an open, unbound request, which is what this one was at 19:27:57Z. Fix direction: capture the base
+at bind for an unbound implementation request with no capsule yet (no work done), recording the moved base on the bind;
+the updater's check stays as it is.
 
 ## Problem 29 (lane C, 20:12Z): deepseek's files-next publish is refused after the restore round, for two reasons
 
