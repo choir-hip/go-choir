@@ -321,3 +321,11 @@ unprocessed occurrence: actorruntime: Texture activation returned without dispos
 tools, continuing" (73 such loop lines by 11:39Z). The revision's trigger is never disposed, so Texture re-runs and
 throws away its own output indefinitely. Hypothesis: two occurrences for the one agent (one per revision) and the
 activation disposes neither exactly. Workaround tried: a new document for round 6 (below).
+Recurrence (11:44Z): main restarted deepseek (an owner restart; the 11:40:16Z document's trajectory was cancelled and
+the two old updates dead-lettered at 11:40:39Z and 11:40:48Z). FP0 re-sent round 6 as a brand-new document
+799ed6d2-b8aa-5c2f-b498-51206b850e72 (trajectory 6be571d8, 11:43:35Z). From 11:44:12Z the same loop: "deferred
+...texture:799ed6d2-.../e979af8f-441d-5850-aa03-24a181a7a571 deferrals=N cause=... Texture activation returned
+without disposing exact trigger" and "discards 1 emitted update(s) ids=[fd70fac3-...]", deferrals=14 by 11:49:40Z
+(about every 35 s), no turn committed. One occurrence, a fresh document and no hibernate: the hypothesis of two
+occurrences is wrong; Texture's activation on this arm never disposes its trigger. FP0 stopped sending to deepseek
+and told main (11:50Z).
