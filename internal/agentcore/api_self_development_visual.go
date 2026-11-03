@@ -78,9 +78,10 @@ func (h *APIHandler) listSelfDevelopmentVisualEvidence(w http.ResponseWriter, r 
 // digests come only from the operation's frozen bundle on this computer, so
 // the embed's membership check is the listing's own binding.
 // A Texture document embeds at most visualcapture.MaxRoutes captures, so
-// the embed gets the route captures and then a few package captures, the
-// opened document on desktop first (textureEmbedCaptures); the judge and
-// the CLI read the whole listing.
+// the embed gets the package captures first, the opened document on desktop
+// first, and route captures only in the room left (textureEmbedCaptures):
+// an app candidate's document shows the app it changed, not the front page.
+// The judge and the CLI read the whole listing.
 func (rt *Runtime) CandidateVisualEvidence(ctx context.Context, computerID, operationID string) (VisualEvidenceListing, error) {
 	out, _, err := rt.candidateVisualEvidence(ctx, computerID, operationID)
 	if err == nil {
@@ -89,18 +90,26 @@ func (rt *Runtime) CandidateVisualEvidence(ctx context.Context, computerID, oper
 	return out, err
 }
 
-// textureEmbedCaptures keeps at most limit captures: every route capture,
-// then package captures ranked desktop before phone and an opened document
-// before other states, in capture order within a rank.
+// textureEmbedCaptures keeps at most limit captures: package captures
+// ranked desktop before phone and an opened document before other states,
+// then route captures, in capture order within a rank. A listing with no
+// package captures is returned unchanged.
 func textureEmbedCaptures(captures []VisualEvidenceCapture, limit int) []VisualEvidenceCapture {
-	if len(captures) <= limit {
+	hasScene := false
+	for _, c := range captures {
+		hasScene = hasScene || c.Scene != nil
+	}
+	if !hasScene {
+		if len(captures) > limit {
+			return captures[:limit]
+		}
 		return captures
 	}
 	rank := func(c VisualEvidenceCapture) int {
 		if c.Scene == nil {
-			return 0
+			return 4
 		}
-		r := 1
+		r := 0
 		if c.Scene.Viewport != visualcapture.ViewportDesktop {
 			r += 2
 		}
@@ -109,20 +118,12 @@ func textureEmbedCaptures(captures []VisualEvidenceCapture, limit int) []VisualE
 		}
 		return r
 	}
-	keep := make([]bool, len(captures))
-	n := 0
-	for r := 0; r <= 4 && n < limit; r++ {
-		for i, c := range captures {
-			if n < limit && !keep[i] && rank(c) == r {
-				keep[i] = true
-				n++
+	out := make([]VisualEvidenceCapture, 0, limit)
+	for r := 0; r <= 4 && len(out) < limit; r++ {
+		for _, c := range captures {
+			if len(out) < limit && rank(c) == r {
+				out = append(out, c)
 			}
-		}
-	}
-	out := make([]VisualEvidenceCapture, 0, n)
-	for i, c := range captures {
-		if keep[i] {
-			out = append(out, c)
 		}
 	}
 	return out

@@ -42,9 +42,9 @@ func TestFreezeWarnsWhenAChangedPackageHasNoCapture(t *testing.T) {
 	}
 }
 
-func TestTextureEmbedKeepsRoutesThenDesktopOpenScenes(t *testing.T) {
+func TestTextureEmbedShowsPackageScenesBeforeRoutes(t *testing.T) {
 	var caps []VisualEvidenceCapture
-	caps = append(caps, VisualEvidenceCapture{Route: "/"})
+	caps = append(caps, VisualEvidenceCapture{Route: "/"}, VisualEvidenceCapture{Route: "/read.html"})
 	for _, theme := range visualcapture.PackageThemes {
 		for _, vp := range []string{visualcapture.ViewportDesktop, visualcapture.ViewportPhone} {
 			for _, st := range []string{"open-pdf", "empty"} {
@@ -54,25 +54,34 @@ func TestTextureEmbedKeepsRoutesThenDesktopOpenScenes(t *testing.T) {
 		}
 	}
 	got := textureEmbedCaptures(caps, visualcapture.MaxRoutes)
-	if len(got) != visualcapture.MaxRoutes || got[0].Route != "/" {
-		t.Fatalf("embed captures %d, first %q", len(got), got[0].Route)
+	if len(got) != visualcapture.MaxRoutes {
+		t.Fatalf("embed captures %d", len(got))
 	}
-	var cells []string
-	for _, c := range got[1:] {
-		cells = append(cells, c.Scene.Theme+"/"+c.Scene.Viewport+"/"+c.Scene.State)
+	// An app candidate's Texture document shows the app it changed, not the
+	// signed-out front page: no route capture displaces a package scene.
+	for _, c := range got {
+		if c.Scene == nil {
+			t.Fatalf("route capture %q embedded while package scenes were left out", c.Route)
+		}
 	}
-	// Every desktop open scene is kept before anything else.
 	for _, theme := range visualcapture.PackageThemes {
 		found := false
-		for _, c := range cells {
-			found = found || c == theme+"/desktop/open-pdf"
+		for _, c := range got {
+			found = found || (c.Scene.Theme == theme && c.Scene.Viewport == visualcapture.ViewportDesktop && c.Scene.State == "open-pdf")
 		}
 		if !found {
-			t.Fatalf("embed dropped %s/desktop/open-pdf: %v", theme, cells)
+			t.Fatalf("embed dropped %s/desktop/open-pdf", theme)
 		}
 	}
-	if small := textureEmbedCaptures(caps[:3], visualcapture.MaxRoutes); !reflect.DeepEqual(small, caps[:3]) {
-		t.Fatal("a listing under the bound was changed")
+	// Under the bound everything is kept, package scenes first.
+	small := textureEmbedCaptures([]VisualEvidenceCapture{caps[0], caps[2], caps[3]}, visualcapture.MaxRoutes)
+	if len(small) != 3 || small[0].Scene == nil || small[1].Scene == nil || small[2].Route != "/" {
+		t.Fatalf("small listing order %+v", small)
+	}
+	// A candidate with no package scenes keeps its route captures as they were.
+	routes := []VisualEvidenceCapture{{Route: "/"}, {Route: "/read.html"}}
+	if got := textureEmbedCaptures(routes, visualcapture.MaxRoutes); !reflect.DeepEqual(got, routes) {
+		t.Fatalf("route-only listing changed: %+v", got)
 	}
 }
 
