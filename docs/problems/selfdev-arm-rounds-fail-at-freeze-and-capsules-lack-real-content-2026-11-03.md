@@ -352,4 +352,8 @@ Pool refreshed to 0de7c5865 at 12:58Z ("source base fetch (attempt 1): fetched c
 rebase". 524a94bad says a computer with no live root desk sends the notice to the stack operation's own document Texture
 (pool's is b1ad3952, trajectory 5dc6a6ff: live, activation passivated, last turn 10:50:16Z). At 10:45Z the same arm minted
 a notice to that Texture. So the fallback did not take on this boot, and pool's Slides round (doc 023c9d49) still cannot
-build. Shift tried: an owner revision on b1ad3952 (13:10Z) to wake that Texture, then watch for a re-mint.
+build. Shift tried: an owner revision on b1ad3952 (13:08:33Z) to wake that Texture; it woke and waited (13:08:37Z).
+13:16:52Z the guest minted "rebase-notice:selfdev-c4ac7712467862d5b7cd527ed6287034:3ab1d5c3342f2f5ebbf5b98f1913dc4a8ecdf6af:1
+(attempt 1)", on base 3ab1d5c3 rather than 0de7c5865, so pool likely booted a newer release first and this was a fresh
+stay-up mint with the stack's Texture live. Texture cast it at 13:16:56Z. Whether the live Texture or the reboot made the
+difference is not separable from this evidence.
