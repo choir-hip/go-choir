@@ -19,6 +19,35 @@
 //   node ... --shots /tmp/shots.mjs --only a,b --preset mobile    # two, phone
 //   node ... --shots /tmp/shots.mjs --size 1000x700               # custom size
 //   node ... --shots /tmp/shots.mjs --list
+//   node ... --shots /tmp/shots.mjs --theme futuristic-noir,london-salmon   # presets
+//   node ... --shots /tmp/shots.mjs --contrast '.window'                    # WCAG
+//
+// --theme a,b (or a shot's `theme` field, a preset id or a list) sets the shell
+// theme without the Settings window: it seeds localStorage 'choir.theme.boot.v2'
+// ({"schema_version":2,"id":"<preset>"}, what App.svelte reads at first paint)
+// through context.addInitScript, and the helper's own server answers
+// GET /api/preferences/theme with that preset before it proxies. Each shot is
+// taken once per preset, as <name>.<preset>.png (<name>.<preset>-<view>.png for
+// a preset or size). Preset ids come from frontend/src/lib/theme.ts; an unknown
+// one fails before anything is built.
+//
+// --contrast <selector> (or a shot's `contrast` field) measures, after the shot
+// is ready, the WCAG contrast ratio of every visible text element under the
+// selector against its real background: it walks up to the first ancestor whose
+// background-color is opaque and has no background-image, compositing the
+// translucent layers above it. At a background-image, a backdrop-filter, a
+// color it cannot read or the root with no opaque layer it reads the pixels
+// under the element's box from a screenshot taken with all text made
+// transparent (the lowest ratio over the sampled pixels counts), decoded with
+// pngjs from the locked dependency tree; without pngjs the node is reported
+// "unmeasured: image background", never measured against black. It writes
+// <shot file stem>.contrast.json (min ratio, failing nodes with selector path,
+// text and ratio, and the method per node) to contrastDir(out), that is
+// /var/lib/artifact/contrast beside the screens directory and not in it:
+// choir.Freeze refuses any file in screens/ that is not a plain .png name
+// (internal/capsule/screens.go screenNames). It prints one line per shot.
+// Text under 24 px (18.66 px bold) must reach 4.5, larger text 3. Ancestor
+// opacity below 1 is not modelled.
 //
 // The shots file is an ES module whose default export is a list of
 //   { name, path = '/', selector, routes(context, base), before(page, base),
@@ -60,14 +89,29 @@ export const PRESETS = {
   mobile: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
 };
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
+export const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
+export const THEME_SCHEMA_VERSION = 2;
+export const THEME_PREFERENCE_PATH = '/api/preferences/theme';
 const STEP_MS = 15000;
 export const COMPUTER_DIR = '/computer';
 export const AUTOPUTER_PORT = 8082;
 export const AUTOPUTER_USER = 'owner';
 const AUTOPUTER_BINARIES = ['/var/lib/artifact/release/bin/autoputer', '/tmp/autoputer'];
 
-export function parseArgs(argv) {
-  const o = { shots: '', only: [], presets: [], size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
+// themeIdsFrom reads the preset ids from the shell's theme.ts source (the
+// two-space `id: 'x',` lines of the preset objects), so the list is the shell's own.
+export function themeIdsFrom(source) {
+  return [...source.matchAll(/^ {2}id: '([a-z0-9-]+)',$/gm)].map((m) => m[1]);
+}
+
+function checkThemes(list, known, what) {
+  for (const t of list) if (!/^[a-z0-9-]+$/.test(t)) throw new Error(`${what} ${t}: a preset id is lowercase letters, digits and '-'`);
+  if (!known) return;
+  for (const t of list) if (!known.includes(t)) throw new Error(`${what} ${t}: unknown theme preset (have ${known.join(', ')})`);
+}
+
+export function parseArgs(argv, knownThemes = null) {
+  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -77,6 +121,8 @@ export function parseArgs(argv) {
     if (a === '--shots') o.shots = val();
     else if (a === '--only') o.only = val().split(',').filter(Boolean);
     else if (a === '--preset') o.presets = val().split(',').filter(Boolean);
+    else if (a === '--theme') o.themes = val().split(',').filter(Boolean);
+    else if (a === '--contrast') o.contrast = val();
     else if (a === '--size') o.size = val();
     else if (a === '--out') o.out = val();
     else if (a === '--list') o.list = true;
@@ -87,11 +133,29 @@ export function parseArgs(argv) {
   if (o.size && o.presets.length) throw new Error('--size and --preset are exclusive');
   if (o.size && !/^\d{2,5}x\d{2,5}$/.test(o.size)) throw new Error(`--size ${o.size}: want WIDTHxHEIGHT, such as 1000x700`);
   for (const p of o.presets) if (!PRESETS[p]) throw new Error(`--preset ${p}: want one of ${Object.keys(PRESETS).join(', ')}`);
+  if (a0(argv, '--theme') && o.themes.length === 0) throw new Error('--theme needs at least one preset id');
+  if (new Set(o.themes).size !== o.themes.length) throw new Error(`--theme ${o.themes.join(',')}: a preset is listed twice`);
+  checkThemes(o.themes, knownThemes, '--theme');
   return o;
 }
 
+function a0(argv, flag) {
+  return argv.includes(flag);
+}
+
+// themesFor is the presets one shot is taken under: its own `theme` field, else
+// --theme, else none (the shell's default, no seeding).
+export function themesFor(shot, o, known = null) {
+  let t = shot.theme;
+  if (t === undefined || t === null || t === '') return o.themes.length ? o.themes : [null];
+  t = Array.isArray(t) ? t : [t];
+  if (t.length === 0 || t.some((x) => typeof x !== 'string' || !x)) throw new Error(`shot ${shot.name}: theme must be a preset id or a list of them`);
+  checkThemes(t, known, `shot ${shot.name}: theme`);
+  return t;
+}
+
 // plan expands the selected shots and presets into the files to write.
-export function plan(shots, o) {
+export function plan(shots, o, knownThemes = null) {
   if (!Array.isArray(shots) || shots.length === 0) throw new Error('the shots file must default-export a non-empty list');
   const seen = new Set();
   for (const s of shots) {
@@ -111,10 +175,176 @@ export function plan(shots, o) {
   }
   const out = [];
   for (const shot of picked)
-    for (const v of views) {
-      const { width, height, ...device } = v.preset || { ...v.viewport };
-      out.push({ shot, viewport: { width, height }, device, file: `${shot.name}${v.label === 'desktop' ? '' : '-' + v.label}.png` });
+    for (const theme of themesFor(shot, o, knownThemes))
+      for (const v of views) {
+        const { width, height, ...device } = v.preset || { ...v.viewport };
+        const stem = `${shot.name}${theme ? '.' + theme : ''}${v.label === 'desktop' ? '' : '-' + v.label}`;
+        const contrast = shot.contrast || o.contrast || '';
+        out.push({ shot, theme, contrast, viewport: { width, height }, device, file: `${stem}.png`, contrastFile: contrast ? `${stem}.contrast.json` : '' });
+      }
+  return out;
+}
+
+// themeSeedScript is the init script that stores the boot cache before any page
+// script runs, in the shape App.svelte's loadThemeBootCache reads: a JSON
+// string of {schema_version, id} (normalizeThemeConfig fills in the rest).
+export function themeSeedScript(preset) {
+  const value = JSON.stringify({ schema_version: THEME_SCHEMA_VERSION, id: preset });
+  return `try { window.localStorage.setItem(${JSON.stringify(THEME_BOOT_CACHE_KEY)}, ${JSON.stringify(value)}); } catch (e) {}`;
+}
+
+// themeAnswer is the helper server's answer to GET /api/preferences/theme while
+// a preset is set: the body, or null when the request is not that one.
+export function themeAnswer(preset, method, pathname) {
+  if (!preset || method !== 'GET' || pathname !== THEME_PREFERENCE_PATH) return null;
+  return { theme: { schema_version: THEME_SCHEMA_VERSION, id: preset } };
+}
+
+// ---- contrast ----
+
+export function parseColor(s) {
+  s = String(s || '').trim();
+  let m = s.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : m[5] ? +m[4] / 100 : +m[4] };
+  m = s.match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%?))?\s*\)$/);
+  if (m) return { r: +m[1] * 255, g: +m[2] * 255, b: +m[3] * 255, a: m[4] === undefined ? 1 : m[5] ? +m[4] / 100 : +m[4] };
+  if (s === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
+  return null;
+}
+
+// over composites the top color (with alpha) onto an opaque or translucent bottom.
+export function over(top, bottom) {
+  const a = top.a + bottom.a * (1 - top.a);
+  if (a === 0) return { r: 0, g: 0, b: 0, a: 0 };
+  const mix = (t, b) => (t * top.a + b * bottom.a * (1 - top.a)) / a;
+  return { r: mix(top.r, bottom.r), g: mix(top.g, bottom.g), b: mix(top.b, bottom.b), a };
+}
+
+// resolveBackground walks layers (element first, root last; each {color, image},
+// color null when unreadable) to the first opaque layer with no image and
+// composites the translucent ones above it. {kind:'pixel', reason} means the
+// walk cannot know: an image, an unreadable color or no opaque layer.
+export function resolveBackground(layers) {
+  const above = [];
+  for (const l of layers) {
+    if (l.image) return { kind: 'pixel', reason: 'image background' };
+    if (l.color === null || l.color === undefined) return { kind: 'pixel', reason: 'unreadable background color' };
+    if (l.color.a === 0) continue;
+    if (l.color.a >= 1) {
+      let c = { ...l.color, a: 1 };
+      for (let i = above.length - 1; i >= 0; i--) c = over(above[i], c);
+      return { kind: 'opaque', color: { r: c.r, g: c.g, b: c.b, a: 1 } };
     }
+    above.push(l.color);
+  }
+  return { kind: 'pixel', reason: above.length ? 'no opaque layer under translucent ones' : 'no opaque layer' };
+}
+
+export function luminance(c) {
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+
+export function contrastRatio(fg, bg) {
+  const a = luminance(fg), b = luminance(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+export function requiredRatio(fontSizePx, fontWeight) {
+  return fontSizePx >= 24 || (fontSizePx >= 18.66 && Number(fontWeight) >= 700) ? 3 : 4.5;
+}
+
+// samplePixels returns up to ~max opaque colors on a grid over the css-pixel
+// rect of a decoded PNG {width, height, data} taken at one pixel per css pixel.
+export function samplePixels(png, rect, max = 200) {
+  const x0 = Math.max(0, Math.floor(rect.x)), y0 = Math.max(0, Math.floor(rect.y));
+  const x1 = Math.min(png.width, Math.ceil(rect.x + rect.width)), y1 = Math.min(png.height, Math.ceil(rect.y + rect.height));
+  const w = x1 - x0, h = y1 - y0;
+  if (w <= 0 || h <= 0) return [];
+  const step = Math.max(1, Math.ceil(Math.sqrt((w * h) / max)));
+  const out = [];
+  for (let y = y0; y < y1; y += step)
+    for (let x = x0; x < x1; x += step) {
+      const i = (y * png.width + x) * 4;
+      out.push({ r: png.data[i], g: png.data[i + 1], b: png.data[i + 2], a: 1 });
+    }
+  return out;
+}
+
+// measureNode scores one collected node {fg, layers, rect, fontSize, fontWeight}.
+export function measureNode(node, png) {
+  const fg = parseColor(node.color);
+  if (!fg) return { ratio: null, method: 'unmeasured: unreadable text color' };
+  const req = requiredRatio(node.fontSize, node.fontWeight);
+  const layers = node.layers.map((l) => ({ color: parseColor(l.bg), image: l.image }));
+  const bg = resolveBackground(layers);
+  if (bg.kind === 'opaque') {
+    const text = fg.a < 1 ? over(fg, bg.color) : fg;
+    return { ratio: contrastRatio(text, bg.color), required: req, method: 'opaque-ancestor' };
+  }
+  if (!png) return { ratio: null, required: req, method: 'unmeasured: image background' };
+  const px = samplePixels(png, node.rect);
+  if (px.length === 0) return { ratio: null, required: req, method: 'unmeasured: box outside the screenshot' };
+  let min = Infinity;
+  for (const p of px) min = Math.min(min, contrastRatio(fg.a < 1 ? over(fg, p) : fg, p));
+  return { ratio: min, required: req, method: `pixels (${bg.reason}; lowest of ${px.length} samples)` };
+}
+
+// contrastDir is where the reports go: beside the screens directory, since
+// Freeze refuses a non-PNG file inside it.
+export function contrastDir(out) {
+  return path.join(path.dirname(path.resolve(out)), 'contrast');
+}
+
+// summarizeContrast builds the JSON report and the one-line summary.
+export function summarizeContrast(meta, nodes, png) {
+  const results = nodes.map((n) => ({ n, r: measureNode(n, png) }));
+  const measured = results.filter((x) => x.r.ratio !== null);
+  const unmeasured = results.filter((x) => x.r.ratio === null);
+  const failing = measured.filter((x) => x.r.ratio < x.r.required).map((x) => ({ selector: x.n.path, text: x.n.text, ratio: +x.r.ratio.toFixed(2), required: x.r.required, method: x.r.method }));
+  const min = measured.length ? +Math.min(...measured.map((x) => x.r.ratio)).toFixed(2) : null;
+  const methods = {};
+  for (const x of results) { const k = x.r.method.split(' (')[0]; methods[k] = (methods[k] || 0) + 1; }
+  const report = { ...meta, nodes: results.length, measured: measured.length, unmeasured: unmeasured.length, min_ratio: min, failing, unmeasured_nodes: unmeasured.slice(0, 20).map((x) => ({ selector: x.n.path, text: x.n.text, method: x.r.method })), methods };
+  const line = `contrast ${meta.file}: min ${min === null ? 'n/a' : min} over ${measured.length}/${results.length} text nodes, ${failing.length} failing, ${unmeasured.length} unmeasured`;
+  return { report, line };
+}
+
+// collectTextNodes runs in the page: every visible element under selector with
+// its own text, its color, box and the background layers from itself to the root.
+export function collectTextNodes({ selector, limit }) {
+  const roots = [...document.querySelectorAll(selector)];
+  const seen = new Set();
+  const out = [];
+  const pathOf = (el) => {
+    const parts = [];
+    for (let e = el; e && e.nodeType === 1 && e !== document.documentElement; e = e.parentElement) {
+      let p = e.tagName.toLowerCase();
+      if (e.id) { parts.unshift(`${p}#${e.id}`); break; }
+      const cls = [...e.classList].slice(0, 2).join('.');
+      if (cls) p += '.' + cls;
+      parts.unshift(p);
+    }
+    return parts.slice(-5).join(' > ');
+  };
+  for (const root of roots) {
+    const els = [root, ...root.querySelectorAll('*')];
+    for (const el of els) {
+      if (seen.has(el) || out.length >= limit) continue;
+      seen.add(el);
+      const text = [...el.childNodes].filter((c) => c.nodeType === 3).map((c) => c.textContent).join(' ').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (cs.display === 'none' || cs.visibility === 'hidden' || r.width < 1 || r.height < 1) continue;
+      const layers = [];
+      for (let e = el; e; e = e.parentElement) {
+        const s = getComputedStyle(e);
+        layers.push({ bg: s.backgroundColor, image: s.backgroundImage !== 'none' || (s.backdropFilter && s.backdropFilter !== 'none') || false });
+      }
+      out.push({ path: pathOf(el), text: text.slice(0, 60), color: cs.color, fontSize: parseFloat(cs.fontSize), fontWeight: cs.fontWeight, rect: { x: r.x + window.scrollX, y: r.y + window.scrollY, width: r.width, height: r.height }, layers });
+    }
+  }
   return out;
 }
 
@@ -275,9 +505,11 @@ function tunnel(req, socket, head) {
   socket.on('close', () => up.destroy());
 }
 
-function serve(dist, computer = false) {
+function serve(dist, computer = false, themeState = { preset: null }) {
   const server = http.createServer((req, res) => {
     const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const themed = themeAnswer(themeState.preset, req.method, u);
+    if (themed) { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(themed)); return; }
     if (computer && isProxied(u)) return proxy(req, res);
     if (computer && u === '/auth/session') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ authenticated: true, user: { id: AUTOPUTER_USER, username: AUTOPUTER_USER } }));
@@ -303,16 +535,48 @@ async function settle(page, selector) {
   await Promise.race([page.evaluate(() => document.fonts && document.fonts.ready), new Promise((r) => setTimeout(r, STEP_MS))]);
 }
 
+// loadPng decodes a PNG with pngjs from the locked tree (or beside this
+// script); null when pngjs is absent.
+function loadPngDecoder(req) {
+  for (const r of [req, createRequire(import.meta.url)]) {
+    try { const { PNG } = r('pngjs'); return (buf) => PNG.sync.read(buf); } catch { /* try the next */ }
+  }
+  return null;
+}
+
+// measureContrast scores the text under selector on a ready page. Text is made
+// transparent for one screenshot so pixel sampling sees only the background.
+async function measureContrast(page, it, decode, out) {
+  const nodes = await page.evaluate(collectTextNodes, { selector: it.contrast, limit: 400 });
+  let png = null;
+  if (decode && nodes.length) {
+    const style = await page.addStyleTag({ content: '*, *::before, *::after { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; }' });
+    try {
+      png = decode(await page.screenshot({ fullPage: true, scale: 'css' }));
+    } finally {
+      await style.evaluate((el) => el.remove());
+    }
+  }
+  const { report, line } = summarizeContrast({ shot: it.shot.name, preset: it.theme, file: it.file, selector: it.contrast, viewport: it.viewport, wcag: 'AA' }, nodes, png);
+  const dir = contrastDir(out);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, it.contrastFile), JSON.stringify(report, null, 2) + '\n');
+  console.log(`choir-shot: ${line}`);
+}
+
 async function main() {
-  const o = parseArgs(process.argv.slice(2));
+  const root = process.env.CHOIR_PLATFORM_ROOT || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const frontend = path.join(root, 'frontend');
+  let known = null;
+  try { known = themeIdsFrom(fs.readFileSync(path.join(frontend, 'src', 'lib', 'theme.ts'), 'utf8')); } catch { /* no source to check against */ }
+  if (known && known.length === 0) known = null;
+  const o = parseArgs(process.argv.slice(2), known);
   const mod = await import(pathToFileURL(path.resolve(o.shots)).href);
-  const items = plan(mod.default, o);
+  const items = plan(mod.default, o, known);
   if (o.list) {
     for (const it of items) console.log(it.file);
     return 0;
   }
-  const root = process.env.CHOIR_PLATFORM_ROOT || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-  const frontend = path.join(root, 'frontend');
   const deps = process.env.CHOIR_FRONTEND_DEPS;
   if (!deps) throw new Error('CHOIR_FRONTEND_DEPS is not set (a capsule job has it)');
   const exe = process.env.CHOIR_BROWSER;
@@ -328,7 +592,9 @@ async function main() {
   process.on('exit', stopAutoputer);
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopAutoputer(); process.exit(130); });
   if (useComputer) await startAutoputer(root, holder);
-  const { server, base } = await serve(dist, useComputer);
+  const themeState = { preset: null };
+  const { server, base } = await serve(dist, useComputer, themeState);
+  const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const failed = [];
@@ -338,6 +604,8 @@ async function main() {
       const context = await browser.newContext({ viewport: it.viewport, ...it.device });
       try {
         const s = it.shot;
+        themeState.preset = it.theme;
+        if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
         const page = await context.newPage();
         if (s.before) await s.before(page, base);
@@ -348,6 +616,7 @@ async function main() {
           await settle(page, s.selector);
         }
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
+        if (it.contrast) await measureContrast(page, it, decode, o.out);
         console.log(`choir-shot: ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
       } catch (e) {
         failed.push(it.file);
