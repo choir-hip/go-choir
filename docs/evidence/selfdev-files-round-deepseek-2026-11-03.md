@@ -123,6 +123,10 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - 11:20:59Z round 6 revision 021721b8 (deepseek/revise-r6.md: the round-4 fixes on the new base, contrast, real
   files, package-only).
 
+- Round 6 never ran: Texture livelocked (Problem 17) on document ddbdd1ae after the hibernate resume, and again on a
+  fresh document 799ed6d2 (11:43:35Z) after main's owner restart (deferrals=14 by 11:49:40Z). Main stopped the arm
+  (lifecycle stop, about 11:52Z) until the Problem 17 fix lands. Spend $3.97 at 11:50Z.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

@@ -102,6 +102,9 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   trajectory a475876b-a9c3-5ebe-974d-05610995992d. Real decks seeded on all four arms at 11:24Z:
   Documents/Decks/rainfall review 2026.pptx (4 slides, notes), choir in five slides.html, Choir state and vision.pdf.
 
+- Slides round 1 stopped at Texture (11:31:03Z): the stack's rebase never ran because the notice id reached
+  engineering mangled (Problem 16, reported 11:33Z). Waits for that fix.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

@@ -124,6 +124,17 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   cancelled at tool-loop iteration 3 with a chatgpt 400: the engineering effort value is malformed ('hig...03)').
   Problem 15, reported to main 11:29Z.
 
+- 11:30:54Z third assignment (after main fixed the effort value): 1m52s, built the package and passed build and
+  check-packages, then completed "blocked": "The requested feature set and required runtime evidence/screenshots
+  are materially incomplete, so no Freeze was attempted". No browser.
+- 11:33:53Z round 7b on new document b72258be-8a6b-5537-bc9a-918537278e10 (trajectory 572760cf). Cast 11:34:03Z;
+  assignments at 11:37:38Z and 11:42:40Z; trajectory failed 11:48:20Z. Texture: "build and package checks but no
+  interactive proof, screenshots, measurements or frozen candidate".
+- Verdict on Files: blocked on the engineer. High reasoning did not change the pattern: luna builds, then stops
+  before the browser run, every time (eleven assignments over nine documents).
+- Next app per main: Slides round 1 on document 2f40db5c-4d3b-5eb0-bf5a-189e4971a7cc (trajectory cf62dc0b),
+  11:50:39Z, with the work order spelled out (build is step 2 of 6).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
