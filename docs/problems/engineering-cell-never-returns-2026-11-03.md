@@ -1,6 +1,8 @@
 # An engineering cell that never returns hides until the activation deadline (2026-11-03)
 
-Status: open; fix lands in the next commit.
+Status: open. The host-side bound landed (062c669da); the root cause is
+not found. The memory hypothesis is refuted (see "The memory hypothesis is
+refuted").
 Mutation class of the fix: red (the engineering agent loop's tool path).
 
 ## What was seen
@@ -55,7 +57,7 @@ context-aware) and the post-eval worktree digest
 The desk path (tools_desk.go) has a host deadline for management cells;
 engineering's capsule path has none.
 
-## Why the broker did not answer (hypothesis, the leading one)
+## Why the broker did not answer (first hypothesis, refuted below)
 
 The broker went silent for every RPC, not one: the host's job_status
 polls (a fresh connection after each 30 s failure) also got no answer
@@ -77,6 +79,104 @@ timer included. This fits every observation, but it is unconfirmed: it
 needs the capsule's memory.events (`high`, `max`, `oom` counts, in the
 capsule memory receipt at destroy) or the guest log for 22:30-23:19Z.
 
+## The memory hypothesis is refuted (read 2026-11-03 23:42Z)
+
+Read with `choir trace export --computer
+computer-848b21d55df1dd1a953ae798b8edc696` (the boot layer's recent_log),
+release 5ea2a61b07ed. The job ran in capsule-1673af6c (spawned 22:18:42Z,
+destroyed 23:19:12Z), not in capsule-ae78252b (that is the next
+assignment's, spawned 23:20:51Z). Its memory receipt at destroy:
+
+    capsule capsule-1673af6c-... memory: policy=observe request=2048MiB
+    admitted=2048MiB high=- max=2048MiB peak=1426MiB events high=0 max=0
+    oom=0 oom_kill=0 doctrine_would_throttle=false
+
+- memory.high was not set (policy observe), so nothing in the capsule could
+  be throttled at memory.high.
+- memory.events `max 0`: the capsule never reached memory.max, so no task in
+  it, the broker included, ever entered reclaim against the capsule's limit.
+- `oom 0`, `oom_kill 0`: no OOM kill in the capsule's subtree (cgroup v2
+  counts a kill by any OOM killer, the global one included, in the victim's
+  memory.events).
+- The peak was 1426 MiB of 2048 MiB. No job memory boost was taken for
+  job-d807dd9c4be9. No boost line names it in the log.
+
+Control run on choir-agents (kernel 6.18, a delegated user scope; the
+harness is a scratch program and is not in the repo). A broker stand-in
+(Go, verifies Ed25519 per request, writes a status file, runs a job with a
+15 s wall clock that kills the job's group) answered 44 of 44 requests,
+1 per second, with the host holding the listener as the executor does:
+
+| run | capsule limit | memory.events / pids.events after | broker answers | wall clock fired |
+|---|---|---|---|---|
+| memory hog, same cgroup | memory.max 256 MiB, swap 0 | max 42, oom 1, oom_kill 1 | 44/44 | yes |
+| memory hog, broker in a sibling leaf (job leaf 224 MiB, broker memory.min 32 MiB) | same | max 39, oom 1, oom_kill 1 | 44/44 | yes |
+| fork hog, same cgroup | pids.max 64 | pids max 4 | 44/44 | yes |
+
+With no swap, a job at memory.max is OOM-killed within about a second and
+leaves `max` and `oom_kill` counts in memory.events. The crouton receipt has
+neither. Moving the broker to its own leaf is not the fix for this incident,
+and it was not built.
+
+## What the evidence does establish (confirmed from code)
+
+- **A dead broker looks like a hung one.** The host keeps its own copy of the
+  broker's listening socket open (`caps.listener`,
+  `startBrokerLocked`, internal/capsule/executor.go). If the broker process
+  exits, the socket still accepts connections into its backlog and nobody
+  reads them. A host call then fails as `read unix ... broker.sock: i/o
+  timeout`, the exact error seen, never as "connection refused".
+- **A broker exit after readiness is never recorded.** `caps.processErr` is
+  read only before readiness ("capsule broker exited before readiness").
+  After that, the launcher's exit status goes unread: no log line, no job
+  end, and RPCs keep going to the backlog. The broker is PID 1 of the
+  capsule's PID namespace, so its death also kills the job. That fits a job
+  that never ended in the host's view.
+- **The broker's own log is not readable on the product route.** Its stderr
+  goes to the autoputer's stderr (the journal), and the observability
+  recent_log does not include it. No `capsule-broker:` line appears in it,
+  not even the ready line at 22:18:42Z. The window from 22:21Z to 23:19Z has
+  no broker-side evidence.
+- **The job's processes were all gone at destroy:** `teardown memory:
+  current=417MiB->15MiB ... file=387MiB anon=0MiB`. That is read after
+  cgroup.kill, so it does not say when they died.
+
+## Candidate causes still open (hypotheses, no trace confirms one)
+
+1. **The broker process died** (exited or crashed), and the held listener
+   hid it. One concrete path: an engineering capsule has `pids.max` 256
+   (`engineeringAssignmentPidsMax`). The job ran vite, then Chromium with
+   Playwright, then an autoputer built inside the capsule (choir-shot starts
+   one over /computer). These are all thread-heavy, and cgroup v2 counts
+   threads. When a Go process cannot create an OS thread, it dies with
+   "runtime: failed to create new OS thread", and it needs one whenever a
+   goroutine blocks in a syscall and no idle thread is parked. The control
+   above (a warm broker under a fork hog) did not die, so this path is
+   unproven. The capsule receipt does not record pids.events, so the
+   incident cannot settle it.
+2. **The broker was alive but unable to serve,** in a way not yet found.
+   Every broker-side wait the RPC path reaches is bounded: the session eval
+   timer is 60 s, the readiness wait is bounded, and m.mu and j.mu are held
+   briefly. The second assignment's capsule ran the same `choir-shot --only
+   01` job (with a 1536 MiB boost, so memory.max was 3584 MiB). Its broker
+   answered, and the job ended `failed` at 23:32:22Z.
+
+## Next probes (before any substrate change)
+
+- Record the broker's exit: log the launcher's exit status and time when the
+  broker dies after readiness, and fail the capsule's broker calls at once
+  with "the capsule broker exited: <status>" instead of letting them wait in
+  the held listener's backlog. Also end the running job ("the capsule broker
+  exited").
+- Add `pids.events` (max), `pids.peak` and `cpu.stat` (throttled_usec) to the
+  capsule receipt next to memory.events.
+- Keep the broker's own stderr lines (a bounded tail per capsule) where the
+  observability route can return them.
+- The next recurrence then says which candidate it was. If it is pids, the
+  substrate change is the same shape as the one asked for here, but for
+  pids: the job runs in a child leaf whose `pids.max` is the capsule's limit
+  less a reserve for the broker.
+
 ## Remaining error field
 
 - Fix (next commit): every engineering cell has a host wall-clock limit
@@ -87,11 +187,11 @@ capsule memory receipt at destroy) or the guest log for 22:30-23:19Z.
   capsule broker did not answer" and names the job. The model's tool
   result names the running job (not stopped) and the next step. A
   "capsule_cell_running" progress event fires every 2 minutes.
-- Residual (root cause, not small): the broker shares the job's cgroup.
-  Moving it to its own leaf (or the job to a child cgroup) has to respect
-  cgroup v2's no-internal-processes rule, the Quiesce freeze (which today
-  freezes the broker with the capsule) and the capsule's memory
-  accounting. Confirm with memory.events first.
+- Residual (root cause, open): the memory-in-the-job's-cgroup cause is
+  refuted (memory.events above). The broker died or went silent for a
+  cause not yet observed. A dead broker is invisible to the host, because
+  the host holds the listener and never reads the exit status. The next
+  step is the probes above, not a cgroup split.
 - Residual: while the broker stays silent, the host's job watcher cannot
   see the job end, so "the platform wakes you" depends on the broker
   coming back. The cell now answers within about 75 s instead of 60 min,
