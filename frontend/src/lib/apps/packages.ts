@@ -24,10 +24,12 @@ type PackageManifest = {
     auth: ChoirAppDefinition['auth'];
     theme: ChoirAppDefinition['theme'];
   };
-  opens?: { media_type: string; extensions: string[] }[];
+  opens?: { media_type: string; extensions: string[]; default?: boolean }[];
 };
 
-export type PackageMediaRoute = { appId: string; mediaType: string; extensions: string[] };
+// `default: false` routes offer the package under Open with only; the
+// extension keeps its default opener.
+export type PackageMediaRoute = { appId: string; mediaType: string; extensions: string[]; default: boolean };
 
 export type LoadedPackages = {
   apps: ChoirAppDefinition[];
@@ -74,7 +76,7 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
       const packageAliases = manifest.app.aliases ?? [];
       const opensList = manifest.opens ?? [];
       if (!Array.isArray(packageAliases) || !packageAliases.every((a) => typeof a === 'string') || !Array.isArray(opensList)
-        || !opensList.every((o) => isObject(o) && Array.isArray(o.extensions))) {
+        || !opensList.every((o) => isObject(o) && Array.isArray(o.extensions) && (o.default === undefined || typeof o.default === 'boolean'))) {
         console.warn(`[packages] skipped ${name}: aliases (strings), opens and opens[].extensions must be arrays`);
         continue;
       }
@@ -95,7 +97,7 @@ export function loadPackageApps(reservedIds: ReadonlySet<string>): LoadedPackage
         auth,
         theme,
       };
-      const routes = opensList.map((o) => ({ appId: name, mediaType: o.media_type, extensions: o.extensions }));
+      const routes = opensList.map((o) => ({ appId: name, mediaType: o.media_type, extensions: o.extensions, default: o.default !== false }));
       claimed.forEach((id) => taken.add(id));
       packageAliases.forEach((alias) => {
         aliases[alias] = name;

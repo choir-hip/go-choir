@@ -80,7 +80,14 @@ type App struct {
 type Opens struct {
 	MediaType  string   `json:"media_type"`
 	Extensions []string `json:"extensions"`
+	// Default false offers the package under Open with for these extensions
+	// without making it their default opener; absent means true.
+	Default *bool `json:"default,omitempty"`
 }
+
+// IsDefault reports whether the entry routes its extensions to the package by
+// default (true unless "default": false).
+func (o Opens) IsDefault() bool { return o.Default == nil || *o.Default }
 
 // Kind is one data kind the package declares.
 type Kind struct {

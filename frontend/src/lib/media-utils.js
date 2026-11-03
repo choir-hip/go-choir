@@ -19,9 +19,15 @@ export const MEDIA_FILE_ROUTES = [
 // boundary refuses any other import): one file to top-level Files, by the same
 // request Files itself sends, so an upload from a package renews the session,
 // reports progress and answers the same way an upload from Files does.
+//
+// options.folder (e.g. "Decks/2026") stores it in that folder instead; the
+// folder must exist (the route creates no parents). The answer's path is the
+// stored path under the files root.
 export async function uploadMediaFile(file, options = {}) {
   const { onProgress, signal } = options || {};
-  const url = '/api/files/' + encodeURIComponent(String(file?.name || ''));
+  const folderSegments = String(options?.folder || '').split('/').filter(Boolean);
+  const storedPath = [...folderSegments, String(file?.name || '')].join('/');
+  const url = '/api/files/' + [...folderSegments, String(file?.name || '')].map(encodeURIComponent).join('/');
   const headers = { 'X-Choir-Device': currentDeviceId() };
   if (file?.type) headers['Content-Type'] = file.type;
   const wantsProgress = typeof onProgress === 'function' && typeof XMLHttpRequest !== 'undefined';
@@ -51,7 +57,7 @@ export async function uploadMediaFile(file, options = {}) {
     if (status === 0) return { ok: false, path: '', status, error: 'The file did not finish uploading. Check the connection and try again.' };
     return { ok: false, path: '', status, error: message || 'The library answered ' + status + ' while saving the file.' };
   }
-  return { ok: true, path: String(file?.name || ''), status: Number(res.status) || 0, error: '' };
+  return { ok: true, path: storedPath, status: Number(res.status) || 0, error: '' };
 }
 
 // The same PUT, sent by XMLHttpRequest when the caller wants progress: fetch
@@ -115,7 +121,10 @@ export function apiFileURL(path, inline = true) {
 export function mediaRouteForFileName(name) {
   const ext = String(name || '').toLowerCase().split('.').pop();
   if (!ext || ext === String(name || '').toLowerCase()) return null;
-  const route = [...PACKAGE_MEDIA_ROUTES, ...MEDIA_FILE_ROUTES].find((candidate) => candidate.extensions.includes(ext));
+  // Open-with-only package routes (`default: false`) never take the default.
+  const route = [...PACKAGE_MEDIA_ROUTES, ...MEDIA_FILE_ROUTES].find(
+    (candidate) => candidate.default !== false && candidate.extensions.includes(ext),
+  );
   if (!route) return null;
   return {
     appId: route.appId,

@@ -476,3 +476,31 @@ func TestRegisterFirstPartyRefusesAReservedDeskName(t *testing.T) {
 		t.Fatal("a reserved-name kind is registered")
 	}
 }
+
+// O1 (Open with, 2026-11-03): an `opens` entry with "default": false offers
+// the package under Open with for those extensions without becoming their
+// default opener. A non-boolean default is refused, and an entry without the
+// field stays a default route.
+func TestParseManifestOpensDefaultFlag(t *testing.T) {
+	m, err := ParseManifest(fixtureJSON(t, func(v map[string]any) {
+		v["opens"] = []any{
+			map[string]any{"media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "extensions": []any{"pptx"}, "default": false},
+			map[string]any{"media_type": "text/x-deck", "extensions": []any{"deck"}},
+		}
+	}))
+	if err != nil {
+		t.Fatalf("open-with-only entry refused: %v", err)
+	}
+	if len(m.Opens) != 2 || m.Opens[0].Default == nil || *m.Opens[0].Default || m.Opens[1].Default != nil {
+		t.Fatalf("opens = %+v", m.Opens)
+	}
+	if !m.Opens[1].IsDefault() || m.Opens[0].IsDefault() {
+		t.Fatalf("IsDefault: %v %v", m.Opens[0].IsDefault(), m.Opens[1].IsDefault())
+	}
+	_, err = ParseManifest(fixtureJSON(t, func(v map[string]any) {
+		v["opens"] = []any{map[string]any{"media_type": "a/b", "extensions": []any{"x"}, "default": "no"}}
+	}))
+	if !errors.Is(err, ErrInvalidManifest) {
+		t.Fatalf("string default: err = %v, want ErrInvalidManifest", err)
+	}
+}

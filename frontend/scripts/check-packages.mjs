@@ -138,7 +138,10 @@ function checkManifest(manifest, dirName, where) {
   if (!Array.isArray(manifest.opens)) fail(where, 'opens must be an array');
   else {
     manifest.opens.forEach((o, i) => {
-      if (!strictKeys(o, `${where} opens[${i}]`, ['media_type', 'extensions'])) return;
+      // default: false offers the package under Open with only; the extension
+      // keeps its default opener, so it may be one another app routes.
+      if (!strictKeys(o, `${where} opens[${i}]`, ['media_type', 'extensions'], ['default'])) return;
+      if (o.default !== undefined && typeof o.default !== 'boolean') fail(`${where} opens[${i}]`, 'default must be a boolean');
       if (!str(o.media_type)) fail(`${where} opens[${i}]`, 'media_type must be a non-empty string');
       if (!Array.isArray(o.extensions) || o.extensions.length === 0 || o.extensions.some((e) => typeof e !== 'string' || !EXT_RE.test(e))) {
         fail(`${where} opens[${i}]`, 'extensions must be a non-empty array of lowercase extensions without a dot');
@@ -215,11 +218,19 @@ function main() {
     const aliases = Array.isArray(manifest?.app?.aliases) ? manifest.app.aliases.filter((a) => typeof a === 'string') : [];
     if (new Set([name, ...aliases]).size !== aliases.length + 1) fail(where, 'name and aliases must be distinct');
     for (const id of new Set([name, ...aliases])) claim(id, name, where);
+    const ownExts = new Set();
     for (const o of Array.isArray(manifest?.opens) ? manifest.opens : []) {
       for (const e of Array.isArray(o?.extensions) ? o.extensions : []) {
+        if (o?.default === false) {
+          // Open with only: no clash with other apps, but not twice in one package.
+          if (ownExts.has(e)) fail(where, `extension "${e}" is listed twice`);
+          ownExts.add(e);
+          continue;
+        }
+        if (ownExts.has(e)) fail(where, `extension "${e}" is listed twice`);
+        ownExts.add(e);
         if (staticExts.has(e)) fail(where, `extension "${e}" is still routed by the static MEDIA_FILE_ROUTES (delete that row in the same change)`);
         else if (claimedExts.has(e) && claimedExts.get(e) !== name) fail(where, `extension "${e}" is already opened by package "${claimedExts.get(e)}"`);
-        else if (claimedExts.get(e) === name) fail(where, `extension "${e}" is listed twice`);
         claimedExts.set(e, claimedExts.get(e) || name);
       }
     }
