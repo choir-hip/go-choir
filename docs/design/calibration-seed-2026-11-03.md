@@ -101,7 +101,13 @@ whose model or prompt is changing for another reason.
 4. **Then the pull arm** (REPL-only), as a second experiment on the same
    desk after the first reads out, or as a third arm only if the sample
    allows it. Record whether and when the desk reads it.
-5. **Engineering last.** Its claims need defining first: what an
+5. **Engineering last.** It already stages rule-settled precommits
+   (`tests_pass`, `freeze_within`, `paths_confined`, `verify_pass`,
+   `completes`, `visual_captured`; `internal/agentcore/engineering_precommit_rules.go`),
+   settled by the runtime at Freeze and Verify, but they are optional, the
+   Cast carries no acceptance criteria, `RulePrecommitSayDo` has no caller,
+   and nothing past Freeze (the judge, owner approval, apply) scores against
+   them. Its claims need widening first: what an
    engineering run predicts (that verify passes, that the judge accepts,
    that the owner approves, rounds to approval) and how each settles. That
    is the PSA work in S6; the self-development arms supply the records.
