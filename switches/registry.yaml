@@ -734,34 +734,6 @@
    "note": "Its own nix expiry is 2026-11-03T00:00:00Z."
   },
   {
-   "id": "proxy_expand_requesters",
-   "kind": "host_selector",
-   "life": "release",
-   "owner": "front",
-   "class": "orange",
-   "surface": "proxy",
-   "introduced": "2026-10-28",
-   "nix": [
-    "PROXY_EXPAND_REQUESTERS"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "nix_value": "",
-   "promote": [
-    {
-     "metric": "private_door_requests_ok",
-     "bound": "== all"
-    }
-   ],
-   "retire": "add the owner id (ON NOW) or delete the key and the private door (a feature removal and test rewrite; lane/delete-dead refused it)",
-   "grandfathered_off_until": "2026-11-04",
-   "note": "The 10-26 audit item 49: NOT deleted."
-  },
-  {
    "id": "proxy_expand_public",
    "kind": "host_env",
    "life": "release",
@@ -1314,36 +1286,7 @@
    ],
    "retire": "delete the observe mode",
    "ready_to_retire": true,
-   "note": "Rollback coupling to gatewayModelScheduler (nix comment)."
-  },
-  {
-   "id": "gateway_model_scheduler",
-   "kind": "let_binding",
-   "life": "release",
-   "owner": "gateway",
-   "class": "red",
-   "surface": "gateway",
-   "introduced": "2026-10-28",
-   "nix": [
-    "gatewayModelScheduler"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "nix_value": "off",
-   "promote": [
-    {
-     "metric": "second_computer_latency_during_burst",
-     "bound": "~ one call"
-    }
-   ],
-   "retire": "delete the let-binding; the fair queue is the code default",
-   "probe": "proof 9 (40 concurrent calls from one test computer)",
-   "grandfathered_off_until": "2026-11-04",
-   "note": "Built (ec25d61ff, 72caf899d); proof 9 never run. Flip as its own deploy."
+   "note": "The model scheduler is deleted (2026-11-03); rollback is raising GATEWAY_BODY_LIMITS model=."
   },
   {
    "id": "choir_document_tool_sandbox",

@@ -44,9 +44,6 @@ type gatewayHealthResponse struct {
 	// AnthropicRelay is "off" (no key), "dark" (a key, but no identity or no
 	// open window) or "on". It names neither the key nor an identity.
 	AnthropicRelay string `json:"anthropic_relay,omitempty"`
-	// ModelScheduler is the RES-11 model-call scheduler: its mode, the calls
-	// in flight and queued, and what it has granted, refused and cancelled.
-	ModelScheduler *gatewaySchedulerHealth `json:"model_scheduler,omitempty"`
 	// SyntheticGate is the Synthetic concurrency gate: its limit, calls in
 	// flight, and what has waited, timed out or been cancelled.
 	SyntheticGate *provider.SyntheticGateStats `json:"synthetic_gate,omitempty"`
@@ -174,10 +171,6 @@ type Handler struct {
 	// anthropicRelay serves /provider/anthropic/* (SEC-08, Option K); nil
 	// means every relay call is answered 503.
 	anthropicRelay *AnthropicRelay
-	// modelScheduler, when set, replaces the fixed-window limiter for model
-	// calls (inference and OpenAI-compatible chat) with a fair queue
-	// (model_scheduler.go, RES-11).
-	modelScheduler *ModelScheduler
 	// bodyCaps bounds every request body the gateway decodes
 	// (body_caps.go, B7); nil means the code defaults, enforced.
 	bodyCaps *bodyCaps
@@ -277,7 +270,6 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.BearerBinding = h.bindingHealth()
 	resp.Credentials = h.credentialHealth()
 	resp.AnthropicRelay = h.anthropicRelay.status()
-	resp.ModelScheduler = h.schedulerHealth()
 	resp.BodyCaps = h.bodyCapsHealth()
 	if st, ok := provider.SyntheticGateStatus(); ok {
 		resp.SyntheticGate = &st
@@ -406,10 +398,8 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005). With the
-	// model scheduler on, model calls are scheduled fairly at step 5 instead
-	// (RES-11): no fixed window, bounded concurrency, queue and wait.
-	if h.rateLimiter != nil && !h.schedulerOn() {
+	// Step 2: Enforce per-autoputer rate limiting (VAL-GATEWAY-005).
+	if h.rateLimiter != nil {
 		if !h.rateLimiter.Record(computerID) {
 			_, _, resetIn := h.rateLimiter.Status(computerID)
 			retrySeconds := int(resetIn.Seconds())
@@ -426,14 +416,8 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// RES-11: take a slot for the whole call, a stream included, before the
-	// body is read, so a queued call holds no body (B7). The release runs
-	// on every exit, a panic too.
-	release, r, ok := h.scheduleModelCall(w, r, computerID, false)
-	if !ok {
-		return
-	}
-	defer release()
+	// Name the computer as the call's image decode caller (bunch 116, F2).
+	r = withModelDecodeCaller(r, computerID)
 
 	// Step 3: Decode the request, under the model body cap (B7).
 	var req ProviderRequest

@@ -217,13 +217,11 @@ type Handler struct {
 	routeCacheMu  sync.Mutex
 	routeCache    map[string]routeCacheEntry
 
-	// Story expansion requests (platform_expand.go): dark unless
-	// expandRequesters holds a user id and expandOff is false.
-	expandRequesters map[string]bool
-	expandOff        bool
-	expandPublic     bool
-	expandMu         sync.Mutex
-	expand           *expandLedger
+	// Story expansion requests (platform_expand.go): open to every signed-in
+	// user; expandPublic also opens the door to readers with no session.
+	expandPublic bool
+	expandMu     sync.Mutex
+	expand       *expandLedger
 }
 
 // Context keys used to carry the resolved upstream URL and its invalidator
@@ -458,8 +456,6 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		authStore:                  authStore,
 		platformSignerDigest:       platformSignerDigest,
 		ownerActSigner:             ownerActSigner,
-		expandRequesters:           expandRequesterSet(cfg.ExpandRequesters),
-		expandOff:                  cfg.ExpandOff,
 		expandPublic:               cfg.ExpandPublic,
 	}
 	if authStore != nil {

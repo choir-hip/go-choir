@@ -4,9 +4,9 @@
  * docs/reports/story-expansion-request-design-2026-10-20.md). It needs:
  *
  *   CHOIR_DEPLOYED_BASE_URL     default https://choir.news
- *   EXPAND_ALLOWED_STATE        Playwright storage state of an account whose
- *                               user id is in PROXY_EXPAND_REQUESTERS (the
- *                               owner, or an expansion-QA account beside it)
+ *   EXPAND_ALLOWED_STATE        Playwright storage state of an any signed-in
+ *                               account (every signed-in user may ask, owner
+ *                               2026-11-03)
  *   EXPAND_ORDINARY_STATE       storage state of an ordinary QA account
  *   EXPAND_API_KEY              optional: an API key of the allowlisted
  *                               account (the refusal check is skipped
@@ -134,9 +134,8 @@ test('anonymous callers and ordinary accounts are refused (F3)', async () => {
   const oread = await ordinary.get(readPath(route));
   expect(oread.status()).toBe(200);
   if (PUBLIC_ON) return; // a signed-in ordinary account is a public reader now
-  expect((await oread.json()).allowed).toBe(false);
-  expect((await ordinary.post('/api/platform/publications/expand', { data: { route } })).status(), 'ordinary POST').toBe(403);
-  record.refusals = { anonymous_post: 401, ordinary_post: 403 };
+  expect((await oread.json()).allowed).toBe(true); // any signed-in account may ask
+  record.refusals = { anonymous_post: 401 };
 });
 
 test('an API key on the allowlisted account is refused; a non-story route is a 404 (F3, F9)', async () => {

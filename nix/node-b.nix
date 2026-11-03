@@ -505,14 +505,6 @@ let
   # enforce flip"). Rollback: "observe" and redeploy. An unset or unknown
   # value enforces in code.
   gatewayBearerBindingMode = "enforce";
-  # RES-11 gateway model-call scheduler (internal/gateway/model_scheduler.go;
-  # docs/problems/gateway-model-calls-have-no-scheduler-2026-10-21.md): "on"
-  # replaces the per-computer 60/minute window for inference and chat calls
-  # with a fair queue (24 in flight, 6 per computer, 256 queued, 120 s wait,
-  # then 429 with Retry-After). "off" is the old behavior. Flip as its own
-  # deploy after the staging proof; /health model_scheduler shows the queue.
-  # Rollback: "off" and redeploy.
-  gatewayModelScheduler = "off";
   # B7 gateway request body caps (internal/gateway/body_caps.go;
   # docs/problems/gateway-request-bodies-unbounded-2026-10-22.md). Every
   # route's body is capped and refused 413 unread past its cap. This mode
@@ -526,13 +518,12 @@ let
   # body_caps.would_refuse.model stays 0 and max_seen stays under the
   # limit. An unset or unknown value enforces in code. In every mode the
   # bytes of all bodies held at once are bounded (limits.in_flight, 1 GiB,
-  # whatever the scheduler's mode), one computer holds at most a quarter of
+  # always), one computer holds at most a quarter of
   # them (limits.per_caller, 256 MiB, or its one first body), a body waits
   # at most 60 s for room and then has 60 s to arrive
   # (GATEWAY_BODY_READ_TIMEOUT). Limits: GATEWAY_BODY_LIMITS, e.g.
-  # "model=256MiB,in_flight=2GiB". Rollback: "observe" only while
-  # gatewayModelScheduler is "off" or with in_flight unchanged; otherwise
-  # raise GATEWAY_BODY_LIMITS model= in enforce.
+  # "model=256MiB,in_flight=2GiB". Rollback: raise GATEWAY_BODY_LIMITS
+  # model= in enforce.
   # enforce from 2026-10-24 (owner: switch on what is proved, aggressively;
   # observe since D12 showed would_refuse {} and max_seen.model 163 KB
   # against a 160 MiB cap, read 20:4x).
@@ -939,17 +930,14 @@ in
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
         # Story expansion requests (docs/reports/story-expansion-request-
-        # design-2026-10-20.md, phase 1). Comma-separated user ids allowed to
-        # ask a story to be expanded; empty means off (the routes are dark and
-        # the page shows no button). Not a secret. To turn on, set the owner's
-        # user id here and deploy. Kill switch: PROXY_EXPAND=off.
-        "PROXY_EXPAND_REQUESTERS="
+        # design-2026-10-20.md): every signed-in user may ask a story to be
+        # expanded (owner, 2026-11-03; the requester allowlist and the
+        # PROXY_EXPAND kill switch are deleted).
         # Public door (owner 2026-10-20, owner notes section 32): readers who
         # are not logged in may ask an Autopaper story to be expanded. They
         # are limited to 3 an hour and 10 a UTC day per address (counted in
         # proxy memory, reset by a restart) on top of the global 3 in flight
-        # and 12 a day. Turn off with "off" or by removing the line;
-        # PROXY_EXPAND=off still wins over everything.
+        # and 12 a day. Turn off with "off" or by removing the line.
         "PROXY_EXPAND_PUBLIC=on"
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).
         # Authenticated computer surface is selected after vmctl resolve.
@@ -2511,7 +2499,7 @@ in
       # about 5.80 GiB: 0.2 GiB under GOMEMLIMIT 6GiB and 2.20 GiB under
       # MemoryMax (systemd reads 8G as 8 GiB).
       # Four decode slots left no room for the output (6.38 GiB). Without
-      # the decode bound, 24 calls (scheduler on) or 60 (off) decoding at once were
+      # the decode bound, 60 calls decoding at once were
       # 7 to 18 GB. MemoryMax without MemoryHigh, as the squash unit: throttling
       # would stall every tenant's calls; GOMEMLIMIT (below) makes the Go
       # collector work harder before the kill. Tighten after /health and
@@ -2582,7 +2570,6 @@ in
         # authentication lapses during normal multi-hour sessions.
         "GATEWAY_AUTOPUTER_TOKEN_TTL=720h"
         "GATEWAY_BEARER_BINDING=${gatewayBearerBindingMode}"
-        "GATEWAY_MODEL_SCHEDULER=${gatewayModelScheduler}"
         "GATEWAY_BODY_CAPS=${gatewayBodyCaps}"
         # Under MemoryMax 8G (above): the collector runs harder past 6 GiB.
         "GOMEMLIMIT=6GiB"
