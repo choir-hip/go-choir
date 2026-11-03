@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -807,5 +808,85 @@ func TestAnthropicRelayRefusalWritesNoIdentityState(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A computer that reboots takes a new guest address, and vmctl moves the pin
+// to it (credentials/ensure with peer_ip) only after the boot returns. A guest
+// that resumes work at boot can read its grant before that
+// (docs/problems/claude-delegate-grant-read-races-host-address-attestation-2026-11-03.md).
+// Failure modes: (a) the pin does not follow the host's attestation, so the
+// rebooted computer stays refused; (b) the old address, or one the host never
+// attested, is still served; (c) the refusal before the attestation reads as a
+// rate limit, so the guest reports "status 429" and management concludes the
+// delegate cannot work; (d) a refused call moves the pin itself.
+func TestAnthropicRelayPinFollowsTheHostAttestationAcrossARestart(t *testing.T) {
+	const peerC = "10.200.2.2"
+	body := relayMessageBody(relayTestModel)
+	rh := newRelayHarness(t) // pinned at peerA by the host's ensure
+	if w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerA, nil); w.Code != http.StatusOK {
+		t.Fatalf("before the restart, from %s: %d %s", peerA, w.Code, w.Body.String())
+	}
+
+	// The VM restarts at peerB; its first grant read beats the host's ensure.
+	w := rh.do(http.MethodGet, "/provider/anthropic/grant", "", peerB, nil)
+	if w.Code != http.StatusConflict || w.Header().Get("Retry-After") == "" {
+		t.Fatalf("a grant read from an address the host has not attested yet: %d %s", w.Code, w.Body.String())
+	}
+	var refusal struct {
+		Error struct{ Type, Message string } `json:"error"`
+	}
+	// The literal is the guest's contract (internal/capsule,
+	// claudeDelegateAddressNotAttested); renaming it on one side alone would
+	// bring the cancelled rounds back.
+	if err := json.Unmarshal(w.Body.Bytes(), &refusal); err != nil || refusal.Error.Type != "address_not_attested" {
+		t.Fatalf("the refusal does not say the address is not attested: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), peerA) || strings.Contains(w.Body.String(), peerB) {
+		t.Fatalf("the refusal names an address: %s", w.Body.String())
+	}
+	if pin := relayPinOf(t, rh.reg, relayTestVM); pin != peerA {
+		t.Fatalf("a refused grant read moved the pin to %q", pin)
+	}
+
+	// The host attests the new address.
+	if _, err := rh.reg.EnsureCredentialForPeer(rh.bearer, peerB); err != nil {
+		t.Fatal(err)
+	}
+	if w := rh.do(http.MethodGet, "/provider/anthropic/grant", "", peerB, nil); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"available":true`) {
+		t.Fatalf("the grant read after the host's ensure, from %s: %d %s", peerB, w.Code, w.Body.String())
+	}
+	if w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerB, nil); w.Code != http.StatusOK {
+		t.Fatalf("a relay call after the host's ensure, from %s: %d %s", peerB, w.Code, w.Body.String())
+	}
+	before := len(rh.requests())
+	for _, peer := range []string{peerA, peerC} {
+		// Relay calls keep the 429 Claude Code's client retries.
+		if w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peer, nil); w.Code != http.StatusTooManyRequests {
+			t.Fatalf("a relay call from %s after the move: %d", peer, w.Code)
+		}
+		if w := rh.do(http.MethodGet, "/provider/anthropic/grant", "", peer, nil); w.Code != http.StatusConflict {
+			t.Fatalf("a grant read from %s after the move: %d", peer, w.Code)
+		}
+	}
+	if n := len(rh.requests()) - before; n != 0 {
+		t.Fatalf("calls from the old or an unattested address reached the upstream %d times", n)
+	}
+	if pin := relayPinOf(t, rh.reg, relayTestVM); pin != peerB {
+		t.Fatalf("the pin is %q after refused calls, want %s", pin, peerB)
+	}
+
+	// Another VM's bearer is refused from the rebooted computer's address.
+	other, err := rh.reg.IssueCredentialForComputer("vm-relay-other", relayTestIdentity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rh.reg.EnsureCredentialForPeer(other.RawToken, peerC); err != nil {
+		t.Fatal(err)
+	}
+	if w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerB, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+other.RawToken)
+	}); w.Code < 400 {
+		t.Fatalf("another VM's bearer from %s: %d", peerB, w.Code)
 	}
 }

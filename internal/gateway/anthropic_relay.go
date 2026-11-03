@@ -458,6 +458,29 @@ func (h *Handler) relayPeerCheck(computerID string, r *http.Request) error {
 	return errPeerPinMismatch
 }
 
+// relayAddressNotAttested is the grant read's error type for a bearer whose
+// pin does not name the caller's address (or names none yet). A rebooted
+// computer takes a new guest address, and vmctl moves the pin to it
+// (credentials/ensure with peer_ip) only after the boot returns, so a guest
+// that resumes work at boot can read its grant first
+// (docs/problems/claude-delegate-grant-read-races-host-address-attestation-2026-11-03.md).
+const relayAddressNotAttested = "address_not_attested"
+
+// relayGrantPeerFailure answers a grant read whose pin check failed. An
+// address the host has not attested gets its own status (409) and type, so
+// the guest can tell it from a rate limit or a missing grant and wait it out;
+// a copied bearer gets the same answer, which names no address. Any other
+// failure is relayAuthFailure's answer.
+func relayGrantPeerFailure(w http.ResponseWriter, err error) {
+	if errors.Is(err, errPeerPinMismatch) || errors.Is(err, errPeerUnpinned) {
+		w.Header().Set("Retry-After", bindingRetryAfter)
+		relayError(w, http.StatusConflict, relayAddressNotAttested,
+			"the host has not attested this computer's current address to the gateway yet (a restarted computer gets a new address, attested within seconds); retry shortly")
+		return
+	}
+	relayAuthFailure(w, err)
+}
+
 func relayError(w http.ResponseWriter, status int, errType, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -959,7 +982,7 @@ func (h *Handler) handleAnthropicRelayGrant(w http.ResponseWriter, r *http.Reque
 	// The pin is checked whatever the answer, so a copied bearer learns
 	// nothing about the grant.
 	if err := h.relayPeerCheck(vmID, r); err != nil {
-		relayAuthFailure(w, err)
+		relayGrantPeerFailure(w, err)
 		return
 	}
 	relay := h.anthropicRelay

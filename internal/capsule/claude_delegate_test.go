@@ -222,3 +222,108 @@ func TestClaudeCapsuleSize(t *testing.T) {
 		t.Fatalf("4 GiB guest: memory %d cpu %d", m, c)
 	}
 }
+
+// A computer that rebooted onto a new address reads its grant before the host
+// has re-attested the address to the gateway, which answers 409
+// address_not_attested with a Retry-After
+// (docs/problems/claude-delegate-grant-read-races-host-address-attestation-2026-11-03.md).
+// Failure modes: (a) the guest gives up on the first refusal, so a round that
+// spawns in the boot's first second is cancelled; (b) it waits without bound;
+// (c) the reason reads as a rate limit ("status 429") instead of naming the
+// address pin and the options; (d) a transient refusal is cached for the full
+// TTL, so the next spawn within 30 s is refused too.
+func TestClaudeDelegateGrantWaitsOutTheHostAttestation(t *testing.T) {
+	const bearer = "gateway-bearer-FAKE-0123456789"
+	var refusals atomic.Int32 // how many more reads are refused
+	var calls atomic.Int32
+	var retryAfter atomic.Value
+	retryAfter.Store("2")
+	var refusalType atomic.Value
+	refusalType.Store("address_not_attested")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if refusals.Add(-1) >= 0 {
+			w.Header().Set("Retry-After", retryAfter.Load().(string))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"type":"error","error":{"type":"`+refusalType.Load().(string)+`","message":"retry shortly"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"available":true,"expires_at":"2026-11-17T00:00:00Z","model":"claude-sonnet-5-5"}`)
+	}))
+	t.Cleanup(srv.Close)
+	binary := fakeClaudeBinary(t)
+	now := time.Date(2026, 11, 3, 22, 5, 52, 0, time.UTC)
+	var slept time.Duration
+	newGW := func() *ClaudeDelegateGateway {
+		return &ClaudeDelegateGateway{
+			URL: srv.URL, Token: func() string { return bearer }, Binary: binary,
+			Now:   func() time.Time { return now },
+			Sleep: func(d time.Duration) { slept += d; now = now.Add(d) },
+		}
+	}
+
+	// Refused twice, then the host's ensure lands: available, after waiting.
+	refusals.Store(2)
+	calls.Store(0)
+	slept = 0
+	if st := newGW().Status(); !st.Available {
+		t.Fatalf("the grant read gave up before the host attested the address: %+v", st)
+	}
+	if calls.Load() != 3 || slept <= 0 {
+		t.Fatalf("calls=%d slept=%s, want 3 calls and a wait", calls.Load(), slept)
+	}
+
+	// Never attested: unavailable within the bound, in plain words.
+	refusals.Store(1 << 20)
+	slept = 0
+	gw := newGW()
+	st := gw.Status()
+	if st.Available {
+		t.Fatal("an address never attested reads available")
+	}
+	if slept > claudeDelegateAttestWait+3*time.Second {
+		t.Fatalf("waited %s for the attestation, bound is %s", slept, claudeDelegateAttestWait)
+	}
+	for _, want := range []string{"address", "restart", "re-run without the delegate"} {
+		if !strings.Contains(st.Reason, want) {
+			t.Fatalf("reason %q does not say %q", st.Reason, want)
+		}
+	}
+	for _, not := range []string{"429", "409", "rate"} {
+		if strings.Contains(st.Reason, not) {
+			t.Fatalf("reason %q says %q", st.Reason, not)
+		}
+	}
+	// A Retry-After out of range is clamped, not turned into a 1 s poll, and
+	// a clock that does not advance still ends the wait.
+	refusals.Store(1 << 20)
+	slept = 0
+	calls.Store(0)
+	retryAfter.Store("600")
+	frozen := newGW()
+	frozen.Sleep = func(d time.Duration) {
+		if d != 5*time.Second {
+			t.Errorf("waited %s for Retry-After 600, want the 5s clamp", d)
+		}
+		slept += d
+	}
+	if st := frozen.Status(); st.Available || calls.Load() > int32(claudeDelegateAttestWait/time.Second)+1 {
+		t.Fatalf("under a frozen clock: available=%v after %d reads", st.Available, calls.Load())
+	}
+	retryAfter.Store("2")
+	// A 409 of another type is not waited out.
+	refusalType.Store("something_else")
+	calls.Store(0)
+	if st := newGW().Status(); st.Available || calls.Load() != 1 || !strings.Contains(st.Reason, "status 409") {
+		t.Fatalf("a 409 of another type: %+v after %d reads", st, calls.Load())
+	}
+	refusalType.Store("address_not_attested")
+	// The transient refusal is not held for the full TTL: once the address is
+	// attested, a read shortly after sees it.
+	refusals.Store(0)
+	now = now.Add(claudeDelegateGrantRetryTTL)
+	if st := gw.Status(); !st.Available {
+		t.Fatalf("a transient refusal was cached past %s: %+v", claudeDelegateGrantRetryTTL, st)
+	}
+}

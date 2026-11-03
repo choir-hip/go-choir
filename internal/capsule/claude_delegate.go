@@ -45,7 +45,24 @@ const (
 	claudeDelegateGrantTTL     = 30 * time.Second
 	claudeDelegateGrantTimeout = 3 * time.Second
 	claudeDelegateGrantMax     = 64 << 10
+	// claudeDelegateAttestWait bounds how long one grant read waits out an
+	// address the host has not attested yet (the gateway's 409
+	// address_not_attested). vmctl attests a rebooted computer's new address
+	// right after the boot returns, within a second or two on staging
+	// (docs/problems/claude-delegate-grant-read-races-host-address-attestation-2026-11-03.md).
+	claudeDelegateAttestWait = 12 * time.Second
+	// claudeDelegateGrantRetryTTL is how long a read that ended on that
+	// transient refusal is cached, instead of claudeDelegateGrantTTL.
+	claudeDelegateGrantRetryTTL = 2 * time.Second
+	// claudeDelegateAddressNotAttested is the gateway's error type for it
+	// (internal/gateway, relayAddressNotAttested).
+	claudeDelegateAddressNotAttested = "address_not_attested"
 )
+
+// claudeDelegateNotAttestedReason is the status reason when the wait runs
+// out. It reaches management through the cancelled spawn, so it says what
+// happened and what to do in plain words.
+const claudeDelegateNotAttestedReason = "the gateway refused this computer's current network address: it still holds the address pin from before this computer restarted, and the host had not re-attested the new address after waiting. This is usually transient (the host re-attests a restarted computer within seconds), not a limit of claude-mode capsules on this computer; retry the round with the delegate, or re-run without the delegate"
 
 // ClaudeDelegateStatus is the delegate's availability on this computer, for
 // the runtime, the prompt and /api/runtime/observability. Never a secret.
@@ -66,7 +83,8 @@ type ClaudeDelegateStatus struct {
 var ErrClaudeDelegateUnavailable = errors.New("claude delegate unavailable")
 
 // ClaudeDelegateGateway reads this computer's delegate grant from the
-// gateway. Its own lock serializes the reads; it never takes the executor's.
+// gateway. Its own lock serializes the reads, and is held while a read waits
+// out an unattested address; it never takes the executor's.
 type ClaudeDelegateGateway struct {
 	// URL is the gateway's base URL (RUNTIME_GATEWAY_URL); Token is this
 	// computer's gateway bearer; Binary is the claude binary in the image.
@@ -75,10 +93,14 @@ type ClaudeDelegateGateway struct {
 	Binary string
 	Client *http.Client
 	Now    func() time.Time
+	// Sleep waits between grant reads while the gateway answers that the
+	// address is not attested yet; nil is time.Sleep.
+	Sleep func(time.Duration)
 
 	mu       sync.Mutex
 	cached   ClaudeDelegateStatus
 	cachedAt time.Time
+	cacheTTL time.Duration
 }
 
 // relayGrantReply is the gateway's grant read (internal/gateway,
@@ -94,7 +116,11 @@ type relayGrantReply struct {
 
 // Status is the delegate's availability now. A read that fails for any
 // reason says unavailable, with the reason; it is cached for
-// claudeDelegateGrantTTL either way.
+// claudeDelegateGrantTTL either way, except a read that ended on an address
+// the host has not attested yet, which is cached for
+// claudeDelegateGrantRetryTTL. The lock is held across that read's waits (at
+// most claudeDelegateAttestWait plus one read), so concurrent callers share
+// one wait instead of each starting their own.
 func (g *ClaudeDelegateGateway) Status() ClaudeDelegateStatus {
 	if g == nil {
 		return ClaudeDelegateStatus{Reason: "this computer has no gateway for the Claude delegate"}
@@ -105,40 +131,70 @@ func (g *ClaudeDelegateGateway) Status() ClaudeDelegateStatus {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if !g.cachedAt.IsZero() && now().Sub(g.cachedAt) < claudeDelegateGrantTTL {
+	if !g.cachedAt.IsZero() && now().Sub(g.cachedAt) < g.cacheTTL {
 		return g.cached
 	}
-	g.cached, g.cachedAt = g.read(), now()
+	status, transient := g.readWaitingForAttestation(now)
+	g.cached, g.cachedAt, g.cacheTTL = status, now(), claudeDelegateGrantTTL
+	if transient {
+		g.cacheTTL = claudeDelegateGrantRetryTTL
+	}
 	return g.cached
 }
 
-func (g *ClaudeDelegateGateway) read() ClaudeDelegateStatus {
+// readWaitingForAttestation reads the grant, and while the gateway answers
+// that this computer's address is not attested yet, waits its Retry-After
+// and reads again, for at most claudeDelegateAttestWait. transient reports a
+// read that ended on that refusal.
+func (g *ClaudeDelegateGateway) readWaitingForAttestation(now func() time.Time) (ClaudeDelegateStatus, bool) {
+	sleep := time.Sleep
+	if g.Sleep != nil {
+		sleep = g.Sleep
+	}
+	deadline := now().Add(claudeDelegateAttestWait)
+	// The attempts are bounded too, so the loop ends even under a clock that
+	// does not advance; each wait is at least a second.
+	for attempt := 0; ; attempt++ {
+		status, retryAfter, notAttested := g.read()
+		if !notAttested {
+			return status, false
+		}
+		if attempt >= int(claudeDelegateAttestWait/time.Second) || !now().Add(retryAfter).Before(deadline) {
+			return ClaudeDelegateStatus{Reason: claudeDelegateNotAttestedReason}, true
+		}
+		sleep(retryAfter)
+	}
+}
+
+// read is one grant read. notAttested reports the gateway's 409
+// address_not_attested, with the wait it asked for.
+func (g *ClaudeDelegateGateway) read() (ClaudeDelegateStatus, time.Duration, bool) {
 	binary := strings.TrimSpace(g.Binary)
 	if binary == "" {
-		return ClaudeDelegateStatus{Reason: "the guest image names no claude binary"}
+		return ClaudeDelegateStatus{Reason: "the guest image names no claude binary"}, 0, false
 	}
 	if info, err := os.Stat(binary); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
-		return ClaudeDelegateStatus{Reason: "the claude binary is missing from the guest image"}
+		return ClaudeDelegateStatus{Reason: "the claude binary is missing from the guest image"}, 0, false
 	}
 	base := strings.TrimRight(strings.TrimSpace(g.URL), "/")
 	if base == "" {
-		return ClaudeDelegateStatus{Reason: "this computer has no gateway URL"}
+		return ClaudeDelegateStatus{Reason: "this computer has no gateway URL"}, 0, false
 	}
 	if _, ok := GatewayRouteAddr(base); !ok {
-		return ClaudeDelegateStatus{Reason: "the gateway URL is not a literal address the capsule route can use"}
+		return ClaudeDelegateStatus{Reason: "the gateway URL is not a literal address the capsule route can use"}, 0, false
 	}
 	token := ""
 	if g.Token != nil {
 		token = strings.TrimSpace(g.Token())
 	}
 	if token == "" {
-		return ClaudeDelegateStatus{Reason: "this computer has no gateway credential"}
+		return ClaudeDelegateStatus{Reason: "this computer has no gateway credential"}, 0, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), claudeDelegateGrantTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+claudeDelegateGrantPath, nil)
 	if err != nil {
-		return ClaudeDelegateStatus{Reason: "the grant read could not be built"}
+		return ClaudeDelegateStatus{Reason: "the grant read could not be built"}, 0, false
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	client := g.Client
@@ -147,15 +203,29 @@ func (g *ClaudeDelegateGateway) read() ClaudeDelegateStatus {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ClaudeDelegateStatus{Reason: "the gateway did not answer the grant read"}
+		return ClaudeDelegateStatus{Reason: "the gateway did not answer the grant read"}, 0, false
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		var refusal struct {
+			Error struct {
+				Type string `json:"type"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, claudeDelegateGrantMax)).Decode(&refusal) == nil && refusal.Error.Type == claudeDelegateAddressNotAttested {
+			wait := time.Second
+			if secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil {
+				wait = time.Duration(min(max(secs, 1), 5)) * time.Second
+			}
+			return ClaudeDelegateStatus{Reason: claudeDelegateNotAttestedReason}, wait, true
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
-		return ClaudeDelegateStatus{Reason: fmt.Sprintf("the gateway refused the grant read (status %d)", resp.StatusCode)}
+		return ClaudeDelegateStatus{Reason: fmt.Sprintf("the gateway refused the grant read (status %d)", resp.StatusCode)}, 0, false
 	}
 	var grant relayGrantReply
 	if err := json.NewDecoder(io.LimitReader(resp.Body, claudeDelegateGrantMax)).Decode(&grant); err != nil {
-		return ClaudeDelegateStatus{Reason: "the gateway's grant read is malformed"}
+		return ClaudeDelegateStatus{Reason: "the gateway's grant read is malformed"}, 0, false
 	}
 	status := ClaudeDelegateStatus{ExpiresAt: grant.ExpiresAt, Model: grant.Model, DailyTokenCap: grant.DailyTokenCap, DailyTokensUsed: grant.DailyTokensUsed}
 	if status.Model == "" {
@@ -163,11 +233,11 @@ func (g *ClaudeDelegateGateway) read() ClaudeDelegateStatus {
 	}
 	if !grant.Available {
 		status.Reason = "the gateway withheld the delegate: " + strings.TrimSpace(grant.Reason)
-		return status
+		return status, 0, false
 	}
 	status.Available = true
 	status.Reason = "available through the gateway until " + grant.ExpiresAt
-	return status
+	return status, 0, false
 }
 
 // GatewayRouteAddr is the gateway's address for a capsule route: the
