@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -509,10 +510,10 @@ func ensureTextureManifest(ctx context.Context, st *store.Store, ownerID string,
 
 	filesRoot := provideriface.ResolveFilesRoot("")
 	absPath := filepath.Join(filesRoot, filepath.FromSlash(sourcePath))
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+	if err := ownerfiles.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return "", fmt.Errorf("create manifest directory: %w", err)
 	}
-	if err := os.WriteFile(absPath, content, 0o644); err != nil {
+	if err := ownerfiles.WriteFile(absPath, content, 0o644); err != nil {
 		return "", fmt.Errorf("write manifest file: %w", err)
 	}
 	if err := st.UpsertDocumentAlias(ctx, ownerID, sourcePath, doc.DocID, time.Now().UTC()); err != nil {

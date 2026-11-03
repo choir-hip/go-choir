@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
@@ -598,14 +599,14 @@ func ensureDefaultPolicyFile(path string, cfg provideriface.Config) error {
 			return nil
 		}
 		// An older platform default (it named retired models): replace it.
-		return os.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
+		return ownerfiles.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := ownerfiles.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
+	return ownerfiles.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
 }
 
 func parsePolicy(raw, source string) (Policy, error) {

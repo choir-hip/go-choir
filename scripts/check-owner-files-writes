@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Files-root write gate (docs/design/capsule-overlay-computer-state-2026-11-03.md,
+# slice S1). Every write under the computer's files root goes through
+# internal/ownerfiles: it replaces a file by rename (so a hardlink snapshot keeps
+# the old bytes) and holds the files lock (so the engineering capsule's
+# snapshot is one instant). This gate refuses raw write calls in the packages
+# that hold the files root. A file there that never touches the files root is
+# allowlisted by name with its reason, so a new file is gated by default.
+# Tests are exempt.
+#
+# Usage: scripts/check-owner-files-writes [ROOT]   (ROOT defaults to the repo)
+set -euo pipefail
+
+ROOT="${1:-$(git rev-parse --show-toplevel)}"
+cd "$ROOT"
+
+GATED_DIRS=(internal/autoputer internal/textureowner internal/modelpolicy)
+GATED_FILES=(internal/agentcore/selfdev_screens.go)
+
+# file:reason. Each names a file in a gated package whose writes are not under
+# the files root.
+ALLOW=(
+  "internal/autoputer/capsule_executor_linux.go:capsule state and artifact dirs under /mnt/persistent, not the files root"
+  "internal/autoputer/diag_drill.go:the drill scratch dir /mnt/persistent/.diag-drill, not the files root"
+  "internal/autoputer/projection_base.go:state.db and snapshot staging, not the files root"
+  "internal/autoputer/run.go:the store dir and the consumed credential envelope, not the files root"
+)
+
+PATTERN='\bos\.(WriteFile|Create|CreateTemp|OpenFile|Rename|Remove|RemoveAll|Mkdir|MkdirAll|MkdirTemp|Truncate|Chmod|Chown|Lchown|Link|Symlink|Chtimes)\(|\bioutil\.(WriteFile|TempFile|TempDir)\(|\bunix\.(Rename|Renameat|Renameat2|Unlink|Unlinkat|Link|Linkat|Symlink|Symlinkat|Mkdir|Mkdirat|Open|Openat|Openat2|Creat|Mknod|Mknodat|Mkfifo|Mkfifoat|Truncate|Chmod|Fchmodat|Chown|Fchownat|Utimes|UtimesNano|UtimesNanoAt)\(|\bsyscall\.(Rename|Renameat|Unlink|Unlinkat|Link|Symlink|Mkdir|Mkdirat|Open|Openat|Creat|Mknod|Mkfifo|Truncate|Chmod|Chown)\('
+
+allowed() {
+  local f="$1" entry
+  for entry in "${ALLOW[@]}"; do
+    [[ "${entry%%:*}" == "$f" ]] && return 0
+  done
+  return 1
+}
+
+FILES=()
+for d in "${GATED_DIRS[@]}"; do
+  [[ -d "$d" ]] || continue
+  while IFS= read -r f; do FILES+=("$f"); done < <(find "$d" -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' | sort)
+done
+for f in "${GATED_FILES[@]}"; do [[ -f "$f" ]] && FILES+=("$f"); done
+
+FAIL=0
+for f in "${FILES[@]}"; do
+  allowed "$f" && continue
+  hits="$(grep -nE "$PATTERN" "$f" | grep -vE '^[0-9]+:\s*//' || true)"
+  if [[ -n "$hits" ]]; then
+    while IFS= read -r h; do
+      echo "check-owner-files-writes: $f:$h: raw write in a files-root package; use internal/ownerfiles (or allowlist the file with a reason if it never writes the files root)" >&2
+    done <<<"$hits"
+    FAIL=1
+  fi
+done
+for entry in "${ALLOW[@]}"; do
+  f="${entry%%:*}"
+  [[ -f "$f" ]] || { echo "check-owner-files-writes: allowlisted $f does not exist; drop the entry" >&2; FAIL=1; }
+done
+if [[ "$FAIL" -ne 0 ]]; then
+  exit 1
+fi
+echo "check-owner-files-writes: ok (${#FILES[@]} files)"

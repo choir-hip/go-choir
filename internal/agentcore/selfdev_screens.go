@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/imageblob"
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -119,23 +120,9 @@ func saveFrozenScreen(images screenAssetStore, filesRoot, frozenRoot, operationI
 			}
 		}
 	}
-	tmp, err := os.CreateTemp(target, ".screen-*")
-	if err != nil {
-		return err
-	}
-	_, werr := tmp.Write(data)
-	serr := tmp.Sync()
-	cerr := tmp.Close()
-	if err := errors.Join(werr, serr, cerr, os.Chmod(tmp.Name(), 0o644)); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	// rename replaces a symlink at final rather than following it.
-	if err := os.Rename(tmp.Name(), final); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	return syncDir(target)
+	// The files write helper renames into place, so a symlink at final is
+	// replaced rather than followed.
+	return ownerfiles.WriteFile(final, data, 0o644)
 }
 
 // mkdirBeneath creates rel (slash separated, already validated plain names)
@@ -156,7 +143,7 @@ func mkdirBeneath(root, rel string) (string, error) {
 				return "", fmt.Errorf("%s is not a plain directory", cur)
 			}
 		case errors.Is(err, os.ErrNotExist):
-			if err := os.Mkdir(cur, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+			if err := ownerfiles.Mkdir(cur, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 				return "", err
 			}
 			if info, err := os.Lstat(cur); err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
@@ -167,15 +154,6 @@ func mkdirBeneath(root, rel string) (string, error) {
 		}
 	}
 	return cur, nil
-}
-
-// syncDir fsyncs a directory so a rename in it survives a hard kill.
-func syncDir(dir string) error {
-	f, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	return errors.Join(f.Sync(), f.Close())
 }
 
 // resaveReplayedScreens re-saves a frozen bundle's screens at a replayed

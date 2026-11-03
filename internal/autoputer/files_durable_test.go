@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 )
 
 // A file saved through PUT /api/files is acknowledged only once its bytes and
@@ -34,9 +36,9 @@ func TestFilePutIsDurableBeforeItIsAcknowledged(t *testing.T) {
 	}
 
 	var synced []string
-	restore := filesDurableSync
-	t.Cleanup(func() { filesDurableSync = restore })
-	filesDurableSync = func(f *os.File) error {
+	restore := ownerfiles.Sync
+	t.Cleanup(func() { ownerfiles.Sync = restore })
+	ownerfiles.Sync = func(f *os.File) error {
 		info, err := f.Stat()
 		if err != nil {
 			return err
@@ -64,7 +66,7 @@ func TestFilePutIsDurableBeforeItIsAcknowledged(t *testing.T) {
 		t.Fatalf("mode = %v, want the existing 0600", info.Mode().Perm())
 	}
 
-	filesDurableSync = func(*os.File) error { return errors.New("disk said no") }
+	ownerfiles.Sync = func(*os.File) error { return errors.New("disk said no") }
 	w = httptest.NewRecorder()
 	fh.HandleFileByPath(w, authBodyRequest(http.MethodPut, "/api/files/documents/note.txt", strings.NewReader("lost")))
 	if w.Code == http.StatusOK {
@@ -100,9 +102,9 @@ func TestFileTreeChangesAreDurableBeforeTheyAreAcknowledged(t *testing.T) {
 		t.Fatal(err)
 	}
 	var synced []string
-	restore := filesDurableSync
-	t.Cleanup(func() { filesDurableSync = restore })
-	filesDurableSync = func(f *os.File) error { synced = append(synced, f.Name()); return nil }
+	restore := ownerfiles.Sync
+	t.Cleanup(func() { ownerfiles.Sync = restore })
+	ownerfiles.Sync = func(f *os.File) error { synced = append(synced, f.Name()); return nil }
 	contains := func(dir string) bool {
 		for _, s := range synced {
 			if s == dir {
@@ -141,10 +143,40 @@ func TestFileTreeChangesAreDurableBeforeTheyAreAcknowledged(t *testing.T) {
 		t.Fatalf("delete synced %v, not the parent %s", synced, b)
 	}
 
-	filesDurableSync = func(*os.File) error { return errors.New("disk said no") }
+	ownerfiles.Sync = func(*os.File) error { return errors.New("disk said no") }
 	w = httptest.NewRecorder()
 	fh.HandleFileByPath(w, authRequest(http.MethodDelete, "/api/files/a/new-folder"))
 	if w.Code == http.StatusOK || w.Code == http.StatusNoContent {
 		t.Fatal("a delete whose fsync failed was acknowledged")
+	}
+}
+
+// The capsule overlay's files snapshot hardlinks the files root, so a save
+// must replace the file by rename and never write the linked inode
+// (docs/design/capsule-overlay-computer-state-2026-11-03.md, S1).
+func TestPutReplacesByRenameSoASnapshotLinkKeepsTheOldBytes(t *testing.T) {
+	fh, root := setupFileTest(t)
+	dir := filepath.Join(root, "documents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(target, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "snapshot-link")
+	if err := os.Link(target, link); err != nil {
+		t.Skipf("hardlink unsupported: %v", err)
+	}
+	w := httptest.NewRecorder()
+	fh.HandleFileByPath(w, authBodyRequest(http.MethodPut, "/api/files/documents/note.txt", strings.NewReader("new")))
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT = %d %s", w.Code, w.Body)
+	}
+	if got, _ := os.ReadFile(link); string(got) != "old" {
+		t.Fatalf("the snapshot link saw the save: %q", got)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "new" {
+		t.Fatalf("target = %q", got)
 	}
 }

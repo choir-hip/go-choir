@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 )
 
 // Maildir provides a crash-safe, standard Unix Maildir mailbox stored inside
@@ -28,7 +30,7 @@ func NewMaildir(mailRoot string) (*Maildir, error) {
 	mailRoot = filepath.Clean(mailRoot)
 	for _, sub := range []string{"cur", "new", "tmp"} {
 		dir := filepath.Join(mailRoot, sub)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if err := ownerfiles.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("maildir: create %s dir: %w", sub, err)
 		}
 	}
@@ -49,6 +51,9 @@ func (m *Maildir) DeliverMessage(ctx context.Context, messageID string, rawEML [
 	if m == nil {
 		return "", fmt.Errorf("maildir: uninitialized")
 	}
+	// Lock order: the files lock, then the maildir's own mutex.
+	tx := ownerfiles.Begin()
+	defer tx.End()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -69,14 +74,14 @@ func (m *Maildir) DeliverMessage(ctx context.Context, messageID string, rawEML [
 	tmpPath := filepath.Join(tmpDir, baseName)
 	newPath := filepath.Join(newDir, baseName)
 
-	file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := tx.CreateExcl(tmpPath, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("maildir: create tmp message: %w", err)
 	}
 	defer func() {
 		if file != nil {
 			_ = file.Close()
-			_ = os.Remove(tmpPath)
+			_ = tx.Remove(tmpPath)
 		}
 	}()
 
@@ -91,16 +96,13 @@ func (m *Maildir) DeliverMessage(ctx context.Context, messageID string, rawEML [
 	}
 	file = nil
 
-	if err := os.Rename(tmpPath, newPath); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := tx.Rename(tmpPath, newPath); err != nil {
+		_ = tx.Remove(tmpPath)
 		return "", fmt.Errorf("maildir: install message to new: %w", err)
 	}
 
 	// Fsync new/ directory
-	if dir, err := os.Open(newDir); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
+	_ = tx.SyncDirs(newDir)
 
 	return filepath.Base(newPath), nil
 }

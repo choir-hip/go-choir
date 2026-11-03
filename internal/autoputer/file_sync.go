@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/filecas"
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 )
 
 const (
@@ -95,24 +96,13 @@ func freshVolumeMarkerPath(filesRoot string) string {
 // recorded root) removes it.
 func MarkFreshVolume(filesRoot string) error {
 	path := freshVolumeMarkerPath(filesRoot)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := ownerfiles.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("file sync: fresh-volume marker directory: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
+	if err := ownerfiles.WriteFile(path, []byte("fresh volume: hydrate the latest root before publishing\n"), 0o600); err != nil {
 		return fmt.Errorf("file sync: write fresh-volume marker: %w", err)
 	}
-	_, err = file.WriteString("fresh volume: hydrate the latest root before publishing\n")
-	if err == nil {
-		err = file.Sync()
-	}
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return fmt.Errorf("file sync: write fresh-volume marker: %w", err)
-	}
-	return syncDir(filepath.Dir(path))
+	return nil
 }
 
 func freshVolumeMarked(filesRoot string) bool {
@@ -123,7 +113,7 @@ func freshVolumeMarked(filesRoot string) bool {
 // clearFreshVolumeMarker runs only after the hydrated tree is installed.
 func clearFreshVolumeMarker(filesRoot string) error {
 	path := freshVolumeMarkerPath(filesRoot)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := ownerfiles.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("file sync: clear fresh-volume marker: %w", err)
 	}
 	return syncDir(filepath.Dir(path))
@@ -288,12 +278,12 @@ func (s *fileSync) hydrateIfNeeded(ctx context.Context) (int, error) {
 	defer clearBytes(dek)
 
 	stagingDir := filepath.Clean(s.filesRoot) + ".hydrate-staging"
-	_ = os.RemoveAll(stagingDir)
-	if err := os.MkdirAll(stagingDir, 0o700); err != nil {
+	_ = ownerfiles.RemoveAll(stagingDir)
+	if err := ownerfiles.MkdirAll(stagingDir, 0o700); err != nil {
 		return 0, fmt.Errorf("file sync: create staging directory: %w", err)
 	}
 	defer func() {
-		_ = os.RemoveAll(stagingDir)
+		_ = ownerfiles.RemoveAll(stagingDir)
 	}()
 
 	restored := 0
@@ -428,65 +418,45 @@ func safeHydrationPath(path string) (string, error) {
 	return clean, nil
 }
 
-func (s *fileSync) hydrateFile(ctx context.Context, dek []byte, targetRoot, rel string, entry filecas.FileEntry) (err error) {
+func (s *fileSync) hydrateFile(ctx context.Context, dek []byte, targetRoot, rel string, entry filecas.FileEntry) error {
 	parent, err := ensureHydrationParent(targetRoot, filepath.Dir(rel))
 	if err != nil {
 		return fmt.Errorf("file sync: create parent for %s: %w", entry.Path, err)
 	}
-	file, err := os.CreateTemp(parent, ".choir-hydrate-*")
-	if err != nil {
-		return fmt.Errorf("file sync: create %s: %w", entry.Path, err)
-	}
-	temp := file.Name()
-	defer func() {
-		if err != nil {
-			_ = file.Close()
-			_ = os.Remove(temp)
+	// The write lands in the staging tree, outside the files root; the root
+	// swap is the one step the files root sees.
+	return ownerfiles.WriteFrom(filepath.Join(parent, filepath.Base(rel)), fs.FileMode(entry.Mode).Perm(), func(file io.Writer) error {
+		var written int64
+		for _, digest := range entry.Chunks {
+			sealed, err := s.get(ctx, "/internal/computers/files/chunks/"+digest+"?computer_id="+url.QueryEscape(s.computerID))
+			if err != nil {
+				return fmt.Errorf("file sync: fetch chunk %s for %s: %w", digest, entry.Path, err)
+			}
+			if len(sealed) == 0 {
+				return fmt.Errorf("file sync: empty chunk %s for %s", digest, entry.Path)
+			}
+			plain, err := filecas.OpenChunk(dek, s.computerID, digest, sealed)
+			if err != nil {
+				return fmt.Errorf("file sync: open chunk %s for %s: %w", digest, entry.Path, err)
+			}
+			n, err := file.Write(plain)
+			written += int64(n)
+			if err != nil {
+				return fmt.Errorf("file sync: write %s: %w", entry.Path, err)
+			}
+			if n != len(plain) {
+				return fmt.Errorf("file sync: short write %s", entry.Path)
+			}
 		}
-	}()
-
-	var written int64
-	for _, digest := range entry.Chunks {
-		sealed, err := s.get(ctx, "/internal/computers/files/chunks/"+digest+"?computer_id="+url.QueryEscape(s.computerID))
-		if err != nil {
-			return fmt.Errorf("file sync: fetch chunk %s for %s: %w", digest, entry.Path, err)
+		if written != entry.Size {
+			return fmt.Errorf("file sync: size mismatch for %s: got %d, want %d", entry.Path, written, entry.Size)
 		}
-		if len(sealed) == 0 {
-			return fmt.Errorf("file sync: empty chunk %s for %s", digest, entry.Path)
-		}
-		plain, err := filecas.OpenChunk(dek, s.computerID, digest, sealed)
-		if err != nil {
-			return fmt.Errorf("file sync: open chunk %s for %s: %w", digest, entry.Path, err)
-		}
-		n, err := file.Write(plain)
-		written += int64(n)
-		if err != nil {
-			return fmt.Errorf("file sync: write %s: %w", entry.Path, err)
-		}
-		if n != len(plain) {
-			return fmt.Errorf("file sync: short write %s", entry.Path)
-		}
-	}
-	if written != entry.Size {
-		return fmt.Errorf("file sync: size mismatch for %s: got %d, want %d", entry.Path, written, entry.Size)
-	}
-	if err := file.Chmod(fs.FileMode(entry.Mode).Perm()); err != nil {
-		return fmt.Errorf("file sync: chmod %s: %w", entry.Path, err)
-	}
-	if err := file.Sync(); err != nil {
-		return fmt.Errorf("file sync: sync %s: %w", entry.Path, err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("file sync: close %s: %w", entry.Path, err)
-	}
-	if err := os.Rename(temp, filepath.Join(parent, filepath.Base(rel))); err != nil {
-		return fmt.Errorf("file sync: install %s: %w", entry.Path, err)
-	}
-	return nil
+		return nil
+	})
 }
 
 func ensureHydrationParent(root, relativeParent string) (string, error) {
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	if err := ownerfiles.MkdirAll(root, 0o700); err != nil {
 		return "", err
 	}
 	info, err := os.Lstat(root)
@@ -504,7 +474,7 @@ func ensureHydrationParent(root, relativeParent string) (string, error) {
 		parent = filepath.Join(parent, component)
 		info, err := os.Lstat(parent)
 		if os.IsNotExist(err) {
-			if err := os.Mkdir(parent, 0o700); err != nil {
+			if err := ownerfiles.Mkdir(parent, 0o700); err != nil {
 				return "", err
 			}
 			continue
@@ -520,38 +490,36 @@ func ensureHydrationParent(root, relativeParent string) (string, error) {
 }
 func swapHydrationTree(stagingDir, targetRoot string) error {
 	parent := filepath.Dir(targetRoot)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
+	if err := ownerfiles.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
 
 	backupDir := filepath.Clean(targetRoot) + ".old"
-	_ = os.RemoveAll(backupDir)
+	_ = ownerfiles.RemoveAll(backupDir)
 
+	// The two renames are the one step the files root sees: one read side of
+	// the files lock covers both, so a snapshot sees the old tree or the new.
+	tx := ownerfiles.Begin()
 	if _, err := os.Stat(targetRoot); err == nil {
-		if err := os.Rename(targetRoot, backupDir); err != nil {
+		if err := tx.Rename(targetRoot, backupDir); err != nil {
+			tx.End()
 			return fmt.Errorf("backup existing empty root: %w", err)
 		}
 	}
-
-	if err := os.Rename(stagingDir, targetRoot); err != nil {
+	if err := tx.Rename(stagingDir, targetRoot); err != nil {
 		// Roll back backup if rename fails
 		if _, statErr := os.Stat(backupDir); statErr == nil {
-			_ = os.Rename(backupDir, targetRoot)
+			_ = tx.Rename(backupDir, targetRoot)
 		}
+		tx.End()
 		return fmt.Errorf("install staged root: %w", err)
 	}
-	_ = os.RemoveAll(backupDir)
-
-	// Fsync targetRoot directory
-	if dir, err := os.Open(targetRoot); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
-	// Fsync parent directory
-	if dir, err := os.Open(parent); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
+	_ = tx.SyncDirs(targetRoot, parent)
+	tx.End()
+	// Outside the lock (the backup is beside the root, not in it), then the
+	// parent again, so a kill after the swap cannot bring the old tree back.
+	_ = ownerfiles.RemoveAll(backupDir)
+	_ = ownerfiles.SyncDirs(parent)
 	return nil
 }
 

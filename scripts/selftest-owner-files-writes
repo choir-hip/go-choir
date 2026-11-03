@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-owner-files-writes: a clean copy of the gated
+# packages passes, and each planted raw write (in a gated package file, a new
+# file, and the screens file) fails. Touches nothing in this tree.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(git -C "$HERE" rev-parse --show-toplevel)"
+CHECK="$HERE/check-owner-files-writes"
+T="$(mktemp -d)"
+trap 'rm -rf "$T"' EXIT
+fresh() {
+  rm -rf "$T/tree"; mkdir -p "$T/tree/internal/agentcore"
+  for d in internal/autoputer internal/textureowner internal/modelpolicy; do
+    mkdir -p "$T/tree/$d"; cp "$REPO/$d"/*.go "$T/tree/$d/"
+  done
+  cp "$REPO/internal/agentcore/selfdev_screens.go" "$T/tree/internal/agentcore/"
+}
+expect() {
+  local want="$1" name="$2" got=0
+  "$CHECK" "$T/tree" >"$T/out" 2>&1 || got=1
+  if [[ "$got" != "$want" ]]; then echo "selftest-owner-files-writes: FAIL $name (exit $got, want $want)"; cat "$T/out"; exit 1; fi
+  echo "selftest-owner-files-writes: ok $name"
+}
+fresh; expect 0 "clean tree passes"
+fresh; printf '\nfunc planted() { _ = os.WriteFile("x", nil, 0o644) }\n' >>"$T/tree/internal/autoputer/files.go"; expect 1 "os.WriteFile in files.go"
+fresh; printf 'package autoputer\n\nimport "os"\n\nfunc planted() { _ = os.Rename("a", "b") }\n' >"$T/tree/internal/autoputer/new_writer.go"; expect 1 "os.Rename in a new file"
+fresh; printf '\nfunc planted() { _ = unix.Renameat2(0, "a", 0, "b", 0) }\n' >>"$T/tree/internal/textureowner/texture_import.go"; expect 1 "unix.Renameat2 in textureowner"
+fresh; printf '\nfunc planted() { _ = os.Chmod("x", 0o600) }\n' >>"$T/tree/internal/agentcore/selfdev_screens.go"; expect 1 "os.Chmod in the screens writer"
+fresh; printf '\nfunc planted() { _ = os.Truncate("x", 0) }\n' >>"$T/tree/internal/modelpolicy/model_policy.go"; expect 1 "os.Truncate in modelpolicy"
+fresh; printf '\nfunc planted() { _, _ = ioutil.TempFile("d", "x") }\n' >>"$T/tree/internal/autoputer/maildir.go"; expect 1 "ioutil.TempFile in maildir.go"
+fresh; printf 'package autoputer_test\n\nimport "os"\n\nfunc planted() { _ = os.WriteFile("x", nil, 0) }\n' >"$T/tree/internal/autoputer/planted_test.go"; expect 0 "tests are exempt"
+echo "selftest-owner-files-writes: all checks passed"

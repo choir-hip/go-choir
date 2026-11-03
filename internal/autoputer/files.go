@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -82,7 +83,7 @@ func NewFilesHandler(rootDir string) *FilesHandler {
 func NewFilesHandlerWithObserver(rootDir string, observer FileChangeObserver) *FilesHandler {
 	rootDir = provideriface.ResolveFilesRoot(rootDir)
 	// Ensure root directory exists.
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+	if err := ownerfiles.MkdirAll(rootDir, 0o755); err != nil {
 		log.Printf("files: could not create root directory %s: %v", rootDir, err)
 	}
 	return &FilesHandler{rootDir: rootDir, observer: observer}
@@ -370,11 +371,11 @@ func (fh *FilesHandler) handleCreateDirectory(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := os.Mkdir(absPath, 0o755); err != nil {
+	if err := ownerfiles.Mkdir(absPath, 0o755); err != nil {
 		writeFileError(w, http.StatusInternalServerError, "failed to create directory")
 		return
 	}
-	if err := syncOwnerDirs(parentDir); err != nil {
+	if err := ownerfiles.SyncDirs(parentDir); err != nil {
 		writeFileError(w, http.StatusInternalServerError, "directory created but not yet durable")
 		return
 	}
@@ -437,7 +438,7 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		}
 	}
 
-	if err := writeOwnerFileDurable(absPath, body, mode); err != nil {
+	if err := ownerfiles.WriteFile(absPath, body, mode); err != nil {
 		if os.IsPermission(err) {
 			writeFileError(w, http.StatusForbidden, "access denied")
 			return
@@ -462,55 +463,6 @@ func (fh *FilesHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request,
 		"status":  "updated",
 		"message": "file saved",
 	})
-}
-
-// filesDurableSync fsyncs one open file or directory; tests replace it to see
-// what reached the disk before a save is acknowledged.
-var filesDurableSync = func(f *os.File) error { return f.Sync() }
-
-// writeOwnerFileDurable replaces path with data through a temporary file in
-// the same directory: write, chmod, fsync, rename, fsync the directory. A kill
-// leaves the old file or the new one, never an empty one (the C0 kill -9 drill,
-// 2026-10-30, found acknowledged saves read back empty).
-func writeOwnerFileDurable(path string, data []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-")
-	if err != nil {
-		return err
-	}
-	_, writeErr := tmp.Write(data)
-	chmodErr := tmp.Chmod(mode)
-	syncErr := filesDurableSync(tmp)
-	closeErr := tmp.Close()
-	if err := errors.Join(writeErr, chmodErr, syncErr, closeErr); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	return syncOwnerDirs(dir)
-}
-
-// syncOwnerDirs fsyncs each distinct directory, so a created, removed or
-// renamed entry in it survives a kill.
-func syncOwnerDirs(dirs ...string) error {
-	seen := make(map[string]bool, len(dirs))
-	for _, dir := range dirs {
-		if seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		d, err := os.Open(dir)
-		if err != nil {
-			return err
-		}
-		if err := errors.Join(filesDurableSync(d), d.Close()); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // handleDelete removes a file or directory at the given path.
@@ -542,17 +494,17 @@ func (fh *FilesHandler) handleDelete(w http.ResponseWriter, r *http.Request, abs
 			writeFileError(w, http.StatusConflict, "directory not empty")
 			return
 		}
-		if err := os.Remove(absPath); err != nil {
+		if err := ownerfiles.Remove(absPath); err != nil {
 			writeFileError(w, http.StatusInternalServerError, "failed to delete directory")
 			return
 		}
 	} else {
-		if err := os.Remove(absPath); err != nil {
+		if err := ownerfiles.Remove(absPath); err != nil {
 			writeFileError(w, http.StatusInternalServerError, "failed to delete file")
 			return
 		}
 	}
-	if err := syncOwnerDirs(filepath.Dir(absPath)); err != nil {
+	if err := ownerfiles.SyncDirs(filepath.Dir(absPath)); err != nil {
 		writeFileError(w, http.StatusInternalServerError, "deleted but not yet durable")
 		return
 	}
@@ -623,7 +575,7 @@ func (fh *FilesHandler) handleMove(w http.ResponseWriter, r *http.Request, absPa
 	// The existence check above is only a fast refusal. The move itself never
 	// replaces a destination: one created in the gap (a concurrent PUT or move)
 	// is refused, not destroyed.
-	if err := renameNoReplace(absPath, destPath); err != nil {
+	if err := ownerfiles.RenameNoReplace(absPath, destPath); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			writeFileError(w, http.StatusConflict, "destination exists")
 			return
@@ -631,7 +583,7 @@ func (fh *FilesHandler) handleMove(w http.ResponseWriter, r *http.Request, absPa
 		writeFileError(w, http.StatusInternalServerError, "failed to move file")
 		return
 	}
-	if err := syncOwnerDirs(filepath.Dir(absPath), filepath.Dir(destPath)); err != nil {
+	if err := ownerfiles.SyncDirs(filepath.Dir(absPath), filepath.Dir(destPath)); err != nil {
 		writeFileError(w, http.StatusInternalServerError, "moved but not yet durable")
 		return
 	}

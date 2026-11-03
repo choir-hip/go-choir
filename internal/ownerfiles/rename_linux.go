@@ -1,6 +1,6 @@
 //go:build linux
 
-package autoputer
+package ownerfiles
 
 import (
 	"errors"
