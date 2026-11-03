@@ -449,3 +449,21 @@ request". The ledger shows otherwise. At 17:42:03Z it logged work_refused: "trig
 trigger; re-checked 12 times over 32s with no progress". No management run was created after 17:41Z. So the turn's
 claimed effects (a revision and a Cast) never committed. This relates to problem 17's "without disposing exact
 trigger", but here the result is a terminal refusal, not a livelock.
+
+## Unnumbered (lane C, 19:45Z): an assignment opened just before a planned refresh freezes on the old base, and its apply is refused
+
+Deepseek's Files restore round ran on trajectory 4dd9ea7e. Sequence:
+- 19:19:00Z: the first assignment was cancelled by host memory ("host memory refused the build capsule"). Deepseek was
+  then still booted on 2cd70f60, which predates the problem 24 wait, so this is not a regression.
+- 19:27:40Z: management opened a new assignment.
+- 19:27:57Z: vmctl refreshed deepseek's VM to e4f1c685 with planned_restart=true (retry-sweep, 42 attempts since 14:29:55Z).
+- 19:28:08Z: the assignment bound, after the restart.
+- 19:39:21Z: the build froze as selfdev-3e3c28f2.
+- 19:44:49Z: approved as FP0. The apply was refused: "updater refused apply: updater: base_moved_since_freeze: release
+  base commit 2cd70f6064ee962dd753acc24191e91ad2b735cb does not match booted base commit
+  e4f1c685a3ced870362e633b390e710aa54103ab".
+
+So an assignment opened on the old boot kept its old release base across the planned restart. It built and froze a
+candidate that could never apply, which wasted about 15 minutes of build and the judge's run. Possible fixes: re-base an
+assignment at bind time after a planned restart, or refuse to bind one whose base differs from the booted base, so a
+fresh open picks up the new base. Not yet checked: which component carried the 2cd70f60 base into the capsule.
