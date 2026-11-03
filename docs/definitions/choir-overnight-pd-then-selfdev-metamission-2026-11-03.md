@@ -17,10 +17,17 @@ definition_version: 5
 # walks. Progressive delivery is the settlement mechanism; self-development
 # is where the predictions come from.
 # And: "we can and likely will make changes in the self-dev mission which
-# then use the prog delivery rings." Platform changes that come out of
-# self-development (Sonnet monitors' fixes, promoted candidates) land on
-# main and reach the fleet through the rings like any release; their
-# precommitments are settled by the same ring walk.
+# then use the prog delivery rings." Platform code changes made during the
+# self-development mission (the Sonnet monitors' fixes to Choir) land on
+# main and reach the fleet through the rings. Self-development candidates
+# do not go through git: an arm applies its own candidate, publishes it to
+# the Library, and the platform owner decides what goes on the base image.
+# Owner, 2026-11-03: "self-dev isnt supposed to run through git like this. the
+# library is meant as a library of stuff made from individual computers. and
+# then i, the platform owner, can decide what is on the base image."
+# Overnight (owner): FP0 approves candidates on the four test arms; no
+# spend caps, per-arm spend reported, an arm paused if a round passes $5 or
+# the arm $50; the original Slides XSS waits for Slides-next.
 # Operating tempo (CLAUDE.md): no blocking asks; escalate on dead ends with
 # a shift of approach first; never wait idle on CI or a deploy.
 readiness: executable  # on the owner's word above

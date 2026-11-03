@@ -120,8 +120,9 @@ finish:
     work (frontend build, Playwright) scheduled across the host so many
     capsules run at once. (6) Per app, frontend/src/packages/<app>-next
     feature complete against docs/design/apps-feature-complete-spec-2026-11-03.md,
-    promoted from the winning arm with scripts/selfdev-promote and tier 1
-    review, deployed beside the untouched original. (7) A performance record
+    applied on its arm and published to the Library as a package release
+    from that computer; what reaches the base image is the platform owner's
+    decision (owner 2026-11-03), not a git promotion. (7) A performance record
     per round and per host sample, and the optimizations it found, landed.
     (8) A finding on PSA and precommitment records in self-development, and
     the deeper integration it names, landed where it is safe.
@@ -227,7 +228,7 @@ slices:
   S5: apps - Files (reinvented) and Slides first on all arms, then Calendar and Podcasts; kinds for authored decks and events (lift check-packages "kinds empty in P1" for the slices that need it)
   S6: PSA and precommitment records in self-development - investigate, then deepen (finding in scratchpad psa-precommit-selfdev.md first); the calibration seed (owner 2026-11-03) per docs/design/calibration-seed-2026-11-03.md: prior-run seed removed first, baseline recomputed, then one experiment per desk at a time (management push arm first; engineering claims defined and collecting from the arms now, tested later)
   S6b: superseded 2026-11-03 by choir-progressive-delivery-2026-11-03.md (no switches; ring-ordered deploys)
-  S7: promote winners per app; deployed acceptance; comparison report across arms
+  S7: publish, not promote. An approved candidate is applied on its arm and published to the Library as a package release from that computer; the platform owner decides what goes on the base image (owner 2026-11-03: "self-dev isnt supposed to run through git like this. the library is meant as a library of stuff made from individual computers. and then i, the platform owner, can decide what is on the base image."). No scripts/selfdev-promote to main. The comparison report across the four arms.
 
 now:
   status: working  # resumed 2026-11-03 as station 2 of the overnight metamission; parked branches selfdev-screens-as-files, cli-agent-onboarding unmerged
