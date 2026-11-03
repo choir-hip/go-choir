@@ -126,3 +126,47 @@ func TestRingEnsureResetsBackoffOnRetarget(t *testing.T) {
 		}
 	}
 }
+
+// Self-opened rounds starve the deploy refresh
+// (docs/problems/self-opened-rounds-starve-the-deploy-refresh-2026-11-03.md):
+// a guest that holds new work for the refresh drains within a round, and the
+// drained gap must be seen within a minute. Ways it could fail: (1) the
+// guest's holds_new_work is not read, so a long round's backoff leaves the
+// gap unseen for up to an hour; (2) a guest that stopped holding (its hold
+// spent) is still asked every minute; (3) an older guest without the field
+// loses its backoff.
+func TestDeployRefreshAsksEveryMinuteWhileTheGuestHoldsNewWork(t *testing.T) {
+	h, _, fake := newDeployRefreshFixture(t, "holdingarm")
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "0ld" }
+	fake.outcome = guestMarkBusy
+	post := func(detail string) deployRefreshPendingEntry {
+		t.Helper()
+		fake.detail = detail
+		if _, resp := postDeployRefresh(t, h, `{"user_id":"holdingarm","desktop_id":"primary","target":"rel-1"}`); resp.Outcome != deployRefreshDeferred {
+			t.Fatalf("setup: %+v, want deferred", resp)
+		}
+		tr := h.deployRefreshState()
+		tr.mu.Lock()
+		for k, e := range tr.pending {
+			e.Attempts = deployRefreshRetryBackoffAfter + 10
+			tr.pending[k] = e
+		}
+		tr.mu.Unlock()
+		return tr.list()[0]
+	}
+	got := post(`{"error":"a live capsule","outcome":"busy","live_capsules":1,"holds_new_work":true}`)
+	if !got.GuestHoldsNewWork {
+		t.Fatalf("holds_new_work was not recorded: %+v", got)
+	}
+	if !deployRefreshRetryDue(got, got.LastAttemptAt.Add(time.Minute)) {
+		t.Fatal("a guest holding new work for the refresh is not asked at the next sweep")
+	}
+	got = post(`{"error":"a live capsule","outcome":"busy","live_capsules":1}`)
+	if got.GuestHoldsNewWork || deployRefreshRetryDue(got, got.LastAttemptAt.Add(time.Minute)) {
+		t.Fatalf("a guest that no longer holds new work kept the one-minute cadence: %+v", got)
+	}
+	got = post(`not json`)
+	if got.GuestHoldsNewWork {
+		t.Fatalf("an unreadable refusal counted as holding: %+v", got)
+	}
+}

@@ -139,6 +139,16 @@ func (m httpGuestMarker) clear(ctx context.Context, own VMOwnership) {
 	_ = resp.Body.Close()
 }
 
+// guestRefusalHoldsNewWork reads holds_new_work from a guest's busy refusal.
+// A refusal that is not JSON, or a guest built before the field, does not
+// hold: the sweep keeps its backoff.
+func guestRefusalHoldsNewWork(detail string) bool {
+	var refusal struct {
+		HoldsNewWork bool `json:"holds_new_work"`
+	}
+	return json.Unmarshal([]byte(detail), &refusal) == nil && refusal.HoldsNewWork
+}
+
 func mustReadLimited(r io.Reader, n int64) []byte {
 	raw, _ := io.ReadAll(io.LimitReader(r, n))
 	return raw
@@ -172,13 +182,17 @@ type deployRefreshResponse struct {
 	PlannedRestart bool   `json:"planned_restart"`
 	// BusyAllowed: vmctl asked the guest with allow_busy (an always-on
 	// platform computer), so running runs did not defer the refresh.
-	BusyAllowed bool   `json:"busy_allowed,omitempty"`
-	VMID        string `json:"vm_id,omitempty"`
-	ComputerID  string `json:"computer_id,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
-	DesktopID   string `json:"desktop_id,omitempty"`
-	ComputerURL string `json:"computer_url,omitempty"`
-	State       string `json:"state,omitempty"`
+	BusyAllowed bool `json:"busy_allowed,omitempty"`
+	// GuestHoldsNewWork: a deferred guest holds new engineering for this
+	// refresh (its refusal's holds_new_work), so the retry sweep keeps a
+	// one-minute cadence for it.
+	GuestHoldsNewWork bool   `json:"guest_holds_new_work,omitempty"`
+	VMID              string `json:"vm_id,omitempty"`
+	ComputerID        string `json:"computer_id,omitempty"`
+	UserID            string `json:"user_id,omitempty"`
+	DesktopID         string `json:"desktop_id,omitempty"`
+	ComputerURL       string `json:"computer_url,omitempty"`
+	State             string `json:"state,omitempty"`
 }
 
 type deployRefreshCandidate struct {
@@ -467,6 +481,7 @@ func (h *Handler) deployRefreshWith(ctx context.Context, req deployRefreshReques
 	case guestMarkWritten:
 		planned = true
 	case guestMarkBusy:
+		base.GuestHoldsNewWork = guestRefusalHoldsNewWork(detail)
 		return reply(deployRefreshDeferred, "busy: "+detail, http.StatusConflict)
 	case guestMarkUnsupported:
 		// Offline maintenance (the store compaction) is never worth a crash

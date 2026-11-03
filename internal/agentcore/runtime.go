@@ -206,6 +206,10 @@ type Runtime struct {
 	// queued request's expiry. Nil is the wall clock; tests set it so expiry
 	// does not depend on how fast the test runs.
 	admissionNow func() time.Time
+	// refreshHold remembers the host's last deploy-refresh request, so
+	// admission holds new engineering until the refresh lands between rounds
+	// (refresh_hold.go).
+	refreshHold refreshHoldState
 
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service

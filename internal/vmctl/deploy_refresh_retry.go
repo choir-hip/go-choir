@@ -65,6 +65,13 @@ type deployRefreshPendingEntry struct {
 	// computer clears both (settle).
 	Kind    string `json:"kind,omitempty"`
 	Release string `json:"release,omitempty"`
+	// GuestHoldsNewWork: the guest's last refusal said it holds new
+	// engineering for this refresh, so it drains within a round; the sweep
+	// asks it every minute instead of backing off, and the drained gap is
+	// seen at once (docs/problems/self-opened-rounds-starve-the-deploy-refresh-2026-11-03.md).
+	// The guest bounds each episode of the hold (a held round starts after
+	// 20 minutes); an old guest omits the field and keeps the backoff.
+	GuestHoldsNewWork bool `json:"guest_holds_new_work,omitempty"`
 }
 
 // A computer still deferred after deployRefreshRetryBackoffAfter attempts
@@ -80,7 +87,7 @@ const (
 
 // deployRefreshRetryDue reports whether the sweep asks entry again at now.
 func deployRefreshRetryDue(e deployRefreshPendingEntry, now time.Time) bool {
-	if e.Attempts < deployRefreshRetryBackoffAfter || e.LastAttemptAt.IsZero() {
+	if e.Attempts < deployRefreshRetryBackoffAfter || e.LastAttemptAt.IsZero() || e.GuestHoldsNewWork {
 		return true
 	}
 	gap := deployRefreshRetryMaxGap
@@ -343,6 +350,7 @@ func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefre
 	entry.Target = req.Target
 	entry.VMID, entry.ComputerID = resp.VMID, resp.ComputerID
 	entry.LastAttemptAt, entry.LastReason, entry.BusyAllowed = now, resp.Reason, resp.BusyAllowed
+	entry.GuestHoldsNewWork = resp.GuestHoldsNewWork
 	entry.Attempts++
 	if entry.Attempts == deployRefreshRetryBackoffAfter {
 		log.Printf("vmctl: deploy refresh of %s to %s still deferred after %d attempts since %s: %q; asking with a growing gap up to %s",

@@ -60,8 +60,10 @@ type engineeringAdmissionBusy struct {
 	// trajectory's newest work has an open self-development operation),
 	// "operation_open" (another self-development operation on the computer
 	// is open, so a Freeze would be refused), "carry_unreadable" (the
-	// carry's history or the operations could not be read) or "host_memory"
-	// (the host refused the build capsule, engineeringWaitHostMemory).
+	// carry's history or the operations could not be read), "host_memory"
+	// (the host refused the build capsule, engineeringWaitHostMemory) or
+	// "refresh_pending" (the host has a deploy refresh waiting,
+	// engineeringWaitRefresh).
 	Why string
 	// OperationID, OperationState and OperationCreatedAt name the blocking
 	// self-development operation when Why is "operation_open"; empty otherwise.
@@ -71,6 +73,9 @@ type engineeringAdmissionBusy struct {
 	// HostMemoryReason is the host's refusal of the build capsule, in full,
 	// when Why is engineeringWaitHostMemory; empty otherwise.
 	HostMemoryReason string
+	// RefreshTarget is the build the request waits to be updated onto when
+	// Why is engineeringWaitRefresh; empty otherwise.
+	RefreshTarget string
 }
 
 // engineeringWaitHostMemory is the Why of a request whose build capsule the
@@ -242,6 +247,20 @@ func (rt *Runtime) admitEngineeringAssignment(ctx context.Context, assignment ty
 			BlockedBy: fmt.Sprintf("self-development operation %s (trajectory %s), still %s, which a Freeze on this computer waits for", open.OperationID, open.TrajectoryID, open.State),
 			Why:       "operation_open", OperationID: open.OperationID, OperationState: open.State, OperationCreatedAt: open.CreatedAt}
 	}
+	// The refresh hold: the host has an update waiting for this computer,
+	// so the request waits for it instead of binding a capsule on the stale
+	// build, and the refresh finds the computer idle between rounds. Bounded
+	// (refresh_hold.go); last, so a live or earlier blocker is named first.
+	// Only an implementation request (a new round) waits: a verification
+	// checks a candidate that is frozen or awaiting its decision, which holds
+	// the refresh anyway (problem 22), so holding it would only delay it.
+	if assignment.Binding.Kind != types.EngineeringAssignmentImplementation {
+		return nil
+	}
+	if target, held := rt.takeRefreshHold(now); held {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID,
+			BlockedBy: "the platform update to " + target + ", which the host is waiting to apply", Why: engineeringWaitRefresh, RefreshTarget: target}
+	}
 	return nil
 }
 
@@ -276,6 +295,11 @@ func (rt *Runtime) deferEngineeringAdmission(ctx context.Context, assignment typ
 		if waited := now.Sub(time.Unix(0, hostMemorySince)); waited >= engineeringHostMemoryMaxWait {
 			return rt.cancelHostMemoryWait(ctx, assignment, busy, waited)
 		}
+	}
+	if busy.Why == engineeringWaitRefresh && busy.RefreshTarget != "" {
+		// The owner sees why the round has not started: "waiting for the
+		// update to <target>". One record per attempt and target.
+		rt.recordEngineeringRefreshWait(ctx, assignment, busy.RefreshTarget)
 	}
 	if retry >= engineeringHoldRecordAfter && busy.Why == "operation_open" && busy.OperationID != "" {
 		// The hold has outlasted a few retries: it is not a passing wait. Put

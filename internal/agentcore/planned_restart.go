@@ -643,6 +643,10 @@ type plannedRestartBusyResponse struct {
 	// hold the refresh until they are decided or age out (problem 22).
 	SelfdevAwaitingDecision int      `json:"selfdev_awaiting_decision,omitempty"`
 	HeldOperations          []string `json:"held_operations,omitempty"`
+	// HoldsNewWork: this guest holds new engineering for the refresh it was
+	// just asked for (refresh_hold.go), so it drains within a round; the host
+	// keeps asking once a minute instead of backing off.
+	HoldsNewWork bool `json:"holds_new_work,omitempty"`
 }
 
 type plannedRestartWrittenResponse struct {
@@ -703,6 +707,9 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 			return
 		}
+		// The host withdrew the refresh: new engineering need not wait for
+		// it. Cleared only once the marker is gone (review 1).
+		h.rt.clearRefreshHold()
 		writeAPIJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 		return
 	}
@@ -731,6 +738,11 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	}
 	defer releaseSlot()
 	allowBusy := plannedRestartAllowBusy(r)
+	// The request is how this guest learns an update is waiting: from now,
+	// new engineering waits for it (refresh_hold.go), whether this request
+	// is refused or the restart follows.
+	askedAt := h.rt.refreshHoldNow()
+	h.rt.noteRefreshAsked(target, askedAt)
 	work, err := h.rt.plannedRestartBusy(r.Context(), true)
 	if err != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: " + err.Error()})
@@ -760,6 +772,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
 			SnapshotInFlight:        work.SnapshotInFlight,
 			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
+			HoldsNewWork: h.rt.refreshHoldsNewWork(askedAt),
 		})
 		return
 	}
