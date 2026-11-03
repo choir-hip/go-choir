@@ -126,23 +126,20 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 7beec5d5b (problem 25 delegate relay by computer id;
-    choir-shot --theme and --contrast). b495fd61a (problem 26: claude-mode
-    capsules get /computer when only the relay secret is present; tier 2
-    accepted) in CI. The delegate works end to end: luna round 10, Sonnet,
-    8.5 min, $0.77, round bind-to-judge 11 min; judged failed on mock
-    content because claude-mode capsules withheld /computer (problem 26).
-    The claude arm's rounds before 17:09Z ran without the delegate.
-    Screenshot failures traced to busy arms running pre-helper choir-shot.
-    Arms: luna round 11 waits for b495fd61a; claude revise-r6 (first real
-    Claude-arm round) running to 18:13Z; deepseek Slides r2 to 18:09Z;
-    pool Slides r2 sent 17:41Z (scope held package-only). Node B 12 GiB
+    staging 70160304a (problems 25 and 26 live and proved; Freeze
+    unknown-path refusals name the paths). First Slides publish: luna
+    slides-next applied 18:24Z and published (release 6a2797e7…), built
+    through the Claude Sonnet delegate on real /computer content. Arms:
+    luna on Calendar round 1 (delegate); claude's management running its
+    own third proof pass to about 18:51Z, then revise-r7; deepseek Slides
+    round 3 (one preset's contrast); pool held after three Slides rounds
+    failed on proof with gpt-6-luna engineering at low. Node B 14 GiB
     available, PSI 0.
   main_uncertainty: >-
-    whether a delegate round on real /computer content passes the judge;
-    why deepseek's Slides r2 waited 27 min to bind (hypothesis: a second
-    build held the computer's one implementation slot)
-  next_observation: luna round 11 receipt computer_state provided, then the judge verdict on real shots
+    the owner's answer on GPT draw (pool engineering and the arms' Texture
+    and management on pool:default resolve to gpt-6-luna); default at
+    19:30Z is pool engineering to medium for one round
+  next_observation: luna Calendar judge verdict; claude r7 on real content; deepseek r3 contrast
   blocker: none
-  next_action: on b495fd61a deploy, send luna round 11 and claude's next round with the /computer check; publish Files from each arm; carry Slides to judged passes
+  next_action: carry rounds to judged passes and publish; apply the pool default at 19:30Z if the owner has not answered
 receipts: []
