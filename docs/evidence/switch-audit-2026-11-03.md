@@ -824,3 +824,11 @@ Each decided switch is deleted; "on" means the code runs everywhere.
 
 **Order (owner):** ring-ordered deploys and automatic rollback first; the
 backlog deletions then ride ring deploys in batches.
+
+## Lane B outcome (2026-11-03, overnight)
+
+- Gateway model scheduler: deleted with its switch and registry row (commit 68a85574d lineage; Devin review: no blocking). The per-computer fixed-window limiter stays.
+- Story expansion: every signed-in browser session may ask; the requester list, the PROXY_EXPAND kill switch and the registry row are deleted. API keys are still refused; the public door (PROXY_EXPAND_PUBLIC) and the per-publication, in-flight, daily and per-address limits stay.
+- Host fetch: the list accepts "*" (hostfetch.Wildcard). On at d@e's VM id (vm-70070cf7337d45f2d46eafc83b9783b9, stable across the restart). Deployed at 0336c8bfe; d@e restarted by its owner API (lifecycle/restart, receipt generation 101), vmctl logged "host fetch route ... granted (vm)". net01 steps 3, 4 (after a tool fix: imports answer 201), 5 and 8 pass: ok hops for en.wikipedia.org, www.youtube.com, itunes.apple.com and both RSS feeds, localtest.me refused by the gateway (forbidden address); the literal-IP URLs are refused earlier by the source-URL validator, so the journal has no gateway "refused" line for them (step 5 reports two failures that are this script expectation, not a defect). Step 7 (no direct egress) NOT run: conntrack is not installed on Node B; needs a tcpdump on the tap. Step 6 (adversarial reads from the research desk) not run. Not yet widened: "*" and deleting the switch wait for steps 6 and 7 and the paper's peak-budget count (step 8 manual).
+- Capsule mirrors: on at d@e (computer id), npm,pypi,crates,git, MIRRORS_ONLY off; pkgmirror active, /healthz lists the four ecosystems, vmctl logged "capsule mirrors ... granted (computer) crates,git,npm,pypi". net02 NOT proved: the probe must run inside an implementation capsule on d@e, which no channel here reaches. Left at d@e only. Node B disk: 148G free of 476G at landing; the 32 GiB combined cache cap fits, no cap change.
+- Reminder: the pkgmirror DNAT to loopback 8089 is unconditional for every guest, so the grant is configuration-level (Devin NIT).

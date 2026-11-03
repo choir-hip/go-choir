@@ -88,11 +88,11 @@ def run_api(args):
         print(f"{'PASS' if ok else 'FAIL'} {name} status={result.get('status')} ms={result.get('ms')}")
 
     r = call(h, key, c, "/api/content/import-url", "POST", {"url": PUBLIC_PAGE})
-    check("import a public page", r, r["status"] == 200)
+    check("import a public page", r, r["status"] in (200, 201))
     r["body"] = summarize(r.get("body"), ["id", "title", "status", "canonical_url"])
 
     r = call(h, key, c, "/api/content/import-url", "POST", {"url": YOUTUBE_URL})
-    check("import a YouTube transcript", r, r["status"] == 200)
+    check("import a YouTube transcript", r, r["status"] in (200, 201))
     r["body"] = summarize(r.get("body"), ["id", "title", "status", "canonical_url"])
 
     r = call(h, key, c, "/api/podcast/search?q=planet+money&limit=3")

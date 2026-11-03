@@ -70,7 +70,7 @@ nf_journal() {
 
 step_1() {
 	nf_target
-	[ "$PROOF_DRY" = 1 ] || info "P=$T_COMPUTER vm=$T_VM; CHOIR_HOST_FETCH_COMPUTERS must be empty for this baseline"
+	[ "$PROOF_DRY" = 1 ] || info "P=$T_COMPUTER vm=$T_VM; CHOIR_HOST_FETCH_VMS must be empty for this baseline"
 	nf_api ungranted
 	manual "the paper's schedules keep polling (the paper liveness probe stays ok)"
 }
@@ -85,10 +85,10 @@ step_2() {
 
 step_3() {
 	nf_target
-	manual "grant: set \"CHOIR_HOST_FETCH_COMPUTERS=$T_COMPUTER\" in nix/node-b.nix, land, deploy, then COLD boot P (stop and start, not a snapshot resume)"
+	manual "grant: set \"CHOIR_HOST_FETCH_VMS=$T_VM (or *)\" in nix/node-b.nix, land, deploy, then COLD boot P (stop and start, not a snapshot resume)"
 	node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "host fetch route for computer $T_COMPUTER" 5
 	if [ "$PROOF_DRY" != 1 ]; then
-		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "host fetch route for computer $T_COMPUTER.*granted \\(computer\\)" 3 | grep -q . && pass "vmctl: host fetch route granted (computer)" || fail "no 'granted (computer)' line for $T_COMPUTER"
+		node_journal "$PROOF_UNIT_VMCTL" "$OPT_since" "host fetch route for computer $T_COMPUTER.*granted \\(vm\\)" 3 | grep -q . && pass "vmctl: host fetch route granted (vm)" || fail "no 'granted (vm)' line for $T_COMPUTER"
 		guest_get /api/runtime/observability | jq -r '.recent_log[]? | select(test("host fetch route"))' | tail -n 3 | while IFS= read -r l; do info "guest log $l"; done
 	fi
 }
