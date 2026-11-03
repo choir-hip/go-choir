@@ -12,6 +12,7 @@
 #   F6 a half-finished state file is resumed (its passkey is gone)
 #   F7 --dry-run touches the network (ssh, playwright)
 #   F8 a removed flag (--scopes) is silently accepted
+#   F9 a made computer is not registered test-tier, or is registered twice
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,6 +28,8 @@ for tool in ssh npx; do
 done
 export PATH="$tmp/bin:$PATH"
 export CHOIR_E2E_STATE_DIR="$tmp/state"
+export CHOIR_TEST_TIER_FILE="$tmp/tiers.json"
+printf '{\n  "schema": "choir.computer_tiers.v1",\n  "paid_accounts": [],\n  "platform_computers": []\n}\n' >"$CHOIR_TEST_TIER_FILE"
 
 fails=0
 pass() { echo "PASS $1"; }
@@ -75,6 +78,11 @@ if grep -q -e "$fake_key" -e "$fake_addr" -e 87654321 -e user-selftest <<<"$out"
 else
   pass "F4 the report prints no key, address or account id"
 fi
+
+# F9: the finished computer is registered test-tier once.
+"$script" --name arm-a >/dev/null 2>&1 || true
+n=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(sum(1 for t in d.get("test_computers",[]) if t["computer_id"]=="computer-0123456789abcdef0123456789abcdef"))' "$CHOIR_TEST_TIER_FILE")
+[[ "$n" == 1 ]] && pass "F9 the computer is registered test-tier once" || fail "F9 test-tier registrations: $n"
 
 # F5: wrong mode.
 write_state arm-b done 644

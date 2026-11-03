@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -28,7 +29,7 @@ type ringReleaseReader interface {
 // ringR0EnrollGrace: the CI deploy refreshes R0 itself right after the link
 // moves; the walk enrolls an R0 computer the deploy did not reach only after
 // this long, so d@e is not refreshed twice for one deploy.
-const ringR0EnrollGrace = 30 * time.Minute
+const ringR0EnrollGrace = 10 * time.Minute
 
 func (h *Handler) ringWalkRunner() *ringWalkRunner {
 	h.deployRefreshMu.Lock()
@@ -117,7 +118,7 @@ func (h *Handler) PrimeRingWalk() {
 // ringObservations reads every interactive computer; with sample, the open
 // ring's members running the target have their /health read.
 func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMemberObs {
-	openRing, to, walking := h.ringWalkRunner().sampleTargets()
+	sampleRing, to, walking := h.ringWalkRunner().sampleTargets()
 	byVM := map[string]GuestReleaseVMStatus{}
 	if reader, ok := h.registry.VMManagerHandle().(guestReleaseReader); ok && reader != nil {
 		_, byVM = reader.GuestReleaseHealth()
@@ -144,7 +145,7 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 		}
 		o.Pending, o.FailedTarget = h.deployRefreshState().pendingAndFailed(own.UserID, own.DesktopID)
 		o.Epoch = own.Epoch
-		if sample && walking && o.Ring == openRing && o.Active && o.Release != "" && o.Release == to.releaseFor(o.Layered) {
+		if sample && walking && sampleRing(o.Ring) && o.Active && o.Release != "" && o.Release == to.releaseFor(o.Layered) {
 			probes = append(probes, len(obs))
 			owners[len(obs)] = *own
 		}
@@ -300,6 +301,45 @@ func (t *deployRefreshTracker) ensure(entry deployRefreshPendingEntry) {
 	}
 	t.pending[key] = entry
 	t.saveLocked()
+}
+
+// HandleRingWalkExpedite serves POST /internal/vmctl/ring-walk/expedite
+// {"reason", "by"}: the owner or operator act (and the CI trailer path) that
+// opens every ring of the walking release at once. Refresh semantics, the
+// guest's refusals and the guards are unchanged.
+func (h *Handler) HandleRingWalkExpedite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req struct {
+		Reason string `json:"reason"`
+		By     string `json:"by"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	req.Reason, req.By = strings.TrimSpace(req.Reason), strings.TrimSpace(req.By)
+	if req.Reason == "" || req.By == "" || len(req.Reason) > 300 || len(req.By) > 120 {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "reason (at most 300 characters) and by (at most 120) are required"})
+		return
+	}
+	if caller := strings.TrimSpace(r.Header.Get("X-Choir-Lifecycle-Caller")); caller != "" && len(caller) <= 80 {
+		req.By += " (caller " + caller + ")"
+	}
+	// The deploy's new release starts its walk here if no tick has yet.
+	h.syncRingWalk()
+	summary, err := h.ringWalkRunner().expedite(time.Now().UTC(), req.Reason, req.By)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, summary)
 }
 
 // HandleRingWalk serves GET /internal/vmctl/ring-walk: the walk's state and

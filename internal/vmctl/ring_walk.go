@@ -84,8 +84,11 @@ type ringSoak struct {
 }
 
 var ringSoaks = map[ringID]ringSoak{
-	ringR0: {30 * time.Minute, 1},
-	ringR1: {2 * time.Hour, 3},
+	// R0 and R1 in minutes (owner, 2026-11-03: "for stuff related to an
+	// optimization loop it's important to speed up the cycle time"); a test
+	// computer gets a platform fix about 25 to 40 minutes after a deploy.
+	ringR0: {10 * time.Minute, 1},
+	ringR1: {15 * time.Minute, 3},
 	ringR2: {4 * time.Hour, 1},
 	ringR3: {4 * time.Hour, 2},
 	ringR4: {2 * time.Hour, 1},
@@ -135,6 +138,8 @@ const (
 	ringEventRolledBack       = "rolled_back"
 	ringEventRollbackComplete = "rollback_complete"
 	ringEventWalkComplete     = "walk_complete"
+	ringEventExpedited        = "expedited"
+	ringEventExpediteRefused  = "expedite_refused"
 
 	ringHistorySchema = "choir.ring_walk_history.v1"
 	ringStateSchema   = 1
@@ -288,6 +293,13 @@ type ringWalk struct {
 	// refresh landed, a hibernated one resumed, a skipped return) is enrolled
 	// again at most every ringReenrollGap, never after a failed return.
 	ReturnEnrolledAt map[string]time.Time `json:"return_enrolled_at,omitempty"`
+	// Expedite (owner, 2026-11-03): every ring opened at once.
+	Expedited      bool      `json:"expedited,omitempty"`
+	ExpediteReason string    `json:"expedite_reason,omitempty"`
+	ExpeditedBy    string    `json:"expedited_by,omitempty"`
+	ExpeditedAt    time.Time `json:"expedited_at,omitempty"`
+	// Reached is when each computer was first seen on the target.
+	Reached map[string]time.Time `json:"reached,omitempty"`
 }
 
 type ringWalkState struct {
@@ -313,6 +325,20 @@ type ringEvent struct {
 	PredictionIDs []string           `json:"prediction_ids,omitempty"`
 	Detail        string             `json:"detail,omitempty"`
 	Actions       []ringActionRecord `json:"actions,omitempty"`
+	// Timing (owner, 2026-11-03: cycle time): from the walk start (the
+	// deploy moving the release) to this ring closing, and to the last of
+	// its members seen on the release.
+	Timing *ringTiming `json:"timing,omitempty"`
+}
+
+// ringTiming is one ring's deploy-to-ring timing, in seconds.
+type ringTiming struct {
+	Ring                    ringID  `json:"ring"`
+	OpenedAfterSeconds      float64 `json:"opened_after_seconds"`
+	ClosedAfterSeconds      float64 `json:"closed_after_seconds,omitempty"`
+	Members                 int     `json:"members"`
+	Reached                 int     `json:"reached"`
+	LastReachedAfterSeconds float64 `json:"last_reached_after_seconds,omitempty"`
 }
 
 type ringEventRelease struct {
@@ -511,6 +537,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	if w == nil {
 		return nil, nil
 	}
+	w.noteReached(now, obs)
 	switch w.Status {
 	case ringWalkRolledBack:
 		return w.stepReturn(now, obs)
@@ -523,6 +550,9 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	if len(obs) == 0 {
 		return nil, nil
 	}
+	if w.Expedited {
+		return s.stepExpedited(now, obs)
+	}
 	var events []ringEvent
 	var actions []ringAction
 	for w.Status == ringWalkWalking {
@@ -530,49 +560,10 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		if p == nil {
 			return events, actions
 		}
-		var members []ringMemberObs
-		for _, o := range obs {
-			if o.Ring == p.Ring {
-				members = append(members, o)
-			}
-		}
-		for _, o := range members {
-			m := p.Members[o.ComputerID]
-			if m == nil {
-				m = &ringMember{ComputerID: o.ComputerID}
-				p.Members[o.ComputerID] = m
-			}
-			m.LastRelease = o.Release
-			onTarget := o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered)
-			// R0 opens with the deploy, and CI refreshes it; the walk enrolls an
-			// R0 computer the deploy did not reach only after the grace.
-			graced := p.Ring == ringR0 && now.Sub(p.OpenedAt) < ringR0EnrollGrace
-			target := w.To.commitFor(o.Layered)
-			if !onTarget {
-				m.LastOffTarget = now
-			}
-			reenroll := m.Enrolled && !o.Pending && o.FailedTarget != target && now.Sub(m.EnrolledAt) >= ringReenrollGap
-			if o.Active && !o.Held && !o.Divergent && (!m.Enrolled || reenroll) && !o.Pending && o.FailedTarget != target && !graced && !onTarget {
-				m.Enrolled, m.EnrolledAt = true, now
-				actions = append(actions, ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: target, Reason: "ring walk " + w.ID + " opened " + string(p.Ring)})
-			}
-			// The proof ring needs d@e seen on the release; d@e is usually
-			// hibernated between uses, so the walk wakes it once (a wake is
-			// what any request does: a snapshot resume or a cold boot onto
-			// the open ring's release, never a restart of running work).
-			if p.Ring == ringR0 && !graced && !o.Active && !o.Held && m.ExposedAt.IsZero() && ringWakeDue(m, now) {
-				m.WakeRequested = true
-				m.WakeAttempts++
-				m.LastWakeAt = now
-				actions = append(actions, ringAction{Kind: ringActionWake, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Reason: "ring walk " + w.ID + ": R0 needs d@e on the release"})
-			}
-			if onTarget && m.FirstOnTarget.IsZero() {
-				m.FirstOnTarget = now
-			}
-			if breach := m.evaluate(now, o, onTarget, p.OpenedAt, p.Ring); breach != nil {
-				events = append(events, w.rollback(now, p, breach, obs, &actions)...)
-				return events, actions
-			}
+		members := ringMembersOf(obs, p.Ring)
+		if breach := w.observeRing(now, p, members, true, &actions); breach != nil {
+			events = append(events, w.rollback(now, p, breach, obs, &actions)...)
+			return events, actions
 		}
 		if len(members) == 0 {
 			if p.Ring == ringR0 {
@@ -599,24 +590,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		// non-divergent member plus any member seen healthy that has since
 		// gone idle. A busy member that has not refreshed yet does not hold
 		// the ring: its pending entry still refreshes it once its ring is open.
-		required, exposed, eligible := 0, 0, 0
-		var missing []string
-		for _, o := range members {
-			m := p.Members[o.ComputerID]
-			isRequired := o.Active && !o.Held && !o.Divergent
-			if isRequired {
-				required++
-			}
-			if !m.ExposedAt.IsZero() {
-				exposed++
-			}
-			if isRequired || !m.ExposedAt.IsZero() {
-				eligible++
-			}
-			if isRequired && m.ExposedAt.IsZero() {
-				missing = append(missing, o.ComputerID)
-			}
-		}
+		required, exposed, eligible, missing := ringExposure(p, members, false)
 		if required == 0 && exposed > 0 {
 			// Every member was seen healthy on the release and has since
 			// gone idle (hibernated): that is exposure.
@@ -643,6 +617,178 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 		}
 	}
 	return events, actions
+}
+
+func ringMembersOf(obs []ringMemberObs, r ringID) []ringMemberObs {
+	var members []ringMemberObs
+	for _, o := range obs {
+		if o.Ring == r {
+			members = append(members, o)
+		}
+	}
+	return members
+}
+
+// ringExposure counts a ring's members: required (active, not held, not
+// divergent; with skipPending, not still pending a refresh either), exposed
+// (seen healthy on the release), eligible (required or exposed), and the
+// required ones not yet exposed.
+func ringExposure(p *ringProgress, members []ringMemberObs, skipPending bool) (required, exposed, eligible int, missing []string) {
+	for _, o := range members {
+		m := p.Members[o.ComputerID]
+		isRequired := o.Active && !o.Held && !o.Divergent && !(skipPending && o.Pending)
+		if isRequired {
+			required++
+		}
+		if m != nil && !m.ExposedAt.IsZero() {
+			exposed++
+		}
+		if isRequired || (m != nil && !m.ExposedAt.IsZero()) {
+			eligible++
+		}
+		if isRequired && (m == nil || m.ExposedAt.IsZero()) {
+			missing = append(missing, o.ComputerID)
+		}
+	}
+	return required, exposed, eligible, missing
+}
+
+// observeRing records one tick of a ring's members: the enrolls, the R0
+// wake, and the guards. A breach is returned. withGrace applies the R0
+// deploy grace (an expedited walk enrolls at once).
+func (w *ringWalk) observeRing(now time.Time, p *ringProgress, members []ringMemberObs, withGrace bool, actions *[]ringAction) *ringBreach {
+	for _, o := range members {
+		m := p.Members[o.ComputerID]
+		if m == nil {
+			m = &ringMember{ComputerID: o.ComputerID}
+			p.Members[o.ComputerID] = m
+		}
+		m.LastRelease = o.Release
+		onTarget := o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered)
+		// R0 opens with the deploy, and CI refreshes it; the walk enrolls an
+		// R0 computer the deploy did not reach only after the grace.
+		graced := withGrace && p.Ring == ringR0 && now.Sub(p.OpenedAt) < ringR0EnrollGrace
+		target := w.To.commitFor(o.Layered)
+		if !onTarget {
+			m.LastOffTarget = now
+		}
+		reenroll := m.Enrolled && !o.Pending && o.FailedTarget != target && now.Sub(m.EnrolledAt) >= ringReenrollGap
+		if o.Active && !o.Held && !o.Divergent && (!m.Enrolled || reenroll) && !o.Pending && o.FailedTarget != target && !graced && !onTarget {
+			m.Enrolled, m.EnrolledAt = true, now
+			reason := "ring walk " + w.ID + " opened " + string(p.Ring)
+			if w.Expedited {
+				reason = "ring walk " + w.ID + " expedited (" + w.ExpediteReason + ")"
+			}
+			*actions = append(*actions, ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: target, Reason: reason})
+		}
+		// The proof ring needs d@e seen on the release; d@e is usually
+		// hibernated between uses, so the walk wakes it (a wake is what any
+		// request does: a snapshot resume or a cold boot onto the open
+		// ring's release, never a restart of running work), with backoff.
+		if !w.Expedited && p.Ring == ringR0 && !graced && !o.Active && !o.Held && m.ExposedAt.IsZero() && ringWakeDue(m, now) {
+			m.WakeRequested = true
+			m.WakeAttempts++
+			m.LastWakeAt = now
+			*actions = append(*actions, ringAction{Kind: ringActionWake, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Reason: "ring walk " + w.ID + ": R0 needs d@e on the release"})
+		}
+		if onTarget && m.FirstOnTarget.IsZero() {
+			m.FirstOnTarget = now
+		}
+		if breach := m.evaluate(now, o, onTarget, p.OpenedAt, p.Ring); breach != nil {
+			return breach
+		}
+	}
+	return nil
+}
+
+// ringExpediteWatch: an expedited ring closes no sooner than this after the
+// expedite, so its guards see the release.
+const ringExpediteWatch = 10 * time.Minute
+
+// stepExpedited runs an expedited walk: every ring is open; each is observed
+// and guarded every tick, and closes once the watch has passed and every
+// required member that is not still pending was seen healthy on the
+// release. A breach in any ring rolls back every computer that took it.
+func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]ringEvent, []ringAction) {
+	w := s.Walk
+	var events []ringEvent
+	var actions []ringAction
+	open := 0
+	for _, p := range w.Rings {
+		if !p.ClosedAt.IsZero() {
+			continue
+		}
+		members := ringMembersOf(obs, p.Ring)
+		if breach := w.observeRing(now, p, members, false, &actions); breach != nil {
+			events = append(events, w.rollback(now, p, breach, obs, &actions)...)
+			return events, actions
+		}
+		if now.Sub(w.ExpeditedAt) < ringExpediteWatch {
+			p.Waiting = "expedited: guards watch until " + w.ExpeditedAt.Add(ringExpediteWatch).UTC().Format(time.RFC3339)
+			open++
+			continue
+		}
+		if len(members) == 0 {
+			events = append(events, w.closeRing(now, p, ringOutcomeSkippedEmpty, "no computer in this ring (expedited)"))
+			continue
+		}
+		required, exposed, _, missing := ringExposure(p, members, true)
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			p.Waiting = fmt.Sprintf("expedited: %d of %d seen healthy on the release; waiting for %s", exposed, required, strings.Join(missing, ","))
+			open++
+			continue
+		}
+		if exposed == 0 {
+			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "expedited: no member ran the release (down or still pending)"))
+			continue
+		}
+		events = append(events, w.closeRing(now, p, ringOutcomeClean, "expedited"))
+	}
+	if open == 0 && w.Status == ringWalkWalking {
+		w.Status, w.EndedAt = ringWalkComplete, now
+		s.Baseline = w.To
+		events = append(events, w.event(now, ringEventWalkComplete))
+	}
+	return events, actions
+}
+
+// expedite opens every remaining ring of the walking walk at once.
+func (s *ringWalkState) expedite(now time.Time, reason, by string) ([]ringEvent, error) {
+	w := s.Walk
+	if w == nil || w.Status == ringWalkComplete || w.Status == ringWalkSuperseded {
+		return nil, fmt.Errorf("no walk in flight: the current release already finished a walk or did not change; nothing to expedite")
+	}
+	if w.Status == ringWalkRolledBack {
+		return nil, fmt.Errorf("ring walk %s rolled release %s back; a rolled-back release is never expedited", w.ID, w.To.Single)
+	}
+	if w.Expedited {
+		return nil, nil
+	}
+	w.Expedited, w.ExpediteReason, w.ExpeditedBy, w.ExpeditedAt = true, reason, by, now
+	ev := w.event(now, ringEventExpedited)
+	ev.Detail = "reason: " + reason + "; by: " + by
+	events := []ringEvent{ev}
+	for len(w.Rings) < len(ringOrder) {
+		events = append(events, w.openRing(now))
+	}
+	return events, nil
+}
+
+// noteReached records when each computer was first seen running the target
+// (any ring, any tick): the deploy-to-ring timing.
+func (w *ringWalk) noteReached(now time.Time, obs []ringMemberObs) {
+	for _, o := range obs {
+		if !o.Active || o.Release == "" || o.Release != w.To.releaseFor(o.Layered) {
+			continue
+		}
+		if w.Reached == nil {
+			w.Reached = map[string]time.Time{}
+		}
+		if _, ok := w.Reached[o.ComputerID]; !ok {
+			w.Reached[o.ComputerID] = now
+		}
+	}
 }
 
 // evaluate applies the guards to one member's sample. A breach is returned.
@@ -741,6 +887,8 @@ func (w *ringWalk) closeRing(now time.Time, p *ringProgress, outcome, detail str
 		ev.Computers = append(ev.Computers, ringEventMember{ComputerID: id, Release: m.LastRelease, FirstOnTarget: m.FirstOnTarget, ExposedAt: m.ExposedAt, Samples: m.Samples, Healthy: m.Healthy, LastStatus: m.LastStatus, LastDetail: m.LastDetail})
 	}
 	ev.Soak.Required = len(ids)
+	t := w.timing(p)
+	ev.Timing = &t
 	return ev
 }
 
@@ -1021,26 +1169,57 @@ func (r *ringWalkRunner) stepWith(now time.Time, obs []ringMemberObs) []ringActi
 	return actions
 }
 
-// sampleTargets lists the computers whose health a tick reads: active members
-// of the open ring running the target. Nil when nothing is walking.
-func (r *ringWalkRunner) sampleTargets() (ring ringID, to ringReleasePair, ok bool) {
+// sampleTargets reports which rings a tick reads health for (the open
+// ring; every unclosed ring of an expedited walk) and the target. ok is false
+// when nothing walks.
+func (r *ringWalkRunner) sampleTargets() (sample func(ringID) bool, to ringReleasePair, ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w := r.state.Walk
 	if w == nil || w.Status != ringWalkWalking {
-		return "", ringReleasePair{}, false
+		return func(ringID) bool { return false }, ringReleasePair{}, false
 	}
-	p := w.open()
-	if p == nil {
-		return "", ringReleasePair{}, false
+	open := map[ringID]bool{}
+	if w.Expedited {
+		for _, p := range w.Rings {
+			if p.ClosedAt.IsZero() {
+				open[p.Ring] = true
+			}
+		}
+	} else if p := w.open(); p != nil {
+		open[p.Ring] = true
 	}
-	return p.Ring, w.To, true
+	return func(r ringID) bool { return open[r] }, w.To, true
+}
+
+// expedite marks the walking walk expedited and records it (or the refusal).
+func (r *ringWalkRunner) expedite(now time.Time, reason, by string) (*deployRefreshRingWalk, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	events, err := r.state.expedite(now, reason, by)
+	if err != nil {
+		ev := ringEvent{Schema: ringHistorySchema, At: now, Event: ringEventExpediteRefused, Detail: "reason: " + reason + "; by: " + by + "; refused: " + err.Error()}
+		if w := r.state.Walk; w != nil {
+			ev.WalkID = w.ID
+		}
+		r.appendHistoryLocked([]ringEvent{ev})
+		return nil, err
+	}
+	if len(events) > 0 {
+		r.saveLocked()
+		r.appendHistoryLocked(events)
+	}
+	return r.summaryLocked(), nil
 }
 
 // ringWalkStatus is GET /internal/vmctl/ring-walk.
 type ringWalkStatus struct {
-	State   ringWalkState     `json:"state"`
-	History []json.RawMessage `json:"history"`
+	State ringWalkState `json:"state"`
+	// Timing per opened ring; R1's last_reached_after_seconds is the
+	// deploy-to-last-test-computer (arm) refreshed time.
+	Timing    []ringTiming      `json:"timing"`
+	Expedited bool              `json:"expedited"`
+	History   []json.RawMessage `json:"history"`
 }
 
 func (r *ringWalkRunner) status(tail int) ringWalkStatus {
@@ -1049,8 +1228,16 @@ func (r *ringWalkRunner) status(tail int) ringWalkStatus {
 	r.mu.Lock()
 	raw, _ := json.Marshal(r.state)
 	path := r.historyPath
+	var timing []ringTiming
+	expedited := false
+	if w := r.state.Walk; w != nil {
+		expedited = w.Expedited
+		for _, p := range w.Rings {
+			timing = append(timing, w.timing(p))
+		}
+	}
 	r.mu.Unlock()
-	st := ringWalkStatus{History: []json.RawMessage{}}
+	st := ringWalkStatus{History: []json.RawMessage{}, Timing: timing, Expedited: expedited}
 	_ = json.Unmarshal(raw, &st.State)
 	if path == "" {
 		return st
@@ -1075,11 +1262,15 @@ func (r *ringWalkRunner) status(tail int) ringWalkStatus {
 func (r *ringWalkRunner) summary() *deployRefreshRingWalk {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.summaryLocked()
+}
+
+func (r *ringWalkRunner) summaryLocked() *deployRefreshRingWalk {
 	w := r.state.Walk
 	if w == nil || (w.Status != ringWalkWalking && w.Status != ringWalkRolledBack) {
 		return nil
 	}
-	out := &deployRefreshRingWalk{ID: w.ID, Status: w.Status, ProofComputer: ringProofComputer}
+	out := &deployRefreshRingWalk{ID: w.ID, Status: w.Status, ProofComputer: ringProofComputer, Expedited: w.Expedited}
 	if p := w.open(); p != nil {
 		out.OpenRing = string(p.Ring)
 	}
@@ -1121,4 +1312,21 @@ func ringWakeNote(p *ringProgress) string {
 		return fmt.Sprintf("; woke %s %d time(s), next try after %s", m.ComputerID, m.WakeAttempts, m.LastWakeAt.Add(ringWakeGap(m.WakeAttempts)).UTC().Format(time.RFC3339))
 	}
 	return ""
+}
+
+// timing is a ring's deploy-to-ring timing now.
+func (w *ringWalk) timing(p *ringProgress) ringTiming {
+	t := ringTiming{Ring: p.Ring, OpenedAfterSeconds: p.OpenedAt.Sub(w.StartedAt).Seconds(), Members: len(p.Members)}
+	if !p.ClosedAt.IsZero() {
+		t.ClosedAfterSeconds = p.ClosedAt.Sub(w.StartedAt).Seconds()
+	}
+	for id := range p.Members {
+		if at, ok := w.Reached[id]; ok {
+			t.Reached++
+			if d := at.Sub(w.StartedAt).Seconds(); d > t.LastReachedAfterSeconds {
+				t.LastReachedAfterSeconds = d
+			}
+		}
+	}
+	return t
 }

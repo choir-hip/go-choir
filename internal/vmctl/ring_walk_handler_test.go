@@ -215,3 +215,42 @@ func TestRingWakeResolvesStoppedProofComputer(t *testing.T) {
 		t.Fatalf("the wake did not start d@e: %+v", got)
 	}
 }
+
+// The expedite endpoint opens every ring: the CI plan then lists every active
+// computer as a candidate; the history records reason and who asked.
+func TestRingExpediteEndpoint(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	f.deploy("r2", "commit-r2")
+	if plan := getPlan(t, f.h); len(plan.RingWaiting) != 1 {
+		t.Fatalf("before expedite one computer waits: %+v", plan)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/ring-walk/expedite", strings.NewReader(`{"reason":"key fix","by":"owner"}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	f.h.HandleRingWalkExpedite(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"expedited":true`) {
+		t.Fatalf("expedite: %d %s", rec.Code, rec.Body.String())
+	}
+	plan := getPlan(t, f.h)
+	if len(plan.Candidates) != 2 || len(plan.RingWaiting) != 0 || plan.RingWalk == nil || !plan.RingWalk.Expedited {
+		t.Fatalf("expedited plan must list every active computer: %+v", plan)
+	}
+	st := f.h.ringWalkRunner().status(50)
+	found := false
+	for _, l := range st.History {
+		if strings.Contains(string(l), `"event":"expedited"`) && strings.Contains(string(l), "key fix") && strings.Contains(string(l), "owner") {
+			found = true
+		}
+	}
+	if !found || !st.Expedited {
+		t.Fatalf("expedite not recorded: %+v", st.History)
+	}
+	// No by: refused.
+	req = httptest.NewRequest(http.MethodPost, "/internal/vmctl/ring-walk/expedite", strings.NewReader(`{"reason":"x"}`))
+	req.Header.Set("X-Internal-Caller", "true")
+	rec = httptest.NewRecorder()
+	f.h.HandleRingWalkExpedite(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expedite without by: %d", rec.Code)
+	}
+}

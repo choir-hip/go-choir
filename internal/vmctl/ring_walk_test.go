@@ -543,13 +543,14 @@ func TestRingWalkStatePersists(t *testing.T) {
 func TestRingTimeFloorHolds(t *testing.T) {
 	s := newWalkingState(t)
 	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
-	for i := 1; i < 30; i++ {
+	floor := int(ringSoaks[ringR0].Floor / time.Minute)
+	for i := 1; i < floor; i++ {
 		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
 		if s.Walk.Current != 0 {
-			t.Fatalf("R0 closed at minute %d, before its 30 minute floor", i)
+			t.Fatalf("R0 closed at minute %d, before its %d minute floor", i, floor)
 		}
 	}
-	s.step(rwT0.Add(30*time.Minute), []ringMemberObs{de})
+	s.step(rwT0.Add(time.Duration(floor)*time.Minute), []ringMemberObs{de})
 	if s.Walk.Current == 0 {
 		t.Fatalf("R0 did not close at its floor")
 	}
@@ -709,7 +710,7 @@ func TestRingBootGuardScoped(t *testing.T) {
 	down := healthyObs(rwTest2, ringR1, "")
 	down.Active, down.Health = false, nil
 	t3 := healthyObs(rwTest3, ringR1, rwTo.Single)
-	for i := 1; i <= 31; i++ {
+	for i := 1; i <= int(ringSoaks[ringR0].Floor/time.Minute)+1; i++ {
 		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, held, down, t3})
 	}
 	if s.Walk.Current != 1 {
@@ -862,5 +863,129 @@ func TestRingWakeRetryBoundedAndVisible(t *testing.T) {
 	}
 	if !strings.Contains(s.Walk.Rings[0].Waiting, "no more automatic wakes") {
 		t.Fatalf("the exhausted bound must show in status: %q", s.Walk.Rings[0].Waiting)
+	}
+}
+
+// Expedite (owner, 2026-11-03): every ring opens at once, the paper
+// included; every active computer off the release is enrolled in one tick;
+// guards still run in every ring and a breach returns every computer that
+// took the release.
+func TestRingExpediteOpensEveryRingAndGuards(t *testing.T) {
+	s := newWalkingState(t)
+	if _, err := s.expedite(rwT0.Add(time.Minute), "key fix", "owner"); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Walk.Rings) != len(ringOrder) || !s.Walk.Expedited {
+		t.Fatalf("expedite must open every ring: %+v", s.Walk.Rings)
+	}
+	for _, id := range []string{ringPaperComputer, rwUser1, rwTest1} {
+		if single, _ := s.pinFor(id, ringForComputer(id, WarmnessClassTest)); single != "" {
+			t.Fatalf("expedited: %s still pinned", id)
+		}
+	}
+	if r := s.gate(ringR5, "commit-to", false); r != "" {
+		t.Fatalf("expedited: the paper's refresh is gated: %q", r)
+	}
+	de := healthyObs(ringProofComputer, ringR0, rwFrom.Single)
+	paper := healthyObs(ringPaperComputer, ringR5, rwFrom.Single)
+	other := healthyObs(rwUser1, ringR3, rwFrom.Single)
+	_, acts := s.step(rwT0.Add(2*time.Minute), []ringMemberObs{de, paper, other})
+	got := map[string]bool{}
+	for _, a := range acts {
+		if a.Kind == ringActionEnroll && a.Target == rwTo.SingleCommit {
+			got[a.ComputerID] = true
+		}
+	}
+	if !got[ringProofComputer] || !got[ringPaperComputer] || !got[rwUser1] {
+		t.Fatalf("expedite must enroll every computer at once, d@e without the grace: %+v", acts)
+	}
+	// The paper takes it; R3's computer takes it and wedges: rollback returns both.
+	paper.Release, other.Release = rwTo.Single, rwTo.Single
+	other.Health = &ringHealth{Answered: true, Status: 200, Wedged: true}
+	var all []ringEvent
+	for i := 3; i <= 4; i++ {
+		ev, a := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, paper, other})
+		all, acts = append(all, ev...), a
+	}
+	if s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("a breach in an expedited ring must roll back: %+v", s.Walk.Status)
+	}
+	returns := map[string]bool{}
+	for _, a := range acts {
+		if a.Kind == ringActionEnroll && a.Target == rwFrom.SingleCommit {
+			returns[a.ComputerID] = true
+		}
+	}
+	if !returns[ringPaperComputer] || !returns[rwUser1] || returns[ringProofComputer] {
+		t.Fatalf("rollback must return every computer that took the release, and only those: %+v", acts)
+	}
+}
+
+func TestRingExpediteRefusedWithoutWalkOrAfterRollback(t *testing.T) {
+	s := &ringWalkState{}
+	s.observeRelease(rwFrom, rwT0)
+	if _, err := s.expedite(rwT0, "x", "owner"); err == nil {
+		t.Fatalf("expedite with no walk must be refused")
+	}
+	s = newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	de.Health = &ringHealth{Answered: true, Status: 200, Wedged: true}
+	s.step(rwT0.Add(time.Minute), []ringMemberObs{de})
+	s.step(rwT0.Add(2*time.Minute), []ringMemberObs{de})
+	if _, err := s.expedite(rwT0.Add(3*time.Minute), "x", "owner"); err == nil || !strings.Contains(err.Error(), "rolled") {
+		t.Fatalf("a rolled-back release must never be expedited: %v", err)
+	}
+}
+
+// An expedited walk completes after the watch once every member that is not
+// still pending (busy) was seen healthy; a busy one does not hold it.
+func TestRingExpediteCompletesAfterWatch(t *testing.T) {
+	s := newWalkingState(t)
+	s.expedite(rwT0, "key fix", "owner")
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	paper := healthyObs(ringPaperComputer, ringR5, rwTo.Single)
+	busy := healthyObs(rwTest1, ringR1, rwFrom.Single)
+	busy.Pending = true
+	var all []ringEvent
+	for i := 1; i <= 12; i++ {
+		ev, _ := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, paper, busy})
+		all = append(all, ev...)
+		if i < 10 && s.Walk.Status != ringWalkWalking {
+			t.Fatalf("expedited walk completed inside the watch")
+		}
+	}
+	if s.Walk.Status != ringWalkComplete || s.Baseline != rwTo {
+		t.Fatalf("expedited walk did not complete: %+v", s.Walk.Rings)
+	}
+	for _, e := range eventsOf(all, ringEventRingClosed) {
+		if e.Timing == nil || e.Timing.ClosedAfterSeconds <= 0 {
+			t.Fatalf("ring close without timing: %+v", e)
+		}
+	}
+}
+
+// Timing: deploy-to-ring-close and deploy-to-last-member-reached.
+func TestRingTimingRecorded(t *testing.T) {
+	r := newRingWalkRunner()
+	r.observe(rwFrom, rwT0.Add(-time.Hour))
+	r.observe(rwTo, rwT0)
+	de := healthyObs(ringProofComputer, ringR0, rwFrom.Single)
+	t1 := healthyObs(rwTest1, ringR1, rwFrom.Single)
+	r.stepWith(rwT0.Add(time.Minute), []ringMemberObs{de, t1})
+	de.Release = rwTo.Single
+	for i := 2; i <= 12; i++ {
+		r.stepWith(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, t1})
+	}
+	t1.Release = rwTo.Single
+	r.stepWith(rwT0.Add(13*time.Minute), []ringMemberObs{de, t1})
+	st := r.status(50)
+	if len(st.Timing) < 2 {
+		t.Fatalf("timing missing: %+v", st.Timing)
+	}
+	if st.Timing[0].Ring != ringR0 || st.Timing[0].ClosedAfterSeconds != 600 || st.Timing[0].LastReachedAfterSeconds != 120 {
+		t.Fatalf("R0 timing = %+v", st.Timing[0])
+	}
+	if st.Timing[1].Ring != ringR1 || st.Timing[1].LastReachedAfterSeconds != 780 || st.Timing[1].Reached != 1 {
+		t.Fatalf("R1 (arms) timing = %+v", st.Timing[1])
 	}
 }

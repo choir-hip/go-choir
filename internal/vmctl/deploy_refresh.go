@@ -222,6 +222,7 @@ type deployRefreshRingWalk struct {
 	Status        string `json:"status"`
 	OpenRing      string `json:"open_ring,omitempty"`
 	ProofComputer string `json:"proof_computer"`
+	Expedited     bool   `json:"expedited,omitempty"`
 }
 
 // deployRefreshAllowsBusy is vmctl's policy for refreshing a computer whose

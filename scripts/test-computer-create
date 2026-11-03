@@ -60,9 +60,34 @@ fi
 state="${state:-$state_dir/test-computer-$name.json}"
 
 field() { python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get(sys.argv[2],""))' "$state" "$1"; }
+# register_test_tier: the computer goes in computer-tiers.json test_computers
+# (class test, so ring R1 of the ring walk and standing autonomy; owner
+# 2026-11-03). The tier file is embedded in vmctl: the line takes effect when
+# it is committed and deployed. Idempotent. CHOIR_TEST_TIER_FILE overrides
+# the path (selftest).
+register_test_tier() {
+  local cid="$1" label="$2" tiers="${CHOIR_TEST_TIER_FILE:-$repo/internal/computertiers/computer-tiers.json}"
+  [[ "$cid" =~ ^computer-[0-9a-f]{32}$ ]] || { echo "tier: no computer id to register" >&2; return 0; }
+  [[ -f "$tiers" ]] || { echo "tier: $tiers not found; register $cid as a test computer by hand" >&2; return 0; }
+  python3 - "$tiers" "$cid" "$label" <<'PY'
+import json, sys
+path, cid, label = sys.argv[1:4]
+d = json.load(open(path))
+tc = d.setdefault("test_computers", [])
+if any(t.get("computer_id") == cid for t in tc):
+    print("tier: " + cid + " is already a test computer")
+    sys.exit(0)
+tc.append({"computer_id": cid, "note": label + ", made by scripts/test-computer-create: test tier, so ring R1"})
+with open(path, "w") as f:
+    f.write(json.dumps(d, indent=2) + "\n")
+print("tier: registered " + cid + " in " + path + "; commit and deploy it (the tier file is embedded in vmctl)")
+PY
+}
+
 report() {
   echo "computer_id: $(field computer_id)"
   echo "state: $state"
+  register_test_tier "$(field computer_id)" "$name"
 }
 
 stage=""

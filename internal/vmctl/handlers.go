@@ -1504,6 +1504,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 	s.HandleFunc("/internal/vmctl/guest-releases", h.HandleGuestReleases)
 	s.HandleFunc("/internal/vmctl/ring-walk", h.HandleRingWalk)
+	s.HandleFunc("/internal/vmctl/ring-walk/expedite", attributedLifecycle(h.HandleRingWalkExpedite))
 	s.HandleFunc(HostBootStatePath, h.HandleHostBootState)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 	s.HandleFunc("/internal/vmctl/memory/balloon", h.HandleBalloonStats)

@@ -61,7 +61,8 @@ moves the guest release.
    The `woke_behind` path now compares a computer against its own resolved
    release, not the global current, so a pinned computer is not "behind".
 6. **Soak** (design 3.2, code-deploy reading). A ring is clean when its time
-   floor has passed (R0 30m, R1 2h, R2 4h, R3 4h, R4 2h, R5 1h) and every
+   floor has passed (R0 10m, R1 15m since the cycle-time ruling below; R2
+   4h, R3 4h, R4 2h, R5 1h) and every
    active, non-held, non-divergent member has been seen healthy on the
    target release, at least min(floor count, members) of them (R1 needs 3,
    R3 2, the rest 1). A member seen healthy on the release and since gone
@@ -99,6 +100,36 @@ moves the guest release.
    releases carry them: the calibration bridge,
    `docs/design/calibration-seed-2026-11-03.md`). Settlement is not built.
    `GET /internal/vmctl/ring-walk` serves the state and the history tail.
+
+## Cycle time (owner, 2026-11-03)
+
+Owner: "for stuff related to an optimization loop it's important to speed
+up the cycle time." A test computer should get a platform fix about 25 to
+40 minutes after a deploy, not hours.
+
+- **R1 is real.** On staging R1 (class test) held 2 computers, both down;
+  the four self-development arms and every computer `scripts/test-computer-
+  create` makes were class primary, so they walked in R3. The arms are now
+  listed in `internal/computertiers/computer-tiers.json` `test_computers`,
+  and `test-computer-create` adds each computer it makes there (the tier
+  file is embedded in vmctl, so the entry takes effect when committed and
+  deployed). Test tier is class test: ring R1, standing autonomy, and the
+  pressure-reclaim rule that a test computer yields first. Retention deletes
+  only ephemeral accounts (email domain or user-id prefix), not tier test
+  computers.
+- **Minutes for R0 and R1.** R0's floor is 10 minutes and R1's 15, from the
+  ring opening; the deploy grace before the walk enrolls or wakes d@e is 10
+  minutes; exposure and the guards are unchanged. R2 onward keep their
+  floors. Expected: d@e refreshed by CI at the deploy, R0 closes at about 10
+  minutes, R1 opens and enrolls the arms (an arm mid capsule or apply
+  refuses and goes at its next idle moment), R1 closes at about 25 minutes.
+- **Measured.** Each `ring_closed` line and the status carry `timing`:
+  seconds from the walk start (the deploy moving the release) to the ring
+  opening, to its closing, and to the last of its members seen on the
+  release. R1's `last_reached_after_seconds` is deploy-to-last-arm-
+  refreshed. The walk keeps `reached` (first time each computer was seen on
+  the release, any ring), so a member refreshed after its ring closed still
+  counts.
 
 ## Expedite (owner, 2026-11-03)
 

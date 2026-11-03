@@ -580,6 +580,32 @@
     # refresh_active_computers=true additionally force-restarts the
     # deferred ones through the operator refresh (crash boot).
     echo "==> Refreshing active interactive computers onto deployed VM boot contract (planned restart)"
+    # Expedite (docs/design/ring-ordered-deploys-2026-11-03.md "Expedite"):
+    # a `Ring-Expedite: <reason>` trailer on any commit since the deployed
+    # commit opens every ring of this release's walk at once. The refreshes
+    # stay planned and marker-backed; the guest's refusals and the guards
+    # are unchanged. Read only from this checkout.
+    expedite_base=$(jq -r '.deployed_commit // .target_commit // empty' /var/lib/go-choir/deploy-receipt.json 2>/dev/null || true)
+    expedite_range="$DEPLOY_COMMIT"
+    if [ -n "$expedite_base" ] && [ "$expedite_base" != "$DEPLOY_COMMIT" ] && git merge-base --is-ancestor "$expedite_base" "$DEPLOY_COMMIT" 2>/dev/null; then
+      expedite_range="${expedite_base}..${DEPLOY_COMMIT}"
+    else
+      expedite_range="-1 ${DEPLOY_COMMIT}"
+    fi
+    # shellcheck disable=SC2086 # expedite_range is a git log argument list
+    expedite_line=$(git log --format='%H%x09%(trailers:key=Ring-Expedite,valueonly,separator=%x20)' $expedite_range 2>/dev/null | awk -F'\t' '$2 != "" {print; exit}' || true)
+    if [ -n "$expedite_line" ]; then
+      expedite_sha=${expedite_line%%$'\t'*}
+      expedite_reason=${expedite_line#*$'\t'}
+      expedite_body=$(jq -nc --arg reason "${expedite_reason:0:300}" --arg by "trailer ${expedite_sha:0:12}" '{reason:$reason,by:$by}')
+      echo "    Ring-Expedite trailer on ${expedite_sha:0:12}: ${expedite_reason}"
+      expedite_status=$(curl -sS -o /tmp/go-choir-ring-expedite.json -w '%{http_code}' -X POST \
+        -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" -H "Content-Type: application/json" \
+        -H "X-Choir-Lifecycle-Caller: ci.ring-expedite" \
+        --data "$expedite_body" http://127.0.0.1:8083/internal/vmctl/ring-walk/expedite || printf 'curl_error_%s' "$?")
+      echo "    Ring walk expedite: http ${expedite_status} $(head -c 300 /tmp/go-choir-ring-expedite.json 2>/dev/null)"
+      rm -f /tmp/go-choir-ring-expedite.json
+    fi
     deploy_refresh_plan=""
     if ! deploy_refresh_plan=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/deploy-refresh); then
       deploy_refresh_plan=""
@@ -799,7 +825,8 @@
         ring_walk_id=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.id // empty')
         ring_walk_open=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.open_ring // empty')
         proof_in_candidates=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.proof_computer as $p | [.candidates[] | select(.computer_id == $p)] | length')
-        echo "    Ring walk ${ring_walk_id}: status=${ring_walk_status} open_ring=${ring_walk_open} proof_computer_refreshed_by_deploy=$([ "${proof_in_candidates:-0}" -gt 0 ] && echo yes || echo no)"
+        ring_walk_expedited=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.expedited // false')
+        echo "    Ring walk ${ring_walk_id}: status=${ring_walk_status} open_ring=${ring_walk_open} expedited=${ring_walk_expedited} proof_computer_refreshed_by_deploy=$([ "${proof_in_candidates:-0}" -gt 0 ] && echo yes || echo no)"
         if [ "$ring_walk_status" != "walking" ] || [ "${proof_in_candidates:-0}" -eq 0 ]; then
           echo "    Ring walk held, unproven: the proof computer has not run this release yet; outer rings stay on the last proved release" >&2
           active_computers_status=ring_held_unproven
