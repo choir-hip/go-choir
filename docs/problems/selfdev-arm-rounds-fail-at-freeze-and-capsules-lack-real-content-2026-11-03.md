@@ -438,3 +438,14 @@ Fix: lift the withhold for gateway-mode delegate capsules. It is with a builder 
 a model egress path. ecosystem_proxy capsules (deepseek, pool) keep /computer and are unaffected. Also seen: the engineering cell's
 own `wc -c` was refused with `import "os/exec" refused: direct process execution must route through capsule broker`.
 That refusal is expected, because an engineering cell cannot exec; the check belongs in a capsule job.
+
+## Unnumbered (lane C, 17:47Z): pool's Texture claims a revision and a Cast that the ledger never records, and the owner revision is refused
+
+Pool's owner revision 207d3a3f (Slides round 2, doc 023c9d49, trajectory a475876b) opened work at 17:41:08Z. Texture
+run 5ae7bf5c (chatgpt/gpt-6-luna at high reasoning, via the pool hash) ended with the text: "The document now reflects
+the owner's package-only route ... A fresh engineering assignment was dispatched with this owner revision and the full
+request". The ledger shows otherwise. At 17:42:03Z it logged work_refused: "trigger not disposed: Texture's turn (run
+5ae7bf5c-6c4a-4e53-bc6c-c0c7ec5396d5) ended without a revision, decision or answer that disposes the document_revision
+trigger; re-checked 12 times over 32s with no progress". No management run was created after 17:41Z. So the turn's
+claimed effects (a revision and a Cast) never committed. This relates to problem 17's "without disposing exact
+trigger", but here the result is a terminal refusal, not a livelock.
