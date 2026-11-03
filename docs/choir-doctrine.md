@@ -349,6 +349,11 @@ effects-capable assignment, not inherited from a role name. Direct Bash and Go
 execution calls use one capsule execution broker and one receipt and
 transaction-tape path. Spawned processes never inherit Choir capabilities,
 credentials, canonical-state access, or control sockets.
+An engineering capsule may receive a read-only, point-in-time copy of the
+computer's state as data. A copy is not access: it carries no credential, no
+store handle, no write path and no live view (owner, 2026-11-03: "capsules
+should be an overlay over the exact computer state";
+`docs/design/capsule-overlay-computer-state-2026-11-03.md`).
 
 `I20` Persisted model-authored source is inert. Loading or reusing it never
 restores an activation capability, live handle, interpreter heap, or prior

@@ -1,6 +1,6 @@
 # Capsules overlay the exact computer state; the source tree follows the deploy (2026-11-03)
 
-Status: design, revision 3, under review (tier 2). Mutation class of this
+Status: design, revision 4: revision 3 accepted at tier 2 (Devin round 3 accept_with_nits; nits folded in below); revision 4 folds in the owner's "no credentials on computers" input and the S0 inventory. Mutation class of this
 doc: green. The change it designs is red: capsule isolation, owner data in
 a capsule, the guest store, source projection and the Cast gate. Problem:
 `docs/problems/selfdev-arm-rounds-fail-at-freeze-and-capsules-lack-real-content-2026-11-03.md`
@@ -158,17 +158,30 @@ source patch and the screens, through Freeze, verify and apply.
 - **Files are linked, never chmodded or copied.** A file without `o+r` is
   left out and named, not raised to readable (raising a mode would read
   through a boundary the owner or a tool set).
-- **Left out, and named in the spawn receipt:** `Source/platform` (it is
-  the source lower already); every `.git` directory; symlinks, sockets and
-  devices; files without `o+r`; the `mail/` tree (the owner's emails are in
-  the keep set; a Mail round gets them by a later owner decision, not by
-  default); and every path the files predicate names.
-  The files predicate is `secretBearingPath` plus the credentials people
-  keep in home-like trees: the directories `.aws`, `.kube`, `.docker`,
-  `.ssh`, `.gnupg`, `.config/gcloud`, `.password-store`; the names
-  `.git-credentials`, `.pgpass`, `.envrc`, `*.env`, `*credentials*`,
-  `id_*` keys, `*.kdbx`, `*.keychain*`, cookie databases (`Cookies`,
-  `cookies.sqlite`). It is a list, not a proof: residual below.
+- **Left out, and named in the spawn receipt:** `Source/platform`;
+  symlinks, sockets and devices; files without `o+r`; the helper's
+  temporary names (`.*.tmp-*`, `.screen-*`, `.choir-hydrate-*`); and the
+  `mail/` tree (the owner's emails are in the keep set; a Mail round gets
+  them by a later owner decision, not by default).
+- **Why `Source/platform` is not under `/computer/files`.** The computer's
+  source is the capsule's editable `/workspace/platform` (the source
+  lower), kept current by S4. A second, read-only copy at
+  `/computer/files/Source/platform` would invite edits there, and every
+  write under `/computer` is scratch that dies with the capsule, so those
+  edits would be thrown away. The leave-out is also load-bearing for
+  consistency: `git reset --hard` writes that tree outside the files lock.
+- **No credential-name list** (owner, 2026-11-03: "there shouldn't be
+  credentials on computers anyway"). The S0 inventory
+  (`docs/evidence/capsule-overlay-s0-measurement-2026-11-03.md`) found no
+  credential in the files store or the store of d@e; every piece of
+  computer identity material (the privacy key, the two signer keys, the
+  gateway token, the event envelope) lives under `/mnt/persistent` or
+  `/run`, which stay masked. So the snapshot has no speculative name
+  blocklist. A credential that does reach a computer is a problem to
+  remove from the computer (the one found, the Claude delegate token on
+  three other computers, is
+  `docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md`),
+  not a name to hide from the capsule.
 - **Cost.** One directory entry per file and no data blocks. A file deleted
   live keeps its blocks until the capsule ends. The walk time and the lock
   hold are measured in S0 and recorded per spawn.
@@ -203,23 +216,23 @@ source patch and the screens, through Freeze, verify and apply.
   `password`, `cookie`, `session`, `nonce`, `credential`). Each match is
   either allowlisted with a reason in the test (for example
   `tokens_before`, a count) or blanked in the copy before the capsule
-  starts. The first rulings: `desktop_sessions.session_id`,
-  `desktop_app_instances.created_by_session_id` and
-  `desktop_window_placements.session_id` are blanked (set to a fixed
-  placeholder, so joins and layout still work). A new matching column
-  fails the test until it is ruled on.
-- **Blanked bytes do not survive.** The copy's connection sets
-  `PRAGMA secure_delete=ON` before the blanking, and the copy is then
-  `VACUUM`ed once more, so no old cell remains in a free page. The S3 test
-  writes a known session id, takes the copy, and greps the copy's raw bytes
-  for it.
+  starts. S0 found 13 matches and none holds a credential; the desktop
+  session ids are layout keys the client picks (`X-Choir-Session`), not
+  an authenticator, so they are allowlisted, not blanked. A new matching
+  column fails the test until it is ruled on.
+- **Blanked bytes do not survive.** When the scan below blanks a value,
+  the copy's connection sets `PRAGMA secure_delete=ON` before the blanking,
+  and the copy is then `VACUUM`ed once more, so no old cell remains in a
+  free page. The S3 test plants a secret-shaped value, takes the copy, and
+  greps the raw bytes of every file under `computer/` for it.
 - **Payload columns** (`events.payload_json`, `choir_events.metadata`,
   `choir_event_bodies.body`, `computer_event_index.prepared_event_json`)
   are invisible to a name scan. The invariant is the one the tape already
   holds: private content is sealed, and `computerevent.LocatePrivateSecrets`
   runs on event bodies at append. S3 also runs it over every text column of
-  the copy at snapshot time; a hit blanks that value and is named in the
-  receipt. S0 measures what that scan costs. Sealed payloads stay
+  the copy at snapshot time, as a check: a hit blanks that value and is
+  named in the receipt, and a hit is also a problem to record, since the
+  tape should never have held it. S0 measures what that scan costs. Sealed payloads stay
   sealed: the capsule has no privacy key, so a sealed body shows as locked.
 - **Consistency across the two.** The files snapshot and the store copy are
   two instants a few seconds apart; the receipt names both (the files lock
@@ -235,9 +248,11 @@ canonical-state access, or control sockets."
 - **Credentials stay out, unchanged.** `/run` and `/mnt` stay masked, so
   `choir-bootstrap` (gateway token, delegate credential), the autoputer env
   file, `choir-credentials` (privacy key), `choir-signers`,
-  `choir-updater`, the signer, verifier and updater sockets are absent. The
-  files predicate and the mode rule keep credential files out of the files
-  snapshot. The store copy drops credential-shaped columns (section 2). The
+  `choir-updater`, the signer, verifier and updater sockets are absent.
+  The S0 inventory found every piece of identity material behind those
+  masks and no credential in the files store or the store. The mode rule
+  keeps files the owner or a tool made unreadable out of the snapshot. The
+  store copy's secret-shape scan stays as a check (section 2). The
   broker env is unchanged apart from the two path names.
 - **No canonical-state access.** The capsule gets copies as data. It never
   receives the files root, `state.db`, the tape, corpusd, a store handle or
@@ -315,8 +330,9 @@ served release itself would be a separate red design.
    Guard: the gate; a test per allowlisted writer that it renames.
 2. The walk follows a symlink out of the root. Guard: `O_NOFOLLOW` opens
    relative to the parent descriptor; symlinks are left out and named.
-3. A credential file is linked. Guard: the files predicate and the `o+r`
-   rule; the S2 test seeds every listed name.
+3. Identity material is linked. Guard: it lives under the masks, not in
+   the files root (S0 inventory); the `o+r` rule; the S2 test seeds a 0600
+   file and checks it is absent.
 4. The lock stalls Files API writes. Guard: it covers only the walk; S0
    measures it; the receipt records it.
 5. The store copy fills the volume. Guard: the S4 charge against the
@@ -349,15 +365,20 @@ arms.
   `Self-development/<operation>/screens/` shows the seeded names, including
   the nested ones, and a listing taken inside the capsule equals the
   seeded set minus the receipt's named leave-outs.
-- **P2 no secret path.** Seed `notes/.env`, `home/.aws/credentials`, a
-  `.git/config` with a credential-shaped remote URL, and a 0600 file with
-  a plain name holding a canary string. A capsule job then tries to read
-  `/mnt/persistent/choir-credentials/privacy-key`,
-  `/run/choir-bootstrap/gateway-token`, `/run/go-choir-autoputer.env`, the
-  signer and verifier sockets and `/etc/ssh`, greps its environment for
-  token and key names, and greps `/computer` for the canary. Pass: every
-  read fails, none of the seeded files is present, the canary is absent,
-  and the receipt names each leave-out.
+- **P2 no secret path.** Seed a 0600 file with a plain name holding a
+  canary string. A capsule job then tries to read
+  `/mnt/persistent/choir-credentials/privacy-key`, the signer keys under
+  `/mnt/persistent/choir-signers/`, every file on the credential disk
+  (`/run/choir-bootstrap/gateway-token`, `host-fetch.json`,
+  `capsule-mirrors.json`, and the delegate's `claude-oauth-token`, which
+  d@e does not have), `/run/go-choir-autoputer.env`, the signer and
+  verifier sockets and `/etc/ssh`, greps its environment for token and key
+  names, and greps `/computer` for the canary. Pass: every read fails, the
+  seeded file is absent, the canary is absent, and the receipt counts the
+  not-`o+r` leave-out. d@e is not a delegate computer, so P2 proves the
+  masks there; the delegate token path on a delegate computer is a
+  residual until the delegate moves behind the gateway (coordinator,
+  2026-11-03).
 - **P3 no write to the computer.** The job writes into `/computer/files`
   and `/computer/state.db`, and changes one source file. Pass: the writes
   succeed in the capsule; the live sha256 of each file and the live
@@ -383,7 +404,7 @@ arms.
 | --- | --- | --- |
 | S0 | Measure on d@e, read-only: files count and bytes, `state.db` size, `VACUUM INTO` time, walk and lock time, free space | green, none |
 | S1 | One files write helper with the snapshot lock; every writer moves onto it; `check-owner-files-writes` | orange, tier 1 |
-| S2 | `computerLower` for engineering capsules: hardlink snapshot, files predicate, leave-outs, `/computer` in the classifier ignore and the walk skip, receipt fields; the I19 note and the ontology row | red, tier 2 |
+| S2 | `computerLower` for engineering capsules: hardlink snapshot, the structural leave-outs, `/computer` in the classifier ignore and the walk skip, receipt fields; the I19 note and the ontology row | red, tier 2 |
 | S3 | `Store.SnapshotTo`, the private copy in the upper, the S4 charge, the column scan; the autoputer starts in a capsule over the copies with no credential; the prompt names the paths | red, tier 2 |
 | S4 | Delete the projection and rebase switches and the root-desk conjunct; save-before-reset; `stack_rematerialized` with the byte-identical graft and the Cast warning | red, tier 2 |
 
@@ -393,7 +414,9 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
 
 ## Rollback
 
-- S1 to S3: revert. The copies are transient and removed with the capsule
+- S1 to S3: revert, keeping the `removePrivateTree` commit (it chmods
+  directories only; the old chmod of every file would change a live file a
+  stale layer links). The copies are transient and removed with the capsule
   or at the next boot; no data migrates. A reverted executor goes back to
   `sourceLower:/`.
 - S4: revert brings the switches back (off). A computer whose HEAD
@@ -419,9 +442,9 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
   its egress allowlist (package registries and code hosts) is the bound on
   where it can go. A request-body bound on egress for capsules with
   `/computer` is a candidate follow-up.
-- **The files predicate is a list.** A credential under a plain name with
-  `o+r` gets through. A content scan of small text files at snapshot time
-  is the next step if S0 shows it is cheap.
+- **No name list in the files snapshot.** A credential an owner keeps in
+  a readable file reaches the capsule. By the owner's rule it should not be
+  on the computer at all; the inventory is the check, rerun per ring.
 - **The guest root lower** shows world-readable guest files outside the
   masks. A narrower lowest layer (the system closure only) is a separate
   change.
@@ -476,3 +499,302 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
 - Directory flatten (6): stated as a residual.
 - Small gaps (7): capsule-uid ownership of the copy, `SkipDir`, and the
   `rebase_needs_root` refusal text.
+
+## Review 3 (Devin accept_with_nits); nits folded into the build
+
+- Helper temp files (1): the walk leaves out `.*.tmp-*` and `.screen-*`,
+  and the read lock spans write, fsync and rename.
+- The gate (2): also `os.Truncate`, `os.Chmod`, `os.Chown`, `os.Link`,
+  `os.Symlink`, `os.Chtimes`. The `Source/platform` leave-out is
+  load-bearing: `git reset --hard` writes it outside the lock.
+- Verification (3): engineering verification must not depend on
+  `/computer`; the verifier's capsule stays `sourceLower:/`.
+- The copy (4): checkpoint and close before the capsule starts; no `-wal`
+  or `-shm` ships; the byte test greps every file under `computer/`.
+- The predicate (5, superseded by revision 4): add `.config/gh`, `.azure`, `.s3cfg`, `.boto`,
+  `.pypirc`, `.gitconfig`, `Login Data`, `logins.json`, `key4.db`,
+  `*.ovpn`, `*.ppk`, `*.keystore`, `*.jks`.
+- Proof (6): P3 uses the real engineering spawn with the in-capsule
+  autoputer running; P5 adds a same-base stacked candidate that passes the
+  host build.
+- Spec (7): the layer root is `<state dir>/computer-lower`, holding
+  `computer/files`; a saved ref that already exists with the same commit is
+  success; a graft equal to B' reports `upstreamed`; lock order is the
+  files lock, then the maildir's own mutex.
+
+## Revision 4: owner input and the S0 inventory
+
+Owner, 2026-11-03: "there shouldn't be credentials on computers anyway."
+
+- S0 inventoried the secret-shaped material on d@e (names, owners, modes,
+  sizes and kinds only): identity material only, all under the masks; no
+  credential that unlocks something outside the computer.
+- The files predicate's name lists and the three session-id blankings are
+  cut; the leave-outs are structural (`Source/platform`, links and
+  specials, modes, helper temporaries, `mail/`). The store copy's
+  secret-shape scan and the column-name test stay as checks.
+- Fleet-wide, the Claude delegate token is the one class (b) credential
+  found; it is a problem doc proposing removal behind the gateway, and the
+  overlay waits on it before the ring that holds those computers.
+- The note on why `Source/platform` is not under `/computer/files` is in
+  section 1.
+
+## Build: S1 failure modes (written before code)
+
+S1 adds `internal/ownerfiles`: the one write path for the files root, and
+the process-wide lock (read side for every write, write side for the S2
+snapshot).
+
+1. **A recursive read lock deadlocks.** Go's `RWMutex` forbids taking the
+   read side twice: a waiting snapshot blocks the second `RLock`. Guard:
+   compound writes (the maildir delivery, the hydration root swap) take
+   one `Tx` and call only its methods; the package functions each take
+   their own. Test: a `Tx` doing many writes while `Exclusive` waits
+   finishes, and `Exclusive` then runs.
+2. **A writer still writes in place.** Guard: texture import and the
+   model-policy default move to `WriteFile` (temporary file, fsync,
+   rename). Test: a hardlink taken before a rewrite keeps the old bytes,
+   for each moved writer.
+3. **Durability regresses.** The C0 kill drill needs write, chmod, fsync,
+   rename, fsync of the directory. Guard: the helper keeps that order and
+   one sync hook (`ownerfiles.Sync`) the existing durability tests drive.
+4. **A mode changes.** The Files API keeps the request's mode, texture
+   import, the model policy and the screens keep 0644, hydration keeps the
+   recorded mode, the maildir keeps 0600 files and 0700 directories.
+5. **The lock is held across the network.** Hydration fetches chunks
+   inside its write callback; that file's write holds the read side for
+   its fetch. It writes into a staging tree outside the root during
+   fresh-volume boot only, so a snapshot can wait one file's fetch, at
+   most; the root swap is the one root-visible step and holds the lock
+   for two renames. The backup removal runs after the lock is released.
+6. **The gate misses a writer.** Guard: `scripts/check-owner-files-writes`
+   scans every non-test Go file of `internal/autoputer`,
+   `internal/textureowner`, `internal/modelpolicy` and
+   `internal/agentcore/selfdev_screens.go` for `os` write calls
+   (`WriteFile`, `Create`, `CreateTemp`, `OpenFile`, `Rename`, `Remove`,
+   `RemoveAll`, `Mkdir`, `MkdirAll`, `MkdirTemp`, `Truncate`, `Chmod`,
+   `Chown`, `Lchown`, `Link`, `Symlink`, `Chtimes`), `ioutil.WriteFile`
+   and the `unix` write calls. A file that never touches the files root
+   is allowlisted by name with its reason, so a new file in those
+   packages is gated by default. Its selftest plants a raw write in a
+   gated file and expects a failure.
+7. **The lock order inverts.** The maildir takes the files lock, then its
+   own mutex; nothing takes them the other way round.
+
+## Build: S2 failure modes (written before code)
+
+S2 adds the files layer: `<capsule state dir>/computer-lower/computer/files`,
+a hardlink snapshot of the files root, mounted between the source lower and
+the guest root for implementation assignments only.
+
+1. **Cleanup changes a live file.** `removePrivateTree` chmods every regular
+   file 0600 before `RemoveAll`; on a hardlink that is the live owner file.
+   Guard: it chmods directories only (unlinking never needs a file's mode).
+   Test: destroy a capsule whose layer links a 0644 file; the live file
+   keeps 0644 and its bytes. Rollback (review 1, DeepSeek 2): the
+   `removePrivateTree` change is its own commit, landed before the layer;
+   a rollback of S2 reverts the layer commit and keeps that one, so no
+   binary that builds layers can be followed by one that chmods them.
+2. **The walk follows a link out of the root or links a special file.**
+   Guard: `openat` with `O_NOFOLLOW|O_DIRECTORY` relative to the parent
+   descriptor, `fstatat` with `AT_SYMLINK_NOFOLLOW`, `linkat` without
+   `AT_SYMLINK_FOLLOW`, regular files only. Test: a symlink to a file
+   outside the root, a symlinked directory, a FIFO and a socket are left
+   out and named.
+3. **A file the capsule must not read is linked.** Guard: files without
+   `o+r` are left out and named, never chmodded. Test: a 0600 file with a
+   canary is absent from the layer.
+4. **The live tree changes during the walk.** Guard: the walk runs under
+   `ownerfiles.Exclusive`; `Source/platform`, which git writes outside the
+   lock, is left out. Test: a writer looping through the helper during the
+   walk never leaves a torn or half-renamed file in the layer.
+5. **The layer cannot be built** (different filesystems: `EXDEV`; a failed
+   walk). Guard: the partial layer is removed and the capsule starts
+   without `/computer/files`; the receipt names why. A capsule always
+   starts; the copy is data, not a precondition.
+6. **The capsule writes the live tree through the layer.** Overlay writes
+   land in the upper; the lower is outside the chroot. Directories in the
+   layer are owned by the capsule's mapped uid, so the capsule can add,
+   rename and remove entries (all in its upper); linked files keep their
+   owner and mode, so an owner file is read-only in the capsule. Test: a
+   capsule job creates, replaces by rename and deletes under
+   `/computer/files`, tries an in-place write of a linked file; the live
+   tree's sha256 and modes are unchanged.
+7. **`/computer` writes reject Freeze or ride the patch.** Guard: the
+   classifier ignores `/computer/` and `walkUpperdir` skips `computer`.
+   Test: a manifest walk of an upper with `computer/files/x` and
+   `computer/state.db` has no `computer` entry; classifying `/computer/x`
+   is ignored.
+8. **A spawn that is not an implementation assignment gets the layer.**
+   Guard: `SpawnSpec.ComputerState`, set only in the implementation
+   assignment's spawn from its durable binding; research, desk-tool and
+   verifier spawns never set it. Test: the spawn spec built for a
+   verification binding has it false.
+9. **The credential disk or identity material reaches `/computer`.**
+   Guard: they live under `/run` and `/mnt/persistent`, outside the files
+   root; `/run` and `/mnt` stay masked. P2 asserts the delegate token path
+   and the credential disk are unreadable from an engineering capsule
+   (coordinator, 2026-11-03); d@e is not a delegate computer, so P2 tests
+   the masks there and the delegate case is a residual until the delegate
+   moves behind the gateway
+   (`docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md`).
+
+Build decisions (deviations from the text above, smaller in effect):
+
+- **No broker env change.** The paths are fixed (`/computer/files`,
+  `/computer/state.db`) and the engineering prompt names them, so the
+  broker env stays exactly as it is. `/computer/receipt.json` (read-only,
+  in the layer) holds the receipt for the engineer and for P1 and P2.
+- **Directory owner.** Section 1 said root-owned 0755; the build makes them
+  the capsule's mapped uid, 0755, so P3's writes succeed in the upper. The
+  lower is outside the capsule's mount namespace either way.
+
+## Build: S3 failure modes (written before code)
+
+S3 adds the store copy (`Store.SnapshotTo`, written into the capsule's upper
+at `computer/state.db` with `computer/state.texture/`), the disk charge, the
+column-name test and the secret-shape scan, the in-capsule autoputer recipe,
+and the prompt text.
+
+1. **The copy is torn or ships a WAL.** Guard: `VACUUM INTO` in one read
+   transaction to a temporary name, `journal_mode=DELETE` and close before
+   the rename, so the copy is one file. Test: after `SnapshotTo`, `dir` holds
+   `state.db` and `state.texture/` only, no `-wal`, `-shm` or temporary.
+2. **A blanked value survives in a free page or another file.** Guard:
+   `secure_delete=ON` before any blanking, then a second `VACUUM`. Test:
+   plant a secret-shaped value in a text column, take the copy, grep the raw
+   bytes of every file under the copy's directory.
+3. **A blanking cannot be applied** (a trigger or constraint refuses the
+   update). Guard: the copy fails, the capsule starts without it, and the
+   receipt names why; a value the scan flagged never ships unblanked.
+4. **A new column holds a credential.** Guard: the column-name test fails
+   until the column is ruled on, each ruling with its reason.
+5. **The copy fills the volume.** Guard: the charge. The estimate is the
+   store's live pages; the capsule state volume must keep its 4 GiB floor
+   (above compaction's 2 GiB) after the copy and an upper allowance of
+   512 MiB; otherwise the capsule starts without the copy and the receipt
+   says so. The paper's 23 GB store is the expected refusal. A failed copy
+   leaves no file.
+6. **The live store is disturbed.** The copy is one read transaction on its
+   own connection (writers never wait; the WAL is pinned for its length),
+   then a checkpoint, as compaction does. The copy's pragmas and blanking
+   run on the copy only. Test: the live store's head and a row are unchanged
+   and it keeps accepting writes during and after the copy.
+7. **The capsule reads the store's sidecar secrets or telemetry.** Guard:
+   only `store-floor.json`, `store-schema.json` and the lease-untrust marker
+   are copied; telemetry partitions and image blobs are left out and named.
+8. **The in-capsule autoputer reaches a credential or the live computer.**
+   Guard: it runs in the capsule's network namespace with no gateway token,
+   no signer, no credential envelope, no platform URL; `run.go` starts those
+   only when their variables name them, and the capsule environment names
+   none. Loopback trust (`CHOIR_GUEST_TRUST_LOOPBACK=1`) is set only on that
+   process, inside the capsule, where loopback is the capsule. Test: start
+   the autoputer binary over a store copy and a files tree with only the
+   capsule recipe's variables; it serves the Files API on loopback and its
+   log shows no credential path opened.
+9. **The copy's ownership blocks the capsule.** Guard: `computer/`,
+   `state.db` and `state.texture/` are chowned to the capsule's mapped uid,
+   as the release leaf is.
+10. **The two instants are mistaken for one.** The receipt names both: the
+    files lock time and the store's event head and sequence.
+
+## Build: S2 review round 1 and S3 decisions
+
+S2 round 1: Devin accept_with_nits, DeepSeek send_back (two blocking).
+
+- A failed link counted as a leave-out while the receipt said built
+  (DeepSeek 1): fixed. Any failure to build a kept entry fails the walk and
+  the layer is refused; only a file that vanished is skipped. Each link is
+  re-checked (same device and inode, regular, `o+r`) and unlinked if the
+  entry changed (DeepSeek 7). A mount inside the files root is left out as
+  `other_filesystem` (Devin 7a). The walk checks the spawn's context.
+- The revert hazard (DeepSeek 2, Devin 1): the `removePrivateTree` change
+  is its own commit; the rollback keeps it.
+- A refused layer had no receipt (DeepSeek 3): the receipt is now written
+  in the upper at `computer/receipt.json` for every spawn that asked, with
+  the files and store results and each refusal.
+- Not-`o+r` file names reached the capsule in the receipt (Devin 2): they
+  are counted, never named.
+- Literal leave-out paths (DeepSeek 5): the source leave-out is the
+  configured source root (`CHOIR_CAPSULE_SOURCE_ROOT`) relative to the
+  files root, and the maildir and the snapshot share `ownerfiles.MailDir`.
+- The files root is resolved through symlinks at configuration, and a root
+  that overlaps the capsule state dir is refused (Devin 4).
+- The receipt records the lock wait as well as the hold (Devin 6).
+- The spawn spec is built by one function the test exercises (Devin 5,
+  DeepSeek 6).
+
+Taken as residuals:
+
+- **The executor mutex.** Spawn holds it throughout, as it does for the
+  source copies; the files walk (about 3,200 links on d@e) and the store
+  copy (about 200 MB) run under it (DeepSeek 4). Moving the layer before the
+  lock is a follow-up if spawn latency shows it.
+- **Egress from a capsule that holds the copy** (Devin 3): a claude-mode
+  implementation capsule holds the copy, the delegate token and
+  `api.anthropic.com` egress. It is the coordinator's ruling to keep the
+  copy and move the delegate behind the gateway
+  (`docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md`);
+  until then the ring walk does not reach the delegate computers with this.
+- **Live-inode side effects** (Devin 7b, c): capsule reads may update atime
+  under `relatime`, and link counts rise while a capsule lives. Neither
+  changes bytes, mode or owner.
+
+S3 decisions:
+
+- **The disk charge is an admission check.** There is no disk reservation
+  in the S4 scheduling work to join (its reservation is host memory). The
+  copy needs twice the store's live pages plus a 512 MiB upper allowance,
+  and the capsule state volume must keep its 4 GiB floor after it (above
+  compaction's 2 GiB); otherwise the receipt says `does not fit` and the
+  capsule starts without the copy.
+- **The copy's sidecar** carries the floor, the schema receipt, the
+  lease-untrust marker and the two vocabulary files that travel with
+  published bases (the cutover report arms the write fence on reopen);
+  telemetry partitions and image blobs are named as left out.
+- **No blanking by column name.** The column-name test rules on all 13
+  matches (none holds a credential); the secret-shape scan of every text
+  and blob value is the check, blanking each hit to
+  `[redacted:<digest prefix>]` under `secure_delete`, then a second
+  `VACUUM`. A blanking the store refuses fails the copy.
+- **The in-capsule autoputer** is the ordinary binary with
+  `RUNTIME_STORE_PATH=/computer/state`, `AUTOPUTER_FILES_ROOT=/computer/files`,
+  `AUTOPUTER_PORT=8082` (Vite's `/api` proxy) and
+  `CHOIR_GUEST_TRUST_LOOPBACK=1` on that process only, inside the capsule's
+  network namespace. `run.go` starts the credential, signer, gateway, file
+  sync and capsule paths only when their variables name them; none is set.
+  The capsule browser recipe says this; the engineering overlay points at
+  it. A local smoke is in the S0 evidence doc.
+
+## Build: review of S2 round 2 and S3 round 1
+
+Devin: accept_with_nits (no blocking finding; "none" judged the honest
+security effect: the epoch pushes fixes to hibernated releases, and an older
+release lacks the layer). Folded in: `SnapshotTo` refuses the live store's
+own directory (1); the source-root containment check uses `pathWithin` (3).
+Recorded here:
+
+- **Scan coverage** (4): the secret-shape scan sees cleartext patterns
+  only. Sealed private payloads are the safe case (the capsule has no
+  privacy key); a future compressed or encoded column is outside it, and the
+  five carried sidecar files (floor, schema receipt, lease marker, the two
+  vocabulary files) are ids and schema records copied unscanned.
+- **The floor watch** (2): `vacuumIntoCopy` watches the live store's volume
+  (the pinned WAL); the capsule charge covers the copy's side. They are one
+  volume on every guest today.
+- **A crash mid-copy** (5) can leave `.state.db.snapshot-tmp`, unblanked,
+  in the upper of a capsule that never mounted; the boot-scoped cleanup of
+  the state directory removes it with the capsule's other state.
+
+DeepSeek on the same round: accept_with_nits ("none" honest, no epoch
+raise). Folded in: a blanking that changes no row fails the copy, and the
+second VACUUM runs on any hit (1); a bind mount of the same device inside
+the files root is left out by statx mount id (2); a receipt that cannot be
+written is logged and the capsule still starts (3); the placeholder digest
+is salted per copy (4); the sidecar copy refuses a symlink (6); only an
+implementation capsule's recipe names `/computer`, a verification capsule
+keeps the mock bullet (7); the recipe says the in-capsule autoputer trusts
+any caller on the capsule's loopback, the network namespace being that
+boundary (8); the floor is read again after the copy (9). Recorded: the
+scan misses double-encoded JSON and base64 or compressed plaintext (5, as
+Devin 4 above).

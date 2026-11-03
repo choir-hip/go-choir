@@ -97,6 +97,17 @@ route projection. Candidate VMs, desktops, routes, mutable branches,
 AppChangePackages, AppAdoption/lineage records, host daemons, and host repair
 are not self-development candidates or fallbacks.
 
+An implementation capsule's root is an overlay of these layers
+(`docs/design/capsule-overlay-computer-state-2026-11-03.md`); every write
+lands in its upper:
+
+| Layer | Holds | Authority |
+| --- | --- | --- |
+| upper | the capsule's writes; `computer/state.db`, a private store copy | dies with the capsule; only the source patch and the screens leave it, through Freeze, verify and apply |
+| source lower | `workspace/platform`, the computer's current source | read-only pin of the source commit; edits are the patch |
+| computerLower | `computer/files`, a hardlink snapshot of the files root at one instant under the files write lock | data, not access: no credential, store handle, write path or live view (I19); writes there are scratch |
+| guest root | `/`, with `/run` and `/mnt` masked | unchanged |
+
 An accepted event changes desired state. A root-owned guest updater stages and
 health-checks the immutable release before an applied event advances effective
 state. `ComputerVersion = (CodeRef, ArtifactProgramRef)` is then the
