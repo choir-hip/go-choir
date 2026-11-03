@@ -329,3 +329,18 @@ without disposing exact trigger" and "discards 1 emitted update(s) ids=[fd70fac3
 (about every 35 s), no turn committed. One occurrence, a fresh document and no hibernate: the hypothesis of two
 occurrences is wrong; Texture's activation on this arm never disposes its trigger. FP0 stopped sending to deepseek
 and told main (11:50Z).
+
+## Problem 18: scripts/choir-shot.mjs and the theme spec cannot resolve their dependencies in the capsule (luna, 11:42-11:48Z)
+
+Luna round 7b, assignment-eb38b054067ce9086841d23a (11:42:40-11:48:20Z), the first luna engineer to reach the
+browser step, completed blocked: "choir-shot's initial Vite build failed exactly because it could not resolve
+@chenglou/pretext (the dependency exists in the read-only Nix node_modules, but the shot helper's build did not
+resolve it); Playwright theme spec invocation with --grep files-next reported 'Error: No tests found' because the
+spec has one whole-frontend test and no package-scoping test". The assignment before it
+(assignment-7fc486680d52f4095cec7270) hit "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test'
+imported from /workspace/platform/frontend/tests/theme-contract.spec.js". So the screenshot helper main shipped for
+rounds (choir-shot.mjs) does not build inside a capsule whose node_modules come from $CHOIR_FRONTEND_DEPS, and the
+theme spec cannot be scoped to one package. The other arms' engineers wrote their own Playwright harnesses and did
+not use choir-shot. This revises the luna verdict: luna's last round was stopped by the capsule's tooling, not only
+by the engineer. Fix direction: resolve choir-shot's Vite build and the specs against $CHOIR_FRONTEND_DEPS/node_modules
+(NODE_PATH or a symlinked node_modules), and give theme-contract.spec.js a package filter.
