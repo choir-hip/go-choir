@@ -43,7 +43,7 @@ if ! git rev-parse --verify --quiet "$rev^{tree}" >/dev/null; then
 	exit 1
 fi
 
-guest_commands="./cmd/autoputer ./cmd/desk-worker ./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate ./cmd/choir-capture"
+guest_commands="./cmd/autoputer ./cmd/desk-worker ./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate"
 
 if [ -n "${GUEST_DIGEST_DIRS:-}" ]; then
 	dirs=$GUEST_DIGEST_DIRS

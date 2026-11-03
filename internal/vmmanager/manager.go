@@ -208,8 +208,8 @@ type VMConfig struct {
 	PostMaintenanceCredential func() (string, error) `json:"-"`
 
 	// WarmnessClass is the class vmctl booted the computer under ("test"
-	// for a test account's computer). It is a boot input only: the visual
-	// capture grant reads it (visual_capture.go).
+	// for a test account's computer). It is a boot input only: the class:
+	// selectors of the boot's grants read it.
 	WarmnessClass string
 
 	// NewComputer marks the first creation of a computer (vmctl's mint
@@ -500,10 +500,6 @@ type ManagerConfig struct {
 	// (VMCTL_GUEST_DNS_ONLY; empty selects none). See guest_dns.go.
 	GuestDNSOnly []string
 
-	// VisualCapture is the visual capture grant switch
-	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
-	// visual_capture.go.
-	VisualCapture VisualCaptureConfig
 
 	// CapsuleMirrors is the capsule package mirror grant switch
 	// (CHOIR_CAPSULE_MIRROR_*; empty by default). See capsule_mirrors.go.
@@ -1167,18 +1163,6 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		delegateFiles, delegateStatus := m.cfg.ClaudeDelegate.claudeDelegateMaterial(cfg.ComputerID, time.Now())
 		if delegateStatus != "" {
 			log.Printf("vmmanager: claude delegate for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, delegateStatus)
-		}
-		// Visual capture: a granted computer's disk carries the launch
-		// grant (docs/design/visual-evidence-slice-2026-10-15.md).
-		captureFiles, captureStatus := m.cfg.VisualCapture.visualCaptureMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
-		if captureStatus != "" {
-			log.Printf("vmmanager: visual capture for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, captureStatus)
-		}
-		for name, content := range captureFiles {
-			if delegateFiles == nil {
-				delegateFiles = map[string][]byte{}
-			}
-			delegateFiles[name] = content
 		}
 		// Capsule package mirrors: a granted computer's disk carries the
 		// ecosystems its L2 capsules use the host mirror for (station FP10).

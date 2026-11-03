@@ -505,8 +505,8 @@ type VMManagerConfig struct {
 	PostMaintenanceCredential func() (string, error)
 
 	// WarmnessClass is the computer's class at this boot ("test" for a
-	// test account's computer): the visual capture grant reads it
-	// (docs/design/visual-evidence-slice-2026-10-15.md).
+	// test account's computer): the class: selectors of the boot's grants
+	// read it.
 	WarmnessClass string
 }
 
@@ -1224,9 +1224,8 @@ func (r *OwnershipRegistry) refreshTestAccounts() {
 	r.mu.Unlock()
 }
 
-// bootWarmnessClass is a computer's class for a boot's inputs (the visual
-// capture grant reads "test"; docs/design/visual-evidence-slice-2026-10-15.md
-// V2). The test tier is refreshed by the idle sweep, so a test account
+// bootWarmnessClass is a computer's class for a boot's inputs (the class:
+// selectors of its grants read "test"). The test tier is refreshed by the idle sweep, so a test account
 // minted moments ago may not be in it yet: on a primary answer for an
 // account the tier does not know, the tier is reloaded once from the auth
 // DB. A failed reload keeps the previous set, so the answer fails closed.

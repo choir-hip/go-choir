@@ -1,14 +1,13 @@
 package main
 
 // `choir texture read` shows a document's embeds so a coding agent can find
-// the evidence digests and fetch them (station TE,
+// the evidence digests and the screen files they name (station TE,
 // docs/design/texture-evidence-embeds-te-2026-10-25.md section 5). Ways it
 // could fail, written before the code:
 //   - the embeds are buried in the revision's body JSON, which read does not
 //     even return, so the agent never learns there is evidence;
-//   - a row lacks the digest, the operation or the computer, so the agent
-//     cannot call `choir self-dev visual` for the bytes;
-//   - the fetch line names another operation or computer than the embed;
+//   - a row lacks the digest, the operation, the computer or the screen's
+//     file in the computer's tree, so the agent cannot find the bytes;
 //   - a document without embeds, or with no revision, changes shape;
 //   - a revision read failure fails the read of the document.
 
@@ -22,12 +21,12 @@ import (
 	"testing"
 )
 
-func TestTextureReadListsEmbedsWithTheirFetchCommand(t *testing.T) {
+func TestTextureReadListsEmbedsWithTheirScreenFile(t *testing.T) {
 	digest := strings.Repeat("c", 64)
 	revisionStatus := http.StatusOK
 	body := `{"schema":"choir.texture_doc.v1","doc":{"type":"doc","attrs":{"id":"d"},"content":[` +
 		`{"type":"paragraph","attrs":{"id":"p1"},"content":[{"type":"text","text":"Evidence."}]},` +
-		`{"type":"embed","attrs":{"id":"embed-1","kind":"capsule_evidence","target":{"digest":"` + digest + `","operation_id":"selfdev-op-1","computer_id":"computer-1","route":"/reader","width":1280,"height":800,"blank":true},"caption":"Blank screenshot of /reader","alt":"Screenshot of /reader"}}]}}`
+		`{"type":"embed","attrs":{"id":"embed-1","kind":"capsule_evidence","target":{"digest":"` + digest + `","operation_id":"selfdev-op-1","computer_id":"computer-1","file":"Self-development/selfdev-op-1/screens/reader.png","width":1280,"height":800,"blank":true},"caption":"Blank screenshot of /reader","alt":"Screenshot of /reader"}}]}}`
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/texture/documents/doc-ev":
@@ -62,9 +61,8 @@ func TestTextureReadListsEmbedsWithTheirFetchCommand(t *testing.T) {
 	row, _ := embeds[0].(map[string]any)
 	want := map[string]any{
 		"block_id": "embed-1", "kind": "capsule_evidence", "digest": digest, "operation_id": "selfdev-op-1",
-		"computer_id": "computer-1", "route": "/reader", "width": float64(1280), "height": float64(800), "blank": true,
+		"computer_id": "computer-1", "file": "Self-development/selfdev-op-1/screens/reader.png", "width": float64(1280), "height": float64(800), "blank": true,
 		"revision_id": "rev-1", "asset_url": "/api/assets/sha256/" + digest,
-		"fetch": "choir self-dev visual --computer 'computer-1' --operation 'selfdev-op-1' --out <dir>",
 	}
 	for k, v := range want {
 		if row[k] != v {

@@ -593,17 +593,6 @@ func buildRegistry() []*command {
 			handler: selfDevPatch,
 		},
 		{
-			path:    []string{"self-dev", "visual"},
-			summary: "List a frozen candidate's screenshots (--out DIR fetches and sha256-verifies each PNG)",
-			desc:    "List a frozen self-development candidate's visual-evidence captures (frozen or later): route, size, digest, blank and resolvable, with the capture receipt. The CLI's --out also fetches each PNG, re-hashes it against its digest, and writes <route>-<digest12>.png into the directory; MCP returns the listing only.",
-			params: []param{
-				computerParam().orSay(selfDevUsage), pStr("operation", "Operation ID (frozen or later)").req(),
-				pStr("out", "Fetch each capture's PNG, verify it against its digest, and write it into this directory (created mode 0700)").onlyCLI("writes the caller's local filesystem; MCP returns the listing only (a hosted server has no local files, and a model must not pick local paths)"),
-			},
-			usage: "--operation is required", scopes: selfDevRead, readOnly: true,
-			handler: selfDevVisual, render: renderSelfDevVisual,
-		},
-		{
 			path: []string{"self-dev", "wait"}, summary: "Poll an operation until it reaches --state",
 			params: []param{
 				computerParam(), pStr("operation", "Operation ID").req(),
@@ -1076,13 +1065,13 @@ type textureEmbedRow struct {
 	OperationID string `json:"operation_id,omitempty"`
 	ComputerID  string `json:"computer_id,omitempty"`
 	Route       string `json:"route,omitempty"`
+	File        string `json:"file,omitempty"`
 	Width       int    `json:"width,omitempty"`
 	Height      int    `json:"height,omitempty"`
 	Blank       bool   `json:"blank"`
 	Caption     string `json:"caption,omitempty"`
 	RevisionID  string `json:"revision_id"`
 	AssetURL    string `json:"asset_url"`
-	Fetch       string `json:"fetch,omitempty"`
 }
 
 func textureEmbedRows(revisionID string, body json.RawMessage) []textureEmbedRow {
@@ -1093,20 +1082,11 @@ func textureEmbedRows(revisionID string, body json.RawMessage) []textureEmbedRow
 	var rows []textureEmbedRow
 	for _, e := range texturedoc.Embeds(doc) {
 		row := textureEmbedRow{BlockID: e.ID, Kind: e.Kind, Digest: e.Digest, OperationID: e.OperationID, ComputerID: e.ComputerID,
-			Route: e.Route, Width: e.Width, Height: e.Height, Blank: e.Blank, Caption: e.Caption, RevisionID: revisionID,
+			Route: e.Route, File: e.File, Width: e.Width, Height: e.Height, Blank: e.Blank, Caption: e.Caption, RevisionID: revisionID,
 			AssetURL: "/api/assets/sha256/" + e.Digest}
-		if e.Kind == texturedoc.EmbedKindCapsuleEvidence && e.ComputerID != "" && e.OperationID != "" {
-			row.Fetch = "choir self-dev visual --computer " + shellQuote(e.ComputerID) + " --operation " + shellQuote(e.OperationID) + " --out <dir>"
-		}
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-// shellQuote single-quotes s for a POSIX shell, so a pasted fetch line runs
-// as shown whatever the ids hold.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func selfDevDecide(x *call, decision string) (any, error) {

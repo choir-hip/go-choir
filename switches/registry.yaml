@@ -591,32 +591,6 @@
    "note": "Deletes; bounded by VMCTL_RETENTION_MAX_DELETES/BYTES."
   },
   {
-   "id": "choir_visual_capture",
-   "kind": "host_selector",
-   "life": "release",
-   "owner": "selfdev",
-   "class": "orange",
-   "surface": "capsule",
-   "introduced": "2026-10-28",
-   "nix": [
-    "CHOIR_VISUAL_CAPTURE_COMPUTERS"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "R1,ids:2",
-   "nix_value": "computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,cla...",
-   "promote": [
-    {
-     "metric": "capture_job_success",
-     "bound": "== all in ring"
-    }
-   ],
-   "retire": "delete the selector; capture is a capsule default"
-  },
-  {
    "id": "choir_event_table_computers",
    "kind": "host_selector",
    "life": "release",
