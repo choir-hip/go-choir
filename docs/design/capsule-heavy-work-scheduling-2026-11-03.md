@@ -135,6 +135,50 @@ shares only consumer-verified, host-fetched downloads and keeps build
 outputs per computer). Round 2: accept (reservation clamp, lifecycle and
 the running-computer charge folded in above).
 
+## As built (2026-11-03, branch selfdev-s4-scheduling)
+
+- **Size classes.** `capsule.SpawnSpec.SizeClass` (`internal/capsule/capsule_size.go`);
+  engineering assignment capsules spawn `build`. `build` reserves 3 GiB
+  (`BuildPeakBytes`) on the host; `light` reserves nothing, since its editing
+  footprint is already in the computer's settled RSS. The guest-local
+  admission and the cgroup limits are the same for both classes.
+- **Reservations and facts share one route.** The guest posts its whole live
+  build set to `POST /internal/vmctl/computers/capsule-reservations`, which is
+  tap-bound like the effective-release report. It posts at a build spawn
+  (with `admit`) and every 5 s while any build capsule is live. vmctl
+  replies with the host facts. So "published to guests" is a reply to the
+  guest's own report, not a separate host-written channel. With no live
+  build the guest asks nothing, and no job then needs the facts. Code:
+  `internal/vmctl/capsule_reservations.go`, `internal/autoputer/capsule_host_memory.go`.
+- **The charge.** Per computer it is `min(ceiling - rss, max(0, settled + builds - rss))`.
+  It goes into the same `reserved` term that starts and build spawns are
+  admitted against. A set expires after the in-flight TTL without a
+  report, and is dropped when the VM stops.
+- **Refusal.** A build spawn the host cannot cover returns
+  `capsule.HostMemoryRefusal`. The assignment open is cancelled with the
+  host's reason, which is visible in the cast's fate. A refused build does
+  not make room (make-room stays a start's). A vmctl that cannot be asked,
+  or one that predates the route, leaves the spawn as before.
+- **Deferral.** A build-class job reads the facts before it starts. It
+  waits in the new job state `waiting` ("waiting for host memory: ...") in
+  two cases: PSI memory some avg10 above 10, or avg60 above the reclaim
+  threshold; or headroom (MemAvailable less the floor and what is promised
+  to other computers) under 3 GiB. It starts when that clears. It ends
+  stopped on its stop, at its capsule's end, or after 30 minutes of
+  waiting, and a restart closes it as interrupted. Protected computers,
+  light capsules and facts older than 30 s never wait.
+- **Priority.** Protected (`premium_always_on`, `critical_protected`,
+  `public_platform`) build spawns are always admitted and still counted.
+  Every other class is batch. The existing make-room order already takes
+  test computers (the arms) first and never takes protected ones.
+- **CPU.** `cpu.weight` is 50 for a build capsule and 100 for a light one.
+  The capsules aggregate is 50.
+- **`JobAdmission`** is deleted, with the lease-share release it threaded
+  through job boosts.
+- **Not built here:** the shared download cache (point 4). It rides the
+  capsule mirrors path that lane B turned on at d@e. Widening the mirrors
+  and the "capsule cannot write a shared entry" check are that lane's.
+
 ## Rollback
 
 Revert. Size classes default to the current request; with no pressure facts
