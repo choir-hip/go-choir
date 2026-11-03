@@ -1,6 +1,6 @@
 # Capsules overlay the exact computer state; the source tree follows the deploy (2026-11-03)
 
-Status: design, revision 2, under review (tier 2). Mutation class of this
+Status: design, revision 3, under review (tier 2). Mutation class of this
 doc: green. The change it designs is red: capsule isolation, owner data in
 a capsule, the guest store, source projection and the Cast gate. Problem:
 `docs/problems/selfdev-arm-rounds-fail-at-freeze-and-capsules-lack-real-content-2026-11-03.md`
@@ -102,7 +102,10 @@ Code refs are at `02775597e`.
 ## Decision
 
 Only engineering (self-development) capsules get the computer's state.
-Research Exec and desk-tool capsules are unchanged.
+`SpawnSpec` gains `ComputerState bool`, set only by the engineering
+assignment's spawn from its durable binding (as `VerifierBundleDir` is);
+research Exec, desk-tool and verifier spawns never set it, and the
+executor mounts `computerLower` only when it is set.
 
 The engineering capsule root becomes:
 
@@ -120,7 +123,8 @@ no mask is loosened. The broker gives engineering workloads
 names them.
 
 Every write in the capsule lands in its upper. `/computer/` joins the
-classifier's ignore list and `walkUpperdir` skips it before stat or hash,
+classifier's ignore list and `walkUpperdir` returns `SkipDir` at
+`computer` (so nothing below it is stat'd or hashed),
 so a write there is scratch: it never rejects a Freeze, is never carried,
 and dies with the capsule. What reaches the computer is unchanged: the
 source patch and the screens, through Freeze, verify and apply.
@@ -131,16 +135,19 @@ source patch and the screens, through Freeze, verify and apply.
   helper (the existing `writeOwnerFileDurable`, moved to a small package)
   that writes a temporary file and renames it, under the read side of one
   process-wide files lock. `texture_import`, the model-policy default, the
-  screens writer and hydration move onto it; the hydration root swap takes
+  screens writer, the maildir (`NewMaildir(filesRoot/mail)`, `run.go:647`,
+  `maildir.go`) and hydration move onto it; the hydration root swap takes
   the lock too. A repo gate (`check-owner-files-writes`) refuses
-  `os.WriteFile`, `os.Create`, `os.OpenFile` with a write flag, `os.Rename`
-  and `os.Remove*` in the packages that hold the files root (autoputer,
+  `os.WriteFile`, `os.Create`, `os.OpenFile` with a write flag, `os.Rename`,
+  `os.Remove*` and `os.Mkdir*` in the packages that hold the files root (autoputer,
   textureowner, modelpolicy, agentcore screens), except inside the helper.
   Consistency is bounded by writers in the autoputer process; nothing else
   writes the files root today.
 - **The snapshot** takes the write side of that lock, walks the files root
   with `O_NOFOLLOW` opens relative to each parent descriptor, and hardlinks
-  each kept regular file into `<capsule state dir>/computer-lower/files`,
+  each kept regular file into `<capsule state dir>/computer-lower/files`
+  (directories root-owned 0755, so the capsule reads but cannot write the
+  lower itself),
   then releases the lock. A rename-only writer never changes a linked
   inode, so the snapshot is the files tree at the instant the lock was
   held. The snapshot sits inside the capsule's own state directory, so the
@@ -153,7 +160,9 @@ source patch and the screens, through Freeze, verify and apply.
   through a boundary the owner or a tool set).
 - **Left out, and named in the spawn receipt:** `Source/platform` (it is
   the source lower already); every `.git` directory; symlinks, sockets and
-  devices; files without `o+r`; and every path the files predicate names.
+  devices; files without `o+r`; the `mail/` tree (the owner's emails are in
+  the keep set; a Mail round gets them by a later owner decision, not by
+  default); and every path the files predicate names.
   The files predicate is `secretBearingPath` plus the credentials people
   keep in home-like trees: the directories `.aws`, `.kube`, `.docker`,
   `.ssh`, `.gnupg`, `.config/gcloud`, `.password-store`; the names
@@ -177,9 +186,10 @@ source patch and the screens, through Freeze, verify and apply.
   telemetry partitions and `state.image-blobs` are left out and named
   (images in documents show as missing in the capsule).
 - **The copy is written straight into the capsule's upper** at
-  `computer/state.db`. It is a private copy, so it needs no lower: SQLite
-  in the capsule writes it and its WAL in place, with no copy-up of a
-  second full file. One file, one charge.
+  `computer/state.db`, with `computer/` and the file owned by the capsule's
+  mapped uid (65534) as the release leaf is. It is a private copy, so it
+  needs no lower: SQLite in the capsule writes it and its WAL in place,
+  with no copy-up of a second full file. One file, one charge.
 - **No reuse.** Each spawn takes a fresh copy (spawns are a few per round).
   A reuse key would need a store-wide commit generation the store does not
   keep.
@@ -192,9 +202,24 @@ source patch and the screens, through Freeze, verify and apply.
   store table for credential-shaped names (`token`, `secret`, `key`,
   `password`, `cookie`, `session`, `nonce`, `credential`). Each match is
   either allowlisted with a reason in the test (for example
-  `tokens_before`, a count) or its rows are deleted from the copy before
-  the capsule starts (`desktop_sessions` until reviewed). A new matching
-  column fails the test until it is classified. Sealed payloads stay
+  `tokens_before`, a count) or blanked in the copy before the capsule
+  starts. The first rulings: `desktop_sessions.session_id`,
+  `desktop_app_instances.created_by_session_id` and
+  `desktop_window_placements.session_id` are blanked (set to a fixed
+  placeholder, so joins and layout still work). A new matching column
+  fails the test until it is ruled on.
+- **Blanked bytes do not survive.** The copy's connection sets
+  `PRAGMA secure_delete=ON` before the blanking, and the copy is then
+  `VACUUM`ed once more, so no old cell remains in a free page. The S3 test
+  writes a known session id, takes the copy, and greps the copy's raw bytes
+  for it.
+- **Payload columns** (`events.payload_json`, `choir_events.metadata`,
+  `choir_event_bodies.body`, `computer_event_index.prepared_event_json`)
+  are invisible to a name scan. The invariant is the one the tape already
+  holds: private content is sealed, and `computerevent.LocatePrivateSecrets`
+  runs on event bodies at append. S3 also runs it over every text column of
+  the copy at snapshot time; a hit blanks that value and is named in the
+  receipt. S0 measures what that scan costs. Sealed payloads stay
   sealed: the capsule has no privacy key, so a sealed body shows as locked.
 - **Consistency across the two.** The files snapshot and the store copy are
   two instants a few seconds apart; the receipt names both (the files lock
@@ -255,8 +280,10 @@ served release itself would be a separate red design.
   Rollout is the ring walk: d@e first.
 - **Reconcile stops destroying work.** Before any `reset --hard`, S4 makes
   `ensureHead` save what it would lose: a dirty tracked tree is committed
-  to `refs/choir/saved/<utc>`, a foreign HEAD is kept at the same kind of
-  ref, and both, with `From`, go on the tape as a `source.projection_saved`
+  to `refs/choir/saved/<saved commit id>`, a foreign HEAD is kept at
+  `refs/choir/saved/<its commit id>` (the name is the commit, so two saves
+  never share a name; `update-ref` is called with an empty old value so it
+  never overwrites), and both, with `From`, go on the tape as a `source.projection_saved`
   fact. The reset then proceeds. The source stays current, and nothing is
   lost silently.
 - **A moved base: re-materialize when byte-identical, else rebase.** S6's
@@ -275,7 +302,9 @@ served release itself would be a separate red design.
     accept.
   - When any touched path differs between B and B', `stack_base_moved`
     stays a refusal of ordinary Casts, and the U4 rebase notice asks the
-    root to Cast the rebase. With no live root RLM, the refusal says so.
+    root to Cast the rebase. With no live root RLM, the Cast refusal gains
+    the text `rebase_needs_root: no live root desk to Cast the rebase`
+    (today `mintRebaseNotice` only logs it, `rebase_notice.go:189,235`).
   - Casting on B+P is rejected: its cumulative patch is based on B, which
     the builder refuses after a deploy (`base_commit_mismatch`).
   - S6 later replaces the whole-stack answer with per-package entries.
@@ -396,8 +425,12 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
 - **The guest root lower** shows world-readable guest files outside the
   masks. A narrower lowest layer (the system closure only) is a separate
   change.
-- **Sealed content and document images** appear locked or missing in the
-  capsule.
+- **Sealed content, document images and mail** appear locked or missing
+  in the capsule.
+- **The boundary in the files snapshot is file mode only.** Directories are
+  flattened to 0755 (hydration makes every directory 0700), so a 0644 file
+  under a 0700 directory, unreachable to uid 65534 on the live tree, is
+  readable in the capsule. File modes and the predicate are the boundary.
 
 ## Decisions after review 1 (Devin send_back, DeepSeek send_back)
 
@@ -426,3 +459,20 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
   stated. `composeFreezePatch` already rebases the patch onto the
   `Choir-Stack-Base` trailer, and the graft writes B' there. P5 now proves
   an approved re-materialized candidate builds and applies.
+
+## Decisions after review 2 (Devin send_back)
+
+- Deleted rows survive in free pages (1): fixed, blanking under
+  `secure_delete` and a second `VACUUM`, with a raw-byte test.
+- Rulings and payload columns (2): fixed, the three session-id columns are
+  blanked by name; a secret-shape scan runs over every text column of the
+  copy.
+- The maildir (3): named, gated (`os.Mkdir*` added), and `mail/` is left
+  out of the snapshot.
+- Engineering at spawn (4): `SpawnSpec.ComputerState`, from the durable
+  binding.
+- Saved-ref collision (5): the ref is named by the saved commit, created
+  with an empty old value.
+- Directory flatten (6): stated as a residual.
+- Small gaps (7): capsule-uid ownership of the copy, `SkipDir`, and the
+  `rebase_needs_root` refusal text.
