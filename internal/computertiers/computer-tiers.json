@@ -28,6 +28,10 @@
     {
       "computer_id": "computer-4d38420cf85ac490a36baa0ef5d7a67a",
       "note": "selfdev-arm-pool, made by scripts/test-computer-create: test tier, so ring R1 (owner 2026-11-03, cycle time)"
+    },
+    {
+      "computer_id": "computer-848b21d55df1dd1a953ae798b8edc696",
+      "note": "selfdev-arm-crouton, made by scripts/test-computer-create: test tier, so ring R1"
     }
   ]
 }
