@@ -69,9 +69,9 @@ let
   # full Chromium (nixpkgs has no headless shell) in the store of every guest
   # but on no PATH. Every capsule broker hands its jobs the path
   # (CHOIR_BROWSER) for an engineer's Playwright, with no grant; the
-  # fontconfig file names DejaVu so text renders without /etc/fonts.
+  # fontconfig file names DejaVu (text) and Noto Color Emoji (the shell icons are emoji code points) so both render without /etc/fonts.
   guestBrowser = toolPkgs.chromium;
-  guestFontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
+  guestFontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts pkgs.noto-fonts-color-emoji ]; };
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
     build_commit=${buildCommit}
