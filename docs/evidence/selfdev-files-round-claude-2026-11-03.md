@@ -10,6 +10,14 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Engineering: Synthetic DeepSeek V4.1 Flash + Claude Sonnet delegate (grant); texture and management pool:default
 - Approver: FP0 (test arm only); publish to the Library, no git promotion
 
+**Correction (16:45Z): this arm never had the Claude delegate.** The gateway keyed the delegate credential by VM id, while
+the grant list holds product computer ids (problem 25). Every round on this computer before the fix therefore ran as
+DeepSeek V4.1 Flash alone. /api/runtime/observability reported claude_delegate available=false: "the gateway withheld
+the delegate: this computer has no Claude delegate grant". So the Files rounds and the 15:54Z proof round here are
+DeepSeek-only results, not Claude-arm results. They compare like-for-like with the deepseek arm, and say nothing about
+Claude. Problem 25's fix is 7800706b5, and taking it needs a cold boot to re-issue the credential. The first real
+Claude-arm round is the first one after that cold boot, once observability reports available=true.
+
 ## Setup (all four arms, 02:50-02:53Z)
 
 - Seeded a real-content corpus through `choir files put` (16 files: two
