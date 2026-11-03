@@ -425,13 +425,16 @@ the gateway, and capsules open as ecosystem_proxy instead of claude mode. Claude
 never used the delegate, so its rounds are unaffected. The fix is with a builder (tier 2, expedited) and will likely
 need a cold boot after deploy. Luna's round 10 is held until then.
 
-## Unnumbered (lane C, 17:21Z): a claude-mode capsule lacks /computer/state.db, so its shots fall back to mocks (luna)
+## Problem 26: a claude-mode capsule withholds /computer, so its shots fall back to mocks (luna, 17:21Z)
 
 Luna's Slides round 10 retry was the first round with a working delegate. Ids: assignment-7bb175e0,
 capsule-b9e65b14, capsule_network_mode "claude". The delegate ran from 17:09:44Z to 17:18:13Z: 44 turns, state done,
 $0.77, no auth errors. The engineer's report says the capsule had no /computer/state.db, only receipt.json. So the
 in-capsule autoputer had no store, and the PPTX, HTML, welcome and error fixtures and the backend routes were
 mocked. The judge rejected selfdev-3d4b74c0 at 17:20:38Z: "uses mocked slides, routes, and fixtures rather than
-authentic computer content". Unverified: whether a claude-mode capsule withholds the computer-state overlay by design
-(it was present in ecosystem_proxy capsules on other arms) or misses it by fault. Also seen: the engineering cell's
+authentic computer content". Cause (main): withheld by design, by a stale rule. internal/capsule/computer_state.go withholds /computer
+from every claude-mode capsule "until the delegate call moves behind the gateway", and since problem 25's fix it has.
+Fix: lift the withhold for gateway-mode delegate capsules. It is with a builder at tier 2, because it puts state beside
+a model egress path. ecosystem_proxy capsules (deepseek, pool) keep /computer and are unaffected. Also seen: the engineering cell's
 own `wc -c` was refused with `import "os/exec" refused: direct process execution must route through capsule broker`.
+That refusal is expected, because an engineering cell cannot exec; the check belongs in a capsule job.
