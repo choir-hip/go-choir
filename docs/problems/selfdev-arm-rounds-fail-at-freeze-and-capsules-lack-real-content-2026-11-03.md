@@ -158,3 +158,21 @@ said "forward this to management now" produced a Cast in 79 s (turn 06:07:53Z, a
 the first turn emitted no control or emitted one that was dropped is a hypothesis until its controls[] are read;
 the lifecycle events show only the turn and no assignment. Workaround: every FP0 revision names the forward
 explicitly and carries the whole request (which also answers Problem 5).
+
+## Problem 9: engineering reads only the first 16 KiB of Texture's request, while Texture may carry 64 KiB
+
+Luna arm, assignment-24a775b85a245c31ad635d9f (06:08Z). FP0's self-contained resend (15,064 bytes, written to
+answer Problems 5 and 8) became a Texture Cast whose body was 20,923 bytes. Engineering saw "[... truncated:
+showing 16384 of 20923 bytes of the Texture request's body (record cell:36ba0624-...:cast:tray-1). Bytes
+16384-20923 are not readable from any desk; do not guess them ...]", reported that to management ("Texture's
+carried request Cast arrived truncated at 16,384 bytes ... Working from visible requirements pending it"),
+froze what it had, and the judge failed selfdev-6038b25b1a45521496562f6f8924b46a (06:12:41Z: "explicitly
+partial, lacks required feature behavior and browser validation"). The cap is
+`engineeringRequestBodyMax = 16 << 10` (internal/agentcore/engineering_cast_request.go:35-36); Texture's
+`castOwnerTextMax` is 64 KiB, so a request Texture accepts can be cut one hop later. The truncation notice works
+as designed (engineering asked for a shorter resend and did not guess), but the round still spends a capsule
+and a judge on a partial build. Texture answered by rewriting the request to fit (06:11:58Z, revision 307df8dc,
+pointing at the repo spec files).
+Fix direction (orange): one cap for the whole carry (Texture refuses or splits a Cast its engineering hop
+would cut), or raise the engineering cap to Texture's. Workaround: FP0 revisions stay under about 8 KB and point
+at the spec in the source tree (projection is on, so the spec is there).

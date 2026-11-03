@@ -95,6 +95,20 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   "import these from app-sdk once it has them; do not edit app-sdk.ts", self-contained (Problem 5). It waits for a
   build slot: deepseek r3 and luna r3 hold the two.
 
+### Round 4
+
+- 06:13:06Z owner revision ae828d55 (claude/revise-r4.md, 5.9 KB). 06:14:54Z Texture turn ("seven named defects
+  and a package-only scope replace the frozen proposal").
+- stack_base_moved fired at the computer's 06:07:49Z boot: "source projection (boot): stack_base_moved
+  base=4036f0c37a84 head=ff9070317d9a booted=2795b8ee6881 op=selfdev-40faf6ee056fec39eb534c07226ffb95
+  changed=false repaired=false diverged=true the stack is based on 4036f0c37a84... but this computer booted
+  2795b8ee6881...; that commit is not in the guest source repository". The arm booted 2795b8ee while staging
+  serves fe981c3dd, so the app-sdk re-exports (e5915e0ca) are not on its base yet.
+- The engineering assignment was refused twice at admission on that base mismatch, before any capsule opened.
+  06:19:08Z Texture dispatched management: "Rebase the applied Files (new) operation selfdev-40faf6ee onto the
+  booted platform base 2795b8ee so the round-4 build can open as directed." Per main, the rebase notice drives;
+  FP0 does not intervene.
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |

@@ -74,6 +74,26 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - 05:26:08Z revise refused (409 "durable lifecycle state is unavailable or terminal": a cancelled trajectory makes
   its document terminal). 05:26:16Z new document ddbdd1ae-2ae1-5c2d-ab8f-89058f98d6f6 "Files (new), round 3"
   (the round-3 notes plus the full request), trajectory 8048fb68-0be2-59b0-b8d8-8b83c8319d4c.
+- 05:28:50Z Texture forwarded; 05:28:59Z management Cast; 05:29:00Z assignment-e4146ed6f95f9d2ce5d89aa0 bound.
+- 06:08:25Z first Freeze refused a cited test receipt ("the workspace changed while job job-834c73b6d325 ran");
+  06:08:26Z selfdev-574077b31eef7feb3d5ce023ad0499ff opened on the rerun; 12 screens, the requested names.
+  The engineer's account: every listed feature built, 9 package tests pass, 4 UI tests skipped (the Vite dev
+  server would not start in the capsule), listing 72.4%, no 390px overflow, lowest contrast 5.38 (salmon) to 9.08;
+  stand-ins served by a harness file API; WAV and WebM because the capsule has no m4a or mp4 encoder; upload shot
+  at 97%. The patch also changes app-sdk.ts (re-exports) and adds two specs outside the package.
+- 06:09:49Z judge passed (awaiting_approval). 06:12:58Z FP0 approved as the automatic stand-in (receipt
+  01a1a00a-170a-73fb-9533-4aa09e673184; prior effective head c128896c...); 06:12:59Z applied.
+- Live real-content screenshots (scratch deepseek/live-r3, 06:13-06:18Z): seven presets at 1100x750; every
+  preset applies. Works: specific kinds (Markdown, CSV, PDF, plain text), real image thumbnails, an opaque context
+  menu with Open with, a places sidebar, one-column phone layout. Defects: space opened no preview for the PDF or
+  the mp4 within 3 s; the search field disappears while anything is selected (the harness could not search);
+  column headers do not line up with their cells ("NAME KIND | MODIFIED | SIZE"); breadcrumbs truncate at 1100
+  ("Ho... / Docume...") and at 390 ("H..."); a double-clicked sidebar label stays text-selected; PDF and video
+  tiles are generic icons. The 390px Documents scenes failed in the harness: the first "Documents" text match is
+  the hidden drawer's, so they are a harness limit, not an app defect.
+- Spend round 3: $1.51, 126 calls (05:26-06:10Z; $3.83 total).
+- Round 4 revision written 06:20Z (scratch deepseek/revise-r4.md): seven defects, package-only scope with
+  "import these from app-sdk once it has them; do not edit app-sdk.ts". It waits for a build slot.
 
 #### Cycle time (UTC, minutes)
 
@@ -81,3 +101,4 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 |---|---|---|---|---|---|---|---|---|
 | 1 | 03:14:46 | 0.4 | 0.0 | 50.0 (refused at Freeze, mode off) | - | - | - | blocked |
 | 2 | 04:09:12 | 1.0 | 0.0 | 24.8 + 3.9 Freeze retries | 1.5 | 1.6 (FP0 reject) | - | FP0 rejected |
+| 3 | 05:26:16 | 2.7 | 0.0 | 39.4 | 1.4 | 3.2 | 0.03 | applied |

@@ -68,6 +68,11 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   app-sdk scope replaced by "import these from app-sdk once it has them; do not edit app-sdk.ts", and an explicit
   "forward this to management now"). 06:07:53Z Texture turn ("Round 3 resent ... for a new build"); 06:08:01Z
   assignment opened, 06:08:03Z bound.
+- The resend made a 20,923-byte Cast body; engineering (assignment-24a775b85a245c31ad635d9f) could read 16,384
+  bytes, reported the cut to management, froze a partial build; selfdev-6038b25b1a45521496562f6f8924b46a
+  (created 06:11:31Z) judge failed 06:12:41Z ("explicitly partial, lacks required feature behavior and browser
+  validation, includes out-of-scope artifacts, and its theme test fails"). Problem 9. 06:11:58Z Texture rewrote
+  the request to fit (revision 307df8dc, the repo spec files as the feature list).
 
 #### Cycle time (UTC, minutes)
 
