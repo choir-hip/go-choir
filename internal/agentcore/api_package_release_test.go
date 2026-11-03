@@ -23,8 +23,10 @@ import (
 // 3.2, publisher-side checks), written before the code. Failure modes pinned:
 //
 //	L1   an operation whose parent subtree is the publisher's earlier,
-//	     unpublished change is drafted on the base (it would carry that
-//	     change): package_parent_unpublished, naming the earlier operation;
+//	     unpublished change carries a path outside the root; or (fix 11,
+//	     docs/problems/selfdev-round-blockers-cluster-2026-11-03.md) its
+//	     release is put on a track head that is not the package at any
+//	     point of this stack, or on the base while the track has a head;
 //	L15  a mixed operation (the package and app.css) is drafted as a
 //	     package; the refusal names the outside paths and points to the
 //	     platform proposal;
@@ -257,35 +259,72 @@ func TestPackageDraftIsTheConfinedSubtreeOnTheBase(t *testing.T) {
 	}
 }
 
-func TestPackageDraftRefusesAParentThatIsAnEarlierUnpublishedChange(t *testing.T) {
+func TestPackageDraftCarriesAnEarlierUnpublishedRoundOfTheStack(t *testing.T) {
 	w := newDraftWorld(t)
 	// op-1 changed the reader and the shell; it applied, and the projection
-	// left its ref. It was never published (it is mixed).
+	// left its ref. It can never be published (it is mixed).
 	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
 	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	wantDraftReason(t, w.draft("op-0001", nil), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
 	// op-2 changes only the reader. Its bundle patch is cumulative from the
 	// stack base (U1), so it carries op-1's change too.
-	cumulative := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"}
+	cumulative := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", draftRoot + "/Extra.svelte": "<p>x</p>\n", "frontend/src/app.css": "body { color: red }\n"}
 	w.operation("op-0002", selfdev.StateApplied, cumulative)
 
-	got := wantDraftReason(t, w.draft("op-0002", nil), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
-	if !strings.Contains(got.Error, "op-0001") {
-		t.Fatalf("L1 refusal does not name the earlier operation: %q", got.Error)
+	// Fix 11: with no track head, op-2's release is the stack's package
+	// change from the base. Only the root travels (L1).
+	record, _, blobs := decodeDraft(t, w.draft("op-0002", nil))
+	baseTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", w.base+":"+draftRoot))
+	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentBase, Commit: w.base, Tree: baseTree}) || record.Operation.OperationID != "op-0002" {
+		t.Fatalf("a stacked round with no head must publish on the base: %+v", record.Parent)
+	}
+	if strings.Contains(string(blobs.ReviewPatch), "app.css") || strings.Contains(string(blobs.TreePatch), "app.css") {
+		t.Fatal("L1 the release carries the shell change")
+	}
+	if !strings.Contains(string(blobs.ReviewPatch), "v3") || strings.Join(record.Source.ChangedPaths, ",") != draftRoot+"/App.svelte,"+draftRoot+"/Extra.svelte" {
+		t.Fatalf("the cumulative release's paths = %v", record.Source.ChangedPaths)
+	}
+	if err := pkgrelease.VerifyHost(context.Background(), pkgrelease.HostInput{Record: record, TreePatch: blobs.TreePatch, ReviewPatch: blobs.ReviewPatch, ParentPatch: blobs.ParentPatch, Base: pkgrelease.GitStore{Dir: w.repo}}); err != nil {
+		t.Fatalf("the cumulative release fails the host checks: %v", err)
 	}
 
-	// Once the reader at op-1 is the track head (published from another
-	// computer, say), op-2 drafts on it and carries only its own delta.
+	// Once the reader at op-1 is the track head, op-2 drafts on it and
+	// carries only its own delta.
 	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
 	headID := strings.Repeat("f", 64)
-	record, _, blobs := decodeDraft(t, w.draft("op-0002", url.Values{"head_release_id": {headID}, "head_tree": {headTree}}))
+	record, _, blobs = decodeDraft(t, w.draft("op-0002", url.Values{"head_release_id": {headID}, "head_tree": {headTree}}))
 	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: headID, Tree: headTree}) || record.ParentPatch != nil || blobs.ParentPatch != nil {
 		t.Fatalf("draft on the head = %+v", record.Parent)
 	}
 	if strings.Contains(string(blobs.ReviewPatch), "app.css") || strings.Contains(string(blobs.TreePatch), "app.css") {
 		t.Fatal("L1 the release carries the shell change")
 	}
-	if strings.Join(record.Source.ChangedPaths, ",") != draftRoot+"/App.svelte" {
-		t.Fatalf("op-2's own paths = %v", record.Source.ChangedPaths)
+
+	// A head that is the package at no point of this stack came from
+	// elsewhere: the stack's change is not put on it.
+	foreign := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", w.base+":frontend/src"))
+	got := wantDraftReason(t, w.draft("op-0002", url.Values{"head_release_id": {headID}, "head_tree": {foreign}}), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
+	if !strings.Contains(got.Error, "came from elsewhere") {
+		t.Fatalf("foreign head refusal = %q", got.Error)
+	}
+}
+
+func TestPackageDraftCarriesTheStackFromAHeadInItsLineage(t *testing.T) {
+	w := newDraftWorld(t)
+	first := map[string]string{draftRoot + "/App.svelte": "<p>v2</p>\n", "frontend/src/app.css": "body { color: red }\n"}
+	projectApplied(t, w.repo, w.base, "op-0001", w.operation("op-0001", selfdev.StateApplied, first))
+	second := map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n", "frontend/src/app.css": "body { color: red }\n"}
+	projectApplied(t, w.repo, w.base, "op-0002", w.operation("op-0002", selfdev.StateApplied, second))
+	w.operation("op-0003", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v4</p>\n", "frontend/src/app.css": "body { color: red }\n"})
+	// The track head is the reader at op-1 (op-2 was never published).
+	headTree := strings.TrimSpace(releaseGit(t, w.repo, "rev-parse", "refs/choir/applied/"+strings.Repeat("a", 60)+"0001:"+draftRoot))
+	headID := strings.Repeat("f", 64)
+	record, _, blobs := decodeDraft(t, w.draft("op-0003", url.Values{"head_release_id": {headID}, "head_tree": {headTree}}))
+	if record.Parent != (pkgrelease.Parent{Kind: pkgrelease.ParentRelease, ReleaseID: headID, Tree: headTree}) {
+		t.Fatalf("op-3 must publish on the head in its lineage: %+v", record.Parent)
+	}
+	if !strings.Contains(string(blobs.ReviewPatch), "-<p>v2</p>") || !strings.Contains(string(blobs.ReviewPatch), "+<p>v4</p>") {
+		t.Fatalf("the review patch must go from the head (v2) to op-3 (v4):\n%s", blobs.ReviewPatch)
 	}
 }
 

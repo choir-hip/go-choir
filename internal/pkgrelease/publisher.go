@@ -215,6 +215,13 @@ type DraftInput struct {
 	// track has one (corpusd's answer, through the proxy).
 	HeadReleaseID string
 	HeadTree      string
+	// Stack lists the commits of this computer's own applied stack at or
+	// before Before, on the same stack base as Base: the projection commits
+	// of the operations applied before this one (Before among them), newest
+	// first. Empty when Before is the base. It lets a release carry earlier,
+	// unpublished rounds of the same stack (fix 11,
+	// docs/problems/selfdev-round-blockers-cluster-2026-11-03.md).
+	Stack []string
 }
 
 // DraftSource is the package part of a release the publisher drafts.
@@ -235,11 +242,19 @@ type DraftSource struct {
 //     before it against the source after it) all lie under the package
 //     root, or package_change_not_confined names the others;
 //  2. own change only: the package subtree before the operation is the
-//     base's or the track head's, or package_parent_unpublished.
+//     base's or the track head's. When it is neither because earlier rounds
+//     of this computer's own applied stack changed the package and were not
+//     published (an earlier round that also changed a path outside the
+//     package can never be), the release carries the stack's cumulative
+//     package change instead: from the track head when the head's tree is
+//     the package at a point of this stack, or from the base when the track
+//     has no head. Otherwise package_parent_unpublished.
 //
-// These are the publisher's own checks: the host holds no copy of this
-// repository, so it cannot redo them. What it can check, it does again on
-// the bytes it stores (VerifyHost).
+// Only the package subtree travels either way, and the parent is one the
+// host verifies (the base's subtree, or a listed release), so the track keeps
+// one linear history. These are the publisher's own checks: the host holds no
+// copy of this repository, so it cannot redo them. What it can check, it does
+// again on the bytes it stores (VerifyHost).
 func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	root := Root(in.Name)
 	s, err := newScratch(ctx, in.Repo)
@@ -303,9 +318,46 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		// On the base. If the track already has a head, corpusd refuses
 		// track_moved: a track has one linear history.
 		parent = Parent{Kind: ParentBase, Commit: in.Base, Tree: baseTree}
+	case len(in.Stack) > 0 && in.Stack[0] == in.Before:
+		// Earlier rounds of this stack changed the package and were not
+		// published: the release carries the stack's package change from the
+		// newest point the track holds.
+		if in.HeadReleaseID == "" {
+			parent = Parent{Kind: ParentBase, Commit: in.Base, Tree: baseTree}
+			break
+		}
+		found := false
+		for _, point := range in.Stack {
+			t, err := subtreeOr(point)
+			if err != nil {
+				return DraftSource{}, err
+			}
+			if t == in.HeadTree {
+				found = true
+				break
+			}
+		}
+		if !found && baseTree == in.HeadTree {
+			found = true
+		}
+		if !found {
+			return DraftSource{}, refuse(ReasonParentUnpublished,
+				"%s before this operation is %s (from %s), which is not the track head's %s, and the head is not the package at any point of this computer's applied stack: the head came from elsewhere, so this stack's change cannot go on it", root, parentTree, in.BeforeLabel, in.HeadTree)
+		}
+		parent = Parent{Kind: ParentRelease, ReleaseID: in.HeadReleaseID, Tree: in.HeadTree}
 	default:
 		return DraftSource{}, refuse(ReasonParentUnpublished,
 			"%s before this operation is %s (from %s), which is neither the base's %s nor the track head's: it carries an earlier, unpublished change. Publish that change's package release first, then this one on it", root, parentTree, in.BeforeLabel, baseTree)
+	}
+	if parent.Tree != parentTree {
+		// A cumulative release: its paths are the package paths that differ
+		// from the parent it names, which the review patch shows.
+		if paths, err = packagePathsBetween(ctx, s, root, parent.Tree, tree); err != nil {
+			return DraftSource{}, err
+		}
+		if len(paths) == 0 {
+			return DraftSource{}, refuse(ReasonUnchanged, "the package at this operation is its parent's %s already (%s)", parent.Tree, parent.Kind)
+		}
 	}
 	full, err := s.prefixed(ctx, root, tree)
 	if err != nil {
@@ -347,4 +399,21 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		return DraftSource{}, err
 	}
 	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
+}
+
+// packagePathsBetween lists the paths under root that differ between two
+// package subtrees, as full repository paths, sorted.
+func packagePathsBetween(ctx context.Context, s *scratch, root, from, to string) ([]string, error) {
+	out, err := gitRun(ctx, s.dir, s.env, nil, "diff-tree", "-r", "-z", "--name-only", "--no-renames", from, to)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, root+"/"+p)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
 }

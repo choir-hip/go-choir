@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -26,7 +27,9 @@ import (
 // applied operation, after the publisher-side checks: the setting is on, the
 // operation applied, every path it changed lies under the package root
 // (package_change_not_confined names the others), and the package before it
-// is the base's or the track head's (package_parent_unpublished). The host
+// is the base's or the track head's, or earlier unpublished rounds of this
+// computer's own applied stack, which the release then carries
+// (package_parent_unpublished otherwise; pkgrelease.DraftPackage). The host
 // redoes every check it can on the bytes it stores.
 func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request, ownerID, computerID, operationID string) {
 	ctx := r.Context()
@@ -64,14 +67,14 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	repo := h.rt.releaseRepo()
-	before, beforeLabel, err := h.rt.packageSourceBefore(ctx, repo, operation, base)
+	before, beforeLabel, stack, err := h.rt.packageSourceBefore(ctx, repo, operation, base)
 	if err != nil {
 		writePackageDraftRefusal(w, err)
 		return
 	}
 	source, err := pkgrelease.DraftPackage(ctx, pkgrelease.DraftInput{
 		Repo: repo, Name: name, Base: base, Patch: patch, Before: before, BeforeLabel: beforeLabel,
-		HeadReleaseID: headID, HeadTree: headTree,
+		HeadReleaseID: headID, HeadTree: headTree, Stack: stack,
 	})
 	if err != nil {
 		writePackageDraftRefusal(w, err)
@@ -162,13 +165,22 @@ func writePackageDraftRefusal(w http.ResponseWriter, err error) {
 // (review 274 F2). An earlier operation that changed no source is passed
 // over, since it changed no tree.
 //
+// It also returns the stack: the projection commits of the operations
+// applied before this one on the same stack base, newest first, starting
+// with the source before (empty when that is the base). The walk stops at
+// the first ref on another stack base; an older operation without a ref is
+// passed over: every projection commit is the whole source at its point
+// (U1's patches are cumulative), so a skipped one loses no change from the
+// source before, and the stack is only searched for the track head's tree, so
+// a missing point can only refuse.
+//
 // The order is creation order: the cast refuses while an apply is pending,
 // so the operation created before this one applied before it was cast.
-func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string, error) {
+func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string, []string, error) {
 	baseLabel := "the base " + base
 	operations, err := rt.selfdevOperations.ListByStates(ctx, operation.ComputerID, selfdev.StateApplied)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	index := -1
 	for i, candidate := range operations {
@@ -178,28 +190,45 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 		}
 	}
 	var refs map[string]pkgrelease.AppliedRef
+	before, beforeLabel := "", ""
+	var stack []string
 	for i := index - 1; i >= 0; i-- {
 		previous := operations[i]
 		if refs == nil {
 			if refs, err = pkgrelease.AppliedRefs(ctx, repo); err != nil {
-				return "", "", err
+				return "", "", nil, err
 			}
 		}
 		ref, ok := refs[previous.OperationID]
 		if !ok {
-			if _, _, err := rt.boundSourcePatch(previous); errors.Is(err, errNoSourcePatch) {
+			_, _, patchErr := rt.boundSourcePatch(previous)
+			if errors.Is(patchErr, errNoSourcePatch) {
 				continue
 			}
-			return "", "", &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentUnpublished, Detail: "operation " + previous.OperationID +
-				" applied just before " + operation.OperationID + " and changed source, and the source projection left no ref for it: the package before " +
-				operation.OperationID + " is unknown, so the release cannot be shown to carry only this operation's change"}
+			if patchErr != nil && before != "" {
+				// Not known to be a source change or not: the stack cannot be
+				// shown, so the draft is unavailable now rather than guessed.
+				return "", "", nil, fmt.Errorf("operation %s: %w", previous.OperationID, patchErr)
+			}
+			if before == "" {
+				return "", "", nil, &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentUnpublished, Detail: "operation " + previous.OperationID +
+					" applied just before " + operation.OperationID + " and changed source, and the source projection left no ref for it: the package before " +
+					operation.OperationID + " is unknown, so the release cannot be shown to carry only this operation's change"}
+			}
+			continue
 		}
 		if !strings.EqualFold(ref.StackBase, base) {
-			return base, baseLabel, nil
+			break
 		}
-		return ref.Commit, "operation " + previous.OperationID, nil
+		if before == "" {
+			before, beforeLabel = ref.Commit, "operation "+previous.OperationID
+		}
+		stack = append(stack, ref.Commit)
 	}
-	return base, baseLabel, nil
+	if before == "" {
+		return base, baseLabel, nil, nil
+	}
+	return before, beforeLabel, stack, nil
 }
 
 // packageShareGate answers GET /api/computers/<id>/packages/share-gate: the

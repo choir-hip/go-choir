@@ -256,6 +256,15 @@ them (review 257 F1).
    of a release listed on the publisher's own track.
    - Otherwise the draft refuses with `package_parent_unpublished`,
      naming the earlier operation.
+   - Amended 2026-11-03 (fix 11,
+     `docs/problems/selfdev-round-blockers-cluster-2026-11-03.md`): when P
+     is neither because earlier rounds of this computer's own applied stack
+     (projection commits on the same stack base) changed NAME and were not
+     published, the release carries the stack's cumulative NAME change, from
+     the base when the track has no head, or from the head when its tree is
+     NAME at a point of this stack. The operation's own change must still be
+     confined (check 2). Such a release names the top operation; its review
+     patch and `changed_paths` cover every carried round.
    - The publisher's changes to other paths never matter, because only
      NAME's subtree is carried.
 
