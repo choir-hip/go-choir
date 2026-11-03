@@ -32,3 +32,23 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   restates every Files feature, names the data store choices (trash and starred under System/Files/
   through /api/files; recents through /api/media/recents), the seeded files, and exactly twelve
   screenshots (the capsule admits at most 12) spread over the seven presets at 1100x750 and 390px.
+- 03:15:42Z Texture's first turn; 03:15:48Z engineering assignment-498e28298664f052561b5720 opened and bound.
+- 03:24:21Z the Claude delegate was started (one run, d20261103T032421-e59c186c; 58 turns, about $2.81 and
+  156,770 output tokens by the engineer's report); 25 `choir-delegate wait` polls to 03:39Z. The engineer reports
+  the delegate's sandbox has no bwrap, so it could not compile; the engineer built, fixed and screenshotted itself.
+- 04:01:31Z and 04:02:04Z `choir.Freeze` refused: mode is "off". 04:02:38-40Z capsule frozen and revoked;
+  engineer reported blocked. No operation, no judge.
+- Engineer's claims (unverified): package of 12 files, app-sdk re-exports, build and check-packages pass;
+  10 of 12 screenshots (05 and 12 missing); listing share 69.4%; 390px overflow (628px content in 500px);
+  contrast measured only in futuristic-noir; spec doc absent from its tree; owner files unreachable (stand-ins).
+- Spend round 1: $1.02, 149 calls, 16.2M input (15.5M cached), 89k output; delegate $2.81 separate.
+- Outcome: blocked by platform precondition (problem doc
+  docs/problems/selfdev-arm-rounds-fail-at-freeze-and-capsules-lack-real-content-2026-11-03.md).
+
+### Round 2
+
+- 04:07Z FP0 set `self-dev mode` to propose_only (generation 1) on all four arms.
+- 04:08:36Z owner revision 8c7822d4 on the same document: blocker cleared, spec sections quoted verbatim,
+  stand-ins accepted with disclosure, the round-1 not-met list to fix, the unproven features to exercise,
+  and the delegate to write source while the engineer builds.
+- 04:11Z engineering assignment-87ef85257263fc2a0aa80e2a running (same trajectory b48525f9).

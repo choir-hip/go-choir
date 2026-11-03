@@ -22,3 +22,5 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Spend baseline (/api/costs): 0 calls at 02:55Z.
 
 ## Rounds
+- Not started yet (at most two capsule builds at once until S4). 04:07Z `self-dev mode` set to propose_only
+  (generation 1), same as the other arms.

@@ -32,3 +32,20 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   restates every Files feature, names the data store choices (trash and starred under System/Files/
   through /api/files; recents through /api/media/recents), the seeded files, and exactly twelve
   screenshots (the capsule admits at most 12) spread over the seven presets at 1100x750 and 390px.
+- 03:15:05Z Texture's first turn; management Cast; 03:15:11Z engineering assignment-eee4559714d6879745a91007 bound.
+- 03:15-03:28Z exploration; 03:28-03:38Z wrote the package; 03:38Z npm run build; 03:40-04:02Z Playwright
+  screenshot harness.
+- 04:05:14Z `choir.Freeze` refused: mode is "off". 04:05:39Z capsule revoked; engineer reported blocked.
+  04:07:03Z trajectory settled. No operation, no judge.
+- Engineer's claims (unverified): six package files, three app-sdk re-exports; build and check-packages pass;
+  twelve screenshots; listing share 71.3% (1100x750), 77.6% (phone); lowest contrast per preset aero 7.58,
+  salmon 5.38, noir 7.58, kintsugi 7.78, frutiger 5.80, vector 7.20, liquid 8.37; no feature named missing;
+  spec absent from its tree; stand-ins from repository samples.
+- Spend round 1: $1.39, 157 calls, 21.3M input (20.3M cached), 155k output.
+
+### Round 2
+
+- 04:07Z FP0 set `self-dev mode` to propose_only (generation 1).
+- 04:09:12Z owner revision 88caabcc: blocker cleared, spec quoted, stand-in set named, a per-feature
+  implemented/exercised account required. New trajectory 950f45ae-4f06-53ef-a174-db3b0acbedc7.
+- 04:11Z engineering assignment-f0934b0d58f2c8b8c5c28b3c running.
