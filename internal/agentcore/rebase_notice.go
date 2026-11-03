@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -272,6 +273,14 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 		}
 	}
 	next := 1
+	if latest != nil && addr.Continue {
+		// A notice already on the tape whose document settled (or whose
+		// continue failed after its commit): continue now, so the record
+		// is read. Idempotent: one next trajectory per settled one.
+		if err := rt.continueRebaseDocument(ctx, ownerID, computerID, addr, latest.RecordID); err != nil {
+			return rt.transientRebase("%v", err)
+		}
+	}
 	if latest != nil {
 		closed, wait, err := rt.rebaseAttemptClosed(ctx, ownerID, computerID, *latest, rootInbox)
 		if err != nil {
@@ -308,6 +317,16 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 		return rt.transientRebase("commit %s: %v", notice.RecordID, err)
 	}
 	out := rebaseNoticeOutcome{Minted: notice.RecordID, Attempt: next}
+	// The notice first, then the continue: a failure between them leaves a
+	// durable unread record that the next fire's continue (above) makes
+	// readable, never a new episode with no notice in it.
+	if addr.Continue {
+		if err := rt.continueRebaseDocument(ctx, ownerID, computerID, addr, notice.RecordID); err != nil {
+			log.Printf("rebase notice: %s minted; its document's next trajectory did not start: %v (the next fire retries)", notice.RecordID, err)
+			out.Rearm = rt.rebaseStayUpInterval()
+			return out
+		}
+	}
 	if next < types.RebaseNoticeMaxAttempts {
 		// Look again every stay-up interval, not once per answer window: a
 		// round that answered the notice and closed without a claim (the
@@ -323,6 +342,11 @@ type rebaseAddressee struct {
 	Inbox, DocID, TrajectoryID string
 	// Live: the Texture can answer the notice.
 	Live bool
+	// Continue: the document's current trajectory (TrajectoryID) has settled.
+	// A Texture wake on it runs nothing, so after the notice commits the
+	// document is continued onto its next trajectory, as the owner's revise
+	// does (problem 21, third shape).
+	Continue bool
 	// Why says, when it is not live, why the operation's Texture cannot take
 	// the notice.
 	Why string
@@ -402,6 +426,8 @@ func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computer
 	switch state {
 	case rebaseTextureOpen, rebaseTextureSettled:
 		return rebaseAddressee{Inbox: agentID, DocID: docID, TrajectoryID: trajectoryID, Live: true}, nil
+	case rebaseTextureTrajectorySettled:
+		return rebaseAddressee{Inbox: agentID, DocID: docID, TrajectoryID: trajectoryID, Live: true, Continue: true}, nil
 	case rebaseTextureTrajectoryGone:
 		return rebaseAddressee{Why: "its document " + docID + "'s trajectory " + trajectoryID + " is not on the tape"}, nil
 	case rebaseTextureCancelled:
@@ -409,6 +435,52 @@ func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computer
 	default:
 		return rebaseAddressee{Why: "its document " + docID + "'s trajectory " + trajectoryID + " is not live"}, nil
 	}
+}
+
+// continueRebaseDocument starts the next trajectory of a document whose
+// trajectory settled, so the notice's Texture can run: the document, its
+// Texture desk and one open Texture work item move to a live trajectory
+// (store.ContinueLifecycleDocument), with the owner's revise's identity
+// (store.TextureContinueIdentity), so a revise racing it starts the same
+// trajectory. A document already moved off the settled trajectory, by this
+// or by anyone, is done.
+func (rt *Runtime) continueRebaseDocument(ctx context.Context, ownerID, computerID string, addr rebaseAddressee, noticeID string) error {
+	settledID := strings.TrimSpace(addr.TrajectoryID)
+	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, addr.DocID)
+	if err != nil {
+		return fmt.Errorf("document %s: %w", addr.DocID, err)
+	}
+	if strings.TrimSpace(doc.TrajectoryID) != settledID {
+		return nil
+	}
+	trajectoryID, commandID, workItemID := store.TextureContinueIdentity(ownerID, computerID, addr.DocID, settledID)
+	req := types.ContinueLifecycleDocumentRequest{
+		OwnerID: ownerID, ComputerID: computerID, CommandID: commandID,
+		TrajectoryID: trajectoryID, PredecessorTrajectoryID: settledID, DocID: addr.DocID,
+		ExpectedHeadRevisionID: doc.CurrentRevisionID,
+		InitialWork: types.WorkItemRecord{
+			WorkItemID: workItemID, Objective: "Answer the platform's rebase notice " + noticeID + " with the one Cast to management it gives.",
+			AssignedAgentID: addr.Inbox, AuthorityProfile: agentprofile.Texture,
+		},
+	}
+	digest, err := store.ComputeContinueLifecycleDocumentDigest(req)
+	if err != nil {
+		return err
+	}
+	req.CommandDigest = digest
+	_, continueErr := rt.store.ContinueLifecycleDocument(ctx, req)
+	// A lost race (the owner's revise, another attempt) has moved it too.
+	current, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, addr.DocID)
+	if err != nil {
+		return fmt.Errorf("document %s: %w", addr.DocID, err)
+	}
+	if strings.TrimSpace(current.TrajectoryID) != settledID {
+		return nil
+	}
+	if continueErr == nil {
+		continueErr = errors.New("the continue left the document on its settled trajectory")
+	}
+	return fmt.Errorf("continue document %s past settled trajectory %s: %w", addr.DocID, settledID, continueErr)
 }
 
 type rebaseTextureState int
@@ -419,6 +491,9 @@ const (
 	rebaseTextureTrajectoryGone
 	rebaseTextureTrajectoryNotLive
 	rebaseTextureCancelled
+	// rebaseTextureTrajectorySettled: the trajectory ended its episode of work
+	// (settled, not cancelled); the document continues onto a next one.
+	rebaseTextureTrajectorySettled
 )
 
 // rebaseTextureRunState says whether agentID can take a run on trajectoryID:
@@ -432,6 +507,9 @@ func (rt *Runtime) rebaseTextureRunState(ctx context.Context, ownerID, computerI
 	}
 	if err != nil {
 		return rebaseTextureTrajectoryNotLive, err
+	}
+	if snapshot.Trajectory.Status == types.TrajectorySettled {
+		return rebaseTextureTrajectorySettled, nil
 	}
 	if snapshot.Trajectory.Status != types.TrajectoryLive {
 		return rebaseTextureTrajectoryNotLive, nil

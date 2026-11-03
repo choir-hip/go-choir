@@ -260,14 +260,11 @@ func (h *Handler) commitLifecycleOwnerRevision(ctx context.Context, doc types.Do
 	}, nil
 }
 
-// textureContinueIdentity derives the next trajectory's ids from the settled
-// trajectory alone, so every revise racing on one settled document sends the
-// same continue command and all but one replay it: one next trajectory.
+// textureContinueIdentity is store.TextureContinueIdentity: every revise, and a
+// rebase notice, racing on one settled document send the same continue
+// command, so one next trajectory starts.
 func textureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID string) (trajectoryID, commandID, workItemID string) {
-	key := strings.Join([]string{"choir:texture:continue", ownerID, computerID, docID, settledTrajectoryID}, "\x00")
-	trajectoryID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00trajectory")).String()
-	workItemID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00work")).String()
-	return trajectoryID, "continue:" + trajectoryID, workItemID
+	return store.TextureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID)
 }
 
 // continueSettledDocumentForOwner starts the next trajectory on a document

@@ -7,10 +7,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// TextureContinueIdentity derives the next trajectory's ids from the settled
+// trajectory alone, so every caller continuing one settled document (the
+// owner's revise, a rebase notice) sends the same continue command and all but
+// one replay it or find the document moved: one next trajectory.
+func TextureContinueIdentity(ownerID, computerID, docID, settledTrajectoryID string) (trajectoryID, commandID, workItemID string) {
+	key := strings.Join([]string{"choir:texture:continue", ownerID, computerID, docID, settledTrajectoryID}, "\x00")
+	trajectoryID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00trajectory")).String()
+	workItemID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(key+"\x00work")).String()
+	return trajectoryID, "continue:" + trajectoryID, workItemID
+}
 
 // Continuing a settled document (F1,
 // docs/problems/settled-document-refuses-owner-revision-2026-10-26.md). A

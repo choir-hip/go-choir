@@ -268,3 +268,128 @@ func TestRebaseNoticeFollowsTheDocumentToItsCurrentTrajectory(t *testing.T) {
 		t.Fatalf("a settled Texture on the newer trajectory: %+v", out)
 	}
 }
+
+// settleArmTrajectory settles the arm's work and its trajectory, leaving
+// doc-arm idle on a settled trajectory: every arm's state between rounds
+// (claude, 14:23Z: ffb9e093's trajectory settled at 11:27Z).
+func settleArmTrajectory(t *testing.T, f *rebaseFixture) {
+	t.Helper()
+	ctx := context.Background()
+	settleArmWork(t, f)
+	snapshot, err := f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, armTrajectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settle := types.SettleLifecycleTrajectoryRequest{
+		OwnerID: f.owner, ComputerID: f.computer, CommandID: "settle:" + armTrajectory, TrajectoryID: armTrajectory,
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.Document.CurrentRevisionID,
+	}
+	settle.CommandDigest, _ = store.ComputeSettleLifecycleTrajectoryDigest(settle)
+	if _, err := f.s.SettleLifecycleTrajectory(ctx, settle); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+}
+
+// checkContinuedForNotice: doc-arm is on the next trajectory the owner's
+// revise would start, live, with one open Texture work item, and the notice is
+// unread pressure on texture:doc-arm.
+func checkContinuedForNotice(t *testing.T, f *rebaseFixture, noticeID string) {
+	t.Helper()
+	ctx := context.Background()
+	next, _, _ := store.TextureContinueIdentity(f.owner, f.computer, "doc-arm", armTrajectory)
+	doc, err := f.s.GetLifecycleDocument(ctx, f.owner, f.computer, "doc-arm")
+	if err != nil || doc.TrajectoryID != next {
+		t.Fatalf("doc-arm is on %q (%v), want the continued trajectory %s", doc.TrajectoryID, err, next)
+	}
+	snapshot, err := f.s.GetLifecycleSnapshot(ctx, f.owner, f.computer, next)
+	if err != nil || snapshot.Trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("the continued trajectory: %+v %v", snapshot.Trajectory, err)
+	}
+	open := 0
+	for _, work := range snapshot.WorkItems {
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == "texture:doc-arm" {
+			open++
+		}
+	}
+	if open != 1 {
+		t.Fatalf("the continued trajectory has %d open Texture items, want 1", open)
+	}
+	if rec := f.notice(t, 1); rec == nil || rec.RecordID != noticeID || rec.Inbox != "texture:doc-arm" {
+		t.Fatalf("notice %+v", rec)
+	}
+	unread, err := f.rt.InboxUnread(ctx, f.owner, f.computer, "texture:doc-arm")
+	if err != nil || !unread {
+		t.Fatalf("the notice must be unread on texture:doc-arm: %v %v", unread, err)
+	}
+}
+
+func TestRebaseNoticeContinuesAnIdleSettledDocument(t *testing.T) {
+	f := newRebaseFallbackFixture(t, true)
+	settleArmTrajectory(t, f) // no resident run of any desk: the fixture starts none
+	if err := f.rt.sourceProjectionCastGate(context.Background()); err == nil || strings.Contains(err.Error(), "rebase_needs_root") || !strings.Contains(err.Error(), "texture:doc-arm") {
+		t.Fatalf("a settled document's Texture is where the notice goes: %v", err)
+	}
+	out := f.fire(t)
+	if out.Minted != f.noticeID(1) {
+		t.Fatalf("an idle settled document got no notice: %+v", out)
+	}
+	checkContinuedForNotice(t, f, f.noticeID(1))
+	// A repeat fire starts nothing new: attempt 1 is live, one trajectory.
+	f.now = f.now.Add(6 * time.Minute)
+	if again := f.fire(t); again.Minted != "" {
+		t.Fatalf("a repeat fire minted %+v", again)
+	}
+	checkContinuedForNotice(t, f, f.noticeID(1))
+}
+
+// A notice committed on a settled trajectory whose continue then failed (the
+// mint commits first): the next fire continues the document, so the record is
+// read. (A live trajectory with the notice unread cannot settle.)
+func TestRebaseNoticeAContinueThatFailedIsRetried(t *testing.T) {
+	f := newRebaseFallbackFixture(t, true)
+	settleArmTrajectory(t, f)
+	notice, ok := types.NewStackRebaseNotice(types.StackRebaseNotice{
+		TextureInbox: "texture:doc-arm", ComputerID: f.computer, OperationID: f.opID, BootedBase: f.moved, StackBase: f.base, Attempt: 1, DocID: "doc-arm",
+	})
+	if !ok {
+		t.Fatal("notice does not bind")
+	}
+	f.commit(t, notice.RecordID, notice)
+	f.now = f.now.Add(6 * time.Minute)
+	if out := f.fire(t); out.Minted != "" || !strings.Contains(out.Reason, "still live") {
+		t.Fatalf("attempt 1 must stay the live attempt: %+v", out)
+	}
+	checkContinuedForNotice(t, f, f.noticeID(1))
+}
+
+// The owner's revise continued the settled document first: the notice joins
+// that trajectory and starts no other.
+func TestRebaseNoticeJoinsTheOwnersContinuation(t *testing.T) {
+	f := newRebaseFallbackFixture(t, true)
+	settleArmTrajectory(t, f)
+	next, commandID, workID := store.TextureContinueIdentity(f.owner, f.computer, "doc-arm", armTrajectory)
+	doc, err := f.s.GetLifecycleDocument(context.Background(), f.owner, f.computer, "doc-arm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := types.ContinueLifecycleDocumentRequest{
+		OwnerID: f.owner, ComputerID: f.computer, CommandID: commandID, TrajectoryID: next, PredecessorTrajectoryID: armTrajectory,
+		DocID: "doc-arm", ExpectedHeadRevisionID: doc.CurrentRevisionID,
+		InitialWork: types.WorkItemRecord{WorkItemID: workID, Objective: "Revise the document for the owner's new request.", AssignedAgentID: "texture:doc-arm", AuthorityProfile: "texture"},
+	}
+	req.CommandDigest, _ = store.ComputeContinueLifecycleDocumentDigest(req)
+	if _, err := f.s.ContinueLifecycleDocument(context.Background(), req); err != nil {
+		t.Fatalf("the owner's continue: %v", err)
+	}
+	if out := f.fire(t); out.Minted != f.noticeID(1) {
+		t.Fatalf("%+v", out)
+	}
+	checkContinuedForNotice(t, f, f.noticeID(1))
+	trajectories, err := f.s.ListLifecycleTrajectoriesByOwner(context.Background(), f.owner, f.computer, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trajectories) != 2 {
+		t.Fatalf("want the settled and the one continued trajectory, got %d", len(trajectories))
+	}
+}

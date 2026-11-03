@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -146,6 +147,18 @@ func (rt *Runtime) retryRebaseNotice(ctx context.Context, ownerID string) (rebas
 			return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_round_running", "%v", err)
 		}
 		return rebaseRetryResult{}, refuseRebaseRetry("rebase_retry_unreadable", "commit %s: %v", notice.RecordID, err)
+	}
+	// As the timer: the notice first, then the settled document's next
+	// trajectory; a failure leaves the record, and the timer's next fire
+	// retries the continue.
+	if addr.Continue {
+		if err := rt.continueRebaseDocument(ctx, ownerID, computerID, addr, notice.RecordID); err != nil {
+			log.Printf("rebase retry: %s minted; its document's next trajectory did not start: %v", notice.RecordID, err)
+			// The timer may have stopped (the retry follows the last
+			// automatic attempt): arm it, so a fire retries the continue
+			// (review p21d-r1, finding 1).
+			rt.rearmRebaseNotice(rt.rebaseStayUpInterval())
+		}
 	}
 	return rebaseRetryResult{Minted: notice.RecordID, Attempt: next}, nil
 }
