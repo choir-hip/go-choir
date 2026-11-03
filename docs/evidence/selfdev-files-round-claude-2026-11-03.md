@@ -52,3 +52,20 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   stand-ins accepted with disclosure, the round-1 not-met list to fix, the unproven features to exercise,
   and the delegate to write source while the engineer builds.
 - 04:11Z engineering assignment-87ef85257263fc2a0aa80e2a running (same trajectory b48525f9).
+- 04:11-04:22Z the engineer applied its carried round-1 patch and built a Playwright harness; 04:22:39Z delegate
+  run d20261103T042239-efe06e06 (claude-sonnet-5-5, 26 s, 14 turns, 13 tool uses, 4,075 output tokens, $0.159 by
+  report; edited files.css and App.svelte); 04:23-04:32Z build, screenshots, 24 Playwright assertions.
+- 04:32:48Z Freeze opened operation selfdev-0c48dc23e50267f7a41243f9e3a31177 (bundle ff18b7f4...).
+- 04:38:03Z the independent judge rejected it (state failed): two of the twelve named screenshots absent (noir error
+  state with Try again; aero media preview playing), the upload progress bar at 0%, and generated stand-ins rather
+  than the named files. Credited: build, 84.6% listing share, 390px fit, seven-preset contrast, 24 assertions.
+- FP0 read of the screenshots (laneC scratch claude/screens-r2): clean list and context menu (Open, Open with,
+  Rename, Move to, Duplicate, Download, Delete, Copy link, Info, Star); all twelve in one dark preset; bare page,
+  no desktop window; invented stand-in names (notes.txt, team-photo.txt, Media, Screenshots).
+- Spend round 2: $0.66, 109 calls (04:11-04:38Z); delegate $0.159 separate.
+- 04:39:41Z `source.projection` set true (stack: only the failed operation; no applied candidate).
+
+### Round 3
+
+- 04:39:56Z owner revision 27c25e19: the twelve listed shots in their presets and names, inside the desktop window,
+  the named stand-in set, real per-file upload progress mid-upload, sidebar labels visible, rebase onto the projected base.

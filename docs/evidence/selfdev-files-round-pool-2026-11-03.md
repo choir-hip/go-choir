@@ -24,3 +24,10 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 ## Rounds
 - Not started yet (at most two capsule builds at once until S4). 04:07Z `self-dev mode` set to propose_only
   (generation 1), same as the other arms.
+- 04:27:37Z `source.projection` set true (empty stack, before any round); projected tree holds the spec.
+  04:37:39Z `choir computer refresh`.
+
+### Round 1
+
+- 04:37:47Z request (v2 text) on Texture doc b1ad3952-5ab4-54e0-80ba-94d312f88385, trajectory
+  5dc6a6ff-41d6-5ee6-9025-151c57bb5eff.

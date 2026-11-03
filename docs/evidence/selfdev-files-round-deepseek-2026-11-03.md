@@ -49,3 +49,17 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - 04:09:12Z owner revision 88caabcc: blocker cleared, spec quoted, stand-in set named, a per-feature
   implemented/exercised account required. New trajectory 950f45ae-4f06-53ef-a174-db3b0acbedc7.
 - 04:11Z engineering assignment-f0934b0d58f2c8b8c5c28b3c running.
+- 04:34:57Z Freeze opened operation selfdev-35d61e7ed08ceb43a61a53f240c7bf08 (bundle 136b4a80...); 04:40:32Z
+  the independent judge passed it to awaiting_approval.
+- Patch: app-sdk.ts, frontend/src/packages/files-next/ (App.svelte, Icon.svelte, choir-package.json, file-types.js,
+  files-api.js, files-next.css) and frontend/tests/files-next/ (spec, harness, mount, tree); 5,023 lines. Code read:
+  XHR per-file upload progress, F2, Shift+F10, contextmenu, long-press, webkitGetAsEntry, file.changed, undo, restore,
+  empty trash, pdf.js, video and audio preview, kind filter, rubber band, history; no localStorage; no colour literals
+  in app code (hex only in test fixtures); radii from tokens.
+- Screens (laneC scratch deepseek/fp0-screens-r2): named stand-in set with real thumbnails; sidebar Home, Recents,
+  Starred, Trash; context menu with Open with (Reader for a txt); conflict prompt Skip, Replace, Keep both.
+- 04:41:58Z FP0 rejected: (1) all twelve shots in one light preset, not the seven assigned; (2) missing the media
+  preview playing, the error state and the 390px list; (3) bare page, no desktop window; (4) no per-file progress
+  visible mid-upload, and a control under the conflict prompt clipped by the status line (check 12); (5) folder
+  shows 0 B and md and csv show kind Text. Tests under frontend/tests/files-next allowed.
+- 04:42Z `source.projection` set true (stack: only the rejected operation).
