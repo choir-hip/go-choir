@@ -114,3 +114,16 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 3 | 07:14:30 | refused at admission (stack_base_moved) | - | - | - | - | - | blocked |
 
 Live shots plus next request (apply to next revision sent): round 1, 05:28:08 to 06:20:10 = 52.0 min (first live run 05:40Z; full-preset runs blocked by email sign-in 429s until 06:04Z; then a build-slot wait).
+
+## Identity change (owner ruling, about 18:58Z): pool is now a DeepSeek arm
+
+The owner moved every arm off GPT except luna's engineering, which delegates to Claude. Main rewrote this computer's
+System/model-policy.toml: every role, engineering included, is now synthetic hf:deepseek-ai/DeepSeek-V4.1-Flash-1017,
+with "# owner-edited" first. From the next run on, this arm is no longer a pool:default draw. It is the same engineering
+model as the deepseek arm, so its later rounds compare with deepseek's, not as a pool arm.
+
+Before the change, pool's Slides rounds drew gpt-6-luna at low reasoning for engineering through the pool hash. All
+three failed on proof:
+- Round 1: engineering asked for a scope change, and no candidate was made.
+- Round 2 (selfdev-f413bff3): one generic screenshot. Management had cut the request down to one sentence.
+- Round 3 (selfdev-7781b241): placeholder screenshots, even though the full request reached engineering this time.
