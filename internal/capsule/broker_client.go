@@ -218,6 +218,24 @@ func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, p
 	return &resp, nil
 }
 
+// boundedCall is call with the read bounded by bound as well as by ctx. When
+// the bound, not the caller, ended the wait, the error is ErrBrokerNoAnswer
+// naming the verb and the bound.
+func (b *BrokerClient) boundedCall(ctx context.Context, bound time.Duration, verb string, cap *Capability, params interface{}) (*BrokerRPCResponse, error) {
+	boundAt := time.Now().Add(bound)
+	callerAt, hasCaller := ctx.Deadline()
+	boundIsTighter := !hasCaller || callerAt.After(boundAt)
+	callCtx, cancel := context.WithDeadline(ctx, boundAt)
+	defer cancel()
+	resp, err := b.call(callCtx, verb, cap, params)
+	// The socket's read deadline can fire before the context's own timer
+	// marks it done, so the clock decides, not callCtx.Err().
+	if err != nil && boundIsTighter && ctx.Err() == nil && !time.Now().Before(boundAt) {
+		return nil, fmt.Errorf("%w to %s within %s: %v", ErrBrokerNoAnswer, verb, bound, err)
+	}
+	return resp, err
+}
+
 // Exec sends an exec command to the broker.
 func (b *BrokerClient) Exec(ctx context.Context, cap *Capability, req ExecRequest) (ExecResult, error) {
 	resp, err := b.call(ctx, "exec", cap, req)
@@ -234,7 +252,8 @@ func (b *BrokerClient) Exec(ctx context.Context, cap *Capability, req ExecReques
 
 // GoEval evaluates model-authored Go source in the capsule via the go_eval verb.
 func (b *BrokerClient) GoEval(ctx context.Context, cap *Capability, req GoEvalRequest) (GoEvalResult, error) {
-	resp, err := b.call(ctx, "go_eval", cap, req)
+	bound := BrokerGoEvalAnswerBound(req.TimeoutMS)
+	resp, err := b.boundedCall(ctx, bound, "go_eval", cap, req)
 	if err != nil {
 		return GoEvalResult{}, err
 	}
@@ -248,8 +267,11 @@ func (b *BrokerClient) GoEval(ctx context.Context, cap *Capability, req GoEvalRe
 
 // Job sends one job verb (job_start, job_status, job_stop) to the broker.
 func (b *BrokerClient) Job(ctx context.Context, verb string, cap *Capability, params JobParams) (capsulejob.Status, error) {
-	resp, err := b.call(ctx, verb, cap, params)
+	resp, err := b.boundedCall(ctx, brokerJobAnswerBound, verb, cap, params)
 	if err != nil {
+		if errors.Is(err, ErrBrokerNoAnswer) {
+			return capsulejob.Status{}, fmt.Errorf("job %s: %w", params.ID, err)
+		}
 		return capsulejob.Status{}, err
 	}
 	var status capsulejob.Status

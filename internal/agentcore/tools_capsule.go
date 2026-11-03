@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -923,7 +924,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell."},
 			"cwd":        map[string]any{"type": "string", "description": "Optional working directory inside /workspace/platform."},
-			"timeout_ms": map[string]any{"type": "integer", "description": "Evaluation timeout in milliseconds."},
+			"timeout_ms": map[string]any{"type": "integer", "description": "Evaluation timeout in milliseconds. Unset, the capsule ends a cell at 60 s; set or not, the host ends every cell by 5 minutes. Start long work with choir.Start."},
 		}, []string{"source"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			toolCtx, err := requireCurrentAssignedCapsule(ctx)
@@ -937,13 +938,16 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			if strings.TrimSpace(input.Source) == "" {
 				return "", fmt.Errorf("capsule_go_eval: source is required")
 			}
-			evalCtx := ctx
-			if input.TimeoutMS > 0 {
-				var cancel context.CancelFunc
-				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
-				defer cancel()
+			// Every engineering cell has a host wall clock: its timeout_ms
+			// when smaller, else five minutes, and never past the activation
+			// deadline (engineering_cell_bound.go).
+			bounds := defaultEngineeringCellBounds.forCell(ctx, input.TimeoutMS)
+			var emit provideriface.EventEmitFunc
+			if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil {
+				emit = rt.runEventEmitter(ctx, rec)
 			}
-			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
+			// The broker's own cell bound always ends inside the host's.
+			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: bounds.brokerTimeoutMS(input.TimeoutMS)}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
 				req.Records = reduction.records.view
@@ -953,13 +957,24 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				req.Updates = pendingCellUpdates(ctx, rt, toolregistry.ExecutionContextFrom(ctx))
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
+			timedOut := false
 			result, err := traceCall(rt, toolCtx.AgentRunID, "cell.go_eval", func() (capsule.GoEvalResult, error) {
-				return toolCtx.Executor.GoEval(evalCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+				res, evalErr, hit := runEngineeringCell(ctx, bounds, rt.capsuleJobs(), toolCtx.AgentRunID, emit, func(cellCtx context.Context) (capsule.GoEvalResult, error) {
+					return toolCtx.Executor.GoEval(cellCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, req)
+				})
+				timedOut = hit
+				return res, evalErr
 			})
+			// A cell ended by a deadline (its limit or the activation's) is a
+			// timeout fate; the broker's own timeout_ms answers in-band and
+			// names itself in result.Error.
+			cellTimedOut := func() bool {
+				return timedOut || (req.TimeoutMS > 0 && strings.Contains(result.Error, "timed out"))
+			}
 			if err != nil {
 				if reduction.active {
 					fate := cellFateFailure
-					if evalCtx.Err() == context.DeadlineExceeded {
+					if cellTimedOut() {
 						fate = cellFateTimeout
 					}
 					if fateErr := reduction.abort(context.Background(), fate, err.Error()); fateErr != nil {
@@ -970,7 +985,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			}
 			if reduction.active && result.Error != "" {
 				fate := cellFateFailure
-				if evalCtx.Err() == context.DeadlineExceeded {
+				if cellTimedOut() {
 					fate = cellFateTimeout
 				}
 				if fateErr := reduction.abort(context.Background(), fate, result.Error); fateErr != nil {
