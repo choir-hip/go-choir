@@ -40,3 +40,32 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   with named gaps rather than none.
 - 04:40:40Z FP0 cancelled the trajectory to keep at most two capsule builds at once (claude r3 and pool r1 were
   building). Luna's round is re-sent when a slot frees.
+
+### Round 2
+
+- 05:32:23Z new document cbca8ba3-fa5c-5577-ad4a-7e40084fcc24 (the cancelled trajectory left the first one
+  terminal), trajectory e998f5ca-063f-5ac5-9abd-99a44e8450c6. 05:36:47Z assignment-43851d28d33d373927c8fb8a.
+- The engineer probed node and npm, built with $CHOIR_FRONTEND_DEPS, wrote a 12-line App.svelte and a copy of
+  the Reader manifest (title "Files Next", emoji icon, Reader description and theme attrs, hex colours), and found
+  no browser: `CHOIR_BROWSER` unset, no Playwright cache. First Freeze refused ("capsule release contains no frozen
+  runtime artifacts"); retry froze selfdev-1a7a11958b2c6d6c551b83ed505a075c (05:38:07Z).
+- 05:39:53Z the judge failed it: "the frozen candidate is only a partial shell; key requested file workflows and
+  interactions are missing, and no browser behavior was exercised because Chromium was unavailable."
+- 05:40:43Z Texture re-cast on its own (assignment 05:41:17Z); selfdev-1b52f0ff3870574a79fd40a84378e2d5 frozen
+  05:46:00Z, judge failed 05:49:00Z: "none of the twelve screenshots, none of the three measurements and no
+  Playwright assertion exists, and nearly every required feature ... is missing or unexercised scaffolding".
+- Spend round 2: about $0.07, 68 calls (05:32-05:40Z).
+
+### Round 3
+
+- 05:51:15Z owner revision 5592b947: Chromium is in the Nix store (other arms used
+  /nix/store/*-chromium-155.0.8059.79/bin/chromium), build the whole feature list, fix the manifest, do not edit
+  app-sdk.ts.
+
+#### Cycle time (UTC, minutes)
+
+| Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 04:34:13 | 0.4 | 0.0 | 0.3 (gave up, no Freeze) | - | - | - | blocked |
+| 2 | 05:32:23 | 4.3 | 0.0 | 1.3 | 1.8 | - | - | judge rejected |
+| 2b (self re-cast) | 05:40:43 | 0.6 | 0.0 | 4.7 | 3.0 | - | - | judge rejected |

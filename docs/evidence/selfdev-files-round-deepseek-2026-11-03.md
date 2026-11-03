@@ -63,3 +63,21 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   visible mid-upload, and a control under the conflict prompt clipped by the status line (check 12); (5) folder
   shows 0 B and md and csv show kind Text. Tests under frontend/tests/files-next allowed.
 - 04:42Z `source.projection` set true (stack: only the rejected operation).
+- 04:41:03Z Texture re-cast the work on its own (assignment opened 04:41:08Z); 04:45:53Z FP0 cancelled that
+  trajectory to keep two builds at once and so the next build carries the rejection reasons.
+- Freeze retries in round 2: "capsule release must contain executable bin/autoputer: the running binary was built
+  from 2795b8ee... but the capsule source is pinned to ee34d53c...". The engineer built bin/autoputer itself; about
+  4 min lost (04:34:57-04:38:53Z).
+
+### Round 3
+
+- 05:26:08Z revise refused (409 "durable lifecycle state is unavailable or terminal": a cancelled trajectory makes
+  its document terminal). 05:26:16Z new document ddbdd1ae-2ae1-5c2d-ab8f-89058f98d6f6 "Files (new), round 3"
+  (the round-3 notes plus the full request), trajectory 8048fb68-0be2-59b0-b8d8-8b83c8319d4c.
+
+#### Cycle time (UTC, minutes)
+
+| Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 03:14:46 | 0.4 | 0.0 | 50.0 (refused at Freeze, mode off) | - | - | - | blocked |
+| 2 | 04:09:12 | 1.0 | 0.0 | 24.8 + 3.9 Freeze retries | 1.5 | 1.6 (FP0 reject) | - | FP0 rejected |

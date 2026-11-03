@@ -69,3 +69,25 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 
 - 04:39:56Z owner revision 27c25e19: the twelve listed shots in their presets and names, inside the desktop window,
   the named stand-in set, real per-file upload progress mid-upload, sidebar labels visible, rebase onto the projected base.
+- 05:29:08Z Freeze opened selfdev-40faf6ee056fec39eb534c07226ffb95 (frozen 05:29:28Z); one delegate run
+  d20261103T044630-9a954fe9 (36 s; 12 turns, 11 tool uses, about $0.144 by report; its own check-packages call was
+  permission-blocked); 35/35 assertions; listing 81.8-91.8%; sidebar labels back.
+- 05:32:45Z the judge passed it (awaiting_approval). Owner ruling 05:10Z: self-development is automatic; FP0
+  approves promptly as the stand-in while standing_consensus is refused on primary-tier computers.
+- 05:34:30Z approved (receipt 01a19fe6-e088-78e9-8dc0-87ad26bdf879; prior effective head 3e30f456...);
+  05:35:01Z applied.
+- Live real-content screenshots (scratch claude/live-r3, aero-chrome-heart): labelled sidebar; real thumbnails;
+  selection toolbar; image preview with metadata; Open with marking Image as Default; mp4 playing in the preview
+  pane. Defects seen: the dock chip shows the literal word "folder" over "Files (new)" (manifest icon); the
+  "Keyboard shor..." footer label truncates; PDF and video grid tiles are generic icons.
+- Spend round 3: $0.79, 115 calls (04:49-05:33Z); delegate about $0.144 separate.
+- Library publish blocked: package_change_not_confined (the candidate also edits app-sdk.ts). Main lands the
+  re-exports on main (branch app-sdk-exports); the next round drops its own app-sdk edit, then publishes.
+
+#### Cycle time (UTC, minutes)
+
+| Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 03:14:46 | 1.0 | 0.0 | 45.7 (refused at Freeze, mode off) | - | - | - | blocked |
+| 2 | 04:08:36 | 2.4 | 0.0 | 21.8 | 5.3 | - | - | judge rejected |
+| 3 | 04:39:56 | 2.3 | 0.0 | 46.9 | 3.6 | 1.75 | 0.5 | applied |
