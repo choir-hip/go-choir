@@ -125,6 +125,23 @@ Calendar keeps the owner's events on the computer, not in memory.
   (server-backed, as the playback position already is), never in
   `localStorage`.
 
+## Desktop background (separate from the theme)
+
+Owner, 2026-11-03: "for themes, i want to separate the desktop background
+from the theme. the desktop bg should have its own mini-interface for
+uploading an image or using one of some stock images or designs."
+
+- The theme sets colors, type, radii and chrome; the background is its own
+  owner setting and survives a theme change.
+- A small background picker (from the desktop's context menu and from
+  Settings): upload an image (file input and drag and drop, saved to Files),
+  pick one from Files, or choose a stock image or design (a small built-in
+  set, including each theme's current background).
+- Fit: fill, fit, center, tile; a live preview before applying.
+- Stored on the computer like other owner preferences, never in
+  `localStorage`; the image is a `choir.file`.
+- Each theme keeps a default background used until the owner picks one.
+
 ## UI design
 
 Each app passes the bar's twelve checks in the seven presets at 1100 by 750
