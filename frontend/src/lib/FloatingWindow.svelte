@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { onMount, onDestroy } from 'svelte';
+  import { contextMenu } from './context-menu';
 
   export let windowId = '';
   export let appId = '';
@@ -184,6 +185,17 @@
     } else {
       dispatch('maximize', { windowId });
     }
+  }
+
+  function titlebarMenuItems() {
+    return [
+      { id: 'minimize', label: 'Minimize', disabled: mode === 'minimized', onSelect: handleMinimize },
+      mode === 'maximized'
+        ? { id: 'restore', label: 'Restore', onSelect: handleMaximizeRestore }
+        : { id: 'maximize', label: 'Maximize', onSelect: handleMaximizeRestore },
+      { separator: true },
+      { id: 'close', label: 'Close', danger: true, onSelect: handleClose },
+    ];
   }
 
   function handleTitlebarDoubleClick(event) {
@@ -525,6 +537,7 @@
     data-window-titlebar
     on:pointerdown={handleDragStart}
     on:dblclick={handleTitlebarDoubleClick}
+    use:contextMenu={{ label: `${title} window`, items: titlebarMenuItems }}
   >
     <span class="titltexture">{title}</span>
     <div class="window-controls">
