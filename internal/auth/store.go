@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS device_authorizations (
 	last_poll_at       DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_device_auth_user_code ON device_authorizations(user_code_hash, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_device_auth_user_code_pending ON device_authorizations(user_code_hash) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_device_auth_ip ON device_authorizations(ip_hash, created_at);
 
 CREATE TABLE IF NOT EXISTS owner_root_keys (

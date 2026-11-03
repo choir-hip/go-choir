@@ -330,7 +330,12 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 				interval += loginPollStep
 				continue
 			}
-			fmt.Fprintf(stderr, "choir login: token poll answered HTTP %d: %s\n", status, truncate(strings.TrimSpace(string(raw)), 300))
+			// Never echo the body: a 200 may carry a key.
+			if status == http.StatusOK {
+				fmt.Fprintln(stderr, "choir login: the token poll answered an unexpected response; run choir login again")
+			} else {
+				fmt.Fprintf(stderr, "choir login: token poll answered HTTP %d (%s)\n", status, tok.Error)
+			}
 			return 1
 		}
 	}

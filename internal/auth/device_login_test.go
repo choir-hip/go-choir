@@ -507,3 +507,116 @@ func TestDeviceBeginLabel(t *testing.T) {
 		t.Fatalf("default label: %s", rec.Body.String())
 	}
 }
+
+// Review finding 1: an explicit "scopes": null is not "omitted"; it is
+// refused like an explicit empty list.
+func TestCreateAPIKeyNullScopesRefused(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("null-user", "null@example.com")
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, passkeyCookieReq(http.MethodPost, "/auth/api-keys", map[string]any{"label": "null", "scopes": nil}, priv, u.ID))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("scopes null: status %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Review finding 2: session-only scopes are a registry set; none is delegable.
+func TestSessionOnlyScopesAreNeverDelegable(t *testing.T) {
+	if !sessionOnlyScopes[OwnerActsScope] {
+		t.Fatal("owner:acts must be session-only")
+	}
+	for s := range sessionOnlyScopes {
+		if !validScopes[s] {
+			t.Fatalf("session-only scope %q is not in the registry", s)
+		}
+	}
+	for _, s := range DelegableScopes() {
+		if sessionOnlyScopes[s] {
+			t.Fatalf("scope %q is both delegable and session-only", s)
+		}
+	}
+	for _, s := range AllScopes() {
+		if !sessionOnlyScopes[s] && !apiKeyHasScope(DelegableScopes(), s) && s != retiredScopeSelfDevPropose {
+			t.Fatalf("scope %q is neither delegable nor session-only", s)
+		}
+	}
+}
+
+// Review finding 3: two polls race to consume one approved request; exactly
+// one gets the secret and one api_keys row results.
+func TestDeviceConsumeRaceYieldsOneKey(t *testing.T) {
+	h, priv := testHandlerEnv(t)
+	h.config.RPOrigins = []string{"https://choir.news"}
+	u, _ := h.store.CreateUser("race-user", "race@example.com")
+	b := deviceBegin(t, h, "racer", "203.0.113.9")
+	rec := deviceDecide(h, passkeyCookieReq(http.MethodPost, "/auth/device/approve", map[string]string{"user_code": b.UserCode, "decision": "approve"}, priv, u.ID))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("approve %d: %s", rec.Code, rec.Body.String())
+	}
+	var before int
+	_ = h.store.DB().QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&before)
+	hash := sha256SumHex(b.DeviceCode)
+	now := time.Now().UTC()
+	results := make([]*DevicePollResult, 2)
+	errs := make([]error, 2)
+	start := make(chan struct{})
+	done := make(chan int, 2)
+	for i := 0; i < 2; i++ {
+		go func(i int) {
+			<-start
+			results[i], errs[i] = h.store.PollDeviceAuthorization(context.Background(), hash, AllScopes(), 0, now)
+			done <- i
+		}(i)
+	}
+	close(start)
+	<-done
+	<-done
+	secrets := 0
+	for i := range results {
+		if errs[i] != nil {
+			t.Fatalf("poll %d: %v", i, errs[i])
+		}
+		if results[i].Secret != "" {
+			secrets++
+		} else if results[i].Status != DeviceStatusConsumed {
+			t.Fatalf("loser status %q, want consumed", results[i].Status)
+		}
+	}
+	if secrets != 1 {
+		t.Fatalf("%d secrets, want exactly 1", secrets)
+	}
+	var after int
+	_ = h.store.DB().QueryRow("SELECT COUNT(*) FROM api_keys").Scan(&after)
+	if after-before != 1 {
+		t.Fatalf("%d api_keys rows added, want 1", after-before)
+	}
+	if code, m := devicePoll(h, b.DeviceCode); code != http.StatusBadRequest || m["error"] != "invalid_grant" {
+		t.Fatalf("loser http: %d %v", code, m)
+	}
+}
+
+// Review finding 5: decide targets the looked-up row, and a second live
+// pending row cannot share a user code hash.
+func TestDeviceDecideTargetsLookedUpRow(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	u, _ := h.store.CreateUser("decide-user", "decide@example.com")
+	b1 := deviceBegin(t, h, "one", "203.0.113.20")
+	b2 := deviceBegin(t, h, "two", "203.0.113.21")
+	_ = b2
+	a, err := h.store.GetDeviceAuthorizationByUserCode(context.Background(), userCodeHash(normalizeUserCode(b1.UserCode)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.DecideDeviceAuthorization(context.Background(), a.ID, u.ID, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	_ = h.store.DB().QueryRow("SELECT COUNT(*) FROM device_authorizations WHERE status = 'approved'").Scan(&n)
+	if n != 1 {
+		t.Fatalf("%d approved, want 1", n)
+	}
+	if _, err := h.store.DB().Exec(`INSERT INTO device_authorizations (id, device_code_hash, user_code_hash, ip_hash, created_at, expires_at, status)
+		SELECT 'dup', 'dupdev', user_code_hash, ip_hash, created_at, expires_at, 'pending' FROM device_authorizations WHERE status = 'pending' LIMIT 1`); err == nil {
+		t.Fatal("two pending rows share a user code hash")
+	}
+}

@@ -140,16 +140,16 @@ func (s *Store) GetDeviceAuthorizationByUserCode(ctx context.Context, userCodeHa
 }
 
 // DecideDeviceAuthorization approves or denies a pending, live request for
-// userID with one conditional update. Anything else is ErrDeviceNotFound.
-func (s *Store) DecideDeviceAuthorization(ctx context.Context, userCodeHash, userID string, approve bool, now time.Time) error {
+// userID with one conditional update on the row id the lookup returned. Anything else is ErrDeviceNotFound.
+func (s *Store) DecideDeviceAuthorization(ctx context.Context, id, userID string, approve bool, now time.Time) error {
 	status := DeviceStatusDenied
 	if approve {
 		status = DeviceStatusApproved
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE device_authorizations SET status = ?, user_id = ?, decided_at = ?
-		  WHERE user_code_hash = ? AND status = ? AND expires_at > ?`,
-		status, userID, now, userCodeHash, DeviceStatusPending, now)
+		  WHERE id = ? AND status = ? AND expires_at > ?`,
+		status, userID, now, id, DeviceStatusPending, now)
 	if err != nil {
 		return fmt.Errorf("decide device authorization: %w", err)
 	}

@@ -1678,9 +1678,24 @@ const retiredScopeSelfDevPropose = "computer:self_development:propose"
 // omitted gets this list (docs/design/cli-agent-onboarding-2026-11-03.md);
 // it is the one definition of "all".
 func AllScopes() []string {
+	return registryScopes(false)
+}
+
+// sessionOnlyScopes are scopes only the owner's signed-in session (or its
+// device approval) may grant. No key may mint or delegate one, and the
+// delegable defaults subtract them. A new session-only scope is added here.
+var sessionOnlyScopes = map[string]bool{OwnerActsScope: true}
+
+// DelegableScopes is AllScopes minus the session-only scopes: what a key may
+// hand on by omission.
+func DelegableScopes() []string {
+	return registryScopes(true)
+}
+
+func registryScopes(delegable bool) []string {
 	out := make([]string, 0, len(validScopes))
 	for s := range validScopes {
-		if s != retiredScopeSelfDevPropose {
+		if s != retiredScopeSelfDevPropose && !(delegable && sessionOnlyScopes[s]) {
 			out = append(out, s)
 		}
 	}
@@ -1697,11 +1712,11 @@ func defaultKeyScopes(callerKey *APIKey) []string {
 	}
 	from := callerKey.Scopes
 	if apiKeyHasScope(from, "admin") {
-		from = AllScopes()
+		from = DelegableScopes()
 	}
 	out := make([]string, 0, len(from))
 	for _, s := range from {
-		if s != OwnerActsScope && s != retiredScopeSelfDevPropose && validScopes[s] && !apiKeyHasScope(out, s) {
+		if !sessionOnlyScopes[s] && s != retiredScopeSelfDevPropose && validScopes[s] && !apiKeyHasScope(out, s) {
 			out = append(out, s)
 		}
 	}
@@ -1717,10 +1732,12 @@ const (
 
 // createAPIKeyRequest is the JSON body for POST /auth/api-keys.
 type createAPIKeyRequest struct {
-	Label      string     `json:"label"`
-	Scopes     []string   `json:"scopes"`
-	ComputerID string     `json:"computer_id,omitempty"`
-	ExpiresAt  *time.Time `json:"expires_at"`
+	Label string `json:"label"`
+	// Scopes stays raw so an absent field (default: every scope) is told
+	// apart from an explicit null or [] (both refused).
+	Scopes     json.RawMessage `json:"scopes"`
+	ComputerID string          `json:"computer_id,omitempty"`
+	ExpiresAt  *time.Time      `json:"expires_at"`
 }
 
 // apiKeyResponse is the JSON response for a single API key (no secret).
@@ -1894,23 +1911,27 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	// Omitted scopes (no "scopes" field) mean full access; an explicit empty
 	// list is still refused below.
+	var scopes []string
 	if req.Scopes == nil {
-		req.Scopes = defaultKeyScopes(callerKey)
+		scopes = defaultKeyScopes(callerKey)
+	} else if err := json.Unmarshal(req.Scopes, &scopes); err != nil || scopes == nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "scopes must be a list of scope strings"})
+		return
 	}
 
-	if err := validateScopes(req.Scopes); err != nil {
+	if err := validateScopes(scopes); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
 	// A key with no scope can do nothing but read its siblings' metadata;
 	// refuse it rather than mint a credential with no purpose.
-	if len(req.Scopes) == 0 {
+	if len(scopes) == 0 {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "at least one scope is required"})
 		return
 	}
 	// owner:acts comes only from the owner's session, never from a key:
 	// otherwise an admin agent key could mint itself owner authority.
-	if callerKey != nil && apiKeyHasScope(req.Scopes, OwnerActsScope) {
+	if callerKey != nil && apiKeyHasScope(scopes, OwnerActsScope) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "owner:acts can be granted only from the owner's signed-in session"})
 		return
 	}
@@ -1918,7 +1939,7 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key requires manage:keys or admin to create keys"})
 		return
 	}
-	if callerKey != nil && !apiKeyScopeSubset(req.Scopes, callerKey.Scopes) {
+	if callerKey != nil && !apiKeyScopeSubset(scopes, callerKey.Scopes) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key cannot delegate requested scopes"})
 		return
 	}
@@ -1933,7 +1954,7 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, secret, err := h.store.CreateComputerScopedAPIKey(r.Context(), user.ID, req.Label, req.Scopes, req.ComputerID, req.ExpiresAt)
+	id, secret, err := h.store.CreateComputerScopedAPIKey(r.Context(), user.ID, req.Label, scopes, req.ComputerID, req.ExpiresAt)
 	if err != nil {
 		log.Printf("[auth] operation=create_api_key user_id=%s result=error error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create api key"})
@@ -1949,7 +1970,7 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 			apiKeyResponse: apiKeyResponse{
 				ID:         id,
 				Label:      req.Label,
-				Scopes:     req.Scopes,
+				Scopes:     scopes,
 				ComputerID: req.ComputerID,
 				CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 				ExpiresAt:  formatTimePtr(req.ExpiresAt),
