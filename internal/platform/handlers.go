@@ -38,12 +38,9 @@ type Handler struct {
 	packageBase       pkgrelease.BaseTrees
 	packageBaseStatus *PackageBaseStatus
 	packageOwnerActs  *OwnerActAuthority
-	// packageShareReads is CHOIR_PACKAGE_SHARE_READS (Library S3): the zero
-	// value reads each listing's scope set.
-	packageShareReads PackageShareReadsMode
-	// widenedListingReads counts the widened listing objects catalog reads
-	// fetched (review 291 F1; the test reads it).
-	widenedListingReads atomic.Int64
+	// publicListingReads counts the listing objects catalog reads fetched
+	// through the record_kind key (review 291 F1; the test reads it).
+	publicListingReads atomic.Int64
 	// packageMu serializes package publishes: the track head read, the
 	// seq and the listing write. It is the only thing that keeps a track
 	// linear, and it holds only while one corpusd process writes Store B

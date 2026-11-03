@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/release"
 )
 
 // Library S3 listing shapes (docs/design/library-package-propagation-2026-10-26.md
@@ -15,9 +17,13 @@ import (
 //	S1   a scope S3 cannot enforce is accepted: platform (S4) and named
 //	     computers (no computer reads packages before S5) must refuse by
 //	     name, not be stored and ignored;
-//	S2   a widening is not recognized as one (it would skip --confirm-paths
-//	     and the second secret scan), or a narrowing is taken for one;
-//	L21  the widening preview omits a path that leaves, or passes a secret.
+//	P1   (owner, 2026-11-03: "published releases mean published, for
+//	     everyone to see") a listed release is hidden from a signed-in
+//	     owner because its stored scope set names only its publisher, or
+//	     names other sharees; a withdrawn, suspended or yanked release is
+//	     shown to anyone but its publisher; an empty reader sees anything;
+//	L21  the publish preview omits a path that becomes public, or passes a
+//	     secret.
 
 func listingOn(scopes []string, owners ...string) Listing {
 	return Listing{
@@ -63,49 +69,38 @@ func TestListingScopeSetsS3Accepts(t *testing.T) {
 	}
 }
 
-func TestListingVisibleToFollowsTheScopeSet(t *testing.T) {
+func TestListedReleaseIsVisibleToEverySignedInOwner(t *testing.T) {
 	owner := listingOn([]string{ScopeOwner})
 	shared := listingOn([]string{ScopeOwner, ScopeShared}, "owner-b")
 	public := listingOn([]string{ScopeOwner, ScopePublic})
-	for _, c := range []struct {
-		listing Listing
-		reader  string
-		want    bool
-	}{
-		{owner, "owner-a", true}, {owner, "owner-b", false}, {owner, "", false},
-		{shared, "owner-a", true}, {shared, "owner-b", true}, {shared, "owner-c", false},
-		{public, "owner-a", true}, {public, "owner-c", true}, {public, "", false},
-	} {
-		if got := c.listing.VisibleTo(c.reader); got != c.want {
-			t.Fatalf("L4 %v %v to %q = %v, want %v", c.listing.Scopes, c.listing.SharedWith.Owners, c.reader, got, c.want)
+	for _, l := range []Listing{owner, shared, public} {
+		for _, reader := range []string{"owner-a", "owner-b", "owner-c"} {
+			if !l.VisibleTo(reader) {
+				t.Fatalf("P1 a listed release %v %v is hidden from %q", l.Scopes, l.SharedWith.Owners, reader)
+			}
+		}
+		if l.VisibleTo("") {
+			t.Fatalf("P1 a listed release is visible to no reader")
+		}
+		for _, state := range []string{StateWithdrawn, StateSuspended, StateYanked} {
+			taken := l
+			taken.State = state
+			if taken.VisibleTo("owner-b") {
+				t.Fatalf("P1 a %s release is visible to another owner", state)
+			}
+			if !taken.VisibleTo("owner-a") {
+				t.Fatalf("P1 a %s release is hidden from its publisher", state)
+			}
 		}
 	}
 }
 
-func TestWidensIsAnyNewReader(t *testing.T) {
-	owner := listingOn([]string{ScopeOwner})
-	sharedB := listingOn([]string{ScopeOwner, ScopeShared}, "owner-b")
-	sharedBC := listingOn([]string{ScopeOwner, ScopeShared}, "owner-b", "owner-c")
-	public := listingOn([]string{ScopeOwner, ScopePublic})
-	for _, c := range []struct {
-		from, to Listing
-		want     bool
-	}{
-		{owner, sharedB, true}, {sharedB, sharedBC, true}, {sharedB, public, true}, {owner, public, true},
-		{sharedBC, sharedB, false}, {sharedB, owner, false}, {public, owner, false}, {sharedB, sharedB, false},
-		// Public to shared-with-b narrows: b could read it already.
-		{public, sharedB, false},
-	} {
-		if got := Widens(c.from, c.to); got != c.want {
-			t.Fatalf("S2 %v%v -> %v%v widens = %v, want %v", c.from.Scopes, c.from.SharedWith.Owners, c.to.Scopes, c.to.SharedWith.Owners, got, c.want)
-		}
-	}
-}
-
-func TestWideningPreviewListsEveryPathAndRescans(t *testing.T) {
+func TestPublishPreviewListsEveryPathAndRescans(t *testing.T) {
 	f := newFixture(t)
 	record, blobs := f.release(f.tree(changed("<p>v2</p>\n")))
-	preview, err := WideningPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
+	record.Declarations.TestCommand = "npm test"
+	record.Precommitments = append(record.Precommitments, release.Precommitment{RecordID: strings.Repeat("b", 64), Kind: "release", Question: "Does the reader still open?", PYesPermille: 900})
+	preview, err := PublishPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +113,16 @@ func TestWideningPreviewListsEveryPathAndRescans(t *testing.T) {
 	if preview.ReviewPatchBytes != len(blobs.ReviewPatch) || len(preview.PathsDigest) != 64 {
 		t.Fatalf("L21 preview = %+v", preview)
 	}
-	again, _ := WideningPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
+	// The record's free text becomes public too, so the preview shows it.
+	if len(preview.Questions) != 1 || len(preview.Questions) != len(record.Precommitments) || preview.TestCommand != record.Declarations.TestCommand {
+		t.Fatalf("L21 the preview omits the record's free text: %+v", preview)
+	}
+	for i, p := range record.Precommitments {
+		if preview.Questions[i] != p.Question {
+			t.Fatalf("L21 preview question %d = %q, want %q", i, preview.Questions[i], p.Question)
+		}
+	}
+	again, _ := PublishPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
 	if again.PathsDigest != preview.PathsDigest {
 		t.Fatal("the paths digest is not stable")
 	}
@@ -126,7 +130,7 @@ func TestWideningPreviewListsEveryPathAndRescans(t *testing.T) {
 	// another confirmation.
 	other := record
 	other.Operation.OperationID = "op-other"
-	if p, _ := WideningPreview(context.Background(), other, blobs.TreePatch, blobs.ReviewPatch); p.PathsDigest == preview.PathsDigest {
+	if p, _ := PublishPreview(context.Background(), other, blobs.TreePatch, blobs.ReviewPatch); p.PathsDigest == preview.PathsDigest {
 		t.Fatal("the paths digest does not bind the release")
 	}
 
@@ -134,7 +138,7 @@ func TestWideningPreviewListsEveryPathAndRescans(t *testing.T) {
 	secret := f.tree(changed("GITHUB_TOKEN=ghp_" + strings.Repeat("A", 36) + "\n"))
 	record, blobs = f.release(secret)
 	wantReason(t, func() error {
-		_, err := WideningPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
+		_, err := PublishPreview(context.Background(), record, blobs.TreePatch, blobs.ReviewPatch)
 		return err
 	}(), ReasonSecretFound)
 }

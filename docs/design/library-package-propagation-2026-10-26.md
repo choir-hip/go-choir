@@ -6,6 +6,13 @@ designs: **tier 2** (Devin and DeepSeek). It is station SR9 of
 [the readiness metamission](../definitions/choir-selfdev-readiness-metamission-2026-10-24.md),
 and its goal file is [choir-sr9-library-2026-10-26.md](../archive/definitions/choir-sr9-library-2026-10-26.md).
 
+- **Superseded in part, 2026-11-03.** The owner ruled that a published
+  release is public ("published releases mean published, for everyone to
+  see"): publish lists at owner and public behind a `--confirm-paths`
+  preview, share and `packages.share` are retired, withdraw stays, and the
+  owner-only and shared scope sets below no longer narrow who sees a
+  listed release. See
+  [the problem record](../problems/published-release-visible-only-to-publisher-2026-11-03.md).
 - **Revision 2.** This revision answers review 257 (both seats requested
   changes; the disposition is in section 21). It also adds the owner's
   2026-10-26 02:0x question about the platform base image (section 10.5).

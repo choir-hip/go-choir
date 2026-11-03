@@ -155,19 +155,12 @@ const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 const SettingTextureRootDesk = "texture.root_desk"
 
 // SettingPackagesPublish lets the owner publish this computer's applied
-// package changes to the Choir Library at scope owner (Library S2,
+// package changes to the Choir Library, where a published release is public
+// to every signed-in owner (owner, 2026-11-03; Library S2,
 // docs/design/library-package-propagation-2026-10-26.md 3.2): the guest
 // drafts a package release only when it is on. Off by default; off is the
 // rollback, and releases already listed stay readable and inert.
 const SettingPackagesPublish = "packages.publish"
-
-// SettingPackagesShare lets the owner share, withdraw and reinstate package
-// releases with this computer as the act's gate (Library S3,
-// docs/design/library-package-propagation-2026-10-26.md 17 S3): the guest
-// answers the proxy's share gate only when it is on. Off by default; off is
-// the rollout switch's rollback, and corpusd's CHOIR_PACKAGE_SHARE_READS=owner
-// is the read side's.
-const SettingPackagesShare = "packages.share"
 
 // SettingDispatchWideSlots raises the dispatcher's shared slots from 8 to
 // 12 at once, without a restart (the owner for the paper, 2026-10-27: "I
@@ -238,7 +231,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureHoldTrajectory:        false,
 	SettingTextureRootDesk:              false,
 	SettingPackagesPublish:              false,
-	SettingPackagesShare:                false,
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,

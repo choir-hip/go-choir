@@ -22,13 +22,17 @@ import (
 //	GET  /api/catalog/packages[?q=]               the packages the caller may see           read
 //	GET  /api/catalog/packages/<name>/releases    a package's history                       read
 //	GET  /api/catalog/releases/<release id>       one package release and its listing       read
-//	PATCH /api/catalog/records/<release id>/listing  share, withdraw or reinstate (S3)    owner act
+//	PATCH /api/catalog/records/<release id>/listing  withdraw or reinstate                owner act
 //
-// Publish is the owner's act from the originating computer. The proxy reads
+// A published release is public: every signed-in owner sees it in the
+// catalog and may install it (owner, 2026-11-03). There is no share; a
+// share answers share_retired. Publish is the owner's act from the
+// originating computer. The proxy reads
 // the owner's track head from corpusd, has the computer draft the release
 // on it from its own tape and source, verifies the draft, and hands corpusd
-// the patches and the record with the publisher it authenticated and an
-// owner-act receipt binding the release and the scope. No guest credential
+// the patches and the record with the publisher it authenticated, the
+// owner's confirmation of the paths that become public, and an owner-act
+// receipt binding the release and its public scope. No guest credential
 // and no desk reaches the write: a desk's product API never POSTs a
 // computer route. Every read names the authenticated owner and only it.
 
@@ -66,6 +70,9 @@ type packagePublishBody struct {
 	OperationID string `json:"operation_id"`
 	Package     string `json:"package"`
 	TestCommand string `json:"test_command,omitempty"`
+	// ConfirmPaths is the paths digest of corpusd's preview of what
+	// becomes public; without it corpusd answers the preview.
+	ConfirmPaths string `json:"confirm_paths,omitempty"`
 }
 
 type packageDraftBody struct {
@@ -77,7 +84,7 @@ type packageDraftBody struct {
 }
 
 // HandleComputerPackagePublish publishes one applied operation's package
-// change of the caller's own computer at scope owner.
+// change of the caller's own computer. Publishing makes it public.
 func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Request) {
 	computerID, ok := computerPackagePublishID(r.URL.Path)
 	if !ok {
@@ -204,10 +211,14 @@ func (h *Handler) HandleComputerPackagePublish(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	publish, _ := json.Marshal(map[string]any{
+	request := map[string]any{
 		"release_id": releaseID, "record": draft.Record,
 		"owner_id": authResult.UserID, "computer_id": computerID,
-	})
+	}
+	if confirm := strings.TrimSpace(body.ConfirmPaths); confirm != "" {
+		request["confirm_paths"] = confirm
+	}
+	publish, _ := json.Marshal(request)
 	status, raw, err = h.corpusdCallHeaders(r.Context(), http.MethodPost, "/internal/platform/packages/releases", "application/json", headers, publish)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
@@ -310,9 +321,10 @@ func (h *Handler) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 	relayJSON(w, status, raw)
 }
 
-// packageListingBody is the owner's listing act: a scope set (share) or a
-// state (withdraw, reinstate), and the computer whose packages.share gates
-// it.
+// packageListingBody is the owner's listing act: a state (withdraw,
+// reinstate) and the owner's computer the act is made from. Scopes,
+// shared_with and confirm_paths are what a retired share sent; any of them
+// answers share_retired.
 type packageListingBody struct {
 	ComputerID   string                 `json:"computer_id"`
 	Scopes       []string               `json:"scopes"`
@@ -322,13 +334,12 @@ type packageListingBody struct {
 	ConfirmPaths string                 `json:"confirm_paths"`
 }
 
-// handlePackageListingAct is share, withdraw and reinstate (Library S3,
-// design 4.1, 14). It is the owner's act: the proxy asks the named
-// computer's share gate (packages.share, the rollout switch, off by
-// default), then hands corpusd the change for the owner it authenticated
-// with an owner-act receipt binding the release and the change. corpusd
-// decides the rest from the release's own listing: a release of another
-// owner answers as missing, and a widening needs the paths confirmed.
+// handlePackageListingAct is withdraw and reinstate (design 4.2, 14). It is
+// the owner's act: the proxy checks the named computer is the owner's, then
+// hands corpusd the change for the owner it authenticated with an owner-act
+// receipt binding the release and the change. corpusd decides the rest from
+// the release's own listing: a release of another owner answers as missing.
+// Share is retired (owner, 2026-11-03): a published release is public.
 func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request, releaseID string) {
 	if !computerevent.IsSHA256(releaseID) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
@@ -353,30 +364,19 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid listing act"})
 		return
 	}
+	if len(body.Scopes) > 0 || body.SharedWith != nil || strings.TrimSpace(body.ConfirmPaths) != "" {
+		writeJSON(w, http.StatusGone, map[string]string{"error": pkgrelease.ReasonShareRetired + ": " + pkgrelease.ShareRetiredDetail, "reason": pkgrelease.ReasonShareRetired})
+		return
+	}
 	computerID := strings.TrimSpace(body.ComputerID)
-	scoped, stated := len(body.Scopes) > 0, strings.TrimSpace(body.State) != ""
-	if computerID == "" || strings.ContainsAny(computerID, "/?#") || scoped == stated {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id, and either scopes (share) or state (withdraw, reinstate), are required"})
+	if computerID == "" || strings.ContainsAny(computerID, "/?#") || strings.TrimSpace(body.State) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id and state (withdraw, reinstate) are required"})
 		return
 	}
-	guestURL, ok := h.ownedComputerURL(w, r, authResult, computerID)
-	if !ok {
+	if _, ok := h.ownedComputerURL(w, r, authResult, computerID); !ok {
 		return
 	}
-	gatePath := "/api/computers/" + url.PathEscape(computerID) + "/packages/share-gate"
-	status, raw, err := h.guestJSON(r.Context(), guestURL, http.MethodGet, gatePath, authResult, computerID, nil)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's share gate is unavailable"})
-		return
-	}
-	if status != http.StatusOK {
-		relayJSON(w, status, raw)
-		return
-	}
-	change := platform.ListingChange{
-		Scopes: body.Scopes, SharedWith: body.SharedWith, State: strings.TrimSpace(body.State),
-		Reason: strings.TrimSpace(body.Reason), ConfirmPaths: strings.TrimSpace(body.ConfirmPaths),
-	}
+	change := platform.ListingChange{State: strings.TrimSpace(body.State), Reason: strings.TrimSpace(body.Reason)}
 	headers := map[string]string{}
 	if h.ownerActSigner != nil {
 		method := owneract.AuthMethodSession
@@ -396,7 +396,7 @@ func (h *Handler) handlePackageListingAct(w http.ResponseWriter, r *http.Request
 		}
 	}
 	act, _ := json.Marshal(platform.PackageListingRequest{OwnerID: authResult.UserID, ComputerID: computerID, ListingChange: change})
-	status, raw, err = h.corpusdCallHeaders(r.Context(), http.MethodPut, "/internal/platform/listings/"+releaseID, "application/json", headers, act)
+	status, raw, err := h.corpusdCallHeaders(r.Context(), http.MethodPut, "/internal/platform/listings/"+releaseID, "application/json", headers, act)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "package store unavailable"})
 		return

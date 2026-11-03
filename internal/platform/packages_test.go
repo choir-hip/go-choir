@@ -273,14 +273,32 @@ func (w *pkgWorld) receiptFor(b built) string {
 	return encoded
 }
 
-func (w *pkgWorld) publishWith(b built, receipt string) *httptest.ResponseRecorder {
+// publishConfirming publishes b with confirm as its --confirm-paths.
+func (w *pkgWorld) publishConfirming(b built, receipt, confirm string) *httptest.ResponseRecorder {
 	w.t.Helper()
 	w.putBlobs(b)
-	body, _ := json.Marshal(map[string]any{
+	request := map[string]any{
 		"release_id": b.id, "record": json.RawMessage(b.raw),
 		"owner_id": b.record.Publisher.OwnerID, "computer_id": b.record.Publisher.ComputerID,
-	})
+	}
+	if confirm != "" {
+		request["confirm_paths"] = confirm
+	}
+	body, _ := json.Marshal(request)
 	return w.do(pkgCall{method: http.MethodPost, path: packagesRoute + "/releases", internal: true, receipt: receipt, body: body})
+}
+
+// publishWith publishes b as the owner does: the first answer previews
+// what becomes public, and the owner confirms those paths.
+func (w *pkgWorld) publishWith(b built, receipt string) *httptest.ResponseRecorder {
+	w.t.Helper()
+	rec := w.publishConfirming(b, receipt, "")
+	var refusal PackageListingRefusal
+	if rec.Code == http.StatusConflict && json.Unmarshal(rec.Body.Bytes(), &refusal) == nil &&
+		refusal.Reason == pkgrelease.ReasonConfirmPathsRequired && refusal.Preview != nil {
+		rec = w.publishConfirming(b, receipt, refusal.Preview.PathsDigest)
+	}
+	return rec
 }
 
 func (w *pkgWorld) publish(b built) *httptest.ResponseRecorder {
@@ -335,7 +353,7 @@ func TestPackageRoutesAreHostOnly(t *testing.T) {
 	}
 }
 
-func TestPackagePublishListsAtOwnerScope(t *testing.T) {
+func TestPackagePublishListsPublicly(t *testing.T) {
 	w := newPkgWorld(t)
 	b := w.build("<p>v2</p>\n", "owner-a", nil)
 	rec := w.publish(b)
@@ -345,7 +363,7 @@ func TestPackagePublishListsAtOwnerScope(t *testing.T) {
 	}
 	l := view.Listing
 	if view.ReleaseID != b.id || !view.Published || l.RecordKind != pkgrelease.RecordKindPackageRelease || l.RecordID != b.id ||
-		l.Package != "reader" || l.Track != "owner-a" || l.Seq != 1 || strings.Join(l.Scopes, ",") != pkgrelease.ScopeOwner ||
+		l.Package != "reader" || l.Track != "owner-a" || l.Seq != 1 || strings.Join(l.Scopes, ",") != pkgrelease.ScopeOwner+","+pkgrelease.ScopePublic ||
 		l.State != pkgrelease.StateListed || l.Version != 1 || l.PrevVersionDigest != "" || !strings.HasPrefix(l.StateActor, "owner_act:") {
 		t.Fatalf("listing = %+v", view)
 	}
@@ -354,14 +372,12 @@ func TestPackagePublishListsAtOwnerScope(t *testing.T) {
 		t.Fatal("the stored record is not the published bytes")
 	}
 
-	// Reads: the owner sees it; another owner sees nothing (L4).
-	if rec := w.read(packagesRoute + "/releases/" + b.id + "?owner_id=owner-a"); rec.Code != http.StatusOK {
-		t.Fatalf("owner read = %d %s", rec.Code, rec.Body.String())
-	}
-	other := w.read(packagesRoute + "/releases/" + b.id + "?owner_id=owner-b")
-	missing := w.read(packagesRoute + "/releases/" + strings.Repeat("0", 64) + "?owner_id=owner-b")
-	if other.Code != http.StatusNotFound || other.Body.String() != missing.Body.String() {
-		t.Fatalf("L4 another owner's read = %d %s, missing = %s", other.Code, other.Body.String(), missing.Body.String())
+	// Reads: the owner sees it, and so does every other owner (published
+	// is public, owner 2026-11-03).
+	for _, reader := range []string{"owner-a", "owner-b"} {
+		if rec := w.read(packagesRoute + "/releases/" + b.id + "?owner_id=" + reader); rec.Code != http.StatusOK {
+			t.Fatalf("%s's read = %d %s", reader, rec.Code, rec.Body.String())
+		}
 	}
 	var catalog struct {
 		Packages []struct {
@@ -381,17 +397,22 @@ func TestPackagePublishListsAtOwnerScope(t *testing.T) {
 	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-a&q=image"); strings.Contains(rec.Body.String(), b.id) {
 		t.Fatalf("search for another name found reader: %s", rec.Body.String())
 	}
-	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-b"); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), b.id) {
-		t.Fatalf("L4 another owner's catalog = %d %s, want 200 and empty", rec.Code, rec.Body.String())
+	if rec := w.read(packagesRoute + "/catalog?owner_id=owner-b"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), b.id) {
+		t.Fatalf("another owner's catalog = %d %s, want the published release", rec.Code, rec.Body.String())
 	}
 	if rec := w.read(packagesRoute + "/catalog/reader/releases?owner_id=owner-a"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), b.id) {
 		t.Fatalf("owner history = %d %s", rec.Code, rec.Body.String())
 	}
+	// Another owner's history names the track; its own track is empty, and
+	// the head a publish drafts on is only ever its own (L24).
+	if rec := w.read(packagesRoute + "/catalog/reader/releases?owner_id=owner-b&track=owner-a"); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), b.id) {
+		t.Fatalf("another owner's history of the track = %d %s", rec.Code, rec.Body.String())
+	}
 	if rec := w.read(packagesRoute + "/catalog/reader/releases?owner_id=owner-b"); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), b.id) {
-		t.Fatalf("L4 another owner's history = %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("L24 another owner's own history = %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := w.read(packagesRoute + "/tracks/reader/head?owner_id=owner-b"); rec.Code != http.StatusNotFound {
-		t.Fatalf("L4 another owner's track head = %d", rec.Code)
+		t.Fatalf("L24 another owner's track head = %d", rec.Code)
 	}
 	// A read that names no owner is refused, never unscoped.
 	for _, path := range []string{"/catalog", "/catalog/reader/releases", "/releases/" + b.id, "/tracks/reader/head"} {

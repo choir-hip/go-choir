@@ -362,32 +362,24 @@ func TestPackageDraftRefusesWhenThePrecedingOperationLeftNoRef(t *testing.T) {
 	wantDraftReason(t, w.draft("op-0003", nil), http.StatusConflict, pkgrelease.ReasonParentUnpublished)
 }
 
-// Library S3 (design 17 S3): the share gate is the guest's rollout switch,
-// as packages.publish is for the draft. Failure modes pinned:
+// The owner's ruling of 2026-11-03: a published release is public, so
+// there is no share act and no switch for it. Failure modes pinned:
 //
-//	G6   the gate answers yes with packages.share off (the default), so a
-//	     share, withdraw or reinstate act would reach corpusd from a stock
-//	     computer; or the gate writes. Off must refuse packages_share_off;
+//	P5   the share gate still answers, or packages.share is still a setting
+//	     a computer stores (a hidden switch: nothing is off by default);
 //	N1   (S2 residual bunch279-N1) a store or ref read failure while
 //	     drafting answers 409, as if it were a conflict; it is 503.
-func TestPackageShareGateNeedsTheSetting(t *testing.T) {
+func TestPackageShareGateAndSettingAreRetired(t *testing.T) {
 	w := newDraftWorld(t)
-	gate := func(method string) *httptest.ResponseRecorder {
-		return releaseRouterCall(t, w.h, method, "/api/computers/"+draftComputer+"/packages/share-gate", "owner-a", draftComputer, nil)
+	rec := releaseRouterCall(t, w.h, http.MethodGet, "/api/computers/"+draftComputer+"/packages/share-gate", "owner-a", draftComputer, nil)
+	if rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), "packages.share") {
+		t.Fatalf("P5 the retired share gate answered %d %s", rec.Code, rec.Body.String())
 	}
-	wantDraftReason(t, gate(http.MethodGet), http.StatusConflict, "packages_share_off")
-	if err := w.rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-a", ComputerID: draftComputer, Key: store.SettingPackagesShare, Value: true}); err != nil {
-		t.Fatal(err)
+	if _, known := store.KnownComputerSettings["packages.share"]; known {
+		t.Fatal("P5 packages.share is still a computer setting")
 	}
-	if rec := gate(http.MethodGet); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), store.SettingPackagesShare) {
-		t.Fatalf("G6 the gate on = %d %s", rec.Code, rec.Body.String())
-	}
-	if rec := gate(http.MethodPost); rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("G6 a gate write = %d, want 405", rec.Code)
-	}
-	// packages.publish does not open the share gate, nor the reverse.
-	if store.SettingPackagesShare == store.SettingPackagesPublish {
-		t.Fatal("the share switch is the publish switch")
+	if err := w.rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: "owner-a", ComputerID: draftComputer, Key: "packages.share", Value: true}); err == nil {
+		t.Fatal("P5 a computer stored the retired packages.share")
 	}
 }
 

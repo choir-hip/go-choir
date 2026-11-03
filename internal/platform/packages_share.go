@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,23 +12,21 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/pkgrelease"
 )
 
-// Library S3 at corpusd (docs/design/library-package-propagation-2026-10-26.md
-// 4.1, 4.2, 4.4, 15.1, 17 S3): share, withdraw and reinstate, each an owner
-// act written as the listing's next version.
+// The listing acts at corpusd (docs/design/library-package-propagation-2026-10-26.md
+// 4.2, 15.1): withdraw and reinstate, each an owner act written as the
+// listing's next version.
 //
 //	PUT /internal/platform/listings/<record id>   host only; the proxy's owner act
 //
-// A share sets the scope set (owner, shared with named owners, public). A
-// widening shows every path that would leave and the review diff's size
-// and refuses until the owner confirms that digest (--confirm-paths); it
-// runs the secret scan again on the stored bytes. A narrowing needs
-// neither: the owner can always take readers away. A withdraw takes the
-// release off the catalog heads and the track head; it stays in the
-// history. A reinstate lists a suspended release again, or a withdrawn one
-// while it can still head the track (its parent is the head without it);
-// once a release was published past it, reinstating would fork the track
-// and refuses track_moved. A yanked release (S11, the host's) takes no
-// owner act.
+// There is no share (owner, 2026-11-03: "published releases mean published,
+// for everyone to see"): a publish lists a release public, and a scope
+// change refuses share_retired. A withdraw takes the release off the
+// catalog heads, the track head and every other owner's view; it stays in
+// its publisher's history. A reinstate lists a suspended release again, or
+// a withdrawn one while it can still head the track (its parent is the head
+// without it); once a release was published past it, reinstating would
+// fork the track and refuses track_moved. A yanked release (S11, the
+// host's) takes no owner act.
 
 const listingsRoute = "/internal/platform/listings"
 
@@ -37,7 +34,9 @@ const listingsRoute = "/internal/platform/listings"
 // for the test.
 var trackPageSize = 500
 
-// ListingChange is one owner act on a listing: a scope change, or a state.
+// ListingChange is one owner act on a listing: a state. Scopes, SharedWith
+// and ConfirmPaths are what a retired share sent; any of them refuses
+// share_retired.
 type ListingChange struct {
 	Scopes       []string               `json:"scopes,omitempty"`
 	SharedWith   *pkgrelease.SharedWith `json:"shared_with,omitempty"`
@@ -57,14 +56,13 @@ type PackageListingRequest struct {
 // PackageListingResult answers a listing act. Changed is false when the
 // act asked for what the listing already is (nothing is written).
 type PackageListingResult struct {
-	ReleaseID string              `json:"release_id"`
-	Changed   bool                `json:"changed"`
-	Listing   pkgrelease.Listing  `json:"listing"`
-	Preview   *pkgrelease.Preview `json:"preview,omitempty"`
+	ReleaseID string             `json:"release_id"`
+	Changed   bool               `json:"changed"`
+	Listing   pkgrelease.Listing `json:"listing"`
 }
 
-// PackageListingRefusal is a refused listing act, with the widening's
-// preview when it needs a confirmation.
+// PackageListingRefusal is a refused publish or listing act, with the
+// publish preview when it needs a confirmation.
 type PackageListingRefusal struct {
 	Error   string              `json:"error"`
 	Reason  string              `json:"reason,omitempty"`
@@ -89,40 +87,6 @@ func PackageListingSubject(releaseID string, change ListingChange) map[string]an
 		"state":            strings.TrimSpace(change.State),
 	}
 }
-
-// PackageShareReadsMode is CHOIR_PACKAGE_SHARE_READS, the read side's
-// rollback: scoped (the default, also when unset) reads each listing's
-// scope set; owner reads every listing at owner scope, as S2 did. Only an
-// unset, empty or "scoped" value is scoped: a typo narrows reads, it never
-// widens them. Read once at startup.
-type PackageShareReadsMode string
-
-const (
-	PackageShareReadsScoped PackageShareReadsMode = "scoped"
-	PackageShareReadsOwner  PackageShareReadsMode = "owner"
-
-	// EnvPackageShareReads names the switch.
-	EnvPackageShareReads = "CHOIR_PACKAGE_SHARE_READS"
-)
-
-// ParsePackageShareReads reads the switch value.
-func ParsePackageShareReads(raw string) PackageShareReadsMode {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(PackageShareReadsScoped):
-		return PackageShareReadsScoped
-	}
-	return PackageShareReadsOwner
-}
-
-// SetPackageShareReads sets the mode once at startup, before the handler
-// serves.
-func (h *Handler) SetPackageShareReads(mode PackageShareReadsMode) {
-	if h != nil {
-		h.packageShareReads = mode
-	}
-}
-
-func listingWidened(listing pkgrelease.Listing) bool { return listing.Widened() }
 
 // HandleListings serves the listing acts.
 func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
@@ -153,12 +117,15 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and computer_id are required"})
 		return
 	}
-	scoped, stated := len(change.Scopes) > 0, change.State != ""
-	if scoped == stated || (!scoped && change.SharedWith != nil) {
-		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonInvalid, Detail: "a listing act is a scope set (share) or a state (withdraw, reinstate), not both and not neither"})
+	if len(change.Scopes) > 0 || change.SharedWith != nil || strings.TrimSpace(change.ConfirmPaths) != "" {
+		writePackageJSON(w, http.StatusGone, packageAPIError{Error: pkgrelease.ReasonShareRetired + ": " + pkgrelease.ShareRetiredDetail, Reason: pkgrelease.ReasonShareRetired})
 		return
 	}
-	if stated && change.State != pkgrelease.StateListed && change.State != pkgrelease.StateWithdrawn {
+	if change.State == "" {
+		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonInvalid, Detail: "a listing act is a state (withdraw, reinstate)"})
+		return
+	}
+	if change.State != pkgrelease.StateListed && change.State != pkgrelease.StateWithdrawn {
 		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonInvalid, Detail: fmt.Sprintf(
 			"an owner act sets a listing %s (reinstate) or %s (withdraw), not %q", pkgrelease.StateListed, pkgrelease.StateWithdrawn, change.State)})
 		return
@@ -195,8 +162,8 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A receipt acts once (review 291 F4): one that already wrote a version
-	// of this listing is a replay, for instance of a widen after the owner
-	// narrowed. A refused act writes nothing, so it spends nothing.
+	// of this listing is a replay, for instance of a withdraw after the
+	// owner reinstated. A refused act writes nothing, so it spends nothing.
 	if actor != "owner_act:unverified" {
 		for _, version := range chains[releaseID] {
 			if version.StateActor == actor {
@@ -211,60 +178,20 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := current.Normalize()
-	var preview *pkgrelease.Preview
 	unchanged := false
-	if scoped {
-		next.Scopes = change.Scopes
-		next.SharedWith = pkgrelease.SharedWith{}
-		if change.SharedWith != nil {
-			next.SharedWith = *change.SharedWith
-		}
-		next = next.Normalize()
-		if err := next.Validate(); err != nil {
-			writePackageRefusal(w, err)
+	switch {
+	case current.State == change.State:
+		unchanged = true
+	case change.State == pkgrelease.StateWithdrawn:
+		next.State, next.StateReason = pkgrelease.StateWithdrawn, reasonOr(change.Reason, "withdrawn")
+	case current.State == pkgrelease.StateWithdrawn:
+		if detail, ok := reinstatable(listings, releaseID, record); !ok {
+			writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackMoved, Detail: detail})
 			return
 		}
-		switch {
-		case pkgrelease.SameAudience(current, next):
-			unchanged = true
-		case pkgrelease.Widens(current, next):
-			if current.State != pkgrelease.StateListed {
-				writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonListingState, Detail: "the release is " + current.State + "; only a listed release is shared wider"})
-				return
-			}
-			p, err := h.wideningPreview(ctx, record)
-			if err != nil {
-				writePackageRefusal(w, err)
-				return
-			}
-			preview = &p
-			if confirm := strings.ToLower(strings.TrimSpace(change.ConfirmPaths)); confirm != p.PathsDigest {
-				reason, detail := pkgrelease.ReasonConfirmPathsMismatch, "the confirmation names other paths than this release's"
-				if confirm == "" {
-					reason, detail = pkgrelease.ReasonConfirmPathsRequired, "a widening shows what leaves: confirm these paths with --confirm-paths "+p.PathsDigest
-				}
-				writePackageJSON(w, http.StatusConflict, PackageListingRefusal{Error: reason + ": " + detail, Reason: reason, Preview: preview})
-				return
-			}
-		}
-		// A scope change keeps the state and its reason: state_reason says
-		// why the release is in its state (review 291 F5); the act's own
-		// record is its state_actor receipt.
-	} else {
-		switch {
-		case current.State == change.State:
-			unchanged = true
-		case change.State == pkgrelease.StateWithdrawn:
-			next.State, next.StateReason = pkgrelease.StateWithdrawn, reasonOr(change.Reason, "withdrawn")
-		case current.State == pkgrelease.StateWithdrawn:
-			if detail, ok := reinstatable(listings, releaseID, record); !ok {
-				writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonTrackMoved, Detail: detail})
-				return
-			}
-			next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
-		default: // suspended -> listed
-			next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
-		}
+		next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
+	default: // suspended -> listed
+		next.State, next.StateReason = pkgrelease.StateListed, reasonOr(change.Reason, "reinstated")
 	}
 	if unchanged {
 		writePackageJSON(w, http.StatusOK, PackageListingResult{ReleaseID: releaseID, Listing: current})
@@ -290,7 +217,7 @@ func (h *Handler) HandleListings(w http.ResponseWriter, r *http.Request) {
 		writePackageRefusal(w, &pkgrelease.Refusal{Reason: pkgrelease.ReasonListingMoved, Detail: fmt.Sprintf("version %d of this listing is already written; read it and act again", next.Version)})
 		return
 	}
-	writePackageJSON(w, http.StatusOK, PackageListingResult{ReleaseID: releaseID, Changed: true, Listing: next.Normalize(), Preview: preview})
+	writePackageJSON(w, http.StatusOK, PackageListingResult{ReleaseID: releaseID, Changed: true, Listing: next.Normalize()})
 }
 
 func reasonOr(reason, fallback string) string {
@@ -320,18 +247,4 @@ func reinstatable(listings map[string]pkgrelease.Listing, releaseID string, reco
 		return fmt.Sprintf("the track moved past this release: its head is %s (seq %d), not this release's parent; reinstating it would fork the track, so publish again on the head", head.RecordID, head.Seq), false
 	}
 	return "this release's parent is no longer on the track; reinstating it would fork the track", false
-}
-
-// wideningPreview reads the release's stored patches and computes what a
-// widening shows.
-func (h *Handler) wideningPreview(ctx context.Context, record pkgrelease.Record) (pkgrelease.Preview, error) {
-	treePatch, err := h.readPackageBlob(record.Source.TreePatch)
-	if err != nil {
-		return pkgrelease.Preview{}, err
-	}
-	reviewPatch, err := h.readPackageBlob(record.Source.ReviewPatch)
-	if err != nil {
-		return pkgrelease.Preview{}, err
-	}
-	return pkgrelease.WideningPreview(ctx, record, treePatch, reviewPatch)
 }

@@ -99,6 +99,9 @@ type packagePublishRequest struct {
 	Record     json.RawMessage `json:"record"`
 	OwnerID    string          `json:"owner_id"`
 	ComputerID string          `json:"computer_id"`
+	// ConfirmPaths is the paths digest of the preview the owner confirmed:
+	// publishing makes the release public.
+	ConfirmPaths string `json:"confirm_paths,omitempty"`
 }
 
 // HandlePackages serves the package release routes, every one host only:
@@ -112,9 +115,11 @@ type packagePublishRequest struct {
 //
 // A guest never reaches them: publish is the owner's act through the proxy
 // (L6). Every read names the owner it is for, as the proxy authenticated
-// it; a read that names none is refused, never unscoped. Visibility is the
-// listing's scope set (S3: owner, shared, public; listingVisible), and an
-// unseen release answers exactly as a missing one.
+// it; a read that names none is refused, never unscoped. A listed release
+// is public to every signed-in owner (owner, 2026-11-03); a withdrawn,
+// suspended or yanked one is its publisher's alone
+// (pkgrelease.Listing.VisibleTo), and an unseen release answers exactly as
+// a missing one.
 func (h *Handler) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	if !trustedInternalCaller(r) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "package routes are host only; publish is the owner's act through the proxy"})
@@ -199,10 +204,15 @@ func writeListingsError(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusInternalServerError, apiError{Error: "package listings unavailable"})
 }
 
+// publishScopes is the scope set a publish lists at: public (owner,
+// 2026-11-03).
+var publishScopes = []string{pkgrelease.ScopeOwner, pkgrelease.ScopePublic}
+
 // PackagePublishSubject is the owner-act subject of a package publish: the
-// release id and the one scope S2 lists at.
+// release id and the scope set it lists at, owner and public. The receipt
+// says the owner made the release public.
 func PackagePublishSubject(releaseID string) map[string]any {
-	return map[string]any{"release_id": strings.ToLower(strings.TrimSpace(releaseID)), "scopes": pkgrelease.ScopeOwner}
+	return map[string]any{"release_id": strings.ToLower(strings.TrimSpace(releaseID)), "scopes": strings.Join(publishScopes, ",")}
 }
 
 // packagePublishActor verifies the publish's owner-act receipt and names
@@ -280,12 +290,6 @@ func listingObject(ownerID, computerID string, listing pkgrelease.Listing, now t
 		"record_id": listing.RecordID, "record_kind": listing.RecordKind, "package": listing.Package,
 		"track": listing.Track, "seq": listing.Seq, "state": listing.State, "version": listing.Version,
 		"listed_at": now.UTC().Format(time.RFC3339Nano),
-	}
-	if listingWidened(listing) {
-		// The index another owner's catalog finds this track by (S3): a
-		// version that admits any reader beyond the owner. Whether the
-		// track's current version still does is decided from the chain.
-		fields["widened"] = "true"
 	}
 	metadata, err := objectgraph.NormalizeMetadata(fields)
 	if err != nil {
@@ -412,13 +416,15 @@ func (h *Handler) pagedListings(ctx context.Context, jsonPath, value, ownerID st
 	}
 }
 
-// widenedListings reads every listing version on the cloud that admits
-// readers beyond its owner, through the registered lookup key (review 291
-// F1): with nothing widened it is one key seek that finds nothing. Before
-// the keys are live it reads nothing (live is false): another owner's
-// tracks are then missing from a catalog until the backfill lands, which
-// is the narrower answer, never a scan.
-func (h *Handler) widenedListings(ctx context.Context) (objects []objectgraph.Object, live bool, err error) {
+// publishedListings reads every listing version on the cloud through the
+// registered lookup key record_kind (review 291 F1): a published release is
+// public (owner, 2026-11-03), so every track with a listing is a catalog
+// candidate. The listings filed before the ruling carry the key once the
+// boot backfill re-keys them (the key was "widened" before). Before the
+// keys are live it reads nothing (live is false): another owner's tracks
+// are then missing from a catalog until the backfill lands, which is the
+// narrower answer, never a scan.
+func (h *Handler) publishedListings(ctx context.Context) (objects []objectgraph.Object, live bool, err error) {
 	store := h.releaseStore()
 	if store == nil {
 		return nil, false, errors.New("package store unavailable")
@@ -428,11 +434,11 @@ func (h *Handler) widenedListings(ctx context.Context) (objects []objectgraph.Ob
 	}
 	after := ""
 	for {
-		page, next, err := store.ListKeyedObjectsPage(ctx, string(ReleaseListingKind), "$.widened", "true", after, objectgraph.NormalizedLimit(trackPageSize))
+		page, next, err := store.ListKeyedObjectsPage(ctx, string(ReleaseListingKind), "$.record_kind", pkgrelease.RecordKindPackageRelease, after, objectgraph.NormalizedLimit(trackPageSize))
 		if err != nil {
 			return nil, true, err
 		}
-		h.widenedListingReads.Add(int64(len(page)))
+		h.publicListingReads.Add(int64(len(page)))
 		objects = append(objects, page...)
 		if next == "" {
 			return objects, true, nil
@@ -455,31 +461,20 @@ func trackHead(listings map[string]pkgrelease.Listing) (head pkgrelease.Listing,
 	return head, found, maxSeq
 }
 
-// listingVisible is the listing's scope set for a reader (L4): the owner;
-// a named owner of a shared listing; anyone of a public one. Nobody else,
-// an admin included. CHOIR_PACKAGE_SHARE_READS=owner reads every listing at
-// owner scope, whatever its versions say.
+// listingVisible is who sees a listing (pkgrelease.Listing.VisibleTo): its
+// publisher always; every other signed-in owner while it is listed.
 func (h *Handler) listingVisible(listing pkgrelease.Listing, readerOwnerID string) bool {
-	if h.packageShareReads == PackageShareReadsOwner {
-		return readerOwnerID != "" && listing.Track == readerOwnerID
-	}
 	return listing.VisibleTo(readerOwnerID)
 }
 
 // listingFor is the listing as reader may see it: another owner never
-// learns who else a shared listing names.
+// learns whom a listing written before 2026-11-03 was shared with.
 func listingFor(listing pkgrelease.Listing, reader string) pkgrelease.Listing {
 	listing = listing.Normalize()
 	if listing.Track == reader {
 		return listing
 	}
-	named := []string{}
-	for _, owner := range listing.SharedWith.Owners {
-		if owner == reader {
-			named = append(named, owner)
-		}
-	}
-	listing.SharedWith = pkgrelease.SharedWith{Owners: named, Computers: []string{}}
+	listing.SharedWith = pkgrelease.SharedWith{Owners: []string{}, Computers: []string{}}
 	return listing
 }
 
@@ -659,6 +654,23 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 		writePackageRefusal(w, err)
 		return
 	}
+	// Publishing makes the release public (owner, 2026-11-03): the owner
+	// first sees every path that becomes public and the review diff's size,
+	// and confirms that digest. The preview confines the content to the
+	// root again and runs the secret scan again on the stored bytes.
+	preview, err := pkgrelease.PublishPreview(ctx, record, in.TreePatch, in.ReviewPatch)
+	if err != nil {
+		writePackageRefusal(w, err)
+		return
+	}
+	if confirm := strings.ToLower(strings.TrimSpace(request.ConfirmPaths)); confirm != preview.PathsDigest {
+		reason, detail := pkgrelease.ReasonConfirmPathsMismatch, "the confirmation names other paths than this release's; "+pkgrelease.PublicNotice(preview.PathsDigest)
+		if confirm == "" {
+			reason, detail = pkgrelease.ReasonConfirmPathsRequired, pkgrelease.PublicNotice(preview.PathsDigest)
+		}
+		writePackageJSON(w, http.StatusConflict, PackageListingRefusal{Error: reason + ": " + detail, Reason: reason, Preview: &preview})
+		return
+	}
 
 	now := time.Now().UTC()
 	obj := existing
@@ -701,7 +713,7 @@ func (h *Handler) publishPackage(w http.ResponseWriter, r *http.Request) {
 	}
 	listing := pkgrelease.Listing{
 		RecordKind: pkgrelease.RecordKindPackageRelease, RecordID: releaseID, Package: record.Package.Name,
-		Track: record.Track, Seq: maxSeq + 1, Scopes: []string{pkgrelease.ScopeOwner},
+		Track: record.Track, Seq: maxSeq + 1, Scopes: publishScopes,
 		State: pkgrelease.StateListed, StateReason: "published", StateActor: actor, Version: 1,
 	}
 	listingObj, err := listingObject(ownerID, computerID, listing, now)
@@ -771,11 +783,10 @@ func (h *Handler) readPackageRelease(w http.ResponseWriter, r *http.Request, rel
 
 // findPackageRecord is the release by id: the reader's own, or another
 // owner's found by its id. Visibility is the caller's to decide from the
-// listing; under CHOIR_PACKAGE_SHARE_READS=owner only the reader's own is
-// looked for.
+// listing.
 func (h *Handler) findPackageRecord(ctx context.Context, reader, releaseID string) (objectgraph.Object, pkgrelease.Record, error) {
 	obj, record, err := h.readPackageRecord(ctx, reader, releaseID)
-	if err == nil || h.packageShareReads == PackageShareReadsOwner {
+	if err == nil {
 		return obj, record, err
 	}
 	store := h.releaseStore()
@@ -827,21 +838,19 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 			tracks[trackKey{reader, listing.Package}] = true
 		}
 	}
-	// Other owners' tracks with a version that ever admitted this reader;
-	// whether the current version still does is decided below.
-	if h.packageShareReads != PackageShareReadsOwner {
-		widened, _, err := h.widenedListings(ctx)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
-			return
+	// Every other owner's tracks: a published release is public. Whether a
+	// track's current versions show the reader anything is decided below.
+	published, _, err := h.publishedListings(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "package catalog unavailable"})
+		return
+	}
+	for _, obj := range published {
+		if obj.OwnerID == reader {
+			continue
 		}
-		for _, obj := range widened {
-			if obj.OwnerID == reader {
-				continue
-			}
-			if listing, err := verifiedListing(obj, obj.OwnerID); err == nil && listing.VisibleTo(reader) && matches(listing.Package) {
-				tracks[trackKey{obj.OwnerID, listing.Package}] = true
-			}
+		if listing, err := verifiedListing(obj, obj.OwnerID); err == nil && matches(listing.Package) {
+			tracks[trackKey{obj.OwnerID, listing.Package}] = true
 		}
 	}
 	entries := []PackageCatalogEntry{}
@@ -873,8 +882,7 @@ func (h *Handler) packageCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		return entries[i].Track < entries[j].Track
 	})
-	// reader is the caller's own owner id: what another owner names to
-	// share with it.
+	// reader is the caller's own owner id: the track its own releases are on.
 	writeJSON(w, http.StatusOK, map[string]any{"packages": entries, "count": len(entries), "reader": reader})
 }
 
@@ -975,8 +983,8 @@ func (h *Handler) packageTrackHead(w http.ResponseWriter, r *http.Request, name 
 		return
 	}
 	head, found, _ := trackHead(listings)
-	// The head a publish drafts on is the reader's own track's, never a
-	// track shared with it (L24).
+	// The head a publish drafts on is the reader's own track's, never
+	// another owner's public one (L24).
 	if !found || head.Track != reader {
 		writeJSON(w, http.StatusNotFound, noHead)
 		return

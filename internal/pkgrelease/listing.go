@@ -19,8 +19,11 @@ const (
 	RecordKindPlatformProposal = "platform_proposal"
 )
 
-// Scopes. S2 lists at owner only; S3 adds shared and public; platform is
-// S4's.
+// Scopes. A publish lists at owner and public (owner, 2026-11-03:
+// "published releases mean published, for everyone to see"). Owner-only
+// and shared scope sets were written before that ruling and are still
+// read; they no longer narrow who sees a listed release (VisibleTo).
+// Platform is S4's.
 const (
 	ScopeOwner    = "owner"
 	ScopeShared   = "shared"
@@ -52,7 +55,9 @@ type Listing struct {
 	PrevVersionDigest string     `json:"prev_version_digest,omitempty"`
 }
 
-// SharedWith names the owners and computers a shared listing admits (S3).
+// SharedWith names the owners and computers a shared listing admitted
+// before 2026-11-03 (S3). It is kept so those listings still verify; only
+// the publisher sees it.
 type SharedWith struct {
 	Owners    []string `json:"owners"`
 	Computers []string `json:"computers"`

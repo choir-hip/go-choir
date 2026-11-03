@@ -13,11 +13,11 @@ import (
 
 // Package commands (Library S2 and S3,
 // docs/design/library-package-propagation-2026-10-26.md 14): publish one
-// applied operation's package change at scope owner (owner act); share,
-// withdraw and reinstate a release (owner acts, gated by the named
-// computer's packages.share); and read the catalog the caller may see: a
-// package's history on one track, a search, and one release verified
-// against its id.
+// applied operation's package change, which makes it public to every
+// signed-in owner (owner act; owner, 2026-11-03); withdraw and reinstate a
+// release (owner acts); and read the catalog: a package's history on one
+// track, a search, and one release verified against its id. Share is
+// retired: it sends nothing and says why.
 
 type packageReleaseView struct {
 	ReleaseID   string          `json:"release_id"`
@@ -91,12 +91,16 @@ func packageCommands() []*command {
 			},
 		},
 		ownerAct(&command{
-			path: []string{"package", "publish"}, summary: "Publish an applied operation's package change to your own catalog (owner act)",
+			path: []string{"package", "publish"}, summary: "Publish an applied operation's package change to the Library, where it is public: every signed-in owner can see and install it (owner act)",
+			desc: "Publishing makes the release public: every signed-in owner sees it in the Library and can install it. " +
+				"The first run answers confirm_paths_required with every path that becomes public and the review diff's size, and publishes nothing; " +
+				"rerun with --confirm-paths <paths_digest> to publish. To take a release down later, withdraw it.",
 			params: []param{
 				computerParam().orSay(selfDevUsage),
 				pStr("operation", "Applied operation ID").req(),
 				pStr("package", "Package name (frontend/src/packages/<name>)").req(),
-				pStr("test_command", "The check an adopter runs after applying the release"),
+				pStr("test_command", "The check an owner runs after installing the release"),
+				pStr("confirm_paths", "The paths_digest the publish preview showed: you confirm these paths become public"),
 			},
 			usage:  "--computer, --operation and --package are required",
 			scopes: []string{releaseApprove}, idempotent: true,
@@ -105,51 +109,30 @@ func packageCommands() []*command {
 				if cmd := x.trim("test_command"); cmd != "" {
 					body["test_command"] = cmd
 				}
+				if confirm := x.trim("confirm_paths"); confirm != "" {
+					body["confirm_paths"] = confirm
+				}
 				return sendRaw(x, http.MethodPost, computerPath(x, "/packages/releases"), body)
 			},
 		}),
 		ownerAct(&command{
-			path: []string{"package", "share"}, summary: "Set who may see a package release: named owners, everyone, or only you (owner act)",
-			desc: "A widening first answers confirm_paths_required with every path that would leave and the review diff's size; " +
-				"rerun with --confirm-paths <paths_digest> to share them. Narrowing (--private, or fewer owners) needs no confirmation.",
+			path: []string{"package", "share"}, summary: "Retired: a published release is already public to every signed-in owner",
+			desc: "Share is retired (owner, 2026-11-03): publishing is the act that makes a release public, visible to and installable by every signed-in owner. " +
+				"This command sends nothing. To take a release down, use choir package withdraw.",
 			params: []param{
-				computerParam().orSay("--computer names the computer whose packages.share setting gates the act"),
-				pStr("release", "Package release id").req(),
-				pList("owners", "Owner ids to share with (comma-separated)").commas(),
-				pBool("public", "Share with every owner on this cloud"),
-				pBool("private", "Only you (and your computers)"),
-				pStr("confirm_paths", "The paths_digest the widening's preview showed"),
+				pStr("computer", "Ignored"),
+				pStr("release", "Package release id (ignored)"),
+				pList("owners", "Ignored").commas(),
+				pBool("public", "Ignored"),
+				pBool("private", "Ignored"),
+				pStr("confirm_paths", "Ignored"),
 			},
-			usage:  "--computer, --release, and one of --owners, --public or --private are required",
 			scopes: []string{releaseApprove}, idempotent: true,
 			handler: func(x *call) (any, error) {
-				owners, public, private := x.list("owners"), x.flag("public"), x.flag("private")
-				named := 0
-				for _, set := range []bool{len(owners) > 0, public, private} {
-					if set {
-						named++
-					}
-				}
-				if named != 1 {
-					return nil, usagef("name exactly one of --owners, --public or --private")
-				}
-				body := map[string]any{"computer_id": x.trim("computer")}
-				switch {
-				case private:
-					body["scopes"] = []string{pkgrelease.ScopeOwner}
-				case public:
-					body["scopes"] = []string{pkgrelease.ScopeOwner, pkgrelease.ScopePublic}
-				default:
-					body["scopes"] = []string{pkgrelease.ScopeOwner, pkgrelease.ScopeShared}
-					body["shared_with"] = map[string]any{"owners": owners}
-				}
-				if confirm := x.trim("confirm_paths"); confirm != "" {
-					body["confirm_paths"] = confirm
-				}
-				return sendRaw(x, http.MethodPatch, listingPath(x), body)
+				return map[string]any{"shared": false, "reason": pkgrelease.ReasonShareRetired, "message": pkgrelease.ShareRetiredDetail}, nil
 			},
 		}),
-		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: it leaves the catalog heads and stays in the history (owner act)"),
+		packageStateAct("withdraw", pkgrelease.StateWithdrawn, "Withdraw a package release: nobody else sees it any more; it stays in your own history (owner act)"),
 		packageStateAct("reinstate", pkgrelease.StateListed, "Reinstate a withdrawn or suspended package release while it can still head its track (owner act)"),
 	}
 }
@@ -162,7 +145,7 @@ func packageStateAct(verb, state, summary string) *command {
 	return ownerAct(&command{
 		path: []string{"package", verb}, summary: summary,
 		params: []param{
-			computerParam().orSay("--computer names the computer whose packages.share setting gates the act"),
+			computerParam().orSay("--computer names your computer the act is made from"),
 			pStr("release", "Package release id").req(),
 			pStr("reason", "Why, recorded on the listing"),
 		},

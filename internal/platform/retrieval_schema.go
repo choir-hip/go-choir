@@ -69,11 +69,12 @@ var metadataLookupKeys = []metadataLookupKey{
 	{Kind: "choir.publication", Field: "publication_id"},
 	{Kind: "choir.publication_version", Field: "publication_version_id"},
 	// The Library (S3, review 291 F1 and F2): a package release is found
-	// by its id on another owner's read, and the listing versions that
-	// admit readers beyond their owner (widened: "true"; no row otherwise)
-	// are what another owner's catalog pages through.
+	// by its id on another owner's read, and every listing version (keyed
+	// by record_kind; a published release is public, owner 2026-11-03) is
+	// what another owner's catalog pages through. The key was "widened"
+	// before; the boot backfill re-keys those rows as stale.
 	{Kind: "choir.package_release", Field: "release_id"},
-	{Kind: "choir.release_listing", Field: "widened"},
+	{Kind: "choir.release_listing", Field: "record_kind"},
 	// The entity layer's duplicate check (R1, review 298 F2): a new
 	// entity's normalised name against the owner's entity rows.
 	{Kind: "choir.entity", Field: "normalized"},

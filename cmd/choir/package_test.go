@@ -106,6 +106,24 @@ func TestPackagePublishSendsTheOperationAndPackage(t *testing.T) {
 	if path != "POST /api/computers/c1/packages/releases" || json.Unmarshal(posted, &body) != nil || body["operation_id"] != "op-1" || body["package"] != "reader" || len(body) != 2 {
 		t.Fatalf("publish request = %s %s", path, posted)
 	}
+	// The second step: the owner confirms the paths the preview showed.
+	if code := run([]string{"package", "publish", "--computer", "c1", "--operation", "op-1", "--package", "reader", "--confirm-paths", strings.Repeat("f", 64)}, &stdout, &stderr); code != 0 {
+		t.Fatalf("publish exit %d: %s", code, stderr.String())
+	}
+	if json.Unmarshal(posted, &body) != nil || body["confirm_paths"] != strings.Repeat("f", 64) {
+		t.Fatalf("a confirmed publish request = %s", posted)
+	}
+	// The command says plainly that publishing is public.
+	for _, cmd := range packageCommands() {
+		if cmd.name() == "package publish" {
+			text := strings.ToLower(cmd.summary + " " + cmd.desc)
+			for _, want := range []string{"public", "every signed-in owner", "install"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("package publish's help %q does not say %q", text, want)
+				}
+			}
+		}
+	}
 	for _, args := range [][]string{
 		{"package", "history", "--package", "reader"},
 		{"package", "search", "--query", "read"},
@@ -117,10 +135,10 @@ func TestPackagePublishSendsTheOperationAndPackage(t *testing.T) {
 	}
 }
 
-// Library S3 at the client (design 4.4, 14): share, withdraw and reinstate
-// are owner acts on PATCH /api/catalog/records/<id>/listing, naming the
-// computer whose packages.share gates them; a widening carries the paths
-// digest the owner confirmed; history names one track and a page.
+// Withdraw and reinstate are owner acts on PATCH
+// /api/catalog/records/<id>/listing; share is retired (owner, 2026-11-03: a
+// published release is public), so it sends nothing and says why; history
+// names one track and a page.
 func TestPackageListingVerbsSendTheOwnersChange(t *testing.T) {
 	id := strings.Repeat("a", 64)
 	var path string
@@ -135,12 +153,6 @@ func TestPackageListingVerbsSendTheOwnersChange(t *testing.T) {
 		args []string
 		want map[string]any
 	}{
-		{[]string{"package", "share", "--computer", "c1", "--release", id, "--owners", "owner-b,owner-c", "--confirm-paths", strings.Repeat("f", 64)},
-			map[string]any{"computer_id": "c1", "scopes": []any{"owner", "shared"}, "shared_with": map[string]any{"owners": []any{"owner-b", "owner-c"}}, "confirm_paths": strings.Repeat("f", 64)}},
-		{[]string{"package", "share", "--computer", "c1", "--release", id, "--public", "--confirm-paths", strings.Repeat("f", 64)},
-			map[string]any{"computer_id": "c1", "scopes": []any{"owner", "public"}, "confirm_paths": strings.Repeat("f", 64)}},
-		{[]string{"package", "share", "--computer", "c1", "--release", id, "--private"},
-			map[string]any{"computer_id": "c1", "scopes": []any{"owner"}}},
 		{[]string{"package", "withdraw", "--computer", "c1", "--release", id, "--reason", "broken"},
 			map[string]any{"computer_id": "c1", "state": "withdrawn", "reason": "broken"}},
 		{[]string{"package", "reinstate", "--computer", "c1", "--release", id},
@@ -160,15 +172,21 @@ func TestPackageListingVerbsSendTheOwnersChange(t *testing.T) {
 			t.Fatalf("%v body = %s, want %s", c.args, got, want)
 		}
 	}
-	// A share names exactly one audience change.
+	// Share is a no-op that explains: nothing is sent, whatever it names.
 	for _, args := range [][]string{
-		{"package", "share", "--computer", "c1", "--release", id},
-		{"package", "share", "--computer", "c1", "--release", id, "--private", "--public"},
-		{"package", "share", "--computer", "c1", "--release", id, "--private", "--owners", "owner-b"},
+		{"package", "share", "--computer", "c1", "--release", id, "--owners", "owner-b", "--confirm-paths", strings.Repeat("f", 64)},
+		{"package", "share", "--computer", "c1", "--release", id, "--public"},
+		{"package", "share", "--computer", "c1", "--release", id, "--private"},
+		{"package", "share"},
 	} {
+		path = ""
 		var stdout, stderr bytes.Buffer
-		if code := run(args, &stdout, &stderr); code == 0 {
-			t.Fatalf("%v was sent", args)
+		if code := run(args, &stdout, &stderr); code != 0 {
+			t.Fatalf("%v exit %d: %s", args, code, stderr.String())
+		}
+		out := stdout.String()
+		if path != "" || !strings.Contains(out, "public") || !strings.Contains(out, "withdraw") {
+			t.Fatalf("%v sent %q, said %s", args, path, out)
 		}
 	}
 	var stdout, stderr bytes.Buffer

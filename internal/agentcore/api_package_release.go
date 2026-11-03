@@ -244,17 +244,3 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 	}
 	return before, beforeLabel, beforeBase, stack, nil
 }
-
-// packageShareGate answers GET /api/computers/<id>/packages/share-gate: the
-// proxy asks it before every share, withdraw or reinstate the owner acts
-// with this computer named (Library S3). It is the rollout switch, as
-// packages.publish is for the draft: off by default, and off refuses
-// packages_share_off so a stock computer gates nothing. Like publish's, it
-// is not a security control; the owner act and corpusd's checks are.
-func (h *APIHandler) packageShareGate(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
-	if !h.rt.computerSettingOn(r.Context(), ownerID, computerID, store.SettingPackagesShare) {
-		writeAPIJSON(w, http.StatusConflict, releaseAPIError{Error: "package sharing is off on this computer; the owner turns on the setting " + store.SettingPackagesShare, Reason: "packages_share_off"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, map[string]any{"setting": store.SettingPackagesShare, "on": true})
-}

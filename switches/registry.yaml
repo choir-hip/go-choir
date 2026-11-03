@@ -1375,30 +1375,6 @@
    "blocked_by": "a counts reader (no SSH), the story-seeding declaration, install kinds (audit row 20)"
   },
   {
-   "id": "choir_package_share_reads",
-   "kind": "code",
-   "life": "ops",
-   "owner": "library",
-   "class": "red",
-   "surface": "library",
-   "introduced": "2026-10-28",
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "review_by": "2027-01-20",
-   "ring": "all",
-   "promote": [
-    {
-     "metric": "package_share_reads_scoped",
-     "bound": "true"
-    }
-   ],
-   "retire": "keep: owner is the rollback; review_by only",
-   "where": "corpusd env CHOIR_PACKAGE_SHARE_READS (unset = scoped)",
-   "note": "Normal state; do not flip."
-  },
-  {
    "id": "choir_release_reads",
    "kind": "code",
    "life": "ops",
@@ -1807,39 +1783,6 @@
    "grandfathered_off_until": "2026-11-04",
    "gate": {
     "act": "train 10 deployed, b@c booted it, the Reader's first release published on b@c"
-   }
-  },
-  {
-   "id": "packages_share",
-   "kind": "setting",
-   "life": "release",
-   "owner": "library",
-   "class": "red",
-   "surface": "library",
-   "introduced": "2026-10-28",
-   "settings": [
-    "packages.share"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "grandfathered_off_until": "2026-11-04",
-   "gate": {
-    "act": "train 10 deployed; first real release published on b@c, then shared to d@e"
    }
   },
   {

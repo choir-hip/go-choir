@@ -46,7 +46,7 @@ type packageProxyEnv struct {
 	draft   func(query string) []byte
 	head    string // corpusd's track head answer; "" is 404
 	receipt string // the owner-act header corpusd saw on the publish
-	// guestStatus is the guest's status (0 is 200); S3's share gate.
+	// guestStatus is the guest's status (0 is 200).
 	guestStatus int
 }
 
@@ -272,7 +272,7 @@ func TestPackagePublishIsTheOwnersActAndOnlyAVerifiedDraftReachesCorpusd(t *test
 	env.head = `{"release_id":"` + headID + `","tree":"` + headTree + `","seq":1}`
 	var draftQuery string
 	env.draft = func(query string) []byte { draftQuery = query; return packageDraftFor(t, env.user, nil, false) }
-	rec := env.send(t, http.MethodPost, path, `{"operation_id":"op-1","package":"reader","test_command":"npm test"}`, owner)
+	rec := env.send(t, http.MethodPost, path, `{"operation_id":"op-1","package":"reader","test_command":"npm test","confirm_paths":"`+strings.Repeat("e", 64)+`"}`, owner)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("publish = %d %s", rec.Code, rec.Body.String())
 	}
@@ -286,6 +286,8 @@ func TestPackagePublishIsTheOwnersActAndOnlyAVerifiedDraftReachesCorpusd(t *test
 		"corpusd PUT /internal/platform/packages/blobs/" + computerevent.DigestBytes(proxyParentPatch) + " internal=true",
 		"corpusd POST /internal/platform/packages/releases internal=true",
 		`"owner_id":"` + env.user + `"`, `"computer_id":"computer-a"`,
+		// The owner's confirmation of what becomes public reaches corpusd.
+		`"confirm_paths":"` + strings.Repeat("e", 64) + `"`,
 	} {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("publish calls missing %q:\n%s", want, calls)
@@ -306,7 +308,7 @@ func TestPackagePublishIsTheOwnersActAndOnlyAVerifiedDraftReachesCorpusd(t *test
 		ReleaseID string `json:"release_id"`
 	}
 	_ = json.Unmarshal(packageDraftFor(t, env.user, nil, false), &draft)
-	if err != nil || verified.OwnerUserID != env.user || verified.SubjectString("release_id") != draft.ReleaseID || verified.SubjectString("scopes") != pkgrelease.ScopeOwner {
+	if err != nil || verified.OwnerUserID != env.user || verified.SubjectString("release_id") != draft.ReleaseID || verified.SubjectString("scopes") != pkgrelease.ScopeOwner+","+pkgrelease.ScopePublic {
 		t.Fatalf("L6 receipt = %+v %v", verified, err)
 	}
 }
@@ -371,23 +373,25 @@ func TestGuestCannotFilePackageObjectsThroughTheProxy(t *testing.T) {
 	}
 }
 
-// Library S3 at the proxy (design 4.1, 4.4, 14): share, withdraw and
-// reinstate are owner acts. Failure modes pinned:
+// Withdraw and reinstate at the proxy (the owner's ruling of 2026-11-03:
+// a published release is public, and share is no longer an act). Failure
+// modes pinned:
 //
 //	A2   a listing act without owner:acts (admin included) reaches the guest
 //	     or corpusd; the receipt does not bind the release and the change;
-//	G1   with packages.share off on the named computer the act reaches
-//	     corpusd (the guest's gate is the rollout switch, as for publish);
+//	P4   a share (a scope set, named owners or a paths confirmation) reaches
+//	     corpusd instead of answering share_retired with the reason; a
+//	     listing act still asks the computer's retired packages.share gate;
 //	R4   the owner corpusd is told is a body field, not the authenticated
-//	     owner; a computer the key does not own gates the act;
+//	     owner; a computer the key does not own names the act;
 //	L4   a history read forwards a caller-chosen owner, or drops the track
 //	     and the page cursor.
-func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
+func TestPackageListingActIsTheOwnersActAndShareIsRetired(t *testing.T) {
 	env := newPackageProxyEnv(t)
-	env.draft = func(string) []byte { return []byte(`{"setting":"packages.share","on":true}`) }
+	env.draft = func(string) []byte { return []byte(`{}`) }
 	id := strings.Repeat("a", 64)
 	path := "/api/catalog/records/" + id + "/listing"
-	share := `{"computer_id":"computer-a","scopes":["owner","shared"],"shared_with":{"owners":["owner-b"]},"confirm_paths":"` + strings.Repeat("f", 64) + `"}`
+	withdraw := `{"computer_id":"computer-a","state":"withdrawn","reason":"bad build"}`
 	reset := func() {
 		env.mu.Lock()
 		env.calls = nil
@@ -397,16 +401,33 @@ func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
 
 	// A2: no owner:acts, admin included: nothing upstream.
 	for _, scopes := range [][]string{{"computer:self_development:approve"}, {"admin"}} {
-		if rec := env.send(t, http.MethodPatch, path, share, env.secret(t, scopes...)); rec.Code != http.StatusForbidden || env.joined() != "" {
-			t.Fatalf("A2 %v share = %d, calls %v", scopes, rec.Code, env.joined())
+		if rec := env.send(t, http.MethodPatch, path, withdraw, env.secret(t, scopes...)); rec.Code != http.StatusForbidden || env.joined() != "" {
+			t.Fatalf("A2 %v withdraw = %d, calls %v", scopes, rec.Code, env.joined())
 		}
 	}
 	owner := env.secret(t, "computer:self_development:approve", OwnerActsScope)
+	// P4: every share shape answers share_retired, and nothing upstream.
+	for _, body := range []string{
+		`{"computer_id":"computer-a","scopes":["owner","shared"],"shared_with":{"owners":["owner-b"]},"confirm_paths":"` + strings.Repeat("f", 64) + `"}`,
+		`{"computer_id":"computer-a","scopes":["owner","public"]}`,
+		`{"computer_id":"computer-a","scopes":["owner"]}`,
+		`{"computer_id":"computer-a","state":"withdrawn","shared_with":{"owners":["owner-b"]}}`,
+	} {
+		reset()
+		rec := env.send(t, http.MethodPatch, path, body, owner)
+		var got struct {
+			Error  string `json:"error"`
+			Reason string `json:"reason"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &got)
+		if rec.Code != http.StatusGone || got.Reason != pkgrelease.ReasonShareRetired || !strings.Contains(got.Error, "public") || env.joined() != "" {
+			t.Fatalf("P4 share %s = %d %s, calls %v; want 410 share_retired and no upstream call", body, rec.Code, rec.Body.String(), env.joined())
+		}
+	}
 	for name, body := range map[string]string{
-		"scopes and a state":   `{"computer_id":"computer-a","scopes":["owner"],"state":"withdrawn"}`,
 		"neither":              `{"computer_id":"computer-a"}`,
-		"no computer":          `{"scopes":["owner"]}`,
-		"an owner in the body": `{"computer_id":"computer-a","scopes":["owner"],"owner_id":"evil"}`,
+		"no computer":          `{"state":"withdrawn"}`,
+		"an owner in the body": `{"computer_id":"computer-a","state":"withdrawn","owner_id":"evil"}`,
 	} {
 		reset()
 		if rec := env.send(t, http.MethodPatch, path, body, owner); rec.Code != http.StatusBadRequest || env.joined() != "" {
@@ -414,24 +435,14 @@ func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
 		}
 	}
 	reset()
-	if rec := env.send(t, http.MethodPatch, "/api/catalog/records/not-a-sha/listing", share, owner); rec.Code != http.StatusNotFound || env.joined() != "" {
+	if rec := env.send(t, http.MethodPatch, "/api/catalog/records/not-a-sha/listing", withdraw, owner); rec.Code != http.StatusNotFound || env.joined() != "" {
 		t.Fatalf("a malformed id = %d, calls %v", rec.Code, env.joined())
 	}
 	// R4: a computer the key does not own.
 	reset()
-	if rec := env.send(t, http.MethodPatch, path, strings.Replace(share, "computer-a", "computer-z", 1), owner); rec.Code == http.StatusOK || strings.Contains(env.joined(), "corpusd PUT") {
-		t.Fatalf("R4 another computer's gate = %d, calls %v", rec.Code, env.joined())
+	if rec := env.send(t, http.MethodPatch, path, strings.Replace(withdraw, "computer-a", "computer-z", 1), owner); rec.Code == http.StatusOK || strings.Contains(env.joined(), "corpusd PUT") {
+		t.Fatalf("R4 another computer = %d, calls %v", rec.Code, env.joined())
 	}
-
-	// G1: the gate is off; the guest's refusal is relayed, corpusd untouched.
-	reset()
-	env.guestStatus = http.StatusConflict
-	env.draft = func(string) []byte { return []byte(`{"error":"off","reason":"packages_share_off"}`) }
-	if rec := env.send(t, http.MethodPatch, path, share, owner); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "packages_share_off") || strings.Contains(env.joined(), "corpusd") {
-		t.Fatalf("G1 the gate off = %d %s, calls %v", rec.Code, rec.Body.String(), env.joined())
-	}
-	env.guestStatus = 0
-	env.draft = func(string) []byte { return []byte(`{"setting":"packages.share","on":true}`) }
 
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -447,8 +458,7 @@ func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
 		body   string
 		change platform.ListingChange
 	}{
-		{share, platform.ListingChange{Scopes: []string{"owner", "shared"}, SharedWith: &pkgrelease.SharedWith{Owners: []string{"owner-b"}}}},
-		{`{"computer_id":"computer-a","state":"withdrawn","reason":"bad build"}`, platform.ListingChange{State: "withdrawn", Reason: "bad build"}},
+		{withdraw, platform.ListingChange{State: "withdrawn", Reason: "bad build"}},
 		{`{"computer_id":"computer-a","state":"listed"}`, platform.ListingChange{State: "listed"}},
 	} {
 		reset()
@@ -457,9 +467,10 @@ func TestPackageListingActIsTheOwnersActBehindTheShareGate(t *testing.T) {
 			t.Fatalf("act %s = %d %s", c.body, rec.Code, rec.Body.String())
 		}
 		calls := env.joined()
+		if strings.Contains(calls, "share-gate") || strings.Contains(calls, "guest ") {
+			t.Fatalf("P4 the act asked the retired share gate:\n%s", calls)
+		}
 		for _, want := range []string{
-			"guest GET /api/computers/computer-a/packages/share-gate?",
-			"owner=" + env.user + " computer=computer-a",
 			"corpusd PUT /internal/platform/listings/" + id + " internal=true",
 			`"owner_id":"` + env.user + `"`, `"computer_id":"computer-a"`,
 		} {
