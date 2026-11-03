@@ -108,8 +108,23 @@ filename-to-preset-to-view/state list". The engineer's report says management
 then read the list from the Texture document's revision 6. If the Cast body
 carries only the actions, every detailed acceptance list in a request (shots,
 features, measurements) reaches engineering secondhand or not at all. Status:
-hypothesis, from the monitor's reading of run events. Not yet checked
-against the Cast record (rlm:cast and the commitment ledger entry for the Cast).
+checked against the Cast record, 05:45Z: **partially confirmed, and the cut
+is one level up**. Texture's Cast to management
+(`cell:bd00c647-...:cast:tray-2`, 04:41:57Z, body 4,976 bytes:
+actions, summary, owner_revision, owner_directions) named only the round-3
+revision 27c25e19 in `owner_revision`. So `attachCastOwnerDirections`
+(internal/agentcore/texture_owner_directions_cast.go:136-165) attached only
+that revision's 2,264-character note, which points at "the twelve screenshots
+the request lists" without the list. The request revision 91b253a0, which
+holds the list, was never named, and `ownerDirectionFromRevision` (:238-261)
+takes a document body only for the first, parentless revision. Nothing was
+truncated (castOwnerTextMax 64 KiB). Engineering sees the parent Cast verbatim
+(engineering_cast_request.go:101-146), so it lacked what Texture's Cast
+lacked. internal/textureprompts/texture.yaml:32 asks Texture to list the
+owner's request and each later direction; this Cast listed only the newest.
+Fix direction: always attach the request-kind revision of the trajectory,
+or have Texture name every owner revision. Management's own engineering Cast
+was not in the trace records (hypothesis that it carried the same).
 
 ## Problem 6: a Library release cannot carry the app-sdk re-exports its package needs
 
@@ -120,3 +135,15 @@ there (the request allowed it), because a package may import only app-sdk and
 the file routes, fetchWithRenewal and the registry were not exported. Main's
 fix: the re-exports on main (branch app-sdk-exports), reaching the arms
 through the ring walk; then each arm's next round is package-only and publishes.
+
+## Problem 7: the luna arm's capsule had no browser
+
+Luna round 2 (assignment-43851d28d33d373927c8fb8a, 05:36-05:39Z): the
+engineer's Playwright launch with `executablePath=$CHOIR_BROWSER` failed
+because `CHOIR_BROWSER` was unset and no Playwright cache existed
+("Executable doesn't exist at /tmp/.cache/ms-playwright/..."). The claude,
+deepseek and pool capsules took screenshots in the same hour. Hypothesis: the
+browser tool layer did not attach on luna's capsule (or its env did not export
+it); check vmctl's "tool layers:" line for luna's last launch. The engineer
+froze a 12-line stub and the judge failed it ("no browser behavior was
+exercised because Chromium was unavailable").
