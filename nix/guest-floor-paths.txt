@@ -48,6 +48,7 @@ internal/deskmanifest
 internal/hostlink
 internal/mirrorgrant
 internal/normtext
+internal/ownerfiles
 internal/quotematch
 internal/receiptsigner
 internal/sourcecontract
