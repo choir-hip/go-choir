@@ -80,8 +80,10 @@ let
   # 2026-10-15 for subscription spend; on again on Sonnet 2026-10-20; b@c's
   # test computer added 2026-10-25 by owner request; renewed two weeks
   # 2026-11-02; plus selfdev-arm-claude (computer-a875023a…) 2026-11-03, the
-  # Claude arm of the apps goal.
-  claudeDelegateComputers = "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02";
+  # Claude arm of the apps goal; plus selfdev-arm-luna (computer-2bf3cab1…)
+  # 2026-11-03 by owner request ("we can have luna delegate to claude"), so the
+  # Luna arm's heavy work runs on the Sonnet delegate under GPT token pressure.
+  claudeDelegateComputers = "computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02,computer-2bf3cab1e3ebf3eb24a515c4603cf954";
   claudeDelegateExpires = "2026-11-17T00:00:00Z";
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
