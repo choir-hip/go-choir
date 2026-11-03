@@ -1314,9 +1314,18 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 		log.Printf("runtime: round closure after %s: %v", rec.RunID, err)
 		return
 	}
+	var unseen map[roundKey]bool
+	if profile != agentprofile.Engineering {
+		// An engineering round is its assignment's; D7 settles it above.
+		unseen = rt.roundsOpenedAfterRunBegan(ctx, rec, rounds)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, round := range rounds {
 		if round.RecipientInbox != inbox || strings.TrimSpace(round.CasterInbox) == "" {
+			continue
+		}
+		if unseen[roundKey{round.ConversationID, round.Round}] {
+			log.Printf("runtime: round %d of %s stays open after %s: its Cast arrived after that run began and is unread", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}
 		if profile == agentprofile.Management && strings.HasPrefix(round.CasterInbox, agentprofile.Texture+":") && rt.childAssignmentsHoldRound(ctx, rec, round) {
@@ -1340,6 +1349,57 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 			log.Printf("runtime: round closure wake for %s: %v", round.CasterInbox, err)
 		}
 	}
+}
+
+type roundKey struct {
+	conversationID string
+	round          int
+}
+
+// roundsOpenedAfterRunBegan names the open rounds the ending run never saw:
+// a record of the round in the desk's inbox is above the desk's read
+// cursor and was committed after the run began. A run end closes only the
+// rounds its run could have answered (B6); a Cast that arrived while an
+// older loop was finishing belongs to the next loop, and closing it refused
+// that loop's engineering Cast "the round ... is not open" (live deepseek
+// calendar r1, 2026-11-02: loop b3fe1201 of the Files round completed 13 s
+// after the Calendar Cast and closed its round). The predicate is the
+// re-check's own wake predicate (same cursor, same rec.CreatedAt), so a
+// round held here always has a loop coming to read it.
+func (rt *Runtime) roundsOpenedAfterRunBegan(ctx context.Context, rec *types.RunRecord, rounds []types.ConversationHead) map[roundKey]bool {
+	if len(rounds) == 0 || rec.CreatedAt.IsZero() {
+		return nil
+	}
+	inbox := strings.TrimSpace(rec.AgentID)
+	cursor, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, inbox, inbox)
+	if err != nil {
+		log.Printf("runtime: round closure after %s: cursor: %v", rec.RunID, err)
+		return nil
+	}
+	head, err := rt.store.InboxHead(ctx, rec.OwnerID, rec.ComputerID, inbox)
+	if err != nil || head <= cursor {
+		return nil
+	}
+	unread, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, inbox, cursor, head)
+	if err != nil {
+		log.Printf("runtime: round closure after %s: unread records: %v", rec.RunID, err)
+		return nil
+	}
+	var held map[roundKey]bool
+	for _, r := range unread {
+		if !store.RecordWakesReader(r) {
+			continue
+		}
+		committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt)
+		if perr != nil || !committed.After(rec.CreatedAt) {
+			continue
+		}
+		if held == nil {
+			held = map[roundKey]bool{}
+		}
+		held[roundKey{r.ConversationID, r.Round}] = true
+	}
+	return held
 }
 
 // childAssignmentsHoldRound is D5 (C1e): a Texture's round survives the end
