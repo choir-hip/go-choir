@@ -24,6 +24,11 @@ import (
 
 func TestMain(m *testing.M) {
 	_ = os.Setenv(apiKeyEnvVar, "choir_sk_test")
+	// Keep a developer's real credentials file (choir login) out of tests.
+	if dir, err := os.MkdirTemp("", "choir-cli-test-config-"); err == nil {
+		_ = os.Setenv("XDG_CONFIG_HOME", dir)
+		defer func() { _ = os.RemoveAll(dir) }()
+	}
 	os.Exit(m.Run())
 }
 

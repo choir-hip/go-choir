@@ -26,6 +26,7 @@
   import LegalDocument from './lib/LegalDocument.svelte';
   import RecoverRoute from './lib/RecoverRoute.svelte';
   import EmailSignInRoute from './lib/EmailSignInRoute.svelte';
+  import DeviceApproveRoute from './lib/DeviceApproveRoute.svelte';
   import { legacyAutopaperRedirect } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
@@ -61,6 +62,8 @@
   let isRecoverRoute = false;
   /** /signin/email: landing page for an email sign-in link. */
   let isEmailSignInRoute = false;
+  /** /device: approve a `choir login` from another device. */
+  let isDeviceApproveRoute = false;
   const THEME_BOOT_CACHE_KEY = 'choir.theme.boot.v2';
 
   $: isAuthenticated = authState === 'signed_in';
@@ -443,6 +446,10 @@
     return pathname === '/signin/email' || pathname === '/signin/email/';
   }
 
+  function isDeviceApprovePath(pathname) {
+    return pathname === '/device' || pathname === '/device/';
+  }
+
   function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
     if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
     if (pathname === '/terms' || pathname === '/terms/') return 'terms';
@@ -455,6 +462,7 @@
     isLegalDocumentRoute = !!legalKind;
     isRecoverRoute = isRecoverPath(window.location.pathname);
     isEmailSignInRoute = isEmailSignInPath(window.location.pathname);
+    isDeviceApproveRoute = isDeviceApprovePath(window.location.pathname);
     // The standalone /autopaper pages are gone: an old link replaces the
     // address with the story's public Texture route (the desktop opens it
     // in a Texture window) or the desktop home.
@@ -468,7 +476,7 @@
     // The recovery page stands alone: no session check, prewarm or
     // computer-surface handoff (a handoff reload would drop the in-memory
     // recovery token).
-    if (!isRecoverRoute && !isEmailSignInRoute) checkSession().then(async (session) => {
+    if (!isRecoverRoute && !isEmailSignInRoute && !isDeviceApproveRoute) checkSession().then(async (session) => {
       if (session?.authenticated) {
         await prewarmAuthenticatedComputer().catch(() => {});
         if (await handoffToComputerSurfaceIfStale()) return;
@@ -535,6 +543,8 @@
     <RecoverRoute />
   {:else if isEmailSignInRoute}
     <EmailSignInRoute />
+  {:else if isDeviceApproveRoute}
+    <DeviceApproveRoute />
   {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading" role="status" aria-live="polite">
       <span class="loading-orbit" aria-hidden="true"></span>

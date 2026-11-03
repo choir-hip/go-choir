@@ -350,30 +350,19 @@ func (l *listFlag) Set(v string) error {
 // function that builds the client once fs is parsed. A command that owns a
 // computer flag defines it first; the client shares it.
 func clientFlags(fs *flag.FlagSet) func() (*client, error) {
-	apiKeyFile := fs.String("api-key-file", "", "Read API key from a mode-0600 file; '-' reads stdin; defaults to $"+apiKeyEnvVar)
-	host := fs.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
+	apiKeyFile := fs.String("api-key-file", "", "Read API key from a mode-0600 file; '-' reads stdin; defaults to $"+apiKeyEnvVar+", $"+apiKeyFileEnvVar+", then the choir login credentials file")
+	host := fs.String("host", "", "Choir host. Defaults to $"+hostEnvVar+", the choir login host, then "+defaultHost)
 	if fs.Lookup("computer") == nil {
 		fs.String("computer", envOr("CHOIR_COMPUTER", ""), "Stable ComputerID targeting for owner-wide API keys (sent as X-Choir-Computer)")
 	}
 	timeout := fs.String("timeout", "", "Request timeout (for example 75s or 2m)")
 	return func() (*client, error) {
-		key := strings.TrimSpace(os.Getenv(apiKeyEnvVar))
-		if strings.TrimSpace(*apiKeyFile) != "" {
-			var err error
-			key, err = readCLISecretFile(*apiKeyFile, cliStdin)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if key == "" {
-			return nil, fmt.Errorf("api key required: set --api-key-file or $%s", apiKeyEnvVar)
+		key, h, err := resolveCredentials(*apiKeyFile, *host)
+		if err != nil {
+			return nil, err
 		}
 		if !strings.HasPrefix(key, apiKeyPrefix) {
 			return nil, fmt.Errorf("api key must start with %q", apiKeyPrefix)
-		}
-		h := strings.TrimRight(strings.TrimSpace(*host), "/")
-		if h == "" {
-			h = defaultHost
 		}
 		requestTimeout, err := resolveTimeout(*timeout, os.Getenv(timeoutEnvVar))
 		if err != nil {
@@ -824,9 +813,13 @@ Commands:`)
 	printCommandLines(w, commands())
 	fmt.Fprintln(w, `
 Auth:
+  choir login          Sign in once from this machine (approve in the browser);
+                       the CLI and choir mcp then need no flags or env.
   --api-key-file path  Read API key from a mode-0600 file; "-" reads stdin.
-                       Defaults to $CHOIR_API_KEY when omitted.
-  --host string        Choir host. Defaults to $CHOIR_HOST or https://choir.news.
+                       Without it: $CHOIR_API_KEY, then $CHOIR_API_KEY_FILE,
+                       then the choir login credentials file.
+  --host string        Choir host. Defaults to $CHOIR_HOST, the choir login
+                       host, then https://choir.news.
   --computer id        Target computer for owner-wide keys. Defaults to $CHOIR_COMPUTER.
   --timeout duration   Request timeout. Defaults to $CHOIR_TIMEOUT or 75s.
 

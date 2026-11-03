@@ -51,7 +51,7 @@ var wantCLIOnly = []string{
 	"computer repin-verifier",
 	"computer restore",
 	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
-	"computer resume-checkpoints", "help", "mcp",
+	"computer resume-checkpoints", "help", "login", "logout", "mcp", "mcp install",
 	// Owner acts (Library S2, S3): publishing a package release, and
 	// sharing, withdrawing or reinstating it.
 	"package publish", "package reinstate", "package share", "package withdraw",

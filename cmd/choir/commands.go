@@ -533,16 +533,17 @@ func buildRegistry() []*command {
 			path: []string{"api-key", "create"}, summary: "Create a delegated API key (requires manage:keys or admin)",
 			params: []param{
 				pStr("label", "Label for the new API key").dflt("CLI key"),
-				pList("scopes", "Comma-separated child scopes (must be within the caller's delegated scopes)").commas().dflt([]string{"read:texture", "read:base", "read:runtime"}),
+				pList("scopes", "Comma-separated child scopes (must be within the caller's delegated scopes); omit for everything the caller may delegate").commas(),
 				pStr("computer", "Optional stable ComputerID to attenuate the key to one computer; omit for an owner-wide key that controls every computer you own").fromEnv("CHOIR_COMPUTER_ID"),
 				pStr("expires_at", "Optional RFC 3339 expiry (for example 2026-08-11T12:00:00Z); must be in the future"),
 			},
 			scopes:  []string{"manage:keys"},
 			cliOnly: "returns a new bearer secret; a tool result would put a live credential into model context and chat transcripts, where a prompt-injected call could mint and exfiltrate it. Hosted MCP access is granted by OAuth consent, never by minting keys",
 			handler: func(x *call) (any, error) {
-				body := map[string]any{"label": x.trim("label"), "scopes": x.list("scopes"), "computer_id": x.trim("computer")}
-				if body["scopes"] == nil {
-					body["scopes"] = []string{}
+				body := map[string]any{"label": x.trim("label"), "computer_id": x.trim("computer")}
+				// Omitted scopes mean everything the caller may delegate.
+				if scopes := x.list("scopes"); len(scopes) > 0 {
+					body["scopes"] = scopes
 				}
 				if v := x.trim("expires_at"); v != "" {
 					exp, err := time.Parse(time.RFC3339, v)
@@ -859,7 +860,22 @@ func buildRegistry() []*command {
 
 		// meta
 		{
-			path: []string{"mcp"}, summary: "Serve every MCP-exposed command as a tool over stdio MCP (key from $CHOIR_API_KEY or $CHOIR_API_KEY_FILE)",
+			path: []string{"login"}, summary: "Sign in from this machine: approve in the browser, and a full-access key is saved to ~/.config/choir/credentials (--host, --label)",
+			scopes: []string{"public"}, cliOnly: "writes a new full-access secret to a local 0600 file; a tool result would put a live credential into model context",
+			legacy: runLogin,
+		},
+		{
+			path: []string{"logout"}, summary: "Revoke the saved login's key and remove the credentials file",
+			scopes: []string{"authenticated"}, cliOnly: "removes the local credentials the MCP server itself runs on",
+			legacy: runLogout,
+		},
+		{
+			path: []string{"mcp", "install"}, summary: "Add choir mcp to an agent host's MCP config (claude-code|cursor|claude-desktop|codex; --print to print it)",
+			scopes: []string{"public"}, cliOnly: "edits a local agent host's configuration file",
+			legacy: runMCPInstall,
+		},
+		{
+			path: []string{"mcp"}, summary: "Serve every MCP-exposed command as a tool over stdio MCP (key as the CLI resolves it: --api-key-file, $CHOIR_API_KEY, $CHOIR_API_KEY_FILE, the choir login credentials file)",
 			scopes: []string{"authenticated"}, cliOnly: "the MCP server itself",
 			legacy: runMCP,
 		},
