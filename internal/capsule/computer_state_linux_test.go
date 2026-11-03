@@ -424,3 +424,49 @@ func TestComputerStateLayerRootRules(t *testing.T) {
 		t.Fatalf("a path that is not the configured source was dropped: %v", err)
 	}
 }
+
+// The spawn's decision: a delegate capsule gets no files layer and no store
+// copy, and its receipt says withheld; an implementation capsule gets both
+// (Devin on the withholding delta, 1).
+func TestPrepareComputerStateWithholdsDelegateCapsules(t *testing.T) {
+	unprivilegedLayerOwner(t)
+	restore := computerStoreFreeBytes
+	t.Cleanup(func() { computerStoreFreeBytes = restore })
+	computerStoreFreeBytes = func(string) (int64, error) { return StateFloorBytes + 3*computerStoreAllowance, nil }
+	root := filepath.Join(t.TempDir(), "files")
+	writeLayerTree(t, root, map[string]os.FileMode{"notes/a.md": 0o644})
+	for _, c := range []struct {
+		name  string
+		spec  SpawnSpec
+		token string
+		held  bool
+	}{
+		{"implementation", SpawnSpec{ComputerState: true, Egress: true}, "", false},
+		{"claude mode", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true}, "", true},
+		{"broker token", SpawnSpec{ComputerState: true, Egress: true}, "tok", true},
+	} {
+		base, upper := t.TempDir(), t.TempDir()
+		source := &fakeStoreSource{estimate: 1}
+		e := &Executor{stateDir: t.TempDir()}
+		e.SetComputerFilesRoot(root, "")
+		e.SetComputerStore(source)
+		receipt, layer := e.prepareComputerState(context.Background(), c.spec, c.token, base)
+		if receipt.ComputerState == ComputerStateProvided {
+			e.writeComputerStoreCopy(context.Background(), upper, receipt)
+		}
+		if err := writeComputerStateReceipt(upper, *receipt); err != nil {
+			t.Fatal(err)
+		}
+		_, layerErr := os.Lstat(filepath.Join(base, computerLowerName))
+		raw, _ := os.ReadFile(filepath.Join(upper, "computer", "receipt.json"))
+		if c.held {
+			if layer != "" || layerErr == nil || source.wrote || receipt.ComputerState != ComputerStateWithheldDelegate || !strings.Contains(string(raw), ComputerStateWithheldDelegate) {
+				t.Fatalf("%s: layer=%q layerOnDisk=%t storeCopied=%t receipt=%s", c.name, layer, layerErr == nil, source.wrote, raw)
+			}
+			continue
+		}
+		if layer == "" || !source.wrote || receipt.ComputerState != ComputerStateProvided {
+			t.Fatalf("%s: layer=%q storeCopied=%t receipt=%s", c.name, layer, source.wrote, raw)
+		}
+	}
+}

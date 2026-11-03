@@ -55,6 +55,9 @@ const (
 // and what it left out. It is written read-only at /computer/receipt.json
 // and kept on the Capsule.
 type ComputerStateReceipt struct {
+	// ComputerState is "provided", or why the spawn got no /computer layers
+	// at all (ComputerStateWithheldDelegate).
+	ComputerState string `json:"computer_state"`
 	// Files is true when /computer/files was built; Refused names why not.
 	Files   bool   `json:"files"`
 	Refused string `json:"refused,omitempty"`
@@ -98,6 +101,38 @@ type ComputerStoreCopy struct {
 type ComputerStoreSource interface {
 	SnapshotEstimate(ctx context.Context) (int64, error)
 	SnapshotForCapsule(ctx context.Context, dir string) (ComputerStoreCopy, error)
+}
+
+// ComputerStateProvided marks a spawn that got the layers (each may still
+// be refused on its own, as Refused and StoreRefused say).
+const ComputerStateProvided = "provided"
+
+// ComputerStateWithheldDelegate is the refusal for a capsule that holds the
+// Claude delegate token: it never gets the computer's state beside a
+// credential that reaches outside the computer, until the delegate call
+// moves behind the gateway
+// (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md).
+const ComputerStateWithheldDelegate = "withheld: delegate capsule (credential present)"
+
+// computerStateWithheld says why a spawn that asked for the computer's state
+// gets none: a claude-mode capsule, a delegate token about to be handed to
+// its broker, or one already in its environment.
+func computerStateWithheld(spec SpawnSpec, delegateToken string) string {
+	if spec.ClaudeDelegate || delegateToken != "" {
+		return ComputerStateWithheldDelegate
+	}
+	for _, kv := range spec.Env {
+		if value, ok := strings.CutPrefix(kv, ClaudeDelegateBrokerTokenEnv+"="); ok && value != "" {
+			return ComputerStateWithheldDelegate
+		}
+	}
+	return ""
+}
+
+// withheldComputerState is the receipt of a withheld spawn: no files layer,
+// no store copy, the reason on all three.
+func withheldComputerState(reason string) *ComputerStateReceipt {
+	return &ComputerStateReceipt{ComputerState: reason, Refused: reason, StoreRefused: reason}
 }
 
 // ComputerStateLeaveOut is one named leave-out.

@@ -708,13 +708,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	var computerState *ComputerStateReceipt
 	if spec.ComputerState {
 		// The computer's state as data, between the source and the guest
-		// root (docs/design/capsule-overlay-computer-state-2026-11-03.md).
-		layer, receipt := e.buildComputerStateLayer(ctx, base)
-		computerState = &receipt
+		// root (docs/design/capsule-overlay-computer-state-2026-11-03.md),
+		// or withheld from a delegate capsule.
+		var layer string
+		computerState, layer = e.prepareComputerState(ctx, spec, claudeToken, base)
 		if layer != "" {
 			lowerLayers = sourceLower + ":" + layer + ":" + e.lowerDir
 		}
-		timer.phase("computer_files", fmt.Sprintf("files=%t linked=%d", receipt.Files, receipt.LinkedFiles))
+		timer.phase("computer_files", fmt.Sprintf("state=%q files=%t linked=%d", computerState.ComputerState, computerState.Files, computerState.LinkedFiles))
 	}
 	// The lowest layer is the guest's own root: hide its release tree behind
 	// an empty capsule-owned directory so a build can write the release
@@ -725,7 +726,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if computerState != nil {
 		// The store copy goes straight into the upper, before the mount: a
 		// private file the capsule's SQLite writes in place, one charge.
-		e.writeComputerStoreCopy(ctx, caps.UpperDir, computerState)
+		if computerState.ComputerState == ComputerStateProvided {
+			e.writeComputerStoreCopy(ctx, caps.UpperDir, computerState)
+		}
 		if err := writeComputerStateReceipt(caps.UpperDir, *computerState); err != nil {
 			// The copies are data, not a precondition: the capsule starts,
 			// and the Capsule and the log keep the receipt.

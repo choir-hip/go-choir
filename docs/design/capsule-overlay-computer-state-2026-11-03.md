@@ -438,6 +438,13 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
 
 ## Residuals
 
+- **Delegate capsules are withheld the copy** (coordinator, 2026-11-03). A
+  capsule spawned in claude network mode, or one whose broker or
+  environment carries the Claude delegate token, gets no `/computer`
+  layers: the spawn proceeds and its receipt records `computer_state:
+  "withheld: delegate capsule (credential present)"`. A correctness
+  refusal, not a switch; it lifts when the delegate call moves behind the
+  gateway (`docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md`).
 - **Exfiltration bound.** An engineering capsule now holds owner data, and
   its egress allowlist (package registries and code hosts) is the bound on
   where it can go. A request-body bound on egress for capsules with
@@ -731,8 +738,9 @@ Taken as residuals:
   copy (about 200 MB) run under it (DeepSeek 4). Moving the layer before the
   lock is a follow-up if spawn latency shows it.
 - **Egress from a capsule that holds the copy** (Devin 3): a claude-mode
-  implementation capsule holds the copy, the delegate token and
-  `api.anthropic.com` egress. It is the coordinator's ruling to keep the
+  implementation capsule would hold the copy, the delegate token and
+  `api.anthropic.com` egress; it is now withheld the copy (Residuals,
+  first item). It is the coordinator's ruling to keep the
   copy and move the delegate behind the gateway
   (`docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md`);
   until then the ring walk does not reach the delegate computers with this.

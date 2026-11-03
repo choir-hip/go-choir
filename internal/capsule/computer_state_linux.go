@@ -49,6 +49,20 @@ func (e *Executor) SetComputerFilesRoot(root, sourceRoot string) {
 	}
 }
 
+// prepareComputerState decides and builds a spawn's files layer: withheld
+// from a delegate capsule (a correctness refusal, not a switch: no copy
+// beside a credential that reaches outside the computer), else built. It
+// returns the receipt and the layer path ("" for none). The store copy
+// follows only for a receipt marked provided.
+func (e *Executor) prepareComputerState(ctx context.Context, spec SpawnSpec, delegateToken, base string) (*ComputerStateReceipt, string) {
+	if reason := computerStateWithheld(spec, delegateToken); reason != "" {
+		return withheldComputerState(reason), ""
+	}
+	layer, receipt := e.buildComputerStateLayer(ctx, base)
+	receipt.ComputerState = ComputerStateProvided
+	return &receipt, layer
+}
+
 // buildComputerStateLayer builds <base>/computer-lower for a spawn that asked
 // for the computer's state and returns its path ("" when the capsule starts
 // without it) and the receipt. It never fails the spawn: a layer it cannot
