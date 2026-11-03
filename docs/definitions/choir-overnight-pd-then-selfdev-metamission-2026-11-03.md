@@ -126,23 +126,23 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging a595321f2 (luna delegate grant; lean rebase notice; problems
-    17 and 21 through 24). 7800706b5 (problem 25: the delegate relay
-    compared a VM id with a computer-id grant list, so no computer ever
-    delegated; tier 2 accepted) in CI; delegate computers need a cold boot
-    after it deploys. The claude arm's rounds so far ran with no delegate
-    (DeepSeek alone); its next round after the cold boot is the first real
-    Claude-arm round. Owner 16:00Z: luna delegates to Claude Sonnet under
-    GPT token pressure; luna held until the delegate is available. Stacks
-    now re-graft mechanically at refresh (stack_rematerialized), and pool's
-    Slides round was admitted on the re-grafted stack. Engineering
-    assignments end at a hard 60 minutes. deepseek Slides r1 rejected for
-    missing screenshots; r2 (theme set by boot cache and one route mock)
-    running. Node B 15 GiB available, PSI 0.
+    staging 7beec5d5b (problem 25 delegate relay by computer id;
+    choir-shot --theme and --contrast). b495fd61a (problem 26: claude-mode
+    capsules get /computer when only the relay secret is present; tier 2
+    accepted) in CI. The delegate works end to end: luna round 10, Sonnet,
+    8.5 min, $0.77, round bind-to-judge 11 min; judged failed on mock
+    content because claude-mode capsules withheld /computer (problem 26).
+    The claude arm's rounds before 17:09Z ran without the delegate.
+    Screenshot failures traced to busy arms running pre-helper choir-shot.
+    Arms: luna round 11 waits for b495fd61a; claude revise-r6 (first real
+    Claude-arm round) running to 18:13Z; deepseek Slides r2 to 18:09Z;
+    pool Slides r2 sent 17:41Z (scope held package-only). Node B 12 GiB
+    available, PSI 0.
   main_uncertainty: >-
-    whether the delegate works end to end after the cold boot (relay call,
-    capsule egress); whether Slides rounds fit inside 60 minutes
-  next_observation: claude_delegate.available=true on luna after its cold boot; first delegate run ids in a luna round
+    whether a delegate round on real /computer content passes the judge;
+    why deepseek's Slides r2 waited 27 min to bind (hypothesis: a second
+    build held the computer's one implementation slot)
+  next_observation: luna round 11 receipt computer_state provided, then the judge verdict on real shots
   blocker: none
-  next_action: on 7800706b5 deploy, cold-boot luna and then claude (when idle), verify the grant, send luna round 10; carry Slides rounds on all arms and publish Files from each
+  next_action: on b495fd61a deploy, send luna round 11 and claude's next round with the /computer check; publish Files from each arm; carry Slides to judged passes
 receipts: []
