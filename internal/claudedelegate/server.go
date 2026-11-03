@@ -175,6 +175,56 @@ func (s *Server) workdir() string {
 	return Workdir
 }
 
+// HomeDir is the delegate's HOME under the run root, beside the run
+// directories (a run id never starts with "h").
+const HomeDir = "home"
+
+func (s *Server) home() string { return filepath.Join(s.Root, HomeDir) }
+
+// projectKey is Claude Code's directory name for the delegate's cwd.
+var projectKey = strings.ReplaceAll(Workdir, "/", "-")
+
+// hasSession reports whether Claude Code kept the session under home: it
+// writes each session as $HOME/.claude/projects/<cwd key>/<session id>.jsonl,
+// and --resume looks only under the cwd's key.
+func hasSession(home, id string) bool {
+	info, err := os.Lstat(filepath.Join(home, ".claude", "projects", projectKey, id+".jsonl"))
+	return err == nil && info.Mode().IsRegular()
+}
+
+// resetHome keeps the session store (.claude/projects, which resume needs)
+// and drops everything else an earlier run left in home: user settings,
+// memory and caches, so no run configures or instructs the next. A run owns
+// its HOME and may have replaced it (a link, a file, an unremovable tree), so
+// the reset never walks home in place: it renames home aside (rename moves a
+// link itself, never its target), makes a fresh home, moves back only a
+// projects tree that Lstat shows is real directories all the way down, and
+// removes the old one best effort. Whatever home held, the next run starts.
+func resetHome(home string) error {
+	var suffix [4]byte
+	_, _ = rand.Read(suffix[:])
+	old := home + ".old-" + hex.EncodeToString(suffix[:])
+	if _, err := os.Lstat(home); err == nil {
+		if err := os.Rename(home, old); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
+		return err
+	}
+	if realDir(old) && realDir(filepath.Join(old, ".claude")) && realDir(filepath.Join(old, ".claude", "projects")) {
+		_ = os.Rename(filepath.Join(old, ".claude", "projects"), filepath.Join(home, ".claude", "projects"))
+	}
+	_ = os.RemoveAll(old)
+	return nil
+}
+
+// realDir reports a directory that is not a link.
+func realDir(p string) bool {
+	info, err := os.Lstat(p)
+	return err == nil && info.IsDir()
+}
+
 func (s *Server) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
@@ -259,11 +309,22 @@ func (s *Server) Start(spec Spec) (Status, error) {
 			return Status{}, fmt.Errorf("delegate run %s is still running; wait for it or stop it first", s.current.status.ID)
 		}
 	}
+	// One HOME for every run of this broker, so a follow-up run's --resume
+	// finds the session an earlier run kept under $HOME/.claude. The broker
+	// lives and dies with its capsule, so a session never crosses
+	// assignments.
+	home := s.home()
+	if err := resetHome(home); err != nil {
+		return Status{}, fmt.Errorf("reset delegate home: %w", err)
+	}
+	if spec.ResumeSession != "" && !hasSession(home, spec.ResumeSession) {
+		return Status{}, fmt.Errorf("resume_session %s is not a session of this capsule's delegate; sessions do not cross capsules, so start a fresh run with the failure quoted in its brief", spec.ResumeSession)
+	}
 	now := s.now()
 	id := newRunID(now)
 	dir := filepath.Join(s.Root, id)
-	home := filepath.Join(dir, "home")
-	if err := os.MkdirAll(home, 0o700); err != nil {
+	// Mkdir, not MkdirAll: a directory a run planted under this id is refused.
+	if err := os.Mkdir(dir, 0o700); err != nil {
 		return Status{}, fmt.Errorf("create run directory: %w", err)
 	}
 	specBytes, _ := json.MarshalIndent(spec, "", "  ")

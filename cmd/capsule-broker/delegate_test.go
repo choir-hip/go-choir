@@ -54,3 +54,34 @@ func TestNoBrokerChildEnvironmentCarriesTheDelegateToken(t *testing.T) {
 		}
 	}
 }
+
+// docs/problems/claude-delegate-under-equipped-2026-11-03.md B1: the claude
+// process gets the paths choir-shot.mjs and choir-spec.sh need, as its jobs
+// do, and still no credential.
+func TestDelegateEnvCarriesTheBuildAndShotPaths(t *testing.T) {
+	env := map[string]string{
+		"PATH": "/run/current-system/sw/bin", yaegikernel.BuildToolchainPathEnv: "/nix/store/gcc/bin",
+		yaegikernel.FrontendDepsEnv:          "/nix/store/abc-frontend-deps",
+		capsule.BrowserEnv:                   "/nix/store/def-chromium/bin/chromium",
+		capsule.FontconfigEnv:                "/nix/store/ghi-fonts.conf",
+		capsule.ClaudeDelegateBrokerTokenEnv: brokerFakeToken,
+	}
+	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+	got, err := claudedelegate.Env(delegateBaseEnv(lookup), "/tmp/choir-delegate/home", "choir-relay-"+strings.Repeat("a", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{
+		"CHOIR_FRONTEND_DEPS=/nix/store/abc-frontend-deps",
+		"CHOIR_BROWSER=/nix/store/def-chromium/bin/chromium",
+		"FONTCONFIG_FILE=/nix/store/ghi-fonts.conf",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the claude environment lacks %s", want)
+		}
+	}
+	if strings.Contains(joined, brokerFakeToken) || strings.Contains(joined, yaegikernel.BuildToolchainPathEnv+"=") {
+		t.Error("the claude environment carries a CHOIR_ key beyond the two store paths")
+	}
+}

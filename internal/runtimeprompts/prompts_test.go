@@ -428,15 +428,27 @@ func TestOtherDesksOverlaysDoNotTeachSystem1(t *testing.T) {
 }
 
 // Delegate-first (owner, 2026-11-02): source edits go to the delegate when
-// it is available; work that changes no source stays with the engineer.
+// it is available. Widened 2026-11-03
+// (docs/problems/claude-delegate-under-equipped-2026-11-03.md): the proof
+// work for those edits (screenshots, contrast, specs) is the delegate's too,
+// and the engineer plans, briefs, reviews and freezes. The brief carries the
+// shot list, the checks and the owner's words in their own fields, and the
+// example sets no turn cap, so a copied 40 no longer ends a run early.
 func TestRLMEngineeringOverlayDelegateFirstRuleOnlyWithTheDelegate(t *testing.T) {
 	claude := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true, ClaudeDelegate: true})
 	for _, want := range []string{
 		"Delegate first:", "any work that edits source", "hand it to the delegate",
-		"trivial fixup after a delegate pass", "does not change source", "do not call the delegate",
+		"trivial fixup after a delegate pass", "the proof work for those edits", "screenshots", "contrast",
+		"You plan, brief, review and Freeze",
+		`"shots":`, `"checks":`, `"owner_words":`, "verbatim", "wall clock, not the turn count",
 	} {
 		if !strings.Contains(claude, want) {
 			t.Errorf("claude overlay lacks %q", want)
+		}
+	}
+	for _, banned := range []string{`"max_turns": 40`, "running a check or a test) stays with you"} {
+		if strings.Contains(claude, banned) {
+			t.Errorf("claude overlay still says %q", banned)
 		}
 	}
 	plain := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})

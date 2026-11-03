@@ -66,7 +66,7 @@ func TestArgsArePinnedToTheVerifiedFlagSet(t *testing.T) {
 	if value("--output-format") != "stream-json" || !slices.Contains(args, "--verbose") {
 		t.Error("stream-json needs --verbose")
 	}
-	if value("--max-turns") != "40" || value("--model") != Model {
+	if value("--max-turns") != "120" || value("--model") != Model {
 		t.Errorf("turns/model = %s/%s", value("--max-turns"), value("--model"))
 	}
 	tools := strings.Split(value("--tools"), ",")
@@ -80,8 +80,8 @@ func TestArgsArePinnedToTheVerifiedFlagSet(t *testing.T) {
 		t.Errorf("--disallowedTools = %v", disallowed)
 	}
 	for _, tool := range strings.Split(value("--allowedTools"), ",") {
-		if strings.HasPrefix(tool, "Bash(") && tool != "Bash(go:*)" && tool != "Bash(gofmt:*)" && tool != "Bash(make:*)" {
-			t.Errorf("Bash allowance %q is wider than go/gofmt/make", tool)
+		if strings.HasPrefix(tool, "Bash(") && tool != "Bash(go:*)" && tool != "Bash(gofmt:*)" && tool != "Bash(make:*)" && tool != "Bash(node:*)" && tool != "Bash(npm:*)" {
+			t.Errorf("Bash allowance %q is wider than go/gofmt/make/node/npm", tool)
 		}
 		if tool == "Bash" || strings.Contains(tool, "git push") || strings.Contains(tool, "curl") {
 			t.Errorf("unbounded allowance %q", tool)
@@ -176,7 +176,7 @@ func TestSpecBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(spec.Paths, []string{"internal/capsule", "cmd"}) || spec.MaxTurns != DefaultMaxTurns || spec.WallClockMin != DefaultWallClockMin {
+	if !slices.Equal(spec.Paths, []string{"internal/capsule", "cmd"}) || spec.MaxTurns != DefaultWallClockMin*TurnsPerWallClockMin || spec.WallClockMin != DefaultWallClockMin {
 		t.Fatalf("normalized = %+v", spec)
 	}
 }

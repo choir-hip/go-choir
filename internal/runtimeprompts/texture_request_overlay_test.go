@@ -40,6 +40,9 @@ func TestManagementOverlayNamesEveryCastNetworkMode(t *testing.T) {
 			`"network": "forbidden"`,
 			"npm",
 			"Claude delegate",
+			// docs/problems/claude-delegate-under-equipped-2026-11-03.md:
+			// "forbidden" and "ecosystem_proxy" shut the delegate out twice.
+			"On a computer with the Claude delegate, leave a Cast's \"network\" unset unless the work needs npm, GitHub or PyPI",
 		} {
 			if !strings.Contains(management, want) {
 				t.Errorf("management overlay (labels %v) lacks %q", labels, want)

@@ -42,10 +42,13 @@ func takeDelegateEnv() (token, binary string) {
 }
 
 // delegateBaseEnv is the claude process's environment before the token:
-// the workload PATH and C toolchain, and the egress proxy settings.
+// the workload PATH and C toolchain (with the frontend's locked
+// dependencies), the store Chromium and fontconfig a job gets, and the
+// egress proxy settings.
 func delegateBaseEnv(lookup func(string) (string, bool)) []string {
 	path, toolchain := yaegikernel.WorkloadToolchainEnv("/run/current-system/sw/bin:/bin:/usr/bin", lookup)
 	env := append([]string{"PATH=" + path, "LANG=C.UTF-8"}, toolchain...)
+	env = append(env, capsule.BrowserJobEnv(lookup)...)
 	return append(env, capsule.EgressProxyEnv()...)
 }
 
