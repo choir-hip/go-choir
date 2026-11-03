@@ -1806,7 +1806,10 @@ in
         # 2026-11-02: renewed two weeks by owner request ("make sure we have
         # our Claude and Sonnet delegate working"); same computers, same
         # token, still Sonnet (internal/claudedelegate/spec.go).
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d"
+        # 2026-11-03: plus selfdev-arm-claude (computer-a875023a…), the
+        # Claude arm of the four-arm apps goal
+        # (docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md).
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-ad1b46d4c20129e84b9e239cf4720fb9,computer-6c50d6e566143ae32cdb660faa60e24d,computer-a875023a6379c41f6ddb438f02e76a02"
         "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-11-17T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Density D3: idle computers give memory back in minutes (owner
