@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: lanes A, C, E (B done; F designed)
+  slice: lanes A (round-1 fixes), C (Files rounds, gated on deploy), E (S4 build, evidence.graph measurement); B done; F designed
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
