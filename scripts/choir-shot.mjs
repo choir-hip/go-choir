@@ -21,6 +21,24 @@
 //   node ... --shots /tmp/shots.mjs --list
 //   node ... --shots /tmp/shots.mjs --theme futuristic-noir,london-salmon   # presets
 //   node ... --shots /tmp/shots.mjs --contrast '.window'                    # WCAG
+//   node ... --shots /tmp/shots.mjs --open image                            # a package app
+//
+// --open <app> (or a shot's `open` field) opens a package app in the shell
+// before the shot, the way a person does: it clicks the app switcher
+// ([data-desk-menu-button]), then the app's launcher entry
+// ([data-desk-sheet-app][data-desk-app-id=<id>], matched by id, else by the
+// title shown on the entry), and waits for the app window
+// ([data-window][data-window-app-id=<id>]). A step that does not happen fails
+// the shot and names what was missing (no switcher button, no such launcher
+// entry with the ids it does have, no window). The shot's selector is waited
+// for after the open, and `act` runs after it. A route-stubbed placeholder is
+// not the app; this opens the real one.
+//
+// A contrast failure names its element: the nearest stable selector (an id or a
+// data-* attribute on the node or its closest ancestor, then the class path
+// below it), a text snippet, and `scope`: "package-window" inside the opened
+// app's window content ([data-window-content]), "shell-chrome" outside it (title bar, tray, desk), or
+// "unscoped" when nothing was opened. Fix a failure only in its own scope.
 //
 // --theme a,b (or a shot's `theme` field, a preset id or a list) sets the shell
 // theme without the Settings window: it seeds localStorage 'choir.theme.boot.v2'
@@ -111,7 +129,7 @@ function checkThemes(list, known, what) {
 }
 
 export function parseArgs(argv, knownThemes = null) {
-  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
+  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -123,6 +141,7 @@ export function parseArgs(argv, knownThemes = null) {
     else if (a === '--preset') o.presets = val().split(',').filter(Boolean);
     else if (a === '--theme') o.themes = val().split(',').filter(Boolean);
     else if (a === '--contrast') o.contrast = val();
+    else if (a === '--open') o.open = val();
     else if (a === '--size') o.size = val();
     else if (a === '--out') o.out = val();
     else if (a === '--list') o.list = true;
@@ -136,7 +155,13 @@ export function parseArgs(argv, knownThemes = null) {
   if (a0(argv, '--theme') && o.themes.length === 0) throw new Error('--theme needs at least one preset id');
   if (new Set(o.themes).size !== o.themes.length) throw new Error(`--theme ${o.themes.join(',')}: a preset is listed twice`);
   checkThemes(o.themes, knownThemes, '--theme');
+  if (a0(argv, '--open')) checkApp(o.open, '--open');
   return o;
+}
+
+const APP_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
+function checkApp(app, what) {
+  if (typeof app !== 'string' || !APP_RE.test(app)) throw new Error(`${what} ${JSON.stringify(app)}: want an app id or title such as image or Slides`);
 }
 
 function a0(argv, flag) {
@@ -180,9 +205,34 @@ export function plan(shots, o, knownThemes = null) {
         const { width, height, ...device } = v.preset || { ...v.viewport };
         const stem = `${shot.name}${theme ? '.' + theme : ''}${v.label === 'desktop' ? '' : '-' + v.label}`;
         const contrast = shot.contrast || o.contrast || '';
-        out.push({ shot, theme, contrast, viewport: { width, height }, device, file: `${stem}.png`, contrastFile: contrast ? `${stem}.contrast.json` : '' });
+        const open = shot.open || o.open || '';
+        if (open) checkApp(open, `shot ${shot.name}: open`);
+        out.push({ shot, theme, contrast, open, viewport: { width, height }, device, file: `${stem}.png`, contrastFile: contrast ? `${stem}.contrast.json` : '' });
       }
   return out;
+}
+
+// openApp opens a package app the way a person does: the app switcher button,
+// the launcher entry, the app window. page is a Playwright page (or anything
+// with locator(sel) giving click, waitFor and evaluateAll). It returns the
+// app id the window carries; every missing step throws a message naming it.
+export async function openApp(page, app, ms = STEP_MS) {
+  const waitFor = async (sel, state, what) => {
+    try { await page.locator(sel).first().waitFor({ state, timeout: ms }); } catch { throw new Error(`--open ${app}: ${what} (${sel}) did not become ${state} within ${ms / 1000} s`); }
+  };
+  await waitFor('[data-desk-menu-button]', 'visible', 'the app switcher button');
+  await page.locator('[data-desk-menu-button]').first().click();
+  await waitFor('[data-desk-sheet]', 'visible', 'the launcher sheet after clicking the switcher');
+  const entries = await page.locator('[data-desk-sheet-app]').evaluateAll((els) => els.map((e) => ({
+    id: e.getAttribute('data-desk-app-id') || '',
+    title: ((e.querySelector('strong') || {}).textContent || '').trim(),
+  })));
+  const want = app.toLowerCase();
+  const hit = entries.find((e) => e.id.toLowerCase() === want) || entries.find((e) => e.title.toLowerCase() === want);
+  if (!hit) throw new Error(`--open ${app}: no launcher entry with that id or title; the launcher menu has ${entries.map((e) => e.id + (e.title && e.title.toLowerCase() !== e.id ? ` (${e.title})` : '')).join(', ') || 'no apps'}. An app with launcher.menu false is not in it`);
+  await page.locator(`[data-desk-sheet-app][data-desk-app-id="${hit.id}"]`).first().click();
+  await waitFor(`[data-window][data-window-app-id="${hit.id}"]`, 'visible', `the ${hit.id} app window (it may have asked to sign in: a private app logged out opens no window)`);
+  return hit.id;
 }
 
 // themeSeedScript is the init script that stores the boot cache before any page
@@ -301,31 +351,47 @@ export function summarizeContrast(meta, nodes, png) {
   const results = nodes.map((n) => ({ n, r: measureNode(n, png) }));
   const measured = results.filter((x) => x.r.ratio !== null);
   const unmeasured = results.filter((x) => x.r.ratio === null);
-  const failing = measured.filter((x) => x.r.ratio < x.r.required).map((x) => ({ selector: x.n.path, text: x.n.text, ratio: +x.r.ratio.toFixed(2), required: x.r.required, method: x.r.method }));
+  const failing = measured.filter((x) => x.r.ratio < x.r.required).map((x) => ({ selector: x.n.path, text: x.n.text, scope: x.n.scope || 'unscoped', ratio: +x.r.ratio.toFixed(2), required: x.r.required, method: x.r.method }));
   const min = measured.length ? +Math.min(...measured.map((x) => x.r.ratio)).toFixed(2) : null;
   const methods = {};
   for (const x of results) { const k = x.r.method.split(' (')[0]; methods[k] = (methods[k] || 0) + 1; }
-  const report = { ...meta, nodes: results.length, measured: measured.length, unmeasured: unmeasured.length, min_ratio: min, failing, unmeasured_nodes: unmeasured.slice(0, 20).map((x) => ({ selector: x.n.path, text: x.n.text, method: x.r.method })), methods };
-  const line = `contrast ${meta.file}: min ${min === null ? 'n/a' : min} over ${measured.length}/${results.length} text nodes, ${failing.length} failing, ${unmeasured.length} unmeasured`;
-  return { report, line };
+  const report = { ...meta, nodes: results.length, measured: measured.length, unmeasured: unmeasured.length, min_ratio: min, failing, unmeasured_nodes: unmeasured.slice(0, 20).map((x) => ({ selector: x.n.path, text: x.n.text, scope: x.n.scope || 'unscoped', method: x.r.method })), methods };
+  const byScope = {};
+  for (const f of failing) byScope[f.scope] = (byScope[f.scope] || 0) + 1;
+  const scopes = Object.keys(byScope).some((k) => k !== 'unscoped') ? ` (${Object.entries(byScope).map(([k, v]) => `${v} ${k}`).join(', ')})` : '';
+  const line = `contrast ${meta.file}: min ${min === null ? 'n/a' : min} over ${measured.length}/${results.length} text nodes, ${failing.length} failing${scopes}, ${unmeasured.length} unmeasured`;
+  const detail = failing.slice(0, 10).map((f) => `  ${f.scope} ${f.ratio} < ${f.required} ${f.selector} "${f.text}"`);
+  return { report, line, detail };
 }
 
 // collectTextNodes runs in the page: every visible element under selector with
 // its own text, its color, box and the background layers from itself to the root.
-export function collectTextNodes({ selector, limit }) {
+export function collectTextNodes({ selector, limit, appId = '' }) {
   const roots = [...document.querySelectorAll(selector)];
   const seen = new Set();
   const out = [];
+  // pathOf: the nearest stable anchor (an id, else a data-* attribute whose
+  // value is not per-window state) on the node or an ancestor, then the class
+  // path below it; with no anchor, the last five steps.
+  const volatile = new Set(['data-window-id', 'data-window-mode', 'data-window-active', 'data-overview-preview-state', 'data-window-tray-item-active', 'data-svelte-h']);
   const pathOf = (el) => {
     const parts = [];
     for (let e = el; e && e.nodeType === 1 && e !== document.documentElement; e = e.parentElement) {
       let p = e.tagName.toLowerCase();
-      if (e.id) { parts.unshift(`${p}#${e.id}`); break; }
+      if (e.id) { parts.unshift(`${p}#${e.id}`); return parts.join(' > '); }
+      const attr = [...(e.attributes || [])].find((a) => a.name.startsWith('data-') && !volatile.has(a.name));
+      if (attr) { parts.unshift(attr.value && attr.value.length <= 30 ? `${p}[${attr.name}="${attr.value}"]` : `${p}[${attr.name}]`); return parts.join(' > '); }
       const cls = [...e.classList].slice(0, 2).join('.');
       if (cls) p += '.' + cls;
       parts.unshift(p);
     }
     return parts.slice(-5).join(' > ');
+  };
+  const windowSel = appId ? `[data-window][data-window-app-id="${appId}"]` : '';
+  const scopeOf = (el) => {
+    if (!appId) return 'unscoped';
+    const content = el.closest('[data-window-content]'); // the package's own surface; the window's title bar and controls are chrome
+    return content && content.closest(windowSel) ? 'package-window' : 'shell-chrome';
   };
   for (const root of roots) {
     const els = [root, ...root.querySelectorAll('*')];
@@ -342,7 +408,7 @@ export function collectTextNodes({ selector, limit }) {
         const s = getComputedStyle(e);
         layers.push({ bg: s.backgroundColor, image: s.backgroundImage !== 'none' || (s.backdropFilter && s.backdropFilter !== 'none') || false });
       }
-      out.push({ path: pathOf(el), text: text.slice(0, 60), color: cs.color, fontSize: parseFloat(cs.fontSize), fontWeight: cs.fontWeight, rect: { x: r.x + window.scrollX, y: r.y + window.scrollY, width: r.width, height: r.height }, layers });
+      out.push({ path: pathOf(el), scope: scopeOf(el), text: text.slice(0, 60), color: cs.color, fontSize: parseFloat(cs.fontSize), fontWeight: cs.fontWeight, rect: { x: r.x + window.scrollX, y: r.y + window.scrollY, width: r.width, height: r.height }, layers });
     }
   }
   return out;
@@ -546,8 +612,8 @@ function loadPngDecoder(req) {
 
 // measureContrast scores the text under selector on a ready page. Text is made
 // transparent for one screenshot so pixel sampling sees only the background.
-async function measureContrast(page, it, decode, out) {
-  const nodes = await page.evaluate(collectTextNodes, { selector: it.contrast, limit: 400 });
+async function measureContrast(page, it, decode, out, appId) {
+  const nodes = await page.evaluate(collectTextNodes, { selector: it.contrast, limit: 400, appId });
   let png = null;
   if (decode && nodes.length) {
     const style = await page.addStyleTag({ content: '*, *::before, *::after { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; }' });
@@ -557,11 +623,12 @@ async function measureContrast(page, it, decode, out) {
       await style.evaluate((el) => el.remove());
     }
   }
-  const { report, line } = summarizeContrast({ shot: it.shot.name, preset: it.theme, file: it.file, selector: it.contrast, viewport: it.viewport, wcag: 'AA' }, nodes, png);
+  const { report, line, detail } = summarizeContrast({ shot: it.shot.name, preset: it.theme, file: it.file, selector: it.contrast, opened: appId || null, viewport: it.viewport, wcag: 'AA' }, nodes, png);
   const dir = contrastDir(out);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, it.contrastFile), JSON.stringify(report, null, 2) + '\n');
   console.log(`choir-shot: ${line}`);
+  for (const d of detail) console.log(`choir-shot: ${d}`);
 }
 
 async function main() {
@@ -610,13 +677,18 @@ async function main() {
         const page = await context.newPage();
         if (s.before) await s.before(page, base);
         await page.goto(base + (s.path || '/'), { waitUntil: 'load', timeout: STEP_MS });
-        await settle(page, s.selector);
+        await settle(page, it.open ? null : s.selector);
+        let appId = '';
+        if (it.open) {
+          appId = await openApp(page, it.open);
+          await settle(page, s.selector);
+        }
         if (s.act) {
           await s.act(page);
           await settle(page, s.selector);
         }
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
-        if (it.contrast) await measureContrast(page, it, decode, o.out);
+        if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
         console.log(`choir-shot: ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
       } catch (e) {
         failed.push(it.file);

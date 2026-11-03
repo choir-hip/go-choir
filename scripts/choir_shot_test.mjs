@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -117,6 +117,100 @@ assert.equal(requiredRatio(19, '700'), 3);
   assert.equal(report.failing.length, 1);
   assert.equal(report.min_ratio, 1.04);
   assert.match(line, /min 1\.04 over 2\/2 text nodes, 1 failing, 0 unmeasured/);
+}
+
+// --open: parsing, the per-shot field, and the steps over a fake page.
+assert.equal(parseArgs(['--shots', 'x', '--open', 'image']).open, 'image');
+throws(() => parseArgs(['--shots', 'x', '--open', '../x']), /--open/);
+throws(() => plan([{ name: 'a', open: 'a"b' }], parseArgs(['--shots', 'x'])), /shot a: open/);
+assert.deepEqual(plan([{ name: 'a' }, { name: 'b', open: 'slides' }], parseArgs(['--shots', 'x', '--open', 'image'])).map((i) => i.open), ['image', 'slides']);
+assert.deepEqual(plan([{ name: 'a' }], parseArgs(['--shots', 'x'])).map((i) => i.open), ['']);
+{
+  // A fake page: the launcher lists entries; clicking one adds its window.
+  const fakePage = ({ button = true, sheet = true, entries = [{ id: 'image', title: 'Image' }, { id: 'slides', title: 'Slides' }], window = true } = {}) => {
+    const clicks = [];
+    const state = { sheetOpen: false, windows: new Set() };
+    const page = {
+      clicks,
+      locator(sel) {
+        const loc = {
+          first: () => loc,
+          async waitFor({ state: st }) {
+            const ok = sel === '[data-desk-menu-button]' ? button : sel === '[data-desk-sheet]' ? sheet && state.sheetOpen : state.windows.has(sel);
+            if (!ok) throw new Error('timeout');
+            assert.equal(st, 'visible');
+          },
+          async click() {
+            clicks.push(sel);
+            if (sel === '[data-desk-menu-button]') state.sheetOpen = true;
+            const m = /data-desk-app-id="([^"]+)"/.exec(sel);
+            if (m && window) state.windows.add(`[data-window][data-window-app-id="${m[1]}"]`);
+          },
+          async evaluateAll(fn) {
+            assert.equal(sel, '[data-desk-sheet-app]');
+            return fn(entries.map((e) => ({ getAttribute: () => e.id, querySelector: () => ({ textContent: ` ${e.title} ` }) })));
+          },
+        };
+        return loc;
+      },
+    };
+    return page;
+  };
+  let p = fakePage();
+  assert.equal(await openApp(p, 'image', 5), 'image');
+  assert.deepEqual(p.clicks, ['[data-desk-menu-button]', '[data-desk-sheet-app][data-desk-app-id="image"]']);
+  assert.equal(await openApp(fakePage(), 'Slides', 5), 'slides'); // by title, any case
+  await assert.rejects(openApp(fakePage({ button: false }), 'image', 5), /app switcher button.*did not become visible/);
+  await assert.rejects(openApp(fakePage({ sheet: false }), 'image', 5), /launcher sheet/);
+  await assert.rejects(openApp(fakePage(), 'trace', 5), /no launcher entry.*has image, slides/);
+  await assert.rejects(openApp(fakePage({ window: false }), 'image', 5), /image app window/);
+}
+
+// Contrast failure records: the stable selector, the snippet and the scope, over a fake DOM.
+{
+  const mk = (tag, { id = '', cls = [], attrs = {}, text = '', parent = null, kids = [] } = {}) => {
+    const el = {
+      nodeType: 1, tagName: tag.toUpperCase(), id, classList: cls, attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })),
+      parentElement: parent, children: kids,
+      childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
+      closest(sel) { const m = /^\[data-window\]\[data-window-app-id="([^"]+)"\]$/.exec(sel); for (let e = el; e; e = e.parentElement) if (m ? e.attributes.some((a) => a.name === 'data-window-app-id' && a.value === m[1]) : sel === '[data-window-content]' && e.attributes.some((a) => a.name === 'data-window-content')) return e; return null; },
+      getBoundingClientRect: () => ({ x: 0, y: 0, width: 10, height: 10 }),
+      querySelectorAll() { const out = []; const walk = (e) => { for (const k of e.children) { out.push(k); walk(k); } }; walk(el); return out; },
+    };
+    for (const k of kids) k.parentElement = el;
+    return el;
+  };
+  const badge = mk('span', { cls: ['badge', 'warn', 'x'], text: 'Draft' });
+  const title = mk('span', { cls: ['titltexture'], text: 'Image' });
+  const bar = mk('div', { cls: ['titlebar'], attrs: { 'data-window-titlebar': '' }, kids: [title] });
+  const body = mk('div', { cls: ['window-content'], attrs: { 'data-window-content': '' }, kids: [mk('div', { cls: ['image-content'], attrs: { 'data-image-window': '' }, kids: [mk('div', { cls: ['row'], kids: [badge] })] })] });
+  const win = mk('section', { cls: ['window'], attrs: { 'data-window': '', 'data-window-id': 'w-123', 'data-window-app-id': 'image' }, kids: [bar, body] });
+  const root = mk('div', { id: 'app', kids: [win] });
+  globalThis.document = { documentElement: mk('html'), querySelectorAll: () => [root] };
+  globalThis.window = { scrollX: 0, scrollY: 0 };
+  globalThis.getComputedStyle = () => ({ display: 'block', visibility: 'visible', color: 'rgb(0,0,0)', fontSize: '14px', fontWeight: '400', backgroundColor: 'rgb(255,255,255)', backgroundImage: 'none', backdropFilter: 'none' });
+  try {
+    const nodes = collectTextNodes({ selector: '#app', limit: 50, appId: 'image' });
+    const byText = Object.fromEntries(nodes.map((n) => [n.text, n]));
+    assert.equal(byText.Draft.scope, 'package-window');
+    assert.equal(byText.Draft.path, 'div[data-image-window] > div.row > span.badge.warn');
+    assert.equal(byText.Image.scope, 'shell-chrome'); // the window's own title bar is chrome, not the package
+    assert.equal(byText.Image.path, 'div[data-window-titlebar] > span.titltexture');
+    // The same nodes with another package opened are shell chrome.
+    const other = collectTextNodes({ selector: '#app', limit: 50, appId: 'slides' });
+    assert.ok(other.every((n) => n.scope === 'shell-chrome'));
+    assert.ok(collectTextNodes({ selector: '#app', limit: 50 }).every((n) => n.scope === 'unscoped'));
+    // The failing record carries selector, text, scope.
+    const low = nodes.map((n) => ({ ...n, color: 'rgb(250,250,250)', layers: [{ bg: 'rgb(255,255,255)', image: false }] }));
+    const { report, line, detail } = summarizeContrast({ file: 'a.png', opened: 'image' }, low, null);
+    assert.deepEqual(Object.keys(report.failing[0]).sort(), ['method', 'ratio', 'required', 'scope', 'selector', 'text']);
+    assert.equal(report.failing.find((f) => f.text === 'Draft').scope, 'package-window');
+    assert.match(line, /2 failing \(1 shell-chrome, 1 package-window\)|2 failing \(1 package-window, 1 shell-chrome\)/);
+    assert.ok(detail.some((d) => /package-window .* div\[data-image-window\] > div\.row > span\.badge/.test(d)), detail.join('\n'));
+    assert.equal(report.opened, 'image');
+  } finally {
+    delete globalThis.document; delete globalThis.window; delete globalThis.getComputedStyle;
+  }
 }
 assert.equal(contrastDir('/var/lib/artifact/screens'), '/var/lib/artifact/contrast');
 

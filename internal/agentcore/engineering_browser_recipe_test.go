@@ -35,6 +35,8 @@ func TestEngineeringRunContextCarriesTheCapsuleBrowserRecipe(t *testing.T) {
 			"npx playwright install",
 			"context.route",
 			"scripts/choir-shot.mjs",
+			"--open <app>",
+			"shell-chrome",
 			"scripts/choir-spec.sh",
 			"--grep \"package <name> has\"",
 		} {
