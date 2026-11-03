@@ -223,7 +223,8 @@ func (h *Handler) HandleDeviceBegin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:        now,
 		ExpiresAt:        now.Add(DeviceAuthorizationTTL),
 	}
-	// A user code that collides with a live one is drawn again.
+	// A user code that collides with a pending row (expired or not; the
+	// partial unique index covers both) is drawn again.
 	var display string
 	for i := 0; i < 5; i++ {
 		var norm string
@@ -234,7 +235,7 @@ func (h *Handler) HandleDeviceBegin(w http.ResponseWriter, r *http.Request) {
 		}
 		a.UserCodeHash = userCodeHash(norm)
 		existing, lerr := h.store.GetDeviceAuthorizationByUserCode(r.Context(), a.UserCodeHash)
-		if errors.Is(lerr, sql.ErrNoRows) || (lerr == nil && existing.EffectiveStatus(now) != DeviceStatusPending) {
+		if errors.Is(lerr, sql.ErrNoRows) || (lerr == nil && existing.Status != DeviceStatusPending) {
 			break
 		}
 	}
@@ -367,11 +368,11 @@ func (h *Handler) HandleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: `decision must be "approve" or "deny"`})
 		return
 	}
-	a, hash := h.lookupForUser(w, r, user, req.UserCode)
+	a, _ := h.lookupForUser(w, r, user, req.UserCode)
 	if a == nil {
 		return
 	}
-	if err := h.store.DecideDeviceAuthorization(r.Context(), hash, user.ID, req.Decision == "approve", time.Now().UTC()); err != nil {
+	if err := h.store.DecideDeviceAuthorization(r.Context(), a.ID, user.ID, req.Decision == "approve", time.Now().UTC()); err != nil {
 		if errors.Is(err, ErrDeviceNotFound) {
 			writeJSON(w, http.StatusNotFound, errorResponse{Error: ErrDeviceNotFound.Error()})
 			return
