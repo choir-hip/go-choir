@@ -27,6 +27,17 @@ program." Chosen, all together:
 digest is on, and the A/B split is the experiment. The program keeps
 adding ideas; each is one experiment per desk at a time.
 
+## The bridge to progressive delivery (owner, 2026-11-03)
+
+"calibration in particular is the bridge between the 2 missions." A change
+that rolls out, platform release or self-development candidate, carries its
+author's precommitments about its effect; the ring walk (soak, health,
+rollback) and the approval path settle them. Progressive delivery is the
+settlement mechanism, self-development the source of predictions, and the
+settled record is the engineering digest. The ring controller's history
+must therefore record, per ring, what a settlement needs: the release, the
+prediction ids it carries, the metrics read, and the outcome.
+
 ## What the repo already has
 
 - **The idea is on the roadmap.** `roadmap-2026-10-31.md` stage 3: the desk

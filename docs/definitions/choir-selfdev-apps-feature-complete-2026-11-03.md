@@ -230,7 +230,7 @@ slices:
   S7: promote winners per app; deployed acceptance; comparison report across arms
 
 now:
-  status: checkpoint_incomplete  # on hold 2026-11-03; parked branches selfdev-screens-as-files, cli-agent-onboarding unmerged
+  status: working  # resumed 2026-11-03 as station 2 of the overnight metamission; parked branches selfdev-screens-as-files, cli-agent-onboarding unmerged
   slice: S0 + S1 (spec committed; four builds in flight; arms being created)
   source_ref: origin/main 93424c258
   deploy_identity: staging ee34d53c1

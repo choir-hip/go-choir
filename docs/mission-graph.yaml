@@ -1165,6 +1165,19 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-overnight-pd-then-selfdev-metamission-2026-11-03
+    title: Overnight metamission — progressive delivery, then self-development, in concurrent lanes, with calibration as the bridge
+    path: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md
+    status: working
+    kind: metamission
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: []
+    note: >-
+      Owner 2026-11-03: "a metamission that runs progressive delivery then
+      the self-dev mission overnight. and with any concurrency possible";
+      "calibration in particular is the bridge between the 2 missions".
   - id: choir-progressive-delivery-2026-11-03
     title: Progressive delivery built — every switch walks the rings on measured evidence, reverts on its own, and retires; the off-switch backlog cleared
     path: docs/definitions/choir-progressive-delivery-2026-11-03.md
@@ -1184,7 +1197,7 @@ nodes:
     title: Self-development — Files, Slides, Calendar and Podcasts feature-complete on four stock arms (Claude delegate, DeepSeek, gpt-6-luna, pool), with agent onboarding, Texture export and the calibration seed plan
     path: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md
     ledger: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.ledger.md
-    status: on_hold  # 2026-11-03, for choir-progressive-delivery-2026-11-03
+    status: working  # resumed 2026-11-03 under the overnight metamission
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator

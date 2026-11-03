@@ -11,6 +11,12 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Active metamission (2026-11-03, overnight): progressive delivery, then self-development
+
+**Goal:** [`definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`](definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md).
+Run it with `/goal docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`.
+Two stations in concurrent lanes; calibration is the bridge (owner).
+
 ## Active goal (2026-11-03): progressive delivery, built
 
 **Goal:** [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md)
@@ -24,7 +30,7 @@ measured evidence and retires; the off backlog is cleared. Inputs: the
 ratified design [`design/progressive-delivery-2026-10-26.md`](design/progressive-delivery-2026-10-26.md)
 and the audit [`evidence/switch-audit-2026-11-03.md`](evidence/switch-audit-2026-11-03.md).
 
-## On hold (2026-11-03): self-development, the apps feature-complete
+## Station 2 (2026-11-03): self-development, the apps feature-complete
 
 **Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
 (`readiness: executable` on the owner's word). Run it with
