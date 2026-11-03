@@ -280,3 +280,6 @@ survive, so the rebase can never freeze. Deepseek's rebase (selfdev-152fe036bf57
 a missing hunk when the base already holds that hunk's resulting content (upstreamed), and say so on the record.
 Also seen: deepseek's rebase operation changes app-sdk.ts and two test specs, so it is not confined itself; the
 arm publishes from its next package-only round (Fix 11 publishes the stack's cumulative package then).
+Both ways out are closed for claude: Texture's 11:20:55Z turn reads "the already-landed app-sdk hunk blocks it
+and the merged duplicate exports fail the build" (keeping the hunk duplicates the exports and breaks npm run
+build; dropping it trips hunk_missing). The arm cannot build again until the content check is fixed.
