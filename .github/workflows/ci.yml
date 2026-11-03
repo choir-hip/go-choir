@@ -493,6 +493,12 @@ jobs:
         shell: bash
         run: scripts/check-test-hang-guards.sh
 
+      # Every write under the files root goes through internal/ownerfiles
+      # (docs/design/capsule-overlay-computer-state-2026-11-03.md, S1).
+      - name: Run files-root write gate
+        shell: bash
+        run: scripts/check-owner-files-writes && scripts/selftest-owner-files-writes
+
       # Every switch is declared in switches/registry.yaml; an unregistered
       # switch, an expired entry that blocks a new switch, or a switch that lands
       # off for every computer fails here
