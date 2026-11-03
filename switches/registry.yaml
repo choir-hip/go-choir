@@ -659,8 +659,8 @@
    "target_ring": "R4",
    "soak_x": 2,
    "expires": "2026-11-11",
-   "ring": "none",
-   "nix_value": "",
+   "ring": "R0",
+   "nix_value": "computer-59c902c5d46caecc0a180a8557164e72",
    "promote": [
     {
      "metric": "net02_mirrors_probe_exit",
@@ -669,8 +669,7 @@
    ],
    "retire": "delete the selectors; capsules always use the host mirror",
    "probe": "scripts/proofs/net02-mirrors.sh",
-   "grandfathered_off_until": "2026-11-04",
-   "note": "Deploy G inert. Walk: one test computer builds through it (R0), then class:test, then MIRRORS_ONLY=1."
+   "note": "On at d@e (2026-11-03), npm,pypi,crates,git, MIRRORS_ONLY off. Owner ruling: on everywhere with no switch; widen after the net02 route-mode proof, then MIRRORS_ONLY."
   },
   {
    "id": "host_fetch_vms",
@@ -689,8 +688,8 @@
    "target_ring": "R4",
    "soak_x": 2,
    "expires": "2026-11-11",
-   "ring": "none",
-   "nix_value": "",
+   "ring": "ids:1",
+   "nix_value": "vm-70070cf7337d45f2d46eafc83b9783b9",
    "promote": [
     {
      "metric": "net01_host_fetch_probe_exit",
@@ -699,8 +698,7 @@
    ],
    "retire": "delete the let-binding; guest fetches always go through the host",
    "probe": "scripts/proofs/net01-host-fetch.sh",
-   "grandfathered_off_until": "2026-11-04",
-   "note": "High security value; closes direct egress. Also feeds CHOIR_HOST_FETCH_VMS in the vmctl and gateway units."
+   "note": "On at d@e (2026-11-03). Owner ruling: on everywhere with no switch; the next deploy sets \"*\" once the net01 proof passes, then the let-binding is deleted. Also feeds CHOIR_HOST_FETCH_VMS in the vmctl and gateway units."
   },
   {
    "id": "choir_claude_delegate",

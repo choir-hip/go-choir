@@ -25,7 +25,9 @@ let
   # podcast and YouTube fetches and source polls make their network hop
   # through the gateway and never fall back to direct egress. Rollback:
   # empty the list, deploy, cold-boot the computer.
-  hostFetchVMs = "";
+  # On for d@e only until its proof passes (2026-11-03, owner: on everywhere,
+  # no switch; "*" admits every VM and is the next deploy).
+  hostFetchVMs = "vm-70070cf7337d45f2d46eafc83b9783b9";
   # D2 (docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md): the
   # one switch for release-bound snapshots. On: every NixOS switch keeps the
   # outgoing guest image as a release directory under
@@ -1767,8 +1769,10 @@ in
         # mirrored registries off those capsules' CONNECT allowlist. A
         # computer reads the grant at its next cold boot. Rollback: empty the
         # computer list and deploy.
-        "CHOIR_CAPSULE_MIRROR_COMPUTERS="
-        "CHOIR_CAPSULE_MIRROR_ECOSYSTEMS="
+        # d@e only until its proof passes (owner 2026-11-03: on everywhere,
+        # no switch); MIRRORS_ONLY stays off until the route mode is proved.
+        "CHOIR_CAPSULE_MIRROR_COMPUTERS=computer-59c902c5d46caecc0a180a8557164e72"
+        "CHOIR_CAPSULE_MIRROR_ECOSYSTEMS=npm,pypi,crates,git"
         "CHOIR_CAPSULE_MIRRORS_ONLY="
         # Host fetch route (SDC NET-01): the grant half. See hostFetchVMs.
         "CHOIR_HOST_FETCH_VMS=${hostFetchVMs}"
@@ -2885,7 +2889,7 @@ in
         "-public-base http://mirror.choir.internal"
         "-max-bytes 17179869184"
         "-git-max-bytes 17179869184"
-        "-ecosystems ''"
+        "-ecosystems npm,pypi,crates,git"
       ];
       Restart = "on-failure";
       RestartSec = 3;

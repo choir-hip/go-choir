@@ -126,7 +126,7 @@ func (h *Handler) HandleHostFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc := h.hostFetchService()
-	if !svc.allowed[computerID] {
+	if !hostfetch.Listed(svc.allowed, computerID) {
 		log.Printf("gateway: fetch refused computer=%s reason=not_granted", computerID)
 		writeGatewayJSON(w, http.StatusForbidden, struct {
 			Error string `json:"error"`
