@@ -181,15 +181,21 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		h.retryRebaseOwnerAct(w, r, ownerID)
 		return
 	}
+	// The verifier key read and the re-pin record do not need the
+	// operation store: a computer whose store failed can still be re-pinned.
+	if len(parts) == 3 && parts[1] == "self-development" && parts[2] == "verifier-key" {
+		h.verifierKeyRoute(w, r, computerID, false)
+		return
+	}
+	if len(parts) == 4 && parts[1] == "self-development" && parts[2] == "verifier-key" && parts[3] == "repinned" {
+		h.verifierKeyRoute(w, r, computerID, true)
+		return
+	}
 	if h.rt.selfdevOperations == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development operation authority unavailable"})
 		return
 	}
 	switch {
-	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "verifier-key":
-		h.verifierKeyRoute(w, r, computerID, false)
-	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "verifier-key" && parts[3] == "repinned":
-		h.verifierKeyRoute(w, r, computerID, true)
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "kernel-capabilities":
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

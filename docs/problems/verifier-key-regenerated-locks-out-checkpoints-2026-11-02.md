@@ -100,32 +100,56 @@ its next verifier checkpoint (the first-use branch), so it is not latent.
 
 ## Fix shape
 
-1. Signer: record a key-id sidecar at generation; a missing key with a
-   sidecar present (partial loss) is a typed refusal; a generated key is
-   reported (`generated_at`) on the signer's public-key route and logged.
-2. Platform: a read-only verifier-key preflight (pin state for a presented
-   key) used by the checkpoint authority and by the guest; an owner-act
-   re-pin route that revokes the active pin and pins the presented key,
-   authorized only by a proxy-signed owner-act receipt, recorded in
-   `control_key_history` and `owner_act_receipts` with the reason.
+1. Signer: a generated key is recorded beside it
+   (`key.ed25519.provenance.json`, written through a unique O_EXCL
+   temporary) and reported (`generated_at`, `generated_this_boot`,
+   `prior_key_id`) on the public-key route and in the log. The signer still
+   generates and starts: the autoputer requires its unit, so a refusal would
+   brick the computer. On d@e's shape the record is lost with the disk, so
+   `prior_key_id` is empty; the signal there is `generated_at` and the
+   host's mismatch.
+2. Platform: a read-only verifier-key preflight (the pin state of a
+   presented key, the same lookup the checkpoint authority makes); an
+   owner-act re-pin route that revokes the active pin and pins the presented
+   key, authorized only by a proxy-signed owner-act receipt, recorded in
+   `control_key_history`, `owner_act_receipts` and a new activation record
+   (`control_key_activations`) with the reason. A key revoked by an earlier
+   re-pin (a disk restored from an older image) is re-activated by the same
+   owner act: its row returns to active, its first activation window is
+   kept, and the re-activation is its own activation record. Without an
+   owner act a revoked key stays refused.
 3. Guest: `/health` carries `verifier_key` (pin state) and degrades on a
    mismatch; the materializer runs the preflight before an attempt is spent
-   and holds a mismatch with a typed reason (no attempt, no retry wake); a
-   checkpoint refused for the key is the same hold. The re-pin records a
-   `key_rotated` event on the tape and wakes the reconciler once.
+   and holds a mismatch with a typed reason (no attempt, no marker, no retry
+   wake). When the preflight cannot answer (host unreachable) or the pin
+   changes after it, the checkpoint refusal arrives after `markPlannedRestart`
+   spent that attempt: one attempt is spent, then the same hold stops every
+   later one. The re-pin records a `key_rotated` event on the tape and wakes
+   the reconciler once.
 4. CLI: `choir computer repin-verifier --computer X --reason R` (owner act)
    and `choir computer verifier-key --computer X` (read).
 
+## Computers on an older guest release
+
+The re-pin reads the presented key through a guest route this change adds.
+A computer still on an older release answers 404, and the proxy answers 409
+with the way out; there is no compatibility path. The owner abandons the
+held operation (`choir self-dev abandon`), which leaves the computer idle so
+the deploy refresh (or `choir computer refresh`) boots the current release,
+then runs `choir computer repin-verifier` and retries the change. d@e's held
+operation was already abandoned, so d@e needs only the refresh and the
+re-pin.
+
 ## Where the fix lives
 
-- Signer provenance: `internal/receiptsigner/signing.go:79`
+- Signer provenance: `internal/receiptsigner/signing.go:98`
   (`LoadOrCreateSigningKeyWithProvenance`), reported on `/v1/public-key`.
 - Preflight and re-pin: `internal/platform/verifier_key_pin.go:53`
-  (`VerifierKeyPreflight`), `:98` (`RepinVerifierKey`), `:233` (route),
-  `:276` (owner-act check, every rollout mode).
-- Proxy: `internal/proxy/verifier_repin.go:54`.
-- Guest hold and health: `internal/agentcore/selfdev_verifier_key.go:135`
-  (`verifierKeyHold`), `:184` (`/health` `verifier_key`); call sites
+  (`VerifierKeyPreflight`), `:98` (`RepinVerifierKey`, re-activation included), `:259` (route),
+  `:302` (owner-act check, every rollout mode).
+- Proxy: `internal/proxy/verifier_repin.go:60`.
+- Guest hold and health: `internal/agentcore/selfdev_verifier_key.go:151`
+  (`verifierKeyHold`), `:205` (`/health` `verifier_key`); call sites
   `internal/agentcore/self_development_materializer.go:1468` (before the
   attempt), `:1145` (checkpoint refusal), `:446` (no retry wake).
 - CLI: `cmd/choir/commands.go:457` (`computer repin-verifier`) and

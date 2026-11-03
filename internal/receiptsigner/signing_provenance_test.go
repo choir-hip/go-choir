@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -144,5 +146,40 @@ func TestPublicKeyRouteCarriesProvenance(t *testing.T) {
 		t.Fatalf("public key body has no generated_at: %v", body)
 	} else if _, parseErr := time.Parse(time.RFC3339Nano, at); parseErr != nil {
 		t.Fatalf("generated_at %q: %v", at, parseErr)
+	}
+}
+
+// Review of 9a465a7f2, DeepSeek #9: concurrent loads never leave a torn or
+// foreign record, and no temporary file is left behind.
+func TestSigningKeyProvenanceWritesAreAtomicUnderConcurrentLoads(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key.ed25519")
+	key, _, err := LoadOrCreateSigningKeyWithProvenance(path, ModeVerifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(provenancePath(path)); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, _, err := LoadOrCreateSigningKeyWithProvenance(path, ModeVerifier); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	record, found, err := readProvenance(path)
+	if err != nil || !found || record.KeyID != key.KeyID {
+		t.Fatalf("record after concurrent loads = %+v, %v, %v", record, found, err)
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp") {
+			t.Fatalf("temporary left behind: %s", entry.Name())
+		}
 	}
 }

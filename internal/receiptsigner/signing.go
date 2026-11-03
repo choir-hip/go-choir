@@ -56,21 +56,40 @@ func readProvenance(keyPath string) (KeyProvenance, bool, error) {
 	}
 	var record KeyProvenance
 	if err := json.Unmarshal(raw, &record); err != nil || record.KeyID == "" {
-		return KeyProvenance{}, true, fmt.Errorf("receipt signer: unreadable key provenance")
+		return KeyProvenance{}, true, errProvenanceCorrupt
 	}
 	return record, true, nil
 }
 
+// errProvenanceCorrupt is a record that was read and does not decode: it is
+// rewritten. Any other read error is transient and leaves the record alone.
+var errProvenanceCorrupt = errors.New("receipt signer: unreadable key provenance")
+
+// writeProvenance replaces the record through a temporary of its own
+// (O_EXCL, unique name), synced before the rename.
 func writeProvenance(keyPath string, record KeyProvenance) error {
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	temporary := provenancePath(keyPath) + ".tmp"
-	if err := os.WriteFile(temporary, raw, 0o600); err != nil {
+	file, err := os.CreateTemp(filepath.Dir(keyPath), filepath.Base(provenancePath(keyPath))+".tmp-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(temporary, provenancePath(keyPath))
+	temporary := file.Name()
+	if _, err = file.Write(raw); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(temporary, provenancePath(keyPath))
+	}
+	if err != nil {
+		_ = os.Remove(temporary)
+	}
+	return err
 }
 
 // LoadOrCreateSigningKeyWithProvenance is LoadOrCreateSigningKey reporting
@@ -108,7 +127,8 @@ func LoadOrCreateSigningKeyWithProvenance(path, domain string) (computerevent.Si
 			log.Printf("receipt signer: %s key provenance does not name the loaded key %s; rewritten", domain, key.KeyID)
 		}
 	}
-	if !(priorErr == nil && priorFound && prior == provenance) {
+	transient := priorErr != nil && !errors.Is(priorErr, errProvenanceCorrupt)
+	if (provenance.Generated || !transient) && !(priorErr == nil && priorFound && prior == provenance) {
 		if writeErr := writeProvenance(path, provenance); writeErr != nil {
 			log.Printf("receipt signer: %s key provenance not recorded: %v", domain, writeErr)
 		}

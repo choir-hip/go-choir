@@ -26,9 +26,12 @@ import (
 // verifier-class checkpoint signed by another. A lost data disk regenerates
 // the key, so an approved apply would spend every guest attempt on a refusal
 // that can only repeat. The guest asks the host, read only, before an attempt
-// is spent; a key the host refuses holds the operation with a typed reason,
-// no attempt and no retry wake, until the owner re-pins
-// (choir computer repin-verifier). /health carries the answer.
+// is spent; a key the host refuses there holds the operation with a typed
+// reason, no attempt and no retry wake, until the owner re-pins
+// (choir computer repin-verifier). When the preflight could not answer (the
+// host unreachable) or passed and the pin changed after it, the checkpoint
+// refusal comes after the attempt was spent: that one attempt is spent, and
+// the same hold stops every later one. /health carries the answer.
 
 // ErrVerifierKeyNotPinned holds a self-development apply or rollback whose
 // verifier key is not the host's pin. The owner clears it with a re-pin.
@@ -52,6 +55,10 @@ type verifierKeyPinCache struct {
 	mu         sync.Mutex
 	last       *verifierKeyCheck
 	refreshing bool
+	// generation moves on every invalidation; an answer whose question
+	// started before it is never cached (a pre-re-pin mismatch written after
+	// the re-pin would hold the one reconciler wake).
+	generation uint64
 }
 
 func (rt *Runtime) presentVerifierKey(ctx context.Context) (string, string, receiptsigner.KeyProvenance, error) {
@@ -94,6 +101,7 @@ func (rt *Runtime) checkVerifierKeyPin(ctx context.Context, maxAge time.Duration
 		cache.mu.Unlock()
 		return cached, nil
 	}
+	generation := cache.generation
 	cache.mu.Unlock()
 	check := verifierKeyCheck{CheckedAt: time.Now().UTC()}
 	keyID, public, provenance, err := rt.presentVerifierKey(ctx)
@@ -112,8 +120,15 @@ func (rt *Runtime) checkVerifierKeyPin(ctx context.Context, maxAge time.Duration
 	}
 	cache.mu.Lock()
 	previous := cache.last
-	cache.last = &check
+	stale := cache.generation != generation
+	if !stale {
+		cache.last = &check
+	}
 	cache.mu.Unlock()
+	if stale && maxAge > 0 {
+		// Invalidated while asking (a re-pin landed): ask again.
+		return rt.checkVerifierKeyPin(ctx, maxAge)
+	}
 	if check.Err == "" && check.Pin.Refuses() && (previous == nil || previous.Pin.State != check.Pin.State || previous.KeyID != check.KeyID) {
 		log.Printf("selfdev: verifier key %s is %s (host pin %s; prior key on this disk %q): verifier checkpoints will be refused until the owner re-pins",
 			check.KeyID, check.Pin.State, check.Pin.PinnedKeyID, check.Provenance.PriorKeyID)
@@ -125,6 +140,7 @@ func (rt *Runtime) checkVerifierKeyPin(ctx context.Context, maxAge time.Duration
 func (rt *Runtime) invalidateVerifierKeyPin() {
 	rt.verifierKeyPin.mu.Lock()
 	rt.verifierKeyPin.last = nil
+	rt.verifierKeyPin.generation++
 	rt.verifierKeyPin.mu.Unlock()
 }
 
@@ -143,8 +159,13 @@ func (rt *Runtime) verifierKeyHold(ctx context.Context) error {
 		}
 		return nil
 	}
-	if check.Pin.Refuses() {
-		return fmt.Errorf("%w (presented %s, host %s: %s)", ErrVerifierKeyNotPinned, check.KeyID, check.Pin.State, check.Pin.PinnedKeyID)
+	switch check.Pin.State {
+	case selfdevprotocol.VerifierKeyMismatch:
+		return fmt.Errorf("%w (presented %s, host pins %s)", ErrVerifierKeyNotPinned, check.KeyID, check.Pin.PinnedKeyID)
+	case selfdevprotocol.VerifierKeyUnpinnedNoGenesis:
+		return fmt.Errorf("%w (host state %s: the computer has no genesis on the host; bootstrap its chain, a re-pin does not apply)", ErrVerifierKeyNotPinned, check.Pin.State)
+	case selfdevprotocol.VerifierKeyInvalid:
+		return fmt.Errorf("%w (host state %s: the signer presents a key id that does not name its key; a re-pin does not apply)", ErrVerifierKeyNotPinned, check.Pin.State)
 	}
 	return nil
 }

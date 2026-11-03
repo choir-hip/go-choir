@@ -313,3 +313,72 @@ func TestVerifierKeyRepinRefusesWithoutAReceiptEvenInObserveMode(t *testing.T) {
 		t.Fatalf("re-pin of an unpinned computer = %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A disk restored from an older image presents the key the owner revoked at
+// the last re-pin. The owner's re-pin re-activates it: a new activation
+// record bound to the owner act, the pin is that key again, and a verifier
+// checkpoint signed by it passes the pin. Without an owner act it stays
+// refused (review of 9a465a7f2, DeepSeek #2: no one-way door).
+func TestVerifierKeyRepinReactivatesARevokedKeyOnlyByTheOwnersAct(t *testing.T) {
+	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	ctx := t.Context()
+	pinnedAt := time.Date(2026, 10, 26, 21, 28, 39, 0, time.UTC)
+	original, regenerated := newTestVerifierKey(t), newTestVerifierKey(t)
+	const computerID = "computer-drill-restore"
+	w.genesis(computerID, 100, pinnedAt)
+	w.pin(computerID, original, 50, pinnedAt)
+
+	// Lost disk: the owner re-pins the regenerated key; the original is revoked.
+	first := selfdevprotocol.VerifierKeyRepinRequest{ComputerID: computerID, OwnerID: "owner-a", KeyID: regenerated.id, PublicKey: regenerated.public, ReplacesKeyID: original.id, Reason: "lost disk"}
+	if rec := w.post(verifierKeyRepinRoute, first, true, w.mint(first, "owner-a")); rec.Code != http.StatusOK {
+		t.Fatalf("first re-pin = %d %s", rec.Code, rec.Body.String())
+	}
+	// Drill restore: the old image comes back and presents the original key.
+	if pin, _ := w.authority.VerifierKeyPreflight(ctx, selfdevprotocol.VerifierKeyPreflightRequest{ComputerID: computerID, KeyID: original.id, PublicKey: original.public}); pin.State != selfdevprotocol.VerifierKeyMismatch {
+		t.Fatalf("restored disk before the owner acts = %+v", pin)
+	}
+	back := selfdevprotocol.VerifierKeyRepinRequest{ComputerID: computerID, OwnerID: "owner-a", KeyID: original.id, PublicKey: original.public, ReplacesKeyID: regenerated.id, Reason: "drill restore brought the old disk back"}
+	if rec := w.post(verifierKeyRepinRoute, back, true, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("re-activation without an owner act = %d %s", rec.Code, rec.Body.String())
+	}
+	// A receipt for the regenerated key does not re-activate the original.
+	if rec := w.post(verifierKeyRepinRoute, back, true, w.mint(first, "owner-a")); rec.Code != http.StatusForbidden {
+		t.Fatalf("re-activation under another act's receipt = %d %s", rec.Code, rec.Body.String())
+	}
+	rec := w.post(verifierKeyRepinRoute, back, true, w.mint(back, "owner-a"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("owner re-activation = %d %s", rec.Code, rec.Body.String())
+	}
+	var response selfdevprotocol.VerifierKeyRepinResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Status != selfdevprotocol.VerifierKeyRepinned || response.PinReceipt.KindFields["reactivated"] != "true" || response.PinReceipt.KindFields["reason"] != back.Reason {
+		t.Fatalf("re-activation response = %+v", response)
+	}
+	// The checkpoint authority's pin lookup (checkpoints.go) now accepts the
+	// original key and refuses the regenerated one.
+	var activeKeyID string
+	var activeKey []byte
+	if err := w.store.db.QueryRowContext(ctx, `SELECT key_id,public_key FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND status='active'`, computerID).Scan(&activeKeyID, &activeKey); err != nil {
+		t.Fatal(err)
+	}
+	if activeKeyID != original.id || !ed25519.PublicKey(activeKey).Equal(original.key) {
+		t.Fatalf("active pin = %s", activeKeyID)
+	}
+	if pin, _ := w.authority.VerifierKeyPreflight(ctx, selfdevprotocol.VerifierKeyPreflightRequest{ComputerID: computerID, KeyID: original.id, PublicKey: original.public}); pin.State != selfdevprotocol.VerifierKeyMatch {
+		t.Fatalf("restored disk after the owner acts = %+v", pin)
+	}
+	if regen, err := w.store.ControlKey(ctx, selfdevprotocol.VerifierKeyDomain, computerID, regenerated.id); err != nil || regen.Status != "revoked" || regen.ReplacementKeyID != original.id {
+		t.Fatalf("regenerated key after re-activation = %+v, %v", regen, err)
+	}
+	// Every activation is its own record, bound to its owner act.
+	var activations int
+	if err := w.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM control_key_activations WHERE signer_domain='verifier-control' AND computer_id=? AND owner_act_receipt_digest<>''`, computerID).Scan(&activations); err != nil || activations != 2 {
+		t.Fatalf("activation records = %d, %v; want 2", activations, err)
+	}
+	var reactivated int
+	if err := w.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM control_key_activations WHERE computer_id=? AND key_id=? AND prior_status='revoked'`, computerID, original.id).Scan(&reactivated); err != nil || reactivated != 1 {
+		t.Fatalf("re-activation record = %d, %v", reactivated, err)
+	}
+}

@@ -38,6 +38,10 @@ type repinProxyEnv struct {
 	receipt string
 	repin   selfdevprotocol.VerifierKeyRepinRequest
 	state   string
+	// guestComputer is the computer_id the guest answers ("" is computer-a);
+	// guestStatus a status for its key read (0 is 200).
+	guestComputer string
+	guestStatus   int
 }
 
 func (e *repinProxyEnv) record(call string) {
@@ -63,7 +67,16 @@ func newRepinProxyEnv(t *testing.T, presented, pinned string, presentedPublic st
 			_, _ = w.Write([]byte(`{"computer_id":"computer-a","event_digest":"e"}`))
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "key_id": presented, "public_key": presentedPublic})
+		if env.guestStatus != 0 {
+			w.WriteHeader(env.guestStatus)
+			_, _ = w.Write([]byte(`{"error":"not found"}`))
+			return
+		}
+		answered := "computer-a"
+		if env.guestComputer != "" {
+			answered = env.guestComputer
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": answered, "key_id": presented, "public_key": presentedPublic})
 	}))
 	t.Cleanup(guest.Close)
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -197,5 +210,24 @@ func TestVerifierRepinIsTheOwnersActAndPinsTheKeyTheGuestPresents(t *testing.T) 
 		if state == selfdevprotocol.VerifierKeyUnpinned && rec.Code != http.StatusConflict {
 			t.Fatalf("unpinned computer = %d %s", rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// Review of 9a465a7f2: the guest's answer must name the computer (#4), and
+// an older guest release with no verifier-key route gets the owner's way
+// out, not a bare 404 (#5).
+func TestVerifierRepinRefusesAnotherComputersAnswerAndExplainsAnOldRelease(t *testing.T) {
+	public, _, _ := ed25519.GenerateKey(rand.Reader)
+	env := newRepinProxyEnv(t, selfdevprotocol.VerifierKeyIDFor(public), "verifier-control-22033e8312994d59", base64.RawStdEncoding.EncodeToString(public))
+	owner := env.secret(t, "computer:lifecycle", OwnerActsScope)
+	body := `{"reason":"lost disk"}`
+	env.guestComputer = "computer-b"
+	if rec := env.send(t, body, owner); rec.Code != http.StatusBadGateway || strings.Contains(env.joined(), "corpusd") {
+		t.Fatalf("another computer's answer = %d %s, calls %v", rec.Code, rec.Body.String(), env.joined())
+	}
+	env.guestComputer, env.guestStatus = "", http.StatusNotFound
+	rec := env.send(t, body, owner)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "predates the verifier re-pin") || !strings.Contains(rec.Body.String(), "self-dev abandon") || strings.Contains(env.joined(), "corpusd") {
+		t.Fatalf("old release = %d %s, calls %v", rec.Code, rec.Body.String(), env.joined())
 	}
 }

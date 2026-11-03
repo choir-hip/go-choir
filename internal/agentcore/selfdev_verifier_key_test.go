@@ -252,3 +252,34 @@ func TestRepinnedRecordVerifiesTheHostsReceiptAndNamesThisKey(t *testing.T) {
 		t.Fatal("a pin receipt for another computer was recorded")
 	}
 }
+
+// Review of 9a465a7f2, DeepSeek #3: a check in flight when the re-pin
+// invalidates the cache must not write its pre-re-pin mismatch afterwards.
+func TestVerifierKeyAnswerStartedBeforeAnInvalidationIsNotCached(t *testing.T) {
+	rt := &Runtime{}
+	key := newFakeVerifierKey(t, "")
+	asked, release := make(chan struct{}), make(chan struct{})
+	rt.verifierKeyPresenter = func(context.Context) (string, string, receiptsigner.KeyProvenance, error) {
+		return key.keyID, key.public, key.provenance, nil
+	}
+	rt.verifierKeyPreflighter = func(context.Context, string, string) (selfdevprotocol.VerifierKeyPin, error) {
+		close(asked)
+		<-release
+		return selfdevprotocol.VerifierKeyPin{ComputerID: "c", State: selfdevprotocol.VerifierKeyMismatch, PinnedKeyID: "old"}, nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = rt.checkVerifierKeyPin(context.Background(), 0)
+	}()
+	<-asked
+	rt.invalidateVerifierKeyPin()
+	close(release)
+	<-done
+	rt.verifierKeyPin.mu.Lock()
+	last := rt.verifierKeyPin.last
+	rt.verifierKeyPin.mu.Unlock()
+	if last != nil {
+		t.Fatalf("a pre-invalidation answer was cached: %+v", last.Pin)
+	}
+}

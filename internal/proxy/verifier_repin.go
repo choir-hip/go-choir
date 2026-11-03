@@ -28,6 +28,12 @@ import (
 
 const maxVerifierRepinReason = 500
 
+// verifierRepinOldRelease is the answer for a computer whose guest release
+// predates the verifier-key route (it answers 404).
+const verifierRepinOldRelease = "this computer's release predates the verifier re-pin (its guest has no verifier-key route), so the key it presents cannot be read. " +
+	"Update it first: abandon the held operation (choir self-dev abandon --computer X --operation OP --reason R) so the computer is idle, let the deploy refresh (or choir computer refresh) boot the current release, " +
+	"then run choir computer repin-verifier again and retry the change."
+
 func computerVerifierRepinID(path string) (string, bool) {
 	const prefix = "/api/computers/"
 	const suffix = "/verifier-key/repin"
@@ -92,16 +98,27 @@ func (h *Handler) HandleComputerVerifierRepin(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the computer's verifier key is unavailable"})
 		return
 	}
+	if status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
+		// A guest release from before the re-pin cannot present its key.
+		// No compatibility path: the owner updates the computer first.
+		writeJSON(w, http.StatusConflict, errorResponse{Error: verifierRepinOldRelease})
+		return
+	}
 	if status != http.StatusOK {
 		relayJSON(w, status, raw)
 		return
 	}
 	var presented struct {
-		KeyID     string `json:"key_id"`
-		PublicKey string `json:"public_key"`
+		ComputerID string `json:"computer_id"`
+		KeyID      string `json:"key_id"`
+		PublicKey  string `json:"public_key"`
 	}
 	if err := json.Unmarshal(raw, &presented); err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "malformed verifier key answer"})
+		return
+	}
+	if presented.ComputerID != computerID {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "the verifier key answer names another computer"})
 		return
 	}
 	if _, err := selfdevprotocol.DecodeVerifierKey(presented.KeyID, presented.PublicKey); err != nil {

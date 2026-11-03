@@ -72,6 +72,20 @@ CREATE TABLE IF NOT EXISTS control_key_history (
 );
 CREATE INDEX IF NOT EXISTS control_key_history_status_idx ON control_key_history (signer_domain, computer_id, status, activation_sequence);
 CREATE INDEX IF NOT EXISTS control_key_history_receipt_idx ON control_key_history (authorizing_receipt_digest);
+CREATE TABLE IF NOT EXISTS control_key_activations (
+  signer_domain VARCHAR(64) NOT NULL,
+  computer_id VARCHAR(128) NOT NULL DEFAULT '',
+  key_id VARCHAR(255) NOT NULL,
+  activation_sequence BIGINT NOT NULL,
+  activation_time TIMESTAMPTZ NOT NULL,
+  prior_status VARCHAR(32) NOT NULL,
+  replaces_key_id VARCHAR(255) NOT NULL,
+  authorizing_receipt_json TEXT NOT NULL,
+  authorizing_receipt_digest CHAR(64) NOT NULL,
+  owner_act_receipt_digest CHAR(64) NOT NULL,
+  PRIMARY KEY (authorizing_receipt_digest)
+);
+CREATE INDEX IF NOT EXISTS control_key_activations_key_idx ON control_key_activations (signer_domain, computer_id, key_id);
 CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   computer_id VARCHAR(128) NOT NULL,
   mode VARCHAR(32) NOT NULL,

@@ -130,7 +130,9 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 	}
 	if activeKeyID == keyID && ed25519.PublicKey(activeKey).Equal(presented) {
 		var receipt computerevent.Receipt
-		_ = json.Unmarshal([]byte(activeReceiptJSON), &receipt)
+		if err := json.Unmarshal([]byte(activeReceiptJSON), &receipt); err != nil || receipt.ReceiptID == "" {
+			return response, fmt.Errorf("verifier re-pin: the active pin's authorizing receipt does not decode: %v", err)
+		}
 		if err := recordOwnerAct(ctx, tx, verified, computerevent.ZeroHead, now); err != nil {
 			return response, err
 		}
@@ -145,13 +147,23 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 	if activeKeyID != strings.TrimSpace(request.ReplacesKeyID) {
 		return response, fmt.Errorf("%w: the active pin is %s, not %s", errVerifierRepinConflict, activeKeyID, strings.TrimSpace(request.ReplacesKeyID))
 	}
-	var prior int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=?`, computerID, keyID).Scan(&prior); err != nil {
+	// A key pinned before and revoked comes back when a disk is restored
+	// from an older image. Refusing it would be a one-way door; the owner's
+	// act re-activates it: the row returns to active (its first activation
+	// window is kept, so what it signed then still resolves), and the
+	// re-activation is a new activation record bound to the owner act.
+	var priorStatus string
+	var priorKey []byte
+	err = tx.QueryRowContext(ctx, `SELECT status,public_key FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=?`, computerID, keyID).Scan(&priorStatus, &priorKey)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		priorStatus = ""
+	case err != nil:
 		return response, err
+	case priorStatus != "revoked" || !ed25519.PublicKey(priorKey).Equal(presented):
+		return response, fmt.Errorf("%w: %s is recorded for %s as %s; only a revoked key with the same public key is re-activated", errVerifierRepinConflict, keyID, computerID, priorStatus)
 	}
-	if prior > 0 {
-		return response, fmt.Errorf("%w: %s was pinned for %s before and revoked; a revoked key is never pinned again", errVerifierRepinConflict, keyID, computerID)
-	}
+	reactivated := priorStatus == "revoked"
 	var head sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT MAX(sequence) FROM computer_event_append_receipts WHERE computer_id=?`, computerID).Scan(&head); err != nil {
 		return response, err
@@ -164,6 +176,7 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 		"computer_id": computerID, "key_id": keyID, "public_key": strings.TrimSpace(request.PublicKey),
 		"repair": selfdevprotocol.VerifierKeyRepinRepair, "reason": reason, "replaces_key_id": activeKeyID,
 		"activation_sequence": fmt.Sprint(cutover), "owner_act_receipt_digest": verified.Digest, "owner_user_id": verified.OwnerUserID,
+		"reactivated": fmt.Sprint(reactivated),
 	}, []computerevent.SigningKey{a.cas.signingKey}, now)
 	if err != nil {
 		return response, err
@@ -181,8 +194,21 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return response, fmt.Errorf("%w: the active pin changed", errVerifierRepinConflict)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO control_key_history (signer_domain,computer_id,key_id,public_key,status,activation_sequence,activation_time,first_invalid_sequence,first_invalid_time,replacement_key_id,authorizing_receipt_json,authorizing_receipt_digest,inserted_at) VALUES ('verifier-control',?,?,?,'active',?,?,NULL,NULL,NULL,?,?,?)`,
+	if reactivated {
+		result, err = tx.ExecContext(ctx, `UPDATE control_key_history SET status='active', first_invalid_sequence=NULL, first_invalid_time=NULL, replacement_key_id=NULL, authorizing_receipt_json=?, authorizing_receipt_digest=? WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=? AND status='revoked'`,
+			string(pinReceiptJSON), pinReceiptDigest, computerID, keyID)
+		if err != nil {
+			return response, err
+		}
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+			return response, fmt.Errorf("%w: the revoked key changed", errVerifierRepinConflict)
+		}
+	} else if _, err := tx.ExecContext(ctx, `INSERT INTO control_key_history (signer_domain,computer_id,key_id,public_key,status,activation_sequence,activation_time,first_invalid_sequence,first_invalid_time,replacement_key_id,authorizing_receipt_json,authorizing_receipt_digest,inserted_at) VALUES ('verifier-control',?,?,?,'active',?,?,NULL,NULL,NULL,?,?,?)`,
 		computerID, keyID, []byte(presented), cutover, now, string(pinReceiptJSON), pinReceiptDigest, now); err != nil {
+		return response, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO control_key_activations (signer_domain,computer_id,key_id,activation_sequence,activation_time,prior_status,replaces_key_id,authorizing_receipt_json,authorizing_receipt_digest,owner_act_receipt_digest) VALUES ('verifier-control',?,?,?,?,?,?,?,?,?)`,
+		computerID, keyID, cutover, now, map[bool]string{true: "revoked", false: "new"}[reactivated], activeKeyID, string(pinReceiptJSON), pinReceiptDigest, verified.Digest); err != nil {
 		return response, err
 	}
 	if err := recordOwnerAct(ctx, tx, verified, pinReceiptDigest, now); err != nil {
@@ -191,7 +217,7 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 	if err := tx.Commit(); err != nil {
 		return response, err
 	}
-	log.Printf("verifier key: owner %s re-pinned %s: %s replaces %s from sequence %d (reason: %s)", verified.OwnerUserID, computerID, keyID, activeKeyID, cutover, reason)
+	log.Printf("verifier key: owner %s re-pinned %s: %s replaces %s from sequence %d (reactivated=%t, reason: %q)", verified.OwnerUserID, computerID, keyID, activeKeyID, cutover, reactivated, reason)
 	response.Status = selfdevprotocol.VerifierKeyRepinned
 	response.Pin = selfdevprotocol.VerifierKeyPin{ComputerID: computerID, State: selfdevprotocol.VerifierKeyMatch, PresentedKeyID: keyID, PinnedKeyID: keyID, PinnedAt: now.UTC().Format(time.RFC3339Nano)}
 	response.PinReceipt = pinReceipt
