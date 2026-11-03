@@ -475,8 +475,12 @@ func ensureHead(ctx context.Context, repo string, cur current, t target) (headMo
 		return headMove{}, nil
 	}
 	var saved []Saved
-	if cur.haveHead {
-		commit, err := saveWorkTree(ctx, repo, cur.head, t.expected)
+	{
+		from := ""
+		if cur.haveHead {
+			from = cur.head
+		}
+		commit, err := saveWorkTree(ctx, repo, from, t.expected)
 		if err != nil {
 			return headMove{}, fmt.Errorf("save the work tree before the reset: %w", err)
 		}
@@ -485,7 +489,7 @@ func ensureHead(ctx context.Context, repo string, cur current, t target) (headMo
 			if err != nil {
 				return headMove{}, err
 			}
-			saved = append(saved, Saved{Ref: RefSavedPrefix + commit, Commit: commit, Kind: SavedDirty, From: cur.head, To: t.expected, Created: created})
+			saved = append(saved, Saved{Ref: RefSavedPrefix + commit, Commit: commit, Kind: SavedDirty, From: from, To: t.expected, Created: created})
 		}
 		if foreign {
 			created, err := createSavedRef(ctx, repo, cur.head)

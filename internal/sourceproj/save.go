@@ -25,7 +25,18 @@ import (
 // a function of its tree and head (fixed identity, head's committer date), so
 // the same dirt saves to the same commit.
 func saveWorkTree(ctx context.Context, repo, head, expected string) (string, error) {
-	headTree, err := git(ctx, repo, nil, nil, "rev-parse", head+"^{tree}")
+	// An unborn HEAD (a repository with no commit yet) has nothing tracked to
+	// lose, but a reset still overwrites the files at the paths expected
+	// tracks: they are saved in a commit with no parent.
+	base := head
+	if base == "" {
+		empty, err := git(ctx, repo, nil, []byte{}, "hash-object", "-t", "tree", "--stdin")
+		if err != nil {
+			return "", err
+		}
+		base = empty
+	}
+	headTree, err := git(ctx, repo, nil, nil, "rev-parse", base+"^{tree}")
 	if err != nil {
 		return "", err
 	}
@@ -37,14 +48,14 @@ func saveWorkTree(ctx context.Context, repo, head, expected string) (string, err
 			if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-			if _, err := git(ctx, repo, env, nil, "read-tree", head); err != nil {
+			if _, err := git(ctx, repo, env, nil, "read-tree", base); err != nil {
 				return err
 			}
 		}
-		if _, err := git(ctx, repo, env, nil, "add", "-u", "--", "."); err != nil {
+		if _, err := git(ctx, repo, env, nil, "add", "-u"); err != nil { // the whole tree (git 2 and later)
 			return err
 		}
-		clobbered, err := untrackedInTheWay(ctx, repo, env, head, expected)
+		clobbered, err := untrackedInTheWay(ctx, repo, env, base, expected)
 		if err != nil {
 			return err
 		}
@@ -74,17 +85,23 @@ func saveWorkTree(ctx context.Context, repo, head, expected string) (string, err
 	if err != nil || tree == headTree {
 		return "", err
 	}
-	when, err := git(ctx, repo, nil, nil, "log", "-1", "--format=%ct", head)
-	if err != nil {
-		return "", err
+	when := "1000000000" // a fixed date git parses as raw (a small number is not)
+	if head != "" {
+		if when, err = git(ctx, repo, nil, nil, "log", "-1", "--format=%ct", head); err != nil {
+			return "", err
+		}
 	}
 	date := strings.TrimSpace(when) + " +0000"
 	env := []string{
 		"GIT_AUTHOR_NAME=Choir Projection", "GIT_AUTHOR_EMAIL=projection@choir.local", "GIT_AUTHOR_DATE=" + date,
 		"GIT_COMMITTER_NAME=Choir Projection", "GIT_COMMITTER_EMAIL=projection@choir.local", "GIT_COMMITTER_DATE=" + date,
 	}
-	msg := "choir: saved before the projection reset\n\nChoir-Saved-From: " + head + "\n"
-	out, err := git(ctx, repo, env, []byte(msg), "-c", "commit.gpgsign=false", "commit-tree", tree, "-p", head, "-F", "-")
+	msg := "choir: saved before the projection reset\n\nChoir-Saved-From: " + firstNonEmptyString(head, "(unborn)") + "\n"
+	args := []string{"-c", "commit.gpgsign=false", "commit-tree", tree}
+	if head != "" {
+		args = append(args, "-p", head)
+	}
+	out, err := git(ctx, repo, env, []byte(msg), append(args, "-F", "-")...)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +112,8 @@ func saveWorkTree(ctx context.Context, repo, head, expected string) (string, err
 }
 
 // untrackedInTheWay lists the paths a reset to expected would overwrite that
-// the scratch index does not track: a path expected adds over head that
+// the scratch index does not track: a path expected adds over head (a commit
+// or a tree) that
 // exists in the work tree, or an ancestor of one that is a file there.
 func untrackedInTheWay(ctx context.Context, repo string, env []string, head, expected string) ([]string, error) {
 	raw, err := gitRaw(ctx, repo, nil, nil, "diff-tree", "-r", "--no-renames", "--name-only", "-z", "--diff-filter=A", head, expected)
@@ -146,6 +164,13 @@ func untrackedInTheWay(ctx context.Context, repo string, env []string, head, exp
 		}
 	}
 	return out, nil
+}
+
+func firstNonEmptyString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func copyFile(from, to string) error {

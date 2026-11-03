@@ -304,3 +304,28 @@ func TestAGraftEqualToTheBootedBaseIsUpstreamed(t *testing.T) {
 		t.Fatalf("11: %s %v %q %v", graft, ok, why, err)
 	}
 }
+
+// An unborn HEAD: files a reset to the base would overwrite are saved in a
+// commit with no parent.
+func TestAnUnbornHeadSavesWhatTheResetOverwrites(t *testing.T) {
+	src, base := baseRepo(t)
+	repo := t.TempDir()
+	tgit(t, repo, "init", "-q")
+	tgit(t, repo, "fetch", "-q", src, base+":refs/remotes/seed/base")
+	write(t, repo, "frontend/src/a.txt", "written before any commit\n")
+	log := &saveLog{}
+	res := reconcile(t, Input{Repo: repo, BootedBase: base, OnSave: log.hook})
+	if res.State != StateBase || headOf(t, repo) != base {
+		t.Fatalf("%+v", res)
+	}
+	saved := savedOf(t, res, SavedDirty)
+	if got := show(t, repo, saved.Commit, "frontend/src/a.txt"); got != "written before any commit" {
+		t.Fatalf("the overwritten file is not saved: %q", got)
+	}
+	if out := tgit(t, repo, "rev-list", "--parents", "-n", "1", saved.Commit); strings.Contains(out, " ") {
+		t.Fatalf("an unborn HEAD's save has no parent: %q", out)
+	}
+	if len(log.calls) != 1 {
+		t.Fatalf("the hook: %+v", log.calls)
+	}
+}
