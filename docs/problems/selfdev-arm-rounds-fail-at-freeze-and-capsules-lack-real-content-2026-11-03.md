@@ -159,6 +159,20 @@ the first turn emitted no control or emitted one that was dropped is a hypothesi
 the lifecycle events show only the turn and no assignment. Workaround: every FP0 revision names the forward
 explicitly and carries the whole request (which also answers Problem 5).
 
+Checked against the cells, 06:31Z (Sonnet trace read of luna e998f5ca and deepseek 8048fb68): **confirmed, three
+times**. In each dropped turn (luna 05:52:46Z and 06:20:29Z, deepseek 06:27:24Z) the committing cell called only
+choir.Write; its output carries `receipts:["rlm:texture_turn:0"]` and no `rlm:cast:N`. Every forwarding turn
+(luna 06:07:53Z, deepseek 05:28:50Z) has `choir.Cast("management", ...)` in the cell and an `rlm:cast:0` receipt,
+with the assignment 8-9 s later. In two dropped turns the model had just printed `choir.Help("Cast")`; in luna's
+06:20:29Z turn the commit reason says "the short cast with the owner's revision is sent", which no cell did.
+Nothing in the runtime requires a Cast (or a stated reason for none) when an owner revision asks for work. Even an
+explicit "forward this to management now" in the revision does not make the cell call it (06:18Z and 06:25Z
+revisions both said so). Hypothesis on why: the model treats a revision as an amendment to the document and
+completes the turn on the Write. Fix direction (orange, Texture turn contract): a turn woken by an owner revision
+on a trajectory with no live assignment must commit a Cast, an Ask, or a stated refusal; a commit reason that
+claims a send must match an rlm:cast receipt. Workaround in use: a one-line follow-up revision that names
+choir.Cast and the owner_revision id.
+
 ## Problem 9: engineering reads only the first 16 KiB of Texture's request, while Texture may carry 64 KiB
 
 Luna arm, assignment-24a775b85a245c31ad635d9f (06:08Z). FP0's self-contained resend (15,064 bytes, written to
@@ -176,3 +190,23 @@ pointing at the repo spec files).
 Fix direction (orange): one cap for the whole carry (Texture refuses or splits a Cast its engineering hop
 would cut), or raise the engineering cap to Texture's. Workaround: FP0 revisions stay under about 8 KB and point
 at the spec in the source tree (projection is on, so the spec is there).
+
+## Problem 10: stack_base_moved after a backward boot leaves an applied arm unable to build, and no rebase notice drives it
+
+Claude arm (a875023a). Round 3 (selfdev-40faf6ee) applied at 05:35Z on a stack based on 4036f0c37a84. At the
+06:07:49Z boot the guest logged: "source projection (boot): stack_base_moved base=4036f0c37a84
+head=ff9070317d9a booted=2795b8ee6881 op=selfdev-40faf6ee056fec39eb534c07226ffb95 changed=false repaired=false
+diverged=true ... that commit is not in the guest source repository, so the stack cannot be shown to be
+upstreamed"; 06:08:01Z "source base fetch (attempt 1): fetched commit=2795b8ee6881". The computer booted an
+older platform than its stack's base (2795b8ee is the pre-walk platform; staging serves fe981c3dd), so the base
+moved backward. FP0's round-4 revision (06:13Z) was refused at engineering admission twice on the base mismatch
+before any capsule opened (Texture 06:19:22Z). Texture asked management to rebase (06:19:08Z); management did not
+Cast: "the request packet lacks the required exact rebase_notice identifier ... I did not cast engineering because
+that cast would be refused without the exact notice", and found no notice in its inbox and no read route for one
+(06:23:36Z). The U4 timer (internal/agentcore/rebase_notice.go) should mint a notice to the root after a 5-minute
+stay-up (about 06:12:49Z); none reached management by 06:23Z.
+Hypothesis (not confirmed): U4 mints no notice when the stack diverged (the booted base is behind the stack's base,
+"cannot be shown to be upstreamed"), so the arm waits until the ring walk boots a platform that contains
+4036f0c3. Status: claude parked; FP0 does not invent a notice id or roll back the applied round.
+Fix direction (red, source projection): a backward boot either mints a notice the root can carry, or admission
+builds on the computer's effective tree (base plus applied stack) instead of refusing.

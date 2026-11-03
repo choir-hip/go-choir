@@ -74,6 +74,23 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   validation, includes out-of-scope artifacts, and its theme test fails"). Problem 9. 06:11:58Z Texture rewrote
   the request to fit (revision 307df8dc, the repo spec files as the feature list).
 
+### Round 4
+
+- 06:18:13Z owner revision d85cbcd5 (4.6 KB, under the 16 KiB cut): Chromium proven, spec read from the source
+  tree, package-only scope with "import these from app-sdk once it has them; do not edit app-sdk.ts", no partial
+  Freeze, theme test scoped to the package, the twelve shots.
+- 06:20:29Z Texture turn wrote the document only (no choir.Cast in the cell; its reason claims "the short cast
+  ... is sent"). Problem 8, confirmed from the cells.
+- 06:29:58Z one-line nudge naming choir.Cast and owner_revision d85cbcd5. 06:30:50Z turn; 06:32:55Z management
+  Cast (rlm:cast:1) with the round-4 revision attached; assignment-189be0c8cb0e6eee8 bound 06:32:57Z.
+- 06:33:40Z engineering completed "blocked" after 45 s, no Freeze: "Chromium invocation returned exit code -1
+  with no output; carried patch cannot apply cleanly (app-sdk conflict and package files already exist), and
+  workspace has no Git repository, preventing scope/diff proof." It had run `chromium --version` through
+  choir.Exec (the direct launch that dies on SIGTRAP) rather than the Playwright launch that worked at 06:09:40Z,
+  and re-applied a carried patch the platform had already applied. Trajectory status: failed.
+- Round 5 written (scratch luna/request-r5.md, 5.5 KB, new document): answers each of the three reasons. It waits
+  for a build slot (pool r2 and deepseek r4 hold the two).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -81,3 +98,6 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 1 | 04:34:13 | 0.4 | 0.0 | 0.3 (gave up, no Freeze) | - | - | - | blocked |
 | 2 | 05:32:23 | 4.3 | 0.0 | 1.3 | 1.8 | - | - | judge rejected |
 | 2b (self re-cast) | 05:40:43 | 0.6 | 0.0 | 4.7 | 3.0 | - | - | judge rejected |
+| 3 (05:51 note, no Cast) | 05:51:15 | none (Problem 8) | - | - | - | - | - | resent |
+| 3 resent | 06:06:34 | 1.5 | 0.03 | 3.5 (cut at 16 KiB) | 1.2 | - | - | judge rejected |
+| 4 | 06:18:13 | 14.7 (Problem 8; nudge at 06:29:58) | 0.03 | 0.7 (Complete blocked, no Freeze) | - | - | - | blocked |
