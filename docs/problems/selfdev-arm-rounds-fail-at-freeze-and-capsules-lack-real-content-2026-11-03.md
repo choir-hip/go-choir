@@ -295,3 +295,17 @@ Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and '
 apparently a note such as "(owner, 2026-11-03)" carried into the value. Management calls on the same arm log
 reasoning=high and succeed, so only the engineering desk's setting is malformed. Fix: set the engineering
 effort to the bare value "high" (and validate effort values against the provider's list when set).
+
+## Problem 16: pool's rebase notice reached management under a mangled id, admission refused both forms, and pool cannot build again
+
+Pool minted rebase-notice:selfdev-c4ac7712467862d5b7cd527ed6287034:eb1fb6408ab8...:1 at 10:45:39Z (deployed proof
+doc). Texture dispatched management at 10:45:41Z. Management's report (pool trajectory 5dc6a6ff, 10:50:16Z): "The
+request names rebase-notice:selfdev-rebase:selfdev-c4ac7712467862d5b7cd527ed6287034:eb1fb6408ab8437ff01053b93c0681818d0c2479:1,
+and engineering admission refuses that string as not a rebase notice id; the short id quoted in the same request is
+refused instead for not being carried by the request. Either version is refused, so no rebase assignment opened".
+The id gained a "selfdev-rebase:" segment between the notice's mint and the Cast (claude's and deepseek's notices,
+minted 10:52Z, reached engineering). With the stack not rebased, pool's next request (Slides, 11:29:36Z) stops at
+Texture: "cannot proceed until a live root or owner initiates the required platform rebase; no engineering work
+is in flight" (11:31:03Z). Whether U4 re-mints after its 30-minute answer window is not yet seen.
+Fix direction: carry the notice id verbatim from the notice record into the Cast (or have admission resolve the
+notice by operation and base), and let a refused rebase re-mint promptly.
