@@ -31,7 +31,12 @@ It also fixes RV-03 (residual register 2026-10-26).
    scratch index only); skip-worktree entries are left alone, since a reset
    does not write them. Untracked files the target does not track are left
    alone and not saved. Tests. The save is one commit of the final state: a
-   file staged at one version and edited to another saves the edit.
+   file staged at one version and edited to another saves the edit. An edited
+   skip-worktree file makes the reset fail loudly ("not uptodate"), so
+   reconcile refuses Casts (`source_projection_failed`) until the owner
+   clears the bit: loud, nothing lost. A nested repository under a clobbered
+   path is saved as a gitlink to its HEAD, not its content; the reset keeps a
+   non-empty untracked directory anyway (named residual).
 3. **A foreign HEAD becomes unreachable.** A commit made on the computer
    branch by something else, or the creation commit on the first
    projection, is moved away from. Guard: a HEAD no `refs/choir/` ref names
