@@ -55,6 +55,51 @@ settled record is the engineering digest. The ring controller's history
 must therefore record, per ring, what a settlement needs: the release, the
 prediction ids it carries, the metrics read, and the outcome.
 
+## The bridge, specified (lane F, 2026-11-03)
+
+Two kinds of change carry predictions, and they settle in different places.
+
+**A self-development candidate** (made on one computer, published to the
+Library). Engineering's rule precommits (`types/commitment_rules.go`) are
+already staged at Cast and carried in the Library release record
+(`release.Precommitment`: record id, kind, question, p(yes) in thousandths,
+settled, resolve record id). Four rule kinds are added, each settled by an
+event the computer already records, so the runtime writes the resolve
+record and no scorer judges:
+- `judge_accepts`: the judge's verdict on this operation's candidate;
+- `owner_approves`: the approve or reject act on the operation (FP0's act
+  on the test arms counts, and is marked as delegated so it can be sliced
+  out);
+- `approved_within_rounds` (N): the request reaches an approved candidate
+  within N Casts;
+- `adopted_elsewhere` (days): another computer installs the Library
+  release within the window (settles late; unresolved at expiry is "no").
+Management's Cast makes `verify_pass`, `judge_accepts` and
+`owner_approves` mandatory (a Cast without them is refused with the
+reason), so every round predicts. These records feed the engineering
+digest on that computer; `calibrationDeskOfThread` gains engineering.
+
+**A platform release** (a commit range on main that walks the rings). The
+author, a builder agent or the orchestrator, states its predictions in the
+commit message as `Predicts:` trailers, one per claim:
+`Predicts: ring_clean R3 p=0.9` (the walk passes ring R3 without a breach),
+`Predicts: rollback_at R0 p=0.05`, `Predicts: metric <name> <op> <value> p=0.7`
+for a named health metric the soak reads. CI collects the trailers of the
+deploy's commit range into the release manifest; vmctl copies their ids
+into the walk's `prediction_ids`; the ring-closed, breach and walk-complete
+lines carry the readings that settle them. A settler (a script over the
+history, phase 1) writes one resolve line per prediction beside the
+history. These are platform authors' records, not a computer desk's: they
+do not enter any computer's digest. They are scored per author kind and
+model, and reported in the morning letter and the ring history, so the
+orchestrator's own calibration about deploys becomes visible.
+
+**What is deferred.** Calibration weighting how fast a release walks (a
+well-calibrated author's release soaking shorter) waits until the settled
+record exists and has n; it is named here so the history keeps what it
+needs. The within-desk A/B and the delivery, content, configuration and
+cost questions above run on the self-development records only.
+
 ## What the repo already has
 
 - **The idea is on the roadmap.** `roadmap-2026-10-31.md` stage 3: the desk
