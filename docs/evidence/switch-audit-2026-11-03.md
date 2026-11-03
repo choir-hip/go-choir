@@ -724,3 +724,22 @@ vm_snapshot_release_retain (all, on since 2026-10-26), vmctl_jailer (paper inclu
 CI deadline: on 2026-11-04 `check-switch-registry` errors for host_fetch_vms, choir_capsule_mirrors, proxy_expand_requesters, gateway_model_scheduler unless each is set on at R0 or deleted (FACT, script lines 307-313).
 
 Unexamined by me (stated so it is not mistaken for a pass): the guest-side readers of checkpoint cadence and event table beyond their headers; guest_balloon.go's use of balloon stats; scheduleModelCall's deadline handling; the exact content of the registry rows for layered and for DNS history after D32; whether VM ids are stable across cold boots for the host-fetch list.
+
+## Backlog walk with the owner (2026-11-03)
+
+Each decided switch is deleted; "on" means the code runs everywhere.
+
+**Group 1, Texture.**
+- `texture.owner_directions`: on everywhere, the paper included.
+- `texture.owner_act_wakes`: on everywhere; Texture wakes are debounced
+  (owner: "we should already be debouncing. but shouldnt add more than a few
+  seconds latency for users"), so a progress-report wake and an owner-act
+  wake within the window run once; the window is a few seconds at most.
+  Check whether a debounce already exists before adding one.
+- `texture.evidence_embeds`: on with screens-as-files when that branch lands;
+  RV-04 (an old client dropping embeds) fixed in the same change.
+- `texture.root_desk`: on everywhere after the excerpt ordering (F4/F5,
+  2026-10-25) is re-proved on d@e; on the paper, published-story documents
+  feed the Master as one batched entry an hour instead of a refresh per
+  commit.
+- `texture.hold_trajectory`: on everywhere (earlier ruling).
