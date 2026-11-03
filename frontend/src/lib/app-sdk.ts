@@ -24,7 +24,7 @@ export {
 } from './media-utils.js';
 
 // Live events (the synced computer state channel).
-export { addLiveEventListener, currentDeviceId, liveEventKind, liveEventPayload } from './live-events.js';
+export { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
 
 // Auth: the renewing fetch every /api call goes through, and its error when
 // the session cannot be renewed.
