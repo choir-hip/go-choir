@@ -1837,7 +1837,13 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	if err != nil {
 		return false, err
 	}
-	report := types.EngineeringAssignmentReport{Result: result, Verdict: verdict, Summary: summary,
+	// The screens the Freeze saved ride on the Report from the platform:
+	// management's judge reads the Report, not the Freeze result.
+	reportedSummary := summary
+	if note := r.toolCtx.frozenScreensNote(ctx, metadataStringValue(r.rec.Metadata, "assignment_id")); note != "" {
+		reportedSummary += "\n\n" + note
+	}
+	report := types.EngineeringAssignmentReport{Result: result, Verdict: verdict, Summary: reportedSummary,
 		EvidenceRefs: evidenceRefs, Commands: recordedCommandsFromReceipts(receipts), Outputs: recordedOutputsFromReceipts(receipts)}
 	// Delegate use is observability only (the delegate-first rule): derived
 	// from this attempt's cells, nil where the delegate is unavailable.

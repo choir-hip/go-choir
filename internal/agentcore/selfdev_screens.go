@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/ownerfiles"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -259,4 +260,40 @@ func (rt *Runtime) CandidateScreens(ctx context.Context, computerID, operationID
 		})
 	}
 	return out, nil
+}
+
+// platformScreensHeading labels the screens list the platform appends to an
+// assignment's Report.
+const platformScreensHeading = "Screens saved at Freeze (platform-attached)"
+
+// frozenScreensNote renders the screens the assignment's Freeze saved, read
+// from the operation's bound bundle, for the Report management and Texture
+// read. The engineer cannot forget or forge them: the rows come from the
+// bundle, never from the Complete summary. It returns "" when the assignment
+// has no frozen operation or its Freeze carried no screens.
+func (toolCtx *CapsuleToolCtx) frozenScreensNote(ctx context.Context, assignmentID string) string {
+	if toolCtx == nil || toolCtx.OperationStore == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || strings.TrimSpace(assignmentID) == "" {
+		return ""
+	}
+	operation, found, err := toolCtx.OperationStore.GetByIdempotency(ctx, toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if err != nil || !found || operation.BundleDigest == "" || !computerevent.IsSHA256(operation.BundleDigest) {
+		return ""
+	}
+	bundle, _, err := readBoundSelfDevelopmentBundle(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest), operation)
+	if err != nil || len(bundle.Screens) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(platformScreensHeading + ":")
+	for _, s := range bundle.Screens {
+		fmt.Fprintf(&b, "\n- %s: artifact:sha256:%s (%dx%d", s.Name, s.SHA256, s.Width, s.Height)
+		if s.Blank {
+			b.WriteString(", blank")
+		}
+		if !screenFileHolds(toolCtx.FilesRoot, operation.OperationID, s) {
+			b.WriteString(", not saved")
+		}
+		b.WriteString(")")
+	}
+	return b.String()
 }
