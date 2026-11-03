@@ -10,6 +10,7 @@ import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
   openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop,
+  loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge,
 } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
@@ -94,6 +95,66 @@ assert.deepEqual(themeAnswer('liquid-metal', 'GET', '/api/preferences/theme'), {
 assert.equal(themeAnswer('liquid-metal', 'PUT', '/api/preferences/theme'), null);
 assert.equal(themeAnswer('liquid-metal', 'GET', '/api/preferences/other'), null);
 assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
+
+// The catalog fixture (docs/problems/capsule-library-catalog-404-2026-11-03.md):
+// /api/catalog/* is the proxy's, so a capsule answers it from the fixture the
+// Go test writes from corpusd's handler, labelled, never from the autoputer.
+{
+  const fx = loadCatalogFixture();
+  assert.equal(fx.fixture, 'capsule-catalog');
+  assert.match(fx.note, /^Not the live catalog/);
+  assert.equal(CATALOG_FIXTURE_HEADER, 'x-choir-fixture');
+  // Not a catalog path, or no fixture: not ours (the autoputer or a route answers).
+  assert.equal(catalogAnswer(fx, 'GET', '/api/files', ''), null);
+  assert.equal(catalogAnswer(fx, 'GET', '/api/catalogue', ''), null);
+  assert.equal(catalogAnswer(null, 'GET', '/api/catalog/packages', ''), null);
+  // The list: the fixture's answer, signed in as choir-shot's owner.
+  const list = catalogAnswer(fx, 'GET', '/api/catalog/packages', '');
+  assert.equal(list.status, 200);
+  assert.equal(list.body.reader, 'owner');
+  assert.ok(list.body.packages.length >= 2);
+  assert.equal(list.body.count, list.body.packages.length);
+  // ?q= filters by name, as corpusd does (substring, case-insensitive).
+  assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/packages', '?q=READ').body.count, list.body.packages.length);
+  const none = catalogAnswer(fx, 'GET', '/api/catalog/packages', '?q=nothing-by-this-name');
+  assert.deepEqual([none.status, none.body.count, none.body.packages], [200, 0, []]);
+  // History: the reader's own track by default, another's by ?track=.
+  const own = catalogAnswer(fx, 'GET', '/api/catalog/packages/reader/releases', '');
+  assert.equal(own.status, 200);
+  assert.equal(own.body.track, 'owner');
+  assert.ok(own.body.releases.length >= 2);
+  const theirs = catalogAnswer(fx, 'GET', '/api/catalog/packages/reader/releases', '?track=owner-b');
+  assert.equal(theirs.body.track, 'owner-b');
+  assert.equal(theirs.body.releases.length, 1);
+  // A package the fixture lacks: an empty history, as corpusd answers (200).
+  const empty = catalogAnswer(fx, 'GET', '/api/catalog/packages/library/releases', '');
+  assert.deepEqual([empty.status, empty.body.package, empty.body.track, empty.body.releases, empty.body.count], [200, 'library', 'owner', [], 0]);
+  // One release: by id (any case); an unknown or malformed id is 404 as at the proxy.
+  const head = list.body.packages[0].head_release_id;
+  const one = catalogAnswer(fx, 'GET', `/api/catalog/releases/${head.toUpperCase()}`, '');
+  assert.equal(one.status, 200);
+  assert.equal(one.body.release_id, head);
+  assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${'0'.repeat(64)}`, '').status, 404);
+  assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/releases/not-an-id', '').status, 404);
+  assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/elsewhere', '').status, 404);
+  // Every head the list names resolves, so a Library can open each one.
+  for (const p of list.body.packages) assert.equal(catalogAnswer(fx, 'GET', `/api/catalog/releases/${p.head_release_id}`, '').status, 200);
+  // A listing act is the owner's on the real computer: refused, by reason.
+  const act = catalogAnswer(fx, 'PATCH', `/api/catalog/records/${head}/listing`, '');
+  assert.deepEqual([act.status, act.body.reason], [409, 'capsule_fixture']);
+  // Any other write is 405, as at the proxy.
+  assert.equal(catalogAnswer(fx, 'POST', '/api/catalog/packages', '').status, 405);
+  // The label a shot carries when its page read the fixture.
+  assert.match(CATALOG_FIXTURE_BADGE, /fixture/i);
+  const appended = [];
+  const el = { dataset: {}, style: {}, set textContent(v) { this.text = v; } };
+  vm.runInNewContext(`(${fixtureBadge})(${JSON.stringify(CATALOG_FIXTURE_BADGE)})`, {
+    document: { createElement: () => el, body: { appendChild: (n) => appended.push(n) } },
+  });
+  assert.equal(appended.length, 1);
+  assert.equal(el.text, CATALOG_FIXTURE_BADGE);
+  assert.equal(el.dataset.choirShotFixture, 'capsule-catalog');
+}
 
 // Contrast: colors, the background walk, ratios and pixel fallback.
 assert.deepEqual(parseColor('rgba(10, 20, 30, 0.5)'), { r: 10, g: 20, b: 30, a: 0.5 });

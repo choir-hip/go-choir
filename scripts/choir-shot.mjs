@@ -92,6 +92,19 @@
 // answers GET /auth/session as that owner; a shot's routes() (context.route)
 // still wins for any URL it handles. --no-computer keeps the mocked backend.
 //
+// The package catalog: /api/catalog/* is the platform proxy's (it reads corpusd
+// for the owner it authenticated), and no capsule reaches it, so the autoputer
+// here answers it 404 (docs/problems/capsule-library-catalog-404-2026-11-03.md).
+// The helper's own server answers GET /api/catalog/* from
+// scripts/fixtures/capsule-catalog.json, written from corpusd's handler by
+// internal/platform/capsule_catalog_fixture_test.go, with the header
+// x-choir-fixture: capsule-catalog. A shot whose page read it carries a visible
+// "catalog fixture" badge and logs a line saying so. A listing act (PATCH)
+// answers 409 capsule_fixture, any other write 405 as at the proxy; history
+// paging (limit, before_seq) is not modelled; install (POST .../self-development/adoptions)
+// is the owner's act on the real computer, and the autoputer here refuses it.
+// A shot's routes() still wins for any catalog URL it handles.
+//
 // Run it as a capsule job (choir.Start), not a choir.Exec: a first build and a
 // browser start outlast 30 s. It does not touch /workspace/platform (the build runs in a private copy under /tmp).
 import { spawn, spawnSync } from 'node:child_process';
@@ -101,7 +114,7 @@ import http from 'node:http';
 import net from 'node:net';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const PRESETS = {
   desktop: { width: 1280, height: 800 },
@@ -450,6 +463,67 @@ export function pickAutoputerBinary(exists = fs.existsSync) {
   return AUTOPUTER_BINARIES.find((b) => exists(b)) || '';
 }
 
+// CATALOG_FIXTURE_PATH is the catalog fixture beside this script.
+export const CATALOG_FIXTURE_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'capsule-catalog.json');
+export const CATALOG_FIXTURE_HEADER = 'x-choir-fixture';
+export const CATALOG_FIXTURE_BADGE = 'Catalog fixture, not the live catalog (scripts/fixtures/capsule-catalog.json)';
+
+// loadCatalogFixture reads the fixture; null when it is missing or not one.
+export function loadCatalogFixture(file = CATALOG_FIXTURE_PATH) {
+  try {
+    const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return fx && fx.fixture === 'capsule-catalog' && fx.packages && Array.isArray(fx.packages.packages) && Array.isArray(fx.history) && Array.isArray(fx.releases) ? fx : null;
+  } catch {
+    return null;
+  }
+}
+
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const PACKAGE_NAME_RE = /^[a-z][a-z0-9-]{1,31}$/; // objectgraph.ValidPackageName's grammar (not its reserved names)
+
+// catalogAnswer is the fixture's answer to a /api/catalog request, as the proxy
+// relays corpusd's: { status, body }, or null for a path that is not the
+// catalog's (or no fixture). search is the URL's query string.
+export function catalogAnswer(fx, method, pathname, search) {
+  if (!fx || !(pathname === '/api/catalog' || pathname.startsWith('/api/catalog/'))) return null;
+  const parts = pathname.replace(/^\/api\/catalog\/?/, '').split('/').filter(Boolean);
+  if (method === 'PATCH' && parts.length === 3 && parts[0] === 'records' && parts[2] === 'listing') {
+    return { status: 409, body: { error: 'the catalog in a capsule is a fixture; a listing act is the owner\'s on the real computer', reason: 'capsule_fixture' } };
+  }
+  if (method !== 'GET') return { status: 405, body: { error: 'method not allowed' } };
+  const q = new URLSearchParams(search || '');
+  const reader = fx.packages.reader;
+  if (parts.length === 1 && parts[0] === 'packages') {
+    const needle = (q.get('q') || '').trim().toLowerCase();
+    const packages = fx.packages.packages.filter((p) => !needle || p.package.includes(needle));
+    return { status: 200, body: { ...fx.packages, packages, count: packages.length } };
+  }
+  if (parts.length === 3 && parts[0] === 'packages' && parts[2] === 'releases' && PACKAGE_NAME_RE.test(parts[1])) {
+    const track = (q.get('track') || '').trim() || reader;
+    const found = fx.history.find((h) => h.package === parts[1] && h.track === track);
+    return { status: 200, body: found || { package: parts[1], track, releases: [], count: 0 } };
+  }
+  if (parts.length === 2 && parts[0] === 'releases' && SHA256_RE.test(parts[1].toLowerCase())) {
+    const found = fx.releases.find((r) => r.release_id === parts[1].toLowerCase());
+    return found ? { status: 200, body: found } : { status: 404, body: { error: 'package release not published' } };
+  }
+  return { status: 404, body: { error: 'not found' } };
+}
+
+// fixtureBadge runs in the page: a fixed label on any shot that read the
+// fixture, so the screen says what it shows.
+export function fixtureBadge(text) {
+  const el = document.createElement('div');
+  el.dataset.choirShotFixture = 'capsule-catalog';
+  el.textContent = text;
+  Object.assign(el.style, {
+    position: 'fixed', right: '8px', bottom: '8px', zIndex: '2147483647', pointerEvents: 'none',
+    font: '600 12px/1.3 system-ui, sans-serif', color: '#111', background: '#ffd84d', border: '1px solid #111',
+    borderRadius: '4px', padding: '3px 7px',
+  });
+  document.body.appendChild(el);
+}
+
 // isProxied is the rule for what the served frontend sends to the autoputer:
 // every /api/ URL. /auth/session is answered locally; other /auth URLs 404.
 export function isProxied(pathname) {
@@ -619,11 +693,17 @@ function tunnel(req, socket, head) {
   socket.on('close', () => up.destroy());
 }
 
-function serve(dist, computer = false, themeState = { preset: null }) {
+function serve(dist, computer = false, themeState = { preset: null }, catalog = null) {
   const server = http.createServer((req, res) => {
-    const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const url = new URL(req.url, 'http://x');
+    const u = decodeURIComponent(url.pathname);
     const themed = themeAnswer(themeState.preset, req.method, u);
     if (themed) { res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(themed)); return; }
+    const listed = catalogAnswer(catalog, req.method, u, url.search);
+    if (listed) {
+      res.writeHead(listed.status, { 'content-type': 'application/json', 'cache-control': 'no-store', [CATALOG_FIXTURE_HEADER]: 'capsule-catalog' }).end(JSON.stringify(listed.body));
+      return;
+    }
     if (computer && isProxied(u)) return proxy(req, res);
     if (computer && u === '/auth/session') {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ authenticated: true, user: { id: AUTOPUTER_USER, username: AUTOPUTER_USER } }));
@@ -725,7 +805,9 @@ async function main() {
     }
   }
   const themeState = { preset: null };
-  const { server, base } = await serve(dist, useComputer, themeState);
+  const catalog = loadCatalogFixture();
+  if (!catalog) console.warn(`choir-shot: no catalog fixture at ${CATALOG_FIXTURE_PATH}; /api/catalog/* is unanswered in a capsule`);
+  const { server, base } = await serve(dist, useComputer, themeState, catalog);
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
@@ -742,6 +824,8 @@ async function main() {
         if (it.theme) await context.addInitScript(themeSeedScript(it.theme));
         if (s.routes) await s.routes(context, base);
         const page = await context.newPage();
+        let readFixture = false;
+        page.on('response', (r) => { if (r.headers()[CATALOG_FIXTURE_HEADER]) readFixture = true; });
         if (s.before) await s.before(page, base);
         await page.goto(base + (s.path || '/'), { waitUntil: 'load', timeout: STEP_MS });
         await settle(page, it.open ? null : s.selector);
@@ -754,7 +838,12 @@ async function main() {
           await s.act(page);
           await settle(page, s.selector);
         }
+        if (readFixture) await page.evaluate(fixtureBadge, CATALOG_FIXTURE_BADGE);
         await page.screenshot({ path: path.join(o.out, it.file), fullPage: !!s.fullPage });
+        if (readFixture) {
+          await page.evaluate(() => document.querySelectorAll('[data-choir-shot-fixture]').forEach((el) => el.remove()));
+          console.log(`choir-shot: ${it.file} shows the catalog fixture (${CATALOG_FIXTURE_PATH}), not the live catalog`);
+        }
         if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
         console.log(`choir-shot: ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
       } catch (e) {

@@ -1,0 +1,484 @@
+{
+  "fixture": "capsule-catalog",
+  "note": "Not the live catalog. Generated from corpusd's package handler by internal/platform/capsule_catalog_fixture_test.go (CHOIR_WRITE_CAPSULE_CATALOG_FIXTURE=1 go test ./internal/platform -run TestCapsuleCatalogFixture); choir-shot serves it in a capsule, labelled.",
+  "packages": {
+    "count": 2,
+    "packages": [
+      {
+        "package": "reader",
+        "track": "owner",
+        "head_release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+        "head_seq": 2,
+        "releases": 2
+      },
+      {
+        "package": "reader",
+        "track": "owner-b",
+        "head_release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+        "head_seq": 1,
+        "releases": 1
+      }
+    ],
+    "reader": "owner"
+  },
+  "history": [
+    {
+      "count": 2,
+      "package": "reader",
+      "releases": [
+        {
+          "release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+          "canonical_id": "obj:choir.package_release:b3duZXI:0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+          "published_at": "2026-11-03T21:46:58.976721Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+            },
+            "operation": {
+              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "operation_id": "op-\u003cp\u003er",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "reader"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+              "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3"
+            },
+            "precommitments": [],
+            "publisher": {
+              "computer_id": "computer-owner1",
+              "owner_id": "owner"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "changed_paths": [
+                "frontend/src/packages/reader/App.svelte"
+              ],
+              "review_patch": {
+                "bytes": 331,
+                "sha256": "acab23d105367c532e3e931dc893cadd41d7125913adb7fb1ac1d3bc587071e5"
+              },
+              "root": "frontend/src/packages/reader",
+              "tree": "eb2fb84ef146197a78902d572aad1597b6c803f6",
+              "tree_patch": {
+                "bytes": 1108,
+                "sha256": "8a737a89102a0dd3f5f519a4d576e452bc7062c9c5729cf19887bb8907feb753"
+              }
+            },
+            "track": "owner"
+          },
+          "listing": {
+            "record_kind": "package_release",
+            "record_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+            "package": "reader",
+            "track": "owner",
+            "seq": 2,
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "shared_with": {
+              "owners": [],
+              "computers": []
+            },
+            "state": "listed",
+            "state_reason": "published",
+            "state_actor": "owner_act:unverified",
+            "version": 1
+          }
+        },
+        {
+          "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+          "canonical_id": "obj:choir.package_release:b3duZXI:41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+          "published_at": "2026-11-03T21:46:58.278749Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+            },
+            "operation": {
+              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "operation_id": "op-\u003cp\u003er",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "reader"
+            },
+            "parent": {
+              "commit": "7bb094fd050df599385bd05cba826d5894545c46",
+              "kind": "base",
+              "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+            },
+            "parent_patch": {
+              "bytes": 1105,
+              "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
+            },
+            "precommitments": [],
+            "publisher": {
+              "computer_id": "computer-owner1",
+              "owner_id": "owner"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "changed_paths": [
+                "frontend/src/packages/reader/App.svelte"
+              ],
+              "review_patch": {
+                "bytes": 328,
+                "sha256": "7d49b69741ce7fc2687b45df581a204f2f8f18646f19b573cae9fdf4ed76dfdd"
+              },
+              "root": "frontend/src/packages/reader",
+              "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3",
+              "tree_patch": {
+                "bytes": 1108,
+                "sha256": "ea0e146f9d8be733cf2597e2c9de7eb99fa64e152873e52659f9313a4004ab48"
+              }
+            },
+            "track": "owner"
+          },
+          "listing": {
+            "record_kind": "package_release",
+            "record_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+            "package": "reader",
+            "track": "owner",
+            "seq": 1,
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "shared_with": {
+              "owners": [],
+              "computers": []
+            },
+            "state": "listed",
+            "state_reason": "published",
+            "state_actor": "owner_act:unverified",
+            "version": 1
+          }
+        }
+      ],
+      "track": "owner"
+    },
+    {
+      "count": 1,
+      "package": "reader",
+      "releases": [
+        {
+          "release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+          "canonical_id": "obj:choir.package_release:b3duZXItYg:3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+          "published_at": "2026-11-03T21:46:59.836043Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+            },
+            "operation": {
+              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "operation_id": "op-\u003cp\u003er",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "reader"
+            },
+            "parent": {
+              "commit": "7bb094fd050df599385bd05cba826d5894545c46",
+              "kind": "base",
+              "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+            },
+            "parent_patch": {
+              "bytes": 1105,
+              "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
+            },
+            "precommitments": [],
+            "publisher": {
+              "computer_id": "computer-b1",
+              "owner_id": "owner-b"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "changed_paths": [
+                "frontend/src/packages/reader/App.svelte"
+              ],
+              "review_patch": {
+                "bytes": 330,
+                "sha256": "0ebd4640a26ff814f274bc75d56a3a8893fabc546cf0a1994095f31f34166f02"
+              },
+              "root": "frontend/src/packages/reader",
+              "tree": "66c5b66a766bd5eff626dd200cc7ecbd954f44f1",
+              "tree_patch": {
+                "bytes": 1110,
+                "sha256": "c7e42e0d54b846236483102815706975ebc6d812dd677974ea2e8987d6d43158"
+              }
+            },
+            "track": "owner-b"
+          },
+          "listing": {
+            "record_kind": "package_release",
+            "record_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+            "package": "reader",
+            "track": "owner-b",
+            "seq": 1,
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "shared_with": {
+              "owners": [],
+              "computers": []
+            },
+            "state": "listed",
+            "state_reason": "published",
+            "state_actor": "owner_act:unverified",
+            "version": 1
+          }
+        }
+      ],
+      "track": "owner-b"
+    }
+  ],
+  "releases": [
+    {
+      "release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+      "canonical_id": "obj:choir.package_release:b3duZXI:0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+      "published_at": "2026-11-03T21:46:58.976721Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+        },
+        "operation": {
+          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "operation_id": "op-\u003cp\u003er",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "reader"
+        },
+        "parent": {
+          "kind": "release",
+          "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+          "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3"
+        },
+        "precommitments": [],
+        "publisher": {
+          "computer_id": "computer-owner1",
+          "owner_id": "owner"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "changed_paths": [
+            "frontend/src/packages/reader/App.svelte"
+          ],
+          "review_patch": {
+            "bytes": 331,
+            "sha256": "acab23d105367c532e3e931dc893cadd41d7125913adb7fb1ac1d3bc587071e5"
+          },
+          "root": "frontend/src/packages/reader",
+          "tree": "eb2fb84ef146197a78902d572aad1597b6c803f6",
+          "tree_patch": {
+            "bytes": 1108,
+            "sha256": "8a737a89102a0dd3f5f519a4d576e452bc7062c9c5729cf19887bb8907feb753"
+          }
+        },
+        "track": "owner"
+      },
+      "listing": {
+        "record_kind": "package_release",
+        "record_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
+        "package": "reader",
+        "track": "owner",
+        "seq": 2,
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "shared_with": {
+          "owners": [],
+          "computers": []
+        },
+        "state": "listed",
+        "state_reason": "published",
+        "state_actor": "owner_act:unverified",
+        "version": 1
+      }
+    },
+    {
+      "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+      "canonical_id": "obj:choir.package_release:b3duZXI:41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+      "published_at": "2026-11-03T21:46:58.278749Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+        },
+        "operation": {
+          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "operation_id": "op-\u003cp\u003er",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "reader"
+        },
+        "parent": {
+          "commit": "7bb094fd050df599385bd05cba826d5894545c46",
+          "kind": "base",
+          "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+        },
+        "parent_patch": {
+          "bytes": 1105,
+          "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
+        },
+        "precommitments": [],
+        "publisher": {
+          "computer_id": "computer-owner1",
+          "owner_id": "owner"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "changed_paths": [
+            "frontend/src/packages/reader/App.svelte"
+          ],
+          "review_patch": {
+            "bytes": 328,
+            "sha256": "7d49b69741ce7fc2687b45df581a204f2f8f18646f19b573cae9fdf4ed76dfdd"
+          },
+          "root": "frontend/src/packages/reader",
+          "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3",
+          "tree_patch": {
+            "bytes": 1108,
+            "sha256": "ea0e146f9d8be733cf2597e2c9de7eb99fa64e152873e52659f9313a4004ab48"
+          }
+        },
+        "track": "owner"
+      },
+      "listing": {
+        "record_kind": "package_release",
+        "record_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
+        "package": "reader",
+        "track": "owner",
+        "seq": 1,
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "shared_with": {
+          "owners": [],
+          "computers": []
+        },
+        "state": "listed",
+        "state_reason": "published",
+        "state_actor": "owner_act:unverified",
+        "version": 1
+      }
+    },
+    {
+      "release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+      "canonical_id": "obj:choir.package_release:b3duZXItYg:3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+      "published_at": "2026-11-03T21:46:59.836043Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+        },
+        "operation": {
+          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "operation_id": "op-\u003cp\u003er",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "reader"
+        },
+        "parent": {
+          "commit": "7bb094fd050df599385bd05cba826d5894545c46",
+          "kind": "base",
+          "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+        },
+        "parent_patch": {
+          "bytes": 1105,
+          "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
+        },
+        "precommitments": [],
+        "publisher": {
+          "computer_id": "computer-b1",
+          "owner_id": "owner-b"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "changed_paths": [
+            "frontend/src/packages/reader/App.svelte"
+          ],
+          "review_patch": {
+            "bytes": 330,
+            "sha256": "0ebd4640a26ff814f274bc75d56a3a8893fabc546cf0a1994095f31f34166f02"
+          },
+          "root": "frontend/src/packages/reader",
+          "tree": "66c5b66a766bd5eff626dd200cc7ecbd954f44f1",
+          "tree_patch": {
+            "bytes": 1110,
+            "sha256": "c7e42e0d54b846236483102815706975ebc6d812dd677974ea2e8987d6d43158"
+          }
+        },
+        "track": "owner-b"
+      },
+      "listing": {
+        "record_kind": "package_release",
+        "record_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+        "package": "reader",
+        "track": "owner-b",
+        "seq": 1,
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "shared_with": {
+          "owners": [],
+          "computers": []
+        },
+        "state": "listed",
+        "state_reason": "published",
+        "state_actor": "owner_act:unverified",
+        "version": 1
+      }
+    }
+  ]
+}
