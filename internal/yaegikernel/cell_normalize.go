@@ -402,6 +402,88 @@ func (s *Session) degradeBoundDefines(src string) string {
 	return out.String()
 }
 
+// topLevelDefineCorrection rewrites a statement-fragment cell so the
+// statements from its first top-level definition yaegi may refuse (`x :=
+// v[i]`, `x := v[a:b]`, `x := v.F.G`, `x := *p`, `x := v.(T)`, or `a, ok :=`
+// a single non-call value) run inside func() { ... }(). A final bare
+// expression in the wrapped tail is printed, since a function body may not
+// leave a value unused. It returns the rewritten source and the cell line
+// the wrapper starts at, or false when src does not parse as statements or
+// has no such definition. The rewrite is handed back in the refusal for the
+// desk to send; it is never compiled in the session that refused the cell,
+// because yaegi re-runs a cell compiled after a refused one on every later
+// cell.
+func topLevelDefineCorrection(src string) (string, int, bool) {
+	const prefix = "package p\nfunc f() {\n"
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "cell.go", prefix+src+"\n}", parser.ParseComments)
+	if err != nil || len(file.Decls) != 1 {
+		return "", 0, false
+	}
+	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok || fn.Body == nil {
+		return "", 0, false
+	}
+	stmts := fn.Body.List
+	from := -1
+	for i, st := range stmts {
+		if as, ok := st.(*ast.AssignStmt); ok && as.Tok == token.DEFINE && refusableTopLevelDefine(as) {
+			from = i
+			break
+		}
+	}
+	if from < 0 {
+		return "", 0, false
+	}
+	var out strings.Builder
+	for i, st := range stmts {
+		if i == from {
+			out.WriteString("func() {\n")
+		}
+		if es, ok := st.(*ast.ExprStmt); ok && i == len(stmts)-1 && i >= from {
+			if _, isCall := es.X.(*ast.CallExpr); !isCall {
+				out.WriteString("fmt.Println(")
+				if format.Node(&out, fset, es.X) != nil {
+					return "", 0, false
+				}
+				out.WriteString(")\n")
+				continue
+			}
+		}
+		if format.Node(&out, fset, st) != nil {
+			return "", 0, false
+		}
+		out.WriteByte('\n')
+	}
+	out.WriteString("}()")
+	return out.String(), fset.Position(stmts[from].Pos()).Line - 2, true
+}
+
+// refusableTopLevelDefine reports whether a top-level definition has the
+// shape yaegi's statement mode refuses (cluster A,
+// docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
+func refusableTopLevelDefine(as *ast.AssignStmt) bool {
+	if len(as.Lhs) > 1 && len(as.Rhs) == 1 {
+		_, isCall := as.Rhs[0].(*ast.CallExpr)
+		return !isCall
+	}
+	for _, e := range as.Rhs {
+		switch x := e.(type) {
+		case *ast.IndexExpr, *ast.SliceExpr, *ast.StarExpr, *ast.TypeAssertExpr, *ast.SelectorExpr:
+			// A selector also matches pkg.Name, which compiles; the rewrite
+			// runs only after a refused compile, so a broad match is safe.
+			return true
+		case *ast.UnaryExpr:
+			if x.Op == token.ARROW {
+				return true
+			}
+		case *ast.ParenExpr:
+			return refusableTopLevelDefine(&ast.AssignStmt{Lhs: as.Lhs, Tok: as.Tok, Rhs: []ast.Expr{x.X}})
+		}
+	}
+	return false
+}
+
 // dropInstalledLeadingImports returns src without its contiguous leading
 // import lines when every path they name is already installed in the
 // session and something follows them. Any new path, an aliased or

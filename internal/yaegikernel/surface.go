@@ -313,6 +313,7 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	}
 	// String literals and comments are not code: a capture id
 	// "obj:choir.web_capture:..." names no choir function.
+	cell := src
 	src = codeOnly(src)
 	names := make([]string, 0, len(surface))
 	for name := range surface {
@@ -357,6 +358,9 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 		return resultFieldHint(m[1])
 	}
 	if topLevelDefineRE.MatchString(msg) {
+		if corrected, line, ok := topLevelDefineCorrection(cell); ok && len(corrected) <= maxTopLevelDefineCorrection {
+			return topLevelDefineHint + fmt.Sprintf("\nThe refused definition is on line %d. Send this cell instead; it runs lines %d and after inside func() { ... }(), so names they declare do not persist to the next cell:\n%s", line, line, corrected)
+		}
 		return topLevelDefineHint
 	}
 	if packetVerbRE.MatchString(src) && literalSyntaxRE.MatchString(msg) {
@@ -487,8 +491,11 @@ func choirResultTypes() []reflect.Type {
 // docs/archive/reports/cross-model-cell-errors-2026-10-13.md).
 var topLevelDefineRE = regexp.MustCompile(`constant definition loop|compile panic`)
 
-const topLevelDefineHint = "At cell top level, `x := v[i]`, `x := v.F.G` and `a, ok := ...` do not compile here. " +
+const topLevelDefineHint = "At cell top level, `x := v[i]`, `x := v.F.G` and `a, ok := ...` do not compile here, and `var x = v[i]` fails the same way. " +
 	"Write them inside a loop or a function: `for _, r := range recs { ... }` or `func() { ... }()`."
+
+// maxTopLevelDefineCorrection bounds the corrected cell a refusal carries.
+const maxTopLevelDefineCorrection = 4000
 
 // codeOnly blanks string literals and comments, keeping offsets and lines.
 func codeOnly(src string) string {
