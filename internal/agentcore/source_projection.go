@@ -243,6 +243,21 @@ func (rt *Runtime) reconcileSourceProjectionLogged(ctx context.Context, reason s
 	}
 }
 
+// sourceProjectionRefusal is the reason a source projection result refuses a
+// capsule source, or "" when it may be used: Result.Refusal, and at
+// stack_base_moved where the rebase starts. The Cast gate and the bind
+// (problem 30) give the same reason.
+func (rt *Runtime) sourceProjectionRefusal(ctx context.Context, result sourceproj.Result) string {
+	refusal := result.Refusal()
+	if refusal == "" || result.State != sourceproj.StateBaseMoved {
+		return refusal
+	}
+	if inbox, live := rt.rebaseTextureLive(ctx, result.OperationID); live {
+		return refusal + "; the rebase starts from the platform's rebase notice, which goes to " + inbox + " (the computer stays up " + rt.rebaseStayUpInterval().String() + " after boot first): that Texture casts it to management, and management's rebase Cast is admitted"
+	}
+	return refusal + "; " + rebaseNeedsRoot
+}
+
 // sourceProjectionCastGate refuses to cast an engineering capsule on a source
 // that is not the effective release's: an apply in flight, a stack on a base
 // the computer no longer booted, or a projection that cannot be rebuilt. The
@@ -299,14 +314,7 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 		if err != nil {
 			return "", nil, fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 		}
-		if refusal := result.Refusal(); refusal != "" {
-			if result.State == sourceproj.StateBaseMoved {
-				if inbox, live := rt.rebaseTextureLive(ctx, result.OperationID); live {
-					refusal += "; the rebase starts from the platform's rebase notice, which goes to " + inbox + " (the computer stays up " + rt.rebaseStayUpInterval().String() + " after boot first): that Texture casts it to management, and management's rebase Cast is admitted"
-				} else {
-					refusal += "; " + rebaseNeedsRoot
-				}
-			}
+		if refusal := rt.sourceProjectionRefusal(ctx, result); refusal != "" {
 			return "", nil, errors.New(refusal)
 		}
 		if result.State == sourceproj.StateRematerialized && strings.TrimSpace(cast.CastRecordID) != "" {

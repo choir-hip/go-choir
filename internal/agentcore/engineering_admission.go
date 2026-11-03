@@ -63,7 +63,8 @@ type engineeringAdmissionBusy struct {
 	// carry's history or the operations could not be read), "host_memory"
 	// (the host refused the build capsule, engineeringWaitHostMemory) or
 	// "refresh_pending" (the host has a deploy refresh waiting,
-	// engineeringWaitRefresh).
+	// engineeringWaitRefresh) or "source_settling" (the source at bind is
+	// not on the booted base yet, engineeringWaitSourceSettling).
 	Why string
 	// OperationID, OperationState and OperationCreatedAt name the blocking
 	// self-development operation when Why is "operation_open"; empty otherwise.
@@ -82,6 +83,13 @@ type engineeringAdmissionBusy struct {
 // host refused for memory (problem 24,
 // docs/problems/build-refused-for-host-memory-cancels-assignment-2026-11-03.md).
 const engineeringWaitHostMemory = "host_memory"
+
+// engineeringWaitSourceSettling is the Why of a request whose source at bind
+// is not on the booted base yet, in a state that passes by waiting: the boot's
+// fetch of the booted base is still running, or an apply is in flight
+// (problem 30, docs/problems/selfdev-bind-reads-a-stack-head-on-the-old-base-2026-11-03.md).
+// The request's own deadline bounds the wait.
+const engineeringWaitSourceSettling = "source_settling"
 
 const (
 	// engineeringHostMemoryMaxWait bounds a request's wait for host memory,

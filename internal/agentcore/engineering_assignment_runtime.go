@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -508,7 +509,18 @@ func (rt *Runtime) resumeDelegatedCastAssignment(ctx context.Context, assignment
 	// HEAD before a planned restart onto a new base binds on what the booted
 	// computer projects now; its candidate would otherwise freeze on a base
 	// the updater refuses (base_moved_since_freeze).
-	preflight, source, atBind := rt.sourceAtBind(ctx, assignment)
+	preflight, source, atBind, sourceErr := rt.sourceAtBind(ctx, assignment)
+	if sourceErr != nil {
+		// Problem 30: the source the request would bind on is not on the
+		// booted base. A state that settles by waiting (the booted base
+		// not fetched yet, an apply in flight) waits under admission's
+		// retry; anything else ends the request here, before any work,
+		// with the projection's reason.
+		if errors.Is(sourceErr, ErrEngineeringAdmissionBusy) {
+			return AssignedEngineeringStart{}, sourceErr
+		}
+		return AssignedEngineeringStart{}, rt.cancelUnboundAssignment(assignment, sourceErr)
+	}
 	if atBind {
 		req.Source, req.SourceAtBind = source, true
 		if source != nil {
@@ -570,27 +582,97 @@ func (rt *Runtime) takesSourceAtBind(ctx context.Context, assignment types.Engin
 
 // sourceAtBind reads the source an eligible request binds on: the guest
 // source HEAD after a reconcile of the source projection, the same read the
-// Cast made. ok is false when the request is not eligible or HEAD cannot be
-// read; the caller then preflights the committed source as before. source is
-// nil when HEAD is still the committed source.
-func (rt *Runtime) sourceAtBind(ctx context.Context, assignment types.EngineeringAssignment) (preflight capsule.SourcePreflight, source *types.EngineeringBindSource, ok bool) {
+// Cast made, behind the same gate (problem 30). ok is false when the request
+// is not eligible; the caller then preflights the committed source as before.
+// source is nil when HEAD is still the committed source.
+//
+// err is set when the request must not bind on HEAD: an
+// *engineeringAdmissionBusy when the projection is settling (the booted
+// base's objects are still being fetched, or an apply is in flight), so the
+// request waits and retries; any other error when it will not settle (the
+// stack's patch conflicts with the booted base, the fetch gave up, the
+// projection cannot be rebuilt, HEAD cannot be read, or HEAD's stack base is
+// not the booted base), so the request ends at bind instead of freezing a
+// candidate the updater refuses (base_moved_since_freeze).
+func (rt *Runtime) sourceAtBind(ctx context.Context, assignment types.EngineeringAssignment) (preflight capsule.SourcePreflight, source *types.EngineeringBindSource, ok bool, err error) {
 	if !rt.takesSourceAtBind(ctx, assignment) {
-		return capsule.SourcePreflight{}, nil, false
+		return capsule.SourcePreflight{}, nil, false, nil
 	}
-	rt.reconcileSourceProjectionLogged(ctx, "bind")
+	settling := func(why string) error {
+		return &engineeringAdmissionBusy{AssignmentID: assignment.AssignmentID, BlockedBy: "the source projection (" + why + ")", Why: engineeringWaitSourceSettling}
+	}
+	result, err := rt.ReconcileSourceProjection(ctx, "bind")
+	if err != nil {
+		return capsule.SourcePreflight{}, nil, false, settling("source_projection_failed: " + err.Error())
+	}
+	if refusal := rt.sourceProjectionRefusal(ctx, result); refusal != "" {
+		if rt.sourceProjectionSettles(ctx, result) {
+			log.Printf("runtime: engineering assignment %s waits to bind: the source projection is %s (head %s, booted %s)", assignment.AssignmentID, result.State, shortDigest(result.Head), shortDigest(result.BootedBase))
+			return capsule.SourcePreflight{}, nil, false, settling(refusal)
+		}
+		log.Printf("runtime: engineering assignment %s ends at bind: %s", assignment.AssignmentID, refusal)
+		return capsule.SourcePreflight{}, nil, false, fmt.Errorf("source at bind: %s", refusal)
+	}
 	current, err := rt.sourcePreflighter().PreflightSourceSnapshot(ctx, "")
 	if err != nil || !strings.HasPrefix(current.ArtifactRef, "capsule-source-git:") || strings.TrimSpace(current.SubjectDigest) == "" {
-		log.Printf("runtime: engineering assignment %s: the source at bind could not be read (%v); it binds on its Cast's source", assignment.AssignmentID, err)
-		return capsule.SourcePreflight{}, nil, false
+		return capsule.SourcePreflight{}, nil, false, fmt.Errorf("source at bind: the guest source HEAD could not be read (%v)", err)
+	}
+	// The updater's join, checked before any work: a candidate built on this
+	// source freezes on its stack base, which must be the booted base.
+	if booted := strings.TrimSpace(result.BootedBase); booted != "" {
+		commit := capsule.SourceArtifactCommit(current.ArtifactRef)
+		base := commit
+		if stackBase, stacked := sourceproj.StackBase(ctx, rt.releaseRepo(), commit); stacked {
+			base = stackBase
+		}
+		if !strings.EqualFold(base, booted) {
+			return capsule.SourcePreflight{}, nil, false, fmt.Errorf("source at bind: base_moved_since_freeze would refuse it: the source %s is based on %s, but this computer booted %s", commit, base, booted)
+		}
 	}
 	if current.ArtifactRef == assignment.Binding.SourceArtifactRef {
-		return current, nil, true
+		return current, nil, true, nil
 	}
 	return current, &types.EngineeringBindSource{
 		PriorSourceArtifactRef: assignment.Binding.SourceArtifactRef,
 		SourceArtifactRef:      current.ArtifactRef,
 		SubjectDigest:          "sha256:" + strings.TrimPrefix(current.SubjectDigest, "sha256:"),
-	}, true
+	}, true, nil
+}
+
+// sourceProjectionSettles reports whether a refused projection state passes
+// by waiting: an apply in flight records applied or failed, and a booted base
+// whose objects are missing is fetched by the boot's fetch while it is still
+// running or has not reported yet. A stack whose patch conflicts with a
+// booted base that is present, a fetch that gave up, and an unrebuildable
+// projection do not.
+func (rt *Runtime) sourceProjectionSettles(ctx context.Context, result sourceproj.Result) bool {
+	switch result.State {
+	case sourceproj.StatePending:
+		return true
+	case sourceproj.StateBaseObjectsMissing, sourceproj.StateBaseMoved:
+		// The reconcile's own snapshot decides (review r1): the base was
+		// present when it resolved it, so the stack's patch conflicts with
+		// it; or it was missing, and the fetch may still bring it.
+		booted := strings.TrimSpace(result.BootedBase)
+		if booted == "" || !result.BootedMissing {
+			return false
+		}
+		if sourceproj.HasCommit(ctx, rt.releaseRepo(), booted) {
+			return true // the fetch landed since this result: the retry reconciles again
+		}
+		rt.sourceBaseFetchMu.Lock()
+		defer rt.sourceBaseFetchMu.Unlock()
+		if rt.sourceBaseFetchRunning || rt.sourceBaseFetchInflight != nil {
+			return true
+		}
+		// A fetch recorded as fetched (or present) for this base had the
+		// objects on disk before the record,
+		// so the retry's reconcile sees them (review r2: the fetch can land
+		// between the HasCommit above and this read).
+		last := rt.sourceBaseFetchLast
+		return last == nil || last.Commit != booted || last.Outcome == sourceproj.FetchFetched || last.Outcome == sourceproj.FetchPresent
+	}
+	return false
 }
 
 // assignmentObjective is the committed objective of a records assignment:
@@ -695,6 +777,29 @@ func castWithholdsNetwork(spec string) bool {
 	return false
 }
 
+// cancelUnboundAssignment ends an open request whose spawn/bind saga failed
+// before it bound, with cause as its reason, so a stranded assignment never
+// blocks a later Cast. It returns cause.
+func (rt *Runtime) cancelUnboundAssignment(assignment types.EngineeringAssignment, cause error) error {
+	ownerID, computerID := assignment.Binding.OwnerID, assignment.Binding.ComputerID
+	assignmentID, attempt := assignment.AssignmentID, assignment.Binding.Attempt
+	current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
+	if loadErr == nil && !current.Disposition.Terminal() {
+		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
+			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
+		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+		if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
+			// A concurrent reconciler already cancelled or advanced the
+			// assignment; terminal/adopted state is convergence.
+			if reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt); reloadErr == nil && reloaded.Disposition.Terminal() {
+				return cause
+			}
+			return fmt.Errorf("%w (cancel stranded open: %v)", cause, cancelErr)
+		}
+	}
+	return cause
+}
+
 // spawnBindActivateAssignment is the shared post-open saga: spawn the capsule,
 // mint the capability, bind the run, wake the actor. Every failure path cancels
 // the durable open so a stranded assignment never blocks a later cast, except
@@ -707,23 +812,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	runID := "run:" + assignmentID
 	// The executor in production; a test substitutes it (assignmentRuntime).
 	exec := rt.assignedCapsule()
-	cancelOpen := func(cause error) error {
-		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
-		if loadErr == nil && !current.Disposition.Terminal() {
-			cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
-				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
-			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
-			if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
-				// A concurrent reconciler already cancelled or advanced the
-				// assignment; terminal/adopted state is convergence.
-				if reloaded, reloadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt); reloadErr == nil && reloaded.Disposition.Terminal() {
-					return cause
-				}
-				return fmt.Errorf("%w (cancel stranded open: %v)", cause, cancelErr)
-			}
-		}
-		return cause
-	}
+	cancelOpen := func(cause error) error { return rt.cancelUnboundAssignment(assignment, cause) }
 	phaseStarted := time.Now()
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()

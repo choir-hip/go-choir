@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -39,8 +40,14 @@ const (
 )
 
 // headPreflight is the guest source HEAD as the capsule executor's preflight
-// sees it: each commit has its own digest.
-type headPreflight struct{ head string }
+// sees it: each commit has its own digest. HEAD is read from repo, the
+// guest source repository the source projection reconciles.
+type headPreflight struct{ repo string }
+
+func (h *headPreflight) current() (string, error) {
+	out, err := exec.Command("git", "-C", h.repo, "rev-parse", "HEAD").Output()
+	return strings.TrimSpace(string(out)), err
+}
 
 func p28Preflight(commit string) capsule.SourcePreflight {
 	digest := strings.TrimPrefix(objectgraph.SHA256([]byte("tree:"+commit)), "sha256:")
@@ -50,7 +57,11 @@ func p28Preflight(commit string) capsule.SourcePreflight {
 func (h *headPreflight) PreflightSourceSnapshot(_ context.Context, ref string) (capsule.SourcePreflight, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return p28Preflight(h.head), nil
+		head, err := h.current()
+		if err != nil {
+			return capsule.SourcePreflight{}, err
+		}
+		return p28Preflight(head), nil
 	}
 	if commit := capsule.SourceArtifactCommit(ref); commit != "" && p28Preflight(commit).ArtifactRef == ref {
 		return p28Preflight(commit), nil
@@ -110,20 +121,40 @@ type baseAtBindFixture struct {
 	head    *headPreflight
 	capsule *spawningCapsule
 	wakes   *[]admissionWake
+	// repo is the guest source repository; x the base the computer booted
+	// when the Cast read HEAD, y a later base in the repository.
+	repo, x, y string
 }
 
 // newBaseAtBindFixture opens one ordinary implementation request whose Cast
 // captured HEAD = X, as planEngineeringCast does.
 func newBaseAtBindFixture(t *testing.T, castBody string) *baseAtBindFixture {
 	t.Helper()
+	return newBaseAtBindFixtureWith(t, castBody, nil)
+}
+
+// newBaseAtBindFixtureWith runs stack (when set) on the booted base X before
+// the Cast reads HEAD: a self-development stack applied on this computer.
+func newBaseAtBindFixtureWith(t *testing.T, castBody string, stack func(f *baseAtBindFixture)) *baseAtBindFixture {
+	t.Helper()
 	rt, s := testRuntime(t)
 	computerID := rt.TextureComputerID()
+	repo, x := releaseSourceRepo(t)
+	y := commitOnTop(t, repo, x, map[string]string{"frontend/public/other.txt": "platform\n"})
+	rt.releaseSourceDir = repo
+	setBootedBase(t, rt, x)
 	seed, err := store.SeedEngineeringAssignmentAuthorityWithCastBody(s, "owner-p28", computerID, "assignment", 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := &baseAtBindFixture{admissionFixture: &admissionFixture{t: t, rt: rt, s: s, seed: seed, computer: computerID},
-		head: &headPreflight{head: p28BaseX}, capsule: &spawningCapsule{}}
+		head: &headPreflight{repo: repo}, capsule: &spawningCapsule{}, repo: repo, x: x, y: y}
+	if stack != nil {
+		stack(f)
+	}
+	if _, err := rt.ReconcileSourceProjection(context.Background(), "boot"); err != nil {
+		t.Fatal(err)
+	}
 	rt.assignmentRuntime = f.capsule
 	rt.sourcePreflight = f.head
 	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
@@ -131,7 +162,10 @@ func newBaseAtBindFixture(t *testing.T, castBody string) *baseAtBindFixture {
 
 	assignmentID := seed.AssignmentIDs[0]
 	req := store.SeedEngineeringOpenRequest(seed, 0, deterministicDocumentAssignmentCapability(assignmentID, 1))
-	opened := p28Preflight(p28BaseX)
+	opened, err := f.head.PreflightSourceSnapshot(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	req.Binding.SourceArtifactRef = opened.ArtifactRef
 	req.Binding.SubjectDigest = "sha256:" + opened.SubjectDigest
 	if castBody != "" {
@@ -146,11 +180,13 @@ func newBaseAtBindFixture(t *testing.T, castBody string) *baseAtBindFixture {
 	return f
 }
 
-// plannedRefresh is vmctl's marker-backed refresh onto Y: the boot projects
-// the guest source HEAD onto Y and keeps the queued request.
-func (f *baseAtBindFixture) plannedRefresh() {
+// plannedRefresh is vmctl's marker-backed refresh onto Y: the computer boots
+// Y and keeps the queued request.
+func (f *baseAtBindFixture) plannedRefresh() { f.refreshTo(f.y) }
+
+func (f *baseAtBindFixture) refreshTo(commit string) {
 	f.restart(true)
-	f.head.head = p28BaseY
+	setBootedBase(f.t, f.rt, commit)
 	f.rt.reconcileEngineeringAssignmentCapsulesAfterRestart(context.Background())
 }
 
@@ -175,7 +211,7 @@ func TestAssignmentBaseCapturedAtBindAfterPlannedRestart(t *testing.T) {
 	if bound.Disposition != types.EngineeringAssignmentBound {
 		t.Fatalf("not bound: %s (%q)", bound.Disposition, bound.DispositionReason)
 	}
-	want := p28Preflight(p28BaseY)
+	want := p28Preflight(f.y)
 	if bound.Binding.SourceArtifactRef != want.ArtifactRef || bound.Binding.SubjectDigest != "sha256:"+want.SubjectDigest {
 		t.Fatalf("F1: the binding kept %s / %s, want the booted base's %s", bound.Binding.SourceArtifactRef, bound.Binding.SubjectDigest, want.ArtifactRef)
 	}
@@ -188,8 +224,8 @@ func TestAssignmentBaseCapturedAtBindAfterPlannedRestart(t *testing.T) {
 	}
 	// Freeze (capsule emitSourcePatch) takes the release base from the
 	// capsule's pinned source ref.
-	if got := capsule.SourceArtifactCommit(spec.SourceArtifactRef); got != p28BaseY {
-		t.Fatalf("F2: Freeze would record base %s, want %s", got, p28BaseY)
+	if got := capsule.SourceArtifactCommit(spec.SourceArtifactRef); got != f.y {
+		t.Fatalf("F2: Freeze would record base %s, want %s", got, f.y)
 	}
 	run, err := f.s.GetLifecycleRun(context.Background(), bound.Binding.OwnerID, bound.Binding.ComputerID, bound.BoundRunID)
 	if err != nil {
@@ -207,7 +243,7 @@ func TestAssignmentBaseUnchangedBindKeepsTheCastBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	bound := f.get(0)
-	if bound.Disposition != types.EngineeringAssignmentBound || bound.Binding.SourceArtifactRef != p28Preflight(p28BaseX).ArtifactRef {
+	if bound.Disposition != types.EngineeringAssignmentBound || bound.Binding.SourceArtifactRef != p28Preflight(f.x).ArtifactRef {
 		t.Fatalf("bound %s on %s, want bound on X", bound.Disposition, bound.Binding.SourceArtifactRef)
 	}
 }
@@ -234,7 +270,7 @@ func TestAssignmentBaseAtBindLeavesStartedOrPinnedWorkAlone(t *testing.T) {
 		if f.rt.takesSourceAtBind(context.Background(), assignment) {
 			t.Fatal("F3: a rebase round would take HEAD at bind instead of its notice's booted base")
 		}
-		if _, _, ok := f.rt.sourceAtBind(context.Background(), assignment); ok {
+		if _, _, ok, err := f.rt.sourceAtBind(context.Background(), assignment); ok || err != nil {
 			t.Fatal("F3: a rebase round read its source at bind")
 		}
 	})
@@ -244,11 +280,11 @@ func TestAssignmentBaseAtBindLeavesStartedOrPinnedWorkAlone(t *testing.T) {
 	t.Run("unbound capsule from an interrupted attempt", func(t *testing.T) {
 		f := newBaseAtBindFixture(t, "")
 		f.capsule.live = map[string]bool{f.opens[0].Binding.CapsuleID: true}
-		f.head.head = p28BaseY
+		setBootedBase(t, f.rt, f.y)
 		if err := f.wake(); err != nil {
 			t.Fatal(err)
 		}
-		want := p28Preflight(p28BaseY).ArtifactRef
+		want := p28Preflight(f.y).ArtifactRef
 		got := f.get(0)
 		if got.Disposition != types.EngineeringAssignmentBound || got.Binding.SourceArtifactRef != want {
 			t.Fatalf("bound %s on %s, want bound on Y", got.Disposition, got.Binding.SourceArtifactRef)
@@ -264,7 +300,7 @@ func TestAssignmentBaseAtBindLeavesStartedOrPinnedWorkAlone(t *testing.T) {
 func TestAssignmentBaseAtBindStoreRefusesUncheckedRestamp(t *testing.T) {
 	f := newBaseAtBindFixture(t, "")
 	open := f.opens[0]
-	moved := p28Preflight(p28BaseY)
+	moved := p28Preflight(f.y)
 	bind := func(prior string) types.BindEngineeringAssignmentRequest {
 		req := store.SeedEngineeringBindRequest(open, "run:"+open.AssignmentID, deterministicDocumentAssignmentCapability(open.AssignmentID, 1))
 		req.Source = &types.EngineeringBindSource{PriorSourceArtifactRef: prior, SourceArtifactRef: moved.ArtifactRef, SubjectDigest: "sha256:" + moved.SubjectDigest}
@@ -295,7 +331,7 @@ func TestAssignmentBaseAtBindFrozenOldBaseCandidateStillRefused(t *testing.T) {
 func TestAssignmentBaseAtBindCrashBootClosesTheRequest(t *testing.T) {
 	f := newBaseAtBindFixture(t, "")
 	f.restart(false)
-	f.head.head = p28BaseY
+	setBootedBase(t, f.rt, f.y)
 	*f.wakes = nil
 	f.rt.reconcileEngineeringAssignmentCapsulesAfterRestart(context.Background())
 	got := f.get(0)
@@ -305,7 +341,7 @@ func TestAssignmentBaseAtBindCrashBootClosesTheRequest(t *testing.T) {
 	if err := f.wake(); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.capsule.spawned) != 0 || f.get(0).Binding.SourceArtifactRef != p28Preflight(p28BaseX).ArtifactRef {
+	if len(f.capsule.spawned) != 0 || f.get(0).Binding.SourceArtifactRef != p28Preflight(f.x).ArtifactRef {
 		t.Fatalf("F6: a closed request was spawned or re-based after a crash boot")
 	}
 }

@@ -173,6 +173,12 @@ type Result struct {
 	ServedBase string `json:"served_base,omitempty"`
 	// BootedBase is the booted image's build commit as given.
 	BootedBase string `json:"booted_base,omitempty"`
+	// BootedMissing: the booted base was named but its objects were not in
+	// the repository when this reconcile resolved it. A caller deciding
+	// whether a refusal passes by waiting for the fetch reads this snapshot
+	// for what the result means (problem 30, review r1); a later look at the
+	// repository may only turn "missing" into "wait and reconcile again".
+	BootedMissing bool `json:"booted_missing,omitempty"`
 	// OperationID is the live (or retired) stack operation.
 	OperationID string `json:"operation_id,omitempty"`
 	// Diverged: a live stack. A retired (upstreamed) stack is not divergence.
@@ -269,6 +275,7 @@ func reconcileLocked(ctx context.Context, in Input, res Result) (Result, error) 
 	booted, haveBooted := "", false
 	if res.BootedBase != "" {
 		booted, haveBooted = resolveCommit(ctx, repo, res.BootedBase)
+		res.BootedMissing = !haveBooted
 	}
 	_, hadBase := resolveCommit(ctx, repo, RefBase)
 	cur := current{head: head, haveHead: haveHead, hadBase: hadBase, onSave: in.OnSave}
