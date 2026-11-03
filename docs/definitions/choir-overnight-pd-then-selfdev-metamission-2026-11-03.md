@@ -126,21 +126,23 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 6e4658891 (problems 17, 21 in all three shapes, 22, 23, 24,
-    luna recipe, choir-shot autoputer helper, isOwnLiveEvent export).
-    Problem 21 proved end to end on claude and pool; both rebase builds
-    took 50-53 min (38 min of screenshot and spec work the notice invited;
-    engineering on synthetic DeepSeek-V4.1-Flash at about 70 s a call).
-    The rebase notice is rewritten to ask only for the change's own checks
-    (in Devin review). Arms: claude and pool re-rebasing onto 031dd6839
-    then package rounds; deepseek Files follow-up live, Slides queued,
-    restore round then publish; luna round 9 at 15:46Z. Node B 16 GiB
-    available, PSI under 1.
+    staging a595321f2 (luna delegate grant; lean rebase notice; problems
+    17 and 21 through 24). 7800706b5 (problem 25: the delegate relay
+    compared a VM id with a computer-id grant list, so no computer ever
+    delegated; tier 2 accepted) in CI; delegate computers need a cold boot
+    after it deploys. The claude arm's rounds so far ran with no delegate
+    (DeepSeek alone); its next round after the cold boot is the first real
+    Claude-arm round. Owner 16:00Z: luna delegates to Claude Sonnet under
+    GPT token pressure; luna held until the delegate is available. Stacks
+    now re-graft mechanically at refresh (stack_rematerialized), and pool's
+    Slides round was admitted on the re-grafted stack. Engineering
+    assignments end at a hard 60 minutes. deepseek Slides r1 rejected for
+    missing screenshots; r2 (theme set by boot cache and one route mock)
+    running. Node B 15 GiB available, PSI 0.
   main_uncertainty: >-
-    whether a rebase under the lean notice fits inside the deploy interval;
-    whether the synthetic provider's slowness was load from the gpt-6-luna
-    quota failover (hypothesis: only five 429s in the window)
-  next_observation: the next rebase's duration after the lean notice deploys; the first files-next publish from an arm
+    whether the delegate works end to end after the cold boot (relay call,
+    capsule egress); whether Slides rounds fit inside 60 minutes
+  next_observation: claude_delegate.available=true on luna after its cold boot; first delegate run ids in a luna round
   blocker: none
-  next_action: land the lean rebase notice on Devin's accept; batch deploys to fewer, larger pushes while arms are rebasing, so each deploy costs one rebase per stacked arm; then publish Files from each arm and move arms to Slides
+  next_action: on 7800706b5 deploy, cold-boot luna and then claude (when idle), verify the grant, send luna round 10; carry Slides rounds on all arms and publish Files from each
 receipts: []
