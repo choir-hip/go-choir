@@ -78,8 +78,11 @@ if any(t.get("computer_id") == cid for t in tc):
     print("tier: " + cid + " is already a test computer")
     sys.exit(0)
 tc.append({"computer_id": cid, "note": label + ", made by scripts/test-computer-create: test tier, so ring R1"})
-with open(path, "w") as f:
+import os, tempfile
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)), prefix=".computer-tiers.")
+with os.fdopen(fd, "w") as f:
     f.write(json.dumps(d, indent=2) + "\n")
+os.replace(tmp, path)
 print("tier: registered " + cid + " in " + path + "; commit and deploy it (the tier file is embedded in vmctl)")
 PY
 }

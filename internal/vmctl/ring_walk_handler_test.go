@@ -254,3 +254,16 @@ func TestRingExpediteEndpoint(t *testing.T) {
 		t.Fatalf("expedite without by: %d", rec.Code)
 	}
 }
+
+// Round 3: the endpoint refuses a caller that is not internal.
+func TestRingExpediteEndpointInternalOnly(t *testing.T) {
+	f := newRingHandlerFixture(t)
+	f.deploy("r2", "commit-r2")
+	req := httptest.NewRequest(http.MethodPost, "/internal/vmctl/ring-walk/expedite", strings.NewReader(`{"reason":"x","by":"y"}`))
+	req.RemoteAddr = "203.0.113.7:4444"
+	rec := httptest.NewRecorder()
+	f.h.HandleRingWalkExpedite(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("an external caller reached expedite: %d %s", rec.Code, rec.Body.String())
+	}
+}

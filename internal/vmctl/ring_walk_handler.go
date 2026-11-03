@@ -29,7 +29,9 @@ type ringReleaseReader interface {
 // ringR0EnrollGrace: the CI deploy refreshes R0 itself right after the link
 // moves; the walk enrolls an R0 computer the deploy did not reach only after
 // this long, so d@e is not refreshed twice for one deploy.
-const ringR0EnrollGrace = 10 * time.Minute
+// Strictly below R0's 10-minute floor, so CI's refresh lands before the walk
+// would enroll d@e itself.
+const ringR0EnrollGrace = 7 * time.Minute
 
 func (h *Handler) ringWalkRunner() *ringWalkRunner {
 	h.deployRefreshMu.Lock()
@@ -319,6 +321,9 @@ func (h *Handler) HandleRingWalkExpedite(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Reason string `json:"reason"`
 		By     string `json:"by"`
+		// Release binds the act to a release (its commit or id): an
+		// expedite never lands on another walk. Optional for an owner act.
+		Release string `json:"release"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
@@ -332,9 +337,10 @@ func (h *Handler) HandleRingWalkExpedite(w http.ResponseWriter, r *http.Request)
 	if caller := strings.TrimSpace(r.Header.Get("X-Choir-Lifecycle-Caller")); caller != "" && len(caller) <= 80 {
 		req.By += " (caller " + caller + ")"
 	}
+	req.Reason, req.By, req.Release = ringPrintable(req.Reason, 300), ringPrintable(req.By, 200), ringPrintable(strings.TrimSpace(req.Release), 80)
 	// The deploy's new release starts its walk here if no tick has yet.
 	h.syncRingWalk()
-	summary, err := h.ringWalkRunner().expedite(time.Now().UTC(), req.Reason, req.By)
+	summary, err := h.ringWalkRunner().expedite(time.Now().UTC(), req.Reason, req.By, req.Release)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
@@ -371,4 +377,19 @@ func (h *Handler) HandleRingWalk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeVMCTLJSON(w, http.StatusOK, h.ringWalkRunner().status(tail))
+}
+
+// ringPrintable keeps printable characters (no control characters in the
+// history or the logs) and caps the length.
+func ringPrintable(v string, max int) string {
+	out := make([]rune, 0, len(v))
+	for _, c := range v {
+		if c >= 0x20 && c != 0x7f {
+			out = append(out, c)
+		}
+	}
+	if len(out) > max {
+		out = out[:max]
+	}
+	return string(out)
 }

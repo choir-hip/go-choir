@@ -92,3 +92,26 @@ func TestParseTestComputers(t *testing.T) {
 		}
 	}
 }
+
+// Ring walk cycle time (docs/design/ring-ordered-deploys-2026-11-03.md): the
+// four self-development arms are test computers, so they walk in R1.
+func TestEmbeddedTiersNameTheArmsTestComputers(t *testing.T) {
+	tiers, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, id := range tiers.TestComputerIDs() {
+		have[id] = true
+	}
+	for _, id := range []string{
+		"computer-a875023a6379c41f6ddb438f02e76a02",
+		"computer-e80d229b0d78c35d47656b8c66426a43",
+		"computer-2bf3cab1e3ebf3eb24a515c4603cf954",
+		"computer-4d38420cf85ac490a36baa0ef5d7a67a",
+	} {
+		if !have[id] {
+			t.Errorf("arm %s is not a test computer", id)
+		}
+	}
+}

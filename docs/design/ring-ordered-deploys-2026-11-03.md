@@ -118,8 +118,9 @@ up the cycle time." A test computer should get a platform fix about 25 to
   only ephemeral accounts (email domain or user-id prefix), not tier test
   computers.
 - **Minutes for R0 and R1.** R0's floor is 10 minutes and R1's 15, from the
-  ring opening; the deploy grace before the walk enrolls or wakes d@e is 10
-  minutes; exposure and the guards are unchanged. R2 onward keep their
+  ring opening; the deploy grace before the walk enrolls or wakes d@e is 7
+  minutes (below the floor, so CI's refresh lands first); the readiness guard
+  can breach from about 8 minutes on a one-minute tick, inside the floor; exposure and the guards are unchanged. R2 onward keep their
   floors. Expected: d@e refreshed by CI at the deploy, R0 closes at about 10
   minutes, R1 opens and enrolls the arms (an arm mid capsule or apply
   refuses and goes at its next idle moment), R1 closes at about 25 minutes.
@@ -159,13 +160,24 @@ order for one release; it does not skip safety.
   ring, and a breach rolls back every computer that took it (all rings are
   open, so all are returned).
 - **Closing.** Each ring closes once 10 minutes have passed since the
-  expedite and every active, eligible member that is not still pending is
-  seen healthy on the release (an empty ring is skipped, R0 included: the
-  owner asked for instantly). The walk completes when every ring has closed.
+  expedite and every active, eligible member is seen healthy on the release;
+  in R1 to R4 a member still pending (busy) does not hold its ring, and one
+  whose refresh to this target failed never does. R0 and R5 are watched
+  (review 3): R0 holds until d@e is seen healthy on the release (the walk
+  wakes it at once, with the bounded retry), and R5 holds until the paper's
+  refresh has landed and is seen healthy, so neither takes the release
+  unguarded. The walk completes, and the baseline moves, only when every ring
+  has closed. A rollback names the breached ring and closes every other open
+  ring `stopped_by_rollback`.
+- **Bound to a release.** The act may name the release (`release`: its
+  commit or id); CI always does (the deploy commit) and retries the post. An
+  expedite naming another release is refused, so it never lands on an older
+  walk that is still in flight. A second expedite of the same walk is a
+  no-op. Reason and `by` are stripped of control characters.
 - **Record.** `expedite` history line with the reason, `by`, and the time;
   status shows `expedited: true`, `expedite_reason`, `expedited_by`; the
-  CI plan's `ring_walk` carries `expedited`. The morning letter names every
-  expedite from the history.
+  CI plan's `ring_walk` carries `expedited` (and `open_ring: all`). The
+  history is the source for naming every expedite in a report.
 
 ## Decisions after review 1 (Devin, 2026-11-03)
 

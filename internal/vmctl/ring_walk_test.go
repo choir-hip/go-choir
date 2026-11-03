@@ -872,7 +872,7 @@ func TestRingWakeRetryBoundedAndVisible(t *testing.T) {
 // took the release.
 func TestRingExpediteOpensEveryRingAndGuards(t *testing.T) {
 	s := newWalkingState(t)
-	if _, err := s.expedite(rwT0.Add(time.Minute), "key fix", "owner"); err != nil {
+	if _, err := s.expedite(rwT0.Add(time.Minute), "key fix", "owner", ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Walk.Rings) != len(ringOrder) || !s.Walk.Expedited {
@@ -924,7 +924,7 @@ func TestRingExpediteOpensEveryRingAndGuards(t *testing.T) {
 func TestRingExpediteRefusedWithoutWalkOrAfterRollback(t *testing.T) {
 	s := &ringWalkState{}
 	s.observeRelease(rwFrom, rwT0)
-	if _, err := s.expedite(rwT0, "x", "owner"); err == nil {
+	if _, err := s.expedite(rwT0, "x", "owner", ""); err == nil {
 		t.Fatalf("expedite with no walk must be refused")
 	}
 	s = newWalkingState(t)
@@ -932,7 +932,7 @@ func TestRingExpediteRefusedWithoutWalkOrAfterRollback(t *testing.T) {
 	de.Health = &ringHealth{Answered: true, Status: 200, Wedged: true}
 	s.step(rwT0.Add(time.Minute), []ringMemberObs{de})
 	s.step(rwT0.Add(2*time.Minute), []ringMemberObs{de})
-	if _, err := s.expedite(rwT0.Add(3*time.Minute), "x", "owner"); err == nil || !strings.Contains(err.Error(), "rolled") {
+	if _, err := s.expedite(rwT0.Add(3*time.Minute), "x", "owner", ""); err == nil || !strings.Contains(err.Error(), "rolled") {
 		t.Fatalf("a rolled-back release must never be expedited: %v", err)
 	}
 }
@@ -941,7 +941,7 @@ func TestRingExpediteRefusedWithoutWalkOrAfterRollback(t *testing.T) {
 // still pending (busy) was seen healthy; a busy one does not hold it.
 func TestRingExpediteCompletesAfterWatch(t *testing.T) {
 	s := newWalkingState(t)
-	s.expedite(rwT0, "key fix", "owner")
+	s.expedite(rwT0, "key fix", "owner", "")
 	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
 	paper := healthyObs(ringPaperComputer, ringR5, rwTo.Single)
 	busy := healthyObs(rwTest1, ringR1, rwFrom.Single)
@@ -987,5 +987,97 @@ func TestRingTimingRecorded(t *testing.T) {
 	}
 	if st.Timing[1].Ring != ringR1 || st.Timing[1].LastReachedAfterSeconds != 780 || st.Timing[1].Reached != 1 {
 		t.Fatalf("R1 (arms) timing = %+v", st.Timing[1])
+	}
+}
+
+// Round 3 (DeepSeek 1): an expedited walk never completes with d@e asleep
+// or the paper still pending: R0 and R5 hold until each is seen healthy on
+// the release, and the walk wakes d@e.
+func TestRingExpediteHoldsProofAndPaper(t *testing.T) {
+	s := newWalkingState(t)
+	s.expedite(rwT0, "key fix", "owner", "")
+	de := healthyObs(ringProofComputer, ringR0, "")
+	de.Active, de.Health = false, nil
+	paper := healthyObs(ringPaperComputer, ringR5, rwFrom.Single)
+	paper.Pending = true
+	other := healthyObs(rwUser1, ringR3, rwTo.Single)
+	woke := false
+	for i := 1; i <= 120; i++ {
+		_, acts := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, paper, other})
+		for _, a := range acts {
+			if a.Kind == ringActionWake && a.ComputerID == ringProofComputer {
+				woke = true
+			}
+		}
+	}
+	if s.Walk.Status != ringWalkWalking || s.Baseline != rwFrom {
+		t.Fatalf("an expedited walk completed with d@e asleep and the paper pending: %+v", s.Walk.Status)
+	}
+	if !woke {
+		t.Fatalf("an expedited walk must wake d@e")
+	}
+	for _, p := range s.Walk.Rings {
+		if (p.Ring == ringR0 || p.Ring == ringR5) && !p.ClosedAt.IsZero() {
+			t.Fatalf("%s closed unwatched: %+v", p.Ring, p)
+		}
+	}
+	// d@e and the paper take it: the walk completes.
+	de.Active, de.Release, de.Health = true, rwTo.Single, &ringHealth{Answered: true, Status: 200}
+	paper.Pending, paper.Release = false, rwTo.Single
+	for i := 121; i <= 123; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, paper, other})
+	}
+	if s.Walk.Status != ringWalkComplete || s.Baseline != rwTo {
+		t.Fatalf("expedited walk did not complete once d@e and the paper ran it: %+v", s.Walk.Rings)
+	}
+}
+
+// Round 3 (DeepSeek 2): an expedite names the release; another walk's
+// release is refused. A second expedite is a no-op.
+func TestRingExpediteBoundToRelease(t *testing.T) {
+	s := newWalkingState(t)
+	if _, err := s.expedite(rwT0, "x", "ci", "commit-other"); err == nil {
+		t.Fatalf("an expedite for another release must be refused")
+	}
+	if s.Walk.Expedited {
+		t.Fatalf("a refused expedite marked the walk")
+	}
+	if _, err := s.expedite(rwT0, "x", "ci", rwTo.SingleCommit); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := s.expedite(rwT0.Add(time.Minute), "again", "ci", rwTo.SingleCommit)
+	if err != nil || len(ev) != 0 || s.Walk.ExpediteReason != "x" {
+		t.Fatalf("a second expedite must be a no-op: %v %+v", err, ev)
+	}
+}
+
+// Round 3 (DeepSeek 3): a rollback of an expedited walk names the breached
+// ring and closes every other open ring with a line.
+func TestRingExpeditedRollbackClosesOtherRings(t *testing.T) {
+	s := newWalkingState(t)
+	s.expedite(rwT0, "x", "owner", "")
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	de.Health = &ringHealth{Answered: true, Status: 200, Wedged: true}
+	var all []ringEvent
+	for i := 1; i <= 2; i++ {
+		ev, _ := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+		all = append(all, ev...)
+	}
+	if s.Walk.Status != ringWalkRolledBack || s.Walk.open().Ring != ringR0 {
+		t.Fatalf("rollback must name R0: %+v", s.Walk.open())
+	}
+	stopped := 0
+	for _, e := range eventsOf(all, ringEventRingClosed) {
+		if e.Outcome == ringOutcomeStoppedByRollback {
+			stopped++
+		}
+	}
+	if stopped != len(ringOrder)-1 {
+		t.Fatalf("every other open ring must close with a line: %d", stopped)
+	}
+	for _, p := range s.Walk.Rings {
+		if p.ClosedAt.IsZero() {
+			t.Fatalf("ring %s left open after the rollback", p.Ring)
+		}
 	}
 }

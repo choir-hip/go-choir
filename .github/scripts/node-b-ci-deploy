@@ -586,7 +586,8 @@
     # stay planned and marker-backed; the guest's refusals and the guards
     # are unchanged. Read only from this checkout.
     expedite_base=$(jq -r '.deployed_commit // .target_commit // empty' /var/lib/go-choir/deploy-receipt.json 2>/dev/null || true)
-    expedite_range="$DEPLOY_COMMIT"
+    # A base that is not an ancestor (a rebased range) scans only the deploy
+    # commit: a missed trailer, never a wrong expedite.
     if [ -n "$expedite_base" ] && [ "$expedite_base" != "$DEPLOY_COMMIT" ] && git merge-base --is-ancestor "$expedite_base" "$DEPLOY_COMMIT" 2>/dev/null; then
       expedite_range="${expedite_base}..${DEPLOY_COMMIT}"
     else
@@ -597,13 +598,19 @@
     if [ -n "$expedite_line" ]; then
       expedite_sha=${expedite_line%%$'\t'*}
       expedite_reason=${expedite_line#*$'\t'}
-      expedite_body=$(jq -nc --arg reason "${expedite_reason:0:300}" --arg by "trailer ${expedite_sha:0:12}" '{reason:$reason,by:$by}')
+      # Bound to this deploy's release: vmctl refuses an expedite of any
+      # other walk.
+      expedite_body=$(jq -nc --arg reason "${expedite_reason:0:300}" --arg by "trailer ${expedite_sha:0:12}" --arg release "$DEPLOY_COMMIT" '{reason:$reason,by:$by,release:$release}')
       echo "    Ring-Expedite trailer on ${expedite_sha:0:12}: ${expedite_reason}"
-      expedite_status=$(curl -sS -o /tmp/go-choir-ring-expedite.json -w '%{http_code}' -X POST \
+      expedite_status=$(curl -sS --max-time 20 --retry 5 --retry-delay 2 --retry-all-errors -o /tmp/go-choir-ring-expedite.json -w '%{http_code}' -X POST \
         -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" -H "Content-Type: application/json" \
         -H "X-Choir-Lifecycle-Caller: ci.ring-expedite" \
         --data "$expedite_body" http://127.0.0.1:8083/internal/vmctl/ring-walk/expedite || printf 'curl_error_%s' "$?")
-      echo "    Ring walk expedite: http ${expedite_status} $(head -c 300 /tmp/go-choir-ring-expedite.json 2>/dev/null)"
+      if [ "$expedite_status" = "200" ]; then
+        echo "    Ring walk expedited: $(head -c 300 /tmp/go-choir-ring-expedite.json 2>/dev/null)"
+      else
+        echo "    WARNING: Ring-Expedite was NOT applied (http ${expedite_status}): $(head -c 300 /tmp/go-choir-ring-expedite.json 2>/dev/null); this release walks the rings at the ordinary pace" >&2
+      fi
       rm -f /tmp/go-choir-ring-expedite.json
     fi
     deploy_refresh_plan=""

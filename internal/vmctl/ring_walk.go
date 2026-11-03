@@ -129,6 +129,7 @@ const (
 	ringOutcomeSkippedEmpty      = "skipped_empty"
 	ringOutcomeSkippedNoExposure = "skipped_no_exposure"
 	ringOutcomeSuperseded        = "superseded"
+	ringOutcomeStoppedByRollback = "stopped_by_rollback"
 
 	ringEventBaseline         = "baseline"
 	ringEventWalkStarted      = "walk_started"
@@ -685,7 +686,7 @@ func (w *ringWalk) observeRing(now time.Time, p *ringProgress, members []ringMem
 		// hibernated between uses, so the walk wakes it (a wake is what any
 		// request does: a snapshot resume or a cold boot onto the open
 		// ring's release, never a restart of running work), with backoff.
-		if !w.Expedited && p.Ring == ringR0 && !graced && !o.Active && !o.Held && m.ExposedAt.IsZero() && ringWakeDue(m, now) {
+		if p.Ring == ringR0 && !graced && !o.Active && !o.Held && m.ExposedAt.IsZero() && ringWakeDue(m, now) {
 			m.WakeRequested = true
 			m.WakeAttempts++
 			m.LastWakeAt = now
@@ -728,11 +729,25 @@ func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]rin
 			open++
 			continue
 		}
+		// The proof ring and the paper's ring are watched even when
+		// expedited: R0 needs d@e seen healthy on the release (the walk wakes
+		// it), and R5 holds until the paper's refresh has landed and is seen
+		// healthy, so neither takes the release unguarded. Other rings let a
+		// still-pending (busy) member go at its next idle moment.
+		watched := p.Ring == ringR0 || p.Ring == ringR5
 		if len(members) == 0 {
+			if p.Ring == ringR0 {
+				p.Waiting = "expedited: no proof computer observed; R0 holds until d@e runs the release and is seen healthy"
+				open++
+				continue
+			}
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedEmpty, "no computer in this ring (expedited)"))
 			continue
 		}
-		required, exposed, _, missing := ringExposure(p, members, true)
+		required, exposed, _, missing := ringExposure(p, members, !watched)
+		// A member whose refresh to this target failed is not retried by the
+		// walk (no kill loop): it cannot hold the ring open.
+		missing = ringDropFailed(missing, members, w.To)
 		if len(missing) > 0 {
 			sort.Strings(missing)
 			p.Waiting = fmt.Sprintf("expedited: %d of %d seen healthy on the release; waiting for %s", exposed, required, strings.Join(missing, ","))
@@ -740,6 +755,11 @@ func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]rin
 			continue
 		}
 		if exposed == 0 {
+			if watched {
+				p.Waiting = fmt.Sprintf("expedited: %s holds until a member is seen healthy on the release", p.Ring) + ringWakeNote(p)
+				open++
+				continue
+			}
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "expedited: no member ran the release (down or still pending)"))
 			continue
 		}
@@ -754,13 +774,16 @@ func (s *ringWalkState) stepExpedited(now time.Time, obs []ringMemberObs) ([]rin
 }
 
 // expedite opens every remaining ring of the walking walk at once.
-func (s *ringWalkState) expedite(now time.Time, reason, by string) ([]ringEvent, error) {
+func (s *ringWalkState) expedite(now time.Time, reason, by, release string) ([]ringEvent, error) {
 	w := s.Walk
 	if w == nil || w.Status == ringWalkComplete || w.Status == ringWalkSuperseded {
 		return nil, fmt.Errorf("no walk in flight: the current release already finished a walk or did not change; nothing to expedite")
 	}
 	if w.Status == ringWalkRolledBack {
 		return nil, fmt.Errorf("ring walk %s rolled release %s back; a rolled-back release is never expedited", w.ID, w.To.Single)
+	}
+	if release != "" && release != w.To.SingleCommit && release != w.To.LayeredCommit && release != w.To.Single && release != w.To.Layered {
+		return nil, fmt.Errorf("release %s is not the walking release (walk %s targets %s, commit %s); nothing expedited", release, w.ID, w.To.Single, w.To.SingleCommit)
 	}
 	if w.Expedited {
 		return nil, nil
@@ -908,6 +931,14 @@ func (w *ringWalk) advance(now time.Time, s *ringWalkState) ([]ringEvent, bool) 
 func (w *ringWalk) rollback(now time.Time, p *ringProgress, breach *ringBreach, obs []ringMemberObs, actions *[]ringAction) []ringEvent {
 	p.Breach = breach
 	events := []ringEvent{w.closeRing(now, p, ringOutcomeBreached, "")}
+	// An expedited walk has every ring open: the breached ring becomes the
+	// current one, and every other unclosed ring is closed with a line.
+	w.Current = ringIndex(p.Ring)
+	for _, q := range w.Rings {
+		if q != p && q.ClosedAt.IsZero() {
+			events = append(events, w.closeRing(now, q, ringOutcomeStoppedByRollback, "a breach in "+string(p.Ring)+" rolled the release back"))
+		}
+	}
 	w.Status, w.EndedAt = ringWalkRolledBack, now
 	ev := w.event(now, ringEventRolledBack)
 	ev.Ring, ev.Breach = p.Ring, breach
@@ -1193,10 +1224,10 @@ func (r *ringWalkRunner) sampleTargets() (sample func(ringID) bool, to ringRelea
 }
 
 // expedite marks the walking walk expedited and records it (or the refusal).
-func (r *ringWalkRunner) expedite(now time.Time, reason, by string) (*deployRefreshRingWalk, error) {
+func (r *ringWalkRunner) expedite(now time.Time, reason, by, release string) (*deployRefreshRingWalk, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	events, err := r.state.expedite(now, reason, by)
+	events, err := r.state.expedite(now, reason, by, release)
 	if err != nil {
 		ev := ringEvent{Schema: ringHistorySchema, At: now, Event: ringEventExpediteRefused, Detail: "reason: " + reason + "; by: " + by + "; refused: " + err.Error()}
 		if w := r.state.Walk; w != nil {
@@ -1274,6 +1305,9 @@ func (r *ringWalkRunner) summaryLocked() *deployRefreshRingWalk {
 	if p := w.open(); p != nil {
 		out.OpenRing = string(p.Ring)
 	}
+	if w.Expedited && w.Status == ringWalkWalking {
+		out.OpenRing = "all"
+	}
 	return out
 }
 
@@ -1329,4 +1363,22 @@ func (w *ringWalk) timing(p *ringProgress) ringTiming {
 		}
 	}
 	return t
+}
+
+// ringDropFailed removes from missing the members whose refresh to the
+// target failed: the walk never retries them.
+func ringDropFailed(missing []string, members []ringMemberObs, to ringReleasePair) []string {
+	failed := map[string]bool{}
+	for _, o := range members {
+		if o.FailedTarget != "" && o.FailedTarget == to.commitFor(o.Layered) {
+			failed[o.ComputerID] = true
+		}
+	}
+	out := missing[:0]
+	for _, id := range missing {
+		if !failed[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }
