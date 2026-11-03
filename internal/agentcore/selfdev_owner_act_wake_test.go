@@ -16,7 +16,8 @@ package agentcore
 //  7. a crash boot wakes Texture            -> ...CrashSettledApplyMintsNothing
 //  8. a failed wake fails the decision      -> ...NoBoundDocumentMintsNothing (decision answers 200)
 //  9. Texture reads a "closure"             -> ...ApproveAndApplyEachWakeOnce (view kind owner_act)
-// 10. the switch is off and something moves -> ...SwitchOffMintsNothing
+// 10. (fix 13) the behavior depends on a switch -> ...HasNoSwitch; a failed
+//     live apply wakes nobody -> ...ApplyFailureWakesOnce
 
 import (
 	"context"
@@ -61,15 +62,6 @@ func seedOwnerActDocument(t *testing.T, s *store.Store, ownerID, computerID, doc
 		t.Fatalf("start document lifecycle: %v", err)
 	}
 	return trajectoryID, agentID
-}
-
-func ownerActSwitch(t *testing.T, s *store.Store, ownerID, computerID string, on bool) {
-	t.Helper()
-	if err := s.PutComputerSetting(context.Background(), store.ComputerSetting{
-		OwnerID: ownerID, ComputerID: computerID, Key: store.SettingTextureOwnerActWakes, Value: on,
-	}); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // ownerActRecords are the owner-act records in one Texture inbox, oldest first.
@@ -192,7 +184,6 @@ func TestOwnerActWakeApproveAndApplyEachWakeOnce(t *testing.T) {
 	ctx := context.Background()
 	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-approve")
 	f.trajectoryID = trajectoryID
-	ownerActSwitch(t, f.store, "owner", f.computerID, true)
 	operation := f.verify(t, f.freeze(t, "owner-act-approve", "owner act approve"))
 	if operation.TrajectoryID != trajectoryID {
 		t.Fatalf("operation trajectory %q, want the document's %q", operation.TrajectoryID, trajectoryID)
@@ -261,7 +252,6 @@ func TestOwnerActWakeRejectWakesOnce(t *testing.T) {
 	ctx := context.Background()
 	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-reject")
 	f.trajectoryID = trajectoryID
-	ownerActSwitch(t, f.store, "owner", f.computerID, true)
 	operation := f.verify(t, f.freeze(t, "owner-act-reject", "owner act reject"))
 	headBefore := ownerActHead(t, f.store, "owner", f.computerID, "doc-reject")
 
@@ -299,7 +289,6 @@ func TestOwnerActWakeNoBoundDocumentMintsNothing(t *testing.T) {
 	f := newP4Fixture(t)
 	ctx := context.Background()
 	_, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-unbound")
-	ownerActSwitch(t, f.store, "owner", f.computerID, true)
 	operation := f.verify(t, f.freeze(t, "owner-act-unbound", "owner act unbound"))
 	if strings.HasPrefix(operation.TrajectoryID, "trajectory-owner-act-") {
 		t.Fatalf("operation is bound to a seeded document: %s", operation.TrajectoryID)
@@ -322,21 +311,60 @@ func TestOwnerActWakeNoBoundDocumentMintsNothing(t *testing.T) {
 	}
 }
 
-func TestOwnerActWakeSwitchOffMintsNothing(t *testing.T) {
+// Fix 13 (docs/problems/selfdev-round-blockers-cluster-2026-11-03.md): there
+// is no switch; with no setting stored an approve and its apply wake Texture.
+func TestOwnerActWakeHasNoSwitch(t *testing.T) {
 	f := newP4Fixture(t)
 	ctx := context.Background()
-	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-off")
+	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-default")
 	f.trajectoryID = trajectoryID
-	// No setting stored: the default.
-	operation := f.verify(t, f.freeze(t, "owner-act-off", "owner act off"))
-	request := ownerActDecisionRequest(t, f, operation, "approve", "owner-act-off-key")
+	operation := f.verify(t, f.freeze(t, "owner-act-default", "owner act default"))
+	request := ownerActDecisionRequest(t, f, operation, "approve", "owner-act-default-key")
 	handler := &APIHandler{rt: f.rt}
 	if _, status, err := handler.decideSelfDevelopment(ctx, "owner", f.computerID, operation.OperationID, request); status != http.StatusOK || err != nil {
 		t.Fatalf("approve answered %d: %v", status, err)
 	}
 	f.waitForState(t, operation.OperationID, selfdev.StateApplied)
-	if head, err := f.store.InboxHead(ctx, "owner", f.computerID, inbox); err != nil || head != 0 {
-		t.Fatalf("texture inbox head %d (%v) with the switch off, want 0", head, err)
+	if got := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(got) != 2 {
+		t.Fatalf("with no setting stored, approve and apply must each wake Texture; got %d records", len(got))
+	}
+}
+
+// Fix 13: a live apply that ends failed tells Texture, with the cause; one
+// that did not fail, or an operation already failed before the pass, mints
+// nothing.
+func TestOwnerActWakeApplyFailureWakesOnce(t *testing.T) {
+	f := newP4Fixture(t)
+	ctx := context.Background()
+	trajectoryID, inbox := seedOwnerActDocument(t, f.store, "owner", f.computerID, "doc-fail")
+	f.trajectoryID = trajectoryID
+	operation := f.verify(t, f.freeze(t, "owner-act-fail", "owner act fail"))
+	// Not failed: nothing.
+	f.rt.notifyTextureOfApplyFailure(ctx, operation)
+	if got := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(got) != 0 {
+		t.Fatalf("an operation that did not fail woke Texture: %+v", got)
+	}
+	failed, err := f.operations.Transition(ctx, f.computerID, operation.OperationID, operation.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
+		next.TerminalError = "host build failed (build_failed): the patch does not apply"
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.rt.notifyTextureOfApplyFailure(ctx, operation)
+	f.rt.notifyTextureOfApplyFailure(ctx, operation)
+	got := ownerActRecords(t, f.store, "owner", f.computerID, inbox)
+	if len(got) != 1 {
+		t.Fatalf("a failed apply must wake Texture once; got %d records", len(got))
+	}
+	checkOwnerActRecord(t, got[0], inbox, operation.OperationID, types.OwnerActFail)
+	if !strings.Contains(got[0].Directive.Body, "build_failed") || !strings.Contains(got[0].Directive.Body, "not applied") {
+		t.Fatalf("the fail record must carry the cause: %q", got[0].Directive.Body)
+	}
+	// Already failed before the pass: the pass recorded nothing new.
+	f.rt.notifyTextureOfApplyFailure(ctx, failed)
+	if again := ownerActRecords(t, f.store, "owner", f.computerID, inbox); len(again) != 1 {
+		t.Fatalf("records = %d, want 1", len(again))
 	}
 }
 
@@ -348,7 +376,6 @@ func TestOwnerActWakeCrashSettledApplyMintsNothing(t *testing.T) {
 	ctx := context.Background()
 	trajectoryID, inbox := seedOwnerActDocument(t, fx.store, "owner", fx.computerID, "doc-crash")
 	fx.trajectoryID = trajectoryID
-	ownerActSwitch(t, fx.store, "owner", fx.computerID, true)
 	fx.controlFail.Store(true)
 	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "owner-act-crash")
 	fx.appendDecision(t, operation, bundleDigest, "owner-act-crash-decision")

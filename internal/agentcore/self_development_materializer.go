@@ -529,6 +529,11 @@ func selfDevelopmentBundleMatchesOperation(bundle transaction.CapsuleEffectBundl
 // journalOnly records the updater journal's terminal outcome without calling
 // the updater (crash-boot settlement, L1a-3b).
 func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
+	if !journalOnly {
+		// A live apply that ends failed tells the candidate's Texture, as an
+		// applied one does (fix 13).
+		defer rt.notifyTextureOfApplyFailure(ctx, operation)
+	}
 	bundlePath := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest, "bundle.json")
 	rawBundle, err := os.ReadFile(bundlePath)
 	if err != nil {

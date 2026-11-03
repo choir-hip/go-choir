@@ -14,9 +14,10 @@
 # script and awaited, not performed.
 #
 # Steps (the numbers are the design's):
-#   1  set texture.root_desk and texture.owner_act_wakes on, through
-#      /api/computer-settings (source projection and the rebase offer have no
-#      switch since capsule overlay S4)
+#   1  set texture.root_desk on, through /api/computer-settings (source
+#      projection and the rebase offer have no switch since capsule overlay
+#      S4; owner-act records have none since fix 13 of
+#      docs/problems/selfdev-round-blockers-cluster-2026-11-03.md)
 #   2  a fresh document requests a small source change A; approve it; wait for
 #      it to apply; /health shows source_projection.state "projected" with the
 #      operation opA and base B
@@ -113,15 +114,15 @@ fail_step() { log "FAIL: $*"; FAILED=1; }
 
 log "health $(api GET /health | jq -c '{deployed: .build.deployed_commit}')"
 if [ "$DRY" = 1 ]; then
-  log "dry run: would set the two switches, request change A, approve and apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
-  for k in texture.root_desk texture.owner_act_wakes; do setting "$k" true; done
+  log "dry run: would set the root desk switch, request change A, approve and apply it, wait for FP0's main commit that edits A's file, check the notice, the root's Cast, management's bound spec, the claim, the B' capsule, the offer, the rebased candidate, the lineage receipt and the owner-act record, then the conflict run and the negatives"
+  setting texture.root_desk true
   exit 0
 fi
 
 # Step 1.
-for k in texture.root_desk texture.owner_act_wakes; do setting "$k" true; done
+setting texture.root_desk true
 api GET /api/computer-settings > "$OUT/settings.json"
-jq -e '[.settings[] | select(.key == "texture.root_desk" or .key == "texture.owner_act_wakes") | .value] | all' "$OUT/settings.json" >/dev/null \
+jq -e '[.settings[] | select(.key == "texture.root_desk") | .value] | all' "$OUT/settings.json" >/dev/null \
   || { log "a switch did not take"; exit 1; }
 
 if [ "$PHASE" = all ] || [ "$PHASE" = apply ]; then

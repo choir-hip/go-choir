@@ -1563,36 +1563,6 @@
    "note": "ON NOW. Known nit: keeps never pruned (bunch230-F7)."
   },
   {
-   "id": "texture_owner_act_wakes",
-   "kind": "setting",
-   "life": "release",
-   "owner": "texture",
-   "class": "red",
-   "surface": "settings-selfdev",
-   "introduced": "2026-10-28",
-   "settings": [
-    "texture.owner_act_wakes"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "R0,ids:1",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW (mints into the Texture inbox)."
-  },
-  {
    "id": "texture_evidence_embeds",
    "kind": "setting",
    "life": "release",

@@ -95,6 +95,12 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 			body += " The reason, verbatim:\n\n" + reason
 		}
 		return body
+	case types.OwnerActFail:
+		body := fmt.Sprintf("Self-development candidate %s failed after its decision: it was not applied, and the computer keeps the release it had.", id)
+		if cause := strings.TrimSpace(operation.TerminalError); cause != "" {
+			body += " The cause:\n\n" + cause
+		}
+		return body
 	case types.OwnerActAbandon:
 		// Abandon is only ever the owner's act. A degraded candidate had
 		// installed a release: that release stays live, and only the
@@ -110,9 +116,12 @@ func ownerActBody(ownerID string, operation selfdev.Operation, act, reason strin
 
 // wakeTextureForOwnerAct mints the owner-act record of act on operation
 // into its document's Texture inbox. It reports whether a record was
-// committed or replayed; an operation with no bound document, an off
-// switch, or a runtime without a store mints nothing and is no error. The
-// command id is the record's, so the same act commits once.
+// committed or replayed; an operation with no bound document, or a runtime
+// without a store, mints nothing and is no error. There is no switch (fix 13,
+// docs/problems/selfdev-round-blockers-cluster-2026-11-03.md: with the old
+// texture.owner_act_wakes off by default, Texture told the owner to apply a
+// candidate already applied and called a rejected one verified). The command
+// id is the record's, so the same act commits once.
 func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, operation selfdev.Operation, act, reason string) (bool, error) {
 	if rt == nil || rt.store == nil || !types.IsOwnerAct(act) || strings.TrimSpace(operation.OperationID) == "" {
 		return false, nil
@@ -120,9 +129,6 @@ func (rt *Runtime) wakeTextureForOwnerAct(ctx context.Context, ownerID string, o
 	ownerID = firstNonEmpty(strings.TrimSpace(ownerID), strings.TrimSpace(rt.selfdevRouteOwnerID))
 	computerID := firstNonEmpty(strings.TrimSpace(rt.TextureComputerID()), strings.TrimSpace(operation.ComputerID))
 	if ownerID == "" || computerID == "" {
-		return false, nil
-	}
-	if !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingTextureOwnerActWakes) {
 		return false, nil
 	}
 	inbox, bound, err := rt.ownerActTextureInbox(ctx, ownerID, computerID, operation)
@@ -166,4 +172,26 @@ func (rt *Runtime) rebaseOwnerActSentence(operation selfdev.Operation, act strin
 		return ""
 	}
 	return rt.rebaseReceiptSentence(operation.OperationID)
+}
+
+// notifyTextureOfApplyFailure wakes the candidate's Texture when a live apply
+// left the operation failed. It reads the operation back, so it mints only
+// for the outcome this pass recorded; the crash boot's journal-only
+// settlement never calls it (a restart never starts a Texture turn).
+func (rt *Runtime) notifyTextureOfApplyFailure(ctx context.Context, operation selfdev.Operation) {
+	if rt == nil || rt.selfdevOperations == nil || operation.State == selfdev.StateFailed {
+		return
+	}
+	// The outcome is already durable: a cancel of the pass's context must
+	// not drop the record that says so.
+	ctx = context.WithoutCancel(ctx)
+	current, err := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
+	if err != nil {
+		log.Printf("selfdev owner act: fail %s: read the operation back: %v", operation.OperationID, err)
+		return
+	}
+	if current.State != selfdev.StateFailed {
+		return
+	}
+	rt.notifyTextureOfOwnerAct(ctx, rt.selfdevRouteOwnerID, current, types.OwnerActFail, "")
 }

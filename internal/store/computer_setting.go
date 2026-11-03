@@ -154,16 +154,6 @@ const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 // rollback: the master stays an ordinary document.
 const SettingTextureRootDesk = "texture.root_desk"
 
-// SettingTextureOwnerActWakes makes an act on a self-development candidate
-// (the owner's approve or reject, and the apply that follows an approve)
-// mint one platform-authored owner-act record into the inbox of the Texture
-// whose document the candidate's trajectory binds, so that Texture wakes
-// with the act as its cause
-// (docs/problems/owner-acts-on-a-candidate-do-not-wake-texture-2026-10-25.md).
-// Texture stays the only writer of the document. Read live at each act. Off
-// by default; off mints nothing and is the rollback.
-const SettingTextureOwnerActWakes = "texture.owner_act_wakes"
-
 // SettingPackagesPublish lets the owner publish this computer's applied
 // package changes to the Choir Library at scope owner (Library S2,
 // docs/design/library-package-propagation-2026-10-26.md 3.2): the guest
@@ -247,7 +237,6 @@ var KnownComputerSettings = map[string]bool{
 	SettingTextureEvidenceEmbeds:        false,
 	SettingTextureHoldTrajectory:        false,
 	SettingTextureRootDesk:              false,
-	SettingTextureOwnerActWakes:         false,
 	SettingPackagesPublish:              false,
 	SettingPackagesShare:                false,
 	SettingDispatchWideSlots:            false,

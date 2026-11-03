@@ -3,7 +3,8 @@ package types
 import "strings"
 
 // An owner-act record tells a Texture that the self-development candidate
-// its document supervises was approved, applied or rejected
+// its document supervises was approved, applied, rejected, abandoned, or
+// failed after its decision
 // (docs/problems/owner-acts-on-a-candidate-do-not-wake-texture-2026-10-25.md).
 // The decision is the owner's (or a consensus decision's) and is already on
 // the tape; this record is its projection into the inbox of the one desk
@@ -24,6 +25,10 @@ const (
 	// OwnerActAbandon closes an open candidate that installed nothing (or a
 	// degraded one) to failed, with the owner's reason.
 	OwnerActAbandon = "abandon"
+	// OwnerActFail is a decided candidate whose apply failed (the updater,
+	// the host build or the rebase check refused it); the computer keeps its
+	// release. It names no owner act, only the outcome of one.
+	OwnerActFail = "fail"
 
 	ownerActSenderDesk   = "selfdev"
 	ownerActRecordPrefix = "owner-act:"
@@ -44,7 +49,7 @@ func OwnerActRecordID(operationID, act string) string {
 // IsOwnerAct reports whether act is one an owner-act record may name.
 func IsOwnerAct(act string) bool {
 	switch act {
-	case OwnerActApprove, OwnerActApply, OwnerActReject, OwnerActAbandon:
+	case OwnerActApprove, OwnerActApply, OwnerActReject, OwnerActAbandon, OwnerActFail:
 		return true
 	}
 	return false
