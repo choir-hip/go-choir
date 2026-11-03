@@ -254,3 +254,14 @@ specs under frontend/tests/files-next/). The re-exports on the base let new roun
 round stacks on an unpublished parent, so Problem 11 still blocks them. All three stacked arms logged
 stack_base_moved again at the 07:07-07:08Z boot (booted=29d47c215b96, "not in the guest source repository"),
 with the base fetched 8-10 s later.
+
+Problem 10 widens after the 29d47c215 refresh (07:15-07:20Z): every arm with an applied files-next stack is now
+refused at engineering admission. Pool round 3 (07:14:30Z): management's report, "the Cast was refused before an
+assignment was opened. The current computer is on release 29d47c215 while the existing stack is based on
+2795b8ee; its patch is not in the booted base and touches frontend/src/lib/app-sdk.ts, so the platform requires a
+root-desk rebase that is unavailable in this run." Claude has been parked on the same gate since 06:19Z; deepseek
+is expected to hit it. Luna (no applied stack) is not affected. The owner rollback does not help: it returns to
+the state an applied operation left and refuses the genesis baseline, so it cannot remove the first files-next
+round (each arm's first applied operation is a files-next round). So the stacked arms wait on the platform: a
+rebase notice that reaches the root (U4), a graft by source auto-update, or a way to start a package-only round
+on the base with the stack set aside. FP0 keeps their next requests queued.
