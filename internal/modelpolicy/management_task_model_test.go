@@ -90,8 +90,11 @@ model = "gpt-6-luna"
 		t.Fatal(err)
 	}
 	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if meta[MetadataProvider] != "synthetic" || meta[MetadataFallbacks] != "chatgpt/gpt-6-luna" {
+	if meta[MetadataProvider] != "synthetic" {
 		t.Fatalf("synthetic task override metadata = %+v", meta)
+	}
+	if _, has := meta[MetadataFallbacks]; has {
+		t.Fatalf("an explicit concrete task pin must have no fallbacks: %+v", meta)
 	}
 	// An override outside the default pool fails over to the default pool's
 	// members, never to a free or preview model.
@@ -99,7 +102,27 @@ model = "gpt-6-luna"
 		t.Fatal(err)
 	}
 	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
-	if fb, _ := meta[MetadataFallbacks].(string); fb != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017,chatgpt/gpt-6-luna" {
-		t.Fatalf("opencode task override fallback = %+v", meta)
+	if _, has := meta[MetadataFallbacks]; has {
+		t.Fatalf("opencode task override must have no fallbacks: %+v", meta)
+	}
+	// A pool, a free or a preview model in the role is replaced by the
+	// platform pin, which keeps the default pool's other member.
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nmodel = \"pool:default\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if meta[MetadataModel] != ManagementTaskModel || meta[MetadataFallbacks] != "synthetic/hf:deepseek-ai/DeepSeek-V4.1-Flash-1017" {
+		t.Fatalf("pool-valued task role = %+v", meta)
+	}
+	// The crouton arm: an uncatalogued provider's concrete model, no fallbacks.
+	if err := os.WriteFile(path, []byte("# owner-edited\n[defaults]\nprovider = \"openrouter\"\nmodel = \"stealth/crouton-alpha\"\n\n[roles.management_task]\nprovider = \"openrouter\"\nmodel = \"stealth/crouton-alpha\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	meta = NewManager(ManagerConfig{PolicyPath: path}).EnrichMetadata(context.Background(), "owner", agentprofile.ManagementTask, map[string]any{"trajectory_id": "t1"})
+	if meta[MetadataModel] != "stealth/crouton-alpha" {
+		t.Fatalf("crouton task = %+v", meta)
+	}
+	if _, has := meta[MetadataFallbacks]; has {
+		t.Fatalf("crouton task must have no fallbacks: %+v", meta)
 	}
 }

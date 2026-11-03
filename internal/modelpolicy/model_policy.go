@@ -194,11 +194,13 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
 	selection, fallbacks, assignment := Assign(selection, thread)
-	if NormalizeRole(role) == ManagementTaskRole {
+	if NormalizeRole(role) == ManagementTaskRole && selection.Source == "management_task_pin" {
 		// A pinned task never fails over to a free or preview model (R2-9).
 		// Owner 2026-10-28: every desk falls back to the other model when
-		// one is out, so the pin fails over to the default pool's other
-		// members only.
+		// one is out, so the platform's pin fails over to the default
+		// pool's other members only. A concrete model the computer's own
+		// policy file names is a pin like any role's: no fallbacks (owner
+		// 2026-10-23: "I'd rather them fail than fallback").
 		fallbacks = managementTaskFallbacks(selection)
 	}
 	if assignment == AssignmentUnknownPool {
