@@ -109,6 +109,15 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   booted platform base 2795b8ee so the round-4 build can open as directed." Per main, the rebase notice drives;
   FP0 does not intervene.
 
+### Round 5
+
+- 07:07:59Z refresh to 29d47c215 (planned); stack_base_moved logged again (booted=29d47c215b96, base 4036f0c37a84).
+- 07:01Z standing_consensus armed (generation 4).
+- 07:14:29Z owner revision c07cd1bb (claude/revise-r5.md: re-exports on the base, package-only, real files at
+  /computer/files, choir-shot.mjs, delegate can build). 07:16:03Z Texture wrote the document; no Cast followed by
+  07:25Z (Problem 8), and admission would refuse it on the stack anyway (Problem 10). No delegate run this round.
+- Status at 07:25Z: blocked on the platform (Problems 10 and 11). Spend $2.92 total (502 calls).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -116,5 +125,7 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 1 | 03:14:46 | 1.0 | 0.0 | 45.7 (refused at Freeze, mode off) | - | - | - | blocked |
 | 2 | 04:08:36 | 2.4 | 0.0 | 21.8 | 5.3 | - | - | judge rejected |
 | 3 | 04:39:56 | 2.3 | 0.0 | 46.9 | 3.6 | 1.75 | 0.5 | applied |
+| 4 | 06:13:06 | refused at admission (stack_base_moved) | - | - | - | - | - | blocked |
+| 5 | 07:14:29 | no Cast by 07:25 (Problem 8; Problem 10 behind it) | - | - | - | - | - | blocked |
 
 Live shots plus next request (apply to next revision sent): round 3, 05:35:01 to 06:13:06 = 38.1 min (live harness hardening about 25 min, the full seven-preset run 4 min, then a build-slot wait).

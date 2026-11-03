@@ -91,6 +91,28 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Round 5 written (scratch luna/request-r5.md, 5.5 KB, new document): answers each of the three reasons. It waits
   for a build slot (pool r2 and deepseek r4 hold the two).
 
+### Round 5 (new document c5478624-82b3-5142-b896-134b9bcacc6a, trajectory 1095280c-d391-5a4b-97d6-031ef7061a33)
+
+- 06:43:55Z request (luna/request-r5.md, answers the three round-4 excuses). Two assignments; selfdev-7708bffc
+  judge failed 06:47:44Z ("incomplete ... repeated generic screenshots"); Texture re-cast 06:48:12Z;
+  selfdev-00592bf5f5d031915bd4ab415185706c frozen 07:05:02Z, judge failed 07:07:55Z ("no interactive run, no
+  twelve genuine state screenshots and no contrast, mobile-overflow or list-share measurements").
+- 07:02Z standing_consensus armed; 07:07Z FP0 returned luna to propose_only for its in-flight round (Problem 12);
+  07:16Z standing_consensus again (generation 4) after the refresh.
+
+### Round 6 (new document 387b1676-dd78-525e-bb39-245cb9a74fdc, trajectory 41dd4c9b-2c9e-5381-91df-4248b1e0517d)
+
+- 07:14:55Z request (luna/request-r6.md: release 29d47c215, real files, choir-shot.mjs, re-exports). 07:17:52Z
+  Texture Cast; the first handoff was refused ("the request round is not open"); 07:18:10Z reissued; assignment
+  bound 07:20:14Z; frozen 07:22:42Z (selfdev-e55e1cf89f84142a8bcba0b363e73ef4); judge failed 07:24:08Z: "no
+  browser or interaction run, no twelve state screenshots and no contrast, mobile-overflow or list-share
+  measurements, and the frozen bundle also carries unintended test-results files".
+- Verdict: honestly blocked on the engineering model. Six rounds, eight assignments: each luna engineer (gpt-6-luna,
+  low reasoning effort per the assignment records) builds for 0.5 to 4.5 minutes, never drives the app in a
+  browser, and freezes a shell or completes "blocked"; the claude, deepseek and pool engineers on the same request
+  build for 20-47 minutes. Raising luna's engineering reasoning effort is the next probe (model policy is main's).
+  Spend $0.92 total (694 calls).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -101,3 +123,5 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 3 (05:51 note, no Cast) | 05:51:15 | none (Problem 8) | - | - | - | - | - | resent |
 | 3 resent | 06:06:34 | 1.5 | 0.03 | 3.5 (cut at 16 KiB) | 1.2 | - | - | judge rejected |
 | 4 | 06:18:13 | 14.7 (Problem 8; nudge at 06:29:58) | 0.03 | 0.7 (Complete blocked, no Freeze) | - | - | - | blocked |
+| 5 | 06:43:55 | 3.2 | 0.0 | 21.1 (two assignments) | 2.9 | - | - | judge rejected |
+| 6 | 07:14:55 | 3.0 (+ one refused handoff) | 2.4 | 2.5 | 1.4 | - | - | judge rejected |

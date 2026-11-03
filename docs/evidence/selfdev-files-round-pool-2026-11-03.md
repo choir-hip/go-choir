@@ -81,11 +81,22 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   harness drives browsing only).
 - Round 3 revision written 06:50Z (scratch pool/revise-r3.md); waits for a build slot.
 
+### Round 3
+
+- 07:07:50Z refresh to 29d47c215; stack_base_moved (base 2795b8ee6881, op selfdev-c4ac7712). 07:01Z
+  standing_consensus armed (generation 6).
+- 07:14:30Z owner revision edea4107 (pool/revise-r3.md). 07:14:46Z Texture forwarded; management's Cast was
+  refused before an assignment opened: "The current computer is on release 29d47c215 while the existing stack is
+  based on 2795b8ee; its patch is not in the booted base and touches frontend/src/lib/app-sdk.ts, so the platform
+  requires a root-desk rebase that is unavailable in this run" (07:15:41Z). Problem 10.
+- Status at 07:25Z: blocked on the platform. Spend $1.92 total (288 calls).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 04:37:47 | 0.4 | 0.0 | 47.2 | 2.3 | 0.4 | 0.03 | applied |
 | 2 | 06:20:10 | 0.9 | 0.02 | 20.5 | 1.0 | 0.6 | 0.03 | applied |
+| 3 | 07:14:30 | refused at admission (stack_base_moved) | - | - | - | - | - | blocked |
 
 Live shots plus next request (apply to next revision sent): round 1, 05:28:08 to 06:20:10 = 52.0 min (first live run 05:40Z; full-preset runs blocked by email sign-in 429s until 06:04Z; then a build-slot wait).

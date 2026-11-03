@@ -107,6 +107,14 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - The next round waits for this arm's refresh to 29d47c215 (real files in the capsule, choir-shot.mjs, app-sdk
   re-exports on the base).
 
+### Round 5
+
+- 07:07:41Z refresh to 29d47c215; stack_base_moved (base 2795b8ee6881, op selfdev-574077b3).
+- 07:14:54Z owner revision 22b592d5 (deepseek/revise-r5.md: rebuild the round-4 fixes on the new base, 4.5:1
+  contrast for row names in noir and liquid-metal, real files, package-only). 07:17:42Z Texture wrote the
+  document; no Cast by 07:25Z (Problem 8); admission would refuse it on the stack (Problem 10).
+- Status at 07:25Z: blocked on the platform. Spend $5.03 total (617 calls).
+
 #### Cycle time (UTC, minutes)
 
 | Round | Sent | Sent to Cast | Cast to capsule start | Build (start to Freeze) | Freeze to judge done | Approve wait | Apply | Outcome |
@@ -115,5 +123,6 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 | 2 | 04:09:12 | 1.0 | 0.0 | 24.8 + 3.9 Freeze retries | 1.5 | 1.6 (FP0 reject) | - | FP0 rejected |
 | 3 | 05:26:16 | 2.7 | 0.0 | 39.4 | 1.4 | 3.2 | 0.03 | applied |
 | 4 | 06:25:28 | 8.1 (Problem 8) | 0.02 | 29.1 | 2.5 (consensus) | - | - | consensus rejected (base_moved) |
+| 5 | 07:14:54 | no Cast by 07:25 (Problem 8; Problem 10 behind it) | - | - | - | - | - | blocked |
 
 Live shots plus next request (apply to next revision sent): round 3, 06:12:59 to 06:25:28 = 12.5 min (live run 06:13-06:18Z, review and revision 7 min). Round 4's revision then waited 8.1 min for a Cast (Problem 8; nudge 06:31:31Z, assignment 06:33:36Z).
