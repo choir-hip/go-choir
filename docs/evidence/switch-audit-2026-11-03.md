@@ -759,3 +759,21 @@ Each decided switch is deleted; "on" means the code runs everywhere.
   longer need it.
 - `dispatch.wide_slots`: the fixed activation cap is deleted; concurrency
   follows the computer's memory and CPU admission.
+
+**Group 3, store and tape.**
+- `telemetry.batch`: on (already).
+- `store.telemetry_partitions`: on everywhere, the paper included, after the
+  partition GC starvation bug (paper-compaction-2026-10-31.md: no retired
+  partition file is deleted while a staged compact copy exists) is fixed;
+  the store floor 5 is accepted like any schema step.
+- `tape.group_commit`: deleted with its code (owner: "i dont like the sound
+  of losing events just before a crash. those are among the most important
+  events!").
+- `store.event_table` and `CHOIR_EVENT_TABLE_COMPUTERS`: deleted, setting
+  and writer; the existing table read until empty.
+- `evidence.graph`: measured first on a copy of the paper's store (rows,
+  bytes, write volume, memory, lock hold of the import), then decided
+  (owner: "we just spent the last few days working to optimize storage and
+  memory usage. cant undo that").
+- `store.compact_force`, `management.serial_tasks`, `store.debounced_checkpoint`,
+  `store.trace_log`: deleted.
