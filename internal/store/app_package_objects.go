@@ -24,12 +24,12 @@ import (
 // SettingAppPackageObjects turns on the owner's route to package kinds
 // (/api/app-packages/{package}/objects/{kind}). Read live on every request, so
 // the owner turns it on for one computer, and off again, with no deploy and no
-// restart. Off by default; off is the rollback: the route answers 404, objects
+// restart. On by default (owner, 2026-11-03); a stored off is the rollback: the route answers 404, objects
 // already written stay on the tape as inert rows that replay without a registry
 // lookup.
 const SettingAppPackageObjects = "app_packages.objects"
 
-func init() { KnownComputerSettings[SettingAppPackageObjects] = false }
+func init() { KnownComputerSettings[SettingAppPackageObjects] = true }
 
 // PackageObject is one stored object of a package kind.
 type PackageObject struct {

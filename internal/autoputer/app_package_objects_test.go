@@ -123,9 +123,14 @@ func (f *routeFixture) countNotes(owner string) int {
 	return len(objs)
 }
 
-// R1
-func TestRouteIsOffByDefaultAndTouchesNothing(t *testing.T) {
+// R1. The route is on by default (owner, 2026-11-03); a stored off closes
+// it and touches nothing.
+func TestRouteIsOnByDefaultAndAStoredOffTouchesNothing(t *testing.T) {
 	f := newRouteFixture(t)
+	if w := f.do(http.MethodPut, noteURL+"/n0", routeOwner, goodNote); w.Code != http.StatusOK {
+		t.Fatalf("PUT with nothing stored: %d %s, want 200 (default on)", w.Code, w.Body.String())
+	}
+	f.setSwitch(routeOwner, routeComputer, false)
 	for _, tc := range []struct{ method, path, body string }{
 		{http.MethodGet, noteURL, ""},
 		{http.MethodGet, noteURL + "/n1", ""},
@@ -137,26 +142,22 @@ func TestRouteIsOffByDefaultAndTouchesNothing(t *testing.T) {
 			t.Errorf("%s %s with the switch off: %d %s, want 404", tc.method, tc.path, w.Code, w.Body.String())
 		}
 	}
-	if n := f.countNotes(routeOwner); n != 0 {
-		t.Fatalf("the route wrote %d objects with the switch off", n)
-	}
-	// A switch explicitly set to false is the same.
-	f.setSwitch(routeOwner, routeComputer, false)
-	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusNotFound {
-		t.Fatalf("explicit off: %d", w.Code)
+	if n := f.countNotes(routeOwner); n != 1 {
+		t.Fatalf("the route holds %d objects; want only the one written before the switch went off", n)
 	}
 }
 
-func TestRouteSettingIsKnownAndDefaultsOff(t *testing.T) {
+func TestRouteSettingIsKnownAndDefaultsOn(t *testing.T) {
 	def, known := choirstore.KnownComputerSettings[choirstore.SettingAppPackageObjects]
-	if !known || def {
-		t.Fatalf("known = %v, default = %v; want a known setting that defaults off", known, def)
+	if !known || !def {
+		t.Fatalf("known = %v, default = %v; want a known setting that defaults on (owner, 2026-11-03)", known, def)
 	}
 }
 
 // R2
 func TestRouteSwitchIsPerOwnerAndComputer(t *testing.T) {
 	f := newRouteFixture(t)
+	f.setSwitch(routeOwner, routeComputer, false)
 	f.setSwitch(routeOwner, "computer-b", true)
 	f.setSwitch("owner-b@example.com", routeComputer, true)
 	if w := f.do(http.MethodPut, noteURL+"/n1", routeOwner, goodNote); w.Code != http.StatusNotFound {

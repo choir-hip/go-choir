@@ -117,8 +117,10 @@ func wakeAfterOwnerReviseAndAgentRevision(t *testing.T, suffix string, switchOn 
 	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	s := core.Store()
 	start := startDirectionsLifecycle(t, s, suffix)
-	if switchOn {
-		if err := s.PutComputerSetting(t.Context(), store.ComputerSetting{OwnerID: start.OwnerID, ComputerID: start.ComputerID, Key: store.SettingTextureOwnerDirections, Value: true}); err != nil {
+	// Stored either way, and hold_trajectory stored off, as these tests were
+	// written: both default on (owner, 2026-11-03).
+	for key, value := range map[string]bool{store.SettingTextureOwnerDirections: switchOn, store.SettingTextureHoldTrajectory: false} {
+		if err := s.PutComputerSetting(t.Context(), store.ComputerSetting{OwnerID: start.OwnerID, ComputerID: start.ComputerID, Key: key, Value: value}); err != nil {
 			t.Fatal(err)
 		}
 	}

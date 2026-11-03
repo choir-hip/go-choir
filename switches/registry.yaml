@@ -1464,7 +1464,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R0,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1476,7 +1476,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "Proved on b@c and d@e; byte-identical when off. ON NOW."
+   "note": "Proved on b@c and d@e; byte-identical when off. ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "engineering_progress_to_texture",
@@ -1494,7 +1494,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R0,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1506,7 +1506,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW."
+   "note": "ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "engineering_carry_unfinished",
@@ -1524,7 +1524,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R0,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1536,7 +1536,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW. Known nit: keeps never pruned (bunch230-F7)."
+   "note": "ON NOW. Known nit: keeps never pruned (bunch230-F7). Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "texture_evidence_embeds",
@@ -1554,7 +1554,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1566,7 +1566,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW with the visual-capture grant."
+   "note": "ON NOW with the visual-capture grant. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "engineering_slots_graph",
@@ -1584,7 +1584,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1596,7 +1596,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW."
+   "note": "ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "evidence_graph",
@@ -1626,7 +1626,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW; turn-on imports the table rows (25 s bounded).",
+   "note": "ON NOW; turn-on imports the table rows (25 s bounded). Default off, held 2026-11-03: owner asked for the first-write import to be measured on a paper copy first (switch audit group 3).",
    "revert": {
     "mode": "one_way"
    }
@@ -1647,7 +1647,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1659,7 +1659,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW."
+   "note": "ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "files_object",
@@ -1677,7 +1677,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1689,7 +1689,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW."
+   "note": "ON NOW. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "texture_hold_trajectory",
@@ -1707,7 +1707,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R0,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1719,7 +1719,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "ON NOW on owner computers; paper after."
+   "note": "ON NOW on owner computers; paper after. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "texture_root_desk",
@@ -1750,7 +1750,7 @@
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
    "blocked_by": "PD3 S2 F4 fix proved (oldest-first excerpt)",
-   "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master)."
+   "note": "LEAVE OFF on the paper (hundreds of story documents would churn the master). Default off, held 2026-11-03 (docs/problems/default-off-switches-audit-2026-11-03.md): owner turns it on once F4/F5 are re-proved on d@e and the paper's story documents feed the master as one batched entry an hour."
   },
   {
    "id": "packages_publish",
@@ -1768,7 +1768,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "none",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1780,38 +1780,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "grandfathered_off_until": "2026-11-04",
-   "gate": {
-    "act": "train 10 deployed, b@c booted it, the Reader's first release published on b@c"
-   }
-  },
-  {
-   "id": "store_debounced_checkpoint",
-   "kind": "setting",
-   "life": "release",
-   "owner": "store",
-   "class": "red",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "settings": [
-    "store.debounced_checkpoint"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-11",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "kill9_drill_durability",
-     "bound": "no acknowledged write lost"
-    }
-   ],
-   "retire": "delete",
-   "grandfathered_off_until": "2026-11-04",
-   "probe": "kill -9 durability drill (deploy R procedure) on a throwaway test computer",
-   "note": "Retired: the guest store has no history commit since the move to SQLite and nothing acts on the key (internal/store/computer_setting.go); it stays known so a stored value still reads. Retired 2026-10-31 to make room for tape_group_commit under the release cap."
+   "note": "Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback. The b@c first-publish gate is superseded by the owner rulings of 2026-11-03 (nothing is off by default; a published release is public, 8e2814b6f); publishing stays an owner act with its --confirm-paths preview and needs an applied operation."
   },
   {
    "id": "intake_events",
@@ -1829,7 +1798,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R5,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1841,7 +1810,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "On for the paper; paper feature."
+   "note": "On for the paper; paper feature. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "intake_labels",
@@ -1859,7 +1828,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R5,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1871,7 +1840,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "On for the paper."
+   "note": "On for the paper. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "research_system1",
@@ -1889,7 +1858,7 @@
    ],
    "target_ring": "R4",
    "expires": "2026-11-11",
-   "ring": "R5,ids:1",
+   "ring": "all",
    "promote": [
     {
      "metric": "unplanned_crash_closures",
@@ -1901,7 +1870,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "On for the paper."
+   "note": "On for the paper. Default ON for every computer from 2026-11-03 (owner: \"nothing is off by default\"); a stored off is the rollback."
   },
   {
    "id": "research_related_story",
@@ -1931,7 +1900,7 @@
     }
    ],
    "retire": "delete the key and its readers; the behavior is the default (after F-0)",
-   "note": "On for the paper since 2026-10-26; route refuses non-platform tiers. Read half is CORPUSD_RELATED_STORY."
+   "note": "On for the paper since 2026-10-26; route refuses non-platform tiers. Read half is CORPUSD_RELATED_STORY. Default off, held 2026-11-03: its finish rule (requireStoryEntitiesRecorded) treats every research:<doc> desk as a story desk, so default-on would hold owner research rounds to record entities for unpublished documents. Fix: key the story rules on a published story, then default on."
   },
   {
    "id": "intake_event_wakes",
@@ -2058,7 +2027,7 @@
     }
    ],
    "retire": "delete the key and stamp tool.result always once every computer runs epoch 5",
-   "note": "tool.result in per-day partition files (docs/design/one-tape-durability-2026-10-31.md section 6c). On for d@e by stored setting first; then the paper; then the default. Turning it on writes store floor 5.",
+   "note": "tool.result in per-day partition files (docs/design/one-tape-durability-2026-10-31.md section 6c). On for d@e by stored setting first; then the paper; then the default. Turning it on writes store floor 5. Default off, held 2026-11-03: GCTelemetryPartitions starves while a compact copy is staged (paper-compaction-2026-10-31.md); owner: on everywhere after that fix.",
    "revert": {
     "mode": "one_way"
    }
@@ -2091,37 +2060,7 @@
     }
    ],
    "retire": "delete the key and group always once the paper shows refused_splits and unknown_outcome at zero and replay equivalent",
-   "note": "Acknowledged unconditional projection writes share a tape event; pending telemetry and run-memory messages ride it (crash-lossy window, owner 2026-10-31; cursor, cell fate, compaction and receipts stay acknowledged); telemetry window 10 s; opening messages as one write (docs/design/tape-group-commit-2026-10-31.md). On for d@e by stored setting first; then the paper; then the default. Off is the live rollback; nothing new is written."
-  },
-  {
-   "id": "store_trace_log",
-   "kind": "setting",
-   "life": "release",
-   "owner": "store",
-   "class": "orange",
-   "surface": "store",
-   "introduced": "2026-10-28",
-   "settings": [
-    "store.trace_log"
-   ],
-   "ladder": [
-    "on"
-   ],
-   "target_ring": "R4",
-   "expires": "2026-11-25",
-   "ring": "none",
-   "promote": [
-    {
-     "metric": "unplanned_crash_closures",
-     "bound": "== 0"
-    },
-    {
-     "metric": "settings_apply_errors",
-     "bound": "== 0"
-    }
-   ],
-   "retire": "delete",
-   "note": "Retired 2026-10-31: the R7 trace segment log was deleted and traces stay on the single tape (docs/design/one-tape-durability-2026-10-31.md). Nothing acts on the key; it stays known so a stored value still reads."
+   "note": "Acknowledged unconditional projection writes share a tape event; pending telemetry and run-memory messages ride it (crash-lossy window, owner 2026-10-31; cursor, cell fate, compaction and receipts stay acknowledged); telemetry window 10 s; opening messages as one write (docs/design/tape-group-commit-2026-10-31.md). On for d@e by stored setting first; then the paper; then the default. Off is the live rollback; nothing new is written. Default off, held 2026-11-03: owner ruled delete (crash-lossy window)."
   },
   {
    "id": "telemetry_batch",
@@ -2181,7 +2120,7 @@
     }
    ],
    "retire": "delete",
-   "note": "Owner 2026-10-24: stays off; the ICRL design replaces it."
+   "note": "Owner 2026-10-24: stays off; the ICRL design replaces it. Default off, held 2026-11-03: engineering is not a digest desk yet and the other desks wait for its results (docs/design/calibration-seed-2026-11-03.md)."
   },
   {
    "id": "management_serial_tasks",

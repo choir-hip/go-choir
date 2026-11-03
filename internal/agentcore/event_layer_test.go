@@ -391,6 +391,10 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 func TestEventLayerOffMakesNoCall(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
+	// Stored off (the default is on, owner 2026-11-03).
+	if err := rt.store.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeEvents, Value: false}); err != nil {
+		t.Fatal(err)
+	}
 	rt.enqueueEventResolution(context.Background(), owner, computer, "src", []sourcegraph.CapturedItem{{CaptureID: "z1", Title: "Anything", URL: "https://a.example.com/z"}})
 	rt.flushEventQueueForTest(context.Background())
 	if judge.callCount() != 0 { // R9

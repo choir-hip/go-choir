@@ -279,6 +279,7 @@ func (f *intakeFixture) captureID(n int) string {
 
 func TestIntakeLabelsOffMakesNoJevCall(t *testing.T) {
 	f := newIntakeFixture(t, "owner-labels-off")
+	storeIntakeLabelsOff(t, f.s, f.owner, f.computer)
 	judge := &fakeIntakeJudge{}
 	f.rt.SetCandidateJudge(judge)
 	openTestStory(t, f.s, f.owner, f.computer, "Pope has lung surgery")

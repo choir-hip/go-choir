@@ -326,6 +326,7 @@ func TestFinishRuleIsSatisfiableWhenTheAnalysisHasNoAnswers(t *testing.T) {
 		{"System 1 off", func(t *testing.T, f *analysisFixture) {
 			t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_RUN", "")
 			t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_DAY", "")
+			f.storeSetting(t, false)
 		}},
 		{"no decision model", func(t *testing.T, f *analysisFixture) { f.rt.candidateJudge = nil }},
 		{"the judge fails", func(t *testing.T, f *analysisFixture) { f.judge.err = errors.New("the decision model is down") }},

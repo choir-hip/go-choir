@@ -84,6 +84,7 @@ func TestFeedAndDeclineWriteTheNoteRecordsWithCapturesAndRecordOverrides(t *test
 	}
 
 	// Off: Feed and Decline are refused and commit nothing.
+	storeIntakeLabelsOff(t, s, owner, computer)
 	cell := managementCell(t, rt, owner, computer, "run-dispose-off")
 	if out := cell(`choir.Feed("` + pope + `", []string{"cap-d1"}, "adds the diagnosis")`); !strings.Contains(out, "intake.labels") {
 		t.Fatalf("Feed with intake.labels off: %s", out)

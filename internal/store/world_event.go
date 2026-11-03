@@ -26,9 +26,9 @@ const (
 )
 
 // SettingIntakeEvents turns on the event layer's shadow resolution: new
-// captures from source polls are resolved onto events by Jev. Off by
-// default; nothing reads the events yet, and turning it off is the
-// rollback.
+// captures from source polls are resolved onto events by Jev. On by default
+// (owner, 2026-11-03); it runs only where source polls capture; nothing reads
+// the events yet, and a stored off is the rollback.
 const SettingIntakeEvents = "intake.events"
 
 // SettingIntakeEventWakes makes production wait on events (event layer
@@ -38,7 +38,7 @@ const SettingIntakeEvents = "intake.events"
 const SettingIntakeEventWakes = "intake.event_wakes"
 
 func init() {
-	KnownComputerSettings[SettingIntakeEvents] = false
+	KnownComputerSettings[SettingIntakeEvents] = true
 	KnownComputerSettings[SettingIntakeEventWakes] = false
 }
 

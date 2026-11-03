@@ -14,8 +14,9 @@ import (
 // The per-computer intake enable (L2a A6 / R2-7,
 // docs/archive/reports/l2a-synthesis-intake-design-2026-10-14.md). Ways it can fail,
 // written before the code:
-//   - a computer with no setting reads as on, so labels run before the
-//     fixture passed (the default must be off);
+//   - a computer with no setting and no source schedule reads as on, so
+//     management carries intake text where no intake can happen (the
+//     default is on, owner 2026-11-03, but only where sources exist);
 //   - an unauthenticated caller, or management through choir.ProductAPI,
 //     turns it on: it is an owner act;
 //   - one computer's setting turns another's on (it is per computer);
@@ -24,12 +25,26 @@ import (
 //   - a store error reads as on;
 //   - the setting is in memory only, so a restart turns it off silently.
 
-func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
+func TestIntakeLabelsSettingIsOnByDefaultAndSetByTheOwner(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	owner, computer := "owner-settings", rt.cfg.ComputerID
+	// Owner, 2026-11-03: nothing is off by default, and intake runs where
+	// source schedules exist. Nothing stored and no schedule: off.
 	if rt.intakeLabelsEnabled(ctx, owner, computer) {
-		t.Fatal("intake.labels reads on with no setting stored")
+		t.Fatal("intake.labels reads on with nothing stored on a computer without a source schedule")
+	}
+	if err := s.PutSourceSchedule(ctx, store.SourceSchedule{OwnerID: owner, ComputerID: "another-computer", SourceID: "rss:elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if rt.intakeLabelsEnabled(ctx, owner, computer) {
+		t.Fatal("another computer's source schedule turned intake.labels on here")
+	}
+	if err := s.PutSourceSchedule(ctx, store.SourceSchedule{OwnerID: owner, ComputerID: computer, SourceID: "rss:here"}); err != nil {
+		t.Fatal(err)
+	}
+	if !rt.intakeLabelsEnabled(ctx, owner, computer) {
+		t.Fatal("intake.labels reads off with nothing stored on a computer with a source schedule; the default is on")
 	}
 	handler := &APIHandler{rt: rt}
 	call := func(method, body string, auth bool) *httptest.ResponseRecorder {
@@ -40,6 +55,11 @@ func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handler.HandleComputerSettings(rec, req)
 		return rec
+	}
+	// The owner turns it off first; the refused requests below must not
+	// turn it back on.
+	if rec := call(http.MethodPost, `{"key":"intake.labels","value":false}`, true); rec.Code != http.StatusOK {
+		t.Fatalf("owner off = %d %s", rec.Code, rec.Body)
 	}
 	if rec := call(http.MethodPost, `{"key":"intake.labels","value":true}`, false); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated set = %d", rec.Code)
@@ -54,7 +74,7 @@ func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
 		t.Fatal("a refused request turned intake.labels on")
 	}
 
-	// GET lists the known settings with their defaults.
+	// GET lists the known settings, the stored off with the defaults.
 	rec := call(http.MethodGet, "", true)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"key":"intake.labels"`) || !strings.Contains(rec.Body.String(), `"value":false`) {
 		t.Fatalf("list = %d %s; want intake.labels false", rec.Code, rec.Body)
@@ -71,8 +91,11 @@ func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
 	if err != nil || !got.Value || got.ComputerID != computer {
 		t.Fatalf("stored setting = %+v, %v", got, err)
 	}
-	if rt.intakeLabelsEnabled(ctx, owner, "another-computer") {
-		t.Fatal("one computer's setting turned another's on")
+	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: "another-computer", Key: store.SettingIntakeLabels, Value: false}); err != nil {
+		t.Fatal(err)
+	}
+	if rt.intakeLabelsEnabled(ctx, owner, "another-computer") || !rt.intakeLabelsEnabled(ctx, owner, computer) {
+		t.Fatal("one computer's setting changed another's")
 	}
 	rec = call(http.MethodGet, "", true)
 	var listed struct {

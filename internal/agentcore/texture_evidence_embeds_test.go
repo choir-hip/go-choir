@@ -75,6 +75,10 @@ func TestFreshFreezeWithCapturesAsksTextureToEmbedThemWhenSwitchedOn(t *testing.
 
 	embedder := &recordingEmbedder{}
 	rt.SetTextureEvidenceEmbedder(embedder)
+	// Stored off (the default is on, owner 2026-11-03).
+	if err := s.PutComputerSetting(context.Background(), choirstore.ComputerSetting{OwnerID: owner, ComputerID: computerID, Key: choirstore.SettingTextureEvidenceEmbeds, Value: false}); err != nil {
+		t.Fatal(err)
+	}
 	settle(freeze(true, 2))
 	if got := embedder.got(); len(got) != 0 {
 		t.Fatalf("switch off, but Texture was asked: %v", got)

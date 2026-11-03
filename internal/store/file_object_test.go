@@ -24,7 +24,7 @@ import (
 //  6. The list shows deleted files or another computer's files.
 //  7. The kinds are unregistered, or registered under a writer the write
 //     gate refuses in enforce mode.
-//  8. The switch is unknown to the settings API, or defaults on.
+//  8. The switch is unknown to the settings API, or defaults off.
 //  9. On a bound tape a change writes more than one projection batch, or a
 //     tombstoned path view does not project (a replay would resurrect it).
 
@@ -196,8 +196,8 @@ func TestFileObjectKindsAndSwitchAreRegistered(t *testing.T) {
 		}
 	}
 	def, known := KnownComputerSettings[SettingFilesObject]
-	if !known || def {
-		t.Fatalf("%s known=%v default=%v; want known and off", SettingFilesObject, known, def)
+	if !known || !def {
+		t.Fatalf("%s known=%v default=%v; want known and on (owner, 2026-11-03)", SettingFilesObject, known, def)
 	}
 }
 
@@ -284,10 +284,8 @@ func TestFileObjectPathsKeepABackslashLiteral(t *testing.T) {
 
 func TestFileObjectApplyRefusesWhileTheSwitchIsOff(t *testing.T) {
 	s := openTestStore(t)
-	_, err := s.ApplyFileChanges(context.Background(), fileObjOwner, fileObjComputer, []FileChange{{Op: FileOpWrite, Record: fileRecord("a.txt", "hmac-sha256:01", 1)}}, time.Now())
-	if !errors.Is(err, ErrFileObjectsOff) {
-		t.Fatalf("apply with the switch unset = %v, want ErrFileObjectsOff", err)
-	}
+	// Unset reads as the default, on (TestFileObjectWriterHonoursTheDefault);
+	// a stored off refuses.
 	if err := s.PutComputerSetting(context.Background(), ComputerSetting{OwnerID: fileObjOwner, ComputerID: fileObjComputer, Key: SettingFilesObject, Value: false}); err != nil {
 		t.Fatal(err)
 	}

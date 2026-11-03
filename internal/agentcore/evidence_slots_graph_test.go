@@ -28,8 +28,20 @@ const graphHomeOwner = "owner-graph-home"
 
 func turnOn(t *testing.T, rt *Runtime, computerID, key string) {
 	t.Helper()
+	setGraphHome(t, rt, computerID, key, true)
+}
+
+// turnOff stores an explicit off: engineering.slots_graph defaults on
+// (owner, 2026-11-03), so a legacy table write needs it.
+func turnOff(t *testing.T, rt *Runtime, computerID, key string) {
+	t.Helper()
+	setGraphHome(t, rt, computerID, key, false)
+}
+
+func setGraphHome(t *testing.T, rt *Runtime, computerID, key string, value bool) {
+	t.Helper()
 	if err := rt.store.PutComputerSetting(context.Background(), choirstore.ComputerSetting{
-		OwnerID: graphHomeOwner, ComputerID: computerID, Key: key, Value: true,
+		OwnerID: graphHomeOwner, ComputerID: computerID, Key: key, Value: value,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -252,9 +264,10 @@ func makeRun(t *testing.T, rt *Runtime, runID, agentID, traj string, state types
 	return rec
 }
 
-func TestSlotsDefaultOffAndStayInTheTable(t *testing.T) {
+func TestSlotsStoredOffStayInTheTable(t *testing.T) {
 	computerID := "computer-slots-off"
 	rt, _ := selfdevReplayRuntime(t, computerID)
+	turnOff(t, rt, computerID, choirstore.SettingEngineeringSlotsGraph)
 	if _, claimed := claimSlot(t, rt, "traj-1", "implementation", "run-1", "agent-1"); !claimed {
 		t.Fatal("claim refused")
 	}
@@ -394,6 +407,7 @@ func TestSlotRowsFromBeforeTheChangeAreImportedAndStillRead(t *testing.T) {
 			rt, _ := selfdevReplayRuntime(t, computerID)
 			makeRun(t, rt, "run-old", "agent-old", "traj-old", types.RunRunning)
 			// Written as the binary before this change did: direct SQL.
+			turnOff(t, rt, computerID, choirstore.SettingEngineeringSlotsGraph)
 			if _, claimed := claimSlot(t, rt, "traj-old", "implementation", "run-old", "agent-old"); !claimed {
 				t.Fatal("legacy claim refused")
 			}
@@ -501,6 +515,7 @@ func TestTurningTheSettingOnThroughTheAPIImportsTheTables(t *testing.T) {
 	rt, _ := selfdevReplayRuntime(t, computerID)
 	seedLegacyEvidence(t, rt.store.DB(), "ev-api", "researcher", time.Now().UTC().Add(-time.Hour))
 	makeRun(t, rt, "run-api", "agent-api", "traj-api", types.RunRunning)
+	turnOff(t, rt, computerID, choirstore.SettingEngineeringSlotsGraph)
 	claimSlot(t, rt, "traj-api", "implementation", "run-api", "agent-api")
 	requireIneligible(t, rt, computerID, "agent_evidence")
 

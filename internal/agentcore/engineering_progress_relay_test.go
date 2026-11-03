@@ -134,7 +134,8 @@ func TestEngineeringProgressRelayMintsNothingWhenOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	assignment, run := c1eOpenBound(t, s, seed, 0)
-	// No setting stored: the default.
+	// Stored off (the default is on, owner 2026-11-03).
+	relaySwitch(t, s, seed, false)
 	head := c1eInboxHead(t, s, seed.OwnerID, seed.ComputerID, seed.TextureInbox)
 	if err := relayEngineeringReduction(rt, seed, run, "cell-relay-off").commitTray(ctx, relayReport("rep"), 1); err != nil {
 		t.Fatalf("engineering Report: %v", err)

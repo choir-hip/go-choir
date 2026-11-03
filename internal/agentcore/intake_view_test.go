@@ -44,6 +44,7 @@ func TestRecordViewJoinsLabelsNamingTheVersion(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	owner, computer := "owner-view", rt.cfg.ComputerID
+	storeIntakeLabelsOff(t, s, owner, computer)
 	management := agentprofile.Management + ":" + owner
 	pope := openTestStory(t, s, owner, computer, "Pope has lung surgery")
 	items := []types.CaptureArrival{{CaptureID: "cap-view-1", Title: "Papst operiert", URL: "https://view.example/1"}, {CaptureID: "cap-view-2", Title: "Kyiv strike", URL: "https://view.example/2"}, {CaptureID: "cap-view-3", Title: "Удар по Киеву", URL: "https://view.example/3"}}
@@ -107,6 +108,7 @@ func TestStoriesPagesPastFiftyNewestFirst(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	owner, computer := "owner-stories", rt.cfg.ComputerID
+	storeIntakeLabelsOff(t, s, owner, computer)
 	for i := 0; i < 57; i++ {
 		openTestStory(t, s, owner, computer, fmt.Sprintf("Story number %02d", i))
 		time.Sleep(time.Millisecond)
@@ -164,6 +166,8 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	owner, computer := "owner-surface", rt.cfg.ComputerID
+	// Nothing stored and no source schedule: the default does not apply
+	// (intake runs where source schedules exist), so the prompt is as before.
 	rec := &types.RunRecord{OwnerID: owner, ComputerID: computer, AgentProfile: agentprofile.Management, AgentID: agentprofile.Management + ":" + owner}
 	off, err := rt.systemPromptForRun(rec)
 	if err != nil {
@@ -199,5 +203,14 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 	// The block renders as one bullet of the Living stories list.
 	if !strings.Contains(on, "Management never writes a Texture.\n- Intake labels:") {
 		t.Fatalf("the intake bullet is not rendered in the surface list:\n%s", on)
+	}
+}
+
+// storeIntakeLabelsOff stores intake.labels off for a test of the off path:
+// the default is on (owner, 2026-11-03).
+func storeIntakeLabelsOff(t *testing.T, s *store.Store, owner, computer string) {
+	t.Helper()
+	if err := s.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: false}); err != nil {
+		t.Fatal(err)
 	}
 }

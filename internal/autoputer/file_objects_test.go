@@ -138,6 +138,8 @@ func (f *fileObjectFixture) byPath(rel string) (choirstore.FileObject, error) {
 
 func TestFileObjectSwitchOffRecordsNothingAndHidesMove(t *testing.T) {
 	f := newFileObjectFixture(t)
+	// The default is on (owner, 2026-11-03); a stored off is the rollback.
+	f.setSwitch(t, false)
 	if w := f.do(t, http.MethodPut, "/api/files/a.txt", []byte("hello")); w.Code != http.StatusOK {
 		t.Fatalf("put = %d", w.Code)
 	}

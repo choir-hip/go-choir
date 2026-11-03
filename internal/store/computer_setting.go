@@ -17,8 +17,8 @@ import (
 const ogKindComputerSetting = objectgraph.ObjectKind("choir.computer_setting")
 
 // SettingIntakeLabels turns on Jev's labels for arriving captures and the
-// prompt text that tells management about them. Off by default; turning it
-// off is the rollback.
+// prompt text that tells management about them. On by default (owner,
+// 2026-11-03: "nothing is off by default"); a stored off is the rollback.
 const SettingIntakeLabels = "intake.labels"
 
 // SettingManagementSerialTasks holds management tasks to one at a time
@@ -31,7 +31,9 @@ const SettingManagementSerialTasks = "management.serial_tasks"
 // SettingCalibrationFeedback turns on the in-context calibration digest
 // of the ICRL experiment (docs/archive/reports/icrl-calibration-experiment-2026-10-14.md):
 // desks in the digest arm read their own settled calibration as a user
-// turn and in choir.Pack(). Off by default; off computes and shows nothing,
+// turn and in choir.Pack(). Off by default, held: engineering is not yet a
+// digest desk and the other desks wait for its results
+// (docs/design/calibration-seed-2026-11-03.md); off computes and shows nothing,
 // and turning it off is the rollback.
 const SettingCalibrationFeedback = "calibration.feedback"
 
@@ -48,22 +50,22 @@ const SettingTelemetryBatch = "telemetry.batch"
 
 // SettingResearchSystem1 lets the research desk ask System 1
 // (choir.System1) with the default caps, when the runtime config sets none
-// (owner notes §29: System 1 does the related-stories reading). Off by
-// default; off is the rollback.
+// (owner notes §29: System 1 does the related-stories reading). On by
+// default (owner, 2026-11-03); a stored off is the rollback, unless the
+// runtime config sets both caps, which wins as before.
 const SettingResearchSystem1 = "research.system1"
 
 // SettingResearchRelatedStory lets the research desk record judged pair
 // relations (choir.RelateStories) and export them to Store B as related_story
 // edges (docs/problems/related-stories-thin-no-subject-nodes-2026-10-20.md,
 // "Build: the related_story edge"). The edges show only when corpusd's
-// CORPUSD_RELATED_STORY read switch is also on. Off by default; off is the
+// CORPUSD_RELATED_STORY read switch is also on. Off by default, held: its
+// finish rule treats every research:<doc> desk as a story desk, so on an
+// owner computer it would hold research rounds to record entities for a
+// story that was never published
+// (docs/problems/default-off-switches-audit-2026-11-03.md); off is the
 // rollback: the verb refuses and nothing is recorded or exported.
 const SettingResearchRelatedStory = "research.related_story"
-
-// SettingDebouncedCheckpoint is retired: the guest store has no history
-// commit since the move to SQLite. The key stays known so a stored value
-// still reads; nothing acts on it.
-const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 
 // SettingEventTable moves the ten batched telemetry kinds to their own table,
 // choir_events (4 prolly trees per insert instead of 13): the writer stamps
@@ -76,12 +78,6 @@ const SettingDebouncedCheckpoint = "store.debounced_checkpoint"
 // (the readers read both tables).
 const SettingEventTable = "store.event_table"
 
-// SettingTraceLog is retired: the R7 trace segment log was deleted 2026-10-31
-// and traces stay on the single tape
-// (docs/design/one-tape-durability-2026-10-31.md). Nothing acts on the key;
-// it stays known so a stored value still reads.
-const SettingTraceLog = "store.trace_log"
-
 // SettingEngineeringProgressToTexture makes each engineering progress Report
 // (a choir.Report from an assignment's engineering desk, which goes to
 // management) also mint one platform-authored progress record into the
@@ -90,20 +86,24 @@ const SettingTraceLog = "store.trace_log"
 // for a management turn to relay it
 // (docs/problems/engineering-reports-never-reach-texture-2026-10-24.md).
 // Texture stays the only writer of the document and management stays the
-// addressee. Off by default; off mints nothing and is the rollback.
+// addressee. On by default (owner, 2026-11-03); a stored off mints nothing
+// and is the rollback.
 const SettingEngineeringProgressToTexture = "engineering.progress_to_texture"
 
 // SettingEvidenceGraph moves research evidence (SaveEvidence) from the
 // agent_evidence table to the choir.agent_evidence graph kind, on the tape
 // (docs/problems/data-has-more-than-one-home-2026-10-24.md, step 3). Read live
-// at each write. Off by default; off is the rollback: new evidence returns to
+// at each write. Off by default, held: the owner asked for the first-write
+// import to be measured on a copy of the paper's store first (switch audit
+// 2026-11-03, group 3); off is the rollback: new evidence returns to
 // the table, and evidence already in the graph stays readable. Turning it on
 // moves the table's rows into the graph.
 const SettingEvidenceGraph = "evidence.graph"
 
 // SettingEngineeringSlotsGraph moves engineering slot claims from the
 // co_super_slots table to the choir.co_super_slot graph kind, on the tape.
-// Read live at each claim. Off by default; off is the rollback, as for
+// Read live at each claim. On by default (owner, 2026-11-03); a stored off
+// is the rollback, as for
 // evidence.graph.
 const SettingEngineeringSlotsGraph = "engineering.slots_graph"
 
@@ -114,7 +114,8 @@ const SettingEngineeringSlotsGraph = "engineering.slots_graph"
 // offers it, labeled so, to the next round on the same trajectory
 // (docs/evidence/selfdev-trace-reviews-2026-10-25.md, problem 1). The patch
 // is never applied by the platform and is never a candidate. Read live at
-// each capsule revoke and each offer. Off by default; off takes no snapshot
+// each capsule revoke and each offer. On by default (owner, 2026-11-03); a
+// stored off takes no snapshot
 // and offers none of the kept ones, and is the rollback.
 const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
 
@@ -124,7 +125,8 @@ const SettingEngineeringCarryUnfinished = "engineering.carry_unfinished"
 // (docs/design/texture-spec-follows-owner-2026-10-25.md). Without it the turn
 // reads owner intent from the head revision only, so one Texture revision
 // after an owner revise drops the direction and the original seed stands
-// alone. Read at each Texture run start. Off by default; off is the
+// alone. Read at each Texture run start. On by default (owner, 2026-11-03);
+// a stored off is the
 // rollback: the turn is byte-identical to before.
 const SettingTextureOwnerDirections = "texture.owner_directions"
 
@@ -134,15 +136,16 @@ const SettingTextureOwnerDirections = "texture.owner_directions"
 // and messages, bounded by the run's own compaction) instead of the actor
 // rewarm digest, and when no revision carries a seed_prompt the request turn
 // shows the document's first owner revision as the owner's request. Read at
-// each Texture run start. Off by default; off is the rollback: the run is
+// each Texture run start. On by default (owner, 2026-11-03); a stored off is
+// the rollback: the run is
 // seeded with the digest and the turn is byte-identical to before.
 const SettingTextureHoldTrajectory = "texture.hold_trajectory"
 
 // SettingTextureEvidenceEmbeds makes a fresh Freeze that observed visual
 // captures embed them in the operation's Texture document, written by
 // Texture's own package from the frozen bundle (station TE,
-// docs/design/texture-evidence-embeds-te-2026-10-25.md). Off by default;
-// off writes nothing and is the rollback.
+// docs/design/texture-evidence-embeds-te-2026-10-25.md). On by default
+// (owner, 2026-11-03); a stored off writes nothing and is the rollback.
 const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 
 // SettingTextureRootDesk turns on the Texture root desk (PD3 S1,
@@ -150,7 +153,10 @@ const SettingTextureEvidenceEmbeds = "texture.evidence_embeds"
 // other documents mint a debounced texture_root_digest, whose dispatch
 // ensures one master document (named by the texture_root marker) and wakes
 // its own Texture desk, texture:<master>, to render the computer's open
-// work. Off by default; off mints no digest and creates nothing, and is the
+// work. Off by default, held: the owner turns it on once its excerpt order
+// (F4/F5) is re-proved on d@e and the paper's story documents feed the
+// master as one batched entry an hour (switch audit 2026-11-03, group 1);
+// off mints no digest and creates nothing, and is the
 // rollback: the master stays an ordinary document.
 const SettingTextureRootDesk = "texture.root_desk"
 
@@ -158,7 +164,8 @@ const SettingTextureRootDesk = "texture.root_desk"
 // package changes to the Choir Library, where a published release is public
 // to every signed-in owner (owner, 2026-11-03; Library S2,
 // docs/design/library-package-propagation-2026-10-26.md 3.2): the guest
-// drafts a package release only when it is on. Off by default; off is the
+// drafts a package release only when it is on. On by default (owner,
+// 2026-11-03); a stored off is the
 // rollback, and releases already listed stay readable and inert.
 const SettingPackagesPublish = "packages.publish"
 
@@ -213,24 +220,22 @@ const SettingCompactForce = "store.compact_force"
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
 var KnownComputerSettings = map[string]bool{
-	SettingIntakeLabels:                 false,
+	SettingIntakeLabels:                 true,
 	SettingManagementSerialTasks:        false,
 	SettingCalibrationFeedback:          false,
 	SettingTelemetryBatch:               true,
-	SettingResearchSystem1:              false,
+	SettingResearchSystem1:              true,
 	SettingResearchRelatedStory:         false,
-	SettingDebouncedCheckpoint:          false,
 	SettingEventTable:                   false,
-	SettingTraceLog:                     false,
-	SettingEngineeringProgressToTexture: false,
+	SettingEngineeringProgressToTexture: true,
 	SettingEvidenceGraph:                false,
-	SettingEngineeringSlotsGraph:        false,
-	SettingEngineeringCarryUnfinished:   false,
-	SettingTextureOwnerDirections:       false,
-	SettingTextureEvidenceEmbeds:        false,
-	SettingTextureHoldTrajectory:        false,
+	SettingEngineeringSlotsGraph:        true,
+	SettingEngineeringCarryUnfinished:   true,
+	SettingTextureOwnerDirections:       true,
+	SettingTextureEvidenceEmbeds:        true,
+	SettingTextureHoldTrajectory:        true,
 	SettingTextureRootDesk:              false,
-	SettingPackagesPublish:              false,
+	SettingPackagesPublish:              true,
 	SettingDispatchWideSlots:            false,
 	SettingTelemetryRetire:              true,
 	SettingTelemetryPartitions:          false,

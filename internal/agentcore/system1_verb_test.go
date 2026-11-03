@@ -196,6 +196,7 @@ func phases(evs []types.EventRecord) []string {
 // nothing reaches the judge or the tape.
 func TestSystem1IsOffUntilBothCapsAreConfigured(t *testing.T) {
 	f := newSystem1Fixture(t)
+	f.storeSetting(t, false)
 	for _, set := range []struct{ run, day string }{{"", ""}, {"5", ""}, {"", "50"}, {"0", "0"}, {"x", "9"}, {"-3", "9"}} {
 		t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_RUN", set.run)
 		t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_DAY", set.day)
@@ -206,6 +207,13 @@ func TestSystem1IsOffUntilBothCapsAreConfigured(t *testing.T) {
 	}
 	if f.judge.callCount() != 0 || len(f.tape(t)) != 0 {
 		t.Fatalf("an off verb reached the judge (%d calls) or the tape (%d events)", f.judge.callCount(), len(f.tape(t)))
+	}
+	// Both caps valid: the runtime config wins over the stored off, so the
+	// parser is what turned the cases above away.
+	t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_RUN", "5")
+	t.Setenv("CHOIR_SYSTEM1_MAX_CALLS_PER_DAY", "50")
+	if run, day := f.rt.system1Limits(context.Background(), f.owner, f.computer); run != 5 || day != 50 {
+		t.Fatalf("valid env caps with a stored off = %d/%d, want 5/50", run, day)
 	}
 }
 
@@ -550,8 +558,14 @@ func (failingCaptures) CaptureBlocks(context.Context, string, string) (texturewr
 func TestSystem1OwnerSettingTurnsItOnWithDefaultCaps(t *testing.T) {
 	f := newSystem1Fixture(t)
 	ctx := context.Background()
+	// The default is on (owner, 2026-11-03): no setting and no env gives the
+	// default caps; a stored off is off.
+	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run <= 0 || day <= 0 {
+		t.Fatalf("no setting, no env: caps %d/%d, want the default caps", run, day)
+	}
+	f.storeSetting(t, false)
 	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run != 0 || day != 0 {
-		t.Fatalf("no setting, no env: caps %d/%d, want off", run, day)
+		t.Fatalf("stored off, no env: caps %d/%d, want off", run, day)
 	}
 	if _, err := f.call(t, agentprofile.Research, "run-setting-off", question("q1")); err == nil || !strings.Contains(err.Error(), store.SettingResearchSystem1) {
 		t.Fatalf("off: err = %v, want the refusal to name %s", err, store.SettingResearchSystem1)
@@ -568,5 +582,14 @@ func TestSystem1OwnerSettingTurnsItOnWithDefaultCaps(t *testing.T) {
 	f.enable(t, 3, 10)
 	if run, day := f.rt.system1Limits(ctx, f.owner, f.computer); run != 3 || day != 10 {
 		t.Fatalf("env caps with the setting on: %d/%d, want 3/10", run, day)
+	}
+}
+
+// storeSetting stores research.system1 for the fixture's computer; the
+// default is on (owner, 2026-11-03).
+func (f *system1Fixture) storeSetting(t *testing.T, on bool) {
+	t.Helper()
+	if err := f.s.PutComputerSetting(context.Background(), store.ComputerSetting{OwnerID: f.owner, ComputerID: f.computer, Key: store.SettingResearchSystem1, Value: on, UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
 	}
 }

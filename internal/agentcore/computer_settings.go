@@ -26,9 +26,42 @@ func (rt *Runtime) intakeSurfacesEnabled(ctx context.Context, ownerID, computerI
 }
 
 // intakeLabelsEnabled reports whether intake.labels is on for the computer.
-// Anything but a stored true (no setting, a store error) is off.
+// A stored value decides. With nothing stored the default (on, owner
+// 2026-11-03) applies only where intake can happen: the computer has a
+// source schedule (owner: "intake runs where source schedules exist"), so a
+// computer without sources keeps management's prompt free of the intake
+// text and verbs. A store error is off.
 func (rt *Runtime) intakeLabelsEnabled(ctx context.Context, ownerID, computerID string) bool {
-	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeLabels)
+	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
+		return false
+	}
+	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, store.SettingIntakeLabels)
+	switch {
+	case err == nil:
+		return setting.Value
+	case !errors.Is(err, store.ErrNotFound):
+		log.Printf("computer settings: read %s on %s: %v; treating it as off", store.SettingIntakeLabels, computerID, err)
+		return false
+	case !store.KnownComputerSettings[store.SettingIntakeLabels]:
+		return false
+	}
+	return rt.computerHasSourceSchedule(ctx, ownerID, computerID)
+}
+
+// computerHasSourceSchedule reports whether the owner has a source schedule
+// on this computer. A read error is no.
+func (rt *Runtime) computerHasSourceSchedule(ctx context.Context, ownerID, computerID string) bool {
+	schedules, err := rt.store.ListSourceSchedules(ctx, ownerID)
+	if err != nil {
+		log.Printf("computer settings: list source schedules on %s: %v; intake.labels reads off", computerID, err)
+		return false
+	}
+	for _, sched := range schedules {
+		if c := strings.TrimSpace(sched.ComputerID); c == "" || c == strings.TrimSpace(computerID) {
+			return true
+		}
+	}
+	return false
 }
 
 // computerSettingOn reports whether a boolean setting is on for the

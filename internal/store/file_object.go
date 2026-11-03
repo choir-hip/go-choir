@@ -26,13 +26,14 @@ const (
 )
 
 // SettingFilesObject turns on the file object for one computer: the Files API
-// and the reconcile pass record choir.file and choir.file_path. Off by
-// default and read live on every write; off is the rollback (the objects
+// and the reconcile pass record choir.file and choir.file_path. On by
+// default (owner, 2026-11-03) and read live on every write; a stored off is
+// the rollback (the objects
 // already written stay as inert rows).
 const SettingFilesObject = "files.object"
 
 func init() {
-	KnownComputerSettings[SettingFilesObject] = false
+	KnownComputerSettings[SettingFilesObject] = true
 }
 
 // ErrFileObjectsOff is returned by ApplyFileChanges when the files.object
@@ -370,11 +371,15 @@ func (s *Store) ApplyFileChanges(ctx context.Context, ownerID, computerID string
 	// The switch is checked here, at the only writer, not only by the callers:
 	// a caller that forgets it, or a switch turned off during a long pass,
 	// still cannot write.
+	// Nothing stored reads as the declared default.
 	setting, err := s.GetComputerSetting(ctx, ownerID, computerID, SettingFilesObject)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		setting.Value = KnownComputerSettings[SettingFilesObject]
+	case err != nil:
 		return FileApplyResult{}, fmt.Errorf("file object: read %s: %w", SettingFilesObject, err)
 	}
-	if err != nil || !setting.Value {
+	if !setting.Value {
 		return FileApplyResult{}, ErrFileObjectsOff
 	}
 	if now.IsZero() {

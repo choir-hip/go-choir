@@ -63,11 +63,9 @@ func wakeAfterTheRequestWasRewritten(t *testing.T, suffix string, on holdSwitche
 	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	s := core.Store()
 	start := startBodyRequestLifecycle(t, s, suffix)
+	// Both are stored, off as well as on: the default is on (owner, 2026-11-03).
 	for key, value := range map[string]bool{store.SettingTextureHoldTrajectory: on.hold, store.SettingTextureOwnerDirections: on.directions} {
-		if !value {
-			continue
-		}
-		if err := s.PutComputerSetting(t.Context(), store.ComputerSetting{OwnerID: start.OwnerID, ComputerID: start.ComputerID, Key: key, Value: true}); err != nil {
+		if err := s.PutComputerSetting(t.Context(), store.ComputerSetting{OwnerID: start.OwnerID, ComputerID: start.ComputerID, Key: key, Value: value}); err != nil {
 			t.Fatal(err)
 		}
 	}
