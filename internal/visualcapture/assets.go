@@ -61,11 +61,6 @@ func isAssetPath(p string) bool {
 	if !strings.HasPrefix(p, "/") || p == "/api" || strings.HasPrefix(p, "/api/") || p == "/auth" || strings.HasPrefix(p, "/auth/") {
 		return false
 	}
-	// A scene's fixture documents are not the page's assets; the error
-	// scene asks for a missing one on purpose.
-	if strings.HasPrefix(p, FixturePrefix) {
-		return false
-	}
 	return assetExtensions[strings.ToLower(path.Ext(p))]
 }
 

@@ -59,7 +59,7 @@ func TestRecordFreezeVisualPutsCapturesInTheAssetStoreAndTellsTheCell(t *testing
 	root, visual := stagedVisualRoot(t, shotA, shotB)
 	out := map[string]any{}
 
-	recordFreezeVisual(runtime.imageStore(), root, visual, nil, out)
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 
 	rows, _ := out["visual_captures"].([]map[string]any)
 	if len(rows) != 2 {
@@ -95,7 +95,7 @@ func TestRecordFreezeVisualPutsCapturesInTheAssetStoreAndTellsTheCell(t *testing
 func TestRecordFreezeVisualReportsAFailedStoreWriteWithoutFailingTheFreeze(t *testing.T) {
 	root, visual := stagedVisualRoot(t, assetPNG(t))
 	out := map[string]any{}
-	recordFreezeVisual(failingAssetStore{err: errors.New("disk full")}, root, visual, nil, out)
+	recordFreezeVisual(failingAssetStore{err: errors.New("disk full")}, root, visual, out)
 	rows, _ := out["visual_captures"].([]map[string]any)
 	if len(rows) != 1 || rows[0]["resolvable"] != false {
 		t.Fatalf("rows = %v", out["visual_captures"])
@@ -122,7 +122,7 @@ func TestRecordFreezeVisualReportsAFailedStoreWriteWithoutFailingTheFreeze(t *te
 		t.Fatal(err)
 	}
 	out = map[string]any{}
-	recordFreezeVisual(runtime.imageStore(), root, visual, nil, out)
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 	if rows, _ := out["visual_captures"].([]map[string]any); len(rows) != 1 || rows[0]["resolvable"] != false {
 		t.Fatalf("a swapped staged file reported resolvable: %v", out["visual_captures"])
 	}
@@ -133,7 +133,7 @@ func TestRecordFreezeVisualReportsAFailedStoreWriteWithoutFailingTheFreeze(t *te
 
 func TestRecordFreezeVisualWithNoCapturesStillObservesNone(t *testing.T) {
 	out := map[string]any{}
-	recordFreezeVisual(failingAssetStore{}, t.TempDir(), nil, nil, out)
+	recordFreezeVisual(failingAssetStore{}, t.TempDir(), nil, out)
 	if _, present := out["visual_captures"]; present {
 		t.Fatalf("a freeze without captures reports them: %v", out)
 	}
@@ -219,14 +219,14 @@ func TestRecordFreezeVisualWarnsWhenRoutesShareOneScreenshot(t *testing.T) {
 	dup.Route = "/read"
 	visual.Captures = append(visual.Captures, dup)
 	out := map[string]any{}
-	recordFreezeVisual(runtime.imageStore(), root, visual, nil, out)
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 	warnings, _ := out["visual_warnings"].([]string)
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "/ and /read") {
 		t.Fatalf("visual_warnings = %v", out["visual_warnings"])
 	}
 	root, visual = stagedVisualRoot(t, assetPNG(t))
 	out = map[string]any{}
-	recordFreezeVisual(runtime.imageStore(), root, visual, nil, out)
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 	if _, present := out["visual_warnings"]; present {
 		t.Fatalf("one route warns: %v", out["visual_warnings"])
 	}
@@ -239,7 +239,7 @@ func TestRecordFreezeVisualWarnsOfFailedAssets(t *testing.T) {
 	root, visual := stagedVisualRoot(t, assetPNG(t))
 	visual.AssetFailures = []visualcapture.AssetFailure{{Path: "/pdf-text-BRoX2Cg_.js", Status: 404, Count: 2}}
 	out := map[string]any{}
-	recordFreezeVisual(runtime.imageStore(), root, visual, nil, out)
+	recordFreezeVisual(runtime.imageStore(), root, visual, out)
 	warnings, _ := out["visual_warnings"].([]string)
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "404 /pdf-text-BRoX2Cg_.js (x2)") {
 		t.Fatalf("visual_warnings = %v", out["visual_warnings"])

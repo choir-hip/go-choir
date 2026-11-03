@@ -38,9 +38,6 @@ type VisualEvidence struct {
 	// engineer and the verifier, never a check, and never in the manifest
 	// (fix 3, docs/evidence/selfdev-trace-reviews-2026-10-25.md round 4).
 	AssetFailures []visualcapture.AssetFailure `json:"asset_failures,omitempty"`
-	// Notes are the manifest's notes: what the package captures could not
-	// cover (docs/problems/selfdev-visual-capture-misses-the-changed-app-2026-11-02.md).
-	Notes []string `json:"notes,omitempty"`
 }
 
 // VisualEvidenceCapture is one capture: its artifact ref, route and size.
@@ -52,8 +49,6 @@ type VisualEvidenceCapture struct {
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
 	Blank     bool   `json:"blank,omitempty"`
-	// Scene is a package capture's package, preset, width and state.
-	Scene *visualcapture.Scene `json:"scene,omitempty"`
 }
 
 // Validate checks the record's shape (refs, digests, bounds).
@@ -67,11 +62,8 @@ func (v *VisualEvidence) Validate() error {
 	if v.CaptureReceipt != "" && !strings.HasPrefix(v.CaptureReceipt, "capsule-exec:sha256:") {
 		return fmt.Errorf("visual evidence: capture receipt %q is not an execution receipt", v.CaptureReceipt)
 	}
-	if len(v.Captures) == 0 || len(v.Captures) > visualcapture.MaxCaptures {
-		return fmt.Errorf("visual evidence: 1..%d captures are admitted", visualcapture.MaxCaptures)
-	}
-	if len(v.Notes) > visualcapture.MaxNotes {
-		return fmt.Errorf("visual evidence: at most %d notes are recorded", visualcapture.MaxNotes)
+	if len(v.Captures) == 0 || len(v.Captures) > visualcapture.MaxRoutes {
+		return fmt.Errorf("visual evidence: 1..%d captures are admitted", visualcapture.MaxRoutes)
 	}
 	for _, c := range v.Captures {
 		sum, ok := strings.CutPrefix(c.Artifact, "artifact:sha256:")
@@ -80,14 +72,6 @@ func (v *VisualEvidence) Validate() error {
 		}
 		if _, err := visualcapture.NormalizeRoute(c.Route); err != nil {
 			return fmt.Errorf("visual evidence: %w", err)
-		}
-		if c.Scene != nil {
-			if err := c.Scene.Validate(); err != nil {
-				return fmt.Errorf("visual evidence: %w", err)
-			}
-			if c.Route != c.Scene.Route() {
-				return fmt.Errorf("visual evidence: capture %q is not its scene's route", c.Artifact)
-			}
 		}
 	}
 	if len(v.AssetFailures) > visualcapture.MaxAssetFailures {
@@ -141,8 +125,8 @@ func visualEvidenceNames(changes []FileChange) ([]string, error) {
 		}
 		names = append(names, rel)
 	}
-	if len(names) > visualcapture.MaxCaptures+1 {
-		return nil, fmt.Errorf("capsule freeze: the visual evidence directory holds %d files; at most %d captures and the manifest", len(names), visualcapture.MaxCaptures)
+	if len(names) > visualcapture.MaxRoutes+1 {
+		return nil, fmt.Errorf("capsule freeze: the visual evidence directory holds %d files; at most %d captures and the manifest", len(names), visualcapture.MaxRoutes)
 	}
 	return names, nil
 }
@@ -256,7 +240,7 @@ func buildVisualEvidence(manifestRaw []byte, files []visualcapture.EvidenceFile,
 		return nil, fmt.Errorf("capsule freeze: %w", err)
 	}
 	manifestSHA := visualcapture.DigestHex(manifestRaw)
-	out := &VisualEvidence{ManifestSHA256: manifestSHA, FrontendSHA256: m.Subject.FrontendSHA256, Notes: m.Notes}
+	out := &VisualEvidence{ManifestSHA256: manifestSHA, FrontendSHA256: m.Subject.FrontendSHA256}
 	if job, ok := latestCaptureJob(jobs, manifestSHA); ok {
 		out.CaptureReceipt = job.ReceiptRef
 		out.AssetFailures = captureAssetFailures(job.Tail, manifestSHA)
@@ -268,7 +252,7 @@ func buildVisualEvidence(manifestRaw []byte, files []visualcapture.EvidenceFile,
 		}
 		out.Captures = append(out.Captures, VisualEvidenceCapture{
 			Artifact: c.Artifact, Route: c.Route, MediaType: c.MediaType, Bytes: c.Bytes,
-			Width: c.Width, Height: c.Height, Blank: blank, Scene: c.Scene,
+			Width: c.Width, Height: c.Height, Blank: blank,
 		})
 	}
 	return out, out.Validate()

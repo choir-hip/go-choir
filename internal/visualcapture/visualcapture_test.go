@@ -61,10 +61,6 @@ func fakeChromium(args []string) int {
 		fmt.Fprintln(f, "ENV "+strings.Join(os.Environ(), "\x1f"))
 		_ = f.Close()
 	}
-	if sub, ok := strings.CutPrefix(mode, "fail:"); ok && strings.Contains(url, sub) {
-		fmt.Fprintln(os.Stderr, "fake failure for", sub)
-		return 1
-	}
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fetch:", err)

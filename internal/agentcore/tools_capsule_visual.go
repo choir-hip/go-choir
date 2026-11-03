@@ -52,20 +52,8 @@ type visualAssetStore interface {
 // the evidence (nil when it captured none). A store failure does not fail the
 // Freeze, because the bundle is the record: the result names it and each
 // capture's resolvable flag says what the store holds (V22).
-//
-// sourcePaths are the capsule's changed source files: a package they touch
-// that no capture shows is a warning the cell and the judge read.
-func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *capsule.VisualEvidence, sourcePaths []string, out map[string]any) {
+func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *capsule.VisualEvidence, out map[string]any) {
 	observation := freezeVisualObservation{}
-	defer func() {
-		if missing := freezePackageGaps(sourcePaths, visual); len(missing) > 0 {
-			warnings, _ := out["visual_warnings"].([]string)
-			for _, name := range missing {
-				warnings = append(warnings, "the change touches frontend/src/packages/"+name+"/ but no capture shows that app: capture it after the last build with choir-capture --package "+name+", then Freeze again")
-			}
-			out["visual_warnings"] = warnings
-		}
-	}()
 	if visual != nil {
 		observation.Receipt = visual.CaptureReceipt
 		var rows []map[string]any
@@ -83,15 +71,9 @@ func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *caps
 				"artifact": capture.Artifact, "route": capture.Route, "width": capture.Width, "height": capture.Height,
 				"bytes": capture.Bytes, "blank": capture.Blank, "resolvable": resolvable,
 			})
-			if capture.Scene != nil {
-				rows[len(rows)-1]["scene"] = capture.Scene
-			}
 			observation.Captures = append(observation.Captures, types.VisualCaptureObservation{Route: capture.Route, Artifact: capture.Artifact, Blank: capture.Blank})
 		}
 		out["visual_captures"] = rows
-		if len(visual.Notes) > 0 {
-			out["visual_notes"] = visual.Notes
-		}
 		out["visual_capture_receipt"] = visual.CaptureReceipt
 		if len(failures) > 0 {
 			out["visual_store_errors"] = failures
@@ -102,20 +84,6 @@ func recordFreezeVisual(images visualAssetStore, stagedRoot string, visual *caps
 		}
 	}
 	out[freezeVisualKey] = observation
-}
-
-// freezePackageGaps lists the packages the changed source touches that the
-// evidence has no package capture of.
-func freezePackageGaps(sourcePaths []string, visual *capsule.VisualEvidence) []string {
-	captured := map[string]bool{}
-	if visual != nil {
-		for _, c := range visual.Captures {
-			if c.Scene != nil {
-				captured[c.Scene.Package] = true
-			}
-		}
-	}
-	return uncapturedPackages(visualcapture.TouchedPackages(sourcePaths), captured)
 }
 
 // storeStagedCapture puts one staged capture in the asset store, checking the
