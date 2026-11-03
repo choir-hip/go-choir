@@ -48,15 +48,19 @@ let
   guestLayeredComputers = [ "computer-59c902c5d46caecc0a180a8557164e72" ];
   # Guest tool layers (docs/design/guest-tool-layers-2026-10-31.md 4): which
   # heavy tools a layered ring computer gets, per layer. Selectors are the
-  # computer selector tokens plus none, grant:visual-capture and
-  # grant:claude-delegate; a layer not named here is attached for every
+  # computer selector tokens plus none and grant:claude-delegate; a layer not
+  # named here is attached for every
   # computer. The ring computer without a matching rule gets the slot's empty
   # placeholder, so the tool is absent from its store (a clear error, never a
   # hang). Office: no Go caller (2026-10-31 inventory); the tool exec log
   # measures use on the single-image fleet. Rollback: add the layer to the
   # computer here (its next cold boot attaches it), or remove the computer from
-  # guestLayeredComputers (the single image carries every tool).
-  guestToolProfile = "toolchain=*;office=none;browser=grant:visual-capture;delegate=grant:claude-delegate";
+  # guestLayeredComputers (the single image carries every tool). Browser: every
+  # computer, no grant (owner 2026-11-03: "every computer should have visual
+  # capture. That shouldn't be anything special"); an engineer's Playwright
+  # uses it (docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
+  # Rollback: browser=grant:claude-delegate narrows it to the delegate list.
+  guestToolProfile = "toolchain=*;office=none;browser=*;delegate=grant:claude-delegate";
   # The guest security-epoch gate in the CI deploy gate (scripts/node-b-ci-gate,
   # epoch_gate): off | observe | enforce. The deploy gate runs the deployed
   # commit's copy of scripts/check-guest-security-epoch over deployed..target,
@@ -1739,27 +1743,6 @@ in
         "VM_SNAPSHOT_TYPE=diff"
         "VM_SNAPSHOT_DIFF_ONLY=computer-59c902c5d46caecc0a180a8557164e72,class:test"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
-        # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
-        # the right to launch the guest image's Chromium in a capsule capture
-        # job. OFF while the list is empty (resumed 2026-10-20: no computer is
-        # granted until the staging drill is scheduled; the guest image
-        # carries Chromium on no PATH either way). To turn it on: ComputerIDs
-        # and/or class:test (every test account's computer), space or comma
-        # separated. A computer gets the grant at its next cold boot (a
-        # snapshot resume keeps its old credential disk). A capture runs
-        # inside the engineering capsule's existing 2 GiB / 1 CPU budget
-        # (0.4-0.55 GiB per shot, measured). Rollback: empty the list and
-        # deploy.
-        # 2026-10-20: one test computer (visual-evidence-20261020) for the
-        # --visual staging drill; owner scope "one test computer first".
-        # 2026-10-24 (W3, FP0 under the switch delegation): b@c, the
-        # self-development test computer, so the owner previews a candidate
-        # through `choir self-dev visual` (gap B). The grant lands at b@c's
-        # next cold boot. 2026-10-26 (the switched-off audit): every test
-        # computer, so any self-development proof computer can preview.
-        # 2026-11-02: d@e by name, the DeepSeek arm of the two-arm
-        # comparison; it is not class:test, and its capsule had no browser.
-        "CHOIR_VISUAL_CAPTURE_COMPUTERS=computer-7011602c92710d9cf13ee52fd2675908,computer-6c50d6e566143ae32cdb660faa60e24d,computer-59c902c5d46caecc0a180a8557164e72,class:test"
         # store.event_table, the host half (F-c deploy 2,
         # docs/archive/design/choir-event-table-f-c-2026-10-22.md 4.2): a named
         # computer's guest writer may stamp its telemetry for choir_events;
