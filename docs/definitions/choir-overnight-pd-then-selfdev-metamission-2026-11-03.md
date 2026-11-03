@@ -126,24 +126,19 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 3c0af9920 (21:38Z): published means public (proved: d@e, never
-    shared with, lists all 6 tracks), context menus, Open with and upload
-    helpers, the 1.5 GiB shot memory claim and verdict line. In CI
-    (queued): 994dcfc67 carries feature settings default on (9ea7dfc99),
-    the OpenRouter provider for stealth/crouton-alpha (5138fe884) and the
-    fifth arm selfdev-arm-crouton (computer-848b21d5…, test tier, policy
-    staged, written after deploy). Building: the Library catalog inside
-    capsules (confirmed: every /api/catalog call 404s in a capsule, so no
-    Library round can pass; Library rounds held), guest idle-cache return
-    to Node B (memory waits cost about 20 min per round), the stale
-    management loop closing the next round (8 min per round), the CLI
-    publish preview and a crouton-only management_task pin. Applied
-    tonight: claude Slides r4 (first delegate-built, published public
-    5bfc180e). Rejected: deepseek Calendar r1 (no window; memory waits),
-    pool Library r1 (catalog 404). Owner rulings 21:10-21:40Z: published
-    is public; installs optional; base image from the Library (design
-    c09383790, five questions); "Install"; keep GPT; a fifth arm on
-    crouton for every desk.
+    staging 5ea2a61b0 (22:11Z): defaults on, OpenRouter crouton provider,
+    fifth arm crouton (every desk stealth/crouton-alpha, verified by the
+    gateway log), guest memory ceiling through live capsules (24
+    through_work acts in 30 min), stale-loop fix, catalog fixture and a
+    clean desktop per shot in capsules, CLI publish preview, crouton-only
+    management pin. Applied tonight: claude Slides r4 and luna Library r2
+    (first Library app, delegate-built, published). Building fixes, in
+    review: refresh between rounds (self-opened rounds starve deploys),
+    the Claude relay pin (each claude-mode capsule has its own address and
+    the relay pins the first one, so the delegate is refused after the
+    first capsule), the stale stack base refused at apply (pool lost a
+    40-minute Library round). Concurrency capped at three building arms
+    (five overran Node B admission). A live tracer covers all five rounds.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
