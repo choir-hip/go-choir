@@ -450,7 +450,7 @@ trigger; re-checked 12 times over 32s with no progress". No management run was c
 claimed effects (a revision and a Cast) never committed. This relates to problem 17's "without disposing exact
 trigger", but here the result is a terminal refusal, not a livelock.
 
-## Unnumbered (lane C, 19:45Z): an assignment opened just before a planned refresh freezes on the old base, and its apply is refused
+## Problem 28 (lane C, 19:45Z): an assignment opened just before a planned refresh freezes on the old base, and its apply is refused
 
 Deepseek's Files restore round ran on trajectory 4dd9ea7e. Sequence:
 - 19:19:00Z: the first assignment was cancelled by host memory ("host memory refused the build capsule"). Deepseek was
