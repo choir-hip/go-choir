@@ -43,12 +43,15 @@ type capsuleHostMemory struct {
 	now        func() time.Time
 	interval   time.Duration
 
-	mu      sync.Mutex
-	live    map[string]int64
-	facts   capsule.HostMemoryFacts
-	factsAt time.Time
-	dirty   bool // the set changed since the last report
-	wake    chan struct{}
+	// reportMu serializes reports, so a heartbeat's older snapshot never
+	// lands after an admit or a release and undoes it in vmctl.
+	reportMu sync.Mutex
+	mu       sync.Mutex
+	live     map[string]int64
+	facts    capsule.HostMemoryFacts
+	factsAt  time.Time
+	dirty    bool // the set changed since the last report
+	wake     chan struct{}
 	// loggedErr: a failed report is logged once until one succeeds.
 	loggedErr bool
 }
@@ -105,6 +108,8 @@ func (h *capsuleHostMemory) signal() {
 // AdmitBuild asks vmctl to admit the build spawn with the live set beside
 // it. Only vmctl's refusal is an error the spawn sees.
 func (h *capsuleHostMemory) AdmitBuild(ctx context.Context, capsuleID string, bytes int64) error {
+	h.reportMu.Lock()
+	defer h.reportMu.Unlock()
 	h.mu.Lock()
 	report := vmctl.CapsuleReservationReport{ComputerID: h.computerID, Reservations: h.liveLocked(),
 		Admit: &vmctl.CapsuleReservation{CapsuleID: capsuleID, Bytes: uint64(bytes)}}
@@ -150,6 +155,8 @@ func (h *capsuleHostMemory) Facts() (capsule.HostMemoryFacts, bool) {
 // reportOnce posts the live set when there is one or it changed. It
 // reports whether it posted.
 func (h *capsuleHostMemory) reportOnce(ctx context.Context) bool {
+	h.reportMu.Lock()
+	defer h.reportMu.Unlock()
 	h.mu.Lock()
 	if len(h.live) == 0 && !h.dirty {
 		h.mu.Unlock()

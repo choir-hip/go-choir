@@ -284,7 +284,7 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 	}
 	// Live capsule builds hold what their computers have not yet grown
 	// into (S4, capsule_reservations.go).
-	buildTotal, _, buildViews := l.buildOutstandingLocked(now, cfg)
+	buildTotal, buildViews := l.buildOutstandingLocked(now, cfg)
 	total += buildTotal
 	views = append(views, buildViews...)
 	sort.Slice(views, func(i, j int) bool {

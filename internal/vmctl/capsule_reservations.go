@@ -148,10 +148,9 @@ func (s *buildReservationSet) outstanding(rss uint64, extra uint64) uint64 {
 
 // buildOutstandingLocked expires sets not reported within the in-flight TTL
 // and returns what the rest hold, per VM and as views. Callers hold l.mu.
-func (l *hostMemoryLedger) buildOutstandingLocked(now time.Time, cfg HostAdmissionConfig) (uint64, map[string]uint64, []AdmissionReservationView) {
+func (l *hostMemoryLedger) buildOutstandingLocked(now time.Time, cfg HostAdmissionConfig) (uint64, []AdmissionReservationView) {
 	l.initLocked()
 	var total uint64
-	perVM := map[string]uint64{}
 	var views []AdmissionReservationView
 	for vmID, set := range l.builds {
 		if now.Sub(set.reportedAt) > cfg.InFlightTTL {
@@ -164,7 +163,6 @@ func (l *hostMemoryLedger) buildOutstandingLocked(now time.Time, cfg HostAdmissi
 		}
 		out := set.outstanding(l.rss[vmID].bytes, 0)
 		total += out
-		perVM[vmID] = out
 		views = append(views, AdmissionReservationView{
 			VMID: vmID, ComputerID: set.computerID, Class: string(set.class),
 			NeedBytes: set.total(), NeedSource: "capsule_build", OutstandingBytes: out,
@@ -172,7 +170,7 @@ func (l *hostMemoryLedger) buildOutstandingLocked(now time.Time, cfg HostAdmissi
 		})
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].VMID < views[j].VMID })
-	return total, perVM, views
+	return total, views
 }
 
 // capsulePriority is how a guest reads its class.
@@ -263,7 +261,7 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 		set.entries[c.CapsuleID] = clamp(c.Bytes)
 	}
 
-	reserved, _ := led.outstandingLocked(now, acfg)
+	reserved, views := led.outstandingLocked(now, acfg)
 	floor := memoryFloorBytes(cfg, sample.MemoryTotalBytes)
 	var result CapsuleReservationResult
 	if admit := report.Admit; admit != nil {
@@ -310,9 +308,16 @@ func (r *OwnershipRegistry) ReportCapsuleReservations(report CapsuleReservationR
 	if len(set.entries) == 0 {
 		delete(led.builds, vmID)
 	}
+	// What this computer itself holds (its own start in flight and its
+	// builds) is not promised to another (review r1, deepseek).
 	mine := uint64(0)
+	for _, v := range views {
+		if v.VMID == vmID && v.NeedSource != "capsule_build" {
+			mine += v.OutstandingBytes
+		}
+	}
 	if len(set.entries) > 0 {
-		mine = set.outstanding(rss, 0)
+		mine += set.outstanding(rss, 0)
 	}
 	others := uint64(0)
 	if reserved > mine {
