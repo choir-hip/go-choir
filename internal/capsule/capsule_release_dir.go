@@ -34,11 +34,21 @@ func prepareCapsuleReleaseDir(upperDir string, uid, gid int) error {
 	if err := os.MkdirAll(upperDir, 0o755); err != nil {
 		return fmt.Errorf("capsule release dir: upper %s: %w", upperDir, err)
 	}
+	if err := prepareCapsuleLeafDir(upperDir, ReleaseTreePrefix, uid, gid, true); err != nil {
+		return err
+	}
+	// The screens directory sits beside release: the engineer (host uid
+	// 65534) writes its screenshots there, and only the leaf is capsule-owned.
+	// It is not opaque: the guest has no lower screens to hide.
+	return prepareCapsuleLeafDir(upperDir, ScreensPrefix, uid, gid, false)
+}
+
+func prepareCapsuleLeafDir(upperDir, prefix string, uid, gid int, opaque bool) error {
 	dirFD, err := unix.Open(upperDir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("capsule release dir: open upper %s: %w", upperDir, err)
 	}
-	parts := strings.Split(strings.TrimSuffix(ReleaseTreePrefix, "/"), "/")
+	parts := strings.Split(strings.TrimSuffix(prefix, "/"), "/")
 	for i, name := range parts {
 		next, err := openOrCreateDirAt(dirFD, name)
 		_ = unix.Close(dirFD)
@@ -53,6 +63,9 @@ func prepareCapsuleReleaseDir(upperDir string, uid, gid int) error {
 	}
 	if err := unix.Fchmod(dirFD, 0o755); err != nil {
 		return fmt.Errorf("capsule release dir: chmod: %w", err)
+	}
+	if !opaque {
+		return nil
 	}
 	if err := unix.Fsetxattr(dirFD, overlayOpaqueXattr, []byte("y"), 0); err != nil {
 		// A state volume without user xattrs cannot carry the marker. The

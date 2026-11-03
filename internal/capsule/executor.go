@@ -2007,6 +2007,9 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
 			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
+		if releasePathReserved(clean) {
+			return nil, fmt.Errorf("capsule release path %q is reserved: evidence/ is where Freeze stages screens", change.Path)
+		}
 		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
 		input, err := openBeneath(rootFD, sourcePath)
 		if err != nil {

@@ -188,9 +188,9 @@ func (r *rlmCallReduction) settleFreezePrecommits(ctx context.Context, in yaegik
 	screens, _ := out[freezeScreensKey].(int)
 	delete(out, freezeScreensKey)
 	rt := r.rt()
-	// A fresh Freeze that saved screens asks Texture to embed them; the
+	// A Freeze that saved screens (a replay counts only the ones it repaired) asks Texture to embed them; the
 	// operation is the Freeze's own result, never the cell's.
-	if fresh && screens > 0 {
+	if screens > 0 {
 		operationID, _ := out["operation_id"].(string)
 		selfdevComputerID := ""
 		if r.toolCtx != nil {

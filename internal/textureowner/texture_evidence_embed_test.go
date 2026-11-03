@@ -75,7 +75,7 @@ func evidenceListing(rec types.RunRecord) agentcore.ScreensListing {
 		BundleDigest: evidenceDigest('b'),
 		Screens: []agentcore.ScreenListingRow{
 			{Name: "reader.png", File: "Self-development/selfdev-op-te/screens/reader.png", SHA256: evidenceDigest('1'), Width: 1280, Height: 800, Bytes: 10, Resolvable: true},
-			{Name: "home.png", File: "Self-development/selfdev-op-te/screens/home.png", SHA256: evidenceDigest('2'), Width: 1280, Height: 800, Bytes: 9, Blank: true, Resolvable: false},
+			{Name: "home.png", File: "Self-development/selfdev-op-te/screens/home.png", SHA256: evidenceDigest('2'), Width: 1280, Height: 800, Bytes: 9, Blank: true, Resolvable: true},
 		},
 	}
 }
@@ -271,6 +271,34 @@ func TestEvidenceEmbedRefusals(t *testing.T) {
 				t.Fatalf("a refused embed wrote %s", head.RevisionID)
 			}
 		})
+	}
+}
+
+// Only screens whose bytes are saved and resolvable are embedded: a row the
+// asset store does not hold is skipped, and a listing with none resolvable
+// writes nothing.
+func TestEvidenceEmbedSkipsUnresolvableScreens(t *testing.T) {
+	ctx := context.Background()
+	h, core, rec, source := evidenceSetup(t, "unresolvable")
+	source.listing.Screens[1].Resolvable = false
+	if _, err := h.EmbedCandidateEvidence(ctx, rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err != nil {
+		t.Fatal(err)
+	}
+	embeds := texturedoc.Embeds(bodyOf(t, headOf(t, core.Store(), rec)))
+	if len(embeds) != 1 || embeds[0].Digest != evidenceDigest('1') {
+		t.Fatalf("embeds = %+v, want only the resolvable screen", embeds)
+	}
+
+	h, core, rec, source = evidenceSetup(t, "none-resolvable")
+	for i := range source.listing.Screens {
+		source.listing.Screens[i].Resolvable = false
+	}
+	base := headOf(t, core.Store(), rec)
+	if _, err := h.EmbedCandidateEvidence(ctx, rec.OwnerID, rec.ComputerID, rec.ComputerID, "selfdev-op-te"); err == nil {
+		t.Fatal("embedded screens nobody can resolve")
+	}
+	if head := headOf(t, core.Store(), rec); head.RevisionID != base.RevisionID {
+		t.Fatalf("wrote %s", head.RevisionID)
 	}
 }
 

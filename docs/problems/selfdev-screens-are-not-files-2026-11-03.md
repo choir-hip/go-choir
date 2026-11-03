@@ -69,3 +69,19 @@ gated by the grant above.
   files (the embed names the file's path and its sha256), and the judge's
   `inspect_bundle` reads and re-hashes the same bytes.
 - The browser layer goes to every computer (`browser=*`); no grant.
+- Accepted trade (review, 2026-11-03): screens are no longer bound to the
+  frozen frontend. The platform capture screenshotted a fixture of the exact
+  release frontend, so its image was tied to the bytes that shipped. An
+  engineer's screenshot shows real content as the engineer saw it, and the
+  bundle binds only the image's own sha256, not the frontend build it
+  depicts. A screen can therefore be stale against a later edit, or show a
+  page the release does not contain. The judge and the owner read it as the
+  engineer's claim with its bytes pinned, not as proof of the release.
+- Review fixes landed with this entry: the capsule-owned `screens`
+  directory is prepared beside `release` (host uid 65534 could not create
+  it); a replayed Freeze re-saves screens a crash left unsaved, by digest;
+  Texture embeds only screens the asset store holds; the Files-tree writer
+  refuses symlinked directories; screens stage under a path a release file
+  cannot occupy (`evidence/` is reserved) and into a directory that must be
+  new; `MaxScreenPixels` is 4096x8192 and the blank check compares every
+  pixel; directory fsyncs follow the renames.

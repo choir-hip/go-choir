@@ -219,10 +219,13 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 			if err := frozenCandidateTreeChanged(ctx, toolCtx, handle, operation); err != nil {
 				return nil, err
 			}
-			return map[string]any{
+			replay := map[string]any{
 				"handle": handle, "bundle_digest": operation.BundleDigest,
 				"operation_id": operation.OperationID, "state": operation.State,
-			}, nil
+			}
+			// Re-save screens a crash left unsaved (idempotent by digest).
+			toolCtx.resaveReplayedScreens(operation, replay)
+			return replay, nil
 		}
 		return nil, fmt.Errorf("self-development operation is %s, expected %s", operation.State, selfdev.StateExecuting)
 	}

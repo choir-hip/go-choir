@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -42,9 +43,9 @@ const (
 	MaxScreenBytes = 8 << 20
 	// MaxScreensTotalBytes bounds one bundle's screens.
 	MaxScreensTotalBytes = 32 << 20
-	// MaxScreenPixels bounds a decode (a full-page capture of a long page
-	// fits; a decompression bomb does not).
-	MaxScreenPixels = 4096 * 16384
+	// MaxScreenPixels bounds a decode to about 128 MiB of RGBA (a full-page
+	// capture of a long page fits; a decompression bomb does not).
+	MaxScreenPixels = 4096 * 8192
 )
 
 var screenNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.png$`)
@@ -166,11 +167,21 @@ func stageScreenFiles(ctx context.Context, names []string, open func(name string
 		return nil, fmt.Errorf("capsule freeze: %w", err)
 	}
 	target := filepath.Join(temporary, filepath.FromSlash(BundleScreensDir))
-	if err := os.MkdirAll(target, 0o700); err != nil {
+	// The directory must be new: a release file staged at the same path
+	// would be overwritten while the bundle still records its digest.
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return nil, err
 	}
+	if err := os.Mkdir(target, 0o700); err != nil {
+		return nil, fmt.Errorf("capsule freeze: %s is already occupied: %w", BundleScreensDir, err)
+	}
 	for name, data := range contents {
-		if err := os.WriteFile(filepath.Join(target, name), data, 0o444); err != nil {
+		f, err := os.OpenFile(filepath.Join(target, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o444)
+		if err != nil {
+			return nil, err
+		}
+		_, werr := f.Write(data)
+		if err := errors.Join(werr, f.Sync(), f.Close()); err != nil {
 			return nil, err
 		}
 	}
@@ -197,11 +208,21 @@ func CheckScreenPNG(data []byte) (width, height int, blank bool, err error) {
 	return cfg.Width, cfg.Height, uniformImage(img), nil
 }
 
+// releasePathReserved says a release file may not live at relative path
+// (under the release directory): the top-level evidence/ directory of the
+// staging area belongs to Freeze (screens).
+func releasePathReserved(relative string) bool {
+	first, _, _ := strings.Cut(filepath.ToSlash(relative), "/")
+	return first == "evidence"
+}
+
+// uniformImage is exact: every pixel is compared, and it stops at the first
+// difference.
 func uniformImage(img image.Image) bool {
 	b := img.Bounds()
 	r0, g0, b0, a0 := img.At(b.Min.X, b.Min.Y).RGBA()
-	for y := b.Min.Y; y < b.Max.Y; y += 2 {
-		for x := b.Min.X; x < b.Max.X; x += 2 {
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
 			r, g, bl, a := img.At(x, y).RGBA()
 			if r != r0 || g != g0 || bl != b0 || a != a0 {
 				return false

@@ -167,3 +167,99 @@ func TestCandidateScreensListsOnlyTheBoundBundlesScreens(t *testing.T) {
 		}
 	}
 }
+
+// A crash between the Executing->Frozen transition and recordFreezeScreens
+// leaves the bundle citing screens that were never saved. A replayed Freeze
+// re-saves them, by digest, and says so.
+func TestReplayedFreezeResavesMissingScreensIdempotently(t *testing.T) {
+	rt, _ := testRuntime(t)
+	updaterRoot, filesRoot := t.TempDir(), t.TempDir()
+	staged, screens, data := screenFixture(t)
+	computerID := "computer-replay"
+	bundle := transaction.CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: computerID, BaseEventHead: strings.Repeat("a", 64),
+		TrajectoryRef: "trajectory-op-replay", CapsuleIdentity: "capsule-op-replay",
+		VerifierReceipts: []string{}, Screens: screens,
+	}
+	var err error
+	bundle.ContentDigest, err = bundle.ComputeContentDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := computerevent.CanonicalJSON(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(updaterRoot, "incoming", bundle.ContentDigest)
+	if err := os.MkdirAll(filepath.Join(dir, "evidence"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(staged, "evidence", "screens"), filepath.Join(dir, "evidence", "screens")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bundle.draft.json"), raw, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	operation := selfdev.Operation{
+		OperationID: "op-replay", ComputerID: computerID, TrajectoryID: "trajectory-op-replay", CapsuleID: "capsule-op-replay",
+		BaseHead: strings.Repeat("a", 64), BundleDigest: bundle.ContentDigest, State: selfdev.StateFrozen,
+	}
+	toolCtx := &CapsuleToolCtx{UpdaterRoot: updaterRoot, FilesRoot: filesRoot, Images: rt.imageStore()}
+	target := filepath.Join(filesRoot, "Self-development", "op-replay", "screens", "home.png")
+
+	out := map[string]any{}
+	toolCtx.resaveReplayedScreens(operation, out)
+	if got, err := os.ReadFile(target); err != nil || string(got) != string(data) {
+		t.Fatalf("missing screen not re-saved: %v", err)
+	}
+	if n, _ := out[freezeScreensKey].(int); n != 1 {
+		t.Fatalf("repaired count = %v, want 1", out[freezeScreensKey])
+	}
+	if _, present := out["screen_errors"]; present {
+		t.Fatalf("errors %v", out["screen_errors"])
+	}
+	again := map[string]any{}
+	toolCtx.resaveReplayedScreens(operation, again)
+	if n, _ := again[freezeScreensKey].(int); n != 0 {
+		t.Fatalf("a second replay repaired %v, want 0", again[freezeScreensKey])
+	}
+	if rows, _ := again["screens"].([]map[string]any); len(rows) != 1 || rows[0]["saved"] != true {
+		t.Fatalf("rows %v", again["screens"])
+	}
+}
+
+// The Files-tree writer never follows a symlink out of the tree.
+func TestSaveFrozenScreenRefusesASymlinkedDirectory(t *testing.T) {
+	rt, _ := testRuntime(t)
+	filesRoot, outside := t.TempDir(), t.TempDir()
+	frozenRoot, screens, _ := screenFixture(t)
+	if err := os.Symlink(outside, filepath.Join(filesRoot, "Self-development")); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]any{}
+	recordFreezeScreens(rt.imageStore(), filesRoot, frozenRoot, "op-link", screens, out)
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("a screen was written through a symlink: %v", entries)
+	}
+	if _, present := out["screen_errors"]; !present {
+		t.Fatal("a symlinked directory was not reported")
+	}
+
+	// A symlink at the file itself is replaced, never followed.
+	filesRoot = t.TempDir()
+	dir := filepath.Join(filesRoot, "Self-development", "op-leaf", "screens")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(outside, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(dir, "home.png")); err != nil {
+		t.Fatal(err)
+	}
+	recordFreezeScreens(rt.imageStore(), filesRoot, frozenRoot, "op-leaf", screens, map[string]any{})
+	if got, _ := os.ReadFile(victim); string(got) != "keep" {
+		t.Fatalf("symlink target overwritten: %q", got)
+	}
+}

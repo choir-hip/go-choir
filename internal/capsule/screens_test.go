@@ -175,3 +175,62 @@ func TestValidateScreensRefusesAMalformedRecord(t *testing.T) {
 		}
 	}
 }
+
+func TestStageScreenFilesRefusesToShareTheStagingPathWithAReleaseFile(t *testing.T) {
+	temporary := t.TempDir()
+	dir := filepath.Join(temporary, filepath.FromSlash(BundleScreensDir))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "home.png"), []byte("release bytes"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	good := testPNG(t, 64, 64, false)
+	if _, err := stageScreenFiles(context.Background(), []string{"home.png"}, memOpen(map[string][]byte{"home.png": good}), temporary); err == nil {
+		t.Fatal("a screen was staged over an existing file")
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "home.png")); string(got) != "release bytes" {
+		t.Fatalf("existing file overwritten: %q", got)
+	}
+}
+
+func TestReleasePathUnderEvidenceIsReserved(t *testing.T) {
+	for _, p := range []string{"evidence/screens/x.png", "evidence", "evidence/other"} {
+		if !releasePathReserved(p) {
+			t.Errorf("%s is not reserved", p)
+		}
+	}
+	for _, p := range []string{"frontend/index.html", "bin/autoputer", "frontend/evidence/x"} {
+		if releasePathReserved(p) {
+			t.Errorf("%s is reserved", p)
+		}
+	}
+}
+
+func TestBlankCheckIsExactAndPixelBoundIsSane(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for y := 0; y < 40; y++ {
+		for x := 0; x < 40; x++ {
+			img.Set(x, y, color.RGBA{R: 9, G: 9, B: 9, A: 255})
+		}
+	}
+	img.Set(5, 7, color.RGBA{R: 200, A: 255}) // odd coordinates: a stride-2 sample misses it
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, blank, err := CheckScreenPNG(buf.Bytes()); err != nil || blank {
+		t.Fatalf("one differing pixel: blank=%v err=%v", blank, err)
+	}
+	if MaxScreenPixels > 4096*8192 {
+		t.Fatalf("MaxScreenPixels = %d, want at most %d", MaxScreenPixels, 4096*8192)
+	}
+	big := image.NewPaletted(image.Rect(0, 0, 4096, 8200), color.Palette{color.Black, color.White})
+	buf.Reset()
+	if err := png.Encode(&buf, big); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := CheckScreenPNG(buf.Bytes()); err == nil {
+		t.Fatal("an oversized PNG was admitted")
+	}
+}

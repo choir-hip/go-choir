@@ -83,10 +83,10 @@ func TestFreshFreezeWithCapturesAsksTextureToEmbedThemWhenSwitchedOn(t *testing.
 	if err := s.PutComputerSetting(context.Background(), choirstore.ComputerSetting{OwnerID: owner, ComputerID: computerID, Key: choirstore.SettingTextureEvidenceEmbeds, Value: true}); err != nil {
 		t.Fatal(err)
 	}
-	settle(freeze(false, 2)) // a replayed freeze
+	settle(freeze(false, 0)) // a replayed freeze that repaired nothing
 	settle(freeze(true, 0))  // no captures
 	if got := embedder.got(); len(got) != 0 {
-		t.Fatalf("a replayed freeze or one with no captures asked: %v", got)
+		t.Fatalf("a replayed freeze that repaired nothing, or one with no captures, asked: %v", got)
 	}
 	settle(freeze(true, 2))
 	if got := embedder.got(); len(got) != 1 || got[0] != owner+"|"+computerID+"|"+computerID+"|selfdev-op-1" {

@@ -106,9 +106,18 @@ func saveFrozenScreen(images screenAssetStore, filesRoot, frozenRoot, operationI
 	if strings.TrimSpace(filesRoot) == "" {
 		return errors.New("no file tree")
 	}
-	target := filepath.Join(filesRoot, filepath.FromSlash(yaegikernel.SelfDevelopmentScreensDir(operationID)))
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", target, err)
+	target, err := mkdirBeneath(filesRoot, yaegikernel.SelfDevelopmentScreensDir(operationID))
+	if err != nil {
+		return fmt.Errorf("create screens directory: %w", err)
+	}
+	final := filepath.Join(target, screen.Name)
+	// Idempotent by digest: a file that already holds these bytes stays.
+	if info, err := os.Lstat(final); err == nil && info.Mode().IsRegular() {
+		if existing, err := os.ReadFile(final); err == nil {
+			if have := sha256.Sum256(existing); hex.EncodeToString(have[:]) == screen.SHA256 {
+				return nil
+			}
+		}
 	}
 	tmp, err := os.CreateTemp(target, ".screen-*")
 	if err != nil {
@@ -121,11 +130,96 @@ func saveFrozenScreen(images screenAssetStore, filesRoot, frozenRoot, operationI
 		_ = os.Remove(tmp.Name())
 		return err
 	}
-	if err := os.Rename(tmp.Name(), filepath.Join(target, screen.Name)); err != nil {
+	// rename replaces a symlink at final rather than following it.
+	if err := os.Rename(tmp.Name(), final); err != nil {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
-	return nil
+	return syncDir(target)
+}
+
+// mkdirBeneath creates rel (slash separated, already validated plain names)
+// under root one component at a time, refusing a symlink or a non-directory
+// at any component, as internal/autoputer/files.go refuses a symlinked parent.
+// It returns the directory's path.
+func mkdirBeneath(root, rel string) (string, error) {
+	cur := root
+	for _, part := range strings.Split(rel, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", fmt.Errorf("unsafe path component %q", part)
+		}
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		switch {
+		case err == nil:
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return "", fmt.Errorf("%s is not a plain directory", cur)
+			}
+		case errors.Is(err, os.ErrNotExist):
+			if err := os.Mkdir(cur, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+				return "", err
+			}
+			if info, err := os.Lstat(cur); err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return "", fmt.Errorf("%s is not a plain directory", cur)
+			}
+		default:
+			return "", err
+		}
+	}
+	return cur, nil
+}
+
+// syncDir fsyncs a directory so a rename in it survives a hard kill.
+func syncDir(dir string) error {
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Sync(), f.Close())
+}
+
+// resaveReplayedScreens re-saves a frozen bundle's screens at a replayed
+// Freeze: a crash between the Executing->Frozen transition and
+// recordFreezeScreens leaves them unsaved, and nothing else repairs that. It
+// is idempotent by digest. out gets the rows and screen_errors; freezeScreensKey
+// counts only the screens that were not saved before, so a replay of a
+// complete freeze asks Texture for nothing.
+func (toolCtx *CapsuleToolCtx) resaveReplayedScreens(operation selfdev.Operation, out map[string]any) {
+	if toolCtx == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || operation.BundleDigest == "" {
+		return
+	}
+	frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest)
+	bundle, _, err := readBoundSelfDevelopmentBundle(frozenRoot, operation)
+	if err != nil || len(bundle.Screens) == 0 {
+		return
+	}
+	missing := 0
+	for _, screen := range bundle.Screens {
+		if !screenFileHolds(toolCtx.FilesRoot, operation.OperationID, screen) {
+			missing++
+		}
+	}
+	recordFreezeScreens(toolCtx.Images, toolCtx.FilesRoot, frozenRoot, operation.OperationID, bundle.Screens, out)
+	saved, _ := out[freezeScreensKey].(int)
+	repaired := min(missing, saved)
+	out[freezeScreensKey] = repaired
+}
+
+// screenFileHolds says the file tree already holds screen's bytes.
+func screenFileHolds(filesRoot, operationID string, screen capsule.ScreenFile) bool {
+	if strings.TrimSpace(filesRoot) == "" || !plainOperationID.MatchString(operationID) || !capsule.ValidScreenName(screen.Name) {
+		return false
+	}
+	path := filepath.Join(filesRoot, filepath.FromSlash(yaegikernel.SelfDevelopmentScreensDir(operationID)), screen.Name)
+	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]) == screen.SHA256
 }
 
 // ScreensListing is a frozen candidate's screens as Texture reads them: the

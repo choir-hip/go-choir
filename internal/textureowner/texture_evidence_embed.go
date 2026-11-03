@@ -81,6 +81,18 @@ func (h *Handler) EmbedCandidateEvidence(ctx context.Context, ownerID, computerI
 	if err := checkEvidenceListing(listing, operationID); err != nil {
 		return "", err
 	}
+	// Only screens whose bytes the asset store holds are embedded, so no
+	// figure is ever unresolvable (design E4).
+	resolvable := listing.Screens[:0:0]
+	for _, screen := range listing.Screens {
+		if screen.Resolvable {
+			resolvable = append(resolvable, screen)
+		}
+	}
+	if len(resolvable) == 0 {
+		return "", fmt.Errorf("texture evidence: %s lists no screen whose bytes are saved", operationID)
+	}
+	listing.Screens = resolvable
 	// The listing must be this computer's: the asset route serves only this
 	// computer's store (design E5; review bunch 231).
 	if want := firstNonEmpty(strings.TrimSpace(selfdevComputerID), computerID); strings.TrimSpace(listing.ComputerID) != want {
