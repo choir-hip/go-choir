@@ -22,3 +22,13 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
 - Spend baseline (/api/costs): 0 calls at 02:55Z.
 
 ## Rounds
+
+### Round 1
+
+- Gate: staging deployed 4036f0c37 (descends from 85dcbb849, screens as files) at 03:12:44Z.
+- 03:14:20Z `choir computer refresh` (the arm was hibernated; refresh boots the current guest image).
+- 03:14:46Z request sent: Texture doc ffb9e093-b523-567d-a48c-ce21357a802c "Files (new)", trajectory b48525f9-60e6-57ac-923e-a842ca7437b3.
+  The request text (same on all four arms, plus one line asking engineering to hand the source edits to the Claude delegate) cites the spec sections and the bar,
+  restates every Files feature, names the data store choices (trash and starred under System/Files/
+  through /api/files; recents through /api/media/recents), the seeded files, and exactly twelve
+  screenshots (the capsule admits at most 12) spread over the seven presets at 1100x750 and 390px.
