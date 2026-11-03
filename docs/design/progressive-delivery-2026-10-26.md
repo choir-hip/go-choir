@@ -812,3 +812,13 @@ answers where they differ.
    feature?"); `texture.hold_trajectory` and `texture.root_desk` stay (root
    desk gives "system wide understanding for each user"); calibration
    feedback is on, engineering first (docs/design/calibration-seed-2026-11-03.md).
+6. **Divergence, not switches.** "rather than switches there can be
+   indefinite divergence of computers. thats the point of this
+   architecture, indeed." A computer differs from another by what it runs
+   and adopts (self-development, packages), never by a platform flag.
+   Research reads the paper's APIs from any computer; intake runs where
+   source schedules exist.
+7. **Order.** Ring-ordered deploys (S5) and automatic rollback (S6) first;
+   the backlog then rides ring deploys in batches.
+8. **The Claude delegate** becomes an owner act per computer (grant,
+   revoke, spend cap, on the tape), replacing the nix list.

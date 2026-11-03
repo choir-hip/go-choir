@@ -106,17 +106,17 @@ boundaries:
     - the simulated-user fleet (owner: "not this week")
 
 slices:
-  P0: rulings into the docs (CLAUDE.md and AGENTS.md "No switches; deploys roll out by ring", the design's owner rulings, the audit, the calibration plan).
-  P1: the backlog, walked with the owner group by group (Texture, engineering and self-development, store and tape, host, Autopaper and network); each group lands as deletions with its code on everywhere or gone, proved on d@e, then rolled out.
-  P2: named rows: delete the gateway model scheduler; make host fetch and capsule mirrors operational everywhere (their proofs run); story expansion for every signed-in user; calibration feedback on with the engineering A/B.
-  P2b: the Library's package path pulled forward (owner: "accelerate library then this will resolve itself"): design/library-package-propagation-2026-10-26.md S6 package-aware containment and re-materialization, so source projection runs everywhere and the rebase offer is deleted.
-  P3: ring-ordered refresh (design S5) with soaks; the paper last, automatic.
-  P4: automatic code rollback (design S6) with a planted bad release.
-  P5: the lint refuses any switch; the registry deleted.
+  P0: rulings into the docs (done 2026-11-03: CLAUDE.md and AGENTS.md, design rulings 1 to 8, the audit's backlog walk groups 1 to 7, the calibration plan).
+  P1: ring-ordered refresh (design S5): vmctl's refresh sweep refreshes d@e, then test computers, then the owner's computers, then every other computer, then the paper last at a planned, marker-backed moment, each ring after its soak.
+  P2: automatic code rollback (design S6): a post-deploy health check per ring; a breach returns that ring to the previous release and stops the walk; a planted bad release proves it.
+  P3: the backlog, in batches that ride ring deploys, as walked with the owner (docs/evidence/switch-audit-2026-11-03.md, "Backlog walk"): deletions with code on everywhere; the named fixes first where the walk says so (files.object reader, partition GC, checkpoint append hold, delegate tunnel pass, root desk ordering, debounce check, carry pruning).
+  P4: named builds from the walk: the gateway scheduler deleted; host fetch and capsule mirrors operational everywhere; story expansion for every signed-in user; the Claude delegate as an owner act; research reads of the paper's APIs from any computer; calibration feedback on with the engineering A/B; evidence.graph measured on a paper store copy.
+  P5: the Library pulled forward (package-aware containment and re-materialization, design/library-package-propagation-2026-10-26.md S6, with app desks wired), so source projection runs everywhere and the rebase offer is deleted.
+  P6: the lint refuses any switch; the registry deleted.
 
 now:
   status: working
-  slice: P0 then P1
+  slice: P1
   conjecture: >-
     C1: if every switch is deleted into on-everywhere code and releases
     roll out by ring with automatic rollback, the owner never again finds
@@ -130,6 +130,6 @@ now:
   main_uncertainty: which guards have known-bad fixtures today
   next_observation: list each ON-NOW row's promotion metric and whether /health or the journal exposes it now
   blocker: none
-  next_action: walk the owner through backlog group 1 (Texture), then land it
+  next_action: P1 ring-ordered refresh: read vmctl's deferred-refresh sweep and the design's S5, then build in a worktree off origin/main (tier 2)
 
 receipts: []

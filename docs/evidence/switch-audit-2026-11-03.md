@@ -806,3 +806,21 @@ Each decided switch is deleted; "on" means the code runs everywhere.
   ... i dont want to remove stuff which may just need fixing". A root-cause
   investigation of the three false-merge failures goes to the Autopaper
   section that follows progressive delivery and self-development.
+
+**Group 7, the paper's features and the delegate.**
+- `intake.events`, `intake.labels`, `research.system1`,
+  `research.related_story`: the switches go. Owner: "these features should,
+  on ordinary computers, still be able to access paper apis. eg research
+  related stories of a topic is useful regardless of your endpoint. intake
+  may not be relevant outside paper though. rather than switches there can
+  be indefinite divergence of computers. thats the point of this
+  architecture, indeed." Research's System 1 and related-story reads run on
+  every computer against the paper's public APIs; intake runs where source
+  schedules exist. Computers differ by what they run and adopt, never by a
+  platform flag.
+- Claude delegate: the nix computer list and expiry are replaced by an owner
+  act per computer (grant and revoke, with a spend cap, recorded on the
+  tape). It is a permission, not a feature switch.
+
+**Order (owner):** ring-ordered deploys and automatic rollback first; the
+backlog deletions then ride ring deploys in batches.

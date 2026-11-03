@@ -352,7 +352,12 @@ and then ship like everything else. A correctness refusal (crash,
 self-development apply, live capsule, release skew) is not a switch and
 stays. A bug is fixed, not hidden behind a flag. Too many model calls is a
 code problem to fix, not a limit to impose (owner: "we want to scale agents
-up not down").
+up not down"). Computers may diverge indefinitely, but by what each
+one runs and adopts (its own self-development, its packages), never by a
+platform flag (owner: "rather than switches there can be indefinite
+divergence of computers. thats the point of this architecture"). A grant
+that spends the owner's money (the Claude delegate) is an owner act on the
+tape, not a switch.
 
 **Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
 optimizing a metric, and investigations; Opus for design and open-ended
