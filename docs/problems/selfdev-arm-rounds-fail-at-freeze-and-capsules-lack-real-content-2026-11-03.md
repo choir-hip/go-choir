@@ -407,7 +407,7 @@ engineering round. The roughly 50-minute rebase rounds were for stacks that coul
 Deepseek's assignment-17a659c2 bound at 14:42:27Z and was cancelled at 15:42:27Z with "context deadline exceeded". The
 capsule was revoked and there was no Report. That deadline bounds every rebase: claude's took 53 minutes, pool's 50.
 
-## Unnumbered (lane C, 16:18Z): after a595321f2 and a cold boot, luna's engineering capsule has no `claude` on PATH
+## Problem 25: the gateway withholds the Claude delegate from every granted computer (found from luna, 16:18Z)
 
 Luna's computer was added to claudeDelegateComputers in a595321f2, which deployed at 16:12Z. It was then cold-booted:
 computer stop at 16:15:48Z (prior epoch 13455), computer start at 16:16:03Z (epoch 13456). Slides round 10
@@ -415,5 +415,12 @@ computer stop at 16:15:48Z (prior epoch 13455), computer start at 16:16:03Z (epo
 `sh -c 'command -v claude; claude --version; command -v choir-delegate'`, which ran with exit 0 and empty stderr. The
 engineer reported claude "not on PATH". Texture's 16:18:17Z turn reads: "the required Claude check failed because the
 executable was absent from PATH". Capsule evidence carries only the stdout digest (sha256:9e10ccd8...), so the literal
-output was not seen. The delegate was never invoked. Open question: whether the binary layer reached the VM and is
-missing only from the capsule's PATH, or never reached the VM at all.
+output was not seen. The delegate was never invoked. 
+Cause (main, 16:3xZ). Step 0 checked the wrong thing. `claude` lives in the guest store and is on no PATH by
+design (internal/capsule/claude_delegate.go:38). The real fault is in the gateway. Each guest's
+/api/runtime/observability reports claude_delegate available=false, on luna and on claude: "the gateway withheld the
+delegate: this computer has no Claude delegate grant". The gateway keys a credential by the VM id (vm-774a03f8...),
+while the grant list holds product computer ids, so no lookup ever matches. No arm has ever had the delegate through
+the gateway, and capsules open as ecosystem_proxy instead of claude mode. Claude's engineering runs on DeepSeek and
+never used the delegate, so its rounds are unaffected. The fix is with a builder (tier 2, expedited) and will likely
+need a cold boot after deploy. Luna's round 10 is held until then.
