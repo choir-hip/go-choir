@@ -1165,13 +1165,27 @@ nodes:
       Owner 2026-10-24: "do all of the platform upgrades that relate to
       self-development now"; "supersede our current one and start the new
       one". Carries the first pass's open items as station SR6.
+  - id: choir-selfdev-apps-feature-complete-2026-11-03
+    title: Self-development — Files, Slides, Calendar and Podcasts feature-complete on four stock arms (Claude delegate, DeepSeek, gpt-6-luna, pool), with agent onboarding, Texture export and the calibration seed plan
+    path: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md
+    ledger: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.ledger.md
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on: [choir-store-header-body-split-2026-11-02]
+    enables: []
+    note: >-
+      Owner 2026-11-03: "make a new through line plan, which includes all
+      the work described above"; "we really need to make them feature
+      complete". Supersedes choir-selfdev-apps-side-by-side-2026-11-02.
   - id: choir-selfdev-apps-side-by-side-2026-11-02
     title: Self-development — the desktop apps rewritten on b@c with the Claude (Sonnet) delegate, each as <app>-next beside its original
     path: docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md
     ledger: docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md
-    status: working
+    status: superseded  # 2026-11-03; successor choir-selfdev-apps-feature-complete-2026-11-03
     kind: spine
-    entrypoint: true
+    entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: [choir-store-header-body-split-2026-11-02]
     enables: []

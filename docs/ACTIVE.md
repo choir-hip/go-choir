@@ -11,19 +11,23 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active goal (2026-11-02): self-development, the apps rewritten beside their originals
+## Active goal (2026-11-03): self-development, the apps feature-complete on four arms
 
-**Goal:** [`definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`](definitions/choir-selfdev-apps-side-by-side-2026-11-02.md)
+**Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
 (`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`.
+`/goal docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`.
 
-Owner, 2026-11-02: "get back to self-development"; the Claude (Sonnet)
-delegate working; "we have a bunch of different apps to rewrite. We should
-keep the originals as well while we rewrite them. We can delete them
-later." Each rewrite is a package `<app>-next` beside the untouched
-original; it supersedes the T1a draft. First slice: one deploy wave after
-the store split's meter day (2026-11-03T05:00Z), the delegate proof on
-b@c, then Slides-next.
+Owner, 2026-11-03: "make a new through line plan, which includes all the
+work described above, from the auth to the choir CLI and MCP to
+self-development"; "we really need to make them feature complete". Four
+fresh stock arms (Claude delegate, Synthetic DeepSeek, gpt-6-luna, the
+pool), a Sonnet monitor per arm, the platform capture path deleted for
+engineer screenshots saved as files, `choir login`, `choir mcp install` and
+`choir texture export`. Feature list:
+[`design/apps-feature-complete-spec-2026-11-03.md`](design/apps-feature-complete-spec-2026-11-03.md);
+calibration seed plan:
+[`design/calibration-seed-2026-11-03.md`](design/calibration-seed-2026-11-03.md).
+Supersedes the 2026-11-02 side-by-side goal.
 
 ## Settling (2026-11-01): the store header/body split, on its meter day
 
