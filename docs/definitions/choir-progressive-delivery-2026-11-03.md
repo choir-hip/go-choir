@@ -116,7 +116,7 @@ slices:
 
 now:
   status: working
-  slice: P1
+  slice: P3
   conjecture: >-
     C1: if every switch is deleted into on-everywhere code and releases
     roll out by ring with automatic rollback, the owner never again finds
@@ -125,11 +125,17 @@ now:
     Edge: missing_oracle (a regression only the paper's load shows, after
     its own refresh). dO: the paper's health checks and the late-regression
     window gate its automatic refresh and roll it back.
-  decision: self-development goal on hold at its checkpoint; its parked branches stay unmerged
-  believed_state: registry and lint exist; nothing walks; most rows are off or on for one or two ids
-  main_uncertainty: which guards have known-bad fixtures today
-  next_observation: list each ON-NOW row's promotion metric and whether /health or the journal exposes it now
+  decision: P1 and P2 landed (ring walk 2795b8ee6, tier 2 Devin accept and DeepSeek no blocking at round 2); the planted bad release b1ce9c6d1 stopped at d@e and rolled back, R1 never opened
+  believed_state: >-
+    Every guest-release deploy walks R0 d@e, R1 test, R2 owner, R3 rest, R4
+    platform, R5 paper; computers outside the open ring are pinned to the last
+    proved release; guards (readiness, wedge, boot, crash) roll back. A full
+    walk takes about 13.5 hours and deploys supersede it.
+  main_uncertainty: whether walks finish at agentic deploy tempo (supersede starvation of R3 to R5 and the paper)
+  next_observation: the first full walk on staging (S4 or the revert release) reaching R5, from GET /internal/vmctl/ring-walk
   blocker: none
-  next_action: P1 ring-ordered refresh: read vmctl's deferred-refresh sweep and the design's S5, then build in a worktree off origin/main (tier 2)
+  next_action: P3 backlog batches ride ring deploys; watch the first walk to R5; residuals in docs/design/ring-ordered-deploys-2026-11-03.md
 
-receipts: []
+receipts:
+  - P1/P2 ring walk landed 2795b8ee6 (CI 41571883136, deployed; baseline recorded 03:31:57Z)
+  - rollback acceptance: planted b1ce9c6d1 (CI 41573994272) breached R0 appender_wedge 04:47:53Z, rolled back, return planned_restart=true, rollback_complete 04:48:53Z; artifact docs/evidence/ring-walk-rollback-acceptance-2026-11-03.jsonl
