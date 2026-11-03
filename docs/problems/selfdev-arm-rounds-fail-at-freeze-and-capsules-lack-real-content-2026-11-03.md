@@ -345,7 +345,7 @@ not use choir-shot. This revises the luna verdict: luna's last round was stopped
 by the engineer. Fix direction: resolve choir-shot's Vite build and the specs against $CHOIR_FRONTEND_DEPS/node_modules
 (NODE_PATH or a symlinked node_modules), and give theme-contract.spec.js a package filter.
 
-## Problem 19: after 0de7c5865, pool's U4 timer mints no rebase notice ("rebase_needs_root")
+## Problem 21: after 0de7c5865, pool's U4 timer mints no rebase notice ("rebase_needs_root")
 
 Pool refreshed to 0de7c5865 at 12:58Z ("source base fetch (attempt 1): fetched commit=0de7c5865d0c" 12:58:05Z). At
 13:03:04Z, the stay-up mark, the guest logged "rebase notice: none minted: rebase_needs_root: no live root desk to Cast the
