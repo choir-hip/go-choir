@@ -468,7 +468,7 @@ candidate that could never apply, which wasted about 15 minutes of build and the
 assignment at bind time after a planned restart, or refuse to bind one whose base differs from the booted base, so a
 fresh open picks up the new base. Not yet checked: which component carried the 2cd70f60 base into the capsule.
 
-## Unnumbered (lane C, 20:12Z): deepseek's files-next publish is refused after the restore round, for two reasons
+## Problem 29 (lane C, 20:12Z): deepseek's files-next publish is refused after the restore round, for two reasons
 
 Deepseek's restore round, selfdev-6be8dc5f25c72c7edfc544c90a881152 (trajectory 78e755eb, assignment-75c292fa), applied
 at 20:09:09Z. The publish of files-next from it was refused: http 409 "package_change_not_confined: the operation
