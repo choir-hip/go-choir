@@ -265,3 +265,18 @@ the state an applied operation left and refuses the genesis baseline, so it cann
 round (each arm's first applied operation is a files-next round). So the stacked arms wait on the platform: a
 rebase notice that reaches the root (U4), a graft by source auto-update, or a way to start a package-only round
 on the base with the stack set aside. FP0 keeps their next requests queued.
+
+## Problem 14: a rebase cannot drop a hunk the new base already carries (claude, 11:15Z)
+
+After eb1fb6408 the claude arm minted its rebase notice (10:52:48Z) and management opened the rebase assignment
+(10:53:00Z). The rebase operation selfdev-22655878c3170572dd841124b2538aa4 (created 11:07:32Z) ended failed at
+11:15:12Z: "assignment failed before its candidate froze; last refusal: freeze: rebase_content_mismatch:
+hunk_missing: paths of the applied change that conflict with the new base lack a hunk of that change, or were
+deleted or edited elsewhere in the path: frontend/src/lib/app-sdk.ts". Claude's round 3 added the app-sdk
+re-exports; eb1fb6408 carries the same re-exports from main (e5915e0ca), so the hunk conflicts with the base and
+the right rebase drops it as already upstream. The Freeze content check requires every conflicting hunk to
+survive, so the rebase can never freeze. Deepseek's rebase (selfdev-152fe036bf575df9af28820e3132bae7, applied
+11:02:09Z) passed because its app-sdk hunk was only a reorder. Fix direction (red, rebase content check): accept
+a missing hunk when the base already holds that hunk's resulting content (upstreamed), and say so on the record.
+Also seen: deepseek's rebase operation changes app-sdk.ts and two test specs, so it is not confined itself; the
+arm publishes from its next package-only round (Fix 11 publishes the stack's cumulative package then).
