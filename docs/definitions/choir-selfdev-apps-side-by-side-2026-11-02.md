@@ -11,7 +11,7 @@ definition_version: 5
 # delegate working as well. And we have a bunch of different apps to
 # rewrite. We should keep the originals as well while we rewrite them. We
 # can delete them later."
-readiness: executable  # on the owner's word above
+readiness: executable  # on the owner's word above; superseded 2026-11-03 by choir-selfdev-apps-feature-complete-2026-11-03.md
 
 review:
   reviewer: none  # executable on the owner's word; each promotion gets tier 1 (Devin)
@@ -151,7 +151,7 @@ boundaries:
   protected_surfaces: [vmctl delegate grant, self-development approval and promotion, frontend/src/app.css shared overrides, Desktop.svelte media routing]
 
 now:
-  status: working
+  status: superseded  # 2026-11-03; successor choir-selfdev-apps-feature-complete-2026-11-03
   slice: >-
     A0 odds and ends: wait for the 05:00Z S6 judgment, then one deploy
     wave with the split follow-ups, the wedge-in-health fix, the delegate

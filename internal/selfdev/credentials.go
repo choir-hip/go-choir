@@ -509,11 +509,7 @@ func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint sel
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusCreated {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-		detail := strings.TrimSpace(string(raw))
-		if detail != "" {
-			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint refused with status %d: %s", response.StatusCode, detail)
-		}
-		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint refused with status %d", response.StatusCode)
+		return selfdevprotocol.CheckpointResponse{}, &CheckpointRefusedError{Status: response.StatusCode, Detail: strings.TrimSpace(string(raw))}
 	}
 	var result selfdevprotocol.CheckpointResponse
 	decoder := json.NewDecoder(io.LimitReader(response.Body, 256<<10))
@@ -527,6 +523,63 @@ func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint sel
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("guest credential: checkpoint receipt binding failed")
 	}
 	return result, nil
+}
+
+// CheckpointRefusedError is the checkpoint authority's refusal of a publish:
+// its HTTP status and body.
+type CheckpointRefusedError struct {
+	Status int
+	Detail string
+}
+
+func (e *CheckpointRefusedError) Error() string {
+	if e.Detail != "" {
+		return fmt.Sprintf("guest credential: checkpoint refused with status %d: %s", e.Status, e.Detail)
+	}
+	return fmt.Sprintf("guest credential: checkpoint refused with status %d", e.Status)
+}
+
+// RefusesVerifierKey reports a deterministic refusal of the verifier key: the
+// pin names another key. Retrying it changes nothing until the owner re-pins
+// (docs/problems/verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md).
+func (e *CheckpointRefusedError) RefusesVerifierKey() bool {
+	return e != nil && e.Status >= 400 && e.Status < 500 &&
+		(strings.Contains(e.Detail, selfdevprotocol.CheckpointRefusalVerifierKeyNotPinned) || strings.Contains(e.Detail, selfdevprotocol.CheckpointRefusalVerifierTrustSubstitution))
+}
+
+// VerifierKeyPreflight asks the checkpoint authority, read only, whether the
+// key this computer's verifier presents is the pinned one.
+func (g *GuestCredentials) VerifierKeyPreflight(ctx context.Context, keyID, publicKey string) (selfdevprotocol.VerifierKeyPin, error) {
+	if g == nil {
+		return selfdevprotocol.VerifierKeyPin{}, fmt.Errorf("guest credential: unavailable")
+	}
+	body, err := json.Marshal(selfdevprotocol.VerifierKeyPreflightRequest{ComputerID: g.computerID, KeyID: keyID, PublicKey: publicKey})
+	if err != nil {
+		return selfdevprotocol.VerifierKeyPin{}, err
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return selfdevprotocol.VerifierKeyPin{}, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/internal/computers/verifier-key/preflight", bytes.NewReader(body))
+	if err != nil {
+		return selfdevprotocol.VerifierKeyPin{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := g.http.Do(request)
+	if err != nil {
+		return selfdevprotocol.VerifierKeyPin{}, fmt.Errorf("guest credential: verifier key preflight: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return selfdevprotocol.VerifierKeyPin{}, fmt.Errorf("guest credential: verifier key preflight refused with status %d", response.StatusCode)
+	}
+	var pin selfdevprotocol.VerifierKeyPin
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&pin); err != nil || pin.ComputerID != g.computerID || pin.State == "" {
+		return selfdevprotocol.VerifierKeyPin{}, fmt.Errorf("guest credential: verifier key preflight answer refused")
+	}
+	return pin, nil
 }
 
 // FetchCheckpoint returns the checkpoint published under an idempotency key,

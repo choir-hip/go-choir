@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Network-free selftest for scripts/test-computer-create.
+#
+#   scripts/selftest-test-computer-create
+#
+# Failure modes checked (each a case below):
+#   F1 the scope list misses a registry scope, or admin/owner:acts
+#   F2 a bad --name is accepted (path traversal into another state file)
+#   F3 a finished state file runs the bootstrap again (not idempotent)
+#   F4 a finished-state report prints the key or the address
+#   F5 a state file that is not mode 0600 is used
+#   F6 a half-finished state file is resumed (its passkey is gone)
+#   F7 --dry-run touches the network (ssh, playwright)
+#   F8 a removed flag (--scopes) is silently accepted
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script="$repo/scripts/test-computer-create"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tcc-selftest.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+
+# Any ssh/npx call is a network call: stubs record it and fail.
+mkdir -p "$tmp/bin"
+for tool in ssh npx; do
+  printf '#!/bin/sh\necho "%s $*" >>"%s/net.log"\nexit 97\n' "$tool" "$tmp" >"$tmp/bin/$tool"
+  chmod +x "$tmp/bin/$tool"
+done
+export PATH="$tmp/bin:$PATH"
+export CHOIR_E2E_STATE_DIR="$tmp/state"
+
+fails=0
+pass() { echo "PASS $1"; }
+fail() { echo "FAIL $1"; fails=$((fails + 1)); }
+
+fake_key="choir_sk_selftestSECRETdoNotPrint0123456789"
+fake_addr="87654321@choir.news"
+write_state() { # name stage [mode]
+  mkdir -p "$CHOIR_E2E_STATE_DIR"
+  local f="$CHOIR_E2E_STATE_DIR/test-computer-$1.json"
+  printf '{"stage":"%s","name":"%s","account_id":"user-selftest","computer_id":"computer-0123456789abcdef0123456789abcdef","address":"%s","api_key":"%s"}\n' \
+    "$2" "$1" "$fake_addr" "$fake_key" >"$f"
+  chmod "${3:-600}" "$f"
+}
+
+# F1: scopes come from the registry source.
+scopes="$("$script" --print-scopes)"
+want="$(awk '/^var validScopes = map\[string\]bool\{/{p=1;next} p&&/^\}/{exit} p' "$repo/internal/auth/handlers.go" \
+  | grep -oE '^[[:space:]]*"[^"]+"' | tr -d ' \t"' | sort -u)"
+got="$(tr ',' '\n' <<<"$scopes" | sort -u)"
+if [[ -n "$want" && "$got" == "$want" ]] && grep -qx admin <<<"$got" && grep -qx owner:acts <<<"$got" \
+  && grep -qx computer:self_development:approve <<<"$got"; then
+  pass "F1 scope list is the registry ($(wc -l <<<"$got" | tr -d ' ') scopes, admin and owner:acts included)"
+else
+  fail "F1 scope list differs from internal/auth/handlers.go validScopes"
+fi
+
+# F2: bad names.
+bad=0
+for n in "" "../x" "a/b" "UPPER" "-lead" "x.json"; do
+  if "$script" --name "$n" --dry-run >/dev/null 2>&1; then bad=1; fi
+done
+[[ $bad == 0 ]] && pass "F2 bad names refused" || fail "F2 a bad name was accepted"
+
+# F3 + F4: finished state: report, no network, no secret.
+write_state arm-a done
+out="$("$script" --name arm-a 2>&1)" && rc=0 || rc=$?
+if [[ $rc == 0 && ! -s "$tmp/net.log" ]] && grep -q 'computer-0123456789abcdef0123456789abcdef' <<<"$out" \
+  && grep -q "$CHOIR_E2E_STATE_DIR/test-computer-arm-a.json" <<<"$out"; then
+  pass "F3 finished state is reported and nothing runs"
+else
+  fail "F3 finished state (rc=$rc, net=$(cat "$tmp/net.log" 2>/dev/null))"
+fi
+if grep -q -e "$fake_key" -e "$fake_addr" -e 87654321 -e user-selftest <<<"$out"; then
+  fail "F4 the report printed a secret"
+else
+  pass "F4 the report prints no key, address or account id"
+fi
+
+# F5: wrong mode.
+write_state arm-b done 644
+if "$script" --name arm-b >/dev/null 2>&1; then fail "F5 a 0644 state file was used"; else pass "F5 a 0644 state file is refused"; fi
+
+# F6: half-finished.
+write_state arm-c keyed
+if "$script" --name arm-c >/dev/null 2>&1; then fail "F6 a half-finished state was resumed"; else pass "F6 a half-finished state is refused"; fi
+[[ ! -s "$tmp/net.log" ]] || fail "F6 the refusal touched the network"
+
+# F7: dry run with no state.
+out="$("$script" --name arm-new --dry-run 2>&1)" && rc=0 || rc=$?
+if [[ $rc == 0 && ! -s "$tmp/net.log" && ! -e "$CHOIR_E2E_STATE_DIR/test-computer-arm-new.json" ]] \
+  && grep -q 'would run' <<<"$out"; then
+  pass "F7 dry run plans the bootstrap with no network and no state file"
+else
+  fail "F7 dry run (rc=$rc, net=$(cat "$tmp/net.log" 2>/dev/null))"
+fi
+
+# F8: --scopes was dropped (owner, 2026-11-03: every key gets all scopes).
+if "$script" --name arm-a --scopes read:runtime >/dev/null 2>&1; then fail "F8 --scopes accepted"; else pass "F8 --scopes refused"; fi
+
+[[ $fails == 0 ]] && echo "selftest-test-computer-create: all passed" || { echo "selftest-test-computer-create: $fails failed"; exit 1; }

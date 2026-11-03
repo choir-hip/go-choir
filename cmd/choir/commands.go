@@ -271,6 +271,7 @@ func buildRegistry() []*command {
 			scopes: readTexture, readOnly: true,
 			handler: textureShow,
 		},
+		textureExportCommand(),
 		{
 			path: []string{"texture", "watch"}, summary: "Watch durable version/control events as JSONL",
 			params: []param{
@@ -452,6 +453,22 @@ func buildRegistry() []*command {
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
 		ownerAct(computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"})),
 		ownerAct(computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true)),
+		computerGet("verifier-key", "Read the key this computer's verifier presents and the host's pin state for it", "/self-development/verifier-key", selfDevRead),
+		ownerAct(&command{
+			path:    []string{"computer", "repin-verifier"},
+			summary: "Owner's re-pin: pin the verifier key the computer now presents, replacing a pin it lost with its data disk (--reason)",
+			desc:    "A computer whose data disk was lost (a lost-disk boot, a cold recover) generates a new verifier key at its next boot, and the host refuses every verifier checkpoint it signs, so every approved apply is held. The re-pin revokes the active pin and pins the key the computer's verifier presents now; the proxy reads that key from the computer and checks with the host that another key is pinned before it signs the owner act, so the caller never names a key. The pin and the reason are recorded in the host's key history and on the computer's tape, and a held apply resumes. A computer on a guest release from before the re-pin cannot present its key (the proxy answers 409 and says so): abandon the held operation, refresh the computer onto the current release, then re-pin. An owner act: the key needs owner:acts, which admin does not imply.",
+			params: []param{
+				computerParam(),
+				pStr("reason", "Why the key is re-pinned (recorded with the pin)").req(),
+			},
+			usage:       "--computer and --reason are required",
+			scopes:      lifecycle,
+			destructive: true,
+			handler: func(x *call) (any, error) {
+				return sendRaw(x, http.MethodPost, computerPath(x, "/verifier-key/repin"), map[string]string{"reason": x.trim("reason")})
+			},
+		}),
 		{
 			path: []string{"computer", "producer-reports"}, summary: "List pending producer reports",
 			params: []param{
@@ -516,16 +533,17 @@ func buildRegistry() []*command {
 			path: []string{"api-key", "create"}, summary: "Create a delegated API key (requires manage:keys or admin)",
 			params: []param{
 				pStr("label", "Label for the new API key").dflt("CLI key"),
-				pList("scopes", "Comma-separated child scopes (must be within the caller's delegated scopes)").commas().dflt([]string{"read:texture", "read:base", "read:runtime"}),
+				pList("scopes", "Comma-separated child scopes (must be within the caller's delegated scopes); omit for everything the caller may delegate").commas(),
 				pStr("computer", "Optional stable ComputerID to attenuate the key to one computer; omit for an owner-wide key that controls every computer you own").fromEnv("CHOIR_COMPUTER_ID"),
 				pStr("expires_at", "Optional RFC 3339 expiry (for example 2026-08-11T12:00:00Z); must be in the future"),
 			},
 			scopes:  []string{"manage:keys"},
 			cliOnly: "returns a new bearer secret; a tool result would put a live credential into model context and chat transcripts, where a prompt-injected call could mint and exfiltrate it. Hosted MCP access is granted by OAuth consent, never by minting keys",
 			handler: func(x *call) (any, error) {
-				body := map[string]any{"label": x.trim("label"), "scopes": x.list("scopes"), "computer_id": x.trim("computer")}
-				if body["scopes"] == nil {
-					body["scopes"] = []string{}
+				body := map[string]any{"label": x.trim("label"), "computer_id": x.trim("computer")}
+				// Omitted scopes mean everything the caller may delegate.
+				if scopes := x.list("scopes"); len(scopes) > 0 {
+					body["scopes"] = scopes
 				}
 				if v := x.trim("expires_at"); v != "" {
 					exp, err := time.Parse(time.RFC3339, v)
@@ -831,7 +849,22 @@ func buildRegistry() []*command {
 
 		// meta
 		{
-			path: []string{"mcp"}, summary: "Serve every MCP-exposed command as a tool over stdio MCP (key from $CHOIR_API_KEY or $CHOIR_API_KEY_FILE)",
+			path: []string{"login"}, summary: "Sign in from this machine: approve in the browser, and a full-access key is saved to ~/.config/choir/credentials (--host, --label)",
+			scopes: []string{"public"}, cliOnly: "writes a new full-access secret to a local 0600 file; a tool result would put a live credential into model context",
+			legacy: runLogin,
+		},
+		{
+			path: []string{"logout"}, summary: "Revoke the saved login's key and remove the credentials file",
+			scopes: []string{"authenticated"}, cliOnly: "removes the local credentials the MCP server itself runs on",
+			legacy: runLogout,
+		},
+		{
+			path: []string{"mcp", "install"}, summary: "Add choir mcp to an agent host's MCP config (claude-code|cursor|claude-desktop|codex; --print to print it)",
+			scopes: []string{"public"}, cliOnly: "edits a local agent host's configuration file",
+			legacy: runMCPInstall,
+		},
+		{
+			path: []string{"mcp"}, summary: "Serve every MCP-exposed command as a tool over stdio MCP (key as the CLI resolves it: --api-key-file, $CHOIR_API_KEY, $CHOIR_API_KEY_FILE, the choir login credentials file)",
 			scopes: []string{"authenticated"}, cliOnly: "the MCP server itself",
 			legacy: runMCP,
 		},

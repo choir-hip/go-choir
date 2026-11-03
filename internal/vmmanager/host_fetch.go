@@ -36,7 +36,7 @@ func loadHostFetchConfig(getenv func(string) string) HostFetchConfig {
 // nothing for a VM the switch does not name.
 func (c HostFetchConfig) hostFetchMaterial(computerID, vmID string, now time.Time) (map[string][]byte, string) {
 	computerID, vmID = strings.TrimSpace(computerID), strings.TrimSpace(vmID)
-	if computerID == "" || vmID == "" || !c.VMs[vmID] {
+	if computerID == "" || vmID == "" || !hostfetch.Listed(c.VMs, vmID) {
 		return nil, ""
 	}
 	raw, _ := json.Marshal(hostfetch.Grant{ComputerID: computerID, Status: hostfetch.GrantGranted, Basis: hostfetch.BasisVM, GrantedAt: now.UTC().Format(time.RFC3339)})

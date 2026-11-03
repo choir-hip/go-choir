@@ -23,7 +23,7 @@ import (
 )
 
 // Story expansion requests (docs/reports/story-expansion-request-design-
-// 2026-10-20.md, phase 1). An allowlisted signed-in owner asks one public
+// 2026-10-20.md, phase 1). A signed-in user asks one public
 // Autopaper story to be expanded with more research. The proxy checks the
 // allowlist, asks corpusd which paper document the route publishes, applies
 // the limits, and calls the paper's research door, POST .../research, as the
@@ -32,8 +32,8 @@ import (
 // story (docs/design/research-more-goes-to-research-2026-10-21.md). The
 // reader sees a fate line. Management is not a hop.
 //
-// Dark by default: PROXY_EXPAND_REQUESTERS empty and PROXY_EXPAND_PUBLIC off
-// means off, and PROXY_EXPAND=off is the kill switch.
+// Every signed-in user may ask (owner, 2026-11-03: the requester allowlist and
+// the PROXY_EXPAND kill switch are deleted).
 //
 // The public door (owner 2026-10-20, section 32 of the owner notes; problem
 // doc "Public door"): with PROXY_EXPAND_PUBLIC=on a reader with no owner
@@ -290,13 +290,7 @@ func (h *Handler) expandLedger() *expandLedger {
 	return h.expand
 }
 
-// expandEnabled is the feature switch: dark when nobody is allowlisted and
-// the public door is shut, or PROXY_EXPAND=off.
-func (h *Handler) expandEnabled() bool {
-	return h != nil && !h.expandOff && (len(h.expandRequesters) > 0 || h.expandPublic)
-}
-
-// expandOwnerSession authenticates an allowlisted browser session. An API key
+// expandOwnerSession authenticates a signed-in browser session (any user). An API key
 // never qualifies: asking is an owner act that needs the signed-in session
 // (compare isEmailOwnerActRoute).
 func (h *Handler) expandOwnerSession(r *http.Request) (*AuthResult, int) {
@@ -304,7 +298,7 @@ func (h *Handler) expandOwnerSession(r *http.Request) (*AuthResult, int) {
 	if err != nil {
 		return nil, http.StatusUnauthorized
 	}
-	if authResult.AuthMethod == "api_key" || !h.expandRequesters[strings.TrimSpace(authResult.UserID)] {
+	if authResult.AuthMethod == "api_key" {
 		return nil, http.StatusForbidden
 	}
 	return authResult, 0
@@ -479,16 +473,11 @@ func (h *Handler) HandlePlatformPublicationExpand(w http.ResponseWriter, r *http
 	requester, requestID, publicationID := "-", "-", "-"
 	defer func() {
 		h.lifecycle.record("platform_expand.request", outcome, time.Since(started))
-		if outcome != "not_found_dark" && outcome != "unauthorized" {
+		if outcome != "unauthorized" {
 			log.Printf("proxy: expand: request=%s publication=%s requester=%s outcome=%s", requestID, publicationID, requester, outcome)
 		}
 	}()
 
-	if !h.expandEnabled() {
-		outcome = "not_found_dark"
-		writeJSON(w, http.StatusNotFound, errorResponse{Error: expandNotFoundBody})
-		return
-	}
 	if r.Method != http.MethodPost {
 		outcome = "bad_method"
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -710,10 +699,6 @@ func (h *Handler) HandlePlatformPublicationExpansion(w http.ResponseWriter, r *h
 		return
 	}
 	deny := expansionRead{Allowed: false}
-	if !h.expandEnabled() {
-		writeJSON(w, http.StatusOK, deny)
-		return
-	}
 	caller, _ := h.expandAskers(r)
 	if caller == nil {
 		writeJSON(w, http.StatusOK, deny)
