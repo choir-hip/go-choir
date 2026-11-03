@@ -231,10 +231,11 @@ func TestPackageDraftRefusesAMixedOperationNamingItsPaths(t *testing.T) {
 	if !strings.Contains(got.Error, "frontend/src/app.css") || strings.Contains(got.Error, draftRoot+"/App.svelte") || !strings.Contains(got.Error, "choir platform publish") {
 		t.Fatalf("L15 refusal = %q, want the outside path named and the platform proposal pointed to", got.Error)
 	}
-	// A confined change drafted under another package's name is not confined
-	// to that package.
+	// A change to the reader drafted under another package's name is the
+	// sibling's subtree, not outside (problem 29); the other package has no
+	// tree here, so the draft is refused as invalid, not as unconfined.
 	w.operation("op-reader", selfdev.StateApplied, map[string]string{draftRoot + "/App.svelte": "<p>v3</p>\n"})
-	wantDraftReason(t, w.draft("op-reader", url.Values{"package": {"image"}}), http.StatusConflict, pkgrelease.ReasonChangeNotConfined)
+	wantDraftReason(t, w.draft("op-reader", url.Values{"package": {"image"}}), http.StatusUnprocessableEntity, pkgrelease.ReasonInvalid)
 }
 
 func TestPackageDraftIsTheConfinedSubtreeOnTheBase(t *testing.T) {

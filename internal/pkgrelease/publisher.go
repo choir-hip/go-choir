@@ -37,6 +37,21 @@ func DiffPaths(ctx context.Context, repo, a, b string) ([]string, error) {
 	return paths, nil
 }
 
+// inSiblingPackage reports whether p lies under another package's subtree,
+// frontend/src/packages/<other>/..., for a draft of package name. Each
+// package is published from its own subtree and a release carries only that
+// subtree, so a sibling's files cannot ship in this release and are not
+// outside it in the confinement sense (problem 29). A file directly under the
+// packages directory is not a package subtree and still counts.
+func inSiblingPackage(p, name string) bool {
+	rest, ok := strings.CutPrefix(p, PackagesRoot+"/")
+	if !ok {
+		return false
+	}
+	other, _, hasSub := strings.Cut(rest, "/")
+	return hasSub && other != "" && other != name
+}
+
 // OutsideRoot lists the paths that are not root itself or under it, in
 // their order.
 func OutsideRoot(paths []string, root string) []string {
@@ -211,6 +226,13 @@ type DraftInput struct {
 	// or Base), and BeforeLabel names it in a refusal.
 	Before      string
 	BeforeLabel string
+	// BeforeBase is the stack base Before was projected on, when it is not
+	// Base: a stack re-grafted onto a moved base (stack_rematerialized) keeps
+	// the earlier operation's projection commit on the old base while the
+	// next operation's bundle is cumulative from the booted one (problem 29).
+	// DraftPackage then grafts Before's change onto Base to get the source
+	// just before the operation. Empty when Before is on Base.
+	BeforeBase string
 	// HeadReleaseID and HeadTree are the publisher's track head, when the
 	// track has one (corpusd's answer, through the proxy).
 	HeadReleaseID string
@@ -241,7 +263,8 @@ type DraftSource struct {
 //  1. operation confinement, on the result: every path the operation
 //     changed (the source before it against the source after it) lies under
 //     the package root or, outside it, is the stack base's again, or
-//     package_change_not_confined names the others. An outside path an
+//     package_change_not_confined names the others. Another package's
+//     subtree is not outside (problem 29). An outside path an
 //     earlier round changed and this round restored does not count
 //     (problem 23);
 //  2. own change only: the package subtree before the operation is the
@@ -273,6 +296,12 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil {
 		return DraftSource{}, fmt.Errorf("pkgrelease: the source before the operation (%s) is unreadable: %w", in.BeforeLabel, err)
 	}
+	// A Before on another stack base is grafted onto Base, byte for byte,
+	// when the base moved at none of the paths Before changed; otherwise the
+	// source before falls back to Base itself.
+	if in.BeforeBase != "" && !strings.EqualFold(in.BeforeBase, in.Base) {
+		before = graftBefore(ctx, s, in, before)
+	}
 	// The operation's own change, against the source just before it.
 	opPaths, err := diffPaths(ctx, s, before, after)
 	if err != nil {
@@ -298,7 +327,7 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		}
 		var outside []string
 		for _, p := range touched {
-			if differs[p] {
+			if differs[p] && !inSiblingPackage(p, in.Name) {
 				outside = append(outside, p)
 			}
 		}
@@ -425,6 +454,40 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		return DraftSource{}, err
 	}
 	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
+}
+
+// graftBefore is the tree of Base with the change BeforeBase..before applied,
+// the source before the operation seen on the operation's own base. It
+// returns Base when the base moved at a path that change touches or the
+// change does not apply, which is the old behavior (the stack restarted).
+func graftBefore(ctx context.Context, s *scratch, in DraftInput, before string) string {
+	fallback := in.Base
+	touched, err := diffPaths(ctx, s, in.BeforeBase, before)
+	if err != nil {
+		return fallback
+	}
+	moved, err := diffPaths(ctx, s, in.BeforeBase, in.Base)
+	if err != nil {
+		return fallback
+	}
+	movedSet := make(map[string]bool, len(moved))
+	for _, p := range moved {
+		movedSet[p] = true
+	}
+	for _, p := range touched {
+		if movedSet[p] {
+			return fallback
+		}
+	}
+	patch, err := gitRun(ctx, s.dir, s.env, nil, "diff-tree", "-p", "-r", "--binary", "--full-index", "--no-renames", "--no-color", in.BeforeBase, before)
+	if err != nil {
+		return fallback
+	}
+	tree, err := s.apply(ctx, in.Base, append(patch, '\n'))
+	if err != nil {
+		return fallback
+	}
+	return tree
 }
 
 // diffPaths lists the paths that differ between two tree-ishes, sorted.

@@ -41,3 +41,19 @@ counted as this operation's. With defect 1 fixed the fallback is harmless for
 sibling packages; shared-lib paths still count correctly because they are
 compared to the base. Confirming the re-graft on this operation needs its
 ledger (applied ref StackBase vs operation base); recorded as a residual.
+
+## Defect 2 confirmed by code (coordinator clue, pool selfdev-c2624f40...)
+
+A re-graft (`reconcileStack`, internal/sourceproj/sourceproj.go) leaves each
+applied ref's commit on the stack's old base (`appliedCommit: commit`, trailer
+Choir-Stack-Base = old base) while HEAD, and so the next operation's cumulative
+bundle, is on the booted base. `packageSourceBefore` then saw
+`ref.StackBase != base`, broke, and used the booted base as the source before:
+the operation's "own change" became base..after, the whole cumulative stack
+(files-next, app-sdk, ...). Deepseek's stack was never re-grafted, so its
+refs matched and its publish passed.
+
+Fix: the nearest earlier ref still stands in, with its stack base passed as
+`BeforeBase`; `DraftPackage` grafts that change onto the operation's base
+(only when the base moved at none of the touched paths, else the old base
+fallback) so the parent is the previous operation, not the stack base.

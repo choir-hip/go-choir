@@ -67,13 +67,13 @@ func (h *APIHandler) packageReleaseDraft(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	repo := h.rt.releaseRepo()
-	before, beforeLabel, stack, err := h.rt.packageSourceBefore(ctx, repo, operation, base)
+	before, beforeLabel, beforeBase, stack, err := h.rt.packageSourceBefore(ctx, repo, operation, base)
 	if err != nil {
 		writePackageDraftRefusal(w, err)
 		return
 	}
 	source, err := pkgrelease.DraftPackage(ctx, pkgrelease.DraftInput{
-		Repo: repo, Name: name, Base: base, Patch: patch, Before: before, BeforeLabel: beforeLabel,
+		Repo: repo, Name: name, Base: base, Patch: patch, Before: before, BeforeLabel: beforeLabel, BeforeBase: beforeBase,
 		HeadReleaseID: headID, HeadTree: headTree, Stack: stack,
 	})
 	if err != nil {
@@ -156,6 +156,12 @@ func writePackageDraftRefusal(w http.ResponseWriter, err error) {
 // earlier applied operation or that one's ref is on another stack base
 // (the stack restarted: upstreamed or moved).
 //
+// A previous ref on an older stack base (the stack was re-grafted onto a
+// moved base, stack_rematerialized) still stands in, with its base returned as
+// beforeBase: the draft grafts its change onto this operation's base, or falls
+// back to the base when the base moved at a path that change touches (problem
+// 29).
+//
 // Only the immediately preceding operation stands in. When it changed
 // source and left no ref (the projection names only the top of the stack
 // it projects, so an operation applied between two projections has none),
@@ -176,11 +182,11 @@ func writePackageDraftRefusal(w http.ResponseWriter, err error) {
 //
 // The order is creation order: the cast refuses while an apply is pending,
 // so the operation created before this one applied before it was cast.
-func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string, []string, error) {
+func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operation selfdev.Operation, base string) (string, string, string, []string, error) {
 	baseLabel := "the base " + base
 	operations, err := rt.selfdevOperations.ListByStates(ctx, operation.ComputerID, selfdev.StateApplied)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 	index := -1
 	for i, candidate := range operations {
@@ -192,11 +198,12 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 	var refs map[string]pkgrelease.AppliedRef
 	before, beforeLabel := "", ""
 	var stack []string
+	beforeBase := ""
 	for i := index - 1; i >= 0; i-- {
 		previous := operations[i]
 		if refs == nil {
 			if refs, err = pkgrelease.AppliedRefs(ctx, repo); err != nil {
-				return "", "", nil, err
+				return "", "", "", nil, err
 			}
 		}
 		ref, ok := refs[previous.OperationID]
@@ -208,27 +215,34 @@ func (rt *Runtime) packageSourceBefore(ctx context.Context, repo string, operati
 			if patchErr != nil && before != "" {
 				// Not known to be a source change or not: the stack cannot be
 				// shown, so the draft is unavailable now rather than guessed.
-				return "", "", nil, fmt.Errorf("operation %s: %w", previous.OperationID, patchErr)
+				return "", "", "", nil, fmt.Errorf("operation %s: %w", previous.OperationID, patchErr)
 			}
 			if before == "" {
-				return "", "", nil, &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentUnpublished, Detail: "operation " + previous.OperationID +
+				return "", "", "", nil, &pkgrelease.Refusal{Reason: pkgrelease.ReasonParentUnpublished, Detail: "operation " + previous.OperationID +
 					" applied just before " + operation.OperationID + " and changed source, and the source projection left no ref for it: the package before " +
 					operation.OperationID + " is unknown, so the release cannot be shown to carry only this operation's change"}
 			}
 			continue
 		}
-		if !strings.EqualFold(ref.StackBase, base) {
-			break
-		}
 		if before == "" {
+			// The nearest earlier operation may sit on an older stack base
+			// after a re-graft (stack_rematerialized): the draft grafts its
+			// change onto this operation's base (problem 29). Older
+			// operations must share that base.
 			before, beforeLabel = ref.Commit, "operation "+previous.OperationID
+			if !strings.EqualFold(ref.StackBase, base) {
+				beforeBase = ref.StackBase
+			}
+		}
+		if !strings.EqualFold(ref.StackBase, base) && !strings.EqualFold(ref.StackBase, beforeBase) {
+			break
 		}
 		stack = append(stack, ref.Commit)
 	}
 	if before == "" {
-		return base, baseLabel, nil, nil
+		return base, baseLabel, "", nil, nil
 	}
-	return before, beforeLabel, stack, nil
+	return before, beforeLabel, beforeBase, stack, nil
 }
 
 // packageShareGate answers GET /api/computers/<id>/packages/share-gate: the
