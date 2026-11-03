@@ -730,16 +730,6 @@ func Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	gate := &replayHealthGate{base: s.HealthHandler()}
-	// PLANTED FAULT, ring-walk rollback acceptance
-	// (docs/design/ring-ordered-deploys-2026-11-03.md, proof plan step 2): on
-	// d@e only, /health reports a persistent appender wedge. The next commit
-	// reverts this. /health stays 200 (health_wedge.go), so nothing restarts.
-	if strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")) == "computer-59c902c5d46caecc0a180a8557164e72" {
-		plantedSince := time.Now().UTC()
-		gate.wedge = func() computerevent.WedgeStatus {
-			return computerevent.WedgeStatus{Active: true, Persistent: true, Since: plantedSince, Consecutive: 3, FirstError: "planted fault: ring walk rollback acceptance", LastError: "planted fault: ring walk rollback acceptance"}
-		}
-	}
 	if replayAppender != nil {
 		gate.mu.Lock()
 		gate.pending = true
