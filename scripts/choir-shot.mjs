@@ -511,13 +511,14 @@ export function catalogAnswer(fx, method, pathname, search) {
 }
 
 // fixtureBadge runs in the page: a fixed label on any shot that read the
-// fixture, so the screen says what it shows.
+// fixture, so the screen says what it shows. It sits at the top-right edge,
+// never over the taskbar or prompt bar at the bottom of a phone-size shot.
 export function fixtureBadge(text) {
   const el = document.createElement('div');
   el.dataset.choirShotFixture = 'capsule-catalog';
   el.textContent = text;
   Object.assign(el.style, {
-    position: 'fixed', right: '8px', bottom: '8px', zIndex: '2147483647', pointerEvents: 'none',
+    position: 'fixed', top: '2px', right: '8px', maxWidth: 'calc(100vw - 16px)', zIndex: '2147483647', pointerEvents: 'none',
     font: '600 12px/1.3 system-ui, sans-serif', color: '#111', background: '#ffd84d', border: '1px solid #111',
     borderRadius: '4px', padding: '3px 7px',
   });

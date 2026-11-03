@@ -2,483 +2,2435 @@
   "fixture": "capsule-catalog",
   "note": "Not the live catalog. Generated from corpusd's package handler by internal/platform/capsule_catalog_fixture_test.go (CHOIR_WRITE_CAPSULE_CATALOG_FIXTURE=1 go test ./internal/platform -run TestCapsuleCatalogFixture); choir-shot serves it in a capsule, labelled.",
   "packages": {
-    "count": 2,
+    "count": 7,
     "packages": [
       {
-        "package": "reader",
-        "track": "owner",
-        "head_release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-        "head_seq": 2,
-        "releases": 2
+        "head_release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+        "head_seq": 1,
+        "package": "files-next",
+        "releases": 1,
+        "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
       },
       {
-        "package": "reader",
-        "track": "owner-b",
-        "head_release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
+        "head_release_id": "bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228",
+        "head_seq": 2,
+        "package": "files-next",
+        "releases": 2,
+        "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+      },
+      {
+        "head_release_id": "91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6",
+        "head_seq": 3,
+        "package": "files-next",
+        "releases": 3,
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      {
+        "head_release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
         "head_seq": 1,
-        "releases": 1
+        "package": "library-next",
+        "releases": 1,
+        "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
+      },
+      {
+        "head_release_id": "be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c",
+        "head_seq": 2,
+        "package": "library-next",
+        "releases": 2,
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      {
+        "head_release_id": "ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e",
+        "head_seq": 2,
+        "package": "slides-next",
+        "releases": 2,
+        "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+      },
+      {
+        "head_release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+        "head_seq": 2,
+        "package": "slides-next",
+        "releases": 3,
+        "track": "owner"
       }
     ],
     "reader": "owner"
   },
   "history": [
     {
-      "count": 2,
-      "package": "reader",
+      "count": 3,
+      "package": "files-next",
       "releases": [
         {
-          "release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-          "canonical_id": "obj:choir.package_release:b3duZXI:0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-          "published_at": "2026-11-03T21:46:58.976721Z",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6",
+          "listing": {
+            "package": "files-next",
+            "record_id": "91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 3,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+            "version": 1
+          },
+          "published_at": "2026-11-02T21:25:00.000000Z",
           "record": {
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
               "kinds_count": 0,
               "opens_count": 0,
-              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
             },
             "operation": {
-              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-              "operation_id": "op-\u003cp\u003er",
+              "bundle_digest": "7d15c82f09e22ce86bfdaedba7787d15bccd60ea8c4f5bd11e69f31b58a4dd90",
+              "decision_event": "b059fb4a7822440551290522880a4c9013e5f34b571ca23a97a624aa6a216517",
+              "operation_id": "op-7ab9bd4c-b87d-456b-a3fe-9167899f051d",
               "verifier_refs": []
             },
             "package": {
               "manifest_version": "1.0.0",
-              "name": "reader"
+              "name": "files-next"
             },
             "parent": {
               "kind": "release",
-              "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-              "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3"
+              "release_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
+              "tree": "d41baf75fc19d49cba109de8267974db52ce4453"
             },
-            "precommitments": [],
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 610,
+                "question": "Do expanded folders stay expanded after a rename?",
+                "record_id": "pc-a927fdf6-848f-4c75-8665-a97ff649555d"
+              }
+            ],
             "publisher": {
-              "computer_id": "computer-owner1",
-              "owner_id": "owner"
+              "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+              "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
               "changed_paths": [
-                "frontend/src/packages/reader/App.svelte"
+                "frontend/src/packages/files-next/FileTree.svelte",
+                "frontend/src/packages/files-next/files-store.js"
               ],
               "review_patch": {
-                "bytes": 331,
-                "sha256": "acab23d105367c532e3e931dc893cadd41d7125913adb7fb1ac1d3bc587071e5"
+                "bytes": 953,
+                "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
               },
-              "root": "frontend/src/packages/reader",
-              "tree": "eb2fb84ef146197a78902d572aad1597b6c803f6",
+              "root": "frontend/src/packages/files-next",
+              "tree": "55208791996a8b4b533a9f9b66f39f70cf23aa78",
               "tree_patch": {
-                "bytes": 1108,
-                "sha256": "8a737a89102a0dd3f5f519a4d576e452bc7062c9c5729cf19887bb8907feb753"
+                "bytes": 2499,
+                "sha256": "550712b3c174afe92f2dabccf37c7ac25ebc33ad8cb01f478444a641cac83e59"
               }
             },
-            "track": "owner"
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
+          "release_id": "91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
           "listing": {
+            "package": "files-next",
+            "record_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
             "record_kind": "package_release",
-            "record_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-            "package": "reader",
-            "track": "owner",
-            "seq": 2,
             "scopes": [
               "owner",
               "public"
             ],
+            "seq": 2,
             "shared_with": {
-              "owners": [],
-              "computers": []
+              "computers": [],
+              "owners": []
             },
             "state": "listed",
-            "state_reason": "published",
             "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
             "version": 1
-          }
+          },
+          "published_at": "2026-11-02T19:22:00.000000Z",
+          "record": {
+            "declarations": {
+              "test_command": "npm run check"
+            },
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+            },
+            "operation": {
+              "bundle_digest": "c716c2934a5050468f98d9160e779608c11af6389c816aa979b9cd049b4a1113",
+              "decision_event": "0d0b6b6e04e65a2e04d1e9db693a80a5c45f3be26b0a3b229688f462dc0e44ce",
+              "operation_id": "op-16686cac-386e-4888-9888-0a95d3e5383e",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "files-next"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+              "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 640,
+                "question": "Does renaming a file keep it selected?",
+                "record_id": "pc-cf850713-ad1d-4cb9-8d3c-7f72cfb64e32",
+                "resolve_record_id": "pc-cf850713-ad1d-4cb9-8d3c-7f72cfb64e32:resolve:rule",
+                "settled": "yes"
+              },
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 700,
+                "question": "Does a name clash refuse without losing the typed name?",
+                "record_id": "pc-796a5845-3dd6-4f00-9790-57031614b580"
+              }
+            ],
+            "publisher": {
+              "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+              "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/files-next/App.svelte",
+                "frontend/src/packages/files-next/RenameDialog.svelte"
+              ],
+              "review_patch": {
+                "bytes": 834,
+                "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
+              },
+              "root": "frontend/src/packages/files-next",
+              "tree": "d41baf75fc19d49cba109de8267974db52ce4453",
+              "tree_patch": {
+                "bytes": 2399,
+                "sha256": "a6591f01f7692a4c243e0ad3e49c1315802ac51df45296d1d50dc833d7b1027a"
+              }
+            },
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+          },
+          "release_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787"
         },
         {
-          "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-          "canonical_id": "obj:choir.package_release:b3duZXI:41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-          "published_at": "2026-11-03T21:46:58.278749Z",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+          "listing": {
+            "package": "files-next",
+            "record_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+            "version": 1
+          },
+          "published_at": "2026-11-02T18:00:00.000000Z",
           "record": {
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
               "kinds_count": 0,
               "opens_count": 0,
-              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
             },
             "operation": {
-              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-              "operation_id": "op-\u003cp\u003er",
+              "bundle_digest": "d74f07055966879a0da90cb3865544876297bbc7844172f50f814ca3a7a2ff68",
+              "decision_event": "bec0759eefc0db1b5a0dcd1f25da5e515cbdf26cf400bdf841db7e5c475c1a72",
+              "operation_id": "op-99055960-5e91-432c-9f4c-f6da43571b24",
               "verifier_refs": []
             },
             "package": {
               "manifest_version": "1.0.0",
-              "name": "reader"
+              "name": "files-next"
             },
             "parent": {
-              "commit": "7bb094fd050df599385bd05cba826d5894545c46",
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
               "kind": "base",
-              "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
             },
             "parent_patch": {
-              "bytes": 1105,
-              "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
+              "bytes": 1863,
+              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
             },
-            "precommitments": [],
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 880,
+                "question": "Does the file tree list every file in the home folder?",
+                "record_id": "pc-18120443-b474-40f8-a163-09618a2830c5",
+                "resolve_record_id": "pc-18120443-b474-40f8-a163-09618a2830c5:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+              "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/files-next/FileTree.svelte"
+              ],
+              "review_patch": {
+                "bytes": 476,
+                "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
+              },
+              "root": "frontend/src/packages/files-next",
+              "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b",
+              "tree_patch": {
+                "bytes": 1960,
+                "sha256": "324b4d9c9f8a18dd6dfc1aeda5ae620724ecf6fc6b7f1efc989a9ee5f8928eca"
+              }
+            },
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+          },
+          "release_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b"
+        }
+      ],
+      "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+    },
+    {
+      "count": 2,
+      "package": "files-next",
+      "releases": [
+        {
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228",
+          "listing": {
+            "package": "files-next",
+            "record_id": "bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 2,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e",
+            "version": 1
+          },
+          "published_at": "2026-11-02T20:44:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+            },
+            "operation": {
+              "bundle_digest": "3841fe9dfc58aa373cd3a552faffb0bd1b072227bc484b6837d059cc91719778",
+              "decision_event": "f34a9c6dd9f1e503989fd880a2edb2cd99c6d771f6cd562c18a015678388bf35",
+              "operation_id": "op-90b5b825-7888-4407-86be-51243505517f",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "files-next"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+              "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 720,
+                "question": "Does the sort order survive a reload?",
+                "record_id": "pc-40b30ef6-c5db-4fb9-844b-9a0816552a83"
+              }
+            ],
+            "publisher": {
+              "computer_id": "a061f9a7-8fe4-4645-bb06-8fdd563d92f9",
+              "owner_id": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/files-next/FileTree.svelte",
+                "frontend/src/packages/files-next/files-store.js"
+              ],
+              "review_patch": {
+                "bytes": 958,
+                "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
+              },
+              "root": "frontend/src/packages/files-next",
+              "tree": "7f271aa277b5087caf48e41ae45871c050e2096a",
+              "tree_patch": {
+                "bytes": 2087,
+                "sha256": "3f4c5183b06e833980fa5808a366d19da3a92b68a2e6779009276e5488ffe795"
+              }
+            },
+            "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+          },
+          "release_id": "bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+          "listing": {
+            "package": "files-next",
+            "record_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e",
+            "version": 1
+          },
+          "published_at": "2026-11-02T18:41:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+            },
+            "operation": {
+              "bundle_digest": "9d9a9bde5f2172085066618127608944afd03517c1e5d7f1e4e3f7666da61689",
+              "decision_event": "1baee7b7ea077df83661ac2b4fde1100131e5a96e303228c52d806491df75332",
+              "operation_id": "op-a4c8c6a5-81fa-46bd-ab5f-468ec3c2e8d1",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "files-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+            },
+            "parent_patch": {
+              "bytes": 1863,
+              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 780,
+                "question": "Do files sort by name, folders first?",
+                "record_id": "pc-37a24372-0803-49a8-b286-a8924ce40b31",
+                "resolve_record_id": "pc-37a24372-0803-49a8-b286-a8924ce40b31:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "a061f9a7-8fe4-4645-bb06-8fdd563d92f9",
+              "owner_id": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/files-next/files-store.js"
+              ],
+              "review_patch": {
+                "bytes": 456,
+                "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
+              },
+              "root": "frontend/src/packages/files-next",
+              "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7",
+              "tree_patch": {
+                "bytes": 1966,
+                "sha256": "bf076eddc66f97c5e4123599275b14e1c2c297f1889a4cc8e9294d364c336cde"
+              }
+            },
+            "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+          },
+          "release_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a"
+        }
+      ],
+      "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+    },
+    {
+      "count": 1,
+      "package": "files-next",
+      "releases": [
+        {
+          "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+          "listing": {
+            "package": "files-next",
+            "record_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492",
+            "version": 1
+          },
+          "published_at": "2026-11-02T20:03:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+            },
+            "operation": {
+              "bundle_digest": "f4fbe7a6677aa0c1e210b4cabdfde6c9c44005bcb90d97d787592274b0b175d0",
+              "decision_event": "3ca075ff95b468e10f945e013892a57f871c9cb20e3e92dd90a9b1cc35e2ddfd",
+              "operation_id": "op-058ce0da-0137-4c47-8b98-88969d7fe257",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "files-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+            },
+            "parent_patch": {
+              "bytes": 1863,
+              "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 560,
+                "question": "Is the tree reachable with the keyboard alone?",
+                "record_id": "pc-de836d2a-769b-48dc-b2e0-3e6a53962dd3",
+                "resolve_record_id": "pc-de836d2a-769b-48dc-b2e0-3e6a53962dd3:resolve:rule",
+                "settled": "no"
+              }
+            ],
+            "publisher": {
+              "computer_id": "9b010a96-b891-4d0b-92aa-f6f0fff4ce3b",
+              "owner_id": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/files-next/FileTree.svelte"
+              ],
+              "review_patch": {
+                "bytes": 391,
+                "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
+              },
+              "root": "frontend/src/packages/files-next",
+              "tree": "0724ad2f8bddb22330edf1f55341e28cf6c2da9a",
+              "tree_patch": {
+                "bytes": 1875,
+                "sha256": "8c0d065fd9545863f2dfcd750bf626c66fe9ff3006a361b628322415c407fe74"
+              }
+            },
+            "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
+          },
+          "release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175"
+        }
+      ],
+      "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
+    },
+    {
+      "count": 2,
+      "package": "slides-next",
+      "releases": [
+        {
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e",
+          "listing": {
+            "package": "slides-next",
+            "record_id": "ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 2,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8",
+            "version": 1
+          },
+          "published_at": "2026-11-02T23:28:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+            },
+            "operation": {
+              "bundle_digest": "854f775a7794a0473b0b7925277b54fbd5bc657aa3c74105d095f787ed6af426",
+              "decision_event": "fca8a20cdc7f427cb590b811155ba9c5fc61c2e4abf2d90fb0bf07bc4b57b86e",
+              "operation_id": "op-78e4ed0c-0dd8-40ee-80ba-1eebfb50f6b6",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "slides-next"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+              "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 900,
+                "question": "Does presenting mode leave with the Escape key?",
+                "record_id": "pc-dbce7f4e-3e17-4ef3-abe2-a5974a8d3b23",
+                "resolve_record_id": "pc-dbce7f4e-3e17-4ef3-abe2-a5974a8d3b23:resolve:rule",
+                "settled": "yes"
+              },
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 850,
+                "question": "Do the arrow keys move one slide at a time?",
+                "record_id": "pc-f64a49c6-8773-47a2-a3bb-3c99fde5912c",
+                "resolve_record_id": "pc-f64a49c6-8773-47a2-a3bb-3c99fde5912c:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "01f55337-53e8-40a7-aa38-335f99d71bf1",
+              "owner_id": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/slides-next/App.svelte",
+                "frontend/src/packages/slides-next/Present.svelte"
+              ],
+              "review_patch": {
+                "bytes": 791,
+                "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
+              },
+              "root": "frontend/src/packages/slides-next",
+              "tree": "bc2f9fc815fec48027b51fcd25892e1a7ebdb5e7",
+              "tree_patch": {
+                "bytes": 2409,
+                "sha256": "eeed058555e310f552406da59511f870d51404167827ca3d121783dd4c2de696"
+              }
+            },
+            "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+          },
+          "release_id": "ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+          "listing": {
+            "package": "slides-next",
+            "record_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8",
+            "version": 1
+          },
+          "published_at": "2026-11-02T22:06:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+            },
+            "operation": {
+              "bundle_digest": "c64bd04660fa21844b0be1b8edd3fe4827b2f86000a26bc46e58c51af2ce4e26",
+              "decision_event": "7b2fd3ca1f240e3cf3b7ed487817bb32919a3ee68b1a53d6811950ab706adf05",
+              "operation_id": "op-e287bf1a-0b33-4065-bc94-4c401c086262",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "slides-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+            },
+            "parent_patch": {
+              "bytes": 1895,
+              "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 700,
+                "question": "Does a deck with forty slides open in under a second?",
+                "record_id": "pc-8a0bef83-ebb9-4590-9684-526c687c3a1b",
+                "resolve_record_id": "pc-8a0bef83-ebb9-4590-9684-526c687c3a1b:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "01f55337-53e8-40a7-aa38-335f99d71bf1",
+              "owner_id": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/slides-next/Deck.svelte"
+              ],
+              "review_patch": {
+                "bytes": 497,
+                "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
+              },
+              "root": "frontend/src/packages/slides-next",
+              "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f",
+              "tree_patch": {
+                "bytes": 2005,
+                "sha256": "8059033dbc639f8f1e250ba4fadd661c82174b961815ee0a2c660a54eb96a064"
+              }
+            },
+            "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+          },
+          "release_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d"
+        }
+      ],
+      "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+    },
+    {
+      "count": 3,
+      "package": "slides-next",
+      "releases": [
+        {
+          "canonical_id": "obj:choir.package_release:b3duZXI:52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+          "listing": {
+            "package": "slides-next",
+            "prev_version_digest": "8ee110f1257126167dcfdb2fc8b6b1c57437627c0421c4b3a1d9356373821756",
+            "record_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 3,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "withdrawn",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "test",
+            "track": "owner",
+            "version": 2
+          },
+          "published_at": "2026-11-03T00:50:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+            },
+            "operation": {
+              "bundle_digest": "d7e8db386cdb51801f19a6848eddc3c98aec30ef8105825736ae814778a6d0e5",
+              "decision_event": "1884f4bdd8d883cd4dd4edafd7df1fbf99936a2a0f152b46076c3008d6a861bf",
+              "operation_id": "op-e4a82d40-14e2-412b-8443-22100204d9b0",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "slides-next"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+              "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 590,
+                "question": "Does the footer print on every slide?",
+                "record_id": "pc-47ce7ef7-8694-41b8-977e-179e5174aede"
+              }
+            ],
             "publisher": {
               "computer_id": "computer-owner1",
               "owner_id": "owner"
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
               "changed_paths": [
-                "frontend/src/packages/reader/App.svelte"
+                "frontend/src/packages/slides-next/slide-render.js"
               ],
               "review_patch": {
-                "bytes": 328,
-                "sha256": "7d49b69741ce7fc2687b45df581a204f2f8f18646f19b573cae9fdf4ed76dfdd"
+                "bytes": 522,
+                "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
               },
-              "root": "frontend/src/packages/reader",
-              "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3",
+              "root": "frontend/src/packages/slides-next",
+              "tree": "7883f3feb760ed61a223b97b11e3a05ae2934cd7",
               "tree_patch": {
-                "bytes": 1108,
-                "sha256": "ea0e146f9d8be733cf2597e2c9de7eb99fa64e152873e52659f9313a4004ab48"
+                "bytes": 1964,
+                "sha256": "9a3c6203e6d69fbc7cd8cf2be3f7844dcd2ac3f63fcdd741522edcd813a7d5ae"
               }
             },
             "track": "owner"
           },
+          "release_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:b3duZXI:f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
           "listing": {
+            "package": "slides-next",
+            "record_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
             "record_kind": "package_release",
-            "record_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-            "package": "reader",
-            "track": "owner",
-            "seq": 1,
             "scopes": [
               "owner",
               "public"
             ],
+            "seq": 2,
             "shared_with": {
-              "owners": [],
-              "computers": []
+              "computers": [],
+              "owners": []
             },
             "state": "listed",
-            "state_reason": "published",
             "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "owner",
             "version": 1
-          }
+          },
+          "published_at": "2026-11-03T00:09:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+            },
+            "operation": {
+              "bundle_digest": "81d9942b43d85d6cca8e5a8212c5cb34918e8005512a5ddb1afbf0276c3c7cad",
+              "decision_event": "0ab8d41d09041af1c01be53cdead9d495f4b97719dc7fee3567f2cb7e8ad67f8",
+              "operation_id": "op-62d31a1c-ddbb-4915-b819-d9d5bfa5c3aa",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "slides-next"
+            },
+            "parent": {
+              "kind": "release",
+              "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+              "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 480,
+                "question": "Does the grid layout fit a phone-width window?",
+                "record_id": "pc-1fae6ab1-6a75-488d-980f-c633a8270fef",
+                "resolve_record_id": "pc-1fae6ab1-6a75-488d-980f-c633a8270fef:resolve:rule",
+                "settled": "no"
+              }
+            ],
+            "publisher": {
+              "computer_id": "computer-owner1",
+              "owner_id": "owner"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/slides-next/Deck.svelte"
+              ],
+              "review_patch": {
+                "bytes": 406,
+                "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
+              },
+              "root": "frontend/src/packages/slides-next",
+              "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8",
+              "tree_patch": {
+                "bytes": 1941,
+                "sha256": "d207c32c723df9cc6acfeaf8167f64332f8f66e782a18d71a3e98aa5e6c73af1"
+              }
+            },
+            "track": "owner"
+          },
+          "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:b3duZXI:f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+          "listing": {
+            "package": "slides-next",
+            "record_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "owner",
+            "version": 1
+          },
+          "published_at": "2026-11-02T22:47:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+            },
+            "operation": {
+              "bundle_digest": "2f08cb8bfb3aa732ba3fd07a9f5fa2a4cee3799eb1e07cc66763a3c89f9b0990",
+              "decision_event": "7b17690574dd9cc76544b61de64734ca8f20e40b1d313f4bf89224c56c728c57",
+              "operation_id": "op-3eb9c4fe-1470-4613-b9b4-20a600e80343",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "slides-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+            },
+            "parent_patch": {
+              "bytes": 1895,
+              "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 820,
+                "question": "Are speaker notes kept when a slide is reordered?",
+                "record_id": "pc-603d3e26-71e8-49ed-8adc-13b42921ce3c",
+                "resolve_record_id": "pc-603d3e26-71e8-49ed-8adc-13b42921ce3c:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "computer-owner1",
+              "owner_id": "owner"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/slides-next/slide-render.js"
+              ],
+              "review_patch": {
+                "bytes": 472,
+                "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
+              },
+              "root": "frontend/src/packages/slides-next",
+              "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60",
+              "tree_patch": {
+                "bytes": 1922,
+                "sha256": "d7298bfae091662788d895815f99010a10376ea167a0be388a125a0dce3f3ee7"
+              }
+            },
+            "track": "owner"
+          },
+          "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f"
         }
       ],
       "track": "owner"
     },
     {
-      "count": 1,
-      "package": "reader",
+      "count": 2,
+      "package": "library-next",
       "releases": [
         {
-          "release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-          "canonical_id": "obj:choir.package_release:b3duZXItYg:3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-          "published_at": "2026-11-03T21:46:59.836043Z",
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c",
+          "listing": {
+            "package": "library-next",
+            "record_id": "be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 2,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+            "version": 1
+          },
+          "published_at": "2026-11-03T02:53:00.000000Z",
           "record": {
             "declarations": {},
             "manifest": {
               "abi": "choir.app-frontend/svelte-inline/v1",
               "kinds_count": 0,
               "opens_count": 0,
-              "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
             },
             "operation": {
-              "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-              "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-              "operation_id": "op-\u003cp\u003er",
+              "bundle_digest": "990cc02f490ab9fe43e99ad665bf38cfa96cb119106559467f3c3f8d02059240",
+              "decision_event": "5db8d6dae86c05c61b4d0dbe9a23e8d2fd205dea987c747d2b628ccf1721a12d",
+              "operation_id": "op-682da530-8d39-4e4d-9973-18dd89d3aa9f",
               "verifier_refs": []
             },
             "package": {
               "manifest_version": "1.0.0",
-              "name": "reader"
+              "name": "library-next"
             },
             "parent": {
-              "commit": "7bb094fd050df599385bd05cba826d5894545c46",
-              "kind": "base",
-              "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+              "kind": "release",
+              "release_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
+              "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f"
             },
-            "parent_patch": {
-              "bytes": 1105,
-              "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
-            },
-            "precommitments": [],
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 740,
+                "question": "Does choosing a release show its changed paths?",
+                "record_id": "pc-c517a651-1feb-4464-9c0d-9e1cb44b0400"
+              }
+            ],
             "publisher": {
-              "computer_id": "computer-b1",
-              "owner_id": "owner-b"
+              "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+              "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
             },
             "schema": "choir.package_release.v1",
             "source": {
-              "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
               "changed_paths": [
-                "frontend/src/packages/reader/App.svelte"
+                "frontend/src/packages/library-next/Catalog.svelte",
+                "frontend/src/packages/library-next/ReleasePane.svelte"
               ],
               "review_patch": {
-                "bytes": 330,
-                "sha256": "0ebd4640a26ff814f274bc75d56a3a8893fabc546cf0a1994095f31f34166f02"
+                "bytes": 909,
+                "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
               },
-              "root": "frontend/src/packages/reader",
-              "tree": "66c5b66a766bd5eff626dd200cc7ecbd954f44f1",
+              "root": "frontend/src/packages/library-next",
+              "tree": "3f787f2443e816e617b9b9d99164215da4bf297d",
               "tree_patch": {
-                "bytes": 1110,
-                "sha256": "c7e42e0d54b846236483102815706975ebc6d812dd677974ea2e8987d6d43158"
+                "bytes": 2415,
+                "sha256": "bcc2c19eeb490943972cd125baceee249a754215447b6a4b7e98a345c7c26550"
               }
             },
-            "track": "owner-b"
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
           },
+          "release_id": "be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c"
+        },
+        {
+          "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
           "listing": {
+            "package": "library-next",
+            "record_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
             "record_kind": "package_release",
-            "record_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-            "package": "reader",
-            "track": "owner-b",
-            "seq": 1,
             "scopes": [
               "owner",
               "public"
             ],
+            "seq": 1,
             "shared_with": {
-              "owners": [],
-              "computers": []
+              "computers": [],
+              "owners": []
             },
             "state": "listed",
-            "state_reason": "published",
             "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
             "version": 1
-          }
+          },
+          "published_at": "2026-11-03T01:31:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+            },
+            "operation": {
+              "bundle_digest": "39c4dbad3626f8fce94dda539939d0bd0d4e8fa553f61a4343c24e36345bcac7",
+              "decision_event": "82d67b7210fe40c100e1ff74b4c931eedb99cf35e00cfa8b53774a0b7f3ca059",
+              "operation_id": "op-a797ff01-d5c3-40bd-a311-b836bbb5691a",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "library-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+            },
+            "parent_patch": {
+              "bytes": 1922,
+              "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 860,
+                "question": "Does the catalog list every public package once?",
+                "record_id": "pc-536750ec-430d-4236-a90a-4fe36b775347",
+                "resolve_record_id": "pc-536750ec-430d-4236-a90a-4fe36b775347:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+              "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/library-next/Catalog.svelte"
+              ],
+              "review_patch": {
+                "bytes": 507,
+                "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
+              },
+              "root": "frontend/src/packages/library-next",
+              "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f",
+              "tree_patch": {
+                "bytes": 2036,
+                "sha256": "6b6c761d8201dbdbfcff19423bd9242a75b1eba284037be73d5bc7683a80f345"
+              }
+            },
+            "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+          },
+          "release_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb"
         }
       ],
-      "track": "owner-b"
+      "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+    },
+    {
+      "count": 1,
+      "package": "library-next",
+      "releases": [
+        {
+          "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+          "listing": {
+            "package": "library-next",
+            "record_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+            "record_kind": "package_release",
+            "scopes": [
+              "owner",
+              "public"
+            ],
+            "seq": 1,
+            "shared_with": {
+              "computers": [],
+              "owners": []
+            },
+            "state": "listed",
+            "state_actor": "owner_act:unverified",
+            "state_reason": "published",
+            "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85",
+            "version": 1
+          },
+          "published_at": "2026-11-03T02:12:00.000000Z",
+          "record": {
+            "declarations": {},
+            "manifest": {
+              "abi": "choir.app-frontend/svelte-inline/v1",
+              "kinds_count": 0,
+              "opens_count": 0,
+              "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+            },
+            "operation": {
+              "bundle_digest": "29cd5b47a280ab977946f0d05aacf935c478cc6f6c1360f430b6e767ff069d02",
+              "decision_event": "c41c1bf2c4e51866d2f79d4e72b1c29d1af248e0af86dc85a6e72e626d111015",
+              "operation_id": "op-a66474bf-6280-40d9-82a2-258f302bb897",
+              "verifier_refs": []
+            },
+            "package": {
+              "manifest_version": "1.0.0",
+              "name": "library-next"
+            },
+            "parent": {
+              "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "kind": "base",
+              "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+            },
+            "parent_patch": {
+              "bytes": 1922,
+              "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+            },
+            "precommitments": [
+              {
+                "kind": "tests_pass",
+                "p_yes_permille": 670,
+                "question": "Does an unreachable catalog show an empty list instead of an error?",
+                "record_id": "pc-081a014b-d8b9-4977-8eeb-07a37d9d521a",
+                "resolve_record_id": "pc-081a014b-d8b9-4977-8eeb-07a37d9d521a:resolve:rule",
+                "settled": "yes"
+              }
+            ],
+            "publisher": {
+              "computer_id": "7e38fb89-21f8-458a-8fdc-3e5e6f143296",
+              "owner_id": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
+            },
+            "schema": "choir.package_release.v1",
+            "source": {
+              "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+              "changed_paths": [
+                "frontend/src/packages/library-next/catalog-client.js"
+              ],
+              "review_patch": {
+                "bytes": 543,
+                "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
+              },
+              "root": "frontend/src/packages/library-next",
+              "tree": "36635904a4ebaae6e2daa86485318632734c1375",
+              "tree_patch": {
+                "bytes": 2020,
+                "sha256": "44e844784714daa5ee2dfa07fc00c1e52f2fe4d2f06c41b17d965989847807d1"
+              }
+            },
+            "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
+          },
+          "release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284"
+        }
+      ],
+      "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
     }
   ],
   "releases": [
     {
-      "release_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-      "canonical_id": "obj:choir.package_release:b3duZXI:0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-      "published_at": "2026-11-03T21:46:58.976721Z",
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c",
+      "listing": {
+        "package": "library-next",
+        "record_id": "be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 2,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+        "version": 1
+      },
+      "published_at": "2026-11-03T02:53:00.000000Z",
       "record": {
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
           "kinds_count": 0,
           "opens_count": 0,
-          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
         },
         "operation": {
-          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "operation_id": "op-\u003cp\u003er",
+          "bundle_digest": "990cc02f490ab9fe43e99ad665bf38cfa96cb119106559467f3c3f8d02059240",
+          "decision_event": "5db8d6dae86c05c61b4d0dbe9a23e8d2fd205dea987c747d2b628ccf1721a12d",
+          "operation_id": "op-682da530-8d39-4e4d-9973-18dd89d3aa9f",
           "verifier_refs": []
         },
         "package": {
           "manifest_version": "1.0.0",
-          "name": "reader"
+          "name": "library-next"
         },
         "parent": {
           "kind": "release",
-          "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-          "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3"
+          "release_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
+          "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f"
         },
-        "precommitments": [],
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 740,
+            "question": "Does choosing a release show its changed paths?",
+            "record_id": "pc-c517a651-1feb-4464-9c0d-9e1cb44b0400"
+          }
+        ],
+        "publisher": {
+          "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+          "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/library-next/Catalog.svelte",
+            "frontend/src/packages/library-next/ReleasePane.svelte"
+          ],
+          "review_patch": {
+            "bytes": 909,
+            "sha256": "f2ae8d92ef012aa8301322f9994e68d90620386e343e0921e6378678540329fa"
+          },
+          "root": "frontend/src/packages/library-next",
+          "tree": "3f787f2443e816e617b9b9d99164215da4bf297d",
+          "tree_patch": {
+            "bytes": 2415,
+            "sha256": "bcc2c19eeb490943972cd125baceee249a754215447b6a4b7e98a345c7c26550"
+          }
+        },
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      "release_id": "be95869a134feea88c6fbed48e30633d5f3e2ef3f9773cc8124a49130bdd5b2c"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:MTUxZDYxMjctZDdkNy00N2MwLThjYmQtNWQxZTI2MmQyYzg1:18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+      "listing": {
+        "package": "library-next",
+        "record_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85",
+        "version": 1
+      },
+      "published_at": "2026-11-03T02:12:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+        },
+        "operation": {
+          "bundle_digest": "29cd5b47a280ab977946f0d05aacf935c478cc6f6c1360f430b6e767ff069d02",
+          "decision_event": "c41c1bf2c4e51866d2f79d4e72b1c29d1af248e0af86dc85a6e72e626d111015",
+          "operation_id": "op-a66474bf-6280-40d9-82a2-258f302bb897",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "library-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+        },
+        "parent_patch": {
+          "bytes": 1922,
+          "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 670,
+            "question": "Does an unreachable catalog show an empty list instead of an error?",
+            "record_id": "pc-081a014b-d8b9-4977-8eeb-07a37d9d521a",
+            "resolve_record_id": "pc-081a014b-d8b9-4977-8eeb-07a37d9d521a:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "7e38fb89-21f8-458a-8fdc-3e5e6f143296",
+          "owner_id": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/library-next/catalog-client.js"
+          ],
+          "review_patch": {
+            "bytes": 543,
+            "sha256": "ca9c475c96cdd3931bd9e5fc0b5c0ad08a4198fd0800dd3fe383a58fdec79a98"
+          },
+          "root": "frontend/src/packages/library-next",
+          "tree": "36635904a4ebaae6e2daa86485318632734c1375",
+          "tree_patch": {
+            "bytes": 2020,
+            "sha256": "44e844784714daa5ee2dfa07fc00c1e52f2fe4d2f06c41b17d965989847807d1"
+          }
+        },
+        "track": "151d6127-d7d7-47c0-8cbd-5d1e262d2c85"
+      },
+      "release_id": "18e227c6463841cc19d186dc6930a661df557a7c75815f50e5ca501280c26284"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
+      "listing": {
+        "package": "library-next",
+        "record_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+        "version": 1
+      },
+      "published_at": "2026-11-03T01:31:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "05668f10cae53b2748f9c0f6ca6da17b999341935d303cda875d35d2bae905c5"
+        },
+        "operation": {
+          "bundle_digest": "39c4dbad3626f8fce94dda539939d0bd0d4e8fa553f61a4343c24e36345bcac7",
+          "decision_event": "82d67b7210fe40c100e1ff74b4c931eedb99cf35e00cfa8b53774a0b7f3ca059",
+          "operation_id": "op-a797ff01-d5c3-40bd-a311-b836bbb5691a",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "library-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "4f68387a97bd205ace96b008d9e2accb1caebd30"
+        },
+        "parent_patch": {
+          "bytes": 1922,
+          "sha256": "1aebb97ac2db74435311f41f9c35189ea5aedc6b8ef2c0a997034a6c3a06f607"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 860,
+            "question": "Does the catalog list every public package once?",
+            "record_id": "pc-536750ec-430d-4236-a90a-4fe36b775347",
+            "resolve_record_id": "pc-536750ec-430d-4236-a90a-4fe36b775347:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+          "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/library-next/Catalog.svelte"
+          ],
+          "review_patch": {
+            "bytes": 507,
+            "sha256": "82bd845b266cab4e18c19b8682acf4d6804d393e23b0ed629c0f4312e397de5b"
+          },
+          "root": "frontend/src/packages/library-next",
+          "tree": "8c569f1a42600b61aceff38bd40dcbeb8f4c814f",
+          "tree_patch": {
+            "bytes": 2036,
+            "sha256": "6b6c761d8201dbdbfcff19423bd9242a75b1eba284037be73d5bc7683a80f345"
+          }
+        },
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      "release_id": "ff09e5bed605730e5ef3be8ad2a7e5bf70267e95e3a776423508625ab43e1adb"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:b3duZXI:52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+      "listing": {
+        "package": "slides-next",
+        "prev_version_digest": "8ee110f1257126167dcfdb2fc8b6b1c57437627c0421c4b3a1d9356373821756",
+        "record_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 3,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "withdrawn",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "test",
+        "track": "owner",
+        "version": 2
+      },
+      "published_at": "2026-11-03T00:50:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+        },
+        "operation": {
+          "bundle_digest": "d7e8db386cdb51801f19a6848eddc3c98aec30ef8105825736ae814778a6d0e5",
+          "decision_event": "1884f4bdd8d883cd4dd4edafd7df1fbf99936a2a0f152b46076c3008d6a861bf",
+          "operation_id": "op-e4a82d40-14e2-412b-8443-22100204d9b0",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "slides-next"
+        },
+        "parent": {
+          "kind": "release",
+          "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
+          "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 590,
+            "question": "Does the footer print on every slide?",
+            "record_id": "pc-47ce7ef7-8694-41b8-977e-179e5174aede"
+          }
+        ],
         "publisher": {
           "computer_id": "computer-owner1",
           "owner_id": "owner"
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
           "changed_paths": [
-            "frontend/src/packages/reader/App.svelte"
+            "frontend/src/packages/slides-next/slide-render.js"
           ],
           "review_patch": {
-            "bytes": 331,
-            "sha256": "acab23d105367c532e3e931dc893cadd41d7125913adb7fb1ac1d3bc587071e5"
+            "bytes": 522,
+            "sha256": "c4e170ab5bfb8b6dcec4d86174209d1097e39d942cd45e23c9eb90699a3f2edf"
           },
-          "root": "frontend/src/packages/reader",
-          "tree": "eb2fb84ef146197a78902d572aad1597b6c803f6",
+          "root": "frontend/src/packages/slides-next",
+          "tree": "7883f3feb760ed61a223b97b11e3a05ae2934cd7",
           "tree_patch": {
-            "bytes": 1108,
-            "sha256": "8a737a89102a0dd3f5f519a4d576e452bc7062c9c5729cf19887bb8907feb753"
+            "bytes": 1964,
+            "sha256": "9a3c6203e6d69fbc7cd8cf2be3f7844dcd2ac3f63fcdd741522edcd813a7d5ae"
           }
         },
         "track": "owner"
       },
+      "release_id": "52ca7f569eabf66e0355620438dbc95b8617ca657b57c461bc381e8f634e9dfc"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:b3duZXI:f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
       "listing": {
+        "package": "slides-next",
+        "record_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628",
         "record_kind": "package_release",
-        "record_id": "0f2cfc084e2d67dfb1733e59e2c126b06846fc32edd70a4d1a7880953545d99a",
-        "package": "reader",
-        "track": "owner",
+        "scopes": [
+          "owner",
+          "public"
+        ],
         "seq": 2,
-        "scopes": [
-          "owner",
-          "public"
-        ],
         "shared_with": {
-          "owners": [],
-          "computers": []
+          "computers": [],
+          "owners": []
         },
         "state": "listed",
-        "state_reason": "published",
         "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "owner",
         "version": 1
-      }
-    },
-    {
-      "release_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-      "canonical_id": "obj:choir.package_release:b3duZXI:41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-      "published_at": "2026-11-03T21:46:58.278749Z",
+      },
+      "published_at": "2026-11-03T00:09:00.000000Z",
       "record": {
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
           "kinds_count": 0,
           "opens_count": 0,
-          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
         },
         "operation": {
-          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "operation_id": "op-\u003cp\u003er",
+          "bundle_digest": "81d9942b43d85d6cca8e5a8212c5cb34918e8005512a5ddb1afbf0276c3c7cad",
+          "decision_event": "0ab8d41d09041af1c01be53cdead9d495f4b97719dc7fee3567f2cb7e8ad67f8",
+          "operation_id": "op-62d31a1c-ddbb-4915-b819-d9d5bfa5c3aa",
           "verifier_refs": []
         },
         "package": {
           "manifest_version": "1.0.0",
-          "name": "reader"
+          "name": "slides-next"
         },
         "parent": {
-          "commit": "7bb094fd050df599385bd05cba826d5894545c46",
-          "kind": "base",
-          "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+          "kind": "release",
+          "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
+          "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60"
         },
-        "parent_patch": {
-          "bytes": 1105,
-          "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
-        },
-        "precommitments": [],
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 480,
+            "question": "Does the grid layout fit a phone-width window?",
+            "record_id": "pc-1fae6ab1-6a75-488d-980f-c633a8270fef",
+            "resolve_record_id": "pc-1fae6ab1-6a75-488d-980f-c633a8270fef:resolve:rule",
+            "settled": "no"
+          }
+        ],
         "publisher": {
           "computer_id": "computer-owner1",
           "owner_id": "owner"
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
           "changed_paths": [
-            "frontend/src/packages/reader/App.svelte"
+            "frontend/src/packages/slides-next/Deck.svelte"
           ],
           "review_patch": {
-            "bytes": 328,
-            "sha256": "7d49b69741ce7fc2687b45df581a204f2f8f18646f19b573cae9fdf4ed76dfdd"
+            "bytes": 406,
+            "sha256": "d52881f8db2bdec3da3cfa00f9c2525f9ff75536c54a7fbc07628abbcb2f4679"
           },
-          "root": "frontend/src/packages/reader",
-          "tree": "406a4910aee11d3ef3b0964ca7c2daf29ed37db3",
+          "root": "frontend/src/packages/slides-next",
+          "tree": "e52189cc65d8d0518812692f28f4f3b141ec2bf8",
           "tree_patch": {
-            "bytes": 1108,
-            "sha256": "ea0e146f9d8be733cf2597e2c9de7eb99fa64e152873e52659f9313a4004ab48"
+            "bytes": 1941,
+            "sha256": "d207c32c723df9cc6acfeaf8167f64332f8f66e782a18d71a3e98aa5e6c73af1"
           }
         },
         "track": "owner"
       },
+      "release_id": "f612d1f53be4e7ef3dedbe1a767f5ca0b748efc80ae3d1581baf436fe1ec2628"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e",
       "listing": {
+        "package": "slides-next",
+        "record_id": "ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e",
         "record_kind": "package_release",
-        "record_id": "41925a0556af08b2a01f7dd8422c84547534e15b8c0b5b6d74be54b923c4b4ce",
-        "package": "reader",
-        "track": "owner",
-        "seq": 1,
         "scopes": [
           "owner",
           "public"
         ],
+        "seq": 2,
         "shared_with": {
-          "owners": [],
-          "computers": []
+          "computers": [],
+          "owners": []
         },
         "state": "listed",
-        "state_reason": "published",
         "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8",
         "version": 1
-      }
-    },
-    {
-      "release_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-      "canonical_id": "obj:choir.package_release:b3duZXItYg:3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-      "published_at": "2026-11-03T21:46:59.836043Z",
+      },
+      "published_at": "2026-11-02T23:28:00.000000Z",
       "record": {
         "declarations": {},
         "manifest": {
           "abi": "choir.app-frontend/svelte-inline/v1",
           "kinds_count": 0,
           "opens_count": 0,
-          "sha256": "3c3c31a376b6c69122f2214d64da901e299e0075ecc7bbff764741dd0cb0ad06"
+          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
         },
         "operation": {
-          "bundle_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "decision_event": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "operation_id": "op-\u003cp\u003er",
+          "bundle_digest": "854f775a7794a0473b0b7925277b54fbd5bc657aa3c74105d095f787ed6af426",
+          "decision_event": "fca8a20cdc7f427cb590b811155ba9c5fc61c2e4abf2d90fb0bf07bc4b57b86e",
+          "operation_id": "op-78e4ed0c-0dd8-40ee-80ba-1eebfb50f6b6",
           "verifier_refs": []
         },
         "package": {
           "manifest_version": "1.0.0",
-          "name": "reader"
+          "name": "slides-next"
         },
         "parent": {
-          "commit": "7bb094fd050df599385bd05cba826d5894545c46",
-          "kind": "base",
-          "tree": "5757f59d563d44b79bde07f0a03b6e201f730bf0"
+          "kind": "release",
+          "release_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+          "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f"
         },
-        "parent_patch": {
-          "bytes": 1105,
-          "sha256": "d21eeff4dd1d308ab29519aac7ccbcb2c1c04efbc5429b99f1e4fe880f82b276"
-        },
-        "precommitments": [],
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 900,
+            "question": "Does presenting mode leave with the Escape key?",
+            "record_id": "pc-dbce7f4e-3e17-4ef3-abe2-a5974a8d3b23",
+            "resolve_record_id": "pc-dbce7f4e-3e17-4ef3-abe2-a5974a8d3b23:resolve:rule",
+            "settled": "yes"
+          },
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 850,
+            "question": "Do the arrow keys move one slide at a time?",
+            "record_id": "pc-f64a49c6-8773-47a2-a3bb-3c99fde5912c",
+            "resolve_record_id": "pc-f64a49c6-8773-47a2-a3bb-3c99fde5912c:resolve:rule",
+            "settled": "yes"
+          }
+        ],
         "publisher": {
-          "computer_id": "computer-b1",
-          "owner_id": "owner-b"
+          "computer_id": "01f55337-53e8-40a7-aa38-335f99d71bf1",
+          "owner_id": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
         },
         "schema": "choir.package_release.v1",
         "source": {
-          "built_on": "7bb094fd050df599385bd05cba826d5894545c46",
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
           "changed_paths": [
-            "frontend/src/packages/reader/App.svelte"
+            "frontend/src/packages/slides-next/App.svelte",
+            "frontend/src/packages/slides-next/Present.svelte"
           ],
           "review_patch": {
-            "bytes": 330,
-            "sha256": "0ebd4640a26ff814f274bc75d56a3a8893fabc546cf0a1994095f31f34166f02"
+            "bytes": 791,
+            "sha256": "736dbeda688d85f432e022a55cdec35e152a72fbd15beef4cbd93dce9761d395"
           },
-          "root": "frontend/src/packages/reader",
-          "tree": "66c5b66a766bd5eff626dd200cc7ecbd954f44f1",
+          "root": "frontend/src/packages/slides-next",
+          "tree": "bc2f9fc815fec48027b51fcd25892e1a7ebdb5e7",
           "tree_patch": {
-            "bytes": 1110,
-            "sha256": "c7e42e0d54b846236483102815706975ebc6d812dd677974ea2e8987d6d43158"
+            "bytes": 2409,
+            "sha256": "eeed058555e310f552406da59511f870d51404167827ca3d121783dd4c2de696"
           }
         },
-        "track": "owner-b"
+        "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
       },
+      "release_id": "ad3bf80bbf24cd397f738a2e2cc3f2a553be1373917d27a66bee752bfa06fe4e"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:b3duZXI:f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
       "listing": {
+        "package": "slides-next",
+        "record_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f",
         "record_kind": "package_release",
-        "record_id": "3c88583869119edd3f300ddbb4e341207ed97d6bd4d674ec5f1475254323b1f3",
-        "package": "reader",
-        "track": "owner-b",
-        "seq": 1,
         "scopes": [
           "owner",
           "public"
         ],
+        "seq": 1,
         "shared_with": {
-          "owners": [],
-          "computers": []
+          "computers": [],
+          "owners": []
         },
         "state": "listed",
-        "state_reason": "published",
         "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "owner",
         "version": 1
-      }
+      },
+      "published_at": "2026-11-02T22:47:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+        },
+        "operation": {
+          "bundle_digest": "2f08cb8bfb3aa732ba3fd07a9f5fa2a4cee3799eb1e07cc66763a3c89f9b0990",
+          "decision_event": "7b17690574dd9cc76544b61de64734ca8f20e40b1d313f4bf89224c56c728c57",
+          "operation_id": "op-3eb9c4fe-1470-4613-b9b4-20a600e80343",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "slides-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+        },
+        "parent_patch": {
+          "bytes": 1895,
+          "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 820,
+            "question": "Are speaker notes kept when a slide is reordered?",
+            "record_id": "pc-603d3e26-71e8-49ed-8adc-13b42921ce3c",
+            "resolve_record_id": "pc-603d3e26-71e8-49ed-8adc-13b42921ce3c:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "computer-owner1",
+          "owner_id": "owner"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/slides-next/slide-render.js"
+          ],
+          "review_patch": {
+            "bytes": 472,
+            "sha256": "62ca4d3d1514ece2ee4b69d1281c737e8666b0b59c04bc76f6edb211adbf2ac5"
+          },
+          "root": "frontend/src/packages/slides-next",
+          "tree": "ceba935de954d5d3bd184fa691b140c9ef3b0b60",
+          "tree_patch": {
+            "bytes": 1922,
+            "sha256": "d7298bfae091662788d895815f99010a10376ea167a0be388a125a0dce3f3ee7"
+          }
+        },
+        "track": "owner"
+      },
+      "release_id": "f7a71a32c3350f480c41e6348f12a0eaa3225c51ae15196dfc82fed1d91abb5f"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Zjc3NjhjNGYtZTczZC00YzlmLWIyZDgtNDRiOWY0MDMyM2U4:7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+      "listing": {
+        "package": "slides-next",
+        "record_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8",
+        "version": 1
+      },
+      "published_at": "2026-11-02T22:06:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "a86f4b9cf3a6bf9689eb7a7249589e74ee00d8570fc4f82f08a428d1680a0460"
+        },
+        "operation": {
+          "bundle_digest": "c64bd04660fa21844b0be1b8edd3fe4827b2f86000a26bc46e58c51af2ce4e26",
+          "decision_event": "7b2fd3ca1f240e3cf3b7ed487817bb32919a3ee68b1a53d6811950ab706adf05",
+          "operation_id": "op-e287bf1a-0b33-4065-bc94-4c401c086262",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "slides-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "44311d1a010a34bf37f023e7ed36b903975d9fe5"
+        },
+        "parent_patch": {
+          "bytes": 1895,
+          "sha256": "75ede4c37e03cc6aad8b692a059455f39bd76f374b4bd1a7d8587c2987f1dfe1"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 700,
+            "question": "Does a deck with forty slides open in under a second?",
+            "record_id": "pc-8a0bef83-ebb9-4590-9684-526c687c3a1b",
+            "resolve_record_id": "pc-8a0bef83-ebb9-4590-9684-526c687c3a1b:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "01f55337-53e8-40a7-aa38-335f99d71bf1",
+          "owner_id": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/slides-next/Deck.svelte"
+          ],
+          "review_patch": {
+            "bytes": 497,
+            "sha256": "85c3dca79c4f5726963c21fb982d3e905359a8676a7c4527b26d242f17b67dfc"
+          },
+          "root": "frontend/src/packages/slides-next",
+          "tree": "a07aa9925ced77b0d07cdabbde4c803b4149813f",
+          "tree_patch": {
+            "bytes": 2005,
+            "sha256": "8059033dbc639f8f1e250ba4fadd661c82174b961815ee0a2c660a54eb96a064"
+          }
+        },
+        "track": "f7768c4f-e73d-4c9f-b2d8-44b9f40323e8"
+      },
+      "release_id": "7d47366dbef3c30133217c163fbd0e44f667289b86b6573d86e21fcdf4afa06d"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6",
+      "listing": {
+        "package": "files-next",
+        "record_id": "91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 3,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+        "version": 1
+      },
+      "published_at": "2026-11-02T21:25:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "7d15c82f09e22ce86bfdaedba7787d15bccd60ea8c4f5bd11e69f31b58a4dd90",
+          "decision_event": "b059fb4a7822440551290522880a4c9013e5f34b571ca23a97a624aa6a216517",
+          "operation_id": "op-7ab9bd4c-b87d-456b-a3fe-9167899f051d",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "kind": "release",
+          "release_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
+          "tree": "d41baf75fc19d49cba109de8267974db52ce4453"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 610,
+            "question": "Do expanded folders stay expanded after a rename?",
+            "record_id": "pc-a927fdf6-848f-4c75-8665-a97ff649555d"
+          }
+        ],
+        "publisher": {
+          "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+          "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/FileTree.svelte",
+            "frontend/src/packages/files-next/files-store.js"
+          ],
+          "review_patch": {
+            "bytes": 953,
+            "sha256": "93ef0ec657aa08c81b12fbbd14d6f9b9f0ab04079712e7216c49c321950ba566"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "55208791996a8b4b533a9f9b66f39f70cf23aa78",
+          "tree_patch": {
+            "bytes": 2499,
+            "sha256": "550712b3c174afe92f2dabccf37c7ac25ebc33ad8cb01f478444a641cac83e59"
+          }
+        },
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      "release_id": "91fac0835cfb9a9f0f760c42cb99623ceb63c36c4004b66ae8dc98a7c7a4c1a6"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228",
+      "listing": {
+        "package": "files-next",
+        "record_id": "bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 2,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e",
+        "version": 1
+      },
+      "published_at": "2026-11-02T20:44:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "3841fe9dfc58aa373cd3a552faffb0bd1b072227bc484b6837d059cc91719778",
+          "decision_event": "f34a9c6dd9f1e503989fd880a2edb2cd99c6d771f6cd562c18a015678388bf35",
+          "operation_id": "op-90b5b825-7888-4407-86be-51243505517f",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "kind": "release",
+          "release_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+          "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 720,
+            "question": "Does the sort order survive a reload?",
+            "record_id": "pc-40b30ef6-c5db-4fb9-844b-9a0816552a83"
+          }
+        ],
+        "publisher": {
+          "computer_id": "a061f9a7-8fe4-4645-bb06-8fdd563d92f9",
+          "owner_id": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/FileTree.svelte",
+            "frontend/src/packages/files-next/files-store.js"
+          ],
+          "review_patch": {
+            "bytes": 958,
+            "sha256": "3e3c52bc409ccc8acb72390d3d954072776b93a00cb0d9b10b1466eb9315b40e"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "7f271aa277b5087caf48e41ae45871c050e2096a",
+          "tree_patch": {
+            "bytes": 2087,
+            "sha256": "3f4c5183b06e833980fa5808a366d19da3a92b68a2e6779009276e5488ffe795"
+          }
+        },
+        "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+      },
+      "release_id": "bd802479e37ce769a896181a80e5723e9b737b2647561db1d42fbb3cc1859228"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:N2IzZGFmMjAtYmZmOC00ODVjLTg5ZWItN2UwYTE4ZTU5NDky:e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+      "listing": {
+        "package": "files-next",
+        "record_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492",
+        "version": 1
+      },
+      "published_at": "2026-11-02T20:03:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "f4fbe7a6677aa0c1e210b4cabdfde6c9c44005bcb90d97d787592274b0b175d0",
+          "decision_event": "3ca075ff95b468e10f945e013892a57f871c9cb20e3e92dd90a9b1cc35e2ddfd",
+          "operation_id": "op-058ce0da-0137-4c47-8b98-88969d7fe257",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+        },
+        "parent_patch": {
+          "bytes": 1863,
+          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 560,
+            "question": "Is the tree reachable with the keyboard alone?",
+            "record_id": "pc-de836d2a-769b-48dc-b2e0-3e6a53962dd3",
+            "resolve_record_id": "pc-de836d2a-769b-48dc-b2e0-3e6a53962dd3:resolve:rule",
+            "settled": "no"
+          }
+        ],
+        "publisher": {
+          "computer_id": "9b010a96-b891-4d0b-92aa-f6f0fff4ce3b",
+          "owner_id": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/FileTree.svelte"
+          ],
+          "review_patch": {
+            "bytes": 391,
+            "sha256": "50810803d75291993a374d667ce6f3cc53766e64042fc8fac8c863f040689ff9"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "0724ad2f8bddb22330edf1f55341e28cf6c2da9a",
+          "tree_patch": {
+            "bytes": 1875,
+            "sha256": "8c0d065fd9545863f2dfcd750bf626c66fe9ff3006a361b628322415c407fe74"
+          }
+        },
+        "track": "7b3daf20-bff8-485c-89eb-7e0a18e59492"
+      },
+      "release_id": "e217bdd835e854f1c44e459663b375e45a0eb99de078252a7bd2473e0f0a3175"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
+      "listing": {
+        "package": "files-next",
+        "record_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 2,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+        "version": 1
+      },
+      "published_at": "2026-11-02T19:22:00.000000Z",
+      "record": {
+        "declarations": {
+          "test_command": "npm run check"
+        },
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "c716c2934a5050468f98d9160e779608c11af6389c816aa979b9cd049b4a1113",
+          "decision_event": "0d0b6b6e04e65a2e04d1e9db693a80a5c45f3be26b0a3b229688f462dc0e44ce",
+          "operation_id": "op-16686cac-386e-4888-9888-0a95d3e5383e",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "kind": "release",
+          "release_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+          "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 640,
+            "question": "Does renaming a file keep it selected?",
+            "record_id": "pc-cf850713-ad1d-4cb9-8d3c-7f72cfb64e32",
+            "resolve_record_id": "pc-cf850713-ad1d-4cb9-8d3c-7f72cfb64e32:resolve:rule",
+            "settled": "yes"
+          },
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 700,
+            "question": "Does a name clash refuse without losing the typed name?",
+            "record_id": "pc-796a5845-3dd6-4f00-9790-57031614b580"
+          }
+        ],
+        "publisher": {
+          "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+          "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/App.svelte",
+            "frontend/src/packages/files-next/RenameDialog.svelte"
+          ],
+          "review_patch": {
+            "bytes": 834,
+            "sha256": "d7fc62e493157e9b0b588b713c611886b361f771b849e691367d06e6a5bd7f61"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "d41baf75fc19d49cba109de8267974db52ce4453",
+          "tree_patch": {
+            "bytes": 2399,
+            "sha256": "a6591f01f7692a4c243e0ad3e49c1315802ac51df45296d1d50dc833d7b1027a"
+          }
+        },
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      "release_id": "37b20152970ff463f07762d72ee700ebcdf85745719162afd5800184e1294787"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:YWNlMTFiZmYtMjVlMi00NjZkLThiZDUtYTI3OTBlYjA1MTZl:45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+      "listing": {
+        "package": "files-next",
+        "record_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e",
+        "version": 1
+      },
+      "published_at": "2026-11-02T18:41:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "9d9a9bde5f2172085066618127608944afd03517c1e5d7f1e4e3f7666da61689",
+          "decision_event": "1baee7b7ea077df83661ac2b4fde1100131e5a96e303228c52d806491df75332",
+          "operation_id": "op-a4c8c6a5-81fa-46bd-ab5f-468ec3c2e8d1",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+        },
+        "parent_patch": {
+          "bytes": 1863,
+          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 780,
+            "question": "Do files sort by name, folders first?",
+            "record_id": "pc-37a24372-0803-49a8-b286-a8924ce40b31",
+            "resolve_record_id": "pc-37a24372-0803-49a8-b286-a8924ce40b31:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "a061f9a7-8fe4-4645-bb06-8fdd563d92f9",
+          "owner_id": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/files-store.js"
+          ],
+          "review_patch": {
+            "bytes": 456,
+            "sha256": "3edbd2f20b2ab85e1a1d982d6c67fd5f836a7b6ca113737e98e66a9d5cc26e1c"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "2c539c10c5d1bcf737c1212db759c2287707c1f7",
+          "tree_patch": {
+            "bytes": 1966,
+            "sha256": "bf076eddc66f97c5e4123599275b14e1c2c297f1889a4cc8e9294d364c336cde"
+          }
+        },
+        "track": "ace11bff-25e2-466d-8bd5-a2790eb0516e"
+      },
+      "release_id": "45dbb076eb43784bb2cffc443920f05bd87016c8820e97c211d50b28d70ff17a"
+    },
+    {
+      "canonical_id": "obj:choir.package_release:Y2RiMDBkNTQtYzFjNS00NjY5LWI2ZmMtN2RiYmU4MThmMjRk:64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+      "listing": {
+        "package": "files-next",
+        "record_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b",
+        "record_kind": "package_release",
+        "scopes": [
+          "owner",
+          "public"
+        ],
+        "seq": 1,
+        "shared_with": {
+          "computers": [],
+          "owners": []
+        },
+        "state": "listed",
+        "state_actor": "owner_act:unverified",
+        "state_reason": "published",
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d",
+        "version": 1
+      },
+      "published_at": "2026-11-02T18:00:00.000000Z",
+      "record": {
+        "declarations": {},
+        "manifest": {
+          "abi": "choir.app-frontend/svelte-inline/v1",
+          "kinds_count": 0,
+          "opens_count": 0,
+          "sha256": "0caf6fcb84493634755d51f3fbf75f91534cb6a2a5a080862807decaec25f3f8"
+        },
+        "operation": {
+          "bundle_digest": "d74f07055966879a0da90cb3865544876297bbc7844172f50f814ca3a7a2ff68",
+          "decision_event": "bec0759eefc0db1b5a0dcd1f25da5e515cbdf26cf400bdf841db7e5c475c1a72",
+          "operation_id": "op-99055960-5e91-432c-9f4c-f6da43571b24",
+          "verifier_refs": []
+        },
+        "package": {
+          "manifest_version": "1.0.0",
+          "name": "files-next"
+        },
+        "parent": {
+          "commit": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "kind": "base",
+          "tree": "d6e8ed5baf6b9750bf343122cf305c7a168b67af"
+        },
+        "parent_patch": {
+          "bytes": 1863,
+          "sha256": "2d13a02fd5f6885f07890a9362febf362974b84878796dfe6f8be39be261188f"
+        },
+        "precommitments": [
+          {
+            "kind": "tests_pass",
+            "p_yes_permille": 880,
+            "question": "Does the file tree list every file in the home folder?",
+            "record_id": "pc-18120443-b474-40f8-a163-09618a2830c5",
+            "resolve_record_id": "pc-18120443-b474-40f8-a163-09618a2830c5:resolve:rule",
+            "settled": "yes"
+          }
+        ],
+        "publisher": {
+          "computer_id": "87bf373c-5e2e-400d-a09e-e6698e8161cb",
+          "owner_id": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+        },
+        "schema": "choir.package_release.v1",
+        "source": {
+          "built_on": "cc47761dc6cc291bd233a4db7bb1615c7a97a80c",
+          "changed_paths": [
+            "frontend/src/packages/files-next/FileTree.svelte"
+          ],
+          "review_patch": {
+            "bytes": 476,
+            "sha256": "f4940e7c426743137da43d28c5dd6a41e4c8e147d87895e29352a8d7156013b6"
+          },
+          "root": "frontend/src/packages/files-next",
+          "tree": "e9c93a9f51a6663748ed419f9c61ec1f3530ab4b",
+          "tree_patch": {
+            "bytes": 1960,
+            "sha256": "324b4d9c9f8a18dd6dfc1aeda5ae620724ecf6fc6b7f1efc989a9ee5f8928eca"
+          }
+        },
+        "track": "cdb00d54-c1c5-4669-b6fc-7dbbe818f24d"
+      },
+      "release_id": "64cbd1e58985ea5383fb29cb40378dc3e6077082a92a703a8d92c0a61a80071b"
     }
   ]
 }

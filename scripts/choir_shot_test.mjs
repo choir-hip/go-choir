@@ -112,20 +112,22 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   const list = catalogAnswer(fx, 'GET', '/api/catalog/packages', '');
   assert.equal(list.status, 200);
   assert.equal(list.body.reader, 'owner');
-  assert.ok(list.body.packages.length >= 2);
+  assert.ok(list.body.packages.length >= 6);
+  assert.deepEqual([...new Set(list.body.packages.map((p) => p.package))].sort(), ['files-next', 'library-next', 'slides-next']);
   assert.equal(list.body.count, list.body.packages.length);
   // ?q= filters by name, as corpusd does (substring, case-insensitive).
-  assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/packages', '?q=READ').body.count, list.body.packages.length);
+  assert.equal(catalogAnswer(fx, 'GET', '/api/catalog/packages', '?q=SLIDES').body.count, list.body.packages.filter((p) => p.package === 'slides-next').length);
   const none = catalogAnswer(fx, 'GET', '/api/catalog/packages', '?q=nothing-by-this-name');
   assert.deepEqual([none.status, none.body.count, none.body.packages], [200, 0, []]);
   // History: the reader's own track by default, another's by ?track=.
-  const own = catalogAnswer(fx, 'GET', '/api/catalog/packages/reader/releases', '');
+  const own = catalogAnswer(fx, 'GET', '/api/catalog/packages/slides-next/releases', '');
   assert.equal(own.status, 200);
   assert.equal(own.body.track, 'owner');
-  assert.ok(own.body.releases.length >= 2);
-  const theirs = catalogAnswer(fx, 'GET', '/api/catalog/packages/reader/releases', '?track=owner-b');
-  assert.equal(theirs.body.track, 'owner-b');
-  assert.equal(theirs.body.releases.length, 1);
+  assert.ok(own.body.releases.some((r) => r.listing.state === 'withdrawn'));
+  const otherTrack = list.body.packages.find((p) => p.package === 'files-next').track;
+  const theirs = catalogAnswer(fx, 'GET', '/api/catalog/packages/files-next/releases', `?track=${otherTrack}`);
+  assert.equal(theirs.body.track, otherTrack);
+  assert.ok(theirs.body.releases.length >= 1);
   // A package the fixture lacks: an empty history, as corpusd answers (200).
   const empty = catalogAnswer(fx, 'GET', '/api/catalog/packages/library/releases', '');
   assert.deepEqual([empty.status, empty.body.package, empty.body.track, empty.body.releases, empty.body.count], [200, 'library', 'owner', [], 0]);
@@ -154,6 +156,9 @@ assert.equal(themeAnswer(null, 'GET', '/api/preferences/theme'), null);
   assert.equal(appended.length, 1);
   assert.equal(el.text, CATALOG_FIXTURE_BADGE);
   assert.equal(el.dataset.choirShotFixture, 'capsule-catalog');
+  // At the top edge: never over the taskbar or prompt bar at the bottom.
+  assert.equal(el.style.top, '2px');
+  assert.equal(el.style.bottom, undefined);
 }
 
 // Contrast: colors, the background walk, ratios and pixel fallback.
