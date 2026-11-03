@@ -107,11 +107,11 @@ type Executor struct {
 	// failure 9).
 	claudeDelegateSource atomic.Pointer[claudeDelegateSource]
 	// jobs are the capsule jobs this process started (jobs.go); jobDone is
-	// the runtime's completion handler and jobAdmission the memory-lease
-	// seam.
-	jobs         map[string]*capsuleJob
-	jobDone      func(JobCompletion)
-	jobAdmission JobAdmission
+	// the runtime's completion handler. (The per-job memory-lease seam,
+	// JobAdmission, was deleted in S4: a build capsule reserves its peak on
+	// the host at spawn and its jobs read the host facts instead.)
+	jobs    map[string]*capsuleJob
+	jobDone func(JobCompletion)
 	// browser and fontconfig are the image's Chromium and fontconfig file,
 	// which every broker hands its jobs (broker_env.go).
 	browser    string
@@ -1082,10 +1082,8 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		e.hostMemory.ReleaseBuild(id)
 	}
 	// Job memory boosts end with the capsule (J8): returned to the budget
-	// here, their lease shares released off the executor lock.
-	for _, release := range e.returnMemoryBoostsLocked(caps) {
-		go release()
-	}
+	// here.
+	e.returnMemoryBoostsLocked(caps)
 	return nil
 }
 

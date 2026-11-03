@@ -18,11 +18,10 @@ import (
 const mib = int64(1 << 20)
 
 type jobMemoryFixture struct {
-	e        *Executor
-	caps     *Capsule
-	cg       *fakeCgroupMemory
-	budget   int64
-	releases []int64 // the cgroup's memory.max at each release
+	e      *Executor
+	caps   *Capsule
+	cg     *fakeCgroupMemory
+	budget int64
 }
 
 func newJobMemoryFixture(t *testing.T) *jobMemoryFixture {
@@ -44,22 +43,18 @@ func newJobMemoryFixture(t *testing.T) *jobMemoryFixture {
 	return f
 }
 
-func (f *jobMemoryFixture) release() func() {
-	return func() { f.releases = append(f.releases, f.cg.max) }
-}
-
 func TestJobMemoryBoostFollowsTheLiveBudget(t *testing.T) {
 	f := newJobMemoryFixture(t)
 	// 2048 used + 1536 asked > 3072: refused, nothing written or counted.
-	if err := f.e.boostJobMemory(f.caps.ID, "job-a", 1536*mib, f.release()); err == nil || !strings.Contains(err.Error(), "budget") {
+	if err := f.e.boostJobMemory(f.caps.ID, "job-a", 1536*mib); err == nil || !strings.Contains(err.Error(), "budget") {
 		t.Fatalf("over budget: %v", err)
 	}
-	if f.e.vmMemoryUsed != 2048*mib || f.cg.max != 2048*mib || len(f.releases) != 0 {
-		t.Fatalf("refusal changed state: used=%d max=%d releases=%v", f.e.vmMemoryUsed, f.cg.max, f.releases)
+	if f.e.vmMemoryUsed != 2048*mib || f.cg.max != 2048*mib {
+		t.Fatalf("refusal changed state: used=%d max=%d", f.e.vmMemoryUsed, f.cg.max)
 	}
-	// The lease plugged 2 GiB: 3/4 of the new MemTotal admits it (F18).
+	// MemTotal grew 2 GiB: 3/4 of the new MemTotal admits it (F18).
 	f.budget = 4608 * mib
-	if err := f.e.boostJobMemory(f.caps.ID, "job-a", 1536*mib, f.release()); err != nil {
+	if err := f.e.boostJobMemory(f.caps.ID, "job-a", 1536*mib); err != nil {
 		t.Fatal(err)
 	}
 	if f.e.vmMemoryUsed != 3584*mib || f.cg.max != 3584*mib {
@@ -75,43 +70,40 @@ func TestJobMemoryBoostFollowsTheLiveBudget(t *testing.T) {
 	if err == nil {
 		t.Fatal("a spawn passed the budget the job's boost holds")
 	}
-	// J6: lowered first, then released.
+	// J6: the cgroup is lowered and the budget returned.
 	f.e.endJobMemory(f.caps.ID, "job-a")
-	if f.e.vmMemoryUsed != 2048*mib || f.cg.max != 2048*mib || len(f.releases) != 1 || f.releases[0] != 2048*mib {
-		t.Fatalf("end: used=%d max=%d releases=%v", f.e.vmMemoryUsed>>20, f.cg.max>>20, f.releases)
+	if f.e.vmMemoryUsed != 2048*mib || f.cg.max != 2048*mib {
+		t.Fatalf("end: used=%d max=%d", f.e.vmMemoryUsed>>20, f.cg.max>>20)
 	}
 	f.e.endJobMemory(f.caps.ID, "job-a") // a second end is a no-op
-	if len(f.releases) != 1 {
-		t.Fatalf("released twice: %v", f.releases)
+	if f.e.vmMemoryUsed != 2048*mib {
+		t.Fatalf("returned twice: used=%d", f.e.vmMemoryUsed>>20)
 	}
 }
 
 // J7, J8: usage the kernel cannot reclaim keeps the boost (no OOM kill in
 // the capsule) until the capsule ends; destroy returns it and releases the
-// need exactly once.
+// boost exactly once.
 func TestJobMemoryRetainedUntilTheCapsuleEnds(t *testing.T) {
 	f := newJobMemoryFixture(t)
 	f.budget = 4096 * mib
-	if err := f.e.boostJobMemory(f.caps.ID, "job-b", 768*mib, f.release()); err != nil {
+	if err := f.e.boostJobMemory(f.caps.ID, "job-b", 768*mib); err != nil {
 		t.Fatal(err)
 	}
 	f.cg.current, f.cg.reclaimTo = 2600*mib, 2400*mib
 	f.e.endJobMemory(f.caps.ID, "job-b")
-	if f.e.vmMemoryUsed != 2816*mib || f.cg.max != 2816*mib || len(f.releases) != 0 {
-		t.Fatalf("retained: used=%d max=%d releases=%v", f.e.vmMemoryUsed>>20, f.cg.max>>20, f.releases)
+	if f.e.vmMemoryUsed != 2816*mib || f.cg.max != 2816*mib {
+		t.Fatalf("retained: used=%d max=%d", f.e.vmMemoryUsed>>20, f.cg.max>>20)
 	}
 	f.e.mu.Lock()
-	releases := f.e.returnMemoryBoostsLocked(f.caps)
+	f.e.returnMemoryBoostsLocked(f.caps)
 	f.e.mu.Unlock()
-	for _, r := range releases {
-		r()
-	}
-	if f.e.vmMemoryUsed != 2048*mib || len(f.releases) != 1 {
-		t.Fatalf("destroy: used=%d releases=%v", f.e.vmMemoryUsed>>20, f.releases)
+	if f.e.vmMemoryUsed != 2048*mib {
+		t.Fatalf("destroy: used=%d", f.e.vmMemoryUsed>>20)
 	}
 	f.e.endJobMemory(f.caps.ID, "job-b")
-	if len(f.releases) != 1 || f.e.vmMemoryUsed != 2048*mib {
-		t.Fatalf("the job's end after destroy: used=%d releases=%v", f.e.vmMemoryUsed>>20, f.releases)
+	if f.e.vmMemoryUsed != 2048*mib {
+		t.Fatalf("the job's end after destroy: used=%d", f.e.vmMemoryUsed>>20)
 	}
 }
 
@@ -124,20 +116,15 @@ func TestFinishJobReturnsMemoryBeforeDone(t *testing.T) {
 	jf.executor.vmMemoryUsed = 2048 * mib
 	jf.executor.memoryTotalFn = func() int64 { return 4096 * mib }
 	jf.executor.cgroupMemoryFor = func(*Capsule) cgroupMemory { return cg }
-	released, doneAtRelease := 0, false
-	if err := jf.executor.boostJobMemory(jf.caps.ID, jf.job.spec.ID, 512*mib, func() {
-		released++
-		select {
-		case <-jf.job.done:
-			doneAtRelease = true
-		default:
-		}
-	}); err != nil {
+	if err := jf.executor.boostJobMemory(jf.caps.ID, jf.job.spec.ID, 512*mib); err != nil {
 		t.Fatal(err)
 	}
 	jf.job.boosted = true // as StartJob marks it
+	// The completion runs after done is closed: by then the boost is back.
+	var maxAtDone int64
+	jf.executor.SetJobCompletionHandler(func(JobCompletion) { maxAtDone = cg.max })
 	jf.executor.finishJob(jf.job, nil, capsulejob.StateStopped, "the capsule ended before the job did")
-	if released != 1 || doneAtRelease || cg.max != 2048*mib || jf.executor.vmMemoryUsed != 2048*mib {
-		t.Fatalf("finish: released=%d done before release=%t max=%d used=%d", released, doneAtRelease, cg.max>>20, jf.executor.vmMemoryUsed>>20)
+	if maxAtDone != 2048*mib || cg.max != 2048*mib || jf.executor.vmMemoryUsed != 2048*mib {
+		t.Fatalf("finish: max at done=%d max=%d used=%d", maxAtDone>>20, cg.max>>20, jf.executor.vmMemoryUsed>>20)
 	}
 }

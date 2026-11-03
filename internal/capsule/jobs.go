@@ -45,8 +45,8 @@ var (
 )
 
 type capsuleJob struct {
-	// boosted says the job's memory need raised its capsule: its lease
-	// share (release) then belongs to that boost, returned by endJobMemory.
+	// boosted says the job's memory need raised its capsule, returned by
+	// endJobMemory.
 	boosted bool
 	// waiting is true while the job waits for host memory; whoever clears
 	// it (its start, its stop, its capsule's end) owns the job's next step.
@@ -61,7 +61,6 @@ type capsuleJob struct {
 	status      capsulejob.Status
 	receiptRef  string
 	logRef      string
-	release     func()
 	done        chan struct{}
 }
 
@@ -85,13 +84,6 @@ func (e *Executor) SetJobCompletionHandler(handler func(JobCompletion)) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.jobDone = handler
-}
-
-// SetJobAdmission installs the job admission hook (memory leases).
-func (e *Executor) SetJobAdmission(admit JobAdmission) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.jobAdmission = admit
 }
 
 // StartJob starts a job in the run's capsule. One job runs at a time per
@@ -129,7 +121,6 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 		}
 	}
 	e.jobs[spec.ID] = job
-	admit := e.jobAdmission
 	hm := e.hostMemory
 	e.mu.Unlock()
 	// A build-class job reads the host facts before it starts (S4): while
@@ -150,7 +141,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 			return view, nil
 		}
 	}
-	view, err := e.launchJob(ctx, job, capability, caps, admit)
+	view, err := e.launchJob(ctx, job, capability, caps)
 	if err != nil {
 		e.mu.Lock()
 		delete(e.jobs, spec.ID)
@@ -163,24 +154,16 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 // launchJob starts a registered job in its capsule: its memory need, the
 // workspace digest, the broker's start, then its watcher. On error nothing
 // it took is kept; the caller decides what the job becomes.
-func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *Capability, caps *Capsule, admit JobAdmission) (yaegikernel.JobView, error) {
+func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *Capability, caps *Capsule) (yaegikernel.JobView, error) {
 	spec := job.spec
 	abandon := func(err error) (yaegikernel.JobView, error) {
 		e.returnJobMemory(job)
 		return yaegikernel.JobView{}, err
 	}
-	// A memory need takes the job's lease share first (the hook; it may
-	// raise the live budget), then raises the capsule against that budget
+	// A memory need raises the capsule against the guest's live budget
 	// (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md section 9).
-	if admit != nil {
-		release, err := admit(caps.ID, spec)
-		if err != nil {
-			return abandon(fmt.Errorf("job %s not admitted: %w", spec.ID, err))
-		}
-		job.release = release
-	}
 	if spec.MemoryMiB > 0 {
-		if err := e.boostJobMemory(caps.ID, spec.ID, int64(spec.MemoryMiB)<<20, job.release); err != nil {
+		if err := e.boostJobMemory(caps.ID, spec.ID, int64(spec.MemoryMiB)<<20); err != nil {
 			return abandon(fmt.Errorf("job %s not admitted: %w; start it without memory_mib to run within the capsule's own size", spec.ID, err))
 		}
 		job.boosted = true
@@ -264,11 +247,8 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			e.finishJob(job, nil, capsulejob.StateStopped, fmt.Sprintf("waited %s for host memory and the host stayed short (%s); start it again later", maxWait, reason))
 			return
 		}
-		e.mu.RLock()
-		admit := e.jobAdmission
-		e.mu.RUnlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		_, err = e.launchJob(ctx, job, capability, caps, admit)
+		_, err = e.launchJob(ctx, job, capability, caps)
 		cancel()
 		if err != nil {
 			e.finishJob(job, nil, capsulejob.StateFailed, "could not start after waiting for host memory: "+err.Error())
@@ -480,16 +460,11 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 	}
 }
 
-// returnJobMemory returns a job's memory: its capsule boost (which then
-// releases the lease share) or, unboosted, its lease share directly. Once.
+// returnJobMemory returns a job's capsule boost, if it took one.
+// endJobMemory is idempotent.
 func (e *Executor) returnJobMemory(job *capsuleJob) {
 	if job.boosted {
 		e.endJobMemory(job.capsuleID, job.spec.ID)
-		return
-	}
-	if release := job.release; release != nil {
-		job.release = nil
-		release()
 	}
 }
 

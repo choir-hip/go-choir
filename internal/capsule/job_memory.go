@@ -13,10 +13,10 @@ import (
 // Job memory (docs/archive/reports/memory-hotplug-controller-design-2026-10-14.md
 // section 9). A job may declare memory it needs beyond its capsule's size.
 // The executor admits that need against the capsule budget, which is read
-// live (3/4 of the guest's current MemTotal, so a memory lease that plugged
-// memory raises it), and raises the capsule's cgroup memory.max by it for
-// the job. At the job's end the cgroup is lowered before the need leaves
-// the lease; a cgroup whose usage cannot come back under its base keeps the
+// live (3/4 of the guest's current MemTotal), and raises the capsule's
+// cgroup memory.max by it for the job. At the job's end the cgroup is
+// lowered before the need leaves the budget; a cgroup whose usage cannot
+// come back under its base keeps the
 // boost until the capsule ends, because lowering memory.max under usage
 // makes the kernel OOM-kill inside the capsule (its broker included).
 
@@ -131,9 +131,7 @@ func lowerCgroupMemory(cg cgroupMemory, limit int64) (lowered bool, err error) {
 }
 
 // jobMemoryBoost is one job's raise of its capsule's memory: counted in the
-// executor's budget and the cgroup until returned; release ends the job's
-// share of the memory lease.
+// executor's budget and the cgroup until returned.
 type jobMemoryBoost struct {
-	bytes   int64
-	release func()
+	bytes int64
 }

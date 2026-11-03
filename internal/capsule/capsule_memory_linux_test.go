@@ -42,7 +42,7 @@ func TestJobMemoryBoostRaisesHighUnderDoctrine(t *testing.T) {
 		vmMemoryUsed:    2048 * mib,
 		cgroupMemoryFor: func(*Capsule) cgroupMemory { return cg },
 	}
-	if err := e.boostJobMemory(caps.ID, "job-a", 1024*mib, nil); err != nil {
+	if err := e.boostJobMemory(caps.ID, "job-a", 1024*mib); err != nil {
 		t.Fatal(err)
 	}
 	if cg.max != 5120*mib || cg.high != 3072*mib || e.vmMemoryUsed != 3072*mib {
@@ -58,7 +58,7 @@ func TestJobMemoryBoostRaisesHighUnderDoctrine(t *testing.T) {
 	caps2 := &Capsule{ID: "capsule-observe", State: StateActive, MemoryMax: 2048 * mib}
 	e2 := &Executor{capsules: map[string]*Capsule{caps2.ID: caps2}, vmMemoryTotal: 6144 * mib, vmMemoryUsed: 2048 * mib,
 		cgroupMemoryFor: func(*Capsule) cgroupMemory { return cg2 }}
-	if err := e2.boostJobMemory(caps2.ID, "job-b", 1024*mib, nil); err != nil {
+	if err := e2.boostJobMemory(caps2.ID, "job-b", 1024*mib); err != nil {
 		t.Fatal(err)
 	}
 	if cg2.high != 0 || strings.Contains(strings.Join(cg2.calls, ","), "high") {
@@ -124,7 +124,7 @@ func TestDoctrineBoostRaisesTheAggregateFirst(t *testing.T) {
 		capsuleAggregateFor: func() cgroupMemory { return agg },
 	}
 	budget = 4608 * mib // a memory lease plugged 1.5 GiB
-	if err := e.boostJobMemory(caps.ID, "job-a", 1536*mib, nil); err != nil {
+	if err := e.boostJobMemory(caps.ID, "job-a", 1536*mib); err != nil {
 		t.Fatal(err)
 	}
 	if agg.max != 4608*mib || cg.max != 5632*mib || e.vmMemoryUsed != 3584*mib {
@@ -136,7 +136,7 @@ func TestDoctrineBoostRaisesTheAggregateFirst(t *testing.T) {
 	e.endJobMemory(caps.ID, "job-a")
 
 	agg.setErr = errFake
-	if err := e.boostJobMemory(caps.ID, "job-b", 1024*mib, nil); err == nil {
+	if err := e.boostJobMemory(caps.ID, "job-b", 1024*mib); err == nil {
 		t.Fatal("a boost passed although the aggregate could not rise")
 	}
 	if cg.max != 4096*mib || cg.high != 2048*mib || e.vmMemoryUsed != 2048*mib || len(caps.memoryBoosts) != 0 {
@@ -203,8 +203,7 @@ func TestRefusedBoostWithAStuckCeilingIsCounted(t *testing.T) {
 		vmMemoryUsed:    2048 * mib,
 		cgroupMemoryFor: func(*Capsule) cgroupMemory { return cg },
 	}
-	released := false
-	err := e.boostJobMemory(caps.ID, "job-a", 1024*mib, func() { released = true })
+	err := e.boostJobMemory(caps.ID, "job-a", 1024*mib)
 	if err == nil || !strings.Contains(err.Error(), "memory.max") {
 		t.Fatalf("boost error %v: want a refusal naming the stuck memory.max", err)
 	}
@@ -213,9 +212,6 @@ func TestRefusedBoostWithAStuckCeilingIsCounted(t *testing.T) {
 	}
 	if e.vmMemoryUsed != 3072*mib || boostedBytesLocked(caps) != 1024*mib {
 		t.Fatalf("stuck raise uncounted: used %d MiB, boosted %d MiB", e.vmMemoryUsed>>20, boostedBytesLocked(caps)>>20)
-	}
-	if released {
-		t.Fatal("the refused job's lease share was released by the boost")
 	}
 	// The job's own id stays free; its end does not return the stuck raise.
 	e.endJobMemory(caps.ID, "job-a")
@@ -237,7 +233,7 @@ func TestTwoStuckBoostsForOneJobAreBothReturned(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		cg.maxCalls = 0 // each attempt's raise works and its restore fails
-		if err := e.boostJobMemory(caps.ID, "job-a", 1024*mib, nil); err == nil {
+		if err := e.boostJobMemory(caps.ID, "job-a", 1024*mib); err == nil {
 			t.Fatalf("attempt %d: the boost passed", i+1)
 		}
 	}

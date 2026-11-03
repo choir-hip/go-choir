@@ -65,10 +65,9 @@ func boostedBytesLocked(caps *Capsule) int64 {
 const stuckBoostPrefix = "stuck:"
 
 // boostJobMemory admits a job's declared need against the live budget and
-// raises its capsule's memory.max by it. release (the job's lease share)
-// runs once, when the boost is returned. On error nothing was raised or
-// counted and release has not run.
-func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release func()) error {
+// raises its capsule's memory.max by it. On error nothing was raised or
+// counted (but for a stuck raise, which is counted until the capsule ends).
+func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	caps := e.capsules[capsuleID]
@@ -82,7 +81,7 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 		return fmt.Errorf("job memory_mib %d: %w", bytes>>20, err)
 	}
 	// Under doctrine the aggregate follows the live budget the boost was
-	// admitted against (a memory lease may have raised it) before any leaf
+	// admitted against (MemTotal may have grown) before any leaf
 	// rises (review B4); if it cannot, the boost is refused.
 	if err := e.ensureCapsuleAggregateLocked(); err != nil {
 		return fmt.Errorf("job memory_mib %d: %w", bytes>>20, err)
@@ -109,8 +108,7 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 			if restoreErr := cg.SetMax(caps.MemoryMax + boostedBytesLocked(caps)); restoreErr != nil {
 				// Review E6: memory.max stays raised. The raise is counted
 				// until the capsule ends, as a boost that cannot come down
-				// is (endJobMemory), under a key the job's end never reaches;
-				// the job's lease share is not held by it.
+				// is (endJobMemory), under a key the job's end never reaches.
 				if caps.memoryBoosts == nil {
 					caps.memoryBoosts = map[string]*jobMemoryBoost{}
 				}
@@ -131,16 +129,15 @@ func (e *Executor) boostJobMemory(capsuleID, jobID string, bytes int64, release 
 	if caps.memoryBoosts == nil {
 		caps.memoryBoosts = map[string]*jobMemoryBoost{}
 	}
-	caps.memoryBoosts[jobID] = &jobMemoryBoost{bytes: bytes, release: release}
+	caps.memoryBoosts[jobID] = &jobMemoryBoost{bytes: bytes}
 	e.vmMemoryUsed += bytes
 	log.Printf("capsule: job %s memory boost +%d MiB in capsule %s (memory.max %d MiB)", jobID, bytes>>20, capsuleID, (caps.MemoryMax+boostedBytesLocked(caps))>>20)
 	return nil
 }
 
 // endJobMemory returns a job's boost: the cgroup is lowered first (only
-// when its usage fits the lower limit, J7), then the budget, then the lease
-// share is released. A boost whose cgroup cannot come down is retained
-// until the capsule is destroyed. Idempotent; a capsule already destroyed
+// when its usage fits the lower limit, J7), then the budget. A boost whose
+// cgroup cannot come down is retained until the capsule is destroyed. Idempotent; a capsule already destroyed
 // returned its boosts then.
 func (e *Executor) endJobMemory(capsuleID, jobID string) {
 	e.mu.Lock()
@@ -186,24 +183,15 @@ func (e *Executor) endJobMemory(capsuleID, jobID string) {
 	delete(caps.memoryBoosts, jobID)
 	e.vmMemoryUsed -= b.bytes
 	e.mu.Unlock()
-	if b.release != nil {
-		b.release()
-	}
 }
 
 // returnMemoryBoostsLocked returns every boost a destroyed capsule held to
-// the budget and hands back their releases for the caller to run outside
-// the lock. Callers hold e.mu.
-func (e *Executor) returnMemoryBoostsLocked(caps *Capsule) []func() {
-	var releases []func()
+// the budget. Callers hold e.mu.
+func (e *Executor) returnMemoryBoostsLocked(caps *Capsule) {
 	for jobID, b := range caps.memoryBoosts {
 		e.vmMemoryUsed -= b.bytes
-		if b.release != nil {
-			releases = append(releases, b.release)
-		}
 		delete(caps.memoryBoosts, jobID)
 	}
-	return releases
 }
 
 // SetMemoryPolicy sets the capsule memory shape for capsules spawned from now

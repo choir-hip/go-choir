@@ -179,7 +179,6 @@ func (e *Executor) HasCapsule(string) bool { return false }
 // Capsule jobs (jobs.go) need the Linux guest.
 func (e *Executor) SetJobCompletionHandler(func(JobCompletion)) {}
 func (e *Executor) SetHostMemory(HostMemory)                    {}
-func (e *Executor) SetJobAdmission(JobAdmission)                {}
 func (e *Executor) SetLiveMemoryBudget(func() int64)            {}
 func (e *Executor) SetMemoryPolicy(CapsuleMemoryPolicy)         {}
 func (e *Executor) SetEgressTunnelIdentity(TunnelIdentityMode)  {}
