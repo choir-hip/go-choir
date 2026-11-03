@@ -126,20 +126,24 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging dbbceec5c (21:12Z): Freeze screens in the Report, emoji font in
-    capsules, the delegate brief carries shots/checks/owner_words with
-    build and Chromium env, choir-shot --help and a log file, a memory
-    wait names the running jobs. In CI: 6e86b4cdf (a job that declares
-    memory_mib waits for that much headroom; choir-shot verdict line).
-    In tier 2 review: published means public (owner), the OpenRouter
-    provider for stealth/crouton-alpha (owner: a fifth arm, every desk on
-    it), context menus, Open with and upload (tier 1 r2), the defaults
-    audit. Designed, not pushed: base image from the Library app
-    (c09383790, five owner questions). Owner rulings about 21:10-21:30Z:
-    published means public; installs optional (app store), base-image
-    pushes go everywhere; "Install" not "Adopt"; keep GPT as is. The
-    deepseek Calendar r1 lost 20+ min to host-memory waits at the 3 GiB
-    build claim and likely misses Freeze.
+    staging 3c0af9920 (21:38Z): published means public (proved: d@e, never
+    shared with, lists all 6 tracks), context menus, Open with and upload
+    helpers, the 1.5 GiB shot memory claim and verdict line. In CI
+    (queued): 994dcfc67 carries feature settings default on (9ea7dfc99),
+    the OpenRouter provider for stealth/crouton-alpha (5138fe884) and the
+    fifth arm selfdev-arm-crouton (computer-848b21d5…, test tier, policy
+    staged, written after deploy). Building: the Library catalog inside
+    capsules (confirmed: every /api/catalog call 404s in a capsule, so no
+    Library round can pass; Library rounds held), guest idle-cache return
+    to Node B (memory waits cost about 20 min per round), the stale
+    management loop closing the next round (8 min per round), the CLI
+    publish preview and a crouton-only management_task pin. Applied
+    tonight: claude Slides r4 (first delegate-built, published public
+    5bfc180e). Rejected: deepseek Calendar r1 (no window; memory waits),
+    pool Library r1 (catalog 404). Owner rulings 21:10-21:40Z: published
+    is public; installs optional; base image from the Library (design
+    c09383790, five questions); "Install"; keep GPT; a fifth arm on
+    crouton for every desk.
   main_uncertainty: >-
     whether the adopt route accepts an app's call (an owner act); whether
     delegate rounds pass once the delegate can run builds and shots
