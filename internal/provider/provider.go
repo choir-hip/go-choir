@@ -2504,6 +2504,13 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		}
 		emitStart()
 		for _, choice := range payload.Choices {
+			if finishSeen {
+				// After the first finish_reason only usage counts: a
+				// repeated finish chunk (OpenRouter) that echoed its delta
+				// must not append text or tool arguments twice (the old
+				// parser dropped anything after the finish too).
+				continue
+			}
 			if text := chatDeltaText(choice.Delta.Content); text != "" {
 				result.Text += text
 				onChunk(StreamChunk{Type: "content_block_delta", Delta: text})

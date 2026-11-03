@@ -254,3 +254,23 @@ func TestStreamSparseTrailingUsageKeepsTokenCounts(t *testing.T) {
 		t.Fatalf("message_delta usage = %+v", delta)
 	}
 }
+
+// A repeated finish chunk that echoes its delta (review r1, DeepSeek) must
+// not append the text or the tool arguments a second time.
+func TestStreamRepeatedFinishChunkDoesNotDuplicateDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk := `{"id":"g","model":"m","choices":[{"index":0,"delta":{"content":"hi","tool_calls":[{"index":0,"id":"c1","type":"function","function":{"name":"f","arguments":"{\"a\":1}"}}]},"finish_reason":"tool_calls"}]}`
+		_, _ = fmt.Fprintf(w, "data: %s\n\ndata: %s\n\n", chunk, chunk)
+		_, _ = fmt.Fprint(w, `data: {"id":"g","model":"m","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`+"\n\ndata: [DONE]\n\n")
+	}))
+	defer server.Close()
+	p := newTestOpenRouter(t, server)
+	resp, err := p.Stream(context.Background(), LLMRequest{Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "x"}}}}}, func(StreamChunk) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Text != "hi" || len(resp.ToolCalls) != 1 || string(resp.ToolCalls[0].Arguments) != `{"a":1}` || resp.Usage.InputTokens != 3 {
+		t.Fatalf("resp = %+v", resp)
+	}
+}
