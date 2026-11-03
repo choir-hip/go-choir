@@ -11,9 +11,15 @@
     resolveMediaSource,
   } from './media-utils.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+  import { dropZone, pickAndUploadFiles } from './file-upload';
 
   export let appContext = {};
   export let windowId = '';
+  export let authenticated = false;
+
+  const DECK_ACCEPT = ['pptx', 'pdf', 'html', 'htm'];
+  let uploadError = '';
+  let uploadingDeck = false;
 
   const kind = 'slides';
   const dispatch = createEventDispatcher();
@@ -330,6 +336,37 @@
     await loadContentItem();
   }
 
+  // Upload a deck from this device into Files, then open it here.
+  async function openUploadedPath(path) {
+    const fileName = String(path || '').split('/').pop() || path;
+    await openRecentFile({ filePath: path, fileName, title: fileName });
+  }
+
+  function handleUploadFailure(err) {
+    if (err?.authRequired) {
+      dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' });
+      return;
+    }
+    uploadError = err?.message || 'Upload failed.';
+  }
+
+  async function uploadDeck() {
+    uploadError = '';
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_upload', appId: 'slides', appName: 'Slides' });
+      return;
+    }
+    try {
+      uploadingDeck = true;
+      const [path] = await pickAndUploadFiles({ accept: DECK_ACCEPT, multiple: false });
+      if (path) await openUploadedPath(path);
+    } catch (err) {
+      handleUploadFailure(err);
+    } finally {
+      uploadingDeck = false;
+    }
+  }
+
   function goToSlide(index) {
     currentSlide = clampNumber(index, 0, slides.length - 1);
   }
@@ -401,11 +438,18 @@
   });
 </script>
 
-<div class="slides-shell" bind:this={containerEl} data-slides-app tabindex="0" on:keydown={handleKeydown}>
-  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><p class="eyebrow">PRESENTATION</p><h1>{item?.title || source.title || 'Slides'}</h1></div></div>{#if slides.length}<div class="top-actions"><span class="deck-count">{slides.length} slides</span><button class="control-button primary" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit presentation mode' : 'Present fullscreen'}>Present <span aria-hidden="true">⛶</span></button></div>{/if}</header>
+<div
+  class="slides-shell"
+  bind:this={containerEl}
+  data-slides-app
+  tabindex="0"
+  on:keydown={handleKeydown}
+  use:dropZone={{ accept: DECK_ACCEPT, multiple: false, enabled: () => authenticated, onUploaded: (paths) => paths[0] && openUploadedPath(paths[0]), onError: handleUploadFailure }}
+>
+  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">S</span><div><p class="eyebrow">PRESENTATION</p><h1>{item?.title || source.title || 'Slides'}</h1></div></div>{#if slides.length}<div class="top-actions"><button class="control-button" data-slides-upload-top on:click={uploadDeck} disabled={uploadingDeck} aria-label="Upload a deck">Upload</button><span class="deck-count">{slides.length} slides</span><button class="control-button primary" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit presentation mode' : 'Present fullscreen'}>Present <span aria-hidden="true">⛶</span></button></div>{/if}</header>
   {#if loading}<div class="state-panel" role="status"><span class="spinner" aria-hidden="true"></span><h2>Preparing your presentation</h2><p>Loading slides…</p></div>
   {:else if error}<div class="state-panel error-panel" role="alert"><span class="state-icon" aria-hidden="true">!</span><h2>Couldn't open this presentation</h2><p>{error}</p><button class="control-button" on:click={loadContentItem}>Try again</button></div>
-  {:else if slides.length === 0}<main class="welcome"><div class="welcome-copy"><span class="eyebrow">YOUR PRESENTATION SPACE</span><h2>Make room for the big picture.</h2><p>Open a PPTX, PDF, or HTML file from Files to present it here.</p></div><div class="recent-panel"><span class="eyebrow">CONTINUE WHERE YOU LEFT OFF</span><h3>Recent presentations</h3>{#if recentFiles.length}<ul class="recent-list">{#each recentFiles as entry}<li><button class="recent-item" on:click={() => openRecentFile(entry)}><span class="file-icon" aria-hidden="true">▤</span><span class="recent-title">{entry.title || entry.fileName || 'Untitled'}</span><span aria-hidden="true">→</span></button></li>{/each}</ul>{:else}<p class="muted">Your recently opened decks will appear here.</p>{/if}</div></main>
+  {:else if slides.length === 0}<main class="welcome"><div class="welcome-copy"><span class="eyebrow">YOUR PRESENTATION SPACE</span><h2>Make room for the big picture.</h2><p>Upload a PPTX, PDF, or HTML file, drop one here, or open one from Files.</p><button class="control-button primary" data-slides-upload on:click={uploadDeck} disabled={uploadingDeck}>{uploadingDeck ? 'Uploading…' : 'Upload a deck'}</button>{#if uploadError}<p class="upload-error" role="alert" data-slides-upload-error>{uploadError}</p>{/if}</div><div class="recent-panel"><span class="eyebrow">CONTINUE WHERE YOU LEFT OFF</span><h3>Recent presentations</h3>{#if recentFiles.length}<ul class="recent-list">{#each recentFiles as entry}<li><button class="recent-item" on:click={() => openRecentFile(entry)}><span class="file-icon" aria-hidden="true">▤</span><span class="recent-title">{entry.title || entry.fileName || 'Untitled'}</span><span aria-hidden="true">→</span></button></li>{/each}</ul>{:else}<p class="muted">Your recently opened decks will appear here.</p>{/if}</div></main>
   {:else}<main class="workspace"><aside class="navigator" aria-label="Slide navigation"><div class="nav-heading"><div><span class="eyebrow">DECK</span><h2>Slides</h2></div><span class="deck-count">{slides.length}</span></div><ol class="slide-list">{#each slides as slide, i}<li><button class:active={i === currentSlide} class="slide-row" aria-current={i === currentSlide ? 'page' : undefined} aria-label="Go to slide {i + 1}: {slide.title || slide.texts?.[0] || 'Slide'}" on:click={() => goToSlide(i)}><span class="row-number">{String(i + 1).padStart(2, '0')}</span><span class="row-preview">{#if slide.type === 'image'}<img src={slide.src} alt="" />{:else if slide.type === 'pptx'}{#if slide.imageUrls?.[0]}<img src={slide.imageUrls[0]} alt="" />{:else}<span class="preview-text">{slide.texts?.[0] || 'Slide'}</span>{/if}{:else}<span class="preview-text">{slide.title || 'Slide'}</span>{/if}</span><span class="row-title">{slide.title || slide.texts?.[0] || 'Slide'}</span></button></li>{/each}</ol><p class="nav-hint">Use ← → to navigate</p></aside>
   <section class="presentation" aria-label="Presentation view"><div class="stage-wrap"><div class="stage" bind:this={stageEl} role="group" aria-label="Slide {currentSlide + 1} of {slides.length}">{#if slides[currentSlide]?.type === 'image'}<img class="slide-image" src={slides[currentSlide].src} alt="Slide {currentSlide + 1}" />{:else if slides[currentSlide]?.type === 'pptx'}<article class="slide-document" data-choir-content>{#each slides[currentSlide].imageUrls || [] as imgUrl}<img class="document-image" src={imgUrl} alt="Image on slide {currentSlide + 1}" />{/each}{#each slides[currentSlide].texts as text}<p>{text}</p>{/each}</article>{:else if slides[currentSlide]?.type === 'html'}<article class="slide-document slide-html" data-choir-content>{@html slides[currentSlide].html}</article>{/if}</div></div>
   <footer class="player-bar"><div class="player-status"><span class="live-dot" aria-hidden="true"></span><span>Slide <strong>{currentSlide + 1}</strong> of {slides.length}</span></div><div class="player-controls"><button class="icon-button" on:click={prevSlide} disabled={currentSlide === 0} aria-label="Previous slide" title="Previous slide (Left arrow)">←</button><span class="slide-position">{slideLabel}</span><button class="icon-button" on:click={nextSlide} disabled={currentSlide === slides.length - 1} aria-label="Next slide" title="Next slide (Right arrow)">→</button><span class="control-divider"></span><button class="icon-button" on:click={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title="Fullscreen (F)">⛶</button></div><span class="keyboard-help">← → navigate · Home / End jump · Esc exit</span></footer></section></main>{/if}
@@ -422,4 +466,6 @@
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (max-width:760px) { .topbar { min-height:62px; padding:0 .85rem; }.brand-mark { width:32px; height:32px; }.brand h1 { max-width:38vw; }.top-actions .deck-count { display:none; }.workspace { grid-template-columns:1fr; grid-template-rows:minmax(110px,30%) 1fr; }.navigator { grid-row:2; padding:.5rem; border-top:1px solid var(--choir-border); border-right:0; }.nav-heading { display:none; }.slide-list { flex-direction:row; }.slide-list li { flex:0 0 138px; }.slide-row { grid-template-columns:18px 48px minmax(0,1fr); gap:.35rem; padding:.3rem; }.row-preview { height:38px; }.nav-hint { display:none; }.presentation { grid-row:1; }.stage-wrap { padding:.6rem; }.player-bar { min-height:48px; padding:.4rem .6rem; }.keyboard-help { display:none; }.welcome { grid-template-columns:1fr; }.slides-shell:fullscreen .workspace { grid-template-columns:1fr; } }
   @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+  .upload-error { color: var(--choir-danger); margin-top: 0.5rem; }
+  :global(.slides-shell[data-drop-active]) { outline: 2px dashed var(--choir-accent); outline-offset: -6px; }
 </style>

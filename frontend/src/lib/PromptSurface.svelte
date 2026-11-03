@@ -14,6 +14,7 @@
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
   import { isSingleHttpUrl, promptContinueTarget } from './prompt-target.js';
+  import { contextMenu, type ContextMenuEntry } from './context-menu';
 
   export let currentUser: any = null;
   export let authenticated = false;
@@ -122,6 +123,21 @@
     else focusWindow(win.windowId);
     sheetOpen = false;
     mobileSwitcherOpen = false;
+  }
+
+  function trayMenuItems(win: any): ContextMenuEntry[] {
+    const act = (action: string) => () => dispatch('windowaction', { windowId: win.windowId, action });
+    const minimized = win.mode === 'minimized';
+    const maximized = win.mode === 'maximized';
+    return [
+      { id: 'show', label: minimized ? 'Restore' : 'Bring to front', onSelect: act(minimized ? 'restore' : 'focus') },
+      { id: 'minimize', label: 'Minimize', disabled: minimized, onSelect: act('minimize') },
+      maximized
+        ? { id: 'restore', label: 'Restore size', onSelect: act('restore') }
+        : { id: 'maximize', label: 'Maximize', onSelect: act('maximize') },
+      { separator: true },
+      { id: 'close', label: 'Close', danger: true, onSelect: act('close') },
+    ];
   }
 
   function launchApp(app: any) {
@@ -297,6 +313,7 @@
         data-window-id={win.windowId}
         title={win.title}
         on:click={() => openWindowFromTray(win)}
+        use:contextMenu={{ label: `${win.title} window`, items: () => trayMenuItems(win) }}
       >
         <span>{win.icon || '□'}</span><small>{win.title}</small>
       </button>

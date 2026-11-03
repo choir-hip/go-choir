@@ -32,3 +32,34 @@ export { AuthRequiredError, fetchWithRenewal } from './auth.js';
 
 // The app registry: which app opens which file kind (Open with).
 export { PACKAGE_MEDIA_ROUTES, getAppDefinition } from './apps/registry';
+export type { PackageMediaRoute } from './apps/packages';
+
+// Context menus: right-click, long press on touch, Shift+F10 and the Menu key.
+export {
+  closeContextMenu,
+  contextMenu,
+  isContextMenuOpen,
+  openContextMenu,
+  placeMenu,
+  placeSubmenu,
+} from './context-menu';
+export type { ContextMenuEntry, ContextMenuItem, ContextMenuOptions, ContextMenuRequest } from './context-menu';
+
+// Open with: the apps that open a file, and the file a window was launched on.
+export { canOpenWith, extensionsOpenedBy, fileExtension, isTextFileName, openersForFile } from './open-with';
+export type { FileOpener } from './open-with';
+export { getLaunchFile, launchFileFromAppContext, launchFileStore } from './launch-file';
+export type { LaunchFile } from './launch-file';
+
+// Upload: the system picker, a list of files, or a drop, into a Files folder.
+export {
+  UploadError,
+  acceptAttribute,
+  createDropZone,
+  dropZone,
+  fileMatchesAccept,
+  pickAndUploadFiles,
+  pickFiles,
+  uploadFiles,
+} from './file-upload';
+export type { DropZoneOptions, UploadFailure, UploadOptions } from './file-upload';

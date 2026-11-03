@@ -4,6 +4,8 @@
   import { getAppDefinition, type ChoirAppDefinition } from './apps/registry';
   import type { ComponentType } from 'svelte';
   import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
+  import { writable } from 'svelte/store';
+  import { provideLaunchContext } from './launch-file';
 
   export let win: any;
   export let currentUser: any = null;
@@ -19,6 +21,11 @@
 
   $: app = getAppDefinition(win?.appId || '');
   $: appContext = { ...(win?.appContext || {}), appId: win?.appId || '' };
+
+  // getLaunchFile() / launchFileStore() in the app read the window's context.
+  const launchContext = writable<any>({});
+  provideLaunchContext(launchContext);
+  $: launchContext.set(appContext);
   $: shellAttrs = app?.theme.shellDataAttr ? { [app.theme.shellDataAttr]: '' } : {};
   $: if (app && app.id !== loadedAppId) {
     void loadComponent(app);

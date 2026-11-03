@@ -73,6 +73,7 @@
     normalizeAppId,
   } from './stores/desktop.js';
   import { PACKAGE_MEDIA_ROUTES } from './apps/registry';
+  import { canOpenWith } from './open-with';
   import {
     createOverviewPreviewDecisions,
     getOverviewPreviewDecision,
@@ -1191,6 +1192,19 @@
     scheduleSave();
   }
 
+  // The taskbar chip's context menu (PromptSurface) acts through the same
+  // handlers as the title bar buttons, so the desktop is saved the same way.
+  function handleTrayWindowAction(event) {
+    const { windowId, action } = event.detail || {};
+    if (!windowId) return;
+    const wrapped = { detail: { windowId } };
+    if (action === 'close') handleWindowClose(wrapped);
+    else if (action === 'minimize') handleWindowMinimize(wrapped);
+    else if (action === 'maximize') handleWindowMaximize(wrapped);
+    else if (action === 'restore') handleWindowRestore(wrapped);
+    else if (action === 'focus') handleWindowFocus(wrapped);
+  }
+
   function handleWindowMove(event) {
     moveWindow(event.detail.windowId, event.detail.x, event.detail.y);
     scheduleSave();
@@ -1412,8 +1426,9 @@
     const appId = detail.appId || '';
     // A package's `opens` routes its file types to its own id (PDF and EPUB to
     // 'reader'), so every app id the package routes name is accepted with the
-    // static media apps.
-    if (!MEDIA_APP_IDS.has(appId)) {
+    // static media apps, and so is any app Open with lists for this file.
+    const fileName = detail.fileName || (detail.pathSegments || []).slice(-1)[0] || '';
+    if (!MEDIA_APP_IDS.has(appId) && !(fileName && canOpenWith(appId, fileName))) {
       showToast(`Could not open ${detail.fileName || 'media file'}`);
       return;
     }
@@ -1424,6 +1439,7 @@
       filePath: detail.filePath || (detail.pathSegments || []).join('/'),
       mediaType: detail.mediaType || '',
       appHint: appId,
+      openedWith: detail.openedWith === 'choice' ? 'choice' : 'default',
       preview: !authenticated,
       allowMultiple: true,
     });
@@ -1686,7 +1702,13 @@
     </div>
 
     <!-- Floating desktop icons (z-index below windows) -->
-    <FloatingDesktopIcons on:launchapp={handleLaunchApp} on:iconpositionschanged={handleIconPositionsChanged} />
+    <FloatingDesktopIcons
+      {authenticated}
+      on:launchapp={handleLaunchApp}
+      on:authrequired={(event) => requestAuth(event.detail || {})}
+      on:toast={(event) => showToast(event.detail?.message || '', { kind: event.detail?.kind || 'info' })}
+      on:iconpositionschanged={handleIconPositionsChanged}
+    />
 
     <!-- Floating windows (rendered on top of icons) -->
     {#if desktopReady}
@@ -1860,6 +1882,7 @@
     on:authrequest={() => requestAuth({ kind: 'sign_in' })}
     on:promptsubmit={handlePromptSubmit}
     on:launchapp={handleLaunchApp}
+    on:windowaction={handleTrayWindowAction}
     on:showoverview={handleShowDesktopOverview}
     on:showdesktop={handleShowDesktop}
   />

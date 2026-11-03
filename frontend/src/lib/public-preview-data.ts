@@ -4,6 +4,7 @@ export const previewFiles = [
   { name: 'welcome-to-choir.md', type: 'file', size: 6200, modified: '2026-05-29T09:00:00Z' },
   { name: 'sample-brief.pdf', type: 'file', size: 384120, modified: '2026-05-29T09:00:00Z' },
   { name: 'reading-room.epub', type: 'file', size: 842880, modified: '2026-05-29T09:00:00Z' },
+  { name: 'quarterly-review.pptx', type: 'file', size: 1204880, modified: '2026-05-29T09:00:00Z' },
 ];
 
 export const previewFolderEntries: Record<string, any[]> = {

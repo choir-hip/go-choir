@@ -14,6 +14,10 @@
     - Error display for permission/other issues
     - Back/forward navigation history
     - Responsive: works in mobile focus mode with >=44px touch targets
+    - Context menu (right-click, long press, Shift+F10) on files, folders and
+      empty space: Open, Open with, Rename, Duplicate, Download, Copy path,
+      Delete, Upload here
+    - Drop files on the window to upload them into the current folder
 
   Data attributes for test targeting:
     data-file-list        — file listing container
@@ -33,12 +37,17 @@
     data-error-message    — error message display
     data-nav-back         — back navigation button
     data-nav-forward      — forward navigation button
+    data-rename-input     — inline rename input on a file row
+    data-files-status     — status line (copied, duplicated, renamed)
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError } from './auth.js';
   import { createEventDispatcher } from 'svelte';
   import { mediaRouteForFileName } from './media-utils.js';
+  import { contextMenu, type ContextMenuEntry } from './context-menu';
+  import { isTextFileName, openersForFile, type FileOpener } from './open-with';
+  import { dropZone, pickAndUploadFiles } from './file-upload';
   import { addLiveEventListener, currentDeviceId, isOwnLiveEvent, liveEventKind, liveEventPayload } from './live-events.js';
   import { previewFiles, previewFolderEntries } from './public-preview-data';
 
@@ -68,6 +77,16 @@
   // Delete confirmation
   let deleteTarget = null; // { name, type }
   let deleteError = '';
+
+  // Rename (inline, like New Folder)
+  let renameTarget = '';
+  let renameValue = '';
+  let renameError = '';
+  let renaming = false;
+
+  // Status line for menu actions (copied, duplicated, renamed)
+  let actionStatus = '';
+  let actionStatusTimer = null;
 
   // Upload state
   let uploadInputEl = null;
@@ -281,6 +300,7 @@
     deleteError = '';
     uploadError = '';
     uploadStatus = '';
+    cancelRename();
 
     // Update history
     // Trim forward history when navigating
@@ -353,6 +373,301 @@
     return false;
   }
 
+  function entrySegments(entry) {
+    return [...currentPath, entry.name];
+  }
+
+  function entryApiPath(entry) {
+    return '/api/files/' + entrySegments(entry).map(encodeURIComponent).join('/');
+  }
+
+  function showActionStatus(message) {
+    actionStatus = message;
+    clearTimeout(actionStatusTimer);
+    actionStatusTimer = setTimeout(() => { actionStatus = ''; }, 4000);
+  }
+
+  // Open with: the user's choice of app for this file (Open keeps the default).
+  function openWith(entry, opener: FileOpener) {
+    const pathSegments = entrySegments(entry);
+    if (opener.via === 'text') {
+      dispatch('opentextfile', { pathSegments, fileName: entry.name });
+      return;
+    }
+    dispatch('openmediafile', {
+      appId: opener.appId,
+      mediaType: opener.mediaType,
+      pathSegments,
+      filePath: pathSegments.join('/'),
+      fileName: entry.name,
+      openedWith: opener.isDefault ? 'default' : 'choice',
+    });
+  }
+
+  function requireAuth(kind = 'file_mutation') {
+    if (authenticated) return true;
+    dispatch('authrequired', { kind, appId: 'files', appName: 'Files' });
+    return false;
+  }
+
+  function startRename(entry) {
+    if (!requireAuth()) return;
+    deleteTarget = null;
+    renameTarget = entry.name;
+    renameValue = entry.name;
+    renameError = '';
+  }
+
+  function cancelRename() {
+    renameTarget = '';
+    renameValue = '';
+    renameError = '';
+  }
+
+  async function commitRename() {
+    const from = renameTarget;
+    const to = renameValue.trim();
+    if (!from) return;
+    if (!to || to === from) {
+      cancelRename();
+      return;
+    }
+    if (to.includes('/') || to.includes('\\')) {
+      renameError = 'Names cannot contain / or \\';
+      return;
+    }
+    if (entries.some((e) => e.name === to)) {
+      renameError = `${to} already exists here.`;
+      return;
+    }
+    if (renaming) return;
+    renaming = true;
+    const fromSegments = [...currentPath, from];
+    const toPath = [...currentPath, to].join('/');
+    const fromUrl = '/api/files/' + fromSegments.map(encodeURIComponent).join('/');
+    try {
+      let res = await fetchWithRenewal(fromUrl, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Choir-Device': currentDeviceId() },
+        body: JSON.stringify({ move_to: toPath }),
+      });
+      // A computer whose move verb is not admitted answers 405: copy the file
+      // to the new name, then delete the old one.
+      if (res.status === 405) res = await renameByCopy(fromUrl, '/api/files/' + [...currentPath, to].map(encodeURIComponent).join('/'));
+      if (res.status === 401) {
+        dispatch('authexpired');
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        renameError = body.error || `Could not rename ${from}.`;
+        return;
+      }
+      cancelRename();
+      showActionStatus(`Renamed to ${to}`);
+      await fetchDirectory(currentPath);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      renameError = `Could not rename ${from}.`;
+    } finally {
+      renaming = false;
+    }
+  }
+
+  async function renameByCopy(fromUrl, toUrl) {
+    const src = await fetchWithRenewal(fromUrl);
+    if (!src.ok) return src;
+    const blob = await src.blob();
+    const put = await fetchWithRenewal(toUrl, {
+      method: 'PUT',
+      headers: { ...(blob.type ? { 'Content-Type': blob.type } : {}), 'X-Choir-Device': currentDeviceId() },
+      body: blob,
+    });
+    if (!put.ok) return put;
+    return fetchWithRenewal(fromUrl, { method: 'DELETE', headers: { 'X-Choir-Device': currentDeviceId() } });
+  }
+
+  function handleRenameKeydown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void commitRename();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelRename();
+    }
+  }
+
+  // "deck.pptx" -> "deck copy.pptx", then "deck copy 2.pptx", ...
+  function copyName(name) {
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    const taken = new Set(entries.map((e) => e.name));
+    for (let n = 1; n < 1000; n += 1) {
+      const candidate = `${base} copy${n > 1 ? ` ${n}` : ''}${ext}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+    return `${base} copy ${Date.now()}${ext}`;
+  }
+
+  async function duplicateEntry(entry) {
+    if (!requireAuth()) return;
+    const target = copyName(entry.name);
+    try {
+      const src = await fetchWithRenewal(entryApiPath(entry));
+      if (src.status === 401) {
+        dispatch('authexpired');
+        return;
+      }
+      if (!src.ok) {
+        error = `Could not read ${entry.name} (${src.status}).`;
+        return;
+      }
+      const blob = await src.blob();
+      const res = await fetchWithRenewal('/api/files/' + [...currentPath, target].map(encodeURIComponent).join('/'), {
+        method: 'PUT',
+        headers: {
+          ...(blob.type ? { 'Content-Type': blob.type } : {}),
+          'X-Choir-Device': currentDeviceId(),
+        },
+        body: blob,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        uploadError = body.error || `Could not duplicate ${entry.name}.`;
+        return;
+      }
+      showActionStatus(`Duplicated as ${target}`);
+      await fetchDirectory(currentPath);
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        dispatch('authexpired');
+        return;
+      }
+      uploadError = `Could not duplicate ${entry.name}.`;
+    }
+  }
+
+  function downloadEntry(entry) {
+    const a = document.createElement('a');
+    a.href = entryApiPath(entry);
+    a.download = entry.name;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function copyPath(entry) {
+    const path = entrySegments(entry).join('/');
+    try {
+      await navigator.clipboard.writeText(path);
+      showActionStatus(`Copied ${path}`);
+    } catch (_err) {
+      showActionStatus(path);
+    }
+  }
+
+  async function uploadInto(folderSegments) {
+    if (!requireAuth('file_upload')) return;
+    uploadError = '';
+    uploadStatus = '';
+    try {
+      uploading = true;
+      const paths = await pickAndUploadFiles({ folder: folderSegments.join('/') });
+      if (!paths.length) return;
+      uploadStatus = paths.length === 1 ? `Uploaded ${paths[0]}` : `Uploaded ${paths.length} files`;
+      await fetchDirectory(currentPath);
+    } catch (err) {
+      if (err?.authRequired) {
+        dispatch('authexpired');
+        return;
+      }
+      uploadError = err?.message || 'Upload failed.';
+      if (err?.paths?.length) await fetchDirectory(currentPath);
+    } finally {
+      uploading = false;
+    }
+  }
+
+  function entryMenuItems(entry): ContextMenuEntry[] {
+    if (entry.type === 'directory') {
+      return [
+        { id: 'open', label: 'Open', onSelect: () => navigateIntoDirectory(entry.name) },
+        { id: 'upload-here', label: 'Upload here…', onSelect: () => void uploadInto(entrySegments(entry)) },
+        { id: 'copy-path', label: 'Copy path', onSelect: () => void copyPath(entry) },
+        { separator: true },
+        { id: 'delete', label: 'Delete…', danger: true, onSelect: () => startDelete(entry) },
+      ];
+    }
+    const openers = openersForFile(entry.name);
+    const items: ContextMenuEntry[] = [
+      { id: 'open', label: 'Open', onSelect: () => handleFileClick(entry) },
+    ];
+    if (openers.length) {
+      items.push({
+        id: 'open-with',
+        label: 'Open with',
+        items: openers.map((opener) => ({
+          id: `open-with:${opener.appId}`,
+          label: opener.isDefault ? `${opener.name} (default)` : opener.name,
+          icon: opener.icon,
+          onSelect: () => openWith(entry, opener),
+        })),
+      });
+    }
+    items.push(
+      { separator: true },
+      { id: 'rename', label: 'Rename…', onSelect: () => startRename(entry) },
+      { id: 'duplicate', label: 'Duplicate', onSelect: () => void duplicateEntry(entry) },
+      { id: 'download', label: 'Download', onSelect: () => downloadEntry(entry) },
+      { id: 'copy-path', label: 'Copy path', onSelect: () => void copyPath(entry) },
+      { separator: true },
+      { id: 'delete', label: 'Delete…', danger: true, onSelect: () => startDelete(entry) },
+    );
+    return items;
+  }
+
+  function backgroundMenuItems(): ContextMenuEntry[] {
+    return [
+      { id: 'upload-here', label: 'Upload here…', onSelect: () => void uploadInto([...currentPath]) },
+      { id: 'new-folder', label: 'New folder', onSelect: handleNewFolderClick },
+      { id: 'refresh', label: 'Refresh', onSelect: () => void fetchDirectory(currentPath) },
+    ];
+  }
+
+  function handleRowKeydown(event, entry) {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleFileClick(entry);
+    } else if (event.key === 'Delete') {
+      event.preventDefault();
+      startDelete(entry);
+    } else if (event.key === 'F2' && entry.type === 'file') {
+      event.preventDefault();
+      startRename(entry);
+    }
+  }
+
+  function handleDroppedUpload(paths) {
+    uploadError = '';
+    uploadStatus = paths.length === 1 ? `Uploaded ${paths[0]}` : `Uploaded ${paths.length} files`;
+    void fetchDirectory(currentPath);
+  }
+
+  function handleDroppedUploadError(err) {
+    if (err?.authRequired) {
+      dispatch('authexpired');
+      return;
+    }
+    uploadError = err?.message || 'Upload failed.';
+    if (err?.paths?.length) void fetchDirectory(currentPath);
+  }
+
   function handleFileClick(entry) {
     if (entry.type === 'directory') {
       navigateIntoDirectory(entry.name);
@@ -406,22 +721,6 @@
     return lower.endsWith('.texture') || lower.endsWith('.texture');
   }
 
-  function isTextFileName(name) {
-    const lower = name.toLowerCase();
-    if (lower === 'makefile' || lower === 'dockerfile') return true;
-    const parts = lower.split('.');
-    const ext = parts.length > 1 ? parts.pop() : '';
-    if (!ext) return true;
-    return [
-      'txt', 'md', 'markdown', 'rst', 'org', 'texture', 'texture',
-      'json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
-      'csv', 'tsv', 'log',
-      'js', 'jsx', 'ts', 'tsx', 'svelte',
-      'go', 'rs', 'py', 'sh', 'bash', 'zsh',
-      'css', 'scss', 'html', 'htm', 'xml', 'svg',
-      'c', 'h', 'cpp', 'hpp', 'java', 'kt', 'swift', 'rb', 'php', 'pl', 'lua', 'sql',
-    ].includes(ext);
-  }
 
   function isTextureImportableDocumentName(name) {
     const lower = String(name || '').toLowerCase();
@@ -475,6 +774,7 @@
       dispatch('authrequired', { kind: 'file_mutation', appId: 'files', appName: 'Files' });
       return;
     }
+    cancelRename();
     deleteTarget = { name: entry.name, type: entry.type };
     deleteError = '';
   }
@@ -511,7 +811,12 @@
   });
 </script>
 
-<div class="file-browser" data-file-list>
+<div
+  class="file-browser"
+  data-file-list
+  use:contextMenu={{ label: 'Folder actions', items: backgroundMenuItems }}
+  use:dropZone={{ folder: currentPath.join('/'), enabled: () => authenticated, onUploaded: handleDroppedUpload, onError: handleDroppedUploadError }}
+>
   <!-- Toolbar: breadcrumb + actions -->
   <div class="toolbar">
     <div class="nav-buttons">
@@ -644,6 +949,10 @@
     </div>
   {/if}
 
+  {#if actionStatus}
+    <div class="status-message" data-files-status role="status">{actionStatus}</div>
+  {/if}
+
   {#if uploadStatus}
     <div class="status-message" data-upload-status role="status">
       {uploadStatus}
@@ -705,10 +1014,30 @@
               class="file-item"
               data-file-item
               data-entry-type={entry.type}
-              on:click={() => handleFileClick(entry)}
+              tabindex="0"
+              role="button"
+              aria-label="{entry.type === 'directory' ? 'Folder' : 'File'} {entry.name}"
+              on:click={() => { if (renameTarget !== entry.name) handleFileClick(entry); }}
+              on:keydown={(event) => handleRowKeydown(event, entry)}
+              use:contextMenu={{ label: `${entry.name} actions`, items: () => entryMenuItems(entry) }}
             >
               <span class="file-icon" data-file-icon>{fileIconFor(entry)}</span>
-              <span class="file-name" data-file-name>{entry.name}</span>
+              {#if renameTarget === entry.name}
+                <!-- svelte-ignore a11y-autofocus -->
+                <input
+                  class="folder-name-input rename-input"
+                  data-rename-input
+                  use:autofocus
+                  bind:value={renameValue}
+                  on:click|stopPropagation
+                  on:keydown|stopPropagation={handleRenameKeydown}
+                  on:blur={() => { if (renameTarget) void commitRename(); }}
+                  aria-label="New name for {entry.name}"
+                />
+                {#if renameError}<span class="inline-error" data-rename-error>{renameError}</span>{/if}
+              {:else}
+                <span class="file-name" data-file-name>{entry.name}</span>
+              {/if}
               {#if entry.type === 'file'}
                 <span class="file-size" data-file-size>{formatFileSize(entry.size)}</span>
                 {#if isTextureImportableDocumentName(entry.name)}
@@ -749,6 +1078,21 @@
     background: var(--choir-state-selected);
     color: var(--choir-text-accent);
     font-size: 0.85rem;
+  }
+
+  :global(.file-browser[data-drop-active]) {
+    outline: 2px dashed var(--choir-accent);
+    outline-offset: -4px;
+  }
+
+  .rename-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .file-item:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: -2px;
   }
 
   /* ---- Toolbar ---- */

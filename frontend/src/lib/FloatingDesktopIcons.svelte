@@ -30,6 +30,12 @@
     selectedIconId,
     moveIcon,
   } from './stores/desktop.js';
+  import { contextMenu, openContextMenu } from './context-menu';
+  import { extensionsOpenedBy } from './open-with';
+  import { mediaRouteForFileName } from './media-utils.js';
+  import { pickAndUploadFiles } from './file-upload';
+
+  export let authenticated = false;
 
   const dispatch = createEventDispatcher();
   const DESKTOP_ICON_WIDTH = 80;
@@ -56,6 +62,12 @@
   let lastPointerX = 0;
   let lastPointerY = 0;
   let dragging = false;
+  // A touch hold that arms drag mode and is released without moving opens the
+  // icon's context menu instead (the long press of touch platforms).
+  let pressIsTouch = false;
+  let movedAfterArm = false;
+  let armX = 0;
+  let armY = 0;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
   let suppressClick = false;
@@ -169,6 +181,54 @@
     dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
   }
 
+  // ---- Context menu: Open, and Upload and open for apps that open files ----
+
+  async function uploadAndOpen(app, exts) {
+    if (!authenticated) {
+      dispatch('authrequired', { kind: 'file_upload', appId: app.id, appName: app.name });
+      return;
+    }
+    try {
+      const paths = await pickAndUploadFiles({ accept: exts, multiple: false });
+      const path = paths[0];
+      if (!path) return;
+      const fileName = path.split('/').pop() || path;
+      const route = mediaRouteForFileName(fileName);
+      dispatch('launchapp', {
+        appId: app.id,
+        appName: app.name,
+        icon: app.icon,
+        appContext: {
+          windowTitle: fileName,
+          fileName,
+          filePath: path,
+          mediaType: route?.mediaType || '',
+          openedWith: 'choice',
+          allowMultiple: true,
+        },
+      });
+    } catch (err) {
+      if (err?.authRequired) {
+        dispatch('authrequired', { kind: 'file_upload', appId: app.id, appName: app.name });
+        return;
+      }
+      dispatch('toast', { message: err?.message || 'Upload failed', kind: 'error' });
+    }
+  }
+
+  function iconMenuItems(app) {
+    const exts = extensionsOpenedBy(app.id);
+    const items = [{ id: 'open', label: 'Open', onSelect: () => dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon }) }];
+    if (exts.length) {
+      items.push({ id: 'upload-open', label: 'Upload and open…', onSelect: () => void uploadAndOpen(app, exts) });
+    }
+    return items;
+  }
+
+  function openIconMenuAt(app, x, y) {
+    openContextMenu({ x, y, label: `${app.name} actions`, items: iconMenuItems(app) });
+  }
+
   function handleKeydown(event, app) {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -176,8 +236,10 @@
   }
 
   /** Handle press start on an icon (mouse or touch). */
-  function beginPress(app, x, y) {
+  function beginPress(app, x, y, isTouch = false) {
     if (pressActive) endPress();
+    pressIsTouch = isTouch;
+    movedAfterArm = false;
     pressActive = true;
     pressAppId = app.id;
     pressStartX = x;
@@ -197,6 +259,9 @@
     pressTimer = 0;
     dragging = true;
     suppressClick = true;
+    armX = lastPointerX;
+    armY = lastPointerY;
+    movedAfterArm = false;
     const surfaceRect = surfaceEl?.getBoundingClientRect();
     const pos = $iconPositions[pressAppId] || { x: 0, y: 0 };
     dragOffsetX = lastPointerX - (surfaceRect?.left || 0) - pos.x;
@@ -217,6 +282,7 @@
       return;
     }
     preventDefault?.();
+    if (Math.abs(x - armX) > DRAG_SLOP_PX || Math.abs(y - armY) > DRAG_SLOP_PX) movedAfterArm = true;
     if (!surfaceEl || !pressAppId) return;
     const rect = surfaceEl.getBoundingClientRect();
     const bounds = safeBounds();
@@ -228,12 +294,18 @@
   /** Handle pointer release — end the press (and any drag). */
   function endPress() {
     if (!pressActive) return;
+    const heldAppId = pressAppId;
     pressActive = false;
     pressAppId = null;
     clearTimeout(pressTimer);
     pressTimer = 0;
     if (dragging) {
       dragging = false;
+      if (pressIsTouch && !movedAfterArm) {
+        const app = DESKTOP_ICON_APPS.find((candidate) => candidate.id === heldAppId);
+        if (app) openIconMenuAt(app, lastPointerX, lastPointerY);
+        return;
+      }
       dispatch('iconpositionschanged');
     }
   }
@@ -253,7 +325,7 @@
   function handleTouchStart(event, app) {
     if (event.touches.length !== 1) return;
     const touch = event.touches[0];
-    beginPress(app, touch.clientX, touch.clientY);
+    beginPress(app, touch.clientX, touch.clientY, true);
   }
 
   function handleTouchMove(event) {
@@ -311,7 +383,7 @@
       on:keydown|stopPropagation={(event) => handleKeydown(event, app)}
       on:mousedown|stopPropagation={(e) => handleMouseDown(e, app)}
       on:touchstart|stopPropagation={(e) => handleTouchStart(e, app)}
-      on:contextmenu|preventDefault|stopPropagation
+      use:contextMenu={{ label: `${app.name} actions`, items: () => iconMenuItems(app), longPress: false }}
       role="button"
       tabindex="0"
       aria-label={app.name}
