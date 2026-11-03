@@ -62,7 +62,12 @@ it.
    admission charges each computer the larger of its settled RSS and its
    idle footprint plus live build reservations. A `build` spawn the host
    cannot cover is refused at spawn, visibly, rather than admitted and
-   killed later.
+   killed later: one report and answer per `build` spawn, never per job.
+   For a running computer the live reservations join vmctl's shared
+   `reserved` term, so the next admission anywhere sees them. A reported
+   reservation is clamped to the guest's remaining ceiling, released when
+   its capsule ends, and expires on guest death by the reservation
+   ledger's existing in-flight TTL.
 2. **CPU by weight.** Capsule and job cgroups get `cpu.weight` (build jobs
    below interactive guest work); no CPU admission anywhere.
 3. **Host pressure published, read locally.** vmctl writes the host's
@@ -79,7 +84,8 @@ it.
    content it already trusts: npm tarballs against the lockfile's
    `integrity` hashes, Go modules against `go.sum` and the checksum
    database, the Playwright Chromium layer from the Nix store. The host
-   fetches them (the capsule mirrors path, `choir_capsule_mirrors`); a
+   fetches them (the capsule mirrors path, `choir_capsule_mirrors`, on at
+   d@e since 0336c8bfe and widened with this work); a
    capsule never writes a shared entry. Built outputs (the Go build cache,
    Vite and package builds) stay per computer: hits across one computer's
    capsules are fine, and a poisoned entry harms only the computer that
@@ -126,7 +132,8 @@ answered above. Deployed admission is measured, so vmctl does not count the
 ceiling (point 1 now reports build reservations into measured admission).
 A cross-computer cache written by capsules can be poisoned (point 4 now
 shares only consumer-verified, host-fetched downloads and keeps build
-outputs per computer). Round 2 pending.
+outputs per computer). Round 2: accept (reservation clamp, lifecycle and
+the running-computer charge folded in above).
 
 ## Rollback
 
