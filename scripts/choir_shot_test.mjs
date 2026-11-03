@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseArgs, plan } from './choir-shot.mjs';
+import { missingDependencies, parseArgs, plan } from './choir-shot.mjs';
 
 const throws = (f, re) => assert.throws(f, re);
 throws(() => parseArgs([]), /--shots FILE is required/);
@@ -25,6 +25,16 @@ assert.deepEqual(plan(shots, parseArgs(['--shots', 'x'])).map((i) => i.file), ['
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'home', '--preset', 'mobile,desktop'])).map((i) => i.file), ['home-mobile.png', 'home.png']);
 assert.deepEqual(plan(shots, parseArgs(['--shots', 'x', '--only', 'detail', '--size', '1000x700'])).map((i) => [i.file, i.viewport.width]), [['detail-1000x700.png', 1000]]);
 
+// A locked tree that lacks a package.json dependency is named, not built against.
+{
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-deps-'));
+  fs.mkdirSync(path.join(d, 'node_modules', 'have'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'node_modules', 'have', 'package.json'), '{}');
+  fs.mkdirSync(path.join(d, 'fe'));
+  fs.writeFileSync(path.join(d, 'fe', 'package.json'), JSON.stringify({ dependencies: { have: '1', gone: '1' }, devDependencies: { alsogone: '1' } }));
+  assert.deepEqual(missingDependencies(path.join(d, 'fe'), path.join(d, 'node_modules')), ['gone', 'alsogone']);
+}
+
 if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-test-'));
   const file = path.join(dir, 'shots.mjs');
@@ -34,8 +44,19 @@ if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   ];`);
   const out = path.join(dir, 'screens');
   const run = (...a) => spawnSync('node', [new URL('./choir-shot.mjs', import.meta.url).pathname, '--shots', file, '--out', out, ...a], { encoding: 'utf8' });
+  // Problem 18: a stray frontend/node_modules (a .vite cache dir, a half install)
+  // must not hide the locked dependencies from the build, and must be left alone.
+  const fe = new URL('../frontend/', import.meta.url).pathname;
+  const stray = path.join(fe, 'node_modules');
+  const hadStray = fs.existsSync(stray);
+  if (!hadStray) fs.mkdirSync(path.join(stray, '.vite'), { recursive: true });
   const one = run('--only', 'shell', '--preset', 'mobile');
-  assert.equal(one.status, 0, one.stdout + one.stderr);
+  try {
+    assert.equal(one.status, 0, one.stdout + one.stderr);
+    assert.ok(fs.existsSync(path.join(stray, '.vite')) || hadStray, 'the helper changed the workspace node_modules');
+  } finally {
+    if (!hadStray) fs.rmSync(stray, { recursive: true, force: true });
+  }
   assert.deepEqual(fs.readdirSync(out), ['shell-mobile.png']);
   assert.equal(fs.readFileSync(path.join(out, 'shell-mobile.png')).subarray(1, 4).toString(), 'PNG');
   // A shot whose selector never appears fails alone, names itself, and the others are still taken.

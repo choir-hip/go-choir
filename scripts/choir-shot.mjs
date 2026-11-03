@@ -33,7 +33,7 @@
 // before choir.Freeze (a change no one looks at needs no shot).
 //
 // Run it as a capsule job (choir.Start), not a choir.Exec: a first build and a
-// browser start outlast 30 s. It leaves /workspace/platform as it found it.
+// browser start outlast 30 s. It does not touch /workspace/platform (the build runs in a private copy under /tmp).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -115,37 +115,50 @@ function sourceHash(frontend) {
   return h.digest('hex').slice(0, 16);
 }
 
-// build runs vite once per source hash, into /tmp, and returns the dist dir.
+// build runs vite once per source hash, in a private copy of the frontend under
+// /tmp whose node_modules is a link to $CHOIR_FRONTEND_DEPS/node_modules. It
+// never reads or writes /workspace/platform/frontend/node_modules: a directory
+// an earlier run or the engineer left there (a stray .vite cache, a half
+// install) hid the locked dependencies from the build ("could not resolve
+// @chenglou/pretext", problem 18), and a link made there could freeze into the
+// candidate. Vite follows the link (resolve.preserveSymlinks is off), so a
+// dependency resolves through the read-only Nix tree and its real path.
 function build(frontend, deps) {
   const cacheRoot = '/tmp/choir-shot';
-  const dist = path.join(cacheRoot, sourceHash(frontend), 'dist');
-  if (fs.existsSync(path.join(dist, 'index.html'))) {
+  const key = path.join(cacheRoot, sourceHash(frontend));
+  const dist = path.join(key, 'dist');
+  if (fs.existsSync(path.join(key, 'done'))) {
     console.log(`choir-shot: build cached (${dist})`);
     return dist;
   }
-  const nm = path.join(frontend, 'node_modules');
-  const target = path.join(deps, 'node_modules');
-  let stale = false; // a link a killed earlier run left behind is ours to remove
-  try { stale = fs.readlinkSync(nm) === target; } catch {}
-  if (stale) fs.rmSync(nm, { force: true });
-  const linked = stale || !fs.existsSync(nm);
-  if (linked) fs.symlinkSync(target, nm);
-  const unlink = () => { if (linked) fs.rmSync(nm, { force: true, recursive: true }); };
-  const onSignal = () => { unlink(); process.exit(143); };
-  process.once('SIGTERM', onSignal);
-  process.once('SIGINT', onSignal);
-  try {
-    const t = Date.now();
-    const r = spawnSync(path.join(nm, '.bin', 'vite'), ['build', '--outDir', dist, '--emptyOutDir'], { cwd: frontend, stdio: 'inherit' });
-    if (r.status !== 0) throw new Error(`vite build failed (exit ${r.status}); fix it, the full npm run build prints the same error`);
-    console.log(`choir-shot: built in ${((Date.now() - t) / 1000).toFixed(1)} s`);
-  } finally {
-    unlink();
-    process.removeListener('SIGTERM', onSignal);
-    process.removeListener('SIGINT', onSignal);
+  const depsModules = path.join(deps, 'node_modules');
+  const missing = missingDependencies(frontend, depsModules);
+  if (missing.length) {
+    throw new Error(`the locked dependency tree ${depsModules} lacks ${missing.join(', ')}: package.json changed since the tree was built, so the shots need an npm ci round with network "ecosystem_proxy" (a build job does that); nothing here can install them`);
   }
-  for (const d of fs.readdirSync(cacheRoot)) if (path.join(cacheRoot, d) !== path.dirname(dist)) fs.rmSync(path.join(cacheRoot, d), { recursive: true, force: true });
+  const work = path.join(key, 'work');
+  fs.rmSync(key, { recursive: true, force: true });
+  fs.mkdirSync(work, { recursive: true });
+  for (const e of fs.readdirSync(frontend)) {
+    if (['node_modules', 'dist', 'tests', '.vite'].includes(e)) continue;
+    fs.cpSync(path.join(frontend, e), path.join(work, e), { recursive: true });
+  }
+  fs.symlinkSync(depsModules, path.join(work, 'node_modules'));
+  const t = Date.now();
+  const r = spawnSync(path.join(work, 'node_modules', '.bin', 'vite'), ['build', '--outDir', dist, '--emptyOutDir'], { cwd: work, stdio: 'inherit' });
+  fs.rmSync(work, { recursive: true, force: true });
+  if (r.status !== 0) throw new Error(`vite build failed (exit ${r.status}); the full npm run build prints the same error`);
+  console.log(`choir-shot: built in ${((Date.now() - t) / 1000).toFixed(1)} s`);
+  fs.writeFileSync(path.join(key, 'done'), ''); // a build killed midway has no marker and is redone
+  for (const d of fs.readdirSync(cacheRoot)) if (path.join(cacheRoot, d) !== key) fs.rmSync(path.join(cacheRoot, d), { recursive: true, force: true });
   return dist;
+}
+
+// missingDependencies names each package.json dependency and dev that the
+// locked tree does not hold, so a stale tree fails here with its cause.
+export function missingDependencies(frontend, depsModules) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(frontend, 'package.json'), 'utf8'));
+  return Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).filter((n) => !fs.existsSync(path.join(depsModules, n, 'package.json')));
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
