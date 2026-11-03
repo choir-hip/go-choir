@@ -777,3 +777,32 @@ Each decided switch is deleted; "on" means the code runs everywhere.
   memory usage. cant undo that").
 - `store.compact_force`, `management.serial_tasks`, `store.debounced_checkpoint`,
   `store.trace_log`: deleted.
+
+**Group 4, host.**
+- Balloon stats, guest DNS (with an Unbound health check), receipt
+  compaction, layered images: on everywhere, one batched cold boot. DAMON
+  reclaim, `VMCTL_PRIMARY_KEEPALIVE_MODE`, `VMCTL_STOP_MANAGED_ON_EXIT`:
+  deleted.
+- Diff snapshots: on everywhere. The Firecracker >= 1.15 check is deleted
+  (the flake pins 1.17.0, so it is dead weight; owner: "protect against real
+  issues. but not fake ones"). The swap, cold-origin and huge-page checks
+  stay: they are what makes a mincore Diff correct (a skipped page must read
+  as zero), and Node B has a swap device. No new wake hash check.
+- Checkpoint cadence: the append hold is fixed first (a no-hold checkpoint,
+  as the snapshot producer already does), then on everywhere.
+- Capsule tunnel enforcement: one Claude-delegate capsule session shows a
+  clean pass on the Claude arm, then enforce for every capsule; the observe
+  mode is deleted.
+
+**Group 5, packages, files, app desks.**
+- `files.object` (after its reader fix), `app_packages.objects`,
+  `packages.publish`, `packages.share`: on everywhere; publish and share are
+  the Library's normal path.
+- App desks (`appdesk`, `appnet`, `egressgrant`, `CHOIR_APP_DESKS`): wired
+  and on, as part of the accelerated Library work.
+
+**Group 6, Autopaper.**
+- `intake.event_wakes`: not deleted. Owner: "lets get to the bottom of this
+  ... i dont want to remove stuff which may just need fixing". A root-cause
+  investigation of the three false-merge failures goes to the Autopaper
+  section that follows progressive delivery and self-development.
