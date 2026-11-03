@@ -155,6 +155,8 @@ export const USAGE = `usage: node scripts/choir-shot.mjs --shots FILE [options]
   --open APP        open a package app in the shell before the shot
   --out DIR         PNG directory (default /var/lib/artifact/screens)
   --list            print the file names the run would write and exit
+  --fail-fast       stop at the first failed shot (the default for a run without --only)
+  --keep-going      take every shot even after one fails (the default with --only)
   --no-computer     mock the backend instead of starting the autoputer over /computer
   --help            print this usage
 
@@ -172,7 +174,7 @@ export function autoputerLogPath(out) {
 
 export function parseArgs(argv, knownThemes = null) {
   if (argv.includes('--help') || argv.includes('-h')) return { help: true };
-  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true };
+  const o = { shots: '', only: [], presets: [], themes: [], contrast: '', open: '', size: '', out: '/var/lib/artifact/screens', list: false, computer: true, failFast: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -188,10 +190,13 @@ export function parseArgs(argv, knownThemes = null) {
     else if (a === '--size') o.size = val();
     else if (a === '--out') o.out = val();
     else if (a === '--list') o.list = true;
+    else if (a === '--fail-fast') o.failFast = true;
+    else if (a === '--keep-going') o.failFast = false;
     else if (a === '--no-computer') o.computer = false;
     else throw new Error(`unknown flag ${a}`);
   }
   if (!o.shots) throw new Error('--shots FILE is required (an ES module whose default export is a list of shots)');
+  if (a0(argv, '--fail-fast') && a0(argv, '--keep-going')) throw new Error('--fail-fast and --keep-going are exclusive');
   if (o.size && o.presets.length) throw new Error('--size and --preset are exclusive');
   if (o.size && !/^\d{2,5}x\d{2,5}$/.test(o.size)) throw new Error(`--size ${o.size}: want WIDTHxHEIGHT, such as 1000x700`);
   for (const p of o.presets) if (!PRESETS[p]) throw new Error(`--preset ${p}: want one of ${Object.keys(PRESETS).join(', ')}`);
@@ -611,7 +616,7 @@ async function startAutoputer(root, holder) {
   return child;
 }
 
-function sourceHash(frontend) {
+export function sourceHash(frontend) {
   const h = createHash('sha256');
   const walk = (p) => {
     for (const e of fs.readdirSync(p, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
@@ -788,9 +793,44 @@ async function measureContrast(page, it, decode, out, appId) {
 // verdictLine is the one line a run ends with, so a failed run never reads as
 // done when its output is cut or piped: "choir-shot: OK n/n shots" or
 // "choir-shot: FAILED k/n: <first error>".
-export function verdictLine(total, failures) {
+export function verdictLine(total, failures, skipped = 0) {
   if (failures.length === 0) return `choir-shot: OK ${total}/${total} shots`;
-  return `choir-shot: FAILED ${failures.length}/${total}: ${failures[0].file}: ${failures[0].error}`;
+  const tail = skipped ? ` (${skipped} not run: fail-fast)` : '';
+  return `choir-shot: FAILED ${failures.length}/${total}: ${failures[0].file}: ${failures[0].error}${tail}`;
+}
+
+// failFastFor: a run of the whole set stops at its first failure (a 12-shot
+// run is about 5 minutes, and the later shots of a broken page or backend fail
+// the same way); a run with --only names the shots it wants and is short, so
+// it takes them all. --fail-fast and --keep-going override either way.
+export function failFastFor(o) {
+  return o.failFast ?? o.only.length === 0;
+}
+
+// runShots takes each item in turn, printing its OK or FAILED line the moment
+// it finishes (stdout, so a job's tail shows progress), and under failFast
+// stops at the first failure. runOne throws to fail a shot.
+export async function runShots(items, runOne, { failFast, log = console.log }) {
+  const failures = [];
+  let skipped = 0;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const t = Date.now();
+    try {
+      await runOne(it);
+      log(`choir-shot: shot ${i + 1}/${items.length} OK ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
+    } catch (e) {
+      const msg = String(e.message || e).split('\n')[0];
+      failures.push({ file: it.file, error: msg });
+      log(`choir-shot: shot ${i + 1}/${items.length} FAILED ${it.file}: ${msg}`);
+      if (failFast) {
+        skipped = items.length - i - 1;
+        if (skipped) log(`choir-shot: --fail-fast: stopped after ${it.file}; ${skipped} shot${skipped === 1 ? '' : 's'} not run (--keep-going takes them all)`);
+        break;
+      }
+    }
+  }
+  return { failures, skipped };
 }
 
 async function main() {
@@ -837,12 +877,12 @@ async function main() {
   const decode = items.some((it) => it.contrast) ? loadPngDecoder(req) : null;
   fs.mkdirSync(o.out, { recursive: true });
   const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const failed = [];
-  const failures = [];
+  let failures = [];
+  let skipped = 0;
+  // A PNG from an earlier run is never left for a shot that fails or is not run (--fail-fast): Freeze would admit it.
+  for (const it of items) { try { fs.rmSync(path.join(o.out, it.file), { force: true }); } catch { /* none */ } }
   try {
-    for (const it of items) {
-      const t = Date.now();
-      try { fs.rmSync(path.join(o.out, it.file), { force: true }); } catch { /* none */ }
+    ({ failures, skipped } = await runShots(items, async (it) => {
       const context = await browser.newContext({ viewport: it.viewport, ...it.device });
       try {
         const s = it.shot;
@@ -874,16 +914,10 @@ async function main() {
           console.log(`choir-shot: ${it.file} shows the catalog fixture (${CATALOG_FIXTURE_PATH}), not the live catalog`);
         }
         if (it.contrast) await measureContrast(page, it, decode, o.out, appId);
-        console.log(`choir-shot: ${it.file} ${((Date.now() - t) / 1000).toFixed(1)} s`);
-      } catch (e) {
-        const msg = String(e.message || e).split('\n')[0];
-        failed.push(it.file);
-        failures.push({ file: it.file, error: msg });
-        console.error(`choir-shot: ${it.file} FAILED: ${msg}`);
       } finally {
         await context.close();
       }
-    }
+    }, { failFast: failFastFor(o) }));
   } finally {
     await browser.close();
     server.close();
@@ -891,9 +925,10 @@ async function main() {
   }
   const have = fs.readdirSync(o.out).filter((f) => f.endsWith('.png')).length;
   if (have > 12) console.warn(`choir-shot: ${have} PNGs in ${o.out}; Freeze takes at most 12`);
+  const failed = failures.map((f) => f.file);
   if (failed.length && useComputer) console.error(`choir-shot: the autoputer's output is in ${holder.log}`);
-  console.log(JSON.stringify({ shots: items.length - failed.length, failed, out: o.out }));
-  const verdict = verdictLine(items.length, failures);
+  console.log(JSON.stringify({ shots: items.length - failed.length - skipped, failed, skipped, out: o.out }));
+  const verdict = verdictLine(items.length, failures, skipped);
   console.log(verdict); // stdout, after the JSON summary: the last line of the run
   return failed.length ? 1 : 0;
 }

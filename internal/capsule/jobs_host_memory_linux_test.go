@@ -207,3 +207,36 @@ func TestJobWaitsForItsDeclaredMemoryNotTheBuildPeak(t *testing.T) {
 		t.Fatalf("need for none: %d", got)
 	}
 }
+
+// A shot job with a cached build is defaulted to 1536 MiB and starts in
+// 2310 MiB; the view says so. An uncached one keeps the claim and waits with
+// the memory_mib hint.
+func TestStartJobDefaultsCachedShotMemory(t *testing.T) {
+	headroom := HostMemoryFacts{HeadroomBytes: 2310 << 20}
+	f, _, _ := newWaitFixture(t, headroom, true, SizeClassBuild)
+	cached := shotCapsule(t, true)
+	f.caps.MergedDir = cached.MergedDir
+	argv := []string{"sh", "-c", "node /workspace/platform/scripts/choir-shot.mjs --shots /tmp/s.mjs"}
+	view, err := f.executor.StartJob(context.Background(), "run-job", "handle-job", JobRequest{ID: "job-cached", Argv: argv})
+	if view.State == capsulejob.StateWaiting {
+		t.Fatalf("a cached shot waited: %+v", view)
+	}
+	_ = err // the fixture's broker refuses; the job was admitted past the wait
+	if j := f.executor.jobs["job-cached"]; j != nil && j.spec.MemoryMiB != 1536 {
+		t.Fatalf("spec memory %d", j.spec.MemoryMiB)
+	}
+
+	f2, _, _ := newWaitFixture(t, headroom, true, SizeClassBuild)
+	f2.caps.MergedDir = shotCapsule(t, false).MergedDir
+	view, err = f2.executor.StartJob(context.Background(), "run-job", "handle-job", JobRequest{ID: "job-fresh", Argv: argv})
+	if err != nil || view.State != capsulejob.StateWaiting || !strings.HasSuffix(view.Reason, memoryMiBHint) {
+		t.Fatalf("uncached shot: %+v %v", view, err)
+	}
+
+	f3, _, _ := newWaitFixture(t, HostMemoryFacts{HeadroomBytes: 100 << 20}, true, SizeClassBuild)
+	f3.caps.MergedDir = cached.MergedDir
+	view, _ = f3.executor.StartJob(context.Background(), "run-job", "handle-job", JobRequest{ID: "job-short", Argv: argv})
+	if view.State != capsulejob.StateWaiting || view.MemoryMiB != 1536 || !strings.Contains(view.Reason, shotDefaultNote) || view.MemoryNote != shotDefaultNote {
+		t.Fatalf("defaulted wait view: %+v", view)
+	}
+}

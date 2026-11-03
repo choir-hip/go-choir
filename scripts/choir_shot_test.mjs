@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   autoputerEnv, isProxied, missingDependencies, pickAutoputerBinary, parseArgs, plan, themeIdsFrom, themeSeedScript, themeAnswer,
-  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop,
+  openApp, collectTextNodes, parseColor, over, resolveBackground, contrastRatio, requiredRatio, samplePixels, measureNode, summarizeContrast, contrastDir, USAGE, autoputerLogPath, verdictLine, resetDesktop, runShots, failFastFor,
   loadCatalogFixture, catalogAnswer, CATALOG_FIXTURE_HEADER, CATALOG_FIXTURE_BADGE, fixtureBadge, windowProblem, checkAppWindow,
 } from './choir-shot.mjs';
 
@@ -339,7 +339,8 @@ if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   // A shot whose selector never appears fails alone, names itself, and the others are still taken.
   const both = run();
   assert.equal(both.status, 1);
-  assert.match(both.stderr, /broken\.png FAILED/);
+  assert.match(both.stdout, /^choir-shot: shot 2\/2 FAILED broken\.png: /m);
+  assert.match(both.stdout, /^choir-shot: shot 1\/2 OK shell\.png /m);
   assert.match(both.stdout.trimEnd().split('\n').pop(), /^choir-shot: FAILED 1\/2: broken\.png: /);
   assert.match(one.stdout, /^choir-shot: OK 1\/1 shots$/m);
   assert.ok(fs.existsSync(path.join(out, 'shell.png')));
@@ -348,6 +349,39 @@ if (process.env.CHOIR_FRONTEND_DEPS && process.env.CHOIR_BROWSER) {
   console.log('choir_shot_test: no CHOIR_FRONTEND_DEPS/CHOIR_BROWSER; skipped the real run');
 }
 console.log('choir_shot_test: ok');
+
+// Per-shot lines and --fail-fast. A 12-shot run takes about 5 minutes; the first failure
+// used to show only in the final line.
+{
+  assert.equal(parseArgs(['--shots', 'x']).failFast, undefined);
+  assert.equal(parseArgs(['--shots', 'x', '--fail-fast']).failFast, true);
+  assert.equal(parseArgs(['--shots', 'x', '--keep-going']).failFast, false);
+  throws(() => parseArgs(['--shots', 'x', '--fail-fast', '--keep-going']), /exclusive/);
+  // A full run (no --only) stops at the first failure by default; an --only run does not.
+  assert.equal(failFastFor(parseArgs(['--shots', 'x'])), true);
+  assert.equal(failFastFor(parseArgs(['--shots', 'x', '--only', 'a'])), false);
+  assert.equal(failFastFor(parseArgs(['--shots', 'x', '--keep-going'])), false);
+  assert.equal(failFastFor(parseArgs(['--shots', 'x', '--only', 'a', '--fail-fast'])), true);
+
+  const items = ['a.png', 'b.png', 'c.png', 'd.png'].map((file) => ({ file }));
+  const mk = (bad) => async (it) => { if (bad.includes(it.file)) throw new Error(`boom ${it.file}\nstack`); };
+  const lines = [];
+  const log = (l) => lines.push(l);
+  let r = await runShots(items, mk(['b.png', 'd.png']), { failFast: false, log });
+  assert.deepEqual(r.failures.map((f) => f.file), ['b.png', 'd.png']);
+  assert.equal(r.skipped, 0);
+  assert.match(lines[0], /^choir-shot: shot 1\/4 OK a\.png \d+\.\d s$/);
+  assert.equal(lines[1], 'choir-shot: shot 2/4 FAILED b.png: boom b.png');
+  assert.equal(lines.length, 4); // one line per shot, as each finishes
+  lines.length = 0;
+  r = await runShots(items, mk(['b.png', 'd.png']), { failFast: true, log });
+  assert.deepEqual(r.failures.map((f) => f.file), ['b.png']);
+  assert.equal(r.skipped, 2);
+  assert.equal(lines.length, 3);
+  assert.match(lines[2], /^choir-shot: --fail-fast: stopped after b\.png; 2 shots not run \(--keep-going takes them all\)$/);
+  assert.equal(verdictLine(4, r.failures, r.skipped), 'choir-shot: FAILED 1/4: b.png: boom b.png (2 not run: fail-fast)');
+  assert.equal(verdictLine(4, [], 0), 'choir-shot: OK 4/4 shots');
+}
 
 // Each shot starts from a clean desktop: the reset PUTs an empty window list as the driver.
 {
@@ -371,3 +405,13 @@ assert.match(windowProblem('library-next', [{ visible: true, minimized: false, w
   await assert.rejects(checkAppWindow(page({ wins: [], chip: true }), 'library-next'), /no window for library-next on screen at capture/);
 }
 console.log('choir-shot: no-window checks ok');
+
+// A no-window failure (checkAppWindow throws) takes the per-shot FAILED line and counts for --fail-fast.
+{
+  const lines = [];
+  const page = { evaluate: async () => ({ wins: [], chip: true }) };
+  const r = await runShots([{ file: 'x.png' }, { file: 'y.png' }], async (it) => { if (it.file === 'x.png') await checkAppWindow(page, 'library-next'); }, { failFast: true, log: (l) => lines.push(l) });
+  assert.equal(r.failures.length, 1);
+  assert.equal(r.skipped, 1);
+  assert.match(lines[0], /^choir-shot: shot 1\/2 FAILED x\.png: no window for library-next/);
+}

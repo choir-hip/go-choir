@@ -58,10 +58,12 @@ type capsuleJob struct {
 	spec        capsulejob.Spec
 	notify      map[string]string
 	startDigest string
-	status      capsulejob.Status
-	receiptRef  string
-	logRef      string
-	done        chan struct{}
+	// memoryNote says the executor defaulted spec.MemoryMiB (job_shot_default.go).
+	memoryNote string
+	status     capsulejob.Status
+	receiptRef string
+	logRef     string
+	done       chan struct{}
 }
 
 // jobRecord is a job's durable record under the artifact root: what the
@@ -96,11 +98,16 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	if capability.AgentRole != RoleEngineering {
 		return yaegikernel.JobView{}, fmt.Errorf("capsule jobs are engineering's")
 	}
+	memoryNote := ""
 	spec, err := capsulejob.Spec{ID: req.ID, Owner: agentRunID, Argv: req.Argv, Cwd: req.Cwd, WallClockMS: req.WallClockMS, MemoryMiB: req.MemoryMiB}.Normalize()
 	if err != nil {
 		return yaegikernel.JobView{}, err
 	}
-	job := &capsuleJob{agentRunID: agentRunID, handle: handle, capsuleID: caps.ID, spec: spec, notify: req.Notify, done: make(chan struct{})}
+	if mib, note := defaultShotMemory(caps, spec.Argv, spec.Cwd, spec.MemoryMiB); note != "" {
+		spec.MemoryMiB = mib
+		memoryNote = note
+	}
+	job := &capsuleJob{memoryNote: memoryNote, agentRunID: agentRunID, handle: handle, capsuleID: caps.ID, spec: spec, notify: req.Notify, done: make(chan struct{})}
 	e.mu.Lock()
 	if e.jobs == nil {
 		e.jobs = map[string]*capsuleJob{}
@@ -128,12 +135,12 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	// declared memory_mib, else one build's peak) over its floor, it waits, visibly, and starts when that clears.
 	if hm != nil && caps.Spec.SizeClass.HostReservationBytes() > 0 {
 		facts, fresh := hm.Facts()
-		if reason := HostMemoryWaitReasonFor(facts, fresh, JobHostNeedBytes(spec.MemoryMiB)); reason != "" {
+		if reason := jobWaitReason(job, facts, fresh); reason != "" {
 			e.mu.Lock()
 			job.waiting = true
 			job.status = capsulejob.Status{ID: spec.ID, State: capsulejob.StateWaiting, Argv: append([]string(nil), spec.Argv...),
 				Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, Reason: reason + jobHoldersNote(e.jobs, job, time.Now())}
-			view := jobView(job.status, "", "")
+			view := job.view(job.status, "", "")
 			e.mu.Unlock()
 			e.persistJobRecord(job)
 			log.Printf("capsule: job %s in capsule %s %s", spec.ID, caps.ID, reason)
@@ -181,7 +188,7 @@ func (e *Executor) launchJob(ctx context.Context, job *capsuleJob, capability *C
 	e.mu.Unlock()
 	e.persistJobRecord(job)
 	go e.watchJob(job)
-	return jobView(st, "", ""), nil
+	return job.view(st, "", ""), nil
 }
 
 // claimWaitingJob ends a job's wait: true for the one caller that clears it.
@@ -233,7 +240,7 @@ func (e *Executor) waitForHostMemory(job *capsuleJob, hm HostMemory, since time.
 			return
 		}
 		facts, fresh := hm.Facts()
-		reason := HostMemoryWaitReasonFor(facts, fresh, JobHostNeedBytes(job.spec.MemoryMiB))
+		reason := jobWaitReason(job, facts, fresh)
 		if reason != "" && time.Since(since) < maxWait {
 			e.mu.Lock()
 			job.status.Reason = reason + jobHoldersNote(e.jobs, job, time.Now())
@@ -311,7 +318,7 @@ func (e *Executor) StopJob(ctx context.Context, agentRunID, handle, id string) (
 	if e.claimWaitingJob(job) {
 		e.finishJob(job, nil, capsulejob.StateStopped, "stopped while waiting for host memory")
 		e.mu.RLock()
-		view := jobView(job.status, "", "")
+		view := job.view(job.status, "", "")
 		e.mu.RUnlock()
 		return view, nil
 	}
@@ -319,7 +326,7 @@ func (e *Executor) StopJob(ctx context.Context, agentRunID, handle, id string) (
 	if err != nil {
 		return yaegikernel.JobView{}, fmt.Errorf("job %s: %w", id, err)
 	}
-	return jobView(st, "", ""), nil
+	return job.view(st, "", ""), nil
 }
 
 // RunningJob reports the run's running job, if it has one, and when its
@@ -340,7 +347,7 @@ func (e *Executor) RunningJob(agentRunID string) (yaegikernel.JobView, time.Time
 		if started.IsZero() {
 			started = time.Now()
 		}
-		return jobView(job.status, "", ""), started.Add(job.spec.WallClock()), true
+		return job.view(job.status, "", ""), started.Add(job.spec.WallClock()), true
 	}
 	return yaegikernel.JobView{}, time.Time{}, false
 }
@@ -360,7 +367,7 @@ func (e *Executor) RunningJobInCapsule(capsuleID string) (yaegikernel.JobView, b
 			continue
 		default:
 		}
-		return jobView(job.status, "", ""), true
+		return job.view(job.status, "", ""), true
 	}
 	return yaegikernel.JobView{}, false
 }
@@ -377,7 +384,7 @@ func (e *Executor) JobViews(agentRunID string) []yaegikernel.JobView {
 	views := make([]yaegikernel.JobView, 0, len(jobs))
 	sort.Slice(jobs, func(i, k int) bool { return jobs[i].status.StartedAt.Before(jobs[k].status.StartedAt) })
 	for _, job := range jobs {
-		views = append(views, jobView(job.status, job.receiptRef, job.logRef))
+		views = append(views, job.view(job.status, job.receiptRef, job.logRef))
 	}
 	e.mu.RUnlock()
 	return views
@@ -481,7 +488,7 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 		job.receiptRef = receipt.ReceiptRef
 	}
 	handler := e.jobDone
-	view := jobView(st, job.receiptRef, job.logRef)
+	view := job.view(st, job.receiptRef, job.logRef)
 	e.mu.Unlock()
 	// Memory first, while the job still reads as running: no next job in
 	// the capsule can raise the cgroup while this one is lowered.
@@ -611,4 +618,12 @@ func (e *Executor) closeInterruptedJobs() []string {
 		log.Printf("capsule: closed %d job(s) open before this boot as interrupted by a restart: %s", len(closed), strings.Join(closed, ", "))
 	}
 	return closed
+}
+
+// view projects the job for a cell, with its memory claim when the executor
+// defaulted it.
+func (j *capsuleJob) view(st capsulejob.Status, receiptRef, logRef string) yaegikernel.JobView {
+	v := jobView(st, receiptRef, logRef)
+	v.MemoryMiB, v.MemoryNote = j.spec.MemoryMiB, j.memoryNote
+	return v
 }

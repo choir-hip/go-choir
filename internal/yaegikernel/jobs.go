@@ -42,6 +42,10 @@ type JobView struct {
 	ElapsedSec   int64    `json:"elapsed_sec"`
 	WallClockSec int64    `json:"wall_clock_sec"`
 	OutputBytes  int64    `json:"output_bytes"`
+	// MemoryMiB is the job's declared memory claim; MemoryNote says the
+	// executor defaulted it.
+	MemoryMiB  int    `json:"memory_mib,omitempty"`
+	MemoryNote string `json:"memory_note,omitempty"`
 	// Tail is the last few KiB of the job's combined output.
 	Tail string `json:"tail,omitempty"`
 	// ReceiptRef is the job's execution receipt, once it has ended: cite it
