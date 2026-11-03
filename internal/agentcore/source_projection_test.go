@@ -411,9 +411,16 @@ func TestAGraftedStackAdmitsTheCastWithALedgerWarning(t *testing.T) {
 	moved := commitOnTop(t, repo, base, map[string]string{"frontend/public/other.txt": "platform\n"})
 	setBootedBase(t, rt, moved)
 	cast := castLedgerRef{OwnerID: "owner-graft", ComputerID: computerID, CastRecordID: "cast-1", ManagementAgentID: persistentManagementAgentID("owner-graft"), TrajectoryID: "trajectory-graft"}
-	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil {
-		t.Fatalf("7: the Cast on a grafted stack must be admitted: %v", err)
+	_, pending, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast)
+	if err != nil || pending == nil {
+		t.Fatalf("7: the Cast on a grafted stack must be admitted with a warning: %v %v", pending, err)
 	}
+	// 12: the gate records nothing itself; a Cast refused after it leaves no
+	// warning. The open records it (openDelegatedCastAssignment).
+	if rec, err := rt.store.GetCommitmentRecord(ctx, cast.OwnerID, computerID, pending.RecordID); err != nil || rec != nil {
+		t.Fatalf("12: the gate must not record the warning before the open: %+v %v", rec, err)
+	}
+	rt.recordRematerializedCastWarning(ctx, cast.OwnerID, computerID, pending)
 	status := rt.sourceProjectionStatus()
 	if status == nil || status.State != sourceproj.StateRematerialized || status.Base != moved || status.ServedBase != base || !status.Diverged {
 		t.Fatalf("7: %+v", status)
@@ -430,12 +437,12 @@ func TestAGraftedStackAdmitsTheCastWithALedgerWarning(t *testing.T) {
 		!strings.Contains(warning.Prediction.Hypothesis, base) || !strings.Contains(warning.Prediction.Hypothesis, moved) || !strings.Contains(warning.Prediction.Hypothesis, "also approves") {
 		t.Fatalf("12: the ledger warning: %+v %v", warning, err)
 	}
-	// A replay of the same Cast records nothing new (the id is the Cast's).
-	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil {
-		t.Fatal(err)
+	// A replay of the same Cast gives the same id, so it records nothing new.
+	if _, again, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, cast); err != nil || again == nil || again.RecordID != pending.RecordID {
+		t.Fatalf("replay: %+v %v", again, err)
 	}
 	// A rebase Cast is not needed on a graft.
-	if _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-a", Base: moved}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
+	if _, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{Notice: "n", RebaseOf: "op-a", Base: moved}, cast); err == nil || !strings.Contains(err.Error(), "rebase_not_needed") {
 		t.Fatalf("a rebase on a graft: %v", err)
 	}
 	// 10: a capsule cast from the graft freezes a cumulative patch on B'.

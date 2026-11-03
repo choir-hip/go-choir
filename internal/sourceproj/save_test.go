@@ -329,3 +329,80 @@ func TestAnUnbornHeadSavesWhatTheResetOverwrites(t *testing.T) {
 		t.Fatalf("the hook: %+v", log.calls)
 	}
 }
+
+// A file the owner untracked (git rm --cached) and then edited is a path the
+// target tracks and the index does not: the reset would overwrite the edit.
+func TestAnUntrackedButTargetTrackedFileIsSaved(t *testing.T) {
+	repo, base := baseRepo(t)
+	reconcile(t, Input{Repo: repo, BootedBase: base})
+	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "frontend/src/b.txt", 3, "platform edit") })
+	tgit(t, repo, "rm", "-q", "--cached", "frontend/src/a.txt")
+	write(t, repo, "frontend/src/a.txt", "edited after untracking\n")
+	res := reconcile(t, Input{Repo: repo, BootedBase: moved})
+	saved := savedOf(t, res, SavedDirty)
+	if got := show(t, repo, saved.Commit, "frontend/src/a.txt"); got != "edited after untracking" {
+		t.Fatalf("the untracked edit is not saved: %q", got)
+	}
+}
+
+// A directory the target replaces with a file: the untracked files left in it
+// (here by a staged deletion) are overwritten by the reset, so they are saved.
+func TestUntrackedFilesInADirectoryTheTargetMakesAFileAreSaved(t *testing.T) {
+	repo, base := baseRepo(t)
+	write(t, repo, "pkg/a/b", "tracked\n")
+	tgit(t, repo, "add", "-A")
+	tgit(t, repo, "commit", "-q", "-m", "a directory")
+	withDir := headOf(t, repo)
+	reconcile(t, Input{Repo: repo, BootedBase: withDir})
+	moved := platformMoved(t, repo, withDir, func(r string) {
+		if err := os.RemoveAll(filepath.Join(r, "pkg/a")); err != nil {
+			t.Fatal(err)
+		}
+		write(t, r, "pkg/a", "now a file\n")
+	})
+	tgit(t, repo, "rm", "-q", "--cached", "pkg/a/b")
+	write(t, repo, "pkg/a/b", "the owner's edit, untracked\n")
+	res := reconcile(t, Input{Repo: repo, BootedBase: moved})
+	if headOf(t, repo) != moved {
+		t.Fatalf("%+v", res)
+	}
+	saved := savedOf(t, res, SavedDirty)
+	if got := show(t, repo, saved.Commit, "pkg/a/b"); got != "the owner's edit, untracked" {
+		t.Fatalf("the file in the replaced directory is not saved: %q", got)
+	}
+	_ = base
+}
+
+// An assume-unchanged file's edit is hidden from add -u; it is saved anyway.
+func TestAnAssumeUnchangedEditIsSaved(t *testing.T) {
+	repo, base := baseRepo(t)
+	reconcile(t, Input{Repo: repo, BootedBase: base})
+	moved := platformMoved(t, repo, base, func(r string) { editLine(t, r, "frontend/src/b.txt", 3, "platform edit") })
+	tgit(t, repo, "update-index", "--assume-unchanged", "frontend/src/a.txt")
+	write(t, repo, "frontend/src/a.txt", "hidden edit\n")
+	res := reconcile(t, Input{Repo: repo, BootedBase: moved})
+	saved := savedOf(t, res, SavedDirty)
+	if got := show(t, repo, saved.Commit, "frontend/src/a.txt"); got != "hidden edit" {
+		t.Fatalf("the assume-unchanged edit is not saved: %q", got)
+	}
+}
+
+// A same-size edit in the same second as the last index write is "racy" to
+// git: the scratch index must keep the real index's mtime or add -u reads the
+// edit as clean and the save misses it.
+func TestARacySameSizeEditIsSaved(t *testing.T) {
+	repo, base := baseRepo(t)
+	write(t, repo, "notes/racy.txt", "0123456789\n")
+	tgit(t, repo, "add", "-A")
+	tgit(t, repo, "commit", "-q", "-m", "racy")
+	head := headOf(t, repo)
+	reconcile(t, Input{Repo: repo, BootedBase: head})
+	write(t, repo, "notes/racy.txt", "abcdefghij\n") // same size, same second
+	c, err := saveWorkTree(context.Background(), repo, head, base)
+	if err != nil || c == "" {
+		t.Fatalf("the racy edit was not saved: %q %v", c, err)
+	}
+	if got := show(t, repo, c, "notes/racy.txt"); got != "abcdefghij" {
+		t.Fatalf("saved %q", got)
+	}
+}

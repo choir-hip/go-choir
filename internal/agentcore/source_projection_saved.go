@@ -45,9 +45,19 @@ func (rt *Runtime) recordSourceProjectionSaved(ctx context.Context, saved []sour
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	rt.appendSourceProjectionFactRecord(sourceProjectionFact{
-		At: now, Kind: sourceproj.FactSaved, Trigger: "reconcile", State: "saved", Saved: saved,
-	})
+	// The guest-local fact names only the refs this reconcile made, so a retry
+	// after a failed append does not grow the log.
+	var created []sourceproj.Saved
+	for _, s := range saved {
+		if s.Created {
+			created = append(created, s)
+		}
+	}
+	if len(created) > 0 {
+		rt.appendSourceProjectionFactRecord(sourceProjectionFact{
+			At: now, Kind: sourceproj.FactSaved, Trigger: "reconcile", State: "saved", Saved: created,
+		})
+	}
 	computerID := firstNonEmpty(strings.TrimSpace(rt.selfdevComputerID), strings.TrimSpace(rt.cfg.ComputerID))
 	if rt.store == nil || rt.eventAppender == nil || computerID == "" {
 		return nil

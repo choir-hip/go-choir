@@ -22,9 +22,16 @@ It also fixes RV-03 (residual register 2026-10-26).
    reset proceeds only after the save is on the tape. Test: a modified, a
    deleted and a staged new file come back from the saved ref.
 2. **An untracked file the expected tree tracks is overwritten.**
-   `reset --hard` overwrites an untracked file at a path the target tracks.
-   Guard: such files (ignored ones too) join the saved commit. Untracked
-   files the target does not track are left alone and not saved. Test.
+   `reset --hard` overwrites any work-tree file at a path the target tracks
+   that the index does not: a file added on the way, one the owner untracked
+   with `git rm --cached`, files left in a directory the target makes a file.
+   Guard: the candidates are the target's paths minus the scratch index's
+   (review 1, both seats), ignored files included; they join the saved
+   commit. An assume-unchanged edit is saved too (the bit is cleared in the
+   scratch index only); skip-worktree entries are left alone, since a reset
+   does not write them. Untracked files the target does not track are left
+   alone and not saved. Tests. The save is one commit of the final state: a
+   file staged at one version and edited to another saves the edit.
 3. **A foreign HEAD becomes unreachable.** A commit made on the computer
    branch by something else, or the creation commit on the first
    projection, is moved away from. Guard: a HEAD no `refs/choir/` ref names
@@ -63,8 +70,10 @@ It also fixes RV-03 (residual register 2026-10-26).
 12. **The Cast at `stack_rematerialized` hides the fact that the served
     build is still the stack on B.** Guard: the ordinary Cast is admitted
     and a system observation commitment record, addressed to management,
-    names the stack, B, B' and what approving the candidate approves. Its
-    id is deterministic per Cast, so a replay records nothing new. Test.
+    names the stack, B, B' and what approving the candidate approves. It is
+    recorded only after the Cast's assignment opens (review 1), so a Cast
+    refused later leaves none. Its id is deterministic per Cast, so a replay
+    records nothing new. Test.
 13. **`stack_base_moved` with no live root desk is silent.** Guard: the
     ordinary Cast refusal gains `rebase_needs_root: no live root desk to
     Cast the rebase`. Test.
@@ -78,8 +87,14 @@ It also fixes RV-03 (residual register 2026-10-26).
     retryable (the back-off schedule); 401 and 404 stay permanent. Test.
 16. **Projection on a computer whose base fetch cannot work** (no remote, a
     dev build). The states are `no_booted_base` (nothing moves, no refusal)
-    and `base_objects_missing` (Casts refused, as on b@c today). This is
-    the intended loud failure; the ring walk starts at d@e.
+    and `base_objects_missing` (Casts refused, as on b@c today). A runtime
+    with no source repository configured or present is
+    `source_projection_repo_unavailable`, a refusal: the capsule seeds from
+    that repository, so it could not have cast anyway. This is the intended
+    loud failure; the ring walk starts at d@e.
+18. **A runtime without a tape** (no store or no event appender: tests and
+    dev runs only; every computer has both) keeps the guest-local fact and
+    resets. Named residual.
 17. **Binary reuse rides on projection.** The reuse-by-input-diff gate was
     `sourceproj.Enabled`. It is now always on. It compares the running
     binary's commit with the capsule source commit, so a graft (source

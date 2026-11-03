@@ -206,6 +206,9 @@ type engineeringCastPlan struct {
 	// carries the admission clock and the store binds the notice and claims
 	// the pair in the open's own transaction.
 	Rebase bool
+	// SourceWarning is the stack_rematerialized ledger warning (capsule
+	// overlay S4), recorded once the open has committed.
+	SourceWarning *types.CommitmentRecord
 }
 
 // planEngineeringCast runs D4's checks for one staged Cast to engineering
@@ -284,7 +287,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 	// U1: the capsule seeds from the repository's HEAD, so HEAD must be the
 	// effective release's source before it is read (and a stack on a moved
 	// base refuses here, visibly, rather than building on the old base).
-	rebaseBase, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase(), castLedgerRef{OwnerID: ownerID, ComputerID: computerID, CastRecordID: recordID, ManagementAgentID: management, TrajectoryID: trajectoryID})
+	rebaseBase, sourceWarning, err := rt.sourceProjectionCastGateFor(ctx, spec.rebase(), castLedgerRef{OwnerID: ownerID, ComputerID: computerID, CastRecordID: recordID, ManagementAgentID: management, TrajectoryID: trajectoryID})
 	if err != nil {
 		return engineeringCastPlan{}, fmt.Errorf("engineering cast: %w", err)
 	}
@@ -347,7 +350,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		return engineeringCastPlan{}, err
 	}
 	cast.ParentID = parentID
-	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast, Rebase: rebaseBase != ""}, nil
+	return engineeringCastPlan{AssignmentID: assignmentID, Binding: binding, Objective: objective, Cast: cast, Rebase: rebaseBase != "", SourceWarning: sourceWarning}, nil
 }
 
 // refuseCastOntoOpenAssignment refuses an engineering Cast for a Texture
@@ -391,7 +394,11 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, plan enginee
 	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	return rt.store.OpenEngineeringAssignment(ctx, open)
+	result, err := rt.store.OpenEngineeringAssignment(ctx, open)
+	if err == nil {
+		rt.recordRematerializedCastWarning(ctx, plan.Binding.OwnerID, plan.Binding.ComputerID, plan.SourceWarning)
+	}
+	return result, err
 }
 
 // resumeDelegatedCastAssignment re-drives the spawn/bind saga for an

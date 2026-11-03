@@ -248,7 +248,7 @@ func (rt *Runtime) reconcileSourceProjectionLogged(ctx context.Context, reason s
 // the computer no longer booted, or a projection that cannot be rebuilt. The
 // reason is stable (its first word is the code) and names the bases.
 func (rt *Runtime) sourceProjectionCastGate(ctx context.Context) error {
-	_, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, castLedgerRef{})
+	_, _, err := rt.sourceProjectionCastGateFor(ctx, rebaseSpec{}, castLedgerRef{})
 	return err
 }
 
@@ -285,60 +285,64 @@ const rebaseNeedsRoot = "rebase_needs_root: no live root desk to Cast the rebase
 //   - no assignment has claimed the pair.
 //
 // It returns the booted base commit the capsule must start from (empty for an
-// ordinary Cast). The store's records admission checks the tape facts (the
-// notice, the root's Cast, the latest attempt) inside the open's transaction.
-func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseSpec, cast castLedgerRef) (rebaseBase string, err error) {
+// ordinary Cast), and, at stack_rematerialized, the ledger warning the caller
+// records once the Cast's assignment has opened (never before: a Cast refused
+// later leaves no warning behind). The store's records admission checks the
+// tape facts (the notice, the root's Cast, the latest attempt) inside the
+// open's transaction.
+func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseSpec, cast castLedgerRef) (rebaseBase string, warning *types.CommitmentRecord, err error) {
 	if !spec.set() {
 		rt.waitSourceBaseFetch(ctx)
 		result, err := rt.ReconcileSourceProjection(ctx, "cast")
 		if err != nil {
-			return "", fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
+			return "", nil, fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 		}
 		if refusal := result.Refusal(); refusal != "" {
 			if result.State == sourceproj.StateBaseMoved && !rt.rebaseRootLive(ctx) {
 				refusal += "; " + rebaseNeedsRoot
 			}
-			return "", errors.New(refusal)
+			return "", nil, errors.New(refusal)
 		}
-		if result.State == sourceproj.StateRematerialized {
-			rt.recordRematerializedCastWarning(ctx, cast, result)
+		if result.State == sourceproj.StateRematerialized && strings.TrimSpace(cast.CastRecordID) != "" {
+			rec := rematerializedCastWarning(cast, result, time.Now())
+			return "", &rec, nil
 		}
-		return "", nil
+		return "", nil, nil
 	}
 	ownerID, computerID := rt.rebaseScope()
 	if strings.TrimSpace(spec.RebaseOf) == "" || strings.TrimSpace(spec.Base) == "" {
-		return "", errors.New("rebase_spec_incomplete: a rebase Cast's spec names rebase_notice, rebase_of (the operation) and base (the booted base), all three")
+		return "", nil, errors.New("rebase_spec_incomplete: a rebase Cast's spec names rebase_notice, rebase_of (the operation) and base (the booted base), all three")
 	}
 	rt.waitSourceBaseFetch(ctx)
 	result, err := rt.ReconcileSourceProjection(ctx, "cast")
 	if err != nil {
-		return "", fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
+		return "", nil, fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 	}
 	if result.State != sourceproj.StateBaseMoved {
 		if refusal := result.Refusal(); refusal != "" {
-			return "", errors.New(refusal)
+			return "", nil, errors.New(refusal)
 		}
-		return "", fmt.Errorf("rebase_not_needed: the applied stack is %s, not on a moved base; there is nothing to rebase", result.State)
+		return "", nil, fmt.Errorf("rebase_not_needed: the applied stack is %s, not on a moved base; there is nothing to rebase", result.State)
 	}
 	if strings.TrimSpace(spec.RebaseOf) != result.OperationID {
-		return "", fmt.Errorf("rebase_of_mismatch: the spec rebases %q, the applied stack's operation is %q", spec.RebaseOf, result.OperationID)
+		return "", nil, fmt.Errorf("rebase_of_mismatch: the spec rebases %q, the applied stack's operation is %q", spec.RebaseOf, result.OperationID)
 	}
 	if strings.TrimSpace(spec.Base) != result.BootedBase {
-		return "", fmt.Errorf("rebase_base_mismatch: the spec rebases onto %q, this computer booted %q", spec.Base, result.BootedBase)
+		return "", nil, fmt.Errorf("rebase_base_mismatch: the spec rebases onto %q, this computer booted %q", spec.Base, result.BootedBase)
 	}
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), result.BootedBase) {
-		return "", fmt.Errorf("rebase_base_missing: the booted base %s is not in the guest source repository yet; the platform fetches it and the next notice follows", result.BootedBase)
+		return "", nil, fmt.Errorf("rebase_base_missing: the booted base %s is not in the guest source repository yet; the platform fetches it and the next notice follows", result.BootedBase)
 	}
 	noticeAttempt := 1
 	if _, _, n, ok := types.ParseStackRebaseNoticeID(spec.Notice); ok {
 		noticeAttempt = n
 	}
 	if claim, err := rt.store.GetRebaseNoticeClaim(ctx, ownerID, computerID, types.StackRebaseClaimKey(types.StackRebasePairKey(result.OperationID, result.BootedBase), noticeAttempt)); err == nil {
-		return "", fmt.Errorf("rebase_pair_claimed: assignment %s already serves the rebase of %s onto %s", claim.AssignmentID, result.OperationID, result.BootedBase)
+		return "", nil, fmt.Errorf("rebase_pair_claimed: assignment %s already serves the rebase of %s onto %s", claim.AssignmentID, result.OperationID, result.BootedBase)
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return "", fmt.Errorf("source_projection_failed: read the rebase claim: %w", err)
+		return "", nil, fmt.Errorf("source_projection_failed: read the rebase claim: %w", err)
 	}
-	return result.BootedBase, nil
+	return result.BootedBase, nil, nil
 }
 
 // rebaseRootLive reports whether a root Texture RLM is live to Cast a rebase.
@@ -397,15 +401,16 @@ func rematerializedCastWarning(cast castLedgerRef, result sourceproj.Result, now
 	}
 }
 
-// recordRematerializedCastWarning writes the warning. It is observational: a
-// ledger failure is logged and the Cast goes on (the state is on /health).
-func (rt *Runtime) recordRematerializedCastWarning(ctx context.Context, cast castLedgerRef, result sourceproj.Result) {
-	if rt == nil || rt.store == nil || strings.TrimSpace(cast.CastRecordID) == "" {
+// recordRematerializedCastWarning writes the warning once the Cast's
+// assignment has opened. It is observational: a ledger failure is logged and
+// the Cast goes on (the state is on /health). The id is the Cast's, so a
+// replayed open records nothing new.
+func (rt *Runtime) recordRematerializedCastWarning(ctx context.Context, ownerID, computerID string, rec *types.CommitmentRecord) {
+	if rt == nil || rt.store == nil || rec == nil {
 		return
 	}
-	rec := rematerializedCastWarning(cast, result, time.Now())
-	if _, err := rt.store.AppendCommitmentRecord(ctx, cast.OwnerID, cast.ComputerID, rec); err != nil {
-		log.Printf("source projection: the stack_rematerialized warning for Cast %s: %v", cast.CastRecordID, err)
+	if _, err := rt.store.AppendCommitmentRecord(ctx, ownerID, computerID, *rec); err != nil {
+		log.Printf("source projection: the stack_rematerialized warning %s: %v", rec.RecordID, err)
 	}
 }
 

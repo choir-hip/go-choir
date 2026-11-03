@@ -52,10 +52,16 @@ func saveWorkTree(ctx context.Context, repo, head, expected string) (string, err
 				return err
 			}
 		}
+		// An assume-unchanged entry hides its edit from add -u, and a reset
+		// still writes the path: clear the bit in the scratch index only.
+		// (skip-worktree entries are left alone: a reset does not write them.)
+		if err := clearAssumeUnchanged(ctx, repo, env); err != nil {
+			return err
+		}
 		if _, err := git(ctx, repo, env, nil, "add", "-u"); err != nil { // the whole tree (git 2 and later)
 			return err
 		}
-		clobbered, err := untrackedInTheWay(ctx, repo, env, base, expected)
+		clobbered, err := untrackedInTheWay(ctx, repo, env, expected)
 		if err != nil {
 			return err
 		}
@@ -112,18 +118,29 @@ func saveWorkTree(ctx context.Context, repo, head, expected string) (string, err
 }
 
 // untrackedInTheWay lists the paths a reset to expected would overwrite that
-// the scratch index does not track: a path expected adds over head (a commit
-// or a tree) that
-// exists in the work tree, or an ancestor of one that is a file there.
-func untrackedInTheWay(ctx context.Context, repo string, env []string, head, expected string) ([]string, error) {
-	raw, err := gitRaw(ctx, repo, nil, nil, "diff-tree", "-r", "--no-renames", "--name-only", "-z", "--diff-filter=A", head, expected)
+// the scratch index does not track: a path expected tracks that the index
+// does not (a file added on the way, or one the owner untracked with
+// `git rm --cached`) and that exists in the work tree, or an ancestor of one
+// that is a file there. Ignored files count: a reset overwrites them too.
+func untrackedInTheWay(ctx context.Context, repo string, env []string, expected string) ([]string, error) {
+	raw, err := gitRaw(ctx, repo, nil, nil, "ls-tree", "-r", "-z", "--name-only", "--full-tree", expected)
 	if err != nil {
 		return nil, err
+	}
+	indexed, err := gitRaw(ctx, repo, env, nil, "ls-files", "-z")
+	if err != nil {
+		return nil, err
+	}
+	tracked := map[string]bool{}
+	for _, p := range strings.Split(string(indexed), "\x00") {
+		if p != "" {
+			tracked[p] = true
+		}
 	}
 	seen := map[string]bool{}
 	var candidates []string
 	for _, p := range strings.Split(string(raw), "\x00") {
-		if p == "" {
+		if p == "" || tracked[p] {
 			continue
 		}
 		for q := p; q != "." && q != "/" && q != ""; q = path.Dir(q) {
@@ -166,6 +183,34 @@ func untrackedInTheWay(ctx context.Context, repo string, env []string, head, exp
 	return out, nil
 }
 
+// clearAssumeUnchanged clears the assume-unchanged bit of every entry in the
+// scratch index that has it (ls-files -v marks those with a lower-case tag).
+func clearAssumeUnchanged(ctx context.Context, repo string, env []string) error {
+	raw, err := gitRaw(ctx, repo, env, nil, "ls-files", "-v", "-z")
+	if err != nil {
+		return err
+	}
+	var marked []string
+	for _, rec := range strings.Split(string(raw), "\x00") {
+		if len(rec) < 3 || rec[1] != ' ' {
+			continue
+		}
+		if tag := rec[0]; tag >= 'a' && tag <= 'z' {
+			marked = append(marked, rec[2:])
+		}
+	}
+	for i := 0; i < len(marked); i += 100 {
+		end := i + 100
+		if end > len(marked) {
+			end = len(marked)
+		}
+		if _, err := git(ctx, repo, env, nil, append([]string{"update-index", "--no-assume-unchanged", "--"}, marked[i:end]...)...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func firstNonEmptyString(a, b string) string {
 	if a != "" {
 		return a
@@ -187,7 +232,17 @@ func copyFile(from, to string) error {
 		dst.Close()
 		return err
 	}
-	return dst.Close()
+	if err := dst.Close(); err != nil {
+		return err
+	}
+	// Keep the index's own mtime: git's racy-entry test compares each entry's
+	// mtime with the index file's, and a fresh mtime would make a same-size
+	// edit made in the same second as the last index write look clean.
+	info, err := src.Stat()
+	if err != nil {
+		return err
+	}
+	return os.Chtimes(to, info.ModTime(), info.ModTime())
 }
 
 // createSavedRef creates refs/choir/saved/<commit> at commit, never moving an
