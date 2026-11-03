@@ -371,12 +371,21 @@ func TestManagementDelegatesIntakeToTasks(t *testing.T) {
 	if o, _ := f.s.CaptureLabelOverrides(ctx, f.owner, f.computer, "cap-a1"); len(o) != 1 || o[0].DocID != f.pope {
 		t.Fatalf("N5: a task's disposition against its label recorded overrides %+v", o)
 	}
-	// The task's session ended with it.
+	// The task's session ended with it. The release runs in the run-end hook,
+	// which can follow the task's closure, so wait for it.
 	workers := f.rt.deskSessionWorkers()
-	workers.mu.Lock()
-	_, kept := workers.sessions["agent:"+taskA.TaskInbox]
-	_, parentKept := workers.sessions["agent:"+f.management()]
-	workers.mu.Unlock()
+	var kept, parentKept bool
+	sessionsSettled := func() bool {
+		workers.mu.Lock()
+		defer workers.mu.Unlock()
+		_, kept = workers.sessions["agent:"+taskA.TaskInbox]
+		_, parentKept = workers.sessions["agent:"+f.management()]
+		return !kept
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for !sessionsSettled() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 	if kept || !parentKept {
 		t.Fatalf("sessions after task A: task kept %v, parent kept %v; want the task's released and the parent's kept", kept, parentKept)
 	}
