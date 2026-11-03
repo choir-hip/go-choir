@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -486,6 +487,49 @@ type plannedRestartWork struct {
 	// and the next attempt would read the whole store again, so on a busy
 	// computer that restarts at every deploy no snapshot would finish.
 	SnapshotInFlight bool
+	// SelfdevAwaitingDecision counts candidates frozen, verified or awaiting
+	// their decision inside the hold bounds (selfdevDecisionHeld); HeldOperations
+	// names them. They survive a restart on disk, but a deploy refresh boots a
+	// newer base under them: a rebase candidate then fails booted_base_moved,
+	// and a standing-consensus attempt (in memory, no resumer) dies (problem
+	// 22). Only the host's deploy refresh waits on them; unsafe() does not
+	// count them, so the restore restart and the snapshot reads do not.
+	SelfdevAwaitingDecision int
+	HeldOperations          []string
+}
+
+const (
+	// selfdevDecisionHoldCap bounds how long a candidate may hold deploy
+	// refreshes since its last transition. It exceeds standingConsensusBudget
+	// (90 minutes), so a standing-consensus attempt can finish under it.
+	selfdevDecisionHoldCap = 2 * time.Hour
+	// selfdevDecisionHoldLifetime bounds the hold from the operation's
+	// creation: an intent-error stamp moves updated_at, so the cap alone
+	// would let a candidate that keeps being stamped hold for ever.
+	selfdevDecisionHoldLifetime = 6 * time.Hour
+	// heldOperationsNamed bounds the operation ids a refusal names.
+	heldOperationsNamed = 5
+)
+
+// selfdevDecisionHoldStates are the parked states that hold a deploy refresh.
+var selfdevDecisionHoldStates = []string{selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval}
+
+// selfdevDecisionHeld reports whether a parked candidate still holds a deploy
+// refresh at now: inside both bounds. A timestamp that does not parse does
+// not hold (the hold must stay bounded); the store always writes RFC 3339.
+func selfdevDecisionHeld(operation selfdev.Operation, now time.Time) bool {
+	if !slices.Contains(selfdevDecisionHoldStates, operation.State) {
+		return false
+	}
+	updated, err := time.Parse(time.RFC3339Nano, operation.UpdatedAt)
+	if err != nil {
+		return false
+	}
+	created, err := time.Parse(time.RFC3339Nano, operation.CreatedAt)
+	if err != nil {
+		return false
+	}
+	return now.Sub(updated) < selfdevDecisionHoldCap && now.Sub(created) < selfdevDecisionHoldLifetime
 }
 
 // unsafe reports work no restart may cut, whatever the host asks.
@@ -504,12 +548,22 @@ func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (
 		return work, nil
 	}
 	if rt.selfdevOperations != nil {
-		ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
-			selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+		ops, err := rt.selfdevOperations.ListByStates(ctx, computerID, append(slices.Clone(selfdevBusyStates), selfdevDecisionHoldStates...)...)
 		if err != nil {
 			return work, fmt.Errorf("cannot read self-development operations: %w", err)
 		}
-		work.SelfdevActive = len(ops)
+		now := time.Now().UTC()
+		for _, operation := range ops {
+			switch {
+			case slices.Contains(selfdevBusyStates, operation.State):
+				work.SelfdevActive++
+			case selfdevDecisionHeld(operation, now):
+				work.SelfdevAwaitingDecision++
+				if len(work.HeldOperations) < heldOperationsNamed {
+					work.HeldOperations = append(work.HeldOperations, operation.OperationID+" ("+operation.State+" since "+operation.UpdatedAt+")")
+				}
+			}
+		}
 	}
 	if countCapsules {
 		live, err := rt.liveCapsuleCount(ctx)
@@ -577,13 +631,18 @@ type plannedRestartRequest struct {
 type plannedRestartBusyResponse struct {
 	Error   string `json:"error"`
 	Outcome string `json:"outcome"`
-	// Reason is "hibernate_fenced" when the refusal is the hibernate fence.
+	// Reason is "hibernate_fenced" when the refusal is the hibernate fence,
+	// "selfdev_awaiting_decision" when it is a candidate awaiting its decision.
 	Reason           string `json:"reason,omitempty"`
 	AllowBusy        bool   `json:"allow_busy"`
 	RunningRuns      int    `json:"running_runs"`
 	SelfdevActiveOps int    `json:"selfdev_active_operations"`
 	LiveCapsules     int    `json:"live_capsules"`
 	SnapshotInFlight bool   `json:"snapshot_in_flight,omitempty"`
+	// SelfdevAwaitingDecision and HeldOperations name the candidates that
+	// hold the refresh until they are decided or age out (problem 22).
+	SelfdevAwaitingDecision int      `json:"selfdev_awaiting_decision,omitempty"`
+	HeldOperations          []string `json:"held_operations,omitempty"`
 }
 
 type plannedRestartWrittenResponse struct {
@@ -677,20 +736,30 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: " + err.Error()})
 		return
 	}
-	if work.unsafe() || (work.Running > 0 && !allowBusy) {
+	// A candidate awaiting its decision holds the refresh whatever the host
+	// asks, allow_busy included, the way a live capsule does: a correctness
+	// refusal, bounded by selfdevDecisionHoldCap, not a switch.
+	held := work.SelfdevAwaitingDecision > 0
+	if work.unsafe() || held || (work.Running > 0 && !allowBusy) {
 		// A refused request restarts nothing: an earlier request's
 		// synchronous mode is undone unless its marker is still durable.
 		h.rt.releaseHostRestartTelemetryIfNoMarker(storePath)
-		why := "guest is busy; restart deferred to its next idle moment"
-		if work.unsafe() {
+		why, reason := "guest is busy; restart deferred to its next idle moment", ""
+		switch {
+		case work.unsafe():
 			why = "a self-development operation, a live capsule or a streaming snapshot would not survive a restart; restart deferred until it settles"
+		case held:
+			why = fmt.Sprintf("a self-development candidate is frozen, verified or awaiting its decision; a refresh would boot a newer base under it; restart deferred until it is decided, %s pass since its last update, or %s since it was created", selfdevDecisionHoldCap, selfdevDecisionHoldLifetime)
+			reason = "selfdev_awaiting_decision"
 		}
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
 			Error:       why,
 			Outcome:     "busy",
+			Reason:      reason,
 			AllowBusy:   allowBusy,
 			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
-			SnapshotInFlight: work.SnapshotInFlight,
+			SnapshotInFlight:        work.SnapshotInFlight,
+			SelfdevAwaitingDecision: work.SelfdevAwaitingDecision, HeldOperations: work.HeldOperations,
 		})
 		return
 	}
