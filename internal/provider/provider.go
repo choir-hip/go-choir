@@ -1689,6 +1689,24 @@ type openAIChatCompletionUsage struct {
 	PromptCacheMissTokens *int `json:"prompt_cache_miss_tokens,omitempty"`
 }
 
+// mergeStreamUsage folds a later stream usage report into the last one. A
+// report with token counts replaces the counts; a sparse report (cache
+// fields only) keeps the earlier counts and adds its cache fields, so a
+// trailing cache report never zeroes the call's tokens.
+func mergeStreamUsage(last, next openAIChatCompletionUsage) openAIChatCompletionUsage {
+	merged := next
+	if next.PromptTokens == 0 && next.CompletionTokens == 0 {
+		merged.PromptTokens, merged.CompletionTokens, merged.TotalTokens = last.PromptTokens, last.CompletionTokens, last.TotalTokens
+	}
+	if merged.PromptTokensDetails == nil {
+		merged.PromptTokensDetails = last.PromptTokensDetails
+	}
+	if merged.PromptCacheHitTokens == nil {
+		merged.PromptCacheHitTokens, merged.PromptCacheMissTokens = last.PromptCacheHitTokens, last.PromptCacheMissTokens
+	}
+	return merged
+}
+
 func (u openAIChatCompletionUsage) present() bool {
 	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.PromptCacheHitTokens != nil
 }
@@ -2381,7 +2399,6 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 	}
 	tools := map[int]*toolBuffer{}
 	started := false
-	completed := false
 	// The closing message_delta is sent at the end of the stream, not at
 	// the first finish_reason: OpenRouter repeats the finish chunk and puts
 	// usage only on the second, and Synthetic sends its cache report on a
@@ -2422,10 +2439,6 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		}
 	}
 	finish := func(reason string, usage openAIChatCompletionUsage) {
-		if completed {
-			return
-		}
-		completed = true
 		hadTools := len(tools) > 0
 		flushTools()
 		if hadTools && (reason == "" || reason == "stop") {
@@ -2526,7 +2539,7 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 			}
 		}
 		if payload.Usage.present() {
-			lastUsage = payload.Usage
+			lastUsage = mergeStreamUsage(lastUsage, payload.Usage)
 		}
 		return nil
 	}); err != nil {

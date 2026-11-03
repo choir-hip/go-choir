@@ -184,6 +184,7 @@ func TestOpenRouterStatusClassification(t *testing.T) {
 		{"credits", http.StatusPaymentRequired, `{"error":{"message":"Insufficient credits","code":402}}`, true, "status 402"},
 		{"quota 429", http.StatusTooManyRequests, `{"error":{"message":"Free model usage limit has been reached for today","code":429}}`, true, "status 429"},
 		{"daily cap 429", http.StatusTooManyRequests, `{"error":{"message":"Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day","code":429}}`, true, "status 429"},
+		{"per-minute 429", http.StatusTooManyRequests, `{"error":{"message":"Rate limit exceeded: free-models-per-min. Add 10 credits to unlock 1000 free model requests per day","code":429}}`, false, "status 429"},
 		{"rate 429", http.StatusTooManyRequests, `{"error":{"message":"Rate limit exceeded: too many requests","code":429}}`, false, "status 429"},
 		{"bad request", http.StatusBadRequest, `{"error":{"message":"Reasoning is mandatory","code":400}}`, false, "status 400"},
 	} {
@@ -219,5 +220,37 @@ func TestResolveAllRegistersOpenRouterOnlyWithKeyAndModels(t *testing.T) {
 	p, ok := mp.Get("openrouter").(*OpenRouterProvider)
 	if !ok || p.modelID != openRouterTestModel || p.baseURL != "https://openrouter.ai/api/v1" {
 		t.Fatalf("openrouter provider = %+v", mp.Get("openrouter"))
+	}
+}
+
+// A trailing usage report that carries only cache fields keeps the earlier
+// token counts (review r1, Devin): it must not zero the call's tokens.
+func TestStreamSparseTrailingUsageKeepsTokenCounts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, line := range []string{
+			`{"id":"s1","model":"m","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":5,"total_tokens":105}}`,
+			`{"id":"s1","model":"m","choices":[],"usage":{"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":36}}`,
+		} {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", line)
+		}
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+	p := newTestOpenRouter(t, server)
+	var delta *StreamUsage
+	resp, err := p.Stream(context.Background(), LLMRequest{Messages: []Message{{Role: "user", Content: []Block{{Type: "text", Text: "hi"}}}}}, func(c StreamChunk) {
+		if c.Type == "message_delta" {
+			delta = c.Usage
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.InputTokens != 100 || resp.Usage.OutputTokens != 5 || resp.Usage.CachedInputTokens != 64 {
+		t.Fatalf("usage = %+v", resp.Usage)
+	}
+	if delta == nil || delta.InputTokens != 100 || delta.OutputTokens != 5 {
+		t.Fatalf("message_delta usage = %+v", delta)
 	}
 }

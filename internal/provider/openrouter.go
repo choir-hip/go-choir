@@ -136,13 +136,15 @@ func (p *OpenRouterProvider) call(ctx context.Context, req LLMRequest, onChunk f
 
 // openRouterRateLimitIsQuota reports whether an OpenRouter 429 is a spent
 // allowance: the shared quota markers, or OpenRouter's daily free-model cap
-// ("Rate limit exceeded: free-models-per-day. Add ... credits ...").
+// (code "free-models-per-day"). Its per-minute cap ("free-models-per-min")
+// clears in seconds and is not quota, though its message also offers
+// credits and names a daily allowance.
 func openRouterRateLimitIsQuota(reason string) bool {
-	if reasonSaysQuota(reason) {
-		return true
-	}
 	r := strings.ToLower(reason)
-	return strings.Contains(r, "per-day") || strings.Contains(r, "per day") || strings.Contains(r, "credits")
+	if strings.Contains(r, "per-min") {
+		return false
+	}
+	return reasonSaysQuota(r) || strings.Contains(r, "per-day")
 }
 
 // openRouterReasoningEffort maps Choir's effort to the values the models
