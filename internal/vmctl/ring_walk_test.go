@@ -795,3 +795,48 @@ func TestRingWalkTornStateLoadsBackup(t *testing.T) {
 		t.Fatalf("backup did not restore the walk: %+v", r2.state)
 	}
 }
+
+// Round 2 (DeepSeek 2): a cold boot mid-soak re-arms the readiness delay.
+func TestRingReadinessDelayPerBoot(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	de.Epoch = 1
+	for i := 1; i <= 10; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+	}
+	de.Epoch, de.Health = 2, &ringHealth{Answered: false, Detail: "booting"}
+	for i := 11; i <= 14; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+	}
+	if s.Walk.Status == ringWalkRolledBack {
+		t.Fatalf("a new boot's first minutes breached readiness")
+	}
+}
+
+// Round 2 (Devin N2): a computer found on the rolled-back release after the
+// breach is enrolled for a return; rollback completes only when none runs it.
+func TestRingLateArrivalOnBadReleaseReturned(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	de.Health = &ringHealth{Answered: true, Status: 200, Wedged: true}
+	s.step(rwT0.Add(time.Minute), []ringMemberObs{de})
+	s.step(rwT0.Add(2*time.Minute), []ringMemberObs{de})
+	if s.Walk.Status != ringWalkRolledBack {
+		t.Fatalf("no rollback")
+	}
+	late := healthyObs(rwTest1, ringR1, rwTo.Single) // an in-flight refresh landed
+	de.Release = rwFrom.Single
+	_, acts := s.step(rwT0.Add(3*time.Minute), []ringMemberObs{de, late})
+	if len(acts) != 1 || acts[0].ComputerID != rwTest1 || acts[0].Target != rwFrom.SingleCommit {
+		t.Fatalf("a late arrival on the bad release must be returned: %+v", acts)
+	}
+	ev, _ := s.step(rwT0.Add(4*time.Minute), []ringMemberObs{de, late})
+	if hasEvent(ev, ringEventRollbackComplete) {
+		t.Fatalf("rollback completed while a computer runs the bad release")
+	}
+	late.Release = rwFrom.Single
+	ev, _ = s.step(rwT0.Add(5*time.Minute), []ringMemberObs{de, late})
+	if !hasEvent(ev, ringEventRollbackComplete) {
+		t.Fatalf("rollback did not complete once none runs the bad release")
+	}
+}

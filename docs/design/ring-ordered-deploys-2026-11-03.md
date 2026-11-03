@@ -129,6 +129,22 @@ moves the guest release.
   (the baseline is normally also its "previous" keep); a pin that does not
   load falls back to the current release and logs it.
 
+## Decisions after review 2 (Devin accept, DeepSeek no blocking)
+
+- **Guards cover the open ring only (deliberate).** A ring that closed clean
+  is not sampled again in this walk: its exposure was the evidence, and the
+  outer rings carry their own guards. A late regression on an inner ring is
+  caught by the crash-loop bound for the computer and by the next walk; a
+  late-regression window over closed rings is a later slice (design 9.1).
+- Taken: the readiness delay re-arms at every boot seen on the release; a
+  crash counts against the release only while the member runs it; after a
+  rollback, any computer found on the rolled-back release (an in-flight
+  refresh that landed, a resumed snapshot) is enrolled for a return, and
+  rollback completes only when none runs it.
+- Residuals: CI's `ring_held_unproven` reads candidate membership, not the
+  walk's own observation of d@e; a CI-time failed refresh of d@e holds R0
+  (and the fleet on `from`) until the next deploy, by the no-kill-loop rule.
+
 ## Failure modes
 
 - **A ring skipped silently.** Every skip writes a history line with its

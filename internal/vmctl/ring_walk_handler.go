@@ -143,6 +143,7 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 			o.Release = byVM[own.VMID].GuestRelease
 		}
 		o.Pending, o.FailedTarget = h.deployRefreshState().pendingAndFailed(own.UserID, own.DesktopID)
+		o.Epoch = own.Epoch
 		if sample && walking && o.Ring == openRing && o.Active && o.Release != "" && o.Release == to.releaseFor(o.Layered) {
 			probes = append(probes, len(obs))
 			owners[len(obs)] = *own

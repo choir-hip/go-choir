@@ -223,6 +223,8 @@ type ringMemberObs struct {
 	// FailedTarget: the target of its last failed deploy refresh, if any.
 	Pending      bool
 	FailedTarget string
+	// Epoch is the computer's realization: a new one is a new boot.
+	Epoch int64
 }
 
 type ringMember struct {
@@ -231,6 +233,8 @@ type ringMember struct {
 	WakeRequested bool      `json:"wake_requested,omitempty"`
 	EnrolledAt    time.Time `json:"enrolled_at,omitempty"`
 	LastOffTarget time.Time `json:"last_off_target,omitempty"`
+	LastEpoch     int64     `json:"last_epoch,omitempty"`
+	BootSeenAt    time.Time `json:"boot_seen_at,omitempty"`
 	FirstOnTarget time.Time `json:"first_on_target,omitempty"`
 	ExposedAt     time.Time `json:"exposed_at,omitempty"`
 	Samples       int       `json:"samples"`
@@ -277,6 +281,11 @@ type ringWalk struct {
 	// rollback is complete once none of them runs the target.
 	Returning       []string `json:"returning,omitempty"`
 	ReturnCompleted bool     `json:"return_completed,omitempty"`
+	// ReturnEnrolledAt is when each return was last enrolled: a computer
+	// found on the rolled-back release after the breach (an in-flight
+	// refresh landed, a hibernated one resumed, a skipped return) is enrolled
+	// again at most every ringReenrollGap, never after a failed return.
+	ReturnEnrolledAt map[string]time.Time `json:"return_enrolled_at,omitempty"`
 }
 
 type ringWalkState struct {
@@ -502,7 +511,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	}
 	switch w.Status {
 	case ringWalkRolledBack:
-		return w.stepReturn(now, obs), nil
+		return w.stepReturn(now, obs)
 	case ringWalkWalking:
 	default:
 		return nil, nil
@@ -658,7 +667,7 @@ func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, ope
 		if m.LastOffTarget.After(since) {
 			since = m.LastOffTarget
 		}
-		if c.Kind != crashKindBootFailed && !m.FirstOnTarget.IsZero() && !at.Before(since) {
+		if c.Kind != crashKindBootFailed && onTarget && !m.FirstOnTarget.IsZero() && !at.Before(since) {
 			return &ringBreach{ComputerID: o.ComputerID, Guard: ringGuardCrash, Detail: c.Kind + ": " + c.Cause, At: now}
 		}
 	}
@@ -666,13 +675,23 @@ func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, ope
 		m.ReadyStrikes, m.WedgeStrikes = 0, 0
 		return nil
 	}
+	// The readiness delay is armed at every boot seen on the release (a new
+	// realization), not only the first: a cold boot mid-soak is unreachable
+	// for minutes too.
+	if o.Epoch != m.LastEpoch {
+		m.LastEpoch, m.BootSeenAt = o.Epoch, now
+	}
+	delayFrom := m.FirstOnTarget
+	if m.BootSeenAt.After(delayFrom) {
+		delayFrom = m.BootSeenAt
+	}
 	h := o.Health
 	m.Samples++
 	m.LastStatus, m.LastDetail = h.Status, h.Detail
 	ready := h.Answered && h.Status == 200
 	if ready {
 		m.ReadyStrikes = 0
-	} else if now.Sub(m.FirstOnTarget) >= ringReadinessInitialDelay {
+	} else if now.Sub(delayFrom) >= ringReadinessInitialDelay {
 		m.ReadyStrikes++
 	}
 	if h.Wedged {
@@ -748,6 +767,10 @@ func (w *ringWalk) rollback(now time.Time, p *ringProgress, breach *ringBreach, 
 			a := ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: w.From.commitFor(o.Layered), Reason: "ring walk " + w.ID + " rolled back at " + string(p.Ring)}
 			*actions = append(*actions, a)
 			w.Returning = append(w.Returning, o.ComputerID)
+			if w.ReturnEnrolledAt == nil {
+				w.ReturnEnrolledAt = map[string]time.Time{}
+			}
+			w.ReturnEnrolledAt[o.ComputerID] = now
 			ev.Actions = append(ev.Actions, ringActionRecord{Kind: a.Kind, ComputerID: a.ComputerID, Target: a.Target})
 			continue
 		}
@@ -760,19 +783,38 @@ func (w *ringWalk) rollback(now time.Time, p *ringProgress, breach *ringBreach, 
 
 // stepReturn watches a rolled-back walk's returns; it evaluates no guard and
 // enrolls nothing, so a rollback cannot loop.
-func (w *ringWalk) stepReturn(now time.Time, obs []ringMemberObs) []ringEvent {
+func (w *ringWalk) stepReturn(now time.Time, obs []ringMemberObs) ([]ringEvent, []ringAction) {
+	if w.ReturnEnrolledAt == nil {
+		w.ReturnEnrolledAt = map[string]time.Time{}
+	}
+	var actions []ringAction
+	onBad := 0
+	for _, o := range obs {
+		if !o.Active || o.Release == "" || o.Release != w.To.releaseFor(o.Layered) || o.Release == w.From.releaseFor(o.Layered) {
+			continue
+		}
+		onBad++
+		target := w.From.commitFor(o.Layered)
+		last, seen := w.ReturnEnrolledAt[o.ComputerID]
+		if o.Held || o.Divergent || o.Pending || o.FailedTarget == target || (seen && now.Sub(last) < ringReenrollGap) {
+			continue
+		}
+		w.ReturnEnrolledAt[o.ComputerID] = now
+		if !seen {
+			w.Returning = append(w.Returning, o.ComputerID)
+		}
+		actions = append(actions, ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: target, Reason: "ring walk " + w.ID + " rolled back: return"})
+	}
+	if onBad > 0 {
+		w.ReturnCompleted = false
+		return nil, actions
+	}
 	if w.ReturnCompleted {
-		return nil
+		return nil, actions
 	}
 	byID := map[string]ringMemberObs{}
 	for _, o := range obs {
 		byID[o.ComputerID] = o
-	}
-	for _, id := range w.Returning {
-		o, ok := byID[id]
-		if ok && o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered) && o.Release != w.From.releaseFor(o.Layered) {
-			return nil
-		}
 	}
 	w.ReturnCompleted = true
 	ev := w.event(now, ringEventRollbackComplete)
@@ -783,8 +825,8 @@ func (w *ringWalk) stepReturn(now time.Time, obs []ringMemberObs) []ringEvent {
 		o := byID[id]
 		ev.Computers = append(ev.Computers, ringEventMember{ComputerID: id, Release: o.Release})
 	}
-	ev.Detail = "no returning computer runs the rolled-back release"
-	return []ringEvent{ev}
+	ev.Detail = "no running computer runs the rolled-back release (a hibernated one that resumes on it is returned when seen)"
+	return []ringEvent{ev}, actions
 }
 
 // ringWalkRunner holds the state, its file and the history file. Its mutex is
