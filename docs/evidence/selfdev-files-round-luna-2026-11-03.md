@@ -97,6 +97,9 @@ Spec: [apps-feature-complete-spec-2026-11-03](../design/apps-feature-complete-sp
   judge failed 06:47:44Z ("incomplete ... repeated generic screenshots"); Texture re-cast 06:48:12Z;
   selfdev-00592bf5f5d031915bd4ab415185706c frozen 07:05:02Z, judge failed 07:07:55Z ("no interactive run, no
   twelve genuine state screenshots and no contrast, mobile-overflow or list-share measurements").
+- Round 5's document kept going after its second failure: Texture cast three more assignments (07:09:54Z,
+  07:13:11Z, 07:25:33Z), each ending failed after 25-53 s with no operation, and settled at 07:27:04Z ("the
+  package is absent, no candidate was applied or verified"). Five assignments in all; round 5 spend $0.33.
 - 07:02Z standing_consensus armed; 07:07Z FP0 returned luna to propose_only for its in-flight round (Problem 12);
   07:16Z standing_consensus again (generation 4) after the refresh.
 
