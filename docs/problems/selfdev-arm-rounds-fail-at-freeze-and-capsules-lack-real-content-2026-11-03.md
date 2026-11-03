@@ -309,3 +309,15 @@ Texture: "cannot proceed until a live root or owner initiates the required platf
 is in flight" (11:31:03Z). Whether U4 re-mints after its 30-minute answer window is not yet seen.
 Fix direction: carry the notice id verbatim from the notice record into the Cast (or have admission resolve the
 notice by operation and base), and let a refused rebase re-mint promptly.
+
+## Problem 17: deepseek's Texture livelocks on an owner revision after resuming from hibernate (11:21Z onward)
+
+Deepseek resumed from a hibernate snapshot at 11:19:39Z ("agentcore: resumed from hibernate snapshot; clock stepped
+576108ms"). FP0's round-6 revision (11:20:59Z) and a nudge (11:33:54Z) on document ddbdd1ae (trajectory 8048fb68)
+produced no Texture turn: the work item stays open, the activation reads passivated, and the guest log repeats,
+every 5-7 s since 11:21:40Z, "dispatcher: deferred ...texture:ddbdd1ae-.../<id> deferrals=N cause=actor: defer
+unprocessed occurrence: actorruntime: Texture activation returned without disposing exact trigger" and "...discards
+1 emitted update(s)", alternating between two occurrence ids, each followed by "tool loop: iteration 1, executed 1
+tools, continuing" (73 such loop lines by 11:39Z). The revision's trigger is never disposed, so Texture re-runs and
+throws away its own output indefinitely. Hypothesis: two occurrences for the one agent (one per revision) and the
+activation disposes neither exactly. Workaround tried: a new document for round 6 (below).
