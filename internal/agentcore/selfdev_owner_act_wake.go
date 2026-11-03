@@ -33,6 +33,16 @@ import (
 // generate theirs), one without a document, a document bound to another
 // trajectory, or an archived document.
 func (rt *Runtime) ownerActTextureInbox(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, bool, error) {
+	docID, bound, err := rt.ownerActTextureDoc(ctx, ownerID, computerID, operation)
+	if err != nil || !bound {
+		return "", false, err
+	}
+	return currentTextureAgentID(docID), true, nil
+}
+
+// ownerActTextureDoc is ownerActTextureInbox's document: the id of the
+// document the operation's trajectory binds.
+func (rt *Runtime) ownerActTextureDoc(ctx context.Context, ownerID, computerID string, operation selfdev.Operation) (string, bool, error) {
 	trajectoryID := strings.TrimSpace(operation.TrajectoryID)
 	if trajectoryID == "" {
 		return "", false, nil
@@ -63,7 +73,7 @@ func (rt *Runtime) ownerActTextureInbox(ctx context.Context, ownerID, computerID
 	if strings.TrimSpace(doc.TrajectoryID) != trajectoryID || doc.ArchivedAt != nil {
 		return "", false, nil
 	}
-	return currentTextureAgentID(docID), true, nil
+	return docID, true, nil
 }
 
 // ownerActBody is the text Texture reads. It is derived only from the act

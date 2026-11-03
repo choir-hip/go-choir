@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/sourceproj"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -18,8 +20,10 @@ import (
 // 2): when the applied self-development stack sits on a base the computer no
 // longer booted (stack_base_moved), the runtime asks the root Texture RLM, with a
 // rebase notice, to rebase it. This file is the trigger and the bounded
-// re-mint. There is no switch (capsule overlay S4); with no live root RLM the
-// timer mints nothing and the Cast refusal says rebase_needs_root.
+// re-mint. There is no switch (capsule overlay S4). With no live root RLM the
+// notice goes to the Texture of the document the stack operation's own
+// trajectory binds (rebaseTexture); with neither, the timer mints nothing and
+// the Cast refusal says rebase_needs_root.
 //
 // Restart rules (CLAUDE.md, "Restarts End Work (Crash) Or Resume It"):
 //   - Nothing here runs inside boot. Reconcile only arms an in-memory timer,
@@ -214,9 +218,9 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	if !sourceproj.HasCommit(ctx, rt.releaseRepo(), booted) {
 		return rebaseNoticeOutcome{Reason: "the booted base's objects are missing"}
 	}
-	rootInbox, docID, live, err := rt.rebaseRoot(ctx, ownerID, computerID)
+	rootInbox, docID, live, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
 	if err != nil {
-		return rt.transientRebase("root Texture RLM: %v", err)
+		return rt.transientRebase("rebase Texture: %v", err)
 	}
 	if !live {
 		return rebaseNoticeOutcome{Reason: rebaseNeedsRoot}
@@ -299,6 +303,77 @@ func (rt *Runtime) mintRebaseNotice(ctx context.Context) rebaseNoticeOutcome {
 	return out
 }
 
+// rebaseTexture resolves the Texture a rebase notice of operationID goes to:
+// the root Texture RLM when one is live, and otherwise the Texture of the
+// document the operation's own trajectory binds
+// (docs/problems/selfdev-round-blockers-cluster-2026-11-03.md, fix 10). The
+// root exists only where texture.root_desk is on, which is off by default, so
+// without the fallback no computer but the root's ever got a notice. The
+// store's admission is unchanged: the notice's inbox must be the sender of the
+// Texture Cast the rebase answers, and the document Texture sends its own.
+func (rt *Runtime) rebaseTexture(ctx context.Context, ownerID, computerID, operationID string) (inbox, docID string, live bool, err error) {
+	inbox, docID, live, err = rt.rebaseRoot(ctx, ownerID, computerID)
+	if err != nil || live {
+		return inbox, docID, live, err
+	}
+	return rt.rebaseOperationTexture(ctx, ownerID, computerID, operationID)
+}
+
+// rebaseOperationTexture is the fallback: the document the operation's
+// trajectory binds (ownerActTextureInbox: a lifecycle trajectory, a document
+// bound to it, not archived), live when that trajectory is live and has no
+// cancellation intent. An operation without one (genesis, rollback) has none.
+func (rt *Runtime) rebaseOperationTexture(ctx context.Context, ownerID, computerID, operationID string) (inbox, docID string, live bool, err error) {
+	operationID = strings.TrimSpace(operationID)
+	if rt.selfdevOperations == nil || operationID == "" {
+		return "", "", false, nil
+	}
+	operation, err := rt.selfdevOperations.Get(ctx, computerID, operationID)
+	if err != nil {
+		if errors.Is(err, selfdev.ErrOperationNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return "", "", false, nil
+		}
+		return "", "", false, fmt.Errorf("operation %s: %w", operationID, err)
+	}
+	docID, bound, err := rt.ownerActTextureDoc(ctx, ownerID, computerID, operation)
+	if err != nil || !bound {
+		return "", "", false, err
+	}
+	live, err = rt.rebaseTextureTakesRun(ctx, ownerID, computerID, strings.TrimSpace(operation.TrajectoryID), currentTextureAgentID(docID))
+	if err != nil || !live {
+		return "", "", false, err
+	}
+	return currentTextureAgentID(docID), docID, true, nil
+}
+
+// rebaseTextureTakesRun reports whether agentID can take a run on
+// trajectoryID now: the trajectory is live, has no cancellation intent, and
+// has an open work item assigned to the agent. A trajectory that is gone is
+// not live, not an error.
+func (rt *Runtime) rebaseTextureTakesRun(ctx context.Context, ownerID, computerID, trajectoryID, agentID string) (bool, error) {
+	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if snapshot.Trajectory.Status != types.TrajectoryLive {
+		return false, nil
+	}
+	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); cancelErr == nil {
+		return false, nil
+	} else if !errors.Is(cancelErr, store.ErrNotFound) {
+		return false, cancelErr
+	}
+	for _, work := range snapshot.WorkItems {
+		if work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // rebaseRoot resolves the current root Texture RLM: the marked master's inbox
 // and document, and whether it can take a root run now (its trajectory is
 // live, has no cancellation intent, and its standing item is open).
@@ -321,32 +396,22 @@ func (rt *Runtime) rebaseRoot(ctx context.Context, ownerID, computerID string) (
 	if trajectoryID == "" || doc.ArchivedAt != nil {
 		return "", "", false, nil
 	}
-	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
+	// A marked master whose trajectory is gone is not live (and not an
+	// error that would keep the fallback from being asked).
+	agentID := currentTextureAgentID(doc.DocID)
+	live, err = rt.rebaseTextureTakesRun(ctx, ownerID, computerID, trajectoryID, agentID)
+	if err != nil || !live {
 		return "", "", false, err
 	}
-	if snapshot.Trajectory.Status != types.TrajectoryLive {
-		return "", "", false, nil
-	}
-	if _, cancelErr := rt.store.GetLifecycleCancellationIntent(ctx, ownerID, computerID, trajectoryID); cancelErr == nil {
-		return "", "", false, nil
-	} else if !errors.Is(cancelErr, store.ErrNotFound) {
-		return "", "", false, cancelErr
-	}
-	agentID := currentTextureAgentID(doc.DocID)
-	for _, work := range snapshot.WorkItems {
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == agentID {
-			return agentID, doc.DocID, true, nil
-		}
-	}
-	return "", "", false, nil
+	return agentID, doc.DocID, true, nil
 }
 
 // rebaseAttemptClosed decides, from the tape, whether attempt n can no longer
 // be answered, so attempt n+1 may follow. It is closed when any of these holds:
 //   - it predates a markerless boot (a crash closed it);
-//   - its inbox is not the current root (the master was replaced);
-//   - no Cast from its root names it and the answer window has passed;
+//   - its inbox is not the current addressee (the master was replaced, or a
+//     root became live in place of the operation's Texture);
+//   - no Cast from its addressee names it and the answer window has passed;
 //   - a Cast named it but that round is closed (and no claim exists).
 //
 // When it is not closed, wait says when to look again.
@@ -382,7 +447,8 @@ func (rt *Runtime) rebaseAttemptClosed(ctx context.Context, ownerID, computerID 
 	return true, 0, nil
 }
 
-// rebaseNoticeCasts are the root's Casts to management that name the notice.
+// rebaseNoticeCasts are the addressee's Casts to management that name the
+// notice (the root's, or the operation's document Texture's).
 func (rt *Runtime) rebaseNoticeCasts(ctx context.Context, ownerID, computerID string, notice types.CommitmentRecord) ([]types.CommitmentRecord, error) {
 	conversation := types.InboxConversationID(persistentManagementAgentID(ownerID), notice.Inbox)
 	records, err := rt.store.ConversationRecords(ctx, ownerID, computerID, conversation)

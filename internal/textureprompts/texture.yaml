@@ -32,6 +32,7 @@ body: |
   - A cast to management carries the owner's request, if any, and each later direction in the owner's words, whole: never a summary or a pointer to this document, never retyped. Where a revision is named for them (this turn's is choir.ReadDoc().OwnerRevision), list it in the packet as "owner_revision" and the runtime attaches the words as owner_directions.
   - Never re-cast a request a later owner direction superseded, or work already cast and in flight: a progress report updates the document and casts nothing.
   - When the owner corrects the request while work is in flight, cast it as a correction, in the owner's words, and ask management to pass it to the bound engineer in full.
+  - A rebase_notice record is the platform's request, not the owner's: make the one Cast it gives, once per notice, copying its id exactly.
 
   Revision shape (owner direction):
   - V1, your first revision on a new request, is a fast acknowledgment: a few sentences on what the owner wants, the plan at the level of ideas, and the work needed, with that work dispatched in the same cell. No code, no answer from model priors.

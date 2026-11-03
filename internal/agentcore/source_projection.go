@@ -269,8 +269,10 @@ type castLedgerRef struct {
 	OwnerID, ComputerID, CastRecordID, ManagementAgentID, TrajectoryID string
 }
 
-// rebaseNeedsRoot is the text a stack_base_moved refusal gains when no root
-// Texture RLM is live to Cast the rebase (capsule overlay S4).
+// rebaseNeedsRoot is the text a stack_base_moved refusal gains when no
+// Texture is live to Cast the rebase: no root Texture RLM, and no live
+// document Texture bound to the stack operation's trajectory (capsule overlay
+// S4; fix 10 of docs/problems/selfdev-round-blockers-cluster-2026-11-03.md).
 const rebaseNeedsRoot = "rebase_needs_root: no live root desk to Cast the rebase"
 
 // sourceProjectionCastGateFor is the gate with U4's exception
@@ -298,8 +300,12 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 			return "", nil, fmt.Errorf("source_projection_failed: the capsule source could not be reconciled with the applied stack: %w", err)
 		}
 		if refusal := result.Refusal(); refusal != "" {
-			if result.State == sourceproj.StateBaseMoved && !rt.rebaseRootLive(ctx) {
-				refusal += "; " + rebaseNeedsRoot
+			if result.State == sourceproj.StateBaseMoved {
+				if inbox, live := rt.rebaseTextureLive(ctx, result.OperationID); live {
+					refusal += "; the rebase starts from the platform's rebase notice, which goes to " + inbox + " (the computer stays up " + rt.rebaseStayUpInterval().String() + " after boot first): that Texture casts it to management, and management's rebase Cast is admitted"
+				} else {
+					refusal += "; " + rebaseNeedsRoot
+				}
 			}
 			return "", nil, errors.New(refusal)
 		}
@@ -345,19 +351,20 @@ func (rt *Runtime) sourceProjectionCastGateFor(ctx context.Context, spec rebaseS
 	return result.BootedBase, nil, nil
 }
 
-// rebaseRootLive reports whether a root Texture RLM is live to Cast a rebase.
-// A read failure counts as not live: the refusal then says so, which is the
-// truth the owner can act on.
-func (rt *Runtime) rebaseRootLive(ctx context.Context) bool {
+// rebaseTextureLive reports the Texture a rebase notice of operationID goes
+// to (rebaseTexture: the root, else the operation's own document Texture) and
+// whether it is live to Cast the rebase. A read failure counts as not live:
+// the refusal then says so, which is the truth the owner can act on.
+func (rt *Runtime) rebaseTextureLive(ctx context.Context, operationID string) (string, bool) {
 	if rt == nil || rt.store == nil {
-		return false
+		return "", false
 	}
 	ownerID, computerID := rt.rebaseScope()
 	if ownerID == "" || computerID == "" {
-		return false
+		return "", false
 	}
-	_, _, live, err := rt.rebaseRoot(ctx, ownerID, computerID)
-	return err == nil && live
+	inbox, _, live, err := rt.rebaseTexture(ctx, ownerID, computerID, operationID)
+	return inbox, err == nil && live
 }
 
 // rematerializedCastObserverAgentID commits the Cast warning: a

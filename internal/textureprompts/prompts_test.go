@@ -87,9 +87,11 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	// replaced two news rules with three; 5.15k until the owner's-intention
 	// rules (texture-holds-the-trajectory-2026-10-25) added four lines; 6k
 	// until casts named the owner's revisions instead of retyping them
-	// (texture-retypes-owner-directions-2026-10-25).
-	if n := len(prompt); n > 6150 {
-		t.Errorf("prompt core is %d characters; the budget is about 6.15k", n)
+	// (texture-retypes-owner-directions-2026-10-25); 6.15k until a document
+	// Texture could take the stack's rebase notice
+	// (selfdev-round-blockers-cluster-2026-11-03, fix 10) and one line said so.
+	if n := len(prompt); n > 6300 {
+		t.Errorf("prompt core is %d characters; the budget is about 6.3k", n)
 	}
 }
 
