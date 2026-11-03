@@ -114,7 +114,7 @@ metamission:
 
 now:
   status: working
-  slice: lanes A (planted-fault rollback proof in CI), C (Files rounds running on claude and deepseek), E (S4 built and accepted, queued as the first real ring walk); B done; F designed; onboarding landed and accepted
+  slice: lanes A (planted-fault walk stalled at R0 on a failed d@e wake; fix and owner start), C (Files round 3 on claude and deepseek after FP0 rejections), E (S4 queued; capsule overlay design in review round 2); B done; F designed; onboarding landed
   conjecture: >-
     C1: with five lanes split by package boundary and reviews in the
     background, one night lands pd P1 and P2 and starts self-development
@@ -136,6 +136,6 @@ now:
   main_uncertainty: whether arms hit stack_base_moved or stale open operations after the deploy refreshes them
   next_observation: staging build identity after CI; first Files Cast per arm
   blocker: none
-  next_action: after the rollback proof, land S4 with the logout-retry script fix and push the batched docs; read the first Files candidates
+  next_action: unblock the R0 walk (d@e wake retry), finish the rollback proof, then land S4, the logout-retry script and the batched docs
 
 receipts: []
