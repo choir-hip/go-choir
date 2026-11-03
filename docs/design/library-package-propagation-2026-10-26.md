@@ -251,6 +251,14 @@ them (review 257 F1).
    - Any other path refuses with `package_change_not_confined`, and the
      refusal names the outside paths. Those paths are a platform
      proposal (10.5).
+   - Amended 2026-11-03 (problem 23): confinement compares the result,
+     not the history. An outside path OP changed counts only when OP's
+     applied source differs from the stack's platform base there. A path an
+     earlier round changed and OP restored byte for byte is net zero and
+     does not refuse; the refusal names only the paths that really
+     differ. The package's own tests under `frontend/tests/NAME/`
+     still count as outside (a release carries only NAME's subtree), and
+     the refusal names them as test files to restore.
 3. **Own change only.** The parent subtree P (NAME before OP) must equal
    either the package subtree in the stack's platform base, or the tree
    of a release listed on the publisher's own track.

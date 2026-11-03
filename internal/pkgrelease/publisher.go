@@ -238,14 +238,17 @@ type DraftSource struct {
 // DraftPackage runs the publisher-side checks of design 3.2 and builds the
 // release's package part, in one scratch over the guest repository:
 //
-//  1. operation confinement: the paths the operation changed (the source
-//     before it against the source after it) all lie under the package
-//     root, or package_change_not_confined names the others;
+//  1. operation confinement, on the result: every path the operation
+//     changed (the source before it against the source after it) lies under
+//     the package root or, outside it, is the stack base's again, or
+//     package_change_not_confined names the others. An outside path an
+//     earlier round changed and this round restored does not count
+//     (problem 23);
 //  2. own change only: the package subtree before the operation is the
 //     base's or the track head's. When it is neither because earlier rounds
 //     of this computer's own applied stack changed the package and were not
-//     published (an earlier round that also changed a path outside the
-//     package can never be), the release carries the stack's cumulative
+//     published (an earlier round whose result also differed from the base
+//     outside the package could not be), the release carries the stack's cumulative
 //     package change instead: from the track head when the head's tree is
 //     the package at a point of this stack, or from the base when the track
 //     has no head. Otherwise package_parent_unpublished.
@@ -270,23 +273,44 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	if err != nil {
 		return DraftSource{}, fmt.Errorf("pkgrelease: the source before the operation (%s) is unreadable: %w", in.BeforeLabel, err)
 	}
-	out, err := gitRun(ctx, s.dir, s.env, nil, "diff-tree", "-r", "-z", "--name-only", "--no-renames", before, after)
+	// The operation's own change, against the source just before it.
+	opPaths, err := diffPaths(ctx, s, before, after)
 	if err != nil {
 		return DraftSource{}, err
 	}
-	var paths []string
-	for _, p := range strings.Split(string(out), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	sort.Strings(paths)
-	if len(paths) == 0 {
+	if len(opPaths) == 0 {
 		return DraftSource{}, refuse(ReasonUnchanged, "the operation changed nothing against %s", in.BeforeLabel)
 	}
-	if outside := OutsideRoot(paths, root); len(outside) > 0 {
-		return DraftSource{}, refuse(ReasonChangeNotConfined,
-			"the operation changed paths outside %s: %s. A change outside a package is never adopted between computers; propose it for the platform with `choir platform publish`, or publish the package part alone if it stands alone", root, listSome(outside))
+	// Confinement compares the result, not the history (problem 23): an
+	// outside path the operation changed counts only when the applied tree
+	// differs from the stack's platform base there. One it put back byte for
+	// byte (an earlier round changed it, or it was touched and reverted) is
+	// net zero and does not refuse. One it left alone never counts (fix 11:
+	// only the package subtree travels).
+	if touched := OutsideRoot(opPaths, root); len(touched) > 0 {
+		netPaths, err := diffPaths(ctx, s, in.Base, after)
+		if err != nil {
+			return DraftSource{}, err
+		}
+		differs := make(map[string]bool, len(netPaths))
+		for _, p := range netPaths {
+			differs[p] = true
+		}
+		var outside []string
+		for _, p := range touched {
+			if differs[p] {
+				outside = append(outside, p)
+			}
+		}
+		if len(outside) > 0 {
+			return DraftSource{}, refuse(ReasonChangeNotConfined, "%s", notConfinedDetail(in.Name, root, outside))
+		}
+	}
+	var paths []string
+	for _, p := range opPaths {
+		if p == root || strings.HasPrefix(p, root+"/") {
+			paths = append(paths, p)
+		}
 	}
 	tree, present, err := subtreeIn(ctx, s.dir, s.env, after, root)
 	if err != nil {
@@ -355,9 +379,11 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 		if paths, err = packagePathsBetween(ctx, s, root, parent.Tree, tree); err != nil {
 			return DraftSource{}, err
 		}
-		if len(paths) == 0 {
-			return DraftSource{}, refuse(ReasonUnchanged, "the package at this operation is its parent's %s already (%s)", parent.Tree, parent.Kind)
-		}
+	}
+	if len(paths) == 0 {
+		// Either the package is its parent's already, or the operation only
+		// put outside paths back to the base and left the package as it was.
+		return DraftSource{}, refuse(ReasonUnchanged, "the package at this operation is its parent's %s already (%s)", parent.Tree, parent.Kind)
 	}
 	full, err := s.prefixed(ctx, root, tree)
 	if err != nil {
@@ -400,6 +426,56 @@ func DraftPackage(ctx context.Context, in DraftInput) (DraftSource, error) {
 	}
 	return DraftSource{Root: root, Paths: paths, Tree: tree, Parent: parent, Blobs: blobs, Manifest: manifest, ManifestVersion: version}, nil
 }
+
+// diffPaths lists the paths that differ between two tree-ishes, sorted.
+func diffPaths(ctx context.Context, s *scratch, from, to string) ([]string, error) {
+	out, err := gitRun(ctx, s.dir, s.env, nil, "diff-tree", "-r", "-z", "--name-only", "--no-renames", from, to)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// notConfinedDetail is the package_change_not_confined prose: the outside
+// paths that differ from the base, with the package's own tests (under
+// frontend/tests/<name>/) named apart. Those stay refused: a release carries
+// only the package subtree, so they would not ship, and the design does not
+// count them as part of the package.
+func notConfinedDetail(name, root string, outside []string) string {
+	testsRoot := packageTestsRoot(name)
+	var tests, other []string
+	for _, p := range outside {
+		if strings.HasPrefix(p, testsRoot+"/") {
+			tests = append(tests, p)
+		} else {
+			other = append(other, p)
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "the operation changed paths outside %s that differ from the base", root)
+	if len(other) > 0 {
+		fmt.Fprintf(&b, ": %s. A change outside a package is never adopted between computers; propose it for the platform with `choir platform publish`, or restore those paths to the base and publish the package part alone if it stands alone", listSome(other))
+	}
+	if len(tests) > 0 {
+		sep := ": "
+		if len(other) > 0 {
+			sep = ". Also, "
+		}
+		fmt.Fprintf(&b, "%sthe package's own test files %s are outside the package and a release does not carry them; restore them to the base to publish", sep, listSome(tests))
+	}
+	return b.String()
+}
+
+// packageTestsRoot is where a package's own end-to-end tests live, outside
+// its subtree.
+func packageTestsRoot(name string) string { return "frontend/tests/" + name }
 
 // packagePathsBetween lists the paths under root that differ between two
 // package subtrees, as full repository paths, sorted.

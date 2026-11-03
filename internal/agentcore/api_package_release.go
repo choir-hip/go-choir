@@ -25,8 +25,8 @@ import (
 
 // packageReleaseDraft drafts the release of one package changed by one
 // applied operation, after the publisher-side checks: the setting is on, the
-// operation applied, every path it changed lies under the package root
-// (package_change_not_confined names the others), and the package before it
+// operation applied, every path it changed lies under the package root or is
+// the stack base's again (package_change_not_confined names the others), and the package before it
 // is the base's or the track head's, or earlier unpublished rounds of this
 // computer's own applied stack, which the release then carries
 // (package_parent_unpublished otherwise; pkgrelease.DraftPackage). The host
