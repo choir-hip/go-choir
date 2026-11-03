@@ -382,3 +382,67 @@ func TestVerifierKeyRepinReactivatesARevokedKeyOnlyByTheOwnersAct(t *testing.T) 
 		t.Fatalf("re-activation record = %d, %v", reactivated, err)
 	}
 }
+
+// Re-review of 6de4d3133 (Devin): a re-activated key opens a new window at
+// the re-activation sequence. A signature the key made while it was revoked
+// ([C1, C2)) must never resolve again; one before C1 (its first window) and
+// one from C2 on resolve.
+func TestReactivatedVerifierKeyNeverResolvesInsideItsRevokedGap(t *testing.T) {
+	w := newVerifierRepinWorld(t, OwnerActEnforce)
+	ctx := t.Context()
+	pinnedAt := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	k1, k2 := newTestVerifierKey(t), newTestVerifierKey(t)
+	const computerID = "computer-gap"
+	w.genesis(computerID, 100, pinnedAt)
+	w.pin(computerID, k1, 10, pinnedAt)
+
+	toK2 := selfdevprotocol.VerifierKeyRepinRequest{ComputerID: computerID, OwnerID: "owner-a", KeyID: k2.id, PublicKey: k2.public, ReplacesKeyID: k1.id, Reason: "lost disk"}
+	if rec := w.post(verifierKeyRepinRoute, toK2, true, w.mint(toK2, "owner-a")); rec.Code != http.StatusOK {
+		t.Fatalf("re-pin to K2 = %d %s", rec.Code, rec.Body.String())
+	}
+	c1 := uint64(101)
+	revokedAt := time.Now().UTC()
+	// The tape moves on while K2 is pinned.
+	insertTestAppendReceipt(t, w.store.db, computerID, "gap-head", platformTestDigest('c'), uint64(150), string(computerevent.EventProjectionBatchRecorded), platformTestDigest('3'), platformTestDigest('d'), nil, revokedAt)
+	time.Sleep(20 * time.Millisecond)
+	inGapAt := time.Now().UTC()
+	time.Sleep(20 * time.Millisecond)
+	back := selfdevprotocol.VerifierKeyRepinRequest{ComputerID: computerID, OwnerID: "owner-a", KeyID: k1.id, PublicKey: k1.public, ReplacesKeyID: k2.id, Reason: "old disk restored"}
+	if rec := w.post(verifierKeyRepinRoute, back, true, w.mint(back, "owner-a")); rec.Code != http.StatusOK {
+		t.Fatalf("re-activation of K1 = %d %s", rec.Code, rec.Body.String())
+	}
+	c2 := uint64(151)
+	afterAt := time.Now().UTC().Add(time.Minute)
+
+	resolver := ControlKeyResolver{Store: w.store}
+	resolve := func(sequence uint64, at time.Time) error {
+		_, err := resolver.ResolveReceiptKey(selfdevprotocol.VerifierKeyDomain, computerID, k1.id, sequence, at)
+		return err
+	}
+	if err := resolve(50, pinnedAt.Add(time.Minute)); err != nil {
+		t.Fatalf("K1 in its first window (before C1) stopped resolving: %v", err)
+	}
+	for _, sequence := range []uint64{c1, 120, c2 - 1} {
+		if err := resolve(sequence, inGapAt); err == nil {
+			t.Fatalf("K1 at sequence %d, inside the revoked gap [%d,%d), resolved", sequence, c1, c2)
+		}
+	}
+	// Inside the gap by time alone (a receipt without a sequence).
+	if err := resolve(0, inGapAt); err == nil {
+		t.Fatal("K1 issued inside the revoked gap resolved by time")
+	}
+	// A sequence from the first window with a gap-time issue is still refused.
+	if err := resolve(50, inGapAt); err == nil {
+		t.Fatal("K1 with a first-window sequence but a revoked-gap time resolved")
+	}
+	if err := resolve(c2, afterAt); err != nil {
+		t.Fatalf("K1 from the re-activation on does not resolve: %v", err)
+	}
+	if err := resolve(c2+40, afterAt); err != nil {
+		t.Fatalf("K1 after the re-activation does not resolve: %v", err)
+	}
+	row, err := w.store.ControlKey(ctx, selfdevprotocol.VerifierKeyDomain, computerID, k1.id)
+	if err != nil || row.ActivationSequence == nil || *row.ActivationSequence != c2 {
+		t.Fatalf("re-activated row = %+v, %v; want a window from %d", row, err, c2)
+	}
+}

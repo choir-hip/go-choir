@@ -83,6 +83,10 @@ CREATE TABLE IF NOT EXISTS control_key_activations (
   authorizing_receipt_json TEXT NOT NULL,
   authorizing_receipt_digest CHAR(64) NOT NULL,
   owner_act_receipt_digest CHAR(64) NOT NULL,
+  prior_window_activation_sequence BIGINT NULL,
+  prior_window_activation_time TIMESTAMPTZ NULL,
+  prior_window_first_invalid_sequence BIGINT NULL,
+  prior_window_first_invalid_time TIMESTAMPTZ NULL,
   PRIMARY KEY (authorizing_receipt_digest)
 );
 CREATE INDEX IF NOT EXISTS control_key_activations_key_idx ON control_key_activations (signer_domain, computer_id, key_id);

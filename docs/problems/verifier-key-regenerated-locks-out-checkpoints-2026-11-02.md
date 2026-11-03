@@ -115,9 +115,18 @@ its next verifier checkpoint (the first-use branch), so it is not latent.
    `control_key_history`, `owner_act_receipts` and a new activation record
    (`control_key_activations`) with the reason. A key revoked by an earlier
    re-pin (a disk restored from an older image) is re-activated by the same
-   owner act: its row returns to active, its first activation window is
-   kept, and the re-activation is its own activation record. Without an
-   owner act a revoked key stays refused.
+   owner act under a new window: its row's window starts at the
+   re-activation sequence and time, its closed earlier window moves to the
+   activation record (`prior_window_*`), and `ControlKeyResolver` honors
+   that earlier window, so a receipt the key signed before its revocation
+   still resolves and one it signed while revoked never does. Without an
+   owner act a revoked key stays refused. Resolvers of verifier-control
+   keys: `ControlKeyResolver` (`platform/control_keys.go`, behind the
+   platform's bootstrap resolver) is the only one that reads
+   `control_key_history` windows; the checkpoint authority
+   (`checkpoints.go:117`) and the preflight compare the active pin only;
+   `verifierprotocol`'s certificate resolver uses the certificate's own
+   key; the bundle trust set refuses any domain but its own.
 3. Guest: `/health` carries `verifier_key` (pin state) and degrades on a
    mismatch; the materializer runs the preflight before an attempt is spent
    and holds a mismatch with a typed reason (no attempt, no marker, no retry

@@ -149,12 +149,16 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 	}
 	// A key pinned before and revoked comes back when a disk is restored
 	// from an older image. Refusing it would be a one-way door; the owner's
-	// act re-activates it: the row returns to active (its first activation
-	// window is kept, so what it signed then still resolves), and the
-	// re-activation is a new activation record bound to the owner act.
+	// act re-activates it under a NEW window: the row's window starts at the
+	// re-activation sequence and time, never the old one, so nothing the key
+	// signed while it was revoked resolves again. Its closed earlier window
+	// moves to the activation record (prior_window_*), where the resolver
+	// still honors what it signed before the revocation.
 	var priorStatus string
 	var priorKey []byte
-	err = tx.QueryRowContext(ctx, `SELECT status,public_key FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=?`, computerID, keyID).Scan(&priorStatus, &priorKey)
+	var priorActSeq, priorInvalidSeq sql.NullInt64
+	var priorActTime, priorInvalidTime sql.NullTime
+	err = tx.QueryRowContext(ctx, `SELECT status,public_key,activation_sequence,activation_time,first_invalid_sequence,first_invalid_time FROM control_key_history WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=?`, computerID, keyID).Scan(&priorStatus, &priorKey, &priorActSeq, &priorActTime, &priorInvalidSeq, &priorInvalidTime)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		priorStatus = ""
@@ -162,6 +166,8 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 		return response, err
 	case priorStatus != "revoked" || !ed25519.PublicKey(priorKey).Equal(presented):
 		return response, fmt.Errorf("%w: %s is recorded for %s as %s; only a revoked key with the same public key is re-activated", errVerifierRepinConflict, keyID, computerID, priorStatus)
+	case !priorInvalidSeq.Valid || !priorInvalidTime.Valid:
+		return response, fmt.Errorf("%w: revoked key %s has no closed window", errVerifierRepinConflict, keyID)
 	}
 	reactivated := priorStatus == "revoked"
 	var head sql.NullInt64
@@ -195,8 +201,8 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 		return response, fmt.Errorf("%w: the active pin changed", errVerifierRepinConflict)
 	}
 	if reactivated {
-		result, err = tx.ExecContext(ctx, `UPDATE control_key_history SET status='active', first_invalid_sequence=NULL, first_invalid_time=NULL, replacement_key_id=NULL, authorizing_receipt_json=?, authorizing_receipt_digest=? WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=? AND status='revoked'`,
-			string(pinReceiptJSON), pinReceiptDigest, computerID, keyID)
+		result, err = tx.ExecContext(ctx, `UPDATE control_key_history SET status='active', activation_sequence=?, activation_time=?, first_invalid_sequence=NULL, first_invalid_time=NULL, replacement_key_id=NULL, authorizing_receipt_json=?, authorizing_receipt_digest=? WHERE signer_domain='verifier-control' AND computer_id=? AND key_id=? AND status='revoked'`,
+			cutover, now, string(pinReceiptJSON), pinReceiptDigest, computerID, keyID)
 		if err != nil {
 			return response, err
 		}
@@ -207,8 +213,14 @@ func (a *CheckpointAuthority) RepinVerifierKey(ctx context.Context, request self
 		computerID, keyID, []byte(presented), cutover, now, string(pinReceiptJSON), pinReceiptDigest, now); err != nil {
 		return response, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO control_key_activations (signer_domain,computer_id,key_id,activation_sequence,activation_time,prior_status,replaces_key_id,authorizing_receipt_json,authorizing_receipt_digest,owner_act_receipt_digest) VALUES ('verifier-control',?,?,?,?,?,?,?,?,?)`,
-		computerID, keyID, cutover, now, map[bool]string{true: "revoked", false: "new"}[reactivated], activeKeyID, string(pinReceiptJSON), pinReceiptDigest, verified.Digest); err != nil {
+	var windowActSeq, windowInvalidSeq, windowActTime, windowInvalidTime any
+	if reactivated {
+		windowActSeq, windowInvalidSeq = nullInt(priorActSeq), nullInt(priorInvalidSeq)
+		windowActTime, windowInvalidTime = nullTime(priorActTime), nullTime(priorInvalidTime)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO control_key_activations (signer_domain,computer_id,key_id,activation_sequence,activation_time,prior_status,replaces_key_id,authorizing_receipt_json,authorizing_receipt_digest,owner_act_receipt_digest,prior_window_activation_sequence,prior_window_activation_time,prior_window_first_invalid_sequence,prior_window_first_invalid_time) VALUES ('verifier-control',?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		computerID, keyID, cutover, now, map[bool]string{true: "revoked", false: "new"}[reactivated], activeKeyID, string(pinReceiptJSON), pinReceiptDigest, verified.Digest,
+		windowActSeq, windowActTime, windowInvalidSeq, windowInvalidTime); err != nil {
 		return response, err
 	}
 	if err := recordOwnerAct(ctx, tx, verified, pinReceiptDigest, now); err != nil {
@@ -321,4 +333,18 @@ func (h *Handler) verifyVerifierRepinOwnerAct(r *http.Request, request selfdevpr
 		}
 	}
 	return &verified, nil
+}
+
+func nullInt(value sql.NullInt64) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Int64
+}
+
+func nullTime(value sql.NullTime) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.Time.UTC()
 }
