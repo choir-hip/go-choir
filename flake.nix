@@ -322,8 +322,6 @@
         "cmd/pkgmirror"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
         "cmd/choir-delegate"
-        # visual capture (docs/design/visual-evidence-slice-2026-10-15.md)
-        "cmd/choir-capture"
         # the desk-session worker without Dolt (RES-17)
         "cmd/desk-worker"
         # operator tools of station FP9 (escrow key sealing; the copy-only
@@ -451,12 +449,6 @@
         choirDelegate = mkGoService {
           pname = "choir-delegate";
           subPackage = "cmd/choir-delegate";
-        };
-        # visual capture: the capsule job that screenshots the release
-        # frontend (docs/design/visual-evidence-slice-2026-10-15.md).
-        choirCapture = mkGoService {
-          pname = "choir-capture";
-          subPackage = "cmd/choir-capture";
         };
         autoputer = mkGoService {
           pname = "autoputer";

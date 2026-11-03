@@ -12,9 +12,9 @@ import (
 )
 
 // Station TE (docs/design/texture-evidence-embeds-te-2026-10-25.md): a
-// fresh Freeze that observed visual captures asks the Texture owner to embed
-// them in the operation's trajectory document. Texture's package writes the
-// embed blocks from the frozen bundle (CandidateVisualEvidence); this side
+// fresh Freeze that saved the engineer's screens asks the Texture owner to
+// embed them in the operation's trajectory document. Texture's package writes
+// the embed blocks from the frozen bundle (CandidateScreens); this side
 // only says which operation froze, from the runtime's own observation, and
 // only when the computer setting texture.evidence_embeds is on.
 

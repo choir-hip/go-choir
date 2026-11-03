@@ -44,24 +44,11 @@ func (r ControlKeyResolver) ResolveReceiptKey(domain, computerID, keyID string, 
 	if key.Status != "active" && key.Status != "revoked" {
 		return nil, fmt.Errorf("control key resolver: key is not active")
 	}
-	predates := (key.ActivationSequence != nil && sequence > 0 && sequence < *key.ActivationSequence) ||
-		(key.ActivationTime != nil && issuedAt.Before(*key.ActivationTime))
-	if predates {
-		// A key the owner re-activated holds its current window on the row
-		// and each earlier, closed window on its activation record. A receipt
-		// inside an earlier window resolves; one in a revoked gap never does
-		// (docs/problems/verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md).
-		inEarlier, windowErr := r.Store.inClosedKeyWindow(context.Background(), key.SignerDomain, key.ComputerID, key.KeyID, sequence, issuedAt)
-		if windowErr != nil {
-			return nil, windowErr
-		}
-		if !inEarlier {
-			if key.ActivationSequence != nil && sequence > 0 && sequence < *key.ActivationSequence {
-				return nil, fmt.Errorf("control key resolver: receipt predates key activation sequence")
-			}
-			return nil, fmt.Errorf("control key resolver: receipt predates key activation time")
-		}
-		return append(ed25519.PublicKey(nil), key.PublicKey...), nil
+	if key.ActivationSequence != nil && sequence > 0 && sequence < *key.ActivationSequence {
+		return nil, fmt.Errorf("control key resolver: receipt predates key activation sequence")
+	}
+	if key.ActivationTime != nil && issuedAt.Before(*key.ActivationTime) {
+		return nil, fmt.Errorf("control key resolver: receipt predates key activation time")
 	}
 	if key.FirstInvalidSequence != nil && sequence >= *key.FirstInvalidSequence {
 		return nil, fmt.Errorf("control key resolver: key invalid at sequence")
@@ -182,31 +169,4 @@ func nullableControlString(value string) any {
 		return nil
 	}
 	return value
-}
-
-// inClosedKeyWindow reports whether a receipt falls inside one of a key's
-// earlier, closed windows (control_key_activations.prior_window_*). A
-// closed window always has both its invalid bounds; a sequence of 0 (none
-// known) is judged by time alone, as the row's own window judges it.
-func (s *Store) inClosedKeyWindow(ctx context.Context, domain, computerID, keyID string, sequence uint64, issuedAt time.Time) (bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT prior_window_activation_sequence, prior_window_activation_time, prior_window_first_invalid_sequence, prior_window_first_invalid_time FROM control_key_activations WHERE signer_domain=? AND computer_id=? AND key_id=? AND prior_window_first_invalid_sequence IS NOT NULL AND prior_window_first_invalid_time IS NOT NULL`, domain, computerID, keyID)
-	if err != nil {
-		return false, fmt.Errorf("control key resolver: closed windows: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var activationSequence, invalidSequence sql.NullInt64
-		var activationTime, invalidTime sql.NullTime
-		if err := rows.Scan(&activationSequence, &activationTime, &invalidSequence, &invalidTime); err != nil {
-			return false, err
-		}
-		if sequence > 0 && ((activationSequence.Valid && sequence < uint64(activationSequence.Int64)) || sequence >= uint64(invalidSequence.Int64)) {
-			continue
-		}
-		if (activationTime.Valid && issuedAt.Before(activationTime.Time)) || !issuedAt.Before(invalidTime.Time) {
-			continue
-		}
-		return true, nil
-	}
-	return false, rows.Err()
 }

@@ -83,13 +83,6 @@ const (
 	// scopes (share), or its state (withdraw, reinstate) (Library S3,
 	// design 4.1). Its subject binds the release id and the change.
 	ActPackageListing = "package.listing"
-	// ActVerifierRepin is the owner replacing a computer's pinned
-	// verifier-control key with the key its verifier now presents, after
-	// the guest lost the old key with its data disk
-	// (docs/problems/verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md).
-	// Its subject binds the new key, the key it replaces and the reason
-	// (selfdevprotocol.VerifierKeyRepinSubject).
-	ActVerifierRepin = "computer.verifier.repin"
 )
 
 // Auth methods.

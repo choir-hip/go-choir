@@ -22,8 +22,11 @@ import (
 // publishable, and publication refuses a document that holds one.
 
 const (
-	// EmbedKindCapsuleEvidence is one capture of a frozen self-development
-	// candidate: an asset-store digest bound to its operation.
+	// EmbedKindCapsuleEvidence is one screenshot of a frozen
+	// self-development candidate: an asset-store digest bound to its
+	// operation, naming the file the runtime saved it as
+	// (Self-development/<operation>/screens/<name>.png) or, for an embed
+	// written before the platform capture was removed, its route.
 	EmbedKindCapsuleEvidence = "capsule_evidence"
 	// EmbedKindImage is an owned image in the computer's asset store.
 	EmbedKindImage = "image"
@@ -48,6 +51,7 @@ type Embed struct {
 	OperationID string
 	ComputerID  string
 	Route       string
+	File        string
 	Width       int
 	Height      int
 	Blank       bool
@@ -96,7 +100,7 @@ func EmbedOf(n Node) (Embed, bool) {
 	return Embed{
 		ID: str(n.Attrs, "id"), Kind: str(n.Attrs, "kind"),
 		Digest: str(target, "digest"), OperationID: str(target, "operation_id"), ComputerID: str(target, "computer_id"),
-		Route: str(target, "route"), Width: num("width"), Height: num("height"), Blank: blank,
+		Route: str(target, "route"), File: str(target, "file"), Width: num("width"), Height: num("height"), Blank: blank,
 		Caption: str(n.Attrs, "caption"), Alt: str(n.Attrs, "alt"),
 	}, true
 }
@@ -173,12 +177,30 @@ var (
 	// Reserved for the later kinds (Texture media design section 3).
 	embedReservedKeys = map[string]bool{"selector": true, "poster": true, "transcript": true}
 	embedTargetKeys   = map[string]map[string]bool{
-		EmbedKindCapsuleEvidence: {"digest": true, "operation_id": true, "computer_id": true, "route": true, "width": true, "height": true, "blank": true},
+		EmbedKindCapsuleEvidence: {"digest": true, "operation_id": true, "computer_id": true, "route": true, "file": true, "width": true, "height": true, "blank": true},
 		EmbedKindImage:           {"digest": true, "width": true, "height": true},
 	}
 	topLevelBlockPath = regexp.MustCompile(`^doc\.content(\[\d+\])?$`)
 	embedDigest       = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
+
+// embedScreensRoot is where the runtime saves a candidate's screens in the
+// computer's file tree.
+const embedScreensRoot = "Self-development/"
+
+// embedScreenFile says file is a relative path under embedScreensRoot with no
+// climbing component.
+func embedScreenFile(file string) bool {
+	if !strings.HasPrefix(file, embedScreensRoot) || utf8.RuneCountInString(file) > maxEmbedRouteRunes || strings.ContainsAny(file, " \t\r\n\\") {
+		return false
+	}
+	for _, part := range strings.Split(file, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
 
 func (v *Validator) validateEmbed(node Node, path string) error {
 	if v.world || v.ownerText {
@@ -228,8 +250,16 @@ func (v *Validator) validateEmbed(node Node, path string) error {
 				return fmt.Errorf("%s.embed target.%s is required (no spaces, at most %d characters)", path, field, maxEmbedIdentRunes)
 			}
 		}
-		if !strings.HasPrefix(e.Route, "/") || strings.HasPrefix(e.Route, "//") || utf8.RuneCountInString(e.Route) > maxEmbedRouteRunes || strings.ContainsAny(e.Route, " \t\r\n") {
+		_, hasRoute := target["route"]
+		_, hasFile := target["file"]
+		if !hasRoute && !hasFile {
+			return fmt.Errorf("%s.embed target names neither a file nor a route", path)
+		}
+		if hasRoute && (!strings.HasPrefix(e.Route, "/") || strings.HasPrefix(e.Route, "//") || utf8.RuneCountInString(e.Route) > maxEmbedRouteRunes || strings.ContainsAny(e.Route, " \t\r\n")) {
 			return fmt.Errorf("%s.embed target.route must be a path on this origin", path)
+		}
+		if hasFile && !embedScreenFile(e.File) {
+			return fmt.Errorf("%s.embed target.file must be a screen file under %s", path, embedScreensRoot)
 		}
 		if err := embedDimensions(target, path, true); err != nil {
 			return err

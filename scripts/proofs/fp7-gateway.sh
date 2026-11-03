@@ -4,7 +4,7 @@
 # docs/definitions/choir-launch-fp7-gateway-identity-2026-10-21.md on
 # lane/b7-gateway-b1fix, numbered the same. The gateway's /health (port 8084 on
 # Node B, read through ssh node-b) carries bearer_binding, credentials,
-# and anthropic_relay; nothing read here is a secret.
+# anthropic_relay and model_scheduler; nothing read here is a secret.
 #
 # Every step is read-only. The acts that need a shell inside a guest, a model
 # turn, a hibernate or a planned refresh are MANUAL lines with the exact
@@ -18,10 +18,10 @@
 #
 # Order: 1 after the deploy with observe; 2 and 3 after the model call and the
 # hibernate/refresh acts; flip to enforce; 4 and 5; 6; 7 after one timer tick
-# (10 minutes); 8; 9 is retired (the scheduler was deleted 2026-11-03).
+# (10 minutes); 8; flip the scheduler on; 9 --label before, the burst, 9 --label after.
 # B7 body caps: 10 after the deploy with GATEWAY_BODY_CAPS=observe; 11 after
 # the guest curls; 12 after a day of observe, and again after the enforce
-# flip. 
+# flip. The scheduler goes on only after 12 passes in enforce.
 set -uo pipefail
 PROOF_NAME=fp7-gateway
 . "$(dirname "$0")/lib.sh"
@@ -34,7 +34,7 @@ step_def 5 ro-after "SEC-05 (enforce): cross-computer token copy is refused (gue
 step_def 6 ro "SEC-08 gateway half: the relay is dark (anthropic_relay off)"
 step_def 7 ro-after "SEC-16: the front-importance tick reaches Jev through the gateway; the unit holds no OPENROUTER key"
 step_def 8 ro-after "SEC-16: the host judgment route refuses a caller without the internal credential"
-step_def 9 ro "RES-11 retired: the model scheduler was deleted 2026-11-03 (owner)"
+step_def 9 ro-after "RES-11 (scheduler on): counters before and after 40+1 concurrent calls"
 step_def 10 ro "B7 body caps (observe): body_caps on /health and the gateway's memory, baseline saved"
 step_def 11 ro-after "B7: oversized bodies from a test computer are refused 413, logged, and the gateway's memory stays flat"
 step_def 12 ro-after "B7: ready to enforce (no real model call over the limit); after the flip, mode is enforce"
@@ -59,7 +59,7 @@ step_1() {
 	local h mode
 	h=$(fp7_health)
 	[ "$PROOF_DRY" = 1 ] && return 0
-	printf '%s' "$h" | jq -c '{bearer_binding, credentials, anthropic_relay}' | while IFS= read -r l; do info "health $l"; done
+	printf '%s' "$h" | jq -c '{bearer_binding, credentials, anthropic_relay, model_scheduler}' | while IFS= read -r l; do info "health $l"; done
 	mode=$(printf '%s' "$h" | jq -r '.bearer_binding.mode // ""')
 	case "$mode" in
 	observe) pass "bearer_binding.mode is observe" ;;
@@ -179,7 +179,27 @@ step_8() {
 }
 
 step_9() {
-	info "retired: the gateway model scheduler was deleted (owner, 2026-11-03); the per-computer fixed window stays"
+	local h st
+	h=$(fp7_health)
+	[ "$PROOF_DRY" = 1 ] && return 0
+	printf '%s' "$h" | jq -c '.model_scheduler' | while IFS= read -r l; do info "scheduler $l"; done
+	[ "$(printf '%s' "$h" | jq -r '.model_scheduler.mode // ""')" = on ] && pass "scheduler mode is on" || fail "scheduler mode is not on (GATEWAY_MODEL_SCHEDULER=on)"
+	st=$(fp7_state "sched-$OPT_label")
+	printf '%s\n' "$h" >"$st"
+	if [ "$OPT_label" = before ]; then
+		manual "from one test computer fire 40 concurrent small model calls through the product path while a second test computer makes one call; time the second call's latency; then rerun with --label after"
+	else
+		local b g0 g1
+		[ -s "$(fp7_state sched-before)" ] || die 2 "run --label before first"
+		g0=$(fp7_num "$(cat "$(fp7_state sched-before)")" '.model_scheduler.granted')
+		g1=$(fp7_num "$h" '.model_scheduler.granted')
+		info "granted $g0 -> $g1 (expect +41), avg_wait_ms=$(fp7_num "$h" '.model_scheduler.avg_wait_ms'), queued=$(fp7_num "$h" '.model_scheduler.queued'), in_flight=$(fp7_num "$h" '.model_scheduler.in_flight')"
+		[ $((g1 - g0)) -ge 41 ] && pass "all 41 calls were granted" || fail "granted rose by $((g1 - g0)), expected at least 41"
+		[ "$(fp7_num "$h" '.model_scheduler.queued')" = 0 ] && [ "$(fp7_num "$h" '.model_scheduler.in_flight')" = 0 ] && pass "queued and in_flight returned to zero" || fail "queued or in_flight not back to zero"
+		b=$(fp7_num "$h" '.model_scheduler.queue_full')
+		[ "$b" = 0 ] && pass "queue_full is 0" || info "queue_full=$b"
+		manual "the second computer's single call stayed near one call's latency (judge from your timing)"
+	fi
 }
 
 # B7 body caps (docs/problems/gateway-request-bodies-unbounded-2026-10-22.md).

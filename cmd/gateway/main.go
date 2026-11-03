@@ -85,6 +85,16 @@ func main() {
 	handler.SetBearerBinding(bindingMode)
 	log.Printf("gateway: bearer binding mode: %s", bindingMode)
 
+	// RES-11: a fair model-call scheduler in place of the fixed window. Off
+	// unless GATEWAY_MODEL_SCHEDULER is on.
+	if gateway.ModelSchedulerEnabled(os.Getenv) {
+		schedulerCfg := gateway.ModelSchedulerConfigFromGetenv(os.Getenv)
+		handler.SetModelScheduler(gateway.NewModelScheduler(schedulerCfg))
+		log.Printf("gateway: model scheduler on: %+v", schedulerCfg)
+	} else {
+		log.Printf("gateway: model scheduler off (fixed-window limiter)")
+	}
+
 	// SEC-08 Option K: the Claude delegate's key, held here. Dark unless the
 	// owner's Console API key, the relay identities and a window are all set;
 	// the status line names none of them.

@@ -206,23 +206,3 @@ func TestHostFetchEmptyListRefusesEveryone(t *testing.T) {
 		t.Fatalf("allow list = %v (class tokens are not identities)", got)
 	}
 }
-
-// Owner 2026-11-03: host fetch is on for every computer. The "*" token admits
-// every authenticated caller; the empty list still refuses everyone.
-func TestHostFetchWildcardAdmitsEveryAuthenticatedCaller(t *testing.T) {
-	var hits int
-	h, reg := hostFetchTestHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++; _, _ = w.Write([]byte("ok")) }), 100, 4)
-	h.hostFetch = newHostFetchService(h.hostFetch.exec, loadHostFetchAllowList(func(k string) string {
-		if k == EnvHostFetchVMs {
-			return "*"
-		}
-		return ""
-	}), 100, 4)
-	w := callHostFetch(h, issue(t, reg, "vm-any-unlisted"), "http://example.com/")
-	if w.Code == http.StatusForbidden {
-		t.Fatalf("wildcard refused an authenticated caller: %d %s", w.Code, w.Body.String())
-	}
-	if w := callHostFetch(h, "not-a-token", "http://example.com/"); w.Code != http.StatusUnauthorized {
-		t.Fatalf("wildcard admitted an unauthenticated caller: %d", w.Code)
-	}
-}

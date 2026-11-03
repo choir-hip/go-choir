@@ -42,19 +42,3 @@ func TestHostFetchGrantIsPerListedVM(t *testing.T) {
 		t.Fatalf("grant = %+v (%s)", g, status)
 	}
 }
-
-func TestHostFetchWildcardGrantsEveryVM(t *testing.T) {
-	cfg := loadHostFetchConfig(func(k string) string {
-		if k == hostFetchVMsEnv {
-			return "*"
-		}
-		return ""
-	})
-	files, _ := cfg.hostFetchMaterial("computer-z", "vm-z", time.Now())
-	if files == nil {
-		t.Fatal("the * token did not grant an unlisted VM")
-	}
-	if files, _ := cfg.hostFetchMaterial("", "vm-z", time.Now()); files != nil {
-		t.Fatal("a VM with no ComputerID granted")
-	}
-}

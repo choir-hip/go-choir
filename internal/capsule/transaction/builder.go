@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,12 +59,16 @@ type CapsuleEffectBundle struct {
 	// built in the capsule, or this computer's running binary reused for a
 	// change with no binary input. Absent on bundles frozen before it.
 	ReleaseBinary *capsule.ReleaseBinaryProvenance `json:"release_binary,omitempty"`
-	// VisualEvidence records the screenshots Freeze staged beside the release
-	// (evidence/visual/ in the bundle directory): the manifest digest, each
-	// capture's artifact ref, route and size, and the capture job's receipt.
-	// An omitempty pointer, so a bundle with no captures canonicalizes
-	// exactly as before (docs/design/visual-evidence-slice-2026-10-15.md V18).
-	VisualEvidence *capsule.VisualEvidence `json:"visual_evidence,omitempty"`
+	// LegacyVisualEvidence is the removed platform capture's record, kept
+	// opaque so a bundle frozen before its removal still decodes strictly
+	// and recomputes its own content digest. Nothing reads it, and a new
+	// Freeze never writes it.
+	LegacyVisualEvidence json.RawMessage `json:"visual_evidence,omitempty"`
+	// Screens are the engineer's screenshots Freeze staged beside the
+	// release (evidence/screens/ in the bundle directory), each bound by
+	// sha256. omitempty, so a bundle with none canonicalizes as before
+	// (docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
+	Screens []capsule.ScreenFile `json:"screens,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.
@@ -123,14 +128,8 @@ func (r CapsuleEffectBundle) Validate(final bool) error {
 	if err := capsule.ValidateReleaseBinary(r.RuntimeFiles, r.ReleaseBinary); err != nil {
 		return fmt.Errorf("capsule effect bundle: %w", err)
 	}
-	if r.VisualEvidence != nil {
-		if err := r.VisualEvidence.Validate(); err != nil {
-			return fmt.Errorf("capsule effect bundle: %w", err)
-		}
-		// V8: the captures are of the frontend this bundle freezes.
-		if r.VisualEvidence.FrontendSHA256 != capsule.ReleaseFrontendDigest(r.RuntimeFiles) {
-			return fmt.Errorf("capsule effect bundle: visual evidence was captured from a different frontend than the one frozen")
-		}
+	if err := capsule.ValidateScreens(r.Screens); err != nil {
+		return fmt.Errorf("capsule effect bundle: %w", err)
 	}
 	if final && !validImmutableRefs(r.VerifierReceipts) {
 		return fmt.Errorf("capsule effect bundle: independent verifier receipt is required")

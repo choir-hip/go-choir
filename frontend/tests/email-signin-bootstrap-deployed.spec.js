@@ -21,10 +21,7 @@
  * placed in an assertion message.
  *
  * Env: E2E_ADDRESS, E2E_STATE_FILE (required); BASE_URL (default
- * https://choir.news); E2E_NODE_B_SSH (default node-b). The key: E2E_KEY_SCOPES
- * (comma list, default read:runtime), E2E_KEY_LABEL, E2E_KEY_FIELD (the state
- * field that holds the secret, default inbox_key). scripts/test-computer-create
- * passes every registry scope and api_key.
+ * https://choir.news); E2E_NODE_B_SSH (default node-b).
  */
 import { expect, request as pwRequest } from '@playwright/test';
 import { test } from './helpers/fixtures.js';
@@ -37,12 +34,6 @@ const BASE_URL = process.env.BASE_URL || 'https://choir.news';
 const ADDRESS = process.env.E2E_ADDRESS || '';
 const STATE_FILE = process.env.E2E_STATE_FILE || '';
 const NODE_B = process.env.E2E_NODE_B_SSH || 'node-b';
-const KEY_SCOPES = (process.env.E2E_KEY_SCOPES || 'read:runtime')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-const KEY_LABEL = process.env.E2E_KEY_LABEL || 'e2e-email-signin inbox reader';
-const KEY_FIELD = process.env.E2E_KEY_FIELD || 'inbox_key';
 
 function readState() {
   try {
@@ -130,21 +121,6 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
   // 1. Register the passkey. Between register/begin and register/finish the
   // reserved number is bound to the new user (id from the begin response).
   let boundID = '';
-  // The auth limiter (internal/auth/rate_limit.go, 10 requests per IP per
-  // minute) answers 429 before the handler runs, so replaying the same request
-  // after the window is safe; back-to-back test computers hit it.
-  const continueRetrying429 = async (route) => {
-    for (let attempt = 0; ; attempt++) {
-      const res = await route.fetch();
-      if (res.status() !== 429 || attempt >= 3) {
-        await route.fulfill({ response: res });
-        return;
-      }
-      console.log('auth rate limit (429); waiting for the next window');
-      await new Promise((r) => setTimeout(r, 61_000));
-    }
-  };
-  await page.route('**/auth/**', continueRetrying429);
   await page.route('**/auth/register/finish', async (route) => {
     if (!boundID) {
       try {
@@ -158,7 +134,7 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
         bindError = String((e.stderr || e.message || e)).split(ADDRESS).join('<address>').slice(0, 300);
       }
     }
-    await continueRetrying429(route);
+    await route.continue();
   });
   page.on('response', async (res) => {
     if (!res.url().endsWith('/auth/register/begin')) return;
@@ -194,23 +170,17 @@ test('bootstrap the email sign-in test account', async ({ page, authenticator })
   writeState({ stage: 'aliased' });
   console.log('numbered address bound to the account');
 
-  // 3. Mint the key from the passkey session (it reads the inbox: every
-  // scope set passed here includes read:runtime). A refusal is reported with
-  // the auth service's reason, never retried with fewer scopes.
+  // 3. Mint the inbox-reading key from the passkey session.
   const keyRes = await pageFetch(page, '/auth/api-keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label: KEY_LABEL, scopes: KEY_SCOPES }),
+    body: JSON.stringify({ label: 'e2e-email-signin inbox reader', scopes: ['read:runtime'] }),
   });
-  const keyRefusal = keyRes.body && typeof keyRes.body === 'object' ? keyRes.body.error : String(keyRes.body).slice(0, 200);
-  expect([200, 201], `mint api key with scopes ${KEY_SCOPES.join(',')}: ${keyRes.status} ${keyRefusal || ''}`).toContain(keyRes.status);
+  expect([200, 201], 'mint api key').toContain(keyRes.status);
   const secret = keyRes.body && keyRes.body.secret;
   expect(secret, 'api key secret missing').toBeTruthy();
-  const granted = (keyRes.body.scopes || []).slice().sort();
-  const missing = KEY_SCOPES.filter((s) => !granted.includes(s));
-  expect(missing, 'the minted key lacks requested scopes').toEqual([]);
-  writeState({ stage: 'keyed', [KEY_FIELD]: secret, [`${KEY_FIELD}_id`]: keyRes.body.id, [`${KEY_FIELD}_scopes`]: granted });
-  console.log(`key minted with ${granted.length} scopes (secret in the state file only)`);
+  writeState({ stage: 'keyed', inbox_key: secret, inbox_key_id: keyRes.body.id });
+  console.log('inbox key minted (state file only)');
 
   const api = await pwRequest.newContext({
     baseURL: BASE_URL,

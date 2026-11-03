@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-floor_commands="./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate ./cmd/choir-capture"
+floor_commands="./cmd/choir-updater ./cmd/capsule-broker ./cmd/choir-receipt-signer ./cmd/choir-delegate"
 required="flake.nix flake.lock go.mod go.sum nix/autoputer-vm.nix scripts/guest-signer-state-migrate scripts/guest-signer-state-project"
 module=github.com/yusefmosiah/go-choir
 

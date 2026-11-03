@@ -255,7 +255,7 @@ should be more judicious, allocating code review to hard stuff and trusting
 that we can handle the easy stuff cold"; "make devin the go-to reviewer").
 Cheap checks run before any review, every time: the repo gates
 (`check-v1-writer-purity`, `check-decode-roots`, `check-test-hang-guards`,
-`selftest-guest-token`, `check-switch-registry`, which refuses any new switch), a nix eval of both systems when `nix/` or the flake
+`selftest-guest-token`, `check-switch-registry`), a nix eval of both systems when `nix/` or the flake
 changed, a dry run of every touched proof script, the CI mirror, and a rebase
 onto the current deploy tree. The tiers are a default and FP0 judges by
 context. Tier 0, no model review: green and yellow changes by default (an
@@ -264,7 +264,7 @@ a build will follow, is reviewed like the change it designs), proof tooling, mec
 finding with only doc, nit or test-only items; the checks are the review.
 Proof, rollback and procedure text for a red deploy is not tier 0: it gets
 the deploy's own review. Tier 1, one seat, Devin: orange changes, and red
-changes that are additive, with a one-act
+changes that are additive, behind a data/config switch, with a one-act
 rollback that shows on staging within minutes. Tier 2, two seats (Devin and
 DeepSeek v4.1 flash): red where a defect would be silent or irreversible —
 deletes, tape/evidence, Texture canonical writes, auth/session, store schema,
@@ -336,28 +336,15 @@ change that durably cuts disk, memory, CPU or write volume may take a
 planned restart, a cold boot or a slow window on any computer, the paper
 included, as long as it has its proof and its rollback.
 
-**No switches; deploys roll out by ring** (owner, 2026-11-03, superseding
-the 2026-10-28 "on, never off everywhere" rule: "i hate the pattern of all
-these switches"; "what i dont want is the current situation, where we have a
-bunch of code that i asked for and thought was running actually not
-running"). New behaviour ships on, with no runtime switch, ever: no
-off-by-default setting, no `*_ONLY` selector, no allowlist that gates a
-feature. Rollout is the deploy itself: a release refreshes d@e, then test
-computers, then the owner's computers, then every other computer, then the
-paper last (automatic, planned, marker-backed, after the soak), each ring
-after its soak, with automatic code rollback when a health check breaks
-(docs/design/progressive-delivery-2026-10-26.md, owner rulings 2026-11-03).
-One-way migrations and security enforcement are proved on d@e before merge
-and then ship like everything else. A correctness refusal (crash,
+**On, never off everywhere; widen by ring** (owner, 2026-10-28: "i dont
+like these 'off by default' things. the whole point is to turn these on";
+then "we can still have progressive rollout. not on for all computers but on
+for at least one... we are still designing our progressive delivery
+system"). A new mechanism ships enabled on at least the proof ring (d@e)
+and widens ring by ring (docs/design/progressive-delivery-2026-10-26.md);
+it never lands off for every computer. A correctness refusal (crash,
 self-development apply, live capsule, release skew) is not a switch and
-stays. A bug is fixed, not hidden behind a flag. Too many model calls is a
-code problem to fix, not a limit to impose (owner: "we want to scale agents
-up not down"). Computers may diverge indefinitely, but by what each
-one runs and adopts (its own self-development, its packages), never by a
-platform flag (owner: "rather than switches there can be indefinite
-divergence of computers. thats the point of this architecture"). A grant
-that spends the owner's money (the Claude delegate) is an owner act on the
-tape, not a switch.
+stays. A bug is fixed, not hidden behind a flag.
 
 **Agent models** (owner, 2026-10-22): Sonnet subagents for following a plan,
 optimizing a metric, and investigations; Opus for design and open-ended

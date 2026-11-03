@@ -4,8 +4,7 @@ Design for one switch registry, a ring order, and a host controller that
 promotes and reverts switches on measured evidence, so the owner stops
 ruling on each switch.
 
-- **Status (2026-11-03): partly superseded.** The owner ruled on 2026-11-03 that there are no switches at all; rollout is ring-ordered deploys with automatic rollback (slices S5 and S6), the paper last and automatic. The switch controller (S3, S4) is not built; the registry becomes the backlog to clear and is then deleted. See "Owner rulings (2026-11-03)" at the end.
-- **Earlier status:** ratified by the owner 2026-10-28 (section 10, "Owner
+- **Status:** ratified by the owner 2026-10-28 (section 10, "Owner
   answers"), with a more aggressive policy table than proposed. **Review 340**
   (Devin): code claims verified; findings F1 to F7 folded in (class tokens on
   protected rings, security revert is hold-and-page, 4 releases kept, finding
@@ -779,46 +778,3 @@ Later (owner, 2026-10-28): "the progressive delivery system will of course
 evolve. like, id love to have a fleet of simulated users. we will
 definitely get there. but not this week." A simulated-user fleet becomes a
 ring ahead of R2 when it exists; not this week.
-
-## Owner rulings (2026-11-03)
-
-Interview in session, 2026-11-03 01:5x UTC. These supersede the 10-28
-answers where they differ.
-
-1. **No switches, ever.** "No standing switches at all"; exceptions: "None,
-   ever." New behaviour ships on. One-way migrations and security
-   enforcement are proved on d@e before merge, then ship like everything
-   else. A bad release is undone by code rollback, not a flip. The problem
-   this answers, in the owner's words: "a bunch of code that i asked for and
-   thought was running actually not running."
-2. **Rollout is the deploy.** Ring-ordered guest refresh (slice S5) and
-   automatic code rollback on a broken health check (slice S6) are the
-   mechanism. The switch controller (S3, S4) is dropped.
-3. **The paper refreshes automatically, last,** after every other ring has
-   run the release cleanly for its soak, at a planned, marker-backed moment,
-   never mid self-development apply or with a live capsule. This supersedes
-   "R5 advances only by a human act".
-4. **The backlog is cleared to zero this week,** walked with the owner group
-   by group (Texture, engineering, store, host, Autopaper). Each switch is
-   deleted: either the code stays and runs everywhere, or the code goes.
-   The registry then holds nothing and is deleted; the lint becomes "no
-   switch may be added".
-5. Rulings on named rows: the gateway model scheduler is deleted ("a
-   solution in search of a problem ... we want to scale agents up not
-   down. if we have too many model calls thats a code issue to solve");
-   host fetch and capsule mirrors must be tested and operational everywhere
-   ("i thought this was on already"); story expansion is for every
-   signed-in user, the allowlist deleted ("how did this become a
-   feature?"); `texture.hold_trajectory` and `texture.root_desk` stay (root
-   desk gives "system wide understanding for each user"); calibration
-   feedback is on, engineering first (docs/design/calibration-seed-2026-11-03.md).
-6. **Divergence, not switches.** "rather than switches there can be
-   indefinite divergence of computers. thats the point of this
-   architecture, indeed." A computer differs from another by what it runs
-   and adopts (self-development, packages), never by a platform flag.
-   Research reads the paper's APIs from any computer; intake runs where
-   source schedules exist.
-7. **Order.** Ring-ordered deploys (S5) and automatic rollback (S6) first;
-   the backlog then rides ring deploys in batches.
-8. **The Claude delegate** becomes an owner act per computer (grant,
-   revoke, spend cap, on the tape), replacing the nix list.

@@ -78,11 +78,20 @@ func (s *Store) Put(data []byte) (string, string, error) {
 		_ = tmp.Close()
 		return "", "", fmt.Errorf("write image: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return "", "", fmt.Errorf("write image: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		return "", "", fmt.Errorf("write image: %w", err)
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return "", "", fmt.Errorf("store image: %w", err)
+	}
+	// Make the rename durable: a hard kill must not drop an image a bundle cites.
+	if dir, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
 	}
 	return ref.String(), mimeType, nil
 }

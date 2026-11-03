@@ -135,14 +135,14 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			// as bad as the verifier socket itself being compromised.
 			var genesisSeq uint64
 			if genErr := a.cas.store.db.QueryRowContext(ctx, `SELECT sequence FROM computer_event_append_receipts WHERE computer_id=? AND event_kind=? ORDER BY sequence LIMIT 1`, request.ComputerID, string(computerevent.EventGenesisImported)).Scan(&genesisSeq); genErr != nil {
-				return selfdevprotocol.CheckpointResponse{}, errors.New(selfdevprotocol.CheckpointRefusalVerifierKeyNotPinned)
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
 			}
 			legacyFirstPin = true
 		} else if keyLookupErr != nil || storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey)) {
-			return selfdevprotocol.CheckpointResponse{}, errors.New(selfdevprotocol.CheckpointRefusalVerifierKeyNotPinned)
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier key is not the pinned computer key")
 		}
 		if keyLookupErr == nil && (storedVerifierKeyID != verifierKeyID || !ed25519.PublicKey(storedVerifierKey).Equal(ed25519.PublicKey(verifierKey))) {
-			return selfdevprotocol.CheckpointResponse{}, errors.New(selfdevprotocol.CheckpointRefusalVerifierTrustSubstitution)
+			return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("checkpoint authority: verifier trust substitution refused")
 		}
 	}
 	receipt, err := selfdevprotocol.NewAuthorityReceipt(selfdevprotocol.ReceiptKindCheckpoint, request.ComputerID, requestCommitment, checkpoint.Digest, a.cas.issuer, a.cas.signingKey, a.now())

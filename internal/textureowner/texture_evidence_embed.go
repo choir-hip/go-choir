@@ -12,28 +12,32 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/visualcapture"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Station TE (docs/design/texture-evidence-embeds-te-2026-10-25.md section
-// 2). When a candidate freezes with visual captures (and the computer setting
+// 2), fed by the engineer's own screens
+// (docs/problems/selfdev-screens-are-not-files-2026-11-03.md). When a
+// candidate freezes with screens (and the computer setting
 // texture.evidence_embeds is on), the runtime asks this, Texture's own
-// package, to embed the captures in the document bound to the operation's
-// trajectory. The digests come only from the operation's frozen bundle on
-// this computer (the visual-evidence listing), so no desk and no model can
+// package, to embed them in the document bound to the operation's
+// trajectory. Each embed names the screen's file in the computer's tree and
+// its sha256; the digests and files come only from the operation's frozen
+// bundle on this computer (the screens listing), so no desk and no model can
 // present a stored image as a candidate's evidence. The revision commits
 // through the store's head-pinned lifecycle commit, the transaction the owner
 // revision route also uses. It adds embed blocks and nothing else: the
 // desk owns every sentence of the document.
 
-// candidateEvidenceSource is the visual-evidence listing as Texture reads it.
+// candidateEvidenceSource is the screens listing as Texture reads it.
 type candidateEvidenceSource interface {
-	CandidateVisualEvidence(ctx context.Context, computerID, operationID string) (agentcore.VisualEvidenceListing, error)
+	CandidateScreens(ctx context.Context, computerID, operationID string) (agentcore.ScreensListing, error)
 }
 
 const (
@@ -70,13 +74,25 @@ func (h *Handler) EmbedCandidateEvidence(ctx context.Context, ownerID, computerI
 	if source == nil || ownerID == "" || computerID == "" || operationID == "" {
 		return "", fmt.Errorf("texture evidence: incomplete request")
 	}
-	listing, err := source.CandidateVisualEvidence(ctx, strings.TrimSpace(selfdevComputerID), operationID)
+	listing, err := source.CandidateScreens(ctx, strings.TrimSpace(selfdevComputerID), operationID)
 	if err != nil {
 		return "", fmt.Errorf("texture evidence: %s: %w", operationID, err)
 	}
 	if err := checkEvidenceListing(listing, operationID); err != nil {
 		return "", err
 	}
+	// Only screens whose bytes the asset store holds are embedded, so no
+	// figure is ever unresolvable (design E4).
+	resolvable := listing.Screens[:0:0]
+	for _, screen := range listing.Screens {
+		if screen.Resolvable {
+			resolvable = append(resolvable, screen)
+		}
+	}
+	if len(resolvable) == 0 {
+		return "", fmt.Errorf("texture evidence: %s lists no screen whose bytes are saved", operationID)
+	}
+	listing.Screens = resolvable
 	// The listing must be this computer's: the asset route serves only this
 	// computer's store (design E5; review bunch 231).
 	if want := firstNonEmpty(strings.TrimSpace(selfdevComputerID), computerID); strings.TrimSpace(listing.ComputerID) != want {
@@ -104,21 +120,27 @@ func (h *Handler) EmbedCandidateEvidence(ctx context.Context, ownerID, computerI
 }
 
 // checkEvidenceListing refuses a listing Texture will not embed: no
-// trajectory, no captures or more than a bundle carries, or a malformed
-// digest (design E4).
-func checkEvidenceListing(listing agentcore.VisualEvidenceListing, operationID string) error {
+// trajectory, no screens or more than a bundle carries, or a screen whose
+// file is not the operation's screens file (design E4).
+func checkEvidenceListing(listing agentcore.ScreensListing, operationID string) error {
 	if strings.TrimSpace(listing.OperationID) != operationID || strings.TrimSpace(listing.TrajectoryID) == "" || strings.TrimSpace(listing.ComputerID) == "" {
 		return fmt.Errorf("texture evidence: the listing for %s is not bound to its operation and trajectory", operationID)
 	}
-	if n := len(listing.Captures); n == 0 || n > visualcapture.MaxRoutes {
-		return fmt.Errorf("texture evidence: %s lists %d captures; a candidate carries 1 to %d", operationID, n, visualcapture.MaxRoutes)
+	if n := len(listing.Screens); n == 0 || n > capsule.MaxScreens {
+		return fmt.Errorf("texture evidence: %s lists %d screens; a candidate carries 1 to %d", operationID, n, capsule.MaxScreens)
+	}
+	dir := yaegikernel.SelfDevelopmentScreensDir(operationID) + "/"
+	for _, screen := range listing.Screens {
+		if screen.File != dir+screen.Name || !capsule.ValidScreenName(screen.Name) {
+			return fmt.Errorf("texture evidence: %s lists a screen outside its screens directory: %q", operationID, screen.File)
+		}
 	}
 	return nil
 }
 
 // commitEvidenceEmbeds writes one revision on the current head. retry is
 // true when the head moved under it.
-func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID, docID string, listing agentcore.VisualEvidenceListing) (string, bool, error) {
+func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID, docID string, listing agentcore.ScreensListing) (string, bool, error) {
 	doc, err := h.Store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
 	if err != nil {
 		return "", false, fmt.Errorf("texture evidence: document %s: %w", docID, err)
@@ -239,9 +261,10 @@ func (h *Handler) commitEvidenceEmbeds(ctx context.Context, ownerID, computerID,
 	return string(out), false, nil
 }
 
-// evidenceEmbedNodes builds one capsule_evidence embed per capture, in
-// capture order, with Texture's words (design section 2).
-func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.VisualEvidenceListing) ([]texturedoc.Node, error) {
+// evidenceEmbedNodes builds one capsule_evidence embed per screen, in the
+// bundle's order, with Texture's words (design section 2). The target names
+// the screen's file in the computer's tree and its sha256.
+func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.ScreensListing) ([]texturedoc.Node, error) {
 	used := map[string]bool{}
 	var walk func(texturedoc.Node)
 	walk = func(n texturedoc.Node) {
@@ -253,30 +276,28 @@ func evidenceEmbedNodes(body texturedoc.StructuredTextureDoc, listing agentcore.
 		}
 	}
 	walk(body.Doc)
-	nodes := make([]texturedoc.Node, 0, len(listing.Captures))
-	for i, capture := range listing.Captures {
-		id := "embed-" + strings.TrimPrefix(objectgraph.SHA256([]byte(fmt.Sprintf("%s\x00%d\x00%s", listing.OperationID, i, capture.Digest))), "sha256:")[:16]
+	nodes := make([]texturedoc.Node, 0, len(listing.Screens))
+	for i, screen := range listing.Screens {
+		id := "embed-" + strings.TrimPrefix(objectgraph.SHA256([]byte(fmt.Sprintf("%s\x00%d\x00%s", listing.OperationID, i, screen.SHA256))), "sha256:")[:16]
 		for used[id] {
 			id += "-x"
 		}
 		used[id] = true
-		route := strings.TrimSpace(capture.Route)
-		// Texture's words interpolate the route and the operation with any
-		// markup character replaced, so a route like /items[12] cannot read
-		// as a legacy citation and refuse the write (review bunch 231). The
-		// target keeps the route as captured.
-		wordsRoute, wordsOperation := wordsSafe(route), wordsSafe(listing.OperationID)
-		caption := fmt.Sprintf("Screenshot of %s from candidate %s (%dx%d)", wordsRoute, wordsOperation, capture.Width, capture.Height)
-		if capture.Blank {
-			caption = fmt.Sprintf("Blank screenshot of %s from candidate %s (%dx%d): the page rendered nothing", wordsRoute, wordsOperation, capture.Width, capture.Height)
+		// The operation id is interpolated with any markup character
+		// replaced, so it cannot read as a legacy citation and refuse the
+		// write (review bunch 231). Screen names are plain by construction.
+		wordsOperation := wordsSafe(listing.OperationID)
+		caption := fmt.Sprintf("Screenshot %s from candidate %s (%dx%d)", screen.Name, wordsOperation, screen.Width, screen.Height)
+		if screen.Blank {
+			caption = fmt.Sprintf("Blank screenshot %s from candidate %s (%dx%d): the page rendered nothing", screen.Name, wordsOperation, screen.Width, screen.Height)
 		}
 		nodes = append(nodes, texturedoc.Node{Type: "embed", Attrs: map[string]any{
 			"id": id, "kind": texturedoc.EmbedKindCapsuleEvidence,
 			"target": map[string]any{
-				"digest": capture.Digest, "operation_id": listing.OperationID, "computer_id": listing.ComputerID,
-				"route": route, "width": capture.Width, "height": capture.Height, "blank": capture.Blank,
+				"digest": screen.SHA256, "operation_id": listing.OperationID, "computer_id": listing.ComputerID,
+				"file": screen.File, "width": screen.Width, "height": screen.Height, "blank": screen.Blank,
 			},
-			"caption": caption, "alt": "Screenshot of " + wordsRoute,
+			"caption": caption, "alt": "Screenshot " + screen.Name,
 		}})
 	}
 	// The nodes are checked as a document of their own before they join the

@@ -66,7 +66,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   castOnRecords, completingInbox, doneJobs, formatWitnessGapTable, goTestCells, isGoBuildOfAutoputer, isGoTest, reportNamesBundle,
-  verifiedNamedBundle, visualEvidenceChecks, witnessGapTable, witnessJoined,
+  verifiedNamedBundle, witnessGapTable, witnessJoined,
 } from './reeng_tracer_checks.mjs';
 import { inProgressReceipt, interruptedReceipt, signalExitCode, strandedTracerComputers } from './reeng_tracer_receipt.mjs';
 import { pinNewestCheckpoint, restoredToPinnedCheckpoint } from './checkpoint_pick.mjs';
@@ -103,7 +103,7 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering|adopt] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served|rewrite] [--app <ComponentName>] [--delegate] [--autonomous] [--autonomy-min 120] [--decide-min 75] [--visual]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering|adopt] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served|rewrite] [--app <ComponentName>] [--delegate] [--autonomous] [--autonomy-min 120] [--decide-min 75]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
@@ -192,25 +192,6 @@ const DECIDE_MIN = Number(arg('decide-min', '75'));
 const REVERSIBLE_SELFDEV_V1 = 'c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7';
 if (AUTONOMOUS && (SCENARIO !== 'engineering' || !(AUTONOMY_MIN > 0 && AUTONOMY_MIN <= 1440))) {
   console.error('--autonomous needs --scenario engineering and 0 < --autonomy-min <= 1440');
-  process.exit(2);
-}
-// --visual (engineering scenario, --change static; docs/design/visual-evidence-
-// slice-2026-10-15.md section 5): the change is a visible page,
-// frontend/public/choir-drill/<token>.html, whose heading is the token.
-// Engineering builds the frontend, takes a screenshot of that page with
-// choir-capture (a capsule job), precommits visual_captured and freezes. The
-// drill claims, through product routes only: the operation's evidence listing
-// names a vouched, non-blank, 1280x800 capture of that route that the asset
-// store holds; the asset route serves it (PNG, nosniff, immutable, digest as
-// ETag, bytes that hash to the digest, a Range request answered 206). It saves
-// the PNG to the trace directory. A vision model's reading of the heading
-// (POST /api/model-policy/verify with the image ref) is observed, not
-// claimed. The computer must be granted visual capture
-// (CHOIR_VISUAL_CAPTURE_COMPUTERS names it or class:test); without the grant
-// the capture job exits 3 and the drill fails at visual_listing.
-const VISUAL = flag('visual');
-if (VISUAL && (SCENARIO !== 'engineering' || CHANGE !== 'static')) {
-  console.error('--visual needs --scenario engineering and --change static');
   process.exit(2);
 }
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
@@ -527,7 +508,7 @@ async function attempt(n, out) {
   }
   const mintStarted = Date.now();
   // --cred <file> reuses a computer qa_test_computer.mjs minted for this drill
-  // (a per-computer grant such as visual capture names the computer before the
+  // (a per-computer grant such as the Claude delegate names the computer before the
   // deploy, so the drill cannot mint it fresh). It is still a computer minted
   // for the drill, never an owner's.
   const minted = CRED_FILE ? reuseMinted(CRED_FILE) : await runMint(label);
@@ -1332,21 +1313,6 @@ function engineeringStory(token) {
       'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
     ].join(' ');
   }
-  if (VISUAL) {
-    return [
-      `Change this computer itself: add one visible page to its web frontend so that it is served at /choir-drill/${token}.html.`,
-      `The file is frontend/public/choir-drill/${token}.html in the platform workspace: a complete HTML document with a dark background (#102030)`,
-      `and one large white <h1> (at least 64px) whose text is exactly ${token}. Change nothing else.`,
-      'Deterministic check, to run in the capsule before freezing:',
-      `grep -q '<h1' frontend/public/choir-drill/${token}.html and grep -q '${token}' frontend/public/choir-drill/${token}.html.`,
-      'The candidate must carry a screenshot of that page: after the frontend build, take it with the capsule capture tool',
-      `(choir-capture --route /choir-drill/${token}.html, started as a capsule job), and record a visual_captured precommit for that route before you build.`,
-      'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
-      'and incorporate management\'s answer when it arrives.',
-      'Management: Cast it to engineering; engineering makes the change, runs the check, builds the release tree, takes the screenshot, freezes the candidate with choir.Freeze and completes;',
-      'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
-    ].join(' ');
-  }
   return [
     `Change this computer itself: add one static file to its web frontend so that it is served at /choir-drill/${token}.txt.`,
     `The file is frontend/public/choir-drill/${token}.txt in the platform workspace and contains exactly one line: ${token}`,
@@ -1382,54 +1348,12 @@ const CRASH_LINE = /crash boot|treating boot as a crash/;
 // which accept_once requires (no fractional part, Z).
 const canonicalExpiry = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.000Z$/, 'Z');
 
-// visualEvidenceStep reads the frozen candidate's screenshots through product
-// routes and records what it saw in claim.visual (the checks are
-// visualEvidenceChecks'). The PNG is kept in the trace directory.
-async function visualEvidenceStep(c, sd, op, claim, token, phase, gap) {
-  const visual = { listing: null, asset: null, range: null, vision: null, png_file: null };
-  claim.visual = visual;
-  const listing = await c.api(sd(`operations/${encodeURIComponent(op.operation_id)}/visual-evidence`), 'GET', undefined, 30_000);
-  visual.listing = { status: listing.status, body: listing.body };
-  phase('visual_listing', { status: listing.status, captures: listing.body?.captures?.length ?? 0, capture_receipt: listing.body?.capture_receipt || null });
-  if (listing.status !== 200) {
-    gap('visual', 'GET /api/computers/{id}/self-development/operations/{op}/visual-evidence', `status ${listing.status}: ${listing.body?.error || listing.error || 'no body'}`);
-    return;
-  }
-  const capture = (listing.body.captures || []).find((x) => x.route === `/choir-drill/${token}.html`);
-  if (!capture?.asset_url) return;
-  // The receipt records sizes and digests; the bytes stay readable for the
-  // checks but out of the JSON (a non-enumerable property).
-  const keep = (res) => {
-    const row = { status: res.status, headers: res.headers, length: res.bytes.length, sha256: createHash('sha256').update(res.bytes).digest('hex') };
-    Object.defineProperty(row, 'bytes', { value: res.bytes, enumerable: false });
-    return row;
-  };
-  const asset = await c.bytes(capture.asset_url);
-  visual.asset = keep(asset);
-  const range = await c.bytes(capture.asset_url, { Range: 'bytes=0-7' });
-  visual.range = keep(range);
-  if (asset.status === 200) {
-    visual.png_file = join(TRACE_DIR, `visual-${token}.png`);
-    writePrivate(visual.png_file, asset.bytes);
-  }
-  // Observed, not claimed: what a vision model reads off the picture.
-  const vision = await c.api('/api/model-policy/verify', 'POST', {
-    role: 'verifier_multimodal', image_ref: capture.artifact,
-    prompt: 'This is a screenshot of a web page. Reply with only the large heading text on it, exactly as written.',
-  }, 120_000);
-  visual.vision = {
-    status: vision.status, error: vision.body?.error || vision.error || null,
-    reading_names_token: JSON.stringify(vision.body || '').includes(token),
-  };
-  phase('visual_asset', { asset_status: asset.status, range_status: range.status, png_file: visual.png_file, vision: visual.vision });
-}
-
 async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, options = {}) {
   const cid = encodeURIComponent(c.computerID);
   const sd = (rest) => `/api/computers/${cid}/self-development/${rest}`;
   const lc = (rest) => `/api/computers/${cid}/lifecycle/${rest}`;
   const token = `choir-drill-${randomUUID().slice(0, 8)}`;
-  const markerPath = `/choir-drill/${token}.${VISUAL ? 'html' : 'txt'}`;
+  const markerPath = `/choir-drill/${token}.txt`;
   const gaps = [];
   const gap = (step, route, detail) => {
     if (gaps.some((g) => g.step === step && g.route === route && g.detail === detail)) return;
@@ -1729,7 +1653,6 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
       phase('go_test_cells', { inbox: jobsInbox, passed: claim.go_test_cells.length });
     }
   }
-  if (VISUAL) await visualEvidenceStep(c, sd, op, claim, token, phase, gap);
   phase('decision_boundary', { operation_id: op.operation_id, bundle_digest: op.bundle_digest, verifier_refs: op.verifier_refs });
   at('decision_boundary');
   await readHead('decision_boundary');
@@ -2260,10 +2183,6 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
     const testJob = done.some(isGoTest);
     checks.go_test_passed = testJob || (claim.go_test_cells || []).length > 0;
     claim.go_test_evidence = testJob ? 'job' : ((claim.go_test_cells || []).length > 0 ? 'cell' : null);
-  }
-  if (VISUAL) {
-    // Existence, binding and serving; the vision reading stays observed.
-    Object.assign(checks, visualEvidenceChecks({ token: claim.token, listing: claim.visual?.listing, asset: claim.visual?.asset, range: claim.visual?.range }));
   }
   const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
   if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;

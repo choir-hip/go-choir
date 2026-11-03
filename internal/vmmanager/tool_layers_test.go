@@ -78,7 +78,7 @@ func writeTestToolRelease(t *testing.T, releases, id, baseID string, p testRelPo
 	}
 }
 
-const toolTestProfile = "toolchain=*;office=none;browser=grant:visual-capture;delegate=grant:claude-delegate"
+const toolTestProfile = "toolchain=*;office=none;browser=*;delegate=grant:claude-delegate"
 
 // newToolRingFixture: R1 single is the fleet's current; R2 is a schema 2
 // layered release with tool slots and the layered link's target; ring
@@ -101,7 +101,6 @@ func newToolRingFixture(t *testing.T, profile string) *releaseFixture {
 	f.mgr.cfg.GuestLayeredLink = filepath.Join(root, "guest-layered-link")
 	f.mgr.cfg.GuestLayeredComputers = []string{ringComputer}
 	f.mgr.cfg.GuestToolProfile = parseToolProfile(profile)
-	f.mgr.cfg.VisualCapture = VisualCaptureConfig{Computers: map[string]bool{}}
 	f.mgr.cfg.ClaudeDelegate = ClaudeDelegateConfig{Computers: map[string]bool{}}
 	r.point(t, relR1)
 	r.pointLayered(t, relR2)
@@ -161,7 +160,7 @@ func TestToolLayerDriveOrder(t *testing.T) {
 			t.Fatalf("tool drive %v is not read-only data", d)
 		}
 		wantPath := filepath.Join(testToolsDir(r.releases), slot.EmptyID, "tool.erofs")
-		if slot.Name == "toolchain" {
+		if slot.Name == "toolchain" || slot.Name == "browser" {
 			wantPath = filepath.Join(testToolsDir(r.releases), slot.ID, "tool.erofs")
 		}
 		if d["path_on_host"] != wantPath {
@@ -192,20 +191,18 @@ func TestToolLayerProfileChoice(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := VMConfig{VMID: "vm-x", ComputerID: ringComputer}
-	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=empty,delegate=empty,office=empty,toolchain=layer" {
+	// The browser is every computer's (browser=*), with no grant: a primary
+	// computer and a test one both get it.
+	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
 		t.Fatalf("d@e with no grants = %s", got)
 	}
-	r.mgr.cfg.VisualCapture = VisualCaptureConfig{Computers: map[string]bool{}, ClassTest: true}
 	test := base
 	test.WarmnessClass = "test"
 	if got := toolChoice(r.mgr.toolDisksFor(test, rel)); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
-		t.Fatalf("class:test computer under a class:test capture grant = %s", got)
-	}
-	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); !strings.HasPrefix(got, "browser=empty") {
-		t.Fatalf("a non-test computer took the class:test capture grant: %s", got)
+		t.Fatalf("class:test computer = %s", got)
 	}
 	r.mgr.cfg.ClaudeDelegate = ClaudeDelegateConfig{Computers: map[string]bool{ringComputer: true}}
-	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=empty,delegate=layer,office=empty,toolchain=layer" {
+	if got := toolChoice(r.mgr.toolDisksFor(base, rel)); got != "browser=layer,delegate=layer,office=empty,toolchain=layer" {
 		t.Fatalf("delegate-listed computer = %s", got)
 	}
 	// Unnamed layers are attached; an empty profile attaches everything.
@@ -406,7 +403,7 @@ func TestToolLayerSnapshotResumesSameSlots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeVMFromSnapshot: %v", err)
 	}
-	if got := toolChoice(inst.Config.ToolDisks); got != "browser=empty,delegate=empty,office=empty,toolchain=layer" {
+	if got := toolChoice(inst.Config.ToolDisks); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
 		t.Fatalf("resumed tool slots = %s", got)
 	}
 }
@@ -416,7 +413,7 @@ func TestToolLayerReattachKeepsLaunchedSlots(t *testing.T) {
 	r := newToolRingFixture(t, toolTestProfile)
 	r.mgr.cfg.GuestToolProfile = parseToolProfile("toolchain=none;office=*")
 	cfg := r.mgr.reattachConfig(r.vmID, r.cfg.Epoch, VMConfig{ComputerID: ringComputer})
-	if got := toolChoice(cfg.ToolDisks); got != "browser=empty,delegate=empty,office=empty,toolchain=layer" {
+	if got := toolChoice(cfg.ToolDisks); got != "browser=layer,delegate=empty,office=empty,toolchain=layer" {
 		t.Fatalf("reattached tool slots = %s; want the launch record's", got)
 	}
 	// A record that does not match the release is not trusted.

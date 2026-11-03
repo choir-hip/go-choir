@@ -121,7 +121,12 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	r = withModelDecodeCaller(r, computerID)
+	// RES-11: the slot first, so a queued call holds no body (B7).
+	release, r, ok := h.scheduleModelCall(w, r, computerID, true)
+	if !ok {
+		return
+	}
+	defer release()
 
 	var req openAIChatCompletionRequest
 	releaseBody, err := h.decodeBodyHeld(w, r, bodyRouteModel, computerID, &req, false)
@@ -249,7 +254,10 @@ func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *htt
 		writeGatewayJSON(w, status, openAIErrorResponse(message))
 		return "", false
 	}
-	if h.rateLimiter != nil {
+	// With the model scheduler on, chat calls are scheduled at the provider
+	// call (scheduleModelCall) instead of passing the fixed window; the models
+	// listing keeps its bucket.
+	if h.rateLimiter != nil && !(scope == "openai_chat" && h.schedulerOn()) {
 		if !h.rateLimiter.Record(rateLimitBucketKey(computerID, scope)) {
 			_, _, resetIn := h.rateLimiter.Status(rateLimitBucketKey(computerID, scope))
 			retrySeconds := int(resetIn.Seconds())

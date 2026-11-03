@@ -27,7 +27,6 @@ scripts/guest-signer-state-project
 
 # the floor commands (the guest's Choir binaries other than autoputer)
 cmd/capsule-broker
-cmd/choir-capture
 cmd/choir-delegate
 cmd/choir-receipt-signer
 cmd/choir-updater
@@ -60,6 +59,5 @@ internal/texturewrite
 internal/types
 internal/updater
 internal/verifierprotocol
-internal/visualcapture
 internal/vocabmigrate
 internal/yaegikernel

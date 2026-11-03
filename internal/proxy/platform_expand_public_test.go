@@ -7,7 +7,7 @@ package proxy
 //
 //  P1  An anonymous request is accepted while PROXY_EXPAND_PUBLIC is off.
 //  P2  The owner allowlist path breaks once the flag is on, the owner is
-//      charged to the address throttle, (PROXY_EXPAND=off is deleted, 2026-11-03).
+//      charged to the address throttle, or PROXY_EXPAND=off stops winning.
 //  P3  One address exhausts the shared daily cap (3 an hour, 10 a UTC day).
 //  P4  A spoofed X-Forwarded-For bypasses the per-address limit.
 //  P5  A second request on the same published version is sent, or a refused
@@ -79,17 +79,20 @@ func (f *expandFixture) setClock(t time.Time) {
 const readerAddr = "198.51.100.7:4000"
 
 // P1
-func TestExpandPublicOffRefusesAnonymous(t *testing.T) {
-	f := newExpandFixture(t)
+func TestExpandPublicOffRefusesAnonymousEvenWithAnAllowlist(t *testing.T) {
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	if w := f.postFrom("", expandTestRoute, readerAddr, ""); w.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous POST with the flag off = %d, want 401", w.Code)
+	}
+	if w := f.postFrom("someone-else", expandTestRoute, readerAddr, ""); w.Code != http.StatusForbidden {
+		t.Fatalf("ordinary account POST with the flag off = %d, want 403", w.Code)
 	}
 	if code, body := f.getFrom("", expandTestRoute, readerAddr); code != http.StatusOK || body["allowed"] != false {
 		t.Fatalf("anonymous GET with the flag off = %d %v, want allowed:false", code, body)
 	}
 	f.noUpstreamCalls()
-	// The public flag opens the door to anonymous readers.
-	g := newExpandPublicFixture(t)
+	// The public flag alone turns the feature on, with an empty allowlist.
+	g := newExpandPublicFixture(t, nil)
 	if w := g.postFrom("", expandTestRoute, readerAddr, ""); w.Code != http.StatusAccepted {
 		t.Fatalf("anonymous POST with the flag on = %d %s, want 202", w.Code, w.Body.String())
 	}
@@ -97,7 +100,7 @@ func TestExpandPublicOffRefusesAnonymous(t *testing.T) {
 
 // P1, P2
 func TestExpandPublicOnLetsAnAnonymousReaderAskAndSeeTheButton(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, []string{expandTestOwner})
 	if code, body := f.getFrom("", expandTestRoute, readerAddr); code != http.StatusOK || body["allowed"] != true || body["asked"] != false {
 		t.Fatalf("anonymous GET = %d %v, want allowed:true", code, body)
 	}
@@ -118,8 +121,8 @@ func TestExpandPublicOnLetsAnAnonymousReaderAskAndSeeTheButton(t *testing.T) {
 }
 
 // P2
-func TestExpandPublicKeepsTheSignedInPath(t *testing.T) {
-	f := newExpandPublicFixture(t)
+func TestExpandPublicKeepsTheOwnerPathAndTheKillSwitch(t *testing.T) {
+	f := newExpandPublicFixture(t, []string{expandTestOwner})
 	// The owner is not charged to the address throttle: four stories in under
 	// two hours from one address would trip the hourly three if charged.
 	for n := 1; n <= 4; n++ {
@@ -135,6 +138,18 @@ func TestExpandPublicKeepsTheSignedInPath(t *testing.T) {
 	if w := f.postFrom("", route, readerAddr, ""); w.Code != http.StatusAccepted {
 		t.Fatalf("anonymous after owner asks = %d %s, want 202", w.Code, w.Body.String())
 	}
+	// Kill switch wins over the public flag.
+	k := newExpandFixtureWith(t, []string{expandTestOwner}, true, true)
+	if w := k.postFrom("", expandTestRoute, readerAddr, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("kill switch anonymous POST = %d, want 404", w.Code)
+	}
+	if w := k.postFrom(expandTestOwner, expandTestRoute, readerAddr, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("kill switch owner POST = %d, want 404", w.Code)
+	}
+	if code, body := k.getFrom("", expandTestRoute, readerAddr); code != http.StatusOK || body["allowed"] != false {
+		t.Fatalf("kill switch GET = %d %v, want allowed:false", code, body)
+	}
+	k.noUpstreamCalls()
 }
 
 // setSettled frees a story's in-flight slot, as a read that found it revised
@@ -148,7 +163,7 @@ func (f *expandFixture) setSettled(route string) {
 
 // P3
 func TestExpandPublicLimitsOneAddressToThreeAnHourAndTenADay(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, nil)
 	// Three in an hour, ten minutes apart.
 	for n := 1; n <= 3; n++ {
 		if w := f.postFrom("", f.addStory(n), readerAddr, ""); w.Code != http.StatusAccepted {
@@ -204,7 +219,7 @@ func TestExpandPublicLimitsOneAddressToThreeAnHourAndTenADay(t *testing.T) {
 
 // P4
 func TestExpandPublicAddressComesFromTheEdgeNotFromTheClient(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, nil)
 	// The edge appends the real address as the last entry; whatever the client
 	// put before it does not make a new address.
 	for n := 1; n <= 3; n++ {
@@ -227,7 +242,7 @@ func TestExpandPublicAddressComesFromTheEdgeNotFromTheClient(t *testing.T) {
 		t.Fatalf("other real address = %d %s, want 202", w.Code, w.Body.String())
 	}
 	// With no forwarder header the peer address is the address, not the port.
-	g := newExpandPublicFixture(t)
+	g := newExpandPublicFixture(t, nil)
 	for n := 1; n <= 3; n++ {
 		if w := g.postFrom("", g.addStory(n), "192.0.2.77:1111", ""); w.Code != http.StatusAccepted {
 			t.Fatalf("peer request %d = %d", n, w.Code)
@@ -241,7 +256,7 @@ func TestExpandPublicAddressComesFromTheEdgeNotFromTheClient(t *testing.T) {
 
 // P5
 func TestExpandPublicSecondRequestOnTheSameVersionIsRefusedAndFree(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, []string{expandTestOwner})
 	if w := f.postFrom("", expandTestRoute, readerAddr, ""); w.Code != http.StatusAccepted {
 		t.Fatalf("first = %d %s", w.Code, w.Body.String())
 	}
@@ -269,7 +284,7 @@ func TestExpandPublicSecondRequestOnTheSameVersionIsRefusedAndFree(t *testing.T)
 
 // P6
 func TestExpandPublicUnknownAndNonStoryRoutesAreNotAskedAndAreFree(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, nil)
 	var first string
 	for i, route := range []string{"/pub/texture/never-published-zzzzzz", "/somewhere/else", "/pub/texture/story-1/../x"} {
 		for k := 0; k < 5; k++ { // more than the hourly allowance
@@ -305,7 +320,7 @@ func TestExpandPublicUnknownAndNonStoryRoutesAreNotAskedAndAreFree(t *testing.T)
 
 // P7
 func TestExpandPublicSharesTheGlobalInFlightAndDailyCaps(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, nil)
 	for n := 1; n <= 3; n++ { // three different addresses, three in flight
 		if w := f.postFrom("", f.addStory(n), fmt.Sprintf("203.0.113.%d:1", n), ""); w.Code != http.StatusAccepted {
 			t.Fatalf("request %d = %d %s", n, w.Code, w.Body.String())
@@ -332,7 +347,7 @@ func TestExpandPublicSharesTheGlobalInFlightAndDailyCaps(t *testing.T) {
 
 // P8: pins the accepted residual so nobody reads the counters as durable.
 func TestExpandPublicCountersLiveInMemoryAndAProxyRestartResetsThem(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, nil)
 	for n := 1; n <= 3; n++ {
 		f.postFrom("", f.addStory(n), readerAddr, "")
 		f.advance(time.Minute)
@@ -357,11 +372,11 @@ func TestExpandPublicRequesterIdentityNeverReachesThePaper(t *testing.T) {
 	defer log.SetOutput(io.Discard)
 
 	const addr = "198.51.100.231"
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, []string{expandTestOwner})
 	if w := f.postFrom("", expandTestRoute, "127.0.0.1:9", "172.16.5.5, "+addr); w.Code != http.StatusAccepted {
 		t.Fatalf("anonymous POST = %d %s", w.Code, w.Body.String())
 	}
-	g := newExpandPublicFixture(t)
+	g := newExpandPublicFixture(t, []string{expandTestOwner})
 	if w := g.postFrom("signed-in-stranger", expandTestRoute, "127.0.0.1:9", addr); w.Code != http.StatusAccepted {
 		t.Fatalf("signed-in stranger POST = %d %s", w.Code, w.Body.String())
 	}
@@ -397,7 +412,7 @@ func TestExpandPublicRequesterIdentityNeverReachesThePaper(t *testing.T) {
 // A public reader's read follows only the newest request, so an anonymous
 // poll cannot fan out into many paper reads.
 func TestExpansionReadForAPublicReaderReturnsOnlyTheNewestRequest(t *testing.T) {
-	f := newExpandPublicFixture(t)
+	f := newExpandPublicFixture(t, []string{expandTestOwner})
 	if w := f.postFrom("", expandTestRoute, readerAddr, ""); w.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d", w.Code)
 	}

@@ -110,14 +110,9 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if status := executor.ClaudeDelegateStatus(); status.Available {
 		log.Printf("capsule executor: claude delegate %s", status.Reason)
 	}
-	// Visual capture (docs/design/visual-evidence-slice-2026-10-15.md): the
-	// grant is on the credential disk only for computers the host granted.
-	captureDir := strings.TrimSpace(os.Getenv("CHOIR_VISUAL_CAPTURE_CREDENTIAL_DIR"))
-	if captureDir == "" {
-		captureDir = capsule.DefaultClaudeDelegateCredentialDir
-	}
-	executor.SetVisualCaptureSource(captureDir, os.Getenv("CHOIR_CAPTURE_BROWSER_BIN"), os.Getenv("CHOIR_CAPTURE_FONTCONFIG_FILE"))
-	log.Printf("capsule executor: visual capture: %s", executor.VisualCaptureStatus().Reason)
+	// The store Chromium every computer's jobs may launch (Playwright), and
+	// the fontconfig file it renders text with. No grant.
+	executor.SetBrowser(os.Getenv("CHOIR_BROWSER_BIN"), os.Getenv("CHOIR_FONTCONFIG_FILE"))
 	// Package mirrors (station FP10): L2 capsules use the host package
 	// mirror only when the host put a grant on the credential disk; the
 	// route address is the guest's tap peer unless set explicitly.

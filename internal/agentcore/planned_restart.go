@@ -707,7 +707,7 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 	releaseSlot() // the marker is durable: the fence may close and will see it
 	marker.WorkStateEpoch = CurrentWorkStateEpoch
 	// The kill skips every fsync the guest's writers left to the kernel (a
-	// frozen bundle, the visual captures): flush them all before the answer
+	// frozen bundle, its screens): flush them all before the answer
 	// that lets the host kill (docs/problems/awaiting-candidate-unreadable-after-refresh-2026-10-26.md).
 	syncFilesystems()
 	log.Printf("runtime: host requested a planned restart (%s %s; allow_busy=%v, interrupting %d running run(s))", marker.Reason, marker.Target, allowBusy, work.Running)

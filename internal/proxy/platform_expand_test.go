@@ -4,11 +4,12 @@ package proxy
 // request-design-2026-10-20.md, section 7 and 4.6), written before the code.
 // Each numbered mode has a test below that names it.
 //
-//  E1  (retired 2026-11-03, owner: every signed-in user may expand a story;
-//      the requester allowlist and the PROXY_EXPAND kill switch are gone.)
+//  E1  Dark by default: with no allowlist, or with PROXY_EXPAND=off, the
+//      route is not there (POST 404) and the page is told allowed:false;
+//      nothing reaches corpusd or the paper.
 //  E2  A non-owner asks (F3): an anonymous caller (POST 401, GET allowed
-//      false), or an API
-//      key (POST 403; an owner act needs the
+//      false), a signed-in account off the allowlist (POST 403), or an API
+//      key on an allowlisted account (POST 403; an owner act needs the
 //      browser session) reaches corpusd or the paper.
 //  E3  The impersonation bridge widens (F4): the call to the paper is built
 //      from anything but corpusd's answer (a doc_id in the request body is
@@ -107,18 +108,18 @@ type expandFixture struct {
 	clock   time.Time
 }
 
-func newExpandFixture(t *testing.T) *expandFixture {
+func newExpandFixture(t *testing.T, requesters []string, off bool) *expandFixture {
 	t.Helper()
-	return newExpandFixtureWith(t, false)
+	return newExpandFixtureWith(t, requesters, off, false)
 }
 
 // newExpandPublicFixture is the fixture with PROXY_EXPAND_PUBLIC on.
-func newExpandPublicFixture(t *testing.T) *expandFixture {
+func newExpandPublicFixture(t *testing.T, requesters []string) *expandFixture {
 	t.Helper()
-	return newExpandFixtureWith(t, true)
+	return newExpandFixtureWith(t, requesters, false, true)
 }
 
-func newExpandFixtureWith(t *testing.T, public bool) *expandFixture {
+func newExpandFixtureWith(t *testing.T, requesters []string, off, public bool) *expandFixture {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -144,7 +145,7 @@ func newExpandFixtureWith(t *testing.T, public bool) *expandFixture {
 	t.Cleanup(f.paper.Close)
 	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
 		ComputerURL: f.paper.URL, AuthPublicKeyPath: "/unused", CorpusdURL: f.corpusd.URL,
-		ExpandPublic: public}, pub)
+		ExpandRequesters: requesters, ExpandOff: off, ExpandPublic: public}, pub)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,9 +292,26 @@ func decodeBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
 	return out
 }
 
+// E1
+func TestExpandIsDarkWithoutAnAllowlistOrWithTheKillSwitch(t *testing.T) {
+	for name, f := range map[string]*expandFixture{
+		"empty allowlist": newExpandFixture(t, nil, false),
+		"kill switch":     newExpandFixture(t, []string{expandTestOwner}, true),
+	} {
+		if w := f.postRoute(expandTestOwner); w.Code != http.StatusNotFound {
+			t.Fatalf("%s: POST = %d, want 404", name, w.Code)
+		}
+		code, body := f.get(expandTestOwner)
+		if code != http.StatusOK || body["allowed"] != false {
+			t.Fatalf("%s: GET = %d %v, want 200 allowed:false", name, code, body)
+		}
+		f.noUpstreamCalls()
+	}
+}
+
 // E2
-func TestExpandRefusesAnonymousAndAPIKeyCallers(t *testing.T) {
-	f := newExpandFixture(t)
+func TestExpandRefusesEveryoneButAnAllowlistedBrowserSession(t *testing.T) {
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 
 	if w := f.postRoute(""); w.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous POST = %d, want 401", w.Code)
@@ -301,7 +319,14 @@ func TestExpandRefusesAnonymousAndAPIKeyCallers(t *testing.T) {
 	if code, body := f.get(""); code != http.StatusOK || body["allowed"] != false {
 		t.Fatalf("anonymous GET = %d %v, want 200 allowed:false", code, body)
 	}
-	// An API key: asking is an owner act that needs the session.
+	if w := f.postRoute("someone-else"); w.Code != http.StatusForbidden {
+		t.Fatalf("ordinary account POST = %d, want 403", w.Code)
+	}
+	if code, body := f.get("someone-else"); code != http.StatusOK || body["allowed"] != false {
+		t.Fatalf("ordinary account GET = %d %v, want 200 allowed:false", code, body)
+	}
+	// An API key whose user is allowlisted: an owner act needs the session.
+	f.h.expandRequesters = map[string]bool{"user-real": true}
 	req := httptest.NewRequest(http.MethodPost, "/api/platform/publications/expand", strings.NewReader(`{"route":"`+expandTestRoute+`"}`))
 	req.Header.Set("Authorization", "Bearer "+auth.APIKeyPrefix+"test-secret")
 	w := httptest.NewRecorder()
@@ -317,6 +342,7 @@ func TestExpandRefusesAnonymousAndAPIKeyCallers(t *testing.T) {
 		t.Fatalf("API key GET = %d %v, want 200 allowed:false", gw.Code, body)
 	}
 	f.noUpstreamCalls()
+	f.h.expandRequesters = map[string]bool{expandTestOwner: true}
 	if w := f.post(expandTestOwner, `{}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("no route = %d, want 400", w.Code)
 	}
@@ -331,7 +357,7 @@ func TestExpandRefusesAnonymousAndAPIKeyCallers(t *testing.T) {
 
 // E3, E8, E11 and the success path.
 func TestExpandAsksTheStoriesOwnResearchDeskAsTheStoriesOwner(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
 	defer log.SetOutput(io.Discard)
@@ -376,7 +402,7 @@ func TestExpandAsksTheStoriesOwnResearchDeskAsTheStoriesOwner(t *testing.T) {
 
 // E4
 func TestExpandAnswersAnUnknownAndANonStoryRouteTheSame(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	a := f.post(expandTestOwner, `{"route":"/pub/texture/never-published"}`)
 	b := f.post(expandTestOwner, `{"route":"/pub/texture/hand-note-def"}`)
 	if a.Code != http.StatusNotFound || b.Code != http.StatusNotFound || a.Body.String() != b.Body.String() {
@@ -394,7 +420,7 @@ func TestExpandAnswersAnUnknownAndANonStoryRouteTheSame(t *testing.T) {
 
 // E3: the document read back does not belong to the story's owner.
 func TestExpandDoesNotAskForADocumentTheStoriesOwnerDoesNotOwn(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	f.mu.Lock()
 	f.docs[expandTestDocID]["owner_id"] = "someone-else"
 	f.anyUserReads = true // a paper that answered anyway
@@ -407,7 +433,7 @@ func TestExpandDoesNotAskForADocumentTheStoriesOwnerDoesNotOwn(t *testing.T) {
 
 // E5
 func TestExpandAllowsOneRequestPerPublishedVersion(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	first := f.postRoute(expandTestOwner)
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("first = %d %s", first.Code, first.Body.String())
@@ -454,14 +480,14 @@ func TestExpandAllowsOneRequestPerPublishedVersion(t *testing.T) {
 
 // E5: the paper replays the duplicate, or already holds it.
 func TestExpandReadsAPaperReplayOrAKnownRequestAsAlreadyAsked(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	f.askReply = func(int, expandResearchCall) (int, any) {
 		return http.StatusAccepted, map[string]any{"replay": true}
 	}
 	if w := f.postRoute(expandTestOwner); w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" {
 		t.Fatalf("replay: %d %s, want 409 already_asked", w.Code, w.Body.String())
 	}
-	g := newExpandFixture(t)
+	g := newExpandFixture(t, []string{expandTestOwner}, false)
 	g.research["expand:"+expandTestPubID+":"+expandTestSourceRev] = map[string]any{"record_id": "r", "committed_at": g.clock.Format(time.RFC3339Nano), "open": true}
 	if w := g.postRoute(expandTestOwner); w.Code != http.StatusConflict || decodeBody(t, w)["status"] != "already_asked" || g.askCount() != 0 {
 		t.Fatalf("known at the paper: %d %s asks=%d, want 409 already_asked and no ask", w.Code, w.Body.String(), g.askCount())
@@ -471,7 +497,7 @@ func TestExpandReadsAPaperReplayOrAKnownRequestAsAlreadyAsked(t *testing.T) {
 // E12: a crash closed the request before research reported. The reader sees
 // it, may ask once more for the same version, and no more than once.
 func TestExpandLetsAnInterruptedRequestBeAskedOnceMore(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	first := "expand:" + expandTestPubID + ":" + expandTestSourceRev
 	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
@@ -507,7 +533,7 @@ func TestExpandLetsAnInterruptedRequestBeAskedOnceMore(t *testing.T) {
 
 // E6
 func TestExpandLimitsInFlightAndDailyRequests(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	ask := func(n int) *httptest.ResponseRecorder {
 		route := fmt.Sprintf("/pub/texture/story-%d", n)
 		doc := fmt.Sprintf("doc-%d", n)
@@ -556,7 +582,7 @@ func TestExpandLimitsInFlightAndDailyRequests(t *testing.T) {
 
 // E6, E7, E8: a request that did not reach the paper holds no slot.
 func TestExpandFailuresBeforeTheDeskReleaseTheSlot(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 
 	f.mu.Lock()
 	f.paperDown = true
@@ -579,7 +605,7 @@ func TestExpandFailuresBeforeTheDeskReleaseTheSlot(t *testing.T) {
 
 // E7
 func TestExpandRetriesAStaleHeadOnceAndReportsABusyDesk(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	f.askReply = func(n int, call expandResearchCall) (int, any) {
 		if n == 1 {
 			// Texture committed between the read and the ask.
@@ -599,7 +625,7 @@ func TestExpandRetriesAStaleHeadOnceAndReportsABusyDesk(t *testing.T) {
 	}
 	f.mu.Unlock()
 
-	g := newExpandFixture(t)
+	g := newExpandFixture(t, []string{expandTestOwner}, false)
 	g.askReply = func(int, expandResearchCall) (int, any) {
 		return http.StatusConflict, map[string]string{"error": "the story changed", "reason": "changed"}
 	}
@@ -608,7 +634,7 @@ func TestExpandRetriesAStaleHeadOnceAndReportsABusyDesk(t *testing.T) {
 		t.Fatalf("always stale = %d %s asks=%d, want 409 changed after exactly 2 tries", w.Code, w.Body.String(), g.askCount())
 	}
 
-	b := newExpandFixture(t)
+	b := newExpandFixture(t, []string{expandTestOwner}, false)
 	b.askReply = func(int, expandResearchCall) (int, any) {
 		return http.StatusConflict, map[string]string{"error": "the story's research desk is busy", "reason": "busy"}
 	}
@@ -648,7 +674,7 @@ func TestExpansionFateIsDerivedFromTheChainAndThePublicVersion(t *testing.T) {
 
 // E9: the GET reads the paper only for an allowlisted caller with a request.
 func TestExpansionReadShowsTheFateAndTouchesThePaperOnlyForTheOwner(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 
 	code, body := f.get(expandTestOwner)
 	if code != http.StatusOK || body["allowed"] != true || body["asked"] != false {
@@ -700,24 +726,23 @@ func TestExpansionReadShowsTheFateAndTouchesThePaperOnlyForTheOwner(t *testing.T
 		t.Fatalf("revised and public: state = %q, want revised", got)
 	}
 
-	// Any signed-in reader sees the same fate line (2026-11-03: no allowlist);
-	// a settled request touches the paper no more for them than for the asker.
+	// A non-owner's read of the same story touches nothing.
 	f.mu.Lock()
 	callsBefore := len(f.paperCalls)
 	f.mu.Unlock()
-	if code, body := f.get("someone-else"); code != http.StatusOK || body["allowed"] != true || body["asked"] != true {
-		t.Fatalf("other reader read = %d %v", code, body)
+	if code, body := f.get("someone-else"); code != http.StatusOK || body["allowed"] != false || body["requests"] != nil {
+		t.Fatalf("non-owner read = %d %v", code, body)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if len(f.paperCalls) != callsBefore {
-		t.Fatalf("another reader's read reached the paper: %v", f.paperCalls[callsBefore:])
+		t.Fatalf("a non-owner's read reached the paper: %v", f.paperCalls[callsBefore:])
 	}
 }
 
 // A Texture revision from before the request must not count as the answer.
 func TestExpansionReadIgnoresATextureRevisionFromBeforeTheRequest(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
 	}
@@ -737,7 +762,7 @@ func TestExpansionReadIgnoresATextureRevisionFromBeforeTheRequest(t *testing.T) 
 
 // E9: a paper that cannot be read leaves the fate unknown, never invented.
 func TestExpansionReadSaysUnknownWhenThePaperCannotBeRead(t *testing.T) {
-	f := newExpandFixture(t)
+	f := newExpandFixture(t, []string{expandTestOwner}, false)
 	if w := f.postRoute(expandTestOwner); w.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s", w.Code, w.Body.String())
 	}
@@ -754,14 +779,12 @@ func TestExpansionReadSaysUnknownWhenThePaperCannotBeRead(t *testing.T) {
 	}
 }
 
-// Owner ruling 2026-11-03: every signed-in user may expand a story, whoever
-// they are and whatever the (now deleted) requester list once held.
-func TestExpandAcceptsAnySignedInAccount(t *testing.T) {
-	f := newExpandFixture(t)
-	if code, body := f.get("some-other-reader"); code != http.StatusOK || body["allowed"] != true {
-		t.Fatalf("signed-in GET = %d %v, want 200 allowed:true", code, body)
+// E1: the environment names, parsed.
+func TestParseExpandRequesters(t *testing.T) {
+	if got := ParseExpandRequesters(" a, ,b ,,"); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("parsed %q", got)
 	}
-	if w := f.postRoute("some-other-reader"); w.Code != http.StatusAccepted {
-		t.Fatalf("signed-in POST = %d body %s, want 202", w.Code, w.Body.String())
+	if got := ParseExpandRequesters(""); len(got) != 0 {
+		t.Fatalf("empty parsed to %q", got)
 	}
 }

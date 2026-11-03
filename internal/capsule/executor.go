@@ -111,11 +111,10 @@ type Executor struct {
 	jobs         map[string]*capsuleJob
 	jobDone      func(JobCompletion)
 	jobAdmission JobAdmission
-	// visualCaptureDir, captureBrowser and captureFontconfig locate the
-	// visual capture grant and the image's Chromium (visual_capture_linux.go).
-	visualCaptureDir  string
-	captureBrowser    string
-	captureFontconfig string
+	// browser and fontconfig are the image's Chromium and fontconfig file,
+	// which every broker hands its jobs (broker_env.go).
+	browser    string
+	fontconfig string
 }
 
 // SetClaudeDelegateSource names the credential directory holding the Claude
@@ -129,6 +128,14 @@ func (e *Executor) SetClaudeDelegateSource(dir, binary string) {
 }
 
 type claudeDelegateSource struct{ dir, binary string }
+
+// SetBrowser names the image's Chromium and its fontconfig file. It applies
+// to capsules spawned afterwards.
+func (e *Executor) SetBrowser(browser, fontconfig string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.browser, e.fontconfig = strings.TrimSpace(browser), strings.TrimSpace(fontconfig)
+}
 
 // ClaudeDelegateStatus reports whether a claude-mode capsule could be
 // spawned now, and why not. It never returns the token.
@@ -828,9 +835,8 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = BrokerProcessEnv(os.LookupEnv)
-	// Visual capture: the Chromium path for capture jobs, on a granted
-	// computer only (visual_capture_linux.go).
-	cmd.Env = append(cmd.Env, e.visualCaptureBrokerEnvLocked()...)
+	// The store Chromium for the jobs' Playwright, on every computer.
+	cmd.Env = append(cmd.Env, browserBrokerEnv(e.browser, e.fontconfig)...)
 	// Package mirrors: the granted ecosystems, for the broker's workload
 	// client settings (mirror.go); nothing on an ungranted computer.
 	cmd.Env = append(cmd.Env, mirrorBrokerEnv(caps.mirrors)...)
@@ -2001,6 +2007,9 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
 			return nil, fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
+		if releasePathReserved(clean) {
+			return nil, fmt.Errorf("capsule release path %q is reserved: evidence/ is where Freeze stages screens", change.Path)
+		}
 		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
 		input, err := openBeneath(rootFD, sourcePath)
 		if err != nil {
@@ -2184,15 +2193,14 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if err != nil {
 		return nil, err
 	}
-	// Visual evidence (docs/design/visual-evidence-slice-2026-10-15.md):
-	// captures bound to this release's frontend, beside release/.
-	visual, err := e.stageVisualEvidence(ctx, rootFD, agentRunID, caps.ID, changes, temporary, files)
+	// Screens: the engineer's own screenshots, beside release/.
+	screens, err := e.stageScreens(ctx, rootFD, changes, temporary)
 	if err != nil {
 		return nil, err
 	}
 	cleanup = false
 	return &StagedRelease{
-		Visual:           visual,
+		Screens:          screens,
 		Files:            files,
 		Binary:           binary,
 		SourcePatch:      patch,

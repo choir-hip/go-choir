@@ -443,12 +443,10 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		} else {
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation, false)
 		}
-		if selfDevelopmentHeldWithoutRetry(operationErr) {
-			// The apply crashed this guest every time it ran, or the host
-			// refuses this computer's verifier key; retrying it is the loop
-			// the attempt bound exists to stop. The operation stays in its
-			// state, visible, for an owner act (a re-pin wakes the
-			// reconciler once).
+		if errors.Is(operationErr, ErrGuestApplyAttemptsSpent) {
+			// The apply crashed this guest every time it ran; retrying it
+			// is the loop the attempt bound exists to stop. The operation
+			// stays in its state, visible, for an owner act.
 			log.Printf("selfdev materializer: operation %s in %s held: %v",
 				operation.OperationID, operation.State, operationErr)
 			continue
@@ -1141,8 +1139,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 		})
 	})
 	if err != nil {
-		// A refusal of the verifier key repeats on every retry: hold it.
-		return rt.classifyCheckpointPublishError(err)
+		return err
 	}
 	checkpoint := *published
 	checkpointRef := "checkpoint:sha256:" + checkpoint.Checkpoint.Digest
@@ -1460,13 +1457,6 @@ func (rt *Runtime) applyOrReadJournal(ctx context.Context, request updater.Apply
 			return journaled.Result, errors.New(journaled.Failure), nil
 		}
 		return journaled.Result, nil, nil
-	}
-	// A verifier key the host refuses would refuse this operation's
-	// checkpoint on every attempt: hold it before an attempt is spent or a
-	// planned marker written (docs/problems/
-	// verifier-key-regenerated-locks-out-checkpoints-2026-11-02.md).
-	if holdErr := rt.verifierKeyHold(ctx); holdErr != nil {
-		return updater.ApplyResult{}, nil, holdErr
 	}
 	restartPlanned, spentErr := rt.markPlannedRestart(reason, target)
 	if spentErr != nil {

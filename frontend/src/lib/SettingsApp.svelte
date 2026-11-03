@@ -33,7 +33,7 @@
   let apiKeyError = '';
   let apiKeyNotice = '';
   let newKeyLabel = '';
-  let newKeyScopes = [];
+  let newKeyScopes = ['read:texture', 'read:base', 'read:runtime'];
   let apiKeyAdvanced = false;
   let newKeyComputerID = '';
   let newKeyExpiry = '';
@@ -71,12 +71,11 @@
     { value: 'owner:acts', label: 'Owner Acts (approve, arm, restore)' },
   ];
 
-  // The one-click key sends no scope list: the auth service gives it every
-  // scope it issues, owner:acts and admin included (owner, 2026-11-03: "for
-  // now, we should just grant all access"; the one list is auth.AllScopes;
-  // docs/design/cli-agent-onboarding-2026-11-03.md). The advanced picker
-  // starts with every scope selected, so narrowing is an explicit choice.
-  newKeyScopes = allScopes.flatMap((s) => (s.value === 'selfdev-group' ? selfDevScopes : [s.value]));
+  // The one-click key covers everything an agent or CLI needs (owner,
+  // 2026-10-24: "the default API key should cover everything that you
+  // need"). admin does not grant owner acts (approve, arm, restore), so the
+  // key also carries owner:acts, which only this signed-in session may grant.
+  const simpleKeyScopes = ['admin', 'owner:acts'];
 
   // Any scope other than manage:keys selects a computer at use time; those
   // keys are owner-wide when computer_id is empty or attenuated when bound.
@@ -126,18 +125,21 @@
     apiKeyError = '';
     apiKeyNotice = '';
     const label = newKeyLabel.trim() || 'CLI key';
-    // Simple mode: one click mints an owner-wide full-access key (scopes
-    // omitted: every scope). Advanced mode: caller may narrow scopes, bind to
-    // one computer, or set an expiry.
-    let computerID = '';
+    // Simple mode: one click mints an owner-wide admin and owner-acts key
+    // covering every computer you own. Advanced mode: caller may narrow scopes, bind to one
+    // computer, or set an expiry.
+    let scopes;
+    let computerID;
     let expiry = '';
-    const body = { label };
     if (apiKeyAdvanced) {
-      body.scopes = newKeyScopes;
+      scopes = newKeyScopes;
       computerID = newKeyComputerID;
       expiry = newKeyExpiry;
+    } else {
+      scopes = simpleKeyScopes;
+      computerID = '';
     }
-    body.computer_id = computerID;
+    const body = { label, scopes, computer_id: computerID };
     if (expiry) {
       const parsed = new Date(expiry);
       if (!Number.isNaN(parsed.getTime())) {
@@ -405,7 +407,7 @@
       <section class="settings-card api-keys-card" data-settings-api-keys>
         <div>
           <h3>API keys</h3>
-          <p class="muted">Easiest: run <code>choir login</code> in a terminal and approve it here; the CLI and <code>choir mcp</code> then work with no setup. Or create a key below. The secret is shown once — copy it immediately.</p>
+          <p class="muted">Create a CLI/agent key. This is the one-time bootstrap — after the first key, all issuance is API/CLI-only (<code>choir api-key create/revoke</code>). The secret is shown once — copy it immediately.</p>
         </div>
 
         {#if showNewKeySecret}
@@ -503,7 +505,7 @@
               </button>
             {:else}
               <p class="muted" data-api-key-simple-hint>
-                Full access: every scope, owner acts included, on every computer you own, until you revoke it here. Anyone holding the key can act as you through the API. The secret is shown once — copy it immediately.
+                Full permissions over every computer you own. Put the key in an agent or CLI once; every later change (rotation, scopes, new computers) is API/CLI-only. The secret is shown once — copy it immediately.
               </p>
               <button
                 class="api-key-advanced-toggle"

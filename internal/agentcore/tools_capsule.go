@@ -43,7 +43,7 @@ type CapsuleToolCtx struct {
 	// VerifyRebase checks a staged cumulative patch for a rebase round (U4);
 	// nil, or an assignment no pair claim names, checks nothing.
 	VerifyRebase    func(ctx context.Context, staged *capsule.StagedRelease, patch []byte) error
-	EventProjection     interface {
+	EventProjection interface {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
 	}
@@ -60,10 +60,11 @@ type CapsuleToolCtx struct {
 	// verification of a reused release binary; nil means
 	// capsule.CurrentRunningBinary.
 	RunningBinary func() (capsule.RunningBinary, error)
-	// Images is the computer's asset store: Freeze files each visual
-	// capture in it so the owner's browser can read it by digest
-	// (visual_evidence_slice V22). Nil leaves captures unresolvable.
-	Images visualAssetStore
+	// Images is the computer's asset store and FilesRoot its file tree:
+	// Freeze saves each screen the engineer took in both
+	// (selfdev_screens.go). Nil or empty leaves a screen unsaved.
+	Images    screenAssetStore
+	FilesRoot string
 	// frozenTree is the executor read a second Freeze on a frozen operation
 	// takes to compare the capsule's tree with the candidate (R9-1); nil
 	// uses Executor. A test substitutes it to drive the replay check
@@ -218,10 +219,13 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 			if err := frozenCandidateTreeChanged(ctx, toolCtx, handle, operation); err != nil {
 				return nil, err
 			}
-			return map[string]any{
+			replay := map[string]any{
 				"handle": handle, "bundle_digest": operation.BundleDigest,
 				"operation_id": operation.OperationID, "state": operation.State,
-			}, nil
+			}
+			// Re-save screens a crash left unsaved (idempotent by digest).
+			toolCtx.resaveReplayedScreens(operation, replay)
+			return replay, nil
 		}
 		return nil, fmt.Errorf("self-development operation is %s, expected %s", operation.State, selfdev.StateExecuting)
 	}
@@ -344,7 +348,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.SourcePatchBaseCommit = staged.SourceBaseCommit
 	record.RuntimeFiles = files
 	record.ReleaseBinary = staged.Binary
-	record.VisualEvidence = staged.Visual
+	record.Screens = staged.Screens
 	record.ContentDigest, err = record.ComputeContentDigest()
 	if err != nil || record.Validate(false) != nil {
 		return nil, fmt.Errorf("complete capsule effect bundle draft unavailable")
@@ -379,9 +383,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if record.ReleaseBinary != nil {
 		out["release_binary_origin"] = record.ReleaseBinary.Origin
 	}
-	// Visual evidence: file the captures in the asset store, tell the cell
-	// what resolved, and leave the runtime's observation for the rule pass.
-	recordFreezeVisual(toolCtx.Images, frozenRoot, staged.Visual, out)
+	// Screens: save the engineer's screenshots as files Texture reads, and
+	// tell the cell where they are.
+	recordFreezeScreens(toolCtx.Images, toolCtx.FilesRoot, frozenRoot, operation.OperationID, staged.Screens, out)
 	return out, nil
 }
 

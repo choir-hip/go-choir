@@ -90,7 +90,7 @@ func TestRefreshTestAccountsReadsTheAuthDBAndSurvivesItsLoss(t *testing.T) {
 	}
 }
 
-// V2 (docs/design/visual-evidence-slice-2026-10-15.md): a test account
+// A test account
 // minted after the last sweep is still booted as test, because a primary
 // answer reloads the tier once; a real account stays primary, and a lost
 // auth DB fails closed.

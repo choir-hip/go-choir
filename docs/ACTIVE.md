@@ -11,42 +11,19 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
-## Active metamission (2026-11-03, overnight): progressive delivery, then self-development
+## Active goal (2026-11-02): self-development, the apps rewritten beside their originals
 
-**Goal:** [`definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`](definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md).
-Run it with `/goal docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md`.
-Two stations in concurrent lanes; calibration is the bridge (owner).
-
-## Active goal (2026-11-03): progressive delivery, built
-
-**Goal:** [`definitions/choir-progressive-delivery-2026-11-03.md`](definitions/choir-progressive-delivery-2026-11-03.md)
+**Goal:** [`definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`](definitions/choir-selfdev-apps-side-by-side-2026-11-02.md)
 (`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-progressive-delivery-2026-11-03.md`.
+`/goal docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md`.
 
-Owner, 2026-11-03: "i hate the pattern of all these switches ... we were
-supposed to build progressive delivery ... put this self-dev mission on
-hold to handle progressive delivery." Every switch walks the rings on
-measured evidence and retires; the off backlog is cleared. Inputs: the
-ratified design [`design/progressive-delivery-2026-10-26.md`](design/progressive-delivery-2026-10-26.md)
-and the audit [`evidence/switch-audit-2026-11-03.md`](evidence/switch-audit-2026-11-03.md).
-
-## Station 2 (2026-11-03): self-development, the apps feature-complete
-
-**Goal:** [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](definitions/choir-selfdev-apps-feature-complete-2026-11-03.md)
-(`readiness: executable` on the owner's word). Run it with
-`/goal docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`.
-
-Owner, 2026-11-03: "make a new through line plan, which includes all the
-work described above, from the auth to the choir CLI and MCP to
-self-development"; "we really need to make them feature complete". Four
-fresh stock arms (Claude delegate, Synthetic DeepSeek, gpt-6-luna, the
-pool), a Sonnet monitor per arm, the platform capture path deleted for
-engineer screenshots saved as files, `choir login`, `choir mcp install` and
-`choir texture export`. Feature list:
-[`design/apps-feature-complete-spec-2026-11-03.md`](design/apps-feature-complete-spec-2026-11-03.md);
-calibration seed plan:
-[`design/calibration-seed-2026-11-03.md`](design/calibration-seed-2026-11-03.md).
-Supersedes the 2026-11-02 side-by-side goal.
+Owner, 2026-11-02: "get back to self-development"; the Claude (Sonnet)
+delegate working; "we have a bunch of different apps to rewrite. We should
+keep the originals as well while we rewrite them. We can delete them
+later." Each rewrite is a package `<app>-next` beside the untouched
+original; it supersedes the T1a draft. First slice: one deploy wave after
+the store split's meter day (2026-11-03T05:00Z), the delegate proof on
+b@c, then Slides-next.
 
 ## Settling (2026-11-01): the store header/body split, on its meter day
 

@@ -128,15 +128,6 @@ func ParseVMList(v string) map[string]bool {
 	return out
 }
 
-// Wildcard is the list token that names every VM (owner, 2026-11-03: host
-// fetch is on for every computer).
-const Wildcard = "*"
-
-// Listed reports whether the list admits id: named, or the Wildcard token.
-func Listed(list map[string]bool, id string) bool {
-	return list[id] || list[Wildcard]
-}
-
 // Grant is the record vmctl writes on a granted computer's credential disk.
 type Grant struct {
 	ComputerID string `json:"computer_id"`

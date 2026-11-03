@@ -9,6 +9,9 @@ package texturedoc
 //     kind, an unknown attribute or a reserved one (selector, poster);
 //   - a capsule_evidence embed names a malformed digest, no operation, a
 //     route off the origin, or no viewport, or a viewport out of bounds;
+//   - one names a screen file (the engineer's screens, saved in the
+//     computer's tree) that is absolute, climbs out with "..", or is
+//     outside Self-development/; or names neither a route nor a file;
 //   - caption and alt skip the authoring rules or are unbounded;
 //   - a world document holds one;
 //   - its projection is empty, so the revision's content loses it;
@@ -42,6 +45,19 @@ func docOf(blocks ...Node) StructuredTextureDoc {
 
 func para(id, text string) Node {
 	return Node{Type: "paragraph", Attrs: map[string]any{"id": id}, Content: []Node{{Type: "text", Text: text}}}
+}
+
+func TestAScreenFileEmbedValidates(t *testing.T) {
+	node := evidenceNode(func(_, tg map[string]any) {
+		delete(tg, "route")
+		tg["file"] = "Self-development/selfdev-op-1/screens/home.png"
+	})
+	if err := Validate(docOf(node), nil); err != nil {
+		t.Fatalf("a screen file embed refused: %v", err)
+	}
+	if e, _ := EmbedOf(node); e.File != "Self-development/selfdev-op-1/screens/home.png" || e.Route != "" {
+		t.Fatalf("embed %+v", e)
+	}
 }
 
 func TestEmbedBlockValidates(t *testing.T) {
@@ -99,7 +115,10 @@ func TestEmbedBlockRefusals(t *testing.T) {
 		"spaced operation":  docOf(evidenceNode(func(_, tg map[string]any) { tg["operation_id"] = "op 1" })),
 		"no computer":       docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "computer_id") })),
 		"absolute route":    docOf(evidenceNode(func(_, tg map[string]any) { tg["route"] = "https://evil.example/" })),
-		"no route":          docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "route") })),
+		"no route, no file": docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "route") })),
+		"absolute file":     docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "route"); tg["file"] = "/etc/passwd" })),
+		"climbing file":     docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "route"); tg["file"] = "Self-development/../Documents/x.png" })),
+		"file elsewhere":    docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "route"); tg["file"] = "Documents/x.png" })),
 		"no width":          docOf(evidenceNode(func(_, tg map[string]any) { delete(tg, "width") })),
 		"zero height":       docOf(evidenceNode(func(_, tg map[string]any) { tg["height"] = float64(0) })),
 		"huge width":        docOf(evidenceNode(func(_, tg map[string]any) { tg["width"] = float64(MaxEmbedDimension + 1) })),

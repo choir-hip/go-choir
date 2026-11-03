@@ -23,9 +23,8 @@
       pick = name: p:
         if stub then pkgs.runCommand "${name}-tool-stub" { } "mkdir -p $out/bin" else p;
       packages = {
-        # visual capture (docs/design/visual-evidence-slice-2026-10-15.md):
-        # full Chromium, on no PATH; only a granted computer's capture job
-        # gets its path.
+        # The store browser: full Chromium, on no PATH; every computer's
+        # capsule jobs get its path (CHOIR_BROWSER) for Playwright.
         chromium = pick "chromium" pkgs.chromium;
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md):
         # pinned Claude Code, on no PATH; only the allowlisted computer's

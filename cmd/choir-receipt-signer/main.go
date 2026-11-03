@@ -53,7 +53,7 @@ func main() {
 		os.Exit(2)
 	}
 	recordStartupStage(receiptsigner.StartupStageConfigured)
-	key, provenance, err := receiptsigner.LoadOrCreateSigningKeyWithProvenance(*keyPath, strings.TrimSpace(*mode))
+	key, err := receiptsigner.LoadOrCreateSigningKey(*keyPath, strings.TrimSpace(*mode))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "choir-receipt-signer: load key: %v\n", err)
 		os.Exit(1)
@@ -64,7 +64,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "choir-receipt-signer: configure: %v\n", err)
 		os.Exit(1)
 	}
-	handler.SetProvenance(provenance)
 	recordStartupStage(receiptsigner.StartupStageHandlerConfigured)
 	if err := os.MkdirAll(filepath.Dir(*socket), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "choir-receipt-signer: socket directory: %v\n", err)

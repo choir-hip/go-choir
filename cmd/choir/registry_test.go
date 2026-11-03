@@ -47,11 +47,9 @@ import (
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
-	// Owner act: re-pin a verifier key a lost data disk regenerated.
-	"computer repin-verifier",
 	"computer restore",
 	// Owner act (slice 3 of the checkpoint design): reopen a closed cadence.
-	"computer resume-checkpoints", "help", "login", "logout", "mcp", "mcp install",
+	"computer resume-checkpoints", "help", "mcp",
 	// Owner acts (Library S2, S3): publishing a package release, and
 	// sharing, withdrawing or reinstating it.
 	"package publish", "package reinstate", "package share", "package withdraw",
@@ -463,7 +461,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	dropQuery := func(r *capReq) { r.Query = "" }
-	exportDir := filepath.Join(t.TempDir(), "texture-export")
 	cases := map[string]parityCase{
 		"trajectories_list":  {cli: []string{"trajectories"}, mcp: `{}`, reply: `{"trajectories":[{"trajectory_id":"t1"}]}`},
 		"trajectory_get":     {cli: []string{"trajectory", "traj/1"}, mcp: `{"trajectory_id":"traj/1"}`},
@@ -479,7 +476,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"texture_history":   {cli: []string{"texture", "history", "doc-1"}, mcp: `{"doc_id":"doc-1"}`},
 		"texture_revisions": {cli: []string{"texture", "revisions", "doc-1"}, mcp: `{"doc_id":"doc-1"}`},
 		"texture_show":      {cli: []string{"texture", "show", "doc-1"}, mcp: `{"doc_id":"doc-1"}`, reply: `{"current_revision_id":"rev-1","doc_id":"doc-1"}`},
-		"texture_export":    {cli: []string{"texture", "export", "--out", exportDir, "doc-1"}, mcp: `{"doc_id":"doc-1","out":"` + exportDir + `"}`, reply: `{"current_revision_id":"rev-1","doc_id":"doc-1","content":"text"}`},
 		"texture_open_source": {cli: []string{"texture", "open-source", "--revision", "r", "--source-ref", "s", "--source-ref-version", "v", "doc-1"}, mcp: `{"doc_id":"doc-1","revision":"r","source_ref":"s","source_ref_version":"v"}`,
 			reply: `{"schema":"choir.texture_source_open.v1"}`},
 		"search": {cli: []string{"search", "jailer", "launch"}, mcp: `{"query":"jailer launch"}`},
@@ -493,7 +489,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"files_get":                        {cli: []string{"files", "get", "a/b.txt"}, mcp: `{"path":"a/b.txt"}`, reply: "plain bytes"},
 		"computer_status":                  {cli: []string{"computer", "status", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replay_completeness":     {cli: []string{"computer", "replay-completeness", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"computer_verifier_key":            {cli: []string{"computer", "verifier-key", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replace_workspace":       {cli: []string{"computer", "replace-workspace", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_checkpoints":             {cli: []string{"computer", "checkpoints", "--computer", "c1", "--digest", "abc"}, mcp: `{"computer":"c1","digest":"abc"}`},
 		"computer_import_residue_snapshot": {cli: []string{"computer", "import-residue-snapshot", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
@@ -510,7 +505,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_show":                    {cli: []string{"self-dev", "show", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`},
 		"self_dev_head":                    {cli: []string{"self-dev", "head", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"self_dev_patch":                   {cli: []string{"self-dev", "patch", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: sourcePatchReply("op-1", "c1", []byte(testSourcePatch), "")},
-		"self_dev_visual":                  {cli: []string{"self-dev", "visual", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: visualListing("op-1", goodRow("/", testPNG))},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"release_list":                     {cli: []string{"release", "list", "--limit", "5", "--publisher", "c9"}, mcp: `{"limit":5,"publisher":"c9"}`},

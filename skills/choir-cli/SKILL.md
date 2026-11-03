@@ -32,7 +32,7 @@ which `admin` does not imply; reject stays an agent act.
 | Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
 | Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
 | Export the source patch | `choir self-dev patch --operation=ID --out=FILE` (frozen or later; MCP `self_dev_patch` inlines it up to 256 KiB) | sha256-verified `source.patch`, its base commit and bundle digest |
-| Preview the screenshots | `choir self-dev visual --operation=ID [--out=DIR]` (frozen or later; 409 before Freeze, 404 with no captures; `--out` fetches each PNG, re-hashes it against its digest, writes `<route>-<digest12>.png` mode 0600 and exits 1 if any capture is unresolvable or fails; MCP `self_dev_visual` lists only) | sha256-verified PNGs, manifest with the capture receipt |
+| See the screenshots | the engineer's own screens are files in the computer's tree, `Self-development/<operation>/screens/<name>.png` (frozen or later); `choir texture read DOC` lists the Texture embeds with each `file` and `digest` | sha256-bound PNGs |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Roll back (owner) | `choir self-dev rollback --to-operation=ID [--wait]` | `rollback_requested` event, rollback operation to `rolled_back` |
@@ -95,31 +95,19 @@ The binary has no cgo dependencies — it is pure Go and builds quickly.
 
 ## Auth
 
-Easiest: `choir login` once on the machine. It prints a link and a code;
-the owner opens the link in a browser, signs in with a passkey and approves.
-The CLI then saves a full-access key (every scope, owner acts included) to
-`~/.config/choir/credentials` (mode 0600), and every later command and
-`choir mcp` use it with no flags or env. `choir mcp install claude-code`
-(or `cursor`, `claude-desktop`, `codex`; `--print` to only print) adds the
-MCP server to an agent host. `choir logout` revokes the key and removes the
-file.
+All commands require an API key:
 
-The key is resolved in this order, the same for the CLI and `choir mcp`:
+- `--api-key` flag, or
+- `$CHOIR_API_KEY` environment variable
 
-1. `--api-key-file <path>` (mode 0600; `-` reads stdin, not for `choir mcp`)
-2. `$CHOIR_API_KEY`
-3. `$CHOIR_API_KEY_FILE`
-4. the `choir login` credentials file (sent only to the host it was minted for)
-
-The key must start with `choir_sk_`. Keys can also be created in the
-SettingsApp "API keys" section (full access unless narrowed under Advanced),
-or via `choir api-key create` if you already have a key.
+The key must start with `choir_sk_`. Keys are created via the SettingsApp
+"API keys" section in the browser UI, or via `choir api-key create` if you
+already have a key.
 
 ## Host
 
 - `--host` flag, or
-- `$CHOIR_HOST` environment variable, or
-- the `choir login` host, else `https://choir.news`
+- `$CHOIR_HOST` environment variable (defaults to `https://choir.news`)
 
 ## Commands
 

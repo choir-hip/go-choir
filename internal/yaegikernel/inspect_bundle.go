@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 )
 
 // selfDevBundleMountPoint is the read-only lower-layer path where the host
@@ -62,29 +61,19 @@ type bundleDraftMirror struct {
 	SourcePatchSHA256       string                     `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit   string                     `json:"source_patch_base_commit,omitempty"`
 	ReleaseBinary           *mountedReleaseBinary      `json:"release_binary,omitempty"`
-	VisualEvidence          *mountedVisualEvidence     `json:"visual_evidence,omitempty"`
+	LegacyVisualEvidence    json.RawMessage            `json:"visual_evidence,omitempty"`
+	Screens                 []mountedScreen            `json:"screens,omitempty"`
 }
 
-// mountedVisualEvidence mirrors capsule.VisualEvidence (the bundle's
-// screenshots, docs/design/visual-evidence-slice-2026-10-15.md).
-type mountedVisualEvidence struct {
-	ManifestSHA256 string                 `json:"manifest_sha256"`
-	FrontendSHA256 string                 `json:"frontend_sha256"`
-	CaptureReceipt string                 `json:"capture_receipt,omitempty"`
-	Captures       []mountedVisualCapture `json:"captures"`
-	// AssetFailures mirrors capsule.VisualEvidence.AssetFailures (advice).
-	AssetFailures []visualcapture.AssetFailure `json:"asset_failures,omitempty"`
-}
-
-// mountedVisualCapture mirrors capsule.VisualEvidenceCapture.
-type mountedVisualCapture struct {
-	Artifact  string `json:"artifact"`
-	Route     string `json:"route"`
-	MediaType string `json:"media_type"`
-	Bytes     int64  `json:"bytes"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	Blank     bool   `json:"blank,omitempty"`
+// mountedScreen mirrors capsule.ScreenFile (the engineer's screenshots,
+// docs/problems/selfdev-screens-are-not-files-2026-11-03.md).
+type mountedScreen struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Bytes  int64  `json:"bytes"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Blank  bool   `json:"blank,omitempty"`
 }
 
 // mountedReleaseBinary mirrors capsule.ReleaseBinaryProvenance.
@@ -171,7 +160,7 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 			return nil, fmt.Errorf("choir: inspect_bundle: frozen runtime file digest mismatch: %s", file.Path)
 		}
 	}
-	visual, err := inspectMountedVisualEvidence(root, record.VisualEvidence, record.RuntimeFiles)
+	screens, err := inspectMountedScreens(root, binding.OperationID, record.Screens)
 	if err != nil {
 		return nil, err
 	}
@@ -199,56 +188,43 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 			"running_commit": binary.RunningCommit, "source_base_commit": binary.SourceBaseCommit,
 		}
 	}
-	if visual != nil {
-		out["visual_evidence"] = visual
+	if len(screens) > 0 {
+		out["screens"] = screens
 	}
 	return out, nil
 }
 
-// inspectMountedVisualEvidence re-hashes every capture the bundle cites under
-// <root>/evidence/visual/ and checks the captures answer to the frontend the
-// bundle's runtime files freeze, so a verifier cites what it inspected. It
-// returns nil for a bundle with no captures.
-func inspectMountedVisualEvidence(root string, evidence *mountedVisualEvidence, runtime []mountedRuntimeFile) (map[string]any, error) {
-	if evidence == nil {
+// inspectMountedScreens re-hashes every screen the bundle cites under
+// <root>/evidence/screens/, so a verifier cites what it inspected. Each row
+// names the file the runtime saved it as in the computer's file tree and the
+// asset ref a vision call takes. nil for a bundle with none.
+func inspectMountedScreens(root, operationID string, screens []mountedScreen) ([]map[string]any, error) {
+	if len(screens) == 0 {
 		return nil, nil
 	}
-	var tree []visualcapture.FileDigest
-	for _, file := range runtime {
-		if rel, ok := strings.CutPrefix(file.Path, "frontend/"); ok && rel != "" {
-			tree = append(tree, visualcapture.FileDigest{Path: rel, SHA256: file.SHA256})
+	out := make([]map[string]any, 0, len(screens))
+	for _, screen := range screens {
+		if !computerevent.IsSHA256(screen.SHA256) || screen.Name != filepath.Base(screen.Name) || !strings.HasSuffix(screen.Name, ".png") {
+			return nil, fmt.Errorf("choir: inspect_bundle: screen %q is not a content-addressed PNG", screen.Name)
 		}
-	}
-	if evidence.FrontendSHA256 != visualcapture.FrontendDigest(tree) {
-		return nil, fmt.Errorf("choir: inspect_bundle: visual evidence was captured from a different frontend than the frozen runtime files")
-	}
-	captures := make([]map[string]any, 0, len(evidence.Captures))
-	shots := make([]visualcapture.RouteShot, 0, len(evidence.Captures))
-	for _, capture := range evidence.Captures {
-		shots = append(shots, visualcapture.RouteShot{Route: capture.Route, Artifact: capture.Artifact})
-		digest, ok := strings.CutPrefix(capture.Artifact, "artifact:sha256:")
-		if !ok || !computerevent.IsSHA256(digest) {
-			return nil, fmt.Errorf("choir: inspect_bundle: visual capture %q is not a content-addressed artifact", capture.Artifact)
-		}
-		data, err := os.ReadFile(filepath.Join(root, "evidence", "visual", digest+".png"))
+		data, err := os.ReadFile(filepath.Join(root, "evidence", "screens", screen.Name))
 		if err != nil {
-			return nil, fmt.Errorf("choir: inspect_bundle: visual capture unavailable: %s", capture.Artifact)
+			return nil, fmt.Errorf("choir: inspect_bundle: screen unavailable: %s", screen.Name)
 		}
 		sum := sha256.Sum256(data)
-		if hex.EncodeToString(sum[:]) != digest || int64(len(data)) != capture.Bytes {
-			return nil, fmt.Errorf("choir: inspect_bundle: visual capture digest mismatch: %s", capture.Artifact)
+		if hex.EncodeToString(sum[:]) != screen.SHA256 || int64(len(data)) != screen.Bytes {
+			return nil, fmt.Errorf("choir: inspect_bundle: screen digest mismatch: %s", screen.Name)
 		}
-		captures = append(captures, map[string]any{
-			"artifact": capture.Artifact, "route": capture.Route, "media_type": capture.MediaType,
-			"bytes": capture.Bytes, "width": capture.Width, "height": capture.Height, "blank": capture.Blank,
+		out = append(out, map[string]any{
+			"name": screen.Name, "sha256": screen.SHA256, "bytes": screen.Bytes, "width": screen.Width, "height": screen.Height, "blank": screen.Blank,
+			"file": SelfDevelopmentScreensDir(operationID) + "/" + screen.Name, "image_ref": "artifact:sha256:" + screen.SHA256,
 		})
 	}
-	out := map[string]any{
-		"manifest_sha256": evidence.ManifestSHA256, "frontend_sha256": evidence.FrontendSHA256,
-		"capture_receipt": evidence.CaptureReceipt, "captures": captures,
-	}
-	if warnings := append(visualcapture.SharedShotWarnings(shots), visualcapture.AssetFailureWarnings(evidence.AssetFailures, 0)...); len(warnings) > 0 {
-		out["warnings"] = warnings
-	}
 	return out, nil
+}
+
+// SelfDevelopmentScreensDir is where the runtime saves an operation's screens
+// in the computer's file tree, relative to the files root.
+func SelfDevelopmentScreensDir(operationID string) string {
+	return "Self-development/" + strings.TrimSpace(operationID) + "/screens"
 }

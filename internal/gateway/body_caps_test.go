@@ -28,11 +28,13 @@ import (
 //     Content-Length over the limit is read at all
 //     (TestBodyCapsRefuseAnOversizedBodyOnEveryRoute);
 //  3. the refusal is a 400 or a dropped connection (same test, every route);
-//  4. (retired 2026-11-03: the model scheduler is deleted)
-//  5. (retired with 4)
+//  4. bodies pile up behind the scheduler (TestModelSchedulerQueuedCallReadsNoBody);
+//  5. a cancelled caller is handed a slot
+//     (TestModelSchedulerRefusesAnAlreadyCancelledCaller);
 //  6. the limits are invisible or fixed in code
 //     (TestBodyCapsEnvOverridesAndHealth);
-//  7. (retired with 4)
+//  7. the scheduler path reads the body somewhere the cap does not cover
+//     (TestModelSchedulerQueuedCallReadsNoBody runs with the cap on).
 
 const bodyCapsHostToken = "body-caps-test-token-0123456789abcdef0123456789"
 
@@ -342,6 +344,48 @@ func TestBodyCapsEnvOverridesAndHealth(t *testing.T) {
 	}
 }
 
+// TestModelSchedulerQueuedCallReadsNoBody: with the scheduler on, a call
+// waiting for a slot holds no body; it reads its body once it has the slot.
+func TestModelSchedulerQueuedCallReadsNoBody(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
+	t.Setenv("GATEWAY_BODY_LIMITS", "")
+	for _, route := range []string{"inference", "openai chat"} {
+		t.Run(route, func(t *testing.T) {
+			s := newTestScheduler(1, 1, 16, time.Minute)
+			h, reg := schedulerHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil, s)
+			cred, _ := reg.IssueCredential("computer-q")
+			hold := mustAcquire(t, s, "computer-q")
+
+			raw := `{"model":"m","messages":[{"role":"user","content":"hi"}]}`
+			path, serve := "/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions
+			if route == "inference" {
+				raw = `{"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`
+				path, serve = "/provider/v1/inference", h.HandleInference
+			}
+			body := &countingBody{r: strings.NewReader(raw)}
+			req := httptest.NewRequest(http.MethodPost, path, body)
+			req.Header.Set("Authorization", "Bearer "+cred.RawToken)
+			rec := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() { serve(rec, req); close(done) }()
+
+			waitUntil(t, "the call to queue", func() bool { return s.Stats().Queued == 1 })
+			if got := body.read.Load(); got != 0 {
+				t.Fatalf("a queued %s call read %d bytes of its body before it had a slot", route, got)
+			}
+			hold()
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("the queued call did not finish after the slot freed")
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("the queued %s call = %d %s, want 200", route, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 // --- review round (bunch 88): F1 aggregate bound, F2/F4 body read deadline ---
 
 // bodyServer serves h's inference route on a real listener with the given
@@ -380,6 +424,34 @@ func postAsync(url, token string, body io.Reader) chan postResult {
 	return out
 }
 
+// F2: a call that waited in the queue longer than the server's read
+// timeout still reads its body: the body's deadline starts when the slot
+// is granted. Fails on 02010a2e0: the read hits the server's absolute
+// deadline and the handler answers 400.
+func TestBodyCapsQueuedCallReadsItsBodyAfterTheServerReadTimeout(t *testing.T) {
+	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
+	t.Setenv("GATEWAY_BODY_LIMITS", "")
+	s := newTestScheduler(1, 1, 16, time.Minute)
+	h, reg := schedulerHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil, s)
+	cred, _ := reg.IssueCredential("computer-late")
+	srv := bodyServer(t, h.HandleInference, 300*time.Millisecond)
+	hold := mustAcquire(t, s, "computer-late")
+
+	pr, pw := io.Pipe()
+	res := postAsync(srv.URL+"/provider/v1/inference", cred.RawToken, pr)
+	waitUntil(t, "the call to queue", func() bool { return s.Stats().Queued == 1 })
+	time.Sleep(600 * time.Millisecond) // past the server's read timeout
+	hold()
+	go func() {
+		_, _ = pw.Write([]byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`))
+		_ = pw.Close()
+	}()
+	r := <-res
+	if r.err != nil || r.code != http.StatusOK {
+		t.Fatalf("a call granted after the server read timeout = %d %q (%v), want 200", r.code, r.body, r.err)
+	}
+}
+
 // F4: a body trickled after the slot is granted is cut at the body read
 // deadline and answered with a status the guest retries; the slot is
 // freed. Fails on 02010a2e0: the slot is held until the server's read
@@ -388,7 +460,8 @@ func TestBodyCapsTrickledBodyIsCutAtTheBodyReadDeadline(t *testing.T) {
 	t.Setenv("GATEWAY_BODY_CAPS", "enforce")
 	t.Setenv("GATEWAY_BODY_LIMITS", "")
 	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "300ms")
-	h, reg := modelCallHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil)
+	s := newTestScheduler(1, 1, 16, time.Minute)
+	h, reg := schedulerHandler(t, &mockProvider{name: "bedrock", real: true, response: &provider.LLMResponse{ID: "r", Text: "ok", Model: "m", StopReason: "end_turn"}}, nil, s)
 	cred, _ := reg.IssueCredential("computer-trickle")
 	srv := bodyServer(t, h.HandleInference, 30*time.Second)
 
@@ -407,6 +480,7 @@ func TestBodyCapsTrickledBodyIsCutAtTheBodyReadDeadline(t *testing.T) {
 	if r.code != http.StatusServiceUnavailable || r.retryAfter == "" {
 		t.Fatalf("a trickled body = %d (Retry-After %q) %q, want 503 with Retry-After (transient to the guest)", r.code, r.retryAfter, r.body)
 	}
+	waitUntil(t, "the slot to free", func() bool { return s.Stats().InFlight == 0 })
 }
 
 // F1: with the scheduler off, the total bytes of bodies in flight are
@@ -419,7 +493,7 @@ func TestBodyCapsBoundTheBytesInFlightWithTheSchedulerOff(t *testing.T) {
 	t.Setenv("GATEWAY_BODY_LIMITS", "model=64KiB,model_ceiling=256KiB,in_flight=256KiB")
 	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "300ms")
 	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
-	h, reg := modelCallHandler(t, gp, nil)
+	h, reg := schedulerHandler(t, gp, nil, nil)
 	defer close(gp.gate)
 
 	first := make(chan int, 1)
@@ -579,7 +653,7 @@ func TestBodyCapsReadWindowStartsWhenTheBodyFits(t *testing.T) {
 	t.Setenv("GATEWAY_BODY_LIMITS", "model=128KiB,model_ceiling=128KiB,in_flight=128KiB")
 	t.Setenv("GATEWAY_BODY_READ_TIMEOUT", "1s")
 	gp := &gateProvider{name: "bedrock", gate: make(chan struct{})}
-	h, reg := modelCallHandler(t, gp, nil)
+	h, reg := schedulerHandler(t, gp, nil, nil)
 	first := make(chan int, 1)
 	go func() { first <- inferWithBody(t, h, reg, "computer-first", largeInferenceBody(t, 100<<10)).Code }()
 	waitUntil(t, "the first call to reach the provider", func() bool { return gp.calls.Load() == 1 })
@@ -631,14 +705,18 @@ func (c *callerProvider) Stream(ctx context.Context, req provider.LLMRequest, on
 // most its share of the decode slots; with the scheduler on and off, on
 // both model routes. Fails on 982a70f3a: there is no decode caller.
 func TestBodyCapsModelCallNamesItsComputerAsTheImageDecodeCaller(t *testing.T) {
-	{
+	for _, on := range []bool{false, true} {
 		cp := &callerProvider{got: make(chan string, 1)}
-		h, reg := modelCallHandler(t, cp, nil)
+		var s *ModelScheduler
+		if on {
+			s = NewModelScheduler(ModelSchedulerConfig{})
+		}
+		h, reg := schedulerHandler(t, cp, nil, s)
 		if rec := inferWithBody(t, h, reg, "computer-decoder", largeInferenceBody(t, 16)); rec.Code != http.StatusOK {
-			t.Fatalf("inference = %d %s", rec.Code, rec.Body.String())
+			t.Fatalf("scheduler on=%v: inference = %d %s", on, rec.Code, rec.Body.String())
 		}
 		if got := <-cp.got; got != "computer-decoder" {
-			t.Fatalf("inference decode caller = %q, want computer-decoder", got)
+			t.Fatalf("scheduler on=%v: inference decode caller = %q, want computer-decoder", on, got)
 		}
 		cred, err := reg.IssueCredential("computer-openai-decoder")
 		if err != nil {
@@ -649,10 +727,10 @@ func TestBodyCapsModelCallNamesItsComputerAsTheImageDecodeCaller(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h.HandleOpenAIChatCompletions(rec, req)
 		if rec.Code != http.StatusOK {
-			t.Fatalf("openai chat = %d %s", rec.Code, rec.Body.String())
+			t.Fatalf("scheduler on=%v: openai chat = %d %s", on, rec.Code, rec.Body.String())
 		}
 		if got := <-cp.got; got != "computer-openai-decoder" {
-			t.Fatalf("openai chat decode caller = %q, want computer-openai-decoder", got)
+			t.Fatalf("scheduler on=%v: openai chat decode caller = %q, want computer-openai-decoder", on, got)
 		}
 	}
 }

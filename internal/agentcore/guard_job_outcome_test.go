@@ -64,7 +64,7 @@ func (g *guardJobTable) ran(id string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.jobs = append(g.jobs, yaegikernel.JobView{ID: id, State: capsulejob.StateDone, ExitCode: &exit,
-		Argv: []string{"choir-capture", "--route", "/"}, ElapsedSec: 2, ReceiptRef: "capsule-exec:sha256:" + id, Tail: "captured " + id})
+		Argv: []string{"node", "shoot.mjs"}, ElapsedSec: 2, ReceiptRef: "capsule-exec:sha256:" + id, Tail: "captured " + id})
 }
 
 // endTurnProvider ends every turn with text and no tool call (the end_turn

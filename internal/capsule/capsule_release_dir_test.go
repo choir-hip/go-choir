@@ -301,3 +301,43 @@ func TestPristineReleaseDirKeepsOtherChangesUnderItsParents(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareCapsuleReleaseDirAlsoCreatesCapsuleOwnedScreensDir(t *testing.T) {
+	requireXattr(t)
+	upper := filepath.Join(t.TempDir(), "upper")
+	uid, gid := releaseOwner()
+	if err := prepareCapsuleReleaseDir(upper, uid, gid); err != nil {
+		t.Fatal(err)
+	}
+	screens := filepath.Join(upper, "var", "lib", "artifact", "screens")
+	info, err := os.Lstat(screens)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("screens dir: info=%v err=%v", info, err)
+	}
+	stat := info.Sys().(*syscall.Stat_t)
+	if int(stat.Uid) != uid || int(stat.Gid) != gid || info.Mode().Perm() != 0o755 {
+		t.Fatalf("screens dir owner/mode = %d:%d %v, want %d:%d 0755", stat.Uid, stat.Gid, info.Mode().Perm(), uid, gid)
+	}
+	pinfo, err := os.Lstat(filepath.Dir(screens))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pstat := pinfo.Sys().(*syscall.Stat_t); os.Geteuid() == 0 && int(pstat.Uid) == uid {
+		t.Fatalf("/var/lib/artifact is capsule-owned")
+	}
+	if changes := diffUpper(t, upper); len(changes) != 0 {
+		t.Fatalf("pristine upper diffs as %v", changePaths(changes))
+	}
+	if err := os.WriteFile(filepath.Join(screens, "a.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range changePaths(diffUpper(t, upper)) {
+		if p == "var/lib/artifact/screens/a.png" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("screen file missing from diff")
+	}
+}

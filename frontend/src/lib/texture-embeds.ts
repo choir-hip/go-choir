@@ -2,11 +2,14 @@
 // docs/design/texture-evidence-embeds-te-2026-10-25.md section 5).
 //
 // An embed is a top-level block of choir.texture_doc.v1 with a typed target.
-// capsule_evidence is one capture of a frozen self-development candidate:
-// the bytes come from the owner's asset route (/api/assets/sha256/<digest>,
-// authorized by the owner's session), and the candidate's identity (bundle,
-// build, capture receipt) is read live from the operation's visual-evidence
-// listing, never from the revision. Unknown kinds render as a plain card.
+// capsule_evidence is one screenshot of a frozen self-development candidate,
+// which its engineer took and the runtime saved as a file in the computer's
+// tree (target.file, Self-development/<operation>/screens/<name>.png): the
+// bytes come from the owner's asset route (/api/assets/sha256/<digest>, the
+// file's sha256, authorized by the owner's session), and the candidate's
+// identity (bundle, state) is read live from the operation, never from the
+// revision. An embed written before the platform capture was removed names a
+// route instead of a file. Unknown kinds render as a plain card.
 // Nothing here runs script in the document: the figure holds an <img> and
 // text, and the component handles a failed load with a capture-phase
 // listener (markEmbedUnresolvable), not an inline handler.
@@ -52,6 +55,7 @@ type EmbedFields = {
   operationID: string;
   computerID: string;
   route: string;
+  file: string;
   width: number;
   height: number;
   blank: boolean;
@@ -69,6 +73,7 @@ export function embedFields(node: EmbedNode): EmbedFields {
     operationID: str(target.operation_id),
     computerID: str(target.computer_id),
     route: str(target.route),
+    file: str(target.file),
     width: dimension(target.width),
     height: dimension(target.height),
     blank: target.blank === true,
@@ -127,7 +132,7 @@ export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<
   const validDigest = DIGEST_RE.test(e.digest);
   if (e.kind === 'capsule_evidence') {
     const state = validDigest ? 'loading' : 'unresolvable';
-    const media = validDigest ? imageHTML(e, e.alt || `Screenshot of ${e.route}`) : '';
+    const media = validDigest ? imageHTML(e, e.alt || `Screenshot ${e.file || e.route}`) : '';
     const badge = e.blank ? '<span class="texture-embed-badge">blank</span> ' : '';
     const allBlank = e.operationID && options.allBlank?.has(e.operationID)
       ? '<span class="texture-embed-warning">Every capture of this candidate is blank.</span>'
@@ -140,7 +145,7 @@ export function renderEmbedBlockHTML(node: EmbedNode, options: { allBlank?: Set<
       'data-embed-state': state,
     })}><div class="texture-embed-frame">${media}${unresolvableHTML(e, validDigest)}</div>`
       + `<figcaption>${badge}<span class="texture-embed-caption">${escapeHTML(e.caption)}</span>`
-      + (e.route ? ` <code>${escapeHTML(e.route)}</code>` : '')
+      + (e.file ? ` <code data-texture-embed-file>${escapeHTML(e.file)}</code>` : e.route ? ` <code>${escapeHTML(e.route)}</code>` : '')
       + `<span class="texture-embed-identity" data-texture-embed-identity>candidate ${escapeHTML(e.operationID)}</span>${allBlank}</figcaption></figure>`;
   }
   if (e.kind === 'image') {
@@ -181,7 +186,7 @@ export function markEmbedUnresolvable(target: any): boolean {
 
 type ListingResult = { status: number; listing?: any };
 
-/** The candidate's identity line, from the live listing. */
+/** The candidate's identity line, from the live operation. */
 export function evidenceIdentityText(operationID: string, result: ListingResult | null): string {
   const head = `candidate ${operationID}`;
   if (!result) return head;
@@ -190,19 +195,18 @@ export function evidenceIdentityText(operationID: string, result: ListingResult 
   const l = result.listing;
   const parts = [head];
   if (str(l.bundle_digest)) parts.push(`bundle ${shortDigest(str(l.bundle_digest).replace(/^sha256:/, ''))}`);
-  if (str(l.frontend_sha256)) parts.push(`build ${shortDigest(str(l.frontend_sha256))}`);
-  if (str(l.capture_receipt)) parts.push(`receipt ${shortDigest(str(l.capture_receipt).replace(/^.*sha256:/, ''))}`);
+  if (str(l.state)) parts.push(str(l.state));
   return parts.join(' · ');
 }
 
 export function evidenceListingPath(computerID: string, operationID: string): string {
-  return `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(operationID)}/visual-evidence`;
+  return `/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(operationID)}`;
 }
 
 const identityCache = new Map<string, Promise<ListingResult>>();
 
 /**
- * Fills each evidence figure's identity line from its operation's listing,
+ * Fills each evidence figure's identity line from its operation,
  * one request per operation per page load.
  */
 export function hydrateEmbedIdentity(root: any, fetchFn: (url: string, init?: any) => Promise<any>): void {

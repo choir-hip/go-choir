@@ -96,23 +96,24 @@ func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) 
 // or mkdir -p put the same directories in the upper. The release staging
 // loop skips directories, and the classifier ignores them.
 func dropPristineReleaseScaffold(manifests []FileManifest) []FileManifest {
-	chain := []string{"var", "var/lib", "var/lib/artifact", strings.TrimSuffix(ReleaseTreePrefix, "/")}
+	// Leaves first (the release and screens directories), then their parents.
+	chain := []string{strings.TrimSuffix(ReleaseTreePrefix, "/"), strings.TrimSuffix(ScreensPrefix, "/"), "var/lib/artifact", "var/lib", "var"}
 	dropped := map[string]bool{}
-	for i := len(chain) - 1; i >= 0; i-- {
+	for _, path := range chain {
 		occupied := false
 		isDir := false
 		for _, fm := range manifests {
 			switch {
-			case fm.Path == chain[i]:
+			case fm.Path == path:
 				isDir = fm.Type == "dir"
-			case strings.HasPrefix(fm.Path, chain[i]+"/") && !dropped[fm.Path]:
+			case strings.HasPrefix(fm.Path, path+"/") && !dropped[fm.Path]:
 				occupied = true
 			}
 		}
 		if occupied || !isDir {
-			break
+			continue
 		}
-		dropped[chain[i]] = true
+		dropped[path] = true
 	}
 	if len(dropped) == 0 {
 		return manifests
