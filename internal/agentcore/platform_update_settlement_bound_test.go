@@ -298,7 +298,7 @@ func TestCrashBootStrandedTailOfARetiredRealizationSpendsNoAttempt(t *testing.T)
 	offer := fx.strandPlatformUpdateTail(t, "update-strand-retired")
 	fx.useDurableAttemptCount(t)
 	fx.controlFail.Store(false)
-	fx.rt.selfdevRealizationID = "realization-retired-since"
+	fx.configure(func(rt *Runtime) { rt.selfdevRealizationID = "realization-retired-since" })
 
 	fx.crashBootPlatformUpdate()
 

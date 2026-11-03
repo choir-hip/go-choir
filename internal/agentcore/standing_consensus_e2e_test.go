@@ -264,7 +264,7 @@ func newP4Fixture(t *testing.T) *p4Fixture {
 
 	// The guest: platform-control verification of signed modes and
 	// decisions, and the real guest-core signer for the reviewer ballot.
-	fx.rt.selfdevControl = selfdev.GuestCredentialsWithPlatformKey(fx.platformURL, fx.computerID, "capability", time.Now().UTC().Add(time.Hour), keyID, fx.platformKey.Public().(ed25519.PublicKey))
+	control := selfdev.GuestCredentialsWithPlatformKey(fx.platformURL, fx.computerID, "capability", time.Now().UTC().Add(time.Hour), keyID, fx.platformKey.Public().(ed25519.PublicKey))
 	_, guestCorePrivate, _ := ed25519.GenerateKey(rand.Reader)
 	guestCore, err := receiptsigner.NewHandler(receiptsigner.ModeGuestCore, fx.computerID, t.TempDir(), computerevent.SigningKey{
 		SignerRef: computerevent.SignerRef{SignerDomain: receiptsigner.ModeGuestCore, KeyID: "guest-core-p4"}, PrivateKey: guestCorePrivate,
@@ -278,16 +278,21 @@ func newP4Fixture(t *testing.T) *p4Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx.rt.selfdevBallotSigner = ballots
 	// The guest reaches the host build routes and the blob store over its
 	// own corpusd client, as production derives it.
 	client, err := computerevent.NewHTTPClient(fx.platformURL, http.DefaultClient, func(context.Context) (string, error) { return "capability", nil }, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx.rt.selfdevHostBuilder = corpusdHostBuilder{client: client}
-	fx.rt.selfdevGuestImageManifest = manifest
-	fx.rt.selfdevStandingPoll = 20 * time.Millisecond
+	// The genesis appends left reconcile drains running; configure waits
+	// them out before the runtime's wiring changes under them.
+	fx.configure(func(rt *Runtime) {
+		rt.selfdevControl = control
+		rt.selfdevBallotSigner = ballots
+		rt.selfdevHostBuilder = corpusdHostBuilder{client: client}
+		rt.selfdevGuestImageManifest = manifest
+		rt.selfdevStandingPoll = 20 * time.Millisecond
+	})
 	return &p4Fixture{derivableSelfDevFixture: fx, handler: handler, modes: modes, ownerSigner: ownerSigner, history: history, modeKeyID: keyID, hostBuilds: hostBuilds}
 }
 

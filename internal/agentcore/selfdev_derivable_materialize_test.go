@@ -234,6 +234,19 @@ type derivableSelfDevFixture struct {
 	// trajectoryID, when set, is the lifecycle trajectory new operations
 	// name (owner-act wake tests bind a Texture document to it).
 	trajectoryID string
+	// reconfigure orders a test's late runtime field writes against the
+	// reconcile drains the post-commit observer runs: the observer drains
+	// under the read lock, configure writes under the write lock.
+	reconfigure sync.RWMutex
+}
+
+// configure applies late runtime wiring (fields set after genesis) with no
+// reconcile drain in flight. The genesis and route bootstrap appends start
+// drains that read these fields; without the lock the writes race them.
+func (fx *derivableSelfDevFixture) configure(apply func(rt *Runtime)) {
+	fx.reconfigure.Lock()
+	defer fx.reconfigure.Unlock()
+	apply(fx.rt)
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -599,7 +612,19 @@ func newDerivableSelfDevFixtureBooted(t *testing.T, computerID, buildCommit stri
 	WithSelfDevelopmentControl(selfdev.GuestCredentialsWithCapability(platformServer.URL, computerID, "capability", time.Now().UTC().Add(time.Hour), platformKey.Public().(ed25519.PublicKey)))(rt)
 	WithSelfDevelopmentRoute(vmctl.NewClient(vmctlServer.URL), "owner", "primary")(rt)
 	WithEventPayloadReader(&payloadChainSource{pinner: fx.pinner})(rt)
-	appender.SetPostCommitObserver(func(computerevent.EventKind) { rt.triggerSelfDevelopmentReconcile() })
+	// The observer is triggerSelfDevelopmentReconcile with the drain run in
+	// the observer's own goroutine under fx.reconfigure, so configure can
+	// wait out every drain; the coalescing flag is the production one.
+	appender.SetPostCommitObserver(func(computerevent.EventKind) {
+		fx.reconfigure.RLock()
+		defer fx.reconfigure.RUnlock()
+		if rt.selfdevOperations == nil || rt.eventAppender == nil || rt.selfdevComputerID == "" {
+			return
+		}
+		if rt.selfdevReconcilePending.CompareAndSwap(false, true) {
+			rt.selfdevReconcileDrain()
+		}
+	})
 	fx.rt = rt
 	fx.operations = operations
 

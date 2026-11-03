@@ -244,9 +244,11 @@ func newHostBuildFixture(t *testing.T, computerID, mode string) (*derivableSelfD
 	if err := os.WriteFile(manifest, []byte("contract=choir-guest-image-v1\nbuild_commit="+hostBuildTestBaseCommit+"\n"), 0o444); err != nil {
 		t.Fatal(err)
 	}
-	fx.rt.selfdevGuestImageManifest = manifest
 	host := newFakeHostBuilder(fx.platformKey, mode)
-	fx.rt.selfdevHostBuilder = host
+	fx.configure(func(rt *Runtime) {
+		rt.selfdevGuestImageManifest = manifest
+		rt.selfdevHostBuilder = host
+	})
 	return fx, host
 }
 

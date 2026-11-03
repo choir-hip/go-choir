@@ -636,7 +636,7 @@ func TestPlatformUpdateBootSweepDischargesRetiredRealization(t *testing.T) {
 	offer := fx.mintPlatformUpdateOffer(t, "update-retired", "<html>retired</html>", fx.currentHead(t))
 	// The guest rebooted into a new epoch: the runtime's realization moved on,
 	// and this offer's pinned realization can never be satisfied again.
-	fx.rt.selfdevRealizationID = "realization-derivable-epoch-2"
+	fx.configure(func(rt *Runtime) { rt.selfdevRealizationID = "realization-derivable-epoch-2" })
 	if offer.Realization == fx.rt.selfdevRealizationID {
 		t.Fatal("fixture offer already binds the runtime realization")
 	}
@@ -700,7 +700,7 @@ func TestPlatformUpdateBootSweepDischargesRetiredRealization(t *testing.T) {
 		t.Fatal("stranded transition not discharged with materialization_failed")
 	}
 	// The wedge is what mattered: a later, properly-bound offer must apply.
-	fx.rt.selfdevRealizationID = "realization-derivable"
+	fx.configure(func(rt *Runtime) { rt.selfdevRealizationID = "realization-derivable" })
 	fresh := fx.mintPlatformUpdateOffer(t, "update-after-retired", "<html>after</html>", fx.currentHead(t))
 	report, err := fx.rt.ApplyPlatformUpdate(ctx, fresh)
 	if err != nil {
