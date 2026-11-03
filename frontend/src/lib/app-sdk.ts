@@ -13,6 +13,8 @@ export {
   apiFileURL,
   clampNumber,
   loadContextContentItem,
+  MEDIA_FILE_ROUTES,
+  mediaRouteForFileName,
   loadRecentMedia,
   mediaSourceIdentity,
   recentMediaAppContext,
@@ -22,4 +24,11 @@ export {
 } from './media-utils.js';
 
 // Live events (the synced computer state channel).
-export { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
+export { addLiveEventListener, currentDeviceId, liveEventKind, liveEventPayload } from './live-events.js';
+
+// Auth: the renewing fetch every /api call goes through, and its error when
+// the session cannot be renewed.
+export { AuthRequiredError, fetchWithRenewal } from './auth.js';
+
+// The app registry: which app opens which file kind (Open with).
+export { PACKAGE_MEDIA_ROUTES, getAppDefinition } from './apps/registry';
