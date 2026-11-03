@@ -27,6 +27,14 @@ func TestOnlyImplementationSpawnsGetComputerState(t *testing.T) {
 	if !impl.ComputerState || verify.ComputerState {
 		t.Fatalf("spawn specs: implementation %t, verification %t", impl.ComputerState, verify.ComputerState)
 	}
+	// Claude mode (problem 26): an implementation capsule still asks for the
+	// state, carries no credential in its spec, and a verification capsule
+	// is unchanged.
+	claudeImpl := engineeringAssignmentSpawnSpec("c", "run:a", types.EngineeringAssignmentBinding{Kind: types.EngineeringAssignmentImplementation}, capsule.SourcePreflight{}, 1, 1, 1, true)
+	claudeVerify := engineeringAssignmentSpawnSpec("c", "run:a", types.EngineeringAssignmentBinding{Kind: types.EngineeringAssignmentVerification}, capsule.SourcePreflight{}, 1, 1, 1, true)
+	if !claudeImpl.ComputerState || !claudeImpl.ClaudeDelegate || len(claudeImpl.Env) != 0 || claudeVerify.ComputerState {
+		t.Fatalf("claude-mode spawn specs: implementation %+v, verification computer state %t", claudeImpl, claudeVerify.ComputerState)
+	}
 }
 
 // Only an implementation capsule is told about /computer; a verification

@@ -721,7 +721,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if spec.ComputerState {
 		// The computer's state as data, between the source and the guest
 		// root (docs/design/capsule-overlay-computer-state-2026-11-03.md),
-		// or withheld from a delegate capsule.
+		// or withheld from a capsule holding a raw model credential.
 		var layer string
 		computerState, layer = e.prepareComputerState(ctx, spec, claudeToken, base)
 		if layer != "" {

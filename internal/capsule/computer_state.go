@@ -56,7 +56,7 @@ const (
 // and kept on the Capsule.
 type ComputerStateReceipt struct {
 	// ComputerState is "provided", or why the spawn got no /computer layers
-	// at all (ComputerStateWithheldDelegate).
+	// at all (ComputerStateWithheldRawCredential).
 	ComputerState string `json:"computer_state"`
 	// Files is true when /computer/files was built; Refused names why not.
 	Files   bool   `json:"files"`
@@ -107,23 +107,52 @@ type ComputerStoreSource interface {
 // be refused on its own, as Refused and StoreRefused say).
 const ComputerStateProvided = "provided"
 
-// ComputerStateWithheldDelegate is the refusal for a capsule that holds the
-// Claude delegate token: it never gets the computer's state beside a
-// credential that reaches outside the computer, until the delegate call
-// moves behind the gateway
-// (docs/problems/claude-delegate-token-on-three-computers-2026-11-03.md).
-const ComputerStateWithheldDelegate = "withheld: delegate capsule (credential present)"
+// ComputerStateWithheldRawCredential is the refusal for a capsule that holds
+// the owner's raw model credential: it never gets the computer's state beside
+// a credential that reaches outside the computer. The claude mode's relay
+// secret is not one: the owner's token stays in the host gateway, and the
+// secret works only at the capsule's own egress proxy (problem 26,
+// docs/problems/delegate-capsules-see-no-computer-state-2026-11-03.md).
+const ComputerStateWithheldRawCredential = "withheld: raw model credential present"
+
+// rawModelCredentialEnv are the environment keys that carry a model
+// credential to a broker or a Claude Code process. A relay secret under one
+// of them is gateway-scoped; any other non-empty value is a raw credential.
+var rawModelCredentialEnv = []string{ClaudeDelegateBrokerTokenEnv, "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"}
+
+// anthropicKeyShape is the prefix of every Anthropic key and OAuth token.
+const anthropicKeyShape = "sk-ant-"
+
+// rawModelCredential reports a value that is a credential and not a relay
+// secret.
+func rawModelCredential(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && !IsClaudeRelaySecret(value)
+}
 
 // computerStateWithheld says why a spawn that asked for the computer's state
-// gets none: a claude-mode capsule, a delegate token about to be handed to
-// its broker, or one already in its environment.
+// gets none: a delegate token about to be handed to its broker that is not a
+// relay secret (a claude-mode spawn always carries one, so a claude-mode
+// spawn without it fails closed), or a credential in its environment under a
+// credential key or in an Anthropic key's shape anywhere in the entry. The
+// claude mode with its relay secret does not withhold it. The broker's base
+// environment is an allowlist (BrokerProcessEnv), so spec.Env and the token
+// are every credential-bearing input. A relay secret is recognized by shape,
+// not by identity: no Anthropic credential has that shape, and a
+// relay-shaped value from elsewhere works at no proxy but its own capsule's.
 func computerStateWithheld(spec SpawnSpec, delegateToken string) string {
-	if spec.ClaudeDelegate || delegateToken != "" {
-		return ComputerStateWithheldDelegate
+	if rawModelCredential(delegateToken) || (spec.ClaudeDelegate && !IsClaudeRelaySecret(strings.TrimSpace(delegateToken))) {
+		return ComputerStateWithheldRawCredential
 	}
 	for _, kv := range spec.Env {
-		if value, ok := strings.CutPrefix(kv, ClaudeDelegateBrokerTokenEnv+"="); ok && value != "" {
-			return ComputerStateWithheldDelegate
+		key, value, _ := strings.Cut(kv, "=")
+		if strings.Contains(kv, anthropicKeyShape) {
+			return ComputerStateWithheldRawCredential
+		}
+		for _, credKey := range rawModelCredentialEnv {
+			if key == credKey && rawModelCredential(value) {
+				return ComputerStateWithheldRawCredential
+			}
 		}
 	}
 	return ""

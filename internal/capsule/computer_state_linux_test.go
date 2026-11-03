@@ -425,16 +425,28 @@ func TestComputerStateLayerRootRules(t *testing.T) {
 	}
 }
 
-// The spawn's decision: a delegate capsule gets no files layer and no store
-// copy, and its receipt says withheld; an implementation capsule gets both
-// (Devin on the withholding delta, 1).
-func TestPrepareComputerStateWithholdsDelegateCapsules(t *testing.T) {
+// The spawn's decision (problem 26): a capsule holding the owner's raw
+// model credential gets no files layer and no store copy, and its receipt
+// says withheld; an implementation capsule and a gateway claude-mode
+// capsule (relay secret only) get both, with the same leave-outs.
+func TestPrepareComputerStateWithholdsOnlyARawCredential(t *testing.T) {
 	unprivilegedLayerOwner(t)
 	restore := computerStoreFreeBytes
 	t.Cleanup(func() { computerStoreFreeBytes = restore })
 	computerStoreFreeBytes = func(string) (int64, error) { return StateFloorBytes + 3*computerStoreAllowance, nil }
 	root := filepath.Join(t.TempDir(), "files")
-	writeLayerTree(t, root, map[string]os.FileMode{"notes/a.md": 0o644})
+	writeLayerTree(t, root, map[string]os.FileMode{
+		"notes/a.md":         0o644,
+		"private/canary.txt": 0o600,
+		"mail/cur/1":         0o644,
+		"Source/platform/x":  0o644,
+	})
+	relay, err := NewClaudeRelaySecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const envSentinel = "p26-env-sentinel-opaque-value"
+	var provided []ComputerStateReceipt
 	for _, c := range []struct {
 		name  string
 		spec  SpawnSpec
@@ -442,13 +454,14 @@ func TestPrepareComputerStateWithholdsDelegateCapsules(t *testing.T) {
 		held  bool
 	}{
 		{"implementation", SpawnSpec{ComputerState: true, Egress: true}, "", false},
-		{"claude mode", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true}, "", true},
-		{"broker token", SpawnSpec{ComputerState: true, Egress: true}, "tok", true},
+		{"gateway claude mode", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true}, relay, false},
+		{"raw token for the broker", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true}, "sk-ant-oat01-FAKE-0123456789abcdef", true},
+		{"raw token in the env", SpawnSpec{ComputerState: true, Egress: true, ClaudeDelegate: true, Env: []string{"CLAUDE_CODE_OAUTH_TOKEN=" + envSentinel}}, relay, true},
 	} {
 		base, upper := t.TempDir(), t.TempDir()
 		source := &fakeStoreSource{estimate: 1}
 		e := &Executor{stateDir: t.TempDir()}
-		e.SetComputerFilesRoot(root, "")
+		e.SetComputerFilesRoot(root, filepath.Join(root, "Source", "platform"))
 		e.SetComputerStore(source)
 		receipt, layer := e.prepareComputerState(context.Background(), c.spec, c.token, base)
 		if receipt.ComputerState == ComputerStateProvided {
@@ -459,8 +472,11 @@ func TestPrepareComputerStateWithholdsDelegateCapsules(t *testing.T) {
 		}
 		_, layerErr := os.Lstat(filepath.Join(base, computerLowerName))
 		raw, _ := os.ReadFile(filepath.Join(upper, "computer", "receipt.json"))
+		if strings.Contains(string(raw), relay) || strings.Contains(string(raw), "sk-ant-") || strings.Contains(string(raw), envSentinel) {
+			t.Fatalf("%s: the receipt names a credential (%d bytes)", c.name, len(raw))
+		}
 		if c.held {
-			if layer != "" || layerErr == nil || source.wrote || receipt.ComputerState != ComputerStateWithheldDelegate || !strings.Contains(string(raw), ComputerStateWithheldDelegate) {
+			if layer != "" || layerErr == nil || source.wrote || receipt.ComputerState != ComputerStateWithheldRawCredential || !strings.Contains(string(raw), ComputerStateWithheldRawCredential) {
 				t.Fatalf("%s: layer=%q layerOnDisk=%t storeCopied=%t receipt=%s", c.name, layer, layerErr == nil, source.wrote, raw)
 			}
 			continue
@@ -468,5 +484,26 @@ func TestPrepareComputerStateWithholdsDelegateCapsules(t *testing.T) {
 		if layer == "" || !source.wrote || receipt.ComputerState != ComputerStateProvided {
 			t.Fatalf("%s: layer=%q storeCopied=%t receipt=%s", c.name, layer, source.wrote, raw)
 		}
+		files := filepath.Join(layer, "computer", "files")
+		if _, err := os.Lstat(filepath.Join(files, "notes", "a.md")); err != nil {
+			t.Fatalf("%s: a kept file is missing: %v", c.name, err)
+		}
+		for _, rel := range []string{"private/canary.txt", "mail", "Source/platform"} {
+			if _, err := os.Lstat(filepath.Join(files, rel)); err == nil {
+				t.Fatalf("%s: %s reached the layer", c.name, rel)
+			}
+		}
+		provided = append(provided, *receipt)
+	}
+	// The leave-outs are exactly those of an implementation capsule.
+	if len(provided) != 2 {
+		t.Fatalf("provided %d receipts, want 2", len(provided))
+	}
+	impl, claude := provided[0], provided[1]
+	if fmt.Sprint(receiptReasons(impl)) != fmt.Sprint(receiptReasons(claude)) || fmt.Sprint(impl.LeftOutCounts) != fmt.Sprint(claude.LeftOutCounts) || impl.LinkedFiles != claude.LinkedFiles {
+		t.Fatalf("claude-mode leave-outs differ: implementation %v %v, claude %v %v", impl.LeftOut, impl.LeftOutCounts, claude.LeftOut, claude.LeftOutCounts)
+	}
+	if want := map[string]string{"mail": LeaveOutMail, "Source/platform": LeaveOutSource}; receiptReasons(claude)["mail"] != want["mail"] || receiptReasons(claude)["Source/platform"] != want["Source/platform"] || claude.LeftOutCounts[LeaveOutNotReadable] != 1 {
+		t.Fatalf("claude-mode leave-outs = %v %v", claude.LeftOut, claude.LeftOutCounts)
 	}
 }

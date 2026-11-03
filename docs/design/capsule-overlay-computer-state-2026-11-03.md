@@ -438,7 +438,16 @@ in the problem doc (FP0 screenshots on the live arm after apply) retires.
 
 ## Residuals
 
-- **Delegate capsules are withheld the copy** (coordinator, 2026-11-03). A
+- **Lifted for the gateway delegate** (problem 26,
+  `docs/problems/delegate-capsules-see-no-computer-state-2026-11-03.md`).
+  The delegate call moved behind the gateway (55420cab4), so a claude-mode
+  capsule holds only a relay secret and now gets the overlay, with the
+  same leave-outs. A capsule is withheld (`"withheld: raw model credential
+  present"`) only for a non-relay delegate token, a claude-mode spawn
+  without its relay secret, a non-relay value under a model credential key
+  in its environment, or an Anthropic-key-shaped entry.
+- **Superseded by problem 26 (history only):** delegate capsules were
+  withheld the copy (coordinator, 2026-11-03). A
   capsule spawned in claude network mode, or one whose broker or
   environment carries the Claude delegate token, gets no `/computer`
   layers: the spawn proceeds and its receipt records `computer_state:

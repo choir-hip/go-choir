@@ -191,6 +191,10 @@ func GatewayRouteAddr(gatewayURL string) (netip.AddrPort, bool) {
 	return netip.AddrPortFrom(ip.Unmap(), uint16(port)), true
 }
 
+// ClaudeRelaySecretPrefix starts every relay secret NewClaudeRelaySecret
+// mints.
+const ClaudeRelaySecretPrefix = "choir-relay-"
+
 // NewClaudeRelaySecret is a claude-mode capsule's relay secret: 32 random
 // bytes, hex. It lets the capsule's egress proxy tell the delegate's claude
 // process from a cell in the same capsule, and dies with the capsule.
@@ -199,7 +203,24 @@ func NewClaudeRelaySecret() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-	return "choir-relay-" + hex.EncodeToString(b[:]), nil
+	return ClaudeRelaySecretPrefix + hex.EncodeToString(b[:]), nil
+}
+
+// IsClaudeRelaySecret reports a value of exactly the minted shape: the
+// prefix and 64 lowercase hex digits. It is gateway-scoped (good only at the
+// capsule's own egress proxy, which swaps it for the computer's bearer), so
+// it is not the owner's credential.
+func IsClaudeRelaySecret(s string) bool {
+	rest, ok := strings.CutPrefix(s, ClaudeRelaySecretPrefix)
+	if !ok || len(rest) != 64 {
+		return false
+	}
+	for i := 0; i < len(rest); i++ {
+		if c := rest[i]; !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // ClaudeEgressPolicy is the claude network mode: no host at all by CONNECT

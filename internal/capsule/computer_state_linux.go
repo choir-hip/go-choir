@@ -50,8 +50,9 @@ func (e *Executor) SetComputerFilesRoot(root, sourceRoot string) {
 }
 
 // prepareComputerState decides and builds a spawn's files layer: withheld
-// from a delegate capsule (a correctness refusal, not a switch: no copy
-// beside a credential that reaches outside the computer), else built. It
+// from a capsule holding the owner's raw model credential (a correctness
+// refusal, not a switch: no copy beside a credential that reaches outside
+// the computer), else built, in claude mode too. It
 // returns the receipt and the layer path ("" for none). The store copy
 // follows only for a receipt marked provided.
 func (e *Executor) prepareComputerState(ctx context.Context, spec SpawnSpec, delegateToken, base string) (*ComputerStateReceipt, string) {
