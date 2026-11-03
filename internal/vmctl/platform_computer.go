@@ -511,7 +511,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		return nil, fmt.Errorf("persist first boot of platform computer %s: %w", vmID, err)
 	}
 	r.mu.Unlock()
-	info, err := mgr.BootVM(vmManagerConfigForOwnership(platformOwn, issueGatewayTokenAt(r.gatewayURL, vmID)))
+	info, err := mgr.BootVM(vmManagerConfigForOwnership(platformOwn, issueGatewayTokenAt(r.gatewayURL, vmID, gatewayProductComputerID(platformOwn))))
 	if err != nil {
 		r.mu.Lock()
 		waiters := r.pendingWaiters[key]

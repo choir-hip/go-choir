@@ -39,8 +39,11 @@ import (
 const (
 	// AnthropicAPIKeyEnv is the Console API key, in gateway-provider.env.
 	AnthropicAPIKeyEnv = "ANTHROPIC_API_KEY"
-	// AnthropicRelayIdentitiesEnv lists the gateway identities (the ids
-	// vmctl issues bearers for) the relay serves.
+	// AnthropicRelayIdentitiesEnv lists the product computer ids
+	// (computer-…) the relay serves. A bearer authenticates as its VM id;
+	// the relay reads the product computer id vmctl recorded on the
+	// identity at issuance (AutoputerIdentity.ProductComputerID), never the
+	// VM id, so a VM id on this list grants nothing.
 	AnthropicRelayIdentitiesEnv = "GATEWAY_ANTHROPIC_RELAY_IDENTITIES"
 	// AnthropicRelayExpiresEnv is the end of the window (RFC 3339 or
 	// YYYY-MM-DD, UTC). Missing, unreadable or past means the relay is dark.
@@ -331,10 +334,15 @@ func (r *AnthropicRelay) usageSnapshot() relayUsage {
 
 // grantState is whether the relay serves identity now, and why not. It is
 // the same order of checks a relay call makes, without the pin.
+//
+// identity is the product computer id the caller's bearer was issued for
+// (relayCaller), "" when the bearer predates it.
 func (r *AnthropicRelay) grantState(identity string) (bool, string) {
 	switch {
 	case r == nil:
 		return false, "the gateway has no Claude delegate relay"
+	case identity == "":
+		return false, relayLegacyReason
 	case !r.identities[identity]:
 		return false, "this computer has no Claude delegate grant"
 	case !r.windowOpen():
@@ -407,6 +415,22 @@ func relayAuthFailure(w http.ResponseWriter, err error) {
 	relayError(w, status, errType, message)
 }
 
+// relayLegacyReason is the grant read's and the relay call's answer to a
+// bearer issued before vmctl named the product computer id.
+const relayLegacyReason = "this computer's gateway credential predates the computer id; cold boot to re-issue it"
+
+// relayCaller authenticates a relay or grant-read caller. vmID is the id the
+// bearer authenticates as, which the pin (relayPeerCheck) and the rate
+// limiter's other routes key by; computerID is the product computer id
+// recorded on that same identity, which the grant list, the budget and the
+// in-flight bound key by. Both come from one validation
+// (ValidateCredentialIdentity), so a relay call and a grant read always
+// judge the same computer. computerID is "" for a bearer issued before it
+// was recorded (relayLegacyReason).
+func (h *Handler) relayCaller(r *http.Request) (vmID, computerID string, err error) {
+	return h.authenticateBearerIdentity(r)
+}
+
 // relayPeerCheck is the relay's own SEC-05 check, independent of
 // GATEWAY_BEARER_BINDING (problem record, finding 11): the relay spends a key
 // the gateway holds, so it serves only a bearer whose identity is already
@@ -468,7 +492,7 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 	// The bearer is validated without touching its pin, and the relay's own
 	// configuration is checked before the pin is read: a relay call never
 	// writes identity state, whatever it answers (problem record, finding 12).
-	computerID, err := h.authenticateBearer(r)
+	vmID, computerID, err := h.relayCaller(r)
 	if err != nil {
 		log.Printf("gateway: anthropic relay authentication denied: %v", err)
 		relayAuthFailure(w, err)
@@ -479,17 +503,22 @@ func (h *Handler) HandleAnthropicRelay(w http.ResponseWriter, r *http.Request) {
 		relayError(w, http.StatusServiceUnavailable, "api_error", "anthropic relay is not configured")
 		return
 	}
+	if computerID == "" {
+		log.Printf("gateway: anthropic relay refused VM %s: its credential predates the computer id (cold boot re-issues it)", vmID)
+		relayError(w, http.StatusForbidden, "permission_error", relayLegacyReason)
+		return
+	}
 	if !relay.identities[computerID] || !relay.windowOpen() {
-		log.Printf("gateway: anthropic relay refused %s: not enabled for this computer or the window is closed", computerID)
+		log.Printf("gateway: anthropic relay refused %s (VM %s): not enabled for this computer or the window is closed", computerID, vmID)
 		relayError(w, http.StatusForbidden, "permission_error", "anthropic relay is not enabled for this computer")
 		return
 	}
 	if relay.key == "" {
-		log.Printf("gateway: anthropic relay refused %s: no credential is configured", computerID)
+		log.Printf("gateway: anthropic relay refused %s (VM %s): no credential is configured", computerID, vmID)
 		relayError(w, http.StatusServiceUnavailable, "api_error", "anthropic relay is not configured")
 		return
 	}
-	if err := h.relayPeerCheck(computerID, r); err != nil {
+	if err := h.relayPeerCheck(vmID, r); err != nil {
 		relayAuthFailure(w, err)
 		return
 	}
@@ -922,21 +951,21 @@ func (h *Handler) handleAnthropicRelayGrant(w http.ResponseWriter, r *http.Reque
 		relayError(w, http.StatusMethodNotAllowed, "invalid_request_error", "method not allowed")
 		return
 	}
-	computerID, err := h.authenticateBearer(r)
+	vmID, computerID, err := h.relayCaller(r)
 	if err != nil {
 		relayAuthFailure(w, err)
 		return
 	}
 	// The pin is checked whatever the answer, so a copied bearer learns
 	// nothing about the grant.
-	if err := h.relayPeerCheck(computerID, r); err != nil {
+	if err := h.relayPeerCheck(vmID, r); err != nil {
 		relayAuthFailure(w, err)
 		return
 	}
 	relay := h.anthropicRelay
 	ok, reason := relay.grantState(computerID)
 	out := relayGrant{Available: ok, Reason: reason}
-	if relay != nil && relay.identities[computerID] {
+	if relay != nil && computerID != "" && relay.identities[computerID] {
 		if !relay.expires.IsZero() {
 			out.ExpiresAt = relay.expires.UTC().Format(time.RFC3339)
 		}

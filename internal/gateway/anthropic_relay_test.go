@@ -42,8 +42,12 @@ import (
 //     (TestAnthropicRelayDoesNotFollowRedirects).
 
 const (
-	relayTestKey      = "sk-ant-api03-FAKE-relay-test-key-0123456789abcdef"
-	relayTestIdentity = "vm-relay-test"
+	relayTestKey = "sk-ant-api03-FAKE-relay-test-key-0123456789abcdef"
+	// relayTestVM is the id the bearer authenticates as (vmctl issues it for
+	// the VM); relayTestIdentity is the product computer id vmctl names at
+	// issuance, which the grant list, budget and in-flight bound key by.
+	relayTestVM       = "vm-relay-test"
+	relayTestIdentity = "computer-relay-test"
 	relayTestModel    = "claude-sonnet-5-5"
 )
 
@@ -88,7 +92,7 @@ func newRelayHarness(t *testing.T) *relayHarness {
 
 	h, reg, _ := setupHandler(t)
 	h.SetBearerBinding(BindingEnforce)
-	cred, err := reg.IssueCredential(relayTestIdentity)
+	cred, err := reg.IssueCredentialForComputer(relayTestVM, relayTestIdentity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +473,7 @@ func TestAnthropicRelayStreamsEventsAsTheyArrive(t *testing.T) {
 	// The client is on loopback, not peerA: the test pins the identity there,
 	// since the relay serves only a pinned bearer in every binding mode.
 	rh.reg.mu.Lock()
-	rh.reg.identities[relayTestIdentity].PeerIP = "127.0.0.1"
+	rh.reg.identities[relayTestVM].PeerIP = "127.0.0.1"
 	rh.reg.mu.Unlock()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -680,7 +684,7 @@ func TestAnthropicRelayHealthNamesNoKeyAndNoIdentity(t *testing.T) {
 	if !strings.Contains(body, `"anthropic_relay":"on"`) {
 		t.Fatalf("health does not report the relay: %s", body)
 	}
-	if strings.Contains(body, relayTestKey) || strings.Contains(body, relayTestIdentity) {
+	if strings.Contains(body, relayTestKey) || strings.Contains(body, relayTestIdentity) || strings.Contains(body, relayTestVM) {
 		t.Fatalf("health names the key or an identity: %s", body)
 	}
 }
@@ -713,7 +717,7 @@ func TestAnthropicRelayRefusesACopiedBearerInEveryBindingMode(t *testing.T) {
 			if n := len(rh.requests()); n != 0 {
 				t.Fatalf("a copied bearer reached the upstream %d times in %s", n, mode)
 			}
-			if pin := relayPinOf(t, rh.reg, relayTestIdentity); pin != peerA {
+			if pin := relayPinOf(t, rh.reg, relayTestVM); pin != peerA {
 				t.Fatalf("the refused call moved the pin to %q", pin)
 			}
 			if w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerA, nil); w.Code != http.StatusOK {
@@ -729,11 +733,11 @@ func TestAnthropicRelayRefusesAnUnpinnedIdentityInEveryBindingMode(t *testing.T)
 		t.Run(string(mode), func(t *testing.T) {
 			rh := newRelayHarness(t)
 			rh.h.SetBearerBinding(mode)
-			fresh, err := rh.reg.IssueCredential("vm-relay-unpinned")
+			fresh, err := rh.reg.IssueCredentialForComputer("vm-relay-unpinned", "computer-relay-unpinned")
 			if err != nil {
 				t.Fatal(err)
 			}
-			rh.relay.identities["vm-relay-unpinned"] = true
+			rh.relay.identities["computer-relay-unpinned"] = true
 			w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerB, func(r *http.Request) {
 				r.Header.Set("Authorization", "Bearer "+fresh.RawToken)
 			})
@@ -778,12 +782,12 @@ func TestAnthropicRelayRefusalWritesNoIdentityState(t *testing.T) {
 			t.Run(string(mode)+"/"+tc.name, func(t *testing.T) {
 				rh := newRelayHarness(t)
 				rh.h.SetBearerBinding(mode)
-				fresh, err := rh.reg.IssueCredential("vm-relay-fresh")
+				fresh, err := rh.reg.IssueCredentialForComputer("vm-relay-fresh", "computer-relay-fresh")
 				if err != nil {
 					t.Fatal(err)
 				}
 				if tc.listed {
-					rh.relay.identities["vm-relay-fresh"] = true
+					rh.relay.identities["computer-relay-fresh"] = true
 				}
 				tc.setup(rh)
 				w := rh.do(http.MethodPost, "/provider/anthropic/v1/messages", body, peerB, func(r *http.Request) {

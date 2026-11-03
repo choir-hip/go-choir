@@ -649,6 +649,10 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 
 	var req struct {
 		ComputerID string `json:"computer_id"`
+		// ProductComputerID is the product computer the VM realizes, which
+		// computer-keyed authorities (the Claude delegate relay) grant by.
+		// Optional; an identity without it is never granted by computer.
+		ProductComputerID string `json:"product_computer_id,omitempty"`
 	}
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
 		if status, ok := bodyRefusal(w, err); ok {
@@ -663,13 +667,19 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.registry.IssueCredential(req.ComputerID)
+	product := strings.TrimSpace(req.ProductComputerID)
+	if product != "" && !validProductComputerID(product) {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid product_computer_id"})
+		return
+	}
+
+	result, err := h.registry.IssueCredentialForComputer(req.ComputerID, product)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to issue credential"})
 		return
 	}
 
-	log.Printf("gateway: issued credential for autoputer %s (expires=%s)", req.ComputerID, result.ExpiresAt)
+	log.Printf("gateway: issued credential for autoputer %s (computer=%q, expires=%s)", req.ComputerID, product, result.ExpiresAt)
 
 	writeGatewayJSON(w, http.StatusCreated, result)
 }
@@ -694,6 +704,10 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		// PeerIP is the computer's current guest address, which moves the
 		// Jev pin to it (EnsureCredentialForPeer). Optional.
 		PeerIP string `json:"peer_ip,omitempty"`
+		// ProductComputerID names the computer the VM realizes; an import
+		// records it, a known identity must already name the same one
+		// (EnsureCredentialForComputer). Optional.
+		ProductComputerID string `json:"product_computer_id,omitempty"`
 	}
 	if err := h.decodeBody(w, r, bodyRouteOperator, "host", &req, false); err != nil {
 		if status, ok := bodyRefusal(w, err); ok {
@@ -718,7 +732,12 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	result, err := h.registry.EnsureCredentialForPeer(req.RawToken, peer)
+	if product := strings.TrimSpace(req.ProductComputerID); product != "" && !validProductComputerID(product) {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid product_computer_id"})
+		return
+	}
+
+	result, err := h.registry.EnsureCredentialForComputer(req.RawToken, peer, req.ProductComputerID)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusConflict, ErrorResponse{Error: "credential could not be ensured"})
 		return
@@ -752,28 +771,37 @@ func (h *Handler) authenticateAutoputer(r *http.Request) (string, error) {
 // it with its own pin check and 403 (jevPeerAllowed); the Anthropic relay
 // uses it with a pin check of its own that ignores the rollout mode.
 func (h *Handler) authenticateBearer(r *http.Request) (string, error) {
+	computerID, _, err := h.authenticateBearerIdentity(r)
+	return computerID, err
+}
+
+// authenticateBearerIdentity is authenticateBearer that also returns the
+// product computer id the bearer's identity was issued for ("" for one
+// issued before it was recorded). The first value stays the VM id every
+// route and the pin key by; only computer-keyed authorities read the second.
+func (h *Handler) authenticateBearerIdentity(r *http.Request) (string, string, error) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
-		return "", fmt.Errorf("missing authorization header")
+		return "", "", fmt.Errorf("missing authorization header")
 	}
 
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return "", fmt.Errorf("invalid authorization scheme")
+		return "", "", fmt.Errorf("invalid authorization scheme")
 	}
 
 	token := strings.TrimPrefix(auth, "Bearer ")
 	if token == "" {
-		return "", fmt.Errorf("empty bearer token")
+		return "", "", fmt.Errorf("empty bearer token")
 	}
 
-	computerID, err := h.registry.ValidateCredential(token)
+	computerID, productComputerID, err := h.registry.ValidateCredentialIdentity(token)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !isAuthorizedRuntimePeer(r) {
-		return "", fmt.Errorf("gateway access is limited to choir runtime peers")
+		return "", "", fmt.Errorf("gateway access is limited to choir runtime peers")
 	}
-	return computerID, nil
+	return computerID, productComputerID, nil
 }
 
 // sanitizeError converts a provider error into a safe, bounded error

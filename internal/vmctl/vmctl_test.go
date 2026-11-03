@@ -1952,7 +1952,7 @@ func TestIssueGatewayToken_GatewayFailure(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetGatewayURL(gateway.URL)
 
-	token := reg.issueGatewayToken("vm-test-123")
+	token := reg.issueGatewayTokenForComputer("vm-test-123", "computer-test")
 	if token != "" {
 		t.Errorf("expected empty token on gateway failure, got %q", token)
 	}
@@ -3108,7 +3108,7 @@ func TestIssueGatewayToken_LegacyJSONShapeStillWorks(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetGatewayURL(gateway.URL)
 
-	token := reg.issueGatewayToken("vm-test-legacy")
+	token := reg.issueGatewayTokenForComputer("vm-test-legacy", "computer-test")
 	if token != credValue {
 		t.Errorf("expected credential value %q, got %q", credValue, token)
 	}
@@ -3119,7 +3119,7 @@ func TestIssueGatewayToken_NoGatewayURL(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	// Don't call SetGatewayURL
 
-	token := reg.issueGatewayToken("vm-test-123")
+	token := reg.issueGatewayTokenForComputer("vm-test-123", "computer-test")
 	if token != "" {
 		t.Errorf("expected empty token when no gateway URL, got %q", token)
 	}

@@ -183,6 +183,32 @@ type AutoputerIdentity struct {
 	// pin: a stored identity file keeps loading, and a rollback to a gateway
 	// that only knows the Jev pin keeps reading it.
 	PeerIP string `json:"JevPeerIP"`
+
+	// ProductComputerID is the product computer id (computer-…) of the
+	// computer this VM realizes, as vmctl named it when it asked for the
+	// credential. ComputerID above is the VM id the bearer authenticates as
+	// and every route keys by; this field is read only by authorities that
+	// grant by computer, today the Claude delegate relay
+	// (docs/problems/claude-delegate-relay-compares-vm-id-with-computer-grant-2026-11-03.md).
+	// Empty on an identity issued before it existed: such an identity is
+	// never granted by computer, and a cold boot re-issues it with the field.
+	ProductComputerID string `json:",omitempty"`
+}
+
+// validProductComputerID bounds the product computer id the host names: a
+// short token of ASCII letters, digits, '.', '_' and '-' (computer-<hex>).
+func validProductComputerID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '.', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // IdentityRegistry manages autoputer identities and their credentials.
@@ -289,6 +315,18 @@ type CredentialEnsureResult struct {
 // If an existing credential exists, it is revoked and replaced.
 // Returns the raw token (shown once) and an error if generation fails.
 func (r *IdentityRegistry) IssueCredential(computerID string) (*CredentialResult, error) {
+	return r.IssueCredentialForComputer(computerID, "")
+}
+
+// IssueCredentialForComputer is IssueCredential for a VM (computerID, the
+// id the bearer authenticates as) that realizes the product computer
+// productComputerID, which the identity records. An empty productComputerID
+// issues an identity no computer-keyed authority grants.
+func (r *IdentityRegistry) IssueCredentialForComputer(computerID, productComputerID string) (*CredentialResult, error) {
+	productComputerID = strings.TrimSpace(productComputerID)
+	if productComputerID != "" && !validProductComputerID(productComputerID) {
+		return nil, fmt.Errorf("invalid product computer id")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -306,11 +344,12 @@ func (r *IdentityRegistry) IssueCredential(computerID string) (*CredentialResult
 	}
 
 	identity := &AutoputerIdentity{
-		ComputerID: computerID,
-		TokenHash:  hex.EncodeToString(hash[:]),
-		IssuedAt:   now,
-		ExpiresAt:  now.Add(r.tokenTTL),
-		Active:     true,
+		ComputerID:        computerID,
+		TokenHash:         hex.EncodeToString(hash[:]),
+		IssuedAt:          now,
+		ExpiresAt:         now.Add(r.tokenTTL),
+		Active:            true,
+		ProductComputerID: productComputerID,
 	}
 	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {
@@ -344,6 +383,20 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 // address is refused and changes nothing
 // (docs/archive/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
 func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*CredentialEnsureResult, error) {
+	return r.EnsureCredentialForComputer(rawToken, peerIP, "")
+}
+
+// EnsureCredentialForComputer is EnsureCredentialForPeer from a host that
+// also names the product computer the VM realizes. An imported identity
+// records it, as an issued one does. A known identity keeps the one it was
+// issued with: an ensure naming a different computer is refused, and an
+// identity issued without one (before the field existed) is not given one
+// here, since only a cold boot's issuance names it.
+func (r *IdentityRegistry) EnsureCredentialForComputer(rawToken, peerIP, productComputerID string) (*CredentialEnsureResult, error) {
+	productComputerID = strings.TrimSpace(productComputerID)
+	if productComputerID != "" && !validProductComputerID(productComputerID) {
+		return nil, fmt.Errorf("invalid product computer id")
+	}
 	peerIP = strings.TrimSpace(peerIP)
 	if peerIP != "" {
 		ip := net.ParseIP(peerIP)
@@ -372,6 +425,9 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 		}
 		if now.After(existing.ExpiresAt) {
 			return nil, fmt.Errorf("credential expired")
+		}
+		if productComputerID != "" && existing.ProductComputerID != "" && existing.ProductComputerID != productComputerID {
+			return nil, fmt.Errorf("credential names another computer")
 		}
 		moved := peerIP != "" && existing.PeerIP != peerIP
 		// The host vouches for a live computer each time it ensures its
@@ -408,12 +464,13 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 	}
 
 	identity := &AutoputerIdentity{
-		ComputerID: computerID,
-		TokenHash:  hashText,
-		IssuedAt:   now,
-		ExpiresAt:  now.Add(r.tokenTTL),
-		Active:     true,
-		PeerIP:     peerIP,
+		ComputerID:        computerID,
+		TokenHash:         hashText,
+		IssuedAt:          now,
+		ExpiresAt:         now.Add(r.tokenTTL),
+		Active:            true,
+		PeerIP:            peerIP,
+		ProductComputerID: productComputerID,
 	}
 	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {
@@ -429,25 +486,34 @@ func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*Cr
 // ValidateCredential checks whether a autoputer credential is valid.
 // Returns the autoputer ID if valid, or an error explaining why not.
 func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
+	computerID, _, err := r.ValidateCredentialIdentity(rawToken)
+	return computerID, err
+}
+
+// ValidateCredentialIdentity is ValidateCredential that also returns the
+// product computer id the identity was issued for, read under the same lock
+// as the validation, so the two always describe one identity. The product
+// computer id is "" for an identity issued before it was recorded.
+func (r *IdentityRegistry) ValidateCredentialIdentity(rawToken string) (string, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	computerID, token, ok := splitCredential(rawToken)
 	if !ok {
-		return "", fmt.Errorf("invalid credential format")
+		return "", "", fmt.Errorf("invalid credential format")
 	}
 
 	identity, ok := r.identities[computerID]
 	if !ok {
-		return "", fmt.Errorf("unknown autoputer identity")
+		return "", "", fmt.Errorf("unknown autoputer identity")
 	}
 
 	if !identity.Active {
-		return "", fmt.Errorf("credential revoked")
+		return "", "", fmt.Errorf("credential revoked")
 	}
 
 	if time.Now().After(identity.ExpiresAt) {
-		return "", fmt.Errorf("credential expired")
+		return "", "", fmt.Errorf("credential expired")
 	}
 
 	// Verify the token hash in constant time (SEC-05): the stored value is
@@ -455,10 +521,10 @@ func (r *IdentityRegistry) ValidateCredential(rawToken string) (string, error) {
 	// comparison costs nothing to make safe.
 	hash := sha256.Sum256([]byte(token))
 	if !hashesEqual(hex.EncodeToString(hash[:]), identity.TokenHash) {
-		return "", fmt.Errorf("invalid credential")
+		return "", "", fmt.Errorf("invalid credential")
 	}
 
-	return computerID, nil
+	return computerID, identity.ProductComputerID, nil
 }
 
 // PeerState is the outcome of checking a call's source address against a

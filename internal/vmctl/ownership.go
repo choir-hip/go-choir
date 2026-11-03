@@ -1690,7 +1690,7 @@ func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*V
 		r.clearRecoveryCondition(own)
 		return info, nil
 	}
-	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayToken(own.VMID), mgr)
+	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayTokenFor(own), mgr)
 	if err != nil {
 		return nil, err
 	}
@@ -1715,7 +1715,7 @@ func (r *OwnershipRegistry) trackedBootConfig(own *VMOwnership, mgr VMManager) (
 	refresh := info != nil && !managedGuestMayLive(info.State)
 	token := ""
 	if refresh {
-		token = r.issueGatewayToken(own.VMID)
+		token = r.issueGatewayTokenFor(own)
 	}
 	cfg, err := r.reserveFreshVMConfig(own, token, mgr)
 	return cfg, refresh, err
@@ -1853,16 +1853,38 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 	return cfg
 }
 
-// issueGatewayToken requests a gateway credential token for the given
-// autoputer ID by calling the gateway's credential issuance endpoint.
-// Returns the raw token string or an empty string on failure.
-// Failures are logged but not fatal — the VM will still boot but
-// won't be able to authenticate to the gateway until a token is provided.
-func (r *OwnershipRegistry) issueGatewayToken(computerID string) string {
+// issueGatewayTokenFor issues own's VM a gateway bearer that names the
+// product computer it realizes, which the gateway's computer-keyed
+// authorities (the Claude delegate relay) grant by; the bearer itself stays
+// keyed by the VM id
+// (docs/problems/claude-delegate-relay-compares-vm-id-with-computer-grant-2026-11-03.md).
+func (r *OwnershipRegistry) issueGatewayTokenFor(own *VMOwnership) string {
+	if own == nil {
+		return ""
+	}
+	return r.issueGatewayTokenForComputer(own.VMID, gatewayProductComputerID(own))
+}
+
+// issueGatewayTokenForComputer requests a gateway credential token for the
+// given VM id, naming the product computer it realizes, by calling the
+// gateway's credential issuance endpoint. Returns the raw token string or
+// an empty string on failure. Failures are logged but not fatal — the VM
+// will still boot but won't be able to authenticate to the gateway until a
+// token is provided.
+func (r *OwnershipRegistry) issueGatewayTokenForComputer(vmID, productComputerID string) string {
 	r.mu.RLock()
 	gwURL := r.gatewayURL
 	r.mu.RUnlock()
-	return issueGatewayTokenAt(gwURL, computerID)
+	return issueGatewayTokenAt(gwURL, vmID, productComputerID)
+}
+
+// gatewayProductComputerID is the product computer id vmctl names to the
+// gateway for own's VM: the stable computer id, never the VM id.
+func gatewayProductComputerID(own *VMOwnership) string {
+	if own == nil {
+		return ""
+	}
+	return stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
 }
 
 func (r *OwnershipRegistry) platformControlPublicKey(ctx context.Context, signer computerevent.SignerRef) (ed25519.PublicKey, error) {
@@ -1978,19 +2000,29 @@ func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, 
 	return base64.RawURLEncoding.EncodeToString(canonical), false
 }
 
-func issueGatewayTokenAt(gwURL, computerID string) string {
+func issueGatewayTokenAt(gwURL, computerID, productComputerID string) string {
 	if gwURL == "" {
 		return ""
 	}
 
 	// Call the gateway's credential issuance endpoint.
 	// This is the same endpoint used by the host autoputer's ExecStartPre.
-	body := fmt.Sprintf(`{"computer_id":"%s"}`, computerID)
+	// computer_id is the VM id the bearer authenticates as;
+	// product_computer_id is the computer the VM realizes.
+	issue := map[string]string{"computer_id": computerID}
+	if productComputerID != "" {
+		issue["product_computer_id"] = productComputerID
+	}
+	body, err := json.Marshal(issue)
+	if err != nil {
+		log.Printf("vmctl: gateway token request marshal failed for %s: %v", computerID, err)
+		return ""
+	}
 	url := strings.TrimRight(gwURL, "/") + "/provider/v1/credentials/issue"
 
 	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
 	if err != nil {
 		log.Printf("vmctl: gateway token request creation failed for %s: %v", computerID, err)
 		return ""
@@ -2067,9 +2099,10 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		r.mu.Unlock()
 		return
 	}
-	peer := ""
+	peer, product := "", ""
 	if own := r.vmByID[vmID]; own != nil {
 		peer = guestAddressOf(own.ComputerURL)
+		product = gatewayProductComputerID(own)
 	}
 	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) && r.gatewayCredentialPeer[vmID] == peer {
 		r.mu.Unlock()
@@ -2095,6 +2128,11 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 	ensure := map[string]string{"raw_token": rawToken}
 	if peer != "" {
 		ensure["peer_ip"] = peer
+	}
+	// An import (the gateway lost its store) records the computer the VM
+	// realizes, as issuance does; a known identity keeps its own.
+	if product != "" {
+		ensure["product_computer_id"] = product
 	}
 	bodyBytes, err := json.Marshal(ensure)
 	if err != nil {
@@ -2556,7 +2594,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		// Issue a gateway token for the VM autoputer before booting.
 		// The token is written to the persistent directory by the vmmanager
 		// and read by the guest init script to authenticate to the gateway.
-		gwToken := r.issueGatewayToken(vmID)
+		gwToken := r.issueGatewayTokenFor(own)
 
 		realizationID := realizationIDFor(vmID, epoch)
 		credentialEnvelope := r.issueComputerCredentialEnvelope(own.ComputerID, realizationID, epoch)
@@ -4229,7 +4267,7 @@ func (r *OwnershipRegistry) rescueLaunch(own *VMOwnership, mgr VMManager, tracke
 	if err := r.admitRecoveryStart(own, false); err != nil {
 		return nil, err
 	}
-	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayToken(own.VMID), mgr)
+	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayTokenFor(own), mgr)
 	if err != nil {
 		return nil, err
 	}
