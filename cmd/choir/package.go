@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -112,7 +113,14 @@ func packageCommands() []*command {
 				if confirm := x.trim("confirm_paths"); confirm != "" {
 					body["confirm_paths"] = confirm
 				}
-				return sendRaw(x, http.MethodPost, computerPath(x, "/packages/releases"), body)
+				out, err := sendRaw(x, http.MethodPost, computerPath(x, "/packages/releases"), body)
+				var api *apiErrorResp
+				if errors.As(err, &api) {
+					if text := publishConfirmText(api, x.str("computer"), x.trim("operation"), x.trim("package"), x.trim("test_command")); text != "" {
+						return nil, errors.New(text)
+					}
+				}
+				return out, err
 			},
 		}),
 		ownerAct(&command{
@@ -159,4 +167,52 @@ func packageStateAct(verb, state, summary string) *command {
 			return sendRaw(x, http.MethodPatch, listingPath(x), body)
 		},
 	})
+}
+
+// publishConfirmText renders the 409 confirm_paths_required (or
+// confirm_paths_mismatch) preview in full: the server's statement, every
+// path, the digest and the command that confirms it. The generic error
+// cuts bodies at 300 characters, which hid the digest and the paths.
+// It returns "" for any other error.
+func publishConfirmText(e *apiErrorResp, computer, operation, pkg, testCommand string) string {
+	if e.Status != http.StatusConflict {
+		return ""
+	}
+	var refusal struct {
+		Error   string `json:"error"`
+		Reason  string `json:"reason"`
+		Preview *struct {
+			Paths            []string `json:"paths"`
+			PathsDigest      string   `json:"paths_digest"`
+			ReviewPatchBytes int      `json:"review_patch_bytes"`
+			Questions        []string `json:"precommitment_questions"`
+			TestCommand      string   `json:"test_command"`
+		} `json:"preview"`
+	}
+	if json.Unmarshal([]byte(e.Body), &refusal) != nil || refusal.Preview == nil || refusal.Preview.PathsDigest == "" ||
+		(refusal.Reason != "confirm_paths_required" && refusal.Reason != "confirm_paths_mismatch") {
+		return ""
+	}
+	pv := refusal.Preview
+	var b strings.Builder
+	fmt.Fprintf(&b, "publishing is not done yet (%s). %s\n", refusal.Reason, strings.TrimSpace(refusal.Error))
+	fmt.Fprintf(&b, "Publishing makes this release public: every signed-in owner can see and install it.\n")
+	fmt.Fprintf(&b, "Paths that become public (%d):\n", len(pv.Paths))
+	for _, p := range pv.Paths {
+		fmt.Fprintf(&b, "  %s\n", p)
+	}
+	fmt.Fprintf(&b, "Review diff: %d bytes\n", pv.ReviewPatchBytes)
+	if pv.TestCommand != "" {
+		fmt.Fprintf(&b, "Test command: %s\n", pv.TestCommand)
+	}
+	for _, q := range pv.Questions {
+		fmt.Fprintf(&b, "Precommitment question: %s\n", q)
+	}
+	fmt.Fprintf(&b, "paths_digest: %s\n", pv.PathsDigest)
+	cmd := fmt.Sprintf("choir package publish --computer %s --operation %s --package %s", computer, operation, pkg)
+	if testCommand != "" {
+		cmd += " --test-command " + strconv.Quote(testCommand)
+	}
+	fmt.Fprintf(&b, "To publish, rerun:\n  %s --confirm-paths %s", cmd, pv.PathsDigest)
+	return b.String()
 }

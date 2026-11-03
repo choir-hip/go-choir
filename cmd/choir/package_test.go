@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -197,5 +198,37 @@ func TestPackageListingVerbsSendTheOwnersChange(t *testing.T) {
 		if !strings.Contains(path, want) {
 			t.Fatalf("history request %s lacks %q", path, want)
 		}
+	}
+}
+
+func TestPackagePublishShowsTheWholeConfirmationPreview(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	var paths []string
+	for i := 0; i < 30; i++ {
+		paths = append(paths, fmt.Sprintf("frontend/src/packages/reader/some/long/path/segment-%02d/file.js", i))
+	}
+	preview, _ := json.Marshal(map[string]any{
+		"error":   "confirm_paths_required: publishing makes this release public",
+		"reason":  "confirm_paths_required",
+		"preview": map[string]any{"paths": paths, "paths_digest": digest, "review_patch_bytes": 1234},
+	})
+	servePackageHost(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write(preview)
+	})
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"package", "publish", "--computer", "c1", "--operation", "op-1", "--package", "reader"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("an unconfirmed publish exited 0")
+	}
+	out := stderr.String() + stdout.String()
+	for _, want := range append(paths, digest, "public", "choir package publish --computer c1 --operation op-1 --package reader --confirm-paths "+digest, "1234") {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the preview output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "...") {
+		t.Fatalf("the preview output is truncated:\n%s", out)
 	}
 }
