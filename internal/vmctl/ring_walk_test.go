@@ -371,8 +371,10 @@ func TestRingR0HoldsWithoutExposure(t *testing.T) {
 			}
 		}
 	}
-	if len(wakes) != 1 || wakes[0].ComputerID != ringProofComputer {
-		t.Fatalf("a down d@e must be woken exactly once: %+v", wakes)
+	// Staging 2026-11-03: a wake can fail; while d@e stays down the walk
+	// wakes it again with a doubling gap, bounded.
+	if len(wakes) < 2 || len(wakes) > ringWakeMaxAttempts || wakes[0].ComputerID != ringProofComputer {
+		t.Fatalf("a down d@e must be woken again with backoff, bounded: %d wakes", len(wakes))
 	}
 	if s.Walk.Current != 0 || s.Walk.Status != ringWalkWalking {
 		t.Fatalf("R0 advanced without d@e seen on the release: %+v", s.Walk.Rings)
@@ -838,5 +840,27 @@ func TestRingLateArrivalOnBadReleaseReturned(t *testing.T) {
 	ev, _ = s.step(rwT0.Add(5*time.Minute), []ringMemberObs{de, late})
 	if !hasEvent(ev, ringEventRollbackComplete) {
 		t.Fatalf("rollback did not complete once none runs the bad release")
+	}
+}
+
+// A wake retry is bounded and visible.
+func TestRingWakeRetryBoundedAndVisible(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, "")
+	de.Active, de.Health = false, nil
+	wakes := 0
+	for i := 1; i <= 24*60; i++ {
+		_, acts := s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+		for _, a := range acts {
+			if a.Kind == ringActionWake {
+				wakes++
+			}
+		}
+	}
+	if wakes != ringWakeMaxAttempts {
+		t.Fatalf("wakes = %d, want the bound %d", wakes, ringWakeMaxAttempts)
+	}
+	if !strings.Contains(s.Walk.Rings[0].Waiting, "no more automatic wakes") {
+		t.Fatalf("the exhausted bound must show in status: %q", s.Walk.Rings[0].Waiting)
 	}
 }

@@ -231,6 +231,8 @@ type ringMember struct {
 	ComputerID    string    `json:"computer_id"`
 	Enrolled      bool      `json:"enrolled,omitempty"`
 	WakeRequested bool      `json:"wake_requested,omitempty"`
+	WakeAttempts  int       `json:"wake_attempts,omitempty"`
+	LastWakeAt    time.Time `json:"last_wake_at,omitempty"`
 	EnrolledAt    time.Time `json:"enrolled_at,omitempty"`
 	LastOffTarget time.Time `json:"last_off_target,omitempty"`
 	LastEpoch     int64     `json:"last_epoch,omitempty"`
@@ -558,8 +560,10 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 			// hibernated between uses, so the walk wakes it once (a wake is
 			// what any request does: a snapshot resume or a cold boot onto
 			// the open ring's release, never a restart of running work).
-			if p.Ring == ringR0 && !graced && !o.Active && !o.Held && !m.WakeRequested && m.ExposedAt.IsZero() {
+			if p.Ring == ringR0 && !graced && !o.Active && !o.Held && m.ExposedAt.IsZero() && ringWakeDue(m, now) {
 				m.WakeRequested = true
+				m.WakeAttempts++
+				m.LastWakeAt = now
 				actions = append(actions, ringAction{Kind: ringActionWake, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Reason: "ring walk " + w.ID + ": R0 needs d@e on the release"})
 			}
 			if onTarget && m.FirstOnTarget.IsZero() {
@@ -619,7 +623,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 			events = append(events, w.closeRing(now, p, ringOutcomeClean, ""))
 		} else if required == 0 {
 			if p.Ring == ringR0 {
-				p.Waiting = "no active member: the proof ring holds until d@e runs the release and is seen healthy"
+				p.Waiting = "no active member: the proof ring holds until d@e runs the release and is seen healthy" + ringWakeNote(p)
 				return events, actions
 			}
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "every member was down for the whole time floor"))
@@ -1080,4 +1084,41 @@ func (r *ringWalkRunner) summary() *deployRefreshRingWalk {
 		out.OpenRing = string(p.Ring)
 	}
 	return out
+}
+
+// Wake retry (staging 2026-11-03: a wake failed on a transient ownership
+// change and R0 held forever). A down R0 member is woken again with a gap
+// that doubles from ringWakeFirstGap to ringWakeMaxGap, at most
+// ringWakeMaxAttempts per ring; then R0 holds and says so.
+const (
+	ringWakeFirstGap    = 5 * time.Minute
+	ringWakeMaxGap      = time.Hour
+	ringWakeMaxAttempts = 6
+)
+
+func ringWakeGap(attempts int) time.Duration {
+	return min(ringWakeFirstGap<<(attempts-1), ringWakeMaxGap)
+}
+
+func ringWakeDue(m *ringMember, now time.Time) bool {
+	if m.WakeAttempts == 0 {
+		return true
+	}
+	if m.WakeAttempts >= ringWakeMaxAttempts {
+		return false
+	}
+	return now.Sub(m.LastWakeAt) >= ringWakeGap(m.WakeAttempts)
+}
+
+func ringWakeNote(p *ringProgress) string {
+	for _, m := range p.Members {
+		if m.WakeAttempts == 0 {
+			continue
+		}
+		if m.WakeAttempts >= ringWakeMaxAttempts {
+			return fmt.Sprintf("; %d wakes of %s did not bring it up, no more automatic wakes this walk (an owner start of d@e resumes the walk)", m.WakeAttempts, m.ComputerID)
+		}
+		return fmt.Sprintf("; woke %s %d time(s), next try after %s", m.ComputerID, m.WakeAttempts, m.LastWakeAt.Add(ringWakeGap(m.WakeAttempts)).UTC().Format(time.RFC3339))
+	}
+	return ""
 }
