@@ -60,7 +60,12 @@ import (
 // reading the old inode (Linux rename semantics); a reader that opens the
 // path after the rename reads the new one; both hold the same bytes. The
 // Reader caches only a sealed segment's fanout and size, and opens the
-// segment by path per read.
+// segment by path per read. A directory listing is not atomic with the
+// rename: a readdir that runs across it may return neither the old name nor
+// the new one (btrfs ends a readdir at the last index it saw at open, and the
+// replacement entry gets a newer one), so a reader that lists an index
+// without its segment checks the segment's path, which rename(2) keeps
+// resolving throughout, before calling it corruption (Reader.list).
 //
 // Crash table (power loss or kill at each step):
 //

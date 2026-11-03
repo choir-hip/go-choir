@@ -176,14 +176,14 @@ type segFiles struct {
 }
 
 // list reads the computer's segment directory. A missing directory (or an
-// id that cannot name one) has no segments. An index without its segment is
-// corruption.
+// id that cannot name one) has no segments. An index whose segment neither
+// the listing nor the segment's own path shows is corruption.
 func (r *Reader) list(computerID string) (string, []segFiles, error) {
 	if !ValidComputerID(computerID) {
 		return "", nil, nil
 	}
 	dir := filepath.Join(r.root, SegDirName, computerID)
-	entries, err := os.ReadDir(dir)
+	entries, err := readSegDir(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return dir, nil, nil
@@ -213,12 +213,44 @@ func (r *Reader) list(computerID string) (string, []segFiles, error) {
 	segs := make([]segFiles, 0, len(byNo))
 	for _, f := range byNo {
 		if f.hasIdx && !f.hasSeg {
-			return dir, nil, corruptf("computer %s: index %s has no segment file", computerID, IndexFileName(f.segno))
+			// A listing is not a snapshot: compaction renames a fresh copy
+			// over a sealed segment while readers list, and a readdir that
+			// runs across that rename may return neither name (btrfs stops
+			// at the last index it saw at open and the new entry has a newer
+			// one; POSIX leaves it unspecified). rename(2) keeps the path
+			// itself resolving to the old file or the new one throughout,
+			// so the path decides; only a segment the path cannot find is
+			// corruption.
+			present, err := segmentPresent(filepath.Join(dir, SegmentFileName(f.segno)))
+			if err != nil {
+				return dir, nil, fmt.Errorf("tapestore: stat segment %d of %s: %w", f.segno, computerID, err)
+			}
+			if !present {
+				return dir, nil, corruptf("computer %s: index %s has no segment file", computerID, IndexFileName(f.segno))
+			}
+			f.hasSeg = true
 		}
 		segs = append(segs, *f)
 	}
 	sort.Slice(segs, func(i, j int) bool { return segs[i].segno < segs[j].segno })
 	return dir, segs, nil
+}
+
+// readSegDir lists a segment directory; a test seam stands in a listing that
+// ran across a compaction rename.
+var readSegDir = os.ReadDir
+
+// segmentPresent reports whether path names a regular file. A missing path,
+// or one naming anything else, is absent; another stat failure is an error.
+func segmentPresent(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return info.Mode().IsRegular(), nil
 }
 
 // readSegment probes the computer's segments newest first. A hit is verified

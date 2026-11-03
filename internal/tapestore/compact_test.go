@@ -242,6 +242,52 @@ func TestCompactConcurrentReaders(t *testing.T) { // C4
 	}
 }
 
+// C4b (CI 2026-11-03, race shard 7: "index seg-00000004.idx has no segment
+// file" during C4). Failure modes of a listing that runs across the
+// compaction rename, and what the reader must do:
+//
+//	the listing misses seg-N.seg, the path still resolves   read through the path
+//	the listing misses seg-N.seg, the path is really gone   ErrCorrupt (unchanged)
+//	the path names a non-regular file                        ErrCorrupt
+//	the stat fails for another reason                        that error, not a read
+//
+// The seam drops the segment's entry from the listing, as a readdir that
+// raced the rename does on btrfs (the replacement entry has a newer index
+// than the one the open saw) and may anywhere.
+func TestCompactListingThatMissedTheRenamedSegment(t *testing.T) { // C4b
+	root := t.TempDir()
+	bodies := buildSealed(t, root, cid, 30, 10)
+	drop := SegmentFileName(2)
+	saved := readSegDir
+	readSegDir = func(dir string) ([]os.DirEntry, error) {
+		entries, err := saved(dir)
+		kept := entries[:0]
+		for _, e := range entries {
+			if e.Name() != drop {
+				kept = append(kept, e)
+			}
+		}
+		return kept, err
+	}
+	defer func() { readSegDir = saved }()
+	readAll(t, NewReader(root), cid, bodies)
+
+	// The segment really gone stays corruption.
+	if err := os.Remove(segPath(root, cid, 2)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := NewReader(root).ReadSegment(cid, NSEvent, hexDigest(digestBytes(bodies[0]))); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("index without its segment: %v, want ErrCorrupt", err)
+	}
+	// A directory in the segment's place is not a segment.
+	if err := os.Mkdir(segPath(root, cid, 2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := NewReader(root).ReadSegment(cid, NSEvent, hexDigest(digestBytes(bodies[0]))); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("index beside a directory: %v, want ErrCorrupt", err)
+	}
+}
+
 func TestCompactDoesNotBlockAppends(t *testing.T) { // C5
 	root := t.TempDir()
 	bodies := buildSealed(t, root, cid, 20, 10)
