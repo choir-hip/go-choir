@@ -10,6 +10,23 @@ We have to empirically test this ... History of predictions and scores ...
 there's the model level, there's the desk level, there's the system level
 ... make sure that we're not running too many experiments at once."
 
+## Owner rulings (2026-11-03 01:5x)
+
+"on, but we need a better experiment. and i think its most important for
+eng desk"; and "consider other ideas as well. this is an ongoing research
+program." Chosen, all together:
+- engineering predicts outcomes past Freeze (verify passes, the judge
+  accepts, the owner approves, rounds to approval), each settled by the
+  event;
+- predictions are mandatory per round, stated before the capsule starts;
+- the model arms are compared by calibration and resolution beside what
+  they deliver;
+- a within-desk A/B: half of rounds see their digest, split by a hash with
+  a per-computer secret salt.
+`calibration.feedback` stops being a switch (no switches, 2026-11-03): the
+digest is on, and the A/B split is the experiment. The program keeps
+adding ideas; each is one experiment per desk at a time.
+
 ## What the repo already has
 
 - **The idea is on the roadmap.** `roadmap-2026-10-31.md` stage 3: the desk
@@ -92,8 +109,8 @@ whose model or prompt is changing for another reason.
    measurement script: per desk, claim type and model, n, Brier, ECE,
    resolution, and the self-favor gap. If management's records are too
    few since the cutover, keep collecting; do not lower the sample size.
-3. **Run the 10-14 experiment as designed, management first, push arm
-   only.** Management has the volume (hundreds of settled hypotheses), and
+3. **Run the experiment, engineering first (owner), push arm and
+   within-desk A/B.** Management has the volume (hundreds of settled hypotheses), and
    the design, harm stops and analysis are already written. Two arms
    within each computer by the hash, so every computer is its own control
    and the model comparison across computers is not confounded. Move the
@@ -101,7 +118,7 @@ whose model or prompt is changing for another reason.
 4. **Then the pull arm** (REPL-only), as a second experiment on the same
    desk after the first reads out, or as a third arm only if the sample
    allows it. Record whether and when the desk reads it.
-5. **Engineering last.** It already stages rule-settled precommits
+5. **Engineering's claims, widened first (owner: engineering most important).** It already stages rule-settled precommits
    (`tests_pass`, `freeze_within`, `paths_confined`, `verify_pass`,
    `completes`, `visual_captured`; `internal/agentcore/engineering_precommit_rules.go`),
    settled by the runtime at Freeze and Verify, but they are optional, the

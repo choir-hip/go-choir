@@ -10,6 +10,17 @@ read-only audits (guest settings and Go gates; host switches), each opening
 with a plain catalog and closing with its conflicts section. The earlier
 inventory is [`switched-off-inventory-2026-11-03.md`](switched-off-inventory-2026-11-03.md).
 
+## Owner rulings (2026-11-03 01:5x), which govern Part A
+
+No switches at all: every row below ends deleted, with its code either on
+everywhere or gone, walked with the owner group by group. Named rows: gateway
+model scheduler deleted; host fetch and capsule mirrors made operational and
+on everywhere; story expansion for every signed-in user, the requester list
+deleted; `texture.hold_trajectory` and `texture.root_desk` stay; calibration
+feedback on, engineering first. Rollout is ring-ordered deploys with
+automatic rollback; the paper last and automatic
+(design/progressive-delivery-2026-10-26.md, "Owner rulings (2026-11-03)").
+
 ## Part A. Decision sheet
 
 **Forcing date.** On 2026-11-04 `check-switch-registry` starts failing CI

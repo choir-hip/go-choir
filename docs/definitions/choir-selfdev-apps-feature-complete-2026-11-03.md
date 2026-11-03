@@ -226,7 +226,7 @@ slices:
   S4: heavy-work scheduling across capsules (build/Playwright slots, warm caches), then raise concurrency
   S5: apps - Files (reinvented) and Slides first on all arms, then Calendar and Podcasts; kinds for authored decks and events (lift check-packages "kinds empty in P1" for the slices that need it)
   S6: PSA and precommitment records in self-development - investigate, then deepen (finding in scratchpad psa-precommit-selfdev.md first); the calibration seed (owner 2026-11-03) per docs/design/calibration-seed-2026-11-03.md: prior-run seed removed first, baseline recomputed, then one experiment per desk at a time (management push arm first; engineering claims defined and collecting from the arms now, tested later)
-  S6b: nothing stays off (owner 2026-11-03: "i dont want anything to stay off. i want to switch features on or delete them"; then "audit the switches before going ham ... features may conflict") - first a plain catalog, per-switch audit and conflict map (scratchpad switch-audit-{settings,host}.md, merged into docs/evidence), the owner decides each; then every switch in docs/evidence/switched-off-inventory-2026-11-03.md is turned on fleet-wide ring by ring (arms and d@e, owner computers, the paper) or deleted with the code it guards; branches switches-on-settings and switches-on-host; calibration.feedback on; the prior-run desk seed deleted
+  S6b: superseded 2026-11-03 by choir-progressive-delivery-2026-11-03.md (no switches; ring-ordered deploys)
   S7: promote winners per app; deployed acceptance; comparison report across arms
 
 now:

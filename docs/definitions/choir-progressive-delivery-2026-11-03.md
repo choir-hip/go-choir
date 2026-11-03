@@ -54,81 +54,81 @@ start:
 
 finish:
   deliver: >-
-    A switch is temporary by construction. Each one is registered, walks
-    R0 to R4 on its own when its guards pass and its soak ends, reverts on
-    its own when a guard breaks, reaches the paper by one owner act, and is
-    deleted (code default on, switch gone) once it is everywhere. The
-    backlog of off switches is gone: every row in the audit is either
-    retired into the code default or deleted with the code it guards.
+    No switches exist. A release reaches every computer by ring-ordered
+    refresh (d@e, test computers, the owner's computers, every other
+    computer, then the paper, automatically and last), each ring after its
+    soak, and rolls back automatically when a health check breaks. Every
+    switch in the backlog is gone: its code runs everywhere, or the code is
+    deleted. Nothing the owner asked for sits built but off.
   artifact:
-    - the ring controller on Node B, acting, with a history file per switch
-    - settings and selectors that follow the registry ring (no hand nix edit per step)
-    - the audit backlog cleared: zero release switches off for every computer; live release switches under the cap of 12
-    - the retire path: a switch at all rings is deleted in one commit with its registry row
+    - zero switches in the code and nix (registry empty, then deleted); the lint refuses any new switch
+    - ring-ordered guest refresh in vmctl's refresh sweep (design slice S5), paper last after the soak
+    - automatic code rollback on a broken post-deploy health check (design slice S6)
+    - host fetch and capsule mirrors operational on every computer; story expansion for every signed-in user; the gateway model scheduler deleted
   acceptance:
-    - a planted-fault walk on staging: a harmless test switch promoted R0 to R1 by the controller, then reverted when a synthetic guard breaks; the history file is the artifact (design section 8)
-    - one real switch walked R0 to R4 by the controller with no person, then retired
-    - the lint shows no release switch off everywhere and the live release count at or under 12
+    - a release walks the rings on staging with soaks, and the paper refreshes last at a planned moment
+    - a planted bad release is rolled back automatically at d@e and never reaches the next ring; the history is the artifact
+    - grep finds no switch; check-switch-registry passes with an empty registry and refuses an added one
   rollback: >-
-    The controller has a freeze; reverting its commits returns rings to the
-    registry file as written. Retired switches are code defaults; reverting
-    the retire commit restores the switch.
+    Revert the refresh-order and rollback commits (deploys return to
+    refresh-all). A deleted switch whose code turns out wrong is fixed
+    forward, or its feature commit is reverted.
   landing: required (commit, push, CI, staging deploy identity, deployed acceptance)
 
 value:
   better_means: >-
-    Minimize the number of switches that are off somewhere for a reason
-    nobody is measuring, and the person-hours each rollout takes, while no
-    computer is left stuck or broken by a flip and the paper never moves
-    without the owner.
+    Minimize code that exists but does not run, and person-hours per
+    rollout, while no computer is left stuck or broken by a release and the
+    paper keeps publishing.
   goodharting_would_be: >-
-    Flipping defaults to on without guards, or deleting switches whose
-    features were needed, to make the count drop; or a controller that
-    advances on "no alarm" with no fresh samples.
+    Deleting switches by deleting features the owner asked for, or flipping
+    everything on without proof so a broken feature runs everywhere; or a
+    rollback that never fires because its health check cannot fail.
 
 homotopy:
   realism_axis: >-
-    hand walk with the controller's readouts, then controller in shadow
-    beside the hand walk, then controller acting on R0 and R1, then through
-    R4, then retire at all rings.
+    backlog walked group by group with the owner; then ring order for
+    refresh on staging; then automatic rollback with a planted bad release;
+    then the paper last, automatically.
 
 boundaries:
-  mutation_class: red (host controller, VM lifecycle, settings plane); per-switch flips take their own class
-  review: tier 2 for the controller (S3b) and live follow (S4); tier 1 for S3a shadow and F-0 completion; tier 0 for registry data and the lint
+  mutation_class: red (vmctl refresh order, deploy rollback, every switch removal that changes behaviour)
+  review: tier 2 for refresh order and automatic rollback; per switch removal by its class
   must_preserve:
-    - the paper advances only by an owner act; never restarted outside a planned, marker-backed refresh
     - crash restarts close work; planned restarts resume (CLAUDE.md)
+    - the paper refreshes only at a planned, marker-backed moment, never mid self-development apply or with a live capsule
     - adversarial drills only on d@e; b@c is never deleted
     - "upgrading things should never leave a computer in a stuck state" (owner)
     - no secrets or owner email addresses in the repo
   excluded:
+    - the switch controller (dropped, owner 2026-11-03)
     - self-development app rounds (on hold)
     - the simulated-user fleet (owner: "not this week")
 
 slices:
-  P0: registry truth. Reconcile switches/registry.yaml with the audit (stale rows, expiries, the delegate expiry, texture.hold_trajectory on everywhere per the owner); finish F-0 (file_object.go:373 and every reader honours the default); decide C1 to C13 into registry entries (revert mode one_way where off is not the inverse of on).
-  P1: deletes. Every DELETE row in the audit with the code it guards (intake.event_wakes, store.event_table switch and writer arming, management.serial_tasks, store.compact_force, retired keys, DAMON, VMCTL_STOP_MANAGED_ON_EXIT, VMCTL_PRIMARY_KEEPALIVE_MODE, docs-only names, env twins).
-  P2: the hand walk. The ON-NOW rows walked R0 to R4 by hand with the readouts the controller will use; the four 2026-11-04 rows on at d@e first.
-  P3: the controller in shadow (design S3a): follow:<id> in selectsComputer, state.json, switches status endpoint and CLI, guards with replayed known-bad fixtures; compared with the hand walk.
-  P4: the controller acting (S3b), then the planted-fault acceptance; then live follow for settings and guest env (S4).
-  P5: the chains. Root desk on its own merit (owner: system-wide understanding for each user), after its F4/F5 excerpt-order failures are re-proved; source projection with it; the rebase offer once one non-upstreamed rebase is proved on d@e (the upstreamed case was solved 2026-10-27 by patch-identity containment, train 34); package changes take the Library's S6 path (design/library-package-propagation-2026-10-26.md 10.3); the gateway scheduler cap against wide slots; evidence.graph's bounded import.
-  P6: retire. Every switch at all rings deleted into the code default; the cap ratcheted to 12.
+  P0: rulings into the docs (CLAUDE.md and AGENTS.md "No switches; deploys roll out by ring", the design's owner rulings, the audit, the calibration plan).
+  P1: the backlog, walked with the owner group by group (Texture, engineering and self-development, store and tape, host, Autopaper and network); each group lands as deletions with its code on everywhere or gone, proved on d@e, then rolled out.
+  P2: named rows: delete the gateway model scheduler; make host fetch and capsule mirrors operational everywhere (their proofs run); story expansion for every signed-in user; calibration feedback on with the engineering A/B.
+  P3: ring-ordered refresh (design S5) with soaks; the paper last, automatic.
+  P4: automatic code rollback (design S6) with a planted bad release.
+  P5: the lint refuses any switch; the registry deleted.
 
 now:
   status: working
-  slice: P0
+  slice: P0 then P1
   conjecture: >-
-    C1: if the registry is true and F-0 holds for every reader, a hand walk
-    of the ON-NOW rows reaches R4 inside a day with no stuck computer, and
-    its readouts are enough to calibrate the controller's guards. Test: the
-    walk's per-ring readouts and zero stuck computers. Edge: missing_oracle
-    (a regression only the paper's load or long uptime shows). dO: the
-    late-regression window after R5.
+    C1: if every switch is deleted into on-everywhere code and releases
+    roll out by ring with automatic rollback, the owner never again finds
+    asked-for code not running, and no computer is stuck by a release.
+    Test: zero switches by grep; a planted bad release stopped at d@e.
+    Edge: missing_oracle (a regression only the paper's load shows, after
+    its own refresh). dO: the paper's health checks and the late-regression
+    window gate its automatic refresh and roll it back.
   decision: self-development goal on hold at its checkpoint; its parked branches stay unmerged
   believed_state: registry and lint exist; nothing walks; most rows are off or on for one or two ids
   main_uncertainty: which guards have known-bad fixtures today
   next_observation: list each ON-NOW row's promotion metric and whether /health or the journal exposes it now
   blocker: none
-  next_action: P0 registry reconciliation and F-0 completion in one worktree off origin/main
+  next_action: walk the owner through backlog group 1 (Texture), then land it
 
 receipts: []
