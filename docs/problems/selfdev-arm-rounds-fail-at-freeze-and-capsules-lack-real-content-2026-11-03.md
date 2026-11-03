@@ -357,6 +357,12 @@ build. Shift tried: an owner revision on b1ad3952 (13:08:33Z) to wake that Textu
 (attempt 1)", on base 3ab1d5c3 rather than 0de7c5865, so pool likely booted a newer release first and this was a fresh
 stay-up mint with the stack's Texture live. Texture cast it at 13:16:56Z. Whether the live Texture or the reboot made the
 difference is not separable from this evidence.
+After 781fcfc46 (the fix: the notice goes to the operation's document Texture as unread pressure), pool rebooted 13:54:07Z
+and at 13:58:37Z logged "rebase notice: none minted: rebase_needs_root: no live root desk to Cast the rebase, and the applied
+operation's document Texture cannot take it: its trajectory 5dc6a6ff-41d6-5ee6-9025-151c57bb5eff binds no live document
+(none, archived, or bound to another trajectory)". The end-to-end proof failed: the fallback looks up the operation's
+original trajectory, while document b1ad3952 has since moved to newer trajectories (owner revisions at 13:08Z and 13:40Z).
+Reported to main 14:01Z.
 
 ## Problem 22: a refresh lands while a candidate awaits its decision, and the candidate dies on booted_base_moved (pool, 13:33Z)
 
