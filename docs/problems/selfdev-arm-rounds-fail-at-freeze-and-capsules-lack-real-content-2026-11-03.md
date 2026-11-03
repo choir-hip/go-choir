@@ -283,3 +283,15 @@ arm publishes from its next package-only round (Fix 11 publishes the stack's cum
 Both ways out are closed for claude: Texture's 11:20:55Z turn reads "the already-landed app-sdk hunk blocks it
 and the merged duplicate exports fail the build" (keeping the hunk duplicates the exports and breaks npm run
 build; dropping it trips hunk_missing). The arm cannot build again until the content check is fixed.
+
+## Problem 15: luna's raised engineering reasoning reaches the provider as a malformed value (11:23Z)
+
+Luna round 7 (doc 789f95a0, trajectory e52877df). Both engineering assignments were cancelled at tool-loop
+iteration 3: assignment-35bbb08249a0557c9fc83f56 (11:22:35-11:23:37Z) and the next (11:27:38-11:28:40Z), each
+"gateway call failed: gateway client: chatgpt: status 400 Bad Request (sanitized)". Node B's gateway log:
+"provider: chatgpt rejected request status=400 reason="invalid_request_error Invalid value: 'hig...03)'.
+Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."" (11:28:22Z, 11:28:38Z,
+11:28:40Z, vm-774a03f8...). The effort string sent for engineering is "high" plus trailing text ending "03)",
+apparently a note such as "(owner, 2026-11-03)" carried into the value. Management calls on the same arm log
+reasoning=high and succeed, so only the engineering desk's setting is malformed. Fix: set the engineering
+effort to the bare value "high" (and validate effort values against the provider's list when set).
