@@ -391,15 +391,18 @@ confined) refuses every cleanup too. Ways out: let check 1 accept outside paths 
 let the owner publish the package subtree of an applied stack whatever its outside paths, recording them as left behind.
 Interim: the next deepseek request asks for app-sdk.ts and frontend/tests/files-next/ to be restored to the base exactly.
 
-## Unnumbered (lane C, 16:15Z): pool refreshed twice after its rebase applied, and no rebase notice reached it
+## Not a defect (lane C, 16:15Z; main read the guest log): a clean stack re-grafts at refresh, with no rebase notice
 
-Evidence, metadata only. Pool's rebase selfdev-5dbd9ba2 onto 059763bb applied at 15:39:41Z, on live document trajectory
-a6b8f87c. vmctl then refreshed pool's VM vm-04a4e430 twice, both with planned_restart=true:
-- 15:47:12Z to 6e4658891 (retry-sweep);
-- 16:01:42Z to 52e05f16c (deploy).
-At 16:15Z, 28 and 13 minutes after those boots, there is no notice. Pool has no run created after 15:29Z, no new self-dev
-operation, and no event on a6b8f87c after its 15:46:44Z turn, which is still live. The notice usually comes about 306 s
-after boot. So the base moved twice under an applied stack and U4 minted no notice, or the notice never reached the
-trajectory. Not yet checked: the guest-side U4 log line, which separates "no notice minted" from "minted but not
-delivered". Lane C's rounds also showed a deepseek build cancelled at exactly 60:00 after it bound ("context deadline
-exceeded", assignment-17a659c2, 14:42:27Z to 15:42:27Z), which bounds every rebase.
+Pool's rebase selfdev-5dbd9ba2 onto 059763bb applied at 15:39:41Z. vmctl then refreshed pool twice, both with planned_restart=true:
+- 15:47:12Z to 6e4658891;
+- 16:01:42Z to 52e05f16c.
+No notice and no run followed. Pool's console log (vm-04a4e430) explains why: the source projection re-grafted the stack
+onto each new base mechanically. It logged "stack_rematerialized base=6e4658891394 head=bd353c4bc06f" at 15:47:13Z and
+"base=52e05f16c92f head=2dcde83d51e2" at 16:01:54Z. Both times the U4 timer correctly declined: "rebase notice: none minted:
+the stack is stack_rematerialized, not stack_base_moved". Once a stack applies cleanly onto a base, a refresh costs no
+engineering round. The roughly 50-minute rebase rounds were for stacks that could not re-graft.
+
+## Observed (lane C): an assignment is cancelled 60:00 minutes after it binds
+
+Deepseek's assignment-17a659c2 bound at 14:42:27Z and was cancelled at 15:42:27Z with "context deadline exceeded". The
+capsule was revoked and there was no Report. That deadline bounds every rebase: claude's took 53 minutes, pool's 50.
