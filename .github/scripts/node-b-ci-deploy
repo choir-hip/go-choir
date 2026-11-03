@@ -790,6 +790,21 @@
       else
         active_computers_status=empty
       fi
+      # A ring walk whose proof computer (d@e) was not refreshed by this
+      # deploy has proved nothing yet: report it held and unproven, never
+      # plain success. vmctl wakes d@e after its grace and the walk proceeds
+      # (GET /internal/vmctl/ring-walk).
+      ring_walk_status=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.status // empty')
+      if [ -n "$ring_walk_status" ]; then
+        ring_walk_id=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.id // empty')
+        ring_walk_open=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.open_ring // empty')
+        proof_in_candidates=$(printf '%s' "$deploy_refresh_plan" | jq -r '.ring_walk.proof_computer as $p | [.candidates[] | select(.computer_id == $p)] | length')
+        echo "    Ring walk ${ring_walk_id}: status=${ring_walk_status} open_ring=${ring_walk_open} proof_computer_refreshed_by_deploy=$([ "${proof_in_candidates:-0}" -gt 0 ] && echo yes || echo no)"
+        if [ "$ring_walk_status" != "walking" ] || [ "${proof_in_candidates:-0}" -eq 0 ]; then
+          echo "    Ring walk held, unproven: the proof computer has not run this release yet; outer rings stay on the last proved release" >&2
+          active_computers_status=ring_held_unproven
+        fi
+      fi
       receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
         jq --arg commit "$DEPLOY_COMMIT" --arg status "$active_computers_status" --argjson deferred "$deferred_json" \
           '. + {active_computers: {commit: $commit, status: $status, deferred: $deferred}}')

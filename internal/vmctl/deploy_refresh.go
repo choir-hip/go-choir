@@ -212,6 +212,16 @@ type deployRefreshPlan struct {
 	// ring walk refreshes each when its ring opens (ring_walk.go). CI does
 	// not refresh them.
 	RingWaiting []deployRefreshCandidate `json:"ring_waiting"`
+	// RingWalk summarizes the walk for CI: a deploy whose proof computer is
+	// not among the candidates is reported held, not proved.
+	RingWalk *deployRefreshRingWalk `json:"ring_walk,omitempty"`
+}
+
+type deployRefreshRingWalk struct {
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	OpenRing      string `json:"open_ring,omitempty"`
+	ProofComputer string `json:"proof_computer"`
 }
 
 // deployRefreshAllowsBusy is vmctl's policy for refreshing a computer whose
@@ -633,7 +643,11 @@ func (h *Handler) ringOrderPlan(plan deployRefreshPlan) deployRefreshPlan {
 		class := WarmnessClass(c.WarmnessClass)
 		layered := h.layeredComputer(id)
 		if c.Rescue {
-			c.RingCommit = h.ringWalkRunner().ringCommit(id, class, layered)
+			// The commit of the release the manager would boot it on now
+			// (the pin, or the current release when the pin does not load).
+			if h.ringWalkRunner().ringCommit(id, class, layered) != "" {
+				_, c.RingCommit = h.guestReleaseFor(id)
+			}
 			kept = append(kept, c)
 			continue
 		}
@@ -645,5 +659,6 @@ func (h *Handler) ringOrderPlan(plan deployRefreshPlan) deployRefreshPlan {
 		kept = append(kept, c)
 	}
 	plan.Candidates = kept
+	plan.RingWalk = h.ringWalkRunner().summary()
 	return plan
 }

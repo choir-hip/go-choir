@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -671,4 +672,126 @@ func TestRingStatusDoesNotAliasLiveWalk(t *testing.T) {
 		}
 	}
 	<-done
+}
+
+// DeepSeek F1: an empty observation set holds every ring; it never cascades
+// R0 to R5 and promotes the baseline.
+func TestRingEmptyObservationHolds(t *testing.T) {
+	s := newWalkingState(t)
+	for i := 1; i <= 24*60; i += 30 {
+		ev, acts := s.step(rwT0.Add(time.Duration(i)*time.Minute), nil)
+		if len(ev) != 0 || len(acts) != 0 {
+			t.Fatalf("an empty tick acted: %+v %+v", ev, acts)
+		}
+	}
+	if s.Walk.Current != 0 || s.Walk.Status != ringWalkWalking || s.Baseline != rwFrom {
+		t.Fatalf("empty ticks moved the walk: %+v baseline %+v", s.Walk, s.Baseline)
+	}
+	// d@e absent (a computer with an empty or unknown id observed instead).
+	stray := healthyObs("", ringForComputer("", ""), rwTo.Single)
+	for i := 1; i <= 120; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{stray})
+	}
+	if s.Walk.Current != 0 {
+		t.Fatalf("R0 passed with d@e absent")
+	}
+}
+
+// DeepSeek F4: a held member, or one never asked onto the release, cannot
+// breach it with a failed boot of the old release.
+func TestRingBootGuardScoped(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	held := healthyObs(rwTest1, ringR1, rwFrom.Single)
+	held.Active, held.Held, held.Health = false, true, nil
+	down := healthyObs(rwTest2, ringR1, "")
+	down.Active, down.Health = false, nil
+	t3 := healthyObs(rwTest3, ringR1, rwTo.Single)
+	for i := 1; i <= 31; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de, held, down, t3})
+	}
+	if s.Walk.Current != 1 {
+		t.Fatalf("R0 did not close")
+	}
+	opened := s.Walk.Rings[1].OpenedAt
+	held.Crashes = []CrashRecord{{At: opened.Add(time.Minute).Format(time.RFC3339Nano), Kind: crashKindBootFailed, Cause: "boot of from failed"}}
+	down.Crashes = held.Crashes
+	for i := 0; i < 5; i++ {
+		s.step(opened.Add(time.Duration(2+i)*time.Minute), []ringMemberObs{de, held, down, t3})
+	}
+	if s.Walk.Status == ringWalkRolledBack {
+		t.Fatalf("a boot failure of a member never asked onto the release rolled it back: %+v", s.Walk.Rings[1].Breach)
+	}
+}
+
+// DeepSeek F5: a layered computer running the single image is not on the
+// layered target.
+func TestRingLayeredOnSingleIsNotOnTarget(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	de.Layered = true
+	for i := 1; i <= 60; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), []ringMemberObs{de})
+	}
+	if s.Walk.Current != 0 {
+		t.Fatalf("R0 closed on the single image of a layered proof computer")
+	}
+}
+
+// DeepSeek F3: a ring larger than its exposure floor closes once the floor
+// count is met; a busy member that has not refreshed does not hold it.
+func TestRingExposureFloorCount(t *testing.T) {
+	s := newWalkingState(t)
+	de := healthyObs(ringProofComputer, ringR0, rwTo.Single)
+	var obs []ringMemberObs
+	obs = append(obs, de)
+	for i := 0; i < 3; i++ {
+		obs = append(obs, healthyObs(fmt.Sprintf("computer-cccc00000000000000000000000000%02d", i), ringR1, rwTo.Single))
+	}
+	busy := healthyObs(rwTest1, ringR1, rwFrom.Single)
+	busy.Pending = true
+	obs = append(obs, busy)
+	for i := 1; i <= 31; i++ {
+		s.step(rwT0.Add(time.Duration(i)*time.Minute), obs)
+	}
+	opened := s.Walk.Rings[1].OpenedAt
+	s.step(opened.Add(time.Minute), obs)
+	s.step(opened.Add(2*time.Hour+time.Minute), obs)
+	if s.Walk.Current < 2 || s.Walk.Rings[1].Outcome != ringOutcomeClean {
+		t.Fatalf("R1 with 3 of 4 exposed must close clean: %+v", s.Walk.Rings[1])
+	}
+}
+
+// DeepSeek F8: a computer the walk has not observed is held on from.
+func TestRingUnobservedComputerPinnedFrom(t *testing.T) {
+	r := newRingWalkRunner()
+	r.observe(rwFrom, rwT0.Add(-time.Hour))
+	r.observe(rwTo, rwT0)
+	if single, _ := r.pin("computer-new0000000000000000000000000000"); single != rwFrom.Single {
+		t.Fatalf("an unobserved computer must be pinned to from, got %q", single)
+	}
+	if single, _ := r.pin(ringProofComputer); single != "" {
+		t.Fatalf("d@e is known by id and R0 is open, pinned %q", single)
+	}
+}
+
+// Nit: a torn state file loads the last good copy.
+func TestRingWalkTornStateLoadsBackup(t *testing.T) {
+	dir := t.TempDir()
+	path, hist := filepath.Join(dir, "ring-walk.json"), filepath.Join(dir, "h.jsonl")
+	r := newRingWalkRunner()
+	_ = r.load(path, hist)
+	r.observe(rwFrom, rwT0.Add(-time.Hour))
+	r.observe(rwTo, rwT0)
+	r.stepWith(rwT0.Add(time.Minute), []ringMemberObs{healthyObs(ringProofComputer, ringR0, rwTo.Single)})
+	if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r2 := newRingWalkRunner()
+	if err := r2.load(path, hist); err != nil {
+		t.Fatalf("torn file with a backup: %v", err)
+	}
+	if r2.state.Walk == nil || r2.state.Walk.To != rwTo {
+		t.Fatalf("backup did not restore the walk: %+v", r2.state)
+	}
 }

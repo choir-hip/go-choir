@@ -115,6 +115,19 @@ moves the guest release.
   never after a failed refresh to the same target; a crash after the last
   tick that saw the member off the release counts; walks compare release ids,
   not commits; a computer that woke behind keeps its user-idle gate.
+- DeepSeek round 1: an empty observation set holds every ring; exposure is
+  min(floor count, eligible members) seen healthy, so one busy member does
+  not hold a large ring (its pending entry still refreshes it); the boot
+  guard counts only members asked onto the release, never held or divergent
+  ones; a layered computer is on target only on the layered release; an
+  unobserved computer is pinned to `from`; health probes run 8 at a time
+  under a 25-second tick deadline; a rescue's `ring_commit` is the commit
+  the manager would boot; the state file keeps a `.bak` and loads it when
+  torn; CI reports a walk whose proof computer it did not refresh as
+  `ring_held_unproven`. Residual: retention reads `pinned_by` once per run,
+  so a run that read usage just before a walk started could delete `from`
+  (the baseline is normally also its "previous" keep); a pin that does not
+  load falls back to the current release and logs it.
 
 ## Failure modes
 

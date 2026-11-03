@@ -158,6 +158,15 @@ func (p ringReleasePair) has(release string) bool {
 	return release != "" && (release == p.Single || release == p.Layered)
 }
 
+// releaseFor is the release of the pair a computer launches: the layered one
+// for a layered ring computer when the pair has it.
+func (p ringReleasePair) releaseFor(layered bool) string {
+	if layered && p.Layered != "" {
+		return p.Layered
+	}
+	return p.Single
+}
+
 func (p ringReleasePair) commitFor(layered bool) string {
 	if layered && p.Layered != "" {
 		return p.LayeredCommit
@@ -498,6 +507,11 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 	default:
 		return nil, nil
 	}
+	// No computer observed at all (a registry not yet loaded, a failed read):
+	// nothing is known, so nothing advances.
+	if len(obs) == 0 {
+		return nil, nil
+	}
 	var events []ringEvent
 	var actions []ringAction
 	for w.Status == ringWalkWalking {
@@ -518,7 +532,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 				p.Members[o.ComputerID] = m
 			}
 			m.LastRelease = o.Release
-			onTarget := o.Active && w.To.has(o.Release)
+			onTarget := o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered)
 			// R0 opens with the deploy, and CI refreshes it; the walk enrolls an
 			// R0 computer the deploy did not reach only after the grace.
 			graced := p.Ring == ringR0 && now.Sub(p.OpenedAt) < ringR0EnrollGrace
@@ -527,7 +541,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 				m.LastOffTarget = now
 			}
 			reenroll := m.Enrolled && !o.Pending && o.FailedTarget != target && now.Sub(m.EnrolledAt) >= ringReenrollGap
-			if o.Active && !o.Held && !o.Divergent && (!m.Enrolled || reenroll) && !graced && !w.To.has(o.Release) {
+			if o.Active && !o.Held && !o.Divergent && (!m.Enrolled || reenroll) && !o.Pending && o.FailedTarget != target && !graced && !onTarget {
 				m.Enrolled, m.EnrolledAt = true, now
 				actions = append(actions, ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: target, Reason: "ring walk " + w.ID + " opened " + string(p.Ring)})
 			}
@@ -542,7 +556,7 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 			if onTarget && m.FirstOnTarget.IsZero() {
 				m.FirstOnTarget = now
 			}
-			if breach := m.evaluate(now, o, onTarget, p.OpenedAt); breach != nil {
+			if breach := m.evaluate(now, o, onTarget, p.OpenedAt, p.Ring); breach != nil {
 				events = append(events, w.rollback(now, p, breach, obs, &actions)...)
 				return events, actions
 			}
@@ -567,18 +581,26 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 			p.Waiting = "time floor until " + p.OpenedAt.Add(soak.Floor).UTC().Format(time.RFC3339)
 			return events, actions
 		}
-		required, exposed := 0, 0
+		// Exposure: at least min(floor count, eligible) members seen healthy
+		// on the release, where eligible is every active, non-held,
+		// non-divergent member plus any member seen healthy that has since
+		// gone idle. A busy member that has not refreshed yet does not hold
+		// the ring: its pending entry still refreshes it once its ring is open.
+		required, exposed, eligible := 0, 0, 0
 		var missing []string
 		for _, o := range members {
 			m := p.Members[o.ComputerID]
+			isRequired := o.Active && !o.Held && !o.Divergent
+			if isRequired {
+				required++
+			}
 			if !m.ExposedAt.IsZero() {
 				exposed++
 			}
-			if !o.Active || o.Held || o.Divergent {
-				continue
+			if isRequired || !m.ExposedAt.IsZero() {
+				eligible++
 			}
-			required++
-			if m.ExposedAt.IsZero() {
+			if isRequired && m.ExposedAt.IsZero() {
 				missing = append(missing, o.ComputerID)
 			}
 		}
@@ -593,8 +615,8 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 			}
 			events = append(events, w.closeRing(now, p, ringOutcomeSkippedNoExposure, "every member was down for the whole time floor"))
 		} else {
-			need := min(soak.MinExposure, required)
-			if len(missing) > 0 || exposed < need {
+			need := min(soak.MinExposure, eligible)
+			if exposed < need {
 				sort.Strings(missing)
 				p.Waiting = fmt.Sprintf("exposure: %d of %d seen healthy on the release; waiting for %s", exposed, need, strings.Join(missing, ","))
 				return events, actions
@@ -611,13 +633,22 @@ func (s *ringWalkState) step(now time.Time, obs []ringMemberObs) ([]ringEvent, [
 }
 
 // evaluate applies the guards to one member's sample. A breach is returned.
-func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, openedAt time.Time) *ringBreach {
+func (m *ringMember) evaluate(now time.Time, o ringMemberObs, onTarget bool, openedAt time.Time, ring ringID) *ringBreach {
+	// A held or divergent member is not walked; its crashes are not the
+	// release's. The boot guard counts only a member the walk or the deploy
+	// asked onto the release (enrolled, seen on it, or R0, which CI
+	// refreshes).
+	if o.Held || o.Divergent {
+		m.ReadyStrikes, m.WedgeStrikes = 0, 0
+		return nil
+	}
+	bootScoped := m.Enrolled || !m.FirstOnTarget.IsZero() || ring == ringR0
 	for _, c := range o.Crashes {
 		at, err := time.Parse(time.RFC3339Nano, c.At)
 		if err != nil {
 			continue
 		}
-		if c.Kind == crashKindBootFailed && !at.Before(openedAt) {
+		if c.Kind == crashKindBootFailed && bootScoped && !at.Before(openedAt) {
 			return &ringBreach{ComputerID: o.ComputerID, Guard: ringGuardBoot, Detail: c.Cause, At: now}
 		}
 		// A crash after the last tick that saw the member off the release
@@ -713,7 +744,7 @@ func (w *ringWalk) rollback(now time.Time, p *ringProgress, breach *ringBreach, 
 		if !w.ringOpened(o.Ring) {
 			continue
 		}
-		if o.Active && w.To.has(o.Release) && !w.From.has(o.Release) {
+		if o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered) && o.Release != w.From.releaseFor(o.Layered) {
 			a := ringAction{Kind: ringActionEnroll, ComputerID: o.ComputerID, UserID: o.UserID, DesktopID: o.DesktopID, VMID: o.VMID, Target: w.From.commitFor(o.Layered), Reason: "ring walk " + w.ID + " rolled back at " + string(p.Ring)}
 			*actions = append(*actions, a)
 			w.Returning = append(w.Returning, o.ComputerID)
@@ -739,7 +770,7 @@ func (w *ringWalk) stepReturn(now time.Time, obs []ringMemberObs) []ringEvent {
 	}
 	for _, id := range w.Returning {
 		o, ok := byID[id]
-		if ok && o.Active && w.To.has(o.Release) && !w.From.has(o.Release) {
+		if ok && o.Active && o.Release != "" && o.Release == w.To.releaseFor(o.Layered) && o.Release != w.From.releaseFor(o.Layered) {
 			return nil
 		}
 	}
@@ -793,7 +824,13 @@ func (r *ringWalkRunner) load(path, historyPath string) error {
 	}
 	var st ringWalkState
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return fmt.Errorf("ring walk: decode %s: %w", r.path, err)
+		// A torn or empty file: the last good copy keeps the walk and its
+		// pins (saveLocked keeps it beside the file).
+		bak, berr := os.ReadFile(r.path + ".bak")
+		if berr != nil || json.Unmarshal(bak, &st) != nil {
+			return fmt.Errorf("ring walk: decode %s (and no readable %s.bak): %w", r.path, r.path, err)
+		}
+		log.Printf("vmctl: ring walk: %s did not decode (%v); loaded the last good copy %s.bak", r.path, err, r.path)
 	}
 	r.state = st
 	return nil
@@ -805,6 +842,11 @@ func (r *ringWalkRunner) saveLocked() {
 	}
 	raw, err := json.MarshalIndent(r.state, "", "  ")
 	if err == nil {
+		// Keep the previous good file as .bak (load reads it when the file
+		// does not decode).
+		if prev, perr := os.ReadFile(r.path); perr == nil && json.Valid(prev) && len(prev) > 0 {
+			_ = writeFileDurably(r.path+".bak", prev)
+		}
 		err = writeFileDurably(r.path, raw)
 	}
 	if err != nil {
@@ -848,11 +890,14 @@ func (r *ringWalkRunner) observe(cur ringReleasePair, now time.Time) {
 	}
 }
 
-func (r *ringWalkRunner) ringOfLocked(computerID string) ringID {
+// ringOfLocked is a computer's ring and whether vmctl has observed it. The
+// rings by id need no observation.
+func (r *ringWalkRunner) ringOfLocked(computerID string) (ringID, bool) {
 	if ring, ok := r.rings[computerID]; ok {
-		return ring
+		return ring, true
 	}
-	return ringForComputer(computerID, "")
+	ring := ringForComputer(computerID, "")
+	return ring, ring != ringR3
 }
 
 // pin is the manager's ReleasePin.
@@ -863,7 +908,17 @@ func (r *ringWalkRunner) pin(computerID string) (single, layered string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.state.pinFor(computerID, r.ringOfLocked(computerID))
+	ring, known := r.ringOfLocked(computerID)
+	if !known {
+		// Not yet observed (created since the last tick): its class is
+		// unknown, so it is held on from while anything walks, never let
+		// ahead of its ring.
+		if w := r.state.Walk; w != nil && (w.Status == ringWalkWalking || w.Status == ringWalkRolledBack) {
+			return w.From.Single, w.From.Layered
+		}
+		return "", ""
+	}
+	return r.state.pinFor(computerID, ring)
 }
 
 // pinnedReleases are the releases pins can name now (retention keeps them).
@@ -968,4 +1023,19 @@ func (r *ringWalkRunner) status(tail int) ringWalkStatus {
 		}
 	}
 	return st
+}
+
+// summary is the walk as CI sees it, nil when nothing walks.
+func (r *ringWalkRunner) summary() *deployRefreshRingWalk {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	w := r.state.Walk
+	if w == nil || (w.Status != ringWalkWalking && w.Status != ringWalkRolledBack) {
+		return nil
+	}
+	out := &deployRefreshRingWalk{ID: w.ID, Status: w.Status, ProofComputer: ringProofComputer}
+	if p := w.open(); p != nil {
+		out.OpenRing = string(p.Ring)
+	}
+	return out
 }

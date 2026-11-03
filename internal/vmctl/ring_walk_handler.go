@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
@@ -122,6 +123,8 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 		_, byVM = reader.GuestReleaseHealth()
 	}
 	var obs []ringMemberObs
+	var probes []int
+	owners := map[int]VMOwnership{}
 	for _, own := range h.registry.ListOwnerships() {
 		if own.Kind != "" && own.Kind != VMKindInteractive {
 			continue
@@ -140,13 +143,53 @@ func (h *Handler) ringObservations(ctx context.Context, sample bool) []ringMembe
 			o.Release = byVM[own.VMID].GuestRelease
 		}
 		o.Pending, o.FailedTarget = h.deployRefreshState().pendingAndFailed(own.UserID, own.DesktopID)
-		if sample && walking && o.Ring == openRing && o.Active && to.has(o.Release) {
-			health := h.probeRingHealth(ctx, *own)
-			o.Health = &health
+		if sample && walking && o.Ring == openRing && o.Active && o.Release != "" && o.Release == to.releaseFor(o.Layered) {
+			probes = append(probes, len(obs))
+			owners[len(obs)] = *own
 		}
 		obs = append(obs, o)
 	}
+	h.probeRingHealthAll(ctx, obs, probes, owners)
 	return obs
+}
+
+// Health probes run in parallel, at most ringProbeParallel at once, under
+// one per-tick deadline, so a few hung guests cannot stall the tick and the
+// retry sweep after it. A probe cut off by the deadline answers "no answer",
+// which counts one readiness strike (three in a row breach).
+const (
+	ringProbeParallel = 8
+	ringProbeDeadline = 25 * time.Second
+)
+
+func (h *Handler) probeRingHealthAll(ctx context.Context, obs []ringMemberObs, probes []int, owners map[int]VMOwnership) {
+	if len(probes) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, ringProbeDeadline)
+	defer cancel()
+	sem := make(chan struct{}, ringProbeParallel)
+	results := make([]ringHealth, len(probes))
+	var wg sync.WaitGroup
+	for i, idx := range probes {
+		wg.Add(1)
+		go func(i int, own VMOwnership) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				results[i] = ringHealth{Detail: "no probe slot before the tick deadline"}
+				return
+			}
+			results[i] = h.probeRingHealth(ctx, own)
+		}(i, owners[idx])
+	}
+	wg.Wait()
+	for i, idx := range probes {
+		health := results[i]
+		obs[idx].Health = &health
+	}
 }
 
 func (h *Handler) probeRingHealth(ctx context.Context, own VMOwnership) ringHealth {
