@@ -26,8 +26,8 @@ definition_version: 5
 # library is meant as a library of stuff made from individual computers. and
 # then i, the platform owner, can decide what is on the base image."
 # Overnight (owner): FP0 approves candidates on the four test arms; no
-# spend caps, per-arm spend reported, an arm paused if a round passes $5 or
-# the arm $50; the original Slides XSS waits for Slides-next.
+# spend caps and no pausing an arm for spend ("dont pause any arm. no spend caps"); per-arm spend reported in the morning letter;
+# the original Slides XSS waits for Slides-next.
 # Operating tempo (CLAUDE.md): no blocking asks; escalate on dead ends with
 # a shift of approach first; never wait idle on CI or a deploy.
 readiness: executable  # on the owner's word above
