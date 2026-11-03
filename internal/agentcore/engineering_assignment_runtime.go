@@ -577,6 +577,10 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: memory, MemoryRequest: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
+		// Engineering capsules build (go links, frontend builds,
+		// Playwright): they reserve one build's peak on the host at spawn
+		// (S4, docs/design/capsule-heavy-work-scheduling-2026-11-03.md).
+		SizeClass:         capsule.SizeClassBuild,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
 		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,
 		ClaudeDelegate: claude}

@@ -29,6 +29,11 @@ type SpawnSpec struct {
 	WorkingDir    string       // initial working directory
 	OwnerRunID    string       // agent run that owns this capsule
 	Tier          ResourceTier // resource tier preset
+	// SizeClass is the capsule's heavy-work class (capsule_size.go): light
+	// (also empty) or build. A build capsule reserves one build's measured
+	// peak on the host for its life; the guest-local admission and cgroup
+	// limits are the same for both.
+	SizeClass SizeClass
 
 	// SourceArtifactRef and ExpectedSubjectDigest are trusted-runtime inputs.
 	// Spawn materializes exactly this preflighted content-addressed subject and

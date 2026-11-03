@@ -2440,7 +2440,7 @@ func validateSpawnSpec(spec SpawnSpec) error {
 	if spec.MemoryMax <= 0 || spec.CpuQuota <= 0 || spec.CpuPeriod <= 0 || spec.PidsMax <= 0 {
 		return fmt.Errorf("capsule spawn requires positive memory, cpu, period, and pid limits")
 	}
-	return nil
+	return spec.SizeClass.Validate()
 }
 
 func installBrokerMount(ctx context.Context, source, root string) error {
