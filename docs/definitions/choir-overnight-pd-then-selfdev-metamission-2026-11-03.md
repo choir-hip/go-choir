@@ -126,18 +126,20 @@ now:
     between deploys; problem 21 rebuilt to need no work item (the notice is
     the wake) after tier 2 found the work item reusable and orphanable
   believed_state: >-
-    staging 2cd70f606 (problem 17 fixed and proved on the deepseek arm:
-    Texture turns commit, no permission denied); 781fcfc46 (problem 21,
-    Devin accept r2, expedited) in CI. deepseek running Files round 7;
-    pool re-noticing after a refresh killed its awaiting rebase (problem
-    22); luna Slides round 6 needs real-content routes for shots; claude
-    arm waits on refresh and rebase. Node B 16 of 31 GiB available, no
-    memory pressure.
+    staging 059763bb0 (problems 17, 21 live-trajectory, 22 hold, luna
+    recipe); 882c95459 (owner-act records follow the document; app-sdk
+    isOwnLiveEvent) in CI; queued behind it: ec297ef20 (problem 23,
+    publish confinement net-zero, Devin accept) then 57434b1dd (problem 21
+    settled document continues, Devin accept). Arms: deepseek Files r7
+    applied, publish waits on 23; claude rebase build live; pool waits on
+    the settled-trajectory fix; luna Slides r8 lost its autoputer when the
+    job ended and the gpt-6-luna circuit is open. Node B 19 GiB available,
+    PSI near 0.
   main_uncertainty: >-
-    whether crash boot closes open lifecycle work items (a reviewer says no;
-    a read-only investigation is running); whether pool applies before the
-    next deploy refreshes it
-  next_observation: 781fcfc46 deployed identity; pool's post-refresh notice reaching engineering without rebase_needs_root
+    whether the settled-document continue lands pool's notice end to end;
+    whether S4 refusals keep starving the third arm before problem 24's
+    wait lands
+  next_observation: pool's rebase notice minted and cast after 57434b1dd deploys; deepseek publish of files-next after its restore round
   blocker: none
-  next_action: land the problem 22 hold (refresh waits while a candidate is frozen, awaiting or accepted) through tier 2, expedited; then publish Files from each arm and move arms to Slides
+  next_action: land 23 and 21-continue in one deploy; problem 24 (build spawn waits for host memory, tier 2) and choir-shot autoputer helper (tier 1) building; then publish Files from each arm
 receipts: []
